@@ -1,3 +1,4 @@
+import { getShadow } from "@/modules/mui/theme/constants";
 import { useGSAP } from "@gsap/react";
 import { Box, Container, Typography, useTheme } from "@mui/material";
 import gsap from "gsap";
@@ -50,10 +51,11 @@ export function Value() {
     <Container maxWidth="md" sx={{ py: 8 }}>
       <Box
         sx={{
-          p: "1px",
+          p: "2px",
           position: "relative",
           borderRadius: 2,
           overflow: "hidden",
+          boxShadow: getShadow("lg"),
         }}
       >
         <Box
@@ -62,7 +64,7 @@ export function Value() {
             zIndex: 1,
             top: 0,
             left: 0,
-            backgroundImage: `linear-gradient(45deg, transparent, ${theme.palette.grey["300"]}, transparent)`,
+            backgroundImage: `linear-gradient(45deg, transparent, ${theme.palette.secondary.light}, transparent)`,
             height: "100%",
             width: "100%",
           }}
@@ -85,7 +87,7 @@ export function Value() {
             id="home-value-description"
           >
             Tembo Tech Ventures is training the next generation of software
-            developers in Africa.
+            developers and technologists in Africa.
           </Typography>
         </Box>
       </Box>

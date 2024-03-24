@@ -1,7 +1,7 @@
 "use client";
 
 import { Elephant } from "@/assets/brand/elephant";
-import { customColors } from "@/modules/mui/theme/colors";
+import { customColors } from "@/modules/mui/theme/constants";
 import { useGSAP } from "@gsap/react";
 import { Box, Stack, Typography } from "@mui/material";
 import gsap from "gsap";
@@ -20,6 +20,21 @@ export function Header() {
           scrollTrigger: {
             trigger: "#home-header-title",
             start: "top 50%",
+            end: "bottom top",
+            scrub: true,
+          },
+        },
+      );
+
+      gsap.fromTo(
+        "#header-elephant-container",
+        { opacity: 1, scale: 1 },
+        {
+          opacity: 0,
+          scale: 0.8,
+          scrollTrigger: {
+            trigger: "#header-elephant-container",
+            start: "bottom 30%",
             end: "bottom top",
             scrub: true,
           },
@@ -48,6 +63,7 @@ export function Header() {
           width: "100%",
           maxWidth: "300px",
         }}
+        id="header-elephant-container"
       >
         <Elephant />
       </Box>

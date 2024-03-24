@@ -1,6 +1,6 @@
 import createTheme from "@mui/material/styles/createTheme";
 import { climateCrisis, mavenPro } from "./fonts";
-import { customColors } from "./colors";
+import { customColors } from "./constants";
 
 export const theme = createTheme({
   palette: {
