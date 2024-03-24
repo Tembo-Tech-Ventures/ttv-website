@@ -85,7 +85,7 @@ export function Value() {
             id="home-value-description"
           >
             Tembo Tech Ventures is training the next generation of software
-            engineers in Africa.
+            developers in Africa.
           </Typography>
         </Box>
       </Box>
