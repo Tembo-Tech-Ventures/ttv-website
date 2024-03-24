@@ -1,3 +1,4 @@
+import { PageTracker } from "@/modules/analytics/components/page-tracker/page-tracker";
 import { ScrollTriggerInit } from "@/modules/gsap/components/scrolltrigger-init/scrolltrigger-init";
 import { Stack } from "@mui/material";
 import { type Metadata } from "next";
@@ -24,6 +25,7 @@ export default function RootLayout({
         minHeight: "100vh",
       }}
     >
+      <PageTracker />
       <ScrollTriggerInit />
       {children}
     </Stack>
