@@ -9,7 +9,7 @@ function Title(props: TypographyProps) {
 
 export function Features() {
   return (
-    <Container sx={{ py: 8 }}> 
+    <Container sx={{ py: 8 }}>
       <Grid container spacing={4} sx={{ width: "100%" }}>
         <Grid item xs={12} md={4}>
           <Card>
