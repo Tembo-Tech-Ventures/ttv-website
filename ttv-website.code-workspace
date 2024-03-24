@@ -1,0 +1,44 @@
+{
+  "folders": [
+    {
+      "path": "."
+    },
+    {
+      "path": "web"
+    }
+  ],
+  "settings": {
+    "files.autoSave": "onFocusChange",
+    "sqltools.connections": [
+      {
+        "previewLimit": 50,
+        "server": "localhost",
+        "port": 5432,
+        "driver": "PostgreSQL",
+        "name": "local",
+        "database": "database",
+        "username": "user",
+        "password": "password"
+      }
+    ],
+    "json.schemas": [
+      {
+        "fileMatch": ["vercel.json"],
+        "url": "https://openapi.vercel.sh/vercel.json"
+      }
+    ],
+    "explorer.compactFolders": false
+  },
+  "extensions": {
+    "recommendations": [
+      "prisma.prisma",
+      "dbaeumer.vscode-eslint",
+      "github.copilot",
+      "github.copilot-chat",
+      "github.copilot-labs",
+      "ms-vscode.vscode-typescript-next",
+      "esbenp.prettier-vscode",
+      "ms-azuretools.vscode-docker"
+    ]
+  },
+}

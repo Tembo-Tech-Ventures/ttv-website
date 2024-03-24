@@ -1,0 +1,7 @@
+tasks:
+  - name: docker-compose 
+    init: docker-compose create
+    command: docker-compose up -d
+  - name: npm install
+    init: npm install
+    command: export NEXTAUTH_URL="https://3000-${GITPOD_WORKSPACE_ID}.${GITPOD_WORKSPACE_CLUSTER_HOST}/" && npm run dev
