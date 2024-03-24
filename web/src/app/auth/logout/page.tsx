@@ -1,6 +1,6 @@
 "use client";
 
-import { Stack, Typography } from "@mui/material";
+import { Container, Stack, Typography } from "@mui/material";
 import { signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -16,8 +16,17 @@ export default function Logout() {
   }, [router]);
 
   return (
-    <Stack height="100vh">
-      <Typography variant="h1">Logging you out...</Typography>
-    </Stack>
+    <Container maxWidth="md">
+      <Stack
+        minHeight="100vh"
+        py={4}
+        direction="column"
+        justifyContent="center"
+      >
+        <Typography variant="h1" color="primary">
+          Logging you out...
+        </Typography>
+      </Stack>
+    </Container>
   );
 }

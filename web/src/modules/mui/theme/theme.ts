@@ -41,7 +41,7 @@ export const theme = createTheme({
     },
     body2: {
       color: "#fff",
-      fontSize: "1rem",
+      fontSize: "1.1rem",
     },
   },
 });

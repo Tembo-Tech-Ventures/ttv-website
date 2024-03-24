@@ -2,9 +2,13 @@ import { Stack, Typography } from "@mui/material";
 
 export default function VerifyRequest() {
   return (
-    <Stack>
-      <Typography variant="h1">Email Incoming</Typography>
-      <Typography>Check your email for a link to login.</Typography>
+    <Stack minHeight="100vh" direction="column" justifyContent="center">
+      <Typography variant="h1" color="primary" textAlign="center">
+        Email Incoming
+      </Typography>
+      <Typography textAlign="center">
+        Check your email for a link to login.
+      </Typography>
     </Stack>
   );
 }

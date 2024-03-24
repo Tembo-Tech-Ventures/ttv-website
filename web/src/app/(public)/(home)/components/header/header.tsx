@@ -57,15 +57,12 @@ export function Header() {
     >
       <Box
         sx={{
-          "& path": {
-            fill: customColors.orange.main,
-          },
           width: "100%",
           maxWidth: "300px",
         }}
         id="header-elephant-container"
       >
-        <Elephant />
+        <Elephant color={customColors.orange.main} />
       </Box>
       <Typography
         variant="h1"

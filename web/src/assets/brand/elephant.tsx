@@ -1,9 +1,18 @@
-export function Elephant() {
+import { Box } from "@mui/material";
+
+interface ElephantProps {
+  color?: string;
+}
+
+export function Elephant({ color }: ElephantProps = { color: "#013D39" }) {
   return (
-    <div
-      style={{
+    <Box
+      sx={{
         aspectRatio: "606 / 697",
         width: "100%",
+        "& path": {
+          fill: color,
+        },
       }}
     >
       <svg
@@ -26,6 +35,6 @@ export function Elephant() {
           fill="#013D39"
         />
       </svg>
-    </div>
+    </Box>
   );
 }
