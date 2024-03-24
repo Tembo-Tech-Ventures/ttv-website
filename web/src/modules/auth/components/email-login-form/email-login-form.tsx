@@ -1,14 +1,14 @@
 "use client";
 
-import { Card } from "@/components/card/card";
 import { Box, Button, Stack, TextField, Typography } from "@mui/material";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
+import { PiArrowFatRight } from "react-icons/pi";
 
 export function EmailLoginForm() {
   const [submitted, setSubmitted] = useState(false);
 
-  if (!submitted) {
+  if (submitted) {
     return (
       <Box
         sx={{
@@ -41,11 +41,10 @@ export function EmailLoginForm() {
           type="email"
           autoComplete="email"
           required
+          fullWidth
         />
         <Button type="submit" variant="contained">
-          <span>
-            Submit <span aria-hidden="true">&rarr;</span>
-          </span>
+          Submit <PiArrowFatRight size={40} />
         </Button>
       </Stack>
     </form>

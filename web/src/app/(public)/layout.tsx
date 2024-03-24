@@ -2,6 +2,7 @@ import { PageTracker } from "@/modules/analytics/components/page-tracker/page-tr
 import { ScrollTriggerInit } from "@/modules/gsap/components/scrolltrigger-init/scrolltrigger-init";
 import { Stack } from "@mui/material";
 import { type Metadata } from "next";
+import { Footer } from "./components/footer/footer";
 
 export const metadata: Metadata = {
   title: {
@@ -28,6 +29,7 @@ export default function RootLayout({
       <PageTracker />
       <ScrollTriggerInit />
       {children}
+      <Footer />
     </Stack>
   );
 }

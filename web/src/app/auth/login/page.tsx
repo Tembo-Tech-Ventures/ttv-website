@@ -21,36 +21,38 @@ export default async function Login() {
   }
 
   return (
-    <Container maxWidth="md" sx={{ py: 4 }}>
-      <Grid container spacing={4}>
-        <Grid
-          item
-          xs={12}
-          md={4}
-          sx={{
-            display: {
-              xs: "none",
-              md: "block",
-            },
-          }}
-        >
-          <Elephant color={customColors.orange.main} />
+    <Stack direction="column" minHeight="100vh" justifyContent="center">
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Grid container spacing={4}>
+          <Grid
+            item
+            xs={12}
+            md={4}
+            sx={{
+              display: {
+                xs: "none",
+                md: "block",
+              },
+            }}
+          >
+            <Elephant color={customColors.orange.main} />
+          </Grid>
+          <Grid item xs={12} md={8}>
+            <Card>
+              <Stack spacing={2}>
+                <Typography variant="h2" color="primary">
+                  Login
+                </Typography>
+                <Typography>
+                  Don’t have an account?{" "}
+                  <Link href="/auth/register">Register</Link> for a free trial.
+                </Typography>
+                <EmailLoginForm />
+              </Stack>
+            </Card>
+          </Grid>
         </Grid>
-        <Grid item xs={12} md={8}>
-          <Card>
-            <Stack spacing={2}>
-              <Typography variant="h2" color="primary">
-                Login
-              </Typography>
-              <Typography>
-                Don’t have an account?{" "}
-                <Link href="/auth/register">Register</Link> for a free trial.
-              </Typography>
-              <EmailLoginForm />
-            </Stack>
-          </Card>
-        </Grid>
-      </Grid>
-    </Container>
+      </Container>
+    </Stack>
   );
 }
