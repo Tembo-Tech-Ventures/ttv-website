@@ -48,6 +48,21 @@ export function Footer() {
               </Typography>
             </Stack>
           </Grid2>
+          <Grid2 xs={12} sm={3}>
+            <Stack direction="column" spacing={2}>
+              <Typography variant="h4" color="grey.300">
+                Connect
+              </Typography>
+              <Typography variant="body2">
+                <Link href="mailto:hello@tembotechventures.com">Email</Link>
+              </Typography>
+              <Typography variant="body2">
+                <Link href="https://www.linkedin.com/company/tembo-tech-ventures/">
+                  LinkedIn
+                </Link>
+              </Typography>
+            </Stack>
+          </Grid2>
         </Grid2>
         <Divider />
         <Stack direction="column" spacing={2}>
