@@ -14,5 +14,8 @@
       ]
     }
   },
-  "postCreateCommand": "cd ./web && npm i"
+  "postCreateCommand": "cd ./web && npm i",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  }
 }
