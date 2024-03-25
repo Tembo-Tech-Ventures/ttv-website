@@ -12,7 +12,7 @@ export function ClientIdentifier({ session }: ClientIdentifierProps) {
   const analytics = useAnalytics();
 
   useEffect(() => {
-    if (analytics && session.user) {
+    if (analytics && session?.user) {
       analytics.identify(session.user.id, session.user);
     }
   }, [analytics, session?.user]);
