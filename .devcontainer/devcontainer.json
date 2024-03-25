@@ -12,6 +12,9 @@
         "mtxr.sqltools",
         "mtxr.sqltools-driver-pg"
       ]
+    },
+    "env": {
+      "NEXTAUTH_URL": "http://localhost:3000"
     }
   },
   "postCreateCommand": "cd ./web && npm i",

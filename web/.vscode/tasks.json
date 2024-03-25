@@ -2,13 +2,25 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			"label": "docker: up",
+			"type": "shell",
+			"command": "docker-compose up -d",
+			"problemMatcher": [],
+		},
+		{
+			"label": "docker: pg_isready",
+			"type": "shell",
+			"command": "until docker-compose exec db pg_isready; do sleep 1; done",
+			"problemMatcher": [],
+			"dependsOn": [
+				"docker: up"
+			]
+		},
+		{
 			"label": "npm: install",
 			"type": "shell",
-			"command": "pwd",
+			"command": "npm i",
 			"problemMatcher": [],
-			"runOptions": {
-				"runOn": "folderOpen"
-			}
 		},
 		{
 			"type": "npm",
@@ -20,7 +32,8 @@
 				"runOn": "folderOpen"
 			},
 			"dependsOn": [
-				"npm: install"
+				"npm: install",
+				"docker: pg_isready",
 			]
 		}
 	]
