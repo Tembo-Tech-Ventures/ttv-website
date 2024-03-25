@@ -14,5 +14,5 @@
       ]
     }
   },
-  "postCreateCommand": "cd ../web && npm i"
+  "postCreateCommand": "cd ./web && npm i"
 }
