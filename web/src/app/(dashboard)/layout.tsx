@@ -111,7 +111,7 @@ export default function PersistentDrawerLeft({
   children: React.ReactNode;
 }) {
   const theme = useTheme();
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen] = React.useState(true);
 
   const handleDrawerOpen = () => {
     setOpen(true);
@@ -201,6 +201,7 @@ export default function PersistentDrawerLeft({
             <NavLink
               icon={<PiSignOutDuotone fontSize={25} />}
               primary="Logout"
+              href="/auth/logout"
             />
           </List>
         </Drawer>
