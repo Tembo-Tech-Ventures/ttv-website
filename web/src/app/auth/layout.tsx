@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     "Tembo Tech Ventures is a technology training program. We are bringing the next generation of African tech talent to the world stage.",
 };
 
-export default function RootLayout({
+export default function AuthLayout({
   children,
 }: {
   children: React.ReactNode;

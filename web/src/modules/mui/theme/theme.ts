@@ -44,4 +44,20 @@ export const theme = createTheme({
       fontSize: "1.1rem",
     },
   },
+  components: {
+    MuiToolbar: {
+      styleOverrides: {
+        root: {
+          backgroundColor: customColors.dark.main,
+        },
+      },
+    },
+    MuiDrawer: {
+      styleOverrides: {
+        paper: {
+          backgroundColor: customColors.dark.main,
+        },
+      },
+    },
+  },
 });
