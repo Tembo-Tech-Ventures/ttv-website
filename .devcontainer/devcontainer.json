@@ -1,3 +1,16 @@
 {
-    "postCreateCommand": "(cd web && npm i)"
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-docker",
+        "dbaeumer.vscode-eslint",
+        "GitHub.copilot",
+        "GitHub.copilot-chat",
+        "ms-vscode.vscode-typescript-next",
+        "esbenp.prettier-vscode",
+        "Prisma.prisma"
+      ]
+    }
+  },
+  "postCreateCommand": "cd ../web && npm i"
 }
