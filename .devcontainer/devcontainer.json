@@ -8,7 +8,9 @@
         "GitHub.copilot-chat",
         "ms-vscode.vscode-typescript-next",
         "esbenp.prettier-vscode",
-        "Prisma.prisma"
+        "Prisma.prisma",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg"
       ]
     }
   },

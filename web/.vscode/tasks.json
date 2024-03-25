@@ -1,0 +1,27 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "npm: install",
+			"type": "shell",
+			"command": "pwd",
+			"problemMatcher": [],
+			"runOptions": {
+				"runOn": "folderOpen"
+			}
+		},
+		{
+			"type": "npm",
+			"script": "dev",
+			"problemMatcher": [],
+			"label": "npm: dev",
+			"detail": "prisma migrate dev && next dev",
+			"runOptions": {
+				"runOn": "folderOpen"
+			},
+			"dependsOn": [
+				"npm: install"
+			]
+		}
+	]
+}
