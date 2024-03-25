@@ -1,3 +1,4 @@
+import { Identifier } from "@/modules/analytics/components/identifier/identifier";
 import { RootProvider } from "@/providers/root-provider/root-provider";
 import { type Metadata } from "next";
 
@@ -18,6 +19,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
+        <Identifier />
         <RootProvider>{children}</RootProvider>
       </body>
     </html>
