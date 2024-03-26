@@ -1,4 +1,5 @@
 import { Identifier } from "@/modules/analytics/components/identifier/identifier";
+import { PageTracker } from "@/modules/analytics/components/page-tracker/page-tracker";
 import { RootProvider } from "@/providers/root-provider/root-provider";
 import { type Metadata } from "next";
 
@@ -20,6 +21,7 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <Identifier />
+        <PageTracker />
         <RootProvider>{children}</RootProvider>
       </body>
     </html>

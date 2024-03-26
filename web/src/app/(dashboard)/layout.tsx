@@ -1,7 +1,6 @@
 "use client";
 
 import { Link } from "@/components/link/link";
-import { PageTracker } from "@/modules/analytics/components/page-tracker/page-tracker";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import MenuIcon from "@mui/icons-material/Menu";
@@ -21,13 +20,14 @@ import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import * as React from "react";
 import {
+  PiGaugeDuotone,
   PiImageSquareDuotone,
   PiSignOutDuotone,
   PiTable,
   PiTreeStructureDuotone,
-  PiGaugeDuotone,
+  PiUser,
+  PiUserDuotone,
 } from "react-icons/pi";
-
 interface NavLinkProps {
   icon: React.ReactNode;
   primary: React.ReactNode;
@@ -129,7 +129,6 @@ export default function PersistentDrawerLeft({
         minHeight: "100vh",
       }}
     >
-      <PageTracker />
       <Box sx={{ display: "flex" }}>
         <AppBar position="fixed" open={open}>
           <Toolbar>
@@ -193,6 +192,11 @@ export default function PersistentDrawerLeft({
               icon={<PiTable fontSize={25} />}
               primary="Applications"
               href="/dashboard/applications"
+            />
+            <NavLink
+              icon={<PiUserDuotone fontSize={25} />}
+              primary="Profile"
+              href="/dashboard/profile"
             />
           </List>
           <Box sx={{ flexGrow: 1 }} />

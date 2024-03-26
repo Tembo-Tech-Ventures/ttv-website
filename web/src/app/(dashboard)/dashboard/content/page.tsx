@@ -1,10 +1,10 @@
 import { Container, Typography } from "@mui/material";
 
-export default function Dashboard() {
+export default function Content() {
   return (
     <Container>
       <Typography variant="h4" color="white">
-        Dashboard
+        Content
       </Typography>
     </Container>
   );
