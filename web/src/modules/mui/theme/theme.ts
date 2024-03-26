@@ -16,12 +16,15 @@ export const theme = createTheme({
     fontFamily: mavenPro.style.fontFamily,
     h1: {
       fontFamily: climateCrisis.style.fontFamily,
+      wordWrap: "break-word",
     },
     h2: {
       fontFamily: climateCrisis.style.fontFamily,
+      wordWrap: "break-word",
     },
     h3: {
       fontFamily: climateCrisis.style.fontFamily,
+      wordWrap: "break-word",
     },
     h4: {
       fontFamily: mavenPro.style.fontFamily,

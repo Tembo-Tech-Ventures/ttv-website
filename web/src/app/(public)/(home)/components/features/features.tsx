@@ -1,5 +1,11 @@
 import { Card } from "@/components/card/card";
-import { Container, Grid, Typography, TypographyProps } from "@mui/material";
+import {
+  Container,
+  Grid,
+  Stack,
+  Typography,
+  TypographyProps,
+} from "@mui/material";
 
 function Title(props: TypographyProps) {
   return (
@@ -10,8 +16,16 @@ function Title(props: TypographyProps) {
 export function Features() {
   return (
     <Container sx={{ py: 8 }}>
-      <Grid container spacing={4} sx={{ width: "100%" }}>
-        <Grid item xs={12} md={4}>
+      <Stack direction="column" rowGap={4}>
+        <Typography variant="h2" color="primary">
+          What We Do
+        </Typography>
+        <Stack
+          sx={{
+            flexDirection: { xs: "column", md: "row" },
+            gap: 4,
+          }}
+        >
           <Card>
             <Title>Training</Title>
             <Typography>
@@ -19,17 +33,13 @@ export function Features() {
               skills to build web and mobile applications.
             </Typography>
           </Card>
-        </Grid>
-        <Grid item xs={12} md={4}>
           <Card>
             <Title>Mentorship</Title>
             <Typography>
-              We provide mentorship to developers who are looking to improve
+              We provide mentorship to new developers who are looking to improve
               their skills and build their careers.
             </Typography>
           </Card>
-        </Grid>
-        <Grid item xs={12} md={4}>
           <Card>
             <Title>Startups</Title>
             <Typography>
@@ -37,8 +47,8 @@ export function Features() {
               build products that solve real problems.
             </Typography>
           </Card>
-        </Grid>
-      </Grid>
+        </Stack>
+      </Stack>
     </Container>
   );
 }

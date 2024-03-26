@@ -4,6 +4,7 @@ import { Box, Stack } from "@mui/material";
 import { Header } from "./components/header/header";
 import { Value } from "./components/value/value";
 import { Features } from "./components/features/features";
+import { OurValues } from "./components/our-values/our-values";
 
 export default function Home() {
   return (
@@ -11,6 +12,7 @@ export default function Home() {
       <Header />
       <Value />
       <Features />
+      <OurValues />
     </Stack>
   );
 }
