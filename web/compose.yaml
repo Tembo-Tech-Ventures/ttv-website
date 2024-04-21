@@ -20,3 +20,11 @@ services:
     ports:
       - 8025:8025
       - 1025:1025
+
+  s3:
+    image: adobe/s3mock
+    ports:
+      - 9090:9090
+    environment:
+      - initialBuckets=ttv-application-files
+      - debug=true

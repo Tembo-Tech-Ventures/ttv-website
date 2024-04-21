@@ -1,6 +1,7 @@
 "use client";
 
 import { Link } from "@/components/link/link";
+import { useLoginRedirect } from "@/modules/auth/hooks/use-login-redirect/use-login-redirect";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import MenuIcon from "@mui/icons-material/Menu";
@@ -18,6 +19,7 @@ import ListItemText from "@mui/material/ListItemText";
 import { styled, useTheme } from "@mui/material/styles";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
+import { useSession } from "next-auth/react";
 import * as React from "react";
 import {
   PiGaugeDuotone,
@@ -25,7 +27,6 @@ import {
   PiSignOutDuotone,
   PiTable,
   PiTreeStructureDuotone,
-  PiUser,
   PiUserDuotone,
 } from "react-icons/pi";
 interface NavLinkProps {
@@ -112,6 +113,9 @@ export default function PersistentDrawerLeft({
 }) {
   const theme = useTheme();
   const [open, setOpen] = React.useState(true);
+  const { status } = useSession();
+
+  useLoginRedirect();
 
   const handleDrawerOpen = () => {
     setOpen(true);
@@ -120,6 +124,10 @@ export default function PersistentDrawerLeft({
   const handleDrawerClose = () => {
     setOpen(false);
   };
+
+  if (status !== "authenticated") {
+    return null;
+  }
 
   return (
     <Stack

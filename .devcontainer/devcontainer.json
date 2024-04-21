@@ -10,7 +10,8 @@
         "esbenp.prettier-vscode",
         "Prisma.prisma",
         "mtxr.sqltools",
-        "mtxr.sqltools-driver-pg"
+        "mtxr.sqltools-driver-pg",
+        "WallabyJs.console-ninja"
       ]
     },
   },
