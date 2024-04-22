@@ -1,4 +1,8 @@
 {
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
   "customizations": {
     "vscode": {
       "extensions": [
@@ -13,7 +17,7 @@
         "mtxr.sqltools-driver-pg",
         "WallabyJs.console-ninja"
       ]
-    },
+    }
   },
   "postCreateCommand": "cd ./web && npm i",
   "features": {
@@ -21,5 +25,11 @@
   },
   "containerEnv": {
       "NEXTAUTH_URL": "http://localhost:3000"
-  }
+  },
+  "forwardPorts": [
+    3000,
+    5432,
+    8025,
+    9090
+  ]
 }

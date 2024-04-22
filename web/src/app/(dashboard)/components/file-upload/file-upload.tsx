@@ -1,6 +1,7 @@
 "use client";
 
-import { Button, styled } from "@mui/material";
+import { FileUploadResponse } from "@/app/api/file/route";
+import { Button, styled, Typography } from "@mui/material";
 import { ChangeEvent, useCallback, useState } from "react";
 import { PiCloud, PiTrashDuotone } from "react-icons/pi";
 
@@ -24,8 +25,7 @@ export function FileUpload({ onChange }: FileUploadProps) {
   const [status, setStatus] = useState<
     "idle" | "uploading" | "success" | "error"
   >("idle");
-  const [url, setUrl] = useState<string | null>(null);
-  const [filename, setFilename] = useState<string | null>(null);
+  const [fileInfo, setFileInfo] = useState<FileUploadResponse | null>(null);
 
   const onChangeInner = useCallback(
     async (e: ChangeEvent<HTMLInputElement>) => {
@@ -34,14 +34,14 @@ export function FileUpload({ onChange }: FileUploadProps) {
       setStatus("uploading");
       const mimeType = file.type;
       const filename = file.name;
-      const basePath = "applications";
+      const size = file.size;
       try {
-        const response = await fetch("/api/file/upload", {
+        const response = await fetch("/api/file", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ filename, basePath, mimeType }),
+          body: JSON.stringify({ filename, mimeType, size }),
         });
-        const data = await response.json();
+        const data = (await response.json()) as FileUploadResponse;
         const url = data.url;
         await fetch(url, {
           method: "PUT",
@@ -49,8 +49,7 @@ export function FileUpload({ onChange }: FileUploadProps) {
         });
         const newUrl = new URL(url);
         newUrl.search = "";
-        setFilename(filename);
-        setUrl(newUrl.toString());
+        setFileInfo(data);
         onChange?.(newUrl.toString());
         setStatus("success");
       } catch (err) {
@@ -61,14 +60,32 @@ export function FileUpload({ onChange }: FileUploadProps) {
     [onChange],
   );
 
-  if (url) {
+  const onDelete = useCallback(async () => {
+    if (!fileInfo?.id) return;
+    try {
+      await fetch(`/api/file/${fileInfo?.id}/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId: fileInfo?.id }),
+      });
+      setFileInfo(null);
+      onChange?.(undefined);
+      setStatus("idle");
+    } catch (err) {
+      console.error("Error", err);
+      alert("There was an error deleting the file");
+    }
+  }, [fileInfo?.id, onChange]);
+
+  if (fileInfo?.filename) {
     return (
       <Button
         startIcon={<PiTrashDuotone fontSize={25} />}
         variant="contained"
         color="secondary"
+        onClick={onDelete}
       >
-        Delete {filename}
+        ...{fileInfo.filename.slice(-8)}
       </Button>
     );
   }
@@ -86,9 +103,13 @@ export function FileUpload({ onChange }: FileUploadProps) {
         Upload file
         <VisuallyHiddenInput type="file" onChange={onChangeInner} />
       </Button>
-      {status === "uploading" && <div>Uploading file...</div>}
-      {status === "success" && <div>File uploaded successfully</div>}
-      {status === "error" && <div>There was an error uploading the file</div>}
+      {status !== "idle" && (
+        <Typography component="p" variant="caption" color="textSecondary">
+          {status === "uploading" && "Uploading file..."}
+          {status === "success" && "File uploaded successfully"}
+          {status === "error" && "There was an error uploading the file"}
+        </Typography>
+      )}
     </>
   );
 }
