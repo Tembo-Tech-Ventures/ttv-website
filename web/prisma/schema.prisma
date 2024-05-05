@@ -69,13 +69,24 @@ model File {
     user User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 }
 
-model Program {
-    id          String   @id @default(cuid())
-    name        String
+model Curriculum {
+    id          String    @id @default(cuid())
+    title       String
     description String
-    createdAt   DateTime @default(now())
-    updatedAt   DateTime @updatedAt
+    createdAt   DateTime  @default(now())
+    updatedAt   DateTime  @updatedAt
+    Program     Program[]
+}
 
+model Program {
+    id           String   @id @default(cuid())
+    name         String
+    description  String
+    curriculumId String
+    createdAt    DateTime @default(now())
+    updatedAt    DateTime @updatedAt
+
+    curriculum         Curriculum           @relation(fields: [curriculumId], references: [id])
     ProgramApplication ProgramApplication[]
 }
 
@@ -83,17 +94,30 @@ enum ApplicationStatus {
     PENDING
     APPROVED
     REJECTED
+    COMPLETED
+}
+
+model ProgramPartner {
+    id        String   @id @default(cuid())
+    name      String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    ProgramApplication ProgramApplication[]
 }
 
 model ProgramApplication {
     id          String            @id @default(cuid())
     programId   String?
     userId      String
+    partnerId   String?
     status      ApplicationStatus @default(PENDING)
     application Json
     createdAt   DateTime          @default(now())
     updatedAt   DateTime          @updatedAt
+    completedAt DateTime?
 
-    program Program? @relation(fields: [programId], references: [id])
-    user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    partner ProgramPartner? @relation(fields: [partnerId], references: [id])
+    program Program?        @relation(fields: [programId], references: [id])
+    user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
