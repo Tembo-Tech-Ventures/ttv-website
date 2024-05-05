@@ -22,10 +22,7 @@ export default function Apply({ partners }: ApplyProps) {
   const [submission] = useAtom(applicationValuesAtom);
 
   const submit = useCallback(
-    async (
-      [url, method]: [string, string],
-      { arg }: { arg: typeof submission },
-    ) => {
+    async (method: string, { arg }: { arg: typeof submission }) => {
       const response = await client.api.v1["program-application"].$post({
         json: {
           version: applicationSchemaVersion,
@@ -33,6 +30,8 @@ export default function Apply({ partners }: ApplyProps) {
           partnerId:
             (arg.find((item) => item.name === "partnerId")?.value as string) ||
             "",
+          name:
+            (arg.find((item) => item.name === "name")?.value as string) || "",
         },
       });
       return await response.json();
@@ -40,7 +39,10 @@ export default function Apply({ partners }: ApplyProps) {
     [],
   );
 
-  const { trigger, isMutating } = useSWR(["/api/application", "POST"], submit);
+  const { trigger, isMutating } = useSWR(
+    `client.api.v1["program-application"].$post`,
+    submit,
+  );
 
   return (
     <Stack
@@ -59,7 +61,7 @@ export default function Apply({ partners }: ApplyProps) {
           size="large"
           onClick={async () => {
             const application = await trigger(submission);
-            if (application?.id) {
+            if ("id" in application) {
               router.refresh();
             }
           }}

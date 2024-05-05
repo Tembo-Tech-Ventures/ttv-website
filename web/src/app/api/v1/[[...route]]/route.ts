@@ -2,13 +2,15 @@ import { Hono } from "hono";
 import { handle } from "hono/vercel";
 import { programApplicationHandler } from "./program-application/program-application";
 import { programPartnerHandler } from "./program-partner/program-partner";
+import { userHandler } from "./user/user";
 
 export const runtime = "nodejs";
 
 const app = new Hono()
   .basePath("/api/v1")
   .route("/program-application", programApplicationHandler)
-  .route("/program-partner", programPartnerHandler);
+  .route("/program-partner", programPartnerHandler)
+  .route("/user", userHandler);
 
 export const GET = handle(app);
 export const POST = handle(app);

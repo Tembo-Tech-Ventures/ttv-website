@@ -1,6 +1,6 @@
 "use client";
 
-import { ProgramApplication, ProgramPartner } from "@prisma/client";
+import { ProgramApplication, ProgramPartner, User } from "@prisma/client";
 import { useAtom } from "jotai";
 import { useEffect } from "react";
 import {
@@ -15,9 +15,11 @@ import { TextAreaField } from "../textarea-field/textarea-field";
 export function ApplicationForm({
   existing,
   partners,
+  user,
 }: {
   existing?: ProgramApplication;
   partners: ProgramPartner[];
+  user?: User;
 }) {
   const [, setApplicationValues] = useAtom(setApplicationValuesAtom);
 
@@ -43,6 +45,9 @@ export function ApplicationForm({
             label: partner.name,
             value: partner.id,
           }));
+        }
+        if (item.name === "name" && user?.name) {
+          return null;
         }
         if (item.type === "requiredBoolean") {
           return <BooleanField key={item.name} {...item} />;
