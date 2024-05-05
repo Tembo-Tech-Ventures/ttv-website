@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Stack } from "@mui/material";
-import { ProgramApplication } from "@prisma/client";
+import { ProgramApplication, ProgramPartner } from "@prisma/client";
 import { useAtom } from "jotai";
 import { useRouter } from "next/navigation";
 import { useCallback } from "react";
@@ -11,8 +11,10 @@ import useSWRMutation from "swr/mutation";
 
 export function UpdateApplication({
   application,
+  partners,
 }: {
   application: ProgramApplication;
+  partners: ProgramPartner[];
 }) {
   const router = useRouter();
   const [submission] = useAtom(applicationValuesAtom);
@@ -50,7 +52,7 @@ export function UpdateApplication({
       spacing={2}
       pt={2}
     >
-      <ApplicationForm existing={application} />
+      <ApplicationForm existing={application} partners={partners} />
       <div>
         <Button
           variant="contained"

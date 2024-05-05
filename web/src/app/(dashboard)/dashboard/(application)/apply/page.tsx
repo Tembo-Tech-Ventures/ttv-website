@@ -12,10 +12,11 @@ export default async function ApplyPage() {
       userId,
     },
   });
+  const partners = await prisma.programPartner.findMany();
 
   if (existingApplication) {
     return redirect(`/dashboard/application/${existingApplication.id}`);
   }
 
-  return <Apply />;
+  return <Apply partners={partners} />;
 }

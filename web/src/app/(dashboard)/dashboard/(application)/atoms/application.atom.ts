@@ -16,6 +16,10 @@ export interface ApplicationSchemaItem {
   name: string;
   label: string;
   valueAtom: any;
+  options?: {
+    label: string;
+    value: string;
+  }[];
 }
 
 export type ApplicationSchema = ApplicationSchemaItem[];
@@ -23,6 +27,18 @@ export type ApplicationSchema = ApplicationSchemaItem[];
 export const applicationSchemaVersion = "1";
 
 export const applicationSchema: ApplicationSchema = [
+  {
+    type: "string",
+    name: "name",
+    label: "Name",
+    valueAtom: atom(null),
+  },
+  {
+    type: "string",
+    name: "partnerId",
+    label: "Partner",
+    valueAtom: atom(null),
+  },
   {
     type: "requiredBoolean",
     name: "htmlCssDone",

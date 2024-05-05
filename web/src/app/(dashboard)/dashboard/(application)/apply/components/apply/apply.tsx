@@ -10,8 +10,14 @@ import {
   applicationValuesAtom,
 } from "../../../atoms/application.atom";
 import { ApplicationForm } from "../../../components/application-form/application-form";
+import { client } from "@/modules/api/client";
+import { ProgramPartner } from "@prisma/client";
 
-export default function Apply() {
+interface ApplyProps {
+  partners: ProgramPartner[];
+}
+
+export default function Apply({ partners }: ApplyProps) {
   const router = useRouter();
   const [submission] = useAtom(applicationValuesAtom);
 
@@ -20,17 +26,16 @@ export default function Apply() {
       [url, method]: [string, string],
       { arg }: { arg: typeof submission },
     ) => {
-      const response = fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const response = await client.api.v1["program-application"].$post({
+        json: {
           version: applicationSchemaVersion,
           submission: arg,
-        }),
+          partnerId:
+            (arg.find((item) => item.name === "partnerId")?.value as string) ||
+            "",
+        },
       });
-      return (await response).json();
+      return await response.json();
     },
     [],
   );
@@ -47,7 +52,7 @@ export default function Apply() {
       <Typography variant="h4" color="white">
         Apply
       </Typography>
-      <ApplicationForm />
+      <ApplicationForm partners={partners} />
       <div>
         <Button
           variant="contained"
