@@ -31,7 +31,7 @@ export function ApplicationForm({
       applicationSchema.forEach(({ valueAtom, name }) => {
         const value = (
           existingApplication.find((item) => item.name === name) as any
-        ).value;
+        )?.value;
         setApplicationValues({ atom: valueAtom, value });
       });
     }
