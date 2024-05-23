@@ -80,12 +80,14 @@ model Curriculum {
 }
 
 model Program {
-    id           String   @id @default(cuid())
+    id           String    @id @default(cuid())
     name         String
     description  String
     curriculumId String
-    createdAt    DateTime @default(now())
-    updatedAt    DateTime @updatedAt
+    startDate    DateTime?
+    endDate      DateTime?
+    createdAt    DateTime  @default(now())
+    updatedAt    DateTime  @updatedAt
 
     curriculum         Curriculum           @relation(fields: [curriculumId], references: [id])
     ProgramApplication ProgramApplication[]
