@@ -45,6 +45,7 @@ model User {
     sessions           Session[]
     ProgramApplication ProgramApplication[]
     File               File[]
+    UserRoles          UserRole[]
 }
 
 model VerificationToken {
@@ -56,6 +57,27 @@ model VerificationToken {
 }
 
 // Application models
+
+model Role {
+    id        String      @id @default(cuid())
+    name      String      @unique
+    createdAt DateTime    @default(now())
+    updatedAt DateTime    @updatedAt
+    UserRoles UserRole[]
+	@@map("Roles")
+}
+
+model UserRole {
+    id        String   @id @default(cuid())
+    userId    String
+    roleId    String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+    role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+	@@map("UserRoles")
+}
 
 model File {
     id        String   @id @default(cuid())
