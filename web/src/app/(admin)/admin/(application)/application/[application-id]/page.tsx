@@ -33,21 +33,20 @@ export default async function Applications({
           Application
         </Typography>
         <Status value={application?.status} />
-        <Grid spacing={2} container>
+        <Grid spacing={4} container>
           {submission.map((field) => (
             <React.Fragment key={field.name}>
               <Grid xs={6} mb={2}>
                 <Typography
                   variant="body2"
-                  color="white"
-                  fontSize={14}
-                  component="span"
+                  color="#999"
+                  sx={{ wordBreak: "break-word" }}
                 >
                   {field.label}
                 </Typography>
               </Grid>
               <Grid xs={6} mb={2}>
-                <Typography variant="body2" color="white">
+                <Typography variant="body2" color="white" sx={{ pl: 2 }}>
                   {`${field.value}`}
                 </Typography>
               </Grid>
