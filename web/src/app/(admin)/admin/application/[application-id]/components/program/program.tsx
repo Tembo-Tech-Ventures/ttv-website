@@ -26,7 +26,7 @@ export function Program({ value, options }: ProgramProps) {
         id="status"
         onChange={async (e) => {
           const formData = new FormData();
-          formData.set("status", e.target.value as string);
+          formData.set("programId", e.target.value as string);
           formData.set("applicationId", applicationId as string);
           await updateStatus(formData);
           router.refresh();
