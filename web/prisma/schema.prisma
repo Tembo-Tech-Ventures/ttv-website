@@ -41,10 +41,11 @@ model User {
     emailVerified DateTime?
     image         String?
 
-    accounts           Account[]
-    sessions           Session[]
-    ProgramApplication ProgramApplication[]
-    File               File[]
+    accounts            Account[]
+    sessions            Session[]
+    programApplications ProgramApplication[]
+    files               File[]
+    userRoles           UserRole[]
 }
 
 model VerificationToken {
@@ -56,6 +57,30 @@ model VerificationToken {
 }
 
 // Application models
+
+model Role {
+    id        String   @id @default(cuid())
+    name      String   @unique
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    userRoles UserRole[]
+
+    @@map("Roles") // I made a mistake and had to map things for naming to be consistent (i.e. singular)
+}
+
+model UserRole {
+    id        String   @id @default(cuid())
+    userId    String
+    roleId    String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+    role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+    @@map("UserRoles") // I made a mistake and had to map things for naming to be consistent (i.e. singular)
+}
 
 model File {
     id        String   @id @default(cuid())
@@ -71,12 +96,13 @@ model File {
 }
 
 model Curriculum {
-    id          String    @id @default(cuid())
+    id          String   @id @default(cuid())
     title       String
     description String
-    createdAt   DateTime  @default(now())
-    updatedAt   DateTime  @updatedAt
-    Program     Program[]
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
+
+    programs Program[]
 }
 
 model Program {
@@ -87,8 +113,8 @@ model Program {
     createdAt    DateTime @default(now())
     updatedAt    DateTime @updatedAt
 
-    curriculum         Curriculum           @relation(fields: [curriculumId], references: [id])
-    ProgramApplication ProgramApplication[]
+    curriculum          Curriculum           @relation(fields: [curriculumId], references: [id])
+    programApplications ProgramApplication[]
 }
 
 enum ApplicationStatus {
@@ -104,7 +130,7 @@ model ProgramPartner {
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
-    ProgramApplication ProgramApplication[]
+    programApplications ProgramApplication[]
 }
 
 model ProgramApplication {
