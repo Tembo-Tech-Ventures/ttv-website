@@ -187,6 +187,11 @@ export function MainAdminLayout({
               primary="Applications"
               href="/admin/application"
             />
+            <NavLink
+              icon={<PiUserDuotone fontSize={25} />}
+              primary="Users"
+              href="/admin/user"
+            />
           </List>
           <Box sx={{ flexGrow: 1 }} />
           <Divider />

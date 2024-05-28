@@ -1,18 +1,18 @@
 import { prisma } from "@/modules/prisma/lib/prisma-client/prisma-client";
 import { Stack, Typography } from "@mui/material";
-import Applications from "./components/applications/applications";
-import { getApplications } from "./lib/get-applications/get-applications";
+import Users from "./components/users/users";
+import { getUsers } from "./lib/get-users/get-users";
 import { checkAdminPermissions } from "@/modules/roles/lib/check-admin-permissions/check-admin-permissions";
 
-export default async function ApplicationsPage() {
+export default async function UsersPage() {
   await checkAdminPermissions();
-  const applications = await getApplications();
+  const users = await getUsers();
   return (
     <Stack spacing={2}>
       <Typography variant="h4" color="white">
-        Applications
+        Users
       </Typography>
-      <Applications applications={applications} />
+      <Users users={users} />
     </Stack>
   );
 }

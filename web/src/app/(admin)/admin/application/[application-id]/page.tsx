@@ -1,8 +1,9 @@
 import { checkAdminPermissions } from "@/modules/roles/lib/check-admin-permissions/check-admin-permissions";
-import { Box, Container, Grid, Stack, Typography } from "@mui/material";
-import { getApplicationPageData } from "./lib/get-application-page-data/get-application-page-data";
+import { Container, Grid, Stack, Typography } from "@mui/material";
 import React from "react";
+import { Program } from "./components/program/program";
 import { Status } from "./components/status/status";
+import { getApplicationPageData } from "./lib/get-application-page-data/get-application-page-data";
 
 type Application = {
   version: string;
@@ -14,7 +15,7 @@ type Application = {
   }[];
 };
 
-export default async function Applications({
+export default async function ApplicationPage({
   params,
 }: {
   params: { "application-id": string };
@@ -22,6 +23,7 @@ export default async function Applications({
   await checkAdminPermissions();
   const applicationId = params["application-id"];
   const applicationPageData = await getApplicationPageData(applicationId);
+  const programs = applicationPageData?.programs;
   const application = applicationPageData?.application;
   const applicationDetails = applicationPageData?.application
     ?.application as Application;
@@ -33,6 +35,10 @@ export default async function Applications({
           Application
         </Typography>
         <Status value={application?.status} />
+        <Program
+          value={application?.programId || undefined}
+          options={programs.map((p) => ({ label: p.name, value: p.id }))}
+        />
         <Grid spacing={4} container>
           {submission.map((field) => (
             <React.Fragment key={field.name}>
