@@ -2,6 +2,7 @@ import { checkAdminPermissions } from "@/modules/roles/lib/check-admin-permissio
 import { Box, Container, Divider, Stack, Typography } from "@mui/material";
 import { getUserPageData } from "./lib/get-user-page-data/get-user-page-data";
 import { Applications } from "./components/applications/applications";
+import { Roles } from "./components/roles/roles";
 
 type Application = {
   version: string;
@@ -33,9 +34,8 @@ export default async function UserPage({
         <Divider />
         <Typography>
           <b>Roles: </b>
-          {user?.userRoles.map((role) => role.role?.name).join(", ") ||
-            "No roles"}
         </Typography>
+        <Roles userPageData={userPageData} />
         <Divider />
         <Stack spacing={2}>
           <Typography variant="h5" color="white">

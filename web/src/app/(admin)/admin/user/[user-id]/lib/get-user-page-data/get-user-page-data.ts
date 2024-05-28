@@ -23,5 +23,6 @@ export async function getUserPageData(id: string) {
       },
     },
   });
-  return { user };
+  const roles = await prisma.role.findMany();
+  return { user, roles };
 }
