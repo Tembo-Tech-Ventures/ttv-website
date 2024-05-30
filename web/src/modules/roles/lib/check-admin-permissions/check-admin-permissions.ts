@@ -5,7 +5,7 @@ import { ROLES } from "@/modules/roles/constants";
 export async function checkAdminPermissions() {
   const session = await getServerSession();
   if (!session?.user) {
-    return false;
+    throw new Error("User not found");
   }
   const userId = session.user.id;
   await prisma.userRole.findFirstOrThrow({
