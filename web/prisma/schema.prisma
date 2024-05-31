@@ -121,6 +121,7 @@ enum ApplicationStatus {
     PENDING
     APPROVED
     REJECTED
+    AUDIT
     COMPLETED
 }
 
