@@ -25,6 +25,7 @@ export default function Users({ users }: UsersProps) {
         { field: "id", headerName: "ID", width: 90 },
         { field: "email", headerName: "Email", width: 200 },
         { field: "name", headerName: "Name", width: 150 },
+        { field: "partnerName", headerName: "Partner", width: 150 },
         { field: "roles", headerName: "Roles", width: 200 },
         { field: "applications", headerName: "Applications", width: 150 },
       ]}
@@ -32,6 +33,7 @@ export default function Users({ users }: UsersProps) {
         ...user,
         roles: user.userRoles.map((role) => role.role?.name).join(", "),
         applications: user.programApplications?.length || 0,
+        partnerName: user.programApplications?.[0]?.partner?.name,
       }))}
     ></DataGrid>
   );

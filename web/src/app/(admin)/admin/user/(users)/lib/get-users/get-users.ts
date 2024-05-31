@@ -10,6 +10,7 @@ export async function getUsers() {
       },
       programApplications: {
         include: {
+          partner: {},
           program: {
             include: {
               curriculum: {},
