@@ -21,14 +21,11 @@ import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import { useSession } from "next-auth/react";
 import * as React from "react";
-import {
-  PiGaugeDuotone,
-  PiImageSquareDuotone,
-  PiSignOutDuotone,
-  PiTable,
-  PiTreeStructureDuotone,
-  PiUserDuotone,
-} from "react-icons/pi";
+import { LocalizationProvider } from "@mui/x-date-pickers";
+import { PiSignOutDuotone, PiTable, PiUserDuotone } from "react-icons/pi";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import "dayjs/locale/en";
+
 interface NavLinkProps {
   icon: React.ReactNode;
   primary: React.ReactNode;
@@ -132,82 +129,84 @@ export function MainAdminLayout({
   }
 
   return (
-    <Stack
-      sx={{
-        backgroundColor: "dark.main",
-        backgroundImage: "linear-gradient(-15deg, #2C6964, #013D39)",
-        minHeight: "100vh",
-        width: "100%",
-        overflowX: "scroll",
-      }}
-    >
-      <Box sx={{ display: "flex" }}>
-        <AppBar position="fixed" open={open}>
-          <Toolbar>
-            <IconButton
-              color="inherit"
-              aria-label="open drawer"
-              onClick={handleDrawerOpen}
-              edge="start"
-              sx={{ mr: 2, ...(open && { display: "none" }) }}
-            >
-              <MenuIcon />
-            </IconButton>
-            <Typography variant="h6" noWrap component="div">
-              TTV Admin
-            </Typography>
-          </Toolbar>
-        </AppBar>
-        <Drawer
-          sx={{
-            width: drawerWidth,
-            flexShrink: 0,
-            "& .MuiDrawer-paper": {
+    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="en">
+      <Stack
+        sx={{
+          backgroundColor: "dark.main",
+          backgroundImage: "linear-gradient(-15deg, #2C6964, #013D39)",
+          minHeight: "100vh",
+          width: "100%",
+          overflowX: "scroll",
+        }}
+      >
+        <Box sx={{ display: "flex" }}>
+          <AppBar position="fixed" open={open}>
+            <Toolbar>
+              <IconButton
+                color="inherit"
+                aria-label="open drawer"
+                onClick={handleDrawerOpen}
+                edge="start"
+                sx={{ mr: 2, ...(open && { display: "none" }) }}
+              >
+                <MenuIcon />
+              </IconButton>
+              <Typography variant="h6" noWrap component="div">
+                TTV Admin
+              </Typography>
+            </Toolbar>
+          </AppBar>
+          <Drawer
+            sx={{
               width: drawerWidth,
-              boxSizing: "border-box",
-            },
-          }}
-          variant="persistent"
-          anchor="left"
-          open={open}
-        >
-          <DrawerHeader>
-            <IconButton onClick={handleDrawerClose}>
-              {theme.direction === "ltr" ? (
-                <ChevronLeftIcon />
-              ) : (
-                <ChevronRightIcon />
-              )}
-            </IconButton>
-          </DrawerHeader>
-          <Divider />
-          <List>
-            <NavLink
-              icon={<PiTable fontSize={25} />}
-              primary="Applications"
-              href="/admin/application"
-            />
-            <NavLink
-              icon={<PiUserDuotone fontSize={25} />}
-              primary="Users"
-              href="/admin/user"
-            />
-          </List>
-          <Box sx={{ flexGrow: 1 }} />
-          <Divider />
-          <List>
-            <NavLink
-              icon={<PiSignOutDuotone fontSize={25} />}
-              primary="Logout"
-              href="/auth/logout"
-            />
-          </List>
-        </Drawer>
-        <Main open={open}>
-          <DrawerHeader />
-          {children}
-        </Main>
-      </Box>
-    </Stack>
+              flexShrink: 0,
+              "& .MuiDrawer-paper": {
+                width: drawerWidth,
+                boxSizing: "border-box",
+              },
+            }}
+            variant="persistent"
+            anchor="left"
+            open={open}
+          >
+            <DrawerHeader>
+              <IconButton onClick={handleDrawerClose}>
+                {theme.direction === "ltr" ? (
+                  <ChevronLeftIcon />
+                ) : (
+                  <ChevronRightIcon />
+                )}
+              </IconButton>
+            </DrawerHeader>
+            <Divider />
+            <List>
+              <NavLink
+                icon={<PiTable fontSize={25} />}
+                primary="Applications"
+                href="/admin/application"
+              />
+              <NavLink
+                icon={<PiUserDuotone fontSize={25} />}
+                primary="Users"
+                href="/admin/user"
+              />
+            </List>
+            <Box sx={{ flexGrow: 1 }} />
+            <Divider />
+            <List>
+              <NavLink
+                icon={<PiSignOutDuotone fontSize={25} />}
+                primary="Logout"
+                href="/auth/logout"
+              />
+            </List>
+          </Drawer>
+          <Main open={open}>
+            <DrawerHeader />
+            {children}
+          </Main>
+        </Box>
+      </Stack>
+    </LocalizationProvider>
   );
 }

@@ -1,5 +1,5 @@
 import { prisma } from "@/modules/prisma/lib/prisma-client/prisma-client";
-import { Chip, Container, Stack, Typography } from "@mui/material";
+import { Box, Button, Chip, Container, Stack, Typography } from "@mui/material";
 import { format } from "date-fns";
 import { redirect } from "next/navigation";
 import { UpdateApplication } from "./components/update-application/update-application";
@@ -49,6 +49,18 @@ export default async function Applications({
           Your application status:
           <Chip label={application?.status} color="secondary" />
         </Typography>
+        {application?.status === ApplicationStatus.COMPLETED &&
+          application?.completedAt && (
+            <Box>
+              <Button
+                href={`/certificate/${applicationId}`}
+                target="_blank"
+                variant="contained"
+              >
+                View Certificate
+              </Button>
+            </Box>
+          )}
         {application?.status === ApplicationStatus.PENDING && (
           <>
             <Card>
