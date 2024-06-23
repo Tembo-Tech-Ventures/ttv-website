@@ -1,6 +1,9 @@
 import { Stack } from "@mui/material";
 import { type Metadata } from "next";
 
+/**
+ * This page has its own layout because we don't want to show the full website layout.
+ */
 export default function RootLayout({
   children,
 }: {

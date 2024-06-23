@@ -20,7 +20,6 @@ export function Program({ value, options }: ProgramProps) {
   return (
     <FormLabel>
       <Select
-        size="small"
         value={value || ""}
         name="status"
         id="status"

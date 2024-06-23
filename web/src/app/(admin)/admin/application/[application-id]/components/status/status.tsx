@@ -18,7 +18,6 @@ export function Status({ value }: StatusProps) {
   return (
     <FormLabel>
       <Select
-        size="small"
         value={value || ""}
         name="status"
         id="status"
