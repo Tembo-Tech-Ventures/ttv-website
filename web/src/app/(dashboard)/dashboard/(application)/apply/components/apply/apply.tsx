@@ -52,7 +52,7 @@ export default function Apply({ partners }: ApplyProps) {
       spacing={2}
     >
       <Typography variant="h4" color="white">
-        Apply
+        Apply to Tembo Tech Ventures
       </Typography>
       <ApplicationForm partners={partners} />
       <div>

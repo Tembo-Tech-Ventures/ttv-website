@@ -85,7 +85,7 @@ export const applicationSchema: ApplicationSchema = [
     type: "requiredBoolean",
     name: "nextjsDone",
     label:
-      "Did you complete the free portion of the [Next.js course](https://nextjs.org/learn)?",
+      "Did you complete the free [Next.js course](https://nextjs.org/learn)?",
     valueAtom: atom(null),
   },
   {

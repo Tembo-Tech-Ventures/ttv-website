@@ -1,8 +1,8 @@
-import { prisma } from "@/modules/prisma/lib/prisma-client/prisma-client";
-import { NextResponse } from "next/server";
 import { createId } from "@paralleldrive/cuid2";
+import { headers } from "next/headers";
 
 export function GET() {
+  headers();
   const id = createId();
   const response = new Response(id, {
     headers: {

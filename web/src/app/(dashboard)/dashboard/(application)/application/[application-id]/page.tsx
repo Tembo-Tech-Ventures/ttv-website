@@ -1,9 +1,11 @@
 import { prisma } from "@/modules/prisma/lib/prisma-client/prisma-client";
-import { Chip, Container, Typography } from "@mui/material";
+import { Chip, Container, Stack, Typography } from "@mui/material";
 import { format } from "date-fns";
 import { redirect } from "next/navigation";
 import { UpdateApplication } from "./components/update-application/update-application";
 import { getServerSession } from "@/modules/auth/lib/get-server-session/get-server-session";
+import { Card } from "@/components/card/card";
+import { ApplicationStatus } from "@prisma/client";
 
 export default async function Applications({
   params,
@@ -35,20 +37,33 @@ export default async function Applications({
 
   return (
     <Container>
-      <Typography variant="h4" color="white">
-        Application
-      </Typography>
-      <Typography color="white" variant="subtitle2">
-        {format(new Date(application?.createdAt.toString() || ""), "PPpp")}
-      </Typography>
-      <Typography color="white" variant="body2">
-        Status: <Chip label={application?.status} color="secondary" />
-      </Typography>
-      <UpdateApplication
-        application={application}
-        partners={partners}
-        user={user!}
-      />
+      <Stack spacing={2}>
+        <Typography variant="h4" color="white">
+          Application
+        </Typography>
+        <Typography color="white" variant="subtitle2">
+          Originally submitted:{" "}
+          {format(new Date(application?.createdAt.toString() || ""), "PPpp")}
+        </Typography>
+        <Typography color="white" variant="body2">
+          Your application status:
+          <Chip label={application?.status} color="secondary" />
+        </Typography>
+        {application?.status === ApplicationStatus.PENDING && (
+          <>
+            <Card>
+              <Typography color="white" variant="body2">
+                Feel free to update your application below while it is pending.
+              </Typography>
+            </Card>
+            <UpdateApplication
+              application={application}
+              partners={partners}
+              user={user!}
+            />
+          </>
+        )}
+      </Stack>
     </Container>
   );
 }
