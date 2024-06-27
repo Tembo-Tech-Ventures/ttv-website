@@ -43,4 +43,49 @@
       "mtxr.sqltools-driver-pg"
     ]
   },
+  "tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			// a task that runs docker-compose up when the folder opens
+			{
+				"label": "start database and mailserver",
+				"type": "shell",
+				"command": "docker-compose up -d",
+				"problemMatcher": [],
+				"runOptions": {
+					"runOn": "folderOpen"
+				},
+        "options": {
+          "cwd": "${workspaceFolder}/web"
+        }
+			},
+			// install dependencies
+			{
+				"label": "install dependencies",
+				"type": "shell",
+				"command": "npm install",
+				"problemMatcher": [],
+        "options": {
+          "cwd": "${workspaceFolder}/web"
+        }
+			},
+			// run the app
+			{
+				"label": "run app",
+				"type": "shell",
+        "command": ". ./run-dev.sh",
+				"problemMatcher": [],
+				"runOptions": {
+					"runOn": "folderOpen"
+				},
+        "options": {
+          "cwd": "${workspaceFolder}/web"
+        },
+				"dependsOn": [
+					"start database and mailserver",
+					"install dependencies"
+				]
+			},
+		]
+	}
 }
