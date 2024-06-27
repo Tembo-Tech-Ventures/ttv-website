@@ -1,6 +1,7 @@
 import { Stack, Typography } from "@mui/material";
 
-export default function VerifyRequest() {
+export default async function VerifyRequest() {
+  console.log("@@ nextauth url: ", process.env.NEXTAUTH_URL);
   return (
     <Stack minHeight="100vh" direction="column" justifyContent="center">
       <Typography variant="h1" color="primary" textAlign="center">
