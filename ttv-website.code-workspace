@@ -3,9 +3,6 @@
     {
       "path": "."
     },
-    {
-      "path": "web"
-    }
   ],
   "settings": {
     "files.autoSave": "onFocusChange",
@@ -46,46 +43,52 @@
   "tasks": {
 		"version": "2.0.0",
 		"tasks": [
-			// a task that runs docker-compose up when the folder opens
-			{
-				"label": "start database and mailserver",
-				"type": "shell",
-				"command": "docker-compose up -d",
-				"problemMatcher": [],
-				"runOptions": {
-					"runOn": "folderOpen"
-				},
+      {
+        "label": "docker: up",
+        "type": "shell",
+        "command": "docker-compose up -d",
+        "problemMatcher": [],
         "options": {
           "cwd": "${workspaceFolder}/web"
         }
-			},
-			// install dependencies
-			{
-				"label": "install dependencies",
-				"type": "shell",
-				"command": "npm install",
-				"problemMatcher": [],
+      },
+      {
+        "label": "docker: pg_isready",
+        "type": "shell",
+        "command": "until docker-compose exec db pg_isready; do sleep 1; done",
+        "problemMatcher": [],
+        "dependsOn": [
+          "docker: up"
+        ],
         "options": {
           "cwd": "${workspaceFolder}/web"
         }
-			},
-			// run the app
-			{
-				"label": "run app",
-				"type": "shell",
+      },
+      {
+        "label": "npm: install",
+        "type": "shell",
+        "command": "npm i",
+        "problemMatcher": [],
+        "options": {
+          "cwd": "${workspaceFolder}/web"
+        }
+      },
+      {
+        "type": "shell",
         "command": ". ./run-dev.sh",
-				"problemMatcher": [],
-				"runOptions": {
-					"runOn": "folderOpen"
-				},
+        "problemMatcher": [],
+        "label": "npm: dev",
+        "runOptions": {
+          "runOn": "folderOpen"
+        },
+        "dependsOn": [
+          "npm: install",
+          "docker: pg_isready",
+        ],
         "options": {
           "cwd": "${workspaceFolder}/web"
-        },
-				"dependsOn": [
-					"start database and mailserver",
-					"install dependencies"
-				]
-			},
+        }
+      }
 		]
 	}
 }
