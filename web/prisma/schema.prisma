@@ -46,6 +46,7 @@ model User {
     programApplications ProgramApplication[]
     files               File[]
     userRoles           UserRole[]
+    programRoles         ProgramRole[]
 }
 
 model VerificationToken {
@@ -117,6 +118,24 @@ model Program {
 
     curriculum          Curriculum           @relation(fields: [curriculumId], references: [id])
     programApplications ProgramApplication[]
+    programRoles         ProgramRole[]
+}
+
+enum ProgramRoleName {
+    INSTRUCTOR
+    TA
+}
+
+model ProgramRole {
+    id        String          @id @default(cuid())
+    programId String
+    userId    String
+    name      ProgramRoleName
+    createdAt DateTime        @default(now())
+    updatedAt DateTime        @updatedAt
+
+    program Program @relation(fields: [programId], references: [id])
+    user    User    @relation(fields: [userId], references: [id])
 }
 
 enum ApplicationStatus {
