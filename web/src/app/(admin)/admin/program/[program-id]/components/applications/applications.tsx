@@ -1,11 +1,11 @@
 "use client";
 
 import { DataGrid } from "@mui/x-data-grid";
-import { getUserPageData } from "../../lib/get-user-page-data/get-user-page-data";
+import { getProgramPageData } from "../../lib/get-user-page-data/get-user-page-data";
 import { Link } from "@/components/link/link";
 
 interface ApplicationsProps {
-  userPageData: Awaited<ReturnType<typeof getUserPageData>>;
+  userPageData: Awaited<ReturnType<typeof getProgramPageData>>;
 }
 
 export function Applications({ userPageData }: ApplicationsProps) {

@@ -3,12 +3,12 @@
 import { Button, CircularProgress, Stack } from "@mui/material";
 import { useRouter } from "next/navigation";
 import { PiCheckCircleDuotone, PiXCircleDuotone } from "react-icons/pi";
-import { getUserPageData } from "../../lib/get-user-page-data/get-user-page-data";
+import { getProgramPageData } from "../../lib/get-user-page-data/get-user-page-data";
 import { toggleRole } from "./actions/toggle-role";
 import useSWRMutation from "swr/mutation";
 
 interface ApplicationsProps {
-  userPageData: Awaited<ReturnType<typeof getUserPageData>>;
+  userPageData: Awaited<ReturnType<typeof getProgramPageData>>;
 }
 
 export function Roles({ userPageData }: ApplicationsProps) {

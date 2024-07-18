@@ -1,6 +1,6 @@
 import { checkAdminPermissions } from "@/modules/roles/lib/check-admin-permissions/check-admin-permissions";
 import { Box, Container, Divider, Stack, Typography } from "@mui/material";
-import { getUserPageData } from "./lib/get-user-page-data/get-user-page-data";
+import { getProgramPageData } from "./lib/get-user-page-data/get-user-page-data";
 import { Applications } from "./components/applications/applications";
 import { Roles } from "./components/roles/roles";
 
@@ -17,32 +17,18 @@ type Application = {
 export default async function UserPage({
   params,
 }: {
-  params: { "user-id": string };
+  params: { "program-id": string };
 }) {
   await checkAdminPermissions();
-  const applicationId = params["user-id"];
-  const userPageData = await getUserPageData(applicationId);
-  const user = userPageData?.user;
+  const programId = params["program-id"];
+  const programPageData = await getProgramPageData(programId);
+  const { program } = programPageData;
   return (
     <Container>
       <Stack spacing={2}>
         <Typography variant="h4" color="white">
-          {user?.name || "No name"}
-          <br />
-          <Typography variant="body1">{user?.email || "No email"}</Typography>
+          <Typography variant="body1">{program.curriculum.title}</Typography>
         </Typography>
-        <Divider />
-        <Typography>
-          <b>Roles: </b>
-        </Typography>
-        <Roles userPageData={userPageData} />
-        <Divider />
-        <Stack spacing={2}>
-          <Typography variant="h5" color="white">
-            Applications
-          </Typography>
-          <Applications userPageData={userPageData} />
-        </Stack>
       </Stack>
     </Container>
   );

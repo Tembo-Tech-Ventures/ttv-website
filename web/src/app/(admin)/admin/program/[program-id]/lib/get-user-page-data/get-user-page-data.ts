@@ -1,28 +1,19 @@
 import { prisma } from "@/modules/prisma/lib/prisma-client/prisma-client";
 
-export async function getUserPageData(id: string) {
-  const user = await prisma.user.findUnique({
+export async function getProgramPageData(id: string) {
+  const user = await prisma.program.findUnique({
     where: {
       id,
     },
     include: {
-      sessions: true,
-      programApplications: {
+      curriculum: true,
+      programRoles: {
         include: {
-          program: {
-            include: {
-              curriculum: {},
-            },
-          },
-        },
-      },
-      userRoles: {
-        include: {
-          role: {},
+          role: true,
+          user: true,
         },
       },
     },
   });
-  const roles = await prisma.role.findMany();
-  return { user, roles };
+  return { program };
 }
