@@ -1,8 +1,8 @@
 import { checkAdminPermissions } from "@/modules/roles/lib/check-admin-permissions/check-admin-permissions";
-import { Box, Container, Divider, Stack, Typography } from "@mui/material";
-import { getProgramPageData } from "./lib/get-user-page-data/get-user-page-data";
-import { Applications } from "./components/applications/applications";
-import { Roles } from "./components/roles/roles";
+import { Container, Stack, Typography } from "@mui/material";
+import { getProgramPageData } from "./lib/get-program-page-data/get-program-page-data";
+import { format } from "date-fns";
+import { ProgramRoles } from "./components/program-roles/program-roles";
 
 type Application = {
   version: string;
@@ -27,8 +27,10 @@ export default async function UserPage({
     <Container>
       <Stack spacing={2}>
         <Typography variant="h4" color="white">
-          <Typography variant="body1">{program?.curriculum.title}</Typography>
+          {program?.curriculum.title} -{" "}
+          {format(new Date(program?.startDate || new Date()), "MMM yyyy")}
         </Typography>
+        <ProgramRoles programId={programId} />
       </Stack>
     </Container>
   );

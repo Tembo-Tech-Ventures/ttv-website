@@ -14,5 +14,12 @@ export async function getProgramPageData(id: string) {
       },
     },
   });
-  return { program };
+
+  const usersToAssign = await prisma.user.findMany({
+    select: {
+      id: true,
+      email: true,
+    },
+  });
+  return { program, usersToAssign };
 }
