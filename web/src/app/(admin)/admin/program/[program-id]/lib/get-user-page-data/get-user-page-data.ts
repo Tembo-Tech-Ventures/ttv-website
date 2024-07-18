@@ -1,7 +1,7 @@
 import { prisma } from "@/modules/prisma/lib/prisma-client/prisma-client";
 
 export async function getProgramPageData(id: string) {
-  const user = await prisma.program.findUnique({
+  const program = await prisma.program.findUnique({
     where: {
       id,
     },
@@ -9,7 +9,6 @@ export async function getProgramPageData(id: string) {
       curriculum: true,
       programRoles: {
         include: {
-          role: true,
           user: true,
         },
       },

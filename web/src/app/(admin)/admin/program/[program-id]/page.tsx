@@ -27,7 +27,7 @@ export default async function UserPage({
     <Container>
       <Stack spacing={2}>
         <Typography variant="h4" color="white">
-          <Typography variant="body1">{program.curriculum.title}</Typography>
+          <Typography variant="body1">{program?.curriculum.title}</Typography>
         </Typography>
       </Stack>
     </Container>
