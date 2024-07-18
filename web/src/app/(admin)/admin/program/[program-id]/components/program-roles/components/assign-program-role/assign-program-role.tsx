@@ -16,9 +16,12 @@ import { ProgramRoleName } from "@prisma/client";
 import { useState } from "react";
 import { assignProgramRole } from "./actions/assign-program-role";
 import { useRouter } from "next/navigation";
+import { getProgramPageData } from "../../../../lib/get-program-page-data/get-program-page-data";
 
 interface AssignProgramRolesProps {
-  usersToAssign: { id: string; email: string }[];
+  usersToAssign: Awaited<
+    ReturnType<typeof getProgramPageData>
+  >["usersToAssign"];
   programId: string;
 }
 
