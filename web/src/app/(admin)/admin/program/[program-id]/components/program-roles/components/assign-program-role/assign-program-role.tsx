@@ -14,9 +14,10 @@ import {
 } from "@mui/material";
 import { ProgramRoleName } from "@prisma/client";
 import { useState } from "react";
-import { assignProgramRole } from "./actions/assign-program-role";
 import { useRouter } from "next/navigation";
 import { getProgramPageData } from "../../../../lib/get-program-page-data/get-program-page-data";
+import useSWRMutation from "swr/mutation";
+import { client } from "@/modules/api/client";
 
 interface AssignProgramRolesProps {
   usersToAssign: Awaited<
@@ -38,11 +39,30 @@ export function AssignProgramRoles({
     role: ProgramRoleName.INSTRUCTOR,
   });
 
+  const { trigger, isMutating } = useSWRMutation(
+    "assignProgramRole",
+    async (
+      x,
+      params: {
+        arg: {
+          userId: string;
+          programId: string;
+          role: ProgramRoleName;
+        };
+      }
+    ) => {
+      await client.api.v1["program-role"].$post({
+        json: params.arg,
+      });
+      router.refresh();
+    }
+  );
+
   return (
     <form
       onSubmit={async (e) => {
         e.preventDefault();
-        assignProgramRole(form.userId, programId, form.role);
+        trigger({ programId, ...form });
         router.refresh();
       }}
     >
@@ -73,8 +93,8 @@ export function AssignProgramRoles({
             <MenuItem value={ProgramRoleName.TA}>TA</MenuItem>
           </Select>
         </FormControl>
-        <Button type="submit" variant="contained">
-          Submit
+        <Button type="submit" variant="contained" disabled={isMutating}>
+          {isMutating ? "Assigning..." : "Assign"}
         </Button>
       </Stack>
     </form>
