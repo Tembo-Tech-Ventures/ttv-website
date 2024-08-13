@@ -1,6 +1,8 @@
 import { getServerSession } from "@/modules/auth/lib/get-server-session/get-server-session";
 import { prisma } from "@/modules/prisma/lib/prisma-client/prisma-client";
+import { checkAdminPermissions } from "@/modules/roles/lib/check-admin-permissions/check-admin-permissions";
 import { zValidator } from "@hono/zod-validator";
+import { ApplicationStatus } from "@prisma/client";
 import { Hono } from "hono";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -84,6 +86,33 @@ export const programApplicationHandler = new Hono()
       });
 
       revalidatePath(`/dashboard/apply/${id}`);
+
+      return c.json(application, 200);
+    },
+  )
+  // admin endpoint to update the status of an application
+  .put(
+    "/:id/admin",
+    zValidator(
+      "json",
+      z
+        // any object
+        .object({
+          programApplication: z.any(),
+        })
+        .passthrough(),
+    ),
+    async (c) => {
+      checkAdminPermissions();
+      const body = c.req.valid("json");
+      const id = c.req.param("id");
+
+      const application = await prisma.programApplication.update({
+        where: { id },
+        data: {
+          ...body.programApplication,
+        },
+      });
 
       return c.json(application, 200);
     },

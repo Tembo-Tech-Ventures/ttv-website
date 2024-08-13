@@ -48,6 +48,17 @@ function HeartAnimation() {
   );
 }
 
+function Value({ title, description }: { title: string; description: string }) {
+  return (
+    <Box>
+      <Typography variant="h3" color="primary">
+        {title}
+      </Typography>
+      <Typography>{description}</Typography>
+    </Box>
+  );
+}
+
 export function OurValues() {
   return (
     <Container>
@@ -58,41 +69,26 @@ export function OurValues() {
             Our Values
           </Typography>
           <Stack direction="column" rowGap={4}>
-            <Box>
-              <Typography variant="h3" color="primary">
-                Empowerment
-              </Typography>
-              <Typography>
-                We believe in empowering young African developers to reach their
-                full potential.
-              </Typography>
-            </Box>
-            <Box>
-              <Typography variant="h3" color="primary">
-                Equity
-              </Typography>
-              <Typography>
-                Our mission is to provide equal access to the training and
-                opportunities needed to succeed in tech.
-              </Typography>
-            </Box>
-            <Box>
-              <Typography variant="h3" color="primary">
-                Community
-              </Typography>
-              <Typography>
-                We foster a sense of community among our developers and mentors.
-              </Typography>
-            </Box>
-            <Box>
-              <Typography variant="h3" color="primary">
-                Innovation
-              </Typography>
-              <Typography>
-                We strive to innovate and push the boundaries of what is
-                possible.
-              </Typography>
-            </Box>
+            <Value
+              title="Empowerment"
+              description="We believe in empowering young African developers to reach their full potential."
+            />
+            <Value
+              title="Impact"
+              description="We believe in the power of technology to create positive change and solve real-world problems."
+            />
+            <Value
+              title="Equity"
+              description="We aim to provide equal access to the training and opportunities needed to succeed in tech."
+            />
+            <Value
+              title="Community"
+              description="We foster a sense of community among our developers and mentors."
+            />
+            <Value
+              title="Innovation"
+              description="We strive to innovate and push the boundaries of what is possible."
+            />
           </Stack>
         </Stack>
       </Card>

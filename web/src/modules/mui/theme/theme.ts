@@ -21,30 +21,35 @@ export const theme = createTheme({
     h2: {
       fontFamily: climateCrisis.style.fontFamily,
       wordWrap: "break-word",
+      fontSize: "3rem",
     },
     h3: {
       fontFamily: climateCrisis.style.fontFamily,
       wordWrap: "break-word",
+      fontSize: "2.5rem",
     },
     h4: {
       fontFamily: mavenPro.style.fontFamily,
       fontWeight: 700,
+      fontSize: "2rem",
     },
     h5: {
       fontFamily: mavenPro.style.fontFamily,
       fontWeight: 700,
+      fontSize: "1.5rem",
     },
     h6: {
       fontFamily: mavenPro.style.fontFamily,
       fontWeight: 700,
+      fontSize: "1.2rem",
     },
     body1: {
       color: "#fff",
-      fontSize: "1.4rem",
+      fontSize: "1.2rem",
     },
     body2: {
       color: "#fff",
-      fontSize: "1.1rem",
+      fontSize: "1rem",
     },
   },
   components: {

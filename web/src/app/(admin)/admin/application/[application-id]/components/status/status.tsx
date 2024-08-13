@@ -1,9 +1,11 @@
 "use client";
 
+import { client } from "@/modules/api/client";
 import { FormLabel, MenuItem, Select } from "@mui/material";
 import { ApplicationStatus } from "@prisma/client";
 import { useParams, useRouter } from "next/navigation";
-import { updateStatus } from "./action";
+import useSWRMutation from "swr/mutation";
+import { useUpdateApplication } from "../../hooks/use-update-application/use-update-application";
 
 interface StatusProps {
   value?: string;
@@ -14,6 +16,7 @@ export function Status({ value }: StatusProps) {
   const router = useRouter();
   const params = useParams();
   const applicationId = params["application-id"];
+  const { trigger } = useUpdateApplication();
 
   return (
     <FormLabel>
@@ -22,10 +25,10 @@ export function Status({ value }: StatusProps) {
         name="status"
         id="status"
         onChange={async (e) => {
-          const formData = new FormData();
-          formData.set("status", e.target.value as string);
-          formData.set("applicationId", applicationId as string);
-          await updateStatus(formData);
+          await trigger({
+            id: applicationId as string,
+            programApplication: { status: e.target.value as ApplicationStatus },
+          });
           router.refresh();
         }}
       >

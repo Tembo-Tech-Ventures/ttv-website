@@ -2,7 +2,7 @@
 
 import { FormLabel, MenuItem, Select } from "@mui/material";
 import { useParams, useRouter } from "next/navigation";
-import { updateStatus } from "./action";
+import { useUpdateApplication } from "../../hooks/use-update-application/use-update-application";
 
 interface ProgramProps {
   value?: string;
@@ -16,6 +16,7 @@ export function Program({ value, options }: ProgramProps) {
   const router = useRouter();
   const params = useParams();
   const applicationId = params["application-id"];
+  const { trigger } = useUpdateApplication();
 
   return (
     <FormLabel>
@@ -24,10 +25,10 @@ export function Program({ value, options }: ProgramProps) {
         name="status"
         id="status"
         onChange={async (e) => {
-          const formData = new FormData();
-          formData.set("programId", e.target.value as string);
-          formData.set("applicationId", applicationId as string);
-          await updateStatus(formData);
+          await trigger({
+            id: applicationId as string,
+            programApplication: { programId: e.target.value as string },
+          });
           router.refresh();
         }}
       >

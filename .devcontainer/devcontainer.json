@@ -15,7 +15,8 @@
         "Prisma.prisma",
         "mtxr.sqltools",
         "mtxr.sqltools-driver-pg",
-        "WallabyJs.console-ninja"
+        "WallabyJs.console-ninja",
+        "tldraw-org.tldraw-vscode"
       ]
     }
   },

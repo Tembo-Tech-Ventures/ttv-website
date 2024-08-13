@@ -22,7 +22,12 @@ import Typography from "@mui/material/Typography";
 import { useSession } from "next-auth/react";
 import * as React from "react";
 import { LocalizationProvider } from "@mui/x-date-pickers";
-import { PiSignOutDuotone, PiTable, PiUserDuotone } from "react-icons/pi";
+import {
+  PiSignOutDuotone,
+  PiCalendar,
+  PiTable,
+  PiUserDuotone,
+} from "react-icons/pi";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import "dayjs/locale/en";
 
@@ -189,6 +194,11 @@ export function MainAdminLayout({
                 icon={<PiUserDuotone fontSize={25} />}
                 primary="Users"
                 href="/admin/user"
+              />
+              <NavLink
+                icon={<PiCalendar fontSize={25} />}
+                primary="Programs"
+                href="/admin/program"
               />
             </List>
             <Box sx={{ flexGrow: 1 }} />
