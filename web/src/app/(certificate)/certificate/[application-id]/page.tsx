@@ -35,6 +35,18 @@ export default async function CertificatePage({
       program: {
         include: {
           curriculum: true,
+          programRoles: {
+            where: {
+              name: "INSTRUCTOR",
+            },
+            include: {
+              user: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -43,6 +55,8 @@ export default async function CertificatePage({
   if (!application) {
     return notFound();
   }
+
+  const instructorName = application.program?.programRoles?.[0]?.user?.name;
 
   return (
     <Stack
@@ -78,6 +92,11 @@ export default async function CertificatePage({
           Issued At:{" "}
           <b>{dayjs(application.completedAt).format("MMMM DD, YYYY")}</b>
         </Typography>
+        {instructorName && (
+          <Typography color="white" align="center">
+            Instructor: <b>{instructorName}</b>
+          </Typography>
+        )}
       </Stack>
     </Stack>
   );

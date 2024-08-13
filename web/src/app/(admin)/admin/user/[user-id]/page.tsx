@@ -3,6 +3,7 @@ import { Box, Container, Divider, Stack, Typography } from "@mui/material";
 import { getUserPageData } from "./lib/get-user-page-data/get-user-page-data";
 import { Applications } from "./components/applications/applications";
 import { Roles } from "./components/roles/roles";
+import { Name } from "./components/name/name";
 
 type Application = {
   version: string;
@@ -26,9 +27,8 @@ export default async function UserPage({
   return (
     <Container>
       <Stack spacing={2}>
+        <Name userPageData={userPageData} />
         <Typography variant="h4" color="white">
-          {user?.name || "No name"}
-          <br />
           <Typography variant="body1">{user?.email || "No email"}</Typography>
         </Typography>
         <Divider />
