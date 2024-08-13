@@ -49,13 +49,13 @@ export function AssignProgramRoles({
           programId: string;
           role: ProgramRoleName;
         };
-      }
+      },
     ) => {
       await client.api.v1["program-role"].$post({
         json: params.arg,
       });
       router.refresh();
-    }
+    },
   );
 
   return (

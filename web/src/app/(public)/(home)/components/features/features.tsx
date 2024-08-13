@@ -29,8 +29,8 @@ export function Features() {
           <Card>
             <Title>Training</Title>
             <Typography>
-              We find ambitious young developers and teach them the necessary
-              skills to build web and mobile applications.
+              We work with ambitious young developers and teach them the
+              necessary skills to build web and mobile applications.
             </Typography>
           </Card>
           <Card>
@@ -41,10 +41,10 @@ export function Features() {
             </Typography>
           </Card>
           <Card>
-            <Title>Startups</Title>
+            <Title>Impact</Title>
             <Typography>
-              We tailor our training to the needs of startups and help our devs
-              build products that solve real problems.
+              We encourage our community to take their skills and use them to
+              solve real-world problems with startups and industry.
             </Typography>
           </Card>
         </Stack>
