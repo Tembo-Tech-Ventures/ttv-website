@@ -27,7 +27,7 @@ export function AssignedProgramRoles({
         },
       });
       router.refresh();
-    }
+    },
   );
 
   return (
