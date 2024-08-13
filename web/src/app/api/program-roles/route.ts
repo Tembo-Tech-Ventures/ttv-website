@@ -16,7 +16,7 @@ const postSchema = z.object({
 export async function assignProgramRole(
   userId: string,
   programId: string,
-  role: ProgramRoleName
+  role: ProgramRoleName,
 ) {
   if (!userId || !programId || !role) {
     throw new Error("Invalid form data");
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
         error: "Invalid form data",
         details: parsedBody.error.errors,
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
   const { userId, programId, role } = parsedBody.data;

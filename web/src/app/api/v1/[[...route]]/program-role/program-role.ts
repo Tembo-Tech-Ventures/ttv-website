@@ -15,7 +15,7 @@ const handler = new Hono()
           programId: z.string(),
           role: z.enum(["INSTRUCTOR", "TA"]),
         })
-        .passthrough()
+        .passthrough(),
     ),
     async (c) => {
       checkAdminPermissions();
@@ -48,7 +48,7 @@ const handler = new Hono()
         });
       }
       return c.json({ message: "created" }, 201);
-    }
+    },
   )
   .delete("/:id", async (c) => {
     checkAdminPermissions();
