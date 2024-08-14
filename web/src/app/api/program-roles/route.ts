@@ -13,7 +13,7 @@ const postSchema = z.object({
   role: z.enum(["INSTRUCTOR", "TA"]),
 });
 
-export async function assignProgramRole(
+async function assignProgramRole(
   userId: string,
   programId: string,
   role: ProgramRoleName,
