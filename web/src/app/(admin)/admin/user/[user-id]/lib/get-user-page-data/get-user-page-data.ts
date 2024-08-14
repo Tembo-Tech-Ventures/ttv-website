@@ -26,3 +26,5 @@ export async function getUserPageData(id: string) {
   const roles = await prisma.role.findMany();
   return { user, roles };
 }
+
+export type UserPageData = Awaited<ReturnType<typeof getUserPageData>>;
