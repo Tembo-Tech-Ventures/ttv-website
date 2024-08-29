@@ -1,5 +1,4 @@
 import { v2 as cloudinary } from "cloudinary";
-import v2 from "cloudinary-core";
 
 const cloudinaryConfig = cloudinary.config({
   cloud: {

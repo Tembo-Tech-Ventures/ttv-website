@@ -4,26 +4,23 @@ import { client } from "@/modules/api/client";
 import {
   Button,
   CircularProgress,
-  Snackbar,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
 import { User } from "@prisma/client";
 import { atom, useAtom } from "jotai";
-import { useCallback, useEffect, useState } from "react";
-import { CloudinaryContext, Image } from "cloudinary-react";
-import { CldImage } from "next-cloudinary";
-import { CldUploadWidget, CldUploadButton } from "next-cloudinary";
+import { CldImage, CldUploadButton } from "next-cloudinary";
+import { ComponentProps, useCallback, useEffect, useState } from "react";
 import useSWRMutation from "swr/mutation";
 
 const profileFormAtom = atom<Partial<User>>({
   name: "",
+  image: null,
 });
 
 export function ProfileForm({ user }: { user: User }) {
   const [form, setForm] = useAtom(profileFormAtom);
-  const [uploadedImageUrl, setUploadedImageUrl] = useState("");
 
   useEffect(() => {
     setForm(user);
@@ -37,41 +34,34 @@ export function ProfileForm({ user }: { user: User }) {
 
   const { trigger, isMutating } = useSWRMutation(
     "client.api.v1.user.$put",
-    submit,
+    submit
   );
-  const handleUpload = useCallback((result: any) => {
-    console.log("Upload result:", result);
-    const imageUrl = result.info.secure_url;
-    setUploadedImageUrl(imageUrl);
-  }, []);
 
-  useEffect(() => {
-    console.log(uploadedImageUrl);
-  }, [uploadedImageUrl]);
-
-  console.log("Does it even work");
   return (
     <>
-      <CldUploadWidget
-        options={{
-          cloudName: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
-          uploadPreset: process.env.NEXT_PUBLIC_CLOUDINARY_PRESET_NAME,
-        }}
-      />
       <CldUploadButton
-        options={{ maxFiles: 1 }}
-        onUploadAdded={handleUpload}
+        options={{
+          maxFiles: 1,
+          cloudName: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+        }}
+        onSuccessAction={(results) => {
+          setForm((prev) => ({
+            ...prev,
+            image: (results.info as any).public_id,
+          }));
+        }}
         uploadPreset={process.env.NEXT_PUBLIC_CLOUDINARY_PRESET_NAME}
       >
         Upload File
       </CldUploadButton>
       <Typography variant="h2">Upload files</Typography>
-      {uploadedImageUrl && (
+      {form.image && (
         <CldImage
-          src={uploadedImageUrl}
-          width={500} // Specify the desired width
-          height={300} // Specify the desired height
+          src={form.image}
+          width={200}
+          height={200}
           alt="Uploaded Image"
+          style={{ objectFit: "cover" }}
         />
       )}
       <form
