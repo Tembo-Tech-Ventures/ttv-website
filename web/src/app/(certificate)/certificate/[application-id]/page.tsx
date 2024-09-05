@@ -1,11 +1,12 @@
 import { prisma } from "@/modules/prisma/lib/prisma-client/prisma-client";
-import { Box, Stack, Typography } from "@mui/material";
+import { Box, Container, Divider, Stack, Typography } from "@mui/material";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { Elephant } from "@/assets/brand/elephant";
 import { customColors } from "@/modules/mui/theme/constants";
 import dayjs from "dayjs";
 import { ApplicationStatus } from "@prisma/client";
+import { Card } from "@/components/card/card";
 
 /**
  * The certificate page needs to display:
@@ -59,45 +60,109 @@ export default async function CertificatePage({
   const instructorName = application.program?.programRoles?.[0]?.user?.name;
 
   return (
-    <Stack
-      direction="column"
-      alignItems="center"
-      justifyContent="center"
-      spacing={4}
-      p={2}
-      minHeight="100vh"
+    <Container
+      sx={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        py: 4,
+      }}
     >
-      <Box maxWidth="150px">
-        <Elephant color={customColors.orange.main} />
-      </Box>
-      <Typography
-        variant="h1"
-        color="primary"
-        sx={{ fontSize: 35 }}
-        align="center"
-      >
-        TTV Program Completion Certificate
-      </Typography>
-      <Stack direction="column" spacing={1}>
-        <Typography color="white" align="center">
-          Issued To: <b>{application.user.name}</b>
-        </Typography>
-        <Typography color="white" align="center">
-          Program: <b>{application?.program?.curriculum.title}</b>
-        </Typography>
-        <Typography color="white" align="center">
-          Certificate ID: <b>{application.id}</b>
-        </Typography>
-        <Typography color="white" align="center">
-          Issued At:{" "}
-          <b>{dayjs(application.completedAt).format("MMMM DD, YYYY")}</b>
-        </Typography>
-        {instructorName && (
-          <Typography color="white" align="center">
-            Instructor: <b>{instructorName}</b>
-          </Typography>
-        )}
-      </Stack>
-    </Stack>
+      <Card width="100%">
+        <Stack
+          direction="column"
+          alignItems="center"
+          justifyContent="center"
+          spacing={4}
+          p={2}
+          width="100%"
+        >
+          <Stack
+            justifyContent="flex-start"
+            alignItems="center"
+            spacing={4}
+            sx={{
+              width: "100%",
+              flexDirection: { xs: "column", sm: "row" },
+            }}
+          >
+            <Box maxWidth="100px">
+              <Elephant color={customColors.orange.main} />
+            </Box>
+            <Typography
+              variant="h1"
+              color="primary"
+              sx={{
+                fontSize: {
+                  xs: "1.5rem",
+                  sm: "2rem",
+                  md: "2.5rem",
+                  lg: "3rem",
+                },
+                textAlign: {
+                  xs: "center",
+                  sm: "left",
+                },
+              }}
+            >
+              Tembo Tech Ventures
+              <br />
+              Certificate of Completion
+            </Typography>
+          </Stack>
+          <Stack direction="column" spacing={1}>
+            <Typography color="white" align="center">
+              This is to certify that
+            </Typography>
+            <Typography
+              component="h1"
+              color="white"
+              align="center"
+              sx={{
+                fontSize: {
+                  xs: "1.5rem",
+                  sm: "2rem",
+                  md: "2.5rem",
+                  lg: "3rem",
+                },
+                fontWeight: "bold",
+              }}
+            >
+              {application.user.name}
+            </Typography>
+            <Typography color="white" align="center">
+              has successfully completed the{" "}
+              <b>{application?.program?.curriculum.title}</b> program
+            </Typography>
+          </Stack>
+          <Divider flexItem />
+          <Stack
+            spacing={4}
+            width="100%"
+            sx={{
+              flexDirection: { xs: "column", sm: "row" },
+              justifyContent: "space-between",
+            }}
+          >
+            <Stack direction="column" spacing={1}>
+              <Typography color="white">
+                Certificate ID: <b>{application.id}</b>
+              </Typography>
+              <Typography color="white">
+                Issued At:{" "}
+                <b>{dayjs(application.completedAt).format("MMMM DD, YYYY")}</b>
+              </Typography>
+            </Stack>
+            <Stack direction="column" spacing={1}>
+              {instructorName && (
+                <Typography color="white">
+                  Instructor: <b>{instructorName}</b>
+                </Typography>
+              )}
+            </Stack>
+          </Stack>
+        </Stack>
+      </Card>
+    </Container>
   );
 }
