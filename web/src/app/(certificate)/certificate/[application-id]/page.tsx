@@ -78,12 +78,13 @@ export default async function CertificatePage({
           width="100%"
         >
           <Stack
-            justifyContent="flex-start"
+            justifyContent="center"
             alignItems="center"
-            spacing={4}
             sx={{
               width: "100%",
               flexDirection: { xs: "column", sm: "row" },
+              alignItems: "center",
+              columnGap: 4,
             }}
           >
             <Box maxWidth="100px">
@@ -93,11 +94,15 @@ export default async function CertificatePage({
               variant="h1"
               color="primary"
               sx={{
+                marginTop: {
+                  xs: "inherit",
+                  sm: "0px !important",
+                },
                 fontSize: {
                   xs: "1.5rem",
-                  sm: "2rem",
-                  md: "2.5rem",
-                  lg: "3rem",
+                  sm: "1.8rem",
+                  md: "1.8rem",
+                  lg: "2rem",
                 },
                 textAlign: {
                   xs: "center",
