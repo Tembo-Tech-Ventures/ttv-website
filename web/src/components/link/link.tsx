@@ -10,7 +10,9 @@ export function Link(props: LinkProps) {
   const { muiLinkProps, children, ...nextLinkProps } = props;
   return (
     <NextLink passHref legacyBehavior {...nextLinkProps}>
-      <MUILink {...muiLinkProps}>{children}</MUILink>
+      <MUILink {...muiLinkProps} target="_blank">
+        {children}
+      </MUILink>
     </NextLink>
   );
 }

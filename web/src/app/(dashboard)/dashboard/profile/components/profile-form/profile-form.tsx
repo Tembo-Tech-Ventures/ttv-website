@@ -34,36 +34,64 @@ export function ProfileForm({ user }: { user: User }) {
 
   const { trigger, isMutating } = useSWRMutation(
     "client.api.v1.user.$put",
-    submit
+    submit,
   );
-
+  const handleUpload = () => {
+    let uploadButton = document.getElementsByClassName(
+      "updbtn",
+    )[0] as HTMLButtonElement;
+    uploadButton.click();
+  };
   return (
     <>
-      <CldUploadButton
-        options={{
-          maxFiles: 1,
-          cloudName: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+      <Stack sx={{ display: "none" }}>
+        <CldUploadButton
+          options={{
+            maxFiles: 1,
+            cloudName: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+          }}
+          className="updbtn"
+          onSuccessAction={(results) => {
+            setForm((prev) => ({
+              ...prev,
+              image: (results.info as any).public_id,
+            }));
+          }}
+          uploadPreset={process.env.NEXT_PUBLIC_CLOUDINARY_PRESET_NAME}
+        >
+          Upload File
+        </CldUploadButton>
+      </Stack>
+      <Stack
+        sx={{
+          display: "flex",
+          position: "relative",
+          width: "100%",
+          alignItems: "center",
+          justifyContent: "center",
         }}
-        onSuccessAction={(results) => {
-          setForm((prev) => ({
-            ...prev,
-            image: (results.info as any).public_id,
-          }));
-        }}
-        uploadPreset={process.env.NEXT_PUBLIC_CLOUDINARY_PRESET_NAME}
       >
-        Upload File
-      </CldUploadButton>
-      <Typography variant="h2">Upload files</Typography>
-      {form.image && (
-        <CldImage
-          src={form.image}
-          width={200}
-          height={200}
-          alt="Uploaded Image"
-          style={{ objectFit: "cover" }}
-        />
-      )}
+        {form.image ? (
+          <CldImage
+            src={form.image}
+            width={200}
+            height={200}
+            alt="Uploaded Image"
+            style={{ objectFit: "cover", borderRadius: "50%" }}
+            draggable="false"
+          />
+        ) : (
+          <CldImage
+            src={"samples/animals/reindeer"}
+            width={200}
+            height={200}
+            alt="Uploaded Image"
+            style={{ objectFit: "cover", borderRadius: "50%" }}
+            draggable="false"
+            onClick={handleUpload}
+          />
+        )}
+      </Stack>
       <form
         onSubmit={(e) => {
           e.preventDefault();
