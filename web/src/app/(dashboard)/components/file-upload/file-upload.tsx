@@ -1,6 +1,10 @@
 "use client";
 
-import { FileUploadResponse } from "@/app/api/file/route";
+import {
+  createUploadUrl,
+  deleteFile,
+  FileUploadResponse,
+} from "@/actions/file";
 import { Button, styled, Typography } from "@mui/material";
 import { ChangeEvent, useCallback, useState } from "react";
 import { PiCloud, PiTrashDuotone } from "react-icons/pi";
@@ -36,12 +40,7 @@ export function FileUpload({ onChange }: FileUploadProps) {
       const filename = file.name;
       const size = file.size;
       try {
-        const response = await fetch("/api/file", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ filename, mimeType, size }),
-        });
-        const data = (await response.json()) as FileUploadResponse;
+        const data = await createUploadUrl({ filename, mimeType, size });
         const url = data.url;
         await fetch(url, {
           method: "PUT",
@@ -63,11 +62,7 @@ export function FileUpload({ onChange }: FileUploadProps) {
   const onDelete = useCallback(async () => {
     if (!fileInfo?.id) return;
     try {
-      await fetch(`/api/file/${fileInfo?.id}/delete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileId: fileInfo?.id }),
-      });
+      await deleteFile(fileInfo.id);
       setFileInfo(null);
       onChange?.(undefined);
       setStatus("idle");

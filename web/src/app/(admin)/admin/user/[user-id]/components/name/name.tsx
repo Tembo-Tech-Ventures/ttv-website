@@ -4,7 +4,7 @@ import { Save } from "@mui/icons-material";
 import { Box, IconButton, TextField } from "@mui/material";
 import { useState } from "react";
 import { UserPageData } from "../../lib/get-user-page-data/get-user-page-data";
-import { client } from "@/modules/api/client";
+import { updateUserAdmin } from "@/actions/user";
 import { useRouter } from "next/navigation";
 
 interface NameProps {
@@ -25,12 +25,7 @@ export function Name({ userPageData }: NameProps) {
           endAdornment: (
             <IconButton
               onClick={async () => {
-                await client.api.v1.user[":id"].admin.$put({
-                  param: { id: userPageData?.user?.id! },
-                  json: {
-                    user: { name },
-                  },
-                });
+                await updateUserAdmin(userPageData?.user?.id!, { name });
                 router.refresh();
               }}
             >

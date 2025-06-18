@@ -1,6 +1,5 @@
 "use client";
 
-import { client } from "@/modules/api/client";
 import { FormLabel, MenuItem, Select } from "@mui/material";
 import { ApplicationStatus } from "@prisma/client";
 import { useParams, useRouter } from "next/navigation";

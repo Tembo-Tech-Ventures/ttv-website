@@ -1,12 +1,12 @@
 "use client";
 
-import { client } from "@/modules/api/client";
 import { Button, Stack } from "@mui/material";
 import { ProgramApplication, ProgramPartner, User } from "@prisma/client";
 import { useAtom } from "jotai";
 import { useRouter } from "next/navigation";
 import { useCallback } from "react";
 import useSWRMutation from "swr/mutation";
+import { updateProgramApplication } from "@/actions/programApplication";
 import {
   applicationSchemaVersion,
   applicationValuesAtom,
@@ -26,26 +26,21 @@ export function UpdateApplication({
   const [submission] = useAtom(applicationValuesAtom);
 
   const submit = useCallback(
-    async (method: string, { arg }: { arg: typeof submission }) => {
-      const response = await client.api.v1["program-application"][":id"].$put({
-        param: { id: application.id },
-        json: {
-          version: applicationSchemaVersion,
-          submission: arg,
-          partnerId:
-            (arg.find((item) => item.name === "partnerId")?.value as string) ||
-            "",
-          name:
-            (arg.find((item) => item.name === "name")?.value as string) || "",
-        },
+    async (_: string, { arg }: { arg: typeof submission }) => {
+      return await updateProgramApplication(application.id, {
+        version: applicationSchemaVersion,
+        submission: arg,
+        partnerId:
+          (arg.find((item) => item.name === "partnerId")?.value as string) ||
+          "",
+        name: (arg.find((item) => item.name === "name")?.value as string) || "",
       });
-      return await response.json();
     },
     [application.id],
   );
 
   const { trigger, isMutating } = useSWRMutation(
-    `client.api.v1["program-application"][":id"].$put`,
+    `updateProgramApplication`,
     submit,
   );
 

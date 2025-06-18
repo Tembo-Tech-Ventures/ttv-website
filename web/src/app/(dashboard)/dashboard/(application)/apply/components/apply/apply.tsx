@@ -10,7 +10,7 @@ import {
   applicationValuesAtom,
 } from "../../../atoms/application.atom";
 import { ApplicationForm } from "../../../components/application-form/application-form";
-import { client } from "@/modules/api/client";
+import { createProgramApplication } from "@/actions/programApplication";
 import { ProgramPartner } from "@prisma/client";
 
 interface ApplyProps {
@@ -22,27 +22,20 @@ export default function Apply({ partners }: ApplyProps) {
   const [submission] = useAtom(applicationValuesAtom);
 
   const submit = useCallback(
-    async (method: string, { arg }: { arg: typeof submission }) => {
-      const response = await client.api.v1["program-application"].$post({
-        json: {
-          version: applicationSchemaVersion,
-          submission: arg,
-          partnerId:
-            (arg.find((item) => item.name === "partnerId")?.value as string) ||
-            "",
-          name:
-            (arg.find((item) => item.name === "name")?.value as string) || "",
-        },
+    async (_: string, { arg }: { arg: typeof submission }) => {
+      return await createProgramApplication({
+        version: applicationSchemaVersion,
+        submission: arg,
+        partnerId:
+          (arg.find((item) => item.name === "partnerId")?.value as string) ||
+          "",
+        name: (arg.find((item) => item.name === "name")?.value as string) || "",
       });
-      return await response.json();
     },
     [],
   );
 
-  const { trigger, isMutating } = useSWR(
-    `client.api.v1["program-application"].$post`,
-    submit,
-  );
+  const { trigger, isMutating } = useSWR(`createProgramApplication`, submit);
 
   return (
     <Stack

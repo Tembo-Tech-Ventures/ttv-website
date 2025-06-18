@@ -1,6 +1,6 @@
-import { client } from "@/modules/api/client";
 import { ProgramApplication } from "@prisma/client";
 import useSWRMutation from "swr/mutation";
+import { updateProgramApplicationAdmin } from "@/actions/programApplication";
 
 export function useUpdateApplication() {
   return useSWRMutation(
@@ -14,14 +14,10 @@ export function useUpdateApplication() {
         };
       },
     ) => {
-      client.api.v1["program-application"][":id"]["admin"].$put({
-        param: {
-          id: params.arg.id,
-        },
-        json: {
-          programApplication: params.arg.programApplication,
-        },
-      });
+      await updateProgramApplicationAdmin(
+        params.arg.id,
+        params.arg.programApplication,
+      );
     },
   );
 }

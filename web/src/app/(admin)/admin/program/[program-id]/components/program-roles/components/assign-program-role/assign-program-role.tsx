@@ -1,6 +1,5 @@
 "use client";
 
-import { prisma } from "@/modules/prisma/lib/prisma-client/prisma-client";
 import {
   Autocomplete,
   Button,
@@ -17,7 +16,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getProgramPageData } from "../../../../lib/get-program-page-data/get-program-page-data";
 import useSWRMutation from "swr/mutation";
-import { client } from "@/modules/api/client";
+import { assignProgramRole } from "@/actions/programRole";
 
 interface AssignProgramRolesProps {
   usersToAssign: Awaited<
@@ -42,7 +41,7 @@ export function AssignProgramRoles({
   const { trigger, isMutating } = useSWRMutation(
     "assignProgramRole",
     async (
-      x,
+      _,
       params: {
         arg: {
           userId: string;
@@ -51,9 +50,7 @@ export function AssignProgramRoles({
         };
       },
     ) => {
-      await client.api.v1["program-role"].$post({
-        json: params.arg,
-      });
+      await assignProgramRole(params.arg);
       router.refresh();
     },
   );

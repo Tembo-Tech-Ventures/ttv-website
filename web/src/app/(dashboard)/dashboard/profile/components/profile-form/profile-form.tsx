@@ -1,6 +1,6 @@
 "use client";
 
-import { client } from "@/modules/api/client";
+import { updateProfile } from "@/actions/user";
 import {
   Button,
   CircularProgress,
@@ -25,15 +25,10 @@ export function ProfileForm({ user }: { user: User }) {
   }, [setForm, user]);
 
   const submit = useCallback(async () => {
-    await client.api.v1.user.$put({
-      json: form,
-    });
+    await updateProfile(form);
   }, [form]);
 
-  const { trigger, isMutating } = useSWRMutation(
-    "client.api.v1.user.$put",
-    submit,
-  );
+  const { trigger, isMutating } = useSWRMutation("updateProfile", submit);
 
   return (
     <form
