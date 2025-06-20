@@ -1,8 +1,15 @@
 "use server";
 
 /**
- * Server actions for program application CRUD operations.
- * These replace REST endpoints that previously lived under `/api/v1`.
+ * **Program Application Actions**
+ *
+ * This module contains server actions used to create and update program
+ * applications. They were introduced to remove the old `/api/v1` REST routes in
+ * favor of direct function calls from React components.
+ *
+ * Responsibilities are intentionally narrow:
+ *  - create and update applications for the currently authenticated user
+ *  - expose an admin-only update helper for status changes
  */
 
 import { getServerSession } from "@/modules/auth/lib/get-server-session/get-server-session";

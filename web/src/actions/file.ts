@@ -1,8 +1,17 @@
 "use server";
 
 /**
- * Server actions for file upload and deletion.
- * These actions are used by the client side FileUpload component.
+ * **File Upload Actions**
+ *
+ * These server actions provide a thin layer over AWS S3 for uploading and
+ * deleting user files. They are consumed by the `FileUpload` component on the
+ * client and enforce basic authorization and file size checks.
+ *
+ * Each exported function performs a single task:
+ *  - `createUploadUrl` validates the request and returns a presigned URL for a
+ *    direct S3 upload.
+ *  - `deleteFile` ensures the current user owns the file before removing it from
+ *    both S3 and the Prisma database.
  */
 
 import { getServerSession } from "@/modules/auth/lib/get-server-session/get-server-session";

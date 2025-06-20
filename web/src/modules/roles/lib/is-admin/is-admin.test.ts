@@ -14,8 +14,12 @@ jest.mock("@auth/prisma-adapter", () => ({ PrismaAdapter: () => ({}) }), {
   virtual: true,
 });
 jest.mock("next-auth", () => ({ getServerSession: jest.fn() }));
-jest.mock("next-auth/providers/email", () => ({ default: jest.fn(() => ({})) }));
-jest.mock("@/app/api/auth/[...nextauth]/constants", () => ({ authOptions: {} }));
+jest.mock("next-auth/providers/email", () => ({
+  default: jest.fn(() => ({})),
+}));
+jest.mock("@/app/api/auth/[...nextauth]/constants", () => ({
+  authOptions: {},
+}));
 
 describe("checkAdminPermissions", () => {
   it("should return true if the user has admin role", async () => {

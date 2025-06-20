@@ -1,12 +1,15 @@
 "use server";
 
 /**
- * Server actions to manage Program Roles.
+ * **Program Role Actions**
  *
- * These actions replace REST API endpoints formerly implemented using Hono.
- * They are invoked directly from client components using the Next.js Server
- * Actions mechanism. Each function performs a single database operation and
- * throws errors that can be handled by the caller.
+ * These helpers assign or remove user roles for a given program. Before server
+ * actions, this logic lived behind Hono REST endpoints. Calling these functions
+ * directly keeps the data mutations close to the components that trigger them
+ * and drastically reduces boilerplate.
+ *
+ * Both actions require the caller to have admin permissions as enforced by the
+ * `checkAdminPermissions` helper.
  */
 
 import { prisma } from "@/modules/prisma/lib/prisma-client/prisma-client";

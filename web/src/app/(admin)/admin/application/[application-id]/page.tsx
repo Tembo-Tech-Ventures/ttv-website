@@ -1,6 +1,7 @@
 import { checkAdminPermissions } from "@/modules/roles/lib/check-admin-permissions/check-admin-permissions";
 import { Box, Button, Container, Grid, Stack, Typography } from "@mui/material";
 import React from "react";
+import type { PageProps } from "next";
 import { Program } from "./components/program/program";
 import { Status } from "./components/status/status";
 import { getApplicationPageData } from "./lib/get-application-page-data/get-application-page-data";
@@ -19,9 +20,7 @@ type Application = {
 
 export default async function ApplicationPage({
   params,
-}: {
-  params: { "application-id": string };
-}) {
+}: PageProps<{ "application-id": string }>) {
   await checkAdminPermissions();
   const applicationId = params["application-id"];
   const applicationPageData = await getApplicationPageData(applicationId);

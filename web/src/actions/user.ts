@@ -1,7 +1,11 @@
 "use server";
 
 /**
- * Server actions for user profile management.
+ * **User Profile Actions**
+ *
+ * Provides simple helpers for updating the currently authenticated user's
+ * profile as well as a restricted admin endpoint for updating arbitrary users.
+ * Components mutate user data by invoking these functions with `use server`.
  */
 
 import { getServerSession } from "@/modules/auth/lib/get-server-session/get-server-session";

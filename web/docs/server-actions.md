@@ -12,3 +12,12 @@ The available actions include:
 - `file.ts` – upload and delete files using signed S3 URLs.
 
 Refer to the action source files for detailed documentation.
+
+## Migration Notes
+
+The legacy `app/api/v1` directory has been removed. All functionality previously
+exposed as REST endpoints now resides in the server action modules. Components
+should import these functions directly using the `use server` directive.
+
+The project has been upgraded to Next.js 15.3.4. Ensure that any third-party
+libraries you add are compatible with React 19 and Next.js 15.
