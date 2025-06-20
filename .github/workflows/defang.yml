@@ -1,0 +1,27 @@
+# GitHub Action that deploys the application using Defang.
+# This workflow installs the Defang CLI and runs the official action
+# against the compose file in the repository root.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Deploy with Defang
+        uses: DefangLabs/defang-github-action@v1.2.0
+        with:
+          # By default the action looks for compose.yaml in the working directory
+          cli-version: v0.5.43
+

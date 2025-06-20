@@ -1,0 +1,52 @@
+# Docker Compose file for the entire application.
+# This file combines the database, local services, and the Next.js
+# application so Defang can build and deploy everything from a
+# single Compose specification.
+
+version: '3.8'
+
+services:
+  web:
+    build: ./web
+    env_file:
+      - ./web/.env
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+      - mailer
+      - s3
+
+  db:
+    # Defang can manage Postgres for us when deploying to the cloud.
+    # By marking the service with the `x-defang-postgres` extension, the
+    # `defang` CLI will provision a managed instance instead of running
+    # the container. Locally we still spin up this container so development
+    # remains simple.
+    image: postgres:14
+    x-defang-postgres: true
+    ports:
+      - mode: host
+        target: 5432
+    environment:
+      # Leaving the password empty allows Defang to inject the value
+      # from `defang config set POSTGRES_PASSWORD` during deployment.
+      POSTGRES_PASSWORD:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - ./.data/db:/var/lib/postgresql/data
+
+  mailer:
+    image: mailhog/mailhog
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+  s3:
+    image: adobe/s3mock
+    ports:
+      - "9090:9090"
+    environment:
+      - initialBuckets=ttv-application-files
+      - debug=true
