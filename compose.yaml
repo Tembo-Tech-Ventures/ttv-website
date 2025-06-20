@@ -23,7 +23,7 @@ services:
     # `defang` CLI will provision a managed instance instead of running
     # the container. Locally we still spin up this container so development
     # remains simple.
-    image: postgres:14
+    image: postgres:17
     x-defang-postgres: true
     ports:
       - mode: host

@@ -13,7 +13,7 @@ cloud Defang replaces it with a managed service.
 ```yaml
 services:
   db:
-    image: postgres:14
+    image: postgres:17
     x-defang-postgres: true
     ports:
       - mode: host
@@ -43,5 +43,5 @@ control the user and database names. Defaults are `postgres` for both.
 ## Connecting to the database
 
 Your services can connect to the managed database using the service name as the
-hostname and the above credentials. Defang recommends using Postgres 14 images
+hostname and the above credentials. Defang recommends using Postgres 17 images
 for best compatibility.
