@@ -7,11 +7,13 @@ import { getServerSession } from "@/modules/auth/lib/get-server-session/get-serv
 import { Card } from "@/components/card/card";
 import { ApplicationStatus } from "@prisma/client";
 
+interface PageProps<P extends Record<string, string>> {
+  params: P;
+}
+
 export default async function Applications({
   params,
-}: {
-  params: { "application-id": string };
-}) {
+}: PageProps<{ "application-id": string }>) {
   const session = await getServerSession();
   const userId = session?.user?.id;
 

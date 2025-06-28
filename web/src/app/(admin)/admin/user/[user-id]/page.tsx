@@ -5,6 +5,10 @@ import { Applications } from "./components/applications/applications";
 import { Roles } from "./components/roles/roles";
 import { Name } from "./components/name/name";
 
+interface PageProps<P extends Record<string, string>> {
+  params: P;
+}
+
 type Application = {
   version: string;
   submission: {
@@ -17,9 +21,7 @@ type Application = {
 
 export default async function UserPage({
   params,
-}: {
-  params: { "user-id": string };
-}) {
+}: PageProps<{ "user-id": string }>) {
   await checkAdminPermissions();
   const applicationId = params["user-id"];
   const userPageData = await getUserPageData(applicationId);

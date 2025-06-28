@@ -4,6 +4,10 @@ import { getProgramPageData } from "./lib/get-program-page-data/get-program-page
 import { format } from "date-fns";
 import { ProgramRoles } from "./components/program-roles/program-roles";
 
+interface PageProps<P extends Record<string, string>> {
+  params: P;
+}
+
 type Application = {
   version: string;
   submission: {
@@ -14,11 +18,9 @@ type Application = {
   }[];
 };
 
-export default async function UserPage({
+export default async function ProgramPage({
   params,
-}: {
-  params: { "program-id": string };
-}) {
+}: PageProps<{ "program-id": string }>) {
   await checkAdminPermissions();
   const programId = params["program-id"];
   const programPageData = await getProgramPageData(programId);

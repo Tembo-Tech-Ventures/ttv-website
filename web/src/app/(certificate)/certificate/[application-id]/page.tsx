@@ -8,6 +8,10 @@ import dayjs from "dayjs";
 import { ApplicationStatus } from "@prisma/client";
 import { Card } from "@/components/card/card";
 
+interface PageProps<P extends Record<string, string>> {
+  params: P;
+}
+
 /**
  * The certificate page needs to display:
  *  - The student name
@@ -18,9 +22,7 @@ import { Card } from "@/components/card/card";
  */
 export default async function CertificatePage({
   params,
-}: {
-  params: { "application-id": string };
-}) {
+}: PageProps<{ "application-id": string }>) {
   const applicationId = params["application-id"];
   console.log(applicationId);
   const application = await prisma.programApplication.findUnique({
