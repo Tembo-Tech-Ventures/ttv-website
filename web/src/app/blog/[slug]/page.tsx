@@ -1,9 +1,16 @@
 /**
- * Renders a single blog post retrieved from the database.
+ * BlogPost
+ * --------
+ * Displays a single blog entry. Similar to the index page, this component is
+ * flagged `force-dynamic` so that the database query only occurs at request
+ * time. Without this, a static export would attempt to resolve the dynamic
+ * route at build time and fail if the database is unreachable.
  */
 
 import { getPost } from "@/modules/blog/lib/get-post/get-post";
 import Markdown from "react-markdown";
+
+export const dynamic = "force-dynamic";
 
 interface Params {
   params: { slug: string };
