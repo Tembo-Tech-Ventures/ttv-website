@@ -47,6 +47,7 @@ model User {
     files               File[]
     userRoles           UserRole[]
     programRoles         ProgramRole[]
+    blogPosts           BlogPost[]
 }
 
 model VerificationToken {
@@ -169,4 +170,16 @@ model ProgramApplication {
     partner ProgramPartner? @relation(fields: [partnerId], references: [id])
     program Program?        @relation(fields: [programId], references: [id])
     user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BlogPost {
+    id        String   @id @default(cuid())
+    title     String
+    slug      String   @unique
+    content   String   @db.Text
+    authorId  String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
 }

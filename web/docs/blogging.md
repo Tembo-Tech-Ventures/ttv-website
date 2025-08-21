@@ -1,0 +1,26 @@
+# Blogging System
+
+This document outlines how the blog feature is wired into the platform.
+
+## Posts
+
+- Admin users compose posts at `/admin/blog/new` using a Markdown editor.
+- Content is stored in Postgres via Prisma using the `BlogPost` model. Each post
+  records the author, title, slug and raw Markdown content.
+
+## Images
+
+Images uploaded through the editor are resized to 1200px width and stored in an
+S3-compatible bucket (Tigris object storage). Configure the following environment
+variables to enable uploads:
+
+- `S3_ENDPOINT`
+- `S3_REGION`
+- `S3_ACCESS_KEY_ID`
+- `S3_SECRET_ACCESS_KEY`
+- `S3_BUCKET`
+- `S3_PUBLIC_BASE_URL` *(optional; defaults to standard S3 URL)*
+
+## RSS
+
+An RSS feed is served from `/blog/rss.xml` so consumers can subscribe to updates.
