@@ -4,12 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "prisma migrate dev && next dev",
-    "build": "next build && prisma migrate deploy",
+    "build": "next build && npm run migrate:deploy",
     "start": "next start",
     "postinstall": "prisma generate",
     "lint": "next lint",
     "lint-fix": "next lint --fix",
     "migrate-dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy || echo 'Database unavailable, skipping migrations'",
     "test": "jest"
   },
   "prisma": {

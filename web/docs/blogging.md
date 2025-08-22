@@ -24,3 +24,13 @@ variables to enable uploads:
 ## RSS
 
 An RSS feed is served from `/blog/rss.xml` so consumers can subscribe to updates.
+
+## Migrations
+
+The build process attempts to apply Prisma migrations but skips them if the
+database is unreachable. After provisioning your Postgres instance, run the
+following command to bring the schema up to date:
+
+```
+npm run migrate:deploy
+```
