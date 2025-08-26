@@ -1,22 +1,24 @@
+"use client";
+
 /**
  * posts-client.tsx
  * -----------------
- * Client component responsible for rendering the list of existing posts and
- * wiring up delete actions. Editing is handled via standard links to the
- * dedicated edit page. Keeping this component client-side keeps the server
- * component lean and allows interactive deletion without full reloads.
+ * Renders the blog post list inside the admin area using MUI's DataGrid. Each
+ * row exposes edit and delete actions so administrators can manage the catalog
+ * without full page reloads.
  */
 
-"use client";
-
 import { useTransition } from "react";
-import { Button, Stack } from "@mui/material";
+import { Button } from "@mui/material";
+import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import Link from "next/link";
 import { deletePost } from "./actions/delete-post";
 
 interface PostSummary {
-  title: string;
+  id: string;
   slug: string;
+  title: string;
+  createdAt: string;
 }
 
 export function PostsClient({ posts }: { posts: PostSummary[] }) {
@@ -28,22 +30,47 @@ export function PostsClient({ posts }: { posts: PostSummary[] }) {
     });
   }
 
+  const columns: GridColDef[] = [
+    {
+      field: "edit",
+      headerName: "",
+      width: 80,
+      renderCell: (params) => (
+        <Link href={`/admin/blog/${params.row.slug}/edit`}>Edit</Link>
+      ),
+    },
+    { field: "title", headerName: "Title", flex: 1 },
+    { field: "slug", headerName: "Slug", flex: 1 },
+    {
+      field: "createdAt",
+      headerName: "Created",
+      width: 150,
+      valueGetter: (params) =>
+        new Date((params as any).row.createdAt as string).toLocaleDateString(),
+    },
+    {
+      field: "delete",
+      headerName: "",
+      width: 100,
+      renderCell: (params) => (
+        <Button
+          variant="outlined"
+          color="error"
+          onClick={() => handleDelete(params.row.slug)}
+          disabled={isPending}
+        >
+          Delete
+        </Button>
+      ),
+    },
+  ];
+
   return (
-    <Stack spacing={2}>
-      {posts.map((p) => (
-        <Stack key={p.slug} direction="row" spacing={2} alignItems="center">
-          <Link href={`/admin/blog/${p.slug}/edit`}>{p.title}</Link>
-          <Button
-            variant="outlined"
-            color="error"
-            onClick={() => handleDelete(p.slug)}
-            disabled={isPending}
-          >
-            Delete
-          </Button>
-        </Stack>
-      ))}
-      {posts.length === 0 && <div>No posts yet.</div>}
-    </Stack>
+    <DataGrid
+      autoHeight
+      disableRowSelectionOnClick
+      rows={posts}
+      columns={columns}
+    />
   );
 }

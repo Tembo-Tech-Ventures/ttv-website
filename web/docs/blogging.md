@@ -7,6 +7,8 @@ This document outlines how the blog feature is wired into the platform.
 - Admin users compose posts at `/admin/blog/new` using a Markdown editor and can
   revisit existing entries from `/admin/blog` where posts may be edited or
   deleted.
+- The admin sidebar links directly to `/admin/blog`, which presents all posts in
+  a sortable table for quick management.
 - Content is stored in Postgres via Prisma using the `BlogPost` model. Each post
   records the author, title, slug and raw Markdown content.
 

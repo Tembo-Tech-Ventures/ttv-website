@@ -9,6 +9,7 @@
 
 import { getPost } from "@/modules/blog/lib/get-post/get-post";
 import Markdown from "react-markdown";
+import { Container, Stack, Typography } from "@mui/material";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +23,13 @@ export default async function BlogPost({ params }: Params) {
     return <p>Post not found</p>;
   }
   return (
-    <article>
-      <h1>{post.title}</h1>
-      <Markdown>{post.content}</Markdown>
-    </article>
+    <Container sx={{ py: 4 }}>
+      <Stack spacing={2} alignItems="center" sx={{ color: "white" }}>
+        <Typography variant="h3" color="orange.main" align="center">
+          {post.title}
+        </Typography>
+        <Markdown>{post.content}</Markdown>
+      </Stack>
+    </Container>
   );
 }

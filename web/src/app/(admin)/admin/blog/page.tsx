@@ -9,14 +9,22 @@
 import { checkAdminPermissions } from "@/modules/roles/lib/check-admin-permissions/check-admin-permissions";
 import { getPosts } from "@/modules/blog/lib/get-posts/get-posts";
 import { PostsClient } from "./posts-client";
-import { Stack, Button } from "@mui/material";
+import { Stack, Button, Typography } from "@mui/material";
 import Link from "next/link";
 
 export default async function AdminBlogIndex() {
   await checkAdminPermissions();
-  const posts = await getPosts();
+  const posts = (await getPosts()).map((p) => ({
+    id: p.id,
+    slug: p.slug,
+    title: p.title,
+    createdAt: p.createdAt.toISOString(),
+  }));
   return (
     <Stack spacing={2}>
+      <Typography variant="h4" color="white">
+        Blog Posts
+      </Typography>
       <Stack direction="row" spacing={2}>
         <Link href="/admin/blog/new">
           <Button variant="contained">New Post</Button>

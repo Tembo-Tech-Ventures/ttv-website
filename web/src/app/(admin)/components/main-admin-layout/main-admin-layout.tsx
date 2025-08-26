@@ -1,5 +1,14 @@
 "use client";
 
+/**
+ * main-admin-layout.tsx
+ * ---------------------
+ * Provides the chrome for all admin pages including navigation, drawer
+ * behavior and authentication gate. The drawer now links to the blog post list
+ * so administrators can browse and manage existing entries alongside creating
+ * new ones.
+ */
+
 import { Link } from "@/components/link/link";
 import { useLoginRedirect } from "@/modules/auth/hooks/use-login-redirect/use-login-redirect";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
@@ -200,6 +209,11 @@ export function MainAdminLayout({
                 icon={<PiCalendar fontSize={25} />}
                 primary="Programs"
                 href="/admin/program"
+              />
+              <NavLink
+                icon={<PiTable fontSize={25} />}
+                primary="Blog Posts"
+                href="/admin/blog"
               />
               <NavLink
                 icon={<PiNotePencilDuotone fontSize={25} />}
