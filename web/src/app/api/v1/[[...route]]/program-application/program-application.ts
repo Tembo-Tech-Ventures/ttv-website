@@ -1,6 +1,7 @@
 import { getServerSession } from "@/modules/auth/lib/get-server-session/get-server-session";
 import { prisma } from "@/modules/prisma/lib/prisma-client/prisma-client";
 import { checkAdminPermissions } from "@/modules/roles/lib/check-admin-permissions/check-admin-permissions";
+import { logProgramCompletion } from "@/modules/student-journey/lib/log-program-completion/log-program-completion";
 import { zValidator } from "@hono/zod-validator";
 import { ApplicationStatus } from "@prisma/client";
 import { Hono } from "hono";
@@ -112,7 +113,12 @@ export const programApplicationHandler = new Hono()
         data: {
           ...body.programApplication,
         },
+        include: { program: true },
       });
+
+      if (application.status === ApplicationStatus.COMPLETED) {
+        await logProgramCompletion(application);
+      }
 
       return c.json(application, 200);
     },
