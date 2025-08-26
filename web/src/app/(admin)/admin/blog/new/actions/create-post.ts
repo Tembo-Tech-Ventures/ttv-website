@@ -11,6 +11,7 @@
 import { getServerSession } from "@/modules/auth/lib/get-server-session/get-server-session";
 import { createBlogPost } from "@/modules/blog/lib/create-post/create-post";
 import { checkAdminPermissions } from "@/modules/roles/lib/check-admin-permissions/check-admin-permissions";
+import { revalidatePath } from "next/cache";
 
 export async function createPost(data: { title: string; content: string }) {
   await checkAdminPermissions();
@@ -21,5 +22,8 @@ export async function createPost(data: { title: string; content: string }) {
   if (!data.title || !data.content) {
     throw new Error("Title and content are required");
   }
-  return createBlogPost(data.title, data.content, session.user.id);
+  const slug = await createBlogPost(data.title, data.content, session.user.id);
+  revalidatePath("/blog");
+  revalidatePath("/admin/blog");
+  return slug;
 }
