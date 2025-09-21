@@ -5,10 +5,18 @@ This document outlines how the blog feature is wired into the platform.
 ## Posts
 
 - Admin users compose posts at `/admin/blog/new` using a Markdown editor and can
-  revisit existing entries from `/admin/blog` where posts may be edited or
-  deleted.
+  revisit existing entries from `/admin/blog` where posts may be edited,
+  deleted, or opened publicly.
 - Content is stored in Postgres via Prisma using the `BlogPost` model. Each post
   records the author, title, slug and raw Markdown content.
+
+## Admin Interface
+
+- The `/admin/blog` dashboard presents posts inside a sortable table so
+  administrators can quickly review publication dates and jump to view, edit or
+  delete actions without leaving the screen.
+- Deletions refresh the table automatically thanks to server actions that
+  revalidate the list.
 
 ## Images
 
