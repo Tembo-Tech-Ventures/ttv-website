@@ -1,22 +1,23 @@
 /**
  * BlogPost
  * --------
- * Renders the detailed view for a single blog entry using the same gradient
- * language and typography scale as the marketing homepage. The component stays
- * server-rendered to keep Prisma queries on the backend while providing rich
- * presentation for the markdown content.
+ * Server-rendered detail view for a single blog entry. The layout intentionally
+ * mirrors the homepage card treatment for the header while letting the article
+ * body sit directly on the page background. This keeps the writing front-and-
+ * centre without heavy gradients or drop shadows.
  *
  * Key behaviours:
  * - Formats the publication timestamp for humans using `Intl.DateTimeFormat`.
  * - Provides bespoke Markdown component overrides so headings, paragraphs, and
  *   lists inherit the site's typography system.
- * - Wraps the layout in a gradient shell with generous spacing for comfortable
- *   reading on both mobile and desktop breakpoints.
+ * - Shares the same `<Card>` surface from the homepage for the title/date block
+ *   while keeping the article content container-free.
  */
 
+import { Card } from "@/components/card/card";
 import { Link } from "@/components/link/link";
 import { getPost } from "@/modules/blog/lib/get-post/get-post";
-import { customColors, getShadow } from "@/modules/mui/theme/constants";
+import { customColors } from "@/modules/mui/theme/constants";
 import { Box, Container, Stack, Typography } from "@mui/material";
 import type { ReactNode } from "react";
 import type { Components } from "react-markdown";
@@ -49,7 +50,7 @@ const markdownComponents: Components = {
       component="h3"
       variant="h5"
       fontWeight={600}
-      color="white"
+      color="text.primary"
       sx={{ mt: 4, mb: 1.5 }}
     >
       {children}
@@ -59,21 +60,18 @@ const markdownComponents: Components = {
     <Typography
       variant="body1"
       paragraph
-      sx={{ color: "rgba(255,255,255,0.85)", lineHeight: 1.7 }}
+      sx={{ color: "text.secondary", lineHeight: 1.7 }}
     >
       {children}
     </Typography>
   ),
   strong: ({ children }) => (
-    <Box component="strong" sx={{ fontWeight: 700, color: "white" }}>
+    <Box component="strong" sx={{ fontWeight: 700, color: "text.primary" }}>
       {children}
     </Box>
   ),
   em: ({ children }) => (
-    <Box
-      component="em"
-      sx={{ fontStyle: "italic", color: "rgba(255,255,255,0.85)" }}
-    >
+    <Box component="em" sx={{ fontStyle: "italic", color: "text.secondary" }}>
       {children}
     </Box>
   ),
@@ -83,7 +81,7 @@ const markdownComponents: Components = {
       sx={{
         pl: 3,
         my: 2,
-        color: "rgba(255,255,255,0.85)",
+        color: "text.secondary",
         listStyle: "disc",
       }}
     >
@@ -96,7 +94,7 @@ const markdownComponents: Components = {
       sx={{
         pl: 3,
         my: 2,
-        color: "rgba(255,255,255,0.85)",
+        color: "text.secondary",
         listStyle: "decimal",
       }}
     >
@@ -107,7 +105,7 @@ const markdownComponents: Components = {
     <Typography
       component="li"
       variant="body1"
-      sx={{ mb: 1, color: "rgba(255,255,255,0.85)" }}
+      sx={{ mb: 1, color: "text.secondary" }}
     >
       {children}
     </Typography>
@@ -123,7 +121,7 @@ const markdownComponents: Components = {
         component="code"
         sx={{
           display: inline ? "inline" : "block",
-          backgroundColor: "rgba(0,0,0,0.35)",
+          backgroundColor: "rgba(255,255,255,0.05)",
           borderRadius: 2,
           px: 1.5,
           py: inline ? 0.5 : 1,
@@ -156,7 +154,7 @@ const markdownComponents: Components = {
         borderLeft: `4px solid ${customColors.orange.main}`,
         pl: 3,
         my: 3,
-        color: "rgba(255,255,255,0.85)",
+        color: "text.secondary",
         fontStyle: "italic",
       }}
     >
@@ -174,52 +172,29 @@ export default async function BlogPost({ params }: Params) {
         component="main"
         sx={{
           minHeight: "100vh",
-          backgroundColor: customColors.dark.main,
-          backgroundImage: `linear-gradient(180deg, ${customColors.dark.main}, ${customColors.lessDark.main})`,
+          bgcolor: "background.default",
           py: { xs: 6, md: 10 },
         }}
       >
         <Container maxWidth="sm">
-          <Box
-            sx={{
-              borderRadius: 4,
-              p: { xs: 4, md: 5 },
-              textAlign: "center",
-              backgroundColor: "rgba(1, 61, 57, 0.75)",
-              boxShadow: getShadow("md"),
-              color: "white",
-            }}
-          >
+          <Card component="section" style={{ textAlign: "center" }}>
             <Typography variant="h4" fontWeight={700} gutterBottom>
               We couldn’t find that story.
             </Typography>
-            <Typography
-              variant="body1"
-              sx={{ color: "rgba(255,255,255,0.8)" }}
-              gutterBottom
-            >
+            <Typography variant="body1" color="text.secondary" gutterBottom>
               The post may have been moved or removed. Explore the latest
               insights from our team instead.
             </Typography>
             <Link
               href="/blog"
               muiLinkProps={{
-                underline: "none",
-                sx: {
-                  display: "inline-block",
-                  mt: 3,
-                  px: 3,
-                  py: 1.5,
-                  borderRadius: 999,
-                  backgroundImage: `linear-gradient(135deg, ${customColors.lessDark.main}, ${customColors.orange.main})`,
-                  color: "white",
-                  fontWeight: 600,
-                },
+                underline: "hover",
+                sx: { color: "primary.main", fontWeight: 600 },
               }}
             >
               Browse all posts
             </Link>
-          </Box>
+          </Card>
         </Container>
       </Stack>
     );
@@ -232,8 +207,7 @@ export default async function BlogPost({ params }: Params) {
       component="main"
       sx={{
         minHeight: "100vh",
-        backgroundColor: customColors.dark.main,
-        backgroundImage: `linear-gradient(180deg, ${customColors.dark.main}, ${customColors.lessDark.main})`,
+        bgcolor: "background.default",
         py: { xs: 6, md: 10 },
       }}
     >
@@ -243,7 +217,7 @@ export default async function BlogPost({ params }: Params) {
           muiLinkProps={{
             underline: "hover",
             sx: {
-              color: "rgba(255,255,255,0.75)",
+              color: "text.secondary",
               fontWeight: 600,
               letterSpacing: 0.5,
             },
@@ -251,35 +225,22 @@ export default async function BlogPost({ params }: Params) {
         >
           ← Back to all posts
         </Link>
-        <Box
-          sx={{
-            mt: 3,
-            backgroundImage: `linear-gradient(135deg, ${customColors.lessDark.main}, ${customColors.orange.main})`,
-            borderRadius: 5,
-            p: { xs: 4, md: 5 },
-            boxShadow: getShadow("lg"),
-            color: "white",
-          }}
-        >
-          <Typography component="h1" variant="h3" fontWeight={700} gutterBottom>
-            {post.title}
-          </Typography>
-          <Typography
-            variant="subtitle1"
-            sx={{ color: "rgba(255,255,255,0.85)" }}
-          >
-            {publishedOn}
-          </Typography>
+        <Box mt={3}>
+          <Card component="header">
+            <Typography
+              component="h1"
+              variant="h3"
+              fontWeight={700}
+              gutterBottom
+            >
+              {post.title}
+            </Typography>
+            <Typography variant="subtitle1" color="text.secondary">
+              {publishedOn}
+            </Typography>
+          </Card>
         </Box>
-        <Box
-          sx={{
-            mt: 4,
-            borderRadius: 4,
-            backgroundColor: "rgba(1, 61, 57, 0.85)",
-            boxShadow: getShadow("md"),
-            p: { xs: 3, md: 5 },
-          }}
-        >
+        <Box mt={4}>
           <Markdown components={markdownComponents}>{post.content}</Markdown>
         </Box>
       </Container>
