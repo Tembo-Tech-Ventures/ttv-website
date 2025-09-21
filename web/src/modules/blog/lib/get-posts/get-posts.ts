@@ -14,6 +14,7 @@ export interface BlogPost {
   title: string;
   content: string;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 export async function getPosts(): Promise<BlogPost[]> {
