@@ -21,6 +21,18 @@ import {
 } from "@mui/x-data-grid";
 import { useRouter } from "next/navigation";
 import { deletePost } from "./actions/delete-post";
+import { customColors, getShadow } from "@/modules/mui/theme/constants";
+
+/**
+ * Precomputed style helpers keep the gradient-heavy aesthetic consistent while
+ * satisfying Prettier's preferred line lengths.
+ */
+const GRID_BACKGROUND_GRADIENT =
+  "linear-gradient(180deg, rgba(255,255,255,0.97), rgba(255,255,255,0.9))";
+const GRID_HEADER_GRADIENT = `linear-gradient(135deg, ${customColors.dark.main}, ${customColors.lessDark.main})`;
+const GRID_STRIPED_ROW_COLOR = "rgba(44,105,100,0.05)";
+const GRID_PAGINATION_SELECTOR =
+  "& .MuiTablePagination-root, & .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows";
 
 /**
  * Intl formatter reused across column definitions so the date rendering stays
@@ -125,23 +137,41 @@ export function PostsClient({ posts }: { posts: AdminPostRow[] }) {
               size="small"
               target="_blank"
               rel="noopener"
+              sx={{
+                fontWeight: 600,
+                color: customColors.dark.main,
+                backgroundColor: "rgba(255,255,255,0.8)",
+                border: "1px solid rgba(1,61,57,0.2)",
+                "&:hover": {
+                  backgroundColor: "rgba(255,255,255,1)",
+                },
+              }}
             >
               View
             </Button>
             <Button
               component={NextLink}
               href={`/admin/blog/${params.row.slug}/edit`}
-              variant="outlined"
+              variant="contained"
               size="small"
+              sx={{
+                fontWeight: 600,
+                backgroundColor: customColors.lessDark.main,
+                color: "common.white",
+                "&:hover": {
+                  backgroundColor: customColors.dark.main,
+                },
+              }}
             >
               Edit
             </Button>
             <Button
-              variant="outlined"
+              variant="contained"
               color="error"
               size="small"
               onClick={() => handleDelete(params.row.slug)}
               disabled={isPending && pendingSlug === params.row.slug}
+              sx={{ fontWeight: 600 }}
             >
               Delete
             </Button>
@@ -164,12 +194,28 @@ export function PostsClient({ posts }: { posts: AdminPostRow[] }) {
         },
       }}
       sx={{
-        backgroundColor: "background.paper",
-        borderRadius: 2,
-        border: "none",
-        boxShadow: 1,
+        backgroundImage: GRID_BACKGROUND_GRADIENT,
+        borderRadius: 4,
+        border: "1px solid rgba(255,255,255,0.2)",
+        boxShadow: getShadow("md"),
+        overflow: "hidden",
         "& .MuiDataGrid-columnHeaders": {
-          backgroundColor: "grey.100",
+          backgroundImage: GRID_HEADER_GRADIENT,
+          color: "common.white",
+          borderBottom: "1px solid rgba(255,255,255,0.2)",
+        },
+        "& .MuiDataGrid-columnHeader, & .MuiDataGrid-cell": {
+          borderColor: "rgba(1,61,57,0.08)",
+        },
+        "& .MuiDataGrid-row:nth-of-type(odd)": {
+          backgroundColor: GRID_STRIPED_ROW_COLOR,
+        },
+        "& .MuiDataGrid-footerContainer": {
+          backgroundColor: "rgba(255,255,255,0.85)",
+          borderTop: "1px solid rgba(1,61,57,0.12)",
+        },
+        [GRID_PAGINATION_SELECTOR]: {
+          color: "text.primary",
         },
       }}
     />

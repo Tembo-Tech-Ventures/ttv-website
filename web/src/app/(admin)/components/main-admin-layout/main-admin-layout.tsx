@@ -27,7 +27,6 @@ import {
   PiCalendar,
   PiTable,
   PiUserDuotone,
-  PiNotePencilDuotone,
   PiNewspaperDuotone,
 } from "react-icons/pi";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -206,11 +205,6 @@ export function MainAdminLayout({
                 icon={<PiNewspaperDuotone fontSize={25} />}
                 primary="Blog Posts"
                 href="/admin/blog"
-              />
-              <NavLink
-                icon={<PiNotePencilDuotone fontSize={25} />}
-                primary="New Post"
-                href="/admin/blog/new"
               />
             </List>
             <Box sx={{ flexGrow: 1 }} />
