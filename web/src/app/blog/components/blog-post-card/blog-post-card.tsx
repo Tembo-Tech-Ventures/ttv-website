@@ -2,8 +2,9 @@
  * BlogPostCard
  * ------------
  * Presentational helper that renders a teaser for a single blog entry. The
- * card embraces Tembo's gradient surfaces and rounded edges while remaining
- * lightweight enough to render server-side inside the blog index route.
+ * component now leans on the shared `<Card>` surface that already ships on the
+ * homepage, which keeps the visual language consistent while avoiding bespoke
+ * gradient styling.
  *
  * Responsibilities:
  * - Format the publication date into a human-readable string using
@@ -14,9 +15,9 @@
  *   states match other navigational affordances on the site.
  */
 
+import { Card } from "@/components/card/card";
 import { Link } from "@/components/link/link";
 import type { BlogPost } from "@/modules/blog/lib/get-posts/get-posts";
-import { customColors, getShadow } from "@/modules/mui/theme/constants";
 import { Stack, Typography } from "@mui/material";
 
 const PUBLISH_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
@@ -55,52 +56,34 @@ export function BlogPostCard({ post }: BlogPostCardProps) {
       href={`/blog/${post.slug}`}
       muiLinkProps={{
         underline: "none",
-        sx: { display: "block", borderRadius: 4 },
+        sx: { display: "block", height: "100%" },
       }}
     >
-      <Stack
-        spacing={2}
-        sx={{
-          height: "100%",
-          borderRadius: 4,
-          backgroundImage: `linear-gradient(150deg, rgba(255,255,255,0.08), rgba(242,141,104,0.25))`,
-          backgroundColor: "rgba(1, 61, 57, 0.75)",
-          color: "white",
-          p: 4,
-          boxShadow: getShadow("md"),
-          transition: "transform 150ms ease, box-shadow 150ms ease",
-          "&:hover": {
-            transform: "translateY(-6px)",
-            boxShadow: getShadow("lg"),
-          },
-          "&:focus-within": {
-            transform: "translateY(-6px)",
-            boxShadow: getShadow("lg"),
-          },
-        }}
-      >
-        <Typography variant="overline" sx={{ color: "rgba(255,255,255,0.75)" }}>
-          {publishedOn}
-        </Typography>
-        <Typography variant="h5" component="h2" fontWeight={600}>
-          {post.title}
-        </Typography>
-        <Typography variant="body1" sx={{ color: "rgba(255,255,255,0.82)" }}>
-          {excerpt}
-        </Typography>
-        <Typography
-          variant="button"
-          sx={{
-            mt: "auto",
-            alignSelf: "flex-start",
-            color: customColors.orange.main,
-            fontWeight: 600,
-            letterSpacing: 1,
-          }}
-        >
-          Read story →
-        </Typography>
-      </Stack>
+      <Card component="article" style={{ height: "100%" }}>
+        <Stack spacing={2} sx={{ height: "100%" }}>
+          <Typography variant="overline" color="text.secondary">
+            {publishedOn}
+          </Typography>
+          <Typography variant="h5" component="h2" fontWeight={600}>
+            {post.title}
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            {excerpt}
+          </Typography>
+          <Typography
+            variant="button"
+            sx={{
+              mt: "auto",
+              alignSelf: "flex-start",
+              color: "primary.main",
+              fontWeight: 600,
+              letterSpacing: 1,
+            }}
+          >
+            Read story →
+          </Typography>
+        </Stack>
+      </Card>
     </Link>
   );
 }
