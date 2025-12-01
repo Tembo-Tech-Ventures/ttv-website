@@ -1,0 +1,56 @@
+services:
+  test-runner:
+    image: node:20-bookworm
+    working_dir: /app
+    command: sh -c "npm ci && npm run test -- --runInBand"
+    environment:
+      NODE_ENV: test
+      CI: "true"
+      DATABASE_URL: postgres://ttv_user:ttv_password@db-test:5432/ttv_test
+      NEXTAUTH_URL: http://localhost:3000
+      EMAIL_SERVER: smtp://mailer-test:1025
+      EMAIL_FROM: test@tembotech.local
+      S3_ENDPOINT: http://s3-test:9090
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY_ID: local
+      S3_SECRET_ACCESS_KEY: local
+      S3_BUCKET: ttv-application-files
+      NEXT_PUBLIC_RUDDERSTACK_WRITE_KEY: test
+      NEXT_PUBLIC_RUDDERSTACK_DATA_PLANE_URL: http://localhost
+    depends_on:
+      db-test:
+        condition: service_healthy
+      mailer-test:
+        condition: service_started
+      s3-test:
+        condition: service_started
+    volumes:
+      - ./web:/app
+      - web_node_modules_test:/app/node_modules
+
+  db-test:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ttv_password
+      POSTGRES_USER: ttv_user
+      POSTGRES_DB: ttv_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ttv_user -d ttv_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailer-test:
+    image: mailhog/mailhog
+    restart: unless-stopped
+
+  s3-test:
+    image: adobe/s3mock
+    environment:
+      - initialBuckets=ttv-application-files
+      - debug=true
+    restart: unless-stopped
+
+volumes:
+  web_node_modules_test:

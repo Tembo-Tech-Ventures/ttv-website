@@ -1,0 +1,19 @@
+# Codex CLI configuration
+# This config is copied into /home/node/.config/codex/config.toml in the devcontainer.
+# Update the server commands if you change how MCP servers are installed.
+
+log_level = "info"
+
+[[mcp_servers]]
+name = "context7"
+transport = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-context7"]
+timeout = 120
+
+[[mcp_servers]]
+name = "playwright"
+transport = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-playwright", "--headless"]
+timeout = 120

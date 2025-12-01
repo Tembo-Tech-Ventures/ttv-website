@@ -1,36 +1,23 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# TTV Web App
 
-## Getting Started
+## Quickstart
+- Install deps: `npm install`
+- Run dev: `npm run dev` (or from repo root: `docker compose -f compose.yaml up -d` / `./scripts/dev-up.sh`)
+- Run tests: `npm run test` (or from repo root: `docker compose -f compose.test.yaml run --rm test-runner` / `./scripts/test-run.sh`)
+- Lint: `npm run lint`
 
-First, run the development server:
+## Services (compose)
+- Root `compose.yaml` spins up Next.js dev server (`app`), Postgres (`db`), Mailhog (`mailer`), and S3 mock (`s3`). Use `docker compose -f ../compose.yaml ...` if running from this directory.
+- Root `compose.test.yaml` runs Jest in a disposable container with isolated Postgres/Mailhog/S3. Use `docker compose -f ../compose.test.yaml ...` if running from this directory.
+- Env vars in compose files mirror local defaults (`DATABASE_URL`, `S3_ENDPOINT`, `EMAIL_SERVER`, etc.).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Testing expectations
+- Every change should include relevant tests (unit for module logic, integration/UI via Testing Library).
+- Jest setup lives in `jest.config.ts` and `jest.setup.ts`; CSS imports are mocked via `test/__mocks__/styleMock.js`.
+- Document tests you ran (and results) in `.agents/logs`.
+- Prisma 7 uses `prisma.config.ts` for datasource configuration and `@prisma/adapter-pg` in `src/modules/prisma/lib/prisma-client/prisma-client.ts`. Ensure `DATABASE_URL` is set before running migrations or tests.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+## Tooling
+- Devcontainer installs `@openai/codex` and copies `.devcontainer/codex/config.toml` into the container for MCP servers (context7, playwright).
+- Path aliases: `@/*` -> `src/*` (see `tsconfig.json`).
+- Avoid barrel files; prefer one export per file and colocate tests/assets with their feature.
