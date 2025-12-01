@@ -11,7 +11,11 @@
     "lint-fix": "next lint --fix",
     "migrate-dev": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy || echo 'Database unavailable, skipping migrations'",
-    "test": "jest"
+    "test": "jest",
+    "dev:docker:up": "docker compose -f ../compose.yaml up -d",
+    "dev:docker:down": "docker compose -f ../compose.yaml down",
+    "test:docker": "docker compose -f ../compose.test.yaml run --rm test-runner",
+    "test:docker:down": "docker compose -f ../compose.test.yaml down -v"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

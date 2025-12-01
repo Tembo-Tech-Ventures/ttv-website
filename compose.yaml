@@ -1,0 +1,71 @@
+services:
+  app:
+    image: node:20-bookworm
+    working_dir: /app
+    command: sh -c "npm ci && npm run dev"
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://ttv_user:ttv_password@db:5432/ttv
+      POSTGRES_PRISMA_URL: postgres://ttv_user:ttv_password@db:5432/ttv
+      NEXTAUTH_URL: http://localhost:3000
+      EMAIL_SERVER: smtp://mailer:1025
+      EMAIL_FROM: dev@tembotech.local
+      S3_ENDPOINT: http://s3:9090
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY_ID: local
+      S3_SECRET_ACCESS_KEY: local
+      S3_BUCKET: ttv-application-files
+      NEXT_PUBLIC_RUDDERSTACK_WRITE_KEY: dev
+      NEXT_PUBLIC_RUDDERSTACK_DATA_PLANE_URL: http://localhost
+    depends_on:
+      db:
+        condition: service_healthy
+      mailer:
+        condition: service_started
+      s3:
+        condition: service_started
+    volumes:
+      - ./web:/app
+      - web_node_modules:/app/node_modules
+      - web_next_cache:/app/.next
+    restart: unless-stopped
+
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ttv_password
+      POSTGRES_USER: ttv_user
+      POSTGRES_DB: ttv
+    ports:
+      - "5432:5432"
+    volumes:
+      - web_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ttv_user -d ttv"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailer:
+    image: mailhog/mailhog
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    restart: unless-stopped
+
+  s3:
+    image: adobe/s3mock
+    ports:
+      - "9090:9090"
+    environment:
+      - initialBuckets=ttv-application-files
+      - debug=true
+    restart: unless-stopped
+
+volumes:
+  web_pgdata:
+  web_node_modules:
+  web_next_cache:
