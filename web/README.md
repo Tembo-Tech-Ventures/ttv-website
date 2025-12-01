@@ -15,6 +15,7 @@
 - Every change should include relevant tests (unit for module logic, integration/UI via Testing Library).
 - Jest setup lives in `jest.config.ts` and `jest.setup.ts`; CSS imports are mocked via `test/__mocks__/styleMock.js`.
 - Document tests you ran (and results) in `.agents/logs`.
+- Prisma 7 uses `prisma.config.ts` for datasource configuration and `@prisma/adapter-pg` in `src/modules/prisma/lib/prisma-client/prisma-client.ts`. Ensure `DATABASE_URL` is set before running migrations or tests.
 
 ## Tooling
 - Devcontainer installs `@openai/codex` and copies `.devcontainer/codex/config.toml` into the container for MCP servers (context7, playwright).

@@ -34,7 +34,8 @@ This file documents how we expect code to be structured inside the Next.js app u
 
 ## Modules (shared/domain)
 - Cross-route logic belongs in `src/modules/<domain>/lib/<feature>/<feature>.ts`. Keep data access in modules, not inside pages/components.
-- Use the shared Prisma client from `@/modules/prisma/lib/prisma-client/prisma-client`; never instantiate new clients.
+- Use the shared Prisma client from `@/modules/prisma/lib/prisma-client/prisma-client` (Prisma 7 + `@prisma/adapter-pg`). `DATABASE_URL` must be set; do not instantiate new clients.
+- Prisma configuration lives in `web/prisma.config.ts` (datasource URL, migrations path). The schema no longer contains `datasource.url`.
 - Auth/session helpers live in `@/modules/auth/...` (`getServerSession`). Role checks use `@/modules/roles/lib/check-admin-permissions` or `is-admin`.
 - The typed API client is `@/modules/api/client` via Hono.
 

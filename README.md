@@ -8,7 +8,8 @@
 - Devcontainer installs `@openai/codex` and seeds MCP config at `/home/node/.config/codex/config.toml` (context7, playwright servers).
 - Local stack: `docker compose -f compose.yaml up -d` (Next.js dev + Postgres + Mailhog + S3 mock). Scripts: `./scripts/dev-up.sh`, `./scripts/dev-down.sh`.
 - Test stack: `docker compose -f compose.test.yaml run --rm test-runner` (or `./scripts/test-run.sh`; cleanup with `./scripts/test-down.sh`).
+- Prisma 7 uses `web/prisma.config.ts` for datasource config and `@prisma/adapter-pg` in the shared client. Ensure `DATABASE_URL` is set before generating or running tests.
 
 ## Testing
-- From `web/`: `npm run lint` and `npm test` (Jest + Testing Library, see `web/jest.config.ts`).
+- From `web/`: `npm run lint` (eslint flat config) and `npm test` (Jest + Testing Library, see `web/jest.config.ts`).
 - Document what you run in `.agents/logs` and add/extend tests for touched code.

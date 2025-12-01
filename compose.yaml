@@ -8,7 +8,6 @@ services:
     environment:
       NODE_ENV: development
       DATABASE_URL: postgres://ttv_user:ttv_password@db:5432/ttv
-      POSTGRES_PRISMA_URL: postgres://ttv_user:ttv_password@db:5432/ttv
       NEXTAUTH_URL: http://localhost:3000
       EMAIL_SERVER: smtp://mailer:1025
       EMAIL_FROM: dev@tembotech.local

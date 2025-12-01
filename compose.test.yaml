@@ -7,7 +7,6 @@ services:
       NODE_ENV: test
       CI: "true"
       DATABASE_URL: postgres://ttv_user:ttv_password@db-test:5432/ttv_test
-      POSTGRES_PRISMA_URL: postgres://ttv_user:ttv_password@db-test:5432/ttv_test
       NEXTAUTH_URL: http://localhost:3000
       EMAIL_SERVER: smtp://mailer-test:1025
       EMAIL_FROM: test@tembotech.local
