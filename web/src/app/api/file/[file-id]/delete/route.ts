@@ -1,16 +1,16 @@
 import { getServerSession } from "@/modules/auth/lib/get-server-session/get-server-session";
 import { prisma } from "@/modules/prisma/lib/prisma-client/prisma-client";
 import { s3Client } from "@/modules/s3/client";
-import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { NextResponse } from "next/server";
+import { DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { NextRequest, NextResponse } from "next/server";
 
 const bucket = "ttv-application-files";
 
 export async function POST(
-  req: Request,
-  { params }: { params: { "file-id": string } },
+  _req: NextRequest,
+  context: { params: Promise<{ "file-id": string }> },
 ) {
+  const { "file-id": fileId } = await context.params;
   const session = await getServerSession();
 
   if (!session?.user?.id) {
@@ -18,7 +18,6 @@ export async function POST(
   }
 
   const ownerId = session.user.id;
-  const fileId = params["file-id"];
 
   const file = await prisma.file.findUnique({
     where: {
@@ -32,7 +31,7 @@ export async function POST(
   }
 
   try {
-    const url = s3Client.send(
+    await s3Client.send(
       new DeleteObjectCommand({
         Bucket: bucket,
         Key: file.path,
