@@ -2,11 +2,16 @@
 import { isAdmin } from "./is-admin";
 import { getServerSession } from "@/modules/auth/lib/get-server-session/get-server-session";
 import { prisma } from "@/modules/prisma/lib/prisma-client/prisma-client";
-import { ROLES } from "@/modules/roles/constants";
 
 // Mock the dependencies
 jest.mock("@/modules/auth/lib/get-server-session/get-server-session");
-jest.mock("@/modules/prisma/lib/prisma-client/prisma-client");
+jest.mock("@/modules/prisma/lib/prisma-client/prisma-client", () => ({
+  prisma: {
+    userRole: {
+      findFirst: jest.fn(),
+    },
+  },
+}));
 
 describe("checkAdminPermissions", () => {
   it("should return true if the user has admin role", async () => {

@@ -120,6 +120,7 @@ Root Layout (SessionProvider + MUI ThemeProvider)
 | `/dashboard/application/[id]` | View/edit application |
 | `/dashboard/profile` | User profile |
 | `/dashboard/curriculum` | Curriculum content |
+| `/dashboard/content` | Content management |
 | `/admin` | Admin dashboard |
 | `/admin/user` | User management |
 | `/admin/application` | Application review |
