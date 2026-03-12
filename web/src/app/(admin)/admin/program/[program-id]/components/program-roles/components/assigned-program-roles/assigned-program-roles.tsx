@@ -3,7 +3,7 @@
 import { IconButton, Stack, Typography } from "@mui/material";
 import { Delete } from "@mui/icons-material";
 import useSWRMutation from "swr/mutation";
-import { client } from "@/modules/api/client";
+import { deleteProgramRole } from "@/app/actions/program-role";
 import { getProgramPageData } from "../../../../lib/get-program-page-data/get-program-page-data";
 import { useRouter } from "next/navigation";
 
@@ -21,11 +21,7 @@ export function AssignedProgramRoles({
   const { trigger } = useSWRMutation(
     "deleteProgramRole",
     async (x, params: { arg: { programRoleId: string } }) => {
-      await client.api.v1["program-role"][":id"].$delete({
-        param: {
-          id: params.arg.programRoleId,
-        },
-      });
+      await deleteProgramRole(params.arg.programRoleId);
       router.refresh();
     },
   );
