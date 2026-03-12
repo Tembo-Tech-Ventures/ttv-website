@@ -1,13 +1,7 @@
 "use client";
 
-import { client } from "@/modules/api/client";
-import {
-  Button,
-  CircularProgress,
-  Snackbar,
-  Stack,
-  TextField,
-} from "@mui/material";
+import { updateUserProfile } from "@/app/actions/user";
+import { Button, CircularProgress, Stack, TextField } from "@mui/material";
 import { User } from "@prisma/client";
 import { atom, useAtom } from "jotai";
 import { useCallback, useEffect } from "react";
@@ -25,15 +19,10 @@ export function ProfileForm({ user }: { user: User }) {
   }, [setForm, user]);
 
   const submit = useCallback(async () => {
-    await client.api.v1.user.$put({
-      json: form,
-    });
+    await updateUserProfile(form);
   }, [form]);
 
-  const { trigger, isMutating } = useSWRMutation(
-    "client.api.v1.user.$put",
-    submit,
-  );
+  const { trigger, isMutating } = useSWRMutation("updateUserProfile", submit);
 
   return (
     <form

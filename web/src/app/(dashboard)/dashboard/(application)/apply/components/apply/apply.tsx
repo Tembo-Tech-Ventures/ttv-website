@@ -4,13 +4,13 @@ import { Button, Stack, Typography } from "@mui/material";
 import { useAtom } from "jotai";
 import { useRouter } from "next/navigation";
 import { useCallback } from "react";
-import useSWR from "swr/mutation";
+import useSWRMutation from "swr/mutation";
 import {
   applicationSchemaVersion,
   applicationValuesAtom,
 } from "../../../atoms/application.atom";
 import { ApplicationForm } from "../../../components/application-form/application-form";
-import { client } from "@/modules/api/client";
+import { createProgramApplication } from "@/app/actions/program-application";
 import { ProgramPartner } from "@prisma/client";
 
 interface ApplyProps {
@@ -23,24 +23,20 @@ export default function Apply({ partners }: ApplyProps) {
 
   const submit = useCallback(
     async (method: string, { arg }: { arg: typeof submission }) => {
-      const response = await client.api.v1["program-application"].$post({
-        json: {
-          version: applicationSchemaVersion,
-          submission: arg,
-          partnerId:
-            (arg.find((item) => item.name === "partnerId")?.value as string) ||
-            "",
-          name:
-            (arg.find((item) => item.name === "name")?.value as string) || "",
-        },
+      return await createProgramApplication({
+        version: applicationSchemaVersion,
+        submission: arg,
+        partnerId:
+          (arg.find((item) => item.name === "partnerId")?.value as string) ||
+          "",
+        name: (arg.find((item) => item.name === "name")?.value as string) || "",
       });
-      return await response.json();
     },
     [],
   );
 
-  const { trigger, isMutating } = useSWR(
-    `client.api.v1["program-application"].$post`,
+  const { trigger, isMutating } = useSWRMutation(
+    "createProgramApplication",
     submit,
   );
 
@@ -61,7 +57,7 @@ export default function Apply({ partners }: ApplyProps) {
           size="large"
           onClick={async () => {
             const application = await trigger(submission);
-            if ("id" in application) {
+            if (application && "id" in application) {
               router.refresh();
             }
           }}

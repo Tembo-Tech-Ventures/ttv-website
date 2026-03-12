@@ -27,7 +27,7 @@ The entire application lives inside the `web/` directory as a single Next.js pro
 | Animations | GSAP + ScrollTrigger |
 | Database | PostgreSQL 16 |
 | ORM | Prisma 5 |
-| API Layer | Hono (mounted inside Next.js API routes) |
+| Mutations | Next.js Server Actions |
 | Authentication | NextAuth 4 (email provider, passwordless) |
 | File Storage | S3-compatible (Tigris in prod, S3Mock in dev) |
 | State Management | Jotai (atoms for form state) |
@@ -51,11 +51,9 @@ ttv-website/
 │   │   │   ├── (certificate)/    # Certificate display
 │   │   │   ├── auth/             # Login, register, verify, logout
 │   │   │   ├── blog/             # Public blog index + posts + RSS
-│   │   │   ├── api/              # API endpoints
-│   │   │   │   ├── auth/         # NextAuth handler
-│   │   │   │   ├── v1/           # Hono REST API (catch-all)
-│   │   │   │   ├── admin/        # Admin-only endpoints (blog image upload)
-│   │   │   │   └── file/         # File upload/delete
+│   │   │   ├── actions/           # Server actions (mutations)
+│   │   │   ├── api/              # API routes
+│   │   │   │   └── auth/         # NextAuth handler
 │   │   ├── components/           # Shared UI components (Card, Link)
 │   │   ├── modules/              # Feature modules (see below)
 │   │   ├── providers/            # React context providers (RootProvider)
@@ -81,7 +79,6 @@ The project organizes business logic into feature modules under `src/modules/`. 
 | Module | Purpose | Key Exports |
 |--------|---------|-------------|
 | `analytics/` | RudderStack page tracking and user identification | `PageTracker`, `Identifier`, `useAnalytics` |
-| `api/` | Hono type-safe API client for frontend calls | `client` (typed Hono client) |
 | `auth/` | Session helpers, email login form, redirect hook | `getServerSession`, `getAccess`, `EmailLoginForm`, `useLoginRedirect` |
 | `blog/` | CRUD for blog posts, image upload, RSS generation | `createPost`, `getPosts`, `getPost`, `updatePost`, `deletePost`, `uploadImage`, `generateRss` |
 | `gsap/` | GSAP ScrollTrigger plugin initialization | `ScrollTriggerInit` |
@@ -142,34 +139,25 @@ Root Layout (SessionProvider + MUI ThemeProvider + Analytics)
 | `/admin/enable-admin` | Dev utility: grant ADMIN role to self | Session |
 | `/certificate/[id]` | Certificate display (requires COMPLETED status) | None |
 
-## API Design
+## Server Actions
 
-REST API endpoints are built with **Hono** mounted as a Next.js catch-all route at `/api/v1/[[...route]]`. Hono provides middleware, routing, and Zod-based request validation via `@hono/zod-validator`.
+All mutations use **Next.js Server Actions** defined in `src/app/actions/`. Each file is marked `"use server"` and exports async functions that can be called directly from client components.
 
-The Hono app type is exported as `AppType` from the route file, enabling type-safe API calls from the frontend via `hono/client`.
+### Action Files
 
-### API Endpoints
+| File | Actions | Auth | Purpose |
+|------|---------|------|---------|
+| `actions/program-application.ts` | `createProgramApplication`, `updateProgramApplication`, `adminUpdateProgramApplication` | User / Admin | Application CRUD |
+| `actions/program-role.ts` | `assignProgramRole`, `deleteProgramRole` | Admin | Instructor/TA assignment |
+| `actions/user.ts` | `updateUserProfile`, `adminUpdateUser` | User / Admin | Profile management |
+| `actions/file.ts` | `getFileUploadUrl`, `deleteFile` | User | S3 file operations |
 
-| Endpoint | Method | Auth | Purpose |
-|----------|--------|------|---------|
-| `/api/v1/program-application` | POST | User | Create application (stores form data as JSON blob) |
-| `/api/v1/program-application/:id` | PUT | User | Update own application |
-| `/api/v1/program-application/:id/admin` | PUT | Admin | Admin update application (status changes) |
-| `/api/v1/program-partner` | GET | None | List partner organizations |
-| `/api/v1/program-role` | POST | Admin | Assign instructor/TA to program |
-| `/api/v1/program-role/:id` | DELETE | Admin | Remove role assignment |
-| `/api/v1/user` | PUT | User | Update own profile (name, image) |
-| `/api/v1/user/:id/admin` | PUT | Admin | Admin update user name |
-| `/api/file` | POST | User | Get signed S3 upload URL |
-| `/api/file/[file-id]/delete` | POST | User | Delete uploaded file |
-| `/api/admin/blog/upload` | POST | Admin | Upload and resize blog image to S3 |
+### Server Action Patterns
 
-### API Patterns
-
-- **Validation**: All Hono endpoints use `zValidator("json", zodSchema)` for request body validation. Application endpoints use `.passthrough()` to allow dynamic form fields.
-- **Auth**: `getServerSession()` retrieves the current user. Returns 401 if no session.
-- **Admin guards**: `checkAdminPermissions()` throws if user lacks ADMIN role (caught as 500).
-- **Cache revalidation**: Endpoints call `revalidatePath()` after mutations to refresh Next.js cache.
+- **Auth**: `getServerSession()` retrieves the current user. Throws if no session.
+- **Admin guards**: `checkAdminPermissions()` throws if user lacks ADMIN role.
+- **Cache revalidation**: Actions call `revalidatePath()` after mutations to refresh Next.js cache.
+- **Frontend usage**: Client components call server actions directly via import, often wrapped in `useSWRMutation` for loading state.
 
 ## Database
 

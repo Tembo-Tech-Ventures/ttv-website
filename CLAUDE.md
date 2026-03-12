@@ -23,7 +23,7 @@ npx prisma migrate dev --name describe-change  # Create migration
 - **Server components by default**: Only add `"use client"` when the component needs browser APIs, hooks, or event handlers
 - **No middleware.ts**: Auth guards are at the layout/page level, not via Next.js middleware
 - **Module structure**: Business logic in `src/modules/<feature>/` with `lib/`, `components/`, `hooks/` subdirs
-- **API layer**: Hono at `/api/v1/[[...route]]` with Zod validation and typed client via `AppType` export
+- **Server actions**: Mutations use Next.js server actions in `src/app/actions/`. No REST API layer.
 - **Styling**: MUI 5 `sx` prop preferred. Colors: orange primary (#F28D68), dark teal (#013D39), lighter teal (#2C6964)
 - **Fonts**: Climate Crisis (headings), Maven Pro (body)
 - **Tests**: Jest + Testing Library, colocated as `*.test.ts(x)`. Mocks in `src/__mocks__/`
@@ -37,12 +37,14 @@ Email-only passwordless via NextAuth 4. Magic links → PostgreSQL sessions via 
 - `isAdmin()` — boolean admin check (use for conditional UI)
 - `useLoginRedirect()` — client hook, redirects unauthenticated users to `/auth/login`
 
-## API Patterns
+## Server Actions
 
-- Validate: `zValidator("json", zodSchema)` — use `.passthrough()` for dynamic form data
-- Auth: `getServerSession()` → return 401 if no session
+Server actions live in `src/app/actions/`. Each action file is marked `"use server"`.
+
+- Auth: `getServerSession()` → throw if no session
 - Admin: `checkAdminPermissions()` → throws on unauthorized
 - After mutations: call `revalidatePath()` to refresh Next.js cache
+- Frontend calls server actions directly (no fetch/REST needed)
 
 ## Environment
 
