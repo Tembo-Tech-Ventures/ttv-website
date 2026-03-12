@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  test:
-    name: Lint & Test
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -19,12 +19,30 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      - run: npm ci
+      - run: npm ci --legacy-peer-deps
 
       - run: npm run lint
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci --legacy-peer-deps
 
       - run: npm test

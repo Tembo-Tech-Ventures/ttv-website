@@ -1,2 +1,2 @@
-ARG VARIANT="20"
+ARG VARIANT="22"
 FROM mcr.microsoft.com/devcontainers/javascript-node:1-${VARIANT}

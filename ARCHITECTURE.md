@@ -10,7 +10,6 @@ TTV Website is a full-stack web application for **Tembo Tech Ventures**, a tech 
 - **Blogging system** with Markdown editor, image uploads, and RSS
 - **User authentication** via passwordless email login
 - **Student application workflow** with dynamic forms and status tracking
-- **Curriculum delivery** via Sanity headless CMS
 - **Admin dashboards** for managing users, applications, programs, and blog posts
 - **Certificate generation** for completed programs
 - **File uploads** to S3-compatible storage
@@ -30,7 +29,6 @@ The entire application lives inside the `web/` directory as a single Next.js pro
 | ORM | Prisma 5 |
 | API Layer | Hono (mounted inside Next.js API routes) |
 | Authentication | NextAuth 4 (email provider, passwordless) |
-| CMS | Sanity (headless, embedded studio) |
 | File Storage | S3-compatible (Tigris in prod, S3Mock in dev) |
 | State Management | Jotai (atoms for form state) |
 | Data Fetching | SWR |
@@ -58,7 +56,6 @@ ttv-website/
 │   │   │   │   ├── v1/           # Hono REST API (catch-all)
 │   │   │   │   ├── admin/        # Admin-only endpoints (blog image upload)
 │   │   │   │   └── file/         # File upload/delete
-│   │   │   └── content-studio/   # Embedded Sanity CMS
 │   │   ├── components/           # Shared UI components (Card, Link)
 │   │   ├── modules/              # Feature modules (see below)
 │   │   ├── providers/            # React context providers (RootProvider)
@@ -69,11 +66,6 @@ ttv-website/
 │   │   ├── schema.prisma         # Database schema
 │   │   ├── seed.ts               # Seed script
 │   │   └── migrations/           # Migration history (16 migrations)
-│   ├── sanity/                   # Sanity CMS schemas and config
-│   │   ├── env.ts                # Sanity project config
-│   │   ├── lib/                  # Sanity client and image helpers
-│   │   ├── schema.ts             # Schema registry
-│   │   └── schema/documents/     # Course, Chapter, Lesson schemas
 │   ├── public/                   # Static files served by Next.js
 │   ├── docs/                     # Feature documentation
 │   └── compose.yaml              # Docker services for dev
@@ -116,7 +108,6 @@ Root Layout (SessionProvider + MUI ThemeProvider + Analytics)
 │   └── certificate/[application-id]
 ├── auth/*    → Dark gradient, no footer (login, register, verify, logout)
 ├── blog/*    → Public blog (index, [slug], rss.xml)
-├── content-studio/* → Embedded Sanity CMS studio
 └── api/*     → API endpoints (no layout)
 ```
 
@@ -136,7 +127,7 @@ Root Layout (SessionProvider + MUI ThemeProvider + Analytics)
 | `/dashboard/apply` | Program application form | Session |
 | `/dashboard/application/[id]` | View/edit own application | Session |
 | `/dashboard/profile` | User profile editing | Session |
-| `/dashboard/curriculum` | Curriculum content from Sanity CMS | Session |
+| `/dashboard/curriculum` | Curriculum content | Session |
 | `/dashboard/content` | Content library | Session |
 | `/admin` | Admin dashboard home | ADMIN |
 | `/admin/user` | User management table | ADMIN |
@@ -150,7 +141,6 @@ Root Layout (SessionProvider + MUI ThemeProvider + Analytics)
 | `/admin/blog/[slug]/edit` | Edit existing blog post | ADMIN |
 | `/admin/enable-admin` | Dev utility: grant ADMIN role to self | Session |
 | `/certificate/[id]` | Certificate display (requires COMPLETED status) | None |
-| `/content-studio` | Embedded Sanity CMS studio | None |
 
 ## API Design
 
@@ -266,12 +256,7 @@ When an application status is set to COMPLETED (with a `completedAt` date), a ce
 
 ### Curriculum & Content
 
-Curriculum content is managed through **Sanity CMS** (headless). The Sanity studio is embedded at `/content-studio`. Schemas define three document types:
-- **Course** — top-level with title, slug, and portable text content
-- **Chapter** — belongs to a Course
-- **Lesson** — belongs to a Chapter
-
-Content is fetched via GROQ queries using `next-sanity`.
+Curriculum and content are managed within the application.
 
 ### File Uploads
 
@@ -328,8 +313,6 @@ Development defaults are configured in `web/.env`. Key variables:
 | `EMAIL_SERVER` | SMTP connection string (Mailhog in dev) |
 | `EMAIL_FROM` | Sender email address |
 | `NEXTAUTH_URL` | Application URL (auto-configured for Codespaces) |
-| `NEXT_PUBLIC_SANITY_PROJECT_ID` | Sanity project ID |
-| `NEXT_PUBLIC_SANITY_DATASET` | Sanity dataset name |
 | `S3_ENDPOINT` | S3-compatible storage endpoint |
 | `ACCESS_KEY_ID` / `SECRET_ACCESS_KEY` | S3 credentials |
 
