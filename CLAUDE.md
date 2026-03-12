@@ -32,7 +32,6 @@ web/src/
 │   ├── auth/                 # Login, register, verify-request, logout
 │   ├── blog/                 # Public blog index, [slug], rss.xml
 │   ├── api/                  # API routes (auth, v1 Hono, file, admin)
-│   └── content-studio/       # Embedded Sanity CMS
 ├── modules/                  # Feature modules (see below)
 ├── components/               # Shared UI (Card, Link)
 ├── providers/                # RootProvider (SessionProvider + MuiProvider)
@@ -42,7 +41,6 @@ web/src/
 
 Other key files:
 - `web/prisma/schema.prisma` — Database schema (PostgreSQL)
-- `web/sanity/` — Sanity CMS schemas (Course, Chapter, Lesson)
 - `web/compose.yaml` — Docker services for local dev
 - `web/docs/blogging.md` — Blogging feature documentation
 
@@ -122,7 +120,6 @@ Dev environment variables are in `web/.env`. Key ones:
 - `EMAIL_SERVER` / `EMAIL_FROM` — SMTP for auth emails (Mailhog in dev)
 - `NEXTAUTH_URL` — App URL (auto-configured for Codespaces)
 - `S3_ENDPOINT` / `ACCESS_KEY_ID` / `SECRET_ACCESS_KEY` — File storage (S3Mock in dev)
-- `NEXT_PUBLIC_SANITY_PROJECT_ID` / `NEXT_PUBLIC_SANITY_DATASET` — CMS
 
 Production also needs: `NEXTAUTH_SECRET`, `S3_REGION`, `S3_BUCKET`, `S3_PUBLIC_BASE_URL`, `SITE_URL`.
 

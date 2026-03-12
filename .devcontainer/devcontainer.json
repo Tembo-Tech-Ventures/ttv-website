@@ -1,4 +1,5 @@
 {
+  "name": "TTV Website",
   "build": {
     "dockerfile": "Dockerfile",
     "context": "."
@@ -14,18 +15,17 @@
         "esbenp.prettier-vscode",
         "Prisma.prisma",
         "mtxr.sqltools",
-        "mtxr.sqltools-driver-pg",
-        "WallabyJs.console-ninja",
-        "tldraw-org.tldraw-vscode"
+        "mtxr.sqltools-driver-pg"
       ]
     }
   },
-  "postCreateCommand": "cd ./web && npm i",
+  "postCreateCommand": "cd ./web && npm install",
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
   },
   "containerEnv": {
-      "NEXTAUTH_URL": "http://localhost:3000"
+    "NEXTAUTH_URL": "http://localhost:3000"
   },
   "forwardPorts": [
     3000,
