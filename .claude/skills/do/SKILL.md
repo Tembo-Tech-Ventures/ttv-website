@@ -1,5 +1,5 @@
 ---
-name: solve
+name: do
 description: End-to-end problem solving — analyse, plan, implement, test, review, and merge
 argument-hint: <problem-description or issue-number>
 disable-model-invocation: true
