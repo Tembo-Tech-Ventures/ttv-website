@@ -107,14 +107,14 @@ export function PostsClient({ posts }: { posts: AdminPostRow[] }) {
         headerName: "Published",
         flex: 1,
         minWidth: 200,
-        valueFormatter: ({ value }) => formatDate(value),
+        valueFormatter: (value: unknown) => formatDate(value),
       },
       {
         field: "updatedAt",
         headerName: "Last Updated",
         flex: 1,
         minWidth: 200,
-        valueFormatter: ({ value }) => formatDate(value),
+        valueFormatter: (value: unknown) => formatDate(value),
       },
       {
         field: "actions",
