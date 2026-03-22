@@ -20,10 +20,10 @@ type Application = {
 export default async function ApplicationPage({
   params,
 }: {
-  params: { "application-id": string };
+  params: Promise<{ "application-id": string }>;
 }) {
   await checkAdminPermissions();
-  const applicationId = params["application-id"];
+  const { "application-id": applicationId } = await params;
   const applicationPageData = await getApplicationPageData(applicationId);
   const programs = applicationPageData?.programs;
   const application = applicationPageData?.application;

@@ -1,5 +1,5 @@
 import { adminUpdateProgramApplication } from "@/app/actions/program-application";
-import { ProgramApplication } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import useSWRMutation from "swr/mutation";
 
 export function useUpdateApplication() {
@@ -10,7 +10,7 @@ export function useUpdateApplication() {
       params: {
         arg: {
           id: string;
-          programApplication: Partial<ProgramApplication>;
+          programApplication: Prisma.ProgramApplicationUncheckedUpdateInput;
         };
       },
     ) => {

@@ -18,10 +18,10 @@ type Application = {
 export default async function UserPage({
   params,
 }: {
-  params: { "user-id": string };
+  params: Promise<{ "user-id": string }>;
 }) {
   await checkAdminPermissions();
-  const applicationId = params["user-id"];
+  const { "user-id": applicationId } = await params;
   const userPageData = await getUserPageData(applicationId);
   const user = userPageData?.user;
   return (

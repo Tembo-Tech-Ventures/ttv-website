@@ -19,9 +19,9 @@ import { Card } from "@/components/card/card";
 export default async function CertificatePage({
   params,
 }: {
-  params: { "application-id": string };
+  params: Promise<{ "application-id": string }>;
 }) {
-  const applicationId = params["application-id"];
+  const { "application-id": applicationId } = await params;
   console.log(applicationId);
   const application = await prisma.programApplication.findUnique({
     where: {

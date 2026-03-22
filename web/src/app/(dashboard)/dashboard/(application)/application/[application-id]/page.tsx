@@ -10,7 +10,7 @@ import { ApplicationStatus } from "@prisma/client";
 export default async function Applications({
   params,
 }: {
-  params: { "application-id": string };
+  params: Promise<{ "application-id": string }>;
 }) {
   const session = await getServerSession();
   const userId = session?.user?.id;
@@ -19,7 +19,7 @@ export default async function Applications({
     redirect("/login");
   }
 
-  const applicationId = params["application-id"];
+  const { "application-id": applicationId } = await params;
   const application = await prisma.programApplication.findUnique({
     where: {
       id: applicationId,

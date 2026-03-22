@@ -17,10 +17,10 @@ type Application = {
 export default async function UserPage({
   params,
 }: {
-  params: { "program-id": string };
+  params: Promise<{ "program-id": string }>;
 }) {
   await checkAdminPermissions();
-  const programId = params["program-id"];
+  const { "program-id": programId } = await params;
   const programPageData = await getProgramPageData(programId);
   const { program } = programPageData;
   return (

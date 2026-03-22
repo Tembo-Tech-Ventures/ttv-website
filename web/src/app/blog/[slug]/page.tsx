@@ -26,7 +26,7 @@ import Markdown from "react-markdown";
 export const dynamic = "force-dynamic";
 
 interface Params {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 const PUBLISH_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
@@ -164,7 +164,8 @@ const markdownComponents: Components = {
 };
 
 export default async function BlogPost({ params }: Params) {
-  const post = await getPost(params.slug);
+  const { slug } = await params;
+  const post = await getPost(slug);
 
   if (!post) {
     return (

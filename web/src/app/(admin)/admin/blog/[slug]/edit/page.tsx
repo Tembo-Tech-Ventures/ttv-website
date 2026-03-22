@@ -13,10 +13,11 @@ import { notFound } from "next/navigation";
 export default async function EditPostPage({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
   await checkAdminPermissions();
-  const post = await getPost(params.slug);
+  const { slug } = await params;
+  const post = await getPost(slug);
   if (!post) {
     notFound();
   }

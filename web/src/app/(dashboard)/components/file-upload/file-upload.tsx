@@ -70,7 +70,7 @@ export function FileUpload({ onChange }: FileUploadProps) {
       console.error("Error", err);
       alert("There was an error deleting the file");
     }
-  }, [fileInfo?.id, onChange]);
+  }, [fileInfo, onChange]);
 
   if (fileInfo?.filename) {
     return (
