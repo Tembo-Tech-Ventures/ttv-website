@@ -2,7 +2,7 @@
 
 import { prisma } from "@/modules/prisma/lib/prisma-client/prisma-client";
 import { checkAdminPermissions } from "@/modules/roles/lib/check-admin-permissions/check-admin-permissions";
-import { ProgramRoleName } from "@prisma/client";
+import { ProgramRoleName } from "@/generated/prisma/client";
 
 export async function assignProgramRole(data: {
   userId: string;

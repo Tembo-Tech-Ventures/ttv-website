@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { UpdateApplication } from "./components/update-application/update-application";
 import { getServerSession } from "@/modules/auth/lib/get-server-session/get-server-session";
 import { Card } from "@/components/card/card";
-import { ApplicationStatus } from "@prisma/client";
+import { ApplicationStatus } from "@/generated/prisma/client";
 
 export default async function Applications({
   params,

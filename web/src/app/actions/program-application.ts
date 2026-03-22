@@ -3,7 +3,7 @@
 import { getServerSession } from "@/modules/auth/lib/get-server-session/get-server-session";
 import { prisma } from "@/modules/prisma/lib/prisma-client/prisma-client";
 import { checkAdminPermissions } from "@/modules/roles/lib/check-admin-permissions/check-admin-permissions";
-import { ProgramApplication } from "@prisma/client";
+import { ProgramApplication } from "@/generated/prisma/client";
 import { revalidatePath } from "next/cache";
 
 export async function createProgramApplication(data: {

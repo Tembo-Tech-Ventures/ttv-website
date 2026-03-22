@@ -5,7 +5,7 @@ import { Program } from "./components/program/program";
 import { Status } from "./components/status/status";
 import { getApplicationPageData } from "./lib/get-application-page-data/get-application-page-data";
 import { CompletedAt } from "./components/completed-at/completed-at";
-import { ApplicationStatus } from "@prisma/client";
+import { ApplicationStatus } from "@/generated/prisma/client";
 
 type Application = {
   version: string;

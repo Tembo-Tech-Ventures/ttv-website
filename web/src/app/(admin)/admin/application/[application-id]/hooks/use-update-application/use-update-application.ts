@@ -1,5 +1,5 @@
 import { adminUpdateProgramApplication } from "@/app/actions/program-application";
-import { ProgramApplication } from "@prisma/client";
+import type { ProgramApplication } from "@/generated/prisma/browser";
 import useSWRMutation from "swr/mutation";
 
 export function useUpdateApplication() {

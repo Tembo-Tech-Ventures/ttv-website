@@ -2,7 +2,11 @@
 
 import { updateProgramApplication } from "@/app/actions/program-application";
 import { Button, Stack } from "@mui/material";
-import { ProgramApplication, ProgramPartner, User } from "@prisma/client";
+import type {
+  ProgramApplication,
+  ProgramPartner,
+  User,
+} from "@/generated/prisma/browser";
 import { useAtom } from "jotai";
 import { useRouter } from "next/navigation";
 import { useCallback } from "react";

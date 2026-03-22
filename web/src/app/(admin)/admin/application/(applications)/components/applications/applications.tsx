@@ -1,7 +1,7 @@
 "use client";
 
 import { DataGrid } from "@mui/x-data-grid";
-import { ProgramApplication } from "@prisma/client";
+import type { ProgramApplication } from "@/generated/prisma/browser";
 import { getApplications } from "../../lib/get-applications/get-applications";
 import { Link } from "@/components/link/link";
 

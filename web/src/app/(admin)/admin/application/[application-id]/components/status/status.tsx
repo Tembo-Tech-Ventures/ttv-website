@@ -1,7 +1,7 @@
 "use client";
 
 import { FormLabel, MenuItem, Select } from "@mui/material";
-import { ApplicationStatus } from "@prisma/client";
+import { ApplicationStatus } from "@/generated/prisma/browser";
 import { useParams, useRouter } from "next/navigation";
 import { useUpdateApplication } from "../../hooks/use-update-application/use-update-application";
 

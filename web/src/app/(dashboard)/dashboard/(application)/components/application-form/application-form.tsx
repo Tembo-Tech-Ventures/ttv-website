@@ -1,6 +1,10 @@
 "use client";
 
-import { ProgramApplication, ProgramPartner, User } from "@prisma/client";
+import type {
+  ProgramApplication,
+  ProgramPartner,
+  User,
+} from "@/generated/prisma/browser";
 import { useAtom } from "jotai";
 import { useEffect } from "react";
 import {

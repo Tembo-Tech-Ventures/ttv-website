@@ -2,7 +2,7 @@
 
 import { updateUserProfile } from "@/app/actions/user";
 import { Button, CircularProgress, Stack, TextField } from "@mui/material";
-import { User } from "@prisma/client";
+import type { User } from "@/generated/prisma/browser";
 import { atom, useAtom } from "jotai";
 import { useCallback, useEffect } from "react";
 import useSWRMutation from "swr/mutation";

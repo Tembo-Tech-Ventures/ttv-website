@@ -10,7 +10,7 @@ import {
   Stack,
   TextField,
 } from "@mui/material";
-import { ProgramRoleName } from "@prisma/client";
+import { ProgramRoleName } from "@/generated/prisma/browser";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getProgramPageData } from "../../../../lib/get-program-page-data/get-program-page-data";

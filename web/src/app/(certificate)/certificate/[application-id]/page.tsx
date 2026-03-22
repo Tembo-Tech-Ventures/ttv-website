@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { Elephant } from "@/assets/brand/elephant";
 import { customColors } from "@/modules/mui/theme/constants";
 import dayjs from "dayjs";
-import { ApplicationStatus } from "@prisma/client";
+import { ApplicationStatus } from "@/generated/prisma/client";
 import { Card } from "@/components/card/card";
 
 /**

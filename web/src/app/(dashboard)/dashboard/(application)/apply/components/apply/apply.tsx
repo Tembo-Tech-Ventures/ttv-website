@@ -11,7 +11,7 @@ import {
 } from "../../../atoms/application.atom";
 import { ApplicationForm } from "../../../components/application-form/application-form";
 import { createProgramApplication } from "@/app/actions/program-application";
-import { ProgramPartner } from "@prisma/client";
+import type { ProgramPartner } from "@/generated/prisma/browser";
 
 interface ApplyProps {
   partners: ProgramPartner[];
