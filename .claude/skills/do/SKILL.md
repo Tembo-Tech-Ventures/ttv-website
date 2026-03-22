@@ -2,7 +2,6 @@
 name: do
 description: End-to-end problem solving — analyse, plan, implement, test, review, and merge
 argument-hint: <problem-description or issue-number>
-disable-model-invocation: true
 ---
 
 Solve `$ARGUMENTS` end-to-end. Follow every phase below in order. Commit and push to remote regularly throughout (at minimum after each major phase).
