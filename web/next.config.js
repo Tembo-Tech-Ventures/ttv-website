@@ -1,14 +1,17 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverActions: {
-      allowedOrigins: [
-        "fluffy-train-7vvwjrgxgr2w59v-3000.app.github.dev",
-      ],
-    }
+  serverActions: {
+    allowedOrigins: [
+      "fluffy-train-7vvwjrgxgr2w59v-3000.app.github.dev",
+    ],
   },
   images: {
-    domains: ["www.gravatar.com"],
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "www.gravatar.com",
+      },
+    ],
   },
 };
 
