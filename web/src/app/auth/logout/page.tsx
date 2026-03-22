@@ -18,8 +18,7 @@ export default function Logout() {
   return (
     <Container maxWidth="md">
       <Stack
-        minHeight="100vh"
-        py={4}
+        sx={{ minHeight: "100vh", py: 4 }}
         direction="column"
         justifyContent="center"
       >

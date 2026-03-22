@@ -1,11 +1,5 @@
 import { Card } from "@/components/card/card";
-import {
-  Container,
-  Grid,
-  Stack,
-  Typography,
-  TypographyProps,
-} from "@mui/material";
+import { Container, Stack, Typography, TypographyProps } from "@mui/material";
 
 function Title(props: TypographyProps) {
   return (

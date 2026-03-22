@@ -1,5 +1,6 @@
 import { checkAdminPermissions } from "@/modules/roles/lib/check-admin-permissions/check-admin-permissions";
-import { Box, Button, Container, Grid, Stack, Typography } from "@mui/material";
+import { Box, Button, Container, Stack, Typography } from "@mui/material";
+import Grid from "@mui/material/Grid";
 import React from "react";
 import { Program } from "./components/program/program";
 import { Status } from "./components/status/status";
@@ -61,7 +62,7 @@ export default async function ApplicationPage({
         <Grid spacing={4} container>
           {submission.map((field) => (
             <React.Fragment key={field.name}>
-              <Grid xs={6} mb={2}>
+              <Grid size={6} sx={{ mb: 2 }}>
                 <Typography
                   variant="body2"
                   color="#999"
@@ -70,7 +71,7 @@ export default async function ApplicationPage({
                   {field.label}
                 </Typography>
               </Grid>
-              <Grid xs={6} mb={2}>
+              <Grid size={6} sx={{ mb: 2 }}>
                 <Typography variant="body2" color="white" sx={{ pl: 2 }}>
                   {`${field.value}`}
                 </Typography>

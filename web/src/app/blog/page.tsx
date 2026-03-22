@@ -20,7 +20,8 @@
 import { BlogPostCard } from "./components/blog-post-card/blog-post-card";
 import { Card } from "@/components/card/card";
 import { getPosts } from "@/modules/blog/lib/get-posts/get-posts";
-import { Container, Grid, Stack, Typography } from "@mui/material";
+import { Container, Stack, Typography } from "@mui/material";
+import Grid from "@mui/material/Grid";
 
 export const dynamic = "force-dynamic";
 
@@ -51,15 +52,19 @@ export default async function BlogIndex() {
         </Stack>
 
         {posts.length > 0 ? (
-          <Grid container spacing={{ xs: 3, md: 4 }} mt={{ xs: 4, md: 6 }}>
+          <Grid
+            container
+            spacing={{ xs: 3, md: 4 }}
+            sx={{ mt: { xs: 4, md: 6 } }}
+          >
             {posts.map((post) => (
-              <Grid key={post.slug} item xs={12} md={6}>
+              <Grid key={post.slug} size={{ xs: 12, md: 6 }}>
                 <BlogPostCard post={post} />
               </Grid>
             ))}
           </Grid>
         ) : (
-          <Stack mt={{ xs: 4, md: 6 }}>
+          <Stack sx={{ mt: { xs: 4, md: 6 } }}>
             <Card component="section" style={{ textAlign: "center" }}>
               <Typography variant="h5" fontWeight={600} gutterBottom>
                 Posts are on their way

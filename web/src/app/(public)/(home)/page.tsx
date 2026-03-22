@@ -8,7 +8,7 @@ import { OurValues } from "./components/our-values/our-values";
 
 export default function Home() {
   return (
-    <Stack direction="column" alignItems="center" py={4} spacing={4}>
+    <Stack direction="column" alignItems="center" sx={{ py: 4 }} spacing={4}>
       <Header />
       <Value />
       <Features />

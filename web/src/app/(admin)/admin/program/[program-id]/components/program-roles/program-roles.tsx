@@ -16,7 +16,7 @@ export async function ProgramRoles({ programId }: ProgramRolesProps) {
       <Typography variant="h5" color="white">
         Program Roles
       </Typography>
-      <Stack spacing={2} py={2}>
+      <Stack spacing={2} sx={{ py: 2 }}>
         <AssignedProgramRoles programRoles={programRoles} />
       </Stack>
       <AssignProgramRoles usersToAssign={usersToAssign} programId={programId} />

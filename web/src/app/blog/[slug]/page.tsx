@@ -225,7 +225,7 @@ export default async function BlogPost({ params }: Params) {
         >
           ← Back to all posts
         </Link>
-        <Box mt={3}>
+        <Box sx={{ mt: 3 }}>
           <Card component="header">
             <Typography
               component="h1"
@@ -240,7 +240,7 @@ export default async function BlogPost({ params }: Params) {
             </Typography>
           </Card>
         </Box>
-        <Box mt={4}>
+        <Box sx={{ mt: 4 }}>
           <Markdown components={markdownComponents}>{post.content}</Markdown>
         </Box>
       </Container>

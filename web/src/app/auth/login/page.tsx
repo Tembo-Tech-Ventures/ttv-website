@@ -4,7 +4,8 @@ import { Card } from "@/components/card/card";
 import { Link } from "@/components/link/link";
 import { EmailLoginForm } from "@/modules/auth/components/email-login-form/email-login-form";
 import { customColors } from "@/modules/mui/theme/constants";
-import { Container, Grid, Stack, Typography } from "@mui/material";
+import { Container, Stack, Typography } from "@mui/material";
+import Grid from "@mui/material/Grid";
 import { type Metadata } from "next";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
@@ -25,9 +26,7 @@ export default async function Login() {
       <Container maxWidth="md" sx={{ py: 4 }}>
         <Grid container spacing={4}>
           <Grid
-            item
-            xs={12}
-            md={4}
+            size={{ xs: 12, md: 4 }}
             sx={{
               display: {
                 xs: "none",
@@ -37,7 +36,7 @@ export default async function Login() {
           >
             <Elephant color={customColors.orange.main} />
           </Grid>
-          <Grid item xs={12} md={8}>
+          <Grid size={{ xs: 12, md: 8 }}>
             <Card>
               <Stack spacing={2}>
                 <Typography variant="h2" color="primary">

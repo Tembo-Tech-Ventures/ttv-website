@@ -48,9 +48,9 @@ export function UpdateApplication({
     <Stack
       sx={{
         maxWidth: (theme) => theme.breakpoints.values.md,
+        pt: 2,
       }}
       spacing={2}
-      pt={2}
     >
       <ApplicationForm existing={application} partners={partners} user={user} />
       <div>

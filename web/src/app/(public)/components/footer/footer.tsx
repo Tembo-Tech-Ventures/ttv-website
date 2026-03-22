@@ -10,15 +10,15 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
-import Grid2 from "@mui/material/Unstable_Grid2/Grid2";
+import Grid from "@mui/material/Grid";
 
 export function Footer() {
   const theme = useTheme();
   return (
     <Container component="footer" sx={{ py: 10 }}>
       <Stack direction="column" spacing={4}>
-        <Grid2 container spacing={4}>
-          <Grid2 xs={12} sm={6}>
+        <Grid container spacing={4}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <Stack direction="row" spacing={2}>
               <Box maxWidth={100}>
                 <Elephant color={theme.palette.primary.main} />
@@ -31,8 +31,8 @@ export function Footer() {
                 Ventures
               </Typography>
             </Stack>
-          </Grid2>
-          <Grid2 xs={12} sm={3}>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 3 }}>
             <Stack direction="column" spacing={2}>
               <Typography variant="h4" color="grey.300">
                 Links
@@ -47,8 +47,8 @@ export function Footer() {
                 <Link href="/dashboard/apply">Apply</Link>
               </Typography>
             </Stack>
-          </Grid2>
-          <Grid2 xs={12} sm={3}>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 3 }}>
             <Stack direction="column" spacing={2}>
               <Typography variant="h4" color="grey.300">
                 Connect
@@ -62,8 +62,8 @@ export function Footer() {
                 </Link>
               </Typography>
             </Stack>
-          </Grid2>
-        </Grid2>
+          </Grid>
+        </Grid>
         <Divider />
         <Stack direction="column" spacing={2}>
           <Typography variant="body2" align="center">
