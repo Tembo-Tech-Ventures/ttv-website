@@ -48,7 +48,56 @@ For each task:
 
 All commands must be run from the `web/` directory.
 
-## Phase 7: Review the Implementation
+## Phase 7: Visual & UI Testing (if UI was changed)
+
+Skip this phase if the change is purely backend (no components, pages, or styles were touched).
+
+### 7a: Set up Playwright (if not already installed)
+
+1. Check if Playwright is installed: `ls web/node_modules/.bin/playwright 2>/dev/null`
+2. If not installed, run from `web/`:
+   ```bash
+   npm install -D @playwright/test
+   npx playwright install chromium
+   ```
+3. If `web/playwright.config.ts` does not exist, create it with:
+   - `webServer` pointing to `npm run dev` on port 3000
+   - `testDir` set to `e2e`
+   - Three projects: `desktop-chrome` (viewport 1280×720), `mobile-portrait` (viewport 375×812), and `mobile-landscape` (viewport 812×375)
+   - `use.screenshot: "on"` to capture screenshots on every test
+   - `outputDir` set to `e2e/results`
+   - Add `e2e/results/` to `.gitignore` if not already there
+
+### 7b: Write visual UI tests
+
+1. Create test files under `web/e2e/` for each changed page or component.
+2. Each test file must:
+   - Test with a **variety of mock data** — empty states, single items, many items, long text, special characters, and edge cases relevant to the UI.
+   - Test on all three viewport projects (desktop, mobile portrait, mobile landscape) — Playwright projects handle this automatically.
+   - **Take full-page screenshots** at key states using `await page.screenshot({ path: 'e2e/results/<descriptive-name>.png', fullPage: true })`.
+   - **Check for horizontal overflow** on mobile viewports:
+     ```ts
+     const hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+     expect(hasOverflow).toBe(false);
+     ```
+   - Verify key elements are **visible and not clipped**: use `expect(locator).toBeVisible()` and check bounding boxes are within the viewport.
+   - Verify interactive elements (buttons, links, form fields) are **tappable on mobile** — check they have adequate size (`>= 44px` tap target).
+
+### 7c: Run the tests and review screenshots
+
+1. Start Docker services if not running: `cd web && docker compose up -d`
+2. Run Playwright tests: `cd web && npx playwright test`
+3. If any test fails, fix the implementation (not the test) and re-run.
+4. **Review every screenshot** using the Read tool to visually inspect them:
+   - Is the layout correct on desktop, mobile portrait, and mobile landscape?
+   - Is text readable and not truncated?
+   - Are there any visual glitches, overlapping elements, or misaligned components?
+   - Does the design match the project's styling (dark teal background, orange primary, Climate Crisis headings, Maven Pro body)?
+5. If any screenshot reveals a visual issue, fix the implementation and re-run until all screenshots look excellent.
+6. Commit the test files (but NOT the screenshot results — they should be gitignored).
+7. Push to remote.
+
+## Phase 8: Review the Implementation
 
 **Automated checks — all must pass:**
 
@@ -66,7 +115,7 @@ cd web && npm test
 
 Fix any issues found, commit, and push.
 
-## Phase 8: Create a Pull Request
+## Phase 9: Create a Pull Request
 
 1. Create a feature branch if not already on one (branch off `main`).
 2. Push the branch to remote with `git push -u origin <branch-name>`.
@@ -75,7 +124,7 @@ Fix any issues found, commit, and push.
    - A body with `## Summary` (bullet points of changes) and `## Test plan` (how to verify)
 4. Share the PR URL.
 
-## Phase 9: Review PR Checks
+## Phase 10: Review PR Checks
 
 1. Wait briefly, then run `gh pr checks <pr-number>` to see CI status.
 2. If any checks fail (lint, tests, third-party services), investigate the failure:
@@ -83,7 +132,7 @@ Fix any issues found, commit, and push.
    - Fix the issue, commit, and push. Repeat until all checks are green.
 3. Confirm all checks pass before proceeding.
 
-## Phase 10: Merge the PR
+## Phase 11: Merge the PR
 
 1. Once all checks are green, merge with `gh pr merge <pr-number> --squash --delete-branch`.
 2. Confirm the merge succeeded with `gh pr view <pr-number>`.
