@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 
@@ -19,13 +19,13 @@ const timestamps = {
     .$onUpdateFn(() => new Date()),
 };
 
-// ─── User ──────────────────────────────────────────────────
+// ─── User (matches better-auth expected schema) ────────────
 
 export const user = sqliteTable("user", {
   id: cuid("id"),
-  name: text("name"),
-  email: text("email").unique(),
-  emailVerified: integer("emailVerified", { mode: "timestamp" }),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: integer("emailVerified", { mode: "boolean" }).notNull().default(false),
   image: text("image"),
   ...timestamps,
 });
@@ -39,47 +39,41 @@ export const userRelations = relations(user, ({ many }) => ({
   programApplications: many(programApplication),
 }));
 
-// ─── Account ───────────────────────────────────────────────
+// ─── Account (matches better-auth expected schema) ─────────
 
-export const account = sqliteTable(
-  "account",
-  {
-    id: cuid("id"),
-    userId: text("userId")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    type: text("type").notNull(),
-    provider: text("provider").notNull(),
-    providerAccountId: text("providerAccountId").notNull(),
-    refresh_token: text("refresh_token"),
-    access_token: text("access_token"),
-    expires_at: integer("expires_at"),
-    token_type: text("token_type"),
-    scope: text("scope"),
-    id_token: text("id_token"),
-    session_state: text("session_state"),
-  },
-  (table) => ({
-    providerProviderAccountIdIdx: uniqueIndex("account_provider_providerAccountId_unique").on(
-      table.provider,
-      table.providerAccountId
-    ),
-  })
-);
+export const account = sqliteTable("account", {
+  id: cuid("id"),
+  accountId: text("accountId").notNull(),
+  providerId: text("providerId").notNull(),
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  accessToken: text("accessToken"),
+  refreshToken: text("refreshToken"),
+  idToken: text("idToken"),
+  accessTokenExpiresAt: integer("accessTokenExpiresAt", { mode: "timestamp" }),
+  refreshTokenExpiresAt: integer("refreshTokenExpiresAt", { mode: "timestamp" }),
+  scope: text("scope"),
+  password: text("password"),
+  ...timestamps,
+});
 
 export const accountRelations = relations(account, ({ one }) => ({
   user: one(user, { fields: [account.userId], references: [user.id] }),
 }));
 
-// ─── Session ───────────────────────────────────────────────
+// ─── Session (matches better-auth expected schema) ─────────
 
 export const session = sqliteTable("session", {
   id: cuid("id"),
-  sessionToken: text("sessionToken").notNull().unique(),
+  expiresAt: integer("expiresAt", { mode: "timestamp" }).notNull(),
+  token: text("token").notNull().unique(),
+  ipAddress: text("ipAddress"),
+  userAgent: text("userAgent"),
   userId: text("userId")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  expires: integer("expires", { mode: "timestamp" }).notNull(),
+  ...timestamps,
 });
 
 export const sessionRelations = relations(session, ({ one }) => ({

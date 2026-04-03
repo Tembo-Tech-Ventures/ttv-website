@@ -1,0 +1,13 @@
+---
+import { createAuth } from "@/lib/auth";
+
+// Sign out by calling better-auth's signOut endpoint server-side
+const auth = createAuth(Astro.locals.runtime.env.DB);
+
+// Forward the request to better-auth's sign-out handler
+await auth.api.signOut({
+  headers: Astro.request.headers,
+});
+
+return Astro.redirect("/");
+---

@@ -11,4 +11,13 @@ export default defineConfig({
     },
   }),
   integrations: [react(), tailwind()],
+  vite: {
+    ssr: {
+      external: ["node:async_hooks"],
+    },
+    resolve: {
+      // Cloudflare Workers compatibility
+      conditions: ["workerd", "worker", "browser"],
+    },
+  },
 });
