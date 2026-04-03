@@ -1,0 +1,261 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import Card from "@/components/common/Card.astro";
+import Badge from "@/components/common/Badge.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
+
+const db = drizzle(Astro.locals.runtime.env.DB, { schema });
+const { id } = Astro.params;
+
+if (!id) return Astro.redirect("/admin/programs");
+
+// Handle POST actions
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  const action = formData.get("action") as string;
+
+  if (action === "update-program") {
+    const name = formData.get("name") as string;
+    const description = formData.get("description") as string;
+    const startDate = formData.get("startDate") as string;
+    const endDate = formData.get("endDate") as string;
+
+    await db
+      .update(schema.program)
+      .set({
+        name,
+        description,
+        startDate: startDate ? new Date(startDate) : null,
+        endDate: endDate ? new Date(endDate) : null,
+      })
+      .where(eq(schema.program.id, id));
+  } else if (action === "add-role") {
+    const userId = formData.get("userId") as string;
+    const roleName = formData.get("roleName") as string;
+
+    if (userId && roleName) {
+      await db.insert(schema.programRole).values({
+        programId: id,
+        userId,
+        name: roleName as "INSTRUCTOR" | "TA",
+      });
+    }
+  } else if (action === "remove-role") {
+    const roleId = formData.get("roleId") as string;
+    if (roleId) {
+      await db
+        .delete(schema.programRole)
+        .where(eq(schema.programRole.id, roleId));
+    }
+  }
+
+  return Astro.redirect(`/admin/programs/${id}`);
+}
+
+const prog = await db.query.program.findFirst({
+  where: eq(schema.program.id, id),
+  with: {
+    curriculum: true,
+    programRoles: { with: { user: true } },
+    programApplications: { with: { user: true } },
+  },
+});
+
+if (!prog) return Astro.redirect("/admin/programs");
+
+// Get all users for the role assignment dropdown
+const allUsers = await db.query.user.findMany({
+  orderBy: (u, { asc }) => [asc(u.name)],
+});
+
+const formatDate = (d: Date | null) =>
+  d ? new Date(d).toISOString().split("T")[0] : "";
+---
+
+<AdminLayout title={prog.name}>
+  <div class="space-y-6">
+    <a href="/admin/programs" class="text-sm text-primary hover:underline">
+      &larr; Back to Programs
+    </a>
+
+    <Card>
+      <h3 class="mb-4 text-lg font-semibold text-white">Program Details</h3>
+      <form method="POST" class="space-y-4">
+        <input type="hidden" name="action" value="update-program" />
+        <div class="flex flex-col gap-1.5">
+          <label for="name" class="text-sm font-medium text-white/90">Name *</label>
+          <input
+            id="name"
+            name="name"
+            value={prog.name}
+            required
+            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+          />
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label for="description" class="text-sm font-medium text-white/90">Description *</label>
+          <textarea
+            id="description"
+            name="description"
+            required
+            rows="3"
+            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+          >{prog.description}</textarea>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="flex flex-col gap-1.5">
+            <label for="startDate" class="text-sm font-medium text-white/90">Start Date</label>
+            <input
+              type="date"
+              id="startDate"
+              name="startDate"
+              value={formatDate(prog.startDate)}
+              class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label for="endDate" class="text-sm font-medium text-white/90">End Date</label>
+            <input
+              type="date"
+              id="endDate"
+              name="endDate"
+              value={formatDate(prog.endDate)}
+              class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+        </div>
+        <div>
+          <p class="text-sm text-white/60">
+            Curriculum: <span class="text-white">{prog.curriculum?.title ?? "—"}</span>
+          </p>
+        </div>
+        <button
+          type="submit"
+          class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
+        >
+          Save Changes
+        </button>
+      </form>
+    </Card>
+
+    <Card>
+      <h3 class="mb-4 text-lg font-semibold text-white">Staff</h3>
+      {prog.programRoles.length > 0 ? (
+        <div class="mb-4 overflow-x-auto rounded-lg border border-teal/20">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-teal/30 text-xs uppercase text-white/80">
+              <tr>
+                <th class="px-4 py-3 font-medium">Name</th>
+                <th class="px-4 py-3 font-medium">Role</th>
+                <th class="px-4 py-3 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-teal/10">
+              {prog.programRoles.map((pr) => (
+                <tr class="text-white/80">
+                  <td class="px-4 py-3">{pr.user?.name ?? "Unknown"}</td>
+                  <td class="px-4 py-3">{pr.name}</td>
+                  <td class="px-4 py-3">
+                    <form method="POST" class="inline">
+                      <input type="hidden" name="action" value="remove-role" />
+                      <input type="hidden" name="roleId" value={pr.id} />
+                      <button
+                        type="submit"
+                        class="text-red-400 hover:text-red-300"
+                      >
+                        Remove
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p class="mb-4 text-white/40">No staff assigned</p>
+      )}
+
+      <form method="POST" class="flex flex-wrap items-end gap-3">
+        <input type="hidden" name="action" value="add-role" />
+        <div class="flex flex-col gap-1.5">
+          <label for="userId" class="text-sm font-medium text-white/90">User</label>
+          <select
+            id="userId"
+            name="userId"
+            required
+            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+          >
+            <option value="">Select user…</option>
+            {allUsers.map((u) => (
+              <option value={u.id}>{u.name} ({u.email})</option>
+            ))}
+          </select>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label for="roleName" class="text-sm font-medium text-white/90">Role</label>
+          <select
+            id="roleName"
+            name="roleName"
+            required
+            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+          >
+            <option value="INSTRUCTOR">Instructor</option>
+            <option value="TA">TA</option>
+          </select>
+        </div>
+        <button
+          type="submit"
+          class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
+        >
+          Add Staff
+        </button>
+      </form>
+    </Card>
+
+    <Card>
+      <h3 class="mb-4 text-lg font-semibold text-white">Applications</h3>
+      {prog.programApplications.length > 0 ? (
+        <div class="overflow-x-auto rounded-lg border border-teal/20">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-teal/30 text-xs uppercase text-white/80">
+              <tr>
+                <th class="px-4 py-3 font-medium">Applicant</th>
+                <th class="px-4 py-3 font-medium">Status</th>
+                <th class="px-4 py-3 font-medium">Date</th>
+                <th class="px-4 py-3 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-teal/10">
+              {prog.programApplications.map((app) => (
+                <tr class="text-white/80 hover:bg-teal/10">
+                  <td class="px-4 py-3">{app.user?.name ?? "Unknown"}</td>
+                  <td class="px-4 py-3">
+                    <Badge variant={app.status.toLowerCase() as any} />
+                  </td>
+                  <td class="px-4 py-3">
+                    {app.createdAt
+                      ? new Date(app.createdAt).toLocaleDateString()
+                      : "—"}
+                  </td>
+                  <td class="px-4 py-3">
+                    <a
+                      href={`/admin/applications/${app.id}`}
+                      class="text-primary hover:underline"
+                    >
+                      View
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p class="text-white/40">No applications for this program</p>
+      )}
+    </Card>
+  </div>
+</AdminLayout>

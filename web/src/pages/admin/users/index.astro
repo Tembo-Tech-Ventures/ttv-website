@@ -1,0 +1,56 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+
+const db = drizzle(Astro.locals.runtime.env.DB, { schema });
+
+const users = await db.query.user.findMany({
+  with: { userRoles: { with: { role: true } } },
+  orderBy: (u, { desc }) => [desc(u.createdAt)],
+});
+---
+
+<AdminLayout title="Users">
+  <div class="space-y-6">
+    <h2 class="text-2xl font-bold text-white">Users</h2>
+
+    <div class="overflow-x-auto rounded-lg border border-teal/20">
+      <table class="w-full text-left text-sm">
+        <thead class="bg-teal/30 text-xs uppercase text-white/80">
+          <tr>
+            <th class="px-4 py-3 font-medium">Name</th>
+            <th class="px-4 py-3 font-medium">Email</th>
+            <th class="px-4 py-3 font-medium">Roles</th>
+            <th class="px-4 py-3 font-medium">Created</th>
+            <th class="px-4 py-3 font-medium">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-teal/10">
+          {users.map((u) => (
+            <tr class="text-white/80 hover:bg-teal/10">
+              <td class="px-4 py-3">{u.name}</td>
+              <td class="px-4 py-3">{u.email}</td>
+              <td class="px-4 py-3">
+                {u.userRoles.length > 0
+                  ? u.userRoles.map((ur) => ur.role.name).join(", ")
+                  : "—"}
+              </td>
+              <td class="px-4 py-3">
+                {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}
+              </td>
+              <td class="px-4 py-3">
+                <a
+                  href={`/admin/users/${u.id}`}
+                  class="text-primary hover:underline"
+                >
+                  View
+                </a>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</AdminLayout>
