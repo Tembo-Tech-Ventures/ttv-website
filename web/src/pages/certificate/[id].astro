@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { format } from "date-fns";
+import { env } from "cloudflare:workers";
 
 const { id } = Astro.params;
 
@@ -11,7 +12,6 @@ if (!id) {
   return Astro.redirect("/");
 }
 
-const env = Astro.locals.runtime.env;
 const db = drizzle(env.DB, { schema });
 
 const application = await db.query.programApplication.findFirst({

@@ -5,9 +5,10 @@ import Card from "@/components/common/Card.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
+import { env } from "cloudflare:workers";
 
 const user = Astro.locals.user!;
-const db = drizzle(Astro.locals.runtime.env.DB, { schema });
+const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
 
 let success = "";

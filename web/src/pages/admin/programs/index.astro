@@ -2,8 +2,9 @@
 import AdminLayout from "@/layouts/AdminLayout.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
+import { env } from "cloudflare:workers";
 
-const db = drizzle(Astro.locals.runtime.env.DB, { schema });
+const db = drizzle(env.DB, { schema });
 
 const programs = await db.query.program.findMany({
   with: { curriculum: true },

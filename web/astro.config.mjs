@@ -1,23 +1,13 @@
 import { defineConfig } from "astro/config";
 import cloudflare from "@astrojs/cloudflare";
 import react from "@astrojs/react";
-import tailwind from "@astrojs/tailwind";
+import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
+  adapter: cloudflare(),
+  integrations: [react()],
   output: "server",
-  adapter: cloudflare({
-    platformProxy: {
-      enabled: true,
-    },
-  }),
-  integrations: [react(), tailwind()],
   vite: {
-    ssr: {
-      external: ["node:async_hooks"],
-    },
-    resolve: {
-      // Cloudflare Workers compatibility
-      conditions: ["workerd", "worker", "browser"],
-    },
+    plugins: [tailwindcss()],
   },
 });

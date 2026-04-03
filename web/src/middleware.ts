@@ -1,9 +1,10 @@
 import { defineMiddleware } from "astro:middleware";
+import { env } from "cloudflare:workers";
 import { createAuth } from "@/lib/auth";
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const { locals, request, url, redirect } = context;
-  const auth = createAuth(locals.runtime.env.DB);
+  const auth = createAuth(env.DB);
 
   // Get session for every request
   const sessionData = await auth.api.getSession({
@@ -27,7 +28,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
 
     // Check admin role via D1 query
-    const db = locals.runtime.env.DB;
+    const db = env.DB;
     const result = await db
       .prepare(
         `SELECT ur.id FROM "UserRoles" ur
