@@ -11,9 +11,9 @@ import { PiListBold } from "react-icons/pi";
 
 const links = [
   { href: "/admin", label: "Admin Home", icon: PiGaugeDuotone },
-  { href: "/admin/user", label: "Users", icon: PiUsersDuotone },
-  { href: "/admin/application", label: "Applications", icon: PiFileTextDuotone },
-  { href: "/admin/program", label: "Programs", icon: PiBookOpenDuotone },
+  { href: "/admin/users", label: "Users", icon: PiUsersDuotone },
+  { href: "/admin/applications", label: "Applications", icon: PiFileTextDuotone },
+  { href: "/admin/programs", label: "Programs", icon: PiBookOpenDuotone },
   { href: "/auth/logout", label: "Logout", icon: PiSignOutDuotone },
 ];
 
