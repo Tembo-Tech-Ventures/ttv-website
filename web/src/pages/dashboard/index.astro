@@ -1,0 +1,79 @@
+---
+import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import Badge from "@/components/common/Badge.astro";
+import Card from "@/components/common/Card.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+
+const user = Astro.locals.user!;
+const db = drizzle(Astro.locals.runtime.env.DB, { schema });
+
+const applications = await db.query.programApplication.findMany({
+  where: eq(schema.programApplication.userId, user.id),
+  with: { program: { with: { curriculum: true } } },
+});
+---
+
+<DashboardLayout title="Dashboard">
+  <div class="space-y-6">
+    <div>
+      <h2 class="text-2xl font-bold text-white">
+        Welcome back, {user.name}
+      </h2>
+      <p class="mt-1 text-white/60">
+        Manage your applications and track your progress.
+      </p>
+    </div>
+
+    {applications.length > 0 ? (
+      <div>
+        <h3 class="mb-4 text-lg font-semibold text-white">Your Applications</h3>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {applications.map((app) => (
+            <Card>
+              <div class="flex flex-col gap-3">
+                <div class="flex items-start justify-between gap-2">
+                  <h4 class="font-semibold text-white">
+                    {app.program?.name ?? "Unknown Program"}
+                  </h4>
+                  <Badge variant={app.status.toLowerCase() as any} />
+                </div>
+                {app.program?.curriculum && (
+                  <p class="text-sm text-white/60">
+                    {app.program.curriculum.title}
+                  </p>
+                )}
+                {app.program?.startDate && (
+                  <p class="text-xs text-white/40">
+                    Starts {app.program.startDate.toLocaleDateString()}
+                  </p>
+                )}
+                <a
+                  href={`/dashboard/application/${app.id}`}
+                  class="mt-1 inline-flex items-center text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                >
+                  View Details &rarr;
+                </a>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    ) : (
+      <Card>
+        <div class="text-center py-8">
+          <p class="text-white/60 mb-4">
+            You haven't applied to any programs yet.
+          </p>
+          <a
+            href="/dashboard/apply"
+            class="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 font-medium text-dark hover:bg-primary/90 transition-colors"
+          >
+            Browse Programs
+          </a>
+        </div>
+      </Card>
+    )}
+  </div>
+</DashboardLayout>
