@@ -1,0 +1,17 @@
+---
+import BaseLayout from "./BaseLayout.astro";
+
+interface Props {
+  title?: string;
+}
+
+const { title = "Certificate" } = Astro.props;
+---
+
+<BaseLayout title={`${title} | Tembo Tech Ventures`}>
+  <div class="min-h-screen bg-white text-gray-900">
+    <main class="mx-auto max-w-4xl px-4 py-12">
+      <slot />
+    </main>
+  </div>
+</BaseLayout>

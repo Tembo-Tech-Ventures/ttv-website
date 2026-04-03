@@ -1,0 +1,63 @@
+---
+import BaseLayout from "./BaseLayout.astro";
+
+interface Props {
+  title?: string;
+}
+
+const { title } = Astro.props;
+---
+
+<BaseLayout title={title}>
+  <div class="flex min-h-screen flex-col bg-gradient-to-br from-[#2C6964] to-[#013D39]">
+    <!-- Header -->
+    <header class="border-b border-teal/20">
+      <nav class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+        <a href="/" class="flex items-center gap-2">
+          <span class="font-heading text-xl text-primary">Tembo Tech Ventures</span>
+        </a>
+        <div class="flex items-center gap-6">
+          <a href="/" class="text-sm font-medium text-white/80 transition-colors hover:text-white">
+            Home
+          </a>
+          <a href="/blog" class="text-sm font-medium text-white/80 transition-colors hover:text-white">
+            Blog
+          </a>
+          <a href="/dashboard" class="text-sm font-medium text-white/80 transition-colors hover:text-white">
+            Dashboard
+          </a>
+          <a
+            href="/auth/login"
+            class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark transition-colors hover:bg-primary/90"
+          >
+            Login
+          </a>
+        </div>
+      </nav>
+    </header>
+
+    <!-- Main content -->
+    <main class="flex-1">
+      <slot />
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-teal/20">
+      <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div class="flex flex-col items-center justify-between gap-4 sm:flex-row">
+          <p class="text-sm text-white/60">
+            &copy; {new Date().getFullYear()} Tembo Tech Ventures. All rights reserved.
+          </p>
+          <div class="flex gap-6">
+            <a href="/blog" class="text-sm text-white/60 transition-colors hover:text-white">
+              Blog
+            </a>
+            <a href="/auth/login" class="text-sm text-white/60 transition-colors hover:text-white">
+              Login
+            </a>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+</BaseLayout>
