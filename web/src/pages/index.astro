@@ -1,17 +1,16 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
+import HeroSection from "@/components/homepage/HeroSection";
+import ValueSection from "@/components/homepage/ValueSection";
+import FeaturesSection from "@/components/homepage/FeaturesSection";
+import ValuesSection from "@/components/homepage/ValuesSection";
 ---
 
 <BaseLayout title="Tembo Tech Ventures">
-  <main class="flex min-h-screen flex-col items-center justify-center px-4">
-    <h1 class="mb-6 text-center text-4xl text-primary md:text-6xl">
-      Tembo Tech Ventures
-    </h1>
-    <p class="mb-8 max-w-xl text-center text-lg text-teal">
-      We're rebuilding our platform. Something great is coming soon.
-    </p>
-    <div class="rounded-lg border border-teal bg-dark/80 px-6 py-4">
-      <p class="text-sm text-white/70">Under Construction</p>
-    </div>
+  <main>
+    <HeroSection client:visible />
+    <ValueSection client:visible />
+    <FeaturesSection client:visible />
+    <ValuesSection client:visible />
   </main>
 </BaseLayout>
