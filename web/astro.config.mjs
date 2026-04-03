@@ -11,4 +11,13 @@ export default defineConfig({
     },
   }),
   integrations: [react(), tailwind()],
+  vite: {
+    resolve: {
+      // Ensure Node.js built-ins resolve for Cloudflare nodejs_compat
+      external: ["node:async_hooks", "node:crypto", "node:buffer", "node:path", "node:fs", "node:os", "node:util", "node:stream", "node:events", "node:net", "node:tls", "node:http", "node:https", "node:url", "node:zlib"],
+    },
+    ssr: {
+      external: ["node:async_hooks", "node:crypto", "node:buffer", "node:path", "node:fs", "node:os", "node:util", "node:stream", "node:events", "node:net", "node:tls", "node:http", "node:https", "node:url", "node:zlib"],
+    },
+  },
 });

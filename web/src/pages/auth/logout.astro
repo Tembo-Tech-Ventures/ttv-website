@@ -1,0 +1,15 @@
+---
+import { createAuth } from "@/lib/auth";
+
+const db = Astro.locals.runtime.env.DB;
+const auth = createAuth(db);
+
+// Revoke the session server-side
+if (Astro.locals.session) {
+  await auth.api.signOut({
+    headers: Astro.request.headers,
+  });
+}
+
+return Astro.redirect("/");
+---

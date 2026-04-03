@@ -8,6 +8,12 @@ type Runtime = import("@astrojs/cloudflare").Runtime<{
   BUCKET: R2Bucket;
 }>;
 
+type BetterAuthUser = import("better-auth").User;
+type BetterAuthSession = import("better-auth").Session;
+
 declare namespace App {
-  interface Locals extends Runtime {}
+  interface Locals extends Runtime {
+    user: BetterAuthUser | null;
+    session: BetterAuthSession | null;
+  }
 }

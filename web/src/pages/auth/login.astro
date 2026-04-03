@@ -1,0 +1,21 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import GitHubSignInButton from "@/components/GitHubSignInButton";
+
+// If already authenticated, redirect to dashboard
+if (Astro.locals.session) {
+  return Astro.redirect("/dashboard");
+}
+---
+
+<BaseLayout title="Sign In - Tembo Tech Ventures">
+  <main class="flex min-h-screen flex-col items-center justify-center px-4">
+    <div class="w-full max-w-md rounded-xl border border-teal bg-dark/80 p-8 text-center shadow-lg">
+      <h1 class="mb-2 text-3xl text-primary">Welcome Back</h1>
+      <p class="mb-8 text-white/70">
+        Sign in to access your Tembo Tech Ventures account.
+      </p>
+      <GitHubSignInButton client:load />
+    </div>
+  </main>
+</BaseLayout>
