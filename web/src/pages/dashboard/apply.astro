@@ -1,0 +1,137 @@
+---
+import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import Card from "@/components/common/Card.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { eq, notInArray } from "drizzle-orm";
+
+const user = Astro.locals.user!;
+const db = drizzle(Astro.locals.runtime.env.DB, { schema });
+
+let success = "";
+let error = "";
+
+// Handle POST — create a new application
+if (Astro.request.method === "POST") {
+  try {
+    const formData = await Astro.request.formData();
+    const programId = formData.get("programId") as string;
+
+    if (!programId) {
+      error = "Missing program ID.";
+    } else {
+      // Check for existing application
+      const existing = await db.query.programApplication.findFirst({
+        where: (pa, { and, eq }) =>
+          and(eq(pa.userId, user.id), eq(pa.programId, programId)),
+      });
+
+      if (existing) {
+        error = "You have already applied to this program.";
+      } else {
+        await db.insert(schema.programApplication).values({
+          programId,
+          userId: user.id,
+          status: "PENDING",
+          application: "{}",
+        });
+        success = "Application submitted successfully!";
+      }
+    }
+  } catch (e) {
+    error = "Something went wrong. Please try again.";
+  }
+}
+
+// Get user's existing applications to filter them out
+const userApplications = await db.query.programApplication.findMany({
+  where: eq(schema.programApplication.userId, user.id),
+  columns: { programId: true },
+});
+const appliedProgramIds = userApplications
+  .map((a) => a.programId)
+  .filter(Boolean) as string[];
+
+// Get all programs with curriculum info
+const allPrograms = await db.query.program.findMany({
+  with: { curriculum: true },
+});
+
+// Filter out programs already applied to
+const availablePrograms = allPrograms.filter(
+  (p) => !appliedProgramIds.includes(p.id)
+);
+---
+
+<DashboardLayout title="Apply">
+  <div class="space-y-6">
+    <div>
+      <h2 class="text-2xl font-bold text-white">Apply to a Program</h2>
+      <p class="mt-1 text-white/60">
+        Browse available programs and submit your application.
+      </p>
+    </div>
+
+    {success && (
+      <div class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-300">
+        {success}
+      </div>
+    )}
+
+    {error && (
+      <div class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
+        {error}
+      </div>
+    )}
+
+    {availablePrograms.length > 0 ? (
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {availablePrograms.map((program) => (
+          <Card>
+            <div class="flex flex-col gap-3">
+              <h3 class="text-lg font-semibold text-white">{program.name}</h3>
+              <p class="text-sm text-white/60">{program.description}</p>
+              {program.curriculum && (
+                <div class="rounded bg-teal/20 px-2 py-1 text-xs text-white/70">
+                  {program.curriculum.title}
+                </div>
+              )}
+              {program.startDate && (
+                <p class="text-xs text-white/40">
+                  Starts {program.startDate.toLocaleDateString()}
+                  {program.endDate && ` — Ends ${program.endDate.toLocaleDateString()}`}
+                </p>
+              )}
+              <form method="POST" class="mt-2">
+                <input type="hidden" name="programId" value={program.id} />
+                <button
+                  type="submit"
+                  class="inline-flex w-full items-center justify-center rounded-md bg-primary px-4 py-2 font-medium text-dark hover:bg-primary/90 transition-colors"
+                >
+                  Apply
+                </button>
+              </form>
+            </div>
+          </Card>
+        ))}
+      </div>
+    ) : (
+      <Card>
+        <div class="text-center py-8">
+          <p class="text-white/60">
+            No programs available to apply to right now.
+            {appliedProgramIds.length > 0 && " You've already applied to all available programs."}
+          </p>
+          {appliedProgramIds.length > 0 && (
+            <a
+              href="/dashboard"
+              class="mt-4 inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 font-medium text-dark hover:bg-primary/90 transition-colors"
+            >
+              View Your Applications
+            </a>
+          )}
+        </div>
+      </Card>
+    )}
+  </div>
+</DashboardLayout>
