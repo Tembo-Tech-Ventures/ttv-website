@@ -79,6 +79,77 @@ The staging workflow is preconfigured to use:
 
 Run `.github/workflows/cloudflare-staging.yml` with `action=deploy` after the required secrets are configured.
 
+## Staging deployment checklist
+
+The exact file references for staging are:
+
+- Reusable workflow: `.github/workflows/cloudflare-environment.yml`
+- Staging wrapper: `.github/workflows/cloudflare-staging.yml`
+- Deploy script: `web/scripts/cloudflare/deploy.mjs`
+- Destroy script: `web/scripts/cloudflare/destroy.mjs`
+- Redirect-domain middleware: `web/src/middleware.ts`
+
+To deploy `staging.tembotechventures.com`, complete the following:
+
+1. Ensure the `tembotechventures.com` zone is managed by Cloudflare in the same account referenced by `CLOUDFLARE_ACCOUNT_ID`.
+2. Create the required GitHub repository secrets:
+   - `CLOUDFLARE_API_TOKEN`
+   - `CLOUDFLARE_ACCOUNT_ID`
+   - `BETTER_AUTH_SECRET`
+   - `GITHUB_CLIENT_ID`
+   - `GITHUB_CLIENT_SECRET`
+3. Create a GitHub OAuth App for staging.
+4. Set the OAuth callback URL to:
+   - `https://staging.tembotechventures.com/api/auth/callback/github`
+5. Optionally set these GitHub repository variables:
+   - `STAGING_REDIRECT_DOMAIN`
+   - `STAGING_BETTER_AUTH_URL`
+   - `CLOUDFLARE_WORKERS_SUBDOMAIN`
+6. Run the `Cloudflare Staging` workflow with `action=deploy`.
+
+If `STAGING_BETTER_AUTH_URL` is unset, the workflow derives Better Auth's base URL from `https://staging.tembotechventures.com`.
+
+## What staging deploy creates
+
+For the `staging` environment, the deploy script creates or reuses:
+
+- Worker: `ttv-website-staging`
+- D1 database: `ttv-website-db-staging`
+- R2 bucket: `ttv-website-files-staging`
+
+The deploy script then:
+
+- pushes Better Auth and GitHub OAuth secrets into Cloudflare
+- runs remote D1 migrations
+- deploys the Worker
+- attaches `staging.tembotechventures.com` as a custom domain
+
+If `STAGING_REDIRECT_DOMAIN` is set, that domain is attached to the same Worker and redirected to the primary domain with an HTTP 301 response.
+
+## GitHub OAuth note
+
+This code path uses GitHub OAuth client credentials in Better Auth, not a GitHub App.
+
+That means you need:
+
+- `GITHUB_CLIENT_ID`
+- `GITHUB_CLIENT_SECRET`
+
+and the OAuth callback URL registered in GitHub must match the deployed environment URL exactly.
+
+## Recommended staging token scope
+
+The Cloudflare token should have at least:
+
+- `Workers Scripts Write`
+- `Workers Scripts Read`
+- `D1 Write`
+- `D1 Read`
+- `Workers R2 Storage Write`
+- `Workers R2 Storage Read`
+
+If the token also needs to create or manage the `staging.tembotechventures.com` custom domain on the zone, ensure it has the corresponding zone permissions required by Workers custom domains in your account.
+
 ## Destroy caveat for R2
 
 Cloudflare only allows deleting an R2 bucket when it is empty. If the environment bucket contains uploaded files, destroy will stop at bucket deletion and surface that Cloudflare error clearly.
