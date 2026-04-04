@@ -35,9 +35,10 @@ Set these as repository secrets:
 
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
-- `BETTER_AUTH_SECRET`
-- `GITHUB_CLIENT_ID`
-- `GITHUB_CLIENT_SECRET`
+- `GH_CLIENT_ID`
+- `GH_CLIENT_SECRET`
+
+`BETTER_AUTH_SECRET` is optional. If it is not set, deploy derives a stable secret automatically from the Cloudflare account/token, environment name, app name, and `GH_CLIENT_SECRET`.
 
 ## Optional GitHub variables
 
@@ -95,9 +96,9 @@ To deploy `staging.tembotechventures.com`, complete the following:
 2. Create the required GitHub repository secrets:
    - `CLOUDFLARE_API_TOKEN`
    - `CLOUDFLARE_ACCOUNT_ID`
-   - `BETTER_AUTH_SECRET`
-   - `GITHUB_CLIENT_ID`
-   - `GITHUB_CLIENT_SECRET`
+   - `GH_CLIENT_ID`
+   - `GH_CLIENT_SECRET`
+   - optional: `BETTER_AUTH_SECRET`
 3. Create a GitHub OAuth App for staging.
 4. Set the OAuth callback URL to:
    - `https://staging.tembotechventures.com/api/auth/callback/github`
@@ -132,8 +133,8 @@ This code path uses GitHub OAuth client credentials in Better Auth, not a GitHub
 
 That means you need:
 
-- `GITHUB_CLIENT_ID`
-- `GITHUB_CLIENT_SECRET`
+- `GH_CLIENT_ID`
+- `GH_CLIENT_SECRET`
 
 and the OAuth callback URL registered in GitHub must match the deployed environment URL exactly.
 

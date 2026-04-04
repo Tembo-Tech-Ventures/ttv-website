@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,11 +12,7 @@ const generatedDir = path.join(webRoot, ".cloudflare", "generated");
 const DEFAULT_APP_NAME = "ttv-website";
 const DEFAULT_COMPATIBILITY_DATE = "2026-04-01";
 const DEFAULT_ENTRYPOINT = "@astrojs/cloudflare/entrypoints/server";
-const SECRET_KEYS = [
-  "BETTER_AUTH_SECRET",
-  "GITHUB_CLIENT_ID",
-  "GITHUB_CLIENT_SECRET",
-];
+const SECRET_KEYS = ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"];
 
 export function getRequiredEnv(name) {
   const value = process.env[name]?.trim();
@@ -29,6 +26,18 @@ export function getRequiredEnv(name) {
 export function getOptionalEnv(name) {
   const value = process.env[name]?.trim();
   return value ? value : undefined;
+}
+
+function deriveBetterAuthSecret() {
+  const seed = [
+    getRequiredEnv("CLOUDFLARE_ACCOUNT_ID"),
+    getRequiredEnv("CLOUDFLARE_API_TOKEN"),
+    getRequiredEnv("CLOUDFLARE_ENVIRONMENT_NAME"),
+    getRequiredEnv("GITHUB_CLIENT_SECRET"),
+    getOptionalEnv("CLOUDFLARE_APP_NAME") ?? DEFAULT_APP_NAME,
+  ].join(":");
+
+  return createHash("sha256").update(seed).digest("hex");
 }
 
 export function normalizeSlug(value) {
@@ -287,10 +296,17 @@ export async function writeGeneratedWranglerConfig({
 }
 
 export function getSecretBindings() {
-  return SECRET_KEYS.map((key) => {
+  const bindings = SECRET_KEYS.map((key) => {
     const value = getRequiredEnv(key);
     return { key, value };
   });
+
+  bindings.unshift({
+    key: "BETTER_AUTH_SECRET",
+    value: getOptionalEnv("BETTER_AUTH_SECRET") ?? deriveBetterAuthSecret(),
+  });
+
+  return bindings;
 }
 
 export async function runWrangler(args, { input } = {}) {
