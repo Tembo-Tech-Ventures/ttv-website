@@ -22,6 +22,7 @@ jobs:
     with:
       action: ${{ inputs.action }}
       environment_name: staging
+      github_environment: staging
       primary_domain: staging.tembotechventures.com
       redirect_domain: ${{ vars.STAGING_REDIRECT_DOMAIN }}
       better_auth_url: ${{ vars.STAGING_BETTER_AUTH_URL }}

@@ -28,10 +28,11 @@ Any arbitrary environment name is normalized to a lower-case slug and used the s
 - Reusable workflow: `.github/workflows/cloudflare-environment.yml`
 - Generic manual wrapper: `.github/workflows/cloudflare-manual.yml`
 - Staging wrapper: `.github/workflows/cloudflare-staging.yml`
+- Staging PR deploy: `.github/workflows/cloudflare-staging-pr.yml`
 
 ## Required GitHub secrets
 
-Set these as repository secrets:
+Set these in the GitHub `staging` environment:
 
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
@@ -42,7 +43,7 @@ Set these as repository secrets:
 
 ## Optional GitHub variables
 
-Set these as repository variables if you want to use them:
+Set these in the GitHub `staging` environment if you want to use them:
 
 - `CLOUDFLARE_WORKERS_SUBDOMAIN`
 - `STAGING_REDIRECT_DOMAIN`
@@ -79,6 +80,7 @@ The staging workflow is preconfigured to use:
 - primary domain: `staging.tembotechventures.com`
 
 Run `.github/workflows/cloudflare-staging.yml` with `action=deploy` after the required secrets are configured.
+Pull requests targeting `main` also deploy automatically to staging via `.github/workflows/cloudflare-staging-pr.yml`.
 
 ## Staging deployment checklist
 
