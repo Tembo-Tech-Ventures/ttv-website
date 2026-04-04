@@ -21,12 +21,12 @@ export default function GitHubSignInButton() {
       });
 
       const redirectUrl = result?.data?.url;
-      const shouldRedirect = result?.data?.redirect;
-
-      if (redirectUrl && !shouldRedirect) {
-        window.location.href = redirectUrl;
+      if (redirectUrl) {
+        window.location.assign(redirectUrl);
         return;
       }
+
+      setError("Unable to start GitHub sign-in. Please try again.");
     } catch (signInError) {
       console.error("GitHub sign-in failed", signInError);
       setError("Unable to start GitHub sign-in. Please try again.");
