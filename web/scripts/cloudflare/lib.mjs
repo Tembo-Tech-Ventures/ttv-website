@@ -252,7 +252,7 @@ export async function writeGeneratedWranglerConfig({
 }) {
   const entrypoint = path.relative(
     generatedDir,
-    path.join(webRoot, "dist", "_worker.js", "index.js")
+    path.join(webRoot, "dist", "server", "entry.mjs")
   );
   const migrationsDir = path.relative(
     generatedDir,
@@ -264,9 +264,10 @@ export async function writeGeneratedWranglerConfig({
     compatibility_date: DEFAULT_COMPATIBILITY_DATE,
     compatibility_flags: ["nodejs_compat"],
     main: entrypoint,
+    no_bundle: true,
     workers_dev: true,
     assets: {
-      directory: path.relative(generatedDir, path.join(webRoot, "dist")),
+      directory: path.relative(generatedDir, path.join(webRoot, "dist", "client")),
       binding: "ASSETS",
     },
     vars: {
