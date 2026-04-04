@@ -11,7 +11,6 @@ const generatedDir = path.join(webRoot, ".cloudflare", "generated");
 
 const DEFAULT_APP_NAME = "ttv-website";
 const DEFAULT_COMPATIBILITY_DATE = "2026-04-01";
-const DEFAULT_ENTRYPOINT = "@astrojs/cloudflare/entrypoints/server";
 const SECRET_KEYS = ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"];
 
 export function getRequiredEnv(name) {
@@ -251,6 +250,10 @@ export async function writeGeneratedWranglerConfig({
   redirectDomain,
   betterAuthUrl,
 }) {
+  const entrypoint = path.relative(
+    generatedDir,
+    path.join(webRoot, "dist", "_worker.js", "index.js")
+  );
   const migrationsDir = path.relative(
     generatedDir,
     path.join(webRoot, "src", "lib", "db", "migrations")
@@ -260,7 +263,7 @@ export async function writeGeneratedWranglerConfig({
     name: workerName,
     compatibility_date: DEFAULT_COMPATIBILITY_DATE,
     compatibility_flags: ["nodejs_compat"],
-    main: DEFAULT_ENTRYPOINT,
+    main: entrypoint,
     workers_dev: true,
     assets: {
       directory: path.relative(generatedDir, path.join(webRoot, "dist")),
