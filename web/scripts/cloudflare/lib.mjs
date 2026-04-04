@@ -1,13 +1,13 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 export const webRoot = path.resolve(__dirname, "..", "..");
-const generatedDir = path.join(webRoot, ".cloudflare", "generated");
+const generatedDir = path.join(webRoot, "dist", "server");
 
 const DEFAULT_APP_NAME = "ttv-website";
 const DEFAULT_COMPATIBILITY_DATE = "2026-04-01";
@@ -250,24 +250,30 @@ export async function writeGeneratedWranglerConfig({
   redirectDomain,
   betterAuthUrl,
 }) {
-  const entrypoint = path.relative(
-    generatedDir,
-    path.join(webRoot, "dist", "server", "entry.mjs")
-  );
   const migrationsDir = path.relative(
     generatedDir,
     path.join(webRoot, "src", "lib", "db", "migrations")
   );
+
   const config = {
-    $schema: "node_modules/wrangler/config-schema.json",
+    $schema: path.relative(
+      generatedDir,
+      path.join(webRoot, "node_modules", "wrangler", "config-schema.json")
+    ),
     name: workerName,
     compatibility_date: DEFAULT_COMPATIBILITY_DATE,
     compatibility_flags: ["nodejs_compat"],
-    main: entrypoint,
+    main: "entry.mjs",
     no_bundle: true,
     workers_dev: true,
+    rules: [
+      {
+        type: "ESModule",
+        globs: ["**/*.js", "**/*.mjs"],
+      },
+    ],
     assets: {
-      directory: path.relative(generatedDir, path.join(webRoot, "dist", "client")),
+      directory: "../client",
       binding: "ASSETS",
     },
     vars: {
@@ -301,8 +307,7 @@ export async function writeGeneratedWranglerConfig({
       : {}),
   };
 
-  await mkdir(generatedDir, { recursive: true });
-  const configPath = path.join(generatedDir, `${workerName}.json`);
+  const configPath = path.join(generatedDir, "wrangler.generated.json");
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
   return configPath;
 }

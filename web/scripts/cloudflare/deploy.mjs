@@ -31,6 +31,7 @@ async function main() {
     workersSubdomain,
   });
 
+  await runNpm(["run", "build"]);
   const configPath = await writeGeneratedWranglerConfig({
     workerName: context.workerName,
     d1Name: context.d1Name,
@@ -42,7 +43,6 @@ async function main() {
   });
 
   await setWorkerSecrets(configPath, getSecretBindings());
-  await runNpm(["run", "build"]);
   await runWrangler([
     "d1",
     "migrations",
