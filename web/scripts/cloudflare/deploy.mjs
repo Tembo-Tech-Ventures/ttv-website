@@ -7,6 +7,7 @@ import {
   getOptionalEnv,
   getSecretBindings,
   resolveBetterAuthUrl,
+  runNpm,
   runWrangler,
   setWorkerSecrets,
   writeGeneratedWranglerConfig,
@@ -41,6 +42,7 @@ async function main() {
   });
 
   await setWorkerSecrets(configPath, getSecretBindings());
+  await runNpm(["run", "build"]);
   await runWrangler([
     "d1",
     "migrations",

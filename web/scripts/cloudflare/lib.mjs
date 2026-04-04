@@ -262,6 +262,10 @@ export async function writeGeneratedWranglerConfig({
     compatibility_flags: ["nodejs_compat"],
     main: DEFAULT_ENTRYPOINT,
     workers_dev: true,
+    assets: {
+      directory: path.relative(generatedDir, path.join(webRoot, "dist")),
+      binding: "ASSETS",
+    },
     vars: {
       BETTER_AUTH_URL: betterAuthUrl,
       ...(primaryDomain ? { PRIMARY_DOMAIN: primaryDomain } : {}),
@@ -314,10 +318,24 @@ export function getSecretBindings() {
 }
 
 export async function runWrangler(args, { input } = {}) {
-  const binary = process.platform === "win32" ? "npx.cmd" : "npx";
+  return runCommand(
+    process.platform === "win32" ? "npx.cmd" : "npx",
+    ["wrangler", ...args],
+    { input }
+  );
+}
 
+export async function runNpm(args, { input } = {}) {
+  return runCommand(
+    process.platform === "win32" ? "npm.cmd" : "npm",
+    args,
+    { input }
+  );
+}
+
+async function runCommand(binary, args, { input } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(binary, ["wrangler", ...args], {
+    const child = spawn(binary, args, {
       cwd: webRoot,
       env: process.env,
       stdio: "pipe",
@@ -347,7 +365,7 @@ export async function runWrangler(args, { input } = {}) {
 
       reject(
         new Error(
-          `wrangler ${args.join(" ")} failed with exit code ${code}\n${stderr || stdout}`
+          `${binary} ${args.join(" ")} failed with exit code ${code}\n${stderr || stdout}`
         )
       );
     });
