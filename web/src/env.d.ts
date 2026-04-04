@@ -1,6 +1,19 @@
 /// <reference path="../.astro/types.d.ts" />
 /// <reference types="astro/client" />
 
+interface ImportMetaEnv {
+  readonly BETTER_AUTH_SECRET: string;
+  readonly BETTER_AUTH_URL: string;
+  readonly GITHUB_CLIENT_ID: string;
+  readonly GITHUB_CLIENT_SECRET: string;
+  readonly PRIMARY_DOMAIN?: string;
+  readonly REDIRECT_DOMAIN?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
 interface AuthSession {
   id: string;
   expiresAt: Date;

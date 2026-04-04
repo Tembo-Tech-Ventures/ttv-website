@@ -4,6 +4,15 @@ import { createAuth } from "@/lib/auth";
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const { locals, request, url, redirect } = context;
+  const primaryDomain = import.meta.env.PRIMARY_DOMAIN;
+  const redirectDomain = import.meta.env.REDIRECT_DOMAIN;
+
+  if (primaryDomain && redirectDomain && url.hostname === redirectDomain) {
+    url.hostname = primaryDomain;
+    url.protocol = "https:";
+    return redirect(url.toString(), 301);
+  }
+
   const auth = createAuth(env.DB);
 
   // Get session for every request

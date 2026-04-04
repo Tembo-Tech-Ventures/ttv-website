@@ -1,0 +1,45 @@
+name: Cloudflare Manual Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Whether to deploy or destroy the environment
+        required: true
+        type: choice
+        options:
+          - deploy
+          - destroy
+      environment_name:
+        description: Arbitrary environment name
+        required: true
+        type: string
+      primary_domain:
+        description: Optional primary custom domain
+        required: false
+        type: string
+      redirect_domain:
+        description: Optional redirect-only custom domain
+        required: false
+        type: string
+      better_auth_url:
+        description: Optional explicit Better Auth URL override
+        required: false
+        type: string
+      allow_protected_destroy:
+        description: Override protected environment guard during destroy
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  environment:
+    uses: ./.github/workflows/cloudflare-environment.yml
+    with:
+      action: ${{ inputs.action }}
+      environment_name: ${{ inputs.environment_name }}
+      primary_domain: ${{ inputs.primary_domain }}
+      redirect_domain: ${{ inputs.redirect_domain }}
+      better_auth_url: ${{ inputs.better_auth_url }}
+      allow_protected_destroy: ${{ inputs.allow_protected_destroy }}
+    secrets: inherit
