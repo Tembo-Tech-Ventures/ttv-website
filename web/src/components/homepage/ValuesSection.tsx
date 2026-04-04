@@ -70,6 +70,7 @@ export default function ValuesSection() {
 
   return (
     <section
+      id="values"
       ref={sectionRef}
       className="min-h-screen px-4 py-20"
       style={{ backgroundColor: "#013D39" }}
