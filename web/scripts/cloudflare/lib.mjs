@@ -251,6 +251,10 @@ export async function writeGeneratedWranglerConfig({
   redirectDomain,
   betterAuthUrl,
 }) {
+  const migrationsDir = path.relative(
+    generatedDir,
+    path.join(webRoot, "src", "lib", "db", "migrations")
+  );
   const config = {
     $schema: "node_modules/wrangler/config-schema.json",
     name: workerName,
@@ -268,7 +272,7 @@ export async function writeGeneratedWranglerConfig({
         binding: "DB",
         database_name: d1Name,
         database_id: d1Id,
-        migrations_dir: "src/lib/db/migrations",
+        migrations_dir: migrationsDir,
       },
     ],
     r2_buckets: [
