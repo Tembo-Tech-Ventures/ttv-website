@@ -265,7 +265,7 @@ export async function writeGeneratedWranglerConfig({
     compatibility_flags: ["nodejs_compat"],
     main: "entry.mjs",
     no_bundle: true,
-    workers_dev: true,
+    workers_dev: !primaryDomain && !redirectDomain,
     rules: [
       {
         type: "ESModule",
