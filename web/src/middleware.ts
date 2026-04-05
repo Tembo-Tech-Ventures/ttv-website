@@ -13,7 +13,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return redirect(url.toString(), 301);
   }
 
-  const auth = createAuth(env.DB);
+  const auth = createAuth(env);
 
   // Get session for every request
   const sessionData = await auth.api.getSession({
