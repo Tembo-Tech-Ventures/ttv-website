@@ -80,6 +80,16 @@ export const sessionRelations = relations(session, ({ one }) => ({
   user: one(user, { fields: [session.userId], references: [user.id] }),
 }));
 
+// ─── Verification (matches better-auth expected schema) ───
+
+export const verification = sqliteTable("verification", {
+  id: cuid("id"),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: integer("expiresAt", { mode: "timestamp" }).notNull(),
+  ...timestamps,
+});
+
 // ─── Role ──────────────────────────────────────────────────
 
 export const role = sqliteTable("Roles", {
