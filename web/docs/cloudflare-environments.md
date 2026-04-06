@@ -27,6 +27,7 @@ Any arbitrary environment name is normalized to a lower-case slug and used the s
 
 - Reusable workflow: `.github/workflows/cloudflare-environment.yml`
 - Generic manual wrapper: `.github/workflows/cloudflare-manual.yml`
+- Production deploy: `.github/workflows/cloudflare-production.yml`
 - Staging wrapper: `.github/workflows/cloudflare-staging.yml`
 - Staging PR deploy: `.github/workflows/cloudflare-staging-pr.yml`
 
@@ -71,6 +72,44 @@ Set a primary domain and an optional redirect domain in workflow inputs or GitHu
 - The primary domain is attached to the Worker as a custom domain.
 - The redirect domain is also attached to the same Worker.
 - Runtime middleware redirects the redirect domain to the primary domain with HTTP 301.
+
+## Production target
+
+The production workflow is preconfigured to use:
+
+- environment: `production`
+- primary domain: `tembotechventures.com`
+- redirect domain: `www.tembotechventures.com`
+
+Production deploys automatically on every push to `main` via `.github/workflows/cloudflare-production.yml`.
+It can also be triggered manually with `action=deploy` or `action=destroy`.
+
+## Production deployment checklist
+
+Before the first production deploy, complete the following:
+
+1. Ensure the `tembotechventures.com` zone is managed by Cloudflare in the same account referenced by `CLOUDFLARE_ACCOUNT_ID`.
+2. Remove any existing DNS records (e.g., CNAME to Vercel) for `tembotechventures.com` and `www.tembotechventures.com` that would conflict with Workers custom domains.
+3. Create a `production` GitHub environment with the required secrets:
+   - `CLOUDFLARE_API_TOKEN`
+   - `CLOUDFLARE_ACCOUNT_ID`
+   - `BETTER_AUTH_SECRET`
+   - `GH_CLIENT_ID`
+   - `GH_CLIENT_SECRET`
+4. Create a GitHub OAuth App for production with the callback URL:
+   - `https://tembotechventures.com/api/auth/callback/github`
+5. Optionally add a review/approval gate on the `production` GitHub environment for extra safety.
+6. Merge the `cf-transition` branch to `main` — the workflow triggers automatically.
+
+## What production deploy creates
+
+For the `production` environment, the deploy script creates or reuses:
+
+- Worker: `ttv-website-production`
+- D1 database: `ttv-website-db-production`
+- R2 bucket: `ttv-website-files-production`
+
+The `www.tembotechventures.com` redirect domain is attached to the same Worker and returns HTTP 301 redirects to `tembotechventures.com`.
 
 ## Staging target
 
