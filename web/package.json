@@ -8,6 +8,7 @@
     "preview": "astro preview",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply ttv-database --local",
+    "db:import": "node ./scripts/import-data.mjs",
     "cf:deploy": "node ./scripts/cloudflare/deploy.mjs",
     "cf:destroy": "node ./scripts/cloudflare/destroy.mjs"
   },
