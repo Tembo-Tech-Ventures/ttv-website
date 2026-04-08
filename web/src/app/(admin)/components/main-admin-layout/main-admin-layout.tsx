@@ -28,6 +28,7 @@ import {
   PiTable,
   PiUserDuotone,
   PiNewspaperDuotone,
+  PiDatabaseDuotone,
 } from "react-icons/pi";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import "dayjs/locale/en";
@@ -205,6 +206,11 @@ export function MainAdminLayout({
                 icon={<PiNewspaperDuotone fontSize={25} />}
                 primary="Blog Posts"
                 href="/admin/blog"
+              />
+              <NavLink
+                icon={<PiDatabaseDuotone fontSize={25} />}
+                primary="Data Migration"
+                href="/admin/data-migration"
               />
             </List>
             <Box sx={{ flexGrow: 1 }} />
