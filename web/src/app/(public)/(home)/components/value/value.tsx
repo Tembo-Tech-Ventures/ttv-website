@@ -1,96 +1,128 @@
-import { getShadow } from "@/modules/mui/theme/constants";
-import { useGSAP } from "@gsap/react";
-import { Box, Container, Typography, useTheme } from "@mui/material";
-import gsap from "gsap";
+"use client";
 
+import { Elephant } from "@/assets/brand/elephant";
+import { customColors } from "@/modules/mui/theme/constants";
+import { climateCrisis } from "@/modules/mui/theme/fonts";
+import { useGSAP } from "@gsap/react";
+import { Box, Container, Stack, Typography } from "@mui/material";
+import gsap from "gsap";
+import { useRef } from "react";
+
+/**
+ * "Tembo (n.) — elephant. Swahili." editorial block (PROPOSAL §3).
+ *
+ * Previously this was a bordered card with a gradient border housing
+ * the mission copy. The proposal's direction is to blow the mission
+ * statement out of the container and present it as an editorial
+ * dictionary entry paired with a pull-quote-sized mission.
+ */
 export function Value() {
-  const theme = useTheme();
-  useGSAP(() => {
-    const scrollTrigger = {
-      trigger: "#home-value-description",
-      start: "top 80%",
-      end: "bottom top",
-      scrub: true,
-    };
-    const timeline = gsap.timeline({
-      scrollTrigger,
-    });
-    timeline
-      .fromTo(
-        "#home-value-description",
-        { opacity: 0 },
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useGSAP(
+    () => {
+      if (typeof window === "undefined") return;
+      const prefersReducedMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      if (prefersReducedMotion) return;
+
+      gsap.fromTo(
+        "#why-tembo-quote",
+        { opacity: 0, y: 40 },
         {
           opacity: 1,
+          y: 0,
+          duration: 1,
+          ease: "power2.out",
+          scrollTrigger: {
+            trigger: "#why-tembo-quote",
+            start: "top 80%",
+            toggleActions: "play none none reverse",
+          },
         },
-      )
-      .to("#home-value-description", {
-        opacity: 1,
-        duration: 0.05,
-      })
-      .to("#home-value-description", {
-        opacity: 0,
-      });
-    gsap.fromTo(
-      "#home-value-gradient",
-      {
-        left: "-100%",
-      },
-      {
-        left: "100%",
-        ease: "power2.inOut",
-        scrollTrigger: {
-          trigger: "#home-value-gradient",
-          start: "bottom bottom",
-          end: "top top",
-          scrub: true,
-        },
-      },
-    );
-  });
+      );
+    },
+    { scope: ref },
+  );
+
   return (
-    <Container maxWidth="md" sx={{ py: 8 }}>
-      <Box
-        sx={{
-          p: "2px",
-          position: "relative",
-          borderRadius: 2,
-          overflow: "hidden",
-          boxShadow: getShadow("lg"),
-        }}
-      >
-        <Box
-          sx={{
-            position: "absolute",
-            zIndex: 1,
-            top: 0,
-            left: 0,
-            backgroundImage: `linear-gradient(45deg, transparent, ${theme.palette.secondary.light}, transparent)`,
-            height: "100%",
-            width: "100%",
-          }}
-          id="home-value-gradient"
-        />
-        <Box
-          sx={{
-            backgroundColor: "dark.main",
-            borderRadius: 2,
-            px: 4,
-            py: 2,
-            position: "relative",
-            zIndex: 10,
-          }}
+    <Box
+      ref={ref}
+      component="section"
+      id="why-tembo"
+      sx={{
+        py: { xs: 10, md: 16 },
+        borderTop: `1px solid ${customColors.rule}`,
+      }}
+    >
+      <Container maxWidth="xl">
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          spacing={{ xs: 4, md: 8 }}
+          alignItems={{ xs: "flex-start", md: "center" }}
         >
+          <Stack spacing={1.5} sx={{ flex: "0 0 auto", maxWidth: 360 }}>
+            <Typography
+              variant="overline"
+              sx={{
+                color: customColors.orange.main,
+                letterSpacing: "0.32em",
+                fontSize: { xs: 12, md: 14 },
+              }}
+            >
+              § 00 &nbsp; Why Tembo
+            </Typography>
+            <Typography
+              sx={{
+                fontFamily: climateCrisis.style.fontFamily,
+                fontSize: { xs: "2.25rem", md: "2.75rem" },
+                lineHeight: 1,
+                color: customColors.ink.primary,
+                letterSpacing: "-0.02em",
+              }}
+            >
+              Tembo
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{
+                color: customColors.ink.secondary,
+                fontStyle: "italic",
+                letterSpacing: "0.04em",
+              }}
+            >
+              (n.) — elephant. Swahili. A memory that carries the herd.
+            </Typography>
+            <Box sx={{ width: 120, mt: 2, opacity: 0.9 }}>
+              <Elephant color={customColors.orange.main} />
+            </Box>
+          </Stack>
+
           <Typography
-            variant="h4"
-            color="grey.300"
-            align="center"
-            id="home-value-description"
+            id="why-tembo-quote"
+            component="blockquote"
+            sx={{
+              flex: "1 1 auto",
+              fontFamily: climateCrisis.style.fontFamily,
+              fontSize: { xs: "2rem", md: "3.5rem" },
+              lineHeight: 1.05,
+              color: customColors.ink.primary,
+              letterSpacing: "-0.02em",
+              borderLeft: { md: `2px solid ${customColors.orange.main}` },
+              pl: { md: 4 },
+              m: 0,
+            }}
           >
-            Tembo Tech Ventures is training a new generation of software
-            developers and technologists in Africa.
+            Our mission is to bridge the gap between Africa&apos;s tech ambition
+            and the{" "}
+            <Box component="span" sx={{ color: customColors.orange.main }}>
+              delivery-ready
+            </Box>{" "}
+            talent the industry still says it can&apos;t find.
           </Typography>
-        </Box>
-      </Box>
-    </Container>
+        </Stack>
+      </Container>
+    </Box>
   );
 }

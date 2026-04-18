@@ -2,14 +2,35 @@ import { Box } from "@mui/material";
 
 interface ElephantProps {
   color?: string;
+  /**
+   * When true, applies a gentle "breathing" scale animation to the mark
+   * (PROPOSAL §C.3). The animation is expressed as a CSS `@keyframes`
+   * rule inside sx so that `Elephant` stays importable from server
+   * components (e.g. the certificate page). It is disabled automatically
+   * when the user has `prefers-reduced-motion` set.
+   */
+  breathing?: boolean;
 }
 
-export function Elephant({ color }: ElephantProps = { color: "#013D39" }) {
+export function Elephant(
+  { color, breathing }: ElephantProps = { color: "#013D39" },
+) {
   return (
     <Box
       sx={{
         aspectRatio: "606 / 697",
         width: "100%",
+        transformOrigin: "center bottom",
+        animation: breathing
+          ? "elephant-breathe 5s ease-in-out infinite"
+          : undefined,
+        "@keyframes elephant-breathe": {
+          "0%, 100%": { transform: "scale(1)" },
+          "50%": { transform: "scale(1.025)" },
+        },
+        "@media (prefers-reduced-motion: reduce)": {
+          animation: "none",
+        },
         "& path": {
           fill: color,
         },

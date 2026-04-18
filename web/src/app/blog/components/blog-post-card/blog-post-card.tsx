@@ -1,36 +1,25 @@
 /**
- * BlogPostCard
- * ------------
- * Presentational helper that renders a teaser for a single blog entry. The
- * component now leans on the shared `<Card>` surface that already ships on the
- * homepage, which keeps the visual language consistent while avoiding bespoke
- * gradient styling.
+ * BlogPostCard — editorial row (PROPOSAL §8).
  *
- * Responsibilities:
- * - Format the publication date into a human-readable string using
- *   `Intl.DateTimeFormat` so localisation can be extended easily.
- * - Generate a concise excerpt from the markdown body to entice readers without
- *   overwhelming the list view.
- * - Wrap the entire surface in the shared `<Link>` component so hover and focus
- *   states match other navigational affordances on the site.
+ * Each post is now a full-width row in the index rather than a small
+ * card on a grid. Readers see an oversized Climate Crisis title (the
+ * thing they came for), a pub date kicker, and a tight excerpt. The
+ * row is a single clickable surface with a subtle hover tint so
+ * keyboard and pointer users get the same affordance.
  */
 
-import { Card } from "@/components/card/card";
 import { Link } from "@/components/link/link";
 import type { BlogPost } from "@/modules/blog/lib/get-posts/get-posts";
-import { Stack, Typography } from "@mui/material";
+import { customColors } from "@/modules/mui/theme/constants";
+import { climateCrisis } from "@/modules/mui/theme/fonts";
+import { Box, Stack, Typography } from "@mui/material";
 
 const PUBLISH_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   dateStyle: "long",
 });
 
-const EXCERPT_MAX_LENGTH = 180;
+const EXCERPT_MAX_LENGTH = 220;
 
-/**
- * Creates a short teaser paragraph by stripping common markdown syntax and
- * trimming the copy to a fixed length. Keeping the logic co-located with the
- * card keeps the parent index component focused on layout concerns.
- */
 function createExcerpt(markdown: string): string {
   const withoutMarkdown = markdown
     .replace(/[#*_`>~\-]+/g, " ")
@@ -56,34 +45,64 @@ export function BlogPostCard({ post }: BlogPostCardProps) {
       href={`/blog/${post.slug}`}
       muiLinkProps={{
         underline: "none",
-        sx: { display: "block", height: "100%" },
+        sx: {
+          display: "block",
+          py: { xs: 4, md: 6 },
+          transition: "background-color 200ms ease",
+          "&:hover": {
+            backgroundColor: "rgba(242,141,104,0.04)",
+          },
+        },
       }}
     >
-      <Card component="article" style={{ height: "100%" }}>
-        <Stack spacing={2} sx={{ height: "100%" }}>
-          <Typography variant="overline" color="text.secondary">
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        spacing={{ xs: 2, md: 8 }}
+        alignItems={{ xs: "flex-start", md: "baseline" }}
+      >
+        <Box sx={{ flex: "0 0 auto", minWidth: { md: 180 } }}>
+          <Typography
+            variant="overline"
+            sx={{
+              color: customColors.ink.secondary,
+              letterSpacing: "0.24em",
+              fontSize: 11,
+            }}
+          >
             {publishedOn}
           </Typography>
-          <Typography variant="h5" component="h2" fontWeight={600}>
+        </Box>
+        <Stack spacing={2} sx={{ flex: "1 1 auto" }}>
+          <Typography
+            component="h2"
+            sx={{
+              fontFamily: climateCrisis.style.fontFamily,
+              fontSize: { xs: "2rem", md: "3rem" },
+              lineHeight: 1.05,
+              color: customColors.ink.primary,
+              letterSpacing: "-0.02em",
+            }}
+          >
             {post.title}
           </Typography>
-          <Typography variant="body1" color="text.secondary">
+          <Typography
+            variant="body1"
+            sx={{ color: customColors.ink.secondary, maxWidth: 680 }}
+          >
             {excerpt}
           </Typography>
           <Typography
             variant="button"
             sx={{
-              mt: "auto",
-              alignSelf: "flex-start",
-              color: "primary.main",
-              fontWeight: 600,
-              letterSpacing: 1,
+              color: customColors.orange.main,
+              fontWeight: 700,
+              letterSpacing: "0.12em",
             }}
           >
             Read story →
           </Typography>
         </Stack>
-      </Card>
+      </Stack>
     </Link>
   );
 }

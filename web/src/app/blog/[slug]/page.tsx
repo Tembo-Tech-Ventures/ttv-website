@@ -14,16 +14,21 @@
  *   while keeping the article content container-free.
  */
 
-import { Card } from "@/components/card/card";
 import { Link } from "@/components/link/link";
 import { getPost } from "@/modules/blog/lib/get-post/get-post";
 import { customColors } from "@/modules/mui/theme/constants";
+import { climateCrisis } from "@/modules/mui/theme/fonts";
 import { Box, Container, Stack, Typography } from "@mui/material";
 import type { ReactNode } from "react";
 import type { Components } from "react-markdown";
 import Markdown from "react-markdown";
 
-export const dynamic = "force-dynamic";
+/**
+ * See `/blog/page.tsx` — use ISR revalidation to make the blog entry
+ * routes compatible with the Cloudflare build rather than forcing every
+ * request through SSR.
+ */
+export const revalidate = 300;
 
 interface Params {
   params: { slug: string };
@@ -168,82 +173,85 @@ export default async function BlogPost({ params }: Params) {
 
   if (!post) {
     return (
-      <Stack
+      <Container
         component="main"
-        sx={{
-          minHeight: "100vh",
-          bgcolor: "background.default",
-          py: { xs: 6, md: 10 },
-        }}
+        maxWidth="sm"
+        sx={{ py: { xs: 8, md: 14 }, textAlign: "center" }}
       >
-        <Container maxWidth="sm">
-          <Card component="section" style={{ textAlign: "center" }}>
-            <Typography variant="h4" fontWeight={700} gutterBottom>
-              We couldn’t find that story.
-            </Typography>
-            <Typography variant="body1" color="text.secondary" gutterBottom>
-              The post may have been moved or removed. Explore the latest
-              insights from our team instead.
-            </Typography>
-            <Link
-              href="/blog"
-              muiLinkProps={{
-                underline: "hover",
-                sx: { color: "primary.main", fontWeight: 600 },
-              }}
-            >
-              Browse all posts
-            </Link>
-          </Card>
-        </Container>
-      </Stack>
+        <Typography
+          component="h1"
+          sx={{
+            fontFamily: climateCrisis.style.fontFamily,
+            fontSize: { xs: "2.5rem", md: "4rem" },
+            color: customColors.ink.primary,
+            letterSpacing: "-0.02em",
+            mb: 2,
+          }}
+        >
+          We couldn&rsquo;t find that story.
+        </Typography>
+        <Typography
+          variant="body1"
+          sx={{ color: customColors.ink.secondary, mb: 3 }}
+        >
+          The post may have been moved or removed. Explore the latest insights
+          from our team instead.
+        </Typography>
+        <Link
+          href="/blog"
+          muiLinkProps={{
+            underline: "hover",
+            sx: { color: "primary.main", fontWeight: 600 },
+          }}
+        >
+          ← Browse all posts
+        </Link>
+      </Container>
     );
   }
 
   const publishedOn = PUBLISH_DATE_FORMATTER.format(post.createdAt);
 
   return (
-    <Stack
-      component="main"
-      sx={{
-        minHeight: "100vh",
-        bgcolor: "background.default",
-        py: { xs: 6, md: 10 },
-      }}
-    >
-      <Container maxWidth="md">
-        <Link
-          href="/blog"
-          muiLinkProps={{
-            underline: "hover",
-            sx: {
-              color: "text.secondary",
-              fontWeight: 600,
-              letterSpacing: 0.5,
-            },
+    <Container component="main" maxWidth="md" sx={{ py: { xs: 6, md: 10 } }}>
+      <Link
+        href="/blog"
+        muiLinkProps={{
+          underline: "hover",
+          sx: {
+            color: customColors.ink.secondary,
+            fontWeight: 500,
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            fontSize: 12,
+          },
+        }}
+      >
+        ← Back to all posts
+      </Link>
+      <Stack spacing={2} sx={{ mt: 4, mb: 6 }}>
+        <Typography
+          variant="overline"
+          sx={{ color: customColors.orange.main, letterSpacing: "0.24em" }}
+        >
+          {publishedOn}
+        </Typography>
+        <Typography
+          component="h1"
+          sx={{
+            fontFamily: climateCrisis.style.fontFamily,
+            fontSize: { xs: "2.5rem", md: "4.5rem" },
+            lineHeight: 1.02,
+            color: customColors.ink.primary,
+            letterSpacing: "-0.02em",
           }}
         >
-          ← Back to all posts
-        </Link>
-        <Box mt={3}>
-          <Card component="header">
-            <Typography
-              component="h1"
-              variant="h3"
-              fontWeight={700}
-              gutterBottom
-            >
-              {post.title}
-            </Typography>
-            <Typography variant="subtitle1" color="text.secondary">
-              {publishedOn}
-            </Typography>
-          </Card>
-        </Box>
-        <Box mt={4}>
-          <Markdown components={markdownComponents}>{post.content}</Markdown>
-        </Box>
-      </Container>
-    </Stack>
+          {post.title}
+        </Typography>
+      </Stack>
+      <Box sx={{ borderTop: `1px solid ${customColors.rule}`, pt: 4 }}>
+        <Markdown components={markdownComponents}>{post.content}</Markdown>
+      </Box>
+    </Container>
   );
 }
