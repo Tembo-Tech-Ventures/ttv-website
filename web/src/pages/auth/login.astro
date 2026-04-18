@@ -1,17 +1,14 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import Grain from "@/components/common/Grain.astro";
-import Elephant from "@/components/brand/Elephant.astro";
 import GitHubSignInButton from "@/components/auth/GitHubSignInButton";
 
 /**
- * Auth / Login — split-screen editorial (PROPOSAL §6).
+ * Auth / Login — split-screen editorial.
  *
- * The old screen was 80% empty on dark mode, which read as broken. This
- * version splits 50/50: brand voice + sign-in on the left, a pull quote
- * and line-art elephant on the right so the page is never hollow. Copy
- * moves from system voice ("Sign in to access your dashboard") to brand
- * voice ("Pick up where you left off.").
+ * Left: brand voice + sign-in. Right: the mission line from the homepage,
+ * rendered as a large pull quote. The previous version had a fabricated
+ * student testimonial and a broken line-art elephant; both are gone.
  */
 
 if (Astro.locals.user) {
@@ -29,9 +26,11 @@ if (Astro.locals.user) {
     <!-- Left: sign-in -->
     <section class="relative flex items-center justify-center px-6 py-16 md:px-16">
       <div class="w-full max-w-md">
-        <a href="/" class="inline-flex items-center gap-2 text-ink-primary">
-          <Elephant size={30} strokeWidth={1.8} class="text-primary" />
-          <span class="font-body text-xs font-bold uppercase tracking-[0.28em]">TTV</span>
+        <a href="/" class="inline-flex items-baseline text-ink-primary">
+          <span class="font-heading text-base" style="letter-spacing: -0.02em;">TEMBO</span>
+          <span class="ml-3 font-body text-[10px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
+            Tech · Ventures
+          </span>
         </a>
 
         <p class="font-body mt-12 text-xs font-semibold uppercase tracking-[0.4em] text-primary">
@@ -61,29 +60,28 @@ if (Astro.locals.user) {
       </div>
     </section>
 
-    <!-- Right: pull quote + elephant -->
+    <!-- Right: mission pull quote -->
     <aside
       class="relative hidden items-center justify-center overflow-hidden border-l border-[color:var(--color-rule)] px-10 py-16 md:flex"
       style="background-color: var(--color-bg-raised);"
     >
       <div class="relative max-w-lg space-y-10">
         <p class="font-body text-xs font-semibold uppercase tracking-[0.4em] text-primary">
-          From the cohort
+          § The mission
         </p>
         <blockquote
           class="font-heading text-ink-primary"
           style="font-size: clamp(2rem, 3.2vw, 3.25rem); line-height: 1.05; letter-spacing: -0.02em;"
         >
-          &ldquo;I came in thinking I&apos;d be taught. I left knowing I was
-          <span class="text-primary">trusted to deliver</span>.&rdquo;
+          Talent is everywhere.
+          <span class="block">Opportunity is not.</span>
+          <span class="block text-primary">We close that gap on purpose.</span>
         </blockquote>
-        <footer class="font-body text-sm uppercase tracking-[0.24em] text-ink-muted">
-          Asha Njeri · Cohort 03 · Backend engineer
-        </footer>
-
-        <div aria-hidden="true" class="absolute -right-20 -bottom-24 text-primary/30">
-          <Elephant size={340} strokeWidth={1.2} breathing />
-        </div>
+        <p class="font-body text-base text-ink-secondary md:text-lg">
+          A small community of engineers across Kenya and Nigeria, learning to
+          build real software together — and staying in touch long after the
+          cohort ends.
+        </p>
       </div>
     </aside>
   </main>

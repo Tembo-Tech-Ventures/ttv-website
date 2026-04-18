@@ -1,95 +1,51 @@
 import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { UsersThree, Handshake, Infinity as InfinityIcon } from "@phosphor-icons/react";
 
 gsap.registerPlugin(ScrollTrigger);
 
 /**
- * "What We Do" — bento grid (PROPOSAL §4).
+ * "What We Do" — bento grid.
  *
- * Kills the Apple-emoji three-card row. Training gets a wide primary
- * card; Mentorship and Impact stack beside it. Each card leads with an
- * oversized Climate-Crisis numeral (01/02/03) — the chunky face used at
- * a size where it still reads — with monoline SVG icons under the body
- * copy.
+ * Rewritten to match the real program: we're less a training bootcamp
+ * and more a community of people building together, with mentorship
+ * and long-term continuity. Icons are Phosphor (light weight) instead
+ * of hand-rolled SVGs.
  */
 interface BentoItem {
   number: string;
   label: string;
   title: string;
   body: string;
-  icon: "mortarboard" | "heads" | "elephant";
+  Icon: typeof UsersThree;
   wide?: boolean;
 }
 
 const BENTO: BentoItem[] = [
   {
     number: "01",
-    label: "Training",
-    title: "Intensive, applied, cohort-based.",
-    body: "Fundamentals to job-ready in months, not years. Built with industry partners and taught by working engineers.",
-    icon: "mortarboard",
+    label: "Community",
+    title: "Not a course. A working group.",
+    body: "Each cohort is a small group learning side-by-side while building real things. The community is the product — the curriculum is a scaffold toward building on your own.",
+    Icon: UsersThree,
     wide: true,
   },
   {
     number: "02",
     label: "Mentorship",
-    title: "Paid mentors. Real accountability.",
-    body: "One-to-one guidance from engineers who are invested in your growth — and compensated for their time.",
-    icon: "heads",
+    title: "You don't do this alone.",
+    body: "Working engineers walk each cohort through the shape of a real system. Accountability over assignments.",
+    Icon: Handshake,
   },
   {
     number: "03",
-    label: "Impact",
-    title: "A pipeline that actually moves.",
-    body: "We measure success in hires, retention, and promotions — not in seats filled. Community first, always.",
-    icon: "elephant",
+    label: "Continuity",
+    title: "We stay in touch.",
+    body: "Alumni stay in the loop after the cohort ends. If someone drifts, we reach out. Some come back as mentors.",
+    Icon: InfinityIcon,
   },
 ];
-
-function Icon({ name }: { name: BentoItem["icon"] }) {
-  const common = {
-    xmlns: "http://www.w3.org/2000/svg",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.6,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    "aria-hidden": true,
-  };
-  if (name === "mortarboard") {
-    return (
-      <svg {...common} viewBox="0 0 48 48" width={48} height={48}>
-        <path d="M4 20 L24 10 L44 20 L24 30 Z" />
-        <path d="M12 24 V34 Q24 42 36 34 V24" />
-        <path d="M44 20 V32" />
-      </svg>
-    );
-  }
-  if (name === "heads") {
-    return (
-      <svg {...common} viewBox="0 0 48 48" width={48} height={48}>
-        <circle cx="16" cy="18" r="6" />
-        <circle cx="32" cy="18" r="6" />
-        <path d="M4 40 Q10 28 16 28 Q22 28 24 36" />
-        <path d="M24 36 Q26 28 32 28 Q38 28 44 40" />
-      </svg>
-    );
-  }
-  return (
-    <svg {...common} viewBox="0 0 120 80" width={72} height={48}>
-      <path d="M18 48 Q22 22 52 20 Q82 18 94 28 Q104 36 98 52" />
-      <path d="M94 28 Q100 24 102 34 Q104 46 96 46" />
-      <path d="M104 40 Q112 44 110 54 Q108 62 100 60" />
-      <path d="M26 48 Q22 66 34 68" />
-      <path d="M88 52 Q90 66 78 68" />
-      <path d="M36 56 L34 72" />
-      <path d="M52 58 L52 72" />
-      <path d="M72 58 L72 72" />
-      <path d="M84 56 L86 72" />
-    </svg>
-  );
-}
 
 export default function FeaturesSection() {
   const sectionRef = useRef<HTMLElement>(null);
@@ -136,7 +92,7 @@ export default function FeaturesSection() {
     >
       <div className="mx-auto max-w-7xl">
         <p className="font-body mb-6 text-xs font-semibold uppercase tracking-[0.4em] text-primary">
-          § 01 What We Do
+          § 01 What we do
         </p>
         <h2
           ref={headingRef}
@@ -147,9 +103,9 @@ export default function FeaturesSection() {
             letterSpacing: "-0.03em",
           }}
         >
-          Training. Mentorship.
+          A community,
           <br />
-          Measurable impact.
+          not a course.
         </h2>
 
         <div
@@ -201,7 +157,7 @@ export default function FeaturesSection() {
               </div>
 
               <div className="mt-8 text-primary/70 transition-colors group-hover:text-primary">
-                <Icon name={item.icon} />
+                <item.Icon size={item.wide ? 64 : 48} weight="light" aria-hidden />
               </div>
             </article>
           ))}

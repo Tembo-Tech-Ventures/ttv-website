@@ -19,9 +19,9 @@ interface HeroSectionProps {
 }
 
 const PROOF_STATS = [
-  { value: "43", label: "Graduates to date" },
-  { value: "9", label: "Employer partners" },
-  { value: "82%", label: "Placement within 6 months" },
+  { value: "~25", label: "Students across Kenya & Nigeria" },
+  { value: "01", label: "Partner school \u00b7 Embu College" },
+  { value: "04", label: "Cohort in flight" },
 ];
 
 export default function HeroSection({ isAuthenticated = false }: HeroSectionProps) {
@@ -119,8 +119,8 @@ export default function HeroSection({ isAuthenticated = false }: HeroSectionProp
           ref={sentenceRef}
           className="font-body mt-10 max-w-3xl text-xl text-ink-primary md:text-[28px] md:leading-[1.25]"
         >
-          We train underrepresented talent into delivery-ready software
-          engineers —{" "}
+          A small community of engineers in Africa learning to build real
+          software —{" "}
           <span
             className="bg-no-repeat pb-1"
             style={{
@@ -128,7 +128,7 @@ export default function HeroSection({ isAuthenticated = false }: HeroSectionProp
               backgroundSize: "100% 100%",
             }}
           >
-            then we keep mentoring them
+            still in touch long after the cohort ends
           </span>
           .
         </p>

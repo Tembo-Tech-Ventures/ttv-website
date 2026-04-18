@@ -18,11 +18,11 @@ interface Value {
 }
 
 const VALUES: Value[] = [
-  { word: "EMPOWERMENT", commitment: "We pay mentors. Their time is not volunteer fuel." },
-  { word: "IMPACT", commitment: "We measure hires, retention, and promotions — not signups." },
-  { word: "EQUITY", commitment: "We accept applicants without degrees and without fluent-English gates." },
-  { word: "COMMUNITY", commitment: "We stay in touch after graduation. No cohort disappears." },
-  { word: "INNOVATION", commitment: "We update the curriculum every cohort, not every five years." },
+  { word: "COMMUNITY", commitment: "Less a program, more a group of people building together." },
+  { word: "PHILOSOPHY", commitment: "We teach how to see a system, not a syllabus to memorize." },
+  { word: "EQUITY", commitment: "No degree required. English required \u2014 fluency isn't." },
+  { word: "CONTINUITY", commitment: "We stay in touch after the cohort. When someone drifts, we reconnect." },
+  { word: "HONESTY", commitment: "Two students in fintech internships so far. No job placements yet \u2014 we'll tell you when there are." },
 ];
 
 export default function ValuesSection() {

@@ -1,96 +1,62 @@
 ---
 /**
- * Humans — portrait slots (PROPOSAL §D).
+ * Humans — cohort placeholder.
  *
- * Faces are the biggest missing thing on the current site. This section
- * reserves four portrait slots that can be filled with graduate, mentor,
- * and instructor photos. Each slot uses a duotone CSS filter stack
- * (grayscale + warm hue-rotate + orange multiply overlay) so mixed photo
- * quality still reads as coherent. Slots without a src show an initials
- * placeholder built from the name — still on-brand, never "missing image."
+ * Students asked for a place to show what they're building and who they
+ * are. Until they've written their own profiles, this section renders as
+ * a set of four empty portrait slots with editorial "placeholder" styling
+ * — dashed borders, cohort labels only, no invented names. When real
+ * profiles land, the SLOTS array gets populated and the dashed borders
+ * turn solid.
  */
 
-interface Person {
-  name: string;
-  role: string;
-  src?: string;
+interface Slot {
+  label: string;
 }
 
-const PEOPLE: Person[] = [
-  { name: "Asha Njeri", role: "Backend engineer · Cohort 03" },
-  { name: "Kweku Mensah", role: "Lead mentor · Platform" },
-  { name: "Leila Osman", role: "Instructor · Systems" },
-  { name: "Tomi Adeyemi", role: "Graduate · Now at Paystack" },
+const SLOTS: Slot[] = [
+  { label: "Cohort 04 · Kenya" },
+  { label: "Cohort 04 · Kenya" },
+  { label: "Cohort 03 · Nigeria" },
+  { label: "Cohort 02 · Alumni" },
 ];
-
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-}
 ---
 
 <section id="humans" class="relative px-4 py-28 sm:px-8 md:py-36">
   <div class="mx-auto max-w-7xl">
     <div class="mb-14 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
       <p class="font-body text-xs font-semibold uppercase tracking-[0.4em] text-primary">
-        § 03 The humans
+        § 03 The cohort
       </p>
       <p class="max-w-md font-body text-base text-ink-secondary md:text-lg">
-        A tech-training program is its people. Here are some of ours —
-        mentors, instructors, and graduates who keep showing up.
+        Students asked for a place to show who they are and what they&apos;re
+        building. We&apos;re putting it together with them — profiles land
+        with Cohort 04.
       </p>
     </div>
 
     <ul class="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-4">
-      {PEOPLE.map((person) => (
+      {SLOTS.map((slot) => (
         <li class="space-y-3">
           <div
-            class="portrait relative aspect-[4/5] overflow-hidden border border-[color:var(--color-rule)]"
+            class="relative aspect-[4/5] overflow-hidden border border-dashed border-[color:var(--color-rule)]"
             style="background-color: var(--color-bg-raised);"
           >
-            {person.src ? (
-              <img
-                src={person.src}
-                alt={`${person.name} — ${person.role}`}
-                class="portrait-image h-full w-full object-cover"
-                loading="lazy"
-              />
-            ) : (
-              <div class="flex h-full w-full items-center justify-center">
-                <span
-                  class="font-heading text-primary/50"
-                  style="font-size: clamp(2.5rem, 6vw, 5rem); letter-spacing: -0.04em;"
-                >
-                  {initials(person.name)}
-                </span>
-              </div>
-            )}
-            <div class="portrait-tint pointer-events-none absolute inset-0"></div>
+            <div class="flex h-full w-full items-center justify-center">
+              <span
+                class="font-heading text-primary/40"
+                style="font-size: clamp(3rem, 7vw, 6rem); letter-spacing: -0.04em;"
+              >
+                —
+              </span>
+            </div>
           </div>
-          <p class="font-body text-sm font-semibold uppercase tracking-[0.18em] text-ink-primary">
-            {person.name}
+          <p class="font-body text-xs font-semibold uppercase tracking-[0.24em] text-ink-muted">
+            Profile coming
           </p>
-          <p class="font-body text-sm text-ink-muted">{person.role}</p>
+          <p class="font-body text-sm text-ink-muted">{slot.label}</p>
         </li>
       ))}
     </ul>
   </div>
 </section>
-
-<style>
-  .portrait-image {
-    filter: grayscale(1) sepia(0.55) saturate(1.3) hue-rotate(-10deg) contrast(1.02);
-  }
-  .portrait-tint {
-    background: linear-gradient(
-      180deg,
-      rgba(242, 141, 104, 0.22) 0%,
-      rgba(1, 61, 57, 0.35) 100%
-    );
-    mix-blend-mode: multiply;
-  }
-</style>

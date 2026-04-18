@@ -1,7 +1,6 @@
 ---
 import BaseLayout from "./BaseLayout.astro";
 import Grain from "@/components/common/Grain.astro";
-import Elephant from "@/components/brand/Elephant.astro";
 
 /**
  * Public marketing layout (PROPOSAL §2 / §7).
@@ -22,27 +21,27 @@ const { title } = Astro.props;
 const isAuthenticated = Boolean(Astro.locals.user);
 
 const NAV_LINKS = [
-  { label: "Programs", href: "/#what-we-do" },
-  { label: "Mentors", href: "/#why-tembo" },
-  { label: "Impact", href: "/#humans" },
+  { label: "How", href: "/#what-we-do" },
+  { label: "Why", href: "/#why-tembo" },
+  { label: "Cohort", href: "/#humans" },
   { label: "Blog", href: "/blog" },
 ];
 
 const FOOTER_GROUPS = [
   {
-    heading: "Programs",
+    heading: "The work",
     links: [
-      { label: "Apply", href: "/dashboard/apply" },
-      { label: "Curriculum", href: "/#what-we-do" },
-      { label: "Mentorship", href: "/#what-we-do" },
+      { label: "How we work", href: "/#what-we-do" },
+      { label: "Why Tembo", href: "/#why-tembo" },
+      { label: "Values", href: "/#values" },
+      { label: "Cohort 04", href: "/#humans" },
     ],
   },
   {
-    heading: "Company",
+    heading: "Join",
     links: [
-      { label: "Why Tembo", href: "/#why-tembo" },
-      { label: "Values", href: "/#values" },
-      { label: "Careers", href: "mailto:hello@tembotechventures.com?subject=Careers" },
+      { label: "Apply", href: "/dashboard/apply" },
+      { label: "Sign in", href: "/auth/login" },
     ],
   },
   {
@@ -56,7 +55,6 @@ const FOOTER_GROUPS = [
     links: [
       { label: "Email", href: "mailto:hello@tembotechventures.com" },
       { label: "LinkedIn", href: "https://www.linkedin.com/company/tembo-tech-ventures/" },
-      { label: "Sign in", href: "/auth/login" },
     ],
   },
 ];
@@ -69,10 +67,12 @@ const FOOTER_GROUPS = [
     <!-- Top nav -->
     <header class="sticky top-0 z-50 border-b border-[color:var(--color-rule)] bg-[#012A28]/80 backdrop-blur">
       <nav class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-        <a href="/" class="group flex items-center gap-2 text-ink-primary" aria-label="Tembo Tech Ventures">
-          <Elephant size={32} strokeWidth={1.8} class="text-primary" />
-          <span class="font-body text-sm font-bold uppercase tracking-[0.28em] text-ink-primary transition-colors group-hover:text-primary">
-            TTV
+        <a href="/" class="group flex items-center text-ink-primary" aria-label="Tembo Tech Ventures">
+          <span class="font-heading text-lg text-ink-primary transition-colors group-hover:text-primary" style="letter-spacing: -0.02em;">
+            TEMBO
+          </span>
+          <span class="ml-3 font-body text-[10px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
+            Tech · Ventures
           </span>
         </a>
 
