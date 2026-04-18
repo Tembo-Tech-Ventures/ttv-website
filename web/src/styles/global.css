@@ -1,24 +1,75 @@
 @import url("https://fonts.googleapis.com/css2?family=Climate+Crisis&family=Maven+Pro:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
-/* TTV Theme */
+/*
+ * TTV Theme — design refresh (PROPOSAL §B).
+ *
+ * Keeps the two brand colors (#F28D68 / #013D39) and adds a warm ink,
+ * a raised bg that recedes, one bright accent for rare highlights, and
+ * a hairline rule color for editorial dividers.
+ */
 @theme {
   --color-primary: #F28D68;
   --color-dark: #013D39;
   --color-teal: #2C6964;
 
+  --color-bg-raised: #063F3A;
+  --color-accent-bright: #FFD166;
+
+  --color-ink-primary: #FFF8F2;
+  --color-ink-secondary: rgba(255, 248, 242, 0.72);
+  --color-ink-muted: rgba(255, 248, 242, 0.48);
+
+  --color-rule: rgba(242, 141, 104, 0.20);
+
   --font-heading: "Climate Crisis", cursive;
   --font-body: "Maven Pro", sans-serif;
 }
 
-/* Base styles */
+/*
+ * Typography role split (PROPOSAL §A): Climate Crisis stays on hero/anchor
+ * headings only. Maven Pro takes every heading small enough that the chunky
+ * display face becomes hard to read (roughly h3 and below).
+ */
 @layer base {
   body {
     font-family: var(--font-body);
-    color: white;
+    color: var(--color-ink-primary);
+    background-color: var(--color-dark);
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1, h2 {
     font-family: var(--font-heading);
+  }
+
+  h3, h4, h5, h6 {
+    font-family: var(--font-body);
+    font-weight: 700;
+  }
+
+  ::selection {
+    background-color: var(--color-primary);
+    color: var(--color-dark);
+  }
+}
+
+/* Reveal utilities used by sections that want a simple in-view animation
+ * when GSAP isn't warranted. Respect prefers-reduced-motion. */
+@layer utilities {
+  .reveal {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 600ms ease, transform 600ms ease;
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
   }
 }

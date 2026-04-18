@@ -4,31 +4,97 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 gsap.registerPlugin(ScrollTrigger);
 
-const features = [
+/**
+ * "What We Do" — bento grid (PROPOSAL §4).
+ *
+ * Kills the Apple-emoji three-card row. Training gets a wide primary
+ * card; Mentorship and Impact stack beside it. Each card leads with an
+ * oversized Climate-Crisis numeral (01/02/03) — the chunky face used at
+ * a size where it still reads — with monoline SVG icons under the body
+ * copy.
+ */
+interface BentoItem {
+  number: string;
+  label: string;
+  title: string;
+  body: string;
+  icon: "mortarboard" | "heads" | "elephant";
+  wide?: boolean;
+}
+
+const BENTO: BentoItem[] = [
   {
-    icon: "🎓",
-    title: "Training",
-    description:
-      "Intensive, hands-on tech training programs designed to take you from fundamentals to job-ready skills in months, not years.",
+    number: "01",
+    label: "Training",
+    title: "Intensive, applied, cohort-based.",
+    body: "Fundamentals to job-ready in months, not years. Built with industry partners and taught by working engineers.",
+    icon: "mortarboard",
+    wide: true,
   },
   {
-    icon: "🤝",
-    title: "Mentorship",
-    description:
-      "One-on-one guidance from industry professionals who are invested in your growth and committed to helping you succeed.",
+    number: "02",
+    label: "Mentorship",
+    title: "Paid mentors. Real accountability.",
+    body: "One-to-one guidance from engineers who are invested in your growth — and compensated for their time.",
+    icon: "heads",
   },
   {
-    icon: "🌍",
-    title: "Impact",
-    description:
-      "Building a diverse pipeline of tech talent that drives innovation and creates lasting change in communities worldwide.",
+    number: "03",
+    label: "Impact",
+    title: "A pipeline that actually moves.",
+    body: "We measure success in hires, retention, and promotions — not in seats filled. Community first, always.",
+    icon: "elephant",
   },
 ];
+
+function Icon({ name }: { name: BentoItem["icon"] }) {
+  const common = {
+    xmlns: "http://www.w3.org/2000/svg",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.6,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+  if (name === "mortarboard") {
+    return (
+      <svg {...common} viewBox="0 0 48 48" width={48} height={48}>
+        <path d="M4 20 L24 10 L44 20 L24 30 Z" />
+        <path d="M12 24 V34 Q24 42 36 34 V24" />
+        <path d="M44 20 V32" />
+      </svg>
+    );
+  }
+  if (name === "heads") {
+    return (
+      <svg {...common} viewBox="0 0 48 48" width={48} height={48}>
+        <circle cx="16" cy="18" r="6" />
+        <circle cx="32" cy="18" r="6" />
+        <path d="M4 40 Q10 28 16 28 Q22 28 24 36" />
+        <path d="M24 36 Q26 28 32 28 Q38 28 44 40" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common} viewBox="0 0 120 80" width={72} height={48}>
+      <path d="M18 48 Q22 22 52 20 Q82 18 94 28 Q104 36 98 52" />
+      <path d="M94 28 Q100 24 102 34 Q104 46 96 46" />
+      <path d="M104 40 Q112 44 110 54 Q108 62 100 60" />
+      <path d="M26 48 Q22 66 34 68" />
+      <path d="M88 52 Q90 66 78 68" />
+      <path d="M36 56 L34 72" />
+      <path d="M52 58 L52 72" />
+      <path d="M72 58 L72 72" />
+      <path d="M84 56 L86 72" />
+    </svg>
+  );
+}
 
 export default function FeaturesSection() {
   const sectionRef = useRef<HTMLElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const cardsRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -39,20 +105,20 @@ export default function FeaturesSection() {
         ease: "power3.out",
         scrollTrigger: {
           trigger: sectionRef.current,
-          start: "top 70%",
+          start: "top 75%",
           toggleActions: "play none none reverse",
         },
       });
 
-      gsap.from(cardsRef.current!.children, {
+      gsap.from(gridRef.current!.children, {
         y: 60,
         opacity: 0,
         duration: 0.8,
-        stagger: 0.2,
+        stagger: 0.18,
         ease: "power3.out",
         scrollTrigger: {
-          trigger: cardsRef.current,
-          start: "top 75%",
+          trigger: gridRef.current,
+          start: "top 78%",
           toggleActions: "play none none reverse",
         },
       });
@@ -63,43 +129,81 @@ export default function FeaturesSection() {
 
   return (
     <section
-      id="features"
+      id="what-we-do"
       ref={sectionRef}
-      className="min-h-screen px-4 py-20"
-      style={{
-        background: "linear-gradient(180deg, #012A28 0%, #013D39 50%, #012A28 100%)",
-      }}
+      className="relative px-4 py-28 sm:px-8 md:py-36"
+      style={{ backgroundColor: "var(--color-bg-raised)" }}
     >
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-7xl">
+        <p className="font-body mb-6 text-xs font-semibold uppercase tracking-[0.4em] text-primary">
+          § 01 What We Do
+        </p>
         <h2
           ref={headingRef}
-          className="font-heading mb-16 text-center text-3xl md:text-5xl"
-          style={{ color: "#F28D68" }}
+          className="font-heading max-w-4xl text-ink-primary"
+          style={{
+            fontSize: "clamp(2.5rem, 6.4vw, 5rem)",
+            lineHeight: 0.95,
+            letterSpacing: "-0.03em",
+          }}
         >
-          What We Do
+          Training. Mentorship.
+          <br />
+          Measurable impact.
         </h2>
 
         <div
-          ref={cardsRef}
-          className="grid gap-8 md:grid-cols-3"
+          ref={gridRef}
+          className="mt-16 grid grid-cols-1 gap-4 md:grid-cols-[1.6fr_1fr] md:grid-rows-2 md:gap-6"
         >
-          {features.map((feature) => (
-            <div
-              key={feature.title}
-              className="group rounded-xl border border-white/10 p-8 transition-colors hover:border-[#F28D68]/30"
-              style={{ backgroundColor: "rgba(1, 61, 57, 0.6)" }}
+          {BENTO.map((item, i) => (
+            <article
+              key={item.number}
+              className={[
+                "group relative overflow-hidden border border-[color:var(--color-rule)] p-8 transition-colors hover:border-primary/60 md:p-10",
+                item.wide ? "md:row-span-2" : "",
+              ].join(" ")}
+              style={{ backgroundColor: "rgba(1, 42, 40, 0.55)" }}
             >
-              <div className="mb-4 text-4xl">{feature.icon}</div>
-              <h3
-                className="font-heading mb-3 text-xl md:text-2xl"
-                style={{ color: "#F28D68" }}
-              >
-                {feature.title}
-              </h3>
-              <p className="font-body text-white/70 leading-relaxed">
-                {feature.description}
-              </p>
-            </div>
+              <div className="flex items-start justify-between gap-6">
+                <span
+                  className="font-heading text-primary"
+                  style={{
+                    fontSize: item.wide ? "clamp(4.5rem, 10vw, 9rem)" : "clamp(3rem, 6vw, 5rem)",
+                    lineHeight: 0.9,
+                    letterSpacing: "-0.04em",
+                  }}
+                >
+                  {item.number}
+                </span>
+                <span className="mt-3 font-body text-xs font-semibold uppercase tracking-[0.28em] text-ink-muted">
+                  0{i + 1} / 03
+                </span>
+              </div>
+
+              <div className={item.wide ? "mt-8 max-w-xl md:mt-12" : "mt-6"}>
+                <p className="font-body text-xs font-semibold uppercase tracking-[0.24em] text-primary">
+                  {item.label}
+                </p>
+                <h3
+                  className="mt-3 font-body text-ink-primary"
+                  style={{
+                    fontSize: item.wide ? "clamp(1.6rem, 2.4vw, 2.25rem)" : "1.35rem",
+                    lineHeight: 1.2,
+                    letterSpacing: "-0.01em",
+                  }}
+                >
+                  {item.title}
+                </h3>
+                <p className="mt-4 max-w-xl font-body text-base text-ink-secondary md:text-lg">
+                  {item.body}
+                </p>
+              </div>
+
+              <div className="mt-8 text-primary/70 transition-colors group-hover:text-primary">
+                <Icon name={item.icon} />
+              </div>
+            </article>
           ))}
         </div>
       </div>

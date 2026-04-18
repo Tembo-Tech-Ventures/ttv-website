@@ -1,81 +1,178 @@
 ---
 import BaseLayout from "./BaseLayout.astro";
+import Grain from "@/components/common/Grain.astro";
+import Elephant from "@/components/brand/Elephant.astro";
 
+/**
+ * Public marketing layout (PROPOSAL §2 / §7).
+ *
+ * Nav: drops "Home", promotes Blog/Apply, demotes Sign In to a ghost
+ * button. The branding mark switches to a tight sans "TTV" monogram
+ * paired with the elephant — Climate Crisis is reserved for 48px+
+ * per the typography role split (§A).
+ *
+ * Footer: expanded into mission + four link columns + legal row + an
+ * oversized "TEMBO" signature that bleeds off the page.
+ */
 interface Props {
   title?: string;
 }
 
 const { title } = Astro.props;
 const isAuthenticated = Boolean(Astro.locals.user);
+
+const NAV_LINKS = [
+  { label: "Programs", href: "/#what-we-do" },
+  { label: "Mentors", href: "/#why-tembo" },
+  { label: "Impact", href: "/#humans" },
+  { label: "Blog", href: "/blog" },
+];
+
+const FOOTER_GROUPS = [
+  {
+    heading: "Programs",
+    links: [
+      { label: "Apply", href: "/dashboard/apply" },
+      { label: "Curriculum", href: "/#what-we-do" },
+      { label: "Mentorship", href: "/#what-we-do" },
+    ],
+  },
+  {
+    heading: "Company",
+    links: [
+      { label: "Why Tembo", href: "/#why-tembo" },
+      { label: "Values", href: "/#values" },
+      { label: "Careers", href: "mailto:hello@tembotechventures.com?subject=Careers" },
+    ],
+  },
+  {
+    heading: "Read",
+    links: [
+      { label: "Blog", href: "/blog" },
+    ],
+  },
+  {
+    heading: "Connect",
+    links: [
+      { label: "Email", href: "mailto:hello@tembotechventures.com" },
+      { label: "LinkedIn", href: "https://www.linkedin.com/company/tembo-tech-ventures/" },
+      { label: "Sign in", href: "/auth/login" },
+    ],
+  },
+];
 ---
 
 <BaseLayout title={title}>
-  <div class="flex min-h-screen flex-col bg-gradient-to-br from-[#2C6964] to-[#013D39]">
-    <!-- Header -->
-    <header class="sticky top-0 z-50 border-b border-white/10 bg-[#012A28]/85 backdrop-blur">
+  <Grain />
+
+  <div class="relative z-[2] flex min-h-screen flex-col" style="background: radial-gradient(1200px 600px at 15% -10%, rgba(242,141,104,0.10), transparent 60%), linear-gradient(180deg, #013D39 0%, #012A28 100%);">
+    <!-- Top nav -->
+    <header class="sticky top-0 z-50 border-b border-[color:var(--color-rule)] bg-[#012A28]/80 backdrop-blur">
       <nav class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-        <a href="/" class="flex items-center gap-2">
-          <span class="font-heading text-xl text-primary">Tembo Tech Ventures</span>
+        <a href="/" class="group flex items-center gap-2 text-ink-primary" aria-label="Tembo Tech Ventures">
+          <Elephant size={32} strokeWidth={1.8} class="text-primary" />
+          <span class="font-body text-sm font-bold uppercase tracking-[0.28em] text-ink-primary transition-colors group-hover:text-primary">
+            TTV
+          </span>
         </a>
-        <div class="flex items-center gap-6">
-          <a href="/" class="text-sm font-medium text-white/80 transition-colors hover:text-white">
-            Home
-          </a>
-          <a href="/#why-tembo" class="text-sm font-medium text-white/80 transition-colors hover:text-white">
-            Why Tembo
-          </a>
-          <a href="/#features" class="text-sm font-medium text-white/80 transition-colors hover:text-white">
-            Programs
-          </a>
-          <a href="/#values" class="text-sm font-medium text-white/80 transition-colors hover:text-white">
-            Values
-          </a>
+
+        <div class="flex items-center gap-6 md:gap-8">
+          <div class="hidden items-center gap-6 md:flex">
+            {NAV_LINKS.map((link) => (
+              <a
+                href={link.href}
+                class="font-body text-sm font-medium uppercase tracking-[0.18em] text-ink-secondary transition-colors hover:text-ink-primary"
+              >
+                {link.label}
+              </a>
+            ))}
+          </div>
+
           {isAuthenticated ? (
             <a
               href="/dashboard"
-              class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark transition-colors hover:bg-primary/90"
+              class="font-body inline-flex items-center rounded-full bg-primary px-5 py-2 text-sm font-semibold uppercase tracking-[0.14em] text-dark transition-transform hover:scale-[1.03]"
             >
-              Open Dashboard
+              Dashboard
             </a>
           ) : (
-            <a
-              href="/auth/login"
-              class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark transition-colors hover:bg-primary/90"
-            >
-              Sign In
-            </a>
+            <div class="flex items-center gap-2">
+              <a
+                href="/auth/login"
+                class="font-body hidden text-sm font-medium uppercase tracking-[0.18em] text-ink-secondary transition-colors hover:text-ink-primary sm:inline-block"
+              >
+                Sign in
+              </a>
+              <a
+                href="/dashboard/apply"
+                class="font-body inline-flex items-center rounded-full bg-primary px-5 py-2 text-sm font-semibold uppercase tracking-[0.14em] text-dark transition-transform hover:scale-[1.03]"
+              >
+                Apply
+              </a>
+            </div>
           )}
         </div>
       </nav>
     </header>
 
-    <!-- Main content -->
     <main class="flex-1">
       <slot />
     </main>
 
-    <!-- Footer -->
-    <footer class="border-t border-teal/20">
-      <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div class="flex flex-col items-center justify-between gap-4 sm:flex-row">
-          <p class="text-sm text-white/60">
-            &copy; {new Date().getFullYear()} Tembo Tech Ventures. All rights reserved.
-          </p>
-          <div class="flex gap-6">
-            <a href="/#features" class="text-sm text-white/60 transition-colors hover:text-white">
-              Programs
-            </a>
-            {isAuthenticated ? (
-              <a href="/dashboard" class="text-sm text-white/60 transition-colors hover:text-white">
-                Dashboard
-              </a>
-            ) : (
-              <a href="/auth/login" class="text-sm text-white/60 transition-colors hover:text-white">
-                Sign In
-              </a>
-            )}
+    <footer class="relative mt-20 overflow-hidden border-t border-[color:var(--color-rule)] pt-16 md:pt-24">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="flex flex-col gap-12 md:flex-row md:justify-between">
+          <div class="max-w-sm space-y-5">
+            <p class="font-body text-xs font-semibold uppercase tracking-[0.32em] text-primary">
+              Tembo Tech Ventures
+            </p>
+            <p class="font-body text-lg text-ink-primary md:text-xl">
+              Bridging Africa&apos;s tech ambition and the delivery-ready
+              talent the industry still says it can&apos;t find.
+            </p>
+          </div>
+
+          <div class="grid grid-cols-2 gap-8 sm:grid-cols-4 md:gap-10">
+            {FOOTER_GROUPS.map((group) => (
+              <div class="space-y-4">
+                <p class="font-body text-xs font-semibold uppercase tracking-[0.24em] text-ink-muted">
+                  {group.heading}
+                </p>
+                <ul class="space-y-3">
+                  {group.links.map((link) => (
+                    <li>
+                      <a
+                        href={link.href}
+                        class="font-body text-[15px] text-ink-primary transition-colors hover:text-primary"
+                      >
+                        {link.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         </div>
+
+        <div class="mt-16 flex flex-col gap-3 border-t border-[color:var(--color-rule)] pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <p class="font-body text-sm text-ink-secondary">
+            &copy; {new Date().getFullYear()} Tembo Tech Ventures. All rights reserved.
+          </p>
+          <p class="font-body text-sm text-ink-muted">
+            Designed and built in-house.
+          </p>
+        </div>
+      </div>
+
+      {/* Oversized TEMBO signature — PROPOSAL §7. */}
+      <div aria-hidden="true" class="mt-10 select-none overflow-hidden text-center leading-[0.85]">
+        <span
+          class="font-heading block translate-y-[18%] whitespace-nowrap text-transparent"
+          style="font-size: clamp(6rem, 24vw, 22rem); letter-spacing: -0.04em; -webkit-text-stroke: 1px var(--color-primary);"
+        >
+          TEMBO
+        </span>
       </div>
     </footer>
   </div>

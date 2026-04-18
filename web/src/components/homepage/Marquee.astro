@@ -1,0 +1,50 @@
+---
+/**
+ * Horizontal marquee band (PROPOSAL §C.2).
+ *
+ * Single repeating band of outlined value words with a separator glyph.
+ * Pure CSS keyframes — pauses automatically under prefers-reduced-motion.
+ */
+const WORDS = ["EMPOWER", "IMPACT", "EQUITY", "COMMUNITY", "INNOVATION"];
+const loop = WORDS.join("  ·  ") + "  ·  ";
+const content = loop.repeat(2);
+---
+
+<section
+  aria-hidden="true"
+  class="relative overflow-hidden border-y border-[color:var(--color-rule)] py-10 md:py-14"
+>
+  <div class="marquee-track whitespace-nowrap">
+    <span class="marquee-text font-heading text-transparent">
+      {content}
+    </span>
+  </div>
+</section>
+
+<style>
+  .marquee-track {
+    display: flex;
+    width: max-content;
+    animation: marquee-scroll 45s linear infinite;
+  }
+
+  .marquee-text {
+    font-size: clamp(3rem, 10vw, 8rem);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    -webkit-text-stroke: 1px var(--color-primary);
+    padding: 0 0.5em;
+  }
+
+  @keyframes marquee-scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .marquee-track {
+      animation: none;
+      transform: translateX(-8%);
+    }
+  }
+</style>

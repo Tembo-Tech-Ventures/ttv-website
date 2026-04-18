@@ -3,14 +3,16 @@ import PublicLayout from "@/layouts/PublicLayout.astro";
 import HeroSection from "@/components/homepage/HeroSection";
 import ValueSection from "@/components/homepage/ValueSection";
 import FeaturesSection from "@/components/homepage/FeaturesSection";
+import Marquee from "@/components/homepage/Marquee.astro";
 import ValuesSection from "@/components/homepage/ValuesSection";
+import HumansSection from "@/components/homepage/HumansSection.astro";
 ---
 
 <PublicLayout title="Tembo Tech Ventures">
-  <main>
-    <HeroSection client:visible isAuthenticated={Boolean(Astro.locals.user)} />
-    <ValueSection client:visible />
-    <FeaturesSection client:visible />
-    <ValuesSection client:visible />
-  </main>
+  <HeroSection client:visible isAuthenticated={Boolean(Astro.locals.user)} />
+  <ValueSection client:visible />
+  <FeaturesSection client:visible />
+  <Marquee />
+  <ValuesSection client:visible />
+  <HumansSection />
 </PublicLayout>
