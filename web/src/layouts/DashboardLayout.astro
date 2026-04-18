@@ -1,0 +1,16 @@
+---
+import BaseLayout from "./BaseLayout.astro";
+import DashboardShell from "@/components/shells/DashboardShell";
+
+interface Props {
+  title?: string;
+}
+
+const { title = "Dashboard" } = Astro.props;
+---
+
+<BaseLayout title={`${title} | TTV`}>
+  <DashboardShell client:load>
+    <slot />
+  </DashboardShell>
+</BaseLayout>

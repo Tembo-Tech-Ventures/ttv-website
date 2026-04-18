@@ -1,0 +1,52 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import Card from "@/components/common/Card.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { count, eq } from "drizzle-orm";
+import { env } from "cloudflare:workers";
+
+const db = drizzle(env.DB, { schema });
+
+const [usersResult] = await db.select({ value: count() }).from(schema.user);
+const [programsResult] = await db.select({ value: count() }).from(schema.program);
+
+const statusCounts = await db
+  .select({ status: schema.programApplication.status, value: count() })
+  .from(schema.programApplication)
+  .groupBy(schema.programApplication.status);
+
+const totalApps = statusCounts.reduce((sum, r) => sum + r.value, 0);
+const byStatus = Object.fromEntries(statusCounts.map((r) => [r.status, r.value]));
+---
+
+<AdminLayout title="Dashboard">
+  <div class="space-y-6">
+    <h2 class="text-2xl font-bold text-white">Dashboard</h2>
+
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <Card>
+        <p class="text-sm text-white/60">Total Users</p>
+        <p class="mt-1 text-3xl font-bold text-primary">{usersResult.value}</p>
+      </Card>
+      <Card>
+        <p class="text-sm text-white/60">Total Applications</p>
+        <p class="mt-1 text-3xl font-bold text-primary">{totalApps}</p>
+      </Card>
+      <Card>
+        <p class="text-sm text-white/60">Total Programs</p>
+        <p class="mt-1 text-3xl font-bold text-primary">{programsResult.value}</p>
+      </Card>
+    </div>
+
+    <h3 class="text-lg font-semibold text-white">Applications by Status</h3>
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      {["PENDING", "APPROVED", "REJECTED", "AUDIT", "COMPLETED"].map((status) => (
+        <Card>
+          <p class="text-sm text-white/60 capitalize">{status.toLowerCase()}</p>
+          <p class="mt-1 text-2xl font-bold text-white">{byStatus[status] ?? 0}</p>
+        </Card>
+      ))}
+    </div>
+  </div>
+</AdminLayout>

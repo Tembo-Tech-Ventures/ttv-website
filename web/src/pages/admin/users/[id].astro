@@ -1,0 +1,177 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import Card from "@/components/common/Card.astro";
+import Badge from "@/components/common/Badge.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
+import { env } from "cloudflare:workers";
+
+const db = drizzle(env.DB, { schema });
+const { id } = Astro.params;
+
+if (!id) return Astro.redirect("/admin/users");
+
+// Handle POST — toggle ADMIN role
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  const action = formData.get("action") as string;
+
+  // Find or create the ADMIN role
+  let adminRole = await db.query.role.findFirst({
+    where: eq(schema.role.name, "ADMIN"),
+  });
+
+  if (!adminRole) {
+    const [created] = await db
+      .insert(schema.role)
+      .values({ name: "ADMIN" })
+      .returning();
+    adminRole = created;
+  }
+
+  if (action === "add-admin") {
+    // Check if already has role
+    const existing = await db.query.userRole.findFirst({
+      where: and(
+        eq(schema.userRole.userId, id),
+        eq(schema.userRole.roleId, adminRole.id)
+      ),
+    });
+    if (!existing) {
+      await db
+        .insert(schema.userRole)
+        .values({ userId: id, roleId: adminRole.id });
+    }
+  } else if (action === "remove-admin") {
+    await db
+      .delete(schema.userRole)
+      .where(
+        and(
+          eq(schema.userRole.userId, id),
+          eq(schema.userRole.roleId, adminRole.id)
+        )
+      );
+  }
+
+  return Astro.redirect(`/admin/users/${id}`);
+}
+
+const targetUser = await db.query.user.findFirst({
+  where: eq(schema.user.id, id),
+  with: {
+    userRoles: { with: { role: true } },
+    programApplications: { with: { program: true } },
+  },
+});
+
+if (!targetUser) return Astro.redirect("/admin/users");
+
+const isTargetAdmin = targetUser.userRoles.some((ur) => ur.role.name === "ADMIN");
+---
+
+<AdminLayout title={targetUser.name}>
+  <div class="space-y-6">
+    <a href="/admin/users" class="text-sm text-primary hover:underline">
+      &larr; Back to Users
+    </a>
+
+    <Card>
+      <div class="flex items-start gap-4">
+        {targetUser.image && (
+          <img
+            src={targetUser.image}
+            alt={targetUser.name}
+            class="h-16 w-16 rounded-full"
+          />
+        )}
+        <div>
+          <h2 class="text-2xl font-bold text-white">{targetUser.name}</h2>
+          <p class="text-white/60">{targetUser.email}</p>
+          <p class="mt-1 text-sm text-white/40">
+            Joined {targetUser.createdAt ? new Date(targetUser.createdAt).toLocaleDateString() : "—"}
+          </p>
+        </div>
+      </div>
+    </Card>
+
+    <Card>
+      <h3 class="mb-4 text-lg font-semibold text-white">Roles</h3>
+      <div class="flex items-center gap-4">
+        <div class="flex flex-wrap gap-2">
+          {targetUser.userRoles.length > 0
+            ? targetUser.userRoles.map((ur) => (
+                <span class="rounded-full bg-teal/30 px-3 py-1 text-sm text-white">
+                  {ur.role.name}
+                </span>
+              ))
+            : <span class="text-white/40">No roles assigned</span>}
+        </div>
+        <form method="POST">
+          {isTargetAdmin ? (
+            <>
+              <input type="hidden" name="action" value="remove-admin" />
+              <button
+                type="submit"
+                class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+              >
+                Remove Admin
+              </button>
+            </>
+          ) : (
+            <>
+              <input type="hidden" name="action" value="add-admin" />
+              <button
+                type="submit"
+                class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-dark hover:bg-primary/90"
+              >
+                Make Admin
+              </button>
+            </>
+          )}
+        </form>
+      </div>
+    </Card>
+
+    <Card>
+      <h3 class="mb-4 text-lg font-semibold text-white">Applications</h3>
+      {targetUser.programApplications.length > 0 ? (
+        <div class="overflow-x-auto rounded-lg border border-teal/20">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-teal/30 text-xs uppercase text-white/80">
+              <tr>
+                <th class="px-4 py-3 font-medium">Program</th>
+                <th class="px-4 py-3 font-medium">Status</th>
+                <th class="px-4 py-3 font-medium">Date</th>
+                <th class="px-4 py-3 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-teal/10">
+              {targetUser.programApplications.map((app) => (
+                <tr class="text-white/80 hover:bg-teal/10">
+                  <td class="px-4 py-3">{app.program?.name ?? "—"}</td>
+                  <td class="px-4 py-3">
+                    <Badge variant={app.status.toLowerCase() as any} />
+                  </td>
+                  <td class="px-4 py-3">
+                    {app.createdAt ? new Date(app.createdAt).toLocaleDateString() : "—"}
+                  </td>
+                  <td class="px-4 py-3">
+                    <a
+                      href={`/admin/applications/${app.id}`}
+                      class="text-primary hover:underline"
+                    >
+                      View
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p class="text-white/40">No applications</p>
+      )}
+    </Card>
+  </div>
+</AdminLayout>

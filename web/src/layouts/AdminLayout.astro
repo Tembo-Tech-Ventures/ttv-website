@@ -1,0 +1,16 @@
+---
+import BaseLayout from "./BaseLayout.astro";
+import AdminShell from "@/components/shells/AdminShell";
+
+interface Props {
+  title?: string;
+}
+
+const { title = "Admin" } = Astro.props;
+---
+
+<BaseLayout title={`${title} | TTV Admin`}>
+  <AdminShell client:load>
+    <slot />
+  </AdminShell>
+</BaseLayout>

@@ -1,0 +1,185 @@
+---
+import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import Badge from "@/components/common/Badge.astro";
+import Card from "@/components/common/Card.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { and, eq } from "drizzle-orm";
+import { env } from "cloudflare:workers";
+
+const user = Astro.locals.user!;
+const db = drizzle(env.DB, { schema });
+const { id } = Astro.params;
+
+let success = "";
+let error = "";
+
+// Fetch the application (must belong to this user)
+const application = await db.query.programApplication.findFirst({
+  where: and(
+    eq(schema.programApplication.id, id!),
+    eq(schema.programApplication.userId, user.id)
+  ),
+  with: { program: { with: { curriculum: true } } },
+});
+
+if (!application) {
+  return Astro.redirect("/dashboard");
+}
+
+// Handle POST — update application JSON
+if (Astro.request.method === "POST" && application.status === "PENDING") {
+  try {
+    const formData = await Astro.request.formData();
+    const applicationJson = formData.get("application") as string;
+
+    // Validate it's valid JSON
+    JSON.parse(applicationJson);
+
+    await db
+      .update(schema.programApplication)
+      .set({ application: applicationJson })
+      .where(
+        and(
+          eq(schema.programApplication.id, id!),
+          eq(schema.programApplication.userId, user.id)
+        )
+      );
+
+    success = "Application saved successfully!";
+
+    // Re-read updated data
+    const updated = await db.query.programApplication.findFirst({
+      where: eq(schema.programApplication.id, id!),
+      columns: { application: true },
+    });
+    if (updated) {
+      (application as any).application = updated.application;
+    }
+  } catch (e) {
+    error = e instanceof SyntaxError
+      ? "Invalid JSON format. Please check your input."
+      : "Something went wrong. Please try again.";
+  }
+}
+
+const isPending = application.status === "PENDING";
+let parsedApplication: Record<string, unknown> = {};
+try {
+  parsedApplication = JSON.parse(application.application);
+} catch {
+  parsedApplication = {};
+}
+---
+
+<DashboardLayout title="Application Details">
+  <div class="space-y-6">
+    <div class="flex items-center gap-4">
+      <a
+        href="/dashboard"
+        class="text-sm text-white/60 hover:text-white transition-colors"
+      >
+        &larr; Back to Dashboard
+      </a>
+    </div>
+
+    {success && (
+      <div class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-300">
+        {success}
+      </div>
+    )}
+
+    {error && (
+      <div class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
+        {error}
+      </div>
+    )}
+
+    <Card>
+      <div class="space-y-4">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h2 class="text-2xl font-bold text-white">
+              {application.program?.name ?? "Unknown Program"}
+            </h2>
+            {application.program?.curriculum && (
+              <p class="mt-1 text-white/60">
+                {application.program.curriculum.title}
+              </p>
+            )}
+          </div>
+          <Badge variant={application.status.toLowerCase() as any} />
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2 text-sm">
+          {application.program?.startDate && (
+            <div>
+              <span class="text-white/40">Start Date</span>
+              <p class="text-white">{application.program.startDate.toLocaleDateString()}</p>
+            </div>
+          )}
+          {application.program?.endDate && (
+            <div>
+              <span class="text-white/40">End Date</span>
+              <p class="text-white">{application.program.endDate.toLocaleDateString()}</p>
+            </div>
+          )}
+          <div>
+            <span class="text-white/40">Applied</span>
+            <p class="text-white">{application.createdAt.toLocaleDateString()}</p>
+          </div>
+          {application.completedAt && (
+            <div>
+              <span class="text-white/40">Completed</span>
+              <p class="text-white">{application.completedAt.toLocaleDateString()}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+
+    <Card>
+      <h3 class="mb-4 text-lg font-semibold text-white">Application Details</h3>
+
+      {isPending ? (
+        <form method="POST" class="space-y-4">
+          <div class="flex flex-col gap-1.5">
+            <label for="application" class="text-sm font-medium text-white/90">
+              Application Data (JSON)
+            </label>
+            <textarea
+              id="application"
+              name="application"
+              rows={10}
+              class="rounded-md border border-teal bg-dark/50 px-3 py-2 font-mono text-sm text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            >{JSON.stringify(parsedApplication, null, 2)}</textarea>
+            <p class="text-xs text-white/40">
+              Enter your application details as JSON.
+            </p>
+          </div>
+          <button
+            type="submit"
+            class="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 font-medium text-dark hover:bg-primary/90 transition-colors"
+          >
+            Save Application
+          </button>
+        </form>
+      ) : (
+        <div>
+          {Object.keys(parsedApplication).length > 0 ? (
+            <dl class="space-y-3">
+              {Object.entries(parsedApplication).map(([key, value]) => (
+                <div>
+                  <dt class="text-sm text-white/40">{key}</dt>
+                  <dd class="text-white">{String(value)}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <p class="text-white/40">No additional details submitted.</p>
+          )}
+        </div>
+      )}
+    </Card>
+  </div>
+</DashboardLayout>

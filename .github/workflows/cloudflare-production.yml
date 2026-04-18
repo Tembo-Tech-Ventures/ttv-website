@@ -1,0 +1,35 @@
+name: Cloudflare Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Whether to deploy or destroy production
+        required: true
+        type: choice
+        options:
+          - deploy
+          - destroy
+      allow_protected_destroy:
+        description: Override protected environment guard during destroy
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  production:
+    uses: ./.github/workflows/cloudflare-environment.yml
+    with:
+      action: ${{ inputs.action || 'deploy' }}
+      environment_name: production
+      github_environment: production
+      primary_domain: tembotechventures.com
+      redirect_domain: www.tembotechventures.com
+      better_auth_url: https://tembotechventures.com
+      workers_subdomain: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
+      protected_environments: production,prod
+      allow_protected_destroy: ${{ inputs.allow_protected_destroy || false }}
+    secrets: inherit

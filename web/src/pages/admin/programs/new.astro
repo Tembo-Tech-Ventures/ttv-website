@@ -1,0 +1,116 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import Card from "@/components/common/Card.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { env } from "cloudflare:workers";
+
+const db = drizzle(env.DB, { schema });
+
+// Handle POST — create program
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  const name = formData.get("name") as string;
+  const description = formData.get("description") as string;
+  const curriculumId = formData.get("curriculumId") as string;
+  const startDate = formData.get("startDate") as string;
+  const endDate = formData.get("endDate") as string;
+
+  const [created] = await db
+    .insert(schema.program)
+    .values({
+      name,
+      description,
+      curriculumId,
+      startDate: startDate ? new Date(startDate) : null,
+      endDate: endDate ? new Date(endDate) : null,
+    })
+    .returning();
+
+  return Astro.redirect(`/admin/programs/${created.id}`);
+}
+
+const curricula = await db.query.curriculum.findMany({
+  orderBy: (c, { asc }) => [asc(c.title)],
+});
+---
+
+<AdminLayout title="New Program">
+  <div class="space-y-6">
+    <a href="/admin/programs" class="text-sm text-primary hover:underline">
+      &larr; Back to Programs
+    </a>
+
+    <h2 class="text-2xl font-bold text-white">Create Program</h2>
+
+    <Card>
+      <form method="POST" class="space-y-4">
+        <div class="flex flex-col gap-1.5">
+          <label for="name" class="text-sm font-medium text-white/90">Name *</label>
+          <input
+            id="name"
+            name="name"
+            required
+            placeholder="Program name"
+            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+          />
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label for="description" class="text-sm font-medium text-white/90">Description *</label>
+          <textarea
+            id="description"
+            name="description"
+            required
+            rows="3"
+            placeholder="Program description"
+            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+          ></textarea>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label for="curriculumId" class="text-sm font-medium text-white/90">Curriculum *</label>
+          <select
+            id="curriculumId"
+            name="curriculumId"
+            required
+            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+          >
+            <option value="">Select curriculum…</option>
+            {curricula.map((c) => (
+              <option value={c.id}>{c.title}</option>
+            ))}
+          </select>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="flex flex-col gap-1.5">
+            <label for="startDate" class="text-sm font-medium text-white/90">Start Date</label>
+            <input
+              type="date"
+              id="startDate"
+              name="startDate"
+              class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label for="endDate" class="text-sm font-medium text-white/90">End Date</label>
+            <input
+              type="date"
+              id="endDate"
+              name="endDate"
+              class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
+        >
+          Create Program
+        </button>
+      </form>
+    </Card>
+  </div>
+</AdminLayout>

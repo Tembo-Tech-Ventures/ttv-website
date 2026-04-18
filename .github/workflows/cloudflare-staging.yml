@@ -1,0 +1,32 @@
+name: Cloudflare Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Whether to deploy or destroy staging
+        required: true
+        type: choice
+        options:
+          - deploy
+          - destroy
+      allow_protected_destroy:
+        description: Override protected environment guard during destroy
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  staging:
+    uses: ./.github/workflows/cloudflare-environment.yml
+    with:
+      action: ${{ inputs.action }}
+      environment_name: staging
+      github_environment: staging
+      primary_domain: staging.tembotechventures.com
+      redirect_domain: ${{ vars.STAGING_REDIRECT_DOMAIN }}
+      better_auth_url: ${{ vars.STAGING_BETTER_AUTH_URL }}
+      workers_subdomain: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
+      protected_environments: production,prod
+      allow_protected_destroy: ${{ inputs.allow_protected_destroy }}
+    secrets: inherit

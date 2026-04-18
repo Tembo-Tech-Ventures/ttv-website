@@ -1,0 +1,24 @@
+@import url("https://fonts.googleapis.com/css2?family=Climate+Crisis&family=Maven+Pro:wght@400;500;600;700&display=swap");
+@import "tailwindcss";
+
+/* TTV Theme */
+@theme {
+  --color-primary: #F28D68;
+  --color-dark: #013D39;
+  --color-teal: #2C6964;
+
+  --font-heading: "Climate Crisis", cursive;
+  --font-body: "Maven Pro", sans-serif;
+}
+
+/* Base styles */
+@layer base {
+  body {
+    font-family: var(--font-body);
+    color: white;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+  }
+}
