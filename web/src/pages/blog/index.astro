@@ -1,0 +1,53 @@
+---
+import PublicLayout from "@/layouts/PublicLayout.astro";
+
+/**
+ * Blog placeholder (PROPOSAL §8).
+ *
+ * The proposal calls out `/blog` as a broken Cloudflare route. The old
+ * Next.js stack had a full blog; the Astro rewrite hasn't re-implemented
+ * the CMS side yet. This page gives us a properly editorial-styled
+ * landing so the nav link stops 404-ing and the design system can be
+ * exercised against it until posts arrive.
+ */
+---
+
+<PublicLayout title="Field notes · Tembo Tech Ventures">
+  <section class="mx-auto max-w-4xl px-4 py-28 sm:px-8 md:py-36">
+    <p class="font-body text-xs font-semibold uppercase tracking-[0.4em] text-primary">
+      § Field notes
+    </p>
+
+    <h1
+      class="font-heading mt-6 text-ink-primary"
+      style="font-size: clamp(3rem, 9vw, 6rem); line-height: 0.95; letter-spacing: -0.03em;"
+    >
+      Notes from
+      <br />
+      the cohort.
+    </h1>
+
+    <p class="mt-8 max-w-2xl font-body text-lg text-ink-secondary md:text-xl">
+      Notes on how we&apos;re learning to build, from people in the cohort
+      and the engineers mentoring them. First posts land with Cohort 04.
+    </p>
+
+    <div
+      class="mt-16 border-y border-[color:var(--color-rule)] py-16 text-center"
+    >
+      <p class="font-body text-sm font-semibold uppercase tracking-[0.28em] text-primary">
+        Not yet
+      </p>
+      <p class="mt-4 font-body text-lg text-ink-secondary">
+        No posts up yet. Check back when Cohort 04 starts shipping, or{" "}
+        <a
+          href="mailto:hello@tembotechventures.com?subject=Notify%20me%20when%20the%20blog%20launches"
+          class="text-primary underline decoration-[color:var(--color-rule)] underline-offset-4 transition-colors hover:decoration-primary"
+        >
+          ask to be notified
+        </a>
+        .
+      </p>
+    </div>
+  </section>
+</PublicLayout>

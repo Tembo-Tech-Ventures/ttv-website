@@ -1,28 +1,88 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
+import Grain from "@/components/common/Grain.astro";
 import GitHubSignInButton from "@/components/auth/GitHubSignInButton";
 
-// Redirect to dashboard if already logged in
+/**
+ * Auth / Login — split-screen editorial.
+ *
+ * Left: brand voice + sign-in. Right: the mission line from the homepage,
+ * rendered as a large pull quote. The previous version had a fabricated
+ * student testimonial and a broken line-art elephant; both are gone.
+ */
+
 if (Astro.locals.user) {
   return Astro.redirect("/dashboard");
 }
 ---
 
-<BaseLayout title="Sign In - Tembo Tech Ventures">
-  <main class="flex min-h-screen flex-col items-center justify-center px-4">
-    <div class="w-full max-w-sm space-y-8">
-      <div class="text-center">
-        <h1 class="font-heading text-3xl text-primary">Tembo Tech Ventures</h1>
-        <p class="mt-3 text-white/70">Sign in to access your dashboard</p>
-      </div>
+<BaseLayout title="Sign In · Tembo Tech Ventures">
+  <Grain />
 
-      <div class="rounded-xl border border-teal/30 bg-dark/80 p-8 shadow-lg backdrop-blur">
-        <GitHubSignInButton client:load />
-      </div>
+  <main
+    class="relative z-[2] grid min-h-screen grid-cols-1 md:grid-cols-2"
+    style="background: radial-gradient(900px 500px at 20% 0%, rgba(242,141,104,0.10), transparent 60%), linear-gradient(180deg, #013D39 0%, #012A28 100%);"
+  >
+    <!-- Left: sign-in -->
+    <section class="relative flex items-center justify-center px-6 py-16 md:px-16">
+      <div class="w-full max-w-md">
+        <a href="/" class="inline-flex items-baseline text-ink-primary">
+          <span class="font-heading text-base" style="letter-spacing: -0.02em;">TEMBO</span>
+          <span class="ml-3 font-body text-[10px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
+            Tech · Ventures
+          </span>
+        </a>
 
-      <p class="text-center text-sm text-white/50">
-        By signing in, you agree to our terms of service.
-      </p>
-    </div>
+        <p class="font-body mt-12 text-xs font-semibold uppercase tracking-[0.4em] text-primary">
+          § Welcome back
+        </p>
+
+        <h1
+          class="font-heading mt-4 text-ink-primary"
+          style="font-size: clamp(2.5rem, 6vw, 4.5rem); line-height: 0.95; letter-spacing: -0.03em;"
+        >
+          Pick up where
+          <br />
+          you left off.
+        </h1>
+
+        <p class="font-body mt-6 text-lg text-ink-secondary">
+          Sign in and get back to building. Your cohort, applications, and
+          mentor notes are all waiting.
+        </p>
+
+        <div class="mt-10 space-y-4">
+          <GitHubSignInButton client:load />
+          <p class="font-body text-center text-xs text-ink-muted">
+            By signing in, you agree to our terms of service.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: mission pull quote -->
+    <aside
+      class="relative hidden items-center justify-center overflow-hidden border-l border-[color:var(--color-rule)] px-10 py-16 md:flex"
+      style="background-color: var(--color-bg-raised);"
+    >
+      <div class="relative max-w-lg space-y-10">
+        <p class="font-body text-xs font-semibold uppercase tracking-[0.4em] text-primary">
+          § The mission
+        </p>
+        <blockquote
+          class="font-heading text-ink-primary"
+          style="font-size: clamp(2rem, 3.2vw, 3.25rem); line-height: 1.05; letter-spacing: -0.02em;"
+        >
+          Talent is everywhere.
+          <span class="block">Opportunity is not.</span>
+          <span class="block text-primary">We close that gap on purpose.</span>
+        </blockquote>
+        <p class="font-body text-base text-ink-secondary md:text-lg">
+          A small community of engineers across Kenya and Nigeria, learning to
+          build real software together — and staying in touch long after the
+          cohort ends.
+        </p>
+      </div>
+    </aside>
   </main>
 </BaseLayout>
