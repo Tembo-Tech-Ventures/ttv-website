@@ -4,7 +4,7 @@ import Card from "@/components/common/Card.astro";
 import Badge from "@/components/common/Badge.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 
 const db = drizzle(env.DB, { schema });
@@ -165,6 +165,7 @@ const formatDate = (d: Date | null) =>
                       <button
                         type="submit"
                         class="text-red-400 hover:text-red-300"
+                        onclick="return confirm('Remove this staff member from the program?')"
                       >
                         Remove
                       </button>

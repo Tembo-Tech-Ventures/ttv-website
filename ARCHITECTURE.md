@@ -1,111 +1,104 @@
 # TTV Website Architecture
 
-This document describes the architecture, technology choices, and conventions used in the TTV Website project. It is intended for developers onboarding to the codebase or returning after time away.
+This document describes the architecture, technology choices, and conventions used in the TTV Website project.
 
 ## Overview
 
 TTV Website is a full-stack web application for **Tembo Tech Ventures**, a tech training platform. It supports:
 
-- **Public marketing pages** with animated hero sections
-- **Blogging system** with Markdown editor, image uploads, and RSS
-- **User authentication** via passwordless email login
+- **Public marketing pages** with animated hero sections and GSAP animations
+- **User authentication** via GitHub OAuth (better-auth)
 - **Student application workflow** with dynamic forms and status tracking
-- **Admin dashboards** for managing users, applications, programs, and blog posts
+- **Admin dashboards** for managing users, applications, and programs
 - **Certificate generation** for completed programs
-- **File uploads** to S3-compatible storage
+- **Blog** (placeholder — CMS not yet re-implemented)
 
-The entire application lives inside the `web/` directory as a single Next.js project.
+The entire application lives inside the `web/` directory as a single Astro project deployed to Cloudflare Workers.
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | Next.js 14 (App Router) |
-| Language | TypeScript 5.2 |
-| UI Components | Material-UI (MUI) 5 |
-| CSS-in-JS | Emotion (via MUI), styled-components |
+| Framework | Astro 6 (SSR, Cloudflare adapter) |
+| Language | TypeScript 5 |
+| UI Islands | React 18 (for interactive components) |
+| CSS | Tailwind CSS 4 (Vite plugin) |
 | Animations | GSAP + ScrollTrigger |
-| Database | PostgreSQL 16 |
-| ORM | Prisma 5 |
-| Mutations | Next.js Server Actions |
-| Authentication | NextAuth 4 (email provider, passwordless) |
-| File Storage | S3-compatible (Tigris in prod, S3Mock in dev) |
-| State Management | Jotai (atoms for form state) |
-| Data Fetching | SWR |
-| Validation | Zod |
-| Analytics | RudderStack |
-| Email | Nodemailer (Mailhog in dev) |
-| Testing | Jest + Testing Library |
-| Deployment | Vercel |
+| Database | SQLite via Cloudflare D1 |
+| ORM | Drizzle ORM |
+| Authentication | better-auth (GitHub OAuth) |
+| File Storage | Cloudflare R2 |
+| Icons | Phosphor Icons, react-icons |
+| ID Generation | CUID2 |
+| Deployment | Cloudflare Workers |
+| CI/CD | GitHub Actions |
 
 ## Directory Structure
 
 ```
 ttv-website/
-├── web/                          # The Next.js application
+├── web/                          # The Astro application
 │   ├── src/
-│   │   ├── app/                  # App Router (pages, layouts, API routes)
-│   │   │   ├── (admin)/          # Admin dashboard (route group)
-│   │   │   ├── (dashboard)/      # User dashboard (route group)
-│   │   │   ├── (public)/         # Public pages (route group)
-│   │   │   ├── (certificate)/    # Certificate display
-│   │   │   ├── auth/             # Login, register, verify, logout
-│   │   │   ├── blog/             # Public blog index + posts + RSS
-│   │   │   ├── actions/           # Server actions (mutations)
+│   │   ├── pages/                # File-based routing (Astro pages)
+│   │   │   ├── admin/            # Admin dashboard pages
+│   │   │   ├── auth/             # Login, logout
+│   │   │   ├── blog/             # Blog (placeholder)
+│   │   │   ├── certificate/      # Certificate display
+│   │   │   ├── dashboard/        # User dashboard pages
 │   │   │   ├── api/              # API routes
-│   │   │   │   └── auth/         # NextAuth handler
-│   │   ├── components/           # Shared UI components (Card, Link)
-│   │   ├── modules/              # Feature modules (see below)
-│   │   ├── providers/            # React context providers (RootProvider)
-│   │   ├── types/                # Shared TypeScript types (MUI theme extensions)
-│   │   ├── assets/               # Static assets (elephant logo)
-│   │   └── __mocks__/            # Jest mocks (NextAuth, PrismaAdapter)
-│   ├── prisma/
-│   │   ├── schema.prisma         # Database schema
-│   │   ├── seed.ts               # Seed script
-│   │   └── migrations/           # Migration history (16 migrations)
-│   ├── public/                   # Static files served by Next.js
-│   ├── docs/                     # Feature documentation
-│   └── compose.yaml              # Docker services for dev
-├── .github/workflows/            # CI/CD (lint + test on push/PR to main)
-├── .devcontainer/                # GitHub Codespaces / devcontainer config
-└── .vscode/                      # Editor settings
+│   │   │   │   ├── auth/         # better-auth handler
+│   │   │   │   └── admin/        # Admin API (data import)
+│   │   │   └── index.astro       # Homepage
+│   │   ├── layouts/              # Astro layouts
+│   │   │   ├── BaseLayout.astro  # Root HTML shell
+│   │   │   ├── PublicLayout.astro # Marketing pages (nav + footer)
+│   │   │   ├── AdminLayout.astro  # Admin pages (sidebar shell)
+│   │   │   ├── DashboardLayout.astro # User dashboard (sidebar shell)
+│   │   │   └── CertificateLayout.astro # Minimal layout
+│   │   ├── components/           # Reusable components
+│   │   │   ├── auth/             # Auth components (GitHubSignInButton)
+│   │   │   ├── common/           # Shared UI (Button, Input, Table, Card, Badge, Sidebar)
+│   │   │   ├── homepage/         # Homepage sections (Hero, Features, Values, etc.)
+│   │   │   └── shells/           # Layout shells (AdminShell, DashboardShell)
+│   │   ├── lib/                  # Core libraries
+│   │   │   ├── auth.ts           # better-auth server config
+│   │   │   ├── auth-client.ts    # better-auth client helpers
+│   │   │   └── db/
+│   │   │       ├── schema.ts     # Drizzle schema (all models)
+│   │   │       └── migrations/   # D1 migration SQL files
+│   │   ├── styles/
+│   │   │   └── global.css        # Tailwind config + theme
+│   │   ├── middleware.ts         # Auth middleware (session + route guards)
+│   │   └── env.d.ts              # TypeScript declarations
+│   ├── scripts/
+│   │   ├── cloudflare/           # Deploy/destroy scripts
+│   │   └── import-data.mjs       # Data migration from old Prisma stack
+│   ├── astro.config.mjs          # Astro configuration
+│   ├── drizzle.config.ts         # Drizzle ORM config
+│   ├── wrangler.jsonc            # Cloudflare Workers config
+│   └── package.json
+├── .github/workflows/            # CI/CD workflows
+├── .claude/                      # Claude Code skills and settings
+└── .devcontainer/                # GitHub Codespaces config
 ```
-
-## Modules (`src/modules/`)
-
-The project organizes business logic into feature modules under `src/modules/`. Each module contains a combination of `lib/` (server-side logic, data access), `components/` (React components), and `hooks/` (client-side hooks).
-
-| Module | Purpose | Key Exports |
-|--------|---------|-------------|
-| `analytics/` | RudderStack page tracking and user identification | `PageTracker`, `Identifier`, `useAnalytics` |
-| `auth/` | Session helpers, email login form, redirect hook | `getServerSession`, `getAccess`, `EmailLoginForm`, `useLoginRedirect` |
-| `blog/` | CRUD for blog posts, image upload, RSS generation | `createPost`, `getPosts`, `getPost`, `updatePost`, `deletePost`, `uploadImage`, `generateRss` |
-| `gsap/` | GSAP ScrollTrigger plugin initialization | `ScrollTriggerInit` |
-| `mui/` | MUI theme definition, fonts, and ThemeProvider | `theme`, `MuiProvider`, color constants |
-| `prisma/` | Prisma client singleton (avoids connection pool issues in dev) | `prisma` |
-| `roles/` | Admin/educator role checks and assignment | `isAdmin`, `checkAdminPermissions`, `enableAdmin`, `ROLES` |
-| `s3/` | S3 client configuration (Tigris in prod, S3Mock in dev) | `s3Client` |
 
 ## Routing
 
-The project uses Next.js App Router with **route groups** (parenthesized folders) to apply different layouts without affecting URL paths.
+Astro uses file-based routing in `src/pages/`. Layouts provide shared UI shells.
 
 ### Layout Hierarchy
 
 ```
-Root Layout (SessionProvider + MUI ThemeProvider + Analytics)
-├── (public)  → Dark gradient background, Footer, GSAP ScrollTrigger
-│   └── (home)/page.tsx  →  /  (animated hero, values, features)
-├── (admin)   → Admin sidebar drawer, login redirect, admin auth check
-│   └── admin/*  (user mgmt, application review, programs, blog)
-├── (dashboard) → User sidebar drawer, login redirect, auth check
-│   └── dashboard/*  (apply, applications, profile, curriculum)
-├── (certificate) → Minimal layout (no nav, no footer)
-│   └── certificate/[application-id]
-├── auth/*    → Dark gradient, no footer (login, register, verify, logout)
-├── blog/*    → Public blog (index, [slug], rss.xml)
-└── api/*     → API endpoints (no layout)
+BaseLayout (HTML shell, global CSS, meta tags)
+├── PublicLayout  → Nav bar, footer, grain overlay, gradient background
+│   └── index.astro  →  /  (animated hero, features, values, cohort)
+├── AdminLayout   → AdminShell (React island with sidebar)
+│   └── admin/*  (users, applications, programs, data-migration)
+├── DashboardLayout → DashboardShell (React island with sidebar)
+│   └── dashboard/*  (apply, applications, profile)
+├── CertificateLayout → Minimal (no nav, no footer)
+│   └── certificate/[id].astro
+├── (no layout) → auth/*, blog/*, api/*
 ```
 
 ### Key Routes
@@ -113,264 +106,138 @@ Root Layout (SessionProvider + MUI ThemeProvider + Analytics)
 | Path | Purpose | Auth |
 |------|---------|------|
 | `/` | Public homepage with animated sections | None |
-| `/blog` | Blog index listing all posts | None |
-| `/blog/[slug]` | Individual blog post rendered from Markdown | None |
-| `/blog/rss.xml` | RSS feed | None |
-| `/auth/login` | Email login (redirects to dashboard if authenticated) | None |
-| `/auth/register` | Registration (same form as login) | None |
-| `/auth/verify-request` | "Check your email" confirmation page | None |
-| `/auth/logout` | Calls `signOut()` and redirects to `/` | Session |
-| `/dashboard` | User dashboard home (redirects to apply if no applications) | Session |
+| `/blog` | Blog placeholder | None |
+| `/auth/login` | GitHub OAuth sign-in | None |
+| `/auth/logout` | Sign out | Session |
+| `/dashboard` | User dashboard home | Session |
 | `/dashboard/apply` | Program application form | Session |
 | `/dashboard/application/[id]` | View/edit own application | Session |
-| `/dashboard/profile` | User profile editing | Session |
-| `/dashboard/curriculum` | Curriculum content | Session |
-| `/dashboard/content` | Content library | Session |
+| `/dashboard/profile` | User profile | Session |
 | `/admin` | Admin dashboard home | ADMIN |
-| `/admin/user` | User management table | ADMIN |
-| `/admin/user/[user-id]` | Individual user detail (roles, applications) | ADMIN |
-| `/admin/application` | Application review table | ADMIN |
-| `/admin/application/[id]` | Review application detail, change status | ADMIN |
-| `/admin/program` | Program management table | ADMIN |
-| `/admin/program/[id]` | Program detail, assign instructors/TAs | ADMIN |
-| `/admin/blog` | Blog post management table | ADMIN |
-| `/admin/blog/new` | Create blog post with Markdown editor | ADMIN |
-| `/admin/blog/[slug]/edit` | Edit existing blog post | ADMIN |
-| `/admin/enable-admin` | Dev utility: grant ADMIN role to self | Session |
-| `/certificate/[id]` | Certificate display (requires COMPLETED status) | None |
-
-## Server Actions
-
-All mutations use **Next.js Server Actions** defined in `src/app/actions/`. Each file is marked `"use server"` and exports async functions that can be called directly from client components.
-
-### Action Files
-
-| File | Actions | Auth | Purpose |
-|------|---------|------|---------|
-| `actions/program-application.ts` | `createProgramApplication`, `updateProgramApplication`, `adminUpdateProgramApplication` | User / Admin | Application CRUD |
-| `actions/program-role.ts` | `assignProgramRole`, `deleteProgramRole` | Admin | Instructor/TA assignment |
-| `actions/user.ts` | `updateUserProfile`, `adminUpdateUser` | User / Admin | Profile management |
-| `actions/file.ts` | `getFileUploadUrl`, `deleteFile` | User | S3 file operations |
-
-### Server Action Patterns
-
-- **Auth**: `getServerSession()` retrieves the current user. Throws if no session.
-- **Admin guards**: `checkAdminPermissions()` throws if user lacks ADMIN role.
-- **Cache revalidation**: Actions call `revalidatePath()` after mutations to refresh Next.js cache.
-- **Frontend usage**: Client components call server actions directly via import, often wrapped in `useSWRMutation` for loading state.
+| `/admin/users` | User management | ADMIN |
+| `/admin/users/[id]` | User detail (roles) | ADMIN |
+| `/admin/applications` | Application review | ADMIN |
+| `/admin/applications/[id]` | Application detail, status changes | ADMIN |
+| `/admin/programs` | Program management | ADMIN |
+| `/admin/programs/[id]` | Program detail, role assignments | ADMIN |
+| `/admin/programs/new` | Create program | ADMIN |
+| `/admin/data-migration` | Import data from old stack | ADMIN |
+| `/certificate/[id]` | Certificate display | None |
+| `/api/auth/[...all]` | better-auth API handler | N/A |
+| `/api/admin/import` | Data import API | ADMIN |
 
 ## Database
 
-PostgreSQL with Prisma ORM. The schema lives at `web/prisma/schema.prisma`.
+SQLite via Cloudflare D1, managed with Drizzle ORM. Schema at `web/src/lib/db/schema.ts`.
 
 ### Core Models
 
-**Authentication (NextAuth)**
-- `User` — email, name, image, emailVerified
-- `Account` — OAuth provider linking (cascade deletes with User)
-- `Session` — database-backed sessions (cascade deletes with User)
-- `VerificationToken` — email magic link tokens
+**Authentication (better-auth)**
+- `user` — id, name, email, emailVerified, image
+- `account` — OAuth provider linking (cascade deletes with User)
+- `session` — database-backed sessions (cascade deletes with User)
+- `verification` — email verification tokens
 
 **Authorization**
-- `Role` — role definitions (ADMIN, EDUCATOR; name is unique)
-- `UserRole` — many-to-many user-role assignments (cascade deletes)
+- `Roles` — role definitions (ADMIN, EDUCATOR)
+- `UserRoles` — many-to-many user-role assignments
 
 **Programs & Curriculum**
-- `Curriculum` — training curriculum (title, description)
-- `Program` — training program with dates, linked to a Curriculum
-- `ProgramRole` — instructor/TA assignments (enum: INSTRUCTOR, TA)
-- `ProgramPartner` — partner organizations
+- `curriculum` — training curriculum (title, description)
+- `program` — training program with dates, linked to Curriculum
+- `programRole` — instructor/TA assignments (enum: INSTRUCTOR, TA)
+- `programPartner` — partner organizations
 
 **Applications**
-- `ProgramApplication` — student applications
+- `programApplication` — student applications
   - `status`: PENDING → APPROVED/REJECTED/AUDIT → COMPLETED
-  - `application`: JSON blob storing dynamic form responses
+  - `application`: JSON text storing form responses
   - `completedAt`: set when status becomes COMPLETED
 
-**Content**
-- `BlogPost` — title, slug (unique), markdown content, authorId
-- `File` — uploaded file metadata (name, type, size, path, ownerId)
+**Files**
+- `file` — uploaded file metadata (name, type, size, path, ownerId)
 
-### Migrations
+### Conventions
 
-There are 16 migrations in `prisma/migrations/`. Migrations auto-run on `npm run dev` and during build (`npm run build` calls `migrate:deploy`). The build migration script has a fallback that skips if the database is unreachable.
+- All tables use CUID2 for primary keys (via `cuid()` helper)
+- Timestamps use `integer({ mode: "timestamp" })` with `unixepoch()` default
+- Relations defined with `relations()` from drizzle-orm
+- Cascade deletes on auth-related tables (account, session, userRole)
 
 ## Authentication
 
-NextAuth 4 with **email-only passwordless** login:
+GitHub OAuth via **better-auth**:
 
-1. User enters email at `/auth/login`
-2. NextAuth sends a magic link via SMTP (10-minute expiry)
-3. User clicks the link to authenticate
-4. Session is created in the database via PrismaAdapter
-5. Session callback enriches the session with the full user object (including `id` and `emailVerified`)
+1. User clicks "Sign in with GitHub" on `/auth/login`
+2. better-auth handles OAuth flow via `/api/auth/[...all]`
+3. Session created in D1 with 5-minute cookie cache
+4. Middleware attaches `locals.user` and `locals.session` on every request
 
-**Auth utilities:**
-- `getServerSession()` — server-side session retrieval with typed `CustomSession` (includes `user.id`, `user.emailVerified`)
-- `getAccess()` — currently a stub returning `{ role: "user", content: null }` (used by layouts)
-- `checkAdminPermissions()` — queries UserRole table, throws if user lacks ADMIN role
-- `isAdmin()` — boolean version of admin check (returns true/false)
-- `enableAdmin()` — idempotent function to grant ADMIN role to current user (dev utility)
-- `useLoginRedirect()` — client hook that redirects unauthenticated users to `/auth/login`
-
-**No middleware.ts** — auth guards are implemented at the layout and page level, not via Next.js middleware.
-
-## Features
-
-### Homepage
-
-The public homepage at `/` is a client component with four animated sections:
-- **Header** — elephant logo with GSAP ScrollTrigger animations on title text
-- **Value** — animated gradient border with fade-in text
-- **Features** — "What We Do" cards (Training, Mentorship, Impact) in responsive grid
-- **Our Values** — core values with animated heart icon (Empowerment, Impact, Equity, Community, Innovation)
-
-### Blogging
-
-Admin users create/edit posts at `/admin/blog` using a Markdown editor (`@uiw/react-md-editor`). Posts are stored in PostgreSQL with the `BlogPost` model. Images are uploaded to S3 and resized to 1200px width via Sharp. The public blog at `/blog` renders markdown with `react-markdown` using custom styled components for headings, paragraphs, code blocks, and blockquotes. RSS feed at `/blog/rss.xml`. See `web/docs/blogging.md` for details.
-
-### Program Applications
-
-Students apply to programs through a dynamic form at `/dashboard/apply`. The form supports text, textarea, boolean, number, and date fields. Applications are stored as JSON blobs in `ProgramApplication.application`. Admins review at `/admin/application` and transition status through the workflow: PENDING → APPROVED/REJECTED/AUDIT → COMPLETED.
-
-### Certificates
-
-When an application status is set to COMPLETED (with a `completedAt` date), a certificate is viewable at `/certificate/[application-id]`. The certificate displays:
-- Student name
-- Curriculum title
-- Certificate ID (application ID)
-- Issue date (formatted as "MMMM DD, YYYY")
-- Instructor name (from ProgramRole where role = INSTRUCTOR)
-
-### Curriculum & Content
-
-Curriculum and content are managed within the application.
-
-### File Uploads
-
-Files are uploaded via signed S3 URLs. The client requests a signed URL from `/api/file`, then uploads directly to S3. File metadata (name, type, size, path) is stored in Prisma. Max file size: 2MB.
-
-### Analytics
-
-RudderStack integration for tracking:
-- **Page views** — `PageTracker` component in root layout tracks route changes
-- **User identification** — `Identifier` component identifies authenticated users
-- **Client-side** — `useAnalytics()` hook lazily loads the RudderStack JS SDK
-- **Server-side** — `server-analytics.ts` initializes the Node SDK
+**Auth flow in middleware (`src/middleware.ts`):**
+- Every request: resolve session from cookies via better-auth
+- `/dashboard/*`: redirect to `/auth/login` if no session
+- `/admin/*`: redirect to `/auth/login` if no session, redirect to `/dashboard` if no ADMIN role
 
 ## Styling
 
-- **MUI Theme**: Custom dark mode theme with orange primary (#F28D68), dark teal background (#013D39), and lighter teal secondary (#2C6964)
-- **Typography**: Climate Crisis font for headings (h1-h6), Maven Pro for body text
-- **Component Styling**: MUI `sx` prop for most styling, styled-components for custom elements
-- **Shadows**: Custom `getShadow(size)` utility for sm/md/lg shadow variants
-- **Theme Overrides**: MuiToolbar and MuiDrawer backgrounds set to dark teal
-- **Animations**: GSAP ScrollTrigger on public homepage sections
+- **Tailwind CSS 4**: Custom theme defined in `src/styles/global.css` using `@theme` directive
+- **Color tokens**: `--color-primary` (#F28D68), `--color-dark` (#013D39), `--color-teal` (#2C6964), `--color-bg-raised`, `--color-ink-primary`, `--color-ink-secondary`, `--color-ink-muted`, `--color-rule`
+- **Typography**: Climate Crisis for h1/h2, Maven Pro for body and h3-h6
+- **Animations**: GSAP ScrollTrigger on homepage sections, CSS-only marquee, reveal utility class
+- **Grain overlay**: SVG noise texture via `Grain.astro` component
 
-## Development Setup
+## Deployment
 
-### Prerequisites
+### Cloudflare Workers via GitHub Actions
 
-- Node.js 20+
-- Docker (for local PostgreSQL, Mailhog, S3Mock)
+- **Production**: Auto-deploys on push to `main` → `tembotechventures.com`
+- **Staging**: Auto-deploys on PR → `staging.tembotechventures.com`
+- **Manual**: Workflow dispatch for arbitrary environments
 
-### Getting Started
+### Deployment scripts (`scripts/cloudflare/`)
 
-```bash
-cd web
-docker compose up -d          # Start PostgreSQL, Mailhog, S3Mock
-npm install                   # Install dependencies (runs prisma generate)
-npm run dev                   # Run migrations + start dev server (port 3000)
-```
+- `deploy.mjs` — Creates D1 database, R2 bucket, applies migrations, deploys Worker, configures domain
+- `destroy.mjs` — Tears down environment (protected against production)
+- `lib.mjs` — Shared Cloudflare API utilities
 
-### Local Services (via Docker Compose)
-
-| Service | Port | Purpose |
-|---------|------|---------|
-| PostgreSQL 16 | 5432 | Database |
-| Mailhog | 8025 (UI), 1025 (SMTP) | Email testing (view magic links here) |
-| S3Mock (Adobe) | 9090 | S3-compatible file storage with `ttv-application-files` bucket |
-
-### Environment Variables
-
-Development defaults are configured in `web/.env`. Key variables:
-
-| Variable | Purpose |
-|----------|---------|
-| `POSTGRES_PRISMA_URL` | PostgreSQL connection string |
-| `EMAIL_SERVER` | SMTP connection string (Mailhog in dev) |
-| `EMAIL_FROM` | Sender email address |
-| `NEXTAUTH_URL` | Application URL (auto-configured for Codespaces) |
-| `S3_ENDPOINT` | S3-compatible storage endpoint |
-| `ACCESS_KEY_ID` / `SECRET_ACCESS_KEY` | S3 credentials |
-
-Production additionally needs: `NEXTAUTH_SECRET`, `S3_REGION`, `S3_BUCKET`, `S3_PUBLIC_BASE_URL`, `SITE_URL`.
-
-### Admin Access in Dev
-
-Visit `/admin/enable-admin` while logged in to grant yourself the ADMIN role. This route is a dev utility and should be disabled or removed in production.
-
-### Running Tests
+### Local Development
 
 ```bash
 cd web
-npm test                      # Run Jest tests
-npm run lint                  # ESLint check
-npm run lint-fix              # ESLint auto-fix
+npm install
+npm run dev          # Starts Astro dev server with local D1
 ```
 
-### CI/CD
-
-GitHub Actions workflow at `.github/workflows/ci.yml` runs on push to main and on pull requests:
-1. Install dependencies (`npm ci`)
-2. Run linting (`npm run lint`)
-3. Run tests (`npm test`)
+No Docker needed. Wrangler handles local D1 database emulation.
 
 ## Working on This Project
 
 ### Adding a New Page
 
-1. Create a directory under the appropriate route group in `src/app/`:
-   - `(public)` for public pages (gets footer and GSAP)
-   - `(dashboard)` for authenticated user pages (gets sidebar, requires login)
-   - `(admin)` for admin pages (gets admin sidebar, requires ADMIN role)
-2. Add a `page.tsx` file with a default export React component
-3. Auth is handled by parent layouts — no need to add auth checks to individual pages
-4. For admin pages, add `await checkAdminPermissions()` at the top of the page component for extra safety
-
-### Adding a New API Endpoint
-
-1. Create a new handler file under `src/app/api/v1/[[...route]]/`
-2. Define a Hono router with your routes and Zod validation schemas
-3. Register the handler in the main `route.ts` with `.route("/path", handler)`
-4. Use `getServerSession()` for auth and `checkAdminPermissions()` for admin-only routes
-5. The `AppType` export automatically provides type safety to the frontend API client
+1. Create `src/pages/<path>.astro` (or `src/pages/<path>/index.astro`)
+2. Import and wrap with the appropriate layout (`PublicLayout`, `DashboardLayout`, `AdminLayout`)
+3. Auth is handled by middleware — no need for per-page auth checks
+4. Access database via `drizzle(env.DB, { schema })`
+5. Use Astro components by default; React islands only for interactivity
 
 ### Adding a Database Model
 
-1. Edit `prisma/schema.prisma` to add your model
-2. Run `npx prisma migrate dev --name describe-change` to create a migration
-3. The Prisma client is auto-regenerated and available via `@/modules/prisma/lib/prisma-client`
+1. Edit `src/lib/db/schema.ts`
+2. Run `cd web && npm run db:generate` to create migration
+3. Run `cd web && npm run db:migrate:local` to apply locally
+4. Migrations auto-apply on deploy via `scripts/cloudflare/deploy.mjs`
 
-### Adding a New Module
+### Adding an API Endpoint
 
-1. Create directory at `src/modules/<feature-name>/`
-2. Add `lib/` for server-side logic (each function in its own directory with `index.ts` barrel export)
-3. Add `components/` for React components
-4. Add `hooks/` for client-side hooks
-5. Add `constants.ts` for shared constants
-
-### Adding a Blog Post
-
-Use the admin interface at `/admin/blog/new`. See `web/docs/blogging.md` for details on the blogging system.
+1. Create `src/pages/api/<path>.ts`
+2. Export HTTP method handlers (`GET`, `POST`, etc.) as `APIRoute`
+3. Auth via `createAuth(env).api.getSession({ headers: request.headers })`
+4. Database via `drizzle(env.DB, { schema })`
 
 ### Conventions
 
-- **Module Organization**: Group related logic in `src/modules/<feature>/lib/<function-name>/` with an `index.ts` barrel export
-- **Server Components by Default**: Pages and layouts are server components; add `"use client"` only when the component needs browser APIs, event handlers, or React hooks
-- **Validation**: Use Zod schemas for all API input validation
-- **Path Alias**: Use `@/` to reference `src/` (e.g., `@/modules/auth/lib/get-server-session`)
-- **Formatting**: Prettier with default config; ESLint with Next.js core-web-vitals rules
-- **Imports**: Prefer `@/` path aliases over relative imports for cross-module references
-- **Testing**: Colocate tests with source files as `*.test.ts` or `*.test.tsx`
-- **Cascade Deletes**: Most models cascade delete with their parent (User, Program, etc.)
+- **Astro first**: Use `.astro` for pages and static components. React `.tsx` only for interactivity.
+- **`client:visible`** for below-fold interactive content, **`client:load`** for above-fold
+- **Path alias**: `@/` for `src/` in imports
+- **Common components**: Use `Button`, `Input`, `Table`, `Card`, `Badge`, `Sidebar` from `src/components/common/`
+- **Theme colors**: Use Tailwind classes (`text-primary`, `bg-dark`, `text-ink-primary`, etc.)

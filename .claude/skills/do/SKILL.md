@@ -18,7 +18,7 @@ Solve `$ARGUMENTS` end-to-end. Follow every phase below in order. Commit and pus
 
 1. Search the codebase for all files, modules, and patterns relevant to the problem.
 2. Read the relevant source files to understand current behaviour.
-3. Check related tests, types, and database schema as needed.
+3. Check related tests, types, and database schema (`web/src/lib/db/schema.ts`) as needed.
 4. If external context is needed (docs, APIs), fetch it.
 
 ## Phase 3: Document the Research
@@ -27,7 +27,7 @@ Solve `$ARGUMENTS` end-to-end. Follow every phase below in order. Commit and pus
 
 ## Phase 4: Develop a Plan
 
-1. Design a solution that follows existing project conventions (see CLAUDE.md and ARCHITECTURE.md).
+1. Design a solution that follows existing project conventions (see CLAUDE.md).
 2. List the files that will be created, modified, or deleted.
 3. Note any migrations, environment variable changes, or dependency additions required.
 
@@ -60,9 +60,9 @@ Skip this phase if the change is purely backend (no components, pages, or styles
    npx playwright install chromium
    ```
 3. If `web/playwright.config.ts` does not exist, create it with:
-   - `webServer` pointing to `npm run dev` on port 3000
+   - `webServer` pointing to `npm run preview` on port 4321
    - `testDir` set to `e2e`
-   - Three projects: `desktop-chrome` (viewport 1280×720), `mobile-portrait` (viewport 375×812), and `mobile-landscape` (viewport 812×375)
+   - Three projects: `desktop-chrome` (viewport 1280x720), `mobile-portrait` (viewport 375x812), and `mobile-landscape` (viewport 812x375)
    - `use.screenshot: "on"` to capture screenshots on every test
    - `outputDir` set to `e2e/results`
    - Add `e2e/results/` to `.gitignore` if not already there
@@ -74,27 +74,18 @@ Skip this phase if the change is purely backend (no components, pages, or styles
    - Test with a **variety of mock data** — empty states, single items, many items, long text, special characters, and edge cases relevant to the UI.
    - Test on all three viewport projects (desktop, mobile portrait, mobile landscape) — Playwright projects handle this automatically.
    - **Take full-page screenshots** at key states using `await page.screenshot({ path: 'e2e/results/<descriptive-name>.png', fullPage: true })`.
-   - **Check for horizontal overflow** on mobile viewports:
-     ```ts
-     const hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
-     expect(hasOverflow).toBe(false);
-     ```
-   - Verify key elements are **visible and not clipped**: use `expect(locator).toBeVisible()` and check bounding boxes are within the viewport.
-   - Verify interactive elements (buttons, links, form fields) are **tappable on mobile** — check they have adequate size (`>= 44px` tap target).
+   - **Check for horizontal overflow** on mobile viewports.
+   - Verify key elements are **visible and not clipped**.
+   - Verify interactive elements (buttons, links, form fields) are **tappable on mobile** (>= 44px tap target).
 
 ### 7c: Run the tests and review screenshots
 
-1. Start Docker services if not running: `cd web && docker compose up -d`
-2. Run Playwright tests: `cd web && npx playwright test`
-3. If any test fails, fix the implementation (not the test) and re-run.
-4. **Review every screenshot** using the Read tool to visually inspect them:
-   - Is the layout correct on desktop, mobile portrait, and mobile landscape?
-   - Is text readable and not truncated?
-   - Are there any visual glitches, overlapping elements, or misaligned components?
-   - Does the design match the project's styling (dark teal background, orange primary, Climate Crisis headings, Maven Pro body)?
-5. If any screenshot reveals a visual issue, fix the implementation and re-run until all screenshots look excellent.
-6. Commit the test files (but NOT the screenshot results — they should be gitignored).
-7. Push to remote.
+1. Run Playwright tests: `cd web && npx playwright test`
+2. If any test fails, fix the implementation (not the test) and re-run.
+3. **Review every screenshot** using the Read tool to visually inspect them.
+4. If any screenshot reveals a visual issue, fix the implementation and re-run until all screenshots look excellent.
+5. Commit the test files (but NOT the screenshot results — they should be gitignored).
+6. Push to remote.
 
 ## Phase 8: Review the Implementation
 
@@ -107,10 +98,10 @@ cd web && npm test
 
 **Manual review — check for:**
 
-- Security: auth guards, input validation, no secrets in code (OWASP top 10)
-- Correctness: proper types, server/client boundaries, `revalidatePath()` after mutations
-- Quality: module structure, `@/` imports, no dead code, tests cover new logic
-- Performance: prefer server components, no N+1 queries, proper caching
+- Security: auth guards in middleware, input validation, no secrets in code (OWASP top 10)
+- Correctness: proper types, Astro server/client island boundaries, form handling
+- Quality: `@/` imports, no dead code, tests cover new logic
+- Performance: prefer Astro components over React islands, no N+1 queries
 
 Fix any issues found, commit, and push.
 
@@ -126,10 +117,8 @@ Fix any issues found, commit, and push.
 ## Phase 10: Review PR Checks
 
 1. Wait briefly, then run `gh pr checks <pr-number>` to see CI status.
-2. If any checks fail (lint, tests, third-party services), investigate the failure:
-   - Run `gh run view <run-id> --log-failed` to read failure logs.
-   - Fix the issue, commit, and push. Repeat until all checks are green.
-3. Confirm all checks pass before proceeding.
+2. If any checks fail, investigate with `gh run view <run-id> --log-failed`.
+3. Fix the issue, commit, and push. Repeat until all checks are green.
 
 ## Phase 11: Merge the PR
 

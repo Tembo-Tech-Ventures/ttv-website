@@ -1,55 +1,84 @@
 # CLAUDE.md
 
-TTV Website is a Next.js 14 (App Router) full-stack application for Tembo Tech Ventures, a tech training platform. The main application code lives in `web/`.
+TTV Website is an Astro 6 SSR application for Tembo Tech Ventures, a tech training platform. Deployed on Cloudflare Workers with D1 (SQLite) and R2 (object storage). The main application code lives in `web/`.
 
 ## Quick Reference
 
 ```bash
 cd web
-docker compose up -d          # Start local services (Postgres, Mailhog, S3Mock)
-npm install                   # Install deps + prisma generate
-npm run dev                   # Run migrations + start dev server (port 3000)
-npm test                      # Run Jest tests
+npm install                   # Install deps
+npm run dev                   # Start Astro dev server (port 4321)
+npm run build                 # Build for production
+npm run preview               # Preview production build locally
+npm run db:generate           # Generate Drizzle migration from schema changes
+npm run db:migrate:local      # Apply migrations to local D1
 npm run lint                  # ESLint
-npm run lint-fix              # ESLint with auto-fix
-npx prisma migrate dev --name describe-change  # Create migration
+npm test                      # Run Vitest tests
 ```
 
 **IMPORTANT**: All `npm` and `npx` commands MUST be run from the `web/` directory.
 
 ## Key Architecture Decisions
 
-- **Path alias**: Use `@/` for `src/`. Example: `import { prisma } from "@/modules/prisma/lib/prisma-client"`
-- **Server components by default**: Only add `"use client"` when the component needs browser APIs, hooks, or event handlers
-- **No middleware.ts**: Auth guards are at the layout/page level, not via Next.js middleware
-- **Module structure**: Business logic in `src/modules/<feature>/` with `lib/`, `components/`, `hooks/` subdirs
-- **Server actions**: Mutations use Next.js server actions in `src/app/actions/`. No REST API layer.
-- **Styling**: MUI 5 `sx` prop preferred. Colors: orange primary (#F28D68), dark teal (#013D39), lighter teal (#2C6964)
-- **Fonts**: Climate Crisis (headings), Maven Pro (body)
-- **Tests**: Jest + Testing Library, colocated as `*.test.ts(x)`. Mocks in `src/__mocks__/`
+- **Path alias**: Use `@/` for `src/`. Example: `import * as schema from "@/lib/db/schema"`
+- **Astro components by default**: Only use React (`.tsx`) with `client:visible` or `client:load` when the component needs browser APIs, hooks, or event handlers
+- **Middleware for auth**: Auth guards are in `src/middleware.ts`, not per-page. Dashboard requires login, admin requires ADMIN role.
+- **Astro pages**: All pages are `.astro` files in `src/pages/`. Forms use standard HTML `<form method="POST">` with server-side handling in frontmatter.
+- **Styling**: Tailwind CSS 4 with custom theme in `src/styles/global.css`. Colors: orange primary (#F28D68), dark teal (#013D39), lighter teal (#2C6964)
+- **Fonts**: Climate Crisis (h1/h2 headings only), Maven Pro (body + h3-h6)
+- **Database**: Drizzle ORM + SQLite via Cloudflare D1. Schema in `src/lib/db/schema.ts`.
+- **Icons**: Phosphor Icons (`@phosphor-icons/react`) for homepage, react-icons (`react-icons/pi`) for admin/dashboard shells
 
 ## Authentication
 
-Email-only passwordless via NextAuth 4. Magic links → PostgreSQL sessions via PrismaAdapter.
+GitHub OAuth via better-auth. Session-based, stored in D1.
 
-- `getServerSession()` — typed server session (includes `user.id`, `user.emailVerified`)
-- `checkAdminPermissions()` — throws if not ADMIN (use in API routes and admin pages)
-- `isAdmin()` — boolean admin check (use for conditional UI)
-- `useLoginRedirect()` — client hook, redirects unauthenticated users to `/auth/login`
+- Middleware (`src/middleware.ts`) — attaches `locals.user`, `locals.session`, `locals.isAdmin` to every request
+- `createAuth(env)` — creates per-request auth instance (Cloudflare bindings are request-scoped)
+- `authClient` (`src/lib/auth-client.ts`) — client-side auth helpers (`signIn`, `signOut`, `useSession`)
+- Protected routes: `/dashboard/*` requires login, `/admin/*` requires ADMIN role
 
-## Server Actions
+## Database Access Pattern
 
-Server actions live in `src/app/actions/`. Each action file is marked `"use server"`.
+```astro
+---
+import { drizzle } from "drizzle-orm/d1";
+import { env } from "cloudflare:workers";
+import * as schema from "@/lib/db/schema";
 
-- Auth: `getServerSession()` → throw if no session
-- Admin: `checkAdminPermissions()` → throws on unauthorized
-- After mutations: call `revalidatePath()` to refresh Next.js cache
-- Frontend calls server actions directly (no fetch/REST needed)
+const db = drizzle(env.DB, { schema });
+const users = await db.query.user.findMany();
+---
+```
+
+## Form Handling Pattern
+
+Astro pages handle forms server-side in the frontmatter:
+
+```astro
+---
+let error = "";
+let success = "";
+
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  const name = formData.get("name") as string;
+  // validate, then insert/update via Drizzle
+}
+---
+<form method="POST">
+  <input name="name" />
+  <button type="submit">Save</button>
+</form>
+```
 
 ## Environment
 
-Docker Compose must be running for local dev (PostgreSQL :5432, Mailhog :8025/:1025, S3Mock :9090).
-Dev env vars in `web/.env`. Production also needs: `NEXTAUTH_SECRET`, `S3_REGION`, `S3_BUCKET`, `S3_PUBLIC_BASE_URL`, `SITE_URL`.
+- Dev: `npm run dev` starts Astro dev server on port 4321 with local D1 via Wrangler
+- Dev env vars in `web/.env`
+- Production: Cloudflare Workers with D1 database, R2 storage
+- Production secrets: `BETTER_AUTH_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
+- Domain redirect: `www.tembotechventures.com` → `tembotechventures.com` (handled in middleware)
 
 ## Reference
 

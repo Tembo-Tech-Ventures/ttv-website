@@ -12,12 +12,41 @@ const { id } = Astro.params;
 
 if (!id) return Astro.redirect("/admin/applications");
 
+// Valid status transitions
+const TRANSITIONS: Record<string, string[]> = {
+  PENDING: ["APPROVED", "REJECTED", "AUDIT"],
+  APPROVED: ["COMPLETED", "REJECTED"],
+  REJECTED: [],
+  AUDIT: ["APPROVED", "REJECTED"],
+  COMPLETED: [],
+};
+
+const VALID_STATUSES = ["PENDING", "APPROVED", "REJECTED", "AUDIT", "COMPLETED"];
+
 // Handle POST — update status
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
   const newStatus = formData.get("status") as string;
 
-  const updateData: Record<string, any> = { status: newStatus };
+  // Validate status is a known value
+  if (!VALID_STATUSES.includes(newStatus)) {
+    return new Response("Invalid status", { status: 400 });
+  }
+
+  // Validate the transition is allowed
+  const current = await db.query.programApplication.findFirst({
+    where: eq(schema.programApplication.id, id),
+    columns: { status: true },
+  });
+
+  if (!current) return Astro.redirect("/admin/applications");
+
+  const allowed = TRANSITIONS[current.status] ?? [];
+  if (!allowed.includes(newStatus)) {
+    return new Response(`Cannot transition from ${current.status} to ${newStatus}`, { status: 400 });
+  }
+
+  const updateData: Record<string, unknown> = { status: newStatus };
   if (newStatus === "COMPLETED") {
     updateData.completedAt = new Date();
   }
@@ -45,16 +74,7 @@ try {
   appData = { raw: application.application };
 }
 
-// Determine available status transitions
-const transitions: Record<string, string[]> = {
-  PENDING: ["APPROVED", "REJECTED", "AUDIT"],
-  APPROVED: ["COMPLETED", "REJECTED"],
-  REJECTED: [],
-  AUDIT: ["APPROVED", "REJECTED"],
-  COMPLETED: [],
-};
-
-const availableStatuses = transitions[application.status] ?? [];
+const availableStatuses = TRANSITIONS[application.status] ?? [];
 ---
 
 <AdminLayout title="Application Detail">
@@ -153,6 +173,7 @@ const availableStatuses = transitions[application.status] ?? [];
                   status === "AUDIT" && "bg-blue-600 text-white hover:bg-blue-700",
                   status === "COMPLETED" && "bg-purple-600 text-white hover:bg-purple-700",
                 ]}
+                onclick={`return confirm('Change application status to ${status}?')`}
               >
                 {status === "COMPLETED" ? "Mark Completed" : status.charAt(0) + status.slice(1).toLowerCase()}
               </button>

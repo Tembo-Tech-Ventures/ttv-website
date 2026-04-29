@@ -12,24 +12,26 @@ Check for:
 **Security**
 - SQL injection, XSS, command injection (OWASP top 10)
 - Secrets or credentials in code
-- Proper auth checks (`getServerSession()`, `checkAdminPermissions()`) on protected routes
-- Input validation with Zod on all API endpoints
+- Proper auth checks via middleware for `/dashboard/*` and `/admin/*` routes
+- Input validation with Zod on API endpoints and form handlers
+- CSRF considerations for form submissions
 
 **Correctness**
-- Proper error handling
+- Proper error handling in form POST handlers
 - Correct TypeScript types (no `any` unless justified)
-- Server vs client component boundaries respected
-- `revalidatePath()` called after mutations in API routes
+- Astro server/client island boundaries respected (no hooks/event handlers in `.astro` files)
+- Database queries use Drizzle's query builder or parameterized statements (never raw string interpolation)
 
 **Code Quality**
-- Follows module structure: `src/modules/<feature>/lib/<function>/index.ts`
 - Uses `@/` path aliases, not relative imports for cross-module references
+- Astro components preferred over React islands where possible
+- Common components (`Button`, `Input`, `Table`, `Card`, `Badge`) used consistently
 - Tests exist for new logic
 - No unused imports or dead code
 
 **Performance**
-- No unnecessary client components (prefer server components)
+- No unnecessary React islands (prefer Astro components for static content)
 - Database queries are efficient (check for N+1)
-- Proper use of Next.js caching patterns
+- `client:visible` preferred over `client:load` for below-the-fold content
 
 Report findings organized by severity (critical, warning, suggestion).

@@ -114,6 +114,7 @@ const isTargetAdmin = targetUser.userRoles.some((ur) => ur.role.name === "ADMIN"
               <button
                 type="submit"
                 class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+                onclick="return confirm('Remove admin privileges from this user?')"
               >
                 Remove Admin
               </button>

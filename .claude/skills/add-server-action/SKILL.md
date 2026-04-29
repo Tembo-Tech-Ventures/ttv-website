@@ -1,19 +1,48 @@
 ---
-name: add-server-action
-description: Create a new server action following project conventions
-argument-hint: <action-name>
+name: add-api-endpoint
+description: Create a new API endpoint following project conventions
+argument-hint: <endpoint-path>
 disable-model-invocation: true
 ---
 
-Create a new server action for `$ARGUMENTS`. Follow these steps:
+Create a new API endpoint at `$ARGUMENTS`. Follow these steps:
 
-1. Create or update an action file at `web/src/app/actions/<feature>.ts`
-2. Mark the file with `"use server"` at the top
-3. Export async functions with:
-   - Auth via `getServerSession()` — throw if no session
-   - Admin checks via `checkAdminPermissions()` if admin-only
-   - Call `revalidatePath()` after mutations
-4. Import and call the server action directly from the client component
-5. Use `useSWRMutation` to wrap the call for loading/error state if needed
-6. Write tests for the new action
-7. Run `cd web && npm test && npm run lint` — everything must pass
+1. Create `web/src/pages/api/<path>.ts`
+
+2. Export HTTP method handlers (`GET`, `POST`, `PUT`, `DELETE`) as named exports:
+   ```typescript
+   import type { APIRoute } from "astro";
+   import { env } from "cloudflare:workers";
+   import { drizzle } from "drizzle-orm/d1";
+   import * as schema from "@/lib/db/schema";
+   import { createAuth } from "@/lib/auth";
+
+   export const POST: APIRoute = async ({ request }) => {
+     const auth = createAuth(env);
+     const session = await auth.api.getSession({ headers: request.headers });
+     if (!session) {
+       return new Response("Unauthorized", { status: 401 });
+     }
+
+     const db = drizzle(env.DB, { schema });
+     // ... handle request
+     return new Response(JSON.stringify({ success: true }), {
+       headers: { "Content-Type": "application/json" },
+     });
+   };
+   ```
+
+3. For admin-only endpoints, check the ADMIN role:
+   ```typescript
+   const adminCheck = await env.DB
+     .prepare(`SELECT ur.id FROM "UserRoles" ur JOIN "Roles" r ON ur."roleId" = r."id" WHERE ur."userId" = ? AND r."name" = 'ADMIN' LIMIT 1`)
+     .bind(session.user.id)
+     .first();
+   if (!adminCheck) {
+     return new Response("Forbidden", { status: 403 });
+   }
+   ```
+
+4. Validate input with Zod before processing
+5. Use parameterized queries (Drizzle ORM) — never interpolate user input into SQL
+6. Run `cd web && npm run lint` — no lint errors

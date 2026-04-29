@@ -30,8 +30,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
-  // Protect /admin/* routes — require ADMIN role
-  if (url.pathname.startsWith("/admin")) {
+  // Protect /admin/* and /api/admin/* routes — require ADMIN role
+  if (url.pathname.startsWith("/admin") || url.pathname.startsWith("/api/admin")) {
     if (!locals.user) {
       return redirect("/auth/login");
     }

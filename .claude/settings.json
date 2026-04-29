@@ -3,10 +3,9 @@
   "permissions": {
     "allow": [
       "Bash(cd web && npm *)",
-      "Bash(cd web && npx prisma *)",
+      "Bash(cd web && npx *)",
       "Bash(cd /workspaces/ttv-website/web && npm *)",
-      "Bash(cd /workspaces/ttv-website/web && npx prisma *)",
-      "Bash(npm *:web)",
+      "Bash(cd /workspaces/ttv-website/web && npx *)",
       "Bash(git status *)",
       "Bash(git log *)",
       "Bash(git diff *)",
@@ -14,14 +13,15 @@
       "Bash(git checkout -b *)",
       "Bash(git add *)",
       "Bash(git commit *)",
+      "Bash(git push *)",
       "Bash(gh pr *)",
       "Bash(gh issue *)",
       "Bash(gh run *)",
       "Read(web/src/**)",
-      "Read(web/prisma/**)",
+      "Read(web/scripts/**)",
       "Read(web/docs/**)",
       "Edit(web/src/**)",
-      "Edit(web/prisma/schema.prisma)",
+      "Edit(web/package.json)",
       "Write(web/src/**)"
     ],
     "deny": [

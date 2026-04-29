@@ -17,18 +17,28 @@ interface SidebarProps {
 }
 
 function NavLinks({ links }: { links: SidebarLink[] }) {
+  const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+
   return (
     <nav className="flex flex-col gap-1">
-      {links.map(({ href, label, icon: Icon }) => (
-        <a
-          key={href}
-          href={href}
-          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-white/80 transition-colors hover:bg-teal/30 hover:text-white"
-        >
-          {Icon && <Icon className="h-5 w-5" />}
-          {label}
-        </a>
-      ))}
+      {links.map(({ href, label, icon: Icon }) => {
+        const isActive = currentPath === href || (href !== "/" && href !== "/admin" && href !== "/dashboard" && currentPath.startsWith(href));
+        return (
+          <a
+            key={href}
+            href={href}
+            className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              isActive
+                ? "bg-primary/20 text-primary"
+                : "text-white/80 hover:bg-teal/30 hover:text-white"
+            }`}
+            aria-current={isActive ? "page" : undefined}
+          >
+            {Icon && <Icon className="h-5 w-5" />}
+            {label}
+          </a>
+        );
+      })}
     </nav>
   );
 }

@@ -73,7 +73,9 @@ const statuses = ["PENDING", "APPROVED", "REJECTED", "AUDIT", "COMPLETED"];
           {applications.length === 0 ? (
             <tr>
               <td colspan="5" class="px-4 py-8 text-center text-white/40">
-                No applications found
+                {statusFilter
+                  ? `No ${statusFilter.toLowerCase()} applications found.`
+                  : "No applications yet. Applications appear here when students submit them."}
               </td>
             </tr>
           ) : (

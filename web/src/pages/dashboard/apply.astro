@@ -3,7 +3,7 @@ import DashboardLayout from "@/layouts/DashboardLayout.astro";
 import Card from "@/components/common/Card.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
-import { eq, notInArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 
 const user = Astro.locals.user!;
@@ -39,7 +39,7 @@ if (Astro.request.method === "POST") {
         success = "Application submitted successfully!";
       }
     }
-  } catch (e) {
+  } catch (_e) {
     error = "Something went wrong. Please try again.";
   }
 }

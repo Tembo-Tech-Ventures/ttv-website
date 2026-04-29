@@ -7,6 +7,11 @@ interface Props {
 }
 
 const { title = "Admin" } = Astro.props;
+
+// Defense-in-depth: redirect if middleware didn't set isAdmin
+if (!Astro.locals.isAdmin) {
+  return Astro.redirect(Astro.locals.user ? "/dashboard" : "/auth/login");
+}
 ---
 
 <BaseLayout title={`${title} | TTV Admin`}>

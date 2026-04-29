@@ -111,9 +111,52 @@ const FOOTER_GROUPS = [
               </a>
             </div>
           )}
+
+          {/* Mobile hamburger */}
+          <button
+            type="button"
+            class="inline-flex items-center justify-center rounded-md p-2 text-ink-secondary transition-colors hover:text-ink-primary md:hidden"
+            aria-label="Open menu"
+            id="mobile-menu-btn"
+          >
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            </svg>
+          </button>
         </div>
       </nav>
+
+      {/* Mobile menu panel */}
+      <div
+        id="mobile-menu"
+        class="hidden border-t border-[color:var(--color-rule)] bg-[#012A28]/95 backdrop-blur md:hidden"
+      >
+        <div class="space-y-1 px-4 py-4">
+          {NAV_LINKS.map((link) => (
+            <a
+              href={link.href}
+              class="block rounded-md px-3 py-3 font-body text-sm font-medium uppercase tracking-[0.18em] text-ink-secondary transition-colors hover:bg-teal/20 hover:text-ink-primary"
+            >
+              {link.label}
+            </a>
+          ))}
+          {!isAuthenticated && (
+            <a
+              href="/auth/login"
+              class="block rounded-md px-3 py-3 font-body text-sm font-medium uppercase tracking-[0.18em] text-ink-secondary transition-colors hover:bg-teal/20 hover:text-ink-primary"
+            >
+              Sign in
+            </a>
+          )}
+        </div>
+      </div>
     </header>
+
+    <script>
+      const btn = document.getElementById("mobile-menu-btn");
+      const menu = document.getElementById("mobile-menu");
+      btn?.addEventListener("click", () => menu?.classList.toggle("hidden"));
+    </script>
 
     <main class="flex-1">
       <slot />
