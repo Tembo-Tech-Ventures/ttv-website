@@ -19,7 +19,7 @@ interface HeroSectionProps {
 }
 
 const PROOF_STATS = [
-  { value: "~25", label: "Students across Kenya & Nigeria" },
+  { value: "~25", label: "Students across Africa" },
   { value: "01", label: "Partner school \u00b7 Embu College" },
   { value: "04", label: "Cohort in flight" },
 ];
@@ -119,8 +119,8 @@ export default function HeroSection({ isAuthenticated = false }: HeroSectionProp
           ref={sentenceRef}
           className="font-body mt-10 max-w-3xl text-xl text-ink-primary md:text-[28px] md:leading-[1.25]"
         >
-          A small community of engineers in Africa learning to build real
-          software —{" "}
+          A practical tech community for early builders across Africa,
+          learning through real software —{" "}
           <span
             className="bg-no-repeat pb-1"
             style={{
