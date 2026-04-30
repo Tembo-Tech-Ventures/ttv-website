@@ -35,14 +35,14 @@ const BENTO: BentoItem[] = [
     number: "02",
     label: "Mentorship",
     title: "You don't do this alone.",
-    body: "Working engineers walk each cohort through the shape of a real system. Accountability over assignments.",
+    body: "Working engineers build alongside each cohort and make the shape of a real system easier to see. Accountability over assignments.",
     Icon: Handshake,
   },
   {
     number: "03",
     label: "Continuity",
     title: "We stay in touch.",
-    body: "Alumni stay in the loop after the cohort ends. If someone drifts, we reach out. Some come back as mentors.",
+    body: "Alumni stay in the loop after the cohort ends. We make it easy to reconnect when life pulls someone away. Some come back as mentors.",
     Icon: InfinityIcon,
   },
 ];

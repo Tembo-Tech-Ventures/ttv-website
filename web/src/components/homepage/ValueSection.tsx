@@ -75,15 +75,15 @@ export default function ValueSection() {
                 letterSpacing: "-0.02em",
               }}
             >
-              Talent is everywhere. Opportunity is not.
-              <span className="block text-primary">We close that gap on purpose.</span>
+              Great builders are already here.
+              <span className="block text-primary">We help grow the ecosystem around them.</span>
             </p>
             <p className="mt-6 max-w-2xl font-body text-base text-ink-secondary md:text-lg">
-              We&apos;re a small, community-led program pairing new builders
-              with working engineers. We teach the{" "}
+              We&apos;re a small, community-led program for early builders
+              across Africa. Working engineers share the{" "}
               <span className="text-ink-primary">shape of a real system</span>
-              {" "}— how it fits together, how to keep learning on your
-              own — and stay in touch long after the cohort ends.
+              {" "}— how it fits together, how to keep learning together —
+              and stay in touch long after the cohort ends.
             </p>
           </blockquote>
         </div>
