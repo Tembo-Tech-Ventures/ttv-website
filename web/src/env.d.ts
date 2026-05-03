@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   readonly GITHUB_CLIENT_SECRET: string;
   readonly PRIMARY_DOMAIN?: string;
   readonly REDIRECT_DOMAIN?: string;
+  readonly ANTHROPIC_API_KEY?: string;
 }
 
 interface ImportMeta {
@@ -18,8 +19,8 @@ interface AuthSession {
   id: string;
   expiresAt: Date;
   token: string;
-  ipAddress: string | null;
-  userAgent: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
   userId: string;
   createdAt: Date;
   updatedAt: Date;
@@ -30,7 +31,7 @@ interface AuthUser {
   name: string;
   email: string;
   emailVerified: boolean;
-  image: string | null;
+  image?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

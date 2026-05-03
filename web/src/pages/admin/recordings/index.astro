@@ -1,0 +1,81 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import ProcessingStatus from "@/components/recordings/ProcessingStatus";
+import { formatDuration } from "@/lib/recordings/time-utils";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { env } from "cloudflare:workers";
+
+const db = drizzle(env.DB, { schema });
+const recordings = await db.query.recording.findMany({
+  with: { program: true },
+  orderBy: (recording, { desc }) => [desc(recording.createdAt)],
+});
+---
+
+<AdminLayout title="Recordings">
+  <div class="space-y-6">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 class="text-2xl font-bold text-white">Recordings</h2>
+        <p class="mt-1 text-sm text-white/55">
+          Upload sessions, monitor processing, and manage transcripts.
+        </p>
+      </div>
+      <a
+        href="/admin/recordings/upload"
+        class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
+      >
+        Upload Recording
+      </a>
+    </div>
+
+    <div class="overflow-x-auto rounded-lg border border-teal/20">
+      <table class="w-full text-left text-sm">
+        <thead class="bg-teal/30 text-xs uppercase text-white/80">
+          <tr>
+            <th class="px-4 py-3 font-medium">Title</th>
+            <th class="px-4 py-3 font-medium">Program</th>
+            <th class="px-4 py-3 font-medium">Recorded</th>
+            <th class="px-4 py-3 font-medium">Duration</th>
+            <th class="px-4 py-3 font-medium">Status</th>
+            <th class="px-4 py-3 font-medium">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-teal/10">
+          {recordings.length === 0 ? (
+            <tr>
+              <td colspan="6" class="px-4 py-8 text-center text-white/40">
+                No recordings uploaded yet
+              </td>
+            </tr>
+          ) : (
+            recordings.map((recording) => (
+              <tr class="text-white/80 hover:bg-teal/10">
+                <td class="px-4 py-3 font-medium text-white">{recording.title}</td>
+                <td class="px-4 py-3">{recording.program?.name ?? "Unassigned"}</td>
+                <td class="px-4 py-3">
+                  {recording.recordedAt
+                    ? recording.recordedAt.toLocaleDateString()
+                    : "—"}
+                </td>
+                <td class="px-4 py-3">{formatDuration(recording.durationSeconds)}</td>
+                <td class="px-4 py-3">
+                  <ProcessingStatus status={recording.processingStatus} />
+                </td>
+                <td class="px-4 py-3">
+                  <a
+                    href={`/admin/recordings/${recording.id}`}
+                    class="text-primary hover:underline"
+                  >
+                    View
+                  </a>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</AdminLayout>

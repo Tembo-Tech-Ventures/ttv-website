@@ -11,7 +11,11 @@ const generatedDir = path.join(webRoot, "dist", "server");
 
 const DEFAULT_APP_NAME = "ttv-website";
 const DEFAULT_COMPATIBILITY_DATE = "2026-04-01";
-const SECRET_KEYS = ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"];
+const SECRET_KEYS = [
+  "GITHUB_CLIENT_ID",
+  "GITHUB_CLIENT_SECRET",
+  "ANTHROPIC_API_KEY",
+];
 
 export function getRequiredEnv(name) {
   const value = process.env[name]?.trim();
@@ -72,6 +76,8 @@ export function deriveEnvironmentContext() {
     workerName: joinName([appName, environmentSlug]),
     d1Name: joinName([appName, "db", environmentSlug]),
     bucketName: joinName([appName, "files", environmentSlug]),
+    queueName: joinName([appName, "recording-pipeline", environmentSlug]),
+    vectorizeIndexName: joinName([appName, "transcripts", environmentSlug]),
   };
 }
 
@@ -167,6 +173,38 @@ export async function ensureR2Bucket(name) {
   });
 }
 
+export async function ensureQueue(name) {
+  try {
+    const existing = await runWrangler(["queues", "info", name]);
+    if (existing) return true;
+  } catch {
+    // Wrangler exits non-zero when the queue does not exist.
+  }
+
+  await runWrangler(["queues", "create", name]);
+  return true;
+}
+
+export async function ensureVectorizeIndex(name) {
+  try {
+    const existing = await runWrangler(["vectorize", "get", name]);
+    if (existing) return true;
+  } catch {
+    // Wrangler exits non-zero when the index does not exist.
+  }
+
+  await runWrangler([
+    "vectorize",
+    "create",
+    name,
+    "--dimensions",
+    "1024",
+    "--metric",
+    "cosine",
+  ]);
+  return true;
+}
+
 export async function deleteR2BucketByName(name) {
   const existing = await cfApi(`/r2/buckets/${encodeURIComponent(name)}`);
   if (!existing) {
@@ -246,6 +284,8 @@ export async function writeGeneratedWranglerConfig({
   d1Name,
   d1Id,
   bucketName,
+  queueName,
+  vectorizeIndexName,
   primaryDomain,
   redirectDomain,
   betterAuthUrl,
@@ -293,6 +333,51 @@ export async function writeGeneratedWranglerConfig({
       {
         binding: "BUCKET",
         bucket_name: bucketName,
+      },
+    ],
+    ai: {
+      binding: "AI",
+    },
+    vectorize: [
+      {
+        binding: "VECTORIZE",
+        index_name: vectorizeIndexName,
+      },
+    ],
+    queues: {
+      producers: [
+        {
+          binding: "RECORDING_QUEUE",
+          queue: queueName,
+        },
+      ],
+      consumers: [
+        {
+          queue: queueName,
+          max_batch_size: 1,
+          max_retries: 3,
+        },
+      ],
+    },
+    containers: [
+      {
+        class_name: "FfmpegContainer",
+        image: path.relative(generatedDir, path.join(webRoot, "containers", "ffmpeg", "Dockerfile")),
+        max_instances: 3,
+      },
+    ],
+    durable_objects: {
+      bindings: [
+        {
+          name: "FFMPEG_CONTAINER",
+          class_name: "FfmpegContainer",
+        },
+      ],
+    },
+    migrations: [
+      {
+        tag: "v1",
+        new_sqlite_classes: ["FfmpegContainer"],
       },
     ],
     ...(primaryDomain || redirectDomain
