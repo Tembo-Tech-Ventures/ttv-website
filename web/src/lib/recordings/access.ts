@@ -1,7 +1,8 @@
 import { and, eq, inArray } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
+import type { Database } from "@/lib/db/schema";
 
-export async function getAccessibleProgramIds(db: any, userId: string) {
+export async function getAccessibleProgramIds(db: Database, userId: string) {
   const applications: Array<{ programId: string | null }> =
     await db.query.programApplication.findMany({
     where: and(
@@ -16,7 +17,7 @@ export async function getAccessibleProgramIds(db: any, userId: string) {
 }
 
 export async function userCanAccessProgram(
-  db: any,
+  db: Database,
   userId: string,
   programId: string | null
 ) {

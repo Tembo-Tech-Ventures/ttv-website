@@ -14,6 +14,9 @@ const DEFAULT_COMPATIBILITY_DATE = "2026-04-01";
 const SECRET_KEYS = [
   "GITHUB_CLIENT_ID",
   "GITHUB_CLIENT_SECRET",
+];
+
+const OPTIONAL_SECRET_KEYS = [
   "ANTHROPIC_API_KEY",
 ];
 
@@ -402,6 +405,13 @@ export function getSecretBindings() {
     const value = getRequiredEnv(key);
     return { key, value };
   });
+
+  for (const key of OPTIONAL_SECRET_KEYS) {
+    const value = getOptionalEnv(key);
+    if (value) {
+      bindings.push({ key, value });
+    }
+  }
 
   bindings.unshift({
     key: "BETTER_AUTH_SECRET",

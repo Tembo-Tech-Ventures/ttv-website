@@ -4,11 +4,7 @@ import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
-  adapter: cloudflare({
-    platformProxy: {
-      enabled: false,
-    },
-  }),
+  adapter: cloudflare(),
   integrations: [react()],
   output: "server",
   vite: {

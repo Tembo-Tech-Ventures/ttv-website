@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
+import type { Database } from "@/lib/db/schema";
 
 export interface TranscriptChunk {
   id: string;
@@ -44,15 +45,13 @@ export async function embedAndIndexRecording({
   env,
   recording,
 }: {
-  db: any;
+  db: Database;
   env: Env;
   recording: typeof schema.recording.$inferSelect;
 }) {
   const segments = await db.query.transcriptSegment.findMany({
     where: eq(schema.transcriptSegment.recordingId, recording.id),
-    orderBy: (segment: typeof schema.transcriptSegment, { asc }: any) => [
-      asc(segment.startTime),
-    ],
+    orderBy: (segment, { asc }) => [asc(segment.startTime)],
   });
 
   const chunks = chunkTranscriptSegments(segments);

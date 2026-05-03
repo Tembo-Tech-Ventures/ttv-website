@@ -24,6 +24,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const db = drizzle(env.DB, { schema });
+  const existing = await db.query.recording.findFirst({
+    where: eq(schema.recording.id, recordingId),
+    columns: { id: true },
+  });
+  if (!existing) {
+    return Response.json({ error: "Recording not found" }, { status: 404 });
+  }
+
   await db
     .update(schema.recording)
     .set({ processingStatus: "queued", processingError: null })

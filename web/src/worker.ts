@@ -12,6 +12,10 @@ FfmpegContainer.outboundByHost = {
     const url = new URL(request.url);
     const key = decodeURIComponent(url.pathname.slice(1));
 
+    if (!key.startsWith("recordings/")) {
+      return new Response("Forbidden: access restricted to recordings/", { status: 403 });
+    }
+
     if (request.method === "GET") {
       const object = await env.BUCKET.get(key);
       return new Response(object?.body ?? null, {

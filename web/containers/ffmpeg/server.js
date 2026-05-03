@@ -65,6 +65,9 @@ async function handleProcess(request) {
     return Response.json({ error: "recordingId and r2VideoKey are required" }, { status: 400 });
   }
 
+  if (!/^[a-z0-9]+$/i.test(recordingId)) {
+    return Response.json({ error: "Invalid recordingId" }, { status: 400 });
+  }
   const workDir = path.join(tmpdir(), recordingId);
   await mkdir(workDir, { recursive: true });
   const input = path.join(workDir, "input.mp4");

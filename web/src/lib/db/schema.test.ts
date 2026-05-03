@@ -58,7 +58,6 @@ describe("Database Schema", () => {
     expect(statusCol.enumValues).toEqual([
       "pending",
       "queued",
-      "downloading",
       "extracting_audio",
       "transcribing",
       "embedding",

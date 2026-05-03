@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
+import type { Database } from "@/lib/db/schema";
 import { embedAndIndexRecording } from "@/lib/recordings/embeddings";
 import { transcribeAudioObject } from "@/lib/recordings/transcription";
 
@@ -19,7 +20,7 @@ function isRecordingQueueMessage(value: unknown): value is RecordingQueueMessage
 }
 
 async function updateStatus(
-  db: any,
+  db: Database,
   recordingId: string,
   processingStatus: typeof schema.recording.$inferSelect.processingStatus,
   processingError: string | null = null

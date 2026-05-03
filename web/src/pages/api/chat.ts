@@ -17,6 +17,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!message || typeof message !== "string") {
     return Response.json({ error: "message is required" }, { status: 400 });
   }
+  if (message.length > 2000) {
+    return Response.json({ error: "message is too long" }, { status: 400 });
+  }
 
   const db = drizzle(env.DB, { schema });
   const programIds = await getAccessibleProgramIds(db, user.id);
@@ -99,6 +102,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
     answer = payload.content?.[0]?.text ?? "";
   } else {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- model name not in Workers AI type stubs
     const llamaResponse = (await env.AI.run("@cf/meta/llama-3.1-8b-instruct" as any, {
       messages: [
         { role: "system", content: system },

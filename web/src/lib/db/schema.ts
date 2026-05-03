@@ -1,6 +1,9 @@
 import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
+import type { drizzle } from "drizzle-orm/d1";
+
+export type Database = ReturnType<typeof drizzle<typeof import("@/lib/db/schema")>>;
 
 // ─── Helpers ───────────────────────────────────────────────
 
@@ -264,7 +267,6 @@ export const recording = sqliteTable("recording", {
     enum: [
       "pending",
       "queued",
-      "downloading",
       "extracting_audio",
       "transcribing",
       "embedding",

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import TimestampBadge from "@/components/recordings/TimestampBadge";
 
 interface Citation {
@@ -20,6 +20,11 @@ export default function ChatInterface() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
 
   async function sendMessage(event: React.FormEvent) {
     event.preventDefault();
@@ -111,6 +116,7 @@ export default function ChatInterface() {
         )}
         {loading && <p className="text-sm text-white/45">Thinking...</p>}
         {error && <p className="text-sm text-red-200">{error}</p>}
+        <div ref={messagesEndRef} />
       </div>
 
       <form onSubmit={sendMessage} className="flex gap-3 border-t border-teal/20 p-4">

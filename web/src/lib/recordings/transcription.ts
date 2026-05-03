@@ -16,7 +16,7 @@ export async function transcribeAudioObject({
 }) {
   const result = (await env.AI.run("@cf/openai/whisper-large-v3-turbo", {
     audio: {
-      body: [...new Uint8Array(audio)],
+      body: new Uint8Array(audio),
       contentType: "audio/mpeg",
     },
     word_timestamps: true,

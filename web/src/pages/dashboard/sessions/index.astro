@@ -49,7 +49,7 @@ const recordings =
                 </div>
                 <p class="text-sm text-white/55">{recording.program?.name ?? "Program session"}</p>
                 <div class="flex items-center justify-between text-xs text-white/45">
-                  <span>{recording.recordedAt ? recording.recordedAt.toLocaleDateString() : "No date"}</span>
+                  <span>{recording.recordedAt ? recording.recordedAt.toISOString().split("T")[0] : "No date"}</span>
                   <span>{formatDuration(recording.durationSeconds)}</span>
                 </div>
               </div>

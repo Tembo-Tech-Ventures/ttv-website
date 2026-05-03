@@ -56,7 +56,7 @@ const recordings = await db.query.recording.findMany({
                 <td class="px-4 py-3">{recording.program?.name ?? "Unassigned"}</td>
                 <td class="px-4 py-3">
                   {recording.recordedAt
-                    ? recording.recordedAt.toLocaleDateString()
+                    ? recording.recordedAt.toISOString().split("T")[0]
                     : "—"}
                 </td>
                 <td class="px-4 py-3">{formatDuration(recording.durationSeconds)}</td>
