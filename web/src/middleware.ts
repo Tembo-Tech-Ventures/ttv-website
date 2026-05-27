@@ -4,8 +4,8 @@ import { createAuth } from "@/lib/auth";
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const { locals, request, url, redirect } = context;
-  const primaryDomain = import.meta.env.PRIMARY_DOMAIN;
-  const redirectDomain = import.meta.env.REDIRECT_DOMAIN;
+  const primaryDomain = env.PRIMARY_DOMAIN;
+  const redirectDomain = env.REDIRECT_DOMAIN;
 
   if (primaryDomain && redirectDomain && url.hostname === redirectDomain) {
     url.hostname = primaryDomain;

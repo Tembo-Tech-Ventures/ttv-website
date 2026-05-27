@@ -1,13 +1,18 @@
 /// <reference path="../.astro/types.d.ts" />
 /// <reference types="astro/client" />
 
+declare namespace Cloudflare {
+  interface Env {
+    PRIMARY_DOMAIN?: string;
+    REDIRECT_DOMAIN?: string;
+  }
+}
+
 interface ImportMetaEnv {
   readonly BETTER_AUTH_SECRET: string;
   readonly BETTER_AUTH_URL: string;
   readonly GITHUB_CLIENT_ID: string;
   readonly GITHUB_CLIENT_SECRET: string;
-  readonly PRIMARY_DOMAIN?: string;
-  readonly REDIRECT_DOMAIN?: string;
 }
 
 interface ImportMeta {
