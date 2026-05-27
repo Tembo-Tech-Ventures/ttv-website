@@ -8,7 +8,6 @@ interface ImportMetaEnv {
   readonly GITHUB_CLIENT_SECRET: string;
   readonly PRIMARY_DOMAIN?: string;
   readonly REDIRECT_DOMAIN?: string;
-  readonly ANTHROPIC_API_KEY?: string;
 }
 
 interface ImportMeta {

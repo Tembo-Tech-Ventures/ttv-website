@@ -69,48 +69,22 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const system = `You are a helpful assistant for TTV students. Answer only from the transcript excerpts. Cite session titles and timestamps when they support the answer.\n\n${context}`;
 
-  let answer: string;
-  if (env.ANTHROPIC_API_KEY) {
-    const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1024,
-        system,
-        messages: [
-          ...conversationHistory
-            .filter((entry) => entry.role === "user" || entry.role === "assistant")
-            .map((entry) => ({
-              role: entry.role,
-              content: String(entry.content).slice(0, 1000),
-            })),
-          { role: "user", content: message },
-        ],
-      }),
-    });
-    const payload = (await claudeResponse.json()) as {
-      error?: { message?: string };
-      content?: Array<{ text?: string }>;
-    };
-    if (!claudeResponse.ok) {
-      throw new Error(payload.error?.message ?? "Claude generation failed");
-    }
-    answer = payload.content?.[0]?.text ?? "";
-  } else {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- model name not in Workers AI type stubs
-    const llamaResponse = (await env.AI.run("@cf/meta/llama-3.1-8b-instruct" as any, {
+  const aiResponse = await env.AI.run(
+    "@cf/google/gemma-4-26b-a4b-it" as Parameters<typeof env.AI.run>[0],
+    {
       messages: [
         { role: "system", content: system },
+        ...conversationHistory
+          .filter((entry) => entry.role === "user" || entry.role === "assistant")
+          .map((entry) => ({
+            role: entry.role as "user" | "assistant",
+            content: String(entry.content).slice(0, 1000),
+          })),
         { role: "user", content: message },
       ],
-    })) as { response?: string; result?: { response?: string } };
-    answer = llamaResponse.response ?? llamaResponse.result?.response ?? "";
-  }
+    }
+  ) as { response?: string; result?: { response?: string } };
+  const answer = aiResponse.response ?? aiResponse.result?.response ?? "";
 
   const citations = segments.map((segment) => ({
     recordingId: segment.recordingId,
