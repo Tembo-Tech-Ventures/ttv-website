@@ -1,6 +1,9 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
+import type { drizzle } from "drizzle-orm/d1";
+
+export type Database = ReturnType<typeof drizzle<typeof import("@/lib/db/schema")>>;
 
 // ─── Helpers ───────────────────────────────────────────────
 
@@ -37,6 +40,7 @@ export const userRelations = relations(user, ({ many }) => ({
   files: many(file),
   programRoles: many(programRole),
   programApplications: many(programApplication),
+  chatMessages: many(chatMessage),
 }));
 
 // ─── Account (matches better-auth expected schema) ─────────
@@ -172,6 +176,7 @@ export const programRelations = relations(program, ({ one, many }) => ({
   }),
   programRoles: many(programRole),
   programApplications: many(programApplication),
+  recordings: many(recording),
 }));
 
 // ─── ProgramRole ───────────────────────────────────────────
@@ -244,3 +249,90 @@ export const programApplicationRelations = relations(
     }),
   })
 );
+
+// ─── Recording ─────────────────────────────────────────────
+
+export const recording = sqliteTable("recording", {
+  id: cuid("id"),
+  programId: text("programId").references(() => program.id),
+  title: text("title").notNull(),
+  description: text("description"),
+  driveFileId: text("driveFileId"),
+  r2VideoKey: text("r2VideoKey"),
+  r2AudioKey: text("r2AudioKey"),
+  durationSeconds: integer("durationSeconds"),
+  fileSizeBytes: integer("fileSizeBytes"),
+  recordedAt: integer("recordedAt", { mode: "timestamp" }),
+  processingStatus: text("processingStatus", {
+    enum: [
+      "pending",
+      "queued",
+      "extracting_audio",
+      "transcribing",
+      "embedding",
+      "complete",
+      "failed",
+    ],
+  })
+    .notNull()
+    .default("pending"),
+  processingError: text("processingError"),
+  transcriptText: text("transcriptText"),
+  transcriptVtt: text("transcriptVtt"),
+  ...timestamps,
+});
+
+export const recordingRelations = relations(recording, ({ one, many }) => ({
+  program: one(program, {
+    fields: [recording.programId],
+    references: [program.id],
+  }),
+  segments: many(transcriptSegment),
+}));
+
+// ─── TranscriptSegment ─────────────────────────────────────
+
+export const transcriptSegment = sqliteTable("transcript_segment", {
+  id: cuid("id"),
+  recordingId: text("recordingId")
+    .notNull()
+    .references(() => recording.id, { onDelete: "cascade" }),
+  startTime: real("startTime").notNull(),
+  endTime: real("endTime").notNull(),
+  speaker: text("speaker"),
+  text: text("text").notNull(),
+  chunkIndex: integer("chunkIndex"),
+  vectorId: text("vectorId"),
+  createdAt: integer("createdAt", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+export const transcriptSegmentRelations = relations(
+  transcriptSegment,
+  ({ one }) => ({
+    recording: one(recording, {
+      fields: [transcriptSegment.recordingId],
+      references: [recording.id],
+    }),
+  })
+);
+
+// ─── ChatMessage ───────────────────────────────────────────
+
+export const chatMessage = sqliteTable("chat_message", {
+  id: cuid("id"),
+  userId: text("userId")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  role: text("role", { enum: ["user", "assistant"] }).notNull(),
+  content: text("content").notNull(),
+  citations: text("citations"),
+  createdAt: integer("createdAt", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+export const chatMessageRelations = relations(chatMessage, ({ one }) => ({
+  user: one(user, { fields: [chatMessage.userId], references: [user.id] }),
+}));

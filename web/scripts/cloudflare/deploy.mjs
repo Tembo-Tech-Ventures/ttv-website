@@ -1,11 +1,14 @@
 import {
   deriveEnvironmentContext,
   ensureD1Database,
+  ensureQueue,
   ensureR2Bucket,
+  ensureVectorizeIndex,
   ensureWorkersSubdomain,
   enableWorkersDevSubdomain,
   getOptionalEnv,
   getSecretBindings,
+  loginContainerRegistry,
   resolveBetterAuthUrl,
   runNpm,
   runWrangler,
@@ -22,6 +25,8 @@ async function main() {
 
   const d1Database = await ensureD1Database(context.d1Name);
   await ensureR2Bucket(context.bucketName);
+  await ensureQueue(context.queueName);
+  await ensureVectorizeIndex(context.vectorizeIndexName);
 
   const workersSubdomain = await ensureWorkersSubdomain();
   const betterAuthUrl = resolveBetterAuthUrl({
@@ -37,6 +42,8 @@ async function main() {
     d1Name: context.d1Name,
     d1Id: d1Database.uuid,
     bucketName: context.bucketName,
+    queueName: context.queueName,
+    vectorizeIndexName: context.vectorizeIndexName,
     primaryDomain,
     redirectDomain,
     betterAuthUrl,
@@ -52,6 +59,7 @@ async function main() {
     "--config",
     configPath,
   ]);
+  await loginContainerRegistry();
   await runWrangler(["deploy", "--config", configPath]);
 
   if (!primaryDomain && workersSubdomain) {
@@ -62,6 +70,8 @@ async function main() {
   await writeGithubOutput("database_name", context.d1Name);
   await writeGithubOutput("database_id", d1Database.uuid);
   await writeGithubOutput("bucket_name", context.bucketName);
+  await writeGithubOutput("queue_name", context.queueName);
+  await writeGithubOutput("vectorize_index_name", context.vectorizeIndexName);
   await writeGithubOutput("better_auth_url", betterAuthUrl);
   if (primaryDomain) {
     await writeGithubOutput("primary_domain", primaryDomain);
@@ -77,6 +87,8 @@ async function main() {
         workerName: context.workerName,
         databaseId: d1Database.uuid,
         bucketName: context.bucketName,
+        queueName: context.queueName,
+        vectorizeIndexName: context.vectorizeIndexName,
         betterAuthUrl,
         primaryDomain,
         redirectDomain,

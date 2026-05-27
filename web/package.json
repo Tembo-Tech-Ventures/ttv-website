@@ -19,6 +19,7 @@
   "dependencies": {
     "@astrojs/cloudflare": "^13.1.7",
     "@astrojs/react": "^5.0.2",
+    "@cloudflare/containers": "^0.3.3",
     "@gsap/react": "^2.1.0",
     "@headlessui/react": "^2.2.9",
     "@opentelemetry/api": "^1.9.1",

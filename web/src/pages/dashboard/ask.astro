@@ -1,0 +1,17 @@
+---
+import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import ChatInterface from "@/components/recordings/ChatInterface";
+---
+
+<DashboardLayout title="Ask AI">
+  <div class="space-y-6">
+    <div>
+      <h2 class="text-2xl font-bold text-white">Ask AI</h2>
+      <p class="mt-1 text-sm text-white/55">
+        Ask questions across your session transcripts and jump back to cited moments.
+      </p>
+    </div>
+
+    <ChatInterface client:load />
+  </div>
+</DashboardLayout>

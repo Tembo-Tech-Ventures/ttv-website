@@ -15,6 +15,9 @@ describe("Database Schema", () => {
     expect(schema.programRole).toBeDefined();
     expect(schema.programPartner).toBeDefined();
     expect(schema.programApplication).toBeDefined();
+    expect(schema.recording).toBeDefined();
+    expect(schema.transcriptSegment).toBeDefined();
+    expect(schema.chatMessage).toBeDefined();
   });
 
   it("exports all expected relations", () => {
@@ -29,6 +32,9 @@ describe("Database Schema", () => {
     expect(schema.programRoleRelations).toBeDefined();
     expect(schema.programPartnerRelations).toBeDefined();
     expect(schema.programApplicationRelations).toBeDefined();
+    expect(schema.recordingRelations).toBeDefined();
+    expect(schema.transcriptSegmentRelations).toBeDefined();
+    expect(schema.chatMessageRelations).toBeDefined();
   });
 
   it("programApplication has correct status enum values", () => {
@@ -45,6 +51,19 @@ describe("Database Schema", () => {
   it("programRole has correct name enum values", () => {
     const nameCol = schema.programRole.name;
     expect(nameCol.enumValues).toEqual(["INSTRUCTOR", "TA"]);
+  });
+
+  it("recording has correct processing status enum values", () => {
+    const statusCol = schema.recording.processingStatus;
+    expect(statusCol.enumValues).toEqual([
+      "pending",
+      "queued",
+      "extracting_audio",
+      "transcribing",
+      "embedding",
+      "complete",
+      "failed",
+    ]);
   });
 
   it("user email has unique constraint", () => {

@@ -7,6 +7,7 @@ import {
   PiBookOpenDuotone,
   PiSignOutDuotone,
   PiDatabaseDuotone,
+  PiVideoCameraDuotone,
 } from "react-icons/pi";
 import { PiListBold } from "react-icons/pi";
 
@@ -15,6 +16,7 @@ const links = [
   { href: "/admin/users", label: "Users", icon: PiUsersDuotone },
   { href: "/admin/applications", label: "Applications", icon: PiFileTextDuotone },
   { href: "/admin/programs", label: "Programs", icon: PiBookOpenDuotone },
+  { href: "/admin/recordings", label: "Recordings", icon: PiVideoCameraDuotone },
   { href: "/admin/data-migration", label: "Data Migration", icon: PiDatabaseDuotone },
   { href: "/auth/logout", label: "Logout", icon: PiSignOutDuotone },
 ];
