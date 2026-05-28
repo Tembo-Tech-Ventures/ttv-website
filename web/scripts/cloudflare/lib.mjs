@@ -204,6 +204,39 @@ export async function ensureVectorizeIndex(name) {
   return true;
 }
 
+export async function loginContainerRegistry() {
+  const registryHost = getOptionalEnv("CLOUDFLARE_CONTAINER_REGISTRY") ?? "registry.cloudflare.com";
+  const credentials = await cfApi(
+    `/containers/registries/${registryHost}/credentials`,
+    {
+      method: "POST",
+      body: {
+        expiration_minutes: 120,
+        permissions: ["pull", "push"],
+      },
+    }
+  );
+
+  const username = credentials?.username;
+  const password = credentials?.password;
+  const resolvedRegistryHost = credentials?.registry_host ?? registryHost;
+  if (!username || !password || !resolvedRegistryHost) {
+    throw new Error("Cloudflare registry credential response was missing registry, username, or password");
+  }
+
+  await runCommand(
+    "docker",
+    [
+      "login",
+      resolvedRegistryHost,
+      "--username",
+      username,
+      "--password-stdin",
+    ],
+    { input: `${password}\n` }
+  );
+}
+
 export async function deleteR2BucketByName(name) {
   const existing = await cfApi(`/r2/buckets/${encodeURIComponent(name)}`);
   if (!existing) {
