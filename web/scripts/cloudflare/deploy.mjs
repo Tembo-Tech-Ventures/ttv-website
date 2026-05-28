@@ -8,7 +8,6 @@ import {
   enableWorkersDevSubdomain,
   getOptionalEnv,
   getSecretBindings,
-  loginContainerRegistry,
   resolveBetterAuthUrl,
   runNpm,
   runWrangler,
@@ -59,7 +58,6 @@ async function main() {
     "--config",
     configPath,
   ]);
-  await loginContainerRegistry();
   await runWrangler(["deploy", "--config", configPath]);
 
   if (!primaryDomain && workersSubdomain) {

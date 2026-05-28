@@ -204,28 +204,6 @@ export async function ensureVectorizeIndex(name) {
   return true;
 }
 
-export async function loginContainerRegistry() {
-  const result = await runWrangler([
-    "containers",
-    "registries",
-    "credentials",
-    "--push",
-    "--json",
-  ]);
-  const credentials = JSON.parse(result.stdout);
-  const password = credentials.password;
-  if (!password) {
-    throw new Error("Failed to obtain container registry credentials");
-  }
-  await runCommand("docker", [
-    "login",
-    "registry.cloudflare.com",
-    "--username",
-    "anything",
-    "--password-stdin",
-  ], { input: password });
-}
-
 export async function deleteR2BucketByName(name) {
   const existing = await cfApi(`/r2/buckets/${encodeURIComponent(name)}`);
   if (!existing) {
