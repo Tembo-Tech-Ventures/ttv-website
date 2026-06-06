@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
+import { AvatarUploadError, storeProfilePhoto } from "@/lib/avatar";
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
@@ -12,25 +13,52 @@ const db = drizzle(env.DB, { schema });
 let success = "";
 let error = "";
 
-// Handle POST — update user profile
+// Handle POST — update user profile or avatar
 if (Astro.request.method === "POST") {
   try {
     const formData = await Astro.request.formData();
-    const name = (formData.get("name") as string)?.trim();
+    const action = formData.get("action");
 
-    if (!name) {
-      error = "Name is required.";
-    } else {
+    if (action === "avatar") {
+      const avatarFile = formData.get("avatar");
+
+      if (!(avatarFile instanceof File)) {
+        throw new AvatarUploadError("Please choose an image to upload.");
+      }
+
+      const uploadedAvatar = await storeProfilePhoto(env, {
+        userId: user.id,
+        file: avatarFile,
+        previousImageUrl: user.image,
+      });
+
       await db
         .update(schema.user)
-        .set({ name })
+        .set({ image: uploadedAvatar.imageUrl })
         .where(eq(schema.user.id, user.id));
 
-      user.name = name;
-      success = "Profile updated successfully!";
+      user.image = uploadedAvatar.imageUrl;
+      success = "Profile photo updated successfully!";
+    } else {
+      const name = (formData.get("name") as string)?.trim();
+
+      if (!name) {
+        error = "Name is required.";
+      } else {
+        await db
+          .update(schema.user)
+          .set({ name })
+          .where(eq(schema.user.id, user.id));
+
+        user.name = name;
+        success = "Profile updated successfully!";
+      }
     }
-  } catch (_e) {
-    error = "Something went wrong. Please try again.";
+  } catch (e) {
+    error =
+      e instanceof AvatarUploadError
+        ? e.message
+        : "Something went wrong. Please try again.";
   }
 }
 ---
@@ -75,6 +103,31 @@ if (Astro.request.method === "POST") {
             <p class="text-lg font-semibold text-white">{user.name}</p>
             <p class="text-sm text-white/60">{user.email}</p>
           </div>
+          <form method="POST" enctype="multipart/form-data" class="w-full space-y-3">
+            <input type="hidden" name="action" value="avatar" />
+            <div class="flex flex-col gap-1.5 text-left">
+              <label for="avatar" class="text-sm font-medium text-white/90">
+                Profile photo
+              </label>
+              <input
+                id="avatar"
+                name="avatar"
+                type="file"
+                accept="image/*"
+                required
+                class="block w-full cursor-pointer rounded-md border border-teal bg-dark/50 px-3 py-2 text-sm text-white file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:font-medium file:text-dark hover:file:bg-primary/90 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+              <p class="text-xs text-white/40">
+                Upload a PNG, JPG, GIF, or WebP image. Files are resized to a maximum of 1024x1024 before storage.
+              </p>
+            </div>
+            <button
+              type="submit"
+              class="inline-flex w-full items-center justify-center rounded-md bg-primary px-6 py-2 font-medium text-dark hover:bg-primary/90 transition-colors"
+            >
+              Upload Photo
+            </button>
+          </form>
         </div>
       </Card>
 
@@ -82,6 +135,7 @@ if (Astro.request.method === "POST") {
       <Card class="lg:col-span-2">
         <h3 class="mb-4 text-lg font-semibold text-white">Edit Profile</h3>
         <form method="POST" class="space-y-4">
+          <input type="hidden" name="action" value="profile" />
           <div class="flex flex-col gap-1.5">
             <label for="name" class="text-sm font-medium text-white/90">
               Name <span class="text-primary">*</span>

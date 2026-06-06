@@ -5,6 +5,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "@astrojs/cloudflare/entrypoints/server",
 
+  "images": {
+    "binding": "IMAGES"
+  },
+
   // D1 Database
   "d1_databases": [
     {

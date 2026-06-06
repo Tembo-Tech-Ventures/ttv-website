@@ -5,6 +5,7 @@ declare namespace Cloudflare {
 	interface Env {
 		BUCKET: R2Bucket;
 		DB: D1Database;
+		IMAGES: ImagesBinding;
 		BETTER_AUTH_URL: string;
 		BETTER_AUTH_SECRET: string;
 		GITHUB_CLIENT_ID: string;
