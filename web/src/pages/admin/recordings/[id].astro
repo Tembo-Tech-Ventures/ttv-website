@@ -1,0 +1,138 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import Card from "@/components/common/Card.astro";
+import ProcessingStatus from "@/components/recordings/ProcessingStatus.astro";
+import { formatDuration } from "@/lib/recordings/time-utils";
+import { drizzle } from "drizzle-orm/d1";
+import { eq } from "drizzle-orm";
+import * as schema from "@/lib/db/schema";
+import { env } from "cloudflare:workers";
+
+const db = drizzle(env.DB, { schema });
+const { id } = Astro.params;
+if (!id) return Astro.redirect("/admin/recordings");
+
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  const action = String(formData.get("action") ?? "");
+
+  if (action === "update") {
+    await db
+      .update(schema.recording)
+      .set({
+        title: String(formData.get("title") ?? ""),
+        description: String(formData.get("description") ?? "") || null,
+        programId: String(formData.get("programId") ?? "") || null,
+        recordedAt: formData.get("recordedAt")
+          ? new Date(String(formData.get("recordedAt")))
+          : null,
+      })
+      .where(eq(schema.recording.id, id));
+  } else if (action === "save-transcript") {
+    await db
+      .update(schema.recording)
+      .set({
+        transcriptText: String(formData.get("transcriptText") ?? ""),
+        transcriptVtt: String(formData.get("transcriptVtt") ?? ""),
+      })
+      .where(eq(schema.recording.id, id));
+  }
+
+  return Astro.redirect(`/admin/recordings/${id}`);
+}
+
+const recording = await db.query.recording.findFirst({
+  where: eq(schema.recording.id, id),
+  with: { program: true, segments: true },
+});
+if (!recording) return Astro.redirect("/admin/recordings");
+
+const programs = await db.query.program.findMany({
+  orderBy: (program, { asc }) => [asc(program.name)],
+});
+
+const formatDate = (date: Date | null) =>
+  date ? date.toISOString().split("T")[0] : "";
+---
+
+<AdminLayout title={recording.title}>
+  <div class="space-y-6">
+    <a href="/admin/recordings" class="text-sm text-primary hover:underline">
+      &larr; Back to Recordings
+    </a>
+
+    <div class="grid gap-6 lg:grid-cols-[minmax(0,2fr)_320px]">
+      <Card>
+        <h2 class="text-xl font-semibold text-white">Recording Details</h2>
+        <form method="POST" class="mt-5 space-y-4">
+          <input type="hidden" name="action" value="update" />
+          <div class="flex flex-col gap-1.5">
+            <label for="title" class="text-sm font-medium text-white/90">Title *</label>
+            <input id="title" name="title" value={recording.title} required class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50" />
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div class="flex flex-col gap-1.5">
+              <label for="programId" class="text-sm font-medium text-white/90">Program</label>
+              <select id="programId" name="programId" class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50">
+                <option value="">Unassigned</option>
+                {programs.map((program) => (
+                  <option value={program.id} selected={program.id === recording.programId}>
+                    {program.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div class="flex flex-col gap-1.5">
+              <label for="recordedAt" class="text-sm font-medium text-white/90">Recorded Date</label>
+              <input type="date" id="recordedAt" name="recordedAt" value={formatDate(recording.recordedAt)} class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50" />
+            </div>
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label for="description" class="text-sm font-medium text-white/90">Description</label>
+            <textarea id="description" name="description" rows="4" class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50">{recording.description ?? ""}</textarea>
+          </div>
+          <button type="submit" class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90">
+            Save Details
+          </button>
+        </form>
+      </Card>
+
+      <Card>
+        <h3 class="text-lg font-semibold text-white">Processing</h3>
+        <div class="mt-4 space-y-3 text-sm text-white/65">
+          <p><ProcessingStatus status={recording.processingStatus} /></p>
+          <p>Duration: <span class="text-white">{formatDuration(recording.durationSeconds)}</span></p>
+          <p>Segments: <span class="text-white">{recording.segments.length}</span></p>
+          {recording.processingError && (
+            <p class="rounded-md bg-red-500/15 p-3 text-red-100">{recording.processingError}</p>
+          )}
+        </div>
+        <form method="POST" action="/api/admin/recordings/process" class="mt-5">
+          <input type="hidden" name="recordingId" value={recording.id} />
+          <button type="submit" class="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90">
+            Reprocess
+          </button>
+        </form>
+      </Card>
+    </div>
+
+    {recording.r2VideoKey && (
+      <Card>
+        <h3 class="mb-4 text-lg font-semibold text-white">Preview</h3>
+        <video src={`/api/recordings/${recording.id}/video`} controls class="aspect-video w-full rounded-md bg-black"></video>
+      </Card>
+    )}
+
+    <Card>
+      <h3 class="text-lg font-semibold text-white">Transcript</h3>
+      <form method="POST" class="mt-4 space-y-4">
+        <input type="hidden" name="action" value="save-transcript" />
+        <textarea name="transcriptText" rows="10" class="w-full rounded-md border border-teal bg-dark/50 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50">{recording.transcriptText ?? ""}</textarea>
+        <textarea name="transcriptVtt" rows="6" class="w-full rounded-md border border-teal bg-dark/50 px-3 py-2 font-mono text-xs text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50">{recording.transcriptVtt ?? ""}</textarea>
+        <button type="submit" class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90">
+          Save Transcript
+        </button>
+      </form>
+    </Card>
+  </div>
+</AdminLayout>

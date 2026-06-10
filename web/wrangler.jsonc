@@ -3,7 +3,7 @@
   "name": "ttv-website",
   "compatibility_date": "2026-04-01",
   "compatibility_flags": ["nodejs_compat"],
-  "main": "@astrojs/cloudflare/entrypoints/server",
+  "main": "./src/worker.ts",
 
   // D1 Database
   "d1_databases": [
@@ -20,6 +20,57 @@
     {
       "binding": "BUCKET",
       "bucket_name": "ttv-files"
+    }
+  ],
+
+  "ai": {
+    "binding": "AI"
+  },
+
+  "vectorize": [
+    {
+      "binding": "VECTORIZE",
+      "index_name": "ttv-transcripts"
+    }
+  ],
+
+  "queues": {
+    "producers": [
+      {
+        "binding": "RECORDING_QUEUE",
+        "queue": "ttv-recording-pipeline"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "ttv-recording-pipeline",
+        "max_batch_size": 1,
+        "max_retries": 3
+      }
+    ]
+  },
+
+  "containers": [
+    {
+      "class_name": "FfmpegContainer",
+      "image": "./containers/ffmpeg/Dockerfile",
+      "max_instances": 3
+    }
+  ],
+
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "FFMPEG_CONTAINER",
+        "class_name": "FfmpegContainer"
+      }
+    ]
+  },
+
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["FfmpegContainer"]
     }
   ]
 }
