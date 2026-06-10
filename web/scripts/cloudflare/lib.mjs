@@ -11,6 +11,7 @@ const generatedDir = path.join(webRoot, "dist", "server");
 
 const DEFAULT_APP_NAME = "ttv-website";
 const DEFAULT_COMPATIBILITY_DATE = "2026-04-01";
+const DEFAULT_AI_GATEWAY_MODEL = "workers-ai/@cf/google/gemma-4-26b-a4b-it";
 const SECRET_KEYS = [
   "GITHUB_CLIENT_ID",
   "GITHUB_CLIENT_SECRET",
@@ -77,6 +78,7 @@ export function deriveEnvironmentContext() {
     bucketName: joinName([appName, "files", environmentSlug]),
     queueName: joinName([appName, "recording-pipeline", environmentSlug]),
     vectorizeIndexName: joinName([appName, "transcripts", environmentSlug]),
+    aiGatewayName: joinName([appName, "ai", environmentSlug]),
   };
 }
 
@@ -204,26 +206,26 @@ export async function ensureVectorizeIndex(name) {
   return true;
 }
 
-export async function loginContainerRegistry() {
-  const result = await runWrangler([
-    "containers",
-    "registries",
-    "credentials",
-    "--push",
-    "--json",
-  ]);
-  const credentials = JSON.parse(result.stdout);
-  const password = credentials.password;
-  if (!password) {
-    throw new Error("Failed to obtain container registry credentials");
+export async function ensureAiGateway(name) {
+  const existing = await cfApi(
+    `/ai-gateway/gateways/${encodeURIComponent(name)}`
+  );
+  if (existing) {
+    return existing;
   }
-  await runCommand("docker", [
-    "login",
-    "registry.cloudflare.com",
-    "--username",
-    "anything",
-    "--password-stdin",
-  ], { input: password });
+
+  return cfApi("/ai-gateway/gateways", {
+    method: "POST",
+    body: {
+      id: name,
+      collect_logs: true,
+      cache_invalidate_on_update: false,
+      cache_ttl: 0,
+      rate_limiting_interval: 0,
+      rate_limiting_limit: 0,
+      rate_limiting_technique: "fixed",
+    },
+  });
 }
 
 export async function deleteR2BucketByName(name) {
@@ -307,6 +309,7 @@ export async function writeGeneratedWranglerConfig({
   bucketName,
   queueName,
   vectorizeIndexName,
+  aiGatewayName,
   primaryDomain,
   redirectDomain,
   betterAuthUrl,
@@ -339,6 +342,11 @@ export async function writeGeneratedWranglerConfig({
     },
     vars: {
       BETTER_AUTH_URL: betterAuthUrl,
+      AI_GATEWAY_ACCOUNT_ID: getRequiredEnv("CLOUDFLARE_ACCOUNT_ID"),
+      AI_GATEWAY_NAME: aiGatewayName,
+      AI_GATEWAY_MODEL:
+        getOptionalEnv("CLOUDFLARE_AI_GATEWAY_MODEL") ??
+        DEFAULT_AI_GATEWAY_MODEL,
       ...(primaryDomain ? { PRIMARY_DOMAIN: primaryDomain } : {}),
       ...(redirectDomain ? { REDIRECT_DOMAIN: redirectDomain } : {}),
     },
@@ -428,6 +436,13 @@ export function getSecretBindings() {
     key: "BETTER_AUTH_SECRET",
     value: getOptionalEnv("BETTER_AUTH_SECRET") ?? deriveBetterAuthSecret(),
   });
+
+  // Optional: scoped Workers AI token for AI Gateway unified-mode requests.
+  // When absent, the worker falls back to the Workers AI binding.
+  const aiGatewayToken = getOptionalEnv("CLOUDFLARE_AI_GATEWAY_TOKEN");
+  if (aiGatewayToken) {
+    bindings.push({ key: "AI_GATEWAY_API_KEY", value: aiGatewayToken });
+  }
 
   return bindings;
 }

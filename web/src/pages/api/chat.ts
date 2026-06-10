@@ -5,6 +5,7 @@ import { inArray } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import { getAccessibleProgramIds } from "@/lib/recordings/access";
 import { formatTimestamp } from "@/lib/recordings/time-utils";
+import { generateChatCompletion, type ChatMessage } from "@/lib/ai/gateway";
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
@@ -69,22 +70,17 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const system = `You are a helpful assistant for TTV students. Answer only from the transcript excerpts. Cite session titles and timestamps when they support the answer.\n\n${context}`;
 
-  const aiResponse = await env.AI.run(
-    "@cf/google/gemma-4-26b-a4b-it" as Parameters<typeof env.AI.run>[0],
-    {
-      messages: [
-        { role: "system", content: system },
-        ...conversationHistory
-          .filter((entry) => entry.role === "user" || entry.role === "assistant")
-          .map((entry) => ({
-            role: entry.role as "user" | "assistant",
-            content: String(entry.content).slice(0, 1000),
-          })),
-        { role: "user", content: message },
-      ],
-    }
-  ) as { response?: string; result?: { response?: string } };
-  const answer = aiResponse.response ?? aiResponse.result?.response ?? "";
+  const messages: ChatMessage[] = [
+    { role: "system", content: system },
+    ...conversationHistory
+      .filter((entry) => entry.role === "user" || entry.role === "assistant")
+      .map((entry) => ({
+        role: entry.role as "user" | "assistant",
+        content: String(entry.content).slice(0, 1000),
+      })),
+    { role: "user", content: message },
+  ];
+  const answer = await generateChatCompletion(env, messages);
 
   const citations = segments.map((segment) => ({
     recordingId: segment.recordingId,
