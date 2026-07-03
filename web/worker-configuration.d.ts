@@ -6,10 +6,18 @@ declare namespace Cloudflare {
 		BUCKET: R2Bucket;
 		DB: D1Database;
 		IMAGES: ImagesBinding;
+		AI: Ai;
+		VECTORIZE: VectorizeIndex;
+		RECORDING_QUEUE: Queue;
+		FFMPEG_CONTAINER: DurableObjectNamespace;
 		BETTER_AUTH_URL: string;
 		BETTER_AUTH_SECRET: string;
 		GITHUB_CLIENT_ID: string;
 		GITHUB_CLIENT_SECRET: string;
+		AI_GATEWAY_ACCOUNT_ID?: string;
+		AI_GATEWAY_NAME?: string;
+		AI_GATEWAY_MODEL?: string;
+		AI_GATEWAY_API_KEY?: string;
 	}
 }
 interface Env extends Cloudflare.Env {}

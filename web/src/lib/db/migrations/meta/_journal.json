@@ -15,6 +15,13 @@
       "when": 1775347749717,
       "tag": "0001_soft_silver_centurion",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1777819347579,
+      "tag": "0002_married_microbe",
+      "breakpoints": true
     }
   ]
 }

@@ -23,6 +23,7 @@ export default [
         process: "readonly",
         fetch: "readonly",
         URL: "readonly",
+        Response: "readonly",
       },
     },
     rules: {

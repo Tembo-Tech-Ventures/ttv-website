@@ -11,7 +11,11 @@ const generatedDir = path.join(webRoot, "dist", "server");
 
 const DEFAULT_APP_NAME = "ttv-website";
 const DEFAULT_COMPATIBILITY_DATE = "2026-04-01";
-const SECRET_KEYS = ["GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"];
+const DEFAULT_AI_GATEWAY_MODEL = "workers-ai/@cf/google/gemma-4-26b-a4b-it";
+const SECRET_KEYS = [
+  "GITHUB_CLIENT_ID",
+  "GITHUB_CLIENT_SECRET",
+];
 
 export function getRequiredEnv(name) {
   const value = process.env[name]?.trim();
@@ -72,6 +76,9 @@ export function deriveEnvironmentContext() {
     workerName: joinName([appName, environmentSlug]),
     d1Name: joinName([appName, "db", environmentSlug]),
     bucketName: joinName([appName, "files", environmentSlug]),
+    queueName: joinName([appName, "recording-pipeline", environmentSlug]),
+    vectorizeIndexName: joinName([appName, "transcripts", environmentSlug]),
+    aiGatewayName: joinName([appName, "ai", environmentSlug]),
   };
 }
 
@@ -167,6 +174,60 @@ export async function ensureR2Bucket(name) {
   });
 }
 
+export async function ensureQueue(name) {
+  try {
+    const existing = await runWrangler(["queues", "info", name]);
+    if (existing) return true;
+  } catch {
+    // Wrangler exits non-zero when the queue does not exist.
+  }
+
+  await runWrangler(["queues", "create", name]);
+  return true;
+}
+
+export async function ensureVectorizeIndex(name) {
+  try {
+    const existing = await runWrangler(["vectorize", "get", name]);
+    if (existing) return true;
+  } catch {
+    // Wrangler exits non-zero when the index does not exist.
+  }
+
+  await runWrangler([
+    "vectorize",
+    "create",
+    name,
+    "--dimensions",
+    "1024",
+    "--metric",
+    "cosine",
+  ]);
+  return true;
+}
+
+export async function ensureAiGateway(name) {
+  const existing = await cfApi(
+    `/ai-gateway/gateways/${encodeURIComponent(name)}`
+  );
+  if (existing) {
+    return existing;
+  }
+
+  return cfApi("/ai-gateway/gateways", {
+    method: "POST",
+    body: {
+      id: name,
+      collect_logs: true,
+      cache_invalidate_on_update: false,
+      cache_ttl: 0,
+      rate_limiting_interval: 0,
+      rate_limiting_limit: 0,
+      rate_limiting_technique: "fixed",
+    },
+  });
+}
+
 export async function deleteR2BucketByName(name) {
   const existing = await cfApi(`/r2/buckets/${encodeURIComponent(name)}`);
   if (!existing) {
@@ -246,6 +307,9 @@ export async function writeGeneratedWranglerConfig({
   d1Name,
   d1Id,
   bucketName,
+  queueName,
+  vectorizeIndexName,
+  aiGatewayName,
   primaryDomain,
   redirectDomain,
   betterAuthUrl,
@@ -278,6 +342,11 @@ export async function writeGeneratedWranglerConfig({
     },
     vars: {
       BETTER_AUTH_URL: betterAuthUrl,
+      AI_GATEWAY_ACCOUNT_ID: getRequiredEnv("CLOUDFLARE_ACCOUNT_ID"),
+      AI_GATEWAY_NAME: aiGatewayName,
+      AI_GATEWAY_MODEL:
+        getOptionalEnv("CLOUDFLARE_AI_GATEWAY_MODEL") ??
+        DEFAULT_AI_GATEWAY_MODEL,
       ...(primaryDomain ? { PRIMARY_DOMAIN: primaryDomain } : {}),
       ...(redirectDomain ? { REDIRECT_DOMAIN: redirectDomain } : {}),
     },
@@ -293,6 +362,51 @@ export async function writeGeneratedWranglerConfig({
       {
         binding: "BUCKET",
         bucket_name: bucketName,
+      },
+    ],
+    ai: {
+      binding: "AI",
+    },
+    vectorize: [
+      {
+        binding: "VECTORIZE",
+        index_name: vectorizeIndexName,
+      },
+    ],
+    queues: {
+      producers: [
+        {
+          binding: "RECORDING_QUEUE",
+          queue: queueName,
+        },
+      ],
+      consumers: [
+        {
+          queue: queueName,
+          max_batch_size: 1,
+          max_retries: 3,
+        },
+      ],
+    },
+    containers: [
+      {
+        class_name: "FfmpegContainer",
+        image: path.relative(generatedDir, path.join(webRoot, "containers", "ffmpeg", "Dockerfile")),
+        max_instances: 3,
+      },
+    ],
+    durable_objects: {
+      bindings: [
+        {
+          name: "FFMPEG_CONTAINER",
+          class_name: "FfmpegContainer",
+        },
+      ],
+    },
+    migrations: [
+      {
+        tag: "v1",
+        new_sqlite_classes: ["FfmpegContainer"],
       },
     ],
     ...(primaryDomain || redirectDomain
@@ -322,6 +436,13 @@ export function getSecretBindings() {
     key: "BETTER_AUTH_SECRET",
     value: getOptionalEnv("BETTER_AUTH_SECRET") ?? deriveBetterAuthSecret(),
   });
+
+  // Optional: scoped Workers AI token for AI Gateway unified-mode requests.
+  // When absent, the worker falls back to the Workers AI binding.
+  const aiGatewayToken = getOptionalEnv("CLOUDFLARE_AI_GATEWAY_TOKEN");
+  if (aiGatewayToken) {
+    bindings.push({ key: "AI_GATEWAY_API_KEY", value: aiGatewayToken });
+  }
 
   return bindings;
 }

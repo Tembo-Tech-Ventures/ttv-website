@@ -1,0 +1,67 @@
+---
+import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import Card from "@/components/common/Card.astro";
+import SessionViewer from "@/components/recordings/SessionViewer";
+import ProcessingStatus from "@/components/recordings/ProcessingStatus.astro";
+import { parseTimestampParam } from "@/lib/recordings/time-utils";
+import { userCanAccessProgram } from "@/lib/recordings/access";
+import { drizzle } from "drizzle-orm/d1";
+import { eq } from "drizzle-orm";
+import * as schema from "@/lib/db/schema";
+import { env } from "cloudflare:workers";
+
+const user = Astro.locals.user!;
+const db = drizzle(env.DB, { schema });
+const { id } = Astro.params;
+if (!id) return Astro.redirect("/dashboard/sessions");
+
+const recording = await db.query.recording.findFirst({
+  where: eq(schema.recording.id, id),
+  with: {
+    program: true,
+    segments: {
+      orderBy: (segment, { asc }) => [asc(segment.startTime)],
+    },
+  },
+});
+
+if (!recording) return Astro.redirect("/dashboard/sessions");
+const hasAccess = await userCanAccessProgram(db, user.id, recording.programId);
+if (!hasAccess) return Astro.redirect("/dashboard/sessions");
+
+const initialTime = parseTimestampParam(Astro.url.searchParams.get("t"));
+---
+
+<DashboardLayout title={recording.title}>
+  <div class="space-y-6">
+    <a href="/dashboard/sessions" class="text-sm text-primary hover:underline">
+      &larr; Back to Sessions
+    </a>
+
+    {recording.processingStatus !== "complete" ? (
+      <Card>
+        <div class="space-y-3 py-8 text-center">
+          <ProcessingStatus status={recording.processingStatus} />
+          <h2 class="text-xl font-semibold text-white">{recording.title}</h2>
+          <p class="text-white/55">
+            This recording is still being processed. Check back once the transcript is ready.
+          </p>
+        </div>
+      </Card>
+    ) : (
+      <SessionViewer
+        client:load
+        title={recording.title}
+        videoUrl={`/api/recordings/${recording.id}/video`}
+        initialTime={initialTime}
+        segments={recording.segments.map((segment) => ({
+          id: segment.id,
+          startTime: segment.startTime,
+          endTime: segment.endTime,
+          text: segment.text,
+          speaker: segment.speaker,
+        }))}
+      />
+    )}
+  </div>
+</DashboardLayout>

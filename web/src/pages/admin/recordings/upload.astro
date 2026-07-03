@@ -1,0 +1,100 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import Card from "@/components/common/Card.astro";
+import { drizzle } from "drizzle-orm/d1";
+import { createId } from "@paralleldrive/cuid2";
+import * as schema from "@/lib/db/schema";
+import { env } from "cloudflare:workers";
+
+const db = drizzle(env.DB, { schema });
+let error = "";
+
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const programId = String(formData.get("programId") ?? "") || null;
+  const recordedAtValue = String(formData.get("recordedAt") ?? "");
+  const file = formData.get("video");
+
+  if (!title || !(file instanceof File) || file.size === 0) {
+    error = "Title and video file are required.";
+  } else {
+    const id = createId();
+    const extension = file.name.split(".").pop() || "mp4";
+    const r2VideoKey = `recordings/${id}/source.${extension}`;
+    await env.BUCKET.put(r2VideoKey, file.stream(), {
+      httpMetadata: { contentType: file.type || "video/mp4" },
+    });
+
+    await db.insert(schema.recording).values({
+      id,
+      title,
+      description: description || null,
+      programId,
+      recordedAt: recordedAtValue ? new Date(recordedAtValue) : null,
+      r2VideoKey,
+      fileSizeBytes: file.size,
+      processingStatus: "queued",
+    });
+
+    await env.RECORDING_QUEUE.send({ type: "process_recording", recordingId: id });
+    return Astro.redirect(`/admin/recordings/${id}`);
+  }
+}
+
+const programs = await db.query.program.findMany({
+  orderBy: (program, { desc }) => [desc(program.createdAt)],
+});
+---
+
+<AdminLayout title="Upload Recording">
+  <div class="mx-auto max-w-3xl space-y-6">
+    <a href="/admin/recordings" class="text-sm text-primary hover:underline">
+      &larr; Back to Recordings
+    </a>
+
+    <Card>
+      <h2 class="text-xl font-semibold text-white">Upload Recording</h2>
+      <p class="mt-1 text-sm text-white/55">
+        The video is stored in R2 and queued for audio extraction, transcription, and indexing.
+      </p>
+
+      {error && <p class="mt-4 rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-100">{error}</p>}
+
+      <form method="POST" enctype="multipart/form-data" class="mt-6 space-y-4">
+        <div class="flex flex-col gap-1.5">
+          <label for="title" class="text-sm font-medium text-white/90">Title *</label>
+          <input id="title" name="title" required class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50" />
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label for="programId" class="text-sm font-medium text-white/90">Program</label>
+          <select id="programId" name="programId" class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50">
+            <option value="">Unassigned</option>
+            {programs.map((program) => <option value={program.id}>{program.name}</option>)}
+          </select>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label for="recordedAt" class="text-sm font-medium text-white/90">Recorded Date</label>
+          <input type="date" id="recordedAt" name="recordedAt" class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50" />
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label for="description" class="text-sm font-medium text-white/90">Description</label>
+          <textarea id="description" name="description" rows="4" class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"></textarea>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label for="video" class="text-sm font-medium text-white/90">Video File *</label>
+          <input type="file" id="video" name="video" required accept="video/*" class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1 file:text-sm file:font-semibold file:text-dark" />
+        </div>
+
+        <button type="submit" class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90">
+          Upload and Process
+        </button>
+      </form>
+    </Card>
+  </div>
+</AdminLayout>
