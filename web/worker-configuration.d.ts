@@ -5,6 +5,7 @@ declare namespace Cloudflare {
 	interface Env {
 		BUCKET: R2Bucket;
 		DB: D1Database;
+		IMAGES: ImagesBinding;
 		AI: Ai;
 		VECTORIZE: VectorizeIndex;
 		RECORDING_QUEUE: Queue;

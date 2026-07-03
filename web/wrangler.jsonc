@@ -5,6 +5,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "./src/worker.ts",
 
+  "images": {
+    "binding": "IMAGES"
+  },
+
   // D1 Database
   "d1_databases": [
     {
