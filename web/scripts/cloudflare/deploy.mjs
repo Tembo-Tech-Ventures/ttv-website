@@ -6,7 +6,6 @@ import {
   ensureR2Bucket,
   ensureVectorizeIndex,
   ensureWorkersSubdomain,
-  enableWorkersDevSubdomain,
   getOptionalEnv,
   getSecretBindings,
   queryD1Database,
@@ -83,10 +82,6 @@ async function main() {
   }
 
   await runWrangler(["deploy", "--config", configPath]);
-
-  if (!primaryDomain && workersSubdomain) {
-    await enableWorkersDevSubdomain(context.workerName);
-  }
 
   await writeGithubOutput("worker_name", context.workerName);
   await writeGithubOutput("database_name", context.d1Name);

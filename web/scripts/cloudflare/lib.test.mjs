@@ -118,6 +118,8 @@ describe("createGeneratedWranglerConfig", () => {
       enabled: true,
       head_sampling_rate: 0.1,
     });
+    expect(config.workers_dev).toBe(true);
+    expect(config.preview_urls).toBe(true);
     expect(config.vars).toMatchObject({
       DEPLOYMENT_ENVIRONMENT: "staging",
       DEPLOYMENT_VERSION: "deadbeef",
@@ -144,6 +146,23 @@ describe("createGeneratedWranglerConfig", () => {
     });
 
     expect(config.vars).not.toHaveProperty("AGENT_AUTH_ENABLED");
+  });
+
+  it("lets Wrangler disable workers.dev and preview routes for custom domains", () => {
+    const config = createGeneratedWranglerConfig({
+      workerName: "ttv-production",
+      d1Name: "ttv-db-production",
+      d1Id: "db-id",
+      bucketName: "ttv-files-production",
+      queueName: "ttv-queue-production",
+      vectorizeIndexName: "ttv-vector-production",
+      aiGatewayName: "ttv-ai-production",
+      primaryDomain: "example.com",
+      betterAuthUrl: "https://example.com",
+    });
+
+    expect(config.workers_dev).toBe(false);
+    expect(config.preview_urls).toBe(false);
   });
 
   it("captures every invocation for isolated preview iteration", () => {

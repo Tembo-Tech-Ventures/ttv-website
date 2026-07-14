@@ -341,12 +341,6 @@ export async function ensureWorkersSubdomain() {
   return created?.subdomain;
 }
 
-export async function enableWorkersDevSubdomain(workerName) {
-  await cfApi(`/workers/scripts/${encodeURIComponent(workerName)}/subdomain`, {
-    method: "POST",
-  });
-}
-
 export async function deleteWorkerScript(workerName) {
   const deleted = await cfApi(
     `/workers/scripts/${encodeURIComponent(workerName)}?force=true`,
@@ -406,6 +400,7 @@ export function createGeneratedWranglerConfig({
   const deployment = resolveDeploymentMetadata();
   const agentAuthEnabled =
     getOptionalEnv("CLOUDFLARE_AGENT_AUTH_ENABLED") === "true";
+  const workersDevEnabled = !primaryDomain && !redirectDomain;
   if (
     agentAuthEnabled &&
     deployment.environment !== "staging" &&
@@ -429,7 +424,8 @@ export function createGeneratedWranglerConfig({
     },
     main: "entry.mjs",
     no_bundle: true,
-    workers_dev: !primaryDomain && !redirectDomain,
+    workers_dev: workersDevEnabled,
+    preview_urls: workersDevEnabled,
     rules: [
       {
         type: "ESModule",
