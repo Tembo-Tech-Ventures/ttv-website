@@ -89,9 +89,9 @@ jobs:
       CLOUDFLARE_ALLOW_PROTECTED_DESTROY: ${{ inputs.allow_protected_destroy }}
       STAGING_AGENT_TOKEN: ${{ secrets.STAGING_AGENT_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -151,9 +151,9 @@ jobs:
       CLOUDFLARE_ALLOW_PROTECTED_DESTROY: ${{ inputs.allow_protected_destroy }}
       STAGING_AGENT_TOKEN: ${{ secrets.STAGING_AGENT_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm

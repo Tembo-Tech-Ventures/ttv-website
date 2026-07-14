@@ -9,6 +9,22 @@ async function readRepositoryFile(relativePath) {
 }
 
 describe("GitHub delivery contracts", () => {
+  it("uses Node 24-compatible checkout and setup actions", async () => {
+    const workflows = await Promise.all(
+      [
+        "ci.yml",
+        "cloudflare-agent.yml",
+        "cloudflare-environment.yml",
+        "cloudflare-sweep.yml",
+      ].map((name) => readRepositoryFile(`.github/workflows/${name}`))
+    );
+
+    for (const workflow of workflows) {
+      expect(workflow).not.toMatch(/actions\/(checkout|setup-node)@v4/);
+      expect(workflow).toMatch(/actions\/(checkout|setup-node)@v5/);
+    }
+  });
+
   it("keeps agent bearer auth enabled only for shared staging", async () => {
     const [pullRequestStaging, manualStaging, production] = await Promise.all([
       readRepositoryFile(".github/workflows/cloudflare-staging-pr.yml"),
