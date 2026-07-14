@@ -88,14 +88,65 @@ describe("runSmokeChecks", () => {
         expectedEnvironment: "agent-123",
         expectedVersion: "new-version",
         fetchImpl: fetchMock,
+        healthAttempts: 1,
       })
     ).rejects.toThrow('Expected environment "agent-123"');
+  });
+
+  it("waits for the expected version to propagate after deployment", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          status: "ok",
+          service: "ttv-website",
+          environment: "agent-123",
+          version: "old-version",
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          status: "ok",
+          service: "ttv-website",
+          environment: "agent-123",
+          version: "new-version",
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response("<html></html>", {
+          status: 200,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        })
+      );
+    const sleepMock = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      runSmokeChecks({
+        baseUrl: "https://example.com",
+        expectedEnvironment: "agent-123",
+        expectedVersion: "new-version",
+        fetchImpl: fetchMock,
+        healthAttempts: 2,
+        retryDelayMs: 1,
+        sleepImpl: sleepMock,
+      })
+    ).resolves.toMatchObject({ version: "new-version" });
+    expect(sleepMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "https://example.com/api/health",
+      "https://example.com/api/health",
+      "https://example.com/",
+    ]);
   });
 
   it("fails on an unhealthy endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 503 }));
     await expect(
-      runSmokeChecks({ baseUrl: "https://example.com", fetchImpl: fetchMock })
+      runSmokeChecks({
+        baseUrl: "https://example.com",
+        fetchImpl: fetchMock,
+        healthAttempts: 1,
+      })
     ).rejects.toThrow("returned HTTP 503");
   });
 });

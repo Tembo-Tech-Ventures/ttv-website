@@ -39,18 +39,16 @@ async function fetchChecked(fetchImpl, url, timeoutMs) {
   return response;
 }
 
-export async function runSmokeChecks({
-  baseUrl,
-  expectedEnvironment,
-  expectedVersion,
-  fetchImpl = fetch,
-  timeoutMs = 15_000,
-}) {
-  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
-  const healthUrl = `${normalizedBaseUrl}/api/health`;
-  const healthResponse = await fetchChecked(fetchImpl, healthUrl, timeoutMs);
-  const health = await healthResponse.json();
+function sleep(durationMs) {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, durationMs));
+}
 
+function assertExpectedHealth(
+  health,
+  healthUrl,
+  expectedEnvironment,
+  expectedVersion
+) {
   if (health.status !== "ok" || health.service !== "ttv-website") {
     throw new Error(`${healthUrl} returned an unexpected health payload.`);
   }
@@ -64,6 +62,66 @@ export async function runSmokeChecks({
       `Expected version "${expectedVersion}" but health reported "${health.version}".`
     );
   }
+}
+
+async function waitForExpectedHealth({
+  fetchImpl,
+  healthUrl,
+  expectedEnvironment,
+  expectedVersion,
+  timeoutMs,
+  healthAttempts,
+  retryDelayMs,
+  sleepImpl,
+}) {
+  let lastError;
+  for (let attempt = 1; attempt <= healthAttempts; attempt += 1) {
+    try {
+      const response = await fetchChecked(fetchImpl, healthUrl, timeoutMs);
+      const health = await response.json();
+      assertExpectedHealth(
+        health,
+        healthUrl,
+        expectedEnvironment,
+        expectedVersion
+      );
+      return health;
+    } catch (error) {
+      lastError = error;
+      if (attempt < healthAttempts) {
+        await sleepImpl(retryDelayMs);
+      }
+    }
+  }
+
+  const reason = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(
+    `Deployment did not become ready after ${healthAttempts} attempts: ${reason}`
+  );
+}
+
+export async function runSmokeChecks({
+  baseUrl,
+  expectedEnvironment,
+  expectedVersion,
+  fetchImpl = fetch,
+  timeoutMs = 15_000,
+  healthAttempts = 30,
+  retryDelayMs = 2_000,
+  sleepImpl = sleep,
+}) {
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+  const healthUrl = `${normalizedBaseUrl}/api/health`;
+  const health = await waitForExpectedHealth({
+    fetchImpl,
+    healthUrl,
+    expectedEnvironment,
+    expectedVersion,
+    timeoutMs,
+    healthAttempts,
+    retryDelayMs,
+    sleepImpl,
+  });
 
   const homepageResponse = await fetchChecked(
     fetchImpl,
