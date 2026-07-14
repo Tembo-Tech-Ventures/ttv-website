@@ -87,7 +87,7 @@ Moving this app there would violate the Cloudflare-only architecture decision.
 For TTV, SAM should dispatch and coordinate agents while the repository's
 Cloudflare tools provide deployment and runtime logs.
 
-### Immediate risks
+### Risks found at baseline
 
 1. `npm audit` currently reports 19 advisories, including a critical direct
    Better Auth advisory and high-severity direct/transitive Astro, Wrangler,
@@ -124,9 +124,40 @@ This branch establishes the first executable slice:
 - CI now runs `tsc --noEmit` in addition to lint and unit tests.
 - All executable additions have Vitest coverage.
 
-Live deployment is not performed by this branch because this task has no approved
-isolated Cloudflare target. The code creates the safe seam; SAM profile and
-Cloudflare policy configuration must supply the scoped authority.
+The direct workspace build/deploy path still needs a scoped Cloudflare token and
+Docker. The repository now also provides a GitHub-hosted isolated workflow that
+uses staging-scoped credentials while targeting only a separately named
+`agent-*` stack.
+
+## Automation implemented: July 2026
+
+- Compatible dependency upgrades removed all known critical/high advisories.
+  CI now enforces that threshold; the remaining low/moderate development-chain
+  findings require Astro 7 or upstream Drizzle/Better Auth changes.
+- Staging-only bearer sessions are admin-minted, expiring, revocable,
+  same-origin protected, displayed once, and rejected by deploy configuration
+  outside `staging` and `agent-*`.
+- Playwright covers health/revision identity, homepage, login, and optional
+  bearer-authenticated dashboard/admin journeys. Every Cloudflare deploy runs
+  smoke and browser verification automatically.
+- Shared staging and production deployments have concurrency guards.
+  `Cloudflare Agent Environment` supplies GitHub-hosted isolated deploy/destroy
+  with staging-scoped credentials; `Cloudflare Agent Environment Cleanup`
+  supplies credentialed dry-run-first cleanup.
+- A stale-resource sweeper selects only this app's `agent-*` Workers, requires
+  at least a six-hour window, defaults to 72 hours and dry-run, supports active
+  exclusions, and preserves the stack when an R2 bucket cannot be safely
+  deleted.
+- SAM now has dedicated planner, implementer, independent reviewer, release,
+  content, and maintenance profiles. It has six corresponding skills:
+  `ttv-plan-feature`, `ttv-feature-delivery`, `ttv-content-update`,
+  `ttv-independent-review`, `ttv-release`, and `ttv-maintenance`.
+- Active single-concurrency SAM triggers run dependency/security maintenance
+  Monday at 06:00 UTC, content/link health Wednesday at 07:00 UTC, and stale
+  environment cleanup daily at 03:30 UTC.
+- The desired main ruleset is versioned at `.github/rulesets/main.json` and
+  tested with the workflows. Activation is waiting on GitHub Administration
+  permission for the current automation identity.
 
 ## Target operating model
 
@@ -151,7 +182,7 @@ second human checkpoint before production.
 
 ### 2. Purpose-built SAM profiles
 
-Create these profiles only after credentials and environment policy are ready:
+The following profiles now exist; credentials remain external and least-privilege:
 
 | Profile | Permissions | Purpose |
 | --- | --- | --- |
@@ -168,7 +199,7 @@ the smallest resource permissions that the current deploy script needs.
 
 ### 3. Reusable SAM skills
 
-Create four project skills:
+The core delivery skills are:
 
 1. **`ttv-feature-delivery`**: inspect history, baseline, implement with tests,
    deploy an isolated Cloudflare environment, run smoke/E2E, inspect logs, and
@@ -182,6 +213,10 @@ Create four project skills:
 4. **`ttv-release`**: require an approved PR and green gates, deploy the exact
    commit, verify health identity and critical journeys, monitor logs, and roll
    back on a defined threshold.
+5. **`ttv-plan-feature`**: convert requests and project history into explicit
+   acceptance, risk, dependency, and evidence contracts.
+6. **`ttv-maintenance`**: perform bounded dependency, security, operational,
+   and cleanup work without feature drift.
 
 Skills should encode commands and evidence schemas, not product decisions.
 Knowledge and project policies remain the source for durable preferences.
@@ -330,12 +365,17 @@ The practical first target is 80% of low-risk changes reaching a green,
 live-verified PR without human intervention, with zero autonomous production
 changes outside the allowlist.
 
-## Decisions still requiring a human
+## Remaining one-time owner actions
 
-- approve the dedicated Cloudflare preview token scopes and profile assignment;
-- decide whether preview environments may create all current resources per task
-  or should share expensive read-only services;
-- choose the staging agent credential lifetime and who may mint/revoke tokens;
-- approve the low-risk auto-merge allowlist;
-- configure the protected GitHub production environment and remove Vercel;
-- decide the retention window for preview logs, screenshots, and test artifacts.
+- Grant the automation identity GitHub repository Administration write
+  permission or apply `.github/rulesets/main.json` in repository settings.
+- Configure the production environment reviewer (the API requires a deliberate
+  user/team choice) and prevent self-review.
+- Disconnect the legacy `ttv-website` Vercel project from GitHub. The connected
+  Vercel app is read-only here and no `VERCEL_TOKEN` is available, so deleting
+  or mutating that external project would be unsafe to fake.
+- After the branch reaches staging, have an admin mint the first bearer session
+  and store it as the `STAGING_AGENT_TOKEN` secret on the GitHub `staging`
+  environment.
+- Approve a low-risk auto-merge allowlist and evidence retention window after
+  observing the scheduled jobs and several agent-delivered pull requests.

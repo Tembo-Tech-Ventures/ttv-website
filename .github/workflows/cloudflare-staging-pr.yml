@@ -11,6 +11,9 @@ on:
 
 jobs:
   staging:
+    concurrency:
+      group: ttv-cloudflare-staging
+      cancel-in-progress: true
     uses: ./.github/workflows/cloudflare-environment.yml
     with:
       action: deploy
@@ -19,6 +22,7 @@ jobs:
       primary_domain: staging.tembotechventures.com
       redirect_domain: ${{ vars.STAGING_REDIRECT_DOMAIN }}
       better_auth_url: ${{ vars.STAGING_BETTER_AUTH_URL }}
+      agent_auth_enabled: true
       workers_subdomain: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
       protected_environments: production,prod
     secrets: inherit

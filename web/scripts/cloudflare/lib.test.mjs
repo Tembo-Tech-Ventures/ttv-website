@@ -99,6 +99,7 @@ describe("resolveDeploymentMetadata", () => {
 describe("createGeneratedWranglerConfig", () => {
   it("includes deployment identity and every runtime binding", () => {
     vi.stubEnv("CLOUDFLARE_DEPLOYMENT_VERSION", "deadbeef");
+    vi.stubEnv("CLOUDFLARE_AGENT_AUTH_ENABLED", "true");
     const config = createGeneratedWranglerConfig({
       workerName: "ttv-agent",
       d1Name: "ttv-db-agent",
@@ -114,6 +115,7 @@ describe("createGeneratedWranglerConfig", () => {
     expect(config.vars).toMatchObject({
       DEPLOYMENT_ENVIRONMENT: "staging",
       DEPLOYMENT_VERSION: "deadbeef",
+      AGENT_AUTH_ENABLED: "true",
     });
     expect(config.d1_databases[0].binding).toBe("DB");
     expect(config.r2_buckets[0].binding).toBe("BUCKET");
@@ -121,6 +123,39 @@ describe("createGeneratedWranglerConfig", () => {
     expect(config.vectorize[0].binding).toBe("VECTORIZE");
     expect(config.queues.producers[0].binding).toBe("RECORDING_QUEUE");
     expect(config.durable_objects.bindings[0].name).toBe("FFMPEG_CONTAINER");
+  });
+
+  it("keeps agent bearer auth disabled unless it is explicitly enabled", () => {
+    const config = createGeneratedWranglerConfig({
+      workerName: "ttv-production",
+      d1Name: "ttv-db-production",
+      d1Id: "db-id",
+      bucketName: "ttv-files-production",
+      queueName: "ttv-queue-production",
+      vectorizeIndexName: "ttv-vector-production",
+      aiGatewayName: "ttv-ai-production",
+      betterAuthUrl: "https://example.com",
+    });
+
+    expect(config.vars).not.toHaveProperty("AGENT_AUTH_ENABLED");
+  });
+
+  it("refuses agent bearer auth outside staging and isolated agent environments", () => {
+    vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME", "production");
+    vi.stubEnv("CLOUDFLARE_AGENT_AUTH_ENABLED", "true");
+
+    expect(() =>
+      createGeneratedWranglerConfig({
+        workerName: "ttv-production",
+        d1Name: "ttv-db-production",
+        d1Id: "db-id",
+        bucketName: "ttv-files-production",
+        queueName: "ttv-queue-production",
+        vectorizeIndexName: "ttv-vector-production",
+        aiGatewayName: "ttv-ai-production",
+        betterAuthUrl: "https://example.com",
+      })
+    ).toThrow("allowed only in staging or agent-* environments");
   });
 });
 

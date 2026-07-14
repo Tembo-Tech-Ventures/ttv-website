@@ -25,6 +25,10 @@ on:
         required: false
         type: string
         default: ""
+      agent_auth_enabled:
+        required: false
+        type: boolean
+        default: false
       workers_subdomain:
         required: false
         type: string
@@ -76,12 +80,14 @@ jobs:
       CLOUDFLARE_PRIMARY_DOMAIN: ${{ inputs.primary_domain }}
       CLOUDFLARE_REDIRECT_DOMAIN: ${{ inputs.redirect_domain }}
       CLOUDFLARE_BETTER_AUTH_URL: ${{ inputs.better_auth_url }}
+      CLOUDFLARE_AGENT_AUTH_ENABLED: ${{ inputs.agent_auth_enabled }}
       CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ inputs.workers_subdomain }}
       CLOUDFLARE_D1_JURISDICTION: ${{ inputs.d1_jurisdiction }}
       CLOUDFLARE_R2_JURISDICTION: ${{ inputs.r2_jurisdiction }}
       CLOUDFLARE_R2_LOCATION_HINT: ${{ inputs.r2_location_hint }}
       CLOUDFLARE_PROTECTED_ENVIRONMENTS: ${{ inputs.protected_environments }}
       CLOUDFLARE_ALLOW_PROTECTED_DESTROY: ${{ inputs.allow_protected_destroy }}
+      STAGING_AGENT_TOKEN: ${{ secrets.STAGING_AGENT_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -94,7 +100,24 @@ jobs:
       - run: npm ci --legacy-peer-deps
 
       - if: ${{ inputs.action == 'deploy' }}
+        id: deploy
         run: npm run cf:deploy
+
+      - if: ${{ inputs.action == 'deploy' }}
+        name: Verify deployment identity and public routes
+        run: npm run cf:smoke -- --base-url="${{ steps.deploy.outputs.better_auth_url }}" --expected-environment="${{ inputs.environment_name }}" --expected-version="$GITHUB_SHA"
+
+      - if: ${{ inputs.action == 'deploy' }}
+        name: Install browser
+        run: npx playwright install --with-deps chromium
+
+      - if: ${{ inputs.action == 'deploy' }}
+        name: Verify live browser journeys
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.deploy.outputs.better_auth_url }}
+          EXPECTED_DEPLOYMENT_ENVIRONMENT: ${{ inputs.environment_name }}
+          EXPECTED_DEPLOYMENT_VERSION: ${{ github.sha }}
+        run: npm run test:e2e
 
       - if: ${{ inputs.action == 'destroy' }}
         run: npm run cf:destroy
@@ -119,12 +142,14 @@ jobs:
       CLOUDFLARE_PRIMARY_DOMAIN: ${{ inputs.primary_domain }}
       CLOUDFLARE_REDIRECT_DOMAIN: ${{ inputs.redirect_domain }}
       CLOUDFLARE_BETTER_AUTH_URL: ${{ inputs.better_auth_url }}
+      CLOUDFLARE_AGENT_AUTH_ENABLED: ${{ inputs.agent_auth_enabled }}
       CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ inputs.workers_subdomain }}
       CLOUDFLARE_D1_JURISDICTION: ${{ inputs.d1_jurisdiction }}
       CLOUDFLARE_R2_JURISDICTION: ${{ inputs.r2_jurisdiction }}
       CLOUDFLARE_R2_LOCATION_HINT: ${{ inputs.r2_location_hint }}
       CLOUDFLARE_PROTECTED_ENVIRONMENTS: ${{ inputs.protected_environments }}
       CLOUDFLARE_ALLOW_PROTECTED_DESTROY: ${{ inputs.allow_protected_destroy }}
+      STAGING_AGENT_TOKEN: ${{ secrets.STAGING_AGENT_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -137,7 +162,24 @@ jobs:
       - run: npm ci --legacy-peer-deps
 
       - if: ${{ inputs.action == 'deploy' }}
+        id: deploy
         run: npm run cf:deploy
+
+      - if: ${{ inputs.action == 'deploy' }}
+        name: Verify deployment identity and public routes
+        run: npm run cf:smoke -- --base-url="${{ steps.deploy.outputs.better_auth_url }}" --expected-environment="${{ inputs.environment_name }}" --expected-version="$GITHUB_SHA"
+
+      - if: ${{ inputs.action == 'deploy' }}
+        name: Install browser
+        run: npx playwright install --with-deps chromium
+
+      - if: ${{ inputs.action == 'deploy' }}
+        name: Verify live browser journeys
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.deploy.outputs.better_auth_url }}
+          EXPECTED_DEPLOYMENT_ENVIRONMENT: ${{ inputs.environment_name }}
+          EXPECTED_DEPLOYMENT_VERSION: ${{ github.sha }}
+        run: npm run test:e2e
 
       - if: ${{ inputs.action == 'destroy' }}
         run: npm run cf:destroy

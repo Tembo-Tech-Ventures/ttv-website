@@ -399,6 +399,17 @@ export function createGeneratedWranglerConfig({
   );
 
   const deployment = resolveDeploymentMetadata();
+  const agentAuthEnabled =
+    getOptionalEnv("CLOUDFLARE_AGENT_AUTH_ENABLED") === "true";
+  if (
+    agentAuthEnabled &&
+    deployment.environment !== "staging" &&
+    !deployment.environment.startsWith("agent-")
+  ) {
+    throw new Error(
+      `Agent bearer auth is allowed only in staging or agent-* environments; received "${deployment.environment}".`
+    );
+  }
   const config = {
     $schema: path.relative(
       generatedDir,
@@ -427,6 +438,9 @@ export function createGeneratedWranglerConfig({
       BETTER_AUTH_URL: betterAuthUrl,
       DEPLOYMENT_ENVIRONMENT: deployment.environment,
       DEPLOYMENT_VERSION: deployment.version,
+      ...(agentAuthEnabled
+        ? { AGENT_AUTH_ENABLED: "true" }
+        : {}),
       AI_GATEWAY_ACCOUNT_ID: getRequiredEnv("CLOUDFLARE_ACCOUNT_ID"),
       AI_GATEWAY_NAME: aiGatewayName,
       AI_GATEWAY_MODEL:

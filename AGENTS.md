@@ -89,6 +89,15 @@ Worker, D1 database, R2 bucket, Queue, Vectorize index, and AI Gateway. If R2 is
 not empty, preserve the environment and report the cleanup blocker rather than
 deleting user data.
 
+When an agent workspace does not have Cloudflare credentials or Docker, dispatch
+the `Cloudflare Agent Environment` GitHub workflow on the exact output branch.
+It uses staging-scoped secrets only as credentials while still creating a
+separate `agent-*` Cloudflare stack. The workflow validates the prefix, deploys,
+checks deployment identity, runs Playwright, and exposes ordinary GitHub run
+logs. Dispatch the same environment name with `action=destroy` after review.
+Use the `Cloudflare Agent Environment Cleanup` workflow for dry-run-first stale
+cleanup; never weaken its age, prefix, or active-task exclusion guards.
+
 Use `npm run cf:smoke -- --base-url=https://...` for an existing deployment.
 Supply `--expected-environment` and `--expected-version` whenever those values
 are known so a shared or stale deployment cannot be mistaken for the current
@@ -105,11 +114,18 @@ login; `wrangler deploy` handles the managed registry.
 
 ## Auth and agent limitations
 
-The app currently has browser GitHub OAuth only. A prior bearer-token experiment
-was not merged, so do not claim authenticated staging verification until a
-staging-only agent auth flow is implemented and tested. Keep any future agent
-credential feature disabled in production by default, scoped, revocable,
-expiring, and auditable.
+Browser GitHub OAuth remains the normal user path. Staging and isolated
+`agent-*` environments may additionally enable the official Better Auth bearer
+plugin. An authenticated admin creates short-lived, revocable sessions at
+`/admin/agent-access`; the raw token is shown once and session listings never
+select it. The deployment generator rejects the feature for production and any
+environment other than `staging` or `agent-*`.
+
+Store a minted staging token only as the `STAGING_AGENT_TOKEN` GitHub
+environment secret. Playwright automatically adds authenticated dashboard/admin
+checks when that secret exists and skips them otherwise. Never put a bearer
+token in a command argument, log, issue, task message, commit, screenshot, or SAM
+knowledge entry.
 
 Current SAM project configuration may not supply `GH_TOKEN` or Cloudflare
 credentials to every profile. Check credential presence before planning a push,

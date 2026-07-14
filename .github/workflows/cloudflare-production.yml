@@ -21,6 +21,9 @@ on:
 
 jobs:
   production:
+    concurrency:
+      group: ttv-cloudflare-production
+      cancel-in-progress: false
     uses: ./.github/workflows/cloudflare-environment.yml
     with:
       action: ${{ inputs.action || 'deploy' }}

@@ -25,6 +25,14 @@ async function resolveGitVersion() {
   return stdout.trim();
 }
 
+export function resolveAgentDeploymentVersion(environment, gitVersion) {
+  return (
+    environment.CLOUDFLARE_DEPLOYMENT_VERSION?.trim() ||
+    environment.GITHUB_SHA?.trim() ||
+    gitVersion
+  );
+}
+
 async function getWorkersSubdomain() {
   const subdomain =
     getOptionalEnv("CLOUDFLARE_WORKERS_SUBDOMAIN") ??
@@ -70,7 +78,10 @@ export async function main(args = process.argv.slice(2)) {
   }
 
   const workersSubdomain = await getWorkersSubdomain();
-  const version = await resolveGitVersion();
+  const version = resolveAgentDeploymentVersion(
+    process.env,
+    await resolveGitVersion()
+  );
   process.env.CLOUDFLARE_DEPLOYMENT_VERSION = version;
   await runNpm(["run", "cf:deploy"]);
 

@@ -1,6 +1,8 @@
 ---
 import BaseLayout from "./BaseLayout.astro";
 import AdminShell from "@/components/shells/AdminShell";
+import { env } from "cloudflare:workers";
+import { isAgentAuthEnabled } from "@/lib/agent-auth";
 
 interface Props {
   title?: string;
@@ -15,7 +17,10 @@ if (!Astro.locals.isAdmin) {
 ---
 
 <BaseLayout title={`${title} | TTV Admin`}>
-  <AdminShell client:load>
+  <AdminShell
+    client:load
+    agentAuthEnabled={isAgentAuthEnabled(env.AGENT_AUTH_ENABLED)}
+  >
     <slot />
   </AdminShell>
 </BaseLayout>

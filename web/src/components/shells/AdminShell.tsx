@@ -8,21 +8,38 @@ import {
   PiSignOutDuotone,
   PiDatabaseDuotone,
   PiVideoCameraDuotone,
+  PiKeyDuotone,
 } from "react-icons/pi";
 import { PiListBold } from "react-icons/pi";
 
-const links = [
+const primaryLinks = [
   { href: "/admin", label: "Admin Home", icon: PiGaugeDuotone },
   { href: "/admin/users", label: "Users", icon: PiUsersDuotone },
   { href: "/admin/applications", label: "Applications", icon: PiFileTextDuotone },
   { href: "/admin/programs", label: "Programs", icon: PiBookOpenDuotone },
   { href: "/admin/recordings", label: "Recordings", icon: PiVideoCameraDuotone },
   { href: "/admin/data-migration", label: "Data Migration", icon: PiDatabaseDuotone },
-  { href: "/auth/logout", label: "Logout", icon: PiSignOutDuotone },
 ];
 
-export default function AdminShell({ children }: { children: ReactNode }) {
+export function getAdminLinks(agentAuthEnabled: boolean) {
+  return [
+    ...primaryLinks,
+    ...(agentAuthEnabled
+      ? [{ href: "/admin/agent-access", label: "Agent Access", icon: PiKeyDuotone }]
+      : []),
+    { href: "/auth/logout", label: "Logout", icon: PiSignOutDuotone },
+  ];
+}
+
+export default function AdminShell({
+  children,
+  agentAuthEnabled = false,
+}: {
+  children: ReactNode;
+  agentAuthEnabled?: boolean;
+}) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const links = getAdminLinks(agentAuthEnabled);
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-[#2C6964] to-[#013D39]">

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { prepareAgentEnvironment } from "./agent-environment.mjs";
+import {
+  prepareAgentEnvironment,
+  resolveAgentDeploymentVersion,
+} from "./agent-environment.mjs";
 
 describe("prepareAgentEnvironment", () => {
   it("derives an isolated environment and clears custom domains", () => {
@@ -23,5 +26,19 @@ describe("prepareAgentEnvironment", () => {
     expect(() =>
       prepareAgentEnvironment({ CLOUDFLARE_ENVIRONMENT_NAME: "production" })
     ).toThrow('must use an "agent-" prefix');
+  });
+});
+
+describe("resolveAgentDeploymentVersion", () => {
+  it("uses the GitHub revision in hosted automation and the git fallback locally", () => {
+    expect(
+      resolveAgentDeploymentVersion(
+        { GITHUB_SHA: "full-github-sha" },
+        "short-local-sha"
+      )
+    ).toBe("full-github-sha");
+    expect(resolveAgentDeploymentVersion({}, "short-local-sha")).toBe(
+      "short-local-sha"
+    );
   });
 });
