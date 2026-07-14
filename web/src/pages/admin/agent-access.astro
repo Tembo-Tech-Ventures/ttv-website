@@ -4,6 +4,7 @@ import { env } from "cloudflare:workers";
 import {
   createAgentSession,
   isAgentAuthEnabled,
+  isAgentSession,
   isSameOriginRequest,
   listAgentSessions,
   parseAgentSessionDuration,
@@ -15,6 +16,9 @@ Astro.response.headers.set("Cache-Control", "no-store");
 const enabled = isAgentAuthEnabled(env.AGENT_AUTH_ENABLED);
 const userId = Astro.locals.user?.id;
 if (!userId) return Astro.redirect("/auth/login");
+if (isAgentSession(Astro.locals.session?.userAgent)) {
+  return Astro.redirect("/admin");
+}
 
 let createdToken: string | undefined;
 let message: string | undefined;

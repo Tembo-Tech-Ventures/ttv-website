@@ -135,16 +135,25 @@ uses staging-scoped credentials while targeting only a separately named
   CI now enforces that threshold; the remaining low/moderate development-chain
   findings require Astro 7 or upstream Drizzle/Better Auth changes.
 - Staging-only bearer sessions are admin-minted, expiring, revocable,
-  same-origin protected, displayed once, and rejected by deploy configuration
-  outside `staging` and `agent-*`.
+  same-origin protected, displayed once, unable to mint replacement credentials,
+  and rejected by deploy configuration outside `staging` and `agent-*`.
+- Isolated previews no longer attempt to reuse a token from shared staging.
+  `AGENT_PREVIEW_SECRET` derives a unique token and Better Auth secret for each
+  preview, and the deployer seeds an eight-hour service identity into that
+  preview's own D1 after migrations.
 - Playwright covers health/revision identity, homepage, login, and optional
   bearer-authenticated dashboard/admin journeys. Every Cloudflare deploy runs
   smoke and browser verification automatically.
-- Shared staging and production deployments have concurrency guards.
+- Pull requests now deploy concurrently to isolated `agent-pr-<number>` stacks,
+  destroy those stacks on close, and make live Cloudflare verification a desired
+  required `preview / cloudflare-with-environment` check. Shared staging remains
+  available for deliberate manual use,
+  and production has its own concurrency guard.
   `Cloudflare Agent Environment` supplies GitHub-hosted isolated deploy/destroy
   with staging-scoped credentials; `Cloudflare Agent Environment Cleanup`
   supplies credentialed dry-run-first cleanup.
-- A stale-resource sweeper selects only this app's `agent-*` Workers, requires
+- A stale-resource sweeper selects only this app's `agent-*` Workers or D1
+  databases, including partial deployments with a missing Worker, requires
   at least a six-hour window, defaults to 72 hours and dry-run, supports active
   exclusions, and preserves the stack when an R2 bucket cannot be safely
   deleted.
@@ -195,7 +204,10 @@ The following profiles now exist; credentials remain external and least-privileg
 Cloudflare and GitHub credentials belong in profile-scoped secret environment
 variables. The implementer must be unable to target production. The release
 operator should be unable to make code edits. Use separate Cloudflare tokens with
-the smallest resource permissions that the current deploy script needs.
+the smallest resource permissions that the current deploy script needs. Because
+Cloudflare edit permissions are account-scoped rather than resource-name-scoped,
+technical production isolation requires a separate preview account; an
+`agent-*` naming policy alone is not a credential boundary.
 
 ### 3. Reusable SAM skills
 
@@ -299,8 +311,9 @@ Cloudflare environment; no known critical production dependency advisory remains
 
 1. Land this branch's health, smoke, isolated environment, logs, cleanup, and
    agent instructions.
-2. Configure a Cloudflare preview token and OAuth secrets on the implementer
-   profile; do not add them to the repository.
+2. Configure a separate-account Cloudflare preview token,
+   `CLOUDFLARE_ACCOUNT_ID`, and `AGENT_PREVIEW_SECRET` on the implementer
+   profile; real OAuth and production application secrets are not needed.
 3. Exercise `cf:agent deploy -> tail -> destroy` against a real task and verify
    all resources are removed.
 4. Add a stale-environment sweeper with a dry-run default and age/tag guard.
@@ -312,10 +325,12 @@ without overwriting each other, and cleanup leaves no task resources.
 
 ### Phase 2: authenticate and test real journeys
 
-1. Implement staging-only agent credentials after the Better Auth upgrade.
-2. Add token creation, expiry, revocation, audit records, and redacted UI.
-3. Install Playwright and seed a minimal deterministic preview dataset.
-4. Add authenticated smoke/E2E coverage and screenshot/artifact capture.
+1. Extend the implemented staging/preview bearer foundation with
+   capability-scoped authorization rather than full preview admin where useful.
+2. Add durable token audit records beyond existing session metadata.
+3. Expand the deterministic preview dataset for core product journeys.
+4. Expand authenticated smoke/E2E coverage beyond dashboard/admin and keep
+   screenshot, trace, and Worker-tail artifacts.
 5. Add structured request/release IDs to Worker logs and a bounded log reader
    command for post-deploy verification.
 
@@ -374,8 +389,16 @@ changes outside the allowlist.
 - Disconnect the legacy `ttv-website` Vercel project from GitHub. The connected
   Vercel app is read-only here and no `VERCEL_TOKEN` is available, so deleting
   or mutating that external project would be unsafe to fake.
-- After the branch reaches staging, have an admin mint the first bearer session
-  and store it as the `STAGING_AGENT_TOKEN` secret on the GitHub `staging`
-  environment.
+- Create a low-cost separate Cloudflare preview account, mint the minimum
+  deployment/tail token there, and add its account ID/token to the GitHub
+  `staging` environment and authorized SAM implementer/content profiles. Until
+  then, the GitHub broker uses the existing Cloudflare account and provides
+  workflow/prefix safety, not a hard account boundary.
+- Keep `AGENT_PREVIEW_SECRET` synchronized between the GitHub `staging`
+  environment and preview-capable SAM profiles. It is a derivation secret, not a
+  staging database token.
+- Optionally have an admin mint `STAGING_AGENT_TOKEN` at
+  `/admin/agent-access` for authenticated checks of the persistent shared
+  staging application. It is not used by isolated previews.
 - Approve a low-risk auto-merge allowlist and evidence retention window after
   observing the scheduled jobs and several agent-delivered pull requests.

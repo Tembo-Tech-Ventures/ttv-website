@@ -17,6 +17,7 @@ export function prepareAgentEnvironment(environment = process.env) {
   environment.CLOUDFLARE_PRIMARY_DOMAIN = "";
   environment.CLOUDFLARE_REDIRECT_DOMAIN = "";
   environment.CLOUDFLARE_BETTER_AUTH_URL = "";
+  environment.CLOUDFLARE_AGENT_AUTH_ENABLED = "true";
   return environmentName;
 }
 

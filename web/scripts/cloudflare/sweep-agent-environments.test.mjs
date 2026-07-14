@@ -50,6 +50,43 @@ describe("stale agent environment selection", () => {
     ).toEqual([]);
   });
 
+  it("discovers partial environments from D1 and uses the freshest resource timestamp", () => {
+    expect(
+      findStaleAgentEnvironments({
+        workers: [],
+        databases: [
+          {
+            name: "ttv-website-db-agent-orphaned",
+            created_at: "2026-07-10T12:00:00.000Z",
+          },
+        ],
+        now,
+        maxAgeHours: 72,
+      })
+    ).toEqual([
+      {
+        environmentName: "agent-orphaned",
+        databaseName: "ttv-website-db-agent-orphaned",
+        lastModified: "2026-07-10T12:00:00.000Z",
+        ageHours: 96,
+      },
+    ]);
+
+    expect(
+      findStaleAgentEnvironments({
+        workers: [workers[0]],
+        databases: [
+          {
+            name: "ttv-website-db-agent-old-task",
+            created_at: "2026-07-14T10:00:00.000Z",
+          },
+        ],
+        now,
+        maxAgeHours: 72,
+      })
+    ).toEqual([]);
+  });
+
   it("defaults to dry-run and rejects unsafe age windows", () => {
     expect(parseSweepArgs([])).toEqual({
       execute: false,
@@ -57,6 +94,9 @@ describe("stale agent environment selection", () => {
       excludedEnvironments: [],
     });
     expect(() => parseSweepArgs(["--max-age-hours=1"])).toThrow("at least 6");
+    expect(parseSweepArgs(["--exclude=agent-one,"])).toMatchObject({
+      excludedEnvironments: ["agent-one"],
+    });
   });
 });
 

@@ -26,9 +26,9 @@ test("keeps the login route operable", async ({ page }) => {
   ).toBeVisible();
 });
 
-test.describe("authenticated staging agent", () => {
-  const token = process.env.STAGING_AGENT_TOKEN;
-  test.skip(!token, "STAGING_AGENT_TOKEN is not configured for this environment.");
+test.describe("authenticated delivery agent", () => {
+  const token = process.env.PLAYWRIGHT_AGENT_TOKEN;
+  test.skip(!token, "No agent bearer token is configured for this environment.");
   test.use({
     extraHTTPHeaders: token ? { Authorization: `Bearer ${token}` } : {},
   });
@@ -40,5 +40,8 @@ test.describe("authenticated staging agent", () => {
     await page.goto("/admin");
     await expect(page).toHaveURL(/\/admin\/?$/);
     await expect(page.getByRole("heading", { name: "TTV Admin" })).toBeVisible();
+
+    await page.goto("/admin/agent-access");
+    await expect(page).toHaveURL(/\/admin\/?$/);
   });
 });

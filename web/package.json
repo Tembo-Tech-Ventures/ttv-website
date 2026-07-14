@@ -20,8 +20,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
-    "test:e2e:list": "playwright test --list"
+    "test:e2e": "node ./scripts/cloudflare/run-live-e2e.mjs",
+    "test:e2e:list": "node ./scripts/cloudflare/run-live-e2e.mjs --list"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^13.7.0",

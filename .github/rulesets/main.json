@@ -33,7 +33,8 @@
         "required_status_checks": [
           { "context": "Lint" },
           { "context": "Test" },
-          { "context": "Security" }
+          { "context": "Security" },
+          { "context": "preview / cloudflare-with-environment" }
         ],
         "strict_required_status_checks_policy": true
       }

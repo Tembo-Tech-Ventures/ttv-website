@@ -71,10 +71,15 @@ command alone.
 
 ## Live Cloudflare iteration
 
-Agents with a scoped Cloudflare token and the required OAuth configuration can
+Read `docs/agent-delivery-map.md` before changing preview credentials or
+workflows. A SAM workspace, SAM profile, GitHub environment, and Cloudflare
+environment are separate trust and runtime boundaries.
+
+Agents with a preview-only Cloudflare token and `AGENT_PREVIEW_SECRET` can
 create a task-isolated environment. The command derives an `agent-*` name from
-`SAM_TASK_ID`, refuses staging/production names, clears custom domains, deploys
-the current commit, and verifies deployment identity plus the homepage:
+`SAM_TASK_ID`, refuses staging/production and overlong names, clears custom
+domains, seeds an expiring identity in the isolated D1, deploys the current
+commit, and verifies deployment identity plus the homepage:
 
 ```sh
 cd web
@@ -89,12 +94,15 @@ Worker, D1 database, R2 bucket, Queue, Vectorize index, and AI Gateway. If R2 is
 not empty, preserve the environment and report the cleanup blocker rather than
 deleting user data.
 
-When an agent workspace does not have Cloudflare credentials or Docker, dispatch
+Cloudflare account permissions cannot be restricted by an `agent-*` name
+prefix. Direct SAM credentials should target a separate preview account. When an
+agent workspace does not have those credentials or Docker, dispatch
 the `Cloudflare Agent Environment` GitHub workflow on the exact output branch.
-It uses staging-scoped secrets only as credentials while still creating a
-separate `agent-*` Cloudflare stack. The workflow validates the prefix, deploys,
-checks deployment identity, runs Playwright, and exposes ordinary GitHub run
-logs. Dispatch the same environment name with `action=destroy` after review.
+It uses GitHub's `staging` environment only as a credential boundary while
+still creating a separate `agent-*` Cloudflare stack. The workflow validates
+the prefix, deploys, checks deployment identity, runs desktop/mobile Playwright,
+captures Worker tail logs, and uploads evidence. Dispatch the same environment
+name with `action=destroy` after review.
 Use the `Cloudflare Agent Environment Cleanup` workflow for dry-run-first stale
 cleanup; never weaken its age, prefix, or active-task exclusion guards.
 
@@ -121,11 +129,20 @@ plugin. An authenticated admin creates short-lived, revocable sessions at
 select it. The deployment generator rejects the feature for production and any
 environment other than `staging` or `agent-*`.
 
-Store a minted staging token only as the `STAGING_AGENT_TOKEN` GitHub
-environment secret. Playwright automatically adds authenticated dashboard/admin
-checks when that secret exists and skips them otherwise. Never put a bearer
-token in a command argument, log, issue, task message, commit, screenshot, or SAM
-knowledge entry.
+Isolated previews and shared staging use different credentials because they use
+different D1 databases:
+
+- `AGENT_PREVIEW_SECRET` derives a unique eight-hour token inside each
+  `agent-*` D1. Store it in GitHub's `staging` environment and only the SAM
+  profiles authorized to deploy previews.
+- `STAGING_AGENT_TOKEN` is minted by a cookie-authenticated admin and is valid
+  only in the persistent shared staging D1. Store it only in GitHub's `staging`
+  environment.
+
+Bearer sessions cannot access `/admin/agent-access` and therefore cannot mint
+or extend credentials. Never put either secret or a derived bearer token in a
+command argument, log, issue, task message, commit, screenshot, or SAM knowledge
+entry.
 
 Current SAM project configuration may not supply `GH_TOKEN` or Cloudflare
 credentials to every profile. Check credential presence before planning a push,
@@ -136,7 +153,9 @@ reuse production credentials.
 
 Before handing work back:
 
-1. Review `git diff` and SAM `get_workspace_diff_summary`.
+1. Use native `git diff` as the review source of truth. Use SAM
+   `get_workspace_diff_summary` only as an aggregate bookkeeping check for
+   forgotten or untracked workspace changes.
 2. Run the complete verification suite and any live smoke/E2E checks.
 3. Confirm task environments are destroyed or document why they remain.
 4. Push the assigned output branch and check GitHub CI when credentials allow.

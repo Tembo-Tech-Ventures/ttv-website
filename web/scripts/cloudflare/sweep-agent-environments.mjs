@@ -29,8 +29,9 @@ export function parseSweepArgs(args) {
         .slice(1)
         .join("=")
         .split(",")
-        .map((entry) => normalizeSlug(entry.trim()))
-        .filter(Boolean);
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map(normalizeSlug);
     }
   }
 
@@ -46,7 +47,8 @@ export function parseSweepArgs(args) {
 }
 
 export function findStaleAgentEnvironments({
-  workers,
+  workers = [],
+  databases = [],
   appName = "ttv-website",
   now = new Date(),
   maxAgeHours = DEFAULT_MAX_AGE_HOURS,
@@ -55,40 +57,74 @@ export function findStaleAgentEnvironments({
   const appSlug = normalizeSlug(appName);
   const workerPrefix = `${appSlug}-agent-`;
   const environmentPrefix = `${appSlug}-`;
+  const databasePrefix = `${appSlug}-db-agent-`;
+  const databaseEnvironmentPrefix = `${appSlug}-db-`;
   const excluded = new Set(excludedEnvironments.map(normalizeSlug));
   const cutoff = now.getTime() - maxAgeHours * 60 * 60 * 1_000;
+  const inventory = new Map();
 
-  return workers
-    .flatMap((worker) => {
-      const workerName = String(worker.id ?? worker.name ?? "");
-      if (!workerName.startsWith(workerPrefix)) return [];
+  function record({ environmentName, timestamp, workerName, databaseName }) {
+    if (
+      !environmentName.startsWith("agent-") ||
+      excluded.has(environmentName) ||
+      !timestamp
+    ) {
+      return;
+    }
+    const observedAt = new Date(timestamp);
+    if (Number.isNaN(observedAt.getTime())) return;
 
-      const environmentName = workerName.slice(environmentPrefix.length);
-      if (!environmentName.startsWith("agent-") || excluded.has(environmentName)) {
-        return [];
-      }
+    const existing = inventory.get(environmentName);
+    inventory.set(environmentName, {
+      environmentName,
+      observedAt:
+        existing && existing.observedAt > observedAt
+          ? existing.observedAt
+          : observedAt,
+      workerName: workerName ?? existing?.workerName,
+      databaseName: databaseName ?? existing?.databaseName,
+    });
+  }
 
-      const timestamp = worker.modified_on ?? worker.created_on;
-      const lastModified = new Date(timestamp);
-      if (!timestamp || Number.isNaN(lastModified.getTime())) return [];
-      if (lastModified.getTime() > cutoff) return [];
+  for (const worker of workers) {
+    const workerName = String(worker.id ?? worker.name ?? "");
+    if (!workerName.startsWith(workerPrefix)) continue;
+    record({
+      environmentName: workerName.slice(environmentPrefix.length),
+      workerName,
+      timestamp: worker.modified_on ?? worker.created_on,
+    });
+  }
 
-      return [
-        {
-          environmentName,
-          workerName,
-          lastModified: lastModified.toISOString(),
-          ageHours: Math.floor(
-            (now.getTime() - lastModified.getTime()) / (60 * 60 * 1_000)
-          ),
-        },
-      ];
-    })
+  for (const database of databases) {
+    const databaseName = String(database.name ?? "");
+    if (!databaseName.startsWith(databasePrefix)) continue;
+    record({
+      environmentName: databaseName.slice(databaseEnvironmentPrefix.length),
+      databaseName,
+      timestamp: database.created_at,
+    });
+  }
+
+  return [...inventory.values()]
+    .filter(({ observedAt }) => observedAt.getTime() <= cutoff)
+    .map(({ observedAt, ...candidate }) => ({
+      ...candidate,
+      lastModified: observedAt.toISOString(),
+      ageHours: Math.floor(
+        (now.getTime() - observedAt.getTime()) / (60 * 60 * 1_000)
+      ),
+    }))
     .sort((left, right) => right.ageHours - left.ageHours);
 }
 
 async function listWorkers() {
   const result = await cfApi("/workers/scripts");
+  return Array.isArray(result) ? result : [];
+}
+
+async function listDatabases() {
+  const result = await cfApi("/d1/database?per_page=1000");
   return Array.isArray(result) ? result : [];
 }
 
@@ -112,11 +148,22 @@ export async function sweepAgentEnvironments({
   excludedEnvironments = [],
   now = new Date(),
   workers,
+  databases,
   appName = getOptionalEnv("CLOUDFLARE_APP_NAME") ?? "ttv-website",
   destroy = destroyByEnvironmentName,
 } = {}) {
+  let availableWorkers = workers ?? [];
+  let availableDatabases = databases ?? [];
+  if (workers === undefined && databases === undefined) {
+    [availableWorkers, availableDatabases] = await Promise.all([
+      listWorkers(),
+      listDatabases(),
+    ]);
+  }
+
   const candidates = findStaleAgentEnvironments({
-    workers: workers ?? (await listWorkers()),
+    workers: availableWorkers,
+    databases: availableDatabases,
     appName,
     now,
     maxAgeHours,

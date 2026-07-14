@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { destroyEnvironment } from "./destroy.mjs";
 
 const context = {
   environmentName: "agent-123",
+  environmentSlug: "agent-123",
   workerName: "worker",
   queueName: "queue",
   vectorizeIndexName: "vector",
@@ -10,6 +11,10 @@ const context = {
   d1Name: "database",
   bucketName: "bucket",
 };
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("destroyEnvironment", () => {
   it("checks and deletes R2 before deleting the rest of the stack", async () => {
@@ -58,5 +63,40 @@ describe("destroyEnvironment", () => {
       })
     ).rejects.toThrow('Failed to delete R2 bucket "bucket"');
     expect(deleteWorker).not.toHaveBeenCalled();
+  });
+
+  it("enforces protected-environment policy inside the reusable destroy function", async () => {
+    const deleteBucket = vi.fn();
+    await expect(
+      destroyEnvironment(
+        {
+          ...context,
+          environmentName: "production",
+          environmentSlug: "production",
+        },
+        { deleteBucket }
+      )
+    ).rejects.toThrow('Refusing to destroy protected environment "production"');
+    expect(deleteBucket).not.toHaveBeenCalled();
+
+    vi.stubEnv("CLOUDFLARE_ALLOW_PROTECTED_DESTROY", "true");
+    const operation = vi.fn().mockResolvedValue(true);
+    await expect(
+      destroyEnvironment(
+        {
+          ...context,
+          environmentName: "production",
+          environmentSlug: "production",
+        },
+        {
+          deleteBucket: operation,
+          deleteWorker: operation,
+          deleteQueue: operation,
+          deleteVectorize: operation,
+          deleteAiGateway: operation,
+          deleteDatabase: operation,
+        }
+      )
+    ).resolves.toMatchObject({ environment: "production" });
   });
 });

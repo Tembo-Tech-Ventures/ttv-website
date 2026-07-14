@@ -3,6 +3,7 @@ import {
   AGENT_SESSION_PREFIX,
   createAgentSession,
   isAgentAuthEnabled,
+  isAgentSession,
   isSameOriginRequest,
   listAgentSessions,
   normalizeAgentSessionLabel,
@@ -31,6 +32,12 @@ describe("agent auth policy", () => {
     expect(isAgentAuthEnabled("true")).toBe(true);
     expect(isAgentAuthEnabled("TRUE")).toBe(false);
     expect(isAgentAuthEnabled(undefined)).toBe(false);
+  });
+
+  it("identifies agent-issued sessions so they cannot mint credentials", () => {
+    expect(isAgentSession(`${AGENT_SESSION_PREFIX}SAM reviewer`)).toBe(true);
+    expect(isAgentSession("Mozilla/5.0")).toBe(false);
+    expect(isAgentSession(null)).toBe(false);
   });
 
   it("validates labels and supported durations", () => {

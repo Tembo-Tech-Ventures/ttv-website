@@ -3,6 +3,11 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  assertAgentEnvironmentName,
+  deriveAgentPreviewAuthSecret,
+  isAgentEnvironmentName,
+} from "./agent-preview-auth.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,10 +17,6 @@ const generatedDir = path.join(webRoot, "dist", "server");
 const DEFAULT_APP_NAME = "ttv-website";
 const DEFAULT_COMPATIBILITY_DATE = "2026-04-01";
 const DEFAULT_AI_GATEWAY_MODEL = "workers-ai/@cf/google/gemma-4-26b-a4b-it";
-const SECRET_KEYS = [
-  "GITHUB_CLIENT_ID",
-  "GITHUB_CLIENT_SECRET",
-];
 
 export function getRequiredEnv(name) {
   const value = process.env[name]?.trim();
@@ -31,7 +32,7 @@ export function getOptionalEnv(name) {
   return value ? value : undefined;
 }
 
-function deriveBetterAuthSecret() {
+function deriveLegacyBetterAuthSecret() {
   const seed = [
     getRequiredEnv("CLOUDFLARE_ACCOUNT_ID"),
     getRequiredEnv("CLOUDFLARE_API_TOKEN"),
@@ -86,12 +87,7 @@ export function deriveAgentEnvironmentName(environment = process.env) {
   const explicitName = environment.CLOUDFLARE_ENVIRONMENT_NAME?.trim();
   if (explicitName) {
     const normalized = normalizeSlug(explicitName);
-    if (!normalized.startsWith("agent-")) {
-      throw new Error(
-        `Agent environments must use an "agent-" prefix; received "${explicitName}".`
-      );
-    }
-    return normalized;
+    return assertAgentEnvironmentName(normalized);
   }
 
   const workspaceIdentity =
@@ -102,7 +98,9 @@ export function deriveAgentEnvironmentName(environment = process.env) {
     );
   }
 
-  return `agent-${normalizeSlug(workspaceIdentity).slice(-12)}`;
+  return assertAgentEnvironmentName(
+    `agent-${normalizeSlug(workspaceIdentity).slice(-12)}`
+  );
 }
 
 export function resolveDeploymentMetadata(environment = process.env) {
@@ -178,6 +176,13 @@ export async function ensureD1Database(name) {
       name,
       ...(jurisdiction ? { jurisdiction } : {}),
     },
+  });
+}
+
+export async function queryD1Database(databaseId, sql, params = []) {
+  return cfApi(`/d1/database/${encodeURIComponent(databaseId)}/query`, {
+    method: "POST",
+    body: { sql, params },
   });
 }
 
@@ -418,6 +423,10 @@ export function createGeneratedWranglerConfig({
     name: workerName,
     compatibility_date: DEFAULT_COMPATIBILITY_DATE,
     compatibility_flags: ["nodejs_compat"],
+    observability: {
+      enabled: true,
+      head_sampling_rate: deployment.environment.startsWith("agent-") ? 1 : 0.1,
+    },
     main: "entry.mjs",
     no_bundle: true,
     workers_dev: !primaryDomain && !redirectDomain,
@@ -531,15 +540,27 @@ export async function writeGeneratedWranglerConfig(options) {
 }
 
 export function getSecretBindings() {
-  const bindings = SECRET_KEYS.map((key) => {
-    const value = getRequiredEnv(key);
-    return { key, value };
-  });
-
-  bindings.unshift({
+  const environmentName = getRequiredEnv("CLOUDFLARE_ENVIRONMENT_NAME");
+  const isAgentPreview = isAgentEnvironmentName(environmentName);
+  const previewSecret = isAgentPreview
+    ? getRequiredEnv("AGENT_PREVIEW_SECRET")
+    : undefined;
+  const bindings = [{
     key: "BETTER_AUTH_SECRET",
-    value: getOptionalEnv("BETTER_AUTH_SECRET") ?? deriveBetterAuthSecret(),
-  });
+    value: isAgentPreview
+      ? deriveAgentPreviewAuthSecret(previewSecret, environmentName)
+      : getOptionalEnv("BETTER_AUTH_SECRET") ?? deriveLegacyBetterAuthSecret(),
+  }, {
+    key: "GITHUB_CLIENT_ID",
+    value: isAgentPreview
+      ? "agent-preview-oauth-disabled"
+      : getRequiredEnv("GITHUB_CLIENT_ID"),
+  }, {
+    key: "GITHUB_CLIENT_SECRET",
+    value: isAgentPreview
+      ? "agent-preview-oauth-disabled"
+      : getRequiredEnv("GITHUB_CLIENT_SECRET"),
+  }];
 
   // Optional: scoped Workers AI token for AI Gateway unified-mode requests.
   // When absent, the worker falls back to the Workers AI binding.

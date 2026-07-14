@@ -9,6 +9,7 @@ import {
   enableWorkersDevSubdomain,
   getOptionalEnv,
   getSecretBindings,
+  queryD1Database,
   resolveBetterAuthUrl,
   runNpm,
   runWrangler,
@@ -16,6 +17,10 @@ import {
   writeGeneratedWranglerConfig,
   writeGithubOutput,
 } from "./lib.mjs";
+import {
+  isAgentEnvironmentName,
+  seedAgentPreviewAccess,
+} from "./agent-preview-auth.mjs";
 
 async function main() {
   const context = deriveEnvironmentContext();
@@ -61,6 +66,22 @@ async function main() {
     "--config",
     configPath,
   ]);
+
+  let agentAccess;
+  if (isAgentEnvironmentName(context.environmentName)) {
+    if (getOptionalEnv("CLOUDFLARE_AGENT_AUTH_ENABLED") !== "true") {
+      throw new Error(
+        "Isolated agent environments must enable CLOUDFLARE_AGENT_AUTH_ENABLED."
+      );
+    }
+    agentAccess = await seedAgentPreviewAccess({
+      databaseId: d1Database.uuid,
+      environmentName: context.environmentName,
+      previewSecret: getOptionalEnv("AGENT_PREVIEW_SECRET") ?? "",
+      executeQuery: queryD1Database,
+    });
+  }
+
   await runWrangler(["deploy", "--config", configPath]);
 
   if (!primaryDomain && workersSubdomain) {
@@ -95,6 +116,9 @@ async function main() {
         betterAuthUrl,
         primaryDomain,
         redirectDomain,
+        agentAccess: agentAccess
+          ? { seeded: true, expiresAt: agentAccess.expiresAt.toISOString() }
+          : undefined,
       },
       null,
       2

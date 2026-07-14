@@ -28,6 +28,7 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: read
+      pull-requests: read
     defaults:
       run:
         working-directory: web
@@ -51,14 +52,30 @@ jobs:
 
       - run: npm ci --legacy-peer-deps
 
+      - name: Protect open pull request previews
+        id: active
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          open_prs="$(gh pr list --state open --limit 200 --json number --jq 'map("agent-pr-" + (.number | tostring)) | join(",")')"
+          echo "open_prs=${open_prs}" >> "${GITHUB_OUTPUT}"
+
       - name: Sweep inactive isolated environments
+        env:
+          OPEN_PR_EXCLUSIONS: ${{ steps.active.outputs.open_prs }}
         shell: bash
         run: |
           args=("--max-age-hours=${SWEEP_MAX_AGE_HOURS}")
           if [[ "${SWEEP_EXECUTE}" == "true" ]]; then
             args+=("--execute")
           fi
-          if [[ -n "${SWEEP_EXCLUDE}" ]]; then
-            args+=("--exclude=${SWEEP_EXCLUDE}")
+          exclusions="${SWEEP_EXCLUDE}"
+          if [[ -n "${OPEN_PR_EXCLUSIONS}" ]]; then
+            exclusions="${exclusions:+${exclusions},}${OPEN_PR_EXCLUSIONS}"
+          fi
+          if [[ -n "${exclusions}" ]]; then
+            args+=("--exclude=${exclusions}")
           fi
           npm run cf:sweep -- "${args[@]}"

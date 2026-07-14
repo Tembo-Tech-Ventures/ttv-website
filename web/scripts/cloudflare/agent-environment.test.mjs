@@ -19,13 +19,14 @@ describe("prepareAgentEnvironment", () => {
       CLOUDFLARE_PRIMARY_DOMAIN: "",
       CLOUDFLARE_REDIRECT_DOMAIN: "",
       CLOUDFLARE_BETTER_AUTH_URL: "",
+      CLOUDFLARE_AGENT_AUTH_ENABLED: "true",
     });
   });
 
   it("refuses to repurpose a non-agent environment", () => {
     expect(() =>
       prepareAgentEnvironment({ CLOUDFLARE_ENVIRONMENT_NAME: "production" })
-    ).toThrow('must use an "agent-" prefix');
+    ).toThrow('must start with "agent-"');
   });
 });
 

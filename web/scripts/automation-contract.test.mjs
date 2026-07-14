@@ -25,7 +25,7 @@ describe("GitHub delivery contracts", () => {
     }
   });
 
-  it("keeps agent bearer auth enabled only for shared staging", async () => {
+  it("keeps agent bearer auth enabled only for staging and isolated previews", async () => {
     const [pullRequestStaging, manualStaging, production] = await Promise.all([
       readRepositoryFile(".github/workflows/cloudflare-staging-pr.yml"),
       readRepositoryFile(".github/workflows/cloudflare-staging.yml"),
@@ -45,6 +45,9 @@ describe("GitHub delivery contracts", () => {
     expect(workflow).toContain("npm run cf:smoke");
     expect(workflow).toContain('--expected-version="$GITHUB_SHA"');
     expect(workflow).toContain("npm run test:e2e");
+    expect(workflow).toContain("npx wrangler tail");
+    expect(workflow).toContain("actions/upload-artifact@v4");
+    expect(workflow).toContain("retention-days: 14");
     expect(workflow).toContain(
       "PLAYWRIGHT_BASE_URL: ${{ steps.deploy.outputs.better_auth_url }}"
     );
@@ -59,7 +62,45 @@ describe("GitHub delivery contracts", () => {
     expect(workflow).toContain("npm run cf:agent -- context");
     expect(workflow).toContain("npm run cf:agent -- deploy");
     expect(workflow).toContain("npm run cf:agent -- destroy");
+    expect(workflow).toContain(
+      "AGENT_PREVIEW_SECRET: ${{ secrets.AGENT_PREVIEW_SECRET }}"
+    );
+    expect(workflow).not.toContain("STAGING_AGENT_TOKEN");
+    expect(workflow).toContain("npx wrangler tail");
+    expect(workflow).toContain("actions/upload-artifact@v4");
     expect(workflow).toContain("CLOUDFLARE_PROTECTED_ENVIRONMENTS: production,prod,staging");
+  });
+
+  it("deploys every pull request to its own environment and tears it down on close", async () => {
+    const workflow = await readRepositoryFile(
+      ".github/workflows/cloudflare-staging-pr.yml"
+    );
+
+    expect(workflow).toContain("- closed");
+    expect(workflow).toContain(
+      "environment_name: agent-pr-${{ github.event.pull_request.number }}"
+    );
+    expect(workflow).toContain(
+      "action: ${{ github.event.action == 'closed' && 'destroy' || 'deploy' }}"
+    );
+    expect(workflow).toContain("name: Cloudflare PR Preview");
+    expect(workflow).not.toContain("environment_name: staging");
+  });
+
+  it("keeps preview identity secrets out of shared staging and production", async () => {
+    const workflow = await readRepositoryFile(
+      ".github/workflows/cloudflare-environment.yml"
+    );
+
+    expect(workflow).toContain(
+      "AGENT_PREVIEW_SECRET: ${{ startsWith(inputs.environment_name, 'agent-')"
+    );
+    expect(workflow).toContain(
+      "PLAYWRIGHT_AGENT_TOKEN: ${{ inputs.environment_name == 'staging'"
+    );
+    expect(workflow).not.toContain(
+      "STAGING_AGENT_TOKEN: ${{ secrets.STAGING_AGENT_TOKEN }}"
+    );
   });
 
   it("keeps credentialed stale cleanup dry-run-first and protected", async () => {
@@ -71,6 +112,11 @@ describe("GitHub delivery contracts", () => {
     expect(workflow).toContain('default: "72"');
     expect(workflow).toContain('if [[ "${SWEEP_EXECUTE}" == "true" ]]');
     expect(workflow).toContain("CLOUDFLARE_PROTECTED_ENVIRONMENTS: production,prod,staging");
+    expect(workflow).toContain("pull-requests: read");
+    expect(workflow).toContain("gh pr list --state open");
+    expect(workflow).toContain(
+      "OPEN_PR_EXCLUSIONS: ${{ steps.active.outputs.open_prs }}"
+    );
     expect(workflow).toContain("npm run cf:sweep");
   });
 
@@ -101,6 +147,24 @@ describe("GitHub delivery contracts", () => {
     });
     expect(
       statusChecks.parameters.required_status_checks.map(({ context }) => context)
-    ).toEqual(["Lint", "Test", "Security"]);
+    ).toEqual([
+      "Lint",
+      "Test",
+      "Security",
+      "preview / cloudflare-with-environment",
+    ]);
+  });
+
+  it("runs live journeys through the token-safe wrapper on desktop and mobile", async () => {
+    const [packageJson, playwright] = await Promise.all([
+      readRepositoryFile("web/package.json"),
+      readRepositoryFile("web/playwright.config.ts"),
+    ]);
+
+    expect(JSON.parse(packageJson).scripts["test:e2e"]).toContain(
+      "run-live-e2e.mjs"
+    );
+    expect(playwright).toContain('name: "chromium"');
+    expect(playwright).toContain('name: "mobile-chromium"');
   });
 });

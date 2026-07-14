@@ -34,6 +34,10 @@ export function isAgentAuthEnabled(value: string | undefined): boolean {
   return value === "true";
 }
 
+export function isAgentSession(userAgent: string | null | undefined): boolean {
+  return userAgent?.startsWith(AGENT_SESSION_PREFIX) ?? false;
+}
+
 export function normalizeAgentSessionLabel(value: string): string {
   const label = value.trim().replace(/\s+/g, " ");
   if (!label || label.length > 50) {

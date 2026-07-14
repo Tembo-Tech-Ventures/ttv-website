@@ -12,7 +12,7 @@ import {
   writeGithubOutput,
 } from "./lib.mjs";
 
-function ensureEnvironmentCanBeDestroyed(environmentSlug) {
+export function ensureEnvironmentCanBeDestroyed(environmentSlug) {
   const protectedEnvironments = (
     getOptionalEnv("CLOUDFLARE_PROTECTED_ENVIRONMENTS") ?? "production,prod"
   )
@@ -43,6 +43,8 @@ export async function destroyEnvironment(
     deleteWorker = deleteWorkerScript,
   } = {}
 ) {
+  ensureEnvironmentCanBeDestroyed(context.environmentSlug);
+
   let bucketDeleted = false;
   try {
     bucketDeleted = await deleteBucket(context.bucketName);
@@ -74,7 +76,6 @@ export async function destroyEnvironment(
 
 async function main() {
   const context = deriveEnvironmentContext();
-  ensureEnvironmentCanBeDestroyed(context.environmentSlug);
   const result = await destroyEnvironment(context);
 
   await writeGithubOutput("worker_deleted", String(result.workerDeleted));
