@@ -79,7 +79,7 @@ The TTV project currently uses only a small part of that surface:
 | Missions/dependency graph | No active missions or queue | Larger features are not automatically decomposed or reviewed |
 | Triggers | Creation/update tools exist; no repository contract | No scheduled maintenance or content loop is defined |
 | Knowledge/policies | Valuable project constraints exist | Decisions are remembered, but execution is not standardized |
-| Credentials | This workspace reports no GH token | Push, PR, and CI verification cannot be assumed |
+| Credentials | SAM credential status missed the working GitHub CLI session; Cloudflare scope was not verified | Agents must check the actual tool and target authority before mutation |
 
 SAM's built-in deployment system is Compose-based and intentionally bypasses CI.
 It is useful for container stacks, but it is not the target runtime for TTV.
@@ -124,9 +124,9 @@ This branch establishes the first executable slice:
 - CI now runs `tsc --noEmit` in addition to lint and unit tests.
 - All executable additions have Vitest coverage.
 
-Live deployment is not performed by this branch because the current profile has
-neither Cloudflare credentials nor an approved environment. The code creates the
-safe seam; SAM configuration must supply the authority.
+Live deployment is not performed by this branch because this task has no approved
+isolated Cloudflare target. The code creates the safe seam; SAM profile and
+Cloudflare policy configuration must supply the scoped authority.
 
 ## Target operating model
 
