@@ -1,8 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  createGeneratedWranglerConfig,
+  deleteAiGatewayByName,
+  deleteQueueByName,
+  deleteVectorizeIndexByName,
+  deriveAgentEnvironmentName,
   deriveEnvironmentContext,
   ensureAiGateway,
   getSecretBindings,
+  resolveDeploymentMetadata,
 } from "./lib.mjs";
 
 beforeEach(() => {
@@ -23,6 +29,98 @@ describe("deriveEnvironmentContext", () => {
   it("derives an AI gateway name alongside other resources", () => {
     const context = deriveEnvironmentContext();
     expect(context.aiGatewayName).toBe("ttv-website-ai-staging");
+  });
+});
+
+describe("deriveAgentEnvironmentName", () => {
+  it("derives a stable, isolated name from the SAM task", () => {
+    expect(
+      deriveAgentEnvironmentName({
+        SAM_TASK_ID: "01KXH3N3SGB464KS2P2H14537E",
+      })
+    ).toBe("agent-ks2p2h14537e");
+  });
+
+  it("falls back to the workspace identity", () => {
+    expect(
+      deriveAgentEnvironmentName({
+        SAM_WORKSPACE_ID: "01KXH3N61664JNFQ225YJ8DFPS",
+      })
+    ).toBe("agent-fq225yj8dfps");
+  });
+
+  it("accepts only explicitly agent-prefixed overrides", () => {
+    expect(
+      deriveAgentEnvironmentName({
+        CLOUDFLARE_ENVIRONMENT_NAME: "Agent Feature 42",
+      })
+    ).toBe("agent-feature-42");
+    expect(() =>
+      deriveAgentEnvironmentName({
+        CLOUDFLARE_ENVIRONMENT_NAME: "staging",
+      })
+    ).toThrow('must use an "agent-" prefix');
+  });
+
+  it("fails without a SAM identity or explicit name", () => {
+    expect(() => deriveAgentEnvironmentName({})).toThrow(
+      "Unable to derive an agent environment"
+    );
+  });
+});
+
+describe("resolveDeploymentMetadata", () => {
+  it("prefers an explicit version for direct agent deploys", () => {
+    expect(
+      resolveDeploymentMetadata({
+        CLOUDFLARE_ENVIRONMENT_NAME: "agent-123",
+        CLOUDFLARE_DEPLOYMENT_VERSION: "deadbeef",
+        GITHUB_SHA: "ignored",
+      })
+    ).toEqual({ environment: "agent-123", version: "deadbeef" });
+  });
+
+  it("uses GitHub and SAM identifiers as fallbacks", () => {
+    expect(
+      resolveDeploymentMetadata({
+        CLOUDFLARE_ENVIRONMENT_NAME: "staging",
+        GITHUB_SHA: "github-sha",
+      })
+    ).toEqual({ environment: "staging", version: "github-sha" });
+    expect(
+      resolveDeploymentMetadata({
+        CLOUDFLARE_ENVIRONMENT_NAME: "agent-123",
+        SAM_TASK_ID: "task-id",
+      })
+    ).toEqual({ environment: "agent-123", version: "task-id" });
+  });
+});
+
+describe("createGeneratedWranglerConfig", () => {
+  it("includes deployment identity and every runtime binding", () => {
+    vi.stubEnv("CLOUDFLARE_DEPLOYMENT_VERSION", "deadbeef");
+    const config = createGeneratedWranglerConfig({
+      workerName: "ttv-agent",
+      d1Name: "ttv-db-agent",
+      d1Id: "db-id",
+      bucketName: "ttv-files-agent",
+      queueName: "ttv-queue-agent",
+      vectorizeIndexName: "ttv-vector-agent",
+      aiGatewayName: "ttv-ai-agent",
+      betterAuthUrl: "https://ttv-agent.example.workers.dev",
+    });
+
+    expect(config.images).toEqual({ binding: "IMAGES" });
+    expect(config.vars).toMatchObject({
+      DEPLOYMENT_ENVIRONMENT: "staging",
+      DEPLOYMENT_VERSION: "deadbeef",
+    });
+    expect(config.d1_databases[0].binding).toBe("DB");
+    expect(config.r2_buckets[0].binding).toBe("BUCKET");
+    expect(config.ai.binding).toBe("AI");
+    expect(config.vectorize[0].binding).toBe("VECTORIZE");
+    expect(config.queues.producers[0].binding).toBe("RECORDING_QUEUE");
+    expect(config.durable_objects.bindings[0].name).toBe("FFMPEG_CONTAINER");
   });
 });
 
@@ -69,6 +167,65 @@ describe("ensureAiGateway", () => {
       id: "ttv-ai",
       collect_logs: true,
     });
+  });
+});
+
+describe("environment cleanup", () => {
+  it("deletes an existing AI gateway", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(deleteAiGatewayByName("ttv-ai")).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.cloudflare.com/client/v4/accounts/acc-123/ai-gateway/gateways/ttv-ai",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
+  it("treats a missing AI gateway as already deleted", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 404 }))
+    );
+    await expect(deleteAiGatewayByName("missing")).resolves.toBe(false);
+  });
+
+  it("deletes an existing queue without masking missing queues", async () => {
+    const runner = vi.fn().mockResolvedValue({});
+    await expect(deleteQueueByName("recordings", runner)).resolves.toBe(true);
+    expect(runner.mock.calls).toEqual([
+      [["queues", "info", "recordings"]],
+      [["queues", "delete", "recordings"]],
+    ]);
+
+    const missingRunner = vi.fn().mockRejectedValue(new Error("not found"));
+    await expect(deleteQueueByName("missing", missingRunner)).resolves.toBe(false);
+    expect(missingRunner).toHaveBeenCalledTimes(1);
+
+    const unauthorizedRunner = vi
+      .fn()
+      .mockRejectedValue(new Error("Unauthorized"));
+    await expect(
+      deleteQueueByName("recordings", unauthorizedRunner)
+    ).rejects.toThrow("Unauthorized");
+  });
+
+  it("force-deletes an existing Vectorize index", async () => {
+    const runner = vi.fn().mockResolvedValue({});
+    await expect(
+      deleteVectorizeIndexByName("transcripts", runner)
+    ).resolves.toBe(true);
+    expect(runner.mock.calls).toEqual([
+      [["vectorize", "get", "transcripts"]],
+      [["vectorize", "delete", "transcripts", "--force"]],
+    ]);
+
+    const missingRunner = vi
+      .fn()
+      .mockRejectedValue(new Error("Index does not exist"));
+    await expect(
+      deleteVectorizeIndexByName("missing", missingRunner)
+    ).resolves.toBe(false);
   });
 });
 

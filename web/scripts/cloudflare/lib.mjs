@@ -82,6 +82,48 @@ export function deriveEnvironmentContext() {
   };
 }
 
+export function deriveAgentEnvironmentName(environment = process.env) {
+  const explicitName = environment.CLOUDFLARE_ENVIRONMENT_NAME?.trim();
+  if (explicitName) {
+    const normalized = normalizeSlug(explicitName);
+    if (!normalized.startsWith("agent-")) {
+      throw new Error(
+        `Agent environments must use an "agent-" prefix; received "${explicitName}".`
+      );
+    }
+    return normalized;
+  }
+
+  const workspaceIdentity =
+    environment.SAM_TASK_ID?.trim() || environment.SAM_WORKSPACE_ID?.trim();
+  if (!workspaceIdentity) {
+    throw new Error(
+      "Unable to derive an agent environment. Set SAM_TASK_ID, SAM_WORKSPACE_ID, or an agent-prefixed CLOUDFLARE_ENVIRONMENT_NAME."
+    );
+  }
+
+  return `agent-${normalizeSlug(workspaceIdentity).slice(-12)}`;
+}
+
+export function resolveDeploymentMetadata(environment = process.env) {
+  return {
+    environment: getRequiredEnvFrom(environment, "CLOUDFLARE_ENVIRONMENT_NAME"),
+    version:
+      environment.CLOUDFLARE_DEPLOYMENT_VERSION?.trim() ||
+      environment.GITHUB_SHA?.trim() ||
+      environment.SAM_TASK_ID?.trim() ||
+      "unknown",
+  };
+}
+
+function getRequiredEnvFrom(environment, name) {
+  const value = environment[name]?.trim();
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+}
+
 export async function cfApi(resourcePath, { method = "GET", body } = {}) {
   const accountId = getRequiredEnv("CLOUDFLARE_ACCOUNT_ID");
   const token = getRequiredEnv("CLOUDFLARE_API_TOKEN");
@@ -228,6 +270,43 @@ export async function ensureAiGateway(name) {
   });
 }
 
+export async function deleteAiGatewayByName(name) {
+  const deleted = await cfApi(
+    `/ai-gateway/gateways/${encodeURIComponent(name)}`,
+    { method: "DELETE" }
+  );
+  return deleted !== null;
+}
+
+function isMissingResourceError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /not found|does not exist|could not find/i.test(message);
+}
+
+export async function deleteQueueByName(name, runner = runWrangler) {
+  try {
+    await runner(["queues", "info", name]);
+  } catch (error) {
+    if (isMissingResourceError(error)) return false;
+    throw error;
+  }
+
+  await runner(["queues", "delete", name]);
+  return true;
+}
+
+export async function deleteVectorizeIndexByName(name, runner = runWrangler) {
+  try {
+    await runner(["vectorize", "get", name]);
+  } catch (error) {
+    if (isMissingResourceError(error)) return false;
+    throw error;
+  }
+
+  await runner(["vectorize", "delete", name, "--force"]);
+  return true;
+}
+
 export async function deleteR2BucketByName(name) {
   const existing = await cfApi(`/r2/buckets/${encodeURIComponent(name)}`);
   if (!existing) {
@@ -302,7 +381,7 @@ export function resolveBetterAuthUrl({
   );
 }
 
-export async function writeGeneratedWranglerConfig({
+export function createGeneratedWranglerConfig({
   workerName,
   d1Name,
   d1Id,
@@ -319,6 +398,7 @@ export async function writeGeneratedWranglerConfig({
     path.join(webRoot, "src", "lib", "db", "migrations")
   );
 
+  const deployment = resolveDeploymentMetadata();
   const config = {
     $schema: path.relative(
       generatedDir,
@@ -340,8 +420,13 @@ export async function writeGeneratedWranglerConfig({
       directory: "../client",
       binding: "ASSETS",
     },
+    images: {
+      binding: "IMAGES",
+    },
     vars: {
       BETTER_AUTH_URL: betterAuthUrl,
+      DEPLOYMENT_ENVIRONMENT: deployment.environment,
+      DEPLOYMENT_VERSION: deployment.version,
       AI_GATEWAY_ACCOUNT_ID: getRequiredEnv("CLOUDFLARE_ACCOUNT_ID"),
       AI_GATEWAY_NAME: aiGatewayName,
       AI_GATEWAY_MODEL:
@@ -421,7 +506,12 @@ export async function writeGeneratedWranglerConfig({
       : {}),
   };
 
+  return config;
+}
+
+export async function writeGeneratedWranglerConfig(options) {
   const configPath = path.join(generatedDir, "wrangler.generated.json");
+  const config = createGeneratedWranglerConfig(options);
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
   return configPath;
 }
@@ -458,6 +548,14 @@ export async function runWrangler(args, { input } = {}) {
 export async function runNpm(args, { input } = {}) {
   return runCommand(
     process.platform === "win32" ? "npm.cmd" : "npm",
+    args,
+    { input }
+  );
+}
+
+export async function runGit(args, { input } = {}) {
+  return runCommand(
+    process.platform === "win32" ? "git.exe" : "git",
     args,
     { input }
   );

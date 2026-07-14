@@ -1,6 +1,7 @@
 import { defineMiddleware } from "astro:middleware";
 import { env } from "cloudflare:workers";
 import { createAuth } from "@/lib/auth";
+import { isHealthCheckPath } from "@/lib/health";
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const { locals, request, url, redirect } = context;
@@ -11,6 +12,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
     url.hostname = primaryDomain;
     url.protocol = "https:";
     return redirect(url.toString(), 301);
+  }
+
+  if (isHealthCheckPath(url.pathname)) {
+    return next();
   }
 
   const auth = createAuth(env);

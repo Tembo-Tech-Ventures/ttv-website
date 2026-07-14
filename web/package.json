@@ -11,8 +11,11 @@
     "db:import": "node ./scripts/import-data.mjs",
     "cf:deploy": "node ./scripts/cloudflare/deploy.mjs",
     "cf:destroy": "node ./scripts/cloudflare/destroy.mjs",
+    "cf:agent": "node ./scripts/cloudflare/agent-environment.mjs",
+    "cf:smoke": "node ./scripts/cloudflare/smoke.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },

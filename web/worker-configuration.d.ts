@@ -18,6 +18,8 @@ declare namespace Cloudflare {
 		AI_GATEWAY_NAME?: string;
 		AI_GATEWAY_MODEL?: string;
 		AI_GATEWAY_API_KEY?: string;
+		DEPLOYMENT_ENVIRONMENT?: string;
+		DEPLOYMENT_VERSION?: string;
 	}
 }
 interface Env extends Cloudflare.Env {}
