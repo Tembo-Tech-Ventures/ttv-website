@@ -447,6 +447,9 @@ export function createGeneratedWranglerConfig({
     no_bundle: true,
     workers_dev: workersDevEnabled,
     preview_urls: workersDevEnabled,
+    triggers: {
+      crons: ["*/15 * * * *"],
+    },
     rules: [
       {
         type: "ESModule",
@@ -584,6 +587,29 @@ export function getSecretBindings() {
   const aiGatewayToken = getOptionalEnv("CLOUDFLARE_AI_GATEWAY_TOKEN");
   if (aiGatewayToken) {
     bindings.push({ key: "AI_GATEWAY_API_KEY", value: aiGatewayToken });
+  }
+
+  // Google credentials are optional and never copied into isolated agent
+  // previews. Shared staging/production can opt in independently.
+  if (!isAgentPreview) {
+    const serviceAccountJson = getOptionalEnv(
+      "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON"
+    );
+    if (serviceAccountJson) {
+      bindings.push({
+        key: "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON",
+        value: serviceAccountJson,
+      });
+      const impersonatedUser = getOptionalEnv(
+        "GOOGLE_DRIVE_IMPERSONATED_USER"
+      );
+      if (impersonatedUser) {
+        bindings.push({
+          key: "GOOGLE_DRIVE_IMPERSONATED_USER",
+          value: impersonatedUser,
+        });
+      }
+    }
   }
 
   return bindings;

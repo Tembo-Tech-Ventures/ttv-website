@@ -4,6 +4,10 @@ import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 import { embedAndIndexRecording } from "@/lib/recordings/embeddings";
 import { transcribeAudioObject } from "@/lib/recordings/transcription";
+import {
+  downloadGoogleDriveVideoToR2,
+  getGoogleDriveCredentials,
+} from "@/lib/recordings/google-drive";
 
 export interface RecordingQueueMessage {
   type: "process_recording";
@@ -44,11 +48,32 @@ export async function processRecordingMessage(message: unknown, env: Env) {
   if (!recording) {
     throw new Error(`Recording ${message.recordingId} not found`);
   }
-  if (!recording.r2VideoKey) {
-    throw new Error(`Recording ${recording.id} does not have an R2 video key`);
-  }
-
   try {
+    let r2VideoKey = recording.r2VideoKey;
+    if (!r2VideoKey) {
+      if (!recording.driveFileId) {
+        throw new Error(
+          `Recording ${recording.id} does not have a video source`
+        );
+      }
+
+      await updateStatus(db, recording.id, "downloading");
+      const imported = await downloadGoogleDriveVideoToR2({
+        env,
+        credentials: getGoogleDriveCredentials(env),
+        fileId: recording.driveFileId,
+        recordingId: recording.id,
+      });
+      r2VideoKey = imported.r2VideoKey;
+      await db
+        .update(schema.recording)
+        .set({
+          r2VideoKey,
+          fileSizeBytes: imported.fileSizeBytes ?? recording.fileSizeBytes,
+        })
+        .where(eq(schema.recording.id, recording.id));
+    }
+
     await updateStatus(db, recording.id, "extracting_audio");
     const container = env.FFMPEG_CONTAINER.getByName(recording.id);
     const ffmpegResponse = await container.fetch("https://ffmpeg/process", {
@@ -56,7 +81,7 @@ export async function processRecordingMessage(message: unknown, env: Env) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         recordingId: recording.id,
-        r2VideoKey: recording.r2VideoKey,
+        r2VideoKey,
       }),
     });
 

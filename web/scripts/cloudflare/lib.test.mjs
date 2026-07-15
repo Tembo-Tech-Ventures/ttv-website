@@ -20,6 +20,8 @@ beforeEach(() => {
   vi.stubEnv("BETTER_AUTH_SECRET", "better-auth-secret");
   vi.stubEnv("GITHUB_CLIENT_ID", "gh-id");
   vi.stubEnv("GITHUB_CLIENT_SECRET", "gh-secret");
+  vi.stubEnv("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON", "");
+  vi.stubEnv("GOOGLE_DRIVE_IMPERSONATED_USER", "");
 });
 
 afterEach(() => {
@@ -121,6 +123,7 @@ describe("createGeneratedWranglerConfig", () => {
     });
     expect(config.workers_dev).toBe(true);
     expect(config.preview_urls).toBe(true);
+    expect(config.triggers).toEqual({ crons: ["*/15 * * * *"] });
     expect(config.vars).toMatchObject({
       DEPLOYMENT_ENVIRONMENT: "staging",
       DEPLOYMENT_VERSION: "deadbeef",
@@ -383,12 +386,35 @@ describe("getSecretBindings", () => {
     });
   });
 
+  it("includes optional Google Drive credentials in shared environments", () => {
+    vi.stubEnv(
+      "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON",
+      '{"client_email":"drive@example.org"}'
+    );
+    vi.stubEnv("GOOGLE_DRIVE_IMPERSONATED_USER", "owner@example.org");
+
+    expect(getSecretBindings()).toEqual(
+      expect.arrayContaining([
+        {
+          key: "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON",
+          value: '{"client_email":"drive@example.org"}',
+        },
+        {
+          key: "GOOGLE_DRIVE_IMPERSONATED_USER",
+          value: "owner@example.org",
+        },
+      ])
+    );
+  });
+
   it("uses preview-only derived auth and disables OAuth in agent environments", () => {
     vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME", "agent-pr-55");
     vi.stubEnv("AGENT_PREVIEW_SECRET", "p".repeat(32));
     vi.stubEnv("BETTER_AUTH_SECRET", "shared-secret-must-not-be-used");
     vi.stubEnv("GITHUB_CLIENT_ID", "real-client-must-not-be-used");
     vi.stubEnv("GITHUB_CLIENT_SECRET", "real-secret-must-not-be-used");
+    vi.stubEnv("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON", "drive-secret-must-not-be-used");
+    vi.stubEnv("GOOGLE_DRIVE_IMPERSONATED_USER", "owner@example.org");
 
     const bindings = getSecretBindings();
     expect(bindings).toContainEqual({
@@ -408,5 +434,9 @@ describe("getSecretBindings", () => {
     expect(JSON.stringify(bindings)).not.toContain(
       "real-secret-must-not-be-used"
     );
+    expect(JSON.stringify(bindings)).not.toContain(
+      "drive-secret-must-not-be-used"
+    );
+    expect(JSON.stringify(bindings)).not.toContain("owner@example.org");
   });
 });

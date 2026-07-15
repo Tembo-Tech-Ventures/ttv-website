@@ -5,6 +5,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "./src/worker.ts",
 
+  "triggers": {
+    "crons": ["*/15 * * * *"]
+  },
+
   "images": {
     "binding": "IMAGES"
   },

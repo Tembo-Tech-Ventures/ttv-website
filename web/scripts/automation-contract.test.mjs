@@ -98,6 +98,12 @@ describe("GitHub delivery contracts", () => {
     expect(workflow).toContain(
       "PLAYWRIGHT_AGENT_TOKEN: ${{ inputs.environment_name == 'staging'"
     );
+    expect(workflow).toContain(
+      "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ !startsWith(inputs.environment_name, 'agent-')"
+    );
+    expect(workflow).toContain(
+      "GOOGLE_DRIVE_IMPERSONATED_USER: ${{ !startsWith(inputs.environment_name, 'agent-')"
+    );
     expect(workflow).not.toContain(
       "STAGING_AGENT_TOKEN: ${{ secrets.STAGING_AGENT_TOKEN }}"
     );

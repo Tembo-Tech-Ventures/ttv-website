@@ -14,6 +14,8 @@ declare namespace Cloudflare {
 		BETTER_AUTH_SECRET: string;
 		GITHUB_CLIENT_ID: string;
 		GITHUB_CLIENT_SECRET: string;
+		GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON?: string;
+		GOOGLE_DRIVE_IMPERSONATED_USER?: string;
 		AI_GATEWAY_ACCOUNT_ID?: string;
 		AI_GATEWAY_NAME?: string;
 		AI_GATEWAY_MODEL?: string;

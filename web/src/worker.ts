@@ -1,6 +1,7 @@
 import { Container } from "@cloudflare/containers";
 import { handle } from "@astrojs/cloudflare/handler";
 import { processRecordingMessage } from "@/lib/recordings/pipeline";
+import { syncEnabledRecordingImportSources } from "@/lib/recordings/importer";
 
 export class FfmpegContainer extends Container<Env> {
   defaultPort = 8080;
@@ -54,5 +55,9 @@ export default {
       await processRecordingMessage(message.body, env);
       message.ack();
     }
+  },
+
+  scheduled(_controller, env, ctx) {
+    ctx.waitUntil(syncEnabledRecordingImportSources(env));
   },
 } satisfies ExportedHandler<Env, unknown>;

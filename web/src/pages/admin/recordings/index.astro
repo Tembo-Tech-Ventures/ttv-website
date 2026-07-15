@@ -22,12 +22,20 @@ const recordings = await db.query.recording.findMany({
           Upload sessions, monitor processing, and manage transcripts.
         </p>
       </div>
-      <a
-        href="/admin/recordings/upload"
-        class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
-      >
-        Upload Recording
-      </a>
+      <div class="flex flex-wrap gap-2">
+        <a
+          href="/admin/recordings/import"
+          class="inline-flex items-center rounded-md border border-primary/50 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10"
+        >
+          Import from Drive
+        </a>
+        <a
+          href="/admin/recordings/upload"
+          class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
+        >
+          Upload Recording
+        </a>
+      </div>
     </div>
 
     <div class="overflow-x-auto rounded-lg border border-teal/20">

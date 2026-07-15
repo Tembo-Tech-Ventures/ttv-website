@@ -76,6 +76,8 @@ jobs:
       GITHUB_CLIENT_ID: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.GH_CLIENT_ID || '' }}
       GITHUB_CLIENT_SECRET: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.GH_CLIENT_SECRET || '' }}
       CLOUDFLARE_AI_GATEWAY_TOKEN: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.CLOUDFLARE_AI_GATEWAY_TOKEN || '' }}
+      GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || '' }}
+      GOOGLE_DRIVE_IMPERSONATED_USER: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.GOOGLE_DRIVE_IMPERSONATED_USER || '' }}
       AGENT_PREVIEW_SECRET: ${{ startsWith(inputs.environment_name, 'agent-') && secrets.AGENT_PREVIEW_SECRET || '' }}
       CLOUDFLARE_APP_NAME: ${{ inputs.app_name }}
       CLOUDFLARE_ENVIRONMENT_NAME: ${{ inputs.environment_name }}
@@ -163,6 +165,8 @@ jobs:
       GITHUB_CLIENT_ID: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.GH_CLIENT_ID || '' }}
       GITHUB_CLIENT_SECRET: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.GH_CLIENT_SECRET || '' }}
       CLOUDFLARE_AI_GATEWAY_TOKEN: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.CLOUDFLARE_AI_GATEWAY_TOKEN || '' }}
+      GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || '' }}
+      GOOGLE_DRIVE_IMPERSONATED_USER: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.GOOGLE_DRIVE_IMPERSONATED_USER || '' }}
       AGENT_PREVIEW_SECRET: ${{ startsWith(inputs.environment_name, 'agent-') && secrets.AGENT_PREVIEW_SECRET || '' }}
       CLOUDFLARE_APP_NAME: ${{ inputs.app_name }}
       CLOUDFLARE_ENVIRONMENT_NAME: ${{ inputs.environment_name }}
