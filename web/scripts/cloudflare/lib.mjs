@@ -3,6 +3,11 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  assertAgentEnvironmentName,
+  deriveAgentPreviewAuthSecret,
+  isAgentEnvironmentName,
+} from "./agent-preview-auth.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,10 +17,6 @@ const generatedDir = path.join(webRoot, "dist", "server");
 const DEFAULT_APP_NAME = "ttv-website";
 const DEFAULT_COMPATIBILITY_DATE = "2026-04-01";
 const DEFAULT_AI_GATEWAY_MODEL = "workers-ai/@cf/google/gemma-4-26b-a4b-it";
-const SECRET_KEYS = [
-  "GITHUB_CLIENT_ID",
-  "GITHUB_CLIENT_SECRET",
-];
 
 export function getRequiredEnv(name) {
   const value = process.env[name]?.trim();
@@ -31,7 +32,7 @@ export function getOptionalEnv(name) {
   return value ? value : undefined;
 }
 
-function deriveBetterAuthSecret() {
+function deriveLegacyBetterAuthSecret() {
   const seed = [
     getRequiredEnv("CLOUDFLARE_ACCOUNT_ID"),
     getRequiredEnv("CLOUDFLARE_API_TOKEN"),
@@ -80,6 +81,45 @@ export function deriveEnvironmentContext() {
     vectorizeIndexName: joinName([appName, "transcripts", environmentSlug]),
     aiGatewayName: joinName([appName, "ai", environmentSlug]),
   };
+}
+
+export function deriveAgentEnvironmentName(environment = process.env) {
+  const explicitName = environment.CLOUDFLARE_ENVIRONMENT_NAME?.trim();
+  if (explicitName) {
+    const normalized = normalizeSlug(explicitName);
+    return assertAgentEnvironmentName(normalized);
+  }
+
+  const workspaceIdentity =
+    environment.SAM_TASK_ID?.trim() || environment.SAM_WORKSPACE_ID?.trim();
+  if (!workspaceIdentity) {
+    throw new Error(
+      "Unable to derive an agent environment. Set SAM_TASK_ID, SAM_WORKSPACE_ID, or an agent-prefixed CLOUDFLARE_ENVIRONMENT_NAME."
+    );
+  }
+
+  return assertAgentEnvironmentName(
+    `agent-${normalizeSlug(workspaceIdentity).slice(-12)}`
+  );
+}
+
+export function resolveDeploymentMetadata(environment = process.env) {
+  return {
+    environment: getRequiredEnvFrom(environment, "CLOUDFLARE_ENVIRONMENT_NAME"),
+    version:
+      environment.CLOUDFLARE_DEPLOYMENT_VERSION?.trim() ||
+      environment.GITHUB_SHA?.trim() ||
+      environment.SAM_TASK_ID?.trim() ||
+      "unknown",
+  };
+}
+
+function getRequiredEnvFrom(environment, name) {
+  const value = environment[name]?.trim();
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
 }
 
 export async function cfApi(resourcePath, { method = "GET", body } = {}) {
@@ -136,6 +176,13 @@ export async function ensureD1Database(name) {
       name,
       ...(jurisdiction ? { jurisdiction } : {}),
     },
+  });
+}
+
+export async function queryD1Database(databaseId, sql, params = []) {
+  return cfApi(`/d1/database/${encodeURIComponent(databaseId)}/query`, {
+    method: "POST",
+    body: { sql, params },
   });
 }
 
@@ -228,6 +275,43 @@ export async function ensureAiGateway(name) {
   });
 }
 
+export async function deleteAiGatewayByName(name) {
+  const deleted = await cfApi(
+    `/ai-gateway/gateways/${encodeURIComponent(name)}`,
+    { method: "DELETE" }
+  );
+  return deleted !== null;
+}
+
+function isMissingResourceError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /not found|does not exist|could not find/i.test(message);
+}
+
+export async function deleteQueueByName(name, runner = runWrangler) {
+  try {
+    await runner(["queues", "info", name]);
+  } catch (error) {
+    if (isMissingResourceError(error)) return false;
+    throw error;
+  }
+
+  await runner(["queues", "delete", name]);
+  return true;
+}
+
+export async function deleteVectorizeIndexByName(name, runner = runWrangler) {
+  try {
+    await runner(["vectorize", "get", name]);
+  } catch (error) {
+    if (isMissingResourceError(error)) return false;
+    throw error;
+  }
+
+  await runner(["vectorize", "delete", name, "--force"]);
+  return true;
+}
+
 export async function deleteR2BucketByName(name) {
   const existing = await cfApi(`/r2/buckets/${encodeURIComponent(name)}`);
   if (!existing) {
@@ -255,12 +339,6 @@ export async function ensureWorkersSubdomain() {
   });
 
   return created?.subdomain;
-}
-
-export async function enableWorkersDevSubdomain(workerName) {
-  await cfApi(`/workers/scripts/${encodeURIComponent(workerName)}/subdomain`, {
-    method: "POST",
-  });
 }
 
 export async function deleteWorkerScript(workerName) {
@@ -302,7 +380,7 @@ export function resolveBetterAuthUrl({
   );
 }
 
-export async function writeGeneratedWranglerConfig({
+export function createGeneratedWranglerConfig({
   workerName,
   d1Name,
   d1Id,
@@ -319,6 +397,19 @@ export async function writeGeneratedWranglerConfig({
     path.join(webRoot, "src", "lib", "db", "migrations")
   );
 
+  const deployment = resolveDeploymentMetadata();
+  const agentAuthEnabled =
+    getOptionalEnv("CLOUDFLARE_AGENT_AUTH_ENABLED") === "true";
+  const workersDevEnabled = !primaryDomain && !redirectDomain;
+  if (
+    agentAuthEnabled &&
+    deployment.environment !== "staging" &&
+    !deployment.environment.startsWith("agent-")
+  ) {
+    throw new Error(
+      `Agent bearer auth is allowed only in staging or agent-* environments; received "${deployment.environment}".`
+    );
+  }
   const config = {
     $schema: path.relative(
       generatedDir,
@@ -327,9 +418,14 @@ export async function writeGeneratedWranglerConfig({
     name: workerName,
     compatibility_date: DEFAULT_COMPATIBILITY_DATE,
     compatibility_flags: ["nodejs_compat"],
+    observability: {
+      enabled: true,
+      head_sampling_rate: deployment.environment.startsWith("agent-") ? 1 : 0.1,
+    },
     main: "entry.mjs",
     no_bundle: true,
-    workers_dev: !primaryDomain && !redirectDomain,
+    workers_dev: workersDevEnabled,
+    preview_urls: workersDevEnabled,
     rules: [
       {
         type: "ESModule",
@@ -340,8 +436,16 @@ export async function writeGeneratedWranglerConfig({
       directory: "../client",
       binding: "ASSETS",
     },
+    images: {
+      binding: "IMAGES",
+    },
     vars: {
       BETTER_AUTH_URL: betterAuthUrl,
+      DEPLOYMENT_ENVIRONMENT: deployment.environment,
+      DEPLOYMENT_VERSION: deployment.version,
+      ...(agentAuthEnabled
+        ? { AGENT_AUTH_ENABLED: "true" }
+        : {}),
       AI_GATEWAY_ACCOUNT_ID: getRequiredEnv("CLOUDFLARE_ACCOUNT_ID"),
       AI_GATEWAY_NAME: aiGatewayName,
       AI_GATEWAY_MODEL:
@@ -421,21 +525,38 @@ export async function writeGeneratedWranglerConfig({
       : {}),
   };
 
+  return config;
+}
+
+export async function writeGeneratedWranglerConfig(options) {
   const configPath = path.join(generatedDir, "wrangler.generated.json");
+  const config = createGeneratedWranglerConfig(options);
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
   return configPath;
 }
 
 export function getSecretBindings() {
-  const bindings = SECRET_KEYS.map((key) => {
-    const value = getRequiredEnv(key);
-    return { key, value };
-  });
-
-  bindings.unshift({
+  const environmentName = getRequiredEnv("CLOUDFLARE_ENVIRONMENT_NAME");
+  const isAgentPreview = isAgentEnvironmentName(environmentName);
+  const previewSecret = isAgentPreview
+    ? getRequiredEnv("AGENT_PREVIEW_SECRET")
+    : undefined;
+  const bindings = [{
     key: "BETTER_AUTH_SECRET",
-    value: getOptionalEnv("BETTER_AUTH_SECRET") ?? deriveBetterAuthSecret(),
-  });
+    value: isAgentPreview
+      ? deriveAgentPreviewAuthSecret(previewSecret, environmentName)
+      : getOptionalEnv("BETTER_AUTH_SECRET") ?? deriveLegacyBetterAuthSecret(),
+  }, {
+    key: "GITHUB_CLIENT_ID",
+    value: isAgentPreview
+      ? "agent-preview-oauth-disabled"
+      : getRequiredEnv("GITHUB_CLIENT_ID"),
+  }, {
+    key: "GITHUB_CLIENT_SECRET",
+    value: isAgentPreview
+      ? "agent-preview-oauth-disabled"
+      : getRequiredEnv("GITHUB_CLIENT_SECRET"),
+  }];
 
   // Optional: scoped Workers AI token for AI Gateway unified-mode requests.
   // When absent, the worker falls back to the Workers AI binding.
@@ -458,6 +579,14 @@ export async function runWrangler(args, { input } = {}) {
 export async function runNpm(args, { input } = {}) {
   return runCommand(
     process.platform === "win32" ? "npm.cmd" : "npm",
+    args,
+    { input }
+  );
+}
+
+export async function runGit(args, { input } = {}) {
+  return runCommand(
+    process.platform === "win32" ? "git.exe" : "git",
     args,
     { input }
   );

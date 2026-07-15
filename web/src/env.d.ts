@@ -5,6 +5,9 @@ declare namespace Cloudflare {
   interface Env {
     PRIMARY_DOMAIN?: string;
     REDIRECT_DOMAIN?: string;
+    DEPLOYMENT_ENVIRONMENT?: string;
+    DEPLOYMENT_VERSION?: string;
+    AGENT_AUTH_ENABLED?: string;
   }
 }
 

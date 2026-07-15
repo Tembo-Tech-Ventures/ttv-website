@@ -26,6 +26,11 @@ on:
         description: Optional explicit Better Auth URL override
         required: false
         type: string
+      agent_auth_enabled:
+        description: Enable short-lived bearer sessions (non-production only)
+        required: false
+        type: boolean
+        default: false
       allow_protected_destroy:
         description: Override protected environment guard during destroy
         required: false
@@ -41,5 +46,6 @@ jobs:
       primary_domain: ${{ inputs.primary_domain }}
       redirect_domain: ${{ inputs.redirect_domain }}
       better_auth_url: ${{ inputs.better_auth_url }}
+      agent_auth_enabled: ${{ inputs.agent_auth_enabled }}
       allow_protected_destroy: ${{ inputs.allow_protected_destroy }}
     secrets: inherit

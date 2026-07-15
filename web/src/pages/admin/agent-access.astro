@@ -1,0 +1,199 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import { env } from "cloudflare:workers";
+import {
+  createAgentSession,
+  isAgentAuthEnabled,
+  isAgentSession,
+  isSameOriginRequest,
+  listAgentSessions,
+  parseAgentSessionDuration,
+  revokeAgentSession,
+} from "@/lib/agent-auth";
+
+Astro.response.headers.set("Cache-Control", "no-store");
+
+const enabled = isAgentAuthEnabled(env.AGENT_AUTH_ENABLED);
+const userId = Astro.locals.user?.id;
+if (!userId) return Astro.redirect("/auth/login");
+if (isAgentSession(Astro.locals.session?.userAgent)) {
+  return Astro.redirect("/admin");
+}
+
+let createdToken: string | undefined;
+let message: string | undefined;
+let error: string | undefined;
+
+if (Astro.request.method === "POST") {
+  try {
+    if (!enabled) throw new Error("Agent access is disabled in this environment.");
+    if (!isSameOriginRequest(Astro.request)) {
+      throw new Error("The request origin could not be verified.");
+    }
+
+    const formData = await Astro.request.formData();
+    const action = String(formData.get("action") ?? "");
+    if (action === "create") {
+      const created = await createAgentSession({
+        db: env.DB,
+        userId,
+        label: String(formData.get("label") ?? ""),
+        durationHours: parseAgentSessionDuration(formData.get("duration")),
+      });
+      createdToken = created.token;
+      message = `Created ${created.label}. Copy the token now; it will not be shown again.`;
+    } else if (action === "revoke") {
+      const revoked = await revokeAgentSession(
+        env.DB,
+        userId,
+        String(formData.get("sessionId") ?? "")
+      );
+      message = revoked ? "Agent access revoked." : "That agent session was not found.";
+    } else {
+      throw new Error("Unsupported agent access action.");
+    }
+  } catch (caught) {
+    error = caught instanceof Error ? caught.message : "Agent access update failed.";
+  }
+}
+
+const sessions = enabled ? await listAgentSessions(env.DB, userId) : [];
+const formatDate = (date: Date) =>
+  new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+  }).format(date);
+---
+
+<AdminLayout title="Agent Access">
+  <div class="max-w-4xl space-y-6">
+    <div>
+      <h2 class="text-2xl font-bold text-white">Agent Access</h2>
+      <p class="mt-2 text-sm text-white/60">
+        Create short-lived bearer sessions for live staging verification. This
+        capability is intentionally unavailable in production.
+      </p>
+    </div>
+
+    {!enabled ? (
+      <div class="rounded-lg border border-amber-400/30 bg-amber-400/10 p-5 text-amber-100">
+        Agent access is disabled in this environment.
+      </div>
+    ) : (
+      <>
+        {message && (
+          <div class="rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
+            {message}
+          </div>
+        )}
+        {error && (
+          <div class="rounded-lg border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-100">
+            {error}
+          </div>
+        )}
+
+        {createdToken && (
+          <section class="rounded-lg border border-primary/40 bg-dark/80 p-5 shadow-lg">
+            <h3 class="font-semibold text-white">One-time bearer token</h3>
+            <p class="mt-1 text-sm text-white/60">
+              Store this as a secret. Anyone holding it can act as your admin account until expiry.
+            </p>
+            <div class="mt-4 flex items-start gap-3">
+              <code
+                id="agent-token"
+                class="min-w-0 flex-1 break-all rounded-md bg-black/30 p-3 text-sm text-primary"
+              >{createdToken}</code>
+              <button
+                id="copy-agent-token"
+                type="button"
+                class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
+              >Copy</button>
+            </div>
+          </section>
+        )}
+
+        <section class="rounded-lg border border-teal/20 bg-dark/80 p-5 shadow-lg">
+          <h3 class="text-lg font-semibold text-white">Create a session</h3>
+          <form method="POST" class="mt-4 grid gap-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+            <input type="hidden" name="action" value="create" />
+            <label class="flex flex-col gap-1.5 text-sm text-white/80">
+              Label
+              <input
+                name="label"
+                required
+                maxlength="50"
+                placeholder="SAM staging verifier"
+                class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/30 focus:border-primary focus:outline-none"
+              />
+            </label>
+            <label class="flex flex-col gap-1.5 text-sm text-white/80">
+              Lifetime
+              <select
+                name="duration"
+                class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none"
+              >
+                <option value="1">1 hour</option>
+                <option value="8" selected>8 hours</option>
+                <option value="24">24 hours</option>
+                <option value="168">7 days</option>
+              </select>
+            </label>
+            <button
+              type="submit"
+              class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
+            >Create token</button>
+          </form>
+        </section>
+
+        <section class="rounded-lg border border-teal/20 bg-dark/80 p-5 shadow-lg">
+          <h3 class="text-lg font-semibold text-white">Issued sessions</h3>
+          {sessions.length === 0 ? (
+            <p class="mt-3 text-sm text-white/50">No agent sessions have been issued.</p>
+          ) : (
+            <div class="mt-4 overflow-x-auto">
+              <table class="w-full text-left text-sm">
+                <thead class="border-b border-teal/20 text-white/50">
+                  <tr>
+                    <th class="pb-2 pr-4 font-medium">Label</th>
+                    <th class="pb-2 pr-4 font-medium">Created (UTC)</th>
+                    <th class="pb-2 pr-4 font-medium">Expires (UTC)</th>
+                    <th class="pb-2 text-right font-medium">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessions.map((session) => (
+                    <tr class="border-b border-teal/10 text-white/80">
+                      <td class="py-3 pr-4 font-medium text-white">{session.label}</td>
+                      <td class="py-3 pr-4">{formatDate(session.createdAt)}</td>
+                      <td class="py-3 pr-4">{formatDate(session.expiresAt)}</td>
+                      <td class="py-3 text-right">
+                        <form method="POST">
+                          <input type="hidden" name="action" value="revoke" />
+                          <input type="hidden" name="sessionId" value={session.id} />
+                          <button
+                            type="submit"
+                            class="rounded-md border border-red-400/30 px-3 py-1.5 text-red-200 hover:bg-red-400/10"
+                          >Revoke</button>
+                        </form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </>
+    )}
+  </div>
+
+  {createdToken && (
+    <script>
+      document.getElementById("copy-agent-token")?.addEventListener("click", async () => {
+        const token = document.getElementById("agent-token")?.textContent?.trim();
+        if (token) await navigator.clipboard.writeText(token);
+      });
+    </script>
+  )}
+</AdminLayout>

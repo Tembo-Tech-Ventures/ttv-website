@@ -1,4 +1,4 @@
-name: Cloudflare Staging PR Deploy
+name: Cloudflare PR Preview
 
 on:
   pull_request:
@@ -8,17 +8,19 @@ on:
       - opened
       - reopened
       - synchronize
+      - closed
 
 jobs:
-  staging:
+  preview:
+    concurrency:
+      group: ttv-cloudflare-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     uses: ./.github/workflows/cloudflare-environment.yml
     with:
-      action: deploy
-      environment_name: staging
+      action: ${{ github.event.action == 'closed' && 'destroy' || 'deploy' }}
+      environment_name: agent-pr-${{ github.event.pull_request.number }}
       github_environment: staging
-      primary_domain: staging.tembotechventures.com
-      redirect_domain: ${{ vars.STAGING_REDIRECT_DOMAIN }}
-      better_auth_url: ${{ vars.STAGING_BETTER_AUTH_URL }}
+      agent_auth_enabled: true
       workers_subdomain: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
-      protected_environments: production,prod
+      protected_environments: production,prod,staging
     secrets: inherit

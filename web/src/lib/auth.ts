@@ -1,6 +1,8 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { bearer } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/d1";
+import { isAgentAuthEnabled } from "./agent-auth";
 import * as schema from "./db/schema";
 
 type AuthRuntimeEnv = Pick<
@@ -10,6 +12,7 @@ type AuthRuntimeEnv = Pick<
   | "BETTER_AUTH_URL"
   | "GITHUB_CLIENT_ID"
   | "GITHUB_CLIENT_SECRET"
+  | "AGENT_AUTH_ENABLED"
 >;
 
 /**
@@ -38,6 +41,9 @@ export function createAuth(runtimeEnv: AuthRuntimeEnv) {
         maxAge: 60 * 5, // 5 minutes
       },
     },
+    // Bearer sessions are a staging-only operational capability. Production
+    // never receives AGENT_AUTH_ENABLED, so it keeps cookie-only auth.
+    plugins: isAgentAuthEnabled(runtimeEnv.AGENT_AUTH_ENABLED) ? [bearer()] : [],
   });
 }
 

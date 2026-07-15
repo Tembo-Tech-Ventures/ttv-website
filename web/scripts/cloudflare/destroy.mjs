@@ -1,13 +1,18 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
+  deleteAiGatewayByName,
   deleteD1DatabaseByName,
+  deleteQueueByName,
   deleteR2BucketByName,
+  deleteVectorizeIndexByName,
   deleteWorkerScript,
   deriveEnvironmentContext,
   getOptionalEnv,
   writeGithubOutput,
 } from "./lib.mjs";
 
-function ensureEnvironmentCanBeDestroyed(environmentSlug) {
+export function ensureEnvironmentCanBeDestroyed(environmentSlug) {
   const protectedEnvironments = (
     getOptionalEnv("CLOUDFLARE_PROTECTED_ENVIRONMENTS") ?? "production,prod"
   )
@@ -27,16 +32,22 @@ function ensureEnvironmentCanBeDestroyed(environmentSlug) {
   }
 }
 
-async function main() {
-  const context = deriveEnvironmentContext();
+export async function destroyEnvironment(
+  context,
+  {
+    deleteAiGateway = deleteAiGatewayByName,
+    deleteDatabase = deleteD1DatabaseByName,
+    deleteQueue = deleteQueueByName,
+    deleteBucket = deleteR2BucketByName,
+    deleteVectorize = deleteVectorizeIndexByName,
+    deleteWorker = deleteWorkerScript,
+  } = {}
+) {
   ensureEnvironmentCanBeDestroyed(context.environmentSlug);
-
-  const workerDeleted = await deleteWorkerScript(context.workerName);
-  const databaseDeleted = await deleteD1DatabaseByName(context.d1Name);
 
   let bucketDeleted = false;
   try {
-    bucketDeleted = await deleteR2BucketByName(context.bucketName);
+    bucketDeleted = await deleteBucket(context.bucketName);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
@@ -44,25 +55,52 @@ async function main() {
     );
   }
 
-  await writeGithubOutput("worker_deleted", String(workerDeleted));
-  await writeGithubOutput("database_deleted", String(databaseDeleted));
-  await writeGithubOutput("bucket_deleted", String(bucketDeleted));
-
-  console.log(
-    JSON.stringify(
-      {
-        environment: context.environmentName,
-        workerDeleted,
-        databaseDeleted,
-        bucketDeleted,
-      },
-      null,
-      2
-    )
+  const workerDeleted = await deleteWorker(context.workerName);
+  const queueDeleted = await deleteQueue(context.queueName);
+  const vectorizeIndexDeleted = await deleteVectorize(
+    context.vectorizeIndexName
   );
+  const aiGatewayDeleted = await deleteAiGateway(context.aiGatewayName);
+  const databaseDeleted = await deleteDatabase(context.d1Name);
+
+  return {
+    environment: context.environmentName,
+    workerDeleted,
+    queueDeleted,
+    vectorizeIndexDeleted,
+    aiGatewayDeleted,
+    databaseDeleted,
+    bucketDeleted,
+  };
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+async function main() {
+  const context = deriveEnvironmentContext();
+  const result = await destroyEnvironment(context);
+
+  await writeGithubOutput("worker_deleted", String(result.workerDeleted));
+  await writeGithubOutput("queue_deleted", String(result.queueDeleted));
+  await writeGithubOutput(
+    "vectorize_index_deleted",
+    String(result.vectorizeIndexDeleted)
+  );
+  await writeGithubOutput(
+    "ai_gateway_deleted",
+    String(result.aiGatewayDeleted)
+  );
+  await writeGithubOutput("database_deleted", String(result.databaseDeleted));
+  await writeGithubOutput("bucket_deleted", String(result.bucketDeleted));
+
+  console.log(JSON.stringify(result, null, 2));
+}
+
+const isDirectRun =
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isDirectRun) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

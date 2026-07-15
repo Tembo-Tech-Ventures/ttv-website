@@ -25,6 +25,10 @@ on:
         required: false
         type: string
         default: ""
+      agent_auth_enabled:
+        required: false
+        type: boolean
+        default: false
       workers_subdomain:
         required: false
         type: string
@@ -58,6 +62,7 @@ jobs:
   cloudflare-with-environment:
     if: ${{ inputs.github_environment != '' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: ${{ inputs.github_environment }}
     permissions:
       contents: read
@@ -67,25 +72,28 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
-      GITHUB_CLIENT_ID: ${{ secrets.GH_CLIENT_ID }}
-      GITHUB_CLIENT_SECRET: ${{ secrets.GH_CLIENT_SECRET }}
-      CLOUDFLARE_AI_GATEWAY_TOKEN: ${{ secrets.CLOUDFLARE_AI_GATEWAY_TOKEN }}
+      BETTER_AUTH_SECRET: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.BETTER_AUTH_SECRET || '' }}
+      GITHUB_CLIENT_ID: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.GH_CLIENT_ID || '' }}
+      GITHUB_CLIENT_SECRET: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.GH_CLIENT_SECRET || '' }}
+      CLOUDFLARE_AI_GATEWAY_TOKEN: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.CLOUDFLARE_AI_GATEWAY_TOKEN || '' }}
+      AGENT_PREVIEW_SECRET: ${{ startsWith(inputs.environment_name, 'agent-') && secrets.AGENT_PREVIEW_SECRET || '' }}
       CLOUDFLARE_APP_NAME: ${{ inputs.app_name }}
       CLOUDFLARE_ENVIRONMENT_NAME: ${{ inputs.environment_name }}
       CLOUDFLARE_PRIMARY_DOMAIN: ${{ inputs.primary_domain }}
       CLOUDFLARE_REDIRECT_DOMAIN: ${{ inputs.redirect_domain }}
       CLOUDFLARE_BETTER_AUTH_URL: ${{ inputs.better_auth_url }}
+      CLOUDFLARE_AGENT_AUTH_ENABLED: ${{ inputs.agent_auth_enabled }}
       CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ inputs.workers_subdomain }}
       CLOUDFLARE_D1_JURISDICTION: ${{ inputs.d1_jurisdiction }}
       CLOUDFLARE_R2_JURISDICTION: ${{ inputs.r2_jurisdiction }}
       CLOUDFLARE_R2_LOCATION_HINT: ${{ inputs.r2_location_hint }}
       CLOUDFLARE_PROTECTED_ENVIRONMENTS: ${{ inputs.protected_environments }}
       CLOUDFLARE_ALLOW_PROTECTED_DESTROY: ${{ inputs.allow_protected_destroy }}
+      PLAYWRIGHT_AGENT_TOKEN: ${{ inputs.environment_name == 'staging' && secrets.STAGING_AGENT_TOKEN || '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -94,7 +102,47 @@ jobs:
       - run: npm ci --legacy-peer-deps
 
       - if: ${{ inputs.action == 'deploy' }}
+        id: deploy
         run: npm run cf:deploy
+
+      - if: ${{ inputs.action == 'deploy' }}
+        name: Verify deployment identity and public routes
+        run: npm run cf:smoke -- --base-url="${{ steps.deploy.outputs.better_auth_url }}" --expected-environment="${{ inputs.environment_name }}" --expected-version="$GITHUB_SHA"
+
+      - if: ${{ inputs.action == 'deploy' }}
+        name: Install browser
+        run: npx playwright install --with-deps chromium
+
+      - if: ${{ inputs.action == 'deploy' }}
+        name: Verify live browser journeys and capture Worker logs
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.deploy.outputs.better_auth_url }}
+          EXPECTED_DEPLOYMENT_ENVIRONMENT: ${{ inputs.environment_name }}
+          EXPECTED_DEPLOYMENT_VERSION: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          log_file="${RUNNER_TEMP}/cloudflare-worker-tail.log"
+          npx wrangler tail "${{ steps.deploy.outputs.worker_name }}" --format pretty > "${log_file}" 2>&1 &
+          tail_pid=$!
+          cleanup() {
+            kill "${tail_pid}" 2>/dev/null || true
+            wait "${tail_pid}" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          sleep 3
+          npm run test:e2e
+
+      - if: ${{ always() && inputs.action == 'deploy' }}
+        name: Upload live verification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-evidence-${{ inputs.environment_name }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            web/test-results
+            ${{ runner.temp }}/cloudflare-worker-tail.log
 
       - if: ${{ inputs.action == 'destroy' }}
         run: npm run cf:destroy
@@ -102,6 +150,7 @@ jobs:
   cloudflare:
     if: ${{ inputs.github_environment == '' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     defaults:
@@ -110,25 +159,28 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
-      GITHUB_CLIENT_ID: ${{ secrets.GH_CLIENT_ID }}
-      GITHUB_CLIENT_SECRET: ${{ secrets.GH_CLIENT_SECRET }}
-      CLOUDFLARE_AI_GATEWAY_TOKEN: ${{ secrets.CLOUDFLARE_AI_GATEWAY_TOKEN }}
+      BETTER_AUTH_SECRET: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.BETTER_AUTH_SECRET || '' }}
+      GITHUB_CLIENT_ID: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.GH_CLIENT_ID || '' }}
+      GITHUB_CLIENT_SECRET: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.GH_CLIENT_SECRET || '' }}
+      CLOUDFLARE_AI_GATEWAY_TOKEN: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.CLOUDFLARE_AI_GATEWAY_TOKEN || '' }}
+      AGENT_PREVIEW_SECRET: ${{ startsWith(inputs.environment_name, 'agent-') && secrets.AGENT_PREVIEW_SECRET || '' }}
       CLOUDFLARE_APP_NAME: ${{ inputs.app_name }}
       CLOUDFLARE_ENVIRONMENT_NAME: ${{ inputs.environment_name }}
       CLOUDFLARE_PRIMARY_DOMAIN: ${{ inputs.primary_domain }}
       CLOUDFLARE_REDIRECT_DOMAIN: ${{ inputs.redirect_domain }}
       CLOUDFLARE_BETTER_AUTH_URL: ${{ inputs.better_auth_url }}
+      CLOUDFLARE_AGENT_AUTH_ENABLED: ${{ inputs.agent_auth_enabled }}
       CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ inputs.workers_subdomain }}
       CLOUDFLARE_D1_JURISDICTION: ${{ inputs.d1_jurisdiction }}
       CLOUDFLARE_R2_JURISDICTION: ${{ inputs.r2_jurisdiction }}
       CLOUDFLARE_R2_LOCATION_HINT: ${{ inputs.r2_location_hint }}
       CLOUDFLARE_PROTECTED_ENVIRONMENTS: ${{ inputs.protected_environments }}
       CLOUDFLARE_ALLOW_PROTECTED_DESTROY: ${{ inputs.allow_protected_destroy }}
+      PLAYWRIGHT_AGENT_TOKEN: ${{ inputs.environment_name == 'staging' && secrets.STAGING_AGENT_TOKEN || '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -137,7 +189,47 @@ jobs:
       - run: npm ci --legacy-peer-deps
 
       - if: ${{ inputs.action == 'deploy' }}
+        id: deploy
         run: npm run cf:deploy
+
+      - if: ${{ inputs.action == 'deploy' }}
+        name: Verify deployment identity and public routes
+        run: npm run cf:smoke -- --base-url="${{ steps.deploy.outputs.better_auth_url }}" --expected-environment="${{ inputs.environment_name }}" --expected-version="$GITHUB_SHA"
+
+      - if: ${{ inputs.action == 'deploy' }}
+        name: Install browser
+        run: npx playwright install --with-deps chromium
+
+      - if: ${{ inputs.action == 'deploy' }}
+        name: Verify live browser journeys and capture Worker logs
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.deploy.outputs.better_auth_url }}
+          EXPECTED_DEPLOYMENT_ENVIRONMENT: ${{ inputs.environment_name }}
+          EXPECTED_DEPLOYMENT_VERSION: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          log_file="${RUNNER_TEMP}/cloudflare-worker-tail.log"
+          npx wrangler tail "${{ steps.deploy.outputs.worker_name }}" --format pretty > "${log_file}" 2>&1 &
+          tail_pid=$!
+          cleanup() {
+            kill "${tail_pid}" 2>/dev/null || true
+            wait "${tail_pid}" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          sleep 3
+          npm run test:e2e
+
+      - if: ${{ always() && inputs.action == 'deploy' }}
+        name: Upload live verification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-evidence-${{ inputs.environment_name }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            web/test-results
+            ${{ runner.temp }}/cloudflare-worker-tail.log
 
       - if: ${{ inputs.action == 'destroy' }}
         run: npm run cf:destroy
