@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 describe("destroyEnvironment", () => {
-  it("checks and deletes R2 before deleting the rest of the stack", async () => {
+  it("checks R2 and removes the Queue consumer before deleting the Worker", async () => {
     const order = [];
     const operation = (name) =>
       vi.fn(async () => {
@@ -26,6 +26,7 @@ describe("destroyEnvironment", () => {
       });
     const dependencies = {
       deleteBucket: operation("bucket"),
+      removeQueueConsumer: operation("consumer"),
       deleteWorker: operation("worker"),
       deleteQueue: operation("queue"),
       deleteVectorize: operation("vector"),
@@ -37,6 +38,7 @@ describe("destroyEnvironment", () => {
       destroyEnvironment(context, dependencies)
     ).resolves.toEqual({
       environment: "agent-123",
+      queueConsumerRemoved: true,
       workerDeleted: true,
       queueDeleted: true,
       vectorizeIndexDeleted: true,
@@ -46,6 +48,7 @@ describe("destroyEnvironment", () => {
     });
     expect(order).toEqual([
       "bucket",
+      "consumer",
       "worker",
       "queue",
       "vector",
@@ -62,6 +65,20 @@ describe("destroyEnvironment", () => {
         deleteWorker,
       })
     ).rejects.toThrow('Failed to delete R2 bucket "bucket"');
+    expect(deleteWorker).not.toHaveBeenCalled();
+  });
+
+  it("does not attempt Worker deletion when Queue consumer removal fails", async () => {
+    const deleteWorker = vi.fn();
+    await expect(
+      destroyEnvironment(context, {
+        deleteBucket: vi.fn().mockResolvedValue(true),
+        removeQueueConsumer: vi
+          .fn()
+          .mockRejectedValue(new Error("consumer remove failed")),
+        deleteWorker,
+      })
+    ).rejects.toThrow("consumer remove failed");
     expect(deleteWorker).not.toHaveBeenCalled();
   });
 
@@ -90,6 +107,7 @@ describe("destroyEnvironment", () => {
         },
         {
           deleteBucket: operation,
+          removeQueueConsumer: operation,
           deleteWorker: operation,
           deleteQueue: operation,
           deleteVectorize: operation,

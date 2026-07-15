@@ -7,6 +7,7 @@ import {
   deleteR2BucketByName,
   deleteVectorizeIndexByName,
   deleteWorkerScript,
+  removeQueueWorkerConsumer,
   deriveEnvironmentContext,
   getOptionalEnv,
   writeGithubOutput,
@@ -38,6 +39,7 @@ export async function destroyEnvironment(
     deleteAiGateway = deleteAiGatewayByName,
     deleteDatabase = deleteD1DatabaseByName,
     deleteQueue = deleteQueueByName,
+    removeQueueConsumer = removeQueueWorkerConsumer,
     deleteBucket = deleteR2BucketByName,
     deleteVectorize = deleteVectorizeIndexByName,
     deleteWorker = deleteWorkerScript,
@@ -55,6 +57,12 @@ export async function destroyEnvironment(
     );
   }
 
+  // Cloudflare blocks Worker deletion while it is a Queue consumer and blocks
+  // Queue deletion while the Worker still has its producer binding.
+  const queueConsumerRemoved = await removeQueueConsumer(
+    context.queueName,
+    context.workerName
+  );
   const workerDeleted = await deleteWorker(context.workerName);
   const queueDeleted = await deleteQueue(context.queueName);
   const vectorizeIndexDeleted = await deleteVectorize(
@@ -65,6 +73,7 @@ export async function destroyEnvironment(
 
   return {
     environment: context.environmentName,
+    queueConsumerRemoved,
     workerDeleted,
     queueDeleted,
     vectorizeIndexDeleted,
@@ -78,6 +87,10 @@ async function main() {
   const context = deriveEnvironmentContext();
   const result = await destroyEnvironment(context);
 
+  await writeGithubOutput(
+    "queue_consumer_removed",
+    String(result.queueConsumerRemoved)
+  );
   await writeGithubOutput("worker_deleted", String(result.workerDeleted));
   await writeGithubOutput("queue_deleted", String(result.queueDeleted));
   await writeGithubOutput(
