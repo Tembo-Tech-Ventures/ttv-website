@@ -55,8 +55,10 @@ export async function destroyEnvironment(
     );
   }
 
-  const workerDeleted = await deleteWorker(context.workerName);
+  // A Worker registered as a Queue consumer cannot be deleted. Deleting the
+  // environment's Queue first removes that consumer relationship.
   const queueDeleted = await deleteQueue(context.queueName);
+  const workerDeleted = await deleteWorker(context.workerName);
   const vectorizeIndexDeleted = await deleteVectorize(
     context.vectorizeIndexName
   );

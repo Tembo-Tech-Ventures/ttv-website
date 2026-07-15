@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 describe("destroyEnvironment", () => {
-  it("checks and deletes R2 before deleting the rest of the stack", async () => {
+  it("checks R2 and removes the Queue consumer before deleting the Worker", async () => {
     const order = [];
     const operation = (name) =>
       vi.fn(async () => {
@@ -46,8 +46,8 @@ describe("destroyEnvironment", () => {
     });
     expect(order).toEqual([
       "bucket",
-      "worker",
       "queue",
+      "worker",
       "vector",
       "gateway",
       "database",
@@ -62,6 +62,20 @@ describe("destroyEnvironment", () => {
         deleteWorker,
       })
     ).rejects.toThrow('Failed to delete R2 bucket "bucket"');
+    expect(deleteWorker).not.toHaveBeenCalled();
+  });
+
+  it("does not attempt Worker deletion when Queue consumer removal fails", async () => {
+    const deleteWorker = vi.fn();
+    await expect(
+      destroyEnvironment(context, {
+        deleteBucket: vi.fn().mockResolvedValue(true),
+        deleteQueue: vi
+          .fn()
+          .mockRejectedValue(new Error("queue delete failed")),
+        deleteWorker,
+      })
+    ).rejects.toThrow("queue delete failed");
     expect(deleteWorker).not.toHaveBeenCalled();
   });
 
