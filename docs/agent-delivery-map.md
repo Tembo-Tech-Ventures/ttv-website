@@ -61,8 +61,10 @@ brokered path.
 GitHub’s `staging` environment is a secret and approval boundary in this path;
 it is not the deployed `staging` application. The workflow still targets an
 isolated `agent-*` stack. Pull requests use `agent-pr-<number>` automatically
-and destroy it when the PR closes. Cleanup also queries open pull requests and
-excludes their preview names automatically.
+and destroy it when the PR closes. A daily cleanup backstop deletes isolated
+stacks older than 72 hours when close-triggered or explicit teardown was missed.
+It queries open pull requests first and excludes their preview names
+automatically; manual cleanup runs remain dry-run-first.
 
 ## Authentication secrets
 

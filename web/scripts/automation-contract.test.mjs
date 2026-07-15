@@ -110,6 +110,13 @@ describe("GitHub delivery contracts", () => {
 
     expect(workflow).toContain("default: false");
     expect(workflow).toContain('default: "72"');
+    expect(workflow).toContain('cron: "17 4 * * *"');
+    expect(workflow).toContain(
+      "SWEEP_EXECUTE: ${{ github.event_name == 'schedule' && 'true' || inputs.execute }}"
+    );
+    expect(workflow).toContain(
+      "SWEEP_MAX_AGE_HOURS: ${{ github.event_name == 'schedule' && '72' || inputs.max_age_hours }}"
+    );
     expect(workflow).toContain('if [[ "${SWEEP_EXECUTE}" == "true" ]]');
     expect(workflow).toContain("CLOUDFLARE_PROTECTED_ENVIRONMENTS: production,prod,staging");
     expect(workflow).toContain("pull-requests: read");

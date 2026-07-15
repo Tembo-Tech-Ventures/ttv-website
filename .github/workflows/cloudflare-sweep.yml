@@ -1,6 +1,9 @@
 name: Cloudflare Agent Environment Cleanup
 
 on:
+  schedule:
+    # Backstop missed PR-close teardown and abandoned direct-agent previews.
+    - cron: "17 4 * * *"
   workflow_dispatch:
     inputs:
       execute:
@@ -37,8 +40,10 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_APP_NAME: ttv-website
       CLOUDFLARE_PROTECTED_ENVIRONMENTS: production,prod,staging
-      SWEEP_EXECUTE: ${{ inputs.execute }}
-      SWEEP_MAX_AGE_HOURS: ${{ inputs.max_age_hours }}
+      # Manual runs remain dry-run-first; the daily backstop deletes only stacks
+      # that pass the age, prefix, protected-name, and open-PR guards.
+      SWEEP_EXECUTE: ${{ github.event_name == 'schedule' && 'true' || inputs.execute }}
+      SWEEP_MAX_AGE_HOURS: ${{ github.event_name == 'schedule' && '72' || inputs.max_age_hours }}
       SWEEP_EXCLUDE: ${{ inputs.exclude }}
 
     steps:
