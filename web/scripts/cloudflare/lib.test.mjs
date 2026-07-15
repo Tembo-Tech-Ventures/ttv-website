@@ -9,6 +9,7 @@ import {
   ensureAiGateway,
   getSecretBindings,
   queryD1Database,
+  removeQueueWorkerConsumer,
   resolveDeploymentMetadata,
 } from "./lib.mjs";
 
@@ -290,6 +291,30 @@ describe("environment cleanup", () => {
       vi.fn().mockResolvedValue(new Response(null, { status: 404 }))
     );
     await expect(deleteAiGatewayByName("missing")).resolves.toBe(false);
+  });
+
+  it("removes a Worker's Queue consumer binding idempotently", async () => {
+    const runner = vi.fn().mockResolvedValue({});
+    await expect(
+      removeQueueWorkerConsumer(
+        "recordings",
+        "recording-worker",
+        runner
+      )
+    ).resolves.toBe(true);
+    expect(runner).toHaveBeenCalledWith([
+      "queues",
+      "consumer",
+      "worker",
+      "remove",
+      "recordings",
+      "recording-worker",
+    ]);
+
+    const missingRunner = vi.fn().mockRejectedValue(new Error("not found"));
+    await expect(
+      removeQueueWorkerConsumer("missing", "worker", missingRunner)
+    ).resolves.toBe(false);
   });
 
   it("deletes an existing queue without masking missing queues", async () => {

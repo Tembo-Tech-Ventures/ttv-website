@@ -26,6 +26,7 @@ describe("destroyEnvironment", () => {
       });
     const dependencies = {
       deleteBucket: operation("bucket"),
+      removeQueueConsumer: operation("consumer"),
       deleteWorker: operation("worker"),
       deleteQueue: operation("queue"),
       deleteVectorize: operation("vector"),
@@ -37,6 +38,7 @@ describe("destroyEnvironment", () => {
       destroyEnvironment(context, dependencies)
     ).resolves.toEqual({
       environment: "agent-123",
+      queueConsumerRemoved: true,
       workerDeleted: true,
       queueDeleted: true,
       vectorizeIndexDeleted: true,
@@ -46,8 +48,9 @@ describe("destroyEnvironment", () => {
     });
     expect(order).toEqual([
       "bucket",
-      "queue",
+      "consumer",
       "worker",
+      "queue",
       "vector",
       "gateway",
       "database",
@@ -70,12 +73,12 @@ describe("destroyEnvironment", () => {
     await expect(
       destroyEnvironment(context, {
         deleteBucket: vi.fn().mockResolvedValue(true),
-        deleteQueue: vi
+        removeQueueConsumer: vi
           .fn()
-          .mockRejectedValue(new Error("queue delete failed")),
+          .mockRejectedValue(new Error("consumer remove failed")),
         deleteWorker,
       })
-    ).rejects.toThrow("queue delete failed");
+    ).rejects.toThrow("consumer remove failed");
     expect(deleteWorker).not.toHaveBeenCalled();
   });
 
@@ -104,6 +107,7 @@ describe("destroyEnvironment", () => {
         },
         {
           deleteBucket: operation,
+          removeQueueConsumer: operation,
           deleteWorker: operation,
           deleteQueue: operation,
           deleteVectorize: operation,

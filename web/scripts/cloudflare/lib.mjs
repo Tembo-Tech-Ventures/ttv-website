@@ -288,6 +288,27 @@ function isMissingResourceError(error) {
   return /not found|does not exist|could not find/i.test(message);
 }
 
+export async function removeQueueWorkerConsumer(
+  queueName,
+  workerName,
+  runner = runWrangler
+) {
+  try {
+    await runner([
+      "queues",
+      "consumer",
+      "worker",
+      "remove",
+      queueName,
+      workerName,
+    ]);
+    return true;
+  } catch (error) {
+    if (isMissingResourceError(error)) return false;
+    throw error;
+  }
+}
+
 export async function deleteQueueByName(name, runner = runWrangler) {
   try {
     await runner(["queues", "info", name]);
