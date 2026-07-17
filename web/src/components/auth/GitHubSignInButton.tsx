@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { signIn } from "@/lib/auth-client";
 
-export default function GitHubSignInButton() {
+export function GitHubSignInButton() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,7 +20,7 @@ export default function GitHubSignInButton() {
         callbackURL: "/dashboard",
       });
 
-      const redirectUrl = result?.data?.url;
+      const redirectUrl = result.data?.url;
       if (redirectUrl) {
         window.location.assign(redirectUrl);
         return;
@@ -39,7 +39,9 @@ export default function GitHubSignInButton() {
     <div className="space-y-3">
       <button
         type="button"
-        onClick={handleSignIn}
+        onClick={() => {
+          void handleSignIn();
+        }}
         disabled={isSubmitting}
         className="flex w-full items-center justify-center gap-3 rounded-lg bg-[#24292f] px-6 py-3 text-base font-medium text-white transition-colors hover:bg-[#3b434b] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-dark disabled:cursor-not-allowed disabled:opacity-70"
       >

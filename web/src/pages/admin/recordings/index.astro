@@ -43,37 +43,39 @@ const recordings = await db.query.recording.findMany({
           </tr>
         </thead>
         <tbody class="divide-y divide-teal/10">
-          {recordings.length === 0 ? (
-            <tr>
-              <td colspan="6" class="px-4 py-8 text-center text-white/40">
-                No recordings uploaded yet
-              </td>
-            </tr>
-          ) : (
-            recordings.map((recording) => (
-              <tr class="text-white/80 hover:bg-teal/10">
-                <td class="px-4 py-3 font-medium text-white">{recording.title}</td>
-                <td class="px-4 py-3">{recording.program?.name ?? "Unassigned"}</td>
-                <td class="px-4 py-3">
-                  {recording.recordedAt
-                    ? recording.recordedAt.toISOString().split("T")[0]
-                    : "—"}
-                </td>
-                <td class="px-4 py-3">{formatDuration(recording.durationSeconds)}</td>
-                <td class="px-4 py-3">
-                  <ProcessingStatus status={recording.processingStatus} />
-                </td>
-                <td class="px-4 py-3">
-                  <a
-                    href={`/admin/recordings/${recording.id}`}
-                    class="text-primary hover:underline"
-                  >
-                    View
-                  </a>
+          {
+            recordings.length === 0 ? (
+              <tr>
+                <td colspan="6" class="px-4 py-8 text-center text-white/40">
+                  No recordings uploaded yet
                 </td>
               </tr>
-            ))
-          )}
+            ) : (
+              recordings.map((recording) => (
+                <tr class="text-white/80 hover:bg-teal/10">
+                  <td class="px-4 py-3 font-medium text-white">{recording.title}</td>
+                  <td class="px-4 py-3">{recording.program?.name ?? "Unassigned"}</td>
+                  <td class="px-4 py-3">
+                    {recording.recordedAt
+                      ? recording.recordedAt.toISOString().split("T")[0]
+                      : "—"}
+                  </td>
+                  <td class="px-4 py-3">{formatDuration(recording.durationSeconds)}</td>
+                  <td class="px-4 py-3">
+                    <ProcessingStatus status={recording.processingStatus} />
+                  </td>
+                  <td class="px-4 py-3">
+                    <a
+                      href={`/admin/recordings/${recording.id}`}
+                      class="text-primary hover:underline"
+                    >
+                      View
+                    </a>
+                  </td>
+                </tr>
+              ))
+            )
+          }
         </tbody>
       </table>
     </div>

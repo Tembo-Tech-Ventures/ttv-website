@@ -21,9 +21,7 @@ describe("project board route contracts", () => {
     expect(page).toContain("const user = Astro.locals.user!");
     expect(page).toContain("parseBoardInput(await Astro.request.formData())");
     expect(page).toContain("ownerId: user.id");
-    expect(page).toContain(
-      "where: eq(schema.projectBoardMember.userId, user.id)"
-    );
+    expect(page).toContain("where: eq(schema.projectBoardMember.userId, user.id)");
     expect(page).toContain("mergeAccessibleBoards(");
   });
 
@@ -33,8 +31,9 @@ describe("project board route contracts", () => {
     expect(page).toMatch(
       /getBoardPermissions\(board\.ownerId, memberUserIds, user\.id\);\s*if \(!permissions\.canView\)/
     );
-    expect(page.match(/eq\(schema\.projectBoardTask\.boardId, boardId\)/g))
-      .toHaveLength(3);
+    expect(page.match(/eq\(schema\.projectBoardTask\.boardId, boardId\)/g)).toHaveLength(
+      3
+    );
     expect(page).toContain("if (!permissions.canManageMembers)");
     expect(page).toContain("if (!permissions.canDeleteBoard)");
     expect(page).toContain("validateAssignee(input.assigneeId, participants)");

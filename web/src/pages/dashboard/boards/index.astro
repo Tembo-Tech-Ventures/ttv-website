@@ -27,6 +27,9 @@ if (Astro.request.method === "POST") {
       })
       .returning({ id: schema.projectBoard.id });
 
+    if (!createdBoard) throw new BoardValidationError("Board creation failed.");
+    void createdBoard;
+
     return Astro.redirect(
       `/dashboard/boards/${createdBoard.id}?notice=${encodeURIComponent(
         "Board created."
@@ -77,36 +80,40 @@ const notice = Astro.url.searchParams.get("notice");
       </p>
       <h2 class="mt-2 text-3xl font-bold text-white">Project Boards</h2>
       <p class="mt-2 max-w-2xl text-white/60">
-        Plan work together, make ownership visible, and keep deadlines in one
-        place.
+        Plan work together, make ownership visible, and keep deadlines in one place.
       </p>
     </header>
 
-    {error && (
-      <div
-        role="alert"
-        class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-200"
-      >
-        {error}
-      </div>
-    )}
+    {
+      error && (
+        <div
+          role="alert"
+          class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-200"
+        >
+          {error}
+        </div>
+      )
+    }
 
-    {notice && (
-      <div
-        role="status"
-        class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-200"
-      >
-        {notice}
-      </div>
-    )}
+    {
+      notice && (
+        <div
+          role="status"
+          class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-200"
+        >
+          {notice}
+        </div>
+      )
+    }
 
     <Card>
-      <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)] lg:items-start">
+      <div
+        class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)] lg:items-start"
+      >
         <div>
           <h3 class="text-xl font-semibold text-white">Start a board</h3>
           <p class="mt-2 max-w-xl text-sm text-white/55">
-            Create a focused workspace, then add existing TTV members and assign
-            tasks.
+            Create a focused workspace, then add existing TTV members and assign tasks.
           </p>
         </div>
 
@@ -161,78 +168,81 @@ const notice = Astro.url.searchParams.get("notice");
           </p>
         </div>
         <span class="text-sm text-white/45">
-          {boards.length} {boards.length === 1 ? "board" : "boards"}
+          {boards.length}
+          {boards.length === 1 ? "board" : "boards"}
         </span>
       </div>
 
-      {boards.length === 0 ? (
-        <Card>
-          <div class="py-10 text-center">
-            <p class="text-lg font-medium text-white">No boards yet</p>
-            <p class="mt-2 text-sm text-white/50">
-              Create the first board above and invite your project team.
-            </p>
-          </div>
-        </Card>
-      ) : (
-        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {boards.map((board) => {
-            const progress = calculateBoardProgress(board.tasks);
-            const isOwner = board.ownerId === user.id;
+      {
+        boards.length === 0 ? (
+          <Card>
+            <div class="py-10 text-center">
+              <p class="text-lg font-medium text-white">No boards yet</p>
+              <p class="mt-2 text-sm text-white/50">
+                Create the first board above and invite your project team.
+              </p>
+            </div>
+          </Card>
+        ) : (
+          <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {boards.map((board) => {
+              const progress = calculateBoardProgress(board.tasks);
+              const isOwner = board.ownerId === user.id;
 
-            return (
-              <a
-                href={`/dashboard/boards/${board.id}`}
-                class="group block rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <Card class="h-full transition-colors group-hover:border-primary/50">
-                  <div class="flex h-full flex-col gap-5">
-                    <div class="flex items-start justify-between gap-4">
-                      <div class="min-w-0">
-                        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-                          {isOwner ? "Owner" : "Shared with you"}
-                        </p>
-                        <h4 class="mt-2 truncate text-lg font-semibold text-white">
-                          {board.name}
-                        </h4>
-                      </div>
-                      <span class="shrink-0 rounded-full bg-teal/30 px-2.5 py-1 text-xs text-white/65">
-                        {board.members.length + 1} people
-                      </span>
-                    </div>
-
-                    <p class="line-clamp-2 min-h-10 text-sm text-white/55">
-                      {board.description || "No board description yet."}
-                    </p>
-
-                    <div class="mt-auto">
-                      <div class="mb-2 flex items-center justify-between text-xs text-white/50">
-                        <span>
-                          {progress.completed} of {progress.total} complete
+              return (
+                <a
+                  href={`/dashboard/boards/${board.id}`}
+                  class="group block rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <Card class="h-full transition-colors group-hover:border-primary/50">
+                    <div class="flex h-full flex-col gap-5">
+                      <div class="flex items-start justify-between gap-4">
+                        <div class="min-w-0">
+                          <p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                            {isOwner ? "Owner" : "Shared with you"}
+                          </p>
+                          <h4 class="mt-2 truncate text-lg font-semibold text-white">
+                            {board.name}
+                          </h4>
+                        </div>
+                        <span class="shrink-0 rounded-full bg-teal/30 px-2.5 py-1 text-xs text-white/65">
+                          {board.members.length + 1} people
                         </span>
-                        <span>{progress.percentage}%</span>
                       </div>
-                      <div
-                        class="h-2 overflow-hidden rounded-full bg-teal/30"
-                        role="progressbar"
-                        aria-label={`${board.name} completion`}
-                        aria-valuemin="0"
-                        aria-valuemax="100"
-                        aria-valuenow={progress.percentage}
-                      >
+
+                      <p class="line-clamp-2 min-h-10 text-sm text-white/55">
+                        {board.description || "No board description yet."}
+                      </p>
+
+                      <div class="mt-auto">
+                        <div class="mb-2 flex items-center justify-between text-xs text-white/50">
+                          <span>
+                            {progress.completed} of {progress.total} complete
+                          </span>
+                          <span>{progress.percentage}%</span>
+                        </div>
                         <div
-                          class="h-full rounded-full bg-primary"
-                          style={`width: ${progress.percentage}%`}
-                        ></div>
+                          class="h-2 overflow-hidden rounded-full bg-teal/30"
+                          role="progressbar"
+                          aria-label={`${board.name} completion`}
+                          aria-valuemin="0"
+                          aria-valuemax="100"
+                          aria-valuenow={progress.percentage}
+                        >
+                          <div
+                            class="h-full rounded-full bg-primary"
+                            style={`width: ${progress.percentage}%`}
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </Card>
-              </a>
-            );
-          })}
-        </div>
-      )}
+                  </Card>
+                </a>
+              );
+            })}
+          </div>
+        )
+      }
     </section>
   </div>
 </DashboardLayout>

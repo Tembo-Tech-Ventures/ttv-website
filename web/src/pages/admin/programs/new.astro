@@ -27,6 +27,9 @@ if (Astro.request.method === "POST") {
     })
     .returning();
 
+  if (!created) throw new Error("The program could not be created.");
+  void created;
+
   return Astro.redirect(`/admin/programs/${created.id}`);
 }
 
@@ -57,7 +60,9 @@ const curricula = await db.query.curriculum.findMany({
         </div>
 
         <div class="flex flex-col gap-1.5">
-          <label for="description" class="text-sm font-medium text-white/90">Description *</label>
+          <label for="description" class="text-sm font-medium text-white/90"
+            >Description *</label
+          >
           <textarea
             id="description"
             name="description"
@@ -69,7 +74,9 @@ const curricula = await db.query.curriculum.findMany({
         </div>
 
         <div class="flex flex-col gap-1.5">
-          <label for="curriculumId" class="text-sm font-medium text-white/90">Curriculum *</label>
+          <label for="curriculumId" class="text-sm font-medium text-white/90"
+            >Curriculum *</label
+          >
           <select
             id="curriculumId"
             name="curriculumId"
@@ -77,15 +84,15 @@ const curricula = await db.query.curriculum.findMany({
             class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
           >
             <option value="">Select curriculum…</option>
-            {curricula.map((c) => (
-              <option value={c.id}>{c.title}</option>
-            ))}
+            {curricula.map((c) => <option value={c.id}>{c.title}</option>)}
           </select>
         </div>
 
         <div class="grid gap-4 sm:grid-cols-2">
           <div class="flex flex-col gap-1.5">
-            <label for="startDate" class="text-sm font-medium text-white/90">Start Date</label>
+            <label for="startDate" class="text-sm font-medium text-white/90"
+              >Start Date</label
+            >
             <input
               type="date"
               id="startDate"
@@ -94,7 +101,8 @@ const curricula = await db.query.curriculum.findMany({
             />
           </div>
           <div class="flex flex-col gap-1.5">
-            <label for="endDate" class="text-sm font-medium text-white/90">End Date</label>
+            <label for="endDate" class="text-sm font-medium text-white/90">End Date</label
+            >
             <input
               type="date"
               id="endDate"

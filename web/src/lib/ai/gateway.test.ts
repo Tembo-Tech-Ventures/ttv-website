@@ -1,17 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  AiGatewayConfigurationError,
+  AiGatewayResponseError,
   DEFAULT_CHAT_MODEL,
   gatewayCompatUrl,
-  generateChatCompletion,
+  openChatCompletionStream,
   resolveChatModel,
   type ChatMessage,
 } from "@/lib/ai/gateway";
 
-function makeEnv(overrides: Record<string, unknown> = {}) {
-  return {
-    AI: { run: vi.fn() },
-    ...overrides,
-  } as unknown as Env;
+function makeEnv(overrides: Record<string, unknown> = {}): Env {
+  return overrides as unknown as Env;
 }
 
 const messages: ChatMessage[] = [
@@ -25,140 +24,105 @@ afterEach(() => {
 });
 
 describe("resolveChatModel", () => {
-  it("defaults to the Gemma model in unified-mode format", () => {
+  it("defaults to Gemma 4 in unified-mode format", () => {
     expect(resolveChatModel(makeEnv())).toBe(DEFAULT_CHAT_MODEL);
-    expect(DEFAULT_CHAT_MODEL).toMatch(/^workers-ai\/@cf\/google\/gemma/);
+    expect(DEFAULT_CHAT_MODEL).toMatch(/^workers-ai\/@cf\/google\/gemma-4/);
   });
 
-  it("uses AI_GATEWAY_MODEL when set", () => {
-    const env = makeEnv({ AI_GATEWAY_MODEL: "openai/gpt-test" });
-    expect(resolveChatModel(env)).toBe("openai/gpt-test");
-  });
-
-  it("ignores blank AI_GATEWAY_MODEL", () => {
-    const env = makeEnv({ AI_GATEWAY_MODEL: "  " });
-    expect(resolveChatModel(env)).toBe(DEFAULT_CHAT_MODEL);
+  it("uses a configured model and ignores a blank override", () => {
+    expect(resolveChatModel(makeEnv({ AI_GATEWAY_MODEL: "dynamic/coach" }))).toBe(
+      "dynamic/coach"
+    );
+    expect(resolveChatModel(makeEnv({ AI_GATEWAY_MODEL: "  " }))).toBe(
+      DEFAULT_CHAT_MODEL
+    );
   });
 });
 
 describe("gatewayCompatUrl", () => {
-  it("returns null when account id or gateway name is missing", () => {
+  it("requires both the account id and gateway name", () => {
     expect(gatewayCompatUrl(makeEnv())).toBeNull();
     expect(gatewayCompatUrl(makeEnv({ AI_GATEWAY_ACCOUNT_ID: "acc" }))).toBeNull();
     expect(gatewayCompatUrl(makeEnv({ AI_GATEWAY_NAME: "gw" }))).toBeNull();
   });
 
-  it("builds the unified-mode compat endpoint", () => {
-    const env = makeEnv({
-      AI_GATEWAY_ACCOUNT_ID: "acc-123",
-      AI_GATEWAY_NAME: "ttv-ai",
-    });
-    expect(gatewayCompatUrl(env)).toBe(
-      "https://gateway.ai.cloudflare.com/v1/acc-123/ttv-ai/compat/chat/completions"
-    );
+  it("builds the unified OpenAI-compatible endpoint", () => {
+    expect(
+      gatewayCompatUrl(
+        makeEnv({ AI_GATEWAY_ACCOUNT_ID: "acc-123", AI_GATEWAY_NAME: "ttv-ai" })
+      )
+    ).toBe("https://gateway.ai.cloudflare.com/v1/acc-123/ttv-ai/compat/chat/completions");
   });
 });
 
-describe("generateChatCompletion", () => {
-  it("calls the AI Gateway compat endpoint with an OpenAI-style payload", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ choices: [{ message: { content: "An answer" } }] }),
-        { status: 200 }
-      )
-    );
+describe("openChatCompletionStream", () => {
+  it("opens a streamed Gemma completion through AI Gateway", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n')
+      );
     vi.stubGlobal("fetch", fetchMock);
-
+    const signal = new AbortController().signal;
     const env = makeEnv({
       AI_GATEWAY_ACCOUNT_ID: "acc-123",
       AI_GATEWAY_NAME: "ttv-ai",
       AI_GATEWAY_API_KEY: "secret-token",
     });
 
-    const answer = await generateChatCompletion(env, messages);
+    const completion = await openChatCompletionStream(env, messages, signal);
 
-    expect(answer).toBe("An answer");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0];
+    expect(completion.model).toBe(DEFAULT_CHAT_MODEL);
+    expect(completion.reader).toBeDefined();
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(
       "https://gateway.ai.cloudflare.com/v1/acc-123/ttv-ai/compat/chat/completions"
     );
-    expect(init.method).toBe("POST");
-    expect(init.headers.Authorization).toBe("Bearer secret-token");
-    expect(JSON.parse(init.body)).toEqual({
+    expect(init.signal).toBe(signal);
+    expect(init.headers).toEqual({
+      Authorization: "Bearer secret-token",
+      "Content-Type": "application/json",
+    });
+    if (typeof init.body !== "string") {
+      throw new Error("Expected a JSON request body.");
+    }
+    const requestBody: unknown = JSON.parse(init.body);
+    expect(requestBody).toEqual({
       model: DEFAULT_CHAT_MODEL,
       messages,
+      stream: true,
+      temperature: 0.35,
+      max_tokens: 1_200,
     });
-    expect((env.AI.run as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
   });
 
-  it("throws when the gateway responds with a non-2xx status", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response("nope", { status: 401 }))
-    );
-
-    const env = makeEnv({
-      AI_GATEWAY_ACCOUNT_ID: "acc-123",
-      AI_GATEWAY_NAME: "ttv-ai",
-      AI_GATEWAY_API_KEY: "secret-token",
-    });
-
-    await expect(generateChatCompletion(env, messages)).rejects.toThrow(
-      "AI Gateway chat completion failed with status 401"
-    );
-  });
-
-  it("returns an empty string when the gateway response has no content", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ choices: [] }), { status: 200 })
-      )
-    );
-
-    const env = makeEnv({
-      AI_GATEWAY_ACCOUNT_ID: "acc-123",
-      AI_GATEWAY_NAME: "ttv-ai",
-      AI_GATEWAY_API_KEY: "secret-token",
-    });
-
-    await expect(generateChatCompletion(env, messages)).resolves.toBe("");
-  });
-
-  it("falls back to the Workers AI binding when no API key is configured", async () => {
+  it("fails closed when gateway configuration is incomplete", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
-    const run = vi.fn().mockResolvedValue({ response: "Binding answer" });
-    const env = makeEnv({
-      AI: { run },
-      AI_GATEWAY_ACCOUNT_ID: "acc-123",
-      AI_GATEWAY_NAME: "ttv-ai",
-    });
-
-    const answer = await generateChatCompletion(env, messages);
-
-    expect(answer).toBe("Binding answer");
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(run).toHaveBeenCalledWith(
-      "@cf/google/gemma-4-26b-a4b-it",
-      { messages },
-      { gateway: { id: "ttv-ai" } }
+    await expect(openChatCompletionStream(makeEnv(), messages)).rejects.toBeInstanceOf(
+      AiGatewayConfigurationError
     );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("omits the gateway option in fallback mode when no gateway is configured", async () => {
-    const run = vi.fn().mockResolvedValue({ result: { response: "Nested" } });
-    const env = makeEnv({ AI: { run } });
+  it("rejects unsuccessful and empty gateway responses", async () => {
+    const env = makeEnv({
+      AI_GATEWAY_ACCOUNT_ID: "acc",
+      AI_GATEWAY_NAME: "gateway",
+      AI_GATEWAY_API_KEY: "token",
+    });
 
-    const answer = await generateChatCompletion(env, messages);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("nope", { status: 429 }))
+    );
+    await expect(openChatCompletionStream(env, messages)).rejects.toThrow("status 429");
 
-    expect(answer).toBe("Nested");
-    expect(run).toHaveBeenCalledWith(
-      "@cf/google/gemma-4-26b-a4b-it",
-      { messages },
-      undefined
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, body: null }));
+    await expect(openChatCompletionStream(env, messages)).rejects.toBeInstanceOf(
+      AiGatewayResponseError
     );
   });
 });

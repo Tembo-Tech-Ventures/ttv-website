@@ -1,5 +1,5 @@
 tasks:
-  - name: docker-compose 
+  - name: docker-compose
     init: docker-compose create
     command: docker-compose up -d
   - name: npm install

@@ -72,9 +72,7 @@ export function isSameOriginRequest(request: Request): boolean {
   }
 }
 
-function createToken(
-  cryptoImpl: Pick<Crypto, "getRandomValues">
-): string {
+function createToken(cryptoImpl: Pick<Crypto, "getRandomValues">): string {
   const bytes = cryptoImpl.getRandomValues(new Uint8Array(32));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
@@ -157,5 +155,5 @@ export async function revokeAgentSession(
     )
     .bind(sessionId, userId, `${AGENT_SESSION_PREFIX}%`)
     .run();
-  return (result.meta.changes ?? 0) > 0;
+  return result.meta.changes > 0;
 }

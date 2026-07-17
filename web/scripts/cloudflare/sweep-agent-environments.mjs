@@ -39,9 +39,7 @@ export function parseSweepArgs(args) {
     !Number.isFinite(options.maxAgeHours) ||
     options.maxAgeHours < MINIMUM_MAX_AGE_HOURS
   ) {
-    throw new Error(
-      `--max-age-hours must be at least ${MINIMUM_MAX_AGE_HOURS}.`
-    );
+    throw new Error(`--max-age-hours must be at least ${MINIMUM_MAX_AGE_HOURS}.`);
   }
   return options;
 }
@@ -78,9 +76,7 @@ export function findStaleAgentEnvironments({
     inventory.set(environmentName, {
       environmentName,
       observedAt:
-        existing && existing.observedAt > observedAt
-          ? existing.observedAt
-          : observedAt,
+        existing && existing.observedAt > observedAt ? existing.observedAt : observedAt,
       workerName: workerName ?? existing?.workerName,
       databaseName: databaseName ?? existing?.databaseName,
     });
@@ -111,9 +107,7 @@ export function findStaleAgentEnvironments({
     .map(({ observedAt, ...candidate }) => ({
       ...candidate,
       lastModified: observedAt.toISOString(),
-      ageHours: Math.floor(
-        (now.getTime() - observedAt.getTime()) / (60 * 60 * 1_000)
-      ),
+      ageHours: Math.floor((now.getTime() - observedAt.getTime()) / (60 * 60 * 1_000)),
     }))
     .sort((left, right) => right.ageHours - left.ageHours);
 }
@@ -201,9 +195,7 @@ export async function sweepAgentEnvironments({
 }
 
 async function main() {
-  const result = await sweepAgentEnvironments(
-    parseSweepArgs(process.argv.slice(2))
-  );
+  const result = await sweepAgentEnvironments(parseSweepArgs(process.argv.slice(2)));
   console.log(JSON.stringify(result, null, 2));
   if (result.results?.some(({ status }) => status === "blocked")) {
     process.exitCode = 1;
@@ -211,8 +203,7 @@ async function main() {
 }
 
 const isDirectRun =
-  process.argv[1] &&
-  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isDirectRun) {
   main().catch((error) => {

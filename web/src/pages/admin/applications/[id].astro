@@ -2,6 +2,7 @@
 import AdminLayout from "@/layouts/AdminLayout.astro";
 import Card from "@/components/common/Card.astro";
 import Badge from "@/components/common/Badge.astro";
+import { applicationBadgeVariant } from "@/lib/application-status";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -43,7 +44,9 @@ if (Astro.request.method === "POST") {
 
   const allowed = TRANSITIONS[current.status] ?? [];
   if (!allowed.includes(newStatus)) {
-    return new Response(`Cannot transition from ${current.status} to ${newStatus}`, { status: 400 });
+    return new Response(`Cannot transition from ${current.status} to ${newStatus}`, {
+      status: 400,
+    });
   }
 
   const updateData: Record<string, unknown> = { status: newStatus };
@@ -67,9 +70,13 @@ const application = await db.query.programApplication.findFirst({
 if (!application) return Astro.redirect("/admin/applications");
 
 // Parse application JSON
-let appData: Record<string, any> = {};
+let appData: Record<string, unknown> = {};
 try {
-  appData = JSON.parse(application.application);
+  const parsed: unknown = JSON.parse(application.application);
+  appData =
+    parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+      ? Object.fromEntries(Object.entries(parsed))
+      : { raw: parsed };
 } catch {
   appData = { raw: application.application };
 }
@@ -85,7 +92,7 @@ const availableStatuses = TRANSITIONS[application.status] ?? [];
 
     <div class="flex items-center gap-3">
       <h2 class="text-2xl font-bold text-white">Application</h2>
-      <Badge variant={application.status.toLowerCase() as any} />
+      <Badge variant={applicationBadgeVariant(application.status)} />
     </div>
 
     <div class="grid gap-6 lg:grid-cols-2">
@@ -124,19 +131,23 @@ const availableStatuses = TRANSITIONS[application.status] ?? [];
           <div class="flex justify-between">
             <dt class="text-white/60">Applied</dt>
             <dd class="text-white">
-              {application.createdAt
-                ? new Date(application.createdAt).toLocaleDateString()
-                : "—"}
+              {
+                application.createdAt
+                  ? new Date(application.createdAt).toLocaleDateString()
+                  : "—"
+              }
             </dd>
           </div>
-          {application.completedAt && (
-            <div class="flex justify-between">
-              <dt class="text-white/60">Completed</dt>
-              <dd class="text-white">
-                {new Date(application.completedAt).toLocaleDateString()}
-              </dd>
-            </div>
-          )}
+          {
+            application.completedAt && (
+              <div class="flex justify-between">
+                <dt class="text-white/60">Completed</dt>
+                <dd class="text-white">
+                  {new Date(application.completedAt).toLocaleDateString()}
+                </dd>
+              </div>
+            )
+          }
         </dl>
       </Card>
     </div>
@@ -144,43 +155,52 @@ const availableStatuses = TRANSITIONS[application.status] ?? [];
     <Card>
       <h3 class="mb-4 text-lg font-semibold text-white">Application Data</h3>
       <dl class="space-y-3 text-sm">
-        {Object.entries(appData).map(([key, value]) => (
-          <div>
-            <dt class="font-medium capitalize text-white/60">
-              {key.replace(/([A-Z])/g, " $1").replace(/_/g, " ")}
-            </dt>
-            <dd class="mt-0.5 text-white">
-              {typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)}
-            </dd>
-          </div>
-        ))}
+        {
+          Object.entries(appData).map(([key, value]) => (
+            <div>
+              <dt class="font-medium capitalize text-white/60">
+                {key.replace(/([A-Z])/g, " $1").replace(/_/g, " ")}
+              </dt>
+              <dd class="mt-0.5 text-white">
+                {typeof value === "object"
+                  ? JSON.stringify(value, null, 2)
+                  : String(value)}
+              </dd>
+            </div>
+          ))
+        }
       </dl>
     </Card>
 
-    {availableStatuses.length > 0 && (
-      <Card>
-        <h3 class="mb-4 text-lg font-semibold text-white">Change Status</h3>
-        <div class="flex flex-wrap gap-2">
-          {availableStatuses.map((status) => (
-            <form method="POST">
-              <input type="hidden" name="status" value={status} />
-              <button
-                type="submit"
-                class:list={[
-                  "rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                  status === "APPROVED" && "bg-green-600 text-white hover:bg-green-700",
-                  status === "REJECTED" && "bg-red-600 text-white hover:bg-red-700",
-                  status === "AUDIT" && "bg-blue-600 text-white hover:bg-blue-700",
-                  status === "COMPLETED" && "bg-purple-600 text-white hover:bg-purple-700",
-                ]}
-                onclick={`return confirm('Change application status to ${status}?')`}
-              >
-                {status === "COMPLETED" ? "Mark Completed" : status.charAt(0) + status.slice(1).toLowerCase()}
-              </button>
-            </form>
-          ))}
-        </div>
-      </Card>
-    )}
+    {
+      availableStatuses.length > 0 && (
+        <Card>
+          <h3 class="mb-4 text-lg font-semibold text-white">Change Status</h3>
+          <div class="flex flex-wrap gap-2">
+            {availableStatuses.map((status) => (
+              <form method="POST">
+                <input type="hidden" name="status" value={status} />
+                <button
+                  type="submit"
+                  class:list={[
+                    "rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                    status === "APPROVED" && "bg-green-600 text-white hover:bg-green-700",
+                    status === "REJECTED" && "bg-red-600 text-white hover:bg-red-700",
+                    status === "AUDIT" && "bg-blue-600 text-white hover:bg-blue-700",
+                    status === "COMPLETED" &&
+                      "bg-purple-600 text-white hover:bg-purple-700",
+                  ]}
+                  onclick={`return confirm('Change application status to ${status}?')`}
+                >
+                  {status === "COMPLETED"
+                    ? "Mark Completed"
+                    : status.charAt(0) + status.slice(1).toLowerCase()}
+                </button>
+              </form>
+            ))}
+          </div>
+        </Card>
+      )
+    }
   </div>
 </AdminLayout>

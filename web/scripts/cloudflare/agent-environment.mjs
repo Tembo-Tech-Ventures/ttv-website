@@ -36,12 +36,9 @@ export function resolveAgentDeploymentVersion(environment, gitVersion) {
 
 async function getWorkersSubdomain() {
   const subdomain =
-    getOptionalEnv("CLOUDFLARE_WORKERS_SUBDOMAIN") ??
-    (await ensureWorkersSubdomain());
+    getOptionalEnv("CLOUDFLARE_WORKERS_SUBDOMAIN") ?? (await ensureWorkersSubdomain());
   if (!subdomain) {
-    throw new Error(
-      "A Workers subdomain is required for an isolated agent environment."
-    );
+    throw new Error("A Workers subdomain is required for an isolated agent environment.");
   }
   process.env.CLOUDFLARE_WORKERS_SUBDOMAIN = subdomain;
   return subdomain;
@@ -73,21 +70,15 @@ export async function main(args = process.argv.slice(2)) {
   }
 
   if (action !== "deploy") {
-    throw new Error(
-      `Unknown action "${action}". Use context, deploy, tail, or destroy.`
-    );
+    throw new Error(`Unknown action "${action}". Use context, deploy, tail, or destroy.`);
   }
 
   const workersSubdomain = await getWorkersSubdomain();
-  const version = resolveAgentDeploymentVersion(
-    process.env,
-    await resolveGitVersion()
-  );
+  const version = resolveAgentDeploymentVersion(process.env, await resolveGitVersion());
   process.env.CLOUDFLARE_DEPLOYMENT_VERSION = version;
   await runNpm(["run", "cf:deploy"]);
 
-  const baseUrl =
-    `https://${context.workerName}.${workersSubdomain}.workers.dev`;
+  const baseUrl = `https://${context.workerName}.${workersSubdomain}.workers.dev`;
   const smoke = await runSmokeChecks({
     baseUrl,
     expectedEnvironment: environmentName,
@@ -97,8 +88,7 @@ export async function main(args = process.argv.slice(2)) {
 }
 
 const isDirectRun =
-  process.argv[1] &&
-  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isDirectRun) {
   main()

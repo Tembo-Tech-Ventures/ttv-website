@@ -9,18 +9,18 @@
  * a hairline rule color for editorial dividers.
  */
 @theme {
-  --color-primary: #F28D68;
-  --color-dark: #013D39;
-  --color-teal: #2C6964;
+  --color-primary: #f28d68;
+  --color-dark: #013d39;
+  --color-teal: #2c6964;
 
-  --color-bg-raised: #063F3A;
-  --color-accent-bright: #FFD166;
+  --color-bg-raised: #063f3a;
+  --color-accent-bright: #ffd166;
 
-  --color-ink-primary: #FFF8F2;
+  --color-ink-primary: #fff8f2;
   --color-ink-secondary: rgba(255, 248, 242, 0.72);
   --color-ink-muted: rgba(255, 248, 242, 0.48);
 
-  --color-rule: rgba(242, 141, 104, 0.20);
+  --color-rule: rgba(242, 141, 104, 0.2);
 
   --font-heading: "Climate Crisis", cursive;
   --font-body: "Maven Pro", sans-serif;
@@ -38,11 +38,15 @@
     background-color: var(--color-dark);
   }
 
-  h1, h2 {
+  h1,
+  h2 {
     font-family: var(--font-heading);
   }
 
-  h3, h4, h5, h6 {
+  h3,
+  h4,
+  h5,
+  h6 {
     font-family: var(--font-body);
     font-weight: 700;
   }
@@ -59,7 +63,9 @@
   .reveal {
     opacity: 0;
     transform: translateY(24px);
-    transition: opacity 600ms ease, transform 600ms ease;
+    transition:
+      opacity 600ms ease,
+      transform 600ms ease;
   }
   .reveal.is-visible {
     opacity: 1;

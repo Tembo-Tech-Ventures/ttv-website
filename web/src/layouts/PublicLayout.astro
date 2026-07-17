@@ -46,71 +46,92 @@ const FOOTER_GROUPS = [
   },
   {
     heading: "Read",
-    links: [
-      { label: "Blog", href: "/blog" },
-    ],
+    links: [{ label: "Blog", href: "/blog" }],
   },
   {
     heading: "Connect",
     links: [
       { label: "Email", href: "mailto:hello@tembotechventures.com" },
-      { label: "LinkedIn", href: "https://www.linkedin.com/company/tembo-tech-ventures/" },
+      {
+        label: "LinkedIn",
+        href: "https://www.linkedin.com/company/tembo-tech-ventures/",
+      },
     ],
   },
 ];
 ---
 
-<BaseLayout title={title}>
+<BaseLayout {...title ? { title } : {}}>
   <Grain />
 
-  <div class="relative z-[2] flex min-h-screen flex-col" style="background: radial-gradient(1200px 600px at 15% -10%, rgba(242,141,104,0.10), transparent 60%), linear-gradient(180deg, #013D39 0%, #012A28 100%);">
+  <div
+    class="relative z-[2] flex min-h-screen flex-col"
+    style="background: radial-gradient(1200px 600px at 15% -10%, rgba(242,141,104,0.10), transparent 60%), linear-gradient(180deg, #013D39 0%, #012A28 100%);"
+  >
     <!-- Top nav -->
-    <header class="sticky top-0 z-50 border-b border-[color:var(--color-rule)] bg-[#012A28]/80 backdrop-blur">
-      <nav class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-        <a href="/" class="group flex items-center text-ink-primary" aria-label="Tembo Tech Ventures">
-          <span class="font-heading text-lg text-ink-primary transition-colors group-hover:text-primary" style="letter-spacing: -0.02em;">
+    <header
+      class="sticky top-0 z-50 border-b border-[color:var(--color-rule)] bg-[#012A28]/80 backdrop-blur"
+    >
+      <nav
+        class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8"
+      >
+        <a
+          href="/"
+          class="group flex items-center text-ink-primary"
+          aria-label="Tembo Tech Ventures"
+        >
+          <span
+            class="font-heading text-lg text-ink-primary transition-colors group-hover:text-primary"
+            style="letter-spacing: -0.02em;"
+          >
             TEMBO
           </span>
-          <span class="ml-3 font-body text-[10px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
+          <span
+            class="ml-3 font-body text-[10px] font-semibold uppercase tracking-[0.32em] text-ink-muted"
+          >
             Tech · Ventures
           </span>
         </a>
 
         <div class="flex items-center gap-6 md:gap-8">
           <div class="hidden items-center gap-6 md:flex">
-            {NAV_LINKS.map((link) => (
-              <a
-                href={link.href}
-                class="font-body text-sm font-medium uppercase tracking-[0.18em] text-ink-secondary transition-colors hover:text-ink-primary"
-              >
-                {link.label}
-              </a>
-            ))}
+            {
+              NAV_LINKS.map((link) => (
+                <a
+                  href={link.href}
+                  class="font-body text-sm font-medium uppercase tracking-[0.18em] text-ink-secondary transition-colors hover:text-ink-primary"
+                >
+                  {link.label}
+                </a>
+              ))
+            }
           </div>
 
-          {isAuthenticated ? (
-            <a
-              href="/dashboard"
-              class="font-body inline-flex items-center rounded-full bg-primary px-5 py-2 text-sm font-semibold uppercase tracking-[0.14em] text-dark transition-transform hover:scale-[1.03]"
-            >
-              Dashboard
-            </a>
-          ) : (
-            <div class="flex items-center gap-2">
+          {
+            isAuthenticated ? (
               <a
-                href="/auth/login"
-                class="font-body hidden text-sm font-medium uppercase tracking-[0.18em] text-ink-secondary transition-colors hover:text-ink-primary sm:inline-block"
-              >
-                Sign in
-              </a>
-              <a
-                href="/dashboard/apply"
+                href="/dashboard"
                 class="font-body inline-flex items-center rounded-full bg-primary px-5 py-2 text-sm font-semibold uppercase tracking-[0.14em] text-dark transition-transform hover:scale-[1.03]"
               >
-                Apply
+                Dashboard
               </a>
-            </div>
-          )}
+            ) : (
+              <div class="flex items-center gap-2">
+                <a
+                  href="/auth/login"
+                  class="font-body hidden text-sm font-medium uppercase tracking-[0.18em] text-ink-secondary transition-colors hover:text-ink-primary sm:inline-block"
+                >
+                  Sign in
+                </a>
+                <a
+                  href="/dashboard/apply"
+                  class="font-body inline-flex items-center rounded-full bg-primary px-5 py-2 text-sm font-semibold uppercase tracking-[0.14em] text-dark transition-transform hover:scale-[1.03]"
+                >
+                  Apply
+                </a>
+              </div>
+            )
+          }
 
           {/* Mobile hamburger */}
           <button
@@ -119,8 +140,17 @@ const FOOTER_GROUPS = [
             aria-label="Open menu"
             id="mobile-menu-btn"
           >
-            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            <svg
+              class="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.5"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"></path>
             </svg>
           </button>
         </div>
@@ -132,22 +162,26 @@ const FOOTER_GROUPS = [
         class="hidden border-t border-[color:var(--color-rule)] bg-[#012A28]/95 backdrop-blur md:hidden"
       >
         <div class="space-y-1 px-4 py-4">
-          {NAV_LINKS.map((link) => (
-            <a
-              href={link.href}
-              class="block rounded-md px-3 py-3 font-body text-sm font-medium uppercase tracking-[0.18em] text-ink-secondary transition-colors hover:bg-teal/20 hover:text-ink-primary"
-            >
-              {link.label}
-            </a>
-          ))}
-          {!isAuthenticated && (
-            <a
-              href="/auth/login"
-              class="block rounded-md px-3 py-3 font-body text-sm font-medium uppercase tracking-[0.18em] text-ink-secondary transition-colors hover:bg-teal/20 hover:text-ink-primary"
-            >
-              Sign in
-            </a>
-          )}
+          {
+            NAV_LINKS.map((link) => (
+              <a
+                href={link.href}
+                class="block rounded-md px-3 py-3 font-body text-sm font-medium uppercase tracking-[0.18em] text-ink-secondary transition-colors hover:bg-teal/20 hover:text-ink-primary"
+              >
+                {link.label}
+              </a>
+            ))
+          }
+          {
+            !isAuthenticated && (
+              <a
+                href="/auth/login"
+                class="block rounded-md px-3 py-3 font-body text-sm font-medium uppercase tracking-[0.18em] text-ink-secondary transition-colors hover:bg-teal/20 hover:text-ink-primary"
+              >
+                Sign in
+              </a>
+            )
+          }
         </div>
       </div>
     </header>
@@ -162,54 +196,63 @@ const FOOTER_GROUPS = [
       <slot />
     </main>
 
-    <footer class="relative mt-20 overflow-hidden border-t border-[color:var(--color-rule)] pt-16 md:pt-24">
+    <footer
+      class="relative mt-20 overflow-hidden border-t border-[color:var(--color-rule)] pt-16 md:pt-24"
+    >
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div class="flex flex-col gap-12 md:flex-row md:justify-between">
           <div class="max-w-sm space-y-5">
-            <p class="font-body text-xs font-semibold uppercase tracking-[0.32em] text-primary">
+            <p
+              class="font-body text-xs font-semibold uppercase tracking-[0.32em] text-primary"
+            >
               Tembo Tech Ventures
             </p>
             <p class="font-body text-lg text-ink-primary md:text-xl">
-              Helping grow practical tech communities across Africa through
-              cohorts, mentorship, and long-term connection.
+              Helping grow practical tech communities across Africa through cohorts,
+              mentorship, and long-term connection.
             </p>
           </div>
 
           <div class="grid grid-cols-2 gap-8 sm:grid-cols-4 md:gap-10">
-            {FOOTER_GROUPS.map((group) => (
-              <div class="space-y-4">
-                <p class="font-body text-xs font-semibold uppercase tracking-[0.24em] text-ink-muted">
-                  {group.heading}
-                </p>
-                <ul class="space-y-3">
-                  {group.links.map((link) => (
-                    <li>
-                      <a
-                        href={link.href}
-                        class="font-body text-[15px] text-ink-primary transition-colors hover:text-primary"
-                      >
-                        {link.label}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+            {
+              FOOTER_GROUPS.map((group) => (
+                <div class="space-y-4">
+                  <p class="font-body text-xs font-semibold uppercase tracking-[0.24em] text-ink-muted">
+                    {group.heading}
+                  </p>
+                  <ul class="space-y-3">
+                    {group.links.map((link) => (
+                      <li>
+                        <a
+                          href={link.href}
+                          class="font-body text-[15px] text-ink-primary transition-colors hover:text-primary"
+                        >
+                          {link.label}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))
+            }
           </div>
         </div>
 
-        <div class="mt-16 flex flex-col gap-3 border-t border-[color:var(--color-rule)] pt-6 sm:flex-row sm:items-center sm:justify-between">
+        <div
+          class="mt-16 flex flex-col gap-3 border-t border-[color:var(--color-rule)] pt-6 sm:flex-row sm:items-center sm:justify-between"
+        >
           <p class="font-body text-sm text-ink-secondary">
             &copy; {new Date().getFullYear()} Tembo Tech Ventures. All rights reserved.
           </p>
-          <p class="font-body text-sm text-ink-muted">
-            Designed and built in-house.
-          </p>
+          <p class="font-body text-sm text-ink-muted">Designed and built in-house.</p>
         </div>
       </div>
 
       {/* Oversized TEMBO signature — PROPOSAL §7. */}
-      <div aria-hidden="true" class="mt-10 select-none overflow-hidden text-center leading-[0.85]">
+      <div
+        aria-hidden="true"
+        class="mt-10 select-none overflow-hidden text-center leading-[0.85]"
+      >
         <span
           class="font-heading block translate-y-[18%] whitespace-nowrap text-transparent"
           style="font-size: clamp(6rem, 24vw, 22rem); letter-spacing: -0.04em; -webkit-text-stroke: 1px var(--color-primary);"

@@ -39,7 +39,7 @@ if (Astro.request.method === "POST") {
         success = "Application submitted successfully!";
       }
     }
-  } catch (_e) {
+  } catch {
     error = "Something went wrong. Please try again.";
   }
 }
@@ -59,9 +59,7 @@ const allPrograms = await db.query.program.findMany({
 });
 
 // Filter out programs already applied to
-const availablePrograms = allPrograms.filter(
-  (p) => !appliedProgramIds.includes(p.id)
-);
+const availablePrograms = allPrograms.filter((p) => !appliedProgramIds.includes(p.id));
 ---
 
 <DashboardLayout title="Apply">
@@ -73,66 +71,73 @@ const availablePrograms = allPrograms.filter(
       </p>
     </div>
 
-    {success && (
-      <div class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-300">
-        {success}
-      </div>
-    )}
-
-    {error && (
-      <div class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
-        {error}
-      </div>
-    )}
-
-    {availablePrograms.length > 0 ? (
-      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {availablePrograms.map((program) => (
-          <Card>
-            <div class="flex flex-col gap-3">
-              <h3 class="text-lg font-semibold text-white">{program.name}</h3>
-              <p class="text-sm text-white/60">{program.description}</p>
-              {program.curriculum && (
-                <div class="rounded bg-teal/20 px-2 py-1 text-xs text-white/70">
-                  {program.curriculum.title}
-                </div>
-              )}
-              {program.startDate && (
-                <p class="text-xs text-white/40">
-                  Starts {program.startDate.toLocaleDateString()}
-                  {program.endDate && ` — Ends ${program.endDate.toLocaleDateString()}`}
-                </p>
-              )}
-              <form method="POST" class="mt-2">
-                <input type="hidden" name="programId" value={program.id} />
-                <button
-                  type="submit"
-                  class="inline-flex w-full items-center justify-center rounded-md bg-primary px-4 py-2 font-medium text-dark hover:bg-primary/90 transition-colors"
-                >
-                  Apply
-                </button>
-              </form>
-            </div>
-          </Card>
-        ))}
-      </div>
-    ) : (
-      <Card>
-        <div class="text-center py-8">
-          <p class="text-white/60">
-            No programs available to apply to right now.
-            {appliedProgramIds.length > 0 && " You've already applied to all available programs."}
-          </p>
-          {appliedProgramIds.length > 0 && (
-            <a
-              href="/dashboard"
-              class="mt-4 inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 font-medium text-dark hover:bg-primary/90 transition-colors"
-            >
-              View Your Applications
-            </a>
-          )}
+    {
+      success && (
+        <div class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-300">
+          {success}
         </div>
-      </Card>
-    )}
+      )
+    }
+
+    {
+      error && (
+        <div class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
+          {error}
+        </div>
+      )
+    }
+
+    {
+      availablePrograms.length > 0 ? (
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {availablePrograms.map((program) => (
+            <Card>
+              <div class="flex flex-col gap-3">
+                <h3 class="text-lg font-semibold text-white">{program.name}</h3>
+                <p class="text-sm text-white/60">{program.description}</p>
+                {program.curriculum && (
+                  <div class="rounded bg-teal/20 px-2 py-1 text-xs text-white/70">
+                    {program.curriculum.title}
+                  </div>
+                )}
+                {program.startDate && (
+                  <p class="text-xs text-white/40">
+                    Starts {program.startDate.toLocaleDateString()}
+                    {program.endDate && ` — Ends ${program.endDate.toLocaleDateString()}`}
+                  </p>
+                )}
+                <form method="POST" class="mt-2">
+                  <input type="hidden" name="programId" value={program.id} />
+                  <button
+                    type="submit"
+                    class="inline-flex w-full items-center justify-center rounded-md bg-primary px-4 py-2 font-medium text-dark hover:bg-primary/90 transition-colors"
+                  >
+                    Apply
+                  </button>
+                </form>
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card>
+          <div class="text-center py-8">
+            <p class="text-white/60">
+              No programs available to apply to right now.
+              {appliedProgramIds.length > 0 &&
+                " You've already applied to all available programs."}
+            </p>
+            {appliedProgramIds.length > 0 && (
+              <a
+                href="/dashboard"
+                class="mt-4 inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 font-medium text-dark hover:bg-primary/90 transition-colors"
+              >
+                View Your Applications
+              </a>
+            )}
+          </div>
+        </Card>
+      )
+    }
   </div>
 </DashboardLayout>

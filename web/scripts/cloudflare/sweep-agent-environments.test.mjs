@@ -27,9 +27,7 @@ const workers = [
 
 describe("stale agent environment selection", () => {
   it("selects only old agent-prefixed workers for this application", () => {
-    expect(
-      findStaleAgentEnvironments({ workers, now, maxAgeHours: 72 })
-    ).toEqual([
+    expect(findStaleAgentEnvironments({ workers, now, maxAgeHours: 72 })).toEqual([
       {
         environmentName: "agent-old-task",
         workerName: "ttv-website-agent-old-task",

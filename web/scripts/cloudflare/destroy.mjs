@@ -23,10 +23,7 @@ export function ensureEnvironmentCanBeDestroyed(environmentSlug) {
   const allowProtectedDestroy =
     getOptionalEnv("CLOUDFLARE_ALLOW_PROTECTED_DESTROY") === "true";
 
-  if (
-    protectedEnvironments.includes(environmentSlug) &&
-    !allowProtectedDestroy
-  ) {
+  if (protectedEnvironments.includes(environmentSlug) && !allowProtectedDestroy) {
     throw new Error(
       `Refusing to destroy protected environment "${environmentSlug}". Set CLOUDFLARE_ALLOW_PROTECTED_DESTROY=true to override.`
     );
@@ -65,9 +62,7 @@ export async function destroyEnvironment(
   );
   const workerDeleted = await deleteWorker(context.workerName);
   const queueDeleted = await deleteQueue(context.queueName);
-  const vectorizeIndexDeleted = await deleteVectorize(
-    context.vectorizeIndexName
-  );
+  const vectorizeIndexDeleted = await deleteVectorize(context.vectorizeIndexName);
   const aiGatewayDeleted = await deleteAiGateway(context.aiGatewayName);
   const databaseDeleted = await deleteDatabase(context.d1Name);
 
@@ -87,20 +82,14 @@ async function main() {
   const context = deriveEnvironmentContext();
   const result = await destroyEnvironment(context);
 
-  await writeGithubOutput(
-    "queue_consumer_removed",
-    String(result.queueConsumerRemoved)
-  );
+  await writeGithubOutput("queue_consumer_removed", String(result.queueConsumerRemoved));
   await writeGithubOutput("worker_deleted", String(result.workerDeleted));
   await writeGithubOutput("queue_deleted", String(result.queueDeleted));
   await writeGithubOutput(
     "vectorize_index_deleted",
     String(result.vectorizeIndexDeleted)
   );
-  await writeGithubOutput(
-    "ai_gateway_deleted",
-    String(result.aiGatewayDeleted)
-  );
+  await writeGithubOutput("ai_gateway_deleted", String(result.aiGatewayDeleted));
   await writeGithubOutput("database_deleted", String(result.databaseDeleted));
   await writeGithubOutput("bucket_deleted", String(result.bucketDeleted));
 
@@ -108,8 +97,7 @@ async function main() {
 }
 
 const isDirectRun =
-  process.argv[1] &&
-  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isDirectRun) {
   main().catch((error) => {

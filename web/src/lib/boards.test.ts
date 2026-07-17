@@ -103,19 +103,19 @@ describe("project board authorization", () => {
       canDeleteBoard: false,
       isOwner: false,
     });
-    expect(getBoardPermissions("owner", ["member"], "outsider").canView).toBe(
-      false
-    );
+    expect(getBoardPermissions("owner", ["member"], "outsider").canView).toBe(false);
   });
 
   it("only allows assignments to board participants", () => {
-    expect(() => validateAssignee(null, ["owner", "member"])).not.toThrow();
-    expect(() =>
-      validateAssignee("member", ["owner", "member"])
-    ).not.toThrow();
-    expect(() => validateAssignee("outsider", ["owner", "member"])).toThrow(
-      BoardValidationError
-    );
+    expect(() => {
+      validateAssignee(null, ["owner", "member"]);
+    }).not.toThrow();
+    expect(() => {
+      validateAssignee("member", ["owner", "member"]);
+    }).not.toThrow();
+    expect(() => {
+      validateAssignee("outsider", ["owner", "member"]);
+    }).toThrow(BoardValidationError);
   });
 });
 
@@ -158,22 +158,14 @@ describe("project board presentation", () => {
     };
 
     expect(
-      mergeAccessibleBoards([oldBoard, newBoard], [oldBoard]).map(
-        ({ id }) => id
-      )
+      mergeAccessibleBoards([oldBoard, newBoard], [oldBoard]).map(({ id }) => id)
     ).toEqual(["new", "old"]);
   });
 
   it("marks unfinished tasks overdue after their due day", () => {
     const today = new Date("2026-07-17T12:00:00Z");
-    expect(
-      isTaskOverdue(new Date("2026-07-16T00:00:00Z"), "TODO", today)
-    ).toBe(true);
-    expect(
-      isTaskOverdue(new Date("2026-07-17T00:00:00Z"), "TODO", today)
-    ).toBe(false);
-    expect(
-      isTaskOverdue(new Date("2026-07-16T00:00:00Z"), "DONE", today)
-    ).toBe(false);
+    expect(isTaskOverdue(new Date("2026-07-16T00:00:00Z"), "TODO", today)).toBe(true);
+    expect(isTaskOverdue(new Date("2026-07-17T00:00:00Z"), "TODO", today)).toBe(false);
+    expect(isTaskOverdue(new Date("2026-07-16T00:00:00Z"), "DONE", today)).toBe(false);
   });
 });

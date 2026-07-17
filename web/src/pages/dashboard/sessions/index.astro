@@ -31,32 +31,40 @@ const recordings =
       </p>
     </div>
 
-    {recordings.length === 0 ? (
-      <Card>
-        <div class="py-10 text-center text-white/55">
-          No session recordings are available for your programs yet.
+    {
+      recordings.length === 0 ? (
+        <Card>
+          <div class="py-10 text-center text-white/55">
+            No session recordings are available for your programs yet.
+          </div>
+        </Card>
+      ) : (
+        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {recordings.map((recording) => (
+            <a href={`/dashboard/sessions/${recording.id}`} class="block">
+              <Card>
+                <div class="space-y-4">
+                  <div class="flex items-start justify-between gap-3">
+                    <h3 class="text-base font-semibold text-white">{recording.title}</h3>
+                    <ProcessingStatus status={recording.processingStatus} />
+                  </div>
+                  <p class="text-sm text-white/55">
+                    {recording.program?.name ?? "Program session"}
+                  </p>
+                  <div class="flex items-center justify-between text-xs text-white/45">
+                    <span>
+                      {recording.recordedAt
+                        ? recording.recordedAt.toISOString().split("T")[0]
+                        : "No date"}
+                    </span>
+                    <span>{formatDuration(recording.durationSeconds)}</span>
+                  </div>
+                </div>
+              </Card>
+            </a>
+          ))}
         </div>
-      </Card>
-    ) : (
-      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {recordings.map((recording) => (
-          <a href={`/dashboard/sessions/${recording.id}`} class="block">
-            <Card>
-              <div class="space-y-4">
-                <div class="flex items-start justify-between gap-3">
-                  <h3 class="text-base font-semibold text-white">{recording.title}</h3>
-                  <ProcessingStatus status={recording.processingStatus} />
-                </div>
-                <p class="text-sm text-white/55">{recording.program?.name ?? "Program session"}</p>
-                <div class="flex items-center justify-between text-xs text-white/45">
-                  <span>{recording.recordedAt ? recording.recordedAt.toISOString().split("T")[0] : "No date"}</span>
-                  <span>{formatDuration(recording.durationSeconds)}</span>
-                </div>
-              </div>
-            </Card>
-          </a>
-        ))}
-      </div>
-    )}
+      )
+    }
   </div>
 </DashboardLayout>

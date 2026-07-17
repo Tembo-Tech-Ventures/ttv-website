@@ -29,6 +29,13 @@
       "when": 1784270729422,
       "tag": "0003_futuristic_stingray",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1784280358677,
+      "tag": "0004_silky_silverclaw",
+      "breakpoints": true
     }
   ]
 }

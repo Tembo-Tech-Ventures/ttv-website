@@ -1,9 +1,17 @@
 import { expect, test } from "@playwright/test";
+import { z } from "zod";
+
+const healthSchema = z.object({
+  status: z.literal("ok"),
+  service: z.literal("ttv-website"),
+  environment: z.string().optional(),
+  version: z.string().optional(),
+});
 
 test("serves the expected live deployment and homepage", async ({ page }) => {
   const healthResponse = await page.request.get("/api/health");
   expect(healthResponse.ok()).toBe(true);
-  const health = await healthResponse.json();
+  const health = healthSchema.parse(await healthResponse.json());
   expect(health).toMatchObject({ status: "ok", service: "ttv-website" });
 
   if (process.env.EXPECTED_DEPLOYMENT_ENVIRONMENT) {
@@ -45,21 +53,14 @@ test.describe("authenticated delivery agent", () => {
     await expect(page).toHaveURL(/\/admin\/?$/);
   });
 
-  test("can complete a shared project-board workflow", async (
-    { page },
-    testInfo
-  ) => {
+  test("can complete a shared project-board workflow", async ({ page }, testInfo) => {
     const boardName = `Agent board ${testInfo.project.name} ${Date.now()}`;
 
     await page.goto("/dashboard/boards");
-    await expect(
-      page.getByRole("heading", { name: "Project Boards" })
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Project Boards" })).toBeVisible();
 
     await page.getByLabel("Board name").fill(boardName);
-    await page
-      .getByLabel("Description")
-      .fill("Temporary browser verification board.");
+    await page.getByLabel("Description").fill("Temporary browser verification board.");
     await page.getByRole("button", { name: "Create board" }).click();
 
     await expect(page).toHaveURL(/\/dashboard\/boards\/[a-z0-9]+/);

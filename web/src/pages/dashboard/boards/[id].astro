@@ -51,6 +51,7 @@ function redirectToBoard(message: string, kind: "notice" | "error" = "notice") {
     303
   );
 }
+void redirectToBoard;
 
 let board = await loadBoard();
 if (!board) {
@@ -73,6 +74,7 @@ if (Astro.request.method === "POST") {
 
     const participants = [board.ownerId, ...memberUserIds];
     let notice = "Board updated.";
+    void notice;
 
     switch (action) {
       case "add-task": {
@@ -138,9 +140,7 @@ if (Astro.request.method === "POST") {
 
       case "add-member": {
         if (!permissions.canManageMembers) {
-          throw new BoardValidationError(
-            "Only the board owner can add members."
-          );
+          throw new BoardValidationError("Only the board owner can add members.");
         }
 
         const email = parseMemberEmail(formData);
@@ -149,9 +149,7 @@ if (Astro.request.method === "POST") {
         });
 
         if (!newMember) {
-          throw new BoardValidationError(
-            "No TTV account was found for that email."
-          );
+          throw new BoardValidationError("No TTV account was found for that email.");
         }
         if (newMember.id === board.ownerId) {
           throw new BoardValidationError("The board owner is already included.");
@@ -170,9 +168,7 @@ if (Astro.request.method === "POST") {
 
       case "remove-member": {
         if (!permissions.canManageMembers) {
-          throw new BoardValidationError(
-            "Only the board owner can remove members."
-          );
+          throw new BoardValidationError("Only the board owner can remove members.");
         }
 
         const memberId = formData.get("memberId");
@@ -219,9 +215,7 @@ if (Astro.request.method === "POST") {
 
       case "update-board": {
         if (!permissions.isOwner) {
-          throw new BoardValidationError(
-            "Only the board owner can edit board details."
-          );
+          throw new BoardValidationError("Only the board owner can edit board details.");
         }
 
         await db
@@ -234,9 +228,7 @@ if (Astro.request.method === "POST") {
 
       case "delete-board": {
         if (!permissions.canDeleteBoard) {
-          throw new BoardValidationError(
-            "Only the board owner can delete this board."
-          );
+          throw new BoardValidationError("Only the board owner can delete this board.");
         }
 
         await db
@@ -270,6 +262,7 @@ if (Astro.request.method === "POST") {
       caught instanceof BoardValidationError
         ? caught.message
         : "The board could not be updated. Please try again.";
+    void message;
     return redirectToBoard(message, "error");
   }
 }
@@ -311,23 +304,27 @@ const error = Astro.url.searchParams.get("error");
       &larr; All project boards
     </a>
 
-    {notice && (
-      <div
-        role="status"
-        class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-200"
-      >
-        {notice}
-      </div>
-    )}
+    {
+      notice && (
+        <div
+          role="status"
+          class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-200"
+        >
+          {notice}
+        </div>
+      )
+    }
 
-    {error && (
-      <div
-        role="alert"
-        class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-200"
-      >
-        {error}
-      </div>
-    )}
+    {
+      error && (
+        <div
+          role="alert"
+          class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-200"
+        >
+          {error}
+        </div>
+      )
+    }
 
     <Card>
       <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-end">
@@ -337,7 +334,8 @@ const error = Astro.url.searchParams.get("error");
               {permissions.isOwner ? "Your board" : "Shared board"}
             </p>
             <span class="rounded-full bg-teal/30 px-2.5 py-1 text-xs text-white/60">
-              {participants.length} {participants.length === 1 ? "person" : "people"}
+              {participants.length}
+              {participants.length === 1 ? "person" : "people"}
             </span>
           </div>
           <h2 class="mt-3 text-3xl font-bold text-white">{board.name}</h2>
@@ -362,7 +360,8 @@ const error = Astro.url.searchParams.get("error");
             <div
               class="h-full rounded-full bg-primary transition-[width]"
               style={`width: ${progress.percentage}%`}
-            ></div>
+            >
+            </div>
           </div>
         </div>
       </div>
@@ -393,10 +392,7 @@ const error = Astro.url.searchParams.get("error");
           </div>
 
           <div class="flex flex-col gap-1.5 md:col-span-2">
-            <label
-              for="new-task-description"
-              class="text-sm font-medium text-white/90"
-            >
+            <label for="new-task-description" class="text-sm font-medium text-white/90">
               Description
             </label>
             <textarea
@@ -418,9 +414,11 @@ const error = Astro.url.searchParams.get("error");
               class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
             >
               <option value="">Unassigned</option>
-              {participants.map((participant) => (
-                <option value={participant.id}>{participant.name}</option>
-              ))}
+              {
+                participants.map((participant) => (
+                  <option value={participant.id}>{participant.name}</option>
+                ))
+              }
             </select>
           </div>
 
@@ -448,46 +446,50 @@ const error = Astro.url.searchParams.get("error");
       <Card>
         <h3 class="text-xl font-semibold text-white">Participants</h3>
         <ul class="mt-4 divide-y divide-teal/20">
-          {participants.map((participant) => (
-            <li class="flex items-center justify-between gap-3 py-3 first:pt-0">
-              <div class="min-w-0">
-                <p class="truncate text-sm font-medium text-white">
-                  {participant.name}
-                </p>
-                <p class="truncate text-xs text-white/45">{participant.email}</p>
-              </div>
-              <span class="shrink-0 rounded-full bg-teal/30 px-2 py-1 text-xs text-white/60">
-                {participant.label}
-              </span>
-            </li>
-          ))}
+          {
+            participants.map((participant) => (
+              <li class="flex items-center justify-between gap-3 py-3 first:pt-0">
+                <div class="min-w-0">
+                  <p class="truncate text-sm font-medium text-white">
+                    {participant.name}
+                  </p>
+                  <p class="truncate text-xs text-white/45">{participant.email}</p>
+                </div>
+                <span class="shrink-0 rounded-full bg-teal/30 px-2 py-1 text-xs text-white/60">
+                  {participant.label}
+                </span>
+              </li>
+            ))
+          }
         </ul>
 
-        {permissions.canManageMembers && (
-          <form method="POST" class="mt-5 border-t border-teal/20 pt-5">
-            <input type="hidden" name="action" value="add-member" />
-            <label for="member-email" class="text-sm font-medium text-white/90">
-              Add an existing TTV member
-            </label>
-            <div class="mt-2 flex flex-col gap-2 sm:flex-row xl:flex-col 2xl:flex-row">
-              <input
-                id="member-email"
-                name="email"
-                type="email"
-                maxlength="320"
-                required
-                placeholder="member@example.com"
-                class="min-w-0 flex-1 rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/35 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
-              />
-              <button
-                type="submit"
-                class="rounded-md border border-primary px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary hover:text-dark"
-              >
-                Add member
-              </button>
-            </div>
-          </form>
-        )}
+        {
+          permissions.canManageMembers && (
+            <form method="POST" class="mt-5 border-t border-teal/20 pt-5">
+              <input type="hidden" name="action" value="add-member" />
+              <label for="member-email" class="text-sm font-medium text-white/90">
+                Add an existing TTV member
+              </label>
+              <div class="mt-2 flex flex-col gap-2 sm:flex-row xl:flex-col 2xl:flex-row">
+                <input
+                  id="member-email"
+                  name="email"
+                  type="email"
+                  maxlength="320"
+                  required
+                  placeholder="member@example.com"
+                  class="min-w-0 flex-1 rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/35 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+                <button
+                  type="submit"
+                  class="rounded-md border border-primary px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary hover:text-dark"
+                >
+                  Add member
+                </button>
+              </div>
+            </form>
+          )
+        }
       </Card>
     </div>
 
@@ -502,313 +504,316 @@ const error = Astro.url.searchParams.get("error");
           </p>
         </div>
         <span class="text-sm text-white/45">
-          {progress.total} {progress.total === 1 ? "task" : "tasks"}
+          {progress.total}
+          {progress.total === 1 ? "task" : "tasks"}
         </span>
       </div>
 
       <div class="grid gap-5 xl:grid-cols-3">
-        {BOARD_STATUSES.map((status) => (
-          <div class="rounded-lg border border-teal/20 bg-dark/35 p-4">
-            <div class="mb-4 flex items-center justify-between gap-3">
-              <h4 class="font-semibold text-white">
-                {BOARD_STATUS_LABELS[status]}
-              </h4>
-              <span class="rounded-full bg-teal/30 px-2.5 py-1 text-xs text-white/60">
-                {tasksByStatus[status].length}
-              </span>
-            </div>
-
-            {tasksByStatus[status].length === 0 ? (
-              <p class="rounded-md border border-dashed border-teal/30 px-3 py-8 text-center text-sm text-white/35">
-                No tasks here.
-              </p>
-            ) : (
-              <div class="space-y-3">
-                {tasksByStatus[status].map((task) => {
-                  const overdue = isTaskOverdue(task.dueDate, task.status);
-
-                  return (
-                    <article class="rounded-md border border-teal/25 bg-dark/85 p-4 shadow-md">
-                      <h5 class="font-semibold text-white">{task.title}</h5>
-                      {task.description && (
-                        <p class="mt-2 whitespace-pre-line text-sm text-white/55">
-                          {task.description}
-                        </p>
-                      )}
-
-                      <div class="mt-4 flex flex-wrap gap-2 text-xs">
-                        <span class="rounded-full bg-teal/30 px-2.5 py-1 text-white/65">
-                          {task.assignee?.name ?? "Unassigned"}
-                        </span>
-                        {task.dueDate && (
-                          <span
-                            class:list={[
-                              "rounded-full px-2.5 py-1",
-                              overdue
-                                ? "bg-red-500/15 text-red-200"
-                                : "bg-teal/30 text-white/65",
-                            ]}
-                          >
-                            {overdue ? "Overdue · " : "Due · "}
-                            {formatDateInput(task.dueDate)}
-                          </span>
-                        )}
-                      </div>
-
-                      <details class="mt-4 border-t border-teal/20 pt-3">
-                        <summary class="cursor-pointer text-sm font-medium text-primary">
-                          Edit task
-                        </summary>
-
-                        <form method="POST" class="mt-4 space-y-3">
-                          <input type="hidden" name="action" value="update-task" />
-                          <input type="hidden" name="taskId" value={task.id} />
-
-                          <div class="flex flex-col gap-1">
-                            <label
-                              for={`title-${task.id}`}
-                              class="text-xs font-medium text-white/70"
-                            >
-                              Title
-                            </label>
-                            <input
-                              id={`title-${task.id}`}
-                              name="title"
-                              type="text"
-                              maxlength="120"
-                              required
-                              value={task.title}
-                              class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none"
-                            />
-                          </div>
-
-                          <div class="flex flex-col gap-1">
-                            <label
-                              for={`description-${task.id}`}
-                              class="text-xs font-medium text-white/70"
-                            >
-                              Description
-                            </label>
-                            <textarea
-                              id={`description-${task.id}`}
-                              name="description"
-                              rows="3"
-                              maxlength="1000"
-                              class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none"
-                            >{task.description}</textarea>
-                          </div>
-
-                          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-                            <div class="flex flex-col gap-1">
-                              <label
-                                for={`status-${task.id}`}
-                                class="text-xs font-medium text-white/70"
-                              >
-                                Status
-                              </label>
-                              <select
-                                id={`status-${task.id}`}
-                                name="status"
-                                class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none"
-                              >
-                                {BOARD_STATUSES.map((optionStatus) => (
-                                  <option
-                                    value={optionStatus}
-                                    selected={optionStatus === task.status}
-                                  >
-                                    {BOARD_STATUS_LABELS[optionStatus]}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            <div class="flex flex-col gap-1">
-                              <label
-                                for={`assignee-${task.id}`}
-                                class="text-xs font-medium text-white/70"
-                              >
-                                Assignee
-                              </label>
-                              <select
-                                id={`assignee-${task.id}`}
-                                name="assigneeId"
-                                class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none"
-                              >
-                                <option value="" selected={!task.assigneeId}>
-                                  Unassigned
-                                </option>
-                                {participants.map((participant) => (
-                                  <option
-                                    value={participant.id}
-                                    selected={participant.id === task.assigneeId}
-                                  >
-                                    {participant.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          </div>
-
-                          <div class="flex flex-col gap-1">
-                            <label
-                              for={`due-${task.id}`}
-                              class="text-xs font-medium text-white/70"
-                            >
-                              Due date
-                            </label>
-                            <input
-                              id={`due-${task.id}`}
-                              name="dueDate"
-                              type="date"
-                              value={formatDateInput(task.dueDate)}
-                              class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none"
-                            />
-                          </div>
-
-                          <button
-                            type="submit"
-                            class="w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-dark transition-colors hover:bg-primary/90"
-                          >
-                            Save task
-                          </button>
-                        </form>
-
-                        <form
-                          method="POST"
-                          class="mt-2"
-                          onsubmit="return confirm('Delete this task?')"
-                        >
-                          <input type="hidden" name="action" value="delete-task" />
-                          <input type="hidden" name="taskId" value={task.id} />
-                          <button
-                            type="submit"
-                            class="w-full rounded-md border border-red-400/40 px-4 py-2 text-sm font-medium text-red-200 transition-colors hover:bg-red-500/10"
-                          >
-                            Delete task
-                          </button>
-                        </form>
-                      </details>
-                    </article>
-                  );
-                })}
+        {
+          BOARD_STATUSES.map((status) => (
+            <div class="rounded-lg border border-teal/20 bg-dark/35 p-4">
+              <div class="mb-4 flex items-center justify-between gap-3">
+                <h4 class="font-semibold text-white">{BOARD_STATUS_LABELS[status]}</h4>
+                <span class="rounded-full bg-teal/30 px-2.5 py-1 text-xs text-white/60">
+                  {tasksByStatus[status].length}
+                </span>
               </div>
-            )}
-          </div>
-        ))}
+
+              {tasksByStatus[status].length === 0 ? (
+                <p class="rounded-md border border-dashed border-teal/30 px-3 py-8 text-center text-sm text-white/35">
+                  No tasks here.
+                </p>
+              ) : (
+                <div class="space-y-3">
+                  {tasksByStatus[status].map((task) => {
+                    const overdue = isTaskOverdue(task.dueDate, task.status);
+
+                    return (
+                      <article class="rounded-md border border-teal/25 bg-dark/85 p-4 shadow-md">
+                        <h5 class="font-semibold text-white">{task.title}</h5>
+                        {task.description && (
+                          <p class="mt-2 whitespace-pre-line text-sm text-white/55">
+                            {task.description}
+                          </p>
+                        )}
+
+                        <div class="mt-4 flex flex-wrap gap-2 text-xs">
+                          <span class="rounded-full bg-teal/30 px-2.5 py-1 text-white/65">
+                            {task.assignee?.name ?? "Unassigned"}
+                          </span>
+                          {task.dueDate && (
+                            <span
+                              class:list={[
+                                "rounded-full px-2.5 py-1",
+                                overdue
+                                  ? "bg-red-500/15 text-red-200"
+                                  : "bg-teal/30 text-white/65",
+                              ]}
+                            >
+                              {overdue ? "Overdue · " : "Due · "}
+                              {formatDateInput(task.dueDate)}
+                            </span>
+                          )}
+                        </div>
+
+                        <details class="mt-4 border-t border-teal/20 pt-3">
+                          <summary class="cursor-pointer text-sm font-medium text-primary">
+                            Edit task
+                          </summary>
+
+                          <form method="POST" class="mt-4 space-y-3">
+                            <input type="hidden" name="action" value="update-task" />
+                            <input type="hidden" name="taskId" value={task.id} />
+
+                            <div class="flex flex-col gap-1">
+                              <label
+                                for={`title-${task.id}`}
+                                class="text-xs font-medium text-white/70"
+                              >
+                                Title
+                              </label>
+                              <input
+                                id={`title-${task.id}`}
+                                name="title"
+                                type="text"
+                                maxlength="120"
+                                required
+                                value={task.title}
+                                class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none"
+                              />
+                            </div>
+
+                            <div class="flex flex-col gap-1">
+                              <label
+                                for={`description-${task.id}`}
+                                class="text-xs font-medium text-white/70"
+                              >
+                                Description
+                              </label>
+                              <textarea
+                                id={`description-${task.id}`}
+                                name="description"
+                                rows="3"
+                                maxlength="1000"
+                                class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none"
+                              >
+                                {task.description}
+                              </textarea>
+                            </div>
+
+                            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                              <div class="flex flex-col gap-1">
+                                <label
+                                  for={`status-${task.id}`}
+                                  class="text-xs font-medium text-white/70"
+                                >
+                                  Status
+                                </label>
+                                <select
+                                  id={`status-${task.id}`}
+                                  name="status"
+                                  class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none"
+                                >
+                                  {BOARD_STATUSES.map((optionStatus) => (
+                                    <option
+                                      value={optionStatus}
+                                      selected={optionStatus === task.status}
+                                    >
+                                      {BOARD_STATUS_LABELS[optionStatus]}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div class="flex flex-col gap-1">
+                                <label
+                                  for={`assignee-${task.id}`}
+                                  class="text-xs font-medium text-white/70"
+                                >
+                                  Assignee
+                                </label>
+                                <select
+                                  id={`assignee-${task.id}`}
+                                  name="assigneeId"
+                                  class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none"
+                                >
+                                  <option value="" selected={!task.assigneeId}>
+                                    Unassigned
+                                  </option>
+                                  {participants.map((participant) => (
+                                    <option
+                                      value={participant.id}
+                                      selected={participant.id === task.assigneeId}
+                                    >
+                                      {participant.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+
+                            <div class="flex flex-col gap-1">
+                              <label
+                                for={`due-${task.id}`}
+                                class="text-xs font-medium text-white/70"
+                              >
+                                Due date
+                              </label>
+                              <input
+                                id={`due-${task.id}`}
+                                name="dueDate"
+                                type="date"
+                                value={formatDateInput(task.dueDate)}
+                                class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none"
+                              />
+                            </div>
+
+                            <button
+                              type="submit"
+                              class="w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-dark transition-colors hover:bg-primary/90"
+                            >
+                              Save task
+                            </button>
+                          </form>
+
+                          <form
+                            method="POST"
+                            class="mt-2"
+                            onsubmit="return confirm('Delete this task?')"
+                          >
+                            <input type="hidden" name="action" value="delete-task" />
+                            <input type="hidden" name="taskId" value={task.id} />
+                            <button
+                              type="submit"
+                              class="w-full rounded-md border border-red-400/40 px-4 py-2 text-sm font-medium text-red-200 transition-colors hover:bg-red-500/10"
+                            >
+                              Delete task
+                            </button>
+                          </form>
+                        </details>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))
+        }
       </div>
     </section>
 
-    {permissions.isOwner && (
-      <Card>
-        <details>
-          <summary class="cursor-pointer text-lg font-semibold text-white">
-            Board settings
-          </summary>
+    {
+      permissions.isOwner && (
+        <Card>
+          <details>
+            <summary class="cursor-pointer text-lg font-semibold text-white">
+              Board settings
+            </summary>
 
-          <div class="mt-6 grid gap-8 lg:grid-cols-2">
-            <form method="POST" class="space-y-4">
-              <input type="hidden" name="action" value="update-board" />
-              <h3 class="font-semibold text-white">Board details</h3>
-              <div class="flex flex-col gap-1.5">
-                <label for="board-name" class="text-sm font-medium text-white/80">
-                  Name
-                </label>
-                <input
-                  id="board-name"
-                  name="name"
-                  type="text"
-                  maxlength="80"
-                  required
-                  value={board.name}
-                  class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none"
-                />
-              </div>
-              <div class="flex flex-col gap-1.5">
-                <label
-                  for="board-description"
-                  class="text-sm font-medium text-white/80"
+            <div class="mt-6 grid gap-8 lg:grid-cols-2">
+              <form method="POST" class="space-y-4">
+                <input type="hidden" name="action" value="update-board" />
+                <h3 class="font-semibold text-white">Board details</h3>
+                <div class="flex flex-col gap-1.5">
+                  <label for="board-name" class="text-sm font-medium text-white/80">
+                    Name
+                  </label>
+                  <input
+                    id="board-name"
+                    name="name"
+                    type="text"
+                    maxlength="80"
+                    required
+                    value={board.name}
+                    class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none"
+                  />
+                </div>
+                <div class="flex flex-col gap-1.5">
+                  <label
+                    for="board-description"
+                    class="text-sm font-medium text-white/80"
+                  >
+                    Description
+                  </label>
+                  <textarea
+                    id="board-description"
+                    name="description"
+                    rows="4"
+                    maxlength="500"
+                    class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none"
+                  >
+                    {board.description}
+                  </textarea>
+                </div>
+                <button
+                  type="submit"
+                  class="rounded-md bg-primary px-4 py-2 font-semibold text-dark transition-colors hover:bg-primary/90"
                 >
-                  Description
-                </label>
-                <textarea
-                  id="board-description"
-                  name="description"
-                  rows="4"
-                  maxlength="500"
-                  class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none"
-                >{board.description}</textarea>
-              </div>
-              <button
-                type="submit"
-                class="rounded-md bg-primary px-4 py-2 font-semibold text-dark transition-colors hover:bg-primary/90"
-              >
-                Save board details
-              </button>
-            </form>
+                  Save board details
+                </button>
+              </form>
 
-            <div>
-              <h3 class="font-semibold text-white">Manage members</h3>
-              {board.members.length === 0 ? (
-                <p class="mt-3 text-sm text-white/45">
-                  This board has no additional members.
-                </p>
-              ) : (
-                <ul class="mt-3 space-y-2">
-                  {board.members.map((member) => (
-                    <li class="flex items-center justify-between gap-3 rounded-md border border-teal/20 p-3">
-                      <div class="min-w-0">
-                        <p class="truncate text-sm font-medium text-white">
-                          {member.user.name}
-                        </p>
-                        <p class="truncate text-xs text-white/45">
-                          {member.user.email}
-                        </p>
-                      </div>
-                      <form
-                        method="POST"
-                        onsubmit="return confirm('Remove this member from the board?')"
-                      >
-                        <input
-                          type="hidden"
-                          name="action"
-                          value="remove-member"
-                        />
-                        <input type="hidden" name="memberId" value={member.id} />
-                        <button
-                          type="submit"
-                          class="text-sm font-medium text-red-200 hover:text-red-100"
+              <div>
+                <h3 class="font-semibold text-white">Manage members</h3>
+                {board.members.length === 0 ? (
+                  <p class="mt-3 text-sm text-white/45">
+                    This board has no additional members.
+                  </p>
+                ) : (
+                  <ul class="mt-3 space-y-2">
+                    {board.members.map((member) => (
+                      <li class="flex items-center justify-between gap-3 rounded-md border border-teal/20 p-3">
+                        <div class="min-w-0">
+                          <p class="truncate text-sm font-medium text-white">
+                            {member.user.name}
+                          </p>
+                          <p class="truncate text-xs text-white/45">
+                            {member.user.email}
+                          </p>
+                        </div>
+                        <form
+                          method="POST"
+                          onsubmit="return confirm('Remove this member from the board?')"
                         >
-                          Remove
-                        </button>
-                      </form>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                          <input type="hidden" name="action" value="remove-member" />
+                          <input type="hidden" name="memberId" value={member.id} />
+                          <button
+                            type="submit"
+                            class="text-sm font-medium text-red-200 hover:text-red-100"
+                          >
+                            Remove
+                          </button>
+                        </form>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
-          </div>
 
-          <div class="mt-8 border-t border-red-400/20 pt-6">
-            <h3 class="font-semibold text-red-200">Delete board</h3>
-            <p class="mt-1 text-sm text-white/45">
-              This permanently deletes every task and membership on the board.
-            </p>
-            <form
-              method="POST"
-              class="mt-3"
-              onsubmit="return confirm('Delete this entire board and all of its tasks?')"
-            >
-              <input type="hidden" name="action" value="delete-board" />
-              <button
-                type="submit"
-                class="rounded-md border border-red-400/50 px-4 py-2 text-sm font-semibold text-red-200 transition-colors hover:bg-red-500/10"
+            <div class="mt-8 border-t border-red-400/20 pt-6">
+              <h3 class="font-semibold text-red-200">Delete board</h3>
+              <p class="mt-1 text-sm text-white/45">
+                This permanently deletes every task and membership on the board.
+              </p>
+              <form
+                method="POST"
+                class="mt-3"
+                onsubmit="return confirm('Delete this entire board and all of its tasks?')"
               >
-                Delete board
-              </button>
-            </form>
-          </div>
-        </details>
-      </Card>
-    )}
+                <input type="hidden" name="action" value="delete-board" />
+                <button
+                  type="submit"
+                  class="rounded-md border border-red-400/50 px-4 py-2 text-sm font-semibold text-red-200 transition-colors hover:bg-red-500/10"
+                >
+                  Delete board
+                </button>
+              </form>
+            </div>
+          </details>
+        </Card>
+      )
+    }
   </div>
 </DashboardLayout>

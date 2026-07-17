@@ -46,9 +46,7 @@ function requireText(
   }
 
   if (value.length > maxLength) {
-    throw new BoardValidationError(
-      `${label} must be ${maxLength} characters or fewer.`
-    );
+    throw new BoardValidationError(`${label} must be ${maxLength} characters or fewer.`);
   }
 
   return value;
@@ -63,9 +61,7 @@ function optionalText(
   const value = getString(formData, key);
 
   if (value.length > maxLength) {
-    throw new BoardValidationError(
-      `${label} must be ${maxLength} characters or fewer.`
-    );
+    throw new BoardValidationError(`${label} must be ${maxLength} characters or fewer.`);
   }
 
   return value;
@@ -74,12 +70,7 @@ function optionalText(
 export function parseBoardInput(formData: FormData): BoardInput {
   return {
     name: requireText(formData, "name", "Board name", 80),
-    description: optionalText(
-      formData,
-      "description",
-      "Board description",
-      500
-    ),
+    description: optionalText(formData, "description", "Board description", 500),
   };
 }
 
@@ -116,12 +107,7 @@ export function parseBoardTaskInput(formData: FormData): BoardTaskInput {
 
   return {
     title: requireText(formData, "title", "Task title", 120),
-    description: optionalText(
-      formData,
-      "description",
-      "Task description",
-      1_000
-    ),
+    description: optionalText(formData, "description", "Task description", 1_000),
     status: rawStatus,
     assigneeId: getString(formData, "assigneeId") || null,
     dueDate: parseDueDate(getString(formData, "dueDate")),
@@ -159,9 +145,7 @@ export function validateAssignee(
   participantUserIds: readonly string[]
 ): void {
   if (assigneeId && !participantUserIds.includes(assigneeId)) {
-    throw new BoardValidationError(
-      "Tasks can only be assigned to board participants."
-    );
+    throw new BoardValidationError("Tasks can only be assigned to board participants.");
   }
 }
 
@@ -181,9 +165,7 @@ export function groupBoardTasksByStatus<T extends { status: BoardStatus }>(
   return grouped;
 }
 
-export function calculateBoardProgress(
-  tasks: readonly { status: BoardStatus }[]
-) {
+export function calculateBoardProgress(tasks: readonly { status: BoardStatus }[]) {
   const total = tasks.length;
   const completed = tasks.filter(({ status }) => status === "DONE").length;
 
@@ -213,8 +195,7 @@ export function mergeAccessibleBoards<
   }
 
   return [...byId.values()].sort(
-    (left, right) =>
-      updatedAtValue(right.updatedAt) - updatedAtValue(left.updatedAt)
+    (left, right) => updatedAtValue(right.updatedAt) - updatedAtValue(left.updatedAt)
   );
 }
 
@@ -224,8 +205,6 @@ export function isTaskOverdue(
   today = new Date()
 ): boolean {
   return Boolean(
-    dueDate &&
-      status !== "DONE" &&
-      formatDateInput(dueDate) < formatDateInput(today)
+    dueDate && status !== "DONE" && formatDateInput(dueDate) < formatDateInput(today)
   );
 }

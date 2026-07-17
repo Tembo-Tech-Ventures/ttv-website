@@ -8,8 +8,8 @@ import {
   PiVideoCameraDuotone,
   PiChatCircleDotsDuotone,
   PiKanbanDuotone,
+  PiListBold,
 } from "react-icons/pi";
-import { PiListBold } from "react-icons/pi";
 
 export const dashboardLinks = [
   { href: "/dashboard", label: "Dashboard", icon: PiGaugeDuotone },
@@ -30,14 +30,18 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
         links={dashboardLinks}
         title="TTV Dashboard"
         isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        onClose={() => {
+          setSidebarOpen(false);
+        }}
       />
 
       <div className="flex flex-1 flex-col">
         {/* Top bar */}
         <header className="flex items-center gap-4 border-b border-teal/20 px-4 py-3 lg:px-6">
           <button
-            onClick={() => setSidebarOpen(true)}
+            onClick={() => {
+              setSidebarOpen(true);
+            }}
             className="rounded-md p-1.5 text-white/60 hover:text-white lg:hidden"
           >
             <PiListBold className="h-6 w-6" />

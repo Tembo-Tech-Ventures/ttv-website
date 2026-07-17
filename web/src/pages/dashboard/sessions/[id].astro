@@ -38,30 +38,33 @@ const initialTime = parseTimestampParam(Astro.url.searchParams.get("t"));
       &larr; Back to Sessions
     </a>
 
-    {recording.processingStatus !== "complete" ? (
-      <Card>
-        <div class="space-y-3 py-8 text-center">
-          <ProcessingStatus status={recording.processingStatus} />
-          <h2 class="text-xl font-semibold text-white">{recording.title}</h2>
-          <p class="text-white/55">
-            This recording is still being processed. Check back once the transcript is ready.
-          </p>
-        </div>
-      </Card>
-    ) : (
-      <SessionViewer
-        client:load
-        title={recording.title}
-        videoUrl={`/api/recordings/${recording.id}/video`}
-        initialTime={initialTime}
-        segments={recording.segments.map((segment) => ({
-          id: segment.id,
-          startTime: segment.startTime,
-          endTime: segment.endTime,
-          text: segment.text,
-          speaker: segment.speaker,
-        }))}
-      />
-    )}
+    {
+      recording.processingStatus !== "complete" ? (
+        <Card>
+          <div class="space-y-3 py-8 text-center">
+            <ProcessingStatus status={recording.processingStatus} />
+            <h2 class="text-xl font-semibold text-white">{recording.title}</h2>
+            <p class="text-white/55">
+              This recording is still being processed. Check back once the transcript is
+              ready.
+            </p>
+          </div>
+        </Card>
+      ) : (
+        <SessionViewer
+          client:load
+          title={recording.title}
+          videoUrl={`/api/recordings/${recording.id}/video`}
+          initialTime={initialTime}
+          segments={recording.segments.map((segment) => ({
+            id: segment.id,
+            startTime: segment.startTime,
+            endTime: segment.endTime,
+            text: segment.text,
+            speaker: segment.speaker,
+          }))}
+        />
+      )
+    }
   </div>
 </DashboardLayout>

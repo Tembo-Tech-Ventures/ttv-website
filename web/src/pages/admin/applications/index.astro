@@ -1,6 +1,11 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
 import Badge from "@/components/common/Badge.astro";
+import {
+  applicationBadgeVariant,
+  applicationStatuses,
+  isApplicationStatus,
+} from "@/lib/application-status";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -8,12 +13,13 @@ import { env } from "cloudflare:workers";
 
 const db = drizzle(env.DB, { schema });
 
-const statusFilter = Astro.url.searchParams.get("status");
+const requestedStatus = Astro.url.searchParams.get("status");
+const statusFilter = isApplicationStatus(requestedStatus) ? requestedStatus : null;
 
 let applications;
 if (statusFilter) {
   applications = await db.query.programApplication.findMany({
-    where: eq(schema.programApplication.status, statusFilter as any),
+    where: eq(schema.programApplication.status, statusFilter),
     with: { user: true, program: true },
     orderBy: (a, { desc }) => [desc(a.createdAt)],
   });
@@ -24,7 +30,7 @@ if (statusFilter) {
   });
 }
 
-const statuses = ["PENDING", "APPROVED", "REJECTED", "AUDIT", "COMPLETED"];
+const statuses = applicationStatuses;
 ---
 
 <AdminLayout title="Applications">
@@ -43,19 +49,21 @@ const statuses = ["PENDING", "APPROVED", "REJECTED", "AUDIT", "COMPLETED"];
       >
         All
       </a>
-      {statuses.map((s) => (
-        <a
-          href={`/admin/applications?status=${s}`}
-          class:list={[
-            "rounded-full px-3 py-1 text-sm font-medium capitalize transition-colors",
-            statusFilter === s
-              ? "bg-primary text-dark"
-              : "bg-teal/20 text-white/60 hover:text-white",
-          ]}
-        >
-          {s.toLowerCase()}
-        </a>
-      ))}
+      {
+        statuses.map((s) => (
+          <a
+            href={`/admin/applications?status=${s}`}
+            class:list={[
+              "rounded-full px-3 py-1 text-sm font-medium capitalize transition-colors",
+              statusFilter === s
+                ? "bg-primary text-dark"
+                : "bg-teal/20 text-white/60 hover:text-white",
+            ]}
+          >
+            {s.toLowerCase()}
+          </a>
+        ))
+      }
     </div>
 
     <div class="overflow-x-auto rounded-lg border border-teal/20">
@@ -70,38 +78,38 @@ const statuses = ["PENDING", "APPROVED", "REJECTED", "AUDIT", "COMPLETED"];
           </tr>
         </thead>
         <tbody class="divide-y divide-teal/10">
-          {applications.length === 0 ? (
-            <tr>
-              <td colspan="5" class="px-4 py-8 text-center text-white/40">
-                {statusFilter
-                  ? `No ${statusFilter.toLowerCase()} applications found.`
-                  : "No applications yet. Applications appear here when students submit them."}
-              </td>
-            </tr>
-          ) : (
-            applications.map((app) => (
-              <tr class="text-white/80 hover:bg-teal/10">
-                <td class="px-4 py-3">{app.user?.name ?? "Unknown"}</td>
-                <td class="px-4 py-3">{app.program?.name ?? "—"}</td>
-                <td class="px-4 py-3">
-                  <Badge variant={app.status.toLowerCase() as any} />
-                </td>
-                <td class="px-4 py-3">
-                  {app.createdAt
-                    ? new Date(app.createdAt).toLocaleDateString()
-                    : "—"}
-                </td>
-                <td class="px-4 py-3">
-                  <a
-                    href={`/admin/applications/${app.id}`}
-                    class="text-primary hover:underline"
-                  >
-                    View
-                  </a>
+          {
+            applications.length === 0 ? (
+              <tr>
+                <td colspan="5" class="px-4 py-8 text-center text-white/40">
+                  {statusFilter
+                    ? `No ${statusFilter.toLowerCase()} applications found.`
+                    : "No applications yet. Applications appear here when students submit them."}
                 </td>
               </tr>
-            ))
-          )}
+            ) : (
+              applications.map((app) => (
+                <tr class="text-white/80 hover:bg-teal/10">
+                  <td class="px-4 py-3">{app.user?.name ?? "Unknown"}</td>
+                  <td class="px-4 py-3">{app.program?.name ?? "—"}</td>
+                  <td class="px-4 py-3">
+                    <Badge variant={applicationBadgeVariant(app.status)} />
+                  </td>
+                  <td class="px-4 py-3">
+                    {app.createdAt ? new Date(app.createdAt).toLocaleDateString() : "—"}
+                  </td>
+                  <td class="px-4 py-3">
+                    <a
+                      href={`/admin/applications/${app.id}`}
+                      class="text-primary hover:underline"
+                    >
+                      View
+                    </a>
+                  </td>
+                </tr>
+              ))
+            )
+          }
         </tbody>
       </table>
     </div>

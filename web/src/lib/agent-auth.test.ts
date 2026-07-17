@@ -11,9 +11,10 @@ import {
   revokeAgentSession,
 } from "./agent-auth";
 
-function mockDatabase(
-  { results = [], changes = 1 }: { results?: unknown[]; changes?: number } = {}
-) {
+function mockDatabase({
+  results = [],
+  changes = 1,
+}: { results?: unknown[]; changes?: number } = {}) {
   const run = vi.fn().mockResolvedValue({ meta: { changes } });
   const all = vi.fn().mockResolvedValue({ results });
   const bind = vi.fn((..._values: unknown[]) => ({ run, all }));
@@ -125,14 +126,14 @@ describe("agent sessions", () => {
         expiresAt: new Date("2026-07-14T18:00:00.000Z"),
       },
     ]);
-    expect(database.prepare.mock.calls[0][0]).not.toContain('"token"');
+    expect(database.prepare.mock.calls[0]?.[0]).not.toContain('"token"');
   });
 
   it("revokes only the current user's marked agent session", async () => {
     const database = mockDatabase();
-    await expect(
-      revokeAgentSession(database.db, "admin-id", "session-id")
-    ).resolves.toBe(true);
+    await expect(revokeAgentSession(database.db, "admin-id", "session-id")).resolves.toBe(
+      true
+    );
     expect(database.bind).toHaveBeenCalledWith(
       "session-id",
       "admin-id",

@@ -29,34 +29,35 @@ const SLOTS: Slot[] = [
         § 03 The cohort
       </p>
       <p class="max-w-md font-body text-base text-ink-secondary md:text-lg">
-        Students asked for a place to show who they are and what they&apos;re
-        building. We&apos;re putting it together with them — profiles land
-        with Cohort 04.
+        Students asked for a place to show who they are and what they&apos;re building.
+        We&apos;re putting it together with them — profiles land with Cohort 04.
       </p>
     </div>
 
     <ul class="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-4">
-      {SLOTS.map((slot) => (
-        <li class="space-y-3">
-          <div
-            class="relative aspect-[4/5] overflow-hidden border border-dashed border-[color:var(--color-rule)]"
-            style="background-color: var(--color-bg-raised);"
-          >
-            <div class="flex h-full w-full items-center justify-center">
-              <span
-                class="font-heading text-primary/40"
-                style="font-size: clamp(3rem, 7vw, 6rem); letter-spacing: -0.04em;"
-              >
-                —
-              </span>
+      {
+        SLOTS.map((slot) => (
+          <li class="space-y-3">
+            <div
+              class="relative aspect-[4/5] overflow-hidden border border-dashed border-[color:var(--color-rule)]"
+              style="background-color: var(--color-bg-raised);"
+            >
+              <div class="flex h-full w-full items-center justify-center">
+                <span
+                  class="font-heading text-primary/40"
+                  style="font-size: clamp(3rem, 7vw, 6rem); letter-spacing: -0.04em;"
+                >
+                  —
+                </span>
+              </div>
             </div>
-          </div>
-          <p class="font-body text-xs font-semibold uppercase tracking-[0.24em] text-ink-muted">
-            Profile coming
-          </p>
-          <p class="font-body text-sm text-ink-muted">{slot.label}</p>
-        </li>
-      ))}
+            <p class="font-body text-xs font-semibold uppercase tracking-[0.24em] text-ink-muted">
+              Profile coming
+            </p>
+            <p class="font-body text-sm text-ink-muted">{slot.label}</p>
+          </li>
+        ))
+      }
     </ul>
   </div>
 </section>

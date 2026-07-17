@@ -16,10 +16,7 @@ import {
   writeGeneratedWranglerConfig,
   writeGithubOutput,
 } from "./lib.mjs";
-import {
-  isAgentEnvironmentName,
-  seedAgentPreviewAccess,
-} from "./agent-preview-auth.mjs";
+import { isAgentEnvironmentName, seedAgentPreviewAccess } from "./agent-preview-auth.mjs";
 
 async function main() {
   const context = deriveEnvironmentContext();

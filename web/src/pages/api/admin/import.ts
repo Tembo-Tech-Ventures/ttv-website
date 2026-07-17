@@ -1,34 +1,22 @@
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
-
-/** Escape single quotes for SQLite string literals. */
-function esc(str: unknown): string {
-  if (str == null) return "NULL";
-  return `'${String(str).replace(/'/g, "''")}'`;
-}
-
-/** Convert an ISO timestamp string to unix seconds, or NULL. */
-function ts(value: unknown): string | number {
-  if (value == null) return "NULL";
-  return Math.floor(new Date(value as string).getTime() / 1000);
-}
-
-/** Convert emailVerified to integer boolean (1 | 0). */
-function boolInt(value: unknown): number {
-  return value ? 1 : 0;
-}
+import {
+  escapeSqlValue as esc,
+  toSqlBoolean as boolInt,
+  toUnixSeconds as ts,
+} from "@/lib/import-values";
 
 interface ImportData {
   version?: number;
   exportedAt?: string;
-  users?: Array<Record<string, unknown>>;
-  roles?: Array<Record<string, unknown>>;
-  curricula?: Array<Record<string, unknown>>;
-  programs?: Array<Record<string, unknown>>;
-  programRoles?: Array<Record<string, unknown>>;
-  programPartners?: Array<Record<string, unknown>>;
-  programApplications?: Array<Record<string, unknown>>;
-  userRoles?: Array<Record<string, unknown>>;
+  users?: Record<string, unknown>[];
+  roles?: Record<string, unknown>[];
+  curricula?: Record<string, unknown>[];
+  programs?: Record<string, unknown>[];
+  programRoles?: Record<string, unknown>[];
+  programPartners?: Record<string, unknown>[];
+  programApplications?: Record<string, unknown>[];
+  userRoles?: Record<string, unknown>[];
 }
 
 type TableKey =
@@ -140,8 +128,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (!data.version || !data.exportedAt) {
       return new Response(
         JSON.stringify({
-          error:
-            "Invalid export file: missing version or exportedAt fields",
+          error: "Invalid export file: missing version or exportedAt fields",
         }),
         { status: 400 }
       );
@@ -150,10 +137,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const statements = generateStatements(data);
 
     if (statements.length === 0) {
-      return new Response(
-        JSON.stringify({ error: "No records found in export file" }),
-        { status: 400 }
-      );
+      return new Response(JSON.stringify({ error: "No records found in export file" }), {
+        status: 400,
+      });
     }
 
     // Execute all statements in a batch
@@ -162,7 +148,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     await db.batch(prepared);
 
     // Count successes per table
-    const tables: Array<{ key: TableKey; label: string }> = [
+    const tables: { key: TableKey; label: string }[] = [
       { key: "users", label: "Users" },
       { key: "roles", label: "Roles" },
       { key: "curricula", label: "Curricula" },

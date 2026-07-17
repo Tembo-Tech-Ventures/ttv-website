@@ -36,38 +36,36 @@ const programs = await db.query.program.findMany({
           </tr>
         </thead>
         <tbody class="divide-y divide-teal/10">
-          {programs.length === 0 ? (
-            <tr>
-              <td colspan="5" class="px-4 py-8 text-center text-white/40">
-                No programs yet
-              </td>
-            </tr>
-          ) : (
-            programs.map((p) => (
-              <tr class="text-white/80 hover:bg-teal/10">
-                <td class="px-4 py-3 font-medium text-white">{p.name}</td>
-                <td class="px-4 py-3">{p.curriculum?.title ?? "—"}</td>
-                <td class="px-4 py-3">
-                  {p.startDate
-                    ? new Date(p.startDate).toLocaleDateString()
-                    : "—"}
-                </td>
-                <td class="px-4 py-3">
-                  {p.endDate
-                    ? new Date(p.endDate).toLocaleDateString()
-                    : "—"}
-                </td>
-                <td class="px-4 py-3">
-                  <a
-                    href={`/admin/programs/${p.id}`}
-                    class="text-primary hover:underline"
-                  >
-                    View
-                  </a>
+          {
+            programs.length === 0 ? (
+              <tr>
+                <td colspan="5" class="px-4 py-8 text-center text-white/40">
+                  No programs yet
                 </td>
               </tr>
-            ))
-          )}
+            ) : (
+              programs.map((p) => (
+                <tr class="text-white/80 hover:bg-teal/10">
+                  <td class="px-4 py-3 font-medium text-white">{p.name}</td>
+                  <td class="px-4 py-3">{p.curriculum?.title ?? "—"}</td>
+                  <td class="px-4 py-3">
+                    {p.startDate ? new Date(p.startDate).toLocaleDateString() : "—"}
+                  </td>
+                  <td class="px-4 py-3">
+                    {p.endDate ? new Date(p.endDate).toLocaleDateString() : "—"}
+                  </td>
+                  <td class="px-4 py-3">
+                    <a
+                      href={`/admin/programs/${p.id}`}
+                      class="text-primary hover:underline"
+                    >
+                      View
+                    </a>
+                  </td>
+                </tr>
+              ))
+            )
+          }
         </tbody>
       </table>
     </div>

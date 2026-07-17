@@ -44,12 +44,16 @@ export default function TranscriptPanel({
               >
                 <TimestampBadge
                   seconds={segment.startTime}
-                  onClick={() => onSeek(segment.startTime)}
+                  onClick={() => {
+                    onSeek(segment.startTime);
+                  }}
                 />
                 <button
                   type="button"
                   className="min-w-0 flex-1 text-left text-sm leading-relaxed text-white/85"
-                  onClick={() => onSeek(segment.startTime)}
+                  onClick={() => {
+                    onSeek(segment.startTime);
+                  }}
                 >
                   {segment.speaker && (
                     <span className="mb-1 block text-xs font-semibold uppercase text-white/45">
