@@ -18,6 +18,9 @@ describe("Database Schema", () => {
     expect(schema.recording).toBeDefined();
     expect(schema.transcriptSegment).toBeDefined();
     expect(schema.chatMessage).toBeDefined();
+    expect(schema.projectBoard).toBeDefined();
+    expect(schema.projectBoardMember).toBeDefined();
+    expect(schema.projectBoardTask).toBeDefined();
   });
 
   it("exports all expected relations", () => {
@@ -35,6 +38,9 @@ describe("Database Schema", () => {
     expect(schema.recordingRelations).toBeDefined();
     expect(schema.transcriptSegmentRelations).toBeDefined();
     expect(schema.chatMessageRelations).toBeDefined();
+    expect(schema.projectBoardRelations).toBeDefined();
+    expect(schema.projectBoardMemberRelations).toBeDefined();
+    expect(schema.projectBoardTaskRelations).toBeDefined();
   });
 
   it("programApplication has correct status enum values", () => {
@@ -63,6 +69,14 @@ describe("Database Schema", () => {
       "embedding",
       "complete",
       "failed",
+    ]);
+  });
+
+  it("projectBoardTask has correct workflow status enum values", () => {
+    expect(schema.projectBoardTask.status.enumValues).toEqual([
+      "TODO",
+      "IN_PROGRESS",
+      "DONE",
     ]);
   });
 

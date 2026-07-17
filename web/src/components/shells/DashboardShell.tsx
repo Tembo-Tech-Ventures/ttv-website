@@ -7,11 +7,13 @@ import {
   PiSignOutDuotone,
   PiVideoCameraDuotone,
   PiChatCircleDotsDuotone,
+  PiKanbanDuotone,
 } from "react-icons/pi";
 import { PiListBold } from "react-icons/pi";
 
-const links = [
+export const dashboardLinks = [
   { href: "/dashboard", label: "Dashboard", icon: PiGaugeDuotone },
+  { href: "/dashboard/boards", label: "Project Boards", icon: PiKanbanDuotone },
   { href: "/dashboard/sessions", label: "Sessions", icon: PiVideoCameraDuotone },
   { href: "/dashboard/ask", label: "Ask AI", icon: PiChatCircleDotsDuotone },
   { href: "/dashboard/apply", label: "Apply", icon: PiPaperPlaneTiltDuotone },
@@ -25,7 +27,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-[#2C6964] to-[#013D39]">
       <Sidebar
-        links={links}
+        links={dashboardLinks}
         title="TTV Dashboard"
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}

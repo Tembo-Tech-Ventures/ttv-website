@@ -9,6 +9,7 @@ TTV Website is a full-stack web application for **Tembo Tech Ventures**, a tech 
 - **Public marketing pages** with animated hero sections and GSAP animations
 - **User authentication** via GitHub OAuth (better-auth)
 - **Student application workflow** with dynamic forms and status tracking
+- **Shared project boards** with members, task ownership, deadlines, and progress
 - **Admin dashboards** for managing users, applications, and programs
 - **Certificate generation** for completed programs
 - **Blog** (placeholder — CMS not yet re-implemented)
@@ -44,7 +45,7 @@ ttv-website/
 │   │   │   ├── auth/             # Login, logout
 │   │   │   ├── blog/             # Blog (placeholder)
 │   │   │   ├── certificate/      # Certificate display
-│   │   │   ├── dashboard/        # User dashboard pages
+│   │   │   ├── dashboard/        # User dashboard, boards, sessions, applications
 │   │   │   ├── api/              # API routes
 │   │   │   │   ├── auth/         # better-auth handler
 │   │   │   │   └── admin/        # Admin API (data import)
@@ -112,6 +113,8 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/dashboard` | User dashboard home | Session |
 | `/dashboard/apply` | Program application form | Session |
 | `/dashboard/application/[id]` | View/edit own application | Session |
+| `/dashboard/boards` | Create and list owned/shared project boards | Session |
+| `/dashboard/boards/[id]` | Manage board members, tasks, owners, and deadlines | Board participant |
 | `/dashboard/profile` | User profile | Session |
 | `/admin` | Admin dashboard home | ADMIN |
 | `/admin/users` | User management | ADMIN |
@@ -156,6 +159,15 @@ SQLite via Cloudflare D1, managed with Drizzle ORM. Schema at `web/src/lib/db/sc
 
 **Files**
 - `file` — uploaded file metadata (name, type, size, path, ownerId)
+
+**Project collaboration**
+- `project_board` — shared workspace with one owner
+- `project_board_member` — revocable access for existing TTV users
+- `project_board_task` — assigned, optionally deadlined work in `TODO`, `IN_PROGRESS`, or `DONE`
+
+Board owners manage board details and membership. Owners and members can create,
+edit, assign, move, and delete tasks. Task assignees must be current board
+participants.
 
 ### Conventions
 

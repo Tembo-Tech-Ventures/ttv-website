@@ -1,0 +1,238 @@
+---
+import Card from "@/components/common/Card.astro";
+import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import {
+  BoardValidationError,
+  calculateBoardProgress,
+  mergeAccessibleBoards,
+  parseBoardInput,
+} from "@/lib/boards";
+import * as schema from "@/lib/db/schema";
+import { desc, eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import { env } from "cloudflare:workers";
+
+const user = Astro.locals.user!;
+const db = drizzle(env.DB, { schema });
+let error = "";
+
+if (Astro.request.method === "POST") {
+  try {
+    const input = parseBoardInput(await Astro.request.formData());
+    const [createdBoard] = await db
+      .insert(schema.projectBoard)
+      .values({
+        ...input,
+        ownerId: user.id,
+      })
+      .returning({ id: schema.projectBoard.id });
+
+    return Astro.redirect(
+      `/dashboard/boards/${createdBoard.id}?notice=${encodeURIComponent(
+        "Board created."
+      )}`,
+      303
+    );
+  } catch (caught) {
+    error =
+      caught instanceof BoardValidationError
+        ? caught.message
+        : "The board could not be created. Please try again.";
+  }
+}
+
+const ownedBoards = await db.query.projectBoard.findMany({
+  where: eq(schema.projectBoard.ownerId, user.id),
+  with: {
+    members: true,
+    tasks: true,
+  },
+  orderBy: [desc(schema.projectBoard.updatedAt)],
+});
+
+const memberships = await db.query.projectBoardMember.findMany({
+  where: eq(schema.projectBoardMember.userId, user.id),
+  with: {
+    board: {
+      with: {
+        members: true,
+        tasks: true,
+      },
+    },
+  },
+});
+
+const boards = mergeAccessibleBoards(
+  ownedBoards,
+  memberships.map(({ board }) => board)
+);
+const notice = Astro.url.searchParams.get("notice");
+---
+
+<DashboardLayout title="Project Boards">
+  <div class="space-y-8">
+    <header>
+      <p class="text-xs font-semibold uppercase tracking-[0.25em] text-primary">
+        Shared workspace
+      </p>
+      <h2 class="mt-2 text-3xl font-bold text-white">Project Boards</h2>
+      <p class="mt-2 max-w-2xl text-white/60">
+        Plan work together, make ownership visible, and keep deadlines in one
+        place.
+      </p>
+    </header>
+
+    {error && (
+      <div
+        role="alert"
+        class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-200"
+      >
+        {error}
+      </div>
+    )}
+
+    {notice && (
+      <div
+        role="status"
+        class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-200"
+      >
+        {notice}
+      </div>
+    )}
+
+    <Card>
+      <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)] lg:items-start">
+        <div>
+          <h3 class="text-xl font-semibold text-white">Start a board</h3>
+          <p class="mt-2 max-w-xl text-sm text-white/55">
+            Create a focused workspace, then add existing TTV members and assign
+            tasks.
+          </p>
+        </div>
+
+        <form method="POST" class="space-y-4">
+          <div class="flex flex-col gap-1.5">
+            <label for="name" class="text-sm font-medium text-white/90">
+              Board name <span class="text-primary">*</span>
+            </label>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              maxlength="80"
+              required
+              placeholder="Cohort demo day"
+              class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/35 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <label for="description" class="text-sm font-medium text-white/90">
+              Description
+            </label>
+            <textarea
+              id="description"
+              name="description"
+              rows="3"
+              maxlength="500"
+              placeholder="What is the team working toward?"
+              class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/35 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            ></textarea>
+          </div>
+
+          <button
+            type="submit"
+            class="inline-flex w-full items-center justify-center rounded-md bg-primary px-5 py-2.5 font-semibold text-dark transition-colors hover:bg-primary/90 sm:w-auto"
+          >
+            Create board
+          </button>
+        </form>
+      </div>
+    </Card>
+
+    <section aria-labelledby="your-boards-heading">
+      <div class="mb-4 flex items-end justify-between gap-4">
+        <div>
+          <h3 id="your-boards-heading" class="text-xl font-semibold text-white">
+            Your boards
+          </h3>
+          <p class="mt-1 text-sm text-white/50">
+            Boards you own and boards shared with you.
+          </p>
+        </div>
+        <span class="text-sm text-white/45">
+          {boards.length} {boards.length === 1 ? "board" : "boards"}
+        </span>
+      </div>
+
+      {boards.length === 0 ? (
+        <Card>
+          <div class="py-10 text-center">
+            <p class="text-lg font-medium text-white">No boards yet</p>
+            <p class="mt-2 text-sm text-white/50">
+              Create the first board above and invite your project team.
+            </p>
+          </div>
+        </Card>
+      ) : (
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {boards.map((board) => {
+            const progress = calculateBoardProgress(board.tasks);
+            const isOwner = board.ownerId === user.id;
+
+            return (
+              <a
+                href={`/dashboard/boards/${board.id}`}
+                class="group block rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <Card class="h-full transition-colors group-hover:border-primary/50">
+                  <div class="flex h-full flex-col gap-5">
+                    <div class="flex items-start justify-between gap-4">
+                      <div class="min-w-0">
+                        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                          {isOwner ? "Owner" : "Shared with you"}
+                        </p>
+                        <h4 class="mt-2 truncate text-lg font-semibold text-white">
+                          {board.name}
+                        </h4>
+                      </div>
+                      <span class="shrink-0 rounded-full bg-teal/30 px-2.5 py-1 text-xs text-white/65">
+                        {board.members.length + 1} people
+                      </span>
+                    </div>
+
+                    <p class="line-clamp-2 min-h-10 text-sm text-white/55">
+                      {board.description || "No board description yet."}
+                    </p>
+
+                    <div class="mt-auto">
+                      <div class="mb-2 flex items-center justify-between text-xs text-white/50">
+                        <span>
+                          {progress.completed} of {progress.total} complete
+                        </span>
+                        <span>{progress.percentage}%</span>
+                      </div>
+                      <div
+                        class="h-2 overflow-hidden rounded-full bg-teal/30"
+                        role="progressbar"
+                        aria-label={`${board.name} completion`}
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        aria-valuenow={progress.percentage}
+                      >
+                        <div
+                          class="h-full rounded-full bg-primary"
+                          style={`width: ${progress.percentage}%`}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              </a>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  </div>
+</DashboardLayout>

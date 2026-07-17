@@ -1,4 +1,11 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import {
+  index,
+  integer,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import type { drizzle } from "drizzle-orm/d1";
@@ -41,6 +48,14 @@ export const userRelations = relations(user, ({ many }) => ({
   programRoles: many(programRole),
   programApplications: many(programApplication),
   chatMessages: many(chatMessage),
+  ownedProjectBoards: many(projectBoard),
+  projectBoardMemberships: many(projectBoardMember),
+  assignedProjectBoardTasks: many(projectBoardTask, {
+    relationName: "projectBoardTaskAssignee",
+  }),
+  createdProjectBoardTasks: many(projectBoardTask, {
+    relationName: "projectBoardTaskCreator",
+  }),
 }));
 
 // ─── Account (matches better-auth expected schema) ─────────
@@ -336,3 +351,122 @@ export const chatMessage = sqliteTable("chat_message", {
 export const chatMessageRelations = relations(chatMessage, ({ one }) => ({
   user: one(user, { fields: [chatMessage.userId], references: [user.id] }),
 }));
+
+// ─── Project Board ─────────────────────────────────────────
+
+export const projectBoard = sqliteTable(
+  "project_board",
+  {
+    id: cuid("id"),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    ownerId: text("ownerId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    ...timestamps,
+  },
+  (table) => [index("project_board_owner_idx").on(table.ownerId)]
+);
+
+export const projectBoardRelations = relations(
+  projectBoard,
+  ({ one, many }) => ({
+    owner: one(user, {
+      fields: [projectBoard.ownerId],
+      references: [user.id],
+    }),
+    members: many(projectBoardMember),
+    tasks: many(projectBoardTask),
+  })
+);
+
+// ─── Project Board Member ──────────────────────────────────
+
+export const projectBoardMember = sqliteTable(
+  "project_board_member",
+  {
+    id: cuid("id"),
+    boardId: text("boardId")
+      .notNull()
+      .references(() => projectBoard.id, { onDelete: "cascade" }),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("project_board_member_board_user_unique").on(
+      table.boardId,
+      table.userId
+    ),
+    index("project_board_member_user_idx").on(table.userId),
+  ]
+);
+
+export const projectBoardMemberRelations = relations(
+  projectBoardMember,
+  ({ one }) => ({
+    board: one(projectBoard, {
+      fields: [projectBoardMember.boardId],
+      references: [projectBoard.id],
+    }),
+    user: one(user, {
+      fields: [projectBoardMember.userId],
+      references: [user.id],
+    }),
+  })
+);
+
+// ─── Project Board Task ────────────────────────────────────
+
+export const projectBoardTask = sqliteTable(
+  "project_board_task",
+  {
+    id: cuid("id"),
+    boardId: text("boardId")
+      .notNull()
+      .references(() => projectBoard.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    status: text("status", {
+      enum: ["TODO", "IN_PROGRESS", "DONE"],
+    })
+      .notNull()
+      .default("TODO"),
+    assigneeId: text("assigneeId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    dueDate: integer("dueDate", { mode: "timestamp" }),
+    createdById: text("createdById")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    ...timestamps,
+  },
+  (table) => [
+    index("project_board_task_board_status_idx").on(
+      table.boardId,
+      table.status
+    ),
+    index("project_board_task_assignee_idx").on(table.assigneeId),
+  ]
+);
+
+export const projectBoardTaskRelations = relations(
+  projectBoardTask,
+  ({ one }) => ({
+    board: one(projectBoard, {
+      fields: [projectBoardTask.boardId],
+      references: [projectBoard.id],
+    }),
+    assignee: one(user, {
+      fields: [projectBoardTask.assigneeId],
+      references: [user.id],
+      relationName: "projectBoardTaskAssignee",
+    }),
+    creator: one(user, {
+      fields: [projectBoardTask.createdById],
+      references: [user.id],
+      relationName: "projectBoardTaskCreator",
+    }),
+  })
+);
