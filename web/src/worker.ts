@@ -3,8 +3,8 @@ import { handle } from "@astrojs/cloudflare/handler";
 import { processRecordingMessage } from "@/lib/recordings/pipeline";
 
 export class FfmpegContainer extends Container<Env> {
-  defaultPort = 8080;
-  sleepAfter = "2m";
+  override defaultPort = 8080;
+  override sleepAfter = "2m";
 }
 
 FfmpegContainer.outboundByHost = {
@@ -20,21 +20,22 @@ FfmpegContainer.outboundByHost = {
       const object = await env.BUCKET.get(key);
       return new Response(object?.body ?? null, {
         status: object ? 200 : 404,
-        headers: object
+        ...(object
           ? {
-              "content-type":
-                object.httpMetadata?.contentType ?? "application/octet-stream",
-              "content-length": String(object.size),
+              headers: {
+                "content-type":
+                  object.httpMetadata?.contentType ?? "application/octet-stream",
+                "content-length": String(object.size),
+              },
             }
-          : undefined,
+          : {}),
       });
     }
 
     if (request.method === "PUT") {
       await env.BUCKET.put(key, request.body, {
         httpMetadata: {
-          contentType:
-            request.headers.get("content-type") ?? "application/octet-stream",
+          contentType: request.headers.get("content-type") ?? "application/octet-stream",
         },
       });
       return Response.json({ ok: true });
@@ -55,4 +56,4 @@ export default {
       message.ack();
     }
   },
-} satisfies ExportedHandler<Env, unknown>;
+} satisfies ExportedHandler<Env>;

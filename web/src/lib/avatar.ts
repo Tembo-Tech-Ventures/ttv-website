@@ -66,8 +66,7 @@ export async function storeProfilePhoto(
     throw new AvatarUploadError("Please upload a valid image file.");
   }
 
-  const transformedImage = await env.IMAGES
-    .input(uploadBlob.stream())
+  const transformedImage = await env.IMAGES.input(uploadBlob.stream())
     .transform({
       fit: "scale-down",
       width: AVATAR_MAX_DIMENSION,
@@ -78,10 +77,9 @@ export async function storeProfilePhoto(
       quality: 85,
     });
 
-  const response = await transformedImage.response();
+  const response = transformedImage.response();
   const contentType =
-    response.headers.get("content-type") ??
-    (await transformedImage.contentType());
+    response.headers.get("content-type") ?? transformedImage.contentType();
   const objectKey = `${AVATAR_OBJECT_PREFIX}/${params.userId}/${crypto.randomUUID()}.webp`;
   const storedBlob = await response.blob();
 

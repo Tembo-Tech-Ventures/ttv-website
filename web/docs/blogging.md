@@ -29,7 +29,7 @@ variables to enable uploads:
 - `S3_ACCESS_KEY_ID`
 - `S3_SECRET_ACCESS_KEY`
 - `S3_BUCKET`
-- `S3_PUBLIC_BASE_URL` *(optional; defaults to standard S3 URL)*
+- `S3_PUBLIC_BASE_URL` _(optional; defaults to standard S3 URL)_
 
 ## RSS
 

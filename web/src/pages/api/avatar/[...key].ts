@@ -1,11 +1,9 @@
 import { env } from "cloudflare:workers";
 
 export async function GET({ params }: { params: { key?: string | string[] } }) {
-  const requestedKey = Array.isArray(params.key)
-    ? params.key.join("/")
-    : params.key;
+  const requestedKey = Array.isArray(params.key) ? params.key.join("/") : params.key;
 
-  if (!requestedKey || !requestedKey.startsWith("avatars/")) {
+  if (!requestedKey?.startsWith("avatars/")) {
     return new Response("Not found", { status: 404 });
   }
 

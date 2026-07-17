@@ -17,7 +17,11 @@ describe("Database Schema", () => {
     expect(schema.programApplication).toBeDefined();
     expect(schema.recording).toBeDefined();
     expect(schema.transcriptSegment).toBeDefined();
+    expect(schema.chatConversation).toBeDefined();
     expect(schema.chatMessage).toBeDefined();
+    expect(schema.projectBoard).toBeDefined();
+    expect(schema.projectBoardMember).toBeDefined();
+    expect(schema.projectBoardTask).toBeDefined();
   });
 
   it("exports all expected relations", () => {
@@ -34,7 +38,11 @@ describe("Database Schema", () => {
     expect(schema.programApplicationRelations).toBeDefined();
     expect(schema.recordingRelations).toBeDefined();
     expect(schema.transcriptSegmentRelations).toBeDefined();
+    expect(schema.chatConversationRelations).toBeDefined();
     expect(schema.chatMessageRelations).toBeDefined();
+    expect(schema.projectBoardRelations).toBeDefined();
+    expect(schema.projectBoardMemberRelations).toBeDefined();
+    expect(schema.projectBoardTaskRelations).toBeDefined();
   });
 
   it("programApplication has correct status enum values", () => {
@@ -64,6 +72,20 @@ describe("Database Schema", () => {
       "complete",
       "failed",
     ]);
+  });
+
+  it("projectBoardTask has correct workflow status enum values", () => {
+    expect(schema.projectBoardTask.status.enumValues).toEqual([
+      "TODO",
+      "IN_PROGRESS",
+      "DONE",
+    ]);
+  });
+
+  it("chat messages belong to typed conversations and preserve model metadata", () => {
+    expect(schema.chatMessage.role.enumValues).toEqual(["user", "assistant"]);
+    expect(schema.chatMessage.conversationId).toBeDefined();
+    expect(schema.chatMessage.model).toBeDefined();
   });
 
   it("user email has unique constraint", () => {

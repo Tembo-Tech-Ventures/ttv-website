@@ -58,6 +58,14 @@ export function normalizeSlug(value) {
   return slug;
 }
 
+export function deriveRateLimitNamespaceId(workerName) {
+  const value = Number.parseInt(
+    createHash("sha256").update(workerName).digest("hex").slice(0, 8),
+    16
+  );
+  return String(value === 0 ? 1 : value);
+}
+
 function joinName(parts, maxLength = 63) {
   const value = parts.filter(Boolean).join("-");
   return value.length <= maxLength ? value : value.slice(0, maxLength);
@@ -149,8 +157,7 @@ export async function cfApi(resourcePath, { method = "GET", body } = {}) {
   const payload = rawText ? JSON.parse(rawText) : {};
   if (!response.ok || payload.success === false) {
     const details =
-      payload?.errors?.map((entry) => entry.message).join("; ") ||
-      response.statusText;
+      payload?.errors?.map((entry) => entry.message).join("; ") || response.statusText;
     throw new Error(`${method} ${resourcePath} failed: ${details}`);
   }
 
@@ -254,9 +261,7 @@ export async function ensureVectorizeIndex(name) {
 }
 
 export async function ensureAiGateway(name) {
-  const existing = await cfApi(
-    `/ai-gateway/gateways/${encodeURIComponent(name)}`
-  );
+  const existing = await cfApi(`/ai-gateway/gateways/${encodeURIComponent(name)}`);
   if (existing) {
     return existing;
   }
@@ -276,10 +281,9 @@ export async function ensureAiGateway(name) {
 }
 
 export async function deleteAiGatewayByName(name) {
-  const deleted = await cfApi(
-    `/ai-gateway/gateways/${encodeURIComponent(name)}`,
-    { method: "DELETE" }
-  );
+  const deleted = await cfApi(`/ai-gateway/gateways/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
   return deleted !== null;
 }
 
@@ -294,14 +298,7 @@ export async function removeQueueWorkerConsumer(
   runner = runWrangler
 ) {
   try {
-    await runner([
-      "queues",
-      "consumer",
-      "worker",
-      "remove",
-      queueName,
-      workerName,
-    ]);
+    await runner(["queues", "consumer", "worker", "remove", queueName, workerName]);
     return true;
   } catch (error) {
     if (isMissingResourceError(error)) return false;
@@ -419,8 +416,7 @@ export function createGeneratedWranglerConfig({
   );
 
   const deployment = resolveDeploymentMetadata();
-  const agentAuthEnabled =
-    getOptionalEnv("CLOUDFLARE_AGENT_AUTH_ENABLED") === "true";
+  const agentAuthEnabled = getOptionalEnv("CLOUDFLARE_AGENT_AUTH_ENABLED") === "true";
   const workersDevEnabled = !primaryDomain && !redirectDomain;
   if (
     agentAuthEnabled &&
@@ -464,14 +460,11 @@ export function createGeneratedWranglerConfig({
       BETTER_AUTH_URL: betterAuthUrl,
       DEPLOYMENT_ENVIRONMENT: deployment.environment,
       DEPLOYMENT_VERSION: deployment.version,
-      ...(agentAuthEnabled
-        ? { AGENT_AUTH_ENABLED: "true" }
-        : {}),
+      ...(agentAuthEnabled ? { AGENT_AUTH_ENABLED: "true" } : {}),
       AI_GATEWAY_ACCOUNT_ID: getRequiredEnv("CLOUDFLARE_ACCOUNT_ID"),
       AI_GATEWAY_NAME: aiGatewayName,
       AI_GATEWAY_MODEL:
-        getOptionalEnv("CLOUDFLARE_AI_GATEWAY_MODEL") ??
-        DEFAULT_AI_GATEWAY_MODEL,
+        getOptionalEnv("CLOUDFLARE_AI_GATEWAY_MODEL") ?? DEFAULT_AI_GATEWAY_MODEL,
       ...(primaryDomain ? { PRIMARY_DOMAIN: primaryDomain } : {}),
       ...(redirectDomain ? { REDIRECT_DOMAIN: redirectDomain } : {}),
     },
@@ -498,6 +491,16 @@ export function createGeneratedWranglerConfig({
         index_name: vectorizeIndexName,
       },
     ],
+    ratelimits: [
+      {
+        name: "CHAT_RATE_LIMITER",
+        namespace_id: deriveRateLimitNamespaceId(workerName),
+        simple: {
+          limit: 20,
+          period: 60,
+        },
+      },
+    ],
     queues: {
       producers: [
         {
@@ -516,7 +519,10 @@ export function createGeneratedWranglerConfig({
     containers: [
       {
         class_name: "FfmpegContainer",
-        image: path.relative(generatedDir, path.join(webRoot, "containers", "ffmpeg", "Dockerfile")),
+        image: path.relative(
+          generatedDir,
+          path.join(webRoot, "containers", "ffmpeg", "Dockerfile")
+        ),
         max_instances: 3,
       },
     ],
@@ -536,12 +542,10 @@ export function createGeneratedWranglerConfig({
     ],
     ...(primaryDomain || redirectDomain
       ? {
-          routes: [primaryDomain, redirectDomain]
-            .filter(Boolean)
-            .map((domain) => ({
-              pattern: domain,
-              custom_domain: true,
-            })),
+          routes: [primaryDomain, redirectDomain].filter(Boolean).map((domain) => ({
+            pattern: domain,
+            custom_domain: true,
+          })),
         }
       : {}),
   };
@@ -562,22 +566,26 @@ export function getSecretBindings() {
   const previewSecret = isAgentPreview
     ? getRequiredEnv("AGENT_PREVIEW_SECRET")
     : undefined;
-  const bindings = [{
-    key: "BETTER_AUTH_SECRET",
-    value: isAgentPreview
-      ? deriveAgentPreviewAuthSecret(previewSecret, environmentName)
-      : getOptionalEnv("BETTER_AUTH_SECRET") ?? deriveLegacyBetterAuthSecret(),
-  }, {
-    key: "GITHUB_CLIENT_ID",
-    value: isAgentPreview
-      ? "agent-preview-oauth-disabled"
-      : getRequiredEnv("GITHUB_CLIENT_ID"),
-  }, {
-    key: "GITHUB_CLIENT_SECRET",
-    value: isAgentPreview
-      ? "agent-preview-oauth-disabled"
-      : getRequiredEnv("GITHUB_CLIENT_SECRET"),
-  }];
+  const bindings = [
+    {
+      key: "BETTER_AUTH_SECRET",
+      value: isAgentPreview
+        ? deriveAgentPreviewAuthSecret(previewSecret, environmentName)
+        : (getOptionalEnv("BETTER_AUTH_SECRET") ?? deriveLegacyBetterAuthSecret()),
+    },
+    {
+      key: "GITHUB_CLIENT_ID",
+      value: isAgentPreview
+        ? "agent-preview-oauth-disabled"
+        : getRequiredEnv("GITHUB_CLIENT_ID"),
+    },
+    {
+      key: "GITHUB_CLIENT_SECRET",
+      value: isAgentPreview
+        ? "agent-preview-oauth-disabled"
+        : getRequiredEnv("GITHUB_CLIENT_SECRET"),
+    },
+  ];
 
   // Optional: scoped Workers AI token for AI Gateway unified-mode requests.
   // When absent, the worker falls back to the Workers AI binding.
@@ -598,19 +606,11 @@ export async function runWrangler(args, { input } = {}) {
 }
 
 export async function runNpm(args, { input } = {}) {
-  return runCommand(
-    process.platform === "win32" ? "npm.cmd" : "npm",
-    args,
-    { input }
-  );
+  return runCommand(process.platform === "win32" ? "npm.cmd" : "npm", args, { input });
 }
 
 export async function runGit(args, { input } = {}) {
-  return runCommand(
-    process.platform === "win32" ? "git.exe" : "git",
-    args,
-    { input }
-  );
+  return runCommand(process.platform === "win32" ? "git.exe" : "git", args, { input });
 }
 
 async function runCommand(binary, args, { input } = {}) {

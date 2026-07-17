@@ -54,9 +54,7 @@ describe("GitHub delivery contracts", () => {
   });
 
   it("provides an isolated GitHub-hosted agent deploy path with staging-scoped credentials", async () => {
-    const workflow = await readRepositoryFile(
-      ".github/workflows/cloudflare-agent.yml"
-    );
+    const workflow = await readRepositoryFile(".github/workflows/cloudflare-agent.yml");
 
     expect(workflow).toContain("environment: staging");
     expect(workflow).toContain("npm run cf:agent -- context");
@@ -68,7 +66,9 @@ describe("GitHub delivery contracts", () => {
     expect(workflow).not.toContain("STAGING_AGENT_TOKEN");
     expect(workflow).toContain("npx wrangler tail");
     expect(workflow).toContain("actions/upload-artifact@v4");
-    expect(workflow).toContain("CLOUDFLARE_PROTECTED_ENVIRONMENTS: production,prod,staging");
+    expect(workflow).toContain(
+      "CLOUDFLARE_PROTECTED_ENVIRONMENTS: production,prod,staging"
+    );
   });
 
   it("deploys every pull request to its own environment and tears it down on close", async () => {
@@ -104,9 +104,7 @@ describe("GitHub delivery contracts", () => {
   });
 
   it("keeps credentialed stale cleanup dry-run-first and protected", async () => {
-    const workflow = await readRepositoryFile(
-      ".github/workflows/cloudflare-sweep.yml"
-    );
+    const workflow = await readRepositoryFile(".github/workflows/cloudflare-sweep.yml");
 
     expect(workflow).toContain("default: false");
     expect(workflow).toContain('default: "72"');
@@ -118,7 +116,9 @@ describe("GitHub delivery contracts", () => {
       "SWEEP_MAX_AGE_HOURS: ${{ github.event_name == 'schedule' && '72' || inputs.max_age_hours }}"
     );
     expect(workflow).toContain('if [[ "${SWEEP_EXECUTE}" == "true" ]]');
-    expect(workflow).toContain("CLOUDFLARE_PROTECTED_ENVIRONMENTS: production,prod,staging");
+    expect(workflow).toContain(
+      "CLOUDFLARE_PROTECTED_ENVIRONMENTS: production,prod,staging"
+    );
     expect(workflow).toContain("pull-requests: read");
     expect(workflow).toContain("gh pr list --state open");
     expect(workflow).toContain(
@@ -130,17 +130,16 @@ describe("GitHub delivery contracts", () => {
   it("requires unit, static, browser-discovery, and security gates in CI", async () => {
     const workflow = await readRepositoryFile(".github/workflows/ci.yml");
 
+    expect(workflow).toContain("npm run format:check");
     expect(workflow).toContain("npm run lint");
     expect(workflow).toContain("npm run typecheck");
-    expect(workflow).toContain("npm test");
+    expect(workflow).toContain("npm run test:coverage");
     expect(workflow).toContain("npm run test:e2e:list");
     expect(workflow).toContain("npm run audit:ci");
   });
 
   it("records review and required-check protection for the default branch", async () => {
-    const ruleset = JSON.parse(
-      await readRepositoryFile(".github/rulesets/main.json")
-    );
+    const ruleset = JSON.parse(await readRepositoryFile(".github/rulesets/main.json"));
     const pullRequest = ruleset.rules.find(({ type }) => type === "pull_request");
     const statusChecks = ruleset.rules.find(
       ({ type }) => type === "required_status_checks"
@@ -154,12 +153,7 @@ describe("GitHub delivery contracts", () => {
     });
     expect(
       statusChecks.parameters.required_status_checks.map(({ context }) => context)
-    ).toEqual([
-      "Lint",
-      "Test",
-      "Security",
-      "preview / cloudflare-with-environment",
-    ]);
+    ).toEqual(["Lint", "Test", "Security", "preview / cloudflare-with-environment"]);
   });
 
   it("runs live journeys through the token-safe wrapper on desktop and mobile", async () => {
@@ -168,9 +162,7 @@ describe("GitHub delivery contracts", () => {
       readRepositoryFile("web/playwright.config.ts"),
     ]);
 
-    expect(JSON.parse(packageJson).scripts["test:e2e"]).toContain(
-      "run-live-e2e.mjs"
-    );
+    expect(JSON.parse(packageJson).scripts["test:e2e"]).toContain("run-live-e2e.mjs");
     expect(playwright).toContain('name: "chromium"');
     expect(playwright).toContain('name: "mobile-chromium"');
   });

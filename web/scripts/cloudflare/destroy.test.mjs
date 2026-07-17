@@ -34,9 +34,7 @@ describe("destroyEnvironment", () => {
       deleteDatabase: operation("database"),
     };
 
-    await expect(
-      destroyEnvironment(context, dependencies)
-    ).resolves.toEqual({
+    await expect(destroyEnvironment(context, dependencies)).resolves.toEqual({
       environment: "agent-123",
       queueConsumerRemoved: true,
       workerDeleted: true,

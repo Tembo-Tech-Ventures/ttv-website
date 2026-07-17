@@ -1,7 +1,7 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import Grain from "@/components/common/Grain.astro";
-import GitHubSignInButton from "@/components/auth/GitHubSignInButton";
+import { GitHubSignInButton } from "@/components/auth/GitHubSignInButton";
 
 /**
  * Auth / Login — split-screen editorial.
@@ -27,13 +27,19 @@ if (Astro.locals.user) {
     <section class="relative flex items-center justify-center px-6 py-16 md:px-16">
       <div class="w-full max-w-md">
         <a href="/" class="inline-flex items-baseline text-ink-primary">
-          <span class="font-heading text-base" style="letter-spacing: -0.02em;">TEMBO</span>
-          <span class="ml-3 font-body text-[10px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
+          <span class="font-heading text-base" style="letter-spacing: -0.02em;"
+            >TEMBO</span
+          >
+          <span
+            class="ml-3 font-body text-[10px] font-semibold uppercase tracking-[0.32em] text-ink-muted"
+          >
             Tech · Ventures
           </span>
         </a>
 
-        <p class="font-body mt-12 text-xs font-semibold uppercase tracking-[0.4em] text-primary">
+        <p
+          class="font-body mt-12 text-xs font-semibold uppercase tracking-[0.4em] text-primary"
+        >
           § Welcome back
         </p>
 
@@ -47,8 +53,8 @@ if (Astro.locals.user) {
         </h1>
 
         <p class="font-body mt-6 text-lg text-ink-secondary">
-          Sign in and get back to building. Your cohort, applications, and
-          mentor notes are all waiting.
+          Sign in and get back to building. Your cohort, applications, and mentor notes
+          are all waiting.
         </p>
 
         <div class="mt-10 space-y-4">
@@ -66,7 +72,9 @@ if (Astro.locals.user) {
       style="background-color: var(--color-bg-raised);"
     >
       <div class="relative max-w-lg space-y-10">
-        <p class="font-body text-xs font-semibold uppercase tracking-[0.4em] text-primary">
+        <p
+          class="font-body text-xs font-semibold uppercase tracking-[0.4em] text-primary"
+        >
           § The mission
         </p>
         <blockquote
@@ -78,8 +86,8 @@ if (Astro.locals.user) {
           <span class="block text-primary">We help grow the ecosystem around them.</span>
         </blockquote>
         <p class="font-body text-base text-ink-secondary md:text-lg">
-          A small community of engineers across Africa, learning to build real
-          software together — and staying in touch long after the cohort ends.
+          A small community of engineers across Africa, learning to build real software
+          together — and staying in touch long after the cohort ends.
         </p>
       </div>
     </aside>

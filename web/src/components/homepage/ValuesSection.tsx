@@ -18,11 +18,28 @@ interface Value {
 }
 
 const VALUES: Value[] = [
-  { word: "COMMUNITY", commitment: "Less a program, more a group of people building together." },
-  { word: "PHILOSOPHY", commitment: "We teach how to see a system, not a syllabus to memorize." },
-  { word: "EQUITY", commitment: "No degree required. English required \u2014 fluency isn't." },
-  { word: "CONTINUITY", commitment: "We stay in touch after the cohort. We make it easy to reconnect when life pulls someone away." },
-  { word: "HONESTY", commitment: "Two students in fintech internships so far. No job placements yet \u2014 we'll tell you when there are." },
+  {
+    word: "COMMUNITY",
+    commitment: "Less a program, more a group of people building together.",
+  },
+  {
+    word: "PHILOSOPHY",
+    commitment: "We teach how to see a system, not a syllabus to memorize.",
+  },
+  {
+    word: "EQUITY",
+    commitment: "No degree required. English required \u2014 fluency isn't.",
+  },
+  {
+    word: "CONTINUITY",
+    commitment:
+      "We stay in touch after the cohort. We make it easy to reconnect when life pulls someone away.",
+  },
+  {
+    word: "HONESTY",
+    commitment:
+      "Two students in fintech internships so far. No job placements yet \u2014 we'll tell you when there are.",
+  },
 ];
 
 export default function ValuesSection() {
@@ -39,7 +56,11 @@ export default function ValuesSection() {
           opacity: 0,
           duration: 1,
           ease: "power3.out",
-          scrollTrigger: { trigger: row, start: "top 80%", toggleActions: "play none none reverse" },
+          scrollTrigger: {
+            trigger: row,
+            start: "top 80%",
+            toggleActions: "play none none reverse",
+          },
         });
         gsap.from(commitment, {
           x: 24,
@@ -47,12 +68,18 @@ export default function ValuesSection() {
           duration: 0.7,
           ease: "power3.out",
           delay: 0.2,
-          scrollTrigger: { trigger: row, start: "top 80%", toggleActions: "play none none reverse" },
+          scrollTrigger: {
+            trigger: row,
+            start: "top 80%",
+            toggleActions: "play none none reverse",
+          },
         });
       });
     }, sectionRef);
 
-    return () => ctx.revert();
+    return () => {
+      ctx.revert();
+    };
   }, []);
 
   return (
@@ -67,8 +94,8 @@ export default function ValuesSection() {
             § 02 Values as commitments
           </p>
           <p className="max-w-md font-body text-base text-ink-secondary md:text-lg">
-            Abstract nouns are easy. These are the five things we&apos;ll
-            actually put in writing.
+            Abstract nouns are easy. These are the five things we&apos;ll actually put in
+            writing.
           </p>
         </div>
 

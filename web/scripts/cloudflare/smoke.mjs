@@ -43,12 +43,7 @@ function sleep(durationMs) {
   return new Promise((resolve) => globalThis.setTimeout(resolve, durationMs));
 }
 
-function assertExpectedHealth(
-  health,
-  healthUrl,
-  expectedEnvironment,
-  expectedVersion
-) {
+function assertExpectedHealth(health, healthUrl, expectedEnvironment, expectedVersion) {
   if (health.status !== "ok" || health.service !== "ttv-website") {
     throw new Error(`${healthUrl} returned an unexpected health payload.`);
   }
@@ -79,12 +74,7 @@ async function waitForExpectedHealth({
     try {
       const response = await fetchChecked(fetchImpl, healthUrl, timeoutMs);
       const health = await response.json();
-      assertExpectedHealth(
-        health,
-        healthUrl,
-        expectedEnvironment,
-        expectedVersion
-      );
+      assertExpectedHealth(health, healthUrl, expectedEnvironment, expectedVersion);
       return health;
     } catch (error) {
       lastError = error;
@@ -149,8 +139,7 @@ async function main() {
 }
 
 const isDirectRun =
-  process.argv[1] &&
-  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isDirectRun) {
   main().catch((error) => {

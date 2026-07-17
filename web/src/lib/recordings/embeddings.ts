@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
-import type { Database } from "@/lib/db/schema";
+import type { Database } from "@/lib/db/database";
 
 export interface TranscriptChunk {
   id: string;
@@ -11,7 +11,7 @@ export interface TranscriptChunk {
 }
 
 export function chunkTranscriptSegments(
-  segments: Array<{ id: string; text: string; startTime: number; endTime: number }>,
+  segments: { id: string; text: string; startTime: number; endTime: number }[],
   maxWords = 180
 ) {
   const chunks: TranscriptChunk[] = [];

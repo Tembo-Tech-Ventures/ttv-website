@@ -33,13 +33,8 @@ describe("prepareAgentEnvironment", () => {
 describe("resolveAgentDeploymentVersion", () => {
   it("uses the GitHub revision in hosted automation and the git fallback locally", () => {
     expect(
-      resolveAgentDeploymentVersion(
-        { GITHUB_SHA: "full-github-sha" },
-        "short-local-sha"
-      )
+      resolveAgentDeploymentVersion({ GITHUB_SHA: "full-github-sha" }, "short-local-sha")
     ).toBe("full-github-sha");
-    expect(resolveAgentDeploymentVersion({}, "short-local-sha")).toBe(
-      "short-local-sha"
-    );
+    expect(resolveAgentDeploymentVersion({}, "short-local-sha")).toBe("short-local-sha");
   });
 });

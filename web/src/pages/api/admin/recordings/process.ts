@@ -3,25 +3,24 @@ import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
+import {
+  parseRecordingProcessRequest,
+  RecordingProcessRequestError,
+} from "@/lib/recordings/process-request";
 
 export const POST: APIRoute = async ({ request, locals }) => {
   if (!locals.isAdmin) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const formData =
-    request.headers.get("content-type")?.includes("application/json")
-      ? null
-      : await request.formData();
-  const body = formData
-    ? null
-    : ((await request.json()) as { recordingId?: string });
-  const recordingId =
-    (formData?.get("recordingId") as string | null) ?? body?.recordingId;
-
-  if (!recordingId) {
-    return Response.json({ error: "recordingId is required" }, { status: 400 });
+  let requestInput;
+  try {
+    requestInput = await parseRecordingProcessRequest(request);
+  } catch (error) {
+    if (!(error instanceof RecordingProcessRequestError)) throw error;
+    return Response.json({ error: error.message }, { status: 400 });
   }
+  const { recordingId, submittedAsForm } = requestInput;
 
   const db = drizzle(env.DB, { schema });
   const existing = await db.query.recording.findFirst({
@@ -42,7 +41,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     recordingId,
   });
 
-  if (formData) {
+  if (submittedAsForm) {
     return new Response(null, {
       status: 303,
       headers: { location: `/admin/recordings/${recordingId}` },

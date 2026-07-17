@@ -9,8 +9,8 @@ import {
   PiDatabaseDuotone,
   PiVideoCameraDuotone,
   PiKeyDuotone,
+  PiListBold,
 } from "react-icons/pi";
-import { PiListBold } from "react-icons/pi";
 
 const primaryLinks = [
   { href: "/admin", label: "Admin Home", icon: PiGaugeDuotone },
@@ -47,14 +47,18 @@ export default function AdminShell({
         links={links}
         title="TTV Admin"
         isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        onClose={() => {
+          setSidebarOpen(false);
+        }}
       />
 
       <div className="flex flex-1 flex-col">
         {/* Top bar */}
         <header className="flex items-center gap-4 border-b border-teal/20 px-4 py-3 lg:px-6">
           <button
-            onClick={() => setSidebarOpen(true)}
+            onClick={() => {
+              setSidebarOpen(true);
+            }}
             className="rounded-md p-1.5 text-white/60 hover:text-white lg:hidden"
           >
             <PiListBold className="h-6 w-6" />

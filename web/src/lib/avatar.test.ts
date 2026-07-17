@@ -4,12 +4,12 @@ import { extractAvatarObjectKey, storeProfilePhoto } from "./avatar";
 function createMockImages() {
   const transform = vi.fn().mockReturnValue({
     output: vi.fn().mockResolvedValue({
-      response: vi.fn().mockResolvedValue(
+      response: vi.fn().mockReturnValue(
         new Response(new Uint8Array([1, 2, 3]), {
           headers: { "content-type": "image/webp" },
         })
       ),
-      contentType: vi.fn().mockResolvedValue("image/webp"),
+      contentType: vi.fn().mockReturnValue("image/webp"),
     }),
   });
 

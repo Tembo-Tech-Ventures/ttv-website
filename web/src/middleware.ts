@@ -2,6 +2,7 @@ import { defineMiddleware } from "astro:middleware";
 import { env } from "cloudflare:workers";
 import { createAuth } from "@/lib/auth";
 import { isHealthCheckPath } from "@/lib/health";
+import { needsAdminContext } from "@/lib/admin-context";
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const { locals, request, url, redirect } = context;
@@ -35,13 +36,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
-  // Protect /admin/* and /api/admin/* routes — require ADMIN role
-  if (url.pathname.startsWith("/admin") || url.pathname.startsWith("/api/admin")) {
-    if (!locals.user) {
-      return redirect("/auth/login");
-    }
+  const isAdminRoute =
+    url.pathname.startsWith("/admin") || url.pathname.startsWith("/api/admin");
+  if (isAdminRoute && !locals.user) return redirect("/auth/login");
 
-    // Check admin role via D1 query
+  // Chat uses the same role context to grant administrators access to all
+  // approved transcript sources, without making the chat route admin-only.
+  if (locals.user && needsAdminContext(url.pathname)) {
     const db = env.DB;
     const result = await db
       .prepare(
@@ -53,11 +54,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
       .bind(locals.user.id)
       .first();
 
-    if (!result) {
-      return redirect("/dashboard");
-    }
-
-    locals.isAdmin = true;
+    locals.isAdmin = Boolean(result);
+    if (isAdminRoute && !locals.isAdmin) return redirect("/dashboard");
   }
 
   return next();

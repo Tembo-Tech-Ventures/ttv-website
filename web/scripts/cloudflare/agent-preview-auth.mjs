@@ -111,13 +111,7 @@ export async function seedAgentPreviewAccess({
        "userId" = excluded."userId",
        "roleId" = excluded."roleId",
        "updatedAt" = excluded."updatedAt"`,
-    [
-      "ttv-agent-preview-user-role",
-      AGENT_PREVIEW_USER_ID,
-      roleId,
-      createdAt,
-      createdAt,
-    ]
+    ["ttv-agent-preview-user-role", AGENT_PREVIEW_USER_ID, roleId, createdAt, createdAt]
   );
 
   await executeQuery(

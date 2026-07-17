@@ -1,4 +1,4 @@
-import { Dialog, Transition } from "@headlessui/react";
+import { Dialog, DialogPanel, Transition, TransitionChild } from "@headlessui/react";
 import { Fragment } from "react";
 import type { IconType } from "react-icons";
 import { PiXBold } from "react-icons/pi";
@@ -22,7 +22,12 @@ function NavLinks({ links }: { links: SidebarLink[] }) {
   return (
     <nav className="flex flex-col gap-1">
       {links.map(({ href, label, icon: Icon }) => {
-        const isActive = currentPath === href || (href !== "/" && href !== "/admin" && href !== "/dashboard" && currentPath.startsWith(href));
+        const isActive =
+          currentPath === href ||
+          (href !== "/" &&
+            href !== "/admin" &&
+            href !== "/dashboard" &&
+            currentPath.startsWith(href));
         return (
           <a
             key={href}
@@ -49,7 +54,7 @@ export default function Sidebar({ links, title, isOpen, onClose }: SidebarProps)
       {/* Mobile sidebar overlay */}
       <Transition show={isOpen} as={Fragment}>
         <Dialog onClose={onClose} className="relative z-50 lg:hidden">
-          <Transition.Child
+          <TransitionChild
             as={Fragment}
             enter="transition-opacity ease-linear duration-200"
             enterFrom="opacity-0"
@@ -59,9 +64,9 @@ export default function Sidebar({ links, title, isOpen, onClose }: SidebarProps)
             leaveTo="opacity-0"
           >
             <div className="fixed inset-0 bg-black/60" />
-          </Transition.Child>
+          </TransitionChild>
 
-          <Transition.Child
+          <TransitionChild
             as={Fragment}
             enter="transition ease-in-out duration-200 transform"
             enterFrom="-translate-x-full"
@@ -70,21 +75,21 @@ export default function Sidebar({ links, title, isOpen, onClose }: SidebarProps)
             leaveFrom="translate-x-0"
             leaveTo="-translate-x-full"
           >
-            <Dialog.Panel className="fixed inset-y-0 left-0 flex w-64 flex-col bg-dark border-r border-teal/20 p-4">
+            <DialogPanel className="fixed inset-y-0 left-0 flex w-64 flex-col border-r border-teal/20 bg-dark p-4">
               <div className="mb-6 flex items-center justify-between">
-                <span className="text-lg font-semibold text-white">
-                  {title}
-                </span>
+                <span className="text-lg font-semibold text-white">{title}</span>
                 <button
+                  type="button"
                   onClick={onClose}
                   className="rounded-md p-1 text-white/60 hover:text-white"
+                  aria-label="Close navigation"
                 >
                   <PiXBold className="h-5 w-5" />
                 </button>
               </div>
               <NavLinks links={links} />
-            </Dialog.Panel>
-          </Transition.Child>
+            </DialogPanel>
+          </TransitionChild>
         </Dialog>
       </Transition>
 

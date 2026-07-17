@@ -1,7 +1,8 @@
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
-import type { Database } from "@/lib/db/schema";
+import type { Database } from "@/lib/db/database";
+import { parseFfmpegResult } from "@/lib/recordings/ffmpeg-contract";
 import { embedAndIndexRecording } from "@/lib/recordings/embeddings";
 import { transcribeAudioObject } from "@/lib/recordings/transcription";
 
@@ -64,12 +65,7 @@ export async function processRecordingMessage(message: unknown, env: Env) {
       throw new Error(`FFmpeg container failed: ${await ffmpegResponse.text()}`);
     }
 
-    const ffmpegResult = (await ffmpegResponse.json()) as {
-      r2VideoKey: string;
-      r2AudioKey: string;
-      durationSeconds?: number;
-      fileSizeBytes?: number;
-    };
+    const ffmpegResult = parseFfmpegResult(await ffmpegResponse.json());
 
     await db
       .update(schema.recording)

@@ -1,9 +1,13 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import {
+  index,
+  integer,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
-import type { drizzle } from "drizzle-orm/d1";
-
-export type Database = ReturnType<typeof drizzle<typeof import("@/lib/db/schema")>>;
 
 // ─── Helpers ───────────────────────────────────────────────
 
@@ -40,7 +44,16 @@ export const userRelations = relations(user, ({ many }) => ({
   files: many(file),
   programRoles: many(programRole),
   programApplications: many(programApplication),
+  chatConversations: many(chatConversation),
   chatMessages: many(chatMessage),
+  ownedProjectBoards: many(projectBoard),
+  projectBoardMemberships: many(projectBoardMember),
+  assignedProjectBoardTasks: many(projectBoardTask, {
+    relationName: "projectBoardTaskAssignee",
+  }),
+  createdProjectBoardTasks: many(projectBoardTask, {
+    relationName: "projectBoardTaskCreator",
+  }),
 }));
 
 // ─── Account (matches better-auth expected schema) ─────────
@@ -232,23 +245,20 @@ export const programApplication = sqliteTable("programApplication", {
   ...timestamps,
 });
 
-export const programApplicationRelations = relations(
-  programApplication,
-  ({ one }) => ({
-    program: one(program, {
-      fields: [programApplication.programId],
-      references: [program.id],
-    }),
-    user: one(user, {
-      fields: [programApplication.userId],
-      references: [user.id],
-    }),
-    partner: one(programPartner, {
-      fields: [programApplication.partnerId],
-      references: [programPartner.id],
-    }),
-  })
-);
+export const programApplicationRelations = relations(programApplication, ({ one }) => ({
+  program: one(program, {
+    fields: [programApplication.programId],
+    references: [program.id],
+  }),
+  user: one(user, {
+    fields: [programApplication.userId],
+    references: [user.id],
+  }),
+  partner: one(programPartner, {
+    fields: [programApplication.partnerId],
+    references: [programPartner.id],
+  }),
+}));
 
 // ─── Recording ─────────────────────────────────────────────
 
@@ -308,31 +318,174 @@ export const transcriptSegment = sqliteTable("transcript_segment", {
     .default(sql`(unixepoch())`),
 });
 
-export const transcriptSegmentRelations = relations(
-  transcriptSegment,
-  ({ one }) => ({
-    recording: one(recording, {
-      fields: [transcriptSegment.recordingId],
-      references: [recording.id],
-    }),
-  })
+export const transcriptSegmentRelations = relations(transcriptSegment, ({ one }) => ({
+  recording: one(recording, {
+    fields: [transcriptSegment.recordingId],
+    references: [recording.id],
+  }),
+}));
+
+// ─── Chat conversation ─────────────────────────────────────
+
+export const chatConversation = sqliteTable(
+  "chat_conversation",
+  {
+    id: cuid("id"),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index("chat_conversation_user_updated_idx").on(table.userId, table.updatedAt),
+  ]
 );
 
-// ─── ChatMessage ───────────────────────────────────────────
+export const chatConversationRelations = relations(chatConversation, ({ one, many }) => ({
+  user: one(user, {
+    fields: [chatConversation.userId],
+    references: [user.id],
+  }),
+  messages: many(chatMessage),
+}));
 
-export const chatMessage = sqliteTable("chat_message", {
-  id: cuid("id"),
-  userId: text("userId")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  role: text("role", { enum: ["user", "assistant"] }).notNull(),
-  content: text("content").notNull(),
-  citations: text("citations"),
-  createdAt: integer("createdAt", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(unixepoch())`),
-});
+// ─── Chat message ──────────────────────────────────────────
+
+export const chatMessage = sqliteTable(
+  "chat_message",
+  {
+    id: cuid("id"),
+    conversationId: text("conversationId").references(() => chatConversation.id, {
+      onDelete: "cascade",
+    }),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["user", "assistant"] }).notNull(),
+    content: text("content").notNull(),
+    citations: text("citations"),
+    model: text("model"),
+    createdAt: integer("createdAt", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    index("chat_message_conversation_created_idx").on(
+      table.conversationId,
+      table.createdAt
+    ),
+  ]
+);
 
 export const chatMessageRelations = relations(chatMessage, ({ one }) => ({
+  conversation: one(chatConversation, {
+    fields: [chatMessage.conversationId],
+    references: [chatConversation.id],
+  }),
   user: one(user, { fields: [chatMessage.userId], references: [user.id] }),
+}));
+
+// ─── Project Board ─────────────────────────────────────────
+
+export const projectBoard = sqliteTable(
+  "project_board",
+  {
+    id: cuid("id"),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    ownerId: text("ownerId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    ...timestamps,
+  },
+  (table) => [index("project_board_owner_idx").on(table.ownerId)]
+);
+
+export const projectBoardRelations = relations(projectBoard, ({ one, many }) => ({
+  owner: one(user, {
+    fields: [projectBoard.ownerId],
+    references: [user.id],
+  }),
+  members: many(projectBoardMember),
+  tasks: many(projectBoardTask),
+}));
+
+// ─── Project Board Member ──────────────────────────────────
+
+export const projectBoardMember = sqliteTable(
+  "project_board_member",
+  {
+    id: cuid("id"),
+    boardId: text("boardId")
+      .notNull()
+      .references(() => projectBoard.id, { onDelete: "cascade" }),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("project_board_member_board_user_unique").on(table.boardId, table.userId),
+    index("project_board_member_user_idx").on(table.userId),
+  ]
+);
+
+export const projectBoardMemberRelations = relations(projectBoardMember, ({ one }) => ({
+  board: one(projectBoard, {
+    fields: [projectBoardMember.boardId],
+    references: [projectBoard.id],
+  }),
+  user: one(user, {
+    fields: [projectBoardMember.userId],
+    references: [user.id],
+  }),
+}));
+
+// ─── Project Board Task ────────────────────────────────────
+
+export const projectBoardTask = sqliteTable(
+  "project_board_task",
+  {
+    id: cuid("id"),
+    boardId: text("boardId")
+      .notNull()
+      .references(() => projectBoard.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    status: text("status", {
+      enum: ["TODO", "IN_PROGRESS", "DONE"],
+    })
+      .notNull()
+      .default("TODO"),
+    assigneeId: text("assigneeId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    dueDate: integer("dueDate", { mode: "timestamp" }),
+    createdById: text("createdById")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    ...timestamps,
+  },
+  (table) => [
+    index("project_board_task_board_status_idx").on(table.boardId, table.status),
+    index("project_board_task_assignee_idx").on(table.assigneeId),
+  ]
+);
+
+export const projectBoardTaskRelations = relations(projectBoardTask, ({ one }) => ({
+  board: one(projectBoard, {
+    fields: [projectBoardTask.boardId],
+    references: [projectBoard.id],
+  }),
+  assignee: one(user, {
+    fields: [projectBoardTask.assigneeId],
+    references: [user.id],
+    relationName: "projectBoardTaskAssignee",
+  }),
+  creator: one(user, {
+    fields: [projectBoardTask.createdById],
+    references: [user.id],
+    relationName: "projectBoardTaskCreator",
+  }),
 }));

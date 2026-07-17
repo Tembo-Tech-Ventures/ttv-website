@@ -32,7 +32,9 @@ export default function ValueSection() {
       });
     }, sectionRef);
 
-    return () => ctx.revert();
+    return () => {
+      ctx.revert();
+    };
   }, []);
 
   return (
@@ -50,17 +52,21 @@ export default function ValueSection() {
         </p>
 
         <div className="max-w-4xl space-y-10">
-          <p
-            data-reveal
-            className="font-body text-base text-ink-secondary md:text-lg"
-          >
-            <span className="font-heading text-ink-primary" style={{ fontSize: "1.6em", letterSpacing: "-0.02em" }}>
+          <p data-reveal className="font-body text-base text-ink-secondary md:text-lg">
+            <span
+              className="font-heading text-ink-primary"
+              style={{ fontSize: "1.6em", letterSpacing: "-0.02em" }}
+            >
               Tembo
             </span>
-            <span className="ml-2 align-middle font-body italic text-ink-muted">(n.)</span>
+            <span className="ml-2 align-middle font-body italic text-ink-muted">
+              (n.)
+            </span>
             <span className="mx-2 align-middle text-ink-muted">—</span>
             <span className="align-middle">elephant. Swahili.</span>
-            <span className="mx-2 align-middle text-ink-muted">A symbol of strength, memory, and community.</span>
+            <span className="mx-2 align-middle text-ink-muted">
+              A symbol of strength, memory, and community.
+            </span>
           </p>
 
           <blockquote
@@ -76,14 +82,16 @@ export default function ValueSection() {
               }}
             >
               Great builders are already here.
-              <span className="block text-primary">We help grow the ecosystem around them.</span>
+              <span className="block text-primary">
+                We help grow the ecosystem around them.
+              </span>
             </p>
             <p className="mt-6 max-w-2xl font-body text-base text-ink-secondary md:text-lg">
-              We&apos;re a small, community-led program for early builders
-              across Africa. Working engineers share the{" "}
-              <span className="text-ink-primary">shape of a real system</span>
-              {" "}— how it fits together, how to keep learning together —
-              and stay in touch long after the cohort ends.
+              We&apos;re a small, community-led program for early builders across Africa.
+              Working engineers share the{" "}
+              <span className="text-ink-primary">shape of a real system</span> — how it
+              fits together, how to keep learning together — and stay in touch long after
+              the cohort ends.
             </p>
           </blockquote>
         </div>

@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { UsersThree, Handshake, Infinity as InfinityIcon } from "@phosphor-icons/react";
+import type { IconType } from "react-icons";
+import { PiHandshake, PiInfinity, PiUsersThree } from "react-icons/pi";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -18,7 +19,7 @@ interface BentoItem {
   label: string;
   title: string;
   body: string;
-  Icon: typeof UsersThree;
+  Icon: IconType;
   wide?: boolean;
 }
 
@@ -28,7 +29,7 @@ const BENTO: BentoItem[] = [
     label: "Community",
     title: "Not a course. A working group.",
     body: "Each cohort is a small group learning side-by-side while building real things. The community is the product — the curriculum is a scaffold toward building on your own.",
-    Icon: UsersThree,
+    Icon: PiUsersThree,
     wide: true,
   },
   {
@@ -36,14 +37,14 @@ const BENTO: BentoItem[] = [
     label: "Mentorship",
     title: "You don't do this alone.",
     body: "Working engineers build alongside each cohort and make the shape of a real system easier to see. Accountability over assignments.",
-    Icon: Handshake,
+    Icon: PiHandshake,
   },
   {
     number: "03",
     label: "Continuity",
     title: "We stay in touch.",
     body: "Alumni stay in the loop after the cohort ends. We make it easy to reconnect when life pulls someone away. Some come back as mentors.",
-    Icon: InfinityIcon,
+    Icon: PiInfinity,
   },
 ];
 
@@ -66,7 +67,9 @@ export default function FeaturesSection() {
         },
       });
 
-      gsap.from(gridRef.current!.children, {
+      const grid = gridRef.current;
+      if (!grid) return;
+      gsap.from(grid.children, {
         y: 60,
         opacity: 0,
         duration: 0.8,
@@ -80,7 +83,9 @@ export default function FeaturesSection() {
       });
     }, sectionRef);
 
-    return () => ctx.revert();
+    return () => {
+      ctx.revert();
+    };
   }, []);
 
   return (
@@ -125,7 +130,9 @@ export default function FeaturesSection() {
                 <span
                   className="font-heading text-primary"
                   style={{
-                    fontSize: item.wide ? "clamp(4.5rem, 10vw, 9rem)" : "clamp(3rem, 6vw, 5rem)",
+                    fontSize: item.wide
+                      ? "clamp(4.5rem, 10vw, 9rem)"
+                      : "clamp(3rem, 6vw, 5rem)",
                     lineHeight: 0.9,
                     letterSpacing: "-0.04em",
                   }}
@@ -157,7 +164,7 @@ export default function FeaturesSection() {
               </div>
 
               <div className="mt-8 text-primary/70 transition-colors group-hover:text-primary">
-                <item.Icon size={item.wide ? 64 : 48} weight="light" aria-hidden />
+                <item.Icon size={item.wide ? 64 : 48} aria-hidden />
               </div>
             </article>
           ))}

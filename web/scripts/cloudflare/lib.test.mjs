@@ -130,6 +130,13 @@ describe("createGeneratedWranglerConfig", () => {
     expect(config.r2_buckets[0].binding).toBe("BUCKET");
     expect(config.ai.binding).toBe("AI");
     expect(config.vectorize[0].binding).toBe("VECTORIZE");
+    expect(config.ratelimits).toEqual([
+      {
+        name: "CHAT_RATE_LIMITER",
+        namespace_id: expect.stringMatching(/^\d+$/),
+        simple: { limit: 20, period: 60 },
+      },
+    ]);
     expect(config.queues.producers[0].binding).toBe("RECORDING_QUEUE");
     expect(config.durable_objects.bindings[0].name).toBe("FFMPEG_CONTAINER");
   });
@@ -250,10 +257,9 @@ describe("ensureAiGateway", () => {
       .fn()
       .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ success: true, result: { id: "ttv-ai" } }),
-          { status: 200 }
-        )
+        new Response(JSON.stringify({ success: true, result: { id: "ttv-ai" } }), {
+          status: 200,
+        })
       );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -296,11 +302,7 @@ describe("environment cleanup", () => {
   it("removes a Worker's Queue consumer binding idempotently", async () => {
     const runner = vi.fn().mockResolvedValue({});
     await expect(
-      removeQueueWorkerConsumer(
-        "recordings",
-        "recording-worker",
-        runner
-      )
+      removeQueueWorkerConsumer("recordings", "recording-worker", runner)
     ).resolves.toBe(true);
     expect(runner).toHaveBeenCalledWith([
       "queues",
@@ -329,39 +331,31 @@ describe("environment cleanup", () => {
     await expect(deleteQueueByName("missing", missingRunner)).resolves.toBe(false);
     expect(missingRunner).toHaveBeenCalledTimes(1);
 
-    const unauthorizedRunner = vi
-      .fn()
-      .mockRejectedValue(new Error("Unauthorized"));
-    await expect(
-      deleteQueueByName("recordings", unauthorizedRunner)
-    ).rejects.toThrow("Unauthorized");
+    const unauthorizedRunner = vi.fn().mockRejectedValue(new Error("Unauthorized"));
+    await expect(deleteQueueByName("recordings", unauthorizedRunner)).rejects.toThrow(
+      "Unauthorized"
+    );
   });
 
   it("force-deletes an existing Vectorize index", async () => {
     const runner = vi.fn().mockResolvedValue({});
-    await expect(
-      deleteVectorizeIndexByName("transcripts", runner)
-    ).resolves.toBe(true);
+    await expect(deleteVectorizeIndexByName("transcripts", runner)).resolves.toBe(true);
     expect(runner.mock.calls).toEqual([
       [["vectorize", "get", "transcripts"]],
       [["vectorize", "delete", "transcripts", "--force"]],
     ]);
 
-    const missingRunner = vi
-      .fn()
-      .mockRejectedValue(new Error("Index does not exist"));
-    await expect(
-      deleteVectorizeIndexByName("missing", missingRunner)
-    ).resolves.toBe(false);
+    const missingRunner = vi.fn().mockRejectedValue(new Error("Index does not exist"));
+    await expect(deleteVectorizeIndexByName("missing", missingRunner)).resolves.toBe(
+      false
+    );
   });
 });
 
 describe("getSecretBindings", () => {
   it("preserves the existing shared-environment auth secret fallback", () => {
     vi.stubEnv("BETTER_AUTH_SECRET", "");
-    const binding = getSecretBindings().find(
-      ({ key }) => key === "BETTER_AUTH_SECRET"
-    );
+    const binding = getSecretBindings().find(({ key }) => key === "BETTER_AUTH_SECRET");
     expect(binding?.value).toHaveLength(64);
   });
 
@@ -399,14 +393,10 @@ describe("getSecretBindings", () => {
       key: "GITHUB_CLIENT_SECRET",
       value: "agent-preview-oauth-disabled",
     });
-    expect(
-      bindings.find(({ key }) => key === "BETTER_AUTH_SECRET")?.value
-    ).toHaveLength(64);
-    expect(JSON.stringify(bindings)).not.toContain(
-      "shared-secret-must-not-be-used"
+    expect(bindings.find(({ key }) => key === "BETTER_AUTH_SECRET")?.value).toHaveLength(
+      64
     );
-    expect(JSON.stringify(bindings)).not.toContain(
-      "real-secret-must-not-be-used"
-    );
+    expect(JSON.stringify(bindings)).not.toContain("shared-secret-must-not-be-used");
+    expect(JSON.stringify(bindings)).not.toContain("real-secret-must-not-be-used");
   });
 });

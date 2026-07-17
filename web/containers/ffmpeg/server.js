@@ -62,7 +62,10 @@ async function probeDuration(file) {
 async function handleProcess(request) {
   const { recordingId, r2VideoKey } = await request.json();
   if (!recordingId || !r2VideoKey) {
-    return Response.json({ error: "recordingId and r2VideoKey are required" }, { status: 400 });
+    return Response.json(
+      { error: "recordingId and r2VideoKey are required" },
+      { status: 400 }
+    );
   }
 
   if (!/^[a-z0-9]+$/i.test(recordingId)) {
@@ -75,7 +78,16 @@ async function handleProcess(request) {
   const audio = path.join(workDir, "audio.mp3");
 
   await download(r2VideoKey, input);
-  await run("ffmpeg", ["-y", "-i", input, "-c", "copy", "-movflags", "+faststart", faststart]);
+  await run("ffmpeg", [
+    "-y",
+    "-i",
+    input,
+    "-c",
+    "copy",
+    "-movflags",
+    "+faststart",
+    faststart,
+  ]);
   await run("ffmpeg", [
     "-y",
     "-i",
@@ -138,6 +150,8 @@ createServer(async (request, response) => {
     response.end("Not found");
   } catch (error) {
     response.writeHead(500, { "content-type": "application/json" });
-    response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
+    response.end(
+      JSON.stringify({ error: error instanceof Error ? error.message : String(error) })
+    );
   }
 }).listen(8080);

@@ -52,7 +52,7 @@ lines.push("");
 // 1. user (no FK deps)
 for (const u of data.users ?? []) {
   lines.push(
-    `INSERT OR IGNORE INTO \`user\` (id, name, email, emailVerified, image) VALUES (${esc(u.id)}, ${esc(u.name ?? "")}, ${esc(u.email)}, ${boolInt(u.emailVerified)}, ${u.image != null ? esc(u.image) : "NULL"});`,
+    `INSERT OR IGNORE INTO \`user\` (id, name, email, emailVerified, image) VALUES (${esc(u.id)}, ${esc(u.name ?? "")}, ${esc(u.email)}, ${boolInt(u.emailVerified)}, ${u.image != null ? esc(u.image) : "NULL"});`
   );
 }
 lines.push("");
@@ -60,7 +60,7 @@ lines.push("");
 // 2. Roles (no FK deps)
 for (const r of data.roles ?? []) {
   lines.push(
-    `INSERT OR IGNORE INTO \`Roles\` (id, name, createdAt, updatedAt) VALUES (${esc(r.id)}, ${esc(r.name)}, ${ts(r.createdAt)}, ${ts(r.updatedAt)});`,
+    `INSERT OR IGNORE INTO \`Roles\` (id, name, createdAt, updatedAt) VALUES (${esc(r.id)}, ${esc(r.name)}, ${ts(r.createdAt)}, ${ts(r.updatedAt)});`
   );
 }
 lines.push("");
@@ -68,7 +68,7 @@ lines.push("");
 // 3. curriculum (no FK deps)
 for (const c of data.curricula ?? []) {
   lines.push(
-    `INSERT OR IGNORE INTO \`curriculum\` (id, title, description, createdAt, updatedAt) VALUES (${esc(c.id)}, ${esc(c.title)}, ${esc(c.description ?? "")}, ${ts(c.createdAt)}, ${ts(c.updatedAt)});`,
+    `INSERT OR IGNORE INTO \`curriculum\` (id, title, description, createdAt, updatedAt) VALUES (${esc(c.id)}, ${esc(c.title)}, ${esc(c.description ?? "")}, ${ts(c.createdAt)}, ${ts(c.updatedAt)});`
   );
 }
 lines.push("");
@@ -76,7 +76,7 @@ lines.push("");
 // 4. programPartner (no FK deps)
 for (const p of data.programPartners ?? []) {
   lines.push(
-    `INSERT OR IGNORE INTO \`programPartner\` (id, name, createdAt, updatedAt) VALUES (${esc(p.id)}, ${esc(p.name)}, ${ts(p.createdAt)}, ${ts(p.updatedAt)});`,
+    `INSERT OR IGNORE INTO \`programPartner\` (id, name, createdAt, updatedAt) VALUES (${esc(p.id)}, ${esc(p.name)}, ${ts(p.createdAt)}, ${ts(p.updatedAt)});`
   );
 }
 lines.push("");
@@ -84,7 +84,7 @@ lines.push("");
 // 5. UserRoles (depends on user + Roles)
 for (const ur of data.userRoles ?? []) {
   lines.push(
-    `INSERT OR IGNORE INTO \`UserRoles\` (id, userId, roleId, createdAt, updatedAt) VALUES (${esc(ur.id)}, ${esc(ur.userId)}, ${esc(ur.roleId)}, ${ts(ur.createdAt)}, ${ts(ur.updatedAt)});`,
+    `INSERT OR IGNORE INTO \`UserRoles\` (id, userId, roleId, createdAt, updatedAt) VALUES (${esc(ur.id)}, ${esc(ur.userId)}, ${esc(ur.roleId)}, ${ts(ur.createdAt)}, ${ts(ur.updatedAt)});`
   );
 }
 lines.push("");
@@ -92,7 +92,7 @@ lines.push("");
 // 6. program (depends on curriculum)
 for (const p of data.programs ?? []) {
   lines.push(
-    `INSERT OR IGNORE INTO \`program\` (id, name, description, curriculumId, startDate, endDate, createdAt, updatedAt) VALUES (${esc(p.id)}, ${esc(p.name)}, ${esc(p.description ?? "")}, ${esc(p.curriculumId)}, ${ts(p.startDate)}, ${ts(p.endDate)}, ${ts(p.createdAt)}, ${ts(p.updatedAt)});`,
+    `INSERT OR IGNORE INTO \`program\` (id, name, description, curriculumId, startDate, endDate, createdAt, updatedAt) VALUES (${esc(p.id)}, ${esc(p.name)}, ${esc(p.description ?? "")}, ${esc(p.curriculumId)}, ${ts(p.startDate)}, ${ts(p.endDate)}, ${ts(p.createdAt)}, ${ts(p.updatedAt)});`
   );
 }
 lines.push("");
@@ -100,7 +100,7 @@ lines.push("");
 // 7. programRole (depends on program + user)
 for (const pr of data.programRoles ?? []) {
   lines.push(
-    `INSERT OR IGNORE INTO \`programRole\` (id, programId, userId, name, createdAt, updatedAt) VALUES (${esc(pr.id)}, ${esc(pr.programId)}, ${esc(pr.userId)}, ${esc(pr.name)}, ${ts(pr.createdAt)}, ${ts(pr.updatedAt)});`,
+    `INSERT OR IGNORE INTO \`programRole\` (id, programId, userId, name, createdAt, updatedAt) VALUES (${esc(pr.id)}, ${esc(pr.programId)}, ${esc(pr.userId)}, ${esc(pr.name)}, ${ts(pr.createdAt)}, ${ts(pr.updatedAt)});`
   );
 }
 lines.push("");
@@ -108,11 +108,9 @@ lines.push("");
 // 8. programApplication (depends on user + program + programPartner)
 for (const pa of data.programApplications ?? []) {
   const appJson =
-    typeof pa.application === "string"
-      ? pa.application
-      : JSON.stringify(pa.application);
+    typeof pa.application === "string" ? pa.application : JSON.stringify(pa.application);
   lines.push(
-    `INSERT OR IGNORE INTO \`programApplication\` (id, programId, userId, partnerId, status, application, completedAt, createdAt, updatedAt) VALUES (${esc(pa.id)}, ${pa.programId != null ? esc(pa.programId) : "NULL"}, ${esc(pa.userId)}, ${pa.partnerId != null ? esc(pa.partnerId) : "NULL"}, ${esc(pa.status)}, ${esc(appJson)}, ${ts(pa.completedAt)}, ${ts(pa.createdAt)}, ${ts(pa.updatedAt)});`,
+    `INSERT OR IGNORE INTO \`programApplication\` (id, programId, userId, partnerId, status, application, completedAt, createdAt, updatedAt) VALUES (${esc(pa.id)}, ${pa.programId != null ? esc(pa.programId) : "NULL"}, ${esc(pa.userId)}, ${pa.partnerId != null ? esc(pa.partnerId) : "NULL"}, ${esc(pa.status)}, ${esc(appJson)}, ${ts(pa.completedAt)}, ${ts(pa.createdAt)}, ${ts(pa.updatedAt)});`
   );
 }
 lines.push("");

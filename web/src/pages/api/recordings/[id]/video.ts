@@ -7,7 +7,7 @@ import { userCanAccessProgram } from "@/lib/recordings/access";
 
 function parseRange(range: string | null, size: number) {
   if (!range) return undefined;
-  const match = range.match(/^bytes=(\d*)-(\d*)$/);
+  const match = /^bytes=(\d*)-(\d*)$/.exec(range);
   if (!match) return undefined;
 
   let start: number;
@@ -47,10 +47,11 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
     where: eq(schema.recording.id, id),
   });
 
-  if (!recording?.r2VideoKey) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!recording?.r2VideoKey)
+    return Response.json({ error: "Not found" }, { status: 404 });
 
   const hasAccess =
-    locals.isAdmin ||
+    locals.isAdmin === true ||
     (await userCanAccessProgram(db, user.id, recording.programId));
   if (!hasAccess) return Response.json({ error: "Forbidden" }, { status: 403 });
 

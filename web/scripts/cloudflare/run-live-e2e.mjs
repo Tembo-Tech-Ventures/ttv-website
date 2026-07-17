@@ -14,11 +14,7 @@ export function resolvePlaywrightAgentToken(environment = process.env) {
     environment.EXPECTED_DEPLOYMENT_ENVIRONMENT?.trim() ||
     environment.CLOUDFLARE_ENVIRONMENT_NAME?.trim();
   const previewSecret = environment.AGENT_PREVIEW_SECRET?.trim();
-  if (
-    environmentName &&
-    isAgentEnvironmentName(environmentName) &&
-    previewSecret
-  ) {
+  if (environmentName && isAgentEnvironmentName(environmentName) && previewSecret) {
     return deriveAgentPreviewToken(previewSecret, environmentName);
   }
 
@@ -47,8 +43,7 @@ export async function main(args = process.argv.slice(2)) {
 }
 
 const isDirectRun =
-  process.argv[1] &&
-  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isDirectRun) {
   main().catch((error) => {

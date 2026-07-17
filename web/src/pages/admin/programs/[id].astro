@@ -2,6 +2,7 @@
 import AdminLayout from "@/layouts/AdminLayout.astro";
 import Card from "@/components/common/Card.astro";
 import Badge from "@/components/common/Badge.astro";
+import { applicationBadgeVariant } from "@/lib/application-status";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -46,9 +47,7 @@ if (Astro.request.method === "POST") {
   } else if (action === "remove-role") {
     const roleId = formData.get("roleId") as string;
     if (roleId) {
-      await db
-        .delete(schema.programRole)
-        .where(eq(schema.programRole.id, roleId));
+      await db.delete(schema.programRole).where(eq(schema.programRole.id, roleId));
     }
   }
 
@@ -71,8 +70,7 @@ const allUsers = await db.query.user.findMany({
   orderBy: (u, { asc }) => [asc(u.name)],
 });
 
-const formatDate = (d: Date | null) =>
-  d ? new Date(d).toISOString().split("T")[0] : "";
+const formatDate = (d: Date | null) => (d ? new Date(d).toISOString().split("T")[0] : "");
 ---
 
 <AdminLayout title={prog.name}>
@@ -96,18 +94,23 @@ const formatDate = (d: Date | null) =>
           />
         </div>
         <div class="flex flex-col gap-1.5">
-          <label for="description" class="text-sm font-medium text-white/90">Description *</label>
+          <label for="description" class="text-sm font-medium text-white/90"
+            >Description *</label
+          >
           <textarea
             id="description"
             name="description"
             required
             rows="3"
             class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
-          >{prog.description}</textarea>
+            >{prog.description}</textarea
+          >
         </div>
         <div class="grid gap-4 sm:grid-cols-2">
           <div class="flex flex-col gap-1.5">
-            <label for="startDate" class="text-sm font-medium text-white/90">Start Date</label>
+            <label for="startDate" class="text-sm font-medium text-white/90"
+              >Start Date</label
+            >
             <input
               type="date"
               id="startDate"
@@ -117,7 +120,8 @@ const formatDate = (d: Date | null) =>
             />
           </div>
           <div class="flex flex-col gap-1.5">
-            <label for="endDate" class="text-sm font-medium text-white/90">End Date</label>
+            <label for="endDate" class="text-sm font-medium text-white/90">End Date</label
+            >
             <input
               type="date"
               id="endDate"
@@ -143,42 +147,44 @@ const formatDate = (d: Date | null) =>
 
     <Card>
       <h3 class="mb-4 text-lg font-semibold text-white">Staff</h3>
-      {prog.programRoles.length > 0 ? (
-        <div class="mb-4 overflow-x-auto rounded-lg border border-teal/20">
-          <table class="w-full text-left text-sm">
-            <thead class="bg-teal/30 text-xs uppercase text-white/80">
-              <tr>
-                <th class="px-4 py-3 font-medium">Name</th>
-                <th class="px-4 py-3 font-medium">Role</th>
-                <th class="px-4 py-3 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-teal/10">
-              {prog.programRoles.map((pr) => (
-                <tr class="text-white/80">
-                  <td class="px-4 py-3">{pr.user?.name ?? "Unknown"}</td>
-                  <td class="px-4 py-3">{pr.name}</td>
-                  <td class="px-4 py-3">
-                    <form method="POST" class="inline">
-                      <input type="hidden" name="action" value="remove-role" />
-                      <input type="hidden" name="roleId" value={pr.id} />
-                      <button
-                        type="submit"
-                        class="text-red-400 hover:text-red-300"
-                        onclick="return confirm('Remove this staff member from the program?')"
-                      >
-                        Remove
-                      </button>
-                    </form>
-                  </td>
+      {
+        prog.programRoles.length > 0 ? (
+          <div class="mb-4 overflow-x-auto rounded-lg border border-teal/20">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-teal/30 text-xs uppercase text-white/80">
+                <tr>
+                  <th class="px-4 py-3 font-medium">Name</th>
+                  <th class="px-4 py-3 font-medium">Role</th>
+                  <th class="px-4 py-3 font-medium">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p class="mb-4 text-white/40">No staff assigned</p>
-      )}
+              </thead>
+              <tbody class="divide-y divide-teal/10">
+                {prog.programRoles.map((pr) => (
+                  <tr class="text-white/80">
+                    <td class="px-4 py-3">{pr.user?.name ?? "Unknown"}</td>
+                    <td class="px-4 py-3">{pr.name}</td>
+                    <td class="px-4 py-3">
+                      <form method="POST" class="inline">
+                        <input type="hidden" name="action" value="remove-role" />
+                        <input type="hidden" name="roleId" value={pr.id} />
+                        <button
+                          type="submit"
+                          class="text-red-400 hover:text-red-300"
+                          onclick="return confirm('Remove this staff member from the program?')"
+                        >
+                          Remove
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p class="mb-4 text-white/40">No staff assigned</p>
+        )
+      }
 
       <form method="POST" class="flex flex-wrap items-end gap-3">
         <input type="hidden" name="action" value="add-role" />
@@ -191,9 +197,13 @@ const formatDate = (d: Date | null) =>
             class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
           >
             <option value="">Select user…</option>
-            {allUsers.map((u) => (
-              <option value={u.id}>{u.name} ({u.email})</option>
-            ))}
+            {
+              allUsers.map((u) => (
+                <option value={u.id}>
+                  {u.name} ({u.email})
+                </option>
+              ))
+            }
           </select>
         </div>
         <div class="flex flex-col gap-1.5">
@@ -219,45 +229,45 @@ const formatDate = (d: Date | null) =>
 
     <Card>
       <h3 class="mb-4 text-lg font-semibold text-white">Applications</h3>
-      {prog.programApplications.length > 0 ? (
-        <div class="overflow-x-auto rounded-lg border border-teal/20">
-          <table class="w-full text-left text-sm">
-            <thead class="bg-teal/30 text-xs uppercase text-white/80">
-              <tr>
-                <th class="px-4 py-3 font-medium">Applicant</th>
-                <th class="px-4 py-3 font-medium">Status</th>
-                <th class="px-4 py-3 font-medium">Date</th>
-                <th class="px-4 py-3 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-teal/10">
-              {prog.programApplications.map((app) => (
-                <tr class="text-white/80 hover:bg-teal/10">
-                  <td class="px-4 py-3">{app.user?.name ?? "Unknown"}</td>
-                  <td class="px-4 py-3">
-                    <Badge variant={app.status.toLowerCase() as any} />
-                  </td>
-                  <td class="px-4 py-3">
-                    {app.createdAt
-                      ? new Date(app.createdAt).toLocaleDateString()
-                      : "—"}
-                  </td>
-                  <td class="px-4 py-3">
-                    <a
-                      href={`/admin/applications/${app.id}`}
-                      class="text-primary hover:underline"
-                    >
-                      View
-                    </a>
-                  </td>
+      {
+        prog.programApplications.length > 0 ? (
+          <div class="overflow-x-auto rounded-lg border border-teal/20">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-teal/30 text-xs uppercase text-white/80">
+                <tr>
+                  <th class="px-4 py-3 font-medium">Applicant</th>
+                  <th class="px-4 py-3 font-medium">Status</th>
+                  <th class="px-4 py-3 font-medium">Date</th>
+                  <th class="px-4 py-3 font-medium">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p class="text-white/40">No applications for this program</p>
-      )}
+              </thead>
+              <tbody class="divide-y divide-teal/10">
+                {prog.programApplications.map((app) => (
+                  <tr class="text-white/80 hover:bg-teal/10">
+                    <td class="px-4 py-3">{app.user?.name ?? "Unknown"}</td>
+                    <td class="px-4 py-3">
+                      <Badge variant={applicationBadgeVariant(app.status)} />
+                    </td>
+                    <td class="px-4 py-3">
+                      {app.createdAt ? new Date(app.createdAt).toLocaleDateString() : "—"}
+                    </td>
+                    <td class="px-4 py-3">
+                      <a
+                        href={`/admin/applications/${app.id}`}
+                        class="text-primary hover:underline"
+                      >
+                        View
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p class="text-white/40">No applications for this program</p>
+        )
+      }
     </Card>
   </div>
 </AdminLayout>

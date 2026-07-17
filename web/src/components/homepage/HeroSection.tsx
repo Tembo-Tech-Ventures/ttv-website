@@ -45,10 +45,26 @@ export default function HeroSection({ isAuthenticated = false }: HeroSectionProp
 
       entry
         .from(kickerRef.current, { y: 20, opacity: 0, duration: 0.6, ease: "power3.out" })
-        .from(wordmarkRef.current, { y: 60, opacity: 0, duration: 1, ease: "power3.out" }, "-=0.3")
-        .from(subKickerRef.current, { y: 20, opacity: 0, duration: 0.5, ease: "power3.out" }, "-=0.4")
-        .from(sentenceRef.current, { y: 30, opacity: 0, duration: 0.7, ease: "power3.out" }, "-=0.2")
-        .from(ctaRef.current, { y: 20, opacity: 0, duration: 0.5, ease: "power3.out" }, "-=0.3");
+        .from(
+          wordmarkRef.current,
+          { y: 60, opacity: 0, duration: 1, ease: "power3.out" },
+          "-=0.3"
+        )
+        .from(
+          subKickerRef.current,
+          { y: 20, opacity: 0, duration: 0.5, ease: "power3.out" },
+          "-=0.4"
+        )
+        .from(
+          sentenceRef.current,
+          { y: 30, opacity: 0, duration: 0.7, ease: "power3.out" },
+          "-=0.2"
+        )
+        .from(
+          ctaRef.current,
+          { y: 20, opacity: 0, duration: 0.5, ease: "power3.out" },
+          "-=0.3"
+        );
 
       if (statsRef.current) {
         entry.from(
@@ -72,7 +88,9 @@ export default function HeroSection({ isAuthenticated = false }: HeroSectionProp
       });
     }, sectionRef);
 
-    return () => ctx.revert();
+    return () => {
+      ctx.revert();
+    };
   }, []);
 
   return (
@@ -119,12 +137,13 @@ export default function HeroSection({ isAuthenticated = false }: HeroSectionProp
           ref={sentenceRef}
           className="font-body mt-10 max-w-3xl text-xl text-ink-primary md:text-[28px] md:leading-[1.25]"
         >
-          A practical tech community for early builders across Africa,
-          learning through real software —{" "}
+          A practical tech community for early builders across Africa, learning through
+          real software —{" "}
           <span
             className="bg-no-repeat pb-1"
             style={{
-              backgroundImage: "linear-gradient(transparent 62%, rgba(255,209,102,0.45) 62%)",
+              backgroundImage:
+                "linear-gradient(transparent 62%, rgba(255,209,102,0.45) 62%)",
               backgroundSize: "100% 100%",
             }}
           >

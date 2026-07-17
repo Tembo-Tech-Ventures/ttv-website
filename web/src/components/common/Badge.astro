@@ -1,6 +1,8 @@
 ---
+import type { ApplicationBadgeVariant } from "@/lib/application-status";
+
 interface Props {
-  variant: "pending" | "approved" | "rejected" | "audit" | "completed";
+  variant: ApplicationBadgeVariant;
 }
 
 const variantClasses: Record<Props["variant"], string> = {

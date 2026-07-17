@@ -20,8 +20,7 @@ export default function SessionViewer({
   const activeSegment = useMemo(() => {
     return (
       segments.find(
-        (segment) =>
-          currentTime >= segment.startTime && currentTime < segment.endTime
+        (segment) => currentTime >= segment.startTime && currentTime < segment.endTime
       ) ?? null
     );
   }, [currentTime, segments]);
@@ -48,7 +47,9 @@ export default function SessionViewer({
             controls
             playsInline
             className="aspect-video w-full bg-black"
-            onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+            onTimeUpdate={(event) => {
+              setCurrentTime(event.currentTarget.currentTime);
+            }}
           >
             <track kind="captions" srcLang="en" label="English" />
           </video>

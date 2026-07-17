@@ -7,11 +7,13 @@ import {
   PiSignOutDuotone,
   PiVideoCameraDuotone,
   PiChatCircleDotsDuotone,
+  PiKanbanDuotone,
+  PiListBold,
 } from "react-icons/pi";
-import { PiListBold } from "react-icons/pi";
 
-const links = [
+export const dashboardLinks = [
   { href: "/dashboard", label: "Dashboard", icon: PiGaugeDuotone },
+  { href: "/dashboard/boards", label: "Project Boards", icon: PiKanbanDuotone },
   { href: "/dashboard/sessions", label: "Sessions", icon: PiVideoCameraDuotone },
   { href: "/dashboard/ask", label: "Ask AI", icon: PiChatCircleDotsDuotone },
   { href: "/dashboard/apply", label: "Apply", icon: PiPaperPlaneTiltDuotone },
@@ -25,17 +27,21 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-[#2C6964] to-[#013D39]">
       <Sidebar
-        links={links}
+        links={dashboardLinks}
         title="TTV Dashboard"
         isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        onClose={() => {
+          setSidebarOpen(false);
+        }}
       />
 
       <div className="flex flex-1 flex-col">
         {/* Top bar */}
         <header className="flex items-center gap-4 border-b border-teal/20 px-4 py-3 lg:px-6">
           <button
-            onClick={() => setSidebarOpen(true)}
+            onClick={() => {
+              setSidebarOpen(true);
+            }}
             className="rounded-md p-1.5 text-white/60 hover:text-white lg:hidden"
           >
             <PiListBold className="h-6 w-6" />

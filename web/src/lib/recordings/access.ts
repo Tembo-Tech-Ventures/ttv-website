@@ -1,15 +1,15 @@
 import { and, eq, inArray } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
-import type { Database } from "@/lib/db/schema";
+import type { Database } from "@/lib/db/database";
 
 export async function getAccessibleProgramIds(db: Database, userId: string) {
-  const applications: Array<{ programId: string | null }> =
+  const applications: { programId: string | null }[] =
     await db.query.programApplication.findMany({
-    where: and(
-      eq(schema.programApplication.userId, userId),
-      inArray(schema.programApplication.status, ["APPROVED", "COMPLETED"])
-    ),
-  });
+      where: and(
+        eq(schema.programApplication.userId, userId),
+        inArray(schema.programApplication.status, ["APPROVED", "COMPLETED"])
+      ),
+    });
 
   return applications
     .map((application) => application.programId)

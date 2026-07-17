@@ -1,9 +1,17 @@
 import { expect, test } from "@playwright/test";
+import { z } from "zod";
+
+const healthSchema = z.object({
+  status: z.literal("ok"),
+  service: z.literal("ttv-website"),
+  environment: z.string().optional(),
+  version: z.string().optional(),
+});
 
 test("serves the expected live deployment and homepage", async ({ page }) => {
   const healthResponse = await page.request.get("/api/health");
   expect(healthResponse.ok()).toBe(true);
-  const health = await healthResponse.json();
+  const health = healthSchema.parse(await healthResponse.json());
   expect(health).toMatchObject({ status: "ok", service: "ttv-website" });
 
   if (process.env.EXPECTED_DEPLOYMENT_ENVIRONMENT) {
@@ -43,5 +51,64 @@ test.describe("authenticated delivery agent", () => {
 
     await page.goto("/admin/agent-access");
     await expect(page).toHaveURL(/\/admin\/?$/);
+  });
+
+  test("renders the Learning Coach controls on desktop and mobile", async ({ page }) => {
+    const historyResponsePromise = page.waitForResponse((response) =>
+      response.url().endsWith("/api/chat/conversations")
+    );
+    await page.goto("/dashboard/ask");
+
+    await expect(
+      page.getByRole("heading", { name: "TTV Learning Coach", level: 2 })
+    ).toBeVisible();
+    await expect(page.getByLabel("Message the TTV Learning Coach")).toBeVisible();
+
+    const openHistory = page.getByRole("button", {
+      name: "Open conversation history",
+    });
+    if (await openHistory.isVisible()) {
+      await openHistory.click();
+    }
+
+    await expect(page.getByRole("button", { name: "New conversation" })).toBeVisible();
+    const historyResponse = await historyResponsePromise;
+    expect(historyResponse.ok()).toBe(true);
+
+    await expect(page.getByRole("navigation", { name: "Chat history" })).toBeVisible();
+  });
+
+  test("can complete a shared project-board workflow", async ({ page }, testInfo) => {
+    const boardName = `Agent board ${testInfo.project.name} ${Date.now()}`;
+
+    await page.goto("/dashboard/boards");
+    await expect(page.getByRole("heading", { name: "Project Boards" })).toBeVisible();
+
+    await page.getByLabel("Board name").fill(boardName);
+    await page.getByLabel("Description").fill("Temporary browser verification board.");
+    await page.getByRole("button", { name: "Create board" }).click();
+
+    await expect(page).toHaveURL(/\/dashboard\/boards\/[a-z0-9]+/);
+    await expect(page.getByRole("heading", { name: boardName })).toBeVisible();
+
+    await page.getByLabel("Task title").fill("Verify the board workflow");
+    await page.getByRole("button", { name: "Add task" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Verify the board workflow" })
+    ).toBeVisible();
+
+    await page.getByText("Edit task", { exact: true }).click();
+    await page.getByLabel("Status").selectOption("DONE");
+    await page.getByRole("button", { name: "Save task" }).click();
+    await expect(
+      page.getByRole("progressbar", { name: "Board completion" })
+    ).toHaveAttribute("aria-valuenow", "100");
+
+    await page.getByText("Board settings", { exact: true }).click();
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Delete board" }).click();
+
+    await expect(page).toHaveURL(/\/dashboard\/boards\?notice=/);
+    await expect(page.getByRole("status")).toContainText("Board deleted.");
   });
 });
