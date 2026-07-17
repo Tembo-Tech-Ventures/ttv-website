@@ -54,6 +54,9 @@ test.describe("authenticated delivery agent", () => {
   });
 
   test("renders the Learning Coach controls on desktop and mobile", async ({ page }) => {
+    const historyResponsePromise = page.waitForResponse((response) =>
+      response.url().endsWith("/api/chat/conversations")
+    );
     await page.goto("/dashboard/ask");
 
     await expect(
@@ -69,6 +72,9 @@ test.describe("authenticated delivery agent", () => {
     }
 
     await expect(page.getByRole("button", { name: "New conversation" })).toBeVisible();
+    const historyResponse = await historyResponsePromise;
+    expect(historyResponse.ok()).toBe(true);
+
     await expect(page.getByRole("navigation", { name: "Chat history" })).toBeVisible();
   });
 
