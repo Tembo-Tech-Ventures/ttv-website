@@ -53,6 +53,25 @@ test.describe("authenticated delivery agent", () => {
     await expect(page).toHaveURL(/\/admin\/?$/);
   });
 
+  test("renders the Learning Coach controls on desktop and mobile", async ({ page }) => {
+    await page.goto("/dashboard/ask");
+
+    await expect(
+      page.getByRole("heading", { name: "TTV Learning Coach", level: 2 })
+    ).toBeVisible();
+    await expect(page.getByLabel("Message the TTV Learning Coach")).toBeVisible();
+
+    const openHistory = page.getByRole("button", {
+      name: "Open conversation history",
+    });
+    if (await openHistory.isVisible()) {
+      await openHistory.click();
+    }
+
+    await expect(page.getByRole("button", { name: "New conversation" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Chat history" })).toBeVisible();
+  });
+
   test("can complete a shared project-board workflow", async ({ page }, testInfo) => {
     const boardName = `Agent board ${testInfo.project.name} ${Date.now()}`;
 
