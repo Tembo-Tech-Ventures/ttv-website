@@ -1,12 +1,446 @@
 ---
 import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import Card from "@/components/common/Card.astro";
+import Badge from "@/components/common/Badge.astro";
+import RepoPicker from "@/components/portfolio/RepoPicker";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+import { env } from "cloudflare:workers";
+import { hasCompletedCohort } from "@/lib/talent/eligibility";
+import { parseSkillsJson } from "@/lib/talent/profile";
+import {
+  saveProfile,
+  submitForReview,
+  type ProfileFormResult,
+} from "@/components/portfolio/portfolio-handlers";
+
+const user = Astro.locals.user!;
+const db = drizzle(env.DB, { schema });
+
+const eligible = await hasCompletedCohort(db, user.id);
+
+let result: ProfileFormResult | null = null;
+
+if (Astro.request.method === "POST" && eligible) {
+  const formData = await Astro.request.formData();
+  const action = formData.get("_action") as string;
+
+  if (action === "save") {
+    const existing = await db.query.studentProfile.findFirst({
+      where: eq(schema.studentProfile.userId, user.id),
+      columns: { id: true },
+    });
+    result = await saveProfile(db, user.id, formData, existing?.id);
+  } else if (action === "submit_for_review") {
+    const existing = await db.query.studentProfile.findFirst({
+      where: eq(schema.studentProfile.userId, user.id),
+      columns: { id: true },
+    });
+    if (existing) {
+      result = await submitForReview(db, user.id, existing.id);
+    } else {
+      result = { success: false, error: "Create your profile first" };
+    }
+  }
+}
+
+const profile = eligible
+  ? await db.query.studentProfile.findFirst({
+      where: eq(schema.studentProfile.userId, user.id),
+      with: { highlights: true },
+    })
+  : null;
+
+const skills = profile ? parseSkillsJson(profile.skills) : [];
+const skillsValue = skills.join(", ");
+
+let defaultHandle = "";
+if (eligible && !profile) {
+  try {
+    const ghAccount = await db.query.account.findFirst({
+      where: eq(schema.account.userId, user.id),
+      columns: { accessToken: true, providerId: true },
+    });
+    if (ghAccount?.providerId === "github" && ghAccount.accessToken) {
+      const { fetchGitHubLogin } = await import("@/lib/talent/github");
+      defaultHandle = await fetchGitHubLogin(ghAccount.accessToken);
+    }
+  } catch {
+    // GitHub unavailable — leave blank
+  }
+}
+
+const isEditable = !profile || profile.status === "DRAFT" || profile.status === "PUBLISHED";
+
+const existingHighlights = profile?.highlights
+  ? profile.highlights
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((h) => ({
+        repoFullName: h.repoFullName,
+        blurb: h.blurb ?? "",
+        sortOrder: h.sortOrder,
+      }))
+  : [];
+
+const hasGitHubAccount = profile
+  ? await db.query.account
+      .findFirst({
+        where: eq(schema.account.userId, user.id),
+        columns: { accessToken: true, providerId: true },
+      })
+      .then((a) => a?.providerId === "github" && !!a.accessToken)
+  : false;
 ---
 
 <DashboardLayout title="Portfolio">
-  <div class="mx-auto max-w-3xl py-12 text-center">
-    <h1 class="text-2xl font-semibold text-white">Portfolio</h1>
-    <p class="mt-4 text-ink-secondary">
-      Your portfolio profile is coming together — check back soon.
-    </p>
+  <div class="space-y-6">
+    <div>
+      <h2 class="text-2xl font-bold text-white">Portfolio</h2>
+      <p class="mt-1 text-ink-secondary">
+        Showcase your work and connect with opportunities.
+      </p>
+    </div>
+
+    {!eligible && (
+      <Card>
+        <div class="py-8 text-center">
+          <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold text-white">
+            Your portfolio unlocks when you complete a cohort
+          </h3>
+          <p class="mx-auto mt-2 max-w-md text-ink-secondary">
+            Once you finish a training program, you'll be able to build your
+            portfolio, highlight your best projects, and connect with
+            opportunities across the ecosystem.
+          </p>
+          <a
+            href="/dashboard/apply"
+            class="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 font-medium text-dark transition-colors hover:bg-primary/90"
+          >
+            Browse Programs
+          </a>
+        </div>
+      </Card>
+    )}
+
+    {eligible && (
+      <>
+        {/* Status banner */}
+        {profile && (
+          <div class:list={[
+            "rounded-md border p-4",
+            profile.status === "DRAFT" && "border-amber-500/30 bg-amber-500/10 text-amber-300",
+            profile.status === "IN_REVIEW" && "border-blue-500/30 bg-blue-500/10 text-blue-300",
+            profile.status === "PUBLISHED" && "border-green-500/30 bg-green-500/10 text-green-300",
+            profile.status === "SUSPENDED" && "border-red-500/30 bg-red-500/10 text-red-300",
+          ]}>
+            <div class="flex items-center justify-between gap-4">
+              <div class="flex items-center gap-3">
+                <Badge variant={profile.status.toLowerCase() as "draft" | "in_review" | "published" | "suspended"} />
+                {profile.status === "DRAFT" && (
+                  <span>Your profile is a draft. Submit it for review when you're ready.</span>
+                )}
+                {profile.status === "IN_REVIEW" && (
+                  <span>The TTV team is reviewing your profile.</span>
+                )}
+                {profile.status === "PUBLISHED" && (
+                  <span>
+                    Live at{" "}
+                    <a
+                      href={`/talent/${profile.handle}`}
+                      class="underline hover:text-white"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >/talent/{profile.handle}</a>
+                    {" "}— edits go live immediately.
+                  </span>
+                )}
+                {profile.status === "SUSPENDED" && (
+                  <span>Your profile is paused — reach out to the team for assistance.</span>
+                )}
+              </div>
+              {profile.status === "DRAFT" && (
+                <form method="POST">
+                  <input type="hidden" name="_action" value="submit_for_review" />
+                  <button
+                    type="submit"
+                    class="whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark transition-colors hover:bg-primary/90"
+                  >
+                    Submit for Review
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Result messages */}
+        {result && !result.success && result.error && (
+          <div class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
+            {result.error}
+          </div>
+        )}
+
+        {result?.success && (
+          <div class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-300">
+            Profile saved successfully.
+          </div>
+        )}
+
+        {/* Profile editor */}
+        {isEditable && (
+          <Card>
+            <form method="POST" class="space-y-5">
+              <input type="hidden" name="_action" value="save" />
+
+              <h3 class="text-lg font-semibold text-white">
+                {profile ? "Edit Your Profile" : "Create Your Profile"}
+              </h3>
+
+              {/* Handle */}
+              <div class="flex flex-col gap-1.5">
+                <label for="handle" class="text-sm font-medium text-white/90">
+                  Handle <span class="text-primary">*</span>
+                </label>
+                <div class="flex items-center gap-2">
+                  <span class="text-ink-muted">/talent/</span>
+                  <input
+                    id="handle"
+                    name="handle"
+                    type="text"
+                    required
+                    maxlength="39"
+                    placeholder="your-handle"
+                    value={profile?.handle ?? defaultHandle}
+                    class:list={[
+                      "flex-1 rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary/50",
+                      result?.handleError ? "border-red-500" : "border-teal focus:border-primary",
+                    ]}
+                  />
+                </div>
+                {result?.handleError && (
+                  <p class="text-sm text-red-400">{result.handleError}</p>
+                )}
+                <p class="text-xs text-ink-muted">
+                  3-39 characters. Lowercase letters, numbers, and hyphens only.
+                </p>
+              </div>
+
+              {/* Headline */}
+              <div class="flex flex-col gap-1.5">
+                <label for="headline" class="text-sm font-medium text-white/90">
+                  Headline
+                </label>
+                <input
+                  id="headline"
+                  name="headline"
+                  type="text"
+                  maxlength="120"
+                  placeholder="e.g. Full-Stack Developer · Lagos, Nigeria"
+                  value={profile?.headline ?? ""}
+                  class:list={[
+                    "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary/50",
+                    result?.fieldErrors?.headline ? "border-red-500" : "border-teal focus:border-primary",
+                  ]}
+                />
+                {result?.fieldErrors?.headline && (
+                  <p class="text-sm text-red-400">{result.fieldErrors.headline}</p>
+                )}
+              </div>
+
+              {/* Bio */}
+              <div class="flex flex-col gap-1.5">
+                <label for="bio" class="text-sm font-medium text-white/90">
+                  Bio
+                </label>
+                <textarea
+                  id="bio"
+                  name="bio"
+                  rows={4}
+                  maxlength="4000"
+                  placeholder="Tell the community about yourself, your journey, and what you're building."
+                  class:list={[
+                    "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary/50",
+                    result?.fieldErrors?.bio ? "border-red-500" : "border-teal focus:border-primary",
+                  ]}
+                >{profile?.bio ?? ""}</textarea>
+                {result?.fieldErrors?.bio && (
+                  <p class="text-sm text-red-400">{result.fieldErrors.bio}</p>
+                )}
+              </div>
+
+              {/* Location + Country */}
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div class="flex flex-col gap-1.5">
+                  <label for="location" class="text-sm font-medium text-white/90">
+                    City / Region
+                  </label>
+                  <input
+                    id="location"
+                    name="location"
+                    type="text"
+                    maxlength="120"
+                    placeholder="e.g. Lagos"
+                    value={profile?.location ?? ""}
+                    class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
+                <div class="flex flex-col gap-1.5">
+                  <label for="country" class="text-sm font-medium text-white/90">
+                    Country
+                  </label>
+                  <input
+                    id="country"
+                    name="country"
+                    type="text"
+                    maxlength="56"
+                    placeholder="e.g. Nigeria"
+                    value={profile?.country ?? ""}
+                    class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
+              </div>
+
+              {/* Skills */}
+              <div class="flex flex-col gap-1.5">
+                <label for="skills" class="text-sm font-medium text-white/90">
+                  Skills
+                </label>
+                <input
+                  id="skills"
+                  name="skills"
+                  type="text"
+                  placeholder="e.g. TypeScript, React, Node.js, Python"
+                  value={skillsValue}
+                  class:list={[
+                    "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary/50",
+                    result?.fieldErrors?.skills ? "border-red-500" : "border-teal focus:border-primary",
+                  ]}
+                />
+                {result?.fieldErrors?.skills && (
+                  <p class="text-sm text-red-400">{result.fieldErrors.skills}</p>
+                )}
+                <p class="text-xs text-ink-muted">
+                  Comma-separated, up to 12 skills (30 characters each).
+                </p>
+              </div>
+
+              {/* Availability toggles */}
+              <div class="flex flex-wrap gap-6">
+                <label class="flex items-center gap-2 text-sm text-white/90">
+                  <input
+                    type="checkbox"
+                    name="openToFreelance"
+                    checked={profile?.openToFreelance ?? false}
+                    class="h-4 w-4 rounded border-teal bg-dark/50 text-primary focus:ring-primary/50"
+                  />
+                  Open to freelance work
+                </label>
+                <label class="flex items-center gap-2 text-sm text-white/90">
+                  <input
+                    type="checkbox"
+                    name="openToRoles"
+                    checked={profile?.openToRoles ?? false}
+                    class="h-4 w-4 rounded border-teal bg-dark/50 text-primary focus:ring-primary/50"
+                  />
+                  Open to full-time roles
+                </label>
+              </div>
+
+              {/* URLs */}
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div class="flex flex-col gap-1.5">
+                  <label for="portfolioUrl" class="text-sm font-medium text-white/90">
+                    Portfolio URL
+                  </label>
+                  <input
+                    id="portfolioUrl"
+                    name="portfolioUrl"
+                    type="url"
+                    maxlength="300"
+                    placeholder="https://your-site.com"
+                    value={profile?.portfolioUrl ?? ""}
+                    class:list={[
+                      "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary/50",
+                      result?.fieldErrors?.portfolioUrl ? "border-red-500" : "border-teal focus:border-primary",
+                    ]}
+                  />
+                  {result?.fieldErrors?.portfolioUrl && (
+                    <p class="text-sm text-red-400">{result.fieldErrors.portfolioUrl}</p>
+                  )}
+                </div>
+                <div class="flex flex-col gap-1.5">
+                  <label for="linkedinUrl" class="text-sm font-medium text-white/90">
+                    LinkedIn URL
+                  </label>
+                  <input
+                    id="linkedinUrl"
+                    name="linkedinUrl"
+                    type="url"
+                    maxlength="300"
+                    placeholder="https://linkedin.com/in/your-profile"
+                    value={profile?.linkedinUrl ?? ""}
+                    class:list={[
+                      "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary/50",
+                      result?.fieldErrors?.linkedinUrl ? "border-red-500" : "border-teal focus:border-primary",
+                    ]}
+                  />
+                  {result?.fieldErrors?.linkedinUrl && (
+                    <p class="text-sm text-red-400">{result.fieldErrors.linkedinUrl}</p>
+                  )}
+                </div>
+              </div>
+
+              <div class="flex justify-end">
+                <button
+                  type="submit"
+                  class="rounded-md bg-primary px-6 py-2 font-medium text-dark transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                >
+                  {profile ? "Save Changes" : "Create Profile"}
+                </button>
+              </div>
+            </form>
+          </Card>
+        )}
+
+        {/* IN_REVIEW non-editable state */}
+        {profile && profile.status === "IN_REVIEW" && (
+          <Card>
+            <div class="py-4 text-center text-ink-secondary">
+              Your profile is under review. You'll be able to edit it again once the team responds.
+            </div>
+          </Card>
+        )}
+
+        {/* SUSPENDED non-editable state */}
+        {profile && profile.status === "SUSPENDED" && (
+          <Card>
+            <div class="py-4 text-center text-ink-secondary">
+              Your profile is currently paused. Please reach out to the TTV team for next steps.
+            </div>
+          </Card>
+        )}
+
+        {/* GitHub Highlights */}
+        {profile && (
+          <Card>
+            <h3 class="mb-4 text-lg font-semibold text-white">
+              GitHub Highlights
+            </h3>
+            <RepoPicker
+              client:load
+              profileId={profile.id}
+              existingHighlights={existingHighlights}
+              hasGitHubToken={hasGitHubAccount}
+            />
+          </Card>
+        )}
+      </>
+    )}
   </div>
 </DashboardLayout>
