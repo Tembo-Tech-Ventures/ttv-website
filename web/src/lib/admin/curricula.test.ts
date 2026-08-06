@@ -229,7 +229,7 @@ describe("validateCurriculumSelection", () => {
   it("requires administrators to create a curriculum when none exist", () => {
     expect(validateCurriculumSelection("", [])).toEqual({
       valid: false,
-      message: "Create a curriculum before creating a program.",
+      message: "Create a curriculum before creating a cohort.",
     });
   });
 

@@ -99,7 +99,7 @@ export function validateCurriculumSelection(
   if (availableCurriculumIds.length === 0) {
     return {
       valid: false,
-      message: "Create a curriculum before creating a program.",
+      message: "Create a curriculum before creating a cohort.",
     };
   }
   if (!normalizedId || !availableCurriculumIds.includes(normalizedId)) {
