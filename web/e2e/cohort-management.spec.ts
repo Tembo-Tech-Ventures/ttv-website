@@ -47,24 +47,11 @@ test.describe("admin cohort management", () => {
     const rosterRow = (name: string) =>
       page.locator("[data-roster-application]", { hasText: name });
     const rosterStatus = async (name: string) =>
-      (
-        await rosterRow(name)
-          .locator("span")
-          .filter({ hasText: /^(pending|approved|rejected|audit|completed)$/i })
-          .first()
-          .textContent()
-      )
-        ?.trim()
-        .toUpperCase() ?? "";
+      (await rosterRow(name).getAttribute("data-application-status")) ?? "";
     const expectRosterStatus = async (name: string, status: string) => {
       const row = rosterRow(name);
       await expect(row).toBeVisible();
-      await expect(
-        row
-          .locator("span")
-          .filter({ hasText: new RegExp(`^${status}$`, "i") })
-          .first()
-      ).toBeVisible();
+      await expect(row).toHaveAttribute("data-application-status", status);
     };
     const clickWithConfirmation = async (
       button: Locator,
