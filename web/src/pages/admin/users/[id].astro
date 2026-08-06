@@ -8,6 +8,7 @@ import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import {
   adminRoleErrorMessage,
+  assertPersistentAdminRoleMutationAllowed,
   assignAdminRole,
   createDrizzleAdminRoleStore,
   revokeAdminRole,
@@ -39,6 +40,11 @@ if (Astro.request.method === "POST") {
   const action = formData.get("action");
 
   try {
+    assertPersistentAdminRoleMutationAllowed(
+      action,
+      Astro.locals.session?.userAgent
+    );
+
     if (action === "add-admin") {
       const result = await assignAdminRole(roleStore, id);
       const outcome = result.changed ? "assigned" : "unchanged";
