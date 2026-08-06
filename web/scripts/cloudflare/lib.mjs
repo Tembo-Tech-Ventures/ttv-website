@@ -18,6 +18,8 @@ const DEFAULT_APP_NAME = "ttv-website";
 const DEFAULT_COMPATIBILITY_DATE = "2026-04-01";
 const DEFAULT_AI_GATEWAY_MODEL = "workers-ai/@cf/google/gemma-4-26b-a4b-it";
 const CONTAINER_CLASS_NAME = "FfmpegContainer";
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function getRequiredEnv(name) {
   const value = process.env[name]?.trim();
@@ -309,6 +311,8 @@ export async function removeQueueWorkerConsumer(
     return true;
   } catch (error) {
     if (isMissingResourceError(error)) return false;
+    const message = error instanceof Error ? error.message : String(error);
+    if (/No worker consumer '.+' exists for queue\b/.test(message)) return false;
     throw error;
   }
 }
@@ -374,8 +378,10 @@ export async function deleteContainerAppByName(name, runner = runWrangler) {
     return false;
   }
 
-  if (!match.id) {
-    throw new Error(`Container "${name}" matched but has no id field`);
+  if (typeof match.id !== "string" || !UUID_PATTERN.test(match.id)) {
+    throw new Error(
+      `Container "${name}" has invalid id: ${JSON.stringify(match.id)}`
+    );
   }
 
   await runner(["containers", "delete", match.id]);
@@ -442,6 +448,7 @@ export function resolveBetterAuthUrl({
 
 export function createGeneratedWranglerConfig({
   workerName,
+  containerAppName,
   d1Name,
   d1Id,
   bucketName,
@@ -554,6 +561,7 @@ export function createGeneratedWranglerConfig({
     },
     containers: [
       {
+        name: containerAppName,
         class_name: CONTAINER_CLASS_NAME,
         image: path.relative(generatedDir, path.join(webRoot, "containers", "ffmpeg", "Dockerfile")),
         max_instances: 3,
