@@ -13,7 +13,7 @@ const BUDGET_MS = 4 * 60_000;
  * the suite starts only once the deployment is stable on the path the tests
  * actually use.
  */
-export default async function globalSetup(config: FullConfig) {
+export default async function globalSetup(_config: FullConfig) {
   const baseURL = process.env.PLAYWRIGHT_BASE_URL;
   if (!baseURL) return; // local dev-server runs skip the live-stability gate
 
