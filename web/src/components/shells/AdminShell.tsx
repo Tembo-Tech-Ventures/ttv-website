@@ -22,14 +22,19 @@ const primaryLinks = [
   { href: "/admin/profiles", label: "Profiles", icon: PiIdentificationCardDuotone },
   { href: "/admin/projects", label: "Client Projects", icon: PiBriefcaseDuotone },
   { href: "/admin/curricula", label: "Curricula", icon: PiBooksDuotone },
-  { href: "/admin/programs", label: "Programs", icon: PiBookOpenDuotone },
+  { href: "/admin/programs", label: "Cohorts", icon: PiBookOpenDuotone },
   { href: "/admin/recordings", label: "Recordings", icon: PiVideoCameraDuotone },
-  { href: "/admin/data-migration", label: "Data Migration", icon: PiDatabaseDuotone },
 ];
 
-export function getAdminLinks(agentAuthEnabled: boolean) {
+export function getAdminLinks(
+  agentAuthEnabled: boolean,
+  dataMigrationEnabled = true
+) {
   return [
     ...primaryLinks,
+    ...(dataMigrationEnabled
+      ? [{ href: "/admin/data-migration", label: "Data Migration", icon: PiDatabaseDuotone }]
+      : []),
     ...(agentAuthEnabled
       ? [{ href: "/admin/agent-access", label: "Agent Access", icon: PiKeyDuotone }]
       : []),
@@ -40,12 +45,14 @@ export function getAdminLinks(agentAuthEnabled: boolean) {
 export default function AdminShell({
   children,
   agentAuthEnabled = false,
+  dataMigrationEnabled = true,
 }: {
   children: ReactNode;
   agentAuthEnabled?: boolean;
+  dataMigrationEnabled?: boolean;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const links = getAdminLinks(agentAuthEnabled);
+  const links = getAdminLinks(agentAuthEnabled, dataMigrationEnabled);
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-[#2C6964] to-[#013D39]">

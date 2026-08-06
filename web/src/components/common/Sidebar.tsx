@@ -1,5 +1,5 @@
 import { Dialog, Transition } from "@headlessui/react";
-import { Fragment } from "react";
+import React, { Fragment } from "react";
 import type { IconType } from "react-icons";
 import { PiXBold } from "react-icons/pi";
 
@@ -43,6 +43,19 @@ function NavLinks({ links }: { links: SidebarLink[] }) {
   );
 }
 
+export function SidebarCloseButton({ onClose }: { onClose: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label="Close navigation"
+      onClick={onClose}
+      className="rounded-md p-1 text-white/60 hover:text-white"
+    >
+      <PiXBold className="h-5 w-5" />
+    </button>
+  );
+}
+
 export default function Sidebar({ links, title, isOpen, onClose }: SidebarProps) {
   return (
     <>
@@ -75,12 +88,7 @@ export default function Sidebar({ links, title, isOpen, onClose }: SidebarProps)
                 <span className="text-lg font-semibold text-white">
                   {title}
                 </span>
-                <button
-                  onClick={onClose}
-                  className="rounded-md p-1 text-white/60 hover:text-white"
-                >
-                  <PiXBold className="h-5 w-5" />
-                </button>
+                <SidebarCloseButton onClose={onClose} />
               </div>
               <NavLinks links={links} />
             </Dialog.Panel>
