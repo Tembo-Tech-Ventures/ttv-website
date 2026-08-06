@@ -133,6 +133,7 @@ describe("createGeneratedWranglerConfig", () => {
     vi.stubEnv("CLOUDFLARE_AGENT_AUTH_ENABLED", "true");
     const config = createGeneratedWranglerConfig({
       workerName: "ttv-agent",
+      containerAppName: "ttv-agent-ffmpegcontainer",
       d1Name: "ttv-db-agent",
       d1Id: "db-id",
       bucketName: "ttv-files-agent",
@@ -160,11 +161,13 @@ describe("createGeneratedWranglerConfig", () => {
     expect(config.vectorize[0].binding).toBe("VECTORIZE");
     expect(config.queues.producers[0].binding).toBe("RECORDING_QUEUE");
     expect(config.durable_objects.bindings[0].name).toBe("FFMPEG_CONTAINER");
+    expect(config.containers[0].name).toBe("ttv-agent-ffmpegcontainer");
   });
 
   it("keeps agent bearer auth disabled unless it is explicitly enabled", () => {
     const config = createGeneratedWranglerConfig({
       workerName: "ttv-production",
+      containerAppName: "ttv-production-ffmpegcontainer",
       d1Name: "ttv-db-production",
       d1Id: "db-id",
       bucketName: "ttv-files-production",
@@ -180,6 +183,7 @@ describe("createGeneratedWranglerConfig", () => {
   it("lets Wrangler disable workers.dev and preview routes for custom domains", () => {
     const config = createGeneratedWranglerConfig({
       workerName: "ttv-production",
+      containerAppName: "ttv-production-ffmpegcontainer",
       d1Name: "ttv-db-production",
       d1Id: "db-id",
       bucketName: "ttv-files-production",
@@ -198,6 +202,7 @@ describe("createGeneratedWranglerConfig", () => {
     vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME", "agent-pr-55");
     const config = createGeneratedWranglerConfig({
       workerName: "ttv-agent",
+      containerAppName: "ttv-agent-ffmpegcontainer",
       d1Name: "ttv-db-agent",
       d1Id: "db-id",
       bucketName: "ttv-files-agent",
@@ -220,6 +225,7 @@ describe("createGeneratedWranglerConfig", () => {
     expect(() =>
       createGeneratedWranglerConfig({
         workerName: "ttv-production",
+        containerAppName: "ttv-production-ffmpegcontainer",
         d1Name: "ttv-db-production",
         d1Id: "db-id",
         bucketName: "ttv-files-production",
@@ -229,6 +235,44 @@ describe("createGeneratedWranglerConfig", () => {
         betterAuthUrl: "https://example.com",
       })
     ).toThrow("allowed only in staging or agent-* environments");
+  });
+
+  it("sets explicit container app name so deploy and destroy share one contract", () => {
+    vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME", "agent-pr-72");
+    const context = deriveEnvironmentContext();
+    const config = createGeneratedWranglerConfig({
+      workerName: context.workerName,
+      containerAppName: context.containerAppName,
+      d1Name: context.d1Name,
+      d1Id: "db-id",
+      bucketName: context.bucketName,
+      queueName: context.queueName,
+      vectorizeIndexName: context.vectorizeIndexName,
+      aiGatewayName: context.aiGatewayName,
+      betterAuthUrl: "https://example.com",
+    });
+    expect(config.containers[0].name).toBe(
+      "ttv-website-agent-pr-72-ffmpegcontainer"
+    );
+    expect(config.containers[0].name).toBe(context.containerAppName);
+  });
+
+  it("deploys and destroys the same truncated name for overlong environments", () => {
+    vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME", "agent-" + "x".repeat(60));
+    const context = deriveEnvironmentContext();
+    const config = createGeneratedWranglerConfig({
+      workerName: context.workerName,
+      containerAppName: context.containerAppName,
+      d1Name: context.d1Name,
+      d1Id: "db-id",
+      bucketName: context.bucketName,
+      queueName: context.queueName,
+      vectorizeIndexName: context.vectorizeIndexName,
+      aiGatewayName: context.aiGatewayName,
+      betterAuthUrl: "https://example.com",
+    });
+    expect(config.containers[0].name).toBe(context.containerAppName);
+    expect(config.containers[0].name.length).toBeLessThanOrEqual(63);
   });
 });
 
@@ -345,6 +389,39 @@ describe("environment cleanup", () => {
     ).resolves.toBe(false);
   });
 
+  it("recognizes Wrangler's exact queue consumer missing error", async () => {
+    const wranglerRunner = vi.fn().mockRejectedValue(
+      new Error(
+        "npx wrangler queues consumer worker remove q w failed with exit code 1\n" +
+          "No worker consumer 'w' exists for queue q"
+      )
+    );
+    await expect(
+      removeQueueWorkerConsumer("q", "w", wranglerRunner)
+    ).resolves.toBe(false);
+
+    const unauthorizedRunner = vi
+      .fn()
+      .mockRejectedValue(new Error("Unauthorized"));
+    await expect(
+      removeQueueWorkerConsumer("q", "w", unauthorizedRunner)
+    ).rejects.toThrow("Unauthorized");
+
+    const networkRunner = vi
+      .fn()
+      .mockRejectedValue(new Error("ECONNREFUSED"));
+    await expect(
+      removeQueueWorkerConsumer("q", "w", networkRunner)
+    ).rejects.toThrow("ECONNREFUSED");
+
+    const otherNoExistsRunner = vi
+      .fn()
+      .mockRejectedValue(new Error("No producer exists for queue recordings"));
+    await expect(
+      removeQueueWorkerConsumer("recordings", "w", otherNoExistsRunner)
+    ).rejects.toThrow("No producer exists");
+  });
+
   it("deletes an existing queue without masking missing queues", async () => {
     const runner = vi.fn().mockResolvedValue({});
     await expect(deleteQueueByName("recordings", runner)).resolves.toBe(true);
@@ -384,12 +461,13 @@ describe("environment cleanup", () => {
   });
 
   it("deletes an exact-match container app by UUID", async () => {
+    const validUuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
     const runner = vi
       .fn()
       .mockResolvedValueOnce({
         stdout: JSON.stringify([
-          { id: "uuid-1", name: "ttv-website-staging-ffmpegcontainer" },
-          { id: "uuid-2", name: "other-app-ffmpegcontainer" },
+          { id: validUuid, name: "ttv-website-staging-ffmpegcontainer" },
+          { id: "f1e2d3c4-b5a6-7890-abcd-ef1234567890", name: "other-app-ffmpegcontainer" },
         ]),
       })
       .mockResolvedValueOnce({});
@@ -399,7 +477,7 @@ describe("environment cleanup", () => {
     ).resolves.toBe(true);
     expect(runner.mock.calls).toEqual([
       [["containers", "list", "--json"]],
-      [["containers", "delete", "uuid-1"]],
+      [["containers", "delete", validUuid]],
     ]);
   });
 
@@ -447,8 +525,8 @@ describe("environment cleanup", () => {
   it("never uses substring or prefix matching for container deletion", async () => {
     const runner = vi.fn().mockResolvedValueOnce({
       stdout: JSON.stringify([
-        { id: "uuid-prefix", name: "ttv-website-agent-pr-72-ffmpegcontainer-extra" },
-        { id: "uuid-substr", name: "x-ttv-website-agent-pr-72-ffmpegcontainer" },
+        { id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890", name: "ttv-website-agent-pr-72-ffmpegcontainer-extra" },
+        { id: "f1e2d3c4-b5a6-7890-abcd-ef1234567890", name: "x-ttv-website-agent-pr-72-ffmpegcontainer" },
       ]),
     });
 
@@ -459,6 +537,34 @@ describe("environment cleanup", () => {
       )
     ).resolves.toBe(false);
     expect(runner).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a non-UUID container id before calling delete", async () => {
+    const malformedRunner = vi.fn().mockResolvedValueOnce({
+      stdout: JSON.stringify([
+        { id: "not-a-uuid", name: "target-app" },
+      ]),
+    });
+    await expect(
+      deleteContainerAppByName("target-app", malformedRunner)
+    ).rejects.toThrow('has invalid id: "not-a-uuid"');
+    expect(malformedRunner).toHaveBeenCalledTimes(1);
+
+    const numericRunner = vi.fn().mockResolvedValueOnce({
+      stdout: JSON.stringify([{ id: 12345, name: "target-app" }]),
+    });
+    await expect(
+      deleteContainerAppByName("target-app", numericRunner)
+    ).rejects.toThrow("has invalid id: 12345");
+    expect(numericRunner).toHaveBeenCalledTimes(1);
+
+    const nullRunner = vi.fn().mockResolvedValueOnce({
+      stdout: JSON.stringify([{ id: null, name: "target-app" }]),
+    });
+    await expect(
+      deleteContainerAppByName("target-app", nullRunner)
+    ).rejects.toThrow("has invalid id: null");
+    expect(nullRunner).toHaveBeenCalledTimes(1);
   });
 });
 

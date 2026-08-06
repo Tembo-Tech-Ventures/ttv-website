@@ -45,6 +45,7 @@ async function main() {
   await runNpm(["run", "build"]);
   const configPath = await writeGeneratedWranglerConfig({
     workerName: context.workerName,
+    containerAppName: context.containerAppName,
     d1Name: context.d1Name,
     d1Id: d1Database.uuid,
     bucketName: context.bucketName,
