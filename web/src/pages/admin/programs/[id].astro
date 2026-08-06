@@ -497,9 +497,12 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
         <div class="rounded-md border border-teal/30 bg-teal/10 p-4">
           <label class="flex items-start gap-3 text-sm text-white/90">
             <input
+              id="applicationsOpen"
               type="checkbox"
               name="applicationsOpen"
               checked={cohortEditValues.applicationsOpen}
+              aria-invalid={Boolean(cohortFieldErrors.applicationsOpen)}
+              aria-describedby={cohortFieldErrors.applicationsOpen ? "applications-open-error" : undefined}
               class="mt-0.5 h-4 w-4 rounded border-teal bg-dark text-primary focus:ring-primary"
             />
             <span>
@@ -510,7 +513,7 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
             </span>
           </label>
           {cohortFieldErrors.applicationsOpen && (
-            <p class="mt-2 text-sm text-red-300">
+            <p id="applications-open-error" class="mt-2 text-sm text-red-300">
               {cohortFieldErrors.applicationsOpen}
             </p>
           )}

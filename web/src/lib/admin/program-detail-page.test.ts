@@ -36,5 +36,10 @@ describe("admin cohort detail page wiring", () => {
     expect(pageSource).toContain('id="curriculum-error"');
     expect(pageSource).toContain('id="start-date-error"');
     expect(pageSource).toContain('id="end-date-error"');
+    expect(pageSource).toContain('id="applicationsOpen"');
+    expect(pageSource).toContain(
+      'aria-describedby={cohortFieldErrors.applicationsOpen ? "applications-open-error" : undefined}'
+    );
+    expect(pageSource).toContain('id="applications-open-error"');
   });
 });

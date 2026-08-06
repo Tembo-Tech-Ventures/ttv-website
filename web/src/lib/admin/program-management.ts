@@ -267,6 +267,7 @@ export function parseOptionalCohortDate(
 
   const parsed = new Date(normalized + "T00:00:00.000Z");
   if (
+    Number(normalized.slice(0, 4)) < 1 ||
     Number.isNaN(parsed.getTime()) ||
     parsed.toISOString().slice(0, 10) !== normalized
   ) {
