@@ -97,10 +97,11 @@ describe("seedAgentPreviewFixtures", () => {
       now,
     });
 
-    // profile reset, curriculum, program, preview app, amina user, amina app,
-    // amina profile, two amina highlights, kwame user, kwame app, kwame
-    // profile, project approved, project pending = 14 total
-    expect(executeQuery).toHaveBeenCalledTimes(14);
+    // profile reset, curriculum, program, cohort-application reset, ten cohort
+    // users, six eligible cohort applications, preview app, amina user/app,
+    // amina profile, two amina highlights, kwame user/app/profile, and two
+    // projects = 31 total
+    expect(executeQuery).toHaveBeenCalledTimes(31);
 
     // All calls should target the correct database
     for (const call of executeQuery.mock.calls) {
@@ -112,6 +113,12 @@ describe("seedAgentPreviewFixtures", () => {
     const calls = executeQuery.mock.calls;
     const findByParam = (value) =>
       calls.find((call) => (call[2] ?? []).includes(value));
+    const findInsertByParam = (table, value) =>
+      calls.find(
+        (call) =>
+          call[1].includes(`INSERT INTO "${table}"`) &&
+          (call[2] ?? []).includes(value)
+      );
 
     expect(calls[0][1]).toContain('DELETE FROM "studentProfile"');
 
@@ -119,6 +126,42 @@ describe("seedAgentPreviewFixtures", () => {
     const programCall = findByParam("ttv-fixture-program-cohort-04");
     expect(programCall?.[1]).toContain("program");
     expect(programCall?.[2]).toContain("Cohort 04");
+
+    const cohortReset = calls.find((call) =>
+      call[1].includes('DELETE FROM "programApplication"')
+    );
+    expect(cohortReset?.[2]).toContain(
+      "ttv-fixture-user-cohort-desktop-current"
+    );
+    expect(cohortReset?.[2]).toContain(
+      "ttv-fixture-user-cohort-mobile-current"
+    );
+
+    const desktopCurrent = findInsertByParam(
+      "user",
+      "ttv-fixture-user-cohort-desktop-current"
+    );
+    expect(desktopCurrent?.[2]).toContain(
+      "Cohort Desktop Current Learner"
+    );
+    expect(
+      findInsertByParam(
+        "programApplication",
+        "ttv-fixture-user-cohort-desktop-current"
+      )
+    ).toBeUndefined();
+
+    const desktopPending = findInsertByParam(
+      "programApplication",
+      "ttv-fixture-app-cohort-desktop-pending"
+    );
+    expect(desktopPending?.[2]).toContain("PENDING");
+    expect(
+      findInsertByParam(
+        "programApplication",
+        "ttv-fixture-app-cohort-mobile-audit"
+      )?.[2]
+    ).toContain("AUDIT");
 
     const previewApp = findByParam("ttv-fixture-app-preview");
     expect(previewApp?.[1]).toContain("programApplication");
@@ -145,8 +188,8 @@ describe("seedAgentPreviewFixtures", () => {
       "Baraka Health"
     );
 
-    // Every INSERT must be idempotent; the profile-reset DELETE is the only
-    // non-INSERT statement.
+    // Every INSERT must be idempotent; deterministic DELETEs only reset
+    // isolated fixture rows before recreating their convergent state.
     for (const call of executeQuery.mock.calls) {
       if (call[1].trimStart().startsWith("DELETE")) continue;
       expect(call[1]).toContain("ON CONFLICT");
