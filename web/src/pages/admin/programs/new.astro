@@ -4,7 +4,12 @@ import Card from "@/components/common/Card.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
-import { validateCurriculumSelection } from "@/lib/admin/curricula";
+import {
+  createCohortValuesFromFormData,
+  validateCreateCohort,
+  type CreateCohortFieldErrors,
+  type CreateCohortValues,
+} from "@/lib/admin/cohorts";
 
 const db = drizzle(env.DB, { schema });
 
@@ -12,72 +17,48 @@ const curricula = await db.query.curriculum.findMany({
   orderBy: (c, { asc }) => [asc(c.title)],
 });
 
-interface ProgramFormValues {
-  name: string;
-  description: string;
-  curriculumId: string;
-  startDate: string;
-  endDate: string;
-}
-
-let values: ProgramFormValues = {
+let values: CreateCohortValues = {
   name: "",
   description: "",
   curriculumId: "",
   startDate: "",
   endDate: "",
+  applicationsOpen: false,
 };
-let curriculumError: string | undefined;
+let fieldErrors: CreateCohortFieldErrors = {};
 let formError: string | undefined;
 
 if (Astro.request.method === "POST") {
-  const formData = await Astro.request.formData();
-  const formText = (name: string) => {
-    const value = formData.get(name);
-    return typeof value === "string" ? value : "";
-  };
-  values = {
-    name: formText("name"),
-    description: formText("description"),
-    curriculumId: formText("curriculumId"),
-    startDate: formText("startDate"),
-    endDate: formText("endDate"),
-  };
-
-  const curriculumSelection = validateCurriculumSelection(
-    values.curriculumId,
+  values = createCohortValuesFromFormData(await Astro.request.formData());
+  const validation = validateCreateCohort(
+    values,
     curricula.map((curriculum) => curriculum.id)
   );
-  if (!curriculumSelection.valid) {
-    curriculumError = curriculumSelection.message;
+
+  if (!validation.valid) {
+    fieldErrors = validation.errors;
   } else {
     try {
       const [created] = await db
         .insert(schema.program)
-        .values({
-          name: values.name,
-          description: values.description,
-          curriculumId: curriculumSelection.curriculumId,
-          startDate: values.startDate ? new Date(values.startDate) : null,
-          endDate: values.endDate ? new Date(values.endDate) : null,
-        })
+        .values(validation.data)
         .returning();
-      if (!created) throw new Error("Program insert did not return a row.");
+      if (!created) throw new Error("Cohort insert did not return a row.");
       return Astro.redirect(`/admin/programs/${created.id}`);
     } catch {
-      formError = "The program could not be created. Please try again.";
+      formError = "The cohort could not be created. Please try again.";
     }
   }
 }
 ---
 
-<AdminLayout title="New Program">
+<AdminLayout title="New Cohort">
   <div class="space-y-6">
     <a href="/admin/programs" class="text-sm text-primary hover:underline">
-      &larr; Back to Programs
+      &larr; Back to Cohorts
     </a>
 
-    <h2 class="text-2xl font-bold text-white">Create Program</h2>
+    <h2 class="text-2xl font-bold text-white">Create Cohort</h2>
 
     {curricula.length === 0 ? (
       <Card>
@@ -86,12 +67,12 @@ if (Astro.request.method === "POST") {
             Create a curriculum first
           </h3>
           <p class="mx-auto mt-2 max-w-xl text-sm text-white/60">
-            Every program or cohort needs a curriculum. Add one, then return
-            here to create the program.
+            Every cohort needs a curriculum. Add one, then return here to
+            create the cohort.
           </p>
-          {curriculumError && (
+          {fieldErrors.curriculumId && (
             <p role="alert" class="mt-3 text-sm text-red-200">
-              {curriculumError}
+              {fieldErrors.curriculumId}
             </p>
           )}
           <a
@@ -119,10 +100,17 @@ if (Astro.request.method === "POST") {
             id="name"
             name="name"
             required
+            aria-invalid={Boolean(fieldErrors.name)}
+            aria-describedby={fieldErrors.name ? "name-error" : undefined}
             value={values.name}
-            placeholder="Program name"
+            placeholder="Cohort name"
             class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
+          {fieldErrors.name && (
+            <p id="name-error" class="text-sm text-red-200">
+              {fieldErrors.name}
+            </p>
+          )}
         </div>
 
         <div class="flex flex-col gap-1.5">
@@ -131,10 +119,17 @@ if (Astro.request.method === "POST") {
             id="description"
             name="description"
             required
+            aria-invalid={Boolean(fieldErrors.description)}
+            aria-describedby={fieldErrors.description ? "description-error" : undefined}
             rows="3"
-            placeholder="Program description"
+            placeholder="Cohort description"
             class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
           >{values.description}</textarea>
+          {fieldErrors.description && (
+            <p id="description-error" class="text-sm text-red-200">
+              {fieldErrors.description}
+            </p>
+          )}
         </div>
 
         <div class="flex flex-col gap-1.5">
@@ -143,8 +138,8 @@ if (Astro.request.method === "POST") {
             id="curriculumId"
             name="curriculumId"
             required
-            aria-invalid={Boolean(curriculumError)}
-            aria-describedby={curriculumError ? "curriculum-error" : undefined}
+            aria-invalid={Boolean(fieldErrors.curriculumId)}
+            aria-describedby={fieldErrors.curriculumId ? "curriculum-error" : undefined}
             class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
           >
             <option value="">Select curriculum…</option>
@@ -154,9 +149,9 @@ if (Astro.request.method === "POST") {
               </option>
             ))}
           </select>
-          {curriculumError && (
+          {fieldErrors.curriculumId && (
             <p id="curriculum-error" class="text-sm text-red-200">
-              {curriculumError}
+              {fieldErrors.curriculumId}
             </p>
           )}
         </div>
@@ -168,9 +163,16 @@ if (Astro.request.method === "POST") {
               type="date"
               id="startDate"
               name="startDate"
+              aria-invalid={Boolean(fieldErrors.startDate)}
+              aria-describedby={fieldErrors.startDate ? "start-date-error" : undefined}
               value={values.startDate}
               class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
+            {fieldErrors.startDate && (
+              <p id="start-date-error" class="text-sm text-red-200">
+                {fieldErrors.startDate}
+              </p>
+            )}
           </div>
           <div class="flex flex-col gap-1.5">
             <label for="endDate" class="text-sm font-medium text-white/90">End Date</label>
@@ -178,17 +180,39 @@ if (Astro.request.method === "POST") {
               type="date"
               id="endDate"
               name="endDate"
+              aria-invalid={Boolean(fieldErrors.endDate)}
+              aria-describedby={fieldErrors.endDate ? "end-date-error" : undefined}
               value={values.endDate}
               class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
+            {fieldErrors.endDate && (
+              <p id="end-date-error" class="text-sm text-red-200">
+                {fieldErrors.endDate}
+              </p>
+            )}
           </div>
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="applicationsOpen" class="flex items-center gap-2 text-sm font-medium text-white/90">
+            <input
+              type="checkbox"
+              id="applicationsOpen"
+              name="applicationsOpen"
+              value="true"
+              checked={values.applicationsOpen}
+              class="h-4 w-4 rounded border-teal bg-dark/50 text-primary focus:ring-primary/50"
+            />
+            Applications open
+          </label>
+          <p class="text-sm text-white/50">Leave unchecked to create a closed cohort.</p>
         </div>
 
         <button
           type="submit"
           class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
         >
-          Create Program
+          Create Cohort
         </button>
       </form>
     </Card>

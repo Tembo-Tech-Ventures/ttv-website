@@ -193,4 +193,22 @@ test.describe("admin curriculum management", () => {
     ).toBeVisible();
     await expect(page.getByLabel(/^Name/)).toHaveValue("Cohort 04");
   });
+
+  test("uses Cohort terminology and defaults new cohorts closed", async ({
+    page,
+  }) => {
+    await page.goto("/admin/programs");
+    await expect(
+      page.getByRole("heading", { name: "Cohorts", exact: true })
+    ).toBeVisible();
+    await expect(page.getByText("Closed", { exact: true }).first()).toBeVisible();
+
+    await page.getByRole("link", { name: "New Cohort" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Create Cohort", exact: true })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("checkbox", { name: "Applications open" })
+    ).not.toBeChecked();
+  });
 });

@@ -12,15 +12,15 @@ const programs = await db.query.program.findMany({
 });
 ---
 
-<AdminLayout title="Programs">
+<AdminLayout title="Cohorts">
   <div class="space-y-6">
     <div class="flex items-center justify-between">
-      <h2 class="text-2xl font-bold text-white">Programs</h2>
+      <h2 class="text-2xl font-bold text-white">Cohorts</h2>
       <a
         href="/admin/programs/new"
         class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
       >
-        New Program
+        New Cohort
       </a>
     </div>
 
@@ -32,14 +32,15 @@ const programs = await db.query.program.findMany({
             <th class="px-4 py-3 font-medium">Curriculum</th>
             <th class="px-4 py-3 font-medium">Start Date</th>
             <th class="px-4 py-3 font-medium">End Date</th>
+            <th class="px-4 py-3 font-medium">Applications</th>
             <th class="px-4 py-3 font-medium">Actions</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-teal/10">
           {programs.length === 0 ? (
             <tr>
-              <td colspan="5" class="px-4 py-8 text-center text-white/40">
-                No programs yet
+              <td colspan="6" class="px-4 py-8 text-center text-white/40">
+                No cohorts yet
               </td>
             </tr>
           ) : (
@@ -56,6 +57,16 @@ const programs = await db.query.program.findMany({
                   {p.endDate
                     ? new Date(p.endDate).toLocaleDateString()
                     : "—"}
+                </td>
+                <td class="px-4 py-3">
+                  <span
+                    class:list={[
+                      "inline-flex rounded-full px-2.5 py-1 text-xs font-medium",
+                      p.applicationsOpen
+                        ? "bg-emerald-500/20 text-emerald-100"
+                        : "bg-white/10 text-white/60",
+                    ]}
+                  >{p.applicationsOpen ? "Open" : "Closed"}</span>
                 </td>
                 <td class="px-4 py-3">
                   <a
