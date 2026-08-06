@@ -1,6 +1,22 @@
 ---
 interface Props {
-  variant: "pending" | "approved" | "rejected" | "audit" | "completed";
+  variant:
+    | "pending"
+    | "approved"
+    | "rejected"
+    | "audit"
+    | "completed"
+    | "draft"
+    | "in_review"
+    | "published"
+    | "suspended"
+    | "new"
+    | "read"
+    | "archived"
+    | "matched"
+    | "closed"
+    | "interested"
+    | "withdrawn";
 }
 
 const variantClasses: Record<Props["variant"], string> = {
@@ -9,6 +25,17 @@ const variantClasses: Record<Props["variant"], string> = {
   rejected: "bg-red-500/20 text-red-300 border-red-500/30",
   audit: "bg-blue-500/20 text-blue-300 border-blue-500/30",
   completed: "bg-purple-500/20 text-purple-300 border-purple-500/30",
+  draft: "bg-gray-500/20 text-gray-300 border-gray-500/30",
+  in_review: "bg-amber-500/20 text-amber-300 border-amber-500/30",
+  published: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+  suspended: "bg-rose-500/20 text-rose-300 border-rose-500/30",
+  new: "bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
+  read: "bg-slate-500/20 text-slate-300 border-slate-500/30",
+  archived: "bg-zinc-500/20 text-zinc-300 border-zinc-500/30",
+  matched: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
+  closed: "bg-stone-500/20 text-stone-300 border-stone-500/30",
+  interested: "bg-teal-500/20 text-teal-300 border-teal-500/30",
+  withdrawn: "bg-orange-500/20 text-orange-300 border-orange-500/30",
 };
 
 const { variant } = Astro.props;
