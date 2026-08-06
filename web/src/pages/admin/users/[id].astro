@@ -4,58 +4,22 @@ import Card from "@/components/common/Card.astro";
 import Badge from "@/components/common/Badge.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
+import {
+  adminRoleErrorMessage,
+  assignAdminRole,
+  createDrizzleAdminRoleStore,
+  revokeAdminRole,
+} from "@/lib/admin/roles";
 
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
 
 if (!id) return Astro.redirect("/admin/users");
 
-// Handle POST — toggle ADMIN role
-if (Astro.request.method === "POST") {
-  const formData = await Astro.request.formData();
-  const action = formData.get("action") as string;
-
-  // Find or create the ADMIN role
-  let adminRole = await db.query.role.findFirst({
-    where: eq(schema.role.name, "ADMIN"),
-  });
-
-  if (!adminRole) {
-    const [created] = await db
-      .insert(schema.role)
-      .values({ name: "ADMIN" })
-      .returning();
-    adminRole = created;
-  }
-
-  if (action === "add-admin") {
-    // Check if already has role
-    const existing = await db.query.userRole.findFirst({
-      where: and(
-        eq(schema.userRole.userId, id),
-        eq(schema.userRole.roleId, adminRole.id)
-      ),
-    });
-    if (!existing) {
-      await db
-        .insert(schema.userRole)
-        .values({ userId: id, roleId: adminRole.id });
-    }
-  } else if (action === "remove-admin") {
-    await db
-      .delete(schema.userRole)
-      .where(
-        and(
-          eq(schema.userRole.userId, id),
-          eq(schema.userRole.roleId, adminRole.id)
-        )
-      );
-  }
-
-  return Astro.redirect(`/admin/users/${id}`);
-}
+const signedInAdminId = Astro.locals.user?.id;
+if (!signedInAdminId) return Astro.redirect("/auth/login");
 
 const targetUser = await db.query.user.findFirst({
   where: eq(schema.user.id, id),
@@ -67,7 +31,48 @@ const targetUser = await db.query.user.findFirst({
 
 if (!targetUser) return Astro.redirect("/admin/users");
 
+const roleStore = createDrizzleAdminRoleStore(db);
+let roleError: string | undefined;
+
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  const action = formData.get("action");
+
+  try {
+    if (action === "add-admin") {
+      const result = await assignAdminRole(roleStore, id);
+      const outcome = result.changed ? "assigned" : "unchanged";
+      return Astro.redirect(`/admin/users/${id}?role=${outcome}`);
+    }
+    if (action === "remove-admin") {
+      const result = await revokeAdminRole(roleStore, id, signedInAdminId);
+      const outcome = result.changed ? "revoked" : "unchanged";
+      return Astro.redirect(`/admin/users/${id}?role=${outcome}`);
+    }
+    roleError = "Choose a valid role action.";
+  } catch (error) {
+    roleError = adminRoleErrorMessage(error);
+  }
+}
+
 const isTargetAdmin = targetUser.userRoles.some((ur) => ur.role.name === "ADMIN");
+const isSignedInUser = targetUser.id === signedInAdminId;
+const roleNoticeByOutcome: Record<string, string> = {
+  assigned: "ADMIN access was granted.",
+  revoked: "ADMIN access was removed.",
+  unchanged: "ADMIN access was already up to date.",
+};
+const roleOutcome = Astro.url.searchParams.get("role");
+const roleNotice = roleOutcome
+  ? roleNoticeByOutcome[roleOutcome]
+  : undefined;
+const applicationBadgeVariants = {
+  PENDING: "pending",
+  APPROVED: "approved",
+  REJECTED: "rejected",
+  AUDIT: "audit",
+  COMPLETED: "completed",
+} as const;
 ---
 
 <AdminLayout title={targetUser.name}>
@@ -97,7 +102,23 @@ const isTargetAdmin = targetUser.userRoles.some((ur) => ur.role.name === "ADMIN"
 
     <Card>
       <h3 class="mb-4 text-lg font-semibold text-white">Roles</h3>
-      <div class="flex items-center gap-4">
+      {roleError && (
+        <p
+          role="alert"
+          class="mb-4 rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
+        >
+          {roleError}
+        </p>
+      )}
+      {roleNotice && (
+        <p
+          role="status"
+          class="mb-4 rounded-md border border-emerald-400/40 bg-emerald-500/15 px-4 py-3 text-sm text-emerald-100"
+        >
+          {roleNotice}
+        </p>
+      )}
+      <div class="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
         <div class="flex flex-wrap gap-2">
           {targetUser.userRoles.length > 0
             ? targetUser.userRoles.map((ur) => (
@@ -107,30 +128,36 @@ const isTargetAdmin = targetUser.userRoles.some((ur) => ur.role.name === "ADMIN"
               ))
             : <span class="text-white/40">No roles assigned</span>}
         </div>
-        <form method="POST">
-          {isTargetAdmin ? (
-            <>
-              <input type="hidden" name="action" value="remove-admin" />
-              <button
-                type="submit"
-                class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
-                onclick="return confirm('Remove admin privileges from this user?')"
-              >
-                Remove Admin
-              </button>
-            </>
-          ) : (
-            <>
-              <input type="hidden" name="action" value="add-admin" />
-              <button
-                type="submit"
-                class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-dark hover:bg-primary/90"
-              >
-                Make Admin
-              </button>
-            </>
-          )}
-        </form>
+        {isTargetAdmin && isSignedInUser ? (
+          <p class="text-sm text-white/60">
+            You cannot remove your own ADMIN role.
+          </p>
+        ) : (
+          <form method="POST">
+            {isTargetAdmin ? (
+              <>
+                <input type="hidden" name="action" value="remove-admin" />
+                <button
+                  type="submit"
+                  class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+                  onclick="return confirm('Remove admin privileges from this user?')"
+                >
+                  Remove Admin
+                </button>
+              </>
+            ) : (
+              <>
+                <input type="hidden" name="action" value="add-admin" />
+                <button
+                  type="submit"
+                  class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-dark hover:bg-primary/90"
+                >
+                  Make Admin
+                </button>
+              </>
+            )}
+          </form>
+        )}
       </div>
     </Card>
 
@@ -152,7 +179,7 @@ const isTargetAdmin = targetUser.userRoles.some((ur) => ur.role.name === "ADMIN"
                 <tr class="text-white/80 hover:bg-teal/10">
                   <td class="px-4 py-3">{app.program?.name ?? "—"}</td>
                   <td class="px-4 py-3">
-                    <Badge variant={app.status.toLowerCase() as any} />
+                    <Badge variant={applicationBadgeVariants[app.status]} />
                   </td>
                   <td class="px-4 py-3">
                     {app.createdAt ? new Date(app.createdAt).toLocaleDateString() : "—"}

@@ -4,35 +4,71 @@ import Card from "@/components/common/Card.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
+import { validateCurriculumSelection } from "@/lib/admin/curricula";
 
 const db = drizzle(env.DB, { schema });
-
-// Handle POST — create program
-if (Astro.request.method === "POST") {
-  const formData = await Astro.request.formData();
-  const name = formData.get("name") as string;
-  const description = formData.get("description") as string;
-  const curriculumId = formData.get("curriculumId") as string;
-  const startDate = formData.get("startDate") as string;
-  const endDate = formData.get("endDate") as string;
-
-  const [created] = await db
-    .insert(schema.program)
-    .values({
-      name,
-      description,
-      curriculumId,
-      startDate: startDate ? new Date(startDate) : null,
-      endDate: endDate ? new Date(endDate) : null,
-    })
-    .returning();
-
-  return Astro.redirect(`/admin/programs/${created.id}`);
-}
 
 const curricula = await db.query.curriculum.findMany({
   orderBy: (c, { asc }) => [asc(c.title)],
 });
+
+interface ProgramFormValues {
+  name: string;
+  description: string;
+  curriculumId: string;
+  startDate: string;
+  endDate: string;
+}
+
+let values: ProgramFormValues = {
+  name: "",
+  description: "",
+  curriculumId: "",
+  startDate: "",
+  endDate: "",
+};
+let curriculumError: string | undefined;
+let formError: string | undefined;
+
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  const formText = (name: string) => {
+    const value = formData.get(name);
+    return typeof value === "string" ? value : "";
+  };
+  values = {
+    name: formText("name"),
+    description: formText("description"),
+    curriculumId: formText("curriculumId"),
+    startDate: formText("startDate"),
+    endDate: formText("endDate"),
+  };
+
+  const curriculumSelection = validateCurriculumSelection(
+    values.curriculumId,
+    curricula.map((curriculum) => curriculum.id)
+  );
+  if (!curriculumSelection.valid) {
+    curriculumError = curriculumSelection.message;
+  } else {
+    try {
+      const [created] = await db
+        .insert(schema.program)
+        .values({
+          name: values.name,
+          description: values.description,
+          curriculumId: curriculumSelection.curriculumId,
+          startDate: values.startDate ? new Date(values.startDate) : null,
+          endDate: values.endDate ? new Date(values.endDate) : null,
+        })
+        .returning();
+      if (!created) throw new Error("Program insert did not return a row.");
+      return Astro.redirect(`/admin/programs/${created.id}`);
+    } catch {
+      formError = "The program could not be created. Please try again.";
+    }
+  }
+}
 ---
 
 <AdminLayout title="New Program">
@@ -43,7 +79,39 @@ const curricula = await db.query.curriculum.findMany({
 
     <h2 class="text-2xl font-bold text-white">Create Program</h2>
 
+    {curricula.length === 0 ? (
+      <Card>
+        <div class="py-6 text-center">
+          <h3 class="text-lg font-semibold text-white">
+            Create a curriculum first
+          </h3>
+          <p class="mx-auto mt-2 max-w-xl text-sm text-white/60">
+            Every program or cohort needs a curriculum. Add one, then return
+            here to create the program.
+          </p>
+          {curriculumError && (
+            <p role="alert" class="mt-3 text-sm text-red-200">
+              {curriculumError}
+            </p>
+          )}
+          <a
+            href="/admin/curricula/new"
+            class="mt-5 inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
+          >
+            Create Curriculum
+          </a>
+        </div>
+      </Card>
+    ) : (
     <Card>
+      {formError && (
+        <p
+          role="alert"
+          class="mb-5 rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
+        >
+          {formError}
+        </p>
+      )}
       <form method="POST" class="space-y-4">
         <div class="flex flex-col gap-1.5">
           <label for="name" class="text-sm font-medium text-white/90">Name *</label>
@@ -51,6 +119,7 @@ const curricula = await db.query.curriculum.findMany({
             id="name"
             name="name"
             required
+            value={values.name}
             placeholder="Program name"
             class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
@@ -65,7 +134,7 @@ const curricula = await db.query.curriculum.findMany({
             rows="3"
             placeholder="Program description"
             class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
-          ></textarea>
+          >{values.description}</textarea>
         </div>
 
         <div class="flex flex-col gap-1.5">
@@ -74,13 +143,22 @@ const curricula = await db.query.curriculum.findMany({
             id="curriculumId"
             name="curriculumId"
             required
+            aria-invalid={Boolean(curriculumError)}
+            aria-describedby={curriculumError ? "curriculum-error" : undefined}
             class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
           >
             <option value="">Select curriculum…</option>
             {curricula.map((c) => (
-              <option value={c.id}>{c.title}</option>
+              <option value={c.id} selected={values.curriculumId === c.id}>
+                {c.title}
+              </option>
             ))}
           </select>
+          {curriculumError && (
+            <p id="curriculum-error" class="text-sm text-red-200">
+              {curriculumError}
+            </p>
+          )}
         </div>
 
         <div class="grid gap-4 sm:grid-cols-2">
@@ -90,6 +168,7 @@ const curricula = await db.query.curriculum.findMany({
               type="date"
               id="startDate"
               name="startDate"
+              value={values.startDate}
               class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
           </div>
@@ -99,6 +178,7 @@ const curricula = await db.query.curriculum.findMany({
               type="date"
               id="endDate"
               name="endDate"
+              value={values.endDate}
               class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
           </div>
@@ -112,5 +192,6 @@ const curricula = await db.query.curriculum.findMany({
         </button>
       </form>
     </Card>
+    )}
   </div>
 </AdminLayout>
