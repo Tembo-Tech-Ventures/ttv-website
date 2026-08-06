@@ -32,7 +32,7 @@ describe("admin navigation", () => {
   });
 
   it("shows data migration only when its independent capability is enabled", () => {
-    expect(getAdminLinks(false).map(({ label }) => label)).toContain(
+    expect(getAdminLinks(false).map(({ label }) => label)).not.toContain(
       "Data Migration"
     );
     expect(getAdminLinks(false, true).map(({ label }) => label)).toContain(

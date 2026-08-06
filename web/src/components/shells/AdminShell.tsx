@@ -28,7 +28,7 @@ const primaryLinks = [
 
 export function getAdminLinks(
   agentAuthEnabled: boolean,
-  dataMigrationEnabled = true
+  dataMigrationEnabled = false
 ) {
   return [
     ...primaryLinks,
@@ -45,7 +45,7 @@ export function getAdminLinks(
 export default function AdminShell({
   children,
   agentAuthEnabled = false,
-  dataMigrationEnabled = true,
+  dataMigrationEnabled = false,
 }: {
   children: ReactNode;
   agentAuthEnabled?: boolean;
