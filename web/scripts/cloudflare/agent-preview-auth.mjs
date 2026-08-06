@@ -396,6 +396,75 @@ export async function seedAgentPreviewFixtures({
     ]
   );
 
+  // Published profile with a legacy COMPLETED row missing completedAt. Public
+  // talent and certificate routes must treat this as an invalid completion.
+  await executeQuery(
+    databaseId,
+    `INSERT INTO "user" ("id", "name", "email", "emailVerified", "image", "createdAt", "updatedAt")
+     VALUES (?, ?, ?, 0, NULL, ?, ?)
+     ON CONFLICT("id") DO UPDATE SET
+       "name" = excluded."name",
+       "email" = excluded."email",
+       "updatedAt" = excluded."updatedAt"`,
+    [
+      "ttv-fixture-user-invalid-completion",
+      "Invalid Completion Fixture",
+      "invalid-completion-fixture@invalid.ttv",
+      createdAt,
+      createdAt,
+    ]
+  );
+
+  await executeQuery(
+    databaseId,
+    `INSERT INTO "programApplication"
+      ("id", "programId", "userId", "status", "application", "completedAt", "createdAt", "updatedAt")
+     VALUES (?, ?, ?, 'COMPLETED', '{}', NULL, ?, ?)
+     ON CONFLICT("id") DO UPDATE SET
+       "programId" = excluded."programId",
+       "userId" = excluded."userId",
+       "status" = 'COMPLETED',
+       "application" = '{}',
+       "completedAt" = NULL,
+       "updatedAt" = excluded."updatedAt"`,
+    [
+      "ttv-fixture-app-invalid-completion",
+      "ttv-fixture-program-cohort-04",
+      "ttv-fixture-user-invalid-completion",
+      createdAt,
+      createdAt,
+    ]
+  );
+
+  await executeQuery(
+    databaseId,
+    `INSERT INTO "studentProfile"
+      ("id", "userId", "handle", "status", "headline", "country", "skills",
+       "openToFreelance", "openToRoles", "publishedAt", "createdAt", "updatedAt")
+     VALUES (?, ?, ?, 'PUBLISHED', ?, ?, '[]', 0, 0, ?, ?, ?)
+     ON CONFLICT("id") DO UPDATE SET
+       "userId" = excluded."userId",
+       "handle" = excluded."handle",
+       "status" = 'PUBLISHED',
+       "headline" = excluded."headline",
+       "country" = excluded."country",
+       "skills" = '[]',
+       "openToFreelance" = 0,
+       "openToRoles" = 0,
+       "publishedAt" = excluded."publishedAt",
+       "updatedAt" = excluded."updatedAt"`,
+    [
+      "ttv-fixture-profile-invalid-completion",
+      "ttv-fixture-user-invalid-completion",
+      "invalid-completion-preview",
+      "Legacy completion without an issue date",
+      "Kenya",
+      publishedAt,
+      createdAt,
+      createdAt,
+    ]
+  );
+
   // Highlights for Amina
   await executeQuery(
     databaseId,

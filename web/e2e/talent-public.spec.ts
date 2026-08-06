@@ -16,6 +16,9 @@ test.describe("public talent directory", () => {
     expect(response?.status()).toBe(200);
     await expect(page.getByText("Amina Fixture")).toBeVisible();
     await expect(
+      page.getByText("Invalid Completion Fixture")
+    ).toHaveCount(0);
+    await expect(
       page.getByText("Full-stack developer", { exact: false }),
     ).toBeVisible();
     await page.screenshot({
@@ -84,6 +87,17 @@ test.describe("public talent profile", () => {
     await expect(highlights.first()).toBeVisible();
   });
 
+  test("published profile without a valid completion returns 404", async ({
+    page,
+  }) => {
+    test.skip(!FIXTURE_ENVIRONMENT, "Requires seeded fixtures (agent-* environments only).");
+    const response = await page.goto("/talent/invalid-completion-preview");
+    expect(response?.status()).toBe(404);
+    await expect(
+      page.getByRole("link", { name: /browse all builders/i }),
+    ).toBeVisible();
+  });
+
   test("/talent/definitely-not-a-handle-xyz returns 404", async ({
     page,
   }) => {
@@ -98,6 +112,28 @@ test.describe("public talent profile", () => {
       path: evidence("talent-profile-404"),
       fullPage: true,
     });
+  });
+});
+
+test.describe("public completion certificates", () => {
+  test.skip(!FIXTURE_ENVIRONMENT, "Requires seeded fixtures (agent-* environments only).");
+
+  test("valid completion serves its certificate", async ({ page }) => {
+    const response = await page.goto("/certificate/ttv-fixture-app-amina");
+    expect(response?.status()).toBe(200);
+    await expect(
+      page.getByRole("heading", { name: "Certificate of Completion" }),
+    ).toBeVisible();
+  });
+
+  test("COMPLETED row without completedAt returns 404", async ({ page }) => {
+    const response = await page.goto(
+      "/certificate/ttv-fixture-app-invalid-completion",
+    );
+    expect(response?.status()).toBe(404);
+    await expect(
+      page.getByRole("heading", { name: "Certificate Not Available" }),
+    ).toBeVisible();
   });
 });
 
@@ -153,6 +189,9 @@ test.describe("homepage humans section", () => {
     await expect(section.getByText("Amina Fixture")).toBeVisible();
     const aminaLink = section.locator('a[href="/talent/amina-preview"]');
     await expect(aminaLink).toBeVisible();
+    await expect(
+      section.getByText("Invalid Completion Fixture")
+    ).toHaveCount(0);
     await page.screenshot({
       path: evidence("homepage-humans"),
       fullPage: true,

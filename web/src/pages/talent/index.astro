@@ -12,7 +12,8 @@ import {
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
+import { isValidCompletion } from "@/lib/talent/eligibility";
 
 const db = drizzle(env.DB, { schema });
 
@@ -23,31 +24,41 @@ const rawProfiles = await db.query.studentProfile.findMany({
       columns: { id: true, name: true, image: true },
       with: {
         programApplications: {
-          where: eq(schema.programApplication.status, "COMPLETED"),
+          where: and(
+            eq(schema.programApplication.status, "COMPLETED"),
+            isNotNull(schema.programApplication.completedAt),
+          ),
           with: { program: { columns: { id: true, name: true } } },
-          columns: { id: true, status: true },
+          columns: { id: true, status: true, completedAt: true },
         },
       },
     },
   },
 });
 
-const allProfiles: DirectoryProfile[] = rawProfiles.map((p) => ({
-  id: p.id,
-  handle: p.handle,
-  headline: p.headline,
-  country: p.country,
-  skills: p.skills,
-  openToFreelance: p.openToFreelance,
-  openToRoles: p.openToRoles,
-  user: { name: p.user.name, image: p.user.image },
-  completedCohorts: p.user.programApplications
-    .filter((a) => a.program)
-    .map((a) => ({
-      programName: a.program!.name,
-      applicationId: a.id,
-    })),
-}));
+const allProfiles: DirectoryProfile[] = rawProfiles
+  .filter((profile) =>
+    profile.user.programApplications.some(isValidCompletion)
+  )
+  .map((profile) => ({
+    id: profile.id,
+    handle: profile.handle,
+    headline: profile.headline,
+    country: profile.country,
+    skills: profile.skills,
+    openToFreelance: profile.openToFreelance,
+    openToRoles: profile.openToRoles,
+    user: { name: profile.user.name, image: profile.user.image },
+    completedCohorts: profile.user.programApplications
+      .filter(
+        (application) =>
+          isValidCompletion(application) && Boolean(application.program)
+      )
+      .map((application) => ({
+        programName: application.program!.name,
+        applicationId: application.id,
+      })),
+  }));
 
 const url = new URL(Astro.request.url);
 const filters = parseDirectoryFilters(url.searchParams);

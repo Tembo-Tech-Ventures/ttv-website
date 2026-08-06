@@ -24,7 +24,7 @@ if (!handle) {
 
 const db = drizzle(env.DB, { schema });
 
-const profile = handle
+const candidateProfile = handle
   ? await db.query.studentProfile.findFirst({
       where: and(
         eq(schema.studentProfile.handle, handle),
@@ -37,13 +37,18 @@ const profile = handle
     })
   : undefined;
 
+const candidateCohorts = candidateProfile
+  ? await getCompletedCohorts(db, candidateProfile.user.id)
+  : [];
+const profile =
+  candidateProfile && candidateCohorts.length > 0
+    ? candidateProfile
+    : undefined;
+const cohorts = profile ? candidateCohorts : [];
+
 if (!profile) {
   Astro.response.status = 404;
 }
-
-const cohorts = profile
-  ? await getCompletedCohorts(db, profile.user.id)
-  : [];
 
 const skills = profile ? parseSkillsJson(profile.skills) : [];
 const initials = profile ? getInitials(profile.user.name) : "?";

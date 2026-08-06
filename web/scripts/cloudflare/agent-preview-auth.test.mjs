@@ -99,9 +99,9 @@ describe("seedAgentPreviewFixtures", () => {
 
     // profile reset, curriculum, program, cohort-application reset, ten cohort
     // users, six eligible cohort applications, preview app, amina user/app,
-    // amina profile, two amina highlights, kwame user/app/profile, and two
-    // projects = 31 total
-    expect(executeQuery).toHaveBeenCalledTimes(31);
+    // amina profile, invalid-completion user/app/profile, two amina highlights,
+    // kwame user/app/profile, and two projects = 34 total
+    expect(executeQuery).toHaveBeenCalledTimes(34);
 
     // All calls should target the correct database
     for (const call of executeQuery.mock.calls) {
@@ -173,6 +173,15 @@ describe("seedAgentPreviewFixtures", () => {
     const aminaProfile = findByParam("ttv-fixture-profile-amina");
     expect(aminaProfile?.[2]).toContain("amina-preview");
     expect(aminaProfile?.[2]).toContain("Kenya");
+    const invalidCompletionApp = findByParam(
+      "ttv-fixture-app-invalid-completion"
+    );
+    expect(invalidCompletionApp?.[1]).toContain("'COMPLETED'");
+    expect(invalidCompletionApp?.[1]).toContain('"completedAt" = NULL');
+    expect(
+      findByParam("ttv-fixture-profile-invalid-completion")?.[2]
+    ).toContain("invalid-completion-preview");
+
     expect(findByParam("ttv-fixture-highlight-amina-1")).toBeDefined();
     expect(findByParam("ttv-fixture-highlight-amina-2")).toBeDefined();
 
