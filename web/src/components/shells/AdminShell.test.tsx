@@ -15,10 +15,10 @@ describe("admin navigation", () => {
     }
   });
 
-  it("places curricula before programs in the management flow", () => {
+  it("places curricula before cohorts in the management flow", () => {
     const labels = getAdminLinks(false).map(({ label }) => label);
     expect(labels.indexOf("Curricula")).toBeLessThan(
-      labels.indexOf("Programs")
+      labels.indexOf("Cohorts")
     );
   });
 
@@ -29,5 +29,20 @@ describe("admin navigation", () => {
     expect(getAdminLinks(true).map(({ label }) => label)).toContain(
       "Agent Access"
     );
+  });
+
+  it("shows data migration only when its independent capability is enabled", () => {
+    expect(getAdminLinks(false).map(({ label }) => label)).toContain(
+      "Data Migration"
+    );
+    expect(getAdminLinks(false, true).map(({ label }) => label)).toContain(
+      "Data Migration"
+    );
+    expect(getAdminLinks(false, false).map(({ label }) => label)).not.toContain(
+      "Data Migration"
+    );
+    const agentOnlyLabels = getAdminLinks(true, false).map(({ label }) => label);
+    expect(agentOnlyLabels).not.toContain("Data Migration");
+    expect(agentOnlyLabels).toContain("Agent Access");
   });
 });
