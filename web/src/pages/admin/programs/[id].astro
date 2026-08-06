@@ -25,12 +25,19 @@ import {
 } from "@/lib/admin/program-application";
 import {
   ProgramManagementError,
+  type CohortUpdateField,
+  type CohortUpdateValues,
+  cohortUpdateErrorField,
+  cohortUpdateValuesFromFormData,
   assertProgramRoleRemoved,
   buildAddProgramRoleStatement,
+  buildCohortUpdateStatement,
   buildRemoveProgramRoleStatement,
+  parseCohortUpdate,
   parseProgramStaffRole,
   parseProgramStaffUserId,
   throwAddProgramRoleFailure,
+  throwCohortUpdateFailure,
 } from "@/lib/admin/program-management";
 
 const db = drizzle(env.DB, { schema });
@@ -40,6 +47,12 @@ const defaultCompletionDate = formatDateInputValue();
 if (!id) return Astro.redirect("/admin/programs");
 
 let actionError = "";
+let submittedCohortValues: CohortUpdateValues | null = null;
+const cohortFieldErrors: Partial<Record<CohortUpdateField, string>> = {};
+const curricula = await db.query.curriculum.findMany({
+  columns: { id: true, title: true },
+  orderBy: (curriculum, { asc }) => [asc(curriculum.title)],
+});
 
 // Handle POST actions
 if (Astro.request.method === "POST") {
@@ -48,22 +61,55 @@ if (Astro.request.method === "POST") {
   const action = typeof actionValue === "string" ? actionValue : "";
 
   if (action === "update-program") {
-    const name = formData.get("name") as string;
-    const description = formData.get("description") as string;
-    const startDate = formData.get("startDate") as string;
-    const endDate = formData.get("endDate") as string;
+    submittedCohortValues = cohortUpdateValuesFromFormData(formData);
 
-    await db
-      .update(schema.program)
-      .set({
-        name,
-        description,
-        startDate: startDate ? new Date(startDate) : null,
-        endDate: endDate ? new Date(endDate) : null,
-      })
-      .where(eq(schema.program.id, id));
+    try {
+      const update = parseCohortUpdate({
+        ...submittedCohortValues,
+        applicationsOpen: formData.get("applicationsOpen"),
+      });
+      const statement = buildCohortUpdateStatement({
+        programId: id,
+        update,
+      });
+      const result = await env.DB.prepare(statement.sql)
+        .bind(...statement.params)
+        .run();
 
-    return Astro.redirect(`/admin/programs/${id}`);
+      if (result.meta.changes !== statement.expectedChanges) {
+        if (result.meta.changes !== 0) {
+          throw new Error(
+            `Atomic cohort update changed ${result.meta.changes} rows; expected ${statement.expectedChanges}.`
+          );
+        }
+
+        const [program, curriculum] = await Promise.all([
+          db.query.program.findFirst({
+            where: eq(schema.program.id, id),
+            columns: { id: true },
+          }),
+          db.query.curriculum.findFirst({
+            where: eq(schema.curriculum.id, update.curriculumId),
+            columns: { id: true },
+          }),
+        ]);
+        throwCohortUpdateFailure({
+          programExists: Boolean(program),
+          curriculumExists: Boolean(curriculum),
+        });
+      }
+
+      return Astro.redirect(`/admin/programs/${id}?notice=cohort-updated`);
+    } catch (error) {
+      if (error instanceof ProgramManagementError) {
+        actionError = error.message;
+        Astro.response.status = 400;
+        const field = cohortUpdateErrorField(error);
+        if (field) cohortFieldErrors[field] = error.message;
+      } else {
+        throw error;
+      }
+    }
   }
 
   if (action === "add-role") {
@@ -302,7 +348,9 @@ const noticeCount = Number.parseInt(
   10
 );
 const actionSuccess =
-  notice === "staff-added"
+  notice === "cohort-updated"
+    ? "Cohort details updated."
+    : notice === "staff-added"
     ? "Cohort staff role added."
     : notice === "staff-removed"
       ? "Cohort staff role removed."
@@ -318,6 +366,14 @@ const actionSuccess =
 
 const formatDate = (date: Date | null) =>
   date ? new Date(date).toISOString().split("T")[0] : "";
+const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
+  name: prog.name,
+  description: prog.description,
+  curriculumId: prog.curriculumId ?? "",
+  startDate: formatDate(prog.startDate),
+  endDate: formatDate(prog.endDate),
+  applicationsOpen: prog.applicationsOpen,
+};
 ---
 
 <AdminLayout title={prog.name}>
@@ -346,17 +402,22 @@ const formatDate = (date: Date | null) =>
 
     <Card>
       <h3 class="mb-4 text-lg font-semibold text-white">Cohort details</h3>
-      <form method="POST" class="space-y-4">
+      <form method="POST" class="space-y-4" data-cohort-details-form>
         <input type="hidden" name="action" value="update-program" />
         <div class="flex flex-col gap-1.5">
           <label for="name" class="text-sm font-medium text-white/90">Name *</label>
           <input
             id="name"
             name="name"
-            value={prog.name}
+            value={cohortEditValues.name}
             required
+            aria-invalid={Boolean(cohortFieldErrors.name)}
+            aria-describedby={cohortFieldErrors.name ? "name-error" : undefined}
             class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
+          {cohortFieldErrors.name && (
+            <p id="name-error" class="text-sm text-red-300">{cohortFieldErrors.name}</p>
+          )}
         </div>
         <div class="flex flex-col gap-1.5">
           <label for="description" class="text-sm font-medium text-white/90">Description *</label>
@@ -365,35 +426,94 @@ const formatDate = (date: Date | null) =>
             name="description"
             required
             rows="3"
+            aria-invalid={Boolean(cohortFieldErrors.description)}
+            aria-describedby={cohortFieldErrors.description ? "description-error" : undefined}
             class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
-          >{prog.description}</textarea>
+          >{cohortEditValues.description}</textarea>
+          {cohortFieldErrors.description && (
+            <p id="description-error" class="text-sm text-red-300">{cohortFieldErrors.description}</p>
+          )}
         </div>
         <div class="grid gap-4 sm:grid-cols-2">
           <div class="flex flex-col gap-1.5">
-            <label for="startDate" class="text-sm font-medium text-white/90">Start Date</label>
+            <label for="startDate" class="text-sm font-medium text-white/90">Start date</label>
             <input
               type="date"
               id="startDate"
               name="startDate"
-              value={formatDate(prog.startDate)}
+              value={cohortEditValues.startDate}
+              aria-invalid={Boolean(cohortFieldErrors.startDate)}
+              aria-describedby={cohortFieldErrors.startDate ? "start-date-error" : undefined}
               class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
+            {cohortFieldErrors.startDate && (
+              <p id="start-date-error" class="text-sm text-red-300">{cohortFieldErrors.startDate}</p>
+            )}
           </div>
           <div class="flex flex-col gap-1.5">
-            <label for="endDate" class="text-sm font-medium text-white/90">End Date</label>
+            <label for="endDate" class="text-sm font-medium text-white/90">End date</label>
             <input
               type="date"
               id="endDate"
               name="endDate"
-              value={formatDate(prog.endDate)}
+              value={cohortEditValues.endDate}
+              aria-invalid={Boolean(cohortFieldErrors.endDate)}
+              aria-describedby={cohortFieldErrors.endDate ? "end-date-error" : undefined}
               class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
+            {cohortFieldErrors.endDate && (
+              <p id="end-date-error" class="text-sm text-red-300">{cohortFieldErrors.endDate}</p>
+            )}
           </div>
         </div>
-        <div>
-          <p class="text-sm text-white/60">
-            Curriculum: <span class="text-white">{prog.curriculum?.title ?? "—"}</span>
-          </p>
+        <div class="flex flex-col gap-1.5">
+          <label for="curriculumId" class="text-sm font-medium text-white/90">
+            Curriculum *
+          </label>
+          <select
+            id="curriculumId"
+            name="curriculumId"
+            required
+            aria-invalid={Boolean(cohortFieldErrors.curriculumId)}
+            aria-describedby={cohortFieldErrors.curriculumId ? "curriculum-error" : undefined}
+            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+          >
+            <option value="">Select a curriculum…</option>
+            {curricula.map((curriculum) => (
+              <option
+                value={curriculum.id}
+                selected={curriculum.id === cohortEditValues.curriculumId}
+              >
+                {curriculum.title}
+              </option>
+            ))}
+          </select>
+          {cohortFieldErrors.curriculumId && (
+            <p id="curriculum-error" class="text-sm text-red-300">
+              {cohortFieldErrors.curriculumId}
+            </p>
+          )}
+        </div>
+        <div class="rounded-md border border-teal/30 bg-teal/10 p-4">
+          <label class="flex items-start gap-3 text-sm text-white/90">
+            <input
+              type="checkbox"
+              name="applicationsOpen"
+              checked={cohortEditValues.applicationsOpen}
+              class="mt-0.5 h-4 w-4 rounded border-teal bg-dark text-primary focus:ring-primary"
+            />
+            <span>
+              <span class="block font-medium">Applications open</span>
+              <span class="mt-1 block text-white/55">
+                Show this cohort on the learner application page and accept new applications.
+              </span>
+            </span>
+          </label>
+          {cohortFieldErrors.applicationsOpen && (
+            <p class="mt-2 text-sm text-red-300">
+              {cohortFieldErrors.applicationsOpen}
+            </p>
+          )}
         </div>
         <button
           type="submit"
@@ -428,7 +548,7 @@ const formatDate = (date: Date | null) =>
                       <button
                         type="submit"
                         class="text-red-400 hover:text-red-300"
-                        onclick="return confirm('Remove this staff member from the program?')"
+                        onclick="return confirm('Remove this staff member from the cohort?')"
                       >
                         Remove
                       </button>
