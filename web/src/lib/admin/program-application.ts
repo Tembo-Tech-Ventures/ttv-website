@@ -53,6 +53,10 @@ export type ProgramApplicationErrorCode =
   | "STALE_TRANSITION"
   | "INVALID_COMPLETION_DATE"
   | "INVALID_ENROLLMENT_STATUS"
+  | "INVALID_APPLICATION_PROGRAM"
+  | "CLOSED_PROGRAM"
+  | "DUPLICATE_APPLICATION"
+  | "APPLICATION_NOT_CREATED"
   | "UNKNOWN_PROGRAM"
   | "UNKNOWN_USER"
   | "DUPLICATE_ENROLLMENT"
@@ -95,6 +99,17 @@ export interface AdminEnrollmentRecord
   userId: string;
   application: string;
   createdAt: Date;
+}
+
+export interface SelfApplicationRecord {
+  id: string;
+  programId: string;
+  userId: string;
+  status: "PENDING";
+  application: "{}";
+  completedAt: null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface BulkApplicationRecord {
@@ -314,6 +329,117 @@ export function createAdminEnrollment({
     createdAt: clonedDate(timestamp),
     ...createStatusMutation(status, timestamp, completionDate),
   };
+}
+
+export function createSelfApplication({
+  id,
+  programId: programIdValue,
+  userId,
+  now = new Date(),
+}: {
+  id: string;
+  programId: unknown;
+  userId: string;
+  now?: Date;
+}): SelfApplicationRecord {
+  if (
+    typeof programIdValue !== "string" ||
+    programIdValue.trim().length === 0
+  ) {
+    throw new ProgramApplicationError(
+      "INVALID_APPLICATION_PROGRAM",
+      "Choose an open cohort before applying."
+    );
+  }
+
+  const timestamp = clonedDate(now);
+  return {
+    id,
+    programId: programIdValue.trim(),
+    userId,
+    status: "PENDING",
+    application: "{}",
+    completedAt: null,
+    createdAt: clonedDate(timestamp),
+    updatedAt: timestamp,
+  };
+}
+
+export function buildSelfApplicationStatement(
+  application: SelfApplicationRecord
+): AtomicMutationStatement {
+  return {
+    sql: [
+      'INSERT OR IGNORE INTO "programApplication"',
+      '  ("id", "programId", "userId", "status", "application", "completedAt", "createdAt", "updatedAt")',
+      "SELECT ?, ?, ?, ?, ?, ?, ?, ?",
+      'WHERE EXISTS (',
+      '  SELECT 1 FROM "program"',
+      '  WHERE "id" = ? AND "applicationsOpen" = 1',
+      ")",
+      '  AND EXISTS (SELECT 1 FROM "user" WHERE "id" = ?)',
+      "  AND NOT EXISTS (",
+      '    SELECT 1 FROM "programApplication"',
+      '    WHERE "programId" = ? AND "userId" = ?',
+      "  )",
+    ].join("\n"),
+    params: [
+      application.id,
+      application.programId,
+      application.userId,
+      application.status,
+      application.application,
+      application.completedAt,
+      toEpochSeconds(application.createdAt),
+      toEpochSeconds(application.updatedAt),
+      application.programId,
+      application.userId,
+      application.programId,
+      application.userId,
+    ],
+    expectedChanges: 1,
+  };
+}
+
+export function throwSelfApplicationFailure({
+  programExists,
+  applicationsOpen,
+  userExists,
+  alreadyApplied,
+}: {
+  programExists: boolean;
+  applicationsOpen: boolean;
+  userExists: boolean;
+  alreadyApplied: boolean;
+}): never {
+  if (!programExists) {
+    throw new ProgramApplicationError(
+      "UNKNOWN_PROGRAM",
+      "That cohort does not exist. Choose one of the open cohorts shown below."
+    );
+  }
+  if (!applicationsOpen) {
+    throw new ProgramApplicationError(
+      "CLOSED_PROGRAM",
+      "Applications for that cohort are closed."
+    );
+  }
+  if (alreadyApplied) {
+    throw new ProgramApplicationError(
+      "DUPLICATE_APPLICATION",
+      "You have already applied to that cohort."
+    );
+  }
+  if (!userExists) {
+    throw new ProgramApplicationError(
+      "UNKNOWN_USER",
+      "Your signed-in user no longer exists. Sign in again before applying."
+    );
+  }
+  throw new ProgramApplicationError(
+    "APPLICATION_NOT_CREATED",
+    "The application could not be created because cohort availability changed. Refresh the page and try again."
+  );
 }
 
 export function getEnrollmentSource(
