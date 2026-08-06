@@ -9,6 +9,7 @@ import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { hasCompletedCohort } from "@/lib/talent/eligibility";
 import { parseSkillsJson } from "@/lib/talent/profile";
+import { fetchGitHubLogin } from "@/lib/talent/github";
 import {
   saveProfile,
   submitForReview,
@@ -63,7 +64,6 @@ if (eligible && !profile) {
       columns: { accessToken: true, providerId: true },
     });
     if (ghAccount?.providerId === "github" && ghAccount.accessToken) {
-      const { fetchGitHubLogin } = await import("@/lib/talent/github");
       defaultHandle = await fetchGitHubLogin(ghAccount.accessToken);
     }
   } catch {

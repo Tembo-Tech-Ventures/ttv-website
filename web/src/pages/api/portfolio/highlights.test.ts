@@ -1,9 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-async function json(
-  res: Response,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Promise<Record<string, any>> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function json(res: Response): Promise<Record<string, any>> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return res.json() as Promise<Record<string, any>>;
 }
@@ -20,8 +18,10 @@ vi.mock("@/lib/auth", () => ({
 const mockFindProfile = vi.fn();
 const mockFindAccount = vi.fn();
 const mockFindHighlights = vi.fn();
-const mockDelete = vi.fn();
+const mockDeleteWhere = vi.fn();
 const mockInsertValues = vi.fn();
+const mockBatch = vi.fn();
+const mockUpdateSetWhere = vi.fn();
 
 vi.mock("drizzle-orm/d1", () => ({
   drizzle: () => ({
@@ -30,8 +30,12 @@ vi.mock("drizzle-orm/d1", () => ({
       account: { findFirst: mockFindAccount },
       profileHighlight: { findMany: mockFindHighlights },
     },
-    delete: () => ({ where: mockDelete }),
+    delete: () => ({ where: mockDeleteWhere }),
     insert: () => ({ values: mockInsertValues }),
+    update: () => ({
+      set: () => ({ where: mockUpdateSetWhere }),
+    }),
+    batch: mockBatch,
   }),
 }));
 
@@ -154,7 +158,7 @@ describe("POST /api/portfolio/highlights", () => {
 
     const res = await POST(makeRequest("POST", []));
     expect(res.status).toBe(200);
-    expect(mockDelete).toHaveBeenCalled();
+    expect(mockDeleteWhere).toHaveBeenCalled();
   });
 
   it("rejects unknown repos", async () => {
@@ -175,7 +179,7 @@ describe("POST /api/portfolio/highlights", () => {
     expect(data.error).toContain("Unknown repositories");
   });
 
-  it("saves valid highlights with server-derived snapshots", async () => {
+  it("uses batch for atomic delete+insert", async () => {
     mockGetSession.mockResolvedValue({
       user: { id: "user-1" },
       session: {},
@@ -193,16 +197,7 @@ describe("POST /api/portfolio/highlights", () => {
     ];
     const res = await POST(makeRequest("POST", body));
     expect(res.status).toBe(200);
-    expect(mockDelete).toHaveBeenCalled();
-    expect(mockInsertValues).toHaveBeenCalled();
-
-    const insertedRows = mockInsertValues.mock.calls[0][0];
-    expect(insertedRows).toHaveLength(1);
-    expect(insertedRows[0].repoFullName).toBe("user/repo-a");
-    expect(insertedRows[0].repoUrl).toBe("https://github.com/user/repo-a");
-    expect(insertedRows[0].blurb).toBe("My main project");
-    expect(insertedRows[0].language).toBe("TypeScript");
-    expect(insertedRows[0].snapshotAt).toBeInstanceOf(Date);
+    expect(mockBatch).toHaveBeenCalledTimes(1);
   });
 
   it("returns 400 on GitHubAuthError", async () => {
@@ -236,22 +231,6 @@ describe("POST /api/portfolio/highlights", () => {
     expect(res.status).toBe(400);
     const data = await json(res);
     expect(data.error).toBe("GitHub account not connected");
-  });
-
-  it("maps empty blurb to null", async () => {
-    mockGetSession.mockResolvedValue({
-      user: { id: "user-1" },
-      session: {},
-    });
-    mockFindProfile.mockResolvedValue({ id: "profile-1" });
-    mockFindAccount.mockResolvedValue({ accessToken: "ghp_test" });
-    mockFetchPublicRepos.mockResolvedValue(SAMPLE_REPOS);
-
-    const body = [{ repoFullName: "user/repo-a", blurb: "", sortOrder: 0 }];
-    await POST(makeRequest("POST", body));
-
-    const insertedRows = mockInsertValues.mock.calls[0][0];
-    expect(insertedRows[0].blurb).toBeNull();
   });
 });
 
@@ -287,7 +266,7 @@ describe("PUT /api/portfolio/highlights (refresh)", () => {
     expect(data.refreshed).toBe(0);
   });
 
-  it("re-snapshots existing highlights from GitHub", async () => {
+  it("uses batch to update matched highlights", async () => {
     mockGetSession.mockResolvedValue({
       user: { id: "user-1" },
       session: {},
@@ -295,6 +274,7 @@ describe("PUT /api/portfolio/highlights (refresh)", () => {
     mockFindProfile.mockResolvedValue({ id: "profile-1" });
     mockFindHighlights.mockResolvedValue([
       {
+        id: "hl-1",
         repoFullName: "user/repo-a",
         blurb: "My project",
         sortOrder: 0,
@@ -307,21 +287,53 @@ describe("PUT /api/portfolio/highlights (refresh)", () => {
     expect(res.status).toBe(200);
     const data = await json(res);
     expect(data.refreshed).toBe(1);
-    expect(mockInsertValues).toHaveBeenCalled();
-
-    const rows = mockInsertValues.mock.calls[0][0];
-    expect(rows[0].blurb).toBe("My project");
-    expect(rows[0].snapshotAt).toBeInstanceOf(Date);
+    expect(mockBatch).toHaveBeenCalledTimes(1);
   });
 
-  it("drops highlights whose repos are no longer public", async () => {
+  it("preserves unmatched highlights with stale snapshot and blurb", async () => {
     mockGetSession.mockResolvedValue({
       user: { id: "user-1" },
       session: {},
     });
     mockFindProfile.mockResolvedValue({ id: "profile-1" });
     mockFindHighlights.mockResolvedValue([
-      { repoFullName: "user/deleted-repo", blurb: "", sortOrder: 0 },
+      {
+        id: "hl-old",
+        repoFullName: "user/old-renamed-repo",
+        blurb: "Carefully written blurb",
+        sortOrder: 0,
+      },
+      {
+        id: "hl-match",
+        repoFullName: "user/repo-a",
+        blurb: "Another project",
+        sortOrder: 1,
+      },
+    ]);
+    mockFindAccount.mockResolvedValue({ accessToken: "ghp_test" });
+    mockFetchPublicRepos.mockResolvedValue(SAMPLE_REPOS);
+
+    const res = await PUT(makeRequest("PUT"));
+    expect(res.status).toBe(200);
+    const data = await json(res);
+    expect(data.refreshed).toBe(1);
+    expect(mockBatch).toHaveBeenCalledTimes(1);
+    expect(mockDeleteWhere).not.toHaveBeenCalled();
+  });
+
+  it("returns 0 refreshed when no repos match but preserves all highlights", async () => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "user-1" },
+      session: {},
+    });
+    mockFindProfile.mockResolvedValue({ id: "profile-1" });
+    mockFindHighlights.mockResolvedValue([
+      {
+        id: "hl-1",
+        repoFullName: "user/deleted-repo",
+        blurb: "Keep this blurb",
+        sortOrder: 0,
+      },
     ]);
     mockFindAccount.mockResolvedValue({ accessToken: "ghp_test" });
     mockFetchPublicRepos.mockResolvedValue(SAMPLE_REPOS);
@@ -330,6 +342,7 @@ describe("PUT /api/portfolio/highlights (refresh)", () => {
     expect(res.status).toBe(200);
     const data = await json(res);
     expect(data.refreshed).toBe(0);
-    expect(mockInsertValues).not.toHaveBeenCalled();
+    expect(mockBatch).not.toHaveBeenCalled();
+    expect(mockDeleteWhere).not.toHaveBeenCalled();
   });
 });

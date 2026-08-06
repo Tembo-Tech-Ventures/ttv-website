@@ -111,10 +111,6 @@ export const POST: APIRoute = async ({ request }) => {
     );
   }
 
-  await db
-    .delete(schema.profileHighlight)
-    .where(eq(schema.profileHighlight.profileId, profile.id));
-
   const rows = entries.map((entry) => {
     const repo = repoMap.get(entry.repoFullName)!;
     const snapshot = toHighlightSnapshot(repo);
@@ -133,7 +129,12 @@ export const POST: APIRoute = async ({ request }) => {
     };
   });
 
-  await db.insert(schema.profileHighlight).values(rows);
+  await db.batch([
+    db
+      .delete(schema.profileHighlight)
+      .where(eq(schema.profileHighlight.profileId, profile.id)),
+    db.insert(schema.profileHighlight).values(rows),
+  ]);
 
   return jsonResponse({ ok: true });
 };
@@ -171,33 +172,30 @@ export const PUT: APIRoute = async ({ request }) => {
 
   const repoMap = new Map(repos.map((r) => [r.full_name, r]));
 
-  await db
-    .delete(schema.profileHighlight)
-    .where(eq(schema.profileHighlight.profileId, profile.id));
+  // Only update highlights whose repos appear in the listing;
+  // unmatched highlights (older/renamed repos beyond the 100-repo cap)
+  // are preserved with their stale snapshot and hand-written blurb.
+  const matched = existing.filter((h) => repoMap.has(h.repoFullName));
 
-  const refreshed = existing
-    .filter((h) => repoMap.has(h.repoFullName))
-    .map((h) => {
+  if (matched.length > 0) {
+    const updates = matched.map((h) => {
       const repo = repoMap.get(h.repoFullName)!;
       const snapshot = toHighlightSnapshot(repo);
-      return {
-        profileId: profile.id,
-        repoFullName: snapshot.repoFullName,
-        repoUrl: snapshot.repoUrl,
-        description: snapshot.description,
-        language: snapshot.language,
-        topics: snapshot.topics,
-        stars: snapshot.stars,
-        pushedAt: snapshot.pushedAt,
-        blurb: h.blurb,
-        sortOrder: h.sortOrder,
-        snapshotAt: snapshot.snapshotAt,
-      };
+      return db
+        .update(schema.profileHighlight)
+        .set({
+          repoUrl: snapshot.repoUrl,
+          description: snapshot.description,
+          language: snapshot.language,
+          topics: snapshot.topics,
+          stars: snapshot.stars,
+          pushedAt: snapshot.pushedAt,
+          snapshotAt: snapshot.snapshotAt,
+        })
+        .where(eq(schema.profileHighlight.id, h.id));
     });
-
-  if (refreshed.length > 0) {
-    await db.insert(schema.profileHighlight).values(refreshed);
+    await db.batch(updates as [typeof updates[0], ...typeof updates]);
   }
 
-  return jsonResponse({ ok: true, refreshed: refreshed.length });
+  return jsonResponse({ ok: true, refreshed: matched.length });
 };
