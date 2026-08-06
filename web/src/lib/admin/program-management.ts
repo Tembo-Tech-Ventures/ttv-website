@@ -44,8 +44,22 @@ export interface CohortUpdate {
   applicationsOpen: boolean;
 }
 
+export interface CohortUpdateValues {
+  name: string;
+  description: string;
+  curriculumId: string;
+  startDate: string;
+  endDate: string;
+  applicationsOpen: boolean;
+}
+
+export type CohortUpdateField = keyof CohortUpdateValues;
+
 const toEpochSeconds = (value: Date | null) =>
   value === null ? null : Math.floor(value.getTime() / 1_000);
+
+const formText = (value: FormDataEntryValue | null) =>
+  typeof value === "string" ? value : "";
 
 const requiredText = (
   value: unknown,
@@ -195,22 +209,66 @@ export function assertProgramRoleRemoved(actualChanges: number): void {
   );
 }
 
+export function cohortUpdateValuesFromFormData(
+  formData: FormData
+): CohortUpdateValues {
+  return {
+    name: formText(formData.get("name")),
+    description: formText(formData.get("description")),
+    curriculumId: formText(formData.get("curriculumId")),
+    startDate: formText(formData.get("startDate")),
+    endDate: formText(formData.get("endDate")),
+    applicationsOpen: formData.get("applicationsOpen") === "on",
+  };
+}
+
+export function cohortUpdateErrorField(
+  error: ProgramManagementError
+): CohortUpdateField | null {
+  switch (error.code) {
+    case "INVALID_COHORT_NAME":
+      return "name";
+    case "INVALID_COHORT_DESCRIPTION":
+      return "description";
+    case "INVALID_CURRICULUM":
+    case "UNKNOWN_CURRICULUM":
+      return "curriculumId";
+    case "INVALID_COHORT_DATE":
+      return error.message.includes("start date") ? "startDate" : "endDate";
+    case "INVALID_COHORT_DATE_RANGE":
+      return "endDate";
+    case "INVALID_APPLICATIONS_OPEN":
+      return "applicationsOpen";
+    default:
+      return null;
+  }
+}
+
 export function parseOptionalCohortDate(
   value: unknown,
   label: string
 ): Date | null {
-  if (value === null || value === undefined || value === "") return null;
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") {
     throw new ProgramManagementError(
       "INVALID_COHORT_DATE",
       "Enter " + label + " in YYYY-MM-DD format."
     );
   }
 
-  const parsed = new Date(value + "T00:00:00.000Z");
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    throw new ProgramManagementError(
+      "INVALID_COHORT_DATE",
+      "Enter " + label + " in YYYY-MM-DD format."
+    );
+  }
+
+  const parsed = new Date(normalized + "T00:00:00.000Z");
   if (
     Number.isNaN(parsed.getTime()) ||
-    parsed.toISOString().slice(0, 10) !== value
+    parsed.toISOString().slice(0, 10) !== normalized
   ) {
     throw new ProgramManagementError(
       "INVALID_COHORT_DATE",

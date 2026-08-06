@@ -5,6 +5,8 @@ import {
   buildAddProgramRoleStatement,
   buildCohortUpdateStatement,
   buildRemoveProgramRoleStatement,
+  cohortUpdateErrorField,
+  cohortUpdateValuesFromFormData,
   parseCohortUpdate,
   parseOptionalCohortDate,
   parseProgramStaffRole,
@@ -160,14 +162,77 @@ describe("cohort staff roles", () => {
 });
 
 describe("typed cohort editing", () => {
+  it("preserves raw form values and reads only the exact open checkbox", () => {
+    const formData = new FormData();
+    formData.set("name", "  Cohort 05  ");
+    formData.set("description", "  Builders shipping together.  ");
+    formData.set("curriculumId", " curriculum-1 ");
+    formData.set("startDate", " 2026-09-01 ");
+    formData.set("endDate", "2026-12-01");
+    formData.set("applicationsOpen", "on");
+
+    expect(cohortUpdateValuesFromFormData(formData)).toEqual({
+      name: "  Cohort 05  ",
+      description: "  Builders shipping together.  ",
+      curriculumId: " curriculum-1 ",
+      startDate: " 2026-09-01 ",
+      endDate: "2026-12-01",
+      applicationsOpen: true,
+    });
+
+    formData.set("applicationsOpen", "true");
+    formData.set("description", new File(["forged"], "description.txt"));
+    expect(cohortUpdateValuesFromFormData(formData)).toMatchObject({
+      description: "",
+      applicationsOpen: false,
+    });
+  });
+
+  it.each([
+    [
+      new ProgramManagementError("INVALID_COHORT_NAME", "name"),
+      "name",
+    ],
+    [
+      new ProgramManagementError("INVALID_COHORT_DESCRIPTION", "description"),
+      "description",
+    ],
+    [
+      new ProgramManagementError("UNKNOWN_CURRICULUM", "curriculum"),
+      "curriculumId",
+    ],
+    [
+      new ProgramManagementError("INVALID_COHORT_DATE", "Enter start date"),
+      "startDate",
+    ],
+    [
+      new ProgramManagementError("INVALID_COHORT_DATE_RANGE", "range"),
+      "endDate",
+    ],
+    [
+      new ProgramManagementError("INVALID_APPLICATIONS_OPEN", "toggle"),
+      "applicationsOpen",
+    ],
+  ] as const)("maps a safe inline error to %s", (error, field) => {
+    expect(cohortUpdateErrorField(error)).toBe(field);
+  });
+
+  it("leaves non-field failures in the page-level alert", () => {
+    expect(
+      cohortUpdateErrorField(
+        new ProgramManagementError("COHORT_NOT_UPDATED", "stale")
+      )
+    ).toBeNull();
+  });
+
   it("trims required text, parses dates, and reads the open toggle", () => {
     expect(
       parseCohortUpdate({
         name: "  Cohort 05  ",
         description: "  Builders shipping together.  ",
         curriculumId: "  curriculum-1  ",
-        startDate: "2026-09-01",
-        endDate: "2026-12-01",
+        startDate: " 2026-09-01 ",
+        endDate: "2026-12-01 ",
         applicationsOpen: "on",
       })
     ).toEqual({
@@ -236,7 +301,7 @@ describe("typed cohort editing", () => {
     );
   });
 
-  it.each(["2026-2-01", " 2026-02-01", "2026-02-29", "2026-13-01"])(
+  it.each(["2026-2-01", "+2026-02-01", "2026-02-29", "2026-13-01"])(
     "rejects malformed or unreal date %s",
     (date) => {
       expectDomainError(
@@ -246,6 +311,13 @@ describe("typed cohort editing", () => {
       );
     }
   );
+
+  it("trims optional date whitespace and treats whitespace-only dates as blank", () => {
+    expect(parseOptionalCohortDate(" 2028-02-29 ", "start date")).toEqual(
+      new Date("2028-02-29T00:00:00.000Z")
+    );
+    expect(parseOptionalCohortDate("  ", "end date")).toBeNull();
+  });
 
   it("accepts a real leap date and rejects reversed dates", () => {
     expect(parseOptionalCohortDate("2028-02-29", "start date")).toEqual(
