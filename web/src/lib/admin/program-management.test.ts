@@ -301,7 +301,13 @@ describe("typed cohort editing", () => {
     );
   });
 
-  it.each(["2026-2-01", "+2026-02-01", "2026-02-29", "2026-13-01"])(
+  it.each([
+    "2026-2-01",
+    "+2026-02-01",
+    "2026-02-29",
+    "2026-13-01",
+    "0000-01-01",
+  ])(
     "rejects malformed or unreal date %s",
     (date) => {
       expectDomainError(
