@@ -1,0 +1,538 @@
+---
+import PublicLayout from "@/layouts/PublicLayout.astro";
+import { drizzle } from "drizzle-orm/d1";
+import { env } from "cloudflare:workers";
+import * as schema from "@/lib/db/schema";
+import {
+  guardPublicForm,
+  issueFormToken,
+  HONEYPOT_FIELD,
+  FORM_TOKEN_FIELD,
+} from "@/lib/spam/protection";
+import { BUDGET_BAND_OPTIONS } from "@/components/hire/budget-bands";
+import { hireFormSchema, parseSkillTags } from "@/components/hire/validation";
+
+let formToken = "";
+let success = false;
+let rateLimited = false;
+const errors: Record<string, string> = {};
+let prev: Record<string, string> = {};
+
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  const db = drizzle(env.DB, { schema });
+
+  const guard = await guardPublicForm({
+    db,
+    secret: env.BETTER_AUTH_SECRET,
+    scope: "hire",
+    request: Astro.request,
+    formData,
+  });
+
+  if (guard.ok && guard.silent) {
+    success = true;
+  } else if (!guard.ok && guard.reason === "rate_limit") {
+    rateLimited = true;
+  } else if (!guard.ok && guard.reason === "token") {
+    formToken = await issueFormToken(env.BETTER_AUTH_SECRET);
+    errors._form = "Something went wrong. Please try again.";
+  } else {
+    const raw = {
+      organization: (formData.get("organization") as string) ?? "",
+      contactName: (formData.get("contactName") as string) ?? "",
+      contactEmail: (formData.get("contactEmail") as string) ?? "",
+      title: (formData.get("title") as string) ?? "",
+      description: (formData.get("description") as string) ?? "",
+      skillsRaw: (formData.get("skills") as string) ?? "",
+      budgetBand: (formData.get("budgetBand") as string) ?? "",
+      timeline: (formData.get("timeline") as string) ?? "",
+    };
+
+    prev = {
+      organization: raw.organization,
+      contactName: raw.contactName,
+      contactEmail: raw.contactEmail,
+      title: raw.title,
+      description: raw.description,
+      skills: raw.skillsRaw,
+      budgetBand: raw.budgetBand,
+      timeline: raw.timeline,
+    };
+
+    const result = hireFormSchema.safeParse(raw);
+
+    if (!result.success) {
+      formToken = await issueFormToken(env.BETTER_AUTH_SECRET);
+      for (const issue of result.error.issues) {
+        const field = issue.path[0] as string;
+        const key = field === "skillsRaw" ? "skills" : field;
+        if (!errors[key]) errors[key] = issue.message;
+      }
+    } else {
+      const skillTags = parseSkillTags(result.data.skillsRaw);
+
+      await db.insert(schema.clientProject).values({
+        organization: result.data.organization,
+        contactName: result.data.contactName,
+        contactEmail: result.data.contactEmail,
+        title: result.data.title,
+        description: result.data.description,
+        skills: skillTags.length > 0 ? JSON.stringify(skillTags) : null,
+        budgetBand: result.data.budgetBand,
+        timeline: result.data.timeline || null,
+        status: "PENDING",
+      });
+
+      success = true;
+    }
+  }
+} else {
+  formToken = await issueFormToken(env.BETTER_AUTH_SECRET);
+}
+
+const hasErrors = Object.keys(errors).length > 0;
+---
+
+<PublicLayout title="Hire · Tembo Tech Ventures">
+  <!-- Pitch section -->
+  <section class="mx-auto max-w-4xl px-4 py-28 sm:px-8 md:py-36">
+    <p
+      class="font-body text-xs font-semibold uppercase tracking-[0.4em] text-primary"
+    >
+      § Hire
+    </p>
+
+    <h1
+      class="font-heading mt-6 text-ink-primary"
+      style="font-size: clamp(3rem, 9vw, 6rem); line-height: 0.95; letter-spacing: -0.03em;"
+    >
+      Work with<br />our builders.
+    </h1>
+
+    <p class="mt-8 max-w-2xl font-body text-lg text-ink-secondary md:text-xl">
+      Connect your project with skilled builders from TTV cohorts across Africa.
+      TTV makes introductions; scoping, contracts, and delivery happen directly
+      between you and the builder.
+    </p>
+
+    <a
+      href="/talent"
+      class="mt-6 inline-flex items-center font-body text-sm font-semibold uppercase tracking-[0.18em] text-primary transition-colors hover:text-ink-primary"
+    >
+      Meet the builders →
+    </a>
+  </section>
+
+  <!-- Value points -->
+  <section
+    class="border-y border-[color:var(--color-rule)] py-16 md:py-24"
+  >
+    <div
+      class="mx-auto grid max-w-5xl gap-12 px-4 sm:px-8 md:grid-cols-3 md:gap-8"
+    >
+      <div>
+        <p
+          class="font-body text-xs font-semibold uppercase tracking-[0.28em] text-primary"
+        >
+          § Verified
+        </p>
+        <h2
+          class="font-heading mt-4 text-2xl text-ink-primary"
+          style="letter-spacing: -0.02em;"
+        >
+          Cohort-trained
+        </h2>
+        <p class="mt-3 font-body text-[15px] leading-relaxed text-ink-secondary">
+          Every builder completed a TTV cohort, with public profiles and
+          certificates documenting the work they shipped.
+        </p>
+      </div>
+
+      <div>
+        <p
+          class="font-body text-xs font-semibold uppercase tracking-[0.28em] text-primary"
+        >
+          § Direct
+        </p>
+        <h2
+          class="font-heading mt-4 text-2xl text-ink-primary"
+          style="letter-spacing: -0.02em;"
+        >
+          You work together
+        </h2>
+        <p class="mt-3 font-body text-[15px] leading-relaxed text-ink-secondary">
+          TTV makes the introduction, then you work together directly — scoping,
+          agreements, and delivery are between you and the builder.
+        </p>
+      </div>
+
+      <div>
+        <p
+          class="font-body text-xs font-semibold uppercase tracking-[0.28em] text-primary"
+        >
+          § Rooted
+        </p>
+        <h2
+          class="font-heading mt-4 text-2xl text-ink-primary"
+          style="letter-spacing: -0.02em;"
+        >
+          Ecosystem impact
+        </h2>
+        <p class="mt-3 font-body text-[15px] leading-relaxed text-ink-secondary">
+          Hiring here strengthens a growing tech ecosystem. Every project
+          reinforces the community these builders are part of.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Form or success state -->
+  <section class="mx-auto max-w-2xl px-4 py-20 sm:px-8 md:py-28">
+    {
+      success ? (
+        <div role="status" data-testid="hire-success">
+          <p class="font-body text-xs font-semibold uppercase tracking-[0.28em] text-primary">
+            § Submitted
+          </p>
+          <h2
+            class="font-heading mt-4 text-3xl text-ink-primary md:text-4xl"
+            style="letter-spacing: -0.02em;"
+          >
+            Thanks for reaching out.
+          </h2>
+          <p class="mt-4 font-body text-lg text-ink-secondary">
+            The TTV team reviews every project and will be in touch.
+          </p>
+        </div>
+      ) : rateLimited ? (
+        <div role="alert">
+          <p class="font-body text-xs font-semibold uppercase tracking-[0.28em] text-primary">
+            § Hold on
+          </p>
+          <h2
+            class="font-heading mt-4 text-3xl text-ink-primary md:text-4xl"
+            style="letter-spacing: -0.02em;"
+          >
+            Too many submissions.
+          </h2>
+          <p class="mt-4 font-body text-lg text-ink-secondary">
+            We limit submissions to keep things running smoothly. Please try
+            again in a bit.
+          </p>
+        </div>
+      ) : (
+        <>
+          <p class="font-body text-xs font-semibold uppercase tracking-[0.28em] text-primary">
+            § Submit a project
+          </p>
+          <h2
+            class="font-heading mt-4 text-3xl text-ink-primary md:text-4xl"
+            style="letter-spacing: -0.02em;"
+          >
+            Tell us about your project.
+          </h2>
+          <p class="mt-4 font-body text-[15px] text-ink-secondary">
+            We will review your project and share it with builders who are a
+            good fit. Fields marked with * are required.
+          </p>
+
+          {hasErrors && errors._form && (
+            <p
+              role="alert"
+              class="mt-6 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 font-body text-sm text-red-300"
+            >
+              {errors._form}
+            </p>
+          )}
+
+          <form method="POST" class="mt-10 space-y-6" novalidate>
+            <input type="hidden" name={FORM_TOKEN_FIELD} value={formToken} />
+            <div class="sr-only" aria-hidden="true">
+              <label>
+                Confirm your website
+                <input
+                  type="text"
+                  name={HONEYPOT_FIELD}
+                  tabindex="-1"
+                  autocomplete="off"
+                />
+              </label>
+            </div>
+
+            <div>
+              <label
+                for="organization"
+                class="block font-body text-sm font-medium text-ink-primary"
+              >
+                Organization *
+              </label>
+              <input
+                id="organization"
+                name="organization"
+                type="text"
+                required
+                maxlength="120"
+                value={prev.organization ?? ""}
+                class:list={[
+                  "mt-1.5 block w-full rounded-lg border bg-dark/40 px-4 py-2.5 font-body text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/40",
+                  errors.organization
+                    ? "border-red-500/50"
+                    : "border-[color:var(--color-rule)]",
+                ]}
+                placeholder="Your company or organization"
+              />
+              {errors.organization && (
+                <p class="mt-1 font-body text-sm text-red-400">
+                  {errors.organization}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label
+                for="contactName"
+                class="block font-body text-sm font-medium text-ink-primary"
+              >
+                Your name *
+              </label>
+              <input
+                id="contactName"
+                name="contactName"
+                type="text"
+                required
+                maxlength="120"
+                value={prev.contactName ?? ""}
+                class:list={[
+                  "mt-1.5 block w-full rounded-lg border bg-dark/40 px-4 py-2.5 font-body text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/40",
+                  errors.contactName
+                    ? "border-red-500/50"
+                    : "border-[color:var(--color-rule)]",
+                ]}
+                placeholder="Full name"
+              />
+              {errors.contactName && (
+                <p class="mt-1 font-body text-sm text-red-400">
+                  {errors.contactName}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label
+                for="contactEmail"
+                class="block font-body text-sm font-medium text-ink-primary"
+              >
+                Email *
+              </label>
+              <input
+                id="contactEmail"
+                name="contactEmail"
+                type="email"
+                required
+                maxlength="254"
+                value={prev.contactEmail ?? ""}
+                class:list={[
+                  "mt-1.5 block w-full rounded-lg border bg-dark/40 px-4 py-2.5 font-body text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/40",
+                  errors.contactEmail
+                    ? "border-red-500/50"
+                    : "border-[color:var(--color-rule)]",
+                ]}
+                placeholder="you@example.com"
+              />
+              {errors.contactEmail && (
+                <p class="mt-1 font-body text-sm text-red-400">
+                  {errors.contactEmail}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label
+                for="title"
+                class="block font-body text-sm font-medium text-ink-primary"
+              >
+                Project title *
+              </label>
+              <input
+                id="title"
+                name="title"
+                type="text"
+                required
+                maxlength="160"
+                value={prev.title ?? ""}
+                class:list={[
+                  "mt-1.5 block w-full rounded-lg border bg-dark/40 px-4 py-2.5 font-body text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/40",
+                  errors.title
+                    ? "border-red-500/50"
+                    : "border-[color:var(--color-rule)]",
+                ]}
+                placeholder="A short name for the project"
+              />
+              {errors.title && (
+                <p class="mt-1 font-body text-sm text-red-400">
+                  {errors.title}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label
+                for="description"
+                class="block font-body text-sm font-medium text-ink-primary"
+              >
+                Description *
+              </label>
+              <textarea
+                id="description"
+                name="description"
+                required
+                maxlength="4000"
+                rows="5"
+                class:list={[
+                  "mt-1.5 block w-full rounded-lg border bg-dark/40 px-4 py-2.5 font-body text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/40",
+                  errors.description
+                    ? "border-red-500/50"
+                    : "border-[color:var(--color-rule)]",
+                ]}
+                placeholder="What does the project need? What are you hoping to build?"
+              >{prev.description ?? ""}</textarea>
+              {errors.description && (
+                <p class="mt-1 font-body text-sm text-red-400">
+                  {errors.description}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label
+                for="skills"
+                class="block font-body text-sm font-medium text-ink-primary"
+              >
+                Skills needed
+              </label>
+              <input
+                id="skills"
+                name="skills"
+                type="text"
+                maxlength="1000"
+                value={prev.skills ?? ""}
+                class="mt-1.5 block w-full rounded-lg border border-[color:var(--color-rule)] bg-dark/40 px-4 py-2.5 font-body text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
+                placeholder="React, Python, PostgreSQL (comma-separated, up to 12)"
+              />
+              {errors.skills && (
+                <p class="mt-1 font-body text-sm text-red-400">
+                  {errors.skills}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label
+                for="budgetBand"
+                class="block font-body text-sm font-medium text-ink-primary"
+              >
+                Budget range *
+              </label>
+              <select
+                id="budgetBand"
+                name="budgetBand"
+                required
+                class:list={[
+                  "mt-1.5 block w-full rounded-lg border bg-dark/40 px-4 py-2.5 font-body text-ink-primary focus:outline-none focus:ring-2 focus:ring-primary/40",
+                  errors.budgetBand
+                    ? "border-red-500/50"
+                    : "border-[color:var(--color-rule)]",
+                ]}
+              >
+                <option value="" disabled selected={!prev.budgetBand}>
+                  Select a range
+                </option>
+                {BUDGET_BAND_OPTIONS.map((opt) => (
+                  <option
+                    value={opt.value}
+                    selected={prev.budgetBand === opt.value}
+                  >
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              {errors.budgetBand && (
+                <p class="mt-1 font-body text-sm text-red-400">
+                  {errors.budgetBand}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label
+                for="timeline"
+                class="block font-body text-sm font-medium text-ink-primary"
+              >
+                Timeline
+              </label>
+              <input
+                id="timeline"
+                name="timeline"
+                type="text"
+                maxlength="120"
+                value={prev.timeline ?? ""}
+                class="mt-1.5 block w-full rounded-lg border border-[color:var(--color-rule)] bg-dark/40 px-4 py-2.5 font-body text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
+                placeholder="e.g. 4 weeks, Q3 2026, flexible"
+              />
+            </div>
+
+            <button
+              type="submit"
+              class="font-body inline-flex items-center rounded-full bg-primary px-8 py-3 text-sm font-semibold uppercase tracking-[0.14em] text-dark transition-transform hover:scale-[1.03]"
+            >
+              Submit project
+            </button>
+          </form>
+        </>
+      )
+    }
+  </section>
+
+  <!-- What happens next -->
+  {
+    !success && !rateLimited && (
+      <section class="border-t border-[color:var(--color-rule)] py-16 md:py-24">
+        <div class="mx-auto max-w-4xl px-4 sm:px-8">
+          <p class="font-body text-xs font-semibold uppercase tracking-[0.28em] text-primary">
+            § What happens next
+          </p>
+          <div class="mt-8 grid gap-8 md:grid-cols-3">
+            <div>
+              <p class="font-body text-lg font-semibold text-ink-primary">
+                1. We review
+              </p>
+              <p class="mt-2 font-body text-[15px] text-ink-secondary">
+                The TTV team reads every submission and checks alignment with
+                our builder community.
+              </p>
+            </div>
+            <div>
+              <p class="font-body text-lg font-semibold text-ink-primary">
+                2. Builders raise a hand
+              </p>
+              <p class="mt-2 font-body text-[15px] text-ink-secondary">
+                Approved projects go on the opportunities board. Builders whose
+                skills match can express interest.
+              </p>
+            </div>
+            <div>
+              <p class="font-body text-lg font-semibold text-ink-primary">
+                3. TTV introduces you
+              </p>
+              <p class="mt-2 font-body text-[15px] text-ink-secondary">
+                When there is a fit, we make the introduction. From there you
+                work together directly.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+    )
+  }
+</PublicLayout>

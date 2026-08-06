@@ -2,7 +2,7 @@
 import CertificateLayout from "@/layouts/CertificateLayout.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { format } from "date-fns";
 import { env } from "cloudflare:workers";
 
@@ -41,6 +41,18 @@ const instructorName = instructor?.user?.name ?? "";
 const issueDate = application?.completedAt
   ? format(application.completedAt, "MMMM dd, yyyy")
   : "";
+
+const publishedProfile = application?.user
+  ? await db.query.studentProfile.findFirst({
+      where: and(
+        eq(schema.studentProfile.userId, application.user.id),
+        eq(schema.studentProfile.status, "PUBLISHED"),
+      ),
+      columns: { handle: true },
+    })
+  : undefined;
+
+const studentFirstName = studentName.split(/\s+/)[0] ?? studentName;
 ---
 
 <CertificateLayout title={isValid ? `Certificate - ${studentName}` : "Certificate Not Found"}>
@@ -126,6 +138,17 @@ const issueDate = application?.completedAt
               Tembo Tech Ventures
             </p>
           </div>
+
+          {publishedProfile && (
+            <div class="mt-8 text-center">
+              <a
+                href={`/talent/${publishedProfile.handle}`}
+                class="text-sm font-medium text-teal transition-colors hover:text-primary"
+              >
+                View {studentFirstName}&rsquo;s builder profile &rarr;
+              </a>
+            </div>
+          )}
         </div>
       </div>
     </div>

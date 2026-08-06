@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, uniqueIndex, index } from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import type { drizzle } from "drizzle-orm/d1";
@@ -33,7 +33,7 @@ export const user = sqliteTable("user", {
   ...timestamps,
 });
 
-export const userRelations = relations(user, ({ many }) => ({
+export const userRelations = relations(user, ({ many, one }) => ({
   accounts: many(account),
   sessions: many(session),
   userRoles: many(userRole),
@@ -41,6 +41,7 @@ export const userRelations = relations(user, ({ many }) => ({
   programRoles: many(programRole),
   programApplications: many(programApplication),
   chatMessages: many(chatMessage),
+  studentProfile: one(studentProfile),
 }));
 
 // ─── Account (matches better-auth expected schema) ─────────
@@ -336,3 +337,216 @@ export const chatMessage = sqliteTable("chat_message", {
 export const chatMessageRelations = relations(chatMessage, ({ one }) => ({
   user: one(user, { fields: [chatMessage.userId], references: [user.id] }),
 }));
+
+// ─── StudentProfile ───────────────────────────────────────
+
+export const studentProfile = sqliteTable("studentProfile", {
+  id: cuid("id"),
+  userId: text("userId")
+    .notNull()
+    .unique()
+    .references(() => user.id, { onDelete: "cascade" }),
+  handle: text("handle").notNull().unique(),
+  status: text("status", {
+    enum: ["DRAFT", "IN_REVIEW", "PUBLISHED", "SUSPENDED"],
+  })
+    .notNull()
+    .default("DRAFT"),
+  headline: text("headline"),
+  bio: text("bio"),
+  location: text("location"),
+  country: text("country"),
+  skills: text("skills"),
+  openToFreelance: integer("openToFreelance", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  openToRoles: integer("openToRoles", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  githubLogin: text("githubLogin"),
+  portfolioUrl: text("portfolioUrl"),
+  linkedinUrl: text("linkedinUrl"),
+  publishedAt: integer("publishedAt", { mode: "timestamp" }),
+  ...timestamps,
+});
+
+export const studentProfileRelations = relations(
+  studentProfile,
+  ({ one, many }) => ({
+    user: one(user, {
+      fields: [studentProfile.userId],
+      references: [user.id],
+    }),
+    highlights: many(profileHighlight),
+    contacts: many(profileContact),
+    projectInterests: many(projectInterest),
+  })
+);
+
+// ─── ProfileHighlight ─────────────────────────────────────
+
+export const profileHighlight = sqliteTable(
+  "profileHighlight",
+  {
+    id: cuid("id"),
+    profileId: text("profileId")
+      .notNull()
+      .references(() => studentProfile.id, { onDelete: "cascade" }),
+    repoFullName: text("repoFullName").notNull(),
+    repoUrl: text("repoUrl").notNull(),
+    description: text("description"),
+    language: text("language"),
+    topics: text("topics"),
+    stars: integer("stars").notNull().default(0),
+    pushedAt: integer("pushedAt", { mode: "timestamp" }),
+    blurb: text("blurb"),
+    sortOrder: integer("sortOrder").notNull().default(0),
+    snapshotAt: integer("snapshotAt", { mode: "timestamp" }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("profileHighlight_profileId_repoFullName_unique").on(
+      table.profileId,
+      table.repoFullName
+    ),
+  ]
+);
+
+export const profileHighlightRelations = relations(
+  profileHighlight,
+  ({ one }) => ({
+    profile: one(studentProfile, {
+      fields: [profileHighlight.profileId],
+      references: [studentProfile.id],
+    }),
+  })
+);
+
+// ─── ProfileContact ───────────────────────────────────────
+
+export const profileContact = sqliteTable("profileContact", {
+  id: cuid("id"),
+  profileId: text("profileId")
+    .notNull()
+    .references(() => studentProfile.id, { onDelete: "cascade" }),
+  fromName: text("fromName").notNull(),
+  fromEmail: text("fromEmail").notNull(),
+  organization: text("organization"),
+  message: text("message").notNull(),
+  status: text("status", {
+    enum: ["NEW", "READ", "ARCHIVED"],
+  })
+    .notNull()
+    .default("NEW"),
+  ...timestamps,
+});
+
+export const profileContactRelations = relations(
+  profileContact,
+  ({ one }) => ({
+    profile: one(studentProfile, {
+      fields: [profileContact.profileId],
+      references: [studentProfile.id],
+    }),
+  })
+);
+
+// ─── ClientProject ────────────────────────────────────────
+
+export const clientProject = sqliteTable("clientProject", {
+  id: cuid("id"),
+  organization: text("organization").notNull(),
+  contactName: text("contactName").notNull(),
+  contactEmail: text("contactEmail").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  skills: text("skills"),
+  budgetBand: text("budgetBand", {
+    enum: [
+      "UNDER_1K",
+      "FROM_1K_TO_5K",
+      "FROM_5K_TO_15K",
+      "OVER_15K",
+      "UNDISCLOSED",
+    ],
+  })
+    .notNull()
+    .default("UNDISCLOSED"),
+  timeline: text("timeline"),
+  status: text("status", {
+    enum: ["PENDING", "APPROVED", "REJECTED", "CLOSED", "MATCHED"],
+  })
+    .notNull()
+    .default("PENDING"),
+  ...timestamps,
+});
+
+export const clientProjectRelations = relations(
+  clientProject,
+  ({ many }) => ({
+    projectInterests: many(projectInterest),
+  })
+);
+
+// ─── ProjectInterest ──────────────────────────────────────
+
+export const projectInterest = sqliteTable(
+  "projectInterest",
+  {
+    id: cuid("id"),
+    projectId: text("projectId")
+      .notNull()
+      .references(() => clientProject.id, { onDelete: "cascade" }),
+    profileId: text("profileId")
+      .notNull()
+      .references(() => studentProfile.id, { onDelete: "cascade" }),
+    note: text("note"),
+    status: text("status", {
+      enum: ["INTERESTED", "WITHDRAWN"],
+    })
+      .notNull()
+      .default("INTERESTED"),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("projectInterest_projectId_profileId_unique").on(
+      table.projectId,
+      table.profileId
+    ),
+  ]
+);
+
+export const projectInterestRelations = relations(
+  projectInterest,
+  ({ one }) => ({
+    project: one(clientProject, {
+      fields: [projectInterest.projectId],
+      references: [clientProject.id],
+    }),
+    profile: one(studentProfile, {
+      fields: [projectInterest.profileId],
+      references: [studentProfile.id],
+    }),
+  })
+);
+
+// ─── FormSubmissionLog ────────────────────────────────────
+
+export const formSubmissionLog = sqliteTable(
+  "formSubmissionLog",
+  {
+    id: cuid("id"),
+    scope: text("scope").notNull(),
+    ipHash: text("ipHash").notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    index("formSubmissionLog_scope_ipHash_createdAt_idx").on(
+      table.scope,
+      table.ipHash,
+      table.createdAt
+    ),
+  ]
+);

@@ -14,7 +14,7 @@
     "cf:agent": "node ./scripts/cloudflare/agent-environment.mjs",
     "cf:sweep": "node ./scripts/cloudflare/sweep-agent-environments.mjs",
     "cf:smoke": "node ./scripts/cloudflare/smoke.mjs",
-    "audit:ci": "npm audit --audit-level=high",
+    "audit:ci": "node ./scripts/audit-ci.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
@@ -46,7 +46,8 @@
   },
   "overrides": {
     "vite": "^7",
-    "kysely": "^0.28.14"
+    "kysely": "^0.28.14",
+    "undici": "^7.29.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

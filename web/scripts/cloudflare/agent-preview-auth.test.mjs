@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   AGENT_PREVIEW_SESSION_MARKER,
+  AGENT_PREVIEW_USER_ID,
   assertAgentEnvironmentName,
   deriveAgentPreviewAuthSecret,
   deriveAgentPreviewToken,
   seedAgentPreviewAccess,
+  seedAgentPreviewFixtures,
 } from "./agent-preview-auth.mjs";
 
 describe("agent preview identity", () => {
@@ -63,5 +65,121 @@ describe("agent preview identity", () => {
       AGENT_PREVIEW_SESSION_MARKER
     );
     expect(executeQuery.mock.calls[4][2][2]).toHaveLength(64);
+  });
+});
+
+describe("seedAgentPreviewFixtures", () => {
+  it("requires a database ID", async () => {
+    await expect(
+      seedAgentPreviewFixtures({
+        databaseId: "",
+        executeQuery: vi.fn(),
+      })
+    ).rejects.toThrow("database ID");
+  });
+
+  it("requires an executeQuery function", async () => {
+    await expect(
+      seedAgentPreviewFixtures({
+        databaseId: "db-123",
+        executeQuery: "not-a-function",
+      })
+    ).rejects.toThrow("query executor");
+  });
+
+  it("seeds all fixture data with idempotent statements", async () => {
+    const executeQuery = vi.fn().mockResolvedValue([]);
+    const now = new Date("2026-07-14T12:00:00.000Z");
+
+    await seedAgentPreviewFixtures({
+      databaseId: "db-fixture-test",
+      executeQuery,
+      now,
+    });
+
+    // profile reset, curriculum, program, preview app, amina user, amina app,
+    // amina profile, two amina highlights, kwame user, kwame app, kwame
+    // profile, project approved, project pending = 14 total
+    expect(executeQuery).toHaveBeenCalledTimes(14);
+
+    // All calls should target the correct database
+    for (const call of executeQuery.mock.calls) {
+      expect(call[0]).toBe("db-fixture-test");
+    }
+
+    // Content-based lookups keep the assertions stable if statement order
+    // shifts; the reset must still run first.
+    const calls = executeQuery.mock.calls;
+    const findByParam = (value) =>
+      calls.find((call) => (call[2] ?? []).includes(value));
+
+    expect(calls[0][1]).toContain('DELETE FROM "studentProfile"');
+
+    expect(findByParam("ttv-fixture-curriculum")?.[1]).toContain("curriculum");
+    const programCall = findByParam("ttv-fixture-program-cohort-04");
+    expect(programCall?.[1]).toContain("program");
+    expect(programCall?.[2]).toContain("Cohort 04");
+
+    const previewApp = findByParam("ttv-fixture-app-preview");
+    expect(previewApp?.[1]).toContain("programApplication");
+    expect(previewApp?.[2]).toContain(AGENT_PREVIEW_USER_ID);
+
+    expect(findByParam("ttv-fixture-user-amina")?.[2]).toContain(
+      "Amina Fixture"
+    );
+    const aminaProfile = findByParam("ttv-fixture-profile-amina");
+    expect(aminaProfile?.[2]).toContain("amina-preview");
+    expect(aminaProfile?.[2]).toContain("Kenya");
+    expect(findByParam("ttv-fixture-highlight-amina-1")).toBeDefined();
+    expect(findByParam("ttv-fixture-highlight-amina-2")).toBeDefined();
+
+    expect(findByParam("ttv-fixture-user-kwame")).toBeDefined();
+    expect(findByParam("ttv-fixture-profile-kwame")?.[2]).toContain(
+      "kwame-preview"
+    );
+
+    expect(findByParam("ttv-fixture-project-approved")?.[2]).toContain(
+      "Savanna Logistics"
+    );
+    expect(findByParam("ttv-fixture-project-pending")?.[2]).toContain(
+      "Baraka Health"
+    );
+
+    // Every INSERT must be idempotent; the profile-reset DELETE is the only
+    // non-INSERT statement.
+    for (const call of executeQuery.mock.calls) {
+      if (call[1].trimStart().startsWith("DELETE")) continue;
+      expect(call[1]).toContain("ON CONFLICT");
+    }
+  });
+
+  it("does NOT seed a studentProfile for the preview user", async () => {
+    const executeQuery = vi.fn().mockResolvedValue([]);
+
+    await seedAgentPreviewFixtures({
+      databaseId: "db-123",
+      executeQuery,
+    });
+
+    const profileInserts = executeQuery.mock.calls.filter(
+      (call) =>
+        call[1].includes("INSERT") &&
+        call[1].includes("studentProfile") &&
+        call[2].includes(AGENT_PREVIEW_USER_ID)
+    );
+    expect(profileInserts).toHaveLength(0);
+  });
+
+  it("resets the preview user's profile before seeding fixtures", async () => {
+    const executeQuery = vi.fn().mockResolvedValue([]);
+
+    await seedAgentPreviewFixtures({
+      databaseId: "db-123",
+      executeQuery,
+    });
+
+    const firstCall = executeQuery.mock.calls[0];
+    expect(firstCall[1]).toContain('DELETE FROM "studentProfile"');
+    expect(firstCall[2]).toEqual([AGENT_PREVIEW_USER_ID]);
   });
 });

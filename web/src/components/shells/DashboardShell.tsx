@@ -7,6 +7,9 @@ import {
   PiSignOutDuotone,
   PiVideoCameraDuotone,
   PiChatCircleDotsDuotone,
+  PiSuitcaseSimpleDuotone,
+  PiTrayDuotone,
+  PiHandshakeDuotone,
 } from "react-icons/pi";
 import { PiListBold } from "react-icons/pi";
 
@@ -15,6 +18,9 @@ const links = [
   { href: "/dashboard/sessions", label: "Sessions", icon: PiVideoCameraDuotone },
   { href: "/dashboard/ask", label: "Ask AI", icon: PiChatCircleDotsDuotone },
   { href: "/dashboard/apply", label: "Apply", icon: PiPaperPlaneTiltDuotone },
+  { href: "/dashboard/portfolio", label: "Portfolio", icon: PiSuitcaseSimpleDuotone },
+  { href: "/dashboard/leads", label: "Leads", icon: PiTrayDuotone },
+  { href: "/dashboard/opportunities", label: "Opportunities", icon: PiHandshakeDuotone },
   { href: "/dashboard/profile", label: "Profile", icon: PiUserDuotone },
   { href: "/auth/logout", label: "Logout", icon: PiSignOutDuotone },
 ];

@@ -9,6 +9,8 @@ import {
   PiDatabaseDuotone,
   PiVideoCameraDuotone,
   PiKeyDuotone,
+  PiIdentificationCardDuotone,
+  PiBriefcaseDuotone,
 } from "react-icons/pi";
 import { PiListBold } from "react-icons/pi";
 
@@ -16,6 +18,8 @@ const primaryLinks = [
   { href: "/admin", label: "Admin Home", icon: PiGaugeDuotone },
   { href: "/admin/users", label: "Users", icon: PiUsersDuotone },
   { href: "/admin/applications", label: "Applications", icon: PiFileTextDuotone },
+  { href: "/admin/profiles", label: "Profiles", icon: PiIdentificationCardDuotone },
+  { href: "/admin/projects", label: "Client Projects", icon: PiBriefcaseDuotone },
   { href: "/admin/programs", label: "Programs", icon: PiBookOpenDuotone },
   { href: "/admin/recordings", label: "Recordings", icon: PiVideoCameraDuotone },
   { href: "/admin/data-migration", label: "Data Migration", icon: PiDatabaseDuotone },

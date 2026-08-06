@@ -1,0 +1,107 @@
+---
+import { parseSkillsJson } from "@/lib/talent/profile";
+import { getInitials } from "./directory-helpers";
+
+interface Props {
+  handle: string;
+  name: string;
+  image: string | null;
+  headline: string | null;
+  country: string | null;
+  skills: string | null;
+  openToFreelance: boolean;
+  openToRoles: boolean;
+  latestCohort: string | null;
+}
+
+const {
+  handle,
+  name,
+  image,
+  headline,
+  country,
+  skills,
+  openToFreelance,
+  openToRoles,
+  latestCohort,
+} = Astro.props;
+
+const parsedSkills = parseSkillsJson(skills).slice(0, 3);
+const initials = getInitials(name);
+---
+
+<a
+  href={`/talent/${handle}`}
+  class="group block rounded-lg border border-[color:var(--color-rule)] bg-[color:var(--color-bg-raised)] transition-colors hover:border-primary/40"
+>
+  <div class="relative aspect-[4/5] overflow-hidden rounded-t-lg">
+    {image ? (
+      <img
+        src={image}
+        alt=""
+        class="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
+        loading="lazy"
+      />
+    ) : (
+      <div
+        class="flex h-full w-full items-center justify-center"
+        style="background-color: var(--color-bg-raised);"
+      >
+        <span
+          class="font-heading text-primary/60"
+          style="font-size: clamp(2.5rem, 6vw, 5rem); letter-spacing: -0.04em;"
+        >
+          {initials}
+        </span>
+      </div>
+    )}
+  </div>
+
+  <div class="space-y-3 p-4">
+    <div>
+      <h3 class="font-body text-base font-semibold text-ink-primary">
+        {name}
+      </h3>
+      {headline && (
+        <p class="mt-1 line-clamp-2 font-body text-sm text-ink-secondary">
+          {headline}
+        </p>
+      )}
+    </div>
+
+    {latestCohort && (
+      <p class="font-body text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+        {latestCohort}
+      </p>
+    )}
+
+    {country && (
+      <p class="font-body text-xs text-ink-muted">{country}</p>
+    )}
+
+    {parsedSkills.length > 0 && (
+      <div class="flex flex-wrap gap-1.5">
+        {parsedSkills.map((skill) => (
+          <span class="inline-flex rounded-full border border-[color:var(--color-rule)] px-2 py-0.5 font-body text-xs text-ink-secondary">
+            {skill}
+          </span>
+        ))}
+      </div>
+    )}
+
+    {(openToFreelance || openToRoles) && (
+      <div class="flex flex-wrap gap-1.5">
+        {openToFreelance && (
+          <span class="inline-flex rounded-full bg-emerald-500/15 px-2 py-0.5 font-body text-xs font-medium text-emerald-300">
+            Open to freelance
+          </span>
+        )}
+        {openToRoles && (
+          <span class="inline-flex rounded-full bg-sky-500/15 px-2 py-0.5 font-body text-xs font-medium text-sky-300">
+            Open to roles
+          </span>
+        )}
+      </div>
+    )}
+  </div>
+</a>
