@@ -164,6 +164,16 @@ export async function seedAgentPreviewFixtures({
   const completedAt = createdAt;
   const publishedAt = createdAt;
 
+  // Reset the preview user's own profile so every deploy starts pristine:
+  // live journeys create and publish it, and per-feature suites assert the
+  // no-profile gate states. Cascading deletes clear its highlights, leads,
+  // and project interests.
+  await executeQuery(
+    databaseId,
+    `DELETE FROM "studentProfile" WHERE "userId" = ?`,
+    [AGENT_PREVIEW_USER_ID]
+  );
+
   // Curriculum
   await executeQuery(
     databaseId,

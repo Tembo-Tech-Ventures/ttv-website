@@ -97,70 +97,58 @@ describe("seedAgentPreviewFixtures", () => {
       now,
     });
 
-    // Expected calls: curriculum, program, preview-user app,
-    // amina user, amina app, amina profile, amina highlight x2,
-    // kwame user, kwame app, kwame profile,
-    // project approved, project pending = 13 total
-    expect(executeQuery).toHaveBeenCalledTimes(13);
+    // profile reset, curriculum, program, preview app, amina user, amina app,
+    // amina profile, two amina highlights, kwame user, kwame app, kwame
+    // profile, project approved, project pending = 14 total
+    expect(executeQuery).toHaveBeenCalledTimes(14);
 
     // All calls should target the correct database
     for (const call of executeQuery.mock.calls) {
       expect(call[0]).toBe("db-fixture-test");
     }
 
-    // Verify curriculum insert
-    expect(executeQuery.mock.calls[0][1]).toContain("curriculum");
-    expect(executeQuery.mock.calls[0][2]).toContain("ttv-fixture-curriculum");
+    // Content-based lookups keep the assertions stable if statement order
+    // shifts; the reset must still run first.
+    const calls = executeQuery.mock.calls;
+    const findByParam = (value) =>
+      calls.find((call) => (call[2] ?? []).includes(value));
 
-    // Verify program insert
-    expect(executeQuery.mock.calls[1][1]).toContain("program");
-    expect(executeQuery.mock.calls[1][2]).toContain(
-      "ttv-fixture-program-cohort-04"
+    expect(calls[0][1]).toContain('DELETE FROM "studentProfile"');
+
+    expect(findByParam("ttv-fixture-curriculum")?.[1]).toContain("curriculum");
+    const programCall = findByParam("ttv-fixture-program-cohort-04");
+    expect(programCall?.[1]).toContain("program");
+    expect(programCall?.[2]).toContain("Cohort 04");
+
+    const previewApp = findByParam("ttv-fixture-app-preview");
+    expect(previewApp?.[1]).toContain("programApplication");
+    expect(previewApp?.[2]).toContain(AGENT_PREVIEW_USER_ID);
+
+    expect(findByParam("ttv-fixture-user-amina")?.[2]).toContain(
+      "Amina Fixture"
     );
-    expect(executeQuery.mock.calls[1][2]).toContain("Cohort 04");
+    const aminaProfile = findByParam("ttv-fixture-profile-amina");
+    expect(aminaProfile?.[2]).toContain("amina-preview");
+    expect(aminaProfile?.[2]).toContain("Kenya");
+    expect(findByParam("ttv-fixture-highlight-amina-1")).toBeDefined();
+    expect(findByParam("ttv-fixture-highlight-amina-2")).toBeDefined();
 
-    // Verify preview user application
-    expect(executeQuery.mock.calls[2][1]).toContain("programApplication");
-    expect(executeQuery.mock.calls[2][2]).toContain("ttv-fixture-app-preview");
-    expect(executeQuery.mock.calls[2][2]).toContain(AGENT_PREVIEW_USER_ID);
-
-    // Verify Amina user
-    expect(executeQuery.mock.calls[3][2]).toContain("ttv-fixture-user-amina");
-    expect(executeQuery.mock.calls[3][2]).toContain("Amina Fixture");
-
-    // Verify Amina profile
-    expect(executeQuery.mock.calls[5][2]).toContain(
-      "ttv-fixture-profile-amina"
-    );
-    expect(executeQuery.mock.calls[5][2]).toContain("amina-preview");
-    expect(executeQuery.mock.calls[5][2]).toContain("Kenya");
-
-    // Verify Amina highlights
-    expect(executeQuery.mock.calls[6][2]).toContain(
-      "ttv-fixture-highlight-amina-1"
-    );
-    expect(executeQuery.mock.calls[7][2]).toContain(
-      "ttv-fixture-highlight-amina-2"
+    expect(findByParam("ttv-fixture-user-kwame")).toBeDefined();
+    expect(findByParam("ttv-fixture-profile-kwame")?.[2]).toContain(
+      "kwame-preview"
     );
 
-    // Verify Kwame user and profile
-    expect(executeQuery.mock.calls[8][2]).toContain("ttv-fixture-user-kwame");
-    expect(executeQuery.mock.calls[10][2]).toContain(
-      "ttv-fixture-profile-kwame"
+    expect(findByParam("ttv-fixture-project-approved")?.[2]).toContain(
+      "Savanna Logistics"
+    );
+    expect(findByParam("ttv-fixture-project-pending")?.[2]).toContain(
+      "Baraka Health"
     );
 
-    // Verify client projects
-    expect(executeQuery.mock.calls[11][2]).toContain(
-      "ttv-fixture-project-approved"
-    );
-    expect(executeQuery.mock.calls[11][2]).toContain("Savanna Logistics");
-    expect(executeQuery.mock.calls[12][2]).toContain(
-      "ttv-fixture-project-pending"
-    );
-    expect(executeQuery.mock.calls[12][2]).toContain("Baraka Health");
-
-    // All SQL statements should use ON CONFLICT for idempotency
+    // Every INSERT must be idempotent; the profile-reset DELETE is the only
+    // non-INSERT statement.
     for (const call of executeQuery.mock.calls) {
+      if (call[1].trimStart().startsWith("DELETE")) continue;
       expect(call[1]).toContain("ON CONFLICT");
     }
   });
@@ -175,9 +163,23 @@ describe("seedAgentPreviewFixtures", () => {
 
     const profileInserts = executeQuery.mock.calls.filter(
       (call) =>
+        call[1].includes("INSERT") &&
         call[1].includes("studentProfile") &&
         call[2].includes(AGENT_PREVIEW_USER_ID)
     );
     expect(profileInserts).toHaveLength(0);
+  });
+
+  it("resets the preview user's profile before seeding fixtures", async () => {
+    const executeQuery = vi.fn().mockResolvedValue([]);
+
+    await seedAgentPreviewFixtures({
+      databaseId: "db-123",
+      executeQuery,
+    });
+
+    const firstCall = executeQuery.mock.calls[0];
+    expect(firstCall[1]).toContain('DELETE FROM "studentProfile"');
+    expect(firstCall[2]).toEqual([AGENT_PREVIEW_USER_ID]);
   });
 });
