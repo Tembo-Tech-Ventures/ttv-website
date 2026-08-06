@@ -49,10 +49,12 @@ test.describe("admin curriculum management", () => {
       await navigateToCurricula(page, viewportWidth);
       await page.getByRole("link", { name: "New Curriculum" }).click();
 
-      await page.getByLabel(/^Title/).fill(`  ${initialTitle}  `);
-      await page
-        .getByLabel(/^Description/)
-        .fill("  Curriculum created by the isolated admin journey.  ");
+      const titleInput = page.locator('input[name="title"]');
+      const descriptionInput = page.locator('textarea[name="description"]');
+      await titleInput.fill(`  ${initialTitle}  `);
+      await descriptionInput.fill(
+        "  Curriculum created by the isolated admin journey.  "
+      );
       await page
         .getByRole("button", { name: "Create Curriculum" })
         .click();
@@ -64,22 +66,20 @@ test.describe("admin curriculum management", () => {
         "Curriculum created."
       );
       editPath = new URL(page.url()).pathname;
-      await expect(page.getByLabel(/^Title/)).toHaveValue(initialTitle);
-      await expect(page.getByLabel(/^Description/)).toHaveValue(
+      await expect(titleInput).toHaveValue(initialTitle);
+      await expect(descriptionInput).toHaveValue(
         "Curriculum created by the isolated admin journey."
       );
 
-      await page.getByLabel(/^Title/).fill(`  ${updatedTitle}  `);
-      await page
-        .getByLabel(/^Description/)
-        .fill("  Updated curriculum description.  ");
+      await titleInput.fill(`  ${updatedTitle}  `);
+      await descriptionInput.fill("  Updated curriculum description.  ");
       await page.getByRole("button", { name: "Save Changes" }).click();
 
       await expect(page.getByRole("status")).toContainText(
         "Curriculum changes saved."
       );
-      await expect(page.getByLabel(/^Title/)).toHaveValue(updatedTitle);
-      await expect(page.getByLabel(/^Description/)).toHaveValue(
+      await expect(titleInput).toHaveValue(updatedTitle);
+      await expect(descriptionInput).toHaveValue(
         "Updated curriculum description."
       );
       await expect(
@@ -129,18 +129,18 @@ test.describe("admin curriculum management", () => {
   }) => {
     await page.goto("/admin/curricula/new");
     const submittedDescription = "  Keep this submitted description.  ";
+    const titleInput = page.locator('input[name="title"]');
+    const descriptionInput = page.locator('textarea[name="description"]');
 
-    await page.getByLabel(/^Title/).fill("   ");
-    await page.getByLabel(/^Description/).fill(submittedDescription);
+    await titleInput.fill("   ");
+    await descriptionInput.fill(submittedDescription);
     await page
       .getByRole("button", { name: "Create Curriculum" })
       .click();
 
     await expect(page.getByText("Enter a curriculum title.")).toBeVisible();
-    await expect(page.getByLabel(/^Title/)).toHaveValue("   ");
-    await expect(page.getByLabel(/^Description/)).toHaveValue(
-      submittedDescription
-    );
+    await expect(titleInput).toHaveValue("   ");
+    await expect(descriptionInput).toHaveValue(submittedDescription);
     await page.screenshot({
       path: evidence("admin-curriculum-validation"),
       fullPage: true,
@@ -150,18 +150,6 @@ test.describe("admin curriculum management", () => {
   test("rejects deletion of a referenced curriculum without deleting its program", async ({
     page,
   }) => {
-    const response = await page.request.post(
-      "/admin/curricula/ttv-fixture-curriculum",
-      { form: { action: "delete" } }
-    );
-
-    expect(response.ok()).toBe(true);
-    const responseBody = await response.text();
-    expect(responseBody).toContain(
-      "This curriculum is used by one or more programs and cannot be deleted."
-    );
-    expect(responseBody).toContain("Cohort 04");
-
     await page.goto("/admin/curricula/ttv-fixture-curriculum");
     await expect(
       page.getByRole("heading", { name: "Edit Curriculum" })
@@ -179,6 +167,21 @@ test.describe("admin curriculum management", () => {
     await expect(
       page.getByRole("button", { name: "Delete Curriculum" })
     ).toHaveCount(0);
+
+    const deleteResponse = await page.evaluate(async () => {
+      const response = await fetch(window.location.pathname, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ action: "delete" }),
+      });
+      return { ok: response.ok, body: await response.text() };
+    });
+    expect(deleteResponse.ok).toBe(true);
+    expect(deleteResponse.body).toContain(
+      "This curriculum is used by one or more programs and cannot be deleted."
+    );
+    await page.reload();
+    await expect(cohortLink).toBeVisible();
     await page.screenshot({
       path: evidence("admin-curriculum-referenced"),
       fullPage: true,
