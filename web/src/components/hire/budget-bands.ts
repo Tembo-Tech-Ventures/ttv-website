@@ -1,19 +1,21 @@
-const BUDGET_BAND_LABELS: Record<string, string> = {
-  UNDER_1K: "Under $1k",
-  FROM_1K_TO_5K: "$1k–$5k",
-  FROM_5K_TO_15K: "$5k–$15k",
-  OVER_15K: "Over $15k",
-  UNDISCLOSED: "Prefer not to say",
-};
+import { budgetLabel } from "@/lib/talent/budget";
 
-export function budgetBandLabel(band: string): string {
-  return BUDGET_BAND_LABELS[band] ?? band;
-}
-
-export const BUDGET_BAND_OPTIONS = [
-  { value: "UNDER_1K", label: "Under $1k" },
-  { value: "FROM_1K_TO_5K", label: "$1k–$5k" },
-  { value: "FROM_5K_TO_15K", label: "$5k–$15k" },
-  { value: "OVER_15K", label: "Over $15k" },
-  { value: "UNDISCLOSED", label: "Prefer not to say" },
+export const BUDGET_BAND_VALUES = [
+  "UNDER_1K",
+  "FROM_1K_TO_5K",
+  "FROM_5K_TO_15K",
+  "OVER_15K",
+  "UNDISCLOSED",
 ] as const;
+
+export type BudgetBand = (typeof BUDGET_BAND_VALUES)[number];
+
+// Labels have a single source of truth in lib/talent/budget.ts (shared with
+// the admin review surfaces); this module adds the select-options shape the
+// hire form and opportunities board render.
+export const budgetBandLabel = budgetLabel;
+
+export const BUDGET_BAND_OPTIONS = BUDGET_BAND_VALUES.map((value) => ({
+  value,
+  label: budgetLabel(value),
+}));
