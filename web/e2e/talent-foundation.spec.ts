@@ -92,8 +92,19 @@ test.describe("authenticated talent foundation", () => {
     });
   });
 
-  test("new nav items are visible in dashboard sidebar", async ({ page }) => {
+  test("new nav items are visible in dashboard sidebar", async ({
+    page,
+    viewport,
+  }) => {
     await page.goto("/dashboard");
+    const isMobile = (viewport?.width ?? 1280) < 1024;
+    if (isMobile) {
+      await page
+        .locator("header button")
+        .first()
+        .click();
+      await page.waitForTimeout(300);
+    }
     await expect(page.getByRole("link", { name: "Portfolio" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Leads" })).toBeVisible();
     await expect(
@@ -105,8 +116,19 @@ test.describe("authenticated talent foundation", () => {
     });
   });
 
-  test("new nav items are visible in admin sidebar", async ({ page }) => {
+  test("new nav items are visible in admin sidebar", async ({
+    page,
+    viewport,
+  }) => {
     await page.goto("/admin");
+    const isMobile = (viewport?.width ?? 1280) < 1024;
+    if (isMobile) {
+      await page
+        .locator("header button")
+        .first()
+        .click();
+      await page.waitForTimeout(300);
+    }
     await expect(page.getByRole("link", { name: "Profiles" })).toBeVisible();
     await expect(
       page.getByRole("link", { name: "Client Projects" })
