@@ -89,11 +89,14 @@ test.describe("admin cohort management", () => {
       );
 
       const dialogPromise = page.waitForEvent("dialog");
-      const clickPromise = page.mouse.click(x, y);
+      const inputPromise =
+        viewport === "mobile"
+          ? page.touchscreen.tap(x, y)
+          : page.mouse.click(x, y);
       const dialog = await dialogPromise;
       expect(dialog.message()).toMatch(expectedMessage);
       await dialog.accept();
-      await clickPromise;
+      await inputPromise;
     };
     const enrollIfAvailable = async (
       learner: typeof current,
