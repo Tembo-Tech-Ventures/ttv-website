@@ -23,6 +23,15 @@ import {
   throwAdminEnrollmentFailure,
   toProgramApplicationBadgeVariant,
 } from "@/lib/admin/program-application";
+import {
+  ProgramManagementError,
+  assertProgramRoleRemoved,
+  buildAddProgramRoleStatement,
+  buildRemoveProgramRoleStatement,
+  parseProgramStaffRole,
+  parseProgramStaffUserId,
+  throwAddProgramRoleFailure,
+} from "@/lib/admin/program-management";
 
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
@@ -58,29 +67,88 @@ if (Astro.request.method === "POST") {
   }
 
   if (action === "add-role") {
-    const userId = formData.get("userId") as string;
-    const roleName = formData.get("roleName") as string;
-
-    if (userId && roleName) {
-      await db.insert(schema.programRole).values({
+    try {
+      const userId = parseProgramStaffUserId(formData.get("userId"));
+      const role = parseProgramStaffRole(formData.get("roleName"));
+      const statement = buildAddProgramRoleStatement({
+        id: createId(),
         programId: id,
         userId,
-        name: roleName as "INSTRUCTOR" | "TA",
+        role,
       });
-    }
+      const result = await env.DB.prepare(statement.sql)
+        .bind(...statement.params)
+        .run();
 
-    return Astro.redirect(`/admin/programs/${id}`);
+      if (result.meta.changes !== statement.expectedChanges) {
+        if (result.meta.changes !== 0) {
+          throw new Error(
+            "Atomic cohort role insert changed " +
+              result.meta.changes +
+              " rows; expected " +
+              statement.expectedChanges +
+              "."
+          );
+        }
+
+        const [program, user, duplicate] = await Promise.all([
+          db.query.program.findFirst({
+            where: eq(schema.program.id, id),
+            columns: { id: true },
+          }),
+          db.query.user.findFirst({
+            where: eq(schema.user.id, userId),
+            columns: { id: true },
+          }),
+          db.query.programRole.findFirst({
+            where: and(
+              eq(schema.programRole.programId, id),
+              eq(schema.programRole.userId, userId),
+              eq(schema.programRole.name, role)
+            ),
+            columns: { id: true },
+          }),
+        ]);
+        throwAddProgramRoleFailure({
+          programExists: Boolean(program),
+          userExists: Boolean(user),
+          duplicateRole: Boolean(duplicate),
+        });
+      }
+
+      return Astro.redirect(`/admin/programs/${id}?notice=staff-added`);
+    } catch (error) {
+      if (error instanceof ProgramManagementError) {
+        actionError = error.message;
+        Astro.response.status = 400;
+      } else {
+        throw error;
+      }
+    }
   }
 
   if (action === "remove-role") {
-    const roleId = formData.get("roleId") as string;
-    if (roleId) {
-      await db
-        .delete(schema.programRole)
-        .where(eq(schema.programRole.id, roleId));
+    try {
+      const roleIdValue = formData.get("roleId");
+      const roleId =
+        typeof roleIdValue === "string" ? roleIdValue.trim() : "";
+      const statement = buildRemoveProgramRoleStatement({
+        programId: id,
+        roleId,
+      });
+      const result = await env.DB.prepare(statement.sql)
+        .bind(...statement.params)
+        .run();
+      assertProgramRoleRemoved(result.meta.changes);
+      return Astro.redirect(`/admin/programs/${id}?notice=staff-removed`);
+    } catch (error) {
+      if (error instanceof ProgramManagementError) {
+        actionError = error.message;
+        Astro.response.status = 400;
+      } else {
+        throw error;
+      }
     }
-
-    return Astro.redirect(`/admin/programs/${id}`);
   }
 
   if (action === "direct-enroll") {
@@ -234,15 +302,19 @@ const noticeCount = Number.parseInt(
   10
 );
 const actionSuccess =
-  notice === "current-enrollment"
-    ? "Current learner enrolled as APPROVED."
-    : notice === "historical-enrollment"
-      ? "Historical learner enrolled as COMPLETED; certificate and builder portfolio access is now unlocked."
-      : notice === "bulk-approved" && noticeCount > 0
-        ? `${noticeCount} cohort application${noticeCount === 1 ? "" : "s"} approved.`
-        : notice === "bulk-completed" && noticeCount > 0
-          ? `${noticeCount} cohort application${noticeCount === 1 ? "" : "s"} completed; certificate and builder portfolio access is now unlocked.`
-          : "";
+  notice === "staff-added"
+    ? "Cohort staff role added."
+    : notice === "staff-removed"
+      ? "Cohort staff role removed."
+      : notice === "current-enrollment"
+        ? "Current learner enrolled as APPROVED."
+        : notice === "historical-enrollment"
+          ? "Historical learner enrolled as COMPLETED; certificate and builder portfolio access is now unlocked."
+          : notice === "bulk-approved" && noticeCount > 0
+            ? `${noticeCount} cohort application${noticeCount === 1 ? "" : "s"} approved.`
+            : notice === "bulk-completed" && noticeCount > 0
+              ? `${noticeCount} cohort application${noticeCount === 1 ? "" : "s"} completed; certificate and builder portfolio access is now unlocked.`
+              : "";
 
 const formatDate = (date: Date | null) =>
   date ? new Date(date).toISOString().split("T")[0] : "";
