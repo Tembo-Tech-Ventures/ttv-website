@@ -197,4 +197,172 @@ test.describe("admin cohort management", () => {
       fullPage: true,
     });
   });
+
+  test("self-application, cohort editing, and staff boundaries converge", async ({
+    page,
+    request,
+  }) => {
+    const viewport =
+      test.info().project.name === "mobile-chromium" ? "mobile" : "desktop";
+    const viewportLabel =
+      viewport.charAt(0).toUpperCase() + viewport.slice(1);
+    const retry = Math.min(test.info().retry, 2);
+    const programId =
+      `ttv-fixture-program-self-apply-${viewport}-${retry}`;
+    const programName =
+      `Open Cohort ${viewportLabel} Applications ${retry + 1}`;
+    const programPath = `/admin/programs/${programId}`;
+    const staffUserId = `ttv-fixture-user-staff-${viewport}`;
+    const staffName = `Cohort ${viewportLabel} Staff`;
+    const crossCohortRoleId =
+      `ttv-fixture-role-cross-cohort-${viewport}`;
+
+    await page.goto("/dashboard/apply");
+    const origin = new URL(page.url()).origin;
+    const postForm = (
+      path: string,
+      entries: [string, string][]
+    ) =>
+      request.post(path, {
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          Origin: origin,
+        },
+        data: new URLSearchParams(entries).toString(),
+      });
+
+    await expect(
+      page.getByRole("heading", { name: "Apply to a Cohort" })
+    ).toBeVisible();
+    const applicationCard = page.locator(
+      `[data-cohort-id="${programId}"]`
+    );
+    await expect(applicationCard).toContainText(programName);
+    await expect(
+      page.locator(
+        '[data-cohort-id="ttv-fixture-program-applications-closed"]'
+      )
+    ).toHaveCount(0);
+
+    await applicationCard.getByRole("button", { name: "Apply" }).click();
+    await expect(page).toHaveURL(/notice=application-submitted/);
+    await expect(
+      page.getByText("Your cohort application was submitted.")
+    ).toBeVisible();
+    await expect(page.locator(`[data-cohort-id="${programId}"]`)).toHaveCount(
+      0
+    );
+
+    const duplicateResponse = await postForm("/dashboard/apply", [
+      ["programId", programId],
+    ]);
+    expect(duplicateResponse.status()).toBe(400);
+    expect(await duplicateResponse.text()).toContain(
+      "already applied to that cohort"
+    );
+
+    const closedResponse = await postForm("/dashboard/apply", [
+      ["programId", "ttv-fixture-program-applications-closed"],
+    ]);
+    expect(closedResponse.status()).toBe(400);
+    expect(await closedResponse.text()).toContain(
+      "Applications for that cohort are closed"
+    );
+
+    const unknownResponse = await postForm("/dashboard/apply", [
+      ["programId", "ttv-fixture-program-does-not-exist"],
+    ]);
+    expect(unknownResponse.status()).toBe(400);
+    const unknownBody = await unknownResponse.text();
+    expect(unknownBody).toContain("That cohort does not exist");
+    expect(unknownBody).not.toMatch(/SQLITE|programApplication/i);
+
+    const staleCurriculumResponse = await postForm(programPath, [
+      ["action", "update-program"],
+      ["name", programName],
+      ["description", "Open self-application fixture"],
+      ["curriculumId", "ttv-fixture-curriculum-stale"],
+      ["startDate", "2026-09-01"],
+      ["endDate", "2026-12-01"],
+      ["applicationsOpen", "on"],
+    ]);
+    expect(staleCurriculumResponse.status()).toBe(400);
+    const staleCurriculumBody = await staleCurriculumResponse.text();
+    expect(staleCurriculumBody).toContain(
+      "That curriculum no longer exists"
+    );
+    expect(staleCurriculumBody).toContain('id="curriculum-error"');
+
+    await page.goto(programPath);
+    const detailsForm = page.locator("[data-cohort-details-form]");
+    await expect(detailsForm).toBeVisible();
+    await detailsForm.getByLabel("Name *").fill(`  ${programName}  `);
+    await detailsForm
+      .getByLabel("Description *")
+      .fill("  Cohort applications managed in preview.  ");
+    await detailsForm
+      .getByLabel("Curriculum *")
+      .selectOption("ttv-fixture-curriculum");
+    await detailsForm.getByLabel("Start date").fill("2026-09-01");
+    await detailsForm.getByLabel("End date").fill("2026-12-01");
+    await detailsForm.getByLabel("Applications open").uncheck();
+    await detailsForm.getByRole("button", { name: "Save Changes" }).click();
+    await expect(page.getByText("Cohort details updated.")).toBeVisible();
+    await expect(page.getByLabel("Name *")).toHaveValue(programName);
+    await expect(page.getByLabel("Applications open")).not.toBeChecked();
+
+    await page.getByLabel("Applications open").check();
+    await page.getByRole("button", { name: "Save Changes" }).click();
+    await expect(page.getByLabel("Applications open")).toBeChecked();
+
+    await page.locator("#staffUserId").selectOption(staffUserId);
+    await page.locator("#roleName").selectOption("TA");
+    await page.getByRole("button", { name: "Add Staff" }).click();
+    await expect(page.getByText("Cohort staff role added.")).toBeVisible();
+    const staffRow = page.locator("tbody tr", { hasText: staffName });
+    await expect(staffRow).toContainText("TA");
+
+    const duplicateStaffResponse = await postForm(programPath, [
+      ["action", "add-role"],
+      ["userId", staffUserId],
+      ["roleName", "TA"],
+    ]);
+    expect(duplicateStaffResponse.status()).toBe(400);
+    expect(await duplicateStaffResponse.text()).toContain(
+      "already has this role in the cohort"
+    );
+
+    const forgedStaffRoleResponse = await postForm(programPath, [
+      ["action", "add-role"],
+      ["userId", staffUserId],
+      ["roleName", "ADMIN"],
+    ]);
+    expect(forgedStaffRoleResponse.status()).toBe(400);
+    expect(await forgedStaffRoleResponse.text()).toContain(
+      "Choose Instructor or TA"
+    );
+
+    const crossCohortResponse = await postForm(programPath, [
+      ["action", "remove-role"],
+      ["roleId", crossCohortRoleId],
+    ]);
+    expect(crossCohortResponse.status()).toBe(400);
+    expect(await crossCohortResponse.text()).toContain(
+      "does not belong to this cohort"
+    );
+
+    const dialogPromise = page.waitForEvent("dialog");
+    const removePromise = staffRow.getByRole("button", { name: "Remove" }).click();
+    const dialog = await dialogPromise;
+    expect(dialog.message()).toMatch(/remove this staff member from the cohort/i);
+    await dialog.accept();
+    await removePromise;
+    await expect(page.getByText("Cohort staff role removed.")).toBeVisible();
+    await expect(page.locator("tbody tr", { hasText: staffName })).toHaveCount(0);
+
+    await page.screenshot({
+      path: evidence("cohort-application-edit-staff-complete"),
+      fullPage: true,
+    });
+  });
 });

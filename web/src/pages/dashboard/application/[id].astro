@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
+import { toProgramApplicationBadgeVariant } from "@/lib/admin/program-application";
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
@@ -54,7 +55,7 @@ if (Astro.request.method === "POST" && application.status === "PENDING") {
       columns: { application: true },
     });
     if (updated) {
-      (application as any).application = updated.application;
+      application.application = updated.application;
     }
   } catch (e) {
     error = e instanceof SyntaxError
@@ -100,7 +101,7 @@ try {
         <div class="flex items-start justify-between gap-4">
           <div>
             <h2 class="text-2xl font-bold text-white">
-              {application.program?.name ?? "Unknown Program"}
+              {application.program?.name ?? "Unknown Cohort"}
             </h2>
             {application.program?.curriculum && (
               <p class="mt-1 text-white/60">
@@ -108,7 +109,7 @@ try {
               </p>
             )}
           </div>
-          <Badge variant={application.status.toLowerCase() as any} />
+          <Badge variant={toProgramApplicationBadgeVariant(application.status)} />
         </div>
 
         <div class="grid gap-4 sm:grid-cols-2 text-sm">

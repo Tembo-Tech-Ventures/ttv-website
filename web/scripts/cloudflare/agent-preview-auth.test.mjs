@@ -97,11 +97,12 @@ describe("seedAgentPreviewFixtures", () => {
       now,
     });
 
-    // profile reset, curriculum, program, cohort-application reset, ten cohort
-    // users, six eligible cohort applications, preview app, amina user/app,
-    // amina profile, invalid-completion user/app/profile, two amina highlights,
-    // kwame user/app/profile, and two projects = 34 total
-    expect(executeQuery).toHaveBeenCalledTimes(34);
+    // profile reset, curriculum, eight convergent cohorts, self-application
+    // reset, staff-role reset, two staff users/roles, cohort-application reset,
+    // ten cohort users, six eligible cohort applications, preview app, amina
+    // user/app/profile, invalid-completion user/app/profile, two amina
+    // highlights, kwame user/app/profile, and two projects = 47 total
+    expect(executeQuery).toHaveBeenCalledTimes(47);
 
     // All calls should target the correct database
     for (const call of executeQuery.mock.calls) {
@@ -126,9 +127,44 @@ describe("seedAgentPreviewFixtures", () => {
     const programCall = findByParam("ttv-fixture-program-cohort-04");
     expect(programCall?.[1]).toContain("program");
     expect(programCall?.[2]).toContain("Cohort 04");
+    expect(programCall?.[1]).toContain('"applicationsOpen"');
+    expect(programCall?.[2]).toContain(0);
+
+    const desktopApplicationProgram = findInsertByParam(
+      "program",
+      "ttv-fixture-program-self-apply-desktop-0"
+    );
+    expect(desktopApplicationProgram?.[2]).toContain(
+      "Open Cohort Desktop Applications 1"
+    );
+    expect(desktopApplicationProgram?.[2]).toContain(1);
+    const mobileApplicationProgram = findInsertByParam(
+      "program",
+      "ttv-fixture-program-self-apply-mobile-2"
+    );
+    expect(mobileApplicationProgram?.[2]).toContain(
+      "Open Cohort Mobile Applications 3"
+    );
+    expect(mobileApplicationProgram?.[2]).toContain(1);
+    expect(
+      findInsertByParam("program", "ttv-fixture-program-applications-closed")?.[2]
+    ).toContain(0);
+
+    const selfApplicationReset = calls.find(
+      (call) =>
+        call[1].includes('DELETE FROM "programApplication"') &&
+        (call[2] ?? []).includes(AGENT_PREVIEW_USER_ID)
+    );
+    expect(selfApplicationReset?.[2]).toContain(
+      "ttv-fixture-program-self-apply-desktop-0"
+    );
+    expect(selfApplicationReset?.[2]).toContain(
+      "ttv-fixture-program-self-apply-mobile-2"
+    );
 
     const cohortReset = calls.find((call) =>
-      call[1].includes('DELETE FROM "programApplication"')
+      call[1].includes('DELETE FROM "programApplication"') &&
+      (call[2] ?? []).includes("ttv-fixture-program-cohort-04")
     );
     expect(cohortReset?.[2]).toContain(
       "ttv-fixture-user-cohort-desktop-current"
@@ -162,6 +198,28 @@ describe("seedAgentPreviewFixtures", () => {
         "ttv-fixture-app-cohort-mobile-audit"
       )?.[2]
     ).toContain("AUDIT");
+
+    const desktopStaff = findInsertByParam(
+      "user",
+      "ttv-fixture-user-staff-desktop"
+    );
+    expect(desktopStaff?.[2]).toContain("Cohort Desktop Staff");
+    const mobileStaff = findInsertByParam(
+      "user",
+      "ttv-fixture-user-staff-mobile"
+    );
+    expect(mobileStaff?.[2]).toContain("Cohort Mobile Staff");
+    const desktopCrossCohortRole = findInsertByParam(
+      "programRole",
+      "ttv-fixture-role-cross-cohort-desktop"
+    );
+    expect(desktopCrossCohortRole?.[2]).toContain(
+      "ttv-fixture-program-applications-closed"
+    );
+    expect(desktopCrossCohortRole?.[2]).toContain(
+      "ttv-fixture-user-staff-desktop"
+    );
+    expect(desktopCrossCohortRole?.[1]).toContain("'INSTRUCTOR'");
 
     const previewApp = findByParam("ttv-fixture-app-preview");
     expect(previewApp?.[1]).toContain("programApplication");

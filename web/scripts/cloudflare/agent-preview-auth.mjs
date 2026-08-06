@@ -192,25 +192,134 @@ export async function seedAgentPreviewFixtures({
     ]
   );
 
-  // Program
+  // Browser projects share one preview identity. Give every project/retry a
+  // distinct open cohort so duplicate protection remains meaningful without
+  // creating cross-project races.
+  const selfApplicationFixtures = ["desktop", "mobile"].flatMap((viewport) =>
+    Array.from({ length: 3 }, (_, retry) => {
+      const viewportLabel =
+        viewport.charAt(0).toUpperCase() + viewport.slice(1);
+      return {
+        id: `ttv-fixture-program-self-apply-${viewport}-${retry}`,
+        name: `Open Cohort ${viewportLabel} Applications ${retry + 1}`,
+        description: `Open self-application fixture for ${viewport} retry ${retry}`,
+      };
+    })
+  );
+  const closedApplicationFixture = {
+    id: "ttv-fixture-program-applications-closed",
+    name: "Closed Cohort Fixture",
+    description: "Closed self-application failure fixture",
+  };
+  const programFixtures = [
+    {
+      id: "ttv-fixture-program-cohort-04",
+      name: "Cohort 04",
+      description: "Preview fixture cohort",
+      applicationsOpen: false,
+    },
+    ...selfApplicationFixtures.map((fixture) => ({
+      ...fixture,
+      applicationsOpen: true,
+    })),
+    { ...closedApplicationFixture, applicationsOpen: false },
+  ];
+
+  for (const fixture of programFixtures) {
+    await executeQuery(
+      databaseId,
+      `INSERT INTO "program"
+        ("id", "name", "description", "curriculumId", "startDate", "endDate",
+         "applicationsOpen", "createdAt", "updatedAt")
+       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?)
+       ON CONFLICT("id") DO UPDATE SET
+         "name" = excluded."name",
+         "description" = excluded."description",
+         "curriculumId" = excluded."curriculumId",
+         "startDate" = NULL,
+         "endDate" = NULL,
+         "applicationsOpen" = excluded."applicationsOpen",
+         "updatedAt" = excluded."updatedAt"`,
+      [
+        fixture.id,
+        fixture.name,
+        fixture.description,
+        "ttv-fixture-curriculum",
+        fixture.applicationsOpen ? 1 : 0,
+        createdAt,
+        createdAt,
+      ]
+    );
+  }
+
+  const selfApplicationProgramIds = selfApplicationFixtures.map(
+    (fixture) => fixture.id
+  );
   await executeQuery(
     databaseId,
-    `INSERT INTO "program" ("id", "name", "description", "curriculumId", "createdAt", "updatedAt")
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT("id") DO UPDATE SET
-       "name" = excluded."name",
-       "description" = excluded."description",
-       "curriculumId" = excluded."curriculumId",
-       "updatedAt" = excluded."updatedAt"`,
+    `DELETE FROM "programApplication"
+     WHERE "userId" = ?
+       AND "programId" IN (${selfApplicationProgramIds.map(() => "?").join(", ")})`,
+    [AGENT_PREVIEW_USER_ID, ...selfApplicationProgramIds]
+  );
+
+  // Each browser project also gets a distinct existing staff user. Remove
+  // roles those journeys may have created, while preserving deterministic
+  // cross-cohort roles used to prove scoped deletion.
+  const staffFixtures = ["desktop", "mobile"].map((viewport) => {
+    const viewportLabel =
+      viewport.charAt(0).toUpperCase() + viewport.slice(1);
+    return {
+      viewport,
+      userId: `ttv-fixture-user-staff-${viewport}`,
+      name: `Cohort ${viewportLabel} Staff`,
+      email: `cohort-staff-${viewport}@invalid.ttv`,
+      crossCohortRoleId: `ttv-fixture-role-cross-cohort-${viewport}`,
+    };
+  });
+  await executeQuery(
+    databaseId,
+    `DELETE FROM "programRole"
+     WHERE "userId" IN (${staffFixtures.map(() => "?").join(", ")})
+       AND "programId" IN (${selfApplicationProgramIds.map(() => "?").join(", ")})`,
     [
-      "ttv-fixture-program-cohort-04",
-      "Cohort 04",
-      "Preview fixture program",
-      "ttv-fixture-curriculum",
-      createdAt,
-      createdAt,
+      ...staffFixtures.map((fixture) => fixture.userId),
+      ...selfApplicationProgramIds,
     ]
   );
+
+  for (const fixture of staffFixtures) {
+    await executeQuery(
+      databaseId,
+      `INSERT INTO "user"
+        ("id", "name", "email", "emailVerified", "image", "createdAt", "updatedAt")
+       VALUES (?, ?, ?, 1, NULL, ?, ?)
+       ON CONFLICT("id") DO UPDATE SET
+         "name" = excluded."name",
+         "email" = excluded."email",
+         "emailVerified" = 1,
+         "updatedAt" = excluded."updatedAt"`,
+      [fixture.userId, fixture.name, fixture.email, createdAt, createdAt]
+    );
+    await executeQuery(
+      databaseId,
+      `INSERT INTO "programRole"
+        ("id", "programId", "userId", "name", "createdAt", "updatedAt")
+       VALUES (?, ?, ?, 'INSTRUCTOR', ?, ?)
+       ON CONFLICT("id") DO UPDATE SET
+         "programId" = excluded."programId",
+         "userId" = excluded."userId",
+         "name" = 'INSTRUCTOR',
+         "updatedAt" = excluded."updatedAt"`,
+      [
+        fixture.crossCohortRoleId,
+        closedApplicationFixture.id,
+        fixture.userId,
+        createdAt,
+        createdAt,
+      ]
+    );
+  }
 
   // Cohort-management rows are split by Playwright project so desktop and
   // mobile journeys can mutate concurrently without racing each other. Reset
