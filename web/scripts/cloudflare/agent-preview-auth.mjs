@@ -212,6 +212,96 @@ export async function seedAgentPreviewFixtures({
     ]
   );
 
+  // Cohort-management rows are split by Playwright project so desktop and
+  // mobile journeys can mutate concurrently without racing each other. Reset
+  // only these deterministic isolated-preview users on every seed so retries
+  // and redeploys converge to the same starting roster.
+  const cohortManagementFixtures = ["desktop", "mobile"].flatMap(
+    (viewport) => {
+      const viewportLabel =
+        viewport.charAt(0).toUpperCase() + viewport.slice(1);
+      const fixture = ({ key, label, applicationStatus = null }) => ({
+        userId: `ttv-fixture-user-cohort-${viewport}-${key}`,
+        applicationId: applicationStatus
+          ? `ttv-fixture-app-cohort-${viewport}-${key}`
+          : null,
+        name: `Cohort ${viewportLabel} ${label}`,
+        email: `cohort-${viewport}-${key}@invalid.ttv`,
+        applicationStatus,
+      });
+
+      return [
+        fixture({ key: "current", label: "Current Learner" }),
+        fixture({ key: "alumni", label: "Historical Alumni" }),
+        fixture({
+          key: "pending",
+          label: "Pending Learner",
+          applicationStatus: "PENDING",
+        }),
+        fixture({
+          key: "audit",
+          label: "Audit Learner",
+          applicationStatus: "AUDIT",
+        }),
+        fixture({
+          key: "approved",
+          label: "Approved Learner",
+          applicationStatus: "APPROVED",
+        }),
+      ];
+    }
+  );
+  const cohortManagementUserIds = cohortManagementFixtures.map(
+    (fixture) => fixture.userId
+  );
+
+  await executeQuery(
+    databaseId,
+    `DELETE FROM "programApplication"
+     WHERE "programId" = ?
+       AND "userId" IN (${cohortManagementUserIds.map(() => "?").join(", ")})`,
+    ["ttv-fixture-program-cohort-04", ...cohortManagementUserIds]
+  );
+
+  for (const fixture of cohortManagementFixtures) {
+    await executeQuery(
+      databaseId,
+      `INSERT INTO "user"
+        ("id", "name", "email", "emailVerified", "image", "createdAt", "updatedAt")
+       VALUES (?, ?, ?, 1, NULL, ?, ?)
+       ON CONFLICT("id") DO UPDATE SET
+         "name" = excluded."name",
+         "email" = excluded."email",
+         "emailVerified" = 1,
+         "updatedAt" = excluded."updatedAt"`,
+      [fixture.userId, fixture.name, fixture.email, createdAt, createdAt]
+    );
+
+    if (!fixture.applicationId || !fixture.applicationStatus) continue;
+
+    await executeQuery(
+      databaseId,
+      `INSERT INTO "programApplication"
+        ("id", "programId", "userId", "status", "application", "completedAt", "createdAt", "updatedAt")
+       VALUES (?, ?, ?, ?, '{}', NULL, ?, ?)
+       ON CONFLICT("id") DO UPDATE SET
+         "programId" = excluded."programId",
+         "userId" = excluded."userId",
+         "status" = excluded."status",
+         "application" = '{}',
+         "completedAt" = NULL,
+         "updatedAt" = excluded."updatedAt"`,
+      [
+        fixture.applicationId,
+        "ttv-fixture-program-cohort-04",
+        fixture.userId,
+        fixture.applicationStatus,
+        createdAt,
+        createdAt,
+      ]
+    );
+  }
+
   // COMPLETED application for existing preview user
   await executeQuery(
     databaseId,
