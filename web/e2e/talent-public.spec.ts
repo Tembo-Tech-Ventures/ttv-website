@@ -36,7 +36,9 @@ test.describe("public talent directory", () => {
   }) => {
     await page.goto("/talent?skill=zzz-nonexistent");
     await expect(page.getByText("Amina Fixture")).not.toBeVisible();
-    await expect(page.getByText(/no.*match/i)).toBeVisible();
+    await expect(
+      page.getByText("No builders match your current filters"),
+    ).toBeVisible();
     await page.screenshot({
       path: evidence("talent-filter-empty"),
       fullPage: true,
@@ -56,7 +58,9 @@ test.describe("public talent profile", () => {
       page.getByText("Full-stack developer", { exact: false }),
     ).toBeVisible();
     await expect(page.getByText(/Verified by TTV/i)).toBeVisible();
-    await expect(page.getByText("TypeScript")).toBeVisible();
+    await expect(
+      page.getByLabel("Skills").getByText("TypeScript"),
+    ).toBeVisible();
     await expect(
       page.locator('form[aria-label="Contact form"]'),
     ).toBeVisible();
@@ -83,7 +87,9 @@ test.describe("public talent profile", () => {
       "/talent/definitely-not-a-handle-xyz",
     );
     expect(response?.status()).toBe(404);
-    await expect(page.getByText(/not published/i)).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /browse all builders/i }),
+    ).toBeVisible();
     await page.screenshot({
       path: evidence("talent-profile-404"),
       fullPage: true,
@@ -98,13 +104,12 @@ test.describe("contact form (desktop-only mutations)", () => {
 
     await page.goto("/talent/amina-preview");
 
-    await page.fill('input[name="fromName"]', "E2E Tester");
-    await page.fill('input[name="fromEmail"]', "e2e@example.com");
-    await page.fill(
-      'textarea[name="message"]',
-      "Hello from the e2e test suite.",
-    );
-    await page.click('button[type="submit"]');
+    await page.getByLabel("Name").fill("E2E Tester");
+    await page.getByLabel("Email").fill("e2e@example.com");
+    await page.getByLabel("Message").fill("Hello from the e2e test suite.");
+    // Token requires MIN_FILL_SECONDS=3 to elapse before submission
+    await page.waitForTimeout(3500);
+    await page.getByRole("button", { name: /send note/i }).click();
 
     await expect(page.getByText(/on its way/i)).toBeVisible();
     await page.screenshot({
@@ -119,13 +124,13 @@ test.describe("contact form (desktop-only mutations)", () => {
 
     await page.goto("/talent/amina-preview");
 
-    await page.fill('input[name="fromName"]', "Bot Tester");
-    await page.fill('input[name="fromEmail"]', "bot@example.com");
-    await page.fill('textarea[name="message"]', "I am a bot.");
+    await page.getByLabel("Name").fill("Bot Tester");
+    await page.getByLabel("Email").fill("bot@example.com");
+    await page.getByLabel("Message").fill("I am a bot.");
     await page
       .locator(`input[name="${HONEYPOT_FIELD}"]`)
       .fill("spam-value", { force: true });
-    await page.click('button[type="submit"]');
+    await page.getByRole("button", { name: /send note/i }).click();
 
     await expect(page.getByText(/on its way/i)).toBeVisible();
     await page.screenshot({
