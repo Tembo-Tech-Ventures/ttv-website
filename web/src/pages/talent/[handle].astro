@@ -1,0 +1,474 @@
+---
+import PublicLayout from "@/layouts/PublicLayout.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { env } from "cloudflare:workers";
+import { eq, and, asc } from "drizzle-orm";
+import { getCompletedCohorts } from "@/lib/talent/eligibility";
+import { parseSkillsJson, parseTopicsJson } from "@/lib/talent/profile";
+import { getInitials } from "@/components/talent/directory-helpers";
+import { parseContactForm } from "@/components/talent/contact-helpers";
+import {
+  guardPublicForm,
+  issueFormToken,
+  HONEYPOT_FIELD,
+  FORM_TOKEN_FIELD,
+} from "@/lib/spam/protection";
+import { formatDistanceToNow } from "date-fns";
+
+const { handle } = Astro.params;
+
+if (!handle) {
+  Astro.response.status = 404;
+}
+
+const db = drizzle(env.DB, { schema });
+
+const profile = handle
+  ? await db.query.studentProfile.findFirst({
+      where: and(
+        eq(schema.studentProfile.handle, handle),
+        eq(schema.studentProfile.status, "PUBLISHED"),
+      ),
+      with: {
+        user: { columns: { id: true, name: true, image: true } },
+        highlights: { orderBy: [asc(schema.profileHighlight.sortOrder)] },
+      },
+    })
+  : undefined;
+
+if (!profile) {
+  Astro.response.status = 404;
+}
+
+const cohorts = profile
+  ? await getCompletedCohorts(db, profile.user.id)
+  : [];
+
+const skills = profile ? parseSkillsJson(profile.skills) : [];
+const initials = profile ? getInitials(profile.user.name) : "?";
+const firstName = profile?.user.name.split(/\s+/)[0] ?? "";
+
+let formState: "idle" | "success" | "rate_limited" = "idle";
+let formErrors: Record<string, string> = {};
+let formValues: Record<string, string> = {
+  fromName: "",
+  fromEmail: "",
+  organization: "",
+  message: "",
+};
+
+if (Astro.request.method === "POST" && profile) {
+  const formData = await Astro.request.formData();
+
+  const parsed = parseContactForm(formData);
+  if (!parsed.valid) {
+    formErrors = parsed.errors;
+    formValues = parsed.values;
+  } else {
+    const guard = await guardPublicForm({
+      db,
+      secret: env.BETTER_AUTH_SECRET,
+      scope: "contact",
+      request: Astro.request,
+      formData,
+    });
+
+    if (!guard.ok) {
+      if (guard.reason === "rate_limit") {
+        formState = "rate_limited";
+      } else {
+        formErrors = { _form: "Something went wrong. Please try again." };
+      }
+    } else if (guard.silent) {
+      formState = "success";
+    } else {
+      await db.insert(schema.profileContact).values({
+        profileId: profile.id,
+        fromName: parsed.data.fromName,
+        fromEmail: parsed.data.fromEmail,
+        organization: parsed.data.organization || null,
+        message: parsed.data.message,
+      });
+      formState = "success";
+    }
+  }
+}
+
+const formToken = profile
+  ? await issueFormToken(env.BETTER_AUTH_SECRET)
+  : "";
+---
+
+<PublicLayout
+  title={profile
+    ? `${profile.user.name} — Builder at Tembo Tech Ventures`
+    : "Profile Not Found · Tembo Tech Ventures"}
+>
+  {!profile ? (
+    <section class="mx-auto max-w-4xl px-4 py-28 sm:px-8 md:py-36 text-center">
+      <h1
+        class="font-heading text-ink-primary"
+        style="font-size: clamp(2rem, 6vw, 4rem); line-height: 0.95; letter-spacing: -0.03em;"
+      >
+        This profile isn&rsquo;t published
+      </h1>
+      <p class="mt-6 font-body text-lg text-ink-secondary">
+        The builder you&rsquo;re looking for hasn&rsquo;t published their profile yet, or the link may be incorrect.
+      </p>
+      <a
+        href="/talent"
+        class="mt-8 inline-flex rounded-full bg-primary px-6 py-3 font-body text-sm font-semibold uppercase tracking-[0.14em] text-dark transition-transform hover:scale-[1.03]"
+      >
+        Browse all builders
+      </a>
+    </section>
+  ) : (
+    <article class="mx-auto max-w-4xl px-4 py-28 sm:px-8 md:py-36">
+      {/* Identity header */}
+      <header class="flex flex-col gap-6 sm:flex-row sm:items-start sm:gap-8">
+        <div class="shrink-0">
+          {profile.user.image ? (
+            <img
+              src={profile.user.image}
+              alt=""
+              class="h-28 w-28 rounded-full border-2 border-primary/30 object-cover sm:h-36 sm:w-36"
+            />
+          ) : (
+            <div class="flex h-28 w-28 items-center justify-center rounded-full border-2 border-primary/30 bg-[color:var(--color-bg-raised)] sm:h-36 sm:w-36">
+              <span
+                class="font-heading text-primary/70"
+                style="font-size: 3rem; letter-spacing: -0.04em;"
+              >
+                {initials}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div class="space-y-3">
+          <h1
+            class="font-heading text-ink-primary"
+            style="font-size: clamp(2rem, 6vw, 3.5rem); line-height: 0.95; letter-spacing: -0.03em;"
+          >
+            {profile.user.name}
+          </h1>
+
+          {profile.headline && (
+            <p class="font-body text-lg text-ink-secondary md:text-xl">
+              {profile.headline}
+            </p>
+          )}
+
+          <div class="flex flex-wrap items-center gap-3">
+            {profile.country && (
+              <span class="font-body text-sm text-ink-muted">
+                {profile.location ? `${profile.location}, ${profile.country}` : profile.country}
+              </span>
+            )}
+
+            {profile.openToFreelance && (
+              <span class="inline-flex rounded-full bg-emerald-500/15 px-2.5 py-0.5 font-body text-xs font-medium text-emerald-300">
+                Open to freelance
+              </span>
+            )}
+
+            {profile.openToRoles && (
+              <span class="inline-flex rounded-full bg-sky-500/15 px-2.5 py-0.5 font-body text-xs font-medium text-sky-300">
+                Open to roles
+              </span>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Verified by TTV */}
+      {cohorts.length > 0 && (
+        <section class="mt-12 border-y border-[color:var(--color-rule)] py-8" aria-label="Verified credentials">
+          <p class="mb-4 font-body text-xs font-semibold uppercase tracking-[0.3em] text-primary">
+            Verified by TTV
+          </p>
+          <ul class="space-y-2">
+            {cohorts.map((c) => (
+              <li class="flex items-center gap-3">
+                <span class="inline-flex rounded-full bg-purple-500/20 border border-purple-500/30 px-2.5 py-0.5 font-body text-xs font-medium capitalize text-purple-300">
+                  completed
+                </span>
+                {c.program ? (
+                  <a
+                    href={`/certificate/${c.application.id}`}
+                    class="font-body text-sm text-ink-primary transition-colors hover:text-primary"
+                  >
+                    {c.program.name}
+                  </a>
+                ) : (
+                  <span class="font-body text-sm text-ink-primary">
+                    Cohort program
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Bio */}
+      {profile.bio && (
+        <section class="mt-12" aria-label="About">
+          <h2 class="mb-4 font-body text-xs font-semibold uppercase tracking-[0.3em] text-primary">
+            About
+          </h2>
+          <p class="whitespace-pre-line font-body text-base leading-relaxed text-ink-secondary">
+            {profile.bio}
+          </p>
+        </section>
+      )}
+
+      {/* Highlighted work */}
+      {profile.highlights.length > 0 && (
+        <section class="mt-12" aria-label="Highlighted work">
+          <h2 class="mb-6 font-body text-xs font-semibold uppercase tracking-[0.3em] text-primary">
+            Highlighted work
+          </h2>
+          <div class="space-y-6">
+            {profile.highlights.map((h) => {
+              const topics = parseTopicsJson(h.topics);
+              return (
+                <div class="rounded-lg border border-[color:var(--color-rule)] bg-[color:var(--color-bg-raised)] p-5">
+                  <div class="flex flex-wrap items-start justify-between gap-2">
+                    <a
+                      href={h.repoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer nofollow"
+                      class="font-body text-base font-semibold text-ink-primary transition-colors hover:text-primary"
+                    >
+                      {h.repoFullName}
+                    </a>
+                    <div class="flex items-center gap-3 font-body text-xs text-ink-muted">
+                      {h.language && <span>{h.language}</span>}
+                      {h.stars > 0 && <span>&starf; {h.stars}</span>}
+                    </div>
+                  </div>
+
+                  {h.description && (
+                    <p class="mt-2 font-body text-sm text-ink-secondary">
+                      {h.description}
+                    </p>
+                  )}
+
+                  {h.blurb && (
+                    <blockquote class="mt-3 border-l-2 border-primary/40 pl-4 font-body text-sm italic text-ink-secondary/90">
+                      {h.blurb}
+                    </blockquote>
+                  )}
+
+                  <div class="mt-3 flex flex-wrap items-center gap-2">
+                    {topics.map((topic) => (
+                      <span class="inline-flex rounded-full border border-[color:var(--color-rule)] px-2 py-0.5 font-body text-xs text-ink-muted">
+                        {topic}
+                      </span>
+                    ))}
+                    {h.pushedAt && (
+                      <span class="font-body text-xs text-ink-muted">
+                        updated {formatDistanceToNow(h.pushedAt, { addSuffix: false })} ago
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Skills */}
+      {skills.length > 0 && (
+        <section class="mt-12" aria-label="Skills">
+          <h2 class="mb-4 font-body text-xs font-semibold uppercase tracking-[0.3em] text-primary">
+            Skills
+          </h2>
+          <div class="flex flex-wrap gap-2">
+            {skills.map((skill) => (
+              <span class="inline-flex rounded-full border border-[color:var(--color-rule)] px-3 py-1 font-body text-sm text-ink-secondary">
+                {skill}
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Links */}
+      {(profile.githubLogin || profile.portfolioUrl || profile.linkedinUrl) && (
+        <section class="mt-12" aria-label="Links">
+          <h2 class="mb-4 font-body text-xs font-semibold uppercase tracking-[0.3em] text-primary">
+            Links
+          </h2>
+          <ul class="space-y-2">
+            {profile.githubLogin && (
+              <li>
+                <a
+                  href={`https://github.com/${profile.githubLogin}`}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow"
+                  class="font-body text-sm text-ink-primary transition-colors hover:text-primary"
+                >
+                  GitHub &middot; {profile.githubLogin}
+                </a>
+              </li>
+            )}
+            {profile.portfolioUrl && (
+              <li>
+                <a
+                  href={profile.portfolioUrl}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow"
+                  class="font-body text-sm text-ink-primary transition-colors hover:text-primary"
+                >
+                  Portfolio &middot; {new URL(profile.portfolioUrl).hostname}
+                </a>
+              </li>
+            )}
+            {profile.linkedinUrl && (
+              <li>
+                <a
+                  href={profile.linkedinUrl}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow"
+                  class="font-body text-sm text-ink-primary transition-colors hover:text-primary"
+                >
+                  LinkedIn
+                </a>
+              </li>
+            )}
+          </ul>
+        </section>
+      )}
+
+      {/* Contact section */}
+      <section class="mt-12 border-t border-[color:var(--color-rule)] pt-12" aria-label="Contact">
+        <h2 class="mb-2 font-body text-xs font-semibold uppercase tracking-[0.3em] text-primary">
+          Get in touch
+        </h2>
+        <p class="mb-6 font-body text-sm text-ink-secondary">
+          Interested in working with {firstName}? Send a note and it will be delivered to them directly.
+        </p>
+
+        {formState === "success" ? (
+          <div class="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-6 text-center" role="status">
+            <p class="font-body text-lg font-semibold text-emerald-300">
+              Your note is on its way to {firstName}.
+            </p>
+            <p class="mt-2 font-body text-sm text-ink-secondary">
+              They&rsquo;ll be able to see your message and reach out if interested.
+            </p>
+          </div>
+        ) : formState === "rate_limited" ? (
+          <div class="rounded-lg border border-amber-500/30 bg-amber-500/10 p-6 text-center" role="alert">
+            <p class="font-body text-base font-semibold text-amber-300">
+              Lots of interest right now &mdash; try again in a bit.
+            </p>
+          </div>
+        ) : (
+          <form method="POST" class="space-y-4" aria-label="Contact form">
+            <input type="hidden" name={FORM_TOKEN_FIELD} value={formToken} />
+            <div style="position:absolute;left:-9999px" aria-hidden="true">
+              <input
+                type="text"
+                name={HONEYPOT_FIELD}
+                tabindex={-1}
+                autocomplete="off"
+              />
+            </div>
+
+            {formErrors._form && (
+              <div class="rounded-lg border border-red-500/30 bg-red-500/10 p-3" role="alert">
+                <p class="font-body text-sm text-red-300">{formErrors._form}</p>
+              </div>
+            )}
+
+            <div>
+              <label for="fromName" class="block font-body text-sm font-medium text-ink-primary">
+                Name
+              </label>
+              <input
+                id="fromName"
+                name="fromName"
+                type="text"
+                required
+                maxlength={120}
+                value={formValues.fromName}
+                class="mt-1 w-full rounded-md border border-[color:var(--color-rule)] bg-dark px-3 py-2 font-body text-sm text-ink-primary placeholder:text-ink-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="Your name"
+              />
+              {formErrors.fromName && (
+                <p class="mt-1 font-body text-xs text-red-400">{formErrors.fromName}</p>
+              )}
+            </div>
+
+            <div>
+              <label for="fromEmail" class="block font-body text-sm font-medium text-ink-primary">
+                Email
+              </label>
+              <input
+                id="fromEmail"
+                name="fromEmail"
+                type="email"
+                required
+                maxlength={254}
+                value={formValues.fromEmail}
+                class="mt-1 w-full rounded-md border border-[color:var(--color-rule)] bg-dark px-3 py-2 font-body text-sm text-ink-primary placeholder:text-ink-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="your@email.com"
+              />
+              {formErrors.fromEmail && (
+                <p class="mt-1 font-body text-xs text-red-400">{formErrors.fromEmail}</p>
+              )}
+            </div>
+
+            <div>
+              <label for="organization" class="block font-body text-sm font-medium text-ink-primary">
+                Organization <span class="text-ink-muted">(optional)</span>
+              </label>
+              <input
+                id="organization"
+                name="organization"
+                type="text"
+                maxlength={120}
+                value={formValues.organization}
+                class="mt-1 w-full rounded-md border border-[color:var(--color-rule)] bg-dark px-3 py-2 font-body text-sm text-ink-primary placeholder:text-ink-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="Company or organization"
+              />
+              {formErrors.organization && (
+                <p class="mt-1 font-body text-xs text-red-400">{formErrors.organization}</p>
+              )}
+            </div>
+
+            <div>
+              <label for="message" class="block font-body text-sm font-medium text-ink-primary">
+                Message
+              </label>
+              <textarea
+                id="message"
+                name="message"
+                required
+                maxlength={4000}
+                rows={5}
+                class="mt-1 w-full rounded-md border border-[color:var(--color-rule)] bg-dark px-3 py-2 font-body text-sm text-ink-primary placeholder:text-ink-muted focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="Tell them about your project or opportunity..."
+              >{formValues.message}</textarea>
+              {formErrors.message && (
+                <p class="mt-1 font-body text-xs text-red-400">{formErrors.message}</p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              class="rounded-full bg-primary px-6 py-2.5 font-body text-sm font-semibold uppercase tracking-[0.14em] text-dark transition-transform hover:scale-[1.03]"
+            >
+              Send note
+            </button>
+          </form>
+        )}
+      </section>
+    </article>
+  )}
+</PublicLayout>

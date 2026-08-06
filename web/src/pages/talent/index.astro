@@ -1,36 +1,220 @@
 ---
 import PublicLayout from "@/layouts/PublicLayout.astro";
+import TalentCard from "@/components/talent/TalentCard.astro";
+import {
+  parseDirectoryFilters,
+  applyFilters,
+  collectFilterOptions,
+  fairSort,
+  todayKey,
+  type DirectoryProfile,
+} from "@/components/talent/directory-helpers";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { env } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
+
+const db = drizzle(env.DB, { schema });
+
+const rawProfiles = await db.query.studentProfile.findMany({
+  where: eq(schema.studentProfile.status, "PUBLISHED"),
+  with: {
+    user: {
+      columns: { id: true, name: true, image: true },
+      with: {
+        programApplications: {
+          where: eq(schema.programApplication.status, "COMPLETED"),
+          with: { program: { columns: { id: true, name: true } } },
+          columns: { id: true, status: true },
+        },
+      },
+    },
+  },
+});
+
+const allProfiles: DirectoryProfile[] = rawProfiles.map((p) => ({
+  id: p.id,
+  handle: p.handle,
+  headline: p.headline,
+  country: p.country,
+  skills: p.skills,
+  openToFreelance: p.openToFreelance,
+  openToRoles: p.openToRoles,
+  user: { name: p.user.name, image: p.user.image },
+  completedCohorts: p.user.programApplications
+    .filter((a) => a.program)
+    .map((a) => ({
+      programName: a.program!.name,
+      applicationId: a.id,
+    })),
+}));
+
+const url = new URL(Astro.request.url);
+const filters = parseDirectoryFilters(url.searchParams);
+const filterOptions = collectFilterOptions(allProfiles);
+const filtered = applyFilters(allProfiles, filters);
+const sorted = fairSort(filtered, todayKey());
+
+const hasFilters = Object.keys(filters).length > 0;
+const isEmpty = allProfiles.length === 0;
+const noResults = !isEmpty && sorted.length === 0;
 ---
 
 <PublicLayout title="Talent · Tembo Tech Ventures">
-  <section class="mx-auto max-w-4xl px-4 py-28 sm:px-8 md:py-36">
-    <p class="font-body text-xs font-semibold uppercase tracking-[0.4em] text-primary">
-      § Talent
-    </p>
-
-    <h1
-      class="font-heading mt-6 text-ink-primary"
-      style="font-size: clamp(3rem, 9vw, 6rem); line-height: 0.95; letter-spacing: -0.03em;"
-    >
-      Meet our
-      <br />
-      builders.
-    </h1>
-
-    <p class="mt-8 max-w-2xl font-body text-lg text-ink-secondary md:text-xl">
-      Builders from our cohorts across Africa — profiles are on their way.
-    </p>
-
-    <div
-      class="mt-16 border-y border-[color:var(--color-rule)] py-16 text-center"
-    >
-      <p class="font-body text-sm font-semibold uppercase tracking-[0.28em] text-primary">
-        Coming soon
-      </p>
-      <p class="mt-4 font-body text-lg text-ink-secondary">
-        Portfolio profiles for our cohort alumni are being built right now.
-        Check back soon to connect with the community.
-      </p>
+  <section class="mx-auto max-w-7xl px-4 py-28 sm:px-8 md:py-36">
+    <div class="mb-14 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <div>
+        <p class="font-body text-xs font-semibold uppercase tracking-[0.4em] text-primary">
+          &sect; Talent
+        </p>
+        <h1
+          class="font-heading mt-6 text-ink-primary"
+          style="font-size: clamp(3rem, 9vw, 6rem); line-height: 0.95; letter-spacing: -0.03em;"
+        >
+          Meet our<br />builders.
+        </h1>
+      </div>
+      <div class="max-w-md space-y-4">
+        <p class="font-body text-base text-ink-secondary md:text-lg">
+          Builders from our cohorts across Africa &mdash; trained, verified, and
+          ready to ship real work.
+        </p>
+        <a
+          href="/hire"
+          class="inline-flex items-center gap-2 font-body text-sm font-semibold text-primary transition-colors hover:text-primary/80"
+        >
+          Have a project? Work with our builders &rarr;
+        </a>
+      </div>
     </div>
+
+    {!isEmpty && (
+      <form
+        method="GET"
+        action="/talent"
+        class="mb-12 flex flex-wrap items-end gap-3 border-y border-[color:var(--color-rule)] py-6"
+        role="search"
+        aria-label="Filter builders"
+      >
+        <div class="flex flex-col gap-1">
+          <label for="filter-skill" class="font-body text-xs font-semibold uppercase tracking-[0.2em] text-ink-muted">
+            Skill
+          </label>
+          <select
+            id="filter-skill"
+            name="skill"
+            class="rounded-md border border-[color:var(--color-rule)] bg-dark px-3 py-2 font-body text-sm text-ink-primary"
+          >
+            <option value="">All skills</option>
+            {filterOptions.skills.map((s) => (
+              <option value={s} selected={filters.skill === s}>{s}</option>
+            ))}
+          </select>
+        </div>
+
+        <div class="flex flex-col gap-1">
+          <label for="filter-country" class="font-body text-xs font-semibold uppercase tracking-[0.2em] text-ink-muted">
+            Country
+          </label>
+          <select
+            id="filter-country"
+            name="country"
+            class="rounded-md border border-[color:var(--color-rule)] bg-dark px-3 py-2 font-body text-sm text-ink-primary"
+          >
+            <option value="">All countries</option>
+            {filterOptions.countries.map((c) => (
+              <option value={c} selected={filters.country === c}>{c}</option>
+            ))}
+          </select>
+        </div>
+
+        <div class="flex flex-col gap-1">
+          <label for="filter-availability" class="font-body text-xs font-semibold uppercase tracking-[0.2em] text-ink-muted">
+            Availability
+          </label>
+          <select
+            id="filter-availability"
+            name="availability"
+            class="rounded-md border border-[color:var(--color-rule)] bg-dark px-3 py-2 font-body text-sm text-ink-primary"
+          >
+            <option value="">Any</option>
+            <option value="freelance" selected={filters.availability === "freelance"}>Open to freelance</option>
+            <option value="roles" selected={filters.availability === "roles"}>Open to roles</option>
+          </select>
+        </div>
+
+        {filterOptions.cohorts.length > 0 && (
+          <div class="flex flex-col gap-1">
+            <label for="filter-cohort" class="font-body text-xs font-semibold uppercase tracking-[0.2em] text-ink-muted">
+              Cohort
+            </label>
+            <select
+              id="filter-cohort"
+              name="cohort"
+              class="rounded-md border border-[color:var(--color-rule)] bg-dark px-3 py-2 font-body text-sm text-ink-primary"
+            >
+              <option value="">All cohorts</option>
+              {filterOptions.cohorts.map((c) => (
+                <option value={c} selected={filters.cohort === c}>{c}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <button
+          type="submit"
+          class="rounded-full bg-primary px-5 py-2 font-body text-sm font-semibold uppercase tracking-[0.14em] text-dark transition-transform hover:scale-[1.03]"
+        >
+          Filter
+        </button>
+
+        {hasFilters && (
+          <a
+            href="/talent"
+            class="font-body text-sm font-medium text-ink-secondary transition-colors hover:text-ink-primary"
+          >
+            Clear filters
+          </a>
+        )}
+      </form>
+    )}
+
+    {isEmpty ? (
+      <div class="border-y border-[color:var(--color-rule)] py-16 text-center">
+        <p class="font-body text-sm font-semibold uppercase tracking-[0.28em] text-primary">
+          Coming soon
+        </p>
+        <p class="mt-4 max-w-lg mx-auto font-body text-lg text-ink-secondary">
+          Builder profiles from our cohorts across Africa are on their way.
+          Check back soon to connect with the community.
+        </p>
+      </div>
+    ) : noResults ? (
+      <div class="border-y border-[color:var(--color-rule)] py-16 text-center">
+        <p class="font-body text-sm font-semibold uppercase tracking-[0.28em] text-primary">
+          No matches
+        </p>
+        <p class="mt-4 max-w-lg mx-auto font-body text-lg text-ink-secondary">
+          No builders match your current filters. Try broadening your search or
+          <a href="/talent" class="text-primary transition-colors hover:text-primary/80">view all builders</a>.
+        </p>
+      </div>
+    ) : (
+      <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {sorted.map((p) => (
+          <TalentCard
+            handle={p.handle}
+            name={p.user.name}
+            image={p.user.image}
+            headline={p.headline}
+            country={p.country}
+            skills={p.skills}
+            openToFreelance={p.openToFreelance}
+            openToRoles={p.openToRoles}
+            latestCohort={p.completedCohorts[0]?.programName ?? null}
+          />
+        ))}
+      </div>
+    )}
   </section>
 </PublicLayout>
