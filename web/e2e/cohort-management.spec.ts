@@ -60,7 +60,8 @@ test.describe("admin cohort management", () => {
       await button.evaluate((el) =>
         el.scrollIntoView({ block: "center", inline: "nearest" })
       );
-      await expect(button).toBeVisible();
+      await expect(button).toBeInViewport();
+      await expect(button).toBeEnabled();
       const dialogPromise = page.waitForEvent("dialog");
       const clickPromise = button.click();
       const dialog = await dialogPromise;
