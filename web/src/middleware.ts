@@ -2,6 +2,7 @@ import { defineMiddleware } from "astro:middleware";
 import { env } from "cloudflare:workers";
 import { createAuth } from "@/lib/auth";
 import { isHealthCheckPath } from "@/lib/health";
+import { enforceAdminMutationOrigin } from "@/lib/admin/mutation-security";
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const { locals, request, url, redirect } = context;
@@ -58,6 +59,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
 
     locals.isAdmin = true;
+
+    const originFailure = enforceAdminMutationOrigin(request);
+    if (originFailure) return originFailure;
   }
 
   return next();
