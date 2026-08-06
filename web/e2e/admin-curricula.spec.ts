@@ -194,21 +194,52 @@ test.describe("admin curriculum management", () => {
     await expect(page.getByLabel(/^Name/)).toHaveValue("Cohort 04");
   });
 
-  test("uses Cohort terminology and defaults new cohorts closed", async ({
+  test("validates cohort creation and persists unchecked cohorts closed", async ({
     page,
   }) => {
+    const cohortName = `Cohort E2E ${test.info().project.name}-${Date.now()}`;
+    const submittedDescription = "  Preserved cohort description.  ";
+
     await page.goto("/admin/programs");
     await expect(
       page.getByRole("heading", { name: "Cohorts", exact: true })
     ).toBeVisible();
-    await expect(page.getByText("Closed", { exact: true }).first()).toBeVisible();
-
     await page.getByRole("link", { name: "New Cohort" }).click();
     await expect(
       page.getByRole("heading", { name: "Create Cohort", exact: true })
     ).toBeVisible();
+
+    const nameInput = page.locator('input[name="name"]');
+    const descriptionInput = page.locator('textarea[name="description"]');
+    const applicationsOpen = page.getByRole("checkbox", {
+      name: "Applications open",
+    });
+    await expect(applicationsOpen).not.toBeChecked();
+    await nameInput.fill("   ");
+    await descriptionInput.fill(submittedDescription);
+    await page
+      .locator('select[name="curriculumId"]')
+      .selectOption("ttv-fixture-curriculum");
+    await page.getByRole("button", { name: "Create Cohort" }).click();
+
+    await expect(page.getByText("Enter a cohort name.")).toBeVisible();
+    await expect(nameInput).toHaveValue("   ");
+    await expect(descriptionInput).toHaveValue(submittedDescription);
+    await expect(applicationsOpen).not.toBeChecked();
+
+    await nameInput.fill(`  ${cohortName}  `);
+    await page.getByRole("button", { name: "Create Cohort" }).click();
+    await expect(page).toHaveURL(/\/admin\/programs\/[^/]+$/);
+
+    await page.goto("/admin/programs");
+    const cohortRow = page.getByRole("row").filter({ hasText: cohortName });
+    await expect(cohortRow).toBeVisible();
     await expect(
-      page.getByRole("checkbox", { name: "Applications open" })
-    ).not.toBeChecked();
+      cohortRow.getByText("Closed", { exact: true })
+    ).toBeVisible();
+    await page.screenshot({
+      path: evidence("admin-cohort-create-closed"),
+      fullPage: true,
+    });
   });
 });
