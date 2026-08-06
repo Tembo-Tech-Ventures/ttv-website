@@ -17,6 +17,7 @@ const generatedDir = path.join(webRoot, "dist", "server");
 const DEFAULT_APP_NAME = "ttv-website";
 const DEFAULT_COMPATIBILITY_DATE = "2026-04-01";
 const DEFAULT_AI_GATEWAY_MODEL = "workers-ai/@cf/google/gemma-4-26b-a4b-it";
+const CONTAINER_CLASS_NAME = "FfmpegContainer";
 
 export function getRequiredEnv(name) {
   const value = process.env[name]?.trim();
@@ -70,11 +71,14 @@ export function deriveEnvironmentContext() {
   const environmentName = getRequiredEnv("CLOUDFLARE_ENVIRONMENT_NAME");
   const environmentSlug = normalizeSlug(environmentName);
 
+  const workerName = joinName([appName, environmentSlug]);
+
   return {
     appName,
     environmentName,
     environmentSlug,
-    workerName: joinName([appName, environmentSlug]),
+    workerName,
+    containerAppName: joinName([workerName, CONTAINER_CLASS_NAME.toLowerCase()]),
     d1Name: joinName([appName, "db", environmentSlug]),
     bucketName: joinName([appName, "files", environmentSlug]),
     queueName: joinName([appName, "recording-pipeline", environmentSlug]),
@@ -343,6 +347,41 @@ export async function deleteR2BucketByName(name) {
   return true;
 }
 
+export async function deleteContainerAppByName(name, runner = runWrangler) {
+  let listResult;
+  try {
+    listResult = await runner(["containers", "list", "--json"]);
+  } catch (error) {
+    if (isMissingResourceError(error)) return false;
+    throw error;
+  }
+
+  let containers;
+  try {
+    containers = JSON.parse(listResult.stdout.trim());
+  } catch {
+    throw new Error("Failed to parse container list output as JSON");
+  }
+
+  if (!Array.isArray(containers)) {
+    throw new Error(
+      `Expected container list to be an array, got ${typeof containers}`
+    );
+  }
+
+  const match = containers.find((entry) => entry.name === name);
+  if (!match) {
+    return false;
+  }
+
+  if (!match.id) {
+    throw new Error(`Container "${name}" matched but has no id field`);
+  }
+
+  await runner(["containers", "delete", match.id]);
+  return true;
+}
+
 export async function ensureWorkersSubdomain() {
   const existing = await cfApi("/workers/subdomain");
   if (existing?.subdomain) {
@@ -515,7 +554,7 @@ export function createGeneratedWranglerConfig({
     },
     containers: [
       {
-        class_name: "FfmpegContainer",
+        class_name: CONTAINER_CLASS_NAME,
         image: path.relative(generatedDir, path.join(webRoot, "containers", "ffmpeg", "Dockerfile")),
         max_instances: 3,
       },
@@ -524,14 +563,14 @@ export function createGeneratedWranglerConfig({
       bindings: [
         {
           name: "FFMPEG_CONTAINER",
-          class_name: "FfmpegContainer",
+          class_name: CONTAINER_CLASS_NAME,
         },
       ],
     },
     migrations: [
       {
         tag: "v1",
-        new_sqlite_classes: ["FfmpegContainer"],
+        new_sqlite_classes: [CONTAINER_CLASS_NAME],
       },
     ],
     ...(primaryDomain || redirectDomain

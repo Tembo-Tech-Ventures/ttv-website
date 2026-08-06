@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   deleteAiGatewayByName,
+  deleteContainerAppByName,
   deleteD1DatabaseByName,
   deleteQueueByName,
   deleteR2BucketByName,
@@ -37,6 +38,7 @@ export async function destroyEnvironment(
   context,
   {
     deleteAiGateway = deleteAiGatewayByName,
+    deleteContainerApp = deleteContainerAppByName,
     deleteDatabase = deleteD1DatabaseByName,
     deleteQueue = deleteQueueByName,
     removeQueueConsumer = removeQueueWorkerConsumer,
@@ -57,6 +59,12 @@ export async function destroyEnvironment(
     );
   }
 
+  // Container apps reference the Worker's Durable Object namespace; delete
+  // them before removing the Worker so no orphaned binding remains.
+  const containerAppDeleted = await deleteContainerApp(
+    context.containerAppName
+  );
+
   // Cloudflare blocks Worker deletion while it is a Queue consumer and blocks
   // Queue deletion while the Worker still has its producer binding.
   const queueConsumerRemoved = await removeQueueConsumer(
@@ -73,6 +81,7 @@ export async function destroyEnvironment(
 
   return {
     environment: context.environmentName,
+    containerAppDeleted,
     queueConsumerRemoved,
     workerDeleted,
     queueDeleted,
@@ -87,6 +96,10 @@ async function main() {
   const context = deriveEnvironmentContext();
   const result = await destroyEnvironment(context);
 
+  await writeGithubOutput(
+    "container_app_deleted",
+    String(result.containerAppDeleted)
+  );
   await writeGithubOutput(
     "queue_consumer_removed",
     String(result.queueConsumerRemoved)

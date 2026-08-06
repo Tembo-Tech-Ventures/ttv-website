@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createGeneratedWranglerConfig,
   deleteAiGatewayByName,
+  deleteContainerAppByName,
   deleteQueueByName,
   deleteVectorizeIndexByName,
   deriveAgentEnvironmentName,
@@ -32,6 +33,33 @@ describe("deriveEnvironmentContext", () => {
   it("derives an AI gateway name alongside other resources", () => {
     const context = deriveEnvironmentContext();
     expect(context.aiGatewayName).toBe("ttv-website-ai-staging");
+  });
+
+  it("derives the container application name from the worker name", () => {
+    const context = deriveEnvironmentContext();
+    expect(context.containerAppName).toBe(
+      "ttv-website-staging-ffmpegcontainer"
+    );
+  });
+
+  it("produces the correct container app name for agent-pr-72", () => {
+    vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME", "agent-pr-72");
+    const context = deriveEnvironmentContext();
+    expect(context.workerName).toBe("ttv-website-agent-pr-72");
+    expect(context.containerAppName).toBe(
+      "ttv-website-agent-pr-72-ffmpegcontainer"
+    );
+  });
+
+  it("truncates overlong container app names consistently", () => {
+    vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME", "agent-" + "x".repeat(60));
+    const context = deriveEnvironmentContext();
+    expect(context.containerAppName.length).toBeLessThanOrEqual(63);
+    expect(context.containerAppName).toBe(
+      context.workerName.length + 1 + "ffmpegcontainer".length > 63
+        ? `${context.workerName}-ffmpegcontainer`.slice(0, 63)
+        : `${context.workerName}-ffmpegcontainer`
+    );
   });
 });
 
@@ -353,6 +381,84 @@ describe("environment cleanup", () => {
     await expect(
       deleteVectorizeIndexByName("missing", missingRunner)
     ).resolves.toBe(false);
+  });
+
+  it("deletes an exact-match container app by UUID", async () => {
+    const runner = vi
+      .fn()
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify([
+          { id: "uuid-1", name: "ttv-website-staging-ffmpegcontainer" },
+          { id: "uuid-2", name: "other-app-ffmpegcontainer" },
+        ]),
+      })
+      .mockResolvedValueOnce({});
+
+    await expect(
+      deleteContainerAppByName("ttv-website-staging-ffmpegcontainer", runner)
+    ).resolves.toBe(true);
+    expect(runner.mock.calls).toEqual([
+      [["containers", "list", "--json"]],
+      [["containers", "delete", "uuid-1"]],
+    ]);
+  });
+
+  it("treats no exact container match as already absent", async () => {
+    const runner = vi.fn().mockResolvedValueOnce({
+      stdout: JSON.stringify([
+        { id: "uuid-1", name: "other-app-ffmpegcontainer" },
+      ]),
+    });
+
+    await expect(
+      deleteContainerAppByName("ttv-website-staging-ffmpegcontainer", runner)
+    ).resolves.toBe(false);
+    expect(runner).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats an empty container list as already absent", async () => {
+    const runner = vi.fn().mockResolvedValueOnce({ stdout: "[]" });
+
+    await expect(
+      deleteContainerAppByName("missing-app", runner)
+    ).resolves.toBe(false);
+  });
+
+  it("rejects malformed JSON from the container list", async () => {
+    const runner = vi.fn().mockResolvedValueOnce({
+      stdout: "not json at all",
+    });
+
+    await expect(
+      deleteContainerAppByName("any-app", runner)
+    ).rejects.toThrow("Failed to parse container list output as JSON");
+  });
+
+  it("rejects a non-array container list response", async () => {
+    const runner = vi.fn().mockResolvedValueOnce({
+      stdout: JSON.stringify({ id: "uuid-1", name: "app" }),
+    });
+
+    await expect(
+      deleteContainerAppByName("app", runner)
+    ).rejects.toThrow("Expected container list to be an array");
+  });
+
+  it("never uses substring or prefix matching for container deletion", async () => {
+    const runner = vi.fn().mockResolvedValueOnce({
+      stdout: JSON.stringify([
+        { id: "uuid-prefix", name: "ttv-website-agent-pr-72-ffmpegcontainer-extra" },
+        { id: "uuid-substr", name: "x-ttv-website-agent-pr-72-ffmpegcontainer" },
+      ]),
+    });
+
+    await expect(
+      deleteContainerAppByName(
+        "ttv-website-agent-pr-72-ffmpegcontainer",
+        runner
+      )
+    ).resolves.toBe(false);
+    expect(runner).toHaveBeenCalledTimes(1);
   });
 });
 
