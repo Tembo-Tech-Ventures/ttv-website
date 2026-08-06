@@ -29,6 +29,20 @@
       "when": 1786001620381,
       "tag": "0003_absurd_argent",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1786017600000,
+      "tag": "0004_seed_admin_role",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1786020406198,
+      "tag": "0005_brief_spiral",
+      "breakpoints": true
     }
   ]
 }

@@ -53,6 +53,11 @@ describe("Database Schema", () => {
     expect(nameCol.enumValues).toEqual(["INSTRUCTOR", "TA"]);
   });
 
+  it("program applications are closed by default", () => {
+    expect(schema.program.applicationsOpen.notNull).toBe(true);
+    expect(schema.program.applicationsOpen.default).toBe(false);
+  });
+
   it("recording has correct processing status enum values", () => {
     const statusCol = schema.recording.processingStatus;
     expect(statusCol.enumValues).toEqual([

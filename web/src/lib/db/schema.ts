@@ -109,16 +109,22 @@ export const roleRelations = relations(role, ({ many }) => ({
 
 // ─── UserRole ──────────────────────────────────────────────
 
-export const userRole = sqliteTable("UserRoles", {
-  id: cuid("id"),
-  userId: text("userId")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  roleId: text("roleId")
-    .notNull()
-    .references(() => role.id, { onDelete: "cascade" }),
-  ...timestamps,
-});
+export const userRole = sqliteTable(
+  "UserRoles",
+  {
+    id: cuid("id"),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    roleId: text("roleId")
+      .notNull()
+      .references(() => role.id, { onDelete: "cascade" }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("UserRoles_userId_roleId_unique").on(table.userId, table.roleId),
+  ]
+);
 
 export const userRoleRelations = relations(userRole, ({ one }) => ({
   user: one(user, { fields: [userRole.userId], references: [user.id] }),
@@ -167,6 +173,9 @@ export const program = sqliteTable("program", {
     .references(() => curriculum.id),
   startDate: integer("startDate", { mode: "timestamp" }),
   endDate: integer("endDate", { mode: "timestamp" }),
+  applicationsOpen: integer("applicationsOpen", { mode: "boolean" })
+    .notNull()
+    .default(false),
   ...timestamps,
 });
 
@@ -182,17 +191,27 @@ export const programRelations = relations(program, ({ one, many }) => ({
 
 // ─── ProgramRole ───────────────────────────────────────────
 
-export const programRole = sqliteTable("programRole", {
-  id: cuid("id"),
-  programId: text("programId")
-    .notNull()
-    .references(() => program.id),
-  userId: text("userId")
-    .notNull()
-    .references(() => user.id),
-  name: text("name", { enum: ["INSTRUCTOR", "TA"] }).notNull(),
-  ...timestamps,
-});
+export const programRole = sqliteTable(
+  "programRole",
+  {
+    id: cuid("id"),
+    programId: text("programId")
+      .notNull()
+      .references(() => program.id),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id),
+    name: text("name", { enum: ["INSTRUCTOR", "TA"] }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("programRole_programId_userId_name_unique").on(
+      table.programId,
+      table.userId,
+      table.name
+    ),
+  ]
+);
 
 export const programRoleRelations = relations(programRole, ({ one }) => ({
   program: one(program, {
@@ -216,22 +235,31 @@ export const programPartnerRelations = relations(programPartner, ({ many }) => (
 
 // ─── ProgramApplication ────────────────────────────────────
 
-export const programApplication = sqliteTable("programApplication", {
-  id: cuid("id"),
-  programId: text("programId").references(() => program.id),
-  userId: text("userId")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  partnerId: text("partnerId").references(() => programPartner.id),
-  status: text("status", {
-    enum: ["PENDING", "APPROVED", "REJECTED", "AUDIT", "COMPLETED"],
-  })
-    .notNull()
-    .default("PENDING"),
-  application: text("application").notNull(),
-  completedAt: integer("completedAt", { mode: "timestamp" }),
-  ...timestamps,
-});
+export const programApplication = sqliteTable(
+  "programApplication",
+  {
+    id: cuid("id"),
+    programId: text("programId").references(() => program.id),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    partnerId: text("partnerId").references(() => programPartner.id),
+    status: text("status", {
+      enum: ["PENDING", "APPROVED", "REJECTED", "AUDIT", "COMPLETED"],
+    })
+      .notNull()
+      .default("PENDING"),
+    application: text("application").notNull(),
+    completedAt: integer("completedAt", { mode: "timestamp" }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("programApplication_programId_userId_unique").on(
+      table.programId,
+      table.userId
+    ),
+  ]
+);
 
 export const programApplicationRelations = relations(
   programApplication,
