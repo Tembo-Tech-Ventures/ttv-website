@@ -11,6 +11,7 @@ import {
   PiKeyDuotone,
   PiIdentificationCardDuotone,
   PiBriefcaseDuotone,
+  PiBooksDuotone,
 } from "react-icons/pi";
 import { PiListBold } from "react-icons/pi";
 
@@ -20,6 +21,7 @@ const primaryLinks = [
   { href: "/admin/applications", label: "Applications", icon: PiFileTextDuotone },
   { href: "/admin/profiles", label: "Profiles", icon: PiIdentificationCardDuotone },
   { href: "/admin/projects", label: "Client Projects", icon: PiBriefcaseDuotone },
+  { href: "/admin/curricula", label: "Curricula", icon: PiBooksDuotone },
   { href: "/admin/programs", label: "Programs", icon: PiBookOpenDuotone },
   { href: "/admin/recordings", label: "Recordings", icon: PiVideoCameraDuotone },
   { href: "/admin/data-migration", label: "Data Migration", icon: PiDatabaseDuotone },
@@ -58,6 +60,8 @@ export default function AdminShell({
         {/* Top bar */}
         <header className="flex items-center gap-4 border-b border-teal/20 px-4 py-3 lg:px-6">
           <button
+            type="button"
+            aria-label="Open navigation"
             onClick={() => setSidebarOpen(true)}
             className="rounded-md p-1.5 text-white/60 hover:text-white lg:hidden"
           >
