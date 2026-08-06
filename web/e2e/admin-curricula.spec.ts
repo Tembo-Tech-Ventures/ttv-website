@@ -204,6 +204,13 @@ test.describe("admin curriculum management", () => {
     await expect(
       page.getByRole("heading", { name: "Cohorts", exact: true })
     ).toBeVisible();
+    const documentWidth = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(documentWidth.scrollWidth).toBeLessThanOrEqual(
+      documentWidth.clientWidth
+    );
     await page.getByRole("link", { name: "New Cohort" }).click();
     await expect(
       page.getByRole("heading", { name: "Create Cohort", exact: true })

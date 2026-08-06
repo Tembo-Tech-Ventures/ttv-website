@@ -1,5 +1,7 @@
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { getAdminLinks } from "./AdminShell";
+import AdminShell, { getAdminLinks } from "./AdminShell";
 
 describe("admin navigation", () => {
   it("links to curriculum management for every admin", () => {
@@ -44,5 +46,17 @@ describe("admin navigation", () => {
     const agentOnlyLabels = getAdminLinks(true, false).map(({ label }) => label);
     expect(agentOnlyLabels).not.toContain("Data Migration");
     expect(agentOnlyLabels).toContain("Agent Access");
+  });
+});
+
+describe("admin shell hydration", () => {
+  it("keeps the mobile opener disabled until the client handler is ready", () => {
+    const html = renderToStaticMarkup(
+      <AdminShell>
+        <div>Admin content</div>
+      </AdminShell>
+    );
+
+    expect(html).toMatch(/aria-label="Open navigation" disabled=""/);
   });
 });

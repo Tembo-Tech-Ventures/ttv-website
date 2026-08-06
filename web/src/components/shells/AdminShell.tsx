@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import React, { useEffect, useState, type ReactNode } from "react";
 import Sidebar from "@/components/common/Sidebar";
 import {
   PiGaugeDuotone,
@@ -52,6 +52,11 @@ export default function AdminShell({
   dataMigrationEnabled?: boolean;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
   const links = getAdminLinks(agentAuthEnabled, dataMigrationEnabled);
 
   return (
@@ -69,6 +74,7 @@ export default function AdminShell({
           <button
             type="button"
             aria-label="Open navigation"
+            disabled={!hydrated}
             onClick={() => setSidebarOpen(true)}
             className="rounded-md p-1.5 text-white/60 hover:text-white lg:hidden"
           >
