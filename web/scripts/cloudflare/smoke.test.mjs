@@ -60,6 +60,7 @@ describe("runSmokeChecks", () => {
         expectedVersion: "abc123",
         fetchImpl: fetchMock,
         requiredConsecutiveSuccesses: 1,
+        requiredHomepageConsecutiveSuccesses: 1,
         settleDelayMs: 0,
       })
     ).resolves.toEqual({
@@ -133,6 +134,7 @@ describe("runSmokeChecks", () => {
         healthAttempts: 2,
         retryDelayMs: 1,
         requiredConsecutiveSuccesses: 1,
+        requiredHomepageConsecutiveSuccesses: 1,
         settleDelayMs: 0,
         sleepImpl: sleepMock,
       })
@@ -193,6 +195,7 @@ describe("runSmokeChecks", () => {
         healthAttempts: 10,
         retryDelayMs: 1,
         requiredConsecutiveSuccesses: 3,
+        requiredHomepageConsecutiveSuccesses: 1,
         settleDelayMs: 0,
         sleepImpl: vi.fn().mockResolvedValue(undefined),
       })
@@ -228,17 +231,119 @@ describe("runSmokeChecks", () => {
     ).rejects.toThrow(/never stayed stable|did not become ready/);
   });
 
-  it("sleeps for the settle delay after stability is reached", async () => {
+  const htmlResponse = (contentType = "text/html; charset=utf-8") =>
+    new Response("<html></html>", {
+      status: 200,
+      headers: { "content-type": contentType },
+    });
+
+  it("waits through homepage 404s until HTML is sustained", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(healthyResponse())
-      .mockResolvedValueOnce(
-        new Response("<html></html>", {
-          status: 200,
-          headers: { "content-type": "text/html; charset=utf-8" },
-        })
-      );
+      .mockResolvedValueOnce(new Response("nothing here yet", { status: 404 }))
+      .mockResolvedValueOnce(htmlResponse())
+      .mockResolvedValueOnce(htmlResponse())
+      .mockResolvedValueOnce(htmlResponse());
     const sleepMock = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      runSmokeChecks({
+        baseUrl: "https://example.com",
+        expectedEnvironment: "agent-123",
+        expectedVersion: "abc123",
+        fetchImpl: fetchMock,
+        requiredConsecutiveSuccesses: 1,
+        homepageAttempts: 4,
+        homepageRetryDelayMs: 25,
+        requiredHomepageConsecutiveSuccesses: 3,
+        settleDelayMs: 0,
+        sleepImpl: sleepMock,
+      })
+    ).resolves.toMatchObject({ version: "abc123" });
+
+    const homepageCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).endsWith("/")
+    );
+    expect(homepageCalls).toHaveLength(4);
+    expect(sleepMock).toHaveBeenCalledTimes(3);
+    expect(sleepMock).toHaveBeenNthCalledWith(1, 25);
+    expect(sleepMock).toHaveBeenNthCalledWith(2, 25);
+    expect(sleepMock).toHaveBeenNthCalledWith(3, 25);
+  });
+
+  it("resets homepage stability for 404s and non-HTML responses", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(healthyResponse())
+      .mockResolvedValueOnce(htmlResponse())
+      .mockResolvedValueOnce(new Response("nothing here yet", { status: 404 }))
+      .mockResolvedValueOnce(htmlResponse())
+      .mockResolvedValueOnce(htmlResponse("application/json"))
+      .mockResolvedValueOnce(htmlResponse())
+      .mockResolvedValueOnce(htmlResponse());
+
+    await expect(
+      runSmokeChecks({
+        baseUrl: "https://example.com",
+        expectedEnvironment: "agent-123",
+        expectedVersion: "abc123",
+        fetchImpl: fetchMock,
+        requiredConsecutiveSuccesses: 1,
+        homepageAttempts: 6,
+        homepageRetryDelayMs: 1,
+        requiredHomepageConsecutiveSuccesses: 2,
+        settleDelayMs: 0,
+        sleepImpl: vi.fn().mockResolvedValue(undefined),
+      })
+    ).resolves.toMatchObject({ version: "abc123" });
+
+    const homepageCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).endsWith("/")
+    );
+    expect(homepageCalls).toHaveLength(6);
+  });
+
+  it("fails when homepage HTML never stays stable", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(healthyResponse())
+      .mockResolvedValueOnce(htmlResponse())
+      .mockResolvedValueOnce(new Response("nothing here yet", { status: 404 }))
+      .mockResolvedValueOnce(htmlResponse())
+      .mockResolvedValueOnce(htmlResponse("application/json"));
+
+    await expect(
+      runSmokeChecks({
+        baseUrl: "https://example.com",
+        expectedEnvironment: "agent-123",
+        expectedVersion: "abc123",
+        fetchImpl: fetchMock,
+        requiredConsecutiveSuccesses: 1,
+        homepageAttempts: 4,
+        homepageRetryDelayMs: 1,
+        requiredHomepageConsecutiveSuccesses: 2,
+        settleDelayMs: 0,
+        sleepImpl: vi.fn().mockResolvedValue(undefined),
+      })
+    ).rejects.toThrow(
+      "Homepage answered with HTML but never stayed stable for 2 consecutive checks within 4 attempts."
+    );
+  });
+
+  it("settles only after health and homepage stability", async () => {
+    const events = [];
+    const fetchMock = vi.fn(async (url) => {
+      if (String(url).endsWith("/api/health")) {
+        events.push("health");
+        return healthyResponse();
+      }
+      events.push("homepage");
+      return htmlResponse();
+    });
+    const sleepMock = vi.fn(async (durationMs) => {
+      events.push(`sleep:${durationMs}`);
+    });
 
     await runSmokeChecks({
       baseUrl: "https://example.com",
@@ -246,9 +351,19 @@ describe("runSmokeChecks", () => {
       expectedVersion: "abc123",
       fetchImpl: fetchMock,
       requiredConsecutiveSuccesses: 1,
+      homepageAttempts: 2,
+      homepageRetryDelayMs: 25,
+      requiredHomepageConsecutiveSuccesses: 2,
       settleDelayMs: 7_500,
       sleepImpl: sleepMock,
     });
-    expect(sleepMock).toHaveBeenCalledWith(7_500);
+
+    expect(events).toEqual([
+      "health",
+      "homepage",
+      "sleep:25",
+      "homepage",
+      "sleep:7500",
+    ]);
   });
 });
