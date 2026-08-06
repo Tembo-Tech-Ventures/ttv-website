@@ -11,7 +11,9 @@ import {
   buildAdminEnrollmentStatement,
   buildApplicationTransitionStatement,
   buildBulkMutationStatement,
+  buildSelfApplicationStatement,
   createAdminEnrollment,
+  createSelfApplication,
   createStatusMutation,
   formatDateInputValue,
   getAvailableApplicationTransitions,
@@ -25,6 +27,7 @@ import {
   planApplicationTransition,
   planBulkProgramApplicationMutation,
   throwAdminEnrollmentFailure,
+  throwSelfApplicationFailure,
   toProgramApplicationBadgeVariant,
   type BulkApplicationRecord,
   type ProgramApplicationStatus,
@@ -343,6 +346,137 @@ describe("admin enrollment", () => {
   ])("classifies $code failures", ({ state, code, message }) => {
     expectDomainError(
       () => throwAdminEnrollmentFailure(state),
+      code,
+      message
+    );
+  });
+});
+
+describe("self application", () => {
+  it("creates a compatible PENDING application record", () => {
+    const application = createSelfApplication({
+      id: "application-1",
+      programId: "  program-1  ",
+      userId: "user-1",
+      now: NOW,
+    });
+    expect(application).toEqual({
+      id: "application-1",
+      programId: "program-1",
+      userId: "user-1",
+      status: "PENDING",
+      application: "{}",
+      completedAt: null,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    expect(application.createdAt).not.toBe(NOW);
+    expect(application.updatedAt).not.toBe(NOW);
+  });
+
+  it.each([null, "", "   ", 42])(
+    "rejects a missing or forged program id %j",
+    (programId) => {
+      expectDomainError(
+        () =>
+          createSelfApplication({
+            id: "application-1",
+            programId,
+            userId: "user-1",
+            now: NOW,
+          }),
+        "INVALID_APPLICATION_PROGRAM",
+        "open cohort"
+      );
+    }
+  );
+
+  it("builds one open-cohort duplicate-safe guarded insert", () => {
+    const statement = buildSelfApplicationStatement(
+      createSelfApplication({
+        id: "application-1",
+        programId: "program-1",
+        userId: "user-1",
+        now: NOW,
+      })
+    );
+
+    expect(statement.sql).toContain(
+      'WHERE "id" = ? AND "applicationsOpen" = 1'
+    );
+    expect(statement.sql).toContain('INSERT OR IGNORE INTO "programApplication"');
+    expect(statement.sql).toContain("NOT EXISTS");
+    expect(statement.params).toEqual([
+      "application-1",
+      "program-1",
+      "user-1",
+      "PENDING",
+      "{}",
+      null,
+      NOW_SECONDS,
+      NOW_SECONDS,
+      "program-1",
+      "user-1",
+      "program-1",
+      "user-1",
+    ]);
+    expect(statement.expectedChanges).toBe(1);
+  });
+
+  it.each([
+    {
+      state: {
+        programExists: false,
+        applicationsOpen: false,
+        userExists: true,
+        alreadyApplied: false,
+      },
+      code: "UNKNOWN_PROGRAM" as const,
+      message: "does not exist",
+    },
+    {
+      state: {
+        programExists: true,
+        applicationsOpen: false,
+        userExists: true,
+        alreadyApplied: false,
+      },
+      code: "CLOSED_PROGRAM" as const,
+      message: "closed",
+    },
+    {
+      state: {
+        programExists: true,
+        applicationsOpen: true,
+        userExists: true,
+        alreadyApplied: true,
+      },
+      code: "DUPLICATE_APPLICATION" as const,
+      message: "already applied",
+    },
+    {
+      state: {
+        programExists: true,
+        applicationsOpen: true,
+        userExists: false,
+        alreadyApplied: false,
+      },
+      code: "UNKNOWN_USER" as const,
+      message: "signed-in user",
+    },
+    {
+      state: {
+        programExists: true,
+        applicationsOpen: true,
+        userExists: true,
+        alreadyApplied: false,
+      },
+      code: "APPLICATION_NOT_CREATED" as const,
+      message: "availability changed",
+    },
+  ])("classifies guarded insert failure $code", ({ state, code, message }) => {
+    expectDomainError(
+      () => throwSelfApplicationFailure(state),
       code,
       message
     );
