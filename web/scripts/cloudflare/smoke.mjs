@@ -72,28 +72,45 @@ async function waitForExpectedHealth({
   timeoutMs,
   healthAttempts,
   retryDelayMs,
+  requiredConsecutiveSuccesses,
   sleepImpl,
 }) {
+  // Freshly created workers.dev subdomains propagate eventually-consistently:
+  // single requests can alternate between the live Worker and Cloudflare's
+  // "nothing here yet" placeholder for a while after the first success. Only
+  // declare the deployment ready once the expected health payload has been
+  // observed on several consecutive checks.
   let lastError;
+  let consecutiveSuccesses = 0;
+  let health;
   for (let attempt = 1; attempt <= healthAttempts; attempt += 1) {
     try {
       const response = await fetchChecked(fetchImpl, healthUrl, timeoutMs);
-      const health = await response.json();
+      health = await response.json();
       assertExpectedHealth(
         health,
         healthUrl,
         expectedEnvironment,
         expectedVersion
       );
-      return health;
+      consecutiveSuccesses += 1;
+      if (consecutiveSuccesses >= requiredConsecutiveSuccesses) {
+        return health;
+      }
     } catch (error) {
       lastError = error;
-      if (attempt < healthAttempts) {
-        await sleepImpl(retryDelayMs);
-      }
+      consecutiveSuccesses = 0;
+    }
+    if (attempt < healthAttempts) {
+      await sleepImpl(retryDelayMs);
     }
   }
 
+  if (consecutiveSuccesses > 0) {
+    throw new Error(
+      `Deployment answered but never stayed stable for ${requiredConsecutiveSuccesses} consecutive checks within ${healthAttempts} attempts.`
+    );
+  }
   const reason = lastError instanceof Error ? lastError.message : String(lastError);
   throw new Error(
     `Deployment did not become ready after ${healthAttempts} attempts: ${reason}`
@@ -106,8 +123,10 @@ export async function runSmokeChecks({
   expectedVersion,
   fetchImpl = fetch,
   timeoutMs = 15_000,
-  healthAttempts = 30,
+  healthAttempts = 60,
   retryDelayMs = 2_000,
+  requiredConsecutiveSuccesses = 5,
+  settleDelayMs = 10_000,
   sleepImpl = sleep,
 }) {
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
@@ -120,8 +139,15 @@ export async function runSmokeChecks({
     timeoutMs,
     healthAttempts,
     retryDelayMs,
+    requiredConsecutiveSuccesses,
     sleepImpl,
   });
+
+  // Extra settle time after observed stability: downstream Playwright runs
+  // open many fresh connections and must not race residual propagation.
+  if (settleDelayMs > 0) {
+    await sleepImpl(settleDelayMs);
+  }
 
   const homepageResponse = await fetchChecked(
     fetchImpl,
