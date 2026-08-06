@@ -189,7 +189,7 @@ test.describe("admin curriculum management", () => {
 
     await cohortLink.click();
     await expect(
-      page.getByRole("heading", { name: "Program Details" })
+      page.getByRole("heading", { name: "Cohort details" })
     ).toBeVisible();
     await expect(page.getByLabel(/^Name/)).toHaveValue("Cohort 04");
   });

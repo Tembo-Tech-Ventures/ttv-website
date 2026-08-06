@@ -32,6 +32,17 @@ test.describe("legacy import containment", () => {
     await expect(page.getByTestId("agent-import-warning")).toContainText(
       "cannot run a legacy import"
     );
+
+    const minimalExport = {
+      version: 1,
+      exportedAt: "2026-08-01T12:00:00.000Z",
+    };
+    await page.getByLabel("Legacy JSON export").setInputFiles({
+      name: "export.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(minimalExport)),
+    });
+    await expect(page.getByText("Record Preview")).toBeVisible();
     await expect(
       page.getByRole("button", {
         name: "Import unavailable for agent sessions",
