@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { mkdirSync } from "fs";
+import { FIXTURE_ENVIRONMENT } from "./fixture-env";
 
 const EVIDENCE_DIR = "test-results/evidence";
 mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -61,6 +62,7 @@ test.describe("/hire public page", () => {
 });
 
 test.describe("/hire form submission", () => {
+  test.skip(!FIXTURE_ENVIRONMENT, "Form mutations run only against disposable agent-* environments.");
   test("submit journey creates a project", async ({ page, viewport }) => {
     const isMobile = (viewport?.width ?? 1280) < 768;
     test.skip(isMobile, "Form submissions are desktop-only");

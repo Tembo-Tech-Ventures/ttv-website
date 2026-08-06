@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { mkdirSync } from "fs";
+import { FIXTURE_ENVIRONMENT } from "./fixture-env";
 import { HONEYPOT_FIELD } from "../src/lib/spam/protection";
 
 const EVIDENCE_DIR = "test-results/evidence";
@@ -9,6 +10,7 @@ const evidence = (name: string) =>
   `${EVIDENCE_DIR}/${test.info().project.name}-${name}.png`;
 
 test.describe("public talent directory", () => {
+  test.skip(!FIXTURE_ENVIRONMENT, "Requires seeded fixtures (agent-* environments only).");
   test("/talent renders the amina-preview card", async ({ page }) => {
     const response = await page.goto("/talent");
     expect(response?.status()).toBe(200);
@@ -48,6 +50,7 @@ test.describe("public talent directory", () => {
 
 test.describe("public talent profile", () => {
   test("/talent/amina-preview renders all sections", async ({ page }) => {
+    test.skip(!FIXTURE_ENVIRONMENT, "Requires seeded fixtures (agent-* environments only).");
     const response = await page.goto("/talent/amina-preview");
     expect(response?.status()).toBe(200);
 
@@ -74,6 +77,7 @@ test.describe("public talent profile", () => {
   test("/talent/amina-preview renders highlights with blurbs", async ({
     page,
   }) => {
+    test.skip(!FIXTURE_ENVIRONMENT, "Requires seeded fixtures (agent-* environments only).");
     await page.goto("/talent/amina-preview");
     await expect(page.getByText(/Highlighted work/i)).toBeVisible();
     const highlights = page.locator("section[aria-label='Highlighted work'] > div > div");
@@ -98,6 +102,7 @@ test.describe("public talent profile", () => {
 });
 
 test.describe("contact form (desktop-only mutations)", () => {
+  test.skip(!FIXTURE_ENVIRONMENT, "Requires seeded fixtures (agent-* environments only).");
   test("contact submit shows success", async ({ page, viewport }) => {
     const isMobile = (viewport?.width ?? 1280) < 768;
     test.skip(isMobile, "Contact form submission is desktop-only");
@@ -141,6 +146,7 @@ test.describe("contact form (desktop-only mutations)", () => {
 });
 
 test.describe("homepage humans section", () => {
+  test.skip(!FIXTURE_ENVIRONMENT, "Requires seeded fixtures (agent-* environments only).");
   test("HumansSection shows amina as a solid card", async ({ page }) => {
     await page.goto("/");
     const section = page.locator("#humans");
