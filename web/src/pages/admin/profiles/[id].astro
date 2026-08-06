@@ -1,0 +1,282 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import Card from "@/components/common/Card.astro";
+import Badge from "@/components/common/Badge.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { eq, count } from "drizzle-orm";
+import { env } from "cloudflare:workers";
+import {
+  PROFILE_TRANSITIONS,
+  canTransition,
+} from "@/lib/talent/transitions";
+import { getCompletedCohorts } from "@/lib/talent/eligibility";
+import { parseSkillsJson } from "@/lib/talent/profile";
+
+const db = drizzle(env.DB, { schema });
+const { id } = Astro.params;
+
+if (!id) return Astro.redirect("/admin/profiles");
+
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  const newStatus = formData.get("status") as string;
+
+  const current = await db.query.studentProfile.findFirst({
+    where: eq(schema.studentProfile.id, id),
+    columns: { status: true, publishedAt: true },
+  });
+
+  if (!current) return Astro.redirect("/admin/profiles");
+
+  if (!canTransition(PROFILE_TRANSITIONS, current.status, newStatus)) {
+    return new Response(
+      `Cannot transition from ${current.status} to ${newStatus}`,
+      { status: 400 }
+    );
+  }
+
+  const updateData: Record<string, unknown> = { status: newStatus };
+  if (newStatus === "PUBLISHED" && !current.publishedAt) {
+    updateData.publishedAt = new Date();
+  }
+
+  await db
+    .update(schema.studentProfile)
+    .set(updateData)
+    .where(eq(schema.studentProfile.id, id));
+
+  return Astro.redirect(`/admin/profiles/${id}`);
+}
+
+const profile = await db.query.studentProfile.findFirst({
+  where: eq(schema.studentProfile.id, id),
+  with: {
+    user: true,
+    highlights: { orderBy: (h, { asc }) => [asc(h.sortOrder)] },
+  },
+});
+
+if (!profile) return Astro.redirect("/admin/profiles");
+
+const cohorts = await getCompletedCohorts(db, profile.userId);
+
+const [leadsResult] = await db
+  .select({ value: count() })
+  .from(schema.profileContact)
+  .where(eq(schema.profileContact.profileId, profile.id));
+const leadsCount = leadsResult?.value ?? 0;
+
+const skills = parseSkillsJson(profile.skills);
+
+const allowed = PROFILE_TRANSITIONS[profile.status] ?? [];
+
+const TRANSITION_LABELS: Record<string, string> = {
+  PUBLISHED: "Publish",
+  DRAFT: "Send back to draft",
+  SUSPENDED: "Suspend",
+};
+
+const TRANSITION_COLORS: Record<string, string> = {
+  PUBLISHED: "bg-green-600 text-white hover:bg-green-700",
+  DRAFT: "bg-gray-600 text-white hover:bg-gray-700",
+  SUSPENDED: "bg-red-600 text-white hover:bg-red-700",
+};
+
+function transitionLabel(to: string, from: string): string {
+  if (to === "PUBLISHED" && from === "SUSPENDED") return "Republish";
+  return TRANSITION_LABELS[to] ?? to;
+}
+---
+
+<AdminLayout title="Profile Detail">
+  <div class="space-y-6">
+    <a href="/admin/profiles" class="text-sm text-primary hover:underline">
+      &larr; Back to Profiles
+    </a>
+
+    <div class="flex items-center gap-3">
+      <h2 class="text-2xl font-bold text-white">Profile</h2>
+      <Badge
+        variant={
+          profile.status.toLowerCase() as
+            | "draft"
+            | "in_review"
+            | "published"
+            | "suspended"
+        }
+      />
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-2">
+      <Card>
+        <h3 class="mb-4 text-lg font-semibold text-white">Owner</h3>
+        <dl class="space-y-2 text-sm">
+          <div class="flex justify-between">
+            <dt class="text-white/60">Name</dt>
+            <dd class="text-white">{profile.user?.name ?? "Unknown"}</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-white/60">Email</dt>
+            <dd class="text-white">{profile.user?.email ?? "—"}</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-white/60">GitHub</dt>
+            <dd class="text-white">{profile.githubLogin ?? "—"}</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-white/60">Handle</dt>
+            <dd class="font-mono text-white">{profile.handle}</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-white/60">Leads</dt>
+            <dd class="text-white">{leadsCount}</dd>
+          </div>
+        </dl>
+      </Card>
+
+      <Card>
+        <h3 class="mb-4 text-lg font-semibold text-white">Completed Cohorts</h3>
+        {cohorts.length === 0 ? (
+          <p class="text-sm text-white/40">No completed cohorts.</p>
+        ) : (
+          <ul class="space-y-2 text-sm">
+            {cohorts.map((c) => (
+              <li class="text-white">
+                {c.program?.name ?? "Unknown program"}
+                {c.application.completedAt && (
+                  <span class="ml-2 text-white/40">
+                    completed{" "}
+                    {new Date(c.application.completedAt).toLocaleDateString()}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
+
+    <Card>
+      <h3 class="mb-4 text-lg font-semibold text-white">
+        How this will appear publicly
+      </h3>
+
+      <div class="space-y-4">
+        {profile.headline && (
+          <p class="text-lg font-medium text-white">{profile.headline}</p>
+        )}
+
+        {profile.bio && <p class="text-sm text-white/80">{profile.bio}</p>}
+
+        <div class="flex flex-wrap gap-4 text-sm text-white/60">
+          {profile.location && <span>📍 {profile.location}</span>}
+          {profile.country && <span>{profile.country}</span>}
+        </div>
+
+        {skills.length > 0 && (
+          <div class="flex flex-wrap gap-2">
+            {skills.map((skill) => (
+              <span class="rounded-full bg-teal/20 px-3 py-1 text-xs font-medium text-white/80">
+                {skill}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div class="flex flex-wrap gap-4 text-sm text-white/60">
+          {profile.openToFreelance && <span>Open to freelance</span>}
+          {profile.openToRoles && <span>Open to roles</span>}
+          {!profile.openToFreelance && !profile.openToRoles && (
+            <span>Availability not specified</span>
+          )}
+        </div>
+
+        <div class="flex flex-wrap gap-4 text-sm">
+          {profile.portfolioUrl && (
+            <a
+              href={profile.portfolioUrl}
+              class="text-primary hover:underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Portfolio
+            </a>
+          )}
+          {profile.linkedinUrl && (
+            <a
+              href={profile.linkedinUrl}
+              class="text-primary hover:underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              LinkedIn
+            </a>
+          )}
+        </div>
+      </div>
+    </Card>
+
+    {profile.highlights.length > 0 && (
+      <Card>
+        <h3 class="mb-4 text-lg font-semibold text-white">
+          Highlighted Projects
+        </h3>
+        <div class="space-y-4">
+          {profile.highlights.map((h) => (
+            <div class="rounded-md border border-teal/10 p-4">
+              <div class="flex items-start justify-between">
+                <a
+                  href={h.repoUrl}
+                  class="font-medium text-primary hover:underline"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {h.repoFullName}
+                </a>
+                <span class="text-xs text-white/40">
+                  {h.stars > 0 && `★ ${h.stars}`}
+                  {h.language && (
+                    <span class="ml-2">{h.language}</span>
+                  )}
+                </span>
+              </div>
+              {h.description && (
+                <p class="mt-1 text-sm text-white/60">{h.description}</p>
+              )}
+              {h.blurb && (
+                <p class="mt-1 text-sm italic text-white/80">{h.blurb}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
+    )}
+
+    <Card>
+      <h3 class="mb-4 text-lg font-semibold text-white">Actions</h3>
+      {allowed.length > 0 ? (
+        <div class="flex flex-wrap gap-2">
+          {allowed.map((status) => (
+            <form method="POST">
+              <input type="hidden" name="status" value={status} />
+              <button
+                type="submit"
+                class:list={[
+                  "rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                  TRANSITION_COLORS[status] ?? "bg-teal/30 text-white hover:bg-teal/40",
+                ]}
+              >
+                {transitionLabel(status, profile.status)}
+              </button>
+            </form>
+          ))}
+        </div>
+      ) : (
+        <p class="text-sm text-white/40">
+          Waiting on the builder — no actions available for draft profiles.
+        </p>
+      )}
+    </Card>
+  </div>
+</AdminLayout>

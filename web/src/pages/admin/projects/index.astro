@@ -1,0 +1,134 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import Badge from "@/components/common/Badge.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { env } from "cloudflare:workers";
+import { budgetLabel } from "@/lib/talent/budget";
+
+const db = drizzle(env.DB, { schema });
+
+const statusFilter = Astro.url.searchParams.get("status");
+const statuses = ["PENDING", "APPROVED", "REJECTED", "MATCHED", "CLOSED"] as const;
+
+const allProjects = await db.query.clientProject.findMany({
+  with: { projectInterests: { columns: { id: true } } },
+});
+
+const filtered = statusFilter
+  ? allProjects.filter((p) => p.status === statusFilter)
+  : allProjects;
+
+const STATUS_ORDER: Record<string, number> = {
+  PENDING: 0,
+  APPROVED: 1,
+  MATCHED: 2,
+  REJECTED: 3,
+  CLOSED: 4,
+};
+
+const projects = filtered.sort((a, b) => {
+  const aOrder = STATUS_ORDER[a.status] ?? 99;
+  const bOrder = STATUS_ORDER[b.status] ?? 99;
+  if (aOrder !== bOrder) return aOrder - bOrder;
+  const aTime = a.createdAt?.getTime() ?? 0;
+  const bTime = b.createdAt?.getTime() ?? 0;
+  return bTime - aTime;
+});
+---
+
+<AdminLayout title="Client Projects">
+  <div class="space-y-6">
+    <h2 class="text-2xl font-bold text-white">Client Projects</h2>
+
+    <div class="flex flex-wrap gap-2">
+      <a
+        href="/admin/projects"
+        class:list={[
+          "rounded-full px-3 py-1 text-sm font-medium transition-colors",
+          !statusFilter
+            ? "bg-primary text-dark"
+            : "bg-teal/20 text-white/60 hover:text-white",
+        ]}
+      >
+        All
+      </a>
+      {statuses.map((s) => (
+        <a
+          href={`/admin/projects?status=${s}`}
+          class:list={[
+            "rounded-full px-3 py-1 text-sm font-medium capitalize transition-colors",
+            statusFilter === s
+              ? "bg-primary text-dark"
+              : "bg-teal/20 text-white/60 hover:text-white",
+          ]}
+        >
+          {s.toLowerCase()}
+        </a>
+      ))}
+    </div>
+
+    <div class="overflow-x-auto rounded-lg border border-teal/20">
+      <table class="w-full text-left text-sm">
+        <thead class="bg-teal/30 text-xs uppercase text-white/80">
+          <tr>
+            <th class="px-4 py-3 font-medium">Organization</th>
+            <th class="px-4 py-3 font-medium">Title</th>
+            <th class="px-4 py-3 font-medium">Budget</th>
+            <th class="px-4 py-3 font-medium">Timeline</th>
+            <th class="px-4 py-3 font-medium">Status</th>
+            <th class="px-4 py-3 font-medium">Interest</th>
+            <th class="px-4 py-3 font-medium">Created</th>
+            <th class="px-4 py-3 font-medium">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-teal/10">
+          {projects.length === 0 ? (
+            <tr>
+              <td colspan="8" class="px-4 py-8 text-center text-white/40">
+                {statusFilter
+                  ? `No ${statusFilter.toLowerCase()} projects found.`
+                  : "No client projects yet. Projects appear here when clients submit them."}
+              </td>
+            </tr>
+          ) : (
+            projects.map((project) => (
+              <tr class="text-white/80 hover:bg-teal/10">
+                <td class="px-4 py-3">{project.organization}</td>
+                <td class="px-4 py-3">{project.title}</td>
+                <td class="px-4 py-3">{budgetLabel(project.budgetBand)}</td>
+                <td class="px-4 py-3">{project.timeline ?? "—"}</td>
+                <td class="px-4 py-3">
+                  <Badge
+                    variant={
+                      project.status.toLowerCase() as
+                        | "pending"
+                        | "approved"
+                        | "rejected"
+                        | "matched"
+                        | "closed"
+                    }
+                  />
+                </td>
+                <td class="px-4 py-3">{project.projectInterests.length}</td>
+                <td class="px-4 py-3">
+                  {project.createdAt
+                    ? new Date(project.createdAt).toLocaleDateString()
+                    : "—"}
+                </td>
+                <td class="px-4 py-3">
+                  <a
+                    href={`/admin/projects/${project.id}`}
+                    class="text-primary hover:underline"
+                  >
+                    View
+                  </a>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</AdminLayout>
