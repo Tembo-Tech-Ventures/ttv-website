@@ -1,12 +1,201 @@
 ---
 import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import Card from "@/components/common/Card.astro";
+import Badge from "@/components/common/Badge.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { eq, and, desc } from "drizzle-orm";
+import { env } from "cloudflare:workers";
+
+const user = Astro.locals.user!;
+const db = drizzle(env.DB, { schema });
+
+const profile = await db.query.studentProfile.findFirst({
+  where: eq(schema.studentProfile.userId, user.id),
+  columns: { id: true },
+});
+
+let error = "";
+let success = "";
+
+if (Astro.request.method === "POST" && profile) {
+  const formData = await Astro.request.formData();
+  const contactId = formData.get("contactId") as string;
+  const newStatus = formData.get("status") as string;
+
+  if (!contactId || !["READ", "ARCHIVED"].includes(newStatus)) {
+    error = "Invalid request.";
+  } else {
+    const contact = await db.query.profileContact.findFirst({
+      where: and(
+        eq(schema.profileContact.id, contactId),
+        eq(schema.profileContact.profileId, profile.id),
+      ),
+      columns: { id: true },
+    });
+
+    if (!contact) {
+      error = "Lead not found.";
+    } else {
+      await db
+        .update(schema.profileContact)
+        .set({ status: newStatus as "READ" | "ARCHIVED" })
+        .where(
+          and(
+            eq(schema.profileContact.id, contactId),
+            eq(schema.profileContact.profileId, profile.id),
+          ),
+        );
+      success =
+        newStatus === "READ" ? "Marked as read." : "Lead archived.";
+    }
+  }
+}
+
+const contacts = profile
+  ? await db.query.profileContact.findMany({
+      where: eq(schema.profileContact.profileId, profile.id),
+      orderBy: [desc(schema.profileContact.createdAt)],
+    })
+  : [];
+
+const unreadCount = contacts.filter((c) => c.status === "NEW").length;
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 ---
 
 <DashboardLayout title="Leads">
-  <div class="mx-auto max-w-3xl py-12 text-center">
-    <h1 class="text-2xl font-semibold text-white">Leads</h1>
-    <p class="mt-4 text-ink-secondary">
-      Inbound leads from your profile are coming together — check back soon.
-    </p>
+  <div class="space-y-6">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <h2 class="text-2xl font-bold text-white">Leads</h2>
+        <p class="mt-1 text-ink-secondary">
+          Messages from people who found you through your profile.
+        </p>
+      </div>
+      {unreadCount > 0 && (
+        <span class="rounded-full bg-primary/20 px-3 py-1 text-sm font-medium text-primary">
+          {unreadCount} unread
+        </span>
+      )}
+    </div>
+
+    {success && (
+      <div class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-300">
+        {success}
+      </div>
+    )}
+
+    {error && (
+      <div class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
+        {error}
+      </div>
+    )}
+
+    {!profile && (
+      <Card>
+        <div class="py-8 text-center">
+          <h3 class="text-lg font-semibold text-white">
+            Set up your portfolio first
+          </h3>
+          <p class="mx-auto mt-2 max-w-md text-ink-secondary">
+            Create your portfolio profile so people can find and reach you.
+          </p>
+          <a
+            href="/dashboard/portfolio"
+            class="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 font-medium text-dark transition-colors hover:bg-primary/90"
+          >
+            Create Portfolio
+          </a>
+        </div>
+      </Card>
+    )}
+
+    {profile && contacts.length === 0 && (
+      <Card>
+        <div class="py-8 text-center">
+          <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-teal/20">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-teal" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <p class="text-lg font-semibold text-white">No leads yet</p>
+          <p class="mx-auto mt-2 max-w-md text-ink-secondary">
+            When someone reaches you through your public profile, their note
+            lands here.
+          </p>
+        </div>
+      </Card>
+    )}
+
+    {profile && contacts.length > 0 && (
+      <div class="space-y-3">
+        {contacts.map((contact) => (
+          <Card class:list={[
+            contact.status === "NEW" && "border-primary/40",
+          ]}>
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div class="min-w-0 flex-1 space-y-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="font-medium text-white">
+                    {contact.fromName}
+                  </span>
+                  <Badge variant={contact.status.toLowerCase() as "new" | "read" | "archived"} />
+                  {contact.organization && (
+                    <span class="text-sm text-ink-muted">
+                      {contact.organization}
+                    </span>
+                  )}
+                </div>
+                <p class="text-sm text-ink-secondary">{contact.message}</p>
+                <div class="flex flex-wrap items-center gap-3 text-xs text-ink-muted">
+                  <a
+                    href={`mailto:${contact.fromEmail}`}
+                    class="text-primary hover:underline"
+                    target="_blank"
+                    rel="noopener noreferrer nofollow"
+                  >
+                    {contact.fromEmail}
+                  </a>
+                  <span>{formatDate(contact.createdAt)}</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                {contact.status === "NEW" && (
+                  <form method="POST">
+                    <input type="hidden" name="contactId" value={contact.id} />
+                    <input type="hidden" name="status" value="READ" />
+                    <button
+                      type="submit"
+                      class="rounded-md border border-teal/40 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-teal/20"
+                    >
+                      Mark Read
+                    </button>
+                  </form>
+                )}
+                {contact.status !== "ARCHIVED" && (
+                  <form method="POST">
+                    <input type="hidden" name="contactId" value={contact.id} />
+                    <input type="hidden" name="status" value="ARCHIVED" />
+                    <button
+                      type="submit"
+                      class="rounded-md border border-teal/40 px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:bg-teal/20"
+                    >
+                      Archive
+                    </button>
+                  </form>
+                )}
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+    )}
   </div>
 </DashboardLayout>

@@ -1,0 +1,269 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import Card from "@/components/common/Card.astro";
+import Badge from "@/components/common/Badge.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+import { env } from "cloudflare:workers";
+import { PROJECT_TRANSITIONS } from "@/lib/talent/transitions";
+import { budgetLabel } from "@/lib/talent/budget";
+import { parseSkillsJson } from "@/lib/talent/profile";
+import {
+  validateProjectTransition,
+  separateInterests,
+} from "@/lib/talent/admin-review";
+
+const db = drizzle(env.DB, { schema });
+const { id } = Astro.params;
+
+if (!id) return Astro.redirect("/admin/projects");
+
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  const newStatus = formData.get("status") as string;
+
+  const current = await db.query.clientProject.findFirst({
+    where: eq(schema.clientProject.id, id),
+    columns: { status: true },
+  });
+
+  if (!current) return Astro.redirect("/admin/projects");
+
+  const validation = validateProjectTransition(current.status, newStatus);
+  if (!validation.valid) {
+    return new Response(validation.reason, { status: 400 });
+  }
+
+  await db
+    .update(schema.clientProject)
+    .set({
+      status: newStatus as
+        | "PENDING"
+        | "APPROVED"
+        | "REJECTED"
+        | "MATCHED"
+        | "CLOSED",
+    })
+    .where(eq(schema.clientProject.id, id));
+
+  return Astro.redirect(`/admin/projects/${id}`);
+}
+
+const project = await db.query.clientProject.findFirst({
+  where: eq(schema.clientProject.id, id),
+  with: {
+    projectInterests: {
+      with: {
+        profile: {
+          with: { user: true },
+        },
+      },
+      orderBy: (pi, { desc }) => [desc(pi.createdAt)],
+    },
+  },
+});
+
+if (!project) return Astro.redirect("/admin/projects");
+
+const skills = parseSkillsJson(project.skills);
+const allowed = PROJECT_TRANSITIONS[project.status] ?? [];
+
+const { interested, withdrawn } = separateInterests(project.projectInterests);
+
+const TRANSITION_LABELS: Record<string, string> = {
+  APPROVED: "Approve",
+  REJECTED: "Reject",
+  MATCHED: "Mark matched",
+  CLOSED: "Close",
+};
+
+const TRANSITION_COLORS: Record<string, string> = {
+  APPROVED: "bg-green-600 text-white hover:bg-green-700",
+  REJECTED: "bg-red-600 text-white hover:bg-red-700",
+  MATCHED: "bg-indigo-600 text-white hover:bg-indigo-700",
+  CLOSED: "bg-gray-600 text-white hover:bg-gray-700",
+};
+---
+
+<AdminLayout title="Project Detail">
+  <div class="space-y-6">
+    <a href="/admin/projects" class="text-sm text-primary hover:underline">
+      &larr; Back to Client Projects
+    </a>
+
+    <div class="flex items-center gap-3">
+      <h2 class="text-2xl font-bold text-white">{project.title}</h2>
+      <Badge
+        variant={
+          project.status.toLowerCase() as
+            | "pending"
+            | "approved"
+            | "rejected"
+            | "matched"
+            | "closed"
+        }
+      />
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-2">
+      <Card>
+        <h3 class="mb-4 text-lg font-semibold text-white">Client Contact</h3>
+        <dl class="space-y-2 text-sm">
+          <div class="flex justify-between">
+            <dt class="text-white/60">Organization</dt>
+            <dd class="text-white">{project.organization}</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-white/60">Contact Name</dt>
+            <dd class="text-white">{project.contactName}</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-white/60">Contact Email</dt>
+            <dd>
+              <a
+                href={`mailto:${project.contactEmail}`}
+                class="text-primary hover:underline"
+              >
+                {project.contactEmail}
+              </a>
+            </dd>
+          </div>
+        </dl>
+      </Card>
+
+      <Card>
+        <h3 class="mb-4 text-lg font-semibold text-white">Project Details</h3>
+        <dl class="space-y-2 text-sm">
+          <div class="flex justify-between">
+            <dt class="text-white/60">Budget</dt>
+            <dd class="text-white">{budgetLabel(project.budgetBand)}</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-white/60">Timeline</dt>
+            <dd class="text-white">{project.timeline ?? "—"}</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-white/60">Submitted</dt>
+            <dd class="text-white">
+              {project.createdAt
+                ? new Date(project.createdAt).toLocaleDateString()
+                : "—"}
+            </dd>
+          </div>
+        </dl>
+      </Card>
+    </div>
+
+    <Card>
+      <h3 class="mb-4 text-lg font-semibold text-white">Description</h3>
+      <p class="text-sm text-white/80">{project.description}</p>
+
+      {skills.length > 0 && (
+        <div class="mt-4 flex flex-wrap gap-2">
+          {skills.map((skill) => (
+            <span class="rounded-full bg-teal/20 px-3 py-1 text-xs font-medium text-white/80">
+              {skill}
+            </span>
+          ))}
+        </div>
+      )}
+    </Card>
+
+    <Card>
+      <h3 class="mb-4 text-lg font-semibold text-white">
+        Interested Builders
+      </h3>
+      {interested.length === 0 && withdrawn.length === 0 ? (
+        <p class="text-sm text-white/40">
+          No builders have raised a hand yet.
+        </p>
+      ) : (
+        <div class="space-y-6">
+          {interested.length > 0 && (
+            <div class="space-y-3">
+              {interested.map((pi) => (
+                <div class="rounded-md border border-teal/10 p-4">
+                  <div class="flex items-center gap-3">
+                    <span class="font-medium text-white">
+                      {pi.profile.user?.name ?? "Unknown"}
+                    </span>
+                    <a
+                      href={`/talent/${pi.profile.handle}`}
+                      class="text-sm text-primary hover:underline"
+                    >
+                      @{pi.profile.handle}
+                    </a>
+                    <a
+                      href={`/admin/profiles/${pi.profile.id}`}
+                      class="text-sm text-white/40 hover:text-white/60"
+                    >
+                      admin profile
+                    </a>
+                    <Badge variant="interested" />
+                  </div>
+                  {pi.note && (
+                    <p class="mt-2 text-sm text-white/60">{pi.note}</p>
+                  )}
+                  {pi.createdAt && (
+                    <p class="mt-1 text-xs text-white/30">
+                      {new Date(pi.createdAt).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {withdrawn.length > 0 && (
+            <div class="space-y-3 opacity-50">
+              <p class="text-xs uppercase text-white/40">Withdrawn</p>
+              {withdrawn.map((pi) => (
+                <div class="rounded-md border border-teal/10 p-3">
+                  <div class="flex items-center gap-3">
+                    <span class="text-sm text-white/60">
+                      {pi.profile.user?.name ?? "Unknown"}
+                    </span>
+                    <a
+                      href={`/talent/${pi.profile.handle}`}
+                      class="text-xs text-white/40 hover:underline"
+                    >
+                      @{pi.profile.handle}
+                    </a>
+                    <Badge variant="withdrawn" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+
+    <Card>
+      <h3 class="mb-4 text-lg font-semibold text-white">Actions</h3>
+      {allowed.length > 0 ? (
+        <div class="flex flex-wrap gap-2">
+          {allowed.map((status) => (
+            <form method="POST">
+              <input type="hidden" name="status" value={status} />
+              <button
+                type="submit"
+                class:list={[
+                  "rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                  TRANSITION_COLORS[status] ?? "bg-teal/30 text-white hover:bg-teal/40",
+                ]}
+              >
+                {TRANSITION_LABELS[status] ?? status}
+              </button>
+            </form>
+          ))}
+        </div>
+      ) : (
+        <p class="text-sm text-white/40">
+          No actions available — this project is in a terminal state.
+        </p>
+      )}
+    </Card>
+  </div>
+</AdminLayout>
