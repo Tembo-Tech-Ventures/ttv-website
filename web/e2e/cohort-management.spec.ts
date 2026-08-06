@@ -91,7 +91,7 @@ test.describe("admin cohort management", () => {
       const dialogPromise = page.waitForEvent("dialog");
       const inputPromise =
         viewport === "mobile"
-          ? page.touchscreen.tap(x, y)
+          ? button.tap()
           : page.mouse.click(x, y);
       const dialog = await dialogPromise;
       expect(dialog.message()).toMatch(expectedMessage);
