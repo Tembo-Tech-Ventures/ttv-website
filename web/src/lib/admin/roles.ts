@@ -1,6 +1,7 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
+import { isAgentSession } from "@/lib/agent-auth";
 
 export const ADMIN_ROLE_NAME = "ADMIN";
 
@@ -8,6 +9,7 @@ export type AdminRoleErrorCode =
   | "ADMIN_ROLE_MISSING"
   | "USER_NOT_FOUND"
   | "CANNOT_REVOKE_SELF"
+  | "AGENT_SESSION_FORBIDDEN"
   | "LAST_ADMIN";
 
 const ERROR_MESSAGES: Record<AdminRoleErrorCode, string> = {
@@ -15,6 +17,8 @@ const ERROR_MESSAGES: Record<AdminRoleErrorCode, string> = {
     "The ADMIN role is missing. Apply the latest database migrations before changing access.",
   USER_NOT_FOUND: "The selected user no longer exists.",
   CANNOT_REVOKE_SELF: "You cannot remove your own ADMIN role.",
+  AGENT_SESSION_FORBIDDEN:
+    "Agent-authenticated sessions cannot change persistent ADMIN access. Sign in with a browser session.",
   LAST_ADMIN:
     "This ADMIN role cannot be removed because at least one administrator must remain.",
 };
@@ -34,9 +38,8 @@ export interface AdminRoleStore {
   findRoleByName(name: string): Promise<RoleRecord | undefined>;
   userExists(userId: string): Promise<boolean>;
   hasRole(userId: string, roleId: string): Promise<boolean>;
-  addRole(userId: string, roleId: string): Promise<void>;
-  countUsersWithRole(roleId: string): Promise<number>;
-  removeRole(userId: string, roleId: string): Promise<void>;
+  grantRole(userId: string, roleId: string): Promise<boolean>;
+  revokeRoleIfOtherAdminExists(userId: string, roleId: string): Promise<boolean>;
 }
 
 export interface AdminRoleChange {
@@ -68,25 +71,27 @@ export function createDrizzleAdminRoleStore(db: Database): AdminRoleStore {
       });
       return Boolean(found);
     },
-    async addRole(userId, roleId) {
-      await db.insert(schema.userRole).values({ userId, roleId });
+    async grantRole(userId, roleId) {
+      const result = await db.run(sql`
+        INSERT INTO "UserRoles" ("id", "userId", "roleId")
+        VALUES (lower(hex(randomblob(16))), ${userId}, ${roleId})
+        ON CONFLICT ("userId", "roleId") DO NOTHING
+      `);
+      return (result.meta.changes ?? 0) > 0;
     },
-    async countUsersWithRole(roleId) {
-      const rows = await db
-        .selectDistinct({ userId: schema.userRole.userId })
-        .from(schema.userRole)
-        .where(eq(schema.userRole.roleId, roleId));
-      return rows.length;
-    },
-    async removeRole(userId, roleId) {
-      await db
-        .delete(schema.userRole)
-        .where(
-          and(
-            eq(schema.userRole.userId, userId),
-            eq(schema.userRole.roleId, roleId)
+    async revokeRoleIfOtherAdminExists(userId, roleId) {
+      const result = await db.run(sql`
+        DELETE FROM "UserRoles"
+        WHERE "userId" = ${userId}
+          AND "roleId" = ${roleId}
+          AND EXISTS (
+            SELECT 1
+            FROM "UserRoles" AS "otherAdmin"
+            WHERE "otherAdmin"."roleId" = ${roleId}
+              AND "otherAdmin"."userId" <> ${userId}
           )
-        );
+      `);
+      return (result.meta.changes ?? 0) > 0;
     },
   };
 }
@@ -114,12 +119,7 @@ export async function assignAdminRole(
   targetUserId: string
 ): Promise<AdminRoleChange> {
   const adminRole = await requireRoleAndUser(store, targetUserId);
-  if (await store.hasRole(targetUserId, adminRole.id)) {
-    return { changed: false };
-  }
-
-  await store.addRole(targetUserId, adminRole.id);
-  return { changed: true };
+  return { changed: await store.grantRole(targetUserId, adminRole.id) };
 }
 
 export async function revokeAdminRole(
@@ -133,16 +133,26 @@ export async function revokeAdminRole(
     throw new AdminRoleOperationError("CANNOT_REVOKE_SELF");
   }
 
-  if (!(await store.hasRole(targetUserId, adminRole.id))) {
-    return { changed: false };
+  if (await store.revokeRoleIfOtherAdminExists(targetUserId, adminRole.id)) {
+    return { changed: true };
   }
 
-  if ((await store.countUsersWithRole(adminRole.id)) <= 1) {
+  if (await store.hasRole(targetUserId, adminRole.id)) {
     throw new AdminRoleOperationError("LAST_ADMIN");
   }
+  return { changed: false };
+}
 
-  await store.removeRole(targetUserId, adminRole.id);
-  return { changed: true };
+export function assertPersistentAdminRoleMutationAllowed(
+  action: unknown,
+  userAgent: string | null | undefined
+): void {
+  const changesPersistentAccess =
+    action === "add-admin" || action === "remove-admin";
+
+  if (changesPersistentAccess && isAgentSession(userAgent)) {
+    throw new AdminRoleOperationError("AGENT_SESSION_FORBIDDEN");
+  }
 }
 
 export function adminRoleErrorMessage(error: unknown): string {
