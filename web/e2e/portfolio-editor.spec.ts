@@ -85,7 +85,7 @@ test.describe("authenticated portfolio editor", () => {
     await page.waitForLoadState("networkidle");
 
     await expect(
-      page.getByText(/profile saved/i).or(page.locator('input[name="handle"]')),
+      page.getByText(/profile saved/i).or(page.locator('input[name="handle"]')).first(),
     ).toBeVisible();
 
     await page.reload();
@@ -146,7 +146,7 @@ test.describe("authenticated portfolio editor", () => {
     await expect(page).toHaveURL(/\/dashboard\/leads/);
 
     await expect(
-      page.getByRole("heading", { name: /leads/i }),
+      page.getByRole("heading", { name: "Leads", exact: true }),
     ).toBeVisible();
 
     const hasContent = await page
