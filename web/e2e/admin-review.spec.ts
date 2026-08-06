@@ -54,10 +54,14 @@ test.describe("admin review surfaces", () => {
   }) => {
     const isMobile = (viewport?.width ?? 1280) < 1024;
 
-    await page.goto("/admin/profiles");
-    const kwameRow = page.locator("tr", { hasText: "Kwame Fixture" });
-    await expect(kwameRow).toBeVisible();
-    await kwameRow.getByRole("link", { name: "View" }).click();
+    if (isMobile) {
+      await page.goto("/admin/profiles/ttv-fixture-profile-kwame");
+    } else {
+      await page.goto("/admin/profiles");
+      const kwameRow = page.locator("tr", { hasText: "Kwame Fixture" });
+      await expect(kwameRow).toBeVisible();
+      await kwameRow.getByRole("link", { name: "View" }).click();
+    }
 
     await expect(
       page.getByRole("heading", { name: /profile/i })
@@ -70,42 +74,54 @@ test.describe("admin review surfaces", () => {
 
     if (isMobile) return;
 
-    const badge = page.locator("h2 + span, .flex.items-center.gap-3 span").first();
-    const statusText = (await badge.textContent())?.trim().toUpperCase().replace(" ", "_") ?? "";
+    const statusBadge = page.locator(".flex.items-center.gap-3 span").first();
+    const statusText =
+      (await statusBadge.textContent())
+        ?.trim()
+        .toUpperCase()
+        .replace(" ", "_") ?? "";
 
     if (statusText === "IN_REVIEW") {
       await page.getByRole("button", { name: /publish/i }).click();
-      await expect(page.locator("span", { hasText: /published/i }).first()).toBeVisible();
+      await expect(
+        page.locator("span", { hasText: /published/i }).first()
+      ).toBeVisible();
     }
 
-    const currentStatus1 = (
-      await page
-        .locator(".flex.items-center.gap-3 span")
-        .first()
-        .textContent()
-    )
-      ?.trim()
-      .toUpperCase()
-      .replace(" ", "_") ?? "";
+    const currentStatus1 =
+      (
+        await page
+          .locator(".flex.items-center.gap-3 span")
+          .first()
+          .textContent()
+      )
+        ?.trim()
+        .toUpperCase()
+        .replace(" ", "_") ?? "";
 
     if (currentStatus1 === "PUBLISHED") {
       await page.getByRole("button", { name: /suspend/i }).click();
-      await expect(page.locator("span", { hasText: /suspended/i }).first()).toBeVisible();
+      await expect(
+        page.locator("span", { hasText: /suspended/i }).first()
+      ).toBeVisible();
     }
 
-    const currentStatus2 = (
-      await page
-        .locator(".flex.items-center.gap-3 span")
-        .first()
-        .textContent()
-    )
-      ?.trim()
-      .toUpperCase()
-      .replace(" ", "_") ?? "";
+    const currentStatus2 =
+      (
+        await page
+          .locator(".flex.items-center.gap-3 span")
+          .first()
+          .textContent()
+      )
+        ?.trim()
+        .toUpperCase()
+        .replace(" ", "_") ?? "";
 
     if (currentStatus2 === "SUSPENDED") {
       await page.getByRole("button", { name: /republish/i }).click();
-      await expect(page.locator("span", { hasText: /published/i }).first()).toBeVisible();
+      await expect(
+        page.locator("span", { hasText: /published/i }).first()
+      ).toBeVisible();
     }
 
     await page.screenshot({
@@ -135,10 +151,14 @@ test.describe("admin review surfaces", () => {
   test("pending project convergent journey", async ({ page, viewport }) => {
     const isMobile = (viewport?.width ?? 1280) < 1024;
 
-    await page.goto("/admin/projects");
-    const row = page.locator("tr", { hasText: "Clinic booking website" });
-    await expect(row).toBeVisible();
-    await row.getByRole("link", { name: "View" }).click();
+    if (isMobile) {
+      await page.goto("/admin/projects/ttv-fixture-project-pending");
+    } else {
+      await page.goto("/admin/projects");
+      const row = page.locator("tr", { hasText: "Clinic booking website" });
+      await expect(row).toBeVisible();
+      await row.getByRole("link", { name: "View" }).click();
+    }
 
     await expect(
       page.getByRole("heading", { name: /clinic booking website/i })
@@ -179,13 +199,20 @@ test.describe("admin review surfaces", () => {
 
   test("approved project detail shows interested builders section", async ({
     page,
+    viewport,
   }) => {
-    await page.goto("/admin/projects");
-    const row = page.locator("tr", {
-      hasText: "Delivery tracking dashboard",
-    });
-    await expect(row).toBeVisible();
-    await row.getByRole("link", { name: "View" }).click();
+    const isMobile = (viewport?.width ?? 1280) < 1024;
+
+    if (isMobile) {
+      await page.goto("/admin/projects/ttv-fixture-project-approved");
+    } else {
+      await page.goto("/admin/projects");
+      const row = page.locator("tr", {
+        hasText: "Delivery tracking dashboard",
+      });
+      await expect(row).toBeVisible();
+      await row.getByRole("link", { name: "View" }).click();
+    }
 
     await expect(
       page.getByRole("heading", { name: /delivery tracking dashboard/i })
