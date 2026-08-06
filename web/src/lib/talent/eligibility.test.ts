@@ -21,17 +21,23 @@ describe("hasCompletedCohort", () => {
     expect(await hasCompletedCohort(db, "user-1")).toBe(false);
   });
 
-  it("returns false when user has applications but none completed", async () => {
-    const db = createMockDb([{ id: "app-1", status: "PENDING" }, undefined]);
+  it("returns false when the COMPLETED-filtered lookup finds nothing", async () => {
+    const db = createMockDb([undefined]);
     expect(await hasCompletedCohort(db, "user-1")).toBe(false);
   });
 
   it("returns true when user has a completed application", async () => {
-    const db = createMockDb([
-      { id: "app-1", status: "COMPLETED" },
-      { id: "app-1" },
-    ]);
+    const db = createMockDb([{ id: "app-1" }]);
     expect(await hasCompletedCohort(db, "user-1")).toBe(true);
+  });
+
+  it("issues a single query", async () => {
+    const db = createMockDb([{ id: "app-1" }]);
+    await hasCompletedCohort(db, "user-1");
+    expect(
+      (db as unknown as { query: { programApplication: { findFirst: ReturnType<typeof vi.fn> } } })
+        .query.programApplication.findFirst
+    ).toHaveBeenCalledTimes(1);
   });
 });
 

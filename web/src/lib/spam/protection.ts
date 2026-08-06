@@ -3,6 +3,7 @@ import { formSubmissionLog } from "@/lib/db/schema";
 import { and, eq, gt, lt, count } from "drizzle-orm";
 
 export const HONEYPOT_FIELD = "website_confirm";
+export const FORM_TOKEN_FIELD = "_form_token";
 
 const TOKEN_SEPARATOR = ".";
 const MIN_FILL_SECONDS = 3;
@@ -32,6 +33,17 @@ async function hmacSign(
     .join("");
 }
 
+function timingSafeEqualHex(a: string, b: string): boolean {
+  // Compare every character regardless of where the first mismatch occurs so
+  // signature verification does not leak a timing side-channel.
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 export async function issueFormToken(
   secret: string,
   now: number = Date.now()
@@ -52,7 +64,7 @@ export async function validateFormToken(
   const ts = token.slice(0, sepIndex);
   const sig = token.slice(sepIndex + 1);
   const expected = await hmacSign(secret, ts);
-  if (sig !== expected) return false;
+  if (!timingSafeEqualHex(sig, expected)) return false;
 
   const age = Math.floor(now / 1000) - parseInt(ts, 10);
   return age >= MIN_FILL_SECONDS && age <= MAX_FILL_SECONDS;
@@ -128,7 +140,7 @@ export async function guardPublicForm({
     return { ok: true, silent: true };
   }
 
-  const token = formData.get("_form_token") as string | null;
+  const token = formData.get(FORM_TOKEN_FIELD) as string | null;
   if (!token || !(await validateFormToken(secret, token, currentTime))) {
     return { ok: false, reason: "token" };
   }
