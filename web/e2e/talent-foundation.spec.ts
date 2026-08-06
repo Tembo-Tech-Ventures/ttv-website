@@ -4,6 +4,11 @@ import { mkdirSync } from "fs";
 const EVIDENCE_DIR = "test-results/evidence";
 mkdirSync(EVIDENCE_DIR, { recursive: true });
 
+// Both Playwright projects run these tests in parallel; the project name in
+// the filename keeps their evidence screenshots from clobbering each other.
+const evidence = (name: string) =>
+  `${EVIDENCE_DIR}/${test.info().project.name}-${name}.png`;
+
 test.describe("public talent stubs", () => {
   test("/talent returns 200 with heading", async ({ page }) => {
     const response = await page.goto("/talent");
@@ -12,7 +17,7 @@ test.describe("public talent stubs", () => {
       page.getByRole("heading", { name: /meet our/i })
     ).toBeVisible();
     await page.screenshot({
-      path: `${EVIDENCE_DIR}/talent-stub.png`,
+      path: evidence("talent-stub"),
       fullPage: true,
     });
   });
@@ -24,7 +29,7 @@ test.describe("public talent stubs", () => {
       page.getByRole("heading", { name: /work with/i })
     ).toBeVisible();
     await page.screenshot({
-      path: `${EVIDENCE_DIR}/hire-stub.png`,
+      path: evidence("hire-stub"),
       fullPage: true,
     });
   });
@@ -43,7 +48,7 @@ test.describe("authenticated talent foundation", () => {
       page.getByRole("heading", { name: /portfolio/i })
     ).toBeVisible();
     await page.screenshot({
-      path: `${EVIDENCE_DIR}/dashboard-portfolio.png`,
+      path: evidence("dashboard-portfolio"),
       fullPage: true,
     });
   });
@@ -54,7 +59,7 @@ test.describe("authenticated talent foundation", () => {
       page.getByRole("heading", { name: /leads/i })
     ).toBeVisible();
     await page.screenshot({
-      path: `${EVIDENCE_DIR}/dashboard-leads.png`,
+      path: evidence("dashboard-leads"),
       fullPage: true,
     });
   });
@@ -65,7 +70,7 @@ test.describe("authenticated talent foundation", () => {
       page.getByRole("heading", { name: /opportunities/i })
     ).toBeVisible();
     await page.screenshot({
-      path: `${EVIDENCE_DIR}/dashboard-opportunities.png`,
+      path: evidence("dashboard-opportunities"),
       fullPage: true,
     });
   });
@@ -76,7 +81,7 @@ test.describe("authenticated talent foundation", () => {
       page.getByRole("heading", { name: /profiles/i })
     ).toBeVisible();
     await page.screenshot({
-      path: `${EVIDENCE_DIR}/admin-profiles.png`,
+      path: evidence("admin-profiles"),
       fullPage: true,
     });
   });
@@ -87,7 +92,7 @@ test.describe("authenticated talent foundation", () => {
       page.getByRole("heading", { name: /client projects/i })
     ).toBeVisible();
     await page.screenshot({
-      path: `${EVIDENCE_DIR}/admin-projects.png`,
+      path: evidence("admin-projects"),
       fullPage: true,
     });
   });
@@ -111,7 +116,7 @@ test.describe("authenticated talent foundation", () => {
       page.getByRole("link", { name: "Opportunities" })
     ).toBeVisible();
     await page.screenshot({
-      path: `${EVIDENCE_DIR}/dashboard-nav.png`,
+      path: evidence("dashboard-nav"),
       fullPage: true,
     });
   });
@@ -134,7 +139,7 @@ test.describe("authenticated talent foundation", () => {
       page.getByRole("link", { name: "Client Projects" })
     ).toBeVisible();
     await page.screenshot({
-      path: `${EVIDENCE_DIR}/admin-nav.png`,
+      path: evidence("admin-nav"),
       fullPage: true,
     });
   });
