@@ -19,6 +19,7 @@ import {
 import {
   isAgentEnvironmentName,
   seedAgentPreviewAccess,
+  seedAgentPreviewFixtures,
 } from "./agent-preview-auth.mjs";
 
 async function main() {
@@ -77,6 +78,10 @@ async function main() {
       databaseId: d1Database.uuid,
       environmentName: context.environmentName,
       previewSecret: getOptionalEnv("AGENT_PREVIEW_SECRET") ?? "",
+      executeQuery: queryD1Database,
+    });
+    await seedAgentPreviewFixtures({
+      databaseId: d1Database.uuid,
       executeQuery: queryD1Database,
     });
   }
