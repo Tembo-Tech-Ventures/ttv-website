@@ -37,7 +37,8 @@ export type BulkProgramApplicationAction =
 export const APPLICATION_COMPLETION_CONFIRMATION =
   "Completing students immediately unlocks their certificates and builder portfolios. Continue?";
 
-export const MAX_BULK_SELECTION_SIZE = 500;
+export const D1_MAX_BOUND_PARAMETERS = 100;
+export const MAX_BULK_SELECTION_SIZE = 90;
 
 const ADMIN_ENROLLMENT_APPLICATION = JSON.stringify({
   enrollment: {
@@ -50,6 +51,7 @@ export type ProgramApplicationErrorCode =
   | "INVALID_STATUS"
   | "INVALID_TRANSITION"
   | "STALE_TRANSITION"
+  | "INVALID_COMPLETION_DATE"
   | "INVALID_ENROLLMENT_STATUS"
   | "UNKNOWN_PROGRAM"
   | "UNKNOWN_USER"
@@ -120,6 +122,49 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const clonedDate = (value: Date) => new Date(value.getTime());
 
+export const formatDateInputValue = (value = new Date()) =>
+  value.toISOString().slice(0, 10);
+
+export function parseCompletionDate(
+  value: unknown,
+  now = new Date()
+): Date {
+  const dateValue =
+    value === null || value === undefined || value === ""
+      ? formatDateInputValue(now)
+      : value;
+
+  if (
+    typeof dateValue !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(dateValue)
+  ) {
+    throw new ProgramApplicationError(
+      "INVALID_COMPLETION_DATE",
+      "Enter a completion date in YYYY-MM-DD format."
+    );
+  }
+
+  const parsed = new Date(dateValue + "T00:00:00.000Z");
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    formatDateInputValue(parsed) !== dateValue
+  ) {
+    throw new ProgramApplicationError(
+      "INVALID_COMPLETION_DATE",
+      "Enter a real completion date in YYYY-MM-DD format."
+    );
+  }
+
+  if (dateValue > formatDateInputValue(now)) {
+    throw new ProgramApplicationError(
+      "INVALID_COMPLETION_DATE",
+      "Completion date cannot be in the future."
+    );
+  }
+
+  return parsed;
+}
+
 const toEpochSeconds = (value: Date | null) =>
   value === null ? null : Math.floor(value.getTime() / 1_000);
 
@@ -163,12 +208,16 @@ export function toProgramApplicationBadgeVariant(
 
 export function createStatusMutation(
   status: ProgramApplicationStatus,
-  now = new Date()
+  now = new Date(),
+  completionDate?: unknown
 ): ProgramApplicationStatusMutation {
   const timestamp = clonedDate(now);
   return {
     status,
-    completedAt: status === "COMPLETED" ? clonedDate(timestamp) : null,
+    completedAt:
+      status === "COMPLETED"
+        ? parseCompletionDate(completionDate, timestamp)
+        : null,
     updatedAt: timestamp,
   };
 }
@@ -178,11 +227,13 @@ export function planApplicationTransition({
   currentStatus: currentValue,
   targetStatus: targetValue,
   now = new Date(),
+  completionDate,
 }: {
   expectedStatus: unknown;
   currentStatus: unknown;
   targetStatus: unknown;
   now?: Date;
+  completionDate?: unknown;
 }): ProgramApplicationTransitionPlan {
   const expectedStatus = parseProgramApplicationStatus(
     expectedValue,
@@ -217,7 +268,7 @@ export function planApplicationTransition({
 
   return {
     expectedStatus,
-    ...createStatusMutation(targetStatus, now),
+    ...createStatusMutation(targetStatus, now, completionDate),
   };
 }
 
@@ -243,12 +294,14 @@ export function createAdminEnrollment({
   userId,
   status: statusValue,
   now = new Date(),
+  completionDate,
 }: {
   id: string;
   programId: string;
   userId: string;
   status: unknown;
   now?: Date;
+  completionDate?: unknown;
 }): AdminEnrollmentRecord {
   const status = parseAdminEnrollmentStatus(statusValue);
   const timestamp = clonedDate(now);
@@ -259,7 +312,7 @@ export function createAdminEnrollment({
     userId,
     application: ADMIN_ENROLLMENT_APPLICATION,
     createdAt: clonedDate(timestamp),
-    ...createStatusMutation(status, timestamp),
+    ...createStatusMutation(status, timestamp, completionDate),
   };
 }
 
@@ -392,12 +445,14 @@ export function planBulkProgramApplicationMutation({
   applicationIds: selectedValues,
   applications,
   now = new Date(),
+  completionDate,
 }: {
   action: unknown;
   programId: string;
   applicationIds: readonly unknown[];
   applications: readonly BulkApplicationRecord[];
   now?: Date;
+  completionDate?: unknown;
 }): BulkProgramApplicationPlan {
   const action = parseBulkApplicationAction(actionValue);
   const applicationIds = parseSelectedApplicationIds(selectedValues);
@@ -437,7 +492,7 @@ export function planBulkProgramApplicationMutation({
     programId,
     applicationIds,
     allowedSourceStatuses: config.allowedSourceStatuses,
-    ...createStatusMutation(config.targetStatus, now),
+    ...createStatusMutation(config.targetStatus, now, completionDate),
   };
 }
 

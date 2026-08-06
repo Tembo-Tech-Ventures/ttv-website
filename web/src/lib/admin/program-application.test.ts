@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ADMIN_ENROLLMENT_STATUSES,
   APPLICATION_COMPLETION_CONFIRMATION,
+  D1_MAX_BOUND_PARAMETERS,
   MAX_BULK_SELECTION_SIZE,
   PROGRAM_APPLICATION_STATUSES,
   PROGRAM_APPLICATION_TRANSITIONS,
@@ -12,11 +13,13 @@ import {
   buildBulkMutationStatement,
   createAdminEnrollment,
   createStatusMutation,
+  formatDateInputValue,
   getAvailableApplicationTransitions,
   getEnrollmentSource,
   isProgramApplicationStatus,
   parseAdminEnrollmentStatus,
   parseBulkApplicationAction,
+  parseCompletionDate,
   parseProgramApplicationStatus,
   parseSelectedApplicationIds,
   planApplicationTransition,
@@ -28,7 +31,12 @@ import {
 } from "./program-application";
 
 const NOW = new Date("2026-08-06T12:34:56.789Z");
+const TODAY = new Date("2026-08-06T00:00:00.000Z");
+const HISTORICAL_COMPLETION = new Date("2025-04-12T00:00:00.000Z");
 const NOW_SECONDS = Math.floor(NOW.getTime() / 1_000);
+const HISTORICAL_COMPLETION_SECONDS = Math.floor(
+  HISTORICAL_COMPLETION.getTime() / 1_000
+);
 
 const expectDomainError = (
   callback: () => unknown,
@@ -153,6 +161,7 @@ describe("individual transitions", () => {
       currentStatus: "APPROVED",
       targetStatus: "COMPLETED",
       now: NOW,
+      completionDate: "2025-04-12",
     });
     const statement = buildApplicationTransitionStatement({
       applicationId: "app-1",
@@ -161,7 +170,7 @@ describe("individual transitions", () => {
     expect(statement.sql).toContain('WHERE "id" = ? AND "status" = ?');
     expect(statement.params).toEqual([
       "COMPLETED",
-      NOW_SECONDS,
+      HISTORICAL_COMPLETION_SECONDS,
       NOW_SECONDS,
       "app-1",
       "APPROVED",
@@ -171,17 +180,48 @@ describe("individual transitions", () => {
 });
 
 describe("completedAt behavior", () => {
-  it("stamps completion with the supplied operation time", () => {
+  it("defaults completion to today's UTC calendar date", () => {
     const mutation = createStatusMutation("COMPLETED", NOW);
-    expect(mutation.completedAt).toEqual(NOW);
+    expect(mutation.completedAt).toEqual(TODAY);
     expect(mutation.updatedAt).toEqual(NOW);
-    expect(mutation.completedAt).not.toBe(NOW);
+    expect(mutation.completedAt).not.toBe(TODAY);
+    expect(formatDateInputValue(NOW)).toBe("2026-08-06");
+  });
+
+  it("accepts an explicit historical YYYY-MM-DD date", () => {
+    expect(
+      parseCompletionDate("2025-04-12", NOW)
+    ).toEqual(HISTORICAL_COMPLETION);
+  });
+
+  it.each([
+    "2026-8-06",
+    " 2026-08-06",
+    "2026-02-29",
+    "2026-13-01",
+    new Date("2026-08-06T00:00:00.000Z"),
+  ])("rejects malformed or unreal completion date %j", (value) => {
+    expectDomainError(
+      () => parseCompletionDate(value, NOW),
+      "INVALID_COMPLETION_DATE",
+      "date"
+    );
+  });
+
+  it("rejects a future completion date", () => {
+    expectDomainError(
+      () => parseCompletionDate("2026-08-07", NOW),
+      "INVALID_COMPLETION_DATE",
+      "future"
+    );
   });
 
   it.each(["PENDING", "APPROVED", "REJECTED", "AUDIT"] as const)(
-    "clears completedAt for %s",
+    "clears completedAt for %s even when a date is supplied",
     (status) => {
-      expect(createStatusMutation(status, NOW).completedAt).toBeNull();
+      expect(
+        createStatusMutation(status, NOW, "2099-01-01").completedAt
+      ).toBeNull();
     }
   );
 });
@@ -207,12 +247,13 @@ describe("admin enrollment", () => {
       userId: "user-1",
       status: "COMPLETED",
       now: NOW,
+      completionDate: "2025-04-12",
     });
     expect(JSON.parse(enrollment.application)).toEqual({
       enrollment: { source: "ADMIN", schemaVersion: 1 },
     });
     expect(enrollment.application).not.toContain("user-1");
-    expect(enrollment.completedAt).toEqual(NOW);
+    expect(enrollment.completedAt).toEqual(HISTORICAL_COMPLETION);
     expect(enrollment.createdAt).toEqual(NOW);
   });
 
@@ -255,6 +296,7 @@ describe("admin enrollment", () => {
         userId: "user-1",
         status: "COMPLETED",
         now: NOW,
+        completionDate: "2025-04-12",
       })
     );
     expect(statement.sql).toContain('EXISTS (SELECT 1 FROM "program"');
@@ -266,7 +308,7 @@ describe("admin enrollment", () => {
       "user-1",
       "COMPLETED",
       JSON.stringify({ enrollment: { source: "ADMIN", schemaVersion: 1 } }),
-      NOW_SECONDS,
+      HISTORICAL_COMPLETION_SECONDS,
       NOW_SECONDS,
       NOW_SECONDS,
       "program-1",
@@ -377,9 +419,10 @@ describe("bulk cohort actions", () => {
       applicationIds: ["approved"],
       applications,
       now: NOW,
+      completionDate: "2025-04-12",
     });
     expect(plan.status).toBe("COMPLETED");
-    expect(plan.completedAt).toEqual(NOW);
+    expect(plan.completedAt).toEqual(HISTORICAL_COMPLETION);
     expect(plan.allowedSourceStatuses).toEqual(["APPROVED"]);
   });
 
@@ -450,6 +493,32 @@ describe("bulk cohort actions", () => {
       2,
     ]);
     expect(statement.expectedChanges).toBe(2);
+  });
+
+  it("keeps the maximum bulk statement within D1's parameter limit", () => {
+    const maximumApplications = Array.from(
+      { length: MAX_BULK_SELECTION_SIZE },
+      (_, index): BulkApplicationRecord => ({
+        id: `pending-${index}`,
+        programId: "program-1",
+        status: "PENDING",
+      })
+    );
+    const statement = buildBulkMutationStatement(
+      planBulkProgramApplicationMutation({
+        action: "bulk-approve",
+        programId: "program-1",
+        applicationIds: maximumApplications.map(({ id }) => id),
+        applications: maximumApplications,
+        now: NOW,
+      })
+    );
+
+    expect(MAX_BULK_SELECTION_SIZE).toBeLessThanOrEqual(90);
+    expect(statement.params).toHaveLength(MAX_BULK_SELECTION_SIZE + 7);
+    expect(statement.params.length).toBeLessThanOrEqual(
+      D1_MAX_BOUND_PARAMETERS
+    );
   });
 
   it("includes certificate and portfolio effects in completion confirmation", () => {

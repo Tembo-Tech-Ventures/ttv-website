@@ -78,6 +78,9 @@ test.describe("admin cohort management", () => {
           label: `${learner.name} (${learner.email})`,
         });
         await page.locator("#enrollmentStatus").selectOption(status);
+        if (status === "COMPLETED") {
+          await page.locator("#enrollmentCompletionDate").fill("2025-04-12");
+        }
         await clickWithConfirmation(
           page.getByRole("button", { name: "Enroll user" }),
           /certificates and builder portfolios unlock immediately/i
@@ -87,12 +90,21 @@ test.describe("admin cohort management", () => {
       await expect(rosterRow(learner.name)).toContainText(learner.email);
       await expect(rosterRow(learner.name)).toContainText("Admin enrollment");
       await expectRosterStatus(learner.name, status);
+      const certificateLink = rosterRow(learner.name).getByRole("link", {
+        name: "View certificate",
+      });
+      if (status === "COMPLETED") {
+        await expect(certificateLink).toBeVisible();
+      } else {
+        await expect(certificateLink).toHaveCount(0);
+      }
     };
 
     await page.goto(PROGRAM_PATH);
     await expect(
       page.getByRole("heading", { name: "Cohort roster" })
     ).toBeVisible();
+    await expect(page.getByText(/select at most 90 applications/i)).toBeVisible();
 
     await enrollIfAvailable(current, "APPROVED");
     await enrollIfAvailable(alumni, "COMPLETED");
@@ -106,7 +118,10 @@ test.describe("admin cohort management", () => {
         ["applicationIds", "ttv-fixture-app-preview"],
       ]);
       const invalidResponse = await request.post(PROGRAM_PATH, {
-        headers: { "content-type": "application/x-www-form-urlencoded" },
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          Origin: new URL(page.url()).origin,
+        },
         data: invalidBody.toString(),
       });
 
@@ -147,6 +162,9 @@ test.describe("admin cohort management", () => {
     }
 
     if (eligibleForCompletion.length > 0) {
+      await page
+        .locator('[data-bulk-form] input[name="completionDate"]')
+        .fill("2025-04-12");
       await clickWithConfirmation(
         page.getByRole("button", { name: "Complete selected" }),
         /certificates and builder portfolios/i
@@ -158,6 +176,21 @@ test.describe("admin cohort management", () => {
     await expectRosterStatus(approved.name, "COMPLETED");
     await expectRosterStatus(current.name, "APPROVED");
     await expectRosterStatus(alumni.name, "COMPLETED");
+    await expect(
+      rosterRow(current.name).getByRole("link", { name: "View certificate" })
+    ).toHaveCount(0);
+    await expect(
+      rosterRow(alumni.name).getByRole("link", { name: "View certificate" })
+    ).toBeVisible();
+
+    await rosterRow(alumni.name)
+      .getByRole("link", { name: "Application" })
+      .click();
+    await expect(
+      page.getByRole("link", { name: "View certificate" })
+    ).toBeVisible();
+    await expect(page.getByLabel("Completion date")).toHaveCount(0);
+    await page.goto(PROGRAM_PATH);
 
     await page.screenshot({
       path: evidence("admin-cohort-management-complete"),
