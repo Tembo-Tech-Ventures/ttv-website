@@ -62,8 +62,34 @@ test.describe("admin cohort management", () => {
       );
       await expect(button).toBeInViewport();
       await expect(button).toBeEnabled();
+
+      const { x, y } = await button.evaluate((el) =>
+        new Promise<{ x: number; y: number }>((resolve, reject) => {
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              const r = el.getBoundingClientRect();
+              const cx = r.left + r.width / 2;
+              const cy = r.top + r.height / 2;
+              const hit = document.elementFromPoint(cx, cy);
+              if (!hit || (!el.contains(hit) && hit !== el)) {
+                const tag = hit
+                  ? `${hit.tagName}.${hit.className}`
+                  : "null";
+                reject(
+                  new Error(
+                    `Hit-test at (${cx},${cy}) returned ${tag}, not the button`
+                  )
+                );
+                return;
+              }
+              resolve({ x: cx, y: cy });
+            })
+          );
+        })
+      );
+
       const dialogPromise = page.waitForEvent("dialog");
-      const clickPromise = button.click();
+      const clickPromise = page.mouse.click(x, y);
       const dialog = await dialogPromise;
       expect(dialog.message()).toMatch(expectedMessage);
       await dialog.accept();
