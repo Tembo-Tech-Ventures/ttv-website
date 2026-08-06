@@ -74,6 +74,7 @@ export default function AdminShell({
           <button
             type="button"
             aria-label="Open navigation"
+            aria-expanded={sidebarOpen}
             disabled={!hydrated}
             onClick={() => setSidebarOpen(true)}
             className="rounded-md p-1.5 text-white/60 hover:text-white lg:hidden"

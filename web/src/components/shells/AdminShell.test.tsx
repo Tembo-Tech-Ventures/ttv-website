@@ -57,6 +57,17 @@ describe("admin shell hydration", () => {
       </AdminShell>
     );
 
-    expect(html).toMatch(/aria-label="Open navigation" disabled=""/);
+    expect(html).toMatch(/aria-label="Open navigation"/);
+    expect(html).toMatch(/disabled=""/);
+  });
+
+  it("renders aria-expanded on the mobile opener", () => {
+    const html = renderToStaticMarkup(
+      <AdminShell>
+        <div>Admin content</div>
+      </AdminShell>
+    );
+
+    expect(html).toMatch(/aria-expanded="false"/);
   });
 });
