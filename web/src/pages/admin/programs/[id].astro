@@ -487,6 +487,7 @@ const formatDate = (date: Date | null) =>
             {roster.map((application) => (
               <div
                 data-roster-application={application.id}
+                data-application-status={application.status}
                 class="grid gap-3 p-3 text-sm text-white/80 transition-colors hover:bg-teal/10 md:grid-cols-[2rem_minmax(0,2fr)_minmax(8rem,1fr)_minmax(10rem,1.2fr)_minmax(8rem,0.8fr)] md:items-center md:gap-4"
               >
                 <div class="flex items-center gap-2 md:block">
