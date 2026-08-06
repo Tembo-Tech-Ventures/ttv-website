@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
 import { budgetLabel } from "@/lib/talent/budget";
+import { sortProjectsForQueue } from "@/lib/talent/admin-review";
 
 const db = drizzle(env.DB, { schema });
 
@@ -19,22 +20,7 @@ const filtered = statusFilter
   ? allProjects.filter((p) => p.status === statusFilter)
   : allProjects;
 
-const STATUS_ORDER: Record<string, number> = {
-  PENDING: 0,
-  APPROVED: 1,
-  MATCHED: 2,
-  REJECTED: 3,
-  CLOSED: 4,
-};
-
-const projects = filtered.sort((a, b) => {
-  const aOrder = STATUS_ORDER[a.status] ?? 99;
-  const bOrder = STATUS_ORDER[b.status] ?? 99;
-  if (aOrder !== bOrder) return aOrder - bOrder;
-  const aTime = a.createdAt?.getTime() ?? 0;
-  const bTime = b.createdAt?.getTime() ?? 0;
-  return bTime - aTime;
-});
+const projects = sortProjectsForQueue(filtered);
 ---
 
 <AdminLayout title="Client Projects">

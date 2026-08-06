@@ -6,12 +6,13 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
-import {
-  PROJECT_TRANSITIONS,
-  canTransition,
-} from "@/lib/talent/transitions";
+import { PROJECT_TRANSITIONS } from "@/lib/talent/transitions";
 import { budgetLabel } from "@/lib/talent/budget";
 import { parseSkillsJson } from "@/lib/talent/profile";
+import {
+  validateProjectTransition,
+  separateInterests,
+} from "@/lib/talent/admin-review";
 
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
@@ -29,11 +30,9 @@ if (Astro.request.method === "POST") {
 
   if (!current) return Astro.redirect("/admin/projects");
 
-  if (!canTransition(PROJECT_TRANSITIONS, current.status, newStatus)) {
-    return new Response(
-      `Cannot transition from ${current.status} to ${newStatus}`,
-      { status: 400 }
-    );
+  const validation = validateProjectTransition(current.status, newStatus);
+  if (!validation.valid) {
+    return new Response(validation.reason, { status: 400 });
   }
 
   await db
@@ -70,12 +69,7 @@ if (!project) return Astro.redirect("/admin/projects");
 const skills = parseSkillsJson(project.skills);
 const allowed = PROJECT_TRANSITIONS[project.status] ?? [];
 
-const interested = project.projectInterests.filter(
-  (pi) => pi.status === "INTERESTED"
-);
-const withdrawn = project.projectInterests.filter(
-  (pi) => pi.status === "WITHDRAWN"
-);
+const { interested, withdrawn } = separateInterests(project.projectInterests);
 
 const TRANSITION_LABELS: Record<string, string> = {
   APPROVED: "Approve",

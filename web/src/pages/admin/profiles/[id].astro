@@ -6,12 +6,13 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq, count } from "drizzle-orm";
 import { env } from "cloudflare:workers";
-import {
-  PROFILE_TRANSITIONS,
-  canTransition,
-} from "@/lib/talent/transitions";
+import { PROFILE_TRANSITIONS } from "@/lib/talent/transitions";
 import { getCompletedCohorts } from "@/lib/talent/eligibility";
 import { parseSkillsJson } from "@/lib/talent/profile";
+import {
+  validateProfileTransition,
+  shouldSetPublishedAt,
+} from "@/lib/talent/admin-review";
 
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
@@ -29,15 +30,13 @@ if (Astro.request.method === "POST") {
 
   if (!current) return Astro.redirect("/admin/profiles");
 
-  if (!canTransition(PROFILE_TRANSITIONS, current.status, newStatus)) {
-    return new Response(
-      `Cannot transition from ${current.status} to ${newStatus}`,
-      { status: 400 }
-    );
+  const validation = validateProfileTransition(current.status, newStatus);
+  if (!validation.valid) {
+    return new Response(validation.reason, { status: 400 });
   }
 
   const updateData: Record<string, unknown> = { status: newStatus };
-  if (newStatus === "PUBLISHED" && !current.publishedAt) {
+  if (shouldSetPublishedAt(newStatus, current.publishedAt)) {
     updateData.publishedAt = new Date();
   }
 

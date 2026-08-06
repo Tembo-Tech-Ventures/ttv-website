@@ -4,6 +4,7 @@ import Badge from "@/components/common/Badge.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
+import { sortProfilesForQueue } from "@/lib/talent/admin-review";
 
 const db = drizzle(env.DB, { schema });
 
@@ -18,21 +19,7 @@ const filtered = statusFilter
   ? allProfiles.filter((p) => p.status === statusFilter)
   : allProfiles;
 
-const STATUS_ORDER: Record<string, number> = {
-  IN_REVIEW: 0,
-  DRAFT: 1,
-  PUBLISHED: 2,
-  SUSPENDED: 3,
-};
-
-const profiles = filtered.sort((a, b) => {
-  const aOrder = STATUS_ORDER[a.status] ?? 99;
-  const bOrder = STATUS_ORDER[b.status] ?? 99;
-  if (aOrder !== bOrder) return aOrder - bOrder;
-  const aTime = a.updatedAt?.getTime() ?? 0;
-  const bTime = b.updatedAt?.getTime() ?? 0;
-  return bTime - aTime;
-});
+const profiles = sortProfilesForQueue(filtered);
 ---
 
 <AdminLayout title="Profiles">
