@@ -3,7 +3,7 @@ import AdminLayout from "@/layouts/AdminLayout.astro";
 import Card from "@/components/common/Card.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
-import { count } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 
 const db = drizzle(env.DB, { schema });
@@ -18,6 +18,16 @@ const statusCounts = await db
 
 const totalApps = statusCounts.reduce((sum, r) => sum + r.value, 0);
 const byStatus = Object.fromEntries(statusCounts.map((r) => [r.status, r.value]));
+
+const [profilesInReview] = await db
+  .select({ value: count() })
+  .from(schema.studentProfile)
+  .where(eq(schema.studentProfile.status, "IN_REVIEW"));
+
+const [pendingProjects] = await db
+  .select({ value: count() })
+  .from(schema.clientProject)
+  .where(eq(schema.clientProject.status, "PENDING"));
 ---
 
 <AdminLayout title="Dashboard">
@@ -36,6 +46,34 @@ const byStatus = Object.fromEntries(statusCounts.map((r) => [r.status, r.value])
       <Card>
         <p class="text-sm text-white/60">Total Programs</p>
         <p class="mt-1 text-3xl font-bold text-primary">{programsResult.value}</p>
+      </Card>
+    </div>
+
+    <h3 class="text-lg font-semibold text-white">Review Queues</h3>
+    <div class="grid gap-4 sm:grid-cols-2">
+      <Card>
+        <p class="text-sm text-white/60">Profiles awaiting review</p>
+        <p class="mt-1 text-3xl font-bold text-primary">
+          {profilesInReview.value}
+        </p>
+        <a
+          href="/admin/profiles?status=IN_REVIEW"
+          class="mt-2 inline-block text-sm text-primary hover:underline"
+        >
+          View queue &rarr;
+        </a>
+      </Card>
+      <Card>
+        <p class="text-sm text-white/60">Pending client projects</p>
+        <p class="mt-1 text-3xl font-bold text-primary">
+          {pendingProjects.value}
+        </p>
+        <a
+          href="/admin/projects?status=PENDING"
+          class="mt-2 inline-block text-sm text-primary hover:underline"
+        >
+          View queue &rarr;
+        </a>
       </Card>
     </div>
 
