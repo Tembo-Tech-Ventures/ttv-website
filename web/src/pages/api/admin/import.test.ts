@@ -144,6 +144,75 @@ describe("POST /api/admin/import", () => {
     expect(mocks.batch).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      name: "program role natural keys",
+      section: "programRoles",
+      rows: [
+        {
+          id: "role-1",
+          programId: "program-1",
+          userId: "user-1",
+          name: "TA",
+          createdAt: DATE,
+          updatedAt: DATE,
+        },
+        {
+          id: "role-2",
+          programId: "program-1",
+          userId: "user-1",
+          name: "TA",
+          createdAt: DATE,
+          updatedAt: DATE,
+        },
+      ],
+    },
+    {
+      name: "non-null application cohort pairs",
+      section: "programApplications",
+      rows: [
+        {
+          id: "application-1",
+          programId: "program-1",
+          userId: "user-1",
+          partnerId: null,
+          status: "PENDING",
+          application: {},
+          completedAt: null,
+          createdAt: DATE,
+          updatedAt: DATE,
+        },
+        {
+          id: "application-2",
+          programId: "program-1",
+          userId: "user-1",
+          partnerId: null,
+          status: "PENDING",
+          application: {},
+          completedAt: null,
+          createdAt: DATE,
+          updatedAt: DATE,
+        },
+      ],
+    },
+  ])("rejects duplicate $name before D1 preparation", async ({ section, rows }) => {
+    const response = await POST(
+      context(
+        JSON.stringify({
+          version: 1,
+          exportedAt: DATE,
+          [section]: rows,
+        })
+      )
+    );
+    const body = await responseJson(response);
+
+    expect(response.status).toBe(400);
+    expect(body.code).toBe("invalid_payload");
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(mocks.batch).not.toHaveBeenCalled();
+  });
+
   it("returns ignored privilege counts without creating grants", async () => {
     const response = await POST(
       context(

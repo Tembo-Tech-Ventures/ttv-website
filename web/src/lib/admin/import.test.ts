@@ -213,6 +213,73 @@ describe("legacy import planning and validation", () => {
     expect(userStatement?.values).toContain("legacy@example.test");
   });
 
+  it("leaves applicationsOpen out of legacy program inserts so the closed default applies", () => {
+    const payload = validPayload();
+    Object.assign(payload.programs[0], { applicationsOpen: true });
+
+    const plan = createLegacyImportPlan(payload);
+    const programStatement = plan.statements.find(
+      (statement) => statement.table === "programs"
+    );
+
+    expect(programStatement?.sql).not.toContain("applicationsOpen");
+    expect(programStatement?.sql.match(/\?/g)).toHaveLength(8);
+    expect(programStatement?.values).toHaveLength(8);
+    expect(programStatement?.values).not.toContain(true);
+  });
+
+  it.each([
+    {
+      name: "program role natural key",
+      duplicate: (payload: ReturnType<typeof validPayload>) => {
+        payload.programRoles.push({
+          ...payload.programRoles[0],
+          id: "program-role-2",
+        });
+      },
+    },
+    {
+      name: "non-null application cohort pair",
+      duplicate: (payload: ReturnType<typeof validPayload>) => {
+        payload.programApplications.push({
+          ...payload.programApplications[0],
+          id: "application-2",
+        });
+      },
+    },
+  ])("rejects a duplicate $name before any D1 work", async ({ duplicate }) => {
+    const payload = validPayload();
+    duplicate(payload);
+    const database = mockDatabase();
+
+    await expect(executeLegacyImport(database.db, payload)).rejects.toMatchObject({
+      code: "invalid_payload",
+    });
+    expect(database.prepare).not.toHaveBeenCalled();
+    expect(database.batch).not.toHaveBeenCalled();
+  });
+
+  it("allows repeated null-program partner applications for the same user", () => {
+    const payload = validPayload();
+    const plan = createLegacyImportPlan({
+      ...payload,
+      programApplications: [
+        {
+          ...payload.programApplications[0],
+          id: "partner-application-1",
+          programId: null,
+        },
+        {
+          ...payload.programApplications[0],
+          id: "partner-application-2",
+          programId: null,
+        },
+      ],
+    });
+
+    expect(plan.attempted.programApplications).toBe(2);
+  });
+
   it.each([
     {
       name: "non-array section",

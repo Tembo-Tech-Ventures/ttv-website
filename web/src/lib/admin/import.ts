@@ -275,6 +275,19 @@ function addUnique(
   seen.add(value);
 }
 
+function addUniqueNaturalKey(
+  seen: Set<string>,
+  values: string[],
+  path: string,
+  description: string
+): void {
+  const key = JSON.stringify(values);
+  if (seen.has(key)) {
+    fail(`Invalid import payload: ${path} duplicates ${description}.`);
+  }
+  seen.add(key);
+}
+
 function addStatement(
   plan: LegacyImportPlan,
   table: ImportableTableKey,
@@ -440,6 +453,7 @@ export function createLegacyImportPlan(input: unknown): LegacyImportPlan {
   }
 
   const programRoleIds = new Set<string>();
+  const programRoleNaturalKeys = new Set<string>();
   for (const [index, value] of readSection(payload, "programRoles").entries()) {
     const path = `programRoles[${index}]`;
     const row = requireRecord(value, path);
@@ -453,6 +467,12 @@ export function createLegacyImportPlan(input: unknown): LegacyImportPlan {
       );
     }
     addUnique(programRoleIds, id, "programRoles");
+    addUniqueNaturalKey(
+      programRoleNaturalKeys,
+      [programId, userId, name],
+      path,
+      "an earlier programId, userId, and name combination"
+    );
     plan.references.programs.push(programId);
     plan.references.users.push(userId);
     addStatement(
@@ -471,6 +491,7 @@ export function createLegacyImportPlan(input: unknown): LegacyImportPlan {
   }
 
   const applicationIds = new Set<string>();
+  const applicationCohortPairs = new Set<string>();
   for (const [index, value] of readSection(
     payload,
     "programApplications"
@@ -497,6 +518,14 @@ export function createLegacyImportPlan(input: unknown): LegacyImportPlan {
       );
     }
     addUnique(applicationIds, id, "programApplications");
+    if (programId !== null) {
+      addUniqueNaturalKey(
+        applicationCohortPairs,
+        [programId, userId],
+        path,
+        "an earlier non-null programId and userId combination"
+      );
+    }
     plan.references.users.push(userId);
     if (programId) plan.references.programs.push(programId);
     if (partnerId) plan.references.programPartners.push(partnerId);
