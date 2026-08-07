@@ -132,7 +132,7 @@ if (Astro.request.method === "POST") {
           )}
         </div>
 
-        <div class="flex flex-col gap-1.5">
+        <div class="flex w-full min-w-0 flex-col gap-1.5">
           <label for="curriculumId" class="text-sm font-medium text-white/90">Curriculum *</label>
           <select
             id="curriculumId"
@@ -140,7 +140,7 @@ if (Astro.request.method === "POST") {
             required
             aria-invalid={Boolean(fieldErrors.curriculumId)}
             aria-describedby={fieldErrors.curriculumId ? "curriculum-error" : undefined}
-            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            class="w-full min-w-0 rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
           >
             <option value="">Select curriculum…</option>
             {curricula.map((c) => (
