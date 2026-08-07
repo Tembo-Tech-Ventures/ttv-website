@@ -45,8 +45,19 @@ export function hasMatchingRequestOrigin(request: Request): boolean {
   }
 }
 
-export function enforceAdminMutationOrigin(request: Request): Response | null {
-  const { pathname } = new URL(request.url);
+/**
+ * Guards admin mutations against cross-origin submission.
+ *
+ * `pathname` must be the request path *as Astro resolved it* — the middleware's
+ * `context.url.pathname`, which has already been percent-decoded and had
+ * duplicate slashes collapsed. Re-deriving it from `request.url` would read the
+ * raw path instead, so `//admin/users/x` or `/%61dmin/users/x` would route to
+ * an admin page and pass the ADMIN role check while slipping past this guard.
+ */
+export function enforceAdminMutationOrigin(
+  request: Request,
+  pathname: string
+): Response | null {
   if (!requiresAdminMutationOrigin(request.method, pathname)) return null;
   if (hasMatchingRequestOrigin(request)) return null;
 

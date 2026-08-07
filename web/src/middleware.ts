@@ -60,7 +60,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
     locals.isAdmin = true;
 
-    const originFailure = enforceAdminMutationOrigin(request);
+    const originFailure = enforceAdminMutationOrigin(request, url.pathname);
     if (originFailure) return originFailure;
   }
 
