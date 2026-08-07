@@ -466,7 +466,7 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
             )}
           </div>
         </div>
-        <div class="flex flex-col gap-1.5">
+        <div class="flex w-full min-w-0 flex-col gap-1.5">
           <label for="curriculumId" class="text-sm font-medium text-white/90">
             Curriculum *
           </label>
@@ -476,7 +476,7 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
             required
             aria-invalid={Boolean(cohortFieldErrors.curriculumId)}
             aria-describedby={cohortFieldErrors.curriculumId ? "curriculum-error" : undefined}
-            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            class="w-full min-w-0 rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
           >
             <option value="">Select a curriculum…</option>
             {curricula.map((curriculum) => (
@@ -568,13 +568,13 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
 
       <form method="POST" class="flex flex-wrap items-end gap-3">
         <input type="hidden" name="action" value="add-role" />
-        <div class="flex flex-col gap-1.5">
+        <div class="flex w-full min-w-0 flex-col gap-1.5 sm:w-auto">
           <label for="staffUserId" class="text-sm font-medium text-white/90">User</label>
           <select
             id="staffUserId"
             name="userId"
             required
-            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            class="w-full min-w-0 rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
           >
             <option value="">Select user…</option>
             {allUsers.map((user) => (
@@ -629,7 +629,7 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
             )})`}
           >
             <input type="hidden" name="action" value="direct-enroll" />
-            <div class="flex min-w-0 flex-col gap-1.5">
+            <div class="flex w-full min-w-0 flex-col gap-1.5">
               <label for="enrollmentUserId" class="text-sm font-medium text-white/90">
                 Signed-in user
               </label>
@@ -637,7 +637,7 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
                 id="enrollmentUserId"
                 name="userId"
                 required
-                class="min-w-0 rounded-md border border-teal bg-dark/70 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                class="w-full min-w-0 rounded-md border border-teal bg-dark/70 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
               >
                 <option value="">Select a user…</option>
                 {availableEnrollmentUsers.map((user) => (

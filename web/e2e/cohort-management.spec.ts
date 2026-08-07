@@ -53,6 +53,23 @@ test.describe("admin cohort management", () => {
       await expect(row).toBeVisible();
       await expect(row).toHaveAttribute("data-application-status", status);
     };
+    /**
+     * A control wider than the screen (an unconstrained <select> sized to its
+     * longest option, say) makes the browser widen the layout viewport and zoom
+     * out, so the page scrolls sideways and tap coordinates stop lining up.
+     * scrollWidth is compared against the configured viewport rather than
+     * clientWidth because both grow together when that happens, hiding it.
+     */
+    const expectNoHorizontalOverflow = async (label: string) => {
+      const configuredWidth = page.viewportSize()?.width ?? 0;
+      const layoutWidth = await page.evaluate(
+        () => document.documentElement.scrollWidth
+      );
+      expect(
+        layoutWidth,
+        `${label} must fit the ${configuredWidth}px viewport without scrolling sideways`
+      ).toBeLessThanOrEqual(configuredWidth + 1);
+    };
     const clickWithConfirmation = async (
       button: Locator,
       expectedMessage: RegExp
@@ -139,6 +156,7 @@ test.describe("admin cohort management", () => {
       page.getByRole("heading", { name: "Cohort roster" })
     ).toBeVisible();
     await expect(page.getByText(/select at most 90 applications/i)).toBeVisible();
+    await expectNoHorizontalOverflow("the cohort detail page");
 
     await enrollIfAvailable(current, "APPROVED");
     await enrollIfAvailable(alumni, "COMPLETED");
