@@ -104,11 +104,10 @@ test.describe("authenticated talent foundation", () => {
     await page.goto("/dashboard");
     const isMobile = (viewport?.width ?? 1280) < 1024;
     if (isMobile) {
-      await page
-        .locator("header button")
-        .first()
-        .click();
-      await page.waitForTimeout(300);
+      const opener = page.getByRole("button", { name: /open navigation/i });
+      await expect(opener).toBeEnabled();
+      await opener.click();
+      await expect(opener).toHaveAttribute("aria-expanded", "true");
     }
     await expect(page.getByRole("link", { name: "Portfolio" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Leads" })).toBeVisible();
@@ -128,11 +127,10 @@ test.describe("authenticated talent foundation", () => {
     await page.goto("/admin");
     const isMobile = (viewport?.width ?? 1280) < 1024;
     if (isMobile) {
-      await page
-        .locator("header button")
-        .first()
-        .click();
-      await page.waitForTimeout(300);
+      const opener = page.getByRole("button", { name: /open navigation/i });
+      await expect(opener).toBeEnabled();
+      await opener.click();
+      await expect(opener).toHaveAttribute("aria-expanded", "true");
     }
     await expect(page.getByRole("link", { name: "Profiles" })).toBeVisible();
     await expect(

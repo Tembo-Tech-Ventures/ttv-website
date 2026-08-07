@@ -126,6 +126,9 @@ export async function runSmokeChecks({
   healthAttempts = 60,
   retryDelayMs = 2_000,
   requiredConsecutiveSuccesses = 5,
+  homepageAttempts = 30,
+  homepageRetryDelayMs = 2_000,
+  requiredHomepageConsecutiveSuccesses = 3,
   settleDelayMs = 10_000,
   sleepImpl = sleep,
 }) {
@@ -143,22 +146,20 @@ export async function runSmokeChecks({
     sleepImpl,
   });
 
-  // Extra settle time after observed stability: downstream Playwright runs
-  // open many fresh connections and must not race residual propagation.
+  await waitForExpectedHomepage({
+    fetchImpl,
+    homepageUrl: `${normalizedBaseUrl}/`,
+    timeoutMs,
+    homepageAttempts,
+    homepageRetryDelayMs,
+    requiredHomepageConsecutiveSuccesses,
+    sleepImpl,
+  });
+
+  // Extra settle time after both endpoints are stable: downstream Playwright
+  // runs open many fresh connections and must not race residual propagation.
   if (settleDelayMs > 0) {
     await sleepImpl(settleDelayMs);
-  }
-
-  const homepageResponse = await fetchChecked(
-    fetchImpl,
-    `${normalizedBaseUrl}/`,
-    timeoutMs
-  );
-  const contentType = homepageResponse.headers.get("content-type") ?? "";
-  if (!contentType.includes("text/html")) {
-    throw new Error(
-      `${normalizedBaseUrl}/ returned unexpected content type "${contentType}".`
-    );
   }
 
   return {
@@ -183,4 +184,54 @@ if (isDirectRun) {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;
   });
+}
+
+async function waitForExpectedHomepage({
+  fetchImpl,
+  homepageUrl,
+  timeoutMs,
+  homepageAttempts,
+  homepageRetryDelayMs,
+  requiredHomepageConsecutiveSuccesses,
+  sleepImpl,
+}) {
+  let lastError;
+  let consecutiveSuccesses = 0;
+  let sawHtmlResponse = false;
+
+  for (let attempt = 1; attempt <= homepageAttempts; attempt += 1) {
+    try {
+      const response = await fetchChecked(fetchImpl, homepageUrl, timeoutMs);
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.includes("text/html")) {
+        throw new Error(
+          `${homepageUrl} returned unexpected content type "${contentType}".`
+        );
+      }
+      sawHtmlResponse = true;
+      consecutiveSuccesses += 1;
+      if (
+        consecutiveSuccesses >= requiredHomepageConsecutiveSuccesses
+      ) {
+        return;
+      }
+    } catch (error) {
+      lastError = error;
+      consecutiveSuccesses = 0;
+    }
+
+    if (attempt < homepageAttempts) {
+      await sleepImpl(homepageRetryDelayMs);
+    }
+  }
+
+  if (sawHtmlResponse) {
+    throw new Error(
+      `Homepage answered with HTML but never stayed stable for ${requiredHomepageConsecutiveSuccesses} consecutive checks within ${homepageAttempts} attempts.`
+    );
+  }
+  const reason = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(
+    `Homepage did not become ready after ${homepageAttempts} attempts: ${reason}`
+  );
 }

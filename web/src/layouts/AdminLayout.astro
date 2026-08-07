@@ -3,6 +3,7 @@ import BaseLayout from "./BaseLayout.astro";
 import AdminShell from "@/components/shells/AdminShell";
 import { env } from "cloudflare:workers";
 import { isAgentAuthEnabled } from "@/lib/agent-auth";
+import { isLegacyImportEnabled } from "@/lib/admin/import";
 
 interface Props {
   title?: string;
@@ -20,6 +21,7 @@ if (!Astro.locals.isAdmin) {
   <AdminShell
     client:load
     agentAuthEnabled={isAgentAuthEnabled(env.AGENT_AUTH_ENABLED)}
+    dataMigrationEnabled={isLegacyImportEnabled(env.DEPLOYMENT_ENVIRONMENT)}
   >
     <slot />
   </AdminShell>

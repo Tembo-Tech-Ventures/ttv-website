@@ -1,0 +1,134 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import Card from "@/components/common/Card.astro";
+import { drizzle } from "drizzle-orm/d1";
+import { env } from "cloudflare:workers";
+import * as schema from "@/lib/db/schema";
+import {
+  createCurriculum,
+  createDrizzleCurriculumStore,
+  curriculumSaveErrorMessage,
+  curriculumValuesFromFormData,
+  type CurriculumFieldErrors,
+  type CurriculumValues,
+} from "@/lib/admin/curricula";
+
+const db = drizzle(env.DB, { schema });
+const store = createDrizzleCurriculumStore(db);
+let values: CurriculumValues = { title: "", description: "" };
+let errors: CurriculumFieldErrors = {};
+let formError: string | undefined;
+
+if (Astro.request.method === "POST") {
+  values = curriculumValuesFromFormData(await Astro.request.formData());
+  try {
+    const result = await createCurriculum(store, values);
+    if (result.ok) {
+      return Astro.redirect(
+        `/admin/curricula/${result.curriculum.id}?notice=created`
+      );
+    }
+    if (result.reason === "validation") {
+      errors = result.errors;
+      values = result.values;
+    } else {
+      formError = result.message;
+    }
+  } catch {
+    formError = curriculumSaveErrorMessage();
+  }
+}
+---
+
+<AdminLayout title="New Curriculum">
+  <div class="mx-auto max-w-3xl space-y-6">
+    <a href="/admin/curricula" class="text-sm text-primary hover:underline">
+      &larr; Back to Curricula
+    </a>
+
+    <div>
+      <h2 class="text-2xl font-bold text-white">Create Curriculum</h2>
+      <p class="mt-1 text-sm text-white/60">
+        Add a reusable learning plan that can be assigned to programs and cohorts.
+      </p>
+    </div>
+
+    <Card>
+      {formError && (
+        <p
+          role="alert"
+          class="mb-5 rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
+        >
+          {formError}
+        </p>
+      )}
+
+      <form method="POST" class="space-y-5">
+        <div class="flex flex-col gap-1.5">
+          <label for="title" class="text-sm font-medium text-white/90">
+            Title *
+          </label>
+          <input
+            id="title"
+            name="title"
+            required
+            value={values.title}
+            aria-invalid={Boolean(errors.title)}
+            aria-describedby={errors.title ? "title-error" : undefined}
+            placeholder="e.g. Web Development Foundations"
+            class:list={[
+              "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary/50",
+              errors.title ? "border-red-400" : "border-teal focus:border-primary",
+            ]}
+          />
+          {errors.title && (
+            <p id="title-error" class="text-sm text-red-200">
+              {errors.title}
+            </p>
+          )}
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label for="description" class="text-sm font-medium text-white/90">
+            Description *
+          </label>
+          <textarea
+            id="description"
+            name="description"
+            required
+            rows="7"
+            aria-invalid={Boolean(errors.description)}
+            aria-describedby={errors.description ? "description-error" : undefined}
+            placeholder="Describe the learning goals and scope."
+            class:list={[
+              "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary/50",
+              errors.description
+                ? "border-red-400"
+                : "border-teal focus:border-primary",
+            ]}
+          >{values.description}</textarea>
+          {errors.description && (
+            <p id="description-error" class="text-sm text-red-200">
+              {errors.description}
+            </p>
+          )}
+        </div>
+
+        <div class="flex flex-wrap gap-3">
+          <button
+            type="submit"
+            class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
+          >
+            Create Curriculum
+          </button>
+          <a
+            href="/admin/curricula"
+            class="rounded-md border border-teal/40 px-4 py-2 text-sm font-medium text-white/80 hover:bg-teal/20"
+          >
+            Cancel
+          </a>
+        </div>
+      </form>
+    </Card>
+  </div>
+</AdminLayout>

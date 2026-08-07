@@ -2,8 +2,8 @@
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
-import { eq, desc } from "drizzle-orm";
-import { getCompletedCohorts } from "@/lib/talent/eligibility";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { isValidCompletion } from "@/lib/talent/eligibility";
 import { getInitials } from "@/components/talent/directory-helpers";
 
 interface Slot {
@@ -22,28 +22,42 @@ const db = drizzle(env.DB, { schema });
 const publishedProfiles = await db.query.studentProfile.findMany({
   where: eq(schema.studentProfile.status, "PUBLISHED"),
   orderBy: desc(schema.studentProfile.publishedAt),
-  limit: 4,
   with: {
-    user: { columns: { id: true, name: true, image: true } },
+    user: {
+      columns: { id: true, name: true, image: true },
+      with: {
+        programApplications: {
+          where: and(
+            eq(schema.programApplication.status, "COMPLETED"),
+            isNotNull(schema.programApplication.completedAt),
+          ),
+          orderBy: desc(schema.programApplication.completedAt),
+          columns: { status: true, completedAt: true },
+          with: { program: { columns: { name: true } } },
+        },
+      },
+    },
   },
 });
 
-const profileCards = await Promise.all(
-  publishedProfiles.map(async (p) => {
-    const cohorts = await getCompletedCohorts(db, p.user.id);
-    const latestCohort = cohorts[0];
-    const cohortLabel = latestCohort?.program
-      ? `${latestCohort.program.name} · ${p.country ?? ""}`
-      : p.country ?? "";
-    return {
-      handle: p.handle,
-      name: p.user.name,
-      image: p.user.image,
-      initials: getInitials(p.user.name),
+const profileCards = publishedProfiles
+  .flatMap((profile) => {
+    const latestCompletion =
+      profile.user.programApplications.find(isValidCompletion);
+    if (!latestCompletion) return [];
+
+    const cohortLabel = latestCompletion.program
+      ? `${latestCompletion.program.name} · ${profile.country ?? ""}`
+      : profile.country ?? "";
+    return [{
+      handle: profile.handle,
+      name: profile.user.name,
+      image: profile.user.image,
+      initials: getInitials(profile.user.name),
       label: cohortLabel,
-    };
-  }),
-);
+    }];
+  })
+  .slice(0, 4);
 
 const hasProfiles = profileCards.length > 0;
 ---

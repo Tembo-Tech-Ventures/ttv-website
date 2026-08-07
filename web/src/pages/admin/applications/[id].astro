@@ -6,55 +6,66 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
+import {
+  APPLICATION_COMPLETION_CONFIRMATION,
+  ProgramApplicationError,
+  assertAtomicMutationApplied,
+  buildApplicationTransitionStatement,
+  formatDateInputValue,
+  getAvailableApplicationTransitions,
+  planApplicationTransition,
+  toProgramApplicationBadgeVariant,
+} from "@/lib/admin/program-application";
 
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
+const defaultCompletionDate = formatDateInputValue();
 
 if (!id) return Astro.redirect("/admin/applications");
-
-// Valid status transitions
-const TRANSITIONS: Record<string, string[]> = {
-  PENDING: ["APPROVED", "REJECTED", "AUDIT"],
-  APPROVED: ["COMPLETED", "REJECTED"],
-  REJECTED: [],
-  AUDIT: ["APPROVED", "REJECTED"],
-  COMPLETED: [],
-};
-
-const VALID_STATUSES = ["PENDING", "APPROVED", "REJECTED", "AUDIT", "COMPLETED"];
 
 // Handle POST — update status
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
-  const newStatus = formData.get("status") as string;
-
-  // Validate status is a known value
-  if (!VALID_STATUSES.includes(newStatus)) {
-    return new Response("Invalid status", { status: 400 });
-  }
-
-  // Validate the transition is allowed
   const current = await db.query.programApplication.findFirst({
     where: eq(schema.programApplication.id, id),
     columns: { status: true },
   });
 
-  if (!current) return Astro.redirect("/admin/applications");
-
-  const allowed = TRANSITIONS[current.status] ?? [];
-  if (!allowed.includes(newStatus)) {
-    return new Response(`Cannot transition from ${current.status} to ${newStatus}`, { status: 400 });
+  if (!current) {
+    return new Response(
+      "Application not found. Return to the application list and try again.",
+      { status: 400 }
+    );
   }
 
-  const updateData: Record<string, unknown> = { status: newStatus };
-  if (newStatus === "COMPLETED") {
-    updateData.completedAt = new Date();
-  }
+  try {
+    const transition = planApplicationTransition({
+      expectedStatus: formData.get("expectedStatus"),
+      currentStatus: current.status,
+      targetStatus: formData.get("status"),
+      completionDate: formData.get("completionDate"),
+    });
+    const statement = buildApplicationTransitionStatement({
+      applicationId: id,
+      transition,
+    });
+    const result = await env.DB.prepare(statement.sql)
+      .bind(...statement.params)
+      .run();
 
-  await db
-    .update(schema.programApplication)
-    .set(updateData)
-    .where(eq(schema.programApplication.id, id));
+    assertAtomicMutationApplied({
+      actualChanges: result.meta.changes,
+      statement,
+      staleCode: "STALE_TRANSITION",
+      staleMessage:
+        "This application changed while you were updating it. Refresh the page before trying again.",
+    });
+  } catch (error) {
+    if (error instanceof ProgramApplicationError) {
+      return new Response(error.message, { status: 400 });
+    }
+    throw error;
+  }
 
   return Astro.redirect(`/admin/applications/${id}`);
 }
@@ -66,15 +77,21 @@ const application = await db.query.programApplication.findFirst({
 
 if (!application) return Astro.redirect("/admin/applications");
 
-// Parse application JSON
-let appData: Record<string, any> = {};
+// Parse application JSON without trusting its shape.
+let appData: Record<string, unknown> = {};
 try {
-  appData = JSON.parse(application.application);
+  const parsed: unknown = JSON.parse(application.application);
+  appData =
+    typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : { value: parsed };
 } catch {
   appData = { raw: application.application };
 }
 
-const availableStatuses = TRANSITIONS[application.status] ?? [];
+const availableStatuses = getAvailableApplicationTransitions(
+  application.status
+);
 ---
 
 <AdminLayout title="Application Detail">
@@ -85,7 +102,7 @@ const availableStatuses = TRANSITIONS[application.status] ?? [];
 
     <div class="flex items-center gap-3">
       <h2 class="text-2xl font-bold text-white">Application</h2>
-      <Badge variant={application.status.toLowerCase() as any} />
+      <Badge variant={toProgramApplicationBadgeVariant(application.status)} />
     </div>
 
     <div class="grid gap-6 lg:grid-cols-2">
@@ -115,10 +132,10 @@ const availableStatuses = TRANSITIONS[application.status] ?? [];
       </Card>
 
       <Card>
-        <h3 class="mb-4 text-lg font-semibold text-white">Program</h3>
+        <h3 class="mb-4 text-lg font-semibold text-white">Cohort</h3>
         <dl class="space-y-2 text-sm">
           <div class="flex justify-between">
-            <dt class="text-white/60">Program</dt>
+            <dt class="text-white/60">Cohort</dt>
             <dd class="text-white">{application.program?.name ?? "—"}</dd>
           </div>
           <div class="flex justify-between">
@@ -134,6 +151,19 @@ const availableStatuses = TRANSITIONS[application.status] ?? [];
               <dt class="text-white/60">Completed</dt>
               <dd class="text-white">
                 {new Date(application.completedAt).toLocaleDateString()}
+              </dd>
+            </div>
+          )}
+          {application.status === "COMPLETED" && application.completedAt && (
+            <div class="flex justify-between">
+              <dt class="text-white/60">Certificate</dt>
+              <dd>
+                <a
+                  href={`/certificate/${application.id}`}
+                  class="text-primary hover:underline"
+                >
+                  View certificate
+                </a>
               </dd>
             </div>
           )}
@@ -162,8 +192,22 @@ const availableStatuses = TRANSITIONS[application.status] ?? [];
         <h3 class="mb-4 text-lg font-semibold text-white">Change Status</h3>
         <div class="flex flex-wrap gap-2">
           {availableStatuses.map((status) => (
-            <form method="POST">
+            <form method="POST" class="flex flex-wrap items-end gap-2">
+              <input type="hidden" name="expectedStatus" value={application.status} />
               <input type="hidden" name="status" value={status} />
+              {status === "COMPLETED" && (
+                <label class="flex flex-col gap-1 text-xs font-medium text-white/70">
+                  Completion date
+                  <input
+                    type="date"
+                    name="completionDate"
+                    value={defaultCompletionDate}
+                    max={defaultCompletionDate}
+                    required
+                    class="rounded-md border border-teal bg-dark/70 px-3 py-2 text-sm text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </label>
+              )}
               <button
                 type="submit"
                 class:list={[
@@ -173,7 +217,11 @@ const availableStatuses = TRANSITIONS[application.status] ?? [];
                   status === "AUDIT" && "bg-blue-600 text-white hover:bg-blue-700",
                   status === "COMPLETED" && "bg-purple-600 text-white hover:bg-purple-700",
                 ]}
-                onclick={`return confirm('Change application status to ${status}?')`}
+                onclick={`return confirm(${JSON.stringify(
+                  status === "COMPLETED"
+                    ? APPLICATION_COMPLETION_CONFIRMATION
+                    : `Change application status to ${status}?`
+                )})`}
               >
                 {status === "COMPLETED" ? "Mark Completed" : status.charAt(0) + status.slice(1).toLowerCase()}
               </button>

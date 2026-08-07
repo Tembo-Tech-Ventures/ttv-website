@@ -5,6 +5,7 @@ import * as schema from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { format } from "date-fns";
 import { env } from "cloudflare:workers";
+import { isValidCompletion } from "@/lib/talent/eligibility";
 
 const { id } = Astro.params;
 
@@ -29,7 +30,12 @@ const application = await db.query.programApplication.findFirst({
   },
 });
 
-const isValid = application?.status === "COMPLETED" && application.program;
+const isValid =
+  isValidCompletion(application) && Boolean(application.program);
+
+if (!isValid) {
+  Astro.response.status = 404;
+}
 
 const studentName = application?.user?.name ?? "Unknown";
 const curriculumTitle = application?.program?.curriculum?.title ?? "";

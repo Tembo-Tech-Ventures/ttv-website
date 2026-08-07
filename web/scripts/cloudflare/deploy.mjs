@@ -21,6 +21,7 @@ import {
   seedAgentPreviewAccess,
   seedAgentPreviewFixtures,
 } from "./agent-preview-auth.mjs";
+import { assertNoBlockingDuplicates } from "./migration-preflight.mjs";
 
 async function main() {
   const context = deriveEnvironmentContext();
@@ -45,6 +46,7 @@ async function main() {
   await runNpm(["run", "build"]);
   const configPath = await writeGeneratedWranglerConfig({
     workerName: context.workerName,
+    containerAppName: context.containerAppName,
     d1Name: context.d1Name,
     d1Id: d1Database.uuid,
     bucketName: context.bucketName,
@@ -57,6 +59,10 @@ async function main() {
   });
 
   await setWorkerSecrets(configPath, getSecretBindings());
+  await assertNoBlockingDuplicates({
+    databaseId: d1Database.uuid,
+    executeQuery: queryD1Database,
+  });
   await runWrangler([
     "d1",
     "migrations",

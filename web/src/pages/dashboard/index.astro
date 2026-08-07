@@ -6,6 +6,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
+import { toProgramApplicationBadgeVariant } from "@/lib/admin/program-application";
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
@@ -36,9 +37,9 @@ const applications = await db.query.programApplication.findMany({
               <div class="flex flex-col gap-3">
                 <div class="flex items-start justify-between gap-2">
                   <h4 class="font-semibold text-white">
-                    {app.program?.name ?? "Unknown Program"}
+                    {app.program?.name ?? "Unknown Cohort"}
                   </h4>
-                  <Badge variant={app.status.toLowerCase() as any} />
+                  <Badge variant={toProgramApplicationBadgeVariant(app.status)} />
                 </div>
                 {app.program?.curriculum && (
                   <p class="text-sm text-white/60">
@@ -65,13 +66,13 @@ const applications = await db.query.programApplication.findMany({
       <Card>
         <div class="text-center py-8">
           <p class="text-white/60 mb-4">
-            You haven't applied to any programs yet.
+            You haven't applied to any cohorts yet.
           </p>
           <a
             href="/dashboard/apply"
             class="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 font-medium text-dark hover:bg-primary/90 transition-colors"
           >
-            Browse Programs
+            Browse Cohorts
           </a>
         </div>
       </Card>
