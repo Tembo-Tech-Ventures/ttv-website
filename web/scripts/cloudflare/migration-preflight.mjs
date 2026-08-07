@@ -136,10 +136,18 @@ export async function findBlockingDuplicates({
     }
 
     const columnList = constraint.columns.map(quote).join(", ");
+    // SQLite treats NULLs as distinct in a unique index but as equal in
+    // GROUP BY. Without this filter a nullable column (e.g. the nullable
+    // programApplication.programId) would report groups that CREATE UNIQUE
+    // INDEX accepts happily, failing the deploy on a phantom conflict.
+    const notNullFilter = constraint.columns
+      .map((column) => `${quote(column)} IS NOT NULL`)
+      .join(" AND ");
     const result = await executeQuery(
       databaseId,
       `SELECT ${columnList}, COUNT(*) AS "duplicateCount"
          FROM ${quote(constraint.table)}
+        WHERE ${notNullFilter}
         GROUP BY ${columnList}
        HAVING COUNT(*) > 1
         LIMIT ${SAMPLE_LIMIT}`,

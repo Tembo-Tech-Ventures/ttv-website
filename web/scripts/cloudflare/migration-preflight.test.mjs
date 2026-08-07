@@ -1,3 +1,4 @@
+import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -137,6 +138,21 @@ describe("findBlockingDuplicates", () => {
     expect(executeQuery).toHaveBeenCalledTimes(1);
   });
 
+  it("ignores groups where an indexed column is NULL", async () => {
+    const executeQuery = createExecutor({ tables: ["programApplication"] });
+
+    await findBlockingDuplicates({
+      constraints,
+      databaseId: "db-1",
+      executeQuery,
+    });
+
+    const [, sql] = executeQuery.mock.calls[1];
+    expect(sql).toContain(
+      'WHERE "programId" IS NOT NULL AND "userId" IS NOT NULL',
+    );
+  });
+
   it("groups by the constraint columns without interpolating user input", async () => {
     const executeQuery = createExecutor({ tables: ["programApplication"] });
 
@@ -161,6 +177,80 @@ describe("findBlockingDuplicates", () => {
       findBlockingDuplicates({ constraints, databaseId: "db-1" }),
     ).rejects.toThrow(/query executor is required/);
   });
+});
+
+/**
+ * The preflight is only useful if its verdict matches what SQLite actually
+ * does. These run the generated query and the real CREATE UNIQUE INDEX against
+ * the same in-memory database and assert the two always agree.
+ */
+describe("preflight verdict matches real SQLite index creation", () => {
+  const constraint = {
+    columns: ["programId", "userId"],
+    indexName: "programApplication_programId_userId_unique",
+    table: "programApplication",
+  };
+
+  /** Executes the preflight's own SQL against a real SQLite database. */
+  const sqliteExecutor = (database) => async (_databaseId, sql) => [
+    { results: database.prepare(sql).all(), success: true },
+  ];
+
+  function seed(rows) {
+    const database = new DatabaseSync(":memory:");
+    database.exec(
+      `CREATE TABLE "programApplication" (
+         "id" text PRIMARY KEY NOT NULL,
+         "programId" text,
+         "userId" text NOT NULL
+       )`,
+    );
+    const insert = database.prepare(
+      'INSERT INTO "programApplication" VALUES (?, ?, ?)',
+    );
+    rows.forEach(([programId, userId], index) =>
+      insert.run(`row-${index}`, programId, userId),
+    );
+    return database;
+  }
+
+  function indexCreationSucceeds(database) {
+    try {
+      database.exec(
+        `CREATE UNIQUE INDEX "ix" ON "programApplication" ("programId", "userId")`,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  const cases = [
+    { name: "no duplicates", rows: [["p-1", "u-1"], ["p-1", "u-2"]] },
+    { name: "a genuine duplicate", rows: [["p-1", "u-1"], ["p-1", "u-1"]] },
+    {
+      name: "repeated NULL programId (distinct to a unique index)",
+      rows: [[null, "u-1"], [null, "u-1"]],
+    },
+    {
+      name: "NULL rows alongside a genuine duplicate",
+      rows: [[null, "u-1"], [null, "u-1"], ["p-1", "u-2"], ["p-1", "u-2"]],
+    },
+  ];
+
+  for (const { name, rows } of cases) {
+    it(`agrees with SQLite for ${name}`, async () => {
+      const database = seed(rows);
+      const conflicts = await findBlockingDuplicates({
+        constraints: [constraint],
+        databaseId: "db-1",
+        executeQuery: sqliteExecutor(database),
+      });
+
+      expect(conflicts.length > 0).toBe(!indexCreationSucceeds(database));
+      database.close();
+    });
+  }
 });
 
 describe("assertNoBlockingDuplicates", () => {
