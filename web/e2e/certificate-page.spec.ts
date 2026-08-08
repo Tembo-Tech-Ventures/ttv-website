@@ -23,10 +23,11 @@ test.describe("public certificate page", () => {
     const response = await page.goto(VALID_CERTIFICATE);
     expect(response?.status()).toBe(200);
 
-    await expect(
-      page.getByRole("heading", { name: "Amina Fixture", level: 1 })
-    ).toBeVisible();
-    await expect(page.getByText("Certificate of Completion")).toBeVisible();
+    // The page's heading carries both the document type and the recipient.
+    const heading = page.getByRole("heading", { level: 1 });
+    await expect(heading).toContainText("Certificate of Completion");
+    await expect(heading).toContainText("Amina Fixture");
+
     await expect(page.getByText("Preview Curriculum")).toBeVisible();
     await expect(page.getByText("Cohort 04")).toBeVisible();
 
