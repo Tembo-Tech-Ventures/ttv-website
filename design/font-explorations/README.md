@@ -1,5 +1,11 @@
 # Heading font exploration
 
+> **Decision: Mattone Black.** Adopted 2026-08-08 — self-hosted from
+> `web/src/assets/fonts/`, with the display tracking moved into the
+> `--tracking-display` / `--tracking-heading` / `--tracking-subhead` theme
+> tokens. The rest of this document is the exploration that led there; the
+> screenshots still show all four options side by side.
+
 Climate Crisis is doing the right job emotionally — loud, chunky, activist-poster —
 but its counters are nearly closed, so anything longer than a word gets hard to read.
 This folder holds like-for-like screenshots of three replacement candidates that keep

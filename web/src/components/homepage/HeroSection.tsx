@@ -97,11 +97,10 @@ export default function HeroSection({ isAuthenticated = false }: HeroSectionProp
 
         <h1
           ref={wordmarkRef}
-          className="font-heading text-ink-primary"
+          className="font-heading tracking-display text-ink-primary"
           style={{
             fontSize: "clamp(5rem, 18vw, 15rem)",
             lineHeight: 0.9,
-            letterSpacing: "-0.04em",
             margin: 0,
           }}
         >
@@ -170,8 +169,7 @@ export default function HeroSection({ isAuthenticated = false }: HeroSectionProp
             className="flex flex-col items-start gap-2 border-[color:var(--color-rule)] px-2 py-6 sm:border-r sm:last:border-r-0 md:px-6"
           >
             <span
-              className="font-heading text-5xl text-primary md:text-6xl"
-              style={{ letterSpacing: "-0.03em" }}
+              className="font-heading tracking-heading text-5xl text-primary md:text-6xl"
             >
               {stat.value}
             </span>

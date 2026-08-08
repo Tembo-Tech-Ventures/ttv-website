@@ -25,7 +25,7 @@ npm test                      # Run Vitest tests
 - **Middleware for auth**: Auth guards are in `src/middleware.ts`, not per-page. Dashboard requires login, admin requires ADMIN role.
 - **Astro pages**: All pages are `.astro` files in `src/pages/`. Forms use standard HTML `<form method="POST">` with server-side handling in frontmatter.
 - **Styling**: Tailwind CSS 4 with custom theme in `src/styles/global.css`. Colors: orange primary (#F28D68), dark teal (#013D39), lighter teal (#2C6964)
-- **Fonts**: Climate Crisis (h1/h2 headings only), Maven Pro (body + h3-h6)
+- **Fonts**: Mattone Black (h1/h2 headings only, self-hosted from `src/assets/fonts/`, OFL 1.1), Maven Pro (body + h3-h6). Display tracking comes from the `--tracking-display` / `--tracking-heading` / `--tracking-subhead` theme tokens — use `tracking-*` utilities, not inline `letter-spacing`.
 - **Database**: Drizzle ORM + SQLite via Cloudflare D1. Schema in `src/lib/db/schema.ts`.
 - **Icons**: Phosphor Icons (`@phosphor-icons/react`) for homepage, react-icons (`react-icons/pi`) for admin/dashboard shells
 

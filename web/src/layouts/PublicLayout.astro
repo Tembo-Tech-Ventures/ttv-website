@@ -7,7 +7,7 @@ import Grain from "@/components/common/Grain.astro";
  *
  * Nav: drops "Home", promotes Blog/Apply, demotes Sign In to a ghost
  * button. The branding mark switches to a tight sans "TTV" monogram
- * paired with the elephant — Climate Crisis is reserved for 48px+
+ * paired with the elephant — the display face is reserved for 48px+
  * per the typography role split (§A).
  *
  * Footer: expanded into mission + four link columns + legal row + an
@@ -68,7 +68,7 @@ const FOOTER_GROUPS = [
     <header class="sticky top-0 z-50 border-b border-[color:var(--color-rule)] bg-[#012A28]/80 backdrop-blur">
       <nav class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
         <a href="/" class="group flex items-center text-ink-primary" aria-label="Tembo Tech Ventures">
-          <span class="font-heading text-lg text-ink-primary transition-colors group-hover:text-primary" style="letter-spacing: -0.02em;">
+          <span class="font-heading tracking-subhead text-lg text-ink-primary transition-colors group-hover:text-primary">
             TEMBO
           </span>
           <span class="ml-3 font-body text-[10px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
@@ -211,8 +211,8 @@ const FOOTER_GROUPS = [
       {/* Oversized TEMBO signature — PROPOSAL §7. */}
       <div aria-hidden="true" class="mt-10 select-none overflow-hidden text-center leading-[0.85]">
         <span
-          class="font-heading block translate-y-[18%] whitespace-nowrap text-transparent"
-          style="font-size: clamp(6rem, 24vw, 22rem); letter-spacing: -0.04em; -webkit-text-stroke: 1px var(--color-primary);"
+          class="font-heading tracking-display block translate-y-[18%] whitespace-nowrap text-transparent"
+          style="font-size: clamp(6rem, 24vw, 22rem); -webkit-text-stroke: 1px var(--color-primary);"
         >
           TEMBO
         </span>
