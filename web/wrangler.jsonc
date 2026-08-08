@@ -54,6 +54,10 @@
     ]
   },
 
+  "triggers": {
+    "crons": ["*/15 * * * *"]
+  },
+
   "containers": [
     {
       "class_name": "FfmpegContainer",

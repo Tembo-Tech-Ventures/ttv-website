@@ -187,6 +187,7 @@ export const programRelations = relations(program, ({ one, many }) => ({
   programRoles: many(programRole),
   programApplications: many(programApplication),
   recordings: many(recording),
+  recordingImportSources: many(recordingImportSource),
 }));
 
 // ─── ProgramRole ───────────────────────────────────────────
@@ -286,7 +287,7 @@ export const recording = sqliteTable("recording", {
   programId: text("programId").references(() => program.id),
   title: text("title").notNull(),
   description: text("description"),
-  driveFileId: text("driveFileId"),
+  driveFileId: text("driveFileId").unique(),
   r2VideoKey: text("r2VideoKey"),
   r2AudioKey: text("r2AudioKey"),
   durationSeconds: integer("durationSeconds"),
@@ -296,6 +297,7 @@ export const recording = sqliteTable("recording", {
     enum: [
       "pending",
       "queued",
+      "downloading",
       "extracting_audio",
       "transcribing",
       "embedding",
@@ -318,6 +320,32 @@ export const recordingRelations = relations(recording, ({ one, many }) => ({
   }),
   segments: many(transcriptSegment),
 }));
+
+// ─── RecordingImportSource ─────────────────────────────────
+
+export const recordingImportSource = sqliteTable("recording_import_source", {
+  id: cuid("id"),
+  programId: text("programId")
+    .notNull()
+    .references(() => program.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  driveFolderId: text("driveFolderId").notNull(),
+  filenameContains: text("filenameContains"),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  lastSyncedAt: integer("lastSyncedAt", { mode: "timestamp" }),
+  lastError: text("lastError"),
+  ...timestamps,
+});
+
+export const recordingImportSourceRelations = relations(
+  recordingImportSource,
+  ({ one }) => ({
+    program: one(program, {
+      fields: [recordingImportSource.programId],
+      references: [program.id],
+    }),
+  })
+);
 
 // ─── TranscriptSegment ─────────────────────────────────────
 

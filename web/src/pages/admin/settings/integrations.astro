@@ -8,13 +8,16 @@ import { createCredentialCipher } from "@/lib/credentials/crypto";
 import {
   saveGoogleDriveCredential,
   getGoogleDriveCredentialStatus,
+  getGoogleDriveCredentials,
   GOOGLE_DRIVE_PROVIDER,
 } from "@/lib/credentials/google-drive";
 import {
   updateIntegrationCredentialConfig,
   deleteIntegrationCredential,
   getRecentAuditEntries,
+  recordCredentialTest,
 } from "@/lib/credentials/store";
+import { testGoogleDriveConnection } from "@/lib/recordings/google-drive";
 
 Astro.response.headers.set("Cache-Control", "no-store");
 
@@ -55,6 +58,30 @@ if (Astro.request.method === "POST" && encryptionAvailable) {
         actorUserId: userId,
       });
       success = "Impersonated user updated.";
+    } else if (action === "test") {
+      const credentials = await getGoogleDriveCredentials(db, cipher);
+      if (!credentials) {
+        throw new Error("No credential is configured to test.");
+      }
+      const sources = await db.query.recordingImportSource.findMany({
+        where: eq(schema.recordingImportSource.enabled, true),
+        columns: { driveFolderId: true },
+      });
+      const folderIds = sources.map((s) => s.driveFolderId);
+      const results = await testGoogleDriveConnection({ credentials, folderIds });
+      const allOk = results.every((r) => r.ok);
+      const detail = results
+        .map((r) => r.ok ? `${r.folderId || "API"}: ok` : `${r.folderId || "API"}: ${r.errorCode}`)
+        .join("; ");
+      await recordCredentialTest(db, {
+        provider: GOOGLE_DRIVE_PROVIDER,
+        actorUserId: userId,
+        ok: allOk,
+        detail,
+      });
+      success = allOk
+        ? "Connection test passed."
+        : `Connection test failed: ${detail}`;
     } else if (action === "remove") {
       await deleteIntegrationCredential(db, {
         provider: GOOGLE_DRIVE_PROVIDER,
@@ -270,6 +297,14 @@ const formatDate = (date: Date) =>
                     >Update</button>
                   </form>
                 </details>
+
+                <form method="POST">
+                  <input type="hidden" name="action" value="test" />
+                  <button
+                    type="submit"
+                    class="rounded-md border border-teal px-4 py-2 text-sm font-medium text-white hover:border-primary"
+                  >Test connection</button>
+                </form>
 
                 <details class="group">
                   <summary class="cursor-pointer rounded-md border border-red-400/40 px-4 py-2 text-sm font-medium text-red-200 hover:bg-red-400/10">
