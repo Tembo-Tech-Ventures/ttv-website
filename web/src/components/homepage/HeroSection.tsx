@@ -99,7 +99,11 @@ export default function HeroSection({ isAuthenticated = false }: HeroSectionProp
           ref={wordmarkRef}
           className="font-heading tracking-display text-ink-primary"
           style={{
-            fontSize: "clamp(5rem, 18vw, 15rem)",
+            // 17vw with no 5rem floor. The section's padding grows from 16px to
+            // 48px a side across breakpoints, so 18vw outgrew the content box at
+            // 768 and below, and the floor sheared 41px off the final O on a
+            // 390px phone. 17vw clears the widest padding at every width.
+            fontSize: "clamp(3rem, 17vw, 15rem)",
             lineHeight: 0.9,
             margin: 0,
           }}

@@ -164,7 +164,14 @@ const FOOTER_GROUPS = [
 
     <footer class="relative mt-20 overflow-hidden border-t border-[color:var(--color-rule)] pt-16 md:pt-24">
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div class="flex flex-col gap-12 md:flex-row md:justify-between">
+        <!--
+          Side by side only from lg. At md the row had to fit a 384px mission
+          block plus four link columns inside 720px, which left each column
+          about 42px: "How we work" broke onto three lines and the "Connect"
+          heading was cut off mid-word. Below lg the two blocks stack, so the
+          link grid gets the full width.
+        -->
+        <div class="flex flex-col gap-12 lg:flex-row lg:justify-between">
           <div class="max-w-sm space-y-5">
             <p class="font-body text-xs font-semibold uppercase tracking-[0.32em] text-primary">
               Tembo Tech Ventures
