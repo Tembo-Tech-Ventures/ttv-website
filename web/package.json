@@ -47,7 +47,8 @@
   "overrides": {
     "vite": "^7",
     "kysely": "^0.28.14",
-    "undici": "^7.29.0"
+    "undici": "^7.29.0",
+    "nanoid": "^3.3.17"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
