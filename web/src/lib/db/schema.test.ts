@@ -16,6 +16,7 @@ describe("Database Schema", () => {
     expect(schema.programPartner).toBeDefined();
     expect(schema.programApplication).toBeDefined();
     expect(schema.recording).toBeDefined();
+    expect(schema.recordingImportSource).toBeDefined();
     expect(schema.transcriptSegment).toBeDefined();
     expect(schema.chatMessage).toBeDefined();
     expect(schema.integrationCredential).toBeDefined();
@@ -35,6 +36,7 @@ describe("Database Schema", () => {
     expect(schema.programPartnerRelations).toBeDefined();
     expect(schema.programApplicationRelations).toBeDefined();
     expect(schema.recordingRelations).toBeDefined();
+    expect(schema.recordingImportSourceRelations).toBeDefined();
     expect(schema.transcriptSegmentRelations).toBeDefined();
     expect(schema.chatMessageRelations).toBeDefined();
   });
@@ -65,12 +67,17 @@ describe("Database Schema", () => {
     expect(statusCol.enumValues).toEqual([
       "pending",
       "queued",
+      "downloading",
       "extracting_audio",
       "transcribing",
       "embedding",
       "complete",
       "failed",
     ]);
+  });
+
+  it("recording Drive file IDs are unique for idempotent imports", () => {
+    expect(schema.recording.driveFileId.isUnique).toBe(true);
   });
 
   it("user email has unique constraint", () => {

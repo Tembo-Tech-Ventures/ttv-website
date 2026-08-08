@@ -4,6 +4,12 @@ import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 import { embedAndIndexRecording } from "@/lib/recordings/embeddings";
 import { transcribeAudioObject } from "@/lib/recordings/transcription";
+import {
+  downloadGoogleDriveVideoToR2,
+  type GoogleDriveCredentials,
+} from "@/lib/recordings/google-drive";
+import { createCredentialCipher } from "@/lib/credentials/crypto";
+import { getGoogleDriveCredentials } from "@/lib/credentials/google-drive";
 
 export interface RecordingQueueMessage {
   type: "process_recording";
@@ -31,6 +37,15 @@ async function updateStatus(
     .where(eq(schema.recording.id, recordingId));
 }
 
+async function resolveGoogleDriveCredentials(
+  env: Env,
+  db: Database
+): Promise<GoogleDriveCredentials | null> {
+  const cipher = createCredentialCipher(env);
+  if (!cipher) return null;
+  return getGoogleDriveCredentials(db, cipher);
+}
+
 export async function processRecordingMessage(message: unknown, env: Env) {
   if (!isRecordingQueueMessage(message)) {
     throw new Error("Unknown recording queue message");
@@ -44,11 +59,35 @@ export async function processRecordingMessage(message: unknown, env: Env) {
   if (!recording) {
     throw new Error(`Recording ${message.recordingId} not found`);
   }
-  if (!recording.r2VideoKey) {
-    throw new Error(`Recording ${recording.id} does not have an R2 video key`);
-  }
 
   try {
+    let r2VideoKey = recording.r2VideoKey;
+    let fileSizeBytes = recording.fileSizeBytes;
+
+    if (!r2VideoKey && recording.driveFileId) {
+      await updateStatus(db, recording.id, "downloading");
+      const credentials = await resolveGoogleDriveCredentials(env, db);
+      if (!credentials) {
+        throw new Error("Google Drive credentials are not configured");
+      }
+      const download = await downloadGoogleDriveVideoToR2({
+        env,
+        credentials,
+        fileId: recording.driveFileId,
+        recordingId: recording.id,
+      });
+      r2VideoKey = download.r2VideoKey;
+      fileSizeBytes = download.fileSizeBytes ?? fileSizeBytes;
+      await db
+        .update(schema.recording)
+        .set({ r2VideoKey, fileSizeBytes })
+        .where(eq(schema.recording.id, recording.id));
+    }
+
+    if (!r2VideoKey) {
+      throw new Error(`Recording ${recording.id} does not have a video source`);
+    }
+
     await updateStatus(db, recording.id, "extracting_audio");
     const container = env.FFMPEG_CONTAINER.getByName(recording.id);
     const ffmpegResponse = await container.fetch("https://ffmpeg/process", {
@@ -56,7 +95,7 @@ export async function processRecordingMessage(message: unknown, env: Env) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         recordingId: recording.id,
-        r2VideoKey: recording.r2VideoKey,
+        r2VideoKey,
       }),
     });
 
