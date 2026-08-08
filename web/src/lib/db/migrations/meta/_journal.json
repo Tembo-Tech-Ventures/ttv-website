@@ -43,6 +43,13 @@
       "when": 1786020406198,
       "tag": "0005_brief_spiral",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1786187011292,
+      "tag": "0006_parallel_devos",
+      "breakpoints": true
     }
   ]
 }

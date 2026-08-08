@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   assertAgentEnvironmentName,
   deriveAgentPreviewAuthSecret,
+  deriveAgentPreviewCredentialKey,
   isAgentEnvironmentName,
 } from "./agent-preview-auth.mjs";
 
@@ -631,6 +632,13 @@ export function getSecretBindings() {
   const aiGatewayToken = getOptionalEnv("CLOUDFLARE_AI_GATEWAY_TOKEN");
   if (aiGatewayToken) {
     bindings.push({ key: "AI_GATEWAY_API_KEY", value: aiGatewayToken });
+  }
+
+  const credentialKey = isAgentPreview
+    ? deriveAgentPreviewCredentialKey(previewSecret, environmentName)
+    : getOptionalEnv("CREDENTIALS_ENCRYPTION_KEY");
+  if (credentialKey) {
+    bindings.push({ key: "CREDENTIALS_ENCRYPTION_KEY", value: credentialKey });
   }
 
   return bindings;

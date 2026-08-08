@@ -1,8 +1,10 @@
 import { createHmac } from "node:crypto";
+import { Buffer } from "node:buffer";
 
 const MINIMUM_PREVIEW_SECRET_LENGTH = 32;
 const PREVIEW_TOKEN_CONTEXT = "ttv-agent-preview-token";
 const PREVIEW_AUTH_SECRET_CONTEXT = "ttv-agent-preview-auth-secret";
+const PREVIEW_CREDENTIAL_KEY_CONTEXT = "ttv-agent-preview-credential-key";
 
 export const AGENT_PREVIEW_USER_ID = "ttv-agent-preview-user";
 export const AGENT_PREVIEW_SESSION_ID = "ttv-agent-preview-session";
@@ -43,6 +45,15 @@ export function deriveAgentPreviewToken(secret, environmentName) {
 
 export function deriveAgentPreviewAuthSecret(secret, environmentName) {
   return deriveSecret(secret, environmentName, PREVIEW_AUTH_SECRET_CONTEXT);
+}
+
+export function deriveAgentPreviewCredentialKey(secret, environmentName) {
+  return Buffer.from(
+    deriveSecret(secret, environmentName, PREVIEW_CREDENTIAL_KEY_CONTEXT),
+    "hex"
+  )
+    .subarray(0, 32)
+    .toString("base64");
 }
 
 function firstQueryRow(result) {

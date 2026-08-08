@@ -1,0 +1,331 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import { drizzle } from "drizzle-orm/d1";
+import { eq } from "drizzle-orm";
+import { env } from "cloudflare:workers";
+import * as schema from "@/lib/db/schema";
+import { createCredentialCipher } from "@/lib/credentials/crypto";
+import {
+  saveGoogleDriveCredential,
+  getGoogleDriveCredentialStatus,
+  GOOGLE_DRIVE_PROVIDER,
+} from "@/lib/credentials/google-drive";
+import {
+  updateIntegrationCredentialConfig,
+  deleteIntegrationCredential,
+  getRecentAuditEntries,
+} from "@/lib/credentials/store";
+
+Astro.response.headers.set("Cache-Control", "no-store");
+
+const userId = Astro.locals.user?.id;
+if (!userId) return Astro.redirect("/auth/login");
+
+const encryptionAvailable = Boolean(env.CREDENTIALS_ENCRYPTION_KEY);
+const db = drizzle(env.DB, { schema });
+
+let error = "";
+let success = "";
+
+if (Astro.request.method === "POST" && encryptionAvailable) {
+  try {
+    const cipher = createCredentialCipher(env);
+    const formData = await Astro.request.formData();
+    const action = String(formData.get("action") ?? "");
+
+    if (action === "save" || action === "replace") {
+      const serviceAccountJson = String(formData.get("serviceAccountJson") ?? "");
+      const impersonatedUser = String(formData.get("impersonatedUser") ?? "").trim();
+      if (!serviceAccountJson.trim()) {
+        throw new Error("Service account JSON is required.");
+      }
+      await saveGoogleDriveCredential(db, cipher, {
+        serviceAccountJson,
+        impersonatedUser: impersonatedUser || undefined,
+        actorUserId: userId,
+      });
+      success = action === "save"
+        ? "Google Drive credential saved."
+        : "Google Drive credential replaced.";
+    } else if (action === "update-config") {
+      const impersonatedUser = String(formData.get("impersonatedUser") ?? "").trim();
+      await updateIntegrationCredentialConfig(db, {
+        provider: GOOGLE_DRIVE_PROVIDER,
+        config: JSON.stringify({ impersonatedUser: impersonatedUser || null }),
+        actorUserId: userId,
+      });
+      success = "Impersonated user updated.";
+    } else if (action === "remove") {
+      await deleteIntegrationCredential(db, {
+        provider: GOOGLE_DRIVE_PROVIDER,
+        actorUserId: userId,
+      });
+      success = "Google Drive credential removed.";
+    } else {
+      throw new Error("Unknown action.");
+    }
+  } catch (caught) {
+    error = caught instanceof Error ? caught.message : "Operation failed.";
+  }
+}
+
+const status = encryptionAvailable
+  ? await getGoogleDriveCredentialStatus(db)
+  : null;
+const auditEntries = encryptionAvailable
+  ? await getRecentAuditEntries(db, GOOGLE_DRIVE_PROVIDER)
+  : [];
+
+let metadata: { clientEmail?: string; projectId?: string; privateKeyIdFingerprint?: string } = {};
+if (status?.displayMetadata) {
+  try {
+    metadata = JSON.parse(status.displayMetadata);
+  } catch { /* non-fatal */ }
+}
+
+let config: { impersonatedUser?: string | null } = {};
+if (status?.config) {
+  try {
+    config = JSON.parse(status.config);
+  } catch { /* non-fatal */ }
+}
+
+let updatedByName: string | null = null;
+if (status?.updatedBy) {
+  const updater = await db.query.user.findFirst({
+    where: eq(schema.user.id, status.updatedBy),
+    columns: { name: true },
+  });
+  updatedByName = updater?.name ?? null;
+}
+
+const actorNames = new Map<string, string>();
+for (const entry of auditEntries) {
+  if (entry.actorUserId && !actorNames.has(entry.actorUserId)) {
+    const actor = await db.query.user.findFirst({
+      where: eq(schema.user.id, entry.actorUserId),
+      columns: { name: true },
+    });
+    actorNames.set(entry.actorUserId, actor?.name ?? "Unknown");
+  }
+}
+
+const formatDate = (date: Date) =>
+  new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+  }).format(date);
+---
+
+<AdminLayout title="Integrations">
+  <div class="max-w-4xl space-y-6">
+    <div>
+      <h2 class="text-2xl font-bold text-white">Integrations</h2>
+      <p class="mt-2 text-sm text-white/60">
+        Manage third-party service credentials. Secrets are encrypted at rest
+        and are never displayed after saving.
+      </p>
+    </div>
+
+    {!encryptionAvailable ? (
+      <div class="rounded-lg border border-amber-400/30 bg-amber-400/10 p-5 text-amber-100">
+        Credential storage is not available in this environment. The
+        <code class="mx-1 rounded bg-black/20 px-1.5 py-0.5 text-xs">CREDENTIALS_ENCRYPTION_KEY</code>
+        secret is not configured.
+      </div>
+    ) : (
+      <>
+        {success && (
+          <div class="rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-4 text-sm text-emerald-100">
+            {success}
+          </div>
+        )}
+        {error && (
+          <div class="rounded-lg border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-100">
+            {error}
+          </div>
+        )}
+
+        <section class="rounded-lg border border-teal/20 bg-dark/80 p-5 shadow-lg">
+          <h3 class="text-lg font-semibold text-white">Google Drive</h3>
+          <p class="mt-1 text-sm text-white/60">
+            Service-account credential for importing session recordings from
+            Google Drive.
+          </p>
+
+          {!status ? (
+            <form method="POST" class="mt-5 space-y-4">
+              <input type="hidden" name="action" value="save" />
+              <label class="flex flex-col gap-1.5 text-sm text-white/80">
+                Service account JSON
+                <textarea
+                  name="serviceAccountJson"
+                  required
+                  rows={6}
+                  placeholder="Paste the full service-account JSON key file here"
+                  class="rounded-md border border-teal bg-dark/50 px-3 py-2 font-mono text-xs text-white placeholder:text-white/30 focus:border-primary focus:outline-none"
+                />
+              </label>
+              <label class="flex flex-col gap-1.5 text-sm text-white/80">
+                Impersonated user (optional)
+                <input
+                  name="impersonatedUser"
+                  type="email"
+                  placeholder="user@example.com"
+                  class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/30 focus:border-primary focus:outline-none"
+                />
+              </label>
+              <button
+                type="submit"
+                class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
+              >Save credential</button>
+            </form>
+          ) : (
+            <div class="mt-5 space-y-5">
+              <dl class="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[auto_1fr]">
+                {metadata.clientEmail && (
+                  <>
+                    <dt class="font-medium text-white/60">Client email</dt>
+                    <dd class="text-white">{metadata.clientEmail}</dd>
+                  </>
+                )}
+                {metadata.projectId && (
+                  <>
+                    <dt class="font-medium text-white/60">Project ID</dt>
+                    <dd class="text-white">{metadata.projectId}</dd>
+                  </>
+                )}
+                {metadata.privateKeyIdFingerprint && (
+                  <>
+                    <dt class="font-medium text-white/60">Key fingerprint</dt>
+                    <dd class="font-mono text-white">{metadata.privateKeyIdFingerprint}...</dd>
+                  </>
+                )}
+                {config.impersonatedUser && (
+                  <>
+                    <dt class="font-medium text-white/60">Impersonated user</dt>
+                    <dd class="text-white">{config.impersonatedUser}</dd>
+                  </>
+                )}
+                <dt class="font-medium text-white/60">Last updated</dt>
+                <dd class="text-white">
+                  {formatDate(status.updatedAt)}
+                  {updatedByName && <span class="text-white/60"> by {updatedByName}</span>}
+                </dd>
+              </dl>
+
+              <div class="flex flex-wrap gap-3 border-t border-teal/20 pt-4">
+                <details class="group">
+                  <summary class="cursor-pointer rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90">
+                    Replace credential
+                  </summary>
+                  <form method="POST" class="mt-3 space-y-3">
+                    <input type="hidden" name="action" value="replace" />
+                    <label class="flex flex-col gap-1.5 text-sm text-white/80">
+                      New service account JSON
+                      <textarea
+                        name="serviceAccountJson"
+                        required
+                        rows={4}
+                        placeholder="Paste the replacement JSON key file"
+                        class="rounded-md border border-teal bg-dark/50 px-3 py-2 font-mono text-xs text-white placeholder:text-white/30 focus:border-primary focus:outline-none"
+                      />
+                    </label>
+                    <label class="flex flex-col gap-1.5 text-sm text-white/80">
+                      Impersonated user (optional)
+                      <input
+                        name="impersonatedUser"
+                        type="email"
+                        value={config.impersonatedUser ?? ""}
+                        class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/30 focus:border-primary focus:outline-none"
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
+                    >Replace</button>
+                  </form>
+                </details>
+
+                <details class="group">
+                  <summary class="cursor-pointer rounded-md border border-teal px-4 py-2 text-sm font-medium text-white hover:border-primary">
+                    Update impersonated user
+                  </summary>
+                  <form method="POST" class="mt-3 space-y-3">
+                    <input type="hidden" name="action" value="update-config" />
+                    <label class="flex flex-col gap-1.5 text-sm text-white/80">
+                      Impersonated user
+                      <input
+                        name="impersonatedUser"
+                        type="email"
+                        value={config.impersonatedUser ?? ""}
+                        placeholder="user@example.com (leave empty to clear)"
+                        class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/30 focus:border-primary focus:outline-none"
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      class="rounded-md border border-teal px-4 py-2 text-sm font-medium text-white hover:border-primary"
+                    >Update</button>
+                  </form>
+                </details>
+
+                <details class="group">
+                  <summary class="cursor-pointer rounded-md border border-red-400/40 px-4 py-2 text-sm font-medium text-red-200 hover:bg-red-400/10">
+                    Remove credential
+                  </summary>
+                  <form method="POST" class="mt-3 space-y-3">
+                    <input type="hidden" name="action" value="remove" />
+                    <p class="text-sm text-red-200">
+                      This will permanently delete the stored credential.
+                      Recording imports that depend on it will stop working.
+                    </p>
+                    <button
+                      type="submit"
+                      class="rounded-md bg-red-500/80 px-4 py-2 text-sm font-medium text-white hover:bg-red-500"
+                    >Confirm removal</button>
+                  </form>
+                </details>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {auditEntries.length > 0 && (
+          <section class="rounded-lg border border-teal/20 bg-dark/80 p-5 shadow-lg">
+            <h3 class="text-lg font-semibold text-white">Recent activity</h3>
+            <div class="mt-4 overflow-x-auto">
+              <table class="w-full text-left text-sm">
+                <thead class="border-b border-teal/20 text-white/50">
+                  <tr>
+                    <th class="pb-2 pr-4 font-medium">Action</th>
+                    <th class="pb-2 pr-4 font-medium">Outcome</th>
+                    <th class="pb-2 pr-4 font-medium">By</th>
+                    <th class="pb-2 font-medium">When (UTC)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditEntries.map((entry) => (
+                    <tr class="border-b border-teal/10 text-white/80">
+                      <td class="py-2.5 pr-4">
+                        <span class="rounded-full bg-teal/20 px-2 py-0.5 text-xs font-medium text-white/90">
+                          {entry.action}
+                        </span>
+                      </td>
+                      <td class="py-2.5 pr-4">{entry.outcome}</td>
+                      <td class="py-2.5 pr-4">
+                        {entry.actorUserId ? actorNames.get(entry.actorUserId) ?? "Unknown" : "System"}
+                      </td>
+                      <td class="py-2.5">{formatDate(entry.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+      </>
+    )}
+  </div>
+</AdminLayout>
