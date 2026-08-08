@@ -32,7 +32,8 @@ test.describe("Google Drive recording import", () => {
 
     if (await notConfigured.isVisible()) {
       await expect(notConfigured).toContainText("not configured");
-      const integrationsLink = page.getByRole("link", {
+      // Scoped to the banner: the admin sidebar also has an Integrations link.
+      const integrationsLink = notConfigured.getByRole("link", {
         name: /Integrations/,
       });
       await expect(integrationsLink).toBeVisible();
