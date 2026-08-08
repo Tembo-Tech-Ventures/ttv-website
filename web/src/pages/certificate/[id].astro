@@ -1,9 +1,6 @@
 ---
 import CertificateLayout from "@/layouts/CertificateLayout.astro";
-import CertificateDocument from "@/components/certificate/CertificateDocument.astro";
-import CertificateCredential from "@/components/certificate/CertificateCredential.astro";
-import CertificateCredentialLight from "@/components/certificate/CertificateCredentialLight.astro";
-import CertificateEditorial from "@/components/certificate/CertificateEditorial.astro";
+import CertificateCard from "@/components/certificate/CertificateCard.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
@@ -62,10 +59,6 @@ const view =
         ).toString(),
       })
     : null;
-
-// TEMPORARY (design exploration): lets the three candidate treatments be
-// previewed side by side. Removed once a direction is chosen.
-const variant = Astro.url.searchParams.get("variant") ?? "document";
 ---
 
 <CertificateLayout
@@ -77,16 +70,8 @@ const variant = Astro.url.searchParams.get("variant") ?? "document";
       <p>This certificate does not exist or has not yet been issued.</p>
       <a href="/">Back to Tembo Tech Ventures</a>
     </main>
-  ) : variant === "credential" ? (
-    <CertificateCredential view={view} />
-  ) : variant === "light-dark-backdrop" ? (
-    <CertificateCredentialLight view={view} backdrop="dark" />
-  ) : variant === "light-warm-backdrop" ? (
-    <CertificateCredentialLight view={view} backdrop="light" />
-  ) : variant === "editorial" ? (
-    <CertificateEditorial view={view} />
   ) : (
-    <CertificateDocument view={view} />
+    <CertificateCard view={view} />
   )}
 </CertificateLayout>
 

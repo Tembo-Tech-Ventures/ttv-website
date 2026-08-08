@@ -20,35 +20,37 @@ const rows = [
 
 <main class="page">
   <article class="card">
-    <div class="card-top">
-      <p class="wordmark">Tembo Tech Ventures</p>
-      <p class="status">Verified</p>
+    <div class="card-body">
+      <div class="card-top">
+        <p class="wordmark">Tembo Tech Ventures</p>
+        <p class="status">Verified</p>
+      </div>
+
+      <div class="seal" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 12.5 9.5 18 20 6.5" />
+        </svg>
+      </div>
+
+      <p class="eyebrow">Certificate of Completion</p>
+      <h1 class="name">{view.studentName}</h1>
+
+      <p class="completed">completed</p>
+      <p class="course">{view.curriculumTitle}</p>
+      {view.programName && <p class="cohort">{view.programName}</p>}
+
+      <dl class="meta">
+        {rows.map((row) => (
+          <div class="meta-row">
+            <dt class="meta-label">{row.label}</dt>
+            <dd class:list={["meta-value", row.mono && "meta-value-mono"]}>
+              {row.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
     </div>
-
-    <div class="seal" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-        stroke-linecap="round" stroke-linejoin="round">
-        <path d="M4 12.5 9.5 18 20 6.5" />
-      </svg>
-    </div>
-
-    <p class="eyebrow">Certificate of Completion</p>
-    <h1 class="name">{view.studentName}</h1>
-
-    <p class="completed">completed</p>
-    <p class="course">{view.curriculumTitle}</p>
-    {view.programName && <p class="cohort">{view.programName}</p>}
-
-    <dl class="meta">
-      {rows.map((row) => (
-        <div class="meta-row">
-          <dt class="meta-label">{row.label}</dt>
-          <dd class:list={["meta-value", row.mono && "meta-value-mono"]}>
-            {row.value}
-          </dd>
-        </div>
-      ))}
-    </dl>
   </article>
 
   <CertificateActions view={view} tone="light" />
@@ -56,30 +58,43 @@ const rows = [
 
 <style>
   .page {
+    --paper: #fffcf6;
+    --ink: #10312e;
+    --ink-soft: #5b736f;
+    --hairline: rgba(1, 61, 57, 0.14);
+
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 1.75rem;
     padding: clamp(1.25rem, 5vw, 4rem) 1rem clamp(2.5rem, 6vw, 4rem);
-    background:
-      radial-gradient(
-        56rem 32rem at 50% -14%,
-        rgba(242, 141, 104, 0.14),
-        transparent 70%
-      ),
-      #012A27;
+    /* The cream card floats on the brand teal so the credential reads as an
+     * object rather than as the page itself. */
+    background: var(--color-dark);
   }
 
   .card {
     width: 100%;
     max-width: 38rem;
-    background: linear-gradient(180deg, #0A4A44 0%, #063F3A 100%);
-    border: 1px solid rgba(255, 248, 242, 0.13);
+    background: var(--paper);
+    color: var(--ink);
     border-radius: 1.5rem;
-    padding: clamp(1.5rem, 5.5vw, 2.5rem);
+    /* Clips the orange strip to the rounded top edge. */
+    overflow: hidden;
     text-align: center;
-    box-shadow: 0 30px 70px -40px rgb(0 0 0 / 0.9);
+    box-shadow: 0 24px 60px -30px rgb(0 0 0 / 0.75);
+  }
+
+  .card::before {
+    content: "";
+    display: block;
+    height: 6px;
+    background: var(--color-primary);
+  }
+
+  .card-body {
+    padding: clamp(1.5rem, 5.5vw, 2.5rem);
   }
 
   .card-top {
@@ -88,7 +103,7 @@ const rows = [
     justify-content: space-between;
     gap: 1rem;
     padding-bottom: clamp(1.25rem, 4vw, 1.75rem);
-    border-bottom: 1px solid rgba(255, 248, 242, 0.12);
+    border-bottom: 1px solid var(--hairline);
   }
 
   .wordmark,
@@ -100,14 +115,15 @@ const rows = [
   }
 
   .wordmark {
-    color: var(--color-ink-secondary);
     letter-spacing: 0.26em;
+    color: var(--color-teal);
     text-align: left;
   }
 
+  /* Teal at both ends of the row balances the header against the seal. */
   .status {
     flex-shrink: 0;
-    color: var(--color-ink-muted);
+    color: var(--color-teal);
   }
 
   .seal {
@@ -132,7 +148,7 @@ const rows = [
     font-weight: 600;
     letter-spacing: 0.22em;
     text-transform: uppercase;
-    color: var(--color-ink-muted);
+    color: var(--ink-soft);
   }
 
   .name {
@@ -142,7 +158,6 @@ const rows = [
     font-weight: 700;
     line-height: 1.12;
     letter-spacing: -0.02em;
-    color: var(--color-ink-primary);
     text-wrap: balance;
   }
 
@@ -152,41 +167,45 @@ const rows = [
     font-weight: 500;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: var(--color-ink-muted);
+    color: var(--ink-soft);
   }
 
+  /*
+   * The brand orange fails contrast as body copy on cream, so the course line
+   * takes the teal and orange stays on the strip and the seal.
+   */
   .course {
     margin-top: 0.5rem;
     font-size: clamp(1.125rem, 4.4vw, 1.375rem);
     font-weight: 600;
     line-height: 1.25;
-    color: var(--color-primary);
+    color: var(--color-teal);
     text-wrap: balance;
   }
 
   .cohort {
     margin-top: 0.3rem;
     font-size: 0.9375rem;
-    color: var(--color-ink-secondary);
+    color: var(--ink-soft);
   }
 
   .meta {
     margin-top: clamp(1.75rem, 5vw, 2.25rem);
-    border: 1px solid rgba(255, 248, 242, 0.12);
+    border: 1px solid var(--hairline);
     border-radius: 0.9rem;
     overflow: hidden;
     text-align: left;
   }
 
   /*
-   * Narrow phones cannot fit a label and a 25-character credential id on one
-   * line without orphaning the tail of the id, so the pairs stack instead.
+   * The label and a 25-character credential id fit on one line down to about
+   * 23rem; below that the id would orphan its tail, so the pairs stack.
    */
   .meta-row {
     padding: 0.65rem 1rem;
   }
 
-  @media (min-width: 26rem) {
+  @media (min-width: 23rem) {
     .meta-row {
       display: flex;
       align-items: baseline;
@@ -197,7 +216,7 @@ const rows = [
   }
 
   .meta-row + .meta-row {
-    border-top: 1px solid rgba(255, 248, 242, 0.09);
+    border-top: 1px solid var(--hairline);
   }
 
   .meta-label {
@@ -206,17 +225,16 @@ const rows = [
     font-weight: 600;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--color-ink-muted);
+    color: var(--ink-soft);
   }
 
   .meta-value {
     margin-top: 0.25rem;
     font-size: 0.875rem;
     font-weight: 500;
-    color: var(--color-ink-secondary);
   }
 
-  @media (min-width: 26rem) {
+  @media (min-width: 23rem) {
     .meta-value {
       margin-top: 0;
       text-align: right;
@@ -225,8 +243,15 @@ const rows = [
 
   .meta-value-mono {
     font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
+    color: var(--ink-soft);
     overflow-wrap: anywhere;
+  }
+
+  @media (min-width: 30rem) {
+    .meta-value-mono {
+      font-size: 0.75rem;
+    }
   }
 
   @media print {
@@ -238,37 +263,7 @@ const rows = [
 
     .card {
       max-width: none;
-      background: #fff;
-      color: #10312e;
-      border-color: rgba(1, 61, 57, 0.2);
       border-radius: 0;
-      box-shadow: none;
-    }
-
-    .name {
-      color: #10312e;
-    }
-
-    .cohort,
-    .meta-value {
-      color: #3d5a56;
-    }
-
-    .wordmark,
-    .status,
-    .eyebrow,
-    .completed,
-    .meta-label {
-      color: #5b736f;
-    }
-
-    .card-top,
-    .meta,
-    .meta-row + .meta-row {
-      border-color: rgba(1, 61, 57, 0.18);
-    }
-
-    .seal {
       box-shadow: none;
     }
   }
