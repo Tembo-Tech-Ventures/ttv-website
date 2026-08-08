@@ -43,6 +43,9 @@ test.describe("admin integrations page", () => {
     await expect(
       page.getByRole("heading", { name: /integrations/i })
     ).toBeVisible();
+    await expect(
+      page.getByText("Where to get this credential")
+    ).toBeVisible();
     await page.screenshot({
       path: evidence("admin-integrations-initial"),
       fullPage: true,
