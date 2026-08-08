@@ -60,6 +60,7 @@ function createDatabase(recording: Record<string, unknown>) {
 function createEnvironment(containerFetch: ReturnType<typeof vi.fn>) {
   return {
     DB: {},
+    CREDENTIALS_ENCRYPTION_KEY: "dGVzdC1rZXktMzItYnl0ZXMtZm9yLXVuaXQ=",
     BUCKET: {
       get: vi.fn().mockResolvedValue({
         arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8)),

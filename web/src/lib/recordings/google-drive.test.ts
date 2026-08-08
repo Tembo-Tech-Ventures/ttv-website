@@ -299,4 +299,31 @@ describe("Google Drive connection test", () => {
     );
     expect(tokenCalls).toHaveLength(1);
   });
+
+  it("includes impersonatedUser in the cache key so changing delegation invalidates tokens", async () => {
+    let tokenCallCount = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.hostname === "oauth2.googleapis.com") {
+        tokenCallCount++;
+        return Response.json({ access_token: `token-${tokenCallCount}`, expires_in: 3600 });
+      }
+      return Response.json({ user: { emailAddress: "test@example.com" } });
+    });
+    const fetchImplementation = fetchMock as unknown as typeof fetch;
+
+    await listGoogleDriveVideoFiles({
+      credentials: { ...credentials, impersonatedUser: "user-a@example.com" },
+      folderId: "1AbCdEfGhIjKlMnOpQrStUvWxYz",
+      fetch: fetchImplementation,
+    });
+    expect(tokenCallCount).toBe(1);
+
+    await listGoogleDriveVideoFiles({
+      credentials: { ...credentials, impersonatedUser: "user-b@example.com" },
+      folderId: "1AbCdEfGhIjKlMnOpQrStUvWxYz",
+      fetch: fetchImplementation,
+    });
+    expect(tokenCallCount).toBe(2);
+  });
 });

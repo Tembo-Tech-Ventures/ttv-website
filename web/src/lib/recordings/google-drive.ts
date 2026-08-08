@@ -155,7 +155,7 @@ export async function getGoogleDriveAccessToken(
   } = {}
 ): Promise<string> {
   const now = options.now ?? Date.now();
-  const cacheKey = `${credentials.privateKeyId ?? ""}:${credentials.clientEmail}`;
+  const cacheKey = `${credentials.privateKeyId ?? ""}:${credentials.clientEmail}:${credentials.impersonatedUser ?? ""}`;
   if (
     options.useCache !== false &&
     tokenCache?.cacheKey === cacheKey &&

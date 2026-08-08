@@ -11,14 +11,14 @@ import { parseGoogleDriveFolderId } from "@/lib/recordings/google-drive";
 import { syncRecordingImportSource } from "@/lib/recordings/importer";
 
 const db = drizzle(env.DB, { schema });
-const cipher = createCredentialCipher(env);
 
 let credentialsConfigured = false;
 let clientEmail: string | undefined;
 let impersonatedUser: string | undefined;
 
-if (cipher) {
+if (env.CREDENTIALS_ENCRYPTION_KEY) {
   try {
+    const cipher = createCredentialCipher(env);
     const creds = await getGoogleDriveCredentials(db, cipher);
     if (creds) {
       credentialsConfigured = true;

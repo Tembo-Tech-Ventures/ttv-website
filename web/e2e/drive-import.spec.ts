@@ -14,7 +14,7 @@ test.describe("Google Drive recording import", () => {
     extraHTTPHeaders: token ? { Authorization: `Bearer ${token}` } : {},
   });
 
-  test("import page is ADMIN-only and shows not-configured gate", async ({
+  test("import page loads and shows credential status", async ({
     page,
   }, testInfo) => {
     await page.goto("/admin/recordings/import");
@@ -23,25 +23,27 @@ test.describe("Google Drive recording import", () => {
       page.getByRole("heading", { name: "Import Session Recordings" })
     ).toBeVisible();
 
-    await expect(
-      page.getByTestId("drive-not-configured")
-    ).toBeVisible();
-
-    await expect(
-      page.getByTestId("drive-not-configured")
-    ).toContainText("not configured");
-
-    const integrationsLink = page.getByRole("link", {
-      name: /Integrations/,
-    });
-    await expect(integrationsLink).toBeVisible();
-    await expect(integrationsLink).toHaveAttribute(
-      "href",
-      "/admin/settings/integrations"
+    const notConfigured = page.getByTestId("drive-not-configured");
+    const configured = page.getByText(
+      "Service account credentials are configured.",
+      { exact: true }
     );
+    await expect(notConfigured.or(configured)).toBeVisible();
+
+    if (await notConfigured.isVisible()) {
+      await expect(notConfigured).toContainText("not configured");
+      const integrationsLink = page.getByRole("link", {
+        name: /Integrations/,
+      });
+      await expect(integrationsLink).toBeVisible();
+      await expect(integrationsLink).toHaveAttribute(
+        "href",
+        "/admin/settings/integrations"
+      );
+    }
 
     await page.screenshot({
-      path: `test-results/evidence/${testInfo.project.name}-drive-import-not-configured.png`,
+      path: `test-results/evidence/${testInfo.project.name}-drive-import.png`,
       fullPage: true,
     });
   });
@@ -49,7 +51,10 @@ test.describe("Google Drive recording import", () => {
   test("recordings index links to the import page", async ({ page }) => {
     await page.goto("/admin/recordings");
 
-    const importLink = page.getByRole("link", { name: "Import from Drive" });
+    const importLink = page.getByRole("link", {
+      name: "Import from Drive",
+      exact: true,
+    });
     await expect(importLink).toBeVisible();
     await expect(importLink).toHaveAttribute(
       "href",

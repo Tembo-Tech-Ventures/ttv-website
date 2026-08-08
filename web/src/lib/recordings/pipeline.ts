@@ -41,8 +41,8 @@ async function resolveGoogleDriveCredentials(
   env: Env,
   db: Database
 ): Promise<GoogleDriveCredentials | null> {
+  if (!env.CREDENTIALS_ENCRYPTION_KEY) return null;
   const cipher = createCredentialCipher(env);
-  if (!cipher) return null;
   return getGoogleDriveCredentials(db, cipher);
 }
 

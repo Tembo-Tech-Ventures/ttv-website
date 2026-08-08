@@ -226,9 +226,6 @@ export async function syncRecordingImportSource(
 
   try {
     const cipher = createCredentialCipher(env);
-    if (!cipher) {
-      throw new Error("Credential storage is not available in this environment.");
-    }
     const credentials = await getGoogleDriveCredentials(db, cipher);
     if (!credentials) {
       throw new Error(
@@ -269,12 +266,23 @@ export async function syncEnabledRecordingImportSources(
 ): Promise<RecordingImportSummary[]> {
   const db = drizzle(env.DB, { schema });
 
-  const cipher = createCredentialCipher(env);
-  if (!cipher) {
+  if (!env.CREDENTIALS_ENCRYPTION_KEY) {
     console.log(JSON.stringify({ event: "drive_sync_skipped", reason: "no_encryption_key" }));
     return [];
   }
-  const credentials = await getGoogleDriveCredentials(db, cipher);
+
+  let credentials;
+  try {
+    const cipher = createCredentialCipher(env);
+    credentials = await getGoogleDriveCredentials(db, cipher);
+  } catch (error) {
+    console.log(JSON.stringify({
+      event: "drive_sync_skipped",
+      reason: "credential_error",
+      message: error instanceof Error ? error.message : String(error),
+    }));
+    return [];
+  }
   if (!credentials) {
     console.log(JSON.stringify({ event: "drive_sync_skipped", reason: "no_credentials" }));
     return [];
