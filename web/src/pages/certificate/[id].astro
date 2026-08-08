@@ -2,6 +2,7 @@
 import CertificateLayout from "@/layouts/CertificateLayout.astro";
 import CertificateDocument from "@/components/certificate/CertificateDocument.astro";
 import CertificateCredential from "@/components/certificate/CertificateCredential.astro";
+import CertificateCredentialLight from "@/components/certificate/CertificateCredentialLight.astro";
 import CertificateEditorial from "@/components/certificate/CertificateEditorial.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
@@ -78,6 +79,10 @@ const variant = Astro.url.searchParams.get("variant") ?? "document";
     </main>
   ) : variant === "credential" ? (
     <CertificateCredential view={view} />
+  ) : variant === "light-dark-backdrop" ? (
+    <CertificateCredentialLight view={view} backdrop="dark" />
+  ) : variant === "light-warm-backdrop" ? (
+    <CertificateCredentialLight view={view} backdrop="light" />
   ) : variant === "editorial" ? (
     <CertificateEditorial view={view} />
   ) : (
