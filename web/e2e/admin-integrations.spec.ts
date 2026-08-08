@@ -52,12 +52,23 @@ test.describe("admin integrations page", () => {
   test("save, verify metadata, replace, and remove credential flow", async ({
     page,
   }) => {
+    // The credential is a singleton per environment, so two browser projects
+    // running this flow concurrently corrupt each other's state. The
+    // read-only test above keeps cross-device coverage.
+    test.skip(
+      test.info().project.name !== "chromium",
+      "Mutating flow runs on a single project against the shared environment."
+    );
+
     await page.goto("/admin/settings/integrations");
 
     // A prior failed attempt can leave a credential configured; reset first
-    // so retries always start from the unconfigured state.
-    if ((await page.getByText("Remove credential").count()) > 0) {
-      await page.getByText("Remove credential").click();
+    // so retries always start from the unconfigured state. Exact matching
+    // keeps audit-log rows (e.g. "remove Credential removed.") out of scope.
+    if (
+      (await page.getByText("Remove credential", { exact: true }).count()) > 0
+    ) {
+      await page.getByText("Remove credential", { exact: true }).click();
       await page.getByRole("button", { name: /confirm removal/i }).click();
       await expect(
         page.getByText("Google Drive credential removed.")
@@ -91,7 +102,7 @@ test.describe("admin integrations page", () => {
       fullPage: true,
     });
 
-    await page.getByText("Replace credential").click();
+    await page.getByText("Replace credential", { exact: true }).click();
     const replacementJson = generateThrowawayServiceAccountJson();
     await page
       .locator('details:has(input[value="replace"]) textarea[name="serviceAccountJson"]')
@@ -109,7 +120,7 @@ test.describe("admin integrations page", () => {
       fullPage: true,
     });
 
-    await page.getByText("Remove credential").click();
+    await page.getByText("Remove credential", { exact: true }).click();
     await page.getByRole("button", { name: /confirm removal/i }).click();
 
     await expect(
