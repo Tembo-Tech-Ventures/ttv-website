@@ -115,27 +115,10 @@ test.describe("public talent profile", () => {
   });
 });
 
-test.describe("public completion certificates", () => {
-  test.skip(!FIXTURE_ENVIRONMENT, "Requires seeded fixtures (agent-* environments only).");
-
-  test("valid completion serves its certificate", async ({ page }) => {
-    const response = await page.goto("/certificate/ttv-fixture-app-amina");
-    expect(response?.status()).toBe(200);
-    await expect(
-      page.getByRole("heading", { name: "Certificate of Completion" }),
-    ).toBeVisible();
-  });
-
-  test("COMPLETED row without completedAt returns 404", async ({ page }) => {
-    const response = await page.goto(
-      "/certificate/ttv-fixture-app-invalid-completion",
-    );
-    expect(response?.status()).toBe(404);
-    await expect(
-      page.getByRole("heading", { name: "Certificate Not Available" }),
-    ).toBeVisible();
-  });
-});
+// Certificate coverage moved to certificate-page.spec.ts, which asserts both
+// of the cases that lived here (a valid completion renders, and a COMPLETED
+// row with a null completedAt 404s) plus the credential id, verification host,
+// page actions and mobile overflow.
 
 test.describe("contact form (desktop-only mutations)", () => {
   test.skip(!FIXTURE_ENVIRONMENT, "Requires seeded fixtures (agent-* environments only).");
