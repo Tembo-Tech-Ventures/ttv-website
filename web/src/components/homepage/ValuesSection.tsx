@@ -79,9 +79,18 @@ export default function ValuesSection() {
               data-value-row
               className="grid grid-cols-1 items-center gap-4 overflow-hidden py-8 md:grid-cols-[1fr_minmax(240px,28%)] md:gap-12 md:py-12"
             >
+              {/*
+                The word is deliberately oversized and crops at the column edge.
+                `min-w-0` is what makes that work: a grid item defaults to
+                `min-width: auto`, so without it the unwrappable word forces the
+                `1fr` column past its share and shoves the commitment copy out of
+                the row — where the row's `overflow-hidden` silently ate it.
+                `overflow-x-clip` (not `hidden`, which would force a vertical
+                scroll container) crops the word without shaving its glyphs.
+              */}
               <span
                 data-value-word
-                className="font-heading tracking-display block text-transparent"
+                className="font-heading tracking-display block min-w-0 overflow-x-clip text-transparent"
                 style={{
                   fontSize: "clamp(3rem, 12vw, 10rem)",
                   lineHeight: 0.9,
