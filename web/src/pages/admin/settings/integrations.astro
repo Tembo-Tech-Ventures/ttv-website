@@ -181,6 +181,62 @@ const formatDate = (date: Date) =>
             Google Drive.
           </p>
 
+          <details
+            class="mt-4 rounded-md border border-teal/20 bg-dark/50 p-4"
+            open={!status}
+          >
+            <summary class="cursor-pointer text-sm font-medium text-white/90">
+              Where to get this credential
+            </summary>
+            <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm text-white/70">
+              <li>
+                In Google Cloud Console, pick (or create) a project and enable
+                the
+                <a
+                  href="https://console.cloud.google.com/apis/library/drive.googleapis.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="font-medium text-primary hover:underline"
+                >Google Drive API</a>.
+              </li>
+              <li>
+                Create a
+                <a
+                  href="https://console.cloud.google.com/iam-admin/serviceaccounts"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="font-medium text-primary hover:underline"
+                >service account</a>
+                — it needs no project roles.
+              </li>
+              <li>
+                On the service account, open
+                <span class="text-white/90">Keys &rarr; Add key &rarr; Create new key &rarr; JSON</span>
+                and download the key file.
+              </li>
+              <li>
+                In Google Drive, share the Meet-recordings folder with the
+                service account&rsquo;s email (the
+                <code class="rounded bg-black/20 px-1 py-0.5 text-xs">client_email</code>
+                in the JSON) as <span class="text-white/90">Viewer</span>. The
+                importer only ever reads.
+              </li>
+              <li>
+                Paste the entire JSON file below and save. It is encrypted
+                before it is stored and can never be viewed again — only
+                replaced or removed.
+              </li>
+            </ol>
+            <p class="mt-3 text-xs text-white/50">
+              If Workspace policy blocks sharing with service accounts, a
+              Workspace super admin can instead grant the service account
+              domain-wide delegation for the scope
+              <code class="rounded bg-black/20 px-1 py-0.5">https://www.googleapis.com/auth/drive.readonly</code>
+              — then set &ldquo;Impersonated user&rdquo; to a Workspace user
+              who can read the folder.
+            </p>
+          </details>
+
           {!status ? (
             <form method="POST" class="mt-5 space-y-4">
               <input type="hidden" name="action" value="save" />
