@@ -5,7 +5,7 @@ CREATE TABLE `credentialAuditLog` (
 	`outcome` text,
 	`actorUserId` text,
 	`createdAt` integer DEFAULT (unixepoch()) NOT NULL,
-	FOREIGN KEY (`actorUserId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`actorUserId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE set null
 );
 --> statement-breakpoint
 CREATE TABLE `integrationCredential` (
@@ -17,7 +17,7 @@ CREATE TABLE `integrationCredential` (
 	`updatedByUserId` text,
 	`createdAt` integer DEFAULT (unixepoch()) NOT NULL,
 	`updatedAt` integer DEFAULT (unixepoch()) NOT NULL,
-	FOREIGN KEY (`updatedByUserId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`updatedByUserId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE set null
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `integrationCredential_provider_unique` ON `integrationCredential` (`provider`);

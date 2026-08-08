@@ -566,7 +566,9 @@ export const integrationCredential = sqliteTable("integrationCredential", {
   ciphertext: text("ciphertext").notNull(),
   displayMetadata: text("displayMetadata"),
   config: text("config"),
-  updatedByUserId: text("updatedByUserId").references(() => user.id),
+  updatedByUserId: text("updatedByUserId").references(() => user.id, {
+    onDelete: "set null",
+  }),
   ...timestamps,
 });
 
@@ -579,7 +581,9 @@ export const credentialAuditLog = sqliteTable("credentialAuditLog", {
     enum: ["set", "replace", "update-config", "remove", "test"],
   }).notNull(),
   outcome: text("outcome"),
-  actorUserId: text("actorUserId").references(() => user.id),
+  actorUserId: text("actorUserId").references(() => user.id, {
+    onDelete: "set null",
+  }),
   createdAt: integer("createdAt", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),

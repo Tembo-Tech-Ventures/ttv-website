@@ -19,7 +19,7 @@ function normalizePemNewlines(key: string): string {
   return key.replace(/\\n/g, "\n");
 }
 
-function pemToDer(pem: string): Uint8Array {
+function pemToDer(pem: string): Uint8Array<ArrayBuffer> {
   const lines = pem
     .split("\n")
     .filter((line) => !line.startsWith("-----") && line.trim().length > 0);

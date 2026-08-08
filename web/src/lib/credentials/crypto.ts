@@ -9,7 +9,7 @@ function base64urlEncode(buffer: ArrayBuffer): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function base64urlDecode(encoded: string): Uint8Array {
+function base64urlDecode(encoded: string): Uint8Array<ArrayBuffer> {
   const padded = encoded.replace(/-/g, "+").replace(/_/g, "/");
   const binary = atob(padded);
   const bytes = new Uint8Array(binary.length);
@@ -17,7 +17,30 @@ function base64urlDecode(encoded: string): Uint8Array {
   return bytes;
 }
 
-async function deriveKeyId(rawKeyBytes: Uint8Array): Promise<string> {
+function decodeKeyMaterial(
+  name: string,
+  value: string,
+): Uint8Array<ArrayBuffer> {
+  const normalized = value
+    .trim()
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  let bytes: Uint8Array<ArrayBuffer>;
+  try {
+    bytes = base64urlDecode(normalized);
+  } catch {
+    throw new Error(`${name} is not valid base64.`);
+  }
+  if (bytes.length !== 32) {
+    throw new Error(
+      `${name} must decode to exactly 32 bytes (got ${bytes.length}). Generate one with: openssl rand -base64 32`,
+    );
+  }
+  return bytes;
+}
+
+async function deriveKeyId(rawKeyBytes: Uint8Array<ArrayBuffer>): Promise<string> {
   const hash = await crypto.subtle.digest("SHA-256", rawKeyBytes);
   const hex = Array.from(new Uint8Array(hash))
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -25,7 +48,9 @@ async function deriveKeyId(rawKeyBytes: Uint8Array): Promise<string> {
   return hex.slice(0, KEY_ID_HEX_LENGTH);
 }
 
-async function importKey(rawKeyBytes: Uint8Array): Promise<CryptoKey> {
+async function importKey(
+  rawKeyBytes: Uint8Array<ArrayBuffer>,
+): Promise<CryptoKey> {
   return crypto.subtle.importKey("raw", rawKeyBytes, "AES-GCM", false, [
     "encrypt",
     "decrypt",
@@ -46,18 +71,16 @@ export function createCredentialCipher(env: {
   CREDENTIALS_ENCRYPTION_KEY?: string;
   CREDENTIALS_ENCRYPTION_KEY_PREVIOUS?: string;
 }): CredentialCipher {
-  const primaryRaw = env.CREDENTIALS_ENCRYPTION_KEY
-    ? base64urlDecode(
-        env.CREDENTIALS_ENCRYPTION_KEY.replace(/\+/g, "-")
-          .replace(/\//g, "_")
-          .replace(/=+$/, ""),
+  const primaryRaw = env.CREDENTIALS_ENCRYPTION_KEY?.trim()
+    ? decodeKeyMaterial(
+        "CREDENTIALS_ENCRYPTION_KEY",
+        env.CREDENTIALS_ENCRYPTION_KEY,
       )
     : null;
-  const previousRaw = env.CREDENTIALS_ENCRYPTION_KEY_PREVIOUS
-    ? base64urlDecode(
-        env.CREDENTIALS_ENCRYPTION_KEY_PREVIOUS.replace(/\+/g, "-")
-          .replace(/\//g, "_")
-          .replace(/=+$/, ""),
+  const previousRaw = env.CREDENTIALS_ENCRYPTION_KEY_PREVIOUS?.trim()
+    ? decodeKeyMaterial(
+        "CREDENTIALS_ENCRYPTION_KEY_PREVIOUS",
+        env.CREDENTIALS_ENCRYPTION_KEY_PREVIOUS,
       )
     : null;
 

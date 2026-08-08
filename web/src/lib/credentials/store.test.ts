@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Database } from "@/lib/db/schema";
 import type { CredentialCipher } from "./crypto";
 
 vi.mock("@/lib/db/schema", () => ({
@@ -120,7 +121,7 @@ function createMockDb() {
     })),
   };
 
-  return { db: db as never, credentials, auditLog };
+  return { db: db as unknown as Database, mocks: db, credentials, auditLog };
 }
 
 describe("setIntegrationCredential", async () => {
@@ -197,7 +198,7 @@ describe("getIntegrationCredentialSecret", async () => {
   });
 
   it("re-encrypts and persists when needsReencrypt is true", async () => {
-    const { db, credentials } = createMockDb();
+    const { db, mocks, credentials } = createMockDb();
     const cipher = createMockCipher({ needsReencrypt: true });
     credentials.set("google-drive", {
       provider: "google-drive",
@@ -211,7 +212,7 @@ describe("getIntegrationCredentialSecret", async () => {
     const result = await getIntegrationCredentialSecret(db, cipher, "google-drive");
     expect(result?.secret).toBe("rotated-secret");
     expect(cipher.encrypt).toHaveBeenCalledWith("rotated-secret", "google-drive");
-    expect(db.update).toHaveBeenCalled();
+    expect(mocks.update).toHaveBeenCalled();
   });
 });
 
