@@ -54,6 +54,16 @@ test.describe("admin integrations page", () => {
   }) => {
     await page.goto("/admin/settings/integrations");
 
+    // A prior failed attempt can leave a credential configured; reset first
+    // so retries always start from the unconfigured state.
+    if ((await page.getByText("Remove credential").count()) > 0) {
+      await page.getByText("Remove credential").click();
+      await page.getByRole("button", { name: /confirm removal/i }).click();
+      await expect(
+        page.getByText("Google Drive credential removed.")
+      ).toBeVisible();
+    }
+
     const saJson = generateThrowawayServiceAccountJson();
     await page.locator('textarea[name="serviceAccountJson"]').fill(saJson);
     await page.locator('input[name="impersonatedUser"]').fill("admin@example.com");
@@ -65,8 +75,12 @@ test.describe("admin integrations page", () => {
     await expect(
       page.getByText("e2e-test@e2e-test-project.iam.gserviceaccount.com")
     ).toBeVisible();
-    await expect(page.getByText("e2e-test-project")).toBeVisible();
-    await expect(page.getByText("admin@example.com")).toBeVisible();
+    await expect(
+      page.getByText("e2e-test-project", { exact: true })
+    ).toBeVisible();
+    await expect(
+      page.getByText("admin@example.com", { exact: true })
+    ).toBeVisible();
 
     const responseBody = await page.content();
     const parsed = JSON.parse(saJson);
