@@ -96,11 +96,10 @@ export default function FeaturesSection() {
         </p>
         <h2
           ref={headingRef}
-          className="font-heading max-w-4xl text-ink-primary"
+          className="font-heading tracking-heading max-w-4xl text-ink-primary"
           style={{
             fontSize: "clamp(2.5rem, 6.4vw, 5rem)",
             lineHeight: 0.95,
-            letterSpacing: "-0.03em",
           }}
         >
           A community,
@@ -123,11 +122,10 @@ export default function FeaturesSection() {
             >
               <div className="flex items-start justify-between gap-6">
                 <span
-                  className="font-heading text-primary"
+                  className="font-heading tracking-display text-primary"
                   style={{
                     fontSize: item.wide ? "clamp(4.5rem, 10vw, 9rem)" : "clamp(3rem, 6vw, 5rem)",
                     lineHeight: 0.9,
-                    letterSpacing: "-0.04em",
                   }}
                 >
                   {item.number}

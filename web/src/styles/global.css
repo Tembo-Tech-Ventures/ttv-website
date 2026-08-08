@@ -1,5 +1,22 @@
-@import url("https://fonts.googleapis.com/css2?family=Climate+Crisis&family=Maven+Pro:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Maven+Pro:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
+
+/*
+ * Mattone Black (Collletttivo, OFL 1.1) — the display face. Self-hosted from
+ * `src/assets/fonts/` rather than a CDN so it ships hashed and immutably cached
+ * alongside the rest of the bundle; see LICENSE.txt in that directory.
+ *
+ * Only one weight exists in the build, so the face claims the whole 400–900
+ * range. That stops the browser synthesising a faux-bold when a heading asks
+ * for a weight we don't have a file for.
+ */
+@font-face {
+  font-family: "Mattone";
+  src: url("../assets/fonts/Mattone-Black.woff2") format("woff2");
+  font-weight: 400 900;
+  font-style: normal;
+  font-display: swap;
+}
 
 /*
  * TTV Theme — design refresh (PROPOSAL §B).
@@ -22,13 +39,25 @@
 
   --color-rule: rgba(242, 141, 104, 0.20);
 
-  --font-heading: "Climate Crisis", cursive;
+  --font-heading: "Mattone", sans-serif;
   --font-body: "Maven Pro", sans-serif;
+
+  /*
+   * Display tracking, by size band. These used to be hand-tuned inline on every
+   * heading — and every value was tuned to one typeface, so swapping the face
+   * meant editing thirty call sites. Naming the three bands here makes the next
+   * swap a three-line change. Mattone needs far less negative tracking than the
+   * face it replaced: it has normal sidebearings, so the old -0.04em closed the
+   * words up.
+   */
+  --tracking-display: -0.02em;
+  --tracking-heading: -0.015em;
+  --tracking-subhead: -0.01em;
 }
 
 /*
- * Typography role split (PROPOSAL §A): Climate Crisis stays on hero/anchor
- * headings only. Maven Pro takes every heading small enough that the chunky
+ * Typography role split (PROPOSAL §A): the display face stays on hero/anchor
+ * headings only. Maven Pro takes every heading small enough that a chunky
  * display face becomes hard to read (roughly h3 and below).
  */
 @layer base {

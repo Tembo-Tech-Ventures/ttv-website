@@ -182,7 +182,8 @@ GitHub OAuth via **better-auth**:
 
 - **Tailwind CSS 4**: Custom theme defined in `src/styles/global.css` using `@theme` directive
 - **Color tokens**: `--color-primary` (#F28D68), `--color-dark` (#013D39), `--color-teal` (#2C6964), `--color-bg-raised`, `--color-ink-primary`, `--color-ink-secondary`, `--color-ink-muted`, `--color-rule`
-- **Typography**: Climate Crisis for h1/h2, Maven Pro for body and h3-h6
+- **Typography**: Mattone Black (Collletttivo, OFL 1.1, self-hosted) for h1/h2, Maven Pro for body and h3-h6
+- **Display tracking**: three named theme tokens (`--tracking-display`, `--tracking-heading`, `--tracking-subhead`) instead of per-element `letter-spacing`, so the display face can be swapped without retuning every heading
 - **Animations**: GSAP ScrollTrigger on homepage sections, CSS-only marquee, reveal utility class
 - **Grain overlay**: SVG noise texture via `Grain.astro` component
 

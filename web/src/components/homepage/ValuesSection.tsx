@@ -81,11 +81,10 @@ export default function ValuesSection() {
             >
               <span
                 data-value-word
-                className="font-heading block text-transparent"
+                className="font-heading tracking-display block text-transparent"
                 style={{
                   fontSize: "clamp(3rem, 12vw, 10rem)",
                   lineHeight: 0.9,
-                  letterSpacing: "-0.04em",
                   WebkitTextStroke: "1px var(--color-primary)",
                 }}
               >

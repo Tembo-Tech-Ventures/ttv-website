@@ -54,7 +54,7 @@ export default function ValueSection() {
             data-reveal
             className="font-body text-base text-ink-secondary md:text-lg"
           >
-            <span className="font-heading text-ink-primary" style={{ fontSize: "1.6em", letterSpacing: "-0.02em" }}>
+            <span className="font-heading tracking-subhead text-ink-primary" style={{ fontSize: "1.6em" }}>
               Tembo
             </span>
             <span className="ml-2 align-middle font-body italic text-ink-muted">(n.)</span>
@@ -68,11 +68,10 @@ export default function ValueSection() {
             className="relative border-l-2 border-primary pl-6 md:pl-10"
           >
             <p
-              className="font-heading text-ink-primary"
+              className="font-heading tracking-subhead text-ink-primary"
               style={{
                 fontSize: "clamp(2rem, 5.4vw, 4rem)",
                 lineHeight: 1.08,
-                letterSpacing: "-0.02em",
               }}
             >
               Great builders are already here.
