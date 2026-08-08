@@ -62,11 +62,13 @@ test.describe("Google Drive recording import", () => {
     );
   });
 
-  test("import page requires admin access", async ({ request }) => {
-    const response = await request.get("/admin/recordings/import", {
-      headers: {},
-      maxRedirects: 0,
-    });
-    expect([301, 302, 303]).toContain(response.status());
+});
+
+// Deliberately outside the authenticated describe: extraHTTPHeaders would
+// merge the agent bearer token into the request and defeat the check.
+test.describe("drive import non-admin access", () => {
+  test("unauthenticated users are redirected to login", async ({ page }) => {
+    await page.goto("/admin/recordings/import");
+    expect(page.url()).toContain("/auth/login");
   });
 });
