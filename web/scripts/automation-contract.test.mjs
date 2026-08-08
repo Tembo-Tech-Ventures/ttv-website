@@ -103,6 +103,21 @@ describe("GitHub delivery contracts", () => {
     );
   });
 
+  it("passes CREDENTIALS_ENCRYPTION_KEY for non-agent environments in both workflow jobs", async () => {
+    const workflow = await readRepositoryFile(
+      ".github/workflows/cloudflare-environment.yml"
+    );
+
+    const occurrences = workflow
+      .split("\n")
+      .filter((line) => line.includes("CREDENTIALS_ENCRYPTION_KEY:"));
+    expect(occurrences.length).toBe(2);
+    for (const line of occurrences) {
+      expect(line).toContain("!startsWith(inputs.environment_name, 'agent-')");
+      expect(line).toContain("secrets.CREDENTIALS_ENCRYPTION_KEY");
+    }
+  });
+
   it("keeps credentialed stale cleanup dry-run-first and protected", async () => {
     const workflow = await readRepositoryFile(
       ".github/workflows/cloudflare-sweep.yml"

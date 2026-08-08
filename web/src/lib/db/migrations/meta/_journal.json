@@ -43,6 +43,13 @@
       "when": 1786020406198,
       "tag": "0005_brief_spiral",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1786188098343,
+      "tag": "0006_spooky_agent_zero",
+      "breakpoints": true
     }
   ]
 }

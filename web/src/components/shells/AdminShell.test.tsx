@@ -17,6 +17,19 @@ describe("admin navigation", () => {
     }
   });
 
+  it("always shows the integrations link for every admin", () => {
+    for (const agentAuthEnabled of [false, true]) {
+      expect(getAdminLinks(agentAuthEnabled)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            href: "/admin/settings/integrations",
+            label: "Integrations",
+          }),
+        ])
+      );
+    }
+  });
+
   it("places curricula before cohorts in the management flow", () => {
     const labels = getAdminLinks(false).map(({ label }) => label);
     expect(labels.indexOf("Curricula")).toBeLessThan(

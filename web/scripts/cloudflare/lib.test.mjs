@@ -577,7 +577,7 @@ describe("getSecretBindings", () => {
     expect(binding?.value).toHaveLength(64);
   });
 
-  it("omits the AI gateway key when no token is configured", () => {
+  it("omits optional keys when no tokens are configured", () => {
     const keys = getSecretBindings().map((binding) => binding.key);
     expect(keys).toEqual([
       "BETTER_AUTH_SECRET",
@@ -593,6 +593,29 @@ describe("getSecretBindings", () => {
       key: "AI_GATEWAY_API_KEY",
       value: "scoped-ai-token",
     });
+  });
+
+  it("includes CREDENTIALS_ENCRYPTION_KEY when the env var is set", () => {
+    vi.stubEnv("CREDENTIALS_ENCRYPTION_KEY", "test-credential-key-base64==");
+    const bindings = getSecretBindings();
+    expect(bindings).toContainEqual({
+      key: "CREDENTIALS_ENCRYPTION_KEY",
+      value: "test-credential-key-base64==",
+    });
+  });
+
+  it("derives a unique credential key for agent preview environments", () => {
+    vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME", "agent-pr-55");
+    vi.stubEnv("AGENT_PREVIEW_SECRET", "p".repeat(32));
+    const bindings = getSecretBindings();
+    const credBinding = bindings.find(
+      ({ key }) => key === "CREDENTIALS_ENCRYPTION_KEY"
+    );
+    expect(credBinding).toBeDefined();
+    const authBinding = bindings.find(
+      ({ key }) => key === "BETTER_AUTH_SECRET"
+    );
+    expect(credBinding?.value).not.toBe(authBinding?.value);
   });
 
   it("uses preview-only derived auth and disables OAuth in agent environments", () => {

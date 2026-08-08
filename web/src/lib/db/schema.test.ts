@@ -18,6 +18,8 @@ describe("Database Schema", () => {
     expect(schema.recording).toBeDefined();
     expect(schema.transcriptSegment).toBeDefined();
     expect(schema.chatMessage).toBeDefined();
+    expect(schema.integrationCredential).toBeDefined();
+    expect(schema.credentialAuditLog).toBeDefined();
   });
 
   it("exports all expected relations", () => {
@@ -79,5 +81,21 @@ describe("Database Schema", () => {
   it("session token has unique constraint", () => {
     const tokenCol = schema.session.token;
     expect(tokenCol.isUnique).toBe(true);
+  });
+
+  it("integrationCredential provider has unique constraint", () => {
+    const providerCol = schema.integrationCredential.provider;
+    expect(providerCol.isUnique).toBe(true);
+  });
+
+  it("credentialAuditLog has correct action enum values", () => {
+    const actionCol = schema.credentialAuditLog.action;
+    expect(actionCol.enumValues).toEqual([
+      "set",
+      "replace",
+      "update-config",
+      "remove",
+      "test",
+    ]);
   });
 });

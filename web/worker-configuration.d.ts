@@ -21,6 +21,8 @@ declare namespace Cloudflare {
 		DEPLOYMENT_ENVIRONMENT?: string;
 		DEPLOYMENT_VERSION?: string;
 		AGENT_AUTH_ENABLED?: string;
+		CREDENTIALS_ENCRYPTION_KEY?: string;
+		CREDENTIALS_ENCRYPTION_KEY_PREVIOUS?: string;
 	}
 }
 interface Env extends Cloudflare.Env {}
