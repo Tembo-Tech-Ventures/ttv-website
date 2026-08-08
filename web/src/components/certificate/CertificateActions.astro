@@ -1,0 +1,124 @@
+---
+import type { CertificateView } from "@/lib/certificate/view-model";
+
+interface Props {
+  view: CertificateView;
+  /** `light` sits on the dark brand surface; `dark` sits on cream paper. */
+  tone: "light" | "dark";
+}
+
+const { view, tone } = Astro.props;
+---
+
+<div class:list={["actions", `tone-${tone}`]}>
+  {view.profileHref && (
+    <a class="action action-primary" href={view.profileHref}>
+      View {view.studentFirstName}&rsquo;s builder profile
+    </a>
+  )}
+  <button class="action" type="button" data-certificate-print>Print</button>
+  <button class="action" type="button" data-certificate-copy>
+    <span data-copy-idle>Copy link</span>
+    <span data-copy-done hidden>Link copied</span>
+  </button>
+</div>
+
+<script>
+  const COPIED_FEEDBACK_MS = 2000;
+
+  document.querySelector<HTMLButtonElement>("[data-certificate-print]")
+    ?.addEventListener("click", () => window.print());
+
+  const copyButton = document.querySelector<HTMLButtonElement>(
+    "[data-certificate-copy]"
+  );
+  copyButton?.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+    } catch {
+      return; // clipboard blocked (insecure context / denied) — leave the label alone
+    }
+    const idle = copyButton.querySelector<HTMLElement>("[data-copy-idle]");
+    const done = copyButton.querySelector<HTMLElement>("[data-copy-done]");
+    if (!idle || !done) return;
+    idle.hidden = true;
+    done.hidden = false;
+    window.setTimeout(() => {
+      idle.hidden = false;
+      done.hidden = true;
+    }, COPIED_FEEDBACK_MS);
+  });
+</script>
+
+<style>
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+    padding: 0 1.1rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease,
+      border-color 150ms ease;
+  }
+
+  .tone-light .action {
+    border-color: rgba(255, 248, 242, 0.22);
+    color: var(--color-ink-secondary);
+    background: transparent;
+  }
+
+  .tone-light .action:hover {
+    border-color: rgba(255, 248, 242, 0.45);
+    color: var(--color-ink-primary);
+  }
+
+  .tone-dark .action {
+    border-color: rgba(1, 61, 57, 0.2);
+    color: #3d5a56;
+    background: transparent;
+  }
+
+  .tone-dark .action:hover {
+    border-color: rgba(1, 61, 57, 0.45);
+    color: var(--color-dark);
+  }
+
+  /*
+   * Scoped by tone so these win over the `.tone-* .action` base rules above,
+   * which are otherwise more specific than a bare `.action-primary`.
+   */
+  .tone-light .action-primary,
+  .tone-dark .action-primary {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--color-dark);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .tone-light .action-primary:hover,
+  .tone-dark .action-primary:hover {
+    background: #f7a688;
+    border-color: #f7a688;
+    color: var(--color-dark);
+  }
+
+  @media print {
+    .actions {
+      display: none;
+    }
+  }
+</style>
