@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@cloudflare/containers", () => ({
   Container: class {},
+  ContainerProxy: class {},
 }));
 vi.mock("@astrojs/cloudflare/handler", () => ({
   handle: mocks.handle,
@@ -20,7 +21,13 @@ vi.mock("@/lib/recordings/importer", () => ({
     mocks.syncEnabledRecordingImportSources,
 }));
 
-import worker from "./worker";
+import worker, { ContainerProxy } from "./worker";
+
+describe("Worker container exports", () => {
+  it("exports the proxy entrypoint required by outbound R2 interception", () => {
+    expect(ContainerProxy).toBeTypeOf("function");
+  });
+});
 
 describe("Worker scheduled imports", () => {
   it("registers enabled Drive source syncing with the execution context", async () => {
