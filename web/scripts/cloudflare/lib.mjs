@@ -186,6 +186,15 @@ export async function ensureD1Database(name) {
   });
 }
 
+export async function findD1DatabaseByName(name) {
+  const existing = await cfApi(
+    `/d1/database?name=${encodeURIComponent(name)}&per_page=10`
+  );
+  return Array.isArray(existing)
+    ? existing.find((database) => database.name === name) ?? null
+    : null;
+}
+
 export async function queryD1Database(databaseId, sql, params = []) {
   return cfApi(`/d1/database/${encodeURIComponent(databaseId)}/query`, {
     method: "POST",

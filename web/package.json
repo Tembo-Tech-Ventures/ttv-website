@@ -12,6 +12,7 @@
     "cf:deploy": "node ./scripts/cloudflare/deploy.mjs",
     "cf:destroy": "node ./scripts/cloudflare/destroy.mjs",
     "cf:agent": "node ./scripts/cloudflare/agent-environment.mjs",
+    "cf:recording-diagnostics": "node ./scripts/cloudflare/recording-diagnostics.mjs",
     "cf:sweep": "node ./scripts/cloudflare/sweep-agent-environments.mjs",
     "cf:smoke": "node ./scripts/cloudflare/smoke.mjs",
     "audit:ci": "node ./scripts/audit-ci.mjs",
