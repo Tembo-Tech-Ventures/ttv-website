@@ -45,6 +45,18 @@ test.describe("authenticated delivery agent", () => {
     await expect(page).toHaveURL(/\/admin\/?$/);
   });
 
+  test("can start and reach the FFmpeg container", async ({ request }) => {
+    const response = await request.get(
+      "/api/admin/recordings/container-health"
+    );
+
+    expect(response.ok()).toBe(true);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      service: "ffmpeg-container",
+    });
+  });
+
   test("delegated credentials cannot mint personal access tokens", async ({
     page,
   }) => {
