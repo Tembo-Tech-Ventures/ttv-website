@@ -111,8 +111,7 @@ function createMockDb() {
           orderBy: vi.fn(() => ({
             limit: vi.fn(async () =>
               auditLog
-                .slice()
-                .reverse()
+                .toReversed()
                 .map((e) => ({ ...e, createdAt: new Date() })),
             ),
           })),

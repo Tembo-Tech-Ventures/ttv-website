@@ -140,7 +140,7 @@ export async function cfApi(resourcePath, { method = "GET", body } = {}) {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: body ? JSON.stringify(body) : undefined,
+      ...(body ? { body: JSON.stringify(body) } : {}),
     }
   );
 
@@ -378,7 +378,7 @@ export async function deleteContainerAppByName(name, runner = runWrangler) {
   }
 
   if (!Array.isArray(containers)) {
-    throw new Error(
+    throw new TypeError(
       `Expected container list to be an array, got ${typeof containers}`
     );
   }

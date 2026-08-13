@@ -99,7 +99,9 @@ test.describe("layout integrity", () => {
         const height = document.documentElement.scrollHeight;
         for (let y = 0; y < height; y += 400) {
           window.scrollTo(0, y);
-          await new Promise((resolve) => setTimeout(resolve, 30));
+          await new Promise((resolve) => {
+            setTimeout(resolve, 30);
+          });
         }
       });
 

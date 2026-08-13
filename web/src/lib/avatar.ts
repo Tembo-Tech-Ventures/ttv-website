@@ -14,7 +14,7 @@ export class AvatarUploadError extends Error {
 }
 
 function assertImageFile(file: File) {
-  if (!file.size) {
+  if (file.size === 0) {
     throw new AvatarUploadError("Please choose an image to upload.");
   }
 

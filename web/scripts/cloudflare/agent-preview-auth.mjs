@@ -71,7 +71,7 @@ export async function seedAgentPreviewAccess({
   assertAgentEnvironmentName(environmentName);
   if (!databaseId) throw new Error("A D1 database ID is required.");
   if (typeof executeQuery !== "function") {
-    throw new Error("A D1 query executor is required.");
+    throw new TypeError("A D1 query executor is required.");
   }
 
   const createdAt = Math.floor(now.getTime() / 1_000);
@@ -168,7 +168,7 @@ export async function seedAgentPreviewFixtures({
 }) {
   if (!databaseId) throw new Error("A D1 database ID is required.");
   if (typeof executeQuery !== "function") {
-    throw new Error("A D1 query executor is required.");
+    throw new TypeError("A D1 query executor is required.");
   }
 
   const createdAt = Math.floor(now.getTime() / 1_000);

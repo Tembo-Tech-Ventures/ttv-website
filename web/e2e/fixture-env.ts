@@ -4,6 +4,6 @@
  * write rows a real environment must never receive — skip everywhere else
  * (production, shared staging, local dev servers).
  */
-export const FIXTURE_ENVIRONMENT = /^agent-/.test(
+export const FIXTURE_ENVIRONMENT = (
   process.env.EXPECTED_DEPLOYMENT_ENVIRONMENT ?? ""
-);
+).startsWith("agent-");

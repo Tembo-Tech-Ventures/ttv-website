@@ -167,6 +167,45 @@ describe("GitHub delivery contracts", () => {
     expect(workflow).toContain("npm run audit:ci");
   });
 
+  it("runs strict Oxlint checks before ESLint without replacing typechecking", async () => {
+    const [packageJson, oxlintConfig] = await Promise.all([
+      readRepositoryFile("web/package.json"),
+      readRepositoryFile("web/.oxlintrc.json"),
+    ]);
+    const scripts = JSON.parse(packageJson).scripts;
+    const config = JSON.parse(oxlintConfig);
+
+    expect(scripts.lint).toBe("oxlint . && eslint .");
+    expect(scripts.typecheck).toBe("tsc --noEmit");
+    expect(config.categories).toEqual({
+      correctness: "error",
+      suspicious: "error",
+      perf: "error",
+    });
+    expect(config.options).toMatchObject({
+      denyWarnings: true,
+      reportUnusedDisableDirectives: "error",
+      respectEslintDisableDirectives: true,
+    });
+    expect(config.plugins).toEqual(
+      expect.arrayContaining([
+        "typescript",
+        "import",
+        "react",
+        "jsx-a11y",
+        "vitest",
+        "promise",
+        "node",
+      ])
+    );
+    expect(config.rules).toMatchObject({
+      "no-debugger": "error",
+      "no-eval": "error",
+      "typescript/no-explicit-any": "error",
+      "vitest/no-focused-tests": "error",
+    });
+  });
+
   it("records review and required-check protection for the default branch", async () => {
     const ruleset = JSON.parse(
       await readRepositoryFile(".github/rulesets/main.json")

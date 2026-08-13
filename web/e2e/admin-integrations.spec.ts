@@ -98,7 +98,7 @@ test.describe("admin integrations page", () => {
 
     const responseBody = await page.content();
     const parsed = JSON.parse(saJson);
-    expect(responseBody).not.toContain(parsed.private_key.substring(40, 80));
+    expect(responseBody).not.toContain(parsed.private_key.slice(40, 80));
 
     await page.screenshot({
       path: evidence("admin-integrations-configured"),

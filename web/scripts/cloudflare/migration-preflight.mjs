@@ -78,7 +78,7 @@ export function collectUniqueIndexConstraints(directory = MIGRATIONS_DIRECTORY) 
   const byIndexName = new Map();
   const fileNames = readdirSync(directory)
     .filter((fileName) => fileName.endsWith(".sql"))
-    .sort();
+    .toSorted();
 
   for (const fileName of fileNames) {
     const sql = readFileSync(new URL(fileName, directory), "utf8");
@@ -124,7 +124,7 @@ export async function findBlockingDuplicates({
 }) {
   if (!databaseId) throw new Error("A D1 database ID is required.");
   if (typeof executeQuery !== "function") {
-    throw new Error("A D1 query executor is required.");
+    throw new TypeError("A D1 query executor is required.");
   }
 
   const existingTables = await readExistingTableNames(databaseId, executeQuery);

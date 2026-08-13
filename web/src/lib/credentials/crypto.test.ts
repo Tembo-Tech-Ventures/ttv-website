@@ -56,7 +56,9 @@ describe("createCredentialCipher", () => {
     const tampered = [parts[0], parts[1], parts[2], parts[3] + "AAAA"].join(
       "."
     );
-    await expect(cipher.decrypt(tampered, aad)).rejects.toThrow();
+    await expect(cipher.decrypt(tampered, aad)).rejects.toThrow(
+      "Credential decryption failed authentication",
+    );
   });
 
   it("rejects decryption with wrong AAD", async () => {
@@ -64,7 +66,9 @@ describe("createCredentialCipher", () => {
       CREDENTIALS_ENCRYPTION_KEY: key,
     });
     const blob = await cipher.encrypt("test", "google-drive");
-    await expect(cipher.decrypt(blob, "wrong-provider")).rejects.toThrow();
+    await expect(cipher.decrypt(blob, "wrong-provider")).rejects.toThrow(
+      "Credential decryption failed authentication",
+    );
   });
 
   it("rejects a blob encrypted with an unknown key", async () => {

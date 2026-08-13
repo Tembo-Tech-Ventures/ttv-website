@@ -158,11 +158,18 @@ export function createCredentialCipher(env: {
       const iv = base64urlDecode(ivEncoded);
       const ciphertext = base64urlDecode(ciphertextEncoded);
       const aadEncoded = new TextEncoder().encode(aad);
-      const decrypted = await crypto.subtle.decrypt(
-        { name: "AES-GCM", iv, additionalData: aadEncoded },
-        selectedKey.cryptoKey,
-        ciphertext,
-      );
+      let decrypted: ArrayBuffer;
+      try {
+        decrypted = await crypto.subtle.decrypt(
+          { name: "AES-GCM", iv, additionalData: aadEncoded },
+          selectedKey.cryptoKey,
+          ciphertext,
+        );
+      } catch (error) {
+        throw new Error("Credential decryption failed authentication.", {
+          cause: error,
+        });
+      }
       return {
         plaintext: new TextDecoder().decode(decrypted),
         needsReencrypt,

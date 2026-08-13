@@ -115,7 +115,7 @@ export function findStaleAgentEnvironments({
         (now.getTime() - observedAt.getTime()) / (60 * 60 * 1_000)
       ),
     }))
-    .sort((left, right) => right.ageHours - left.ageHours);
+    .toSorted((left, right) => right.ageHours - left.ageHours);
 }
 
 async function listWorkers() {
