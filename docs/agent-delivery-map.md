@@ -72,6 +72,7 @@ automatically; manual cleanup runs remain dry-run-first.
 | --- | --- | --- | --- |
 | `AGENT_PREVIEW_SECRET` | GitHub `staging` environment and authorized SAM profiles | No database directly | Derives a different bearer token and Better Auth secret for each isolated `agent-*` D1 |
 | `STAGING_AGENT_TOKEN` | GitHub `staging` environment only | Shared staging D1 only | Optional authenticated checks of the persistent shared staging application |
+| `TTV_PERSONAL_ACCESS_TOKEN` | An authorized SAM profile's encrypted runtime variables | The TTV environment where an admin issued it | Expiring, revocable browser and API verification as the issuing user |
 | Production auth secrets | GitHub `production` environment only | Production | Real application auth; never supplied to previews or SAM implementers |
 
 Shared staging and production retain the repository's existing deterministic
@@ -82,6 +83,16 @@ to an explicit stable secret during a deliberate sign-out window.
 An admin creates `STAGING_AGENT_TOKEN` at `/admin/agent-access` while signed in
 with a normal browser cookie. Bearer-authenticated sessions cannot access that
 credential-management page, so a token cannot extend its own lifetime.
+
+An admin can create a personal access token at
+`/admin/personal-access-tokens`. Store the one-time value as the encrypted
+`TTV_PERSONAL_ACCESS_TOKEN` profile variable; never paste it into a task,
+message, command argument, log, screenshot, or knowledge entry. The live
+Playwright wrapper reads that variable without printing it. Set
+`RECORDING_SMOKE_ID` to inspect a particular recording during the authenticated
+desktop/mobile smoke suite. Personal access tokens are user-bound, hashed in
+D1, expiring, revocable, and either read-only or read/write. A delegated bearer
+session or another personal access token cannot mint one.
 
 `AGENT_PREVIEW_SECRET` is not inserted into D1. The deployer derives a
 per-environment token from it, stores only that token in the isolated database,

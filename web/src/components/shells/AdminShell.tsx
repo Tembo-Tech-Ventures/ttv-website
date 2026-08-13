@@ -26,6 +26,11 @@ const primaryLinks = [
   { href: "/admin/programs", label: "Cohorts", icon: PiBookOpenDuotone },
   { href: "/admin/recordings", label: "Recordings", icon: PiVideoCameraDuotone },
   { href: "/admin/settings/integrations", label: "Integrations", icon: PiPlugsDuotone },
+  {
+    href: "/admin/personal-access-tokens",
+    label: "Personal Access Tokens",
+    icon: PiKeyDuotone,
+  },
 ];
 
 export function getAdminLinks(
