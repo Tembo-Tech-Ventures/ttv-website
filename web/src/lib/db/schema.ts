@@ -36,6 +36,7 @@ export const user = sqliteTable("user", {
 export const userRelations = relations(user, ({ many, one }) => ({
   accounts: many(account),
   sessions: many(session),
+  personalAccessTokens: many(personalAccessToken),
   userRoles: many(userRole),
   files: many(file),
   programRoles: many(programRole),
@@ -84,6 +85,40 @@ export const session = sqliteTable("session", {
 export const sessionRelations = relations(session, ({ one }) => ({
   user: one(user, { fields: [session.userId], references: [user.id] }),
 }));
+
+// ─── Personal Access Token ─────────────────────────────────
+
+export const personalAccessToken = sqliteTable(
+  "personal_access_token",
+  {
+    id: cuid("id"),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    tokenHash: text("tokenHash").notNull().unique(),
+    tokenPrefix: text("tokenPrefix").notNull(),
+    label: text("label").notNull(),
+    scopes: text("scopes").notNull(),
+    expiresAt: integer("expiresAt", { mode: "timestamp" }).notNull(),
+    lastUsedAt: integer("lastUsedAt", { mode: "timestamp" }),
+    revokedAt: integer("revokedAt", { mode: "timestamp" }),
+    ...timestamps,
+  },
+  (table) => [
+    index("personal_access_token_userId_idx").on(table.userId),
+    index("personal_access_token_expiresAt_idx").on(table.expiresAt),
+  ]
+);
+
+export const personalAccessTokenRelations = relations(
+  personalAccessToken,
+  ({ one }) => ({
+    user: one(user, {
+      fields: [personalAccessToken.userId],
+      references: [user.id],
+    }),
+  })
+);
 
 // ─── Verification (matches better-auth expected schema) ───
 

@@ -37,6 +37,21 @@ describe("GitHub delivery contracts", () => {
     expect(production).not.toContain("agent_auth_enabled: true");
   });
 
+  it("runs recording diagnostics read-only behind the production credential boundary", async () => {
+    const workflow = await readRepositoryFile(
+      ".github/workflows/cloudflare-production.yml"
+    );
+
+    expect(workflow).toContain("diagnose-recording:");
+    expect(workflow).toContain("environment: production");
+    expect(workflow).toContain("npm run cf:recording-diagnostics");
+    expect(workflow).toContain("--recording-id=\"$RECORDING_ID\"");
+    expect(workflow).not.toContain('--recording-id="${{ inputs.recording_id }}"');
+    expect(workflow).not.toMatch(
+      /diagnose-recording:[\s\S]*?npm run cf:deploy/
+    );
+  });
+
   it("verifies deployment identity and live browser journeys after every deploy", async () => {
     const workflow = await readRepositoryFile(
       ".github/workflows/cloudflare-environment.yml"
@@ -150,6 +165,45 @@ describe("GitHub delivery contracts", () => {
     expect(workflow).toContain("npm test");
     expect(workflow).toContain("npm run test:e2e:list");
     expect(workflow).toContain("npm run audit:ci");
+  });
+
+  it("runs strict Oxlint checks before ESLint without replacing typechecking", async () => {
+    const [packageJson, oxlintConfig] = await Promise.all([
+      readRepositoryFile("web/package.json"),
+      readRepositoryFile("web/.oxlintrc.json"),
+    ]);
+    const scripts = JSON.parse(packageJson).scripts;
+    const config = JSON.parse(oxlintConfig);
+
+    expect(scripts.lint).toBe("oxlint . && eslint .");
+    expect(scripts.typecheck).toBe("tsc --noEmit");
+    expect(config.categories).toEqual({
+      correctness: "error",
+      suspicious: "error",
+      perf: "error",
+    });
+    expect(config.options).toMatchObject({
+      denyWarnings: true,
+      reportUnusedDisableDirectives: "error",
+      respectEslintDisableDirectives: true,
+    });
+    expect(config.plugins).toEqual(
+      expect.arrayContaining([
+        "typescript",
+        "import",
+        "react",
+        "jsx-a11y",
+        "vitest",
+        "promise",
+        "node",
+      ])
+    );
+    expect(config.rules).toMatchObject({
+      "no-debugger": "error",
+      "no-eval": "error",
+      "typescript/no-explicit-any": "error",
+      "vitest/no-focused-tests": "error",
+    });
   });
 
   it("records review and required-check protection for the default branch", async () => {

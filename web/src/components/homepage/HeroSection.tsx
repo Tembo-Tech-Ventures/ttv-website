@@ -20,7 +20,7 @@ interface HeroSectionProps {
 
 const PROOF_STATS = [
   { value: "~25", label: "Students across Africa" },
-  { value: "01", label: "Partner school \u00b7 Embu College" },
+  { value: "01", label: "Partner school \u00B7 Embu College" },
   { value: "04", label: "Cohort in flight" },
 ];
 

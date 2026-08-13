@@ -210,7 +210,7 @@ describe("saveGoogleDriveCredential", () => {
         }),
         actorUserId: "user-1",
       })
-    ).rejects.toThrow();
+    ).rejects.toThrow("private key is not valid PKCS#8 PEM");
   });
 
   it("normalizes escaped newlines in the private key", async () => {

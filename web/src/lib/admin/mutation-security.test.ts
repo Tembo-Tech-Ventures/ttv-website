@@ -63,6 +63,23 @@ describe("admin mutation origin policy", () => {
     await expect(response?.text()).resolves.toBe(ADMIN_MUTATION_ORIGIN_ERROR);
     expect(response?.headers.get("Cache-Control")).toBe("no-store");
   });
+
+  it("allows an originless mutation only for separately authorized bearer access", () => {
+    expect(
+      enforceAdminMutationOrigin(
+        request("POST"),
+        "/admin/programs",
+        { allowOriginlessAuthorization: true }
+      )
+    ).toBeNull();
+    expect(
+      enforceAdminMutationOrigin(
+        request("POST", "https://attacker.example"),
+        "/admin/programs",
+        { allowOriginlessAuthorization: true }
+      )?.status
+    ).toBe(403);
+  });
 });
 
 describe("admin mutation guard uses the resolved path", () => {

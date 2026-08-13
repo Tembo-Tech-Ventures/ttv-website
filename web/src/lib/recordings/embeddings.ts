@@ -61,7 +61,7 @@ export async function embedAndIndexRecording({
     })) as { data?: number[][]; result?: { data?: number[][] } };
     const values = embedding.data?.[0] ?? embedding.result?.data?.[0];
     if (!Array.isArray(values)) {
-      throw new Error("Workers AI embedding response did not include vector data");
+      throw new TypeError("Workers AI embedding response did not include vector data");
     }
 
     const vectorId = `${recording.id}:${chunk.chunkIndex}`;

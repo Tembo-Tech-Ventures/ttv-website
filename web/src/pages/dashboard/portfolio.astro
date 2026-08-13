@@ -75,7 +75,7 @@ const isEditable = !profile || profile.status === "DRAFT" || profile.status === 
 
 const existingHighlights = profile?.highlights
   ? profile.highlights
-      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .toSorted((a, b) => a.sortOrder - b.sortOrder)
       .map((h) => ({
         repoFullName: h.repoFullName,
         blurb: h.blurb ?? "",

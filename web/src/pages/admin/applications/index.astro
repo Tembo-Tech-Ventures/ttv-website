@@ -8,12 +8,28 @@ import { env } from "cloudflare:workers";
 
 const db = drizzle(env.DB, { schema });
 
-const statusFilter = Astro.url.searchParams.get("status");
+type ApplicationStatus = typeof schema.programApplication.$inferSelect.status;
+const statuses = [
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+  "AUDIT",
+  "COMPLETED",
+] as const satisfies readonly ApplicationStatus[];
+const statusVariants = {
+  PENDING: "pending",
+  APPROVED: "approved",
+  REJECTED: "rejected",
+  AUDIT: "audit",
+  COMPLETED: "completed",
+} as const;
+const requestedStatus = Astro.url.searchParams.get("status");
+const statusFilter = statuses.find((status) => status === requestedStatus);
 
 let applications;
 if (statusFilter) {
   applications = await db.query.programApplication.findMany({
-    where: eq(schema.programApplication.status, statusFilter as any),
+    where: eq(schema.programApplication.status, statusFilter),
     with: { user: true, program: true },
     orderBy: (a, { desc }) => [desc(a.createdAt)],
   });
@@ -24,7 +40,6 @@ if (statusFilter) {
   });
 }
 
-const statuses = ["PENDING", "APPROVED", "REJECTED", "AUDIT", "COMPLETED"];
 ---
 
 <AdminLayout title="Applications">
@@ -84,7 +99,7 @@ const statuses = ["PENDING", "APPROVED", "REJECTED", "AUDIT", "COMPLETED"];
                 <td class="px-4 py-3">{app.user?.name ?? "Unknown"}</td>
                 <td class="px-4 py-3">{app.program?.name ?? "—"}</td>
                 <td class="px-4 py-3">
-                  <Badge variant={app.status.toLowerCase() as any} />
+                  <Badge variant={statusVariants[app.status]} />
                 </td>
                 <td class="px-4 py-3">
                   {app.createdAt

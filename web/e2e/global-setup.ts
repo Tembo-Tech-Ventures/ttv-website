@@ -41,7 +41,9 @@ export default async function globalSetup(_config: FullConfig) {
         consecutive = 0;
         lastProblem = error instanceof Error ? error.message : String(error);
       }
-      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+      await new Promise((resolve) => {
+        setTimeout(resolve, POLL_INTERVAL_MS);
+      });
     }
 
     throw new Error(

@@ -321,7 +321,7 @@ if (!prog) {
   return Astro.redirect("/admin/programs");
 }
 
-const rosterApplications = [...prog.programApplications].sort(
+const rosterApplications = prog.programApplications.toSorted(
   (first, second) => first.createdAt.getTime() - second.createdAt.getTime()
 );
 const enrolledUserIds = new Set(

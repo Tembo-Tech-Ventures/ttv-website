@@ -57,6 +57,13 @@
       "when": 1786190454175,
       "tag": "0007_workable_nova",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786617974495,
+      "tag": "0008_curvy_purifiers",
+      "breakpoints": true
     }
   ]
 }

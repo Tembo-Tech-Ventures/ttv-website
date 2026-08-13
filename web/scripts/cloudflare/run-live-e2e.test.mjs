@@ -3,6 +3,24 @@ import { deriveAgentPreviewToken } from "./agent-preview-auth.mjs";
 import { resolvePlaywrightAgentToken } from "./run-live-e2e.mjs";
 
 describe("live browser authentication", () => {
+  it("uses a securely supplied personal access token for live verification", () => {
+    expect(
+      resolvePlaywrightAgentToken({
+        TTV_PERSONAL_ACCESS_TOKEN: `ttv_pat_${"a".repeat(64)}`,
+        EXPECTED_DEPLOYMENT_ENVIRONMENT: "production",
+      })
+    ).toBe(`ttv_pat_${"a".repeat(64)}`);
+  });
+
+  it("prefers an explicit PAT over environment-specific delegated auth", () => {
+    expect(
+      resolvePlaywrightAgentToken({
+        TTV_PERSONAL_ACCESS_TOKEN: `ttv_pat_${"b".repeat(64)}`,
+        PLAYWRIGHT_AGENT_TOKEN: "staging-session-token",
+      })
+    ).toBe(`ttv_pat_${"b".repeat(64)}`);
+  });
+
   it("uses an explicitly supplied shared-environment token", () => {
     expect(
       resolvePlaywrightAgentToken({

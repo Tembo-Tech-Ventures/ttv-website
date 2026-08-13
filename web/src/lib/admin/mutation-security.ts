@@ -56,9 +56,11 @@ export function hasMatchingRequestOrigin(request: Request): boolean {
  */
 export function enforceAdminMutationOrigin(
   request: Request,
-  pathname: string
+  pathname: string,
+  { allowOriginlessAuthorization = false } = {}
 ): Response | null {
   if (!requiresAdminMutationOrigin(request.method, pathname)) return null;
+  if (allowOriginlessAuthorization && !request.headers.has("Origin")) return null;
   if (hasMatchingRequestOrigin(request)) return null;
 
   return new Response(ADMIN_MUTATION_ORIGIN_ERROR, {

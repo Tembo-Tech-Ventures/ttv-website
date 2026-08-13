@@ -55,7 +55,8 @@ export async function destroyEnvironment(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `Failed to delete R2 bucket "${context.bucketName}". Cloudflare only allows bucket deletion when the bucket is empty. Original error: ${message}`
+      `Failed to delete R2 bucket "${context.bucketName}". Cloudflare only allows bucket deletion when the bucket is empty. Original error: ${message}`,
+      { cause: error }
     );
   }
 

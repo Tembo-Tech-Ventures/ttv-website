@@ -20,7 +20,7 @@ export function fairSort<T extends { id: string }>(
   items: T[],
   dateKey: string,
 ): T[] {
-  return [...items].sort(
+  return items.toSorted(
     (a, b) => rotationHash(a.id, dateKey) - rotationHash(b.id, dateKey),
   );
 }
@@ -111,8 +111,8 @@ export function collectFilterOptions(profiles: DirectoryProfile[]) {
   }
 
   return {
-    skills: [...skills].sort(),
-    countries: [...countries].sort(),
-    cohorts: [...cohorts].sort(),
+    skills: [...skills].toSorted(),
+    countries: [...countries].toSorted(),
+    cohorts: [...cohorts].toSorted(),
   };
 }

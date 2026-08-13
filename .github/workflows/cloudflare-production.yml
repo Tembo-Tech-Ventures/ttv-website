@@ -12,7 +12,12 @@ on:
         type: choice
         options:
           - deploy
+          - diagnose-recording
           - destroy
+      recording_id:
+        description: Recording ID for the read-only diagnostic action
+        required: false
+        type: string
       allow_protected_destroy:
         description: Override protected environment guard during destroy
         required: false
@@ -21,6 +26,7 @@ on:
 
 jobs:
   production:
+    if: ${{ inputs.action != 'diagnose-recording' }}
     concurrency:
       group: ttv-cloudflare-production
       cancel-in-progress: false
@@ -36,3 +42,34 @@ jobs:
       protected_environments: production,prod
       allow_protected_destroy: ${{ inputs.allow_protected_destroy || false }}
     secrets: inherit
+
+  diagnose-recording:
+    if: ${{ inputs.action == 'diagnose-recording' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: web
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_APP_NAME: ttv-website
+      CLOUDFLARE_ENVIRONMENT_NAME: production
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: Read recording pipeline diagnostics
+        env:
+          RECORDING_ID: ${{ inputs.recording_id }}
+        run: npm run cf:recording-diagnostics -- --recording-id="$RECORDING_ID"

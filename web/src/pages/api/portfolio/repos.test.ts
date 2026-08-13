@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-async function json(
-  res: Response,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Promise<Record<string, any>> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return res.json() as Promise<Record<string, any>>;
+interface RepositoriesResponse extends Record<string, unknown> {
+  repos: Array<Record<string, unknown>>;
+}
+
+async function json(res: Response): Promise<RepositoriesResponse> {
+  return res.json() as Promise<RepositoriesResponse>;
 }
 
 vi.mock("cloudflare:workers", () => ({ env: { DB: {} } }));

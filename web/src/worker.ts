@@ -1,4 +1,5 @@
 import { Container } from "@cloudflare/containers";
+export { ContainerProxy } from "@cloudflare/containers";
 import { handle } from "@astrojs/cloudflare/handler";
 import { processRecordingMessage } from "@/lib/recordings/pipeline";
 import { syncEnabledRecordingImportSources } from "@/lib/recordings/importer";

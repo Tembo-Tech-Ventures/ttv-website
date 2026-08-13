@@ -1,9 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function json(res: Response): Promise<Record<string, any>> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return res.json() as Promise<Record<string, any>>;
+async function json(res: Response): Promise<Record<string, unknown>> {
+  return res.json() as Promise<Record<string, unknown>>;
 }
 
 vi.mock("cloudflare:workers", () => ({ env: { DB: {} } }));

@@ -8,6 +8,7 @@ import {
   deriveAgentEnvironmentName,
   deriveEnvironmentContext,
   ensureAiGateway,
+  findD1DatabaseByName,
   getSecretBindings,
   queryD1Database,
   removeQueueWorkerConsumer,
@@ -296,6 +297,33 @@ describe("queryD1Database", () => {
       sql: "SELECT * FROM user WHERE id = ?",
       params: ["user-1"],
     });
+  });
+});
+
+describe("findD1DatabaseByName", () => {
+  it("returns only an exact existing database without creating resources", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          result: [
+            { uuid: "wrong-id", name: "ttv-website-db-production-copy" },
+            { uuid: "database-id", name: "ttv-website-db-production" },
+          ],
+        }),
+        { status: 200 }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      findD1DatabaseByName("ttv-website-db-production")
+    ).resolves.toEqual({
+      uuid: "database-id",
+      name: "ttv-website-db-production",
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0][1]?.method).toBe("GET");
   });
 });
 

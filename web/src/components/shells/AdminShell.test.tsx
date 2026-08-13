@@ -30,6 +30,19 @@ describe("admin navigation", () => {
     }
   });
 
+  it("always exposes personal access token management to browser-authenticated admins", () => {
+    for (const agentAuthEnabled of [false, true]) {
+      expect(getAdminLinks(agentAuthEnabled)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            href: "/admin/personal-access-tokens",
+            label: "Personal Access Tokens",
+          }),
+        ])
+      );
+    }
+  });
+
   it("places curricula before cohorts in the management flow", () => {
     const labels = getAdminLinks(false).map(({ label }) => label);
     expect(labels.indexOf("Curricula")).toBeLessThan(

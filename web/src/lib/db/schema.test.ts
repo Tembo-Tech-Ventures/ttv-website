@@ -6,6 +6,7 @@ describe("Database Schema", () => {
     expect(schema.user).toBeDefined();
     expect(schema.account).toBeDefined();
     expect(schema.session).toBeDefined();
+    expect(schema.personalAccessToken).toBeDefined();
     expect(schema.verification).toBeDefined();
     expect(schema.role).toBeDefined();
     expect(schema.userRole).toBeDefined();
@@ -27,6 +28,7 @@ describe("Database Schema", () => {
     expect(schema.userRelations).toBeDefined();
     expect(schema.accountRelations).toBeDefined();
     expect(schema.sessionRelations).toBeDefined();
+    expect(schema.personalAccessTokenRelations).toBeDefined();
     expect(schema.roleRelations).toBeDefined();
     expect(schema.userRoleRelations).toBeDefined();
     expect(schema.fileRelations).toBeDefined();
@@ -88,6 +90,11 @@ describe("Database Schema", () => {
   it("session token has unique constraint", () => {
     const tokenCol = schema.session.token;
     expect(tokenCol.isUnique).toBe(true);
+  });
+
+  it("personal access tokens store a unique hash instead of a raw token", () => {
+    expect(schema.personalAccessToken.tokenHash.isUnique).toBe(true);
+    expect(schema.personalAccessToken).not.toHaveProperty("token");
   });
 
   it("integrationCredential provider has unique constraint", () => {

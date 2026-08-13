@@ -182,7 +182,7 @@ export async function getGoogleDriveAccessToken(
     expires_in?: unknown;
   };
   if (typeof result.access_token !== "string") {
-    throw new Error("Google OAuth token response did not include an access token.");
+    throw new TypeError("Google OAuth token response did not include an access token.");
   }
 
   const expiresIn =

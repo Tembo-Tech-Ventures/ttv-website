@@ -44,4 +44,41 @@ test.describe("authenticated delivery agent", () => {
     await page.goto("/admin/agent-access");
     await expect(page).toHaveURL(/\/admin\/?$/);
   });
+
+  test("can start and reach the FFmpeg container", async ({ request }) => {
+    const response = await request.get(
+      "/api/admin/recordings/container-health"
+    );
+
+    expect(response.ok()).toBe(true);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      service: "ffmpeg-container",
+    });
+  });
+
+  test("delegated credentials cannot mint personal access tokens", async ({
+    page,
+  }) => {
+    const response = await page.goto("/admin/personal-access-tokens");
+    expect(response?.status()).toBe(403);
+    await expect(page.getByText(/delegated credentials cannot manage/i)).toBeVisible();
+  });
+
+  test("can inspect a requested recording with a securely supplied token", async ({
+    page,
+  }, testInfo) => {
+    const recordingId = process.env.RECORDING_SMOKE_ID?.trim();
+    test.skip(!recordingId, "No recording was selected for authenticated smoke testing.");
+
+    await page.goto(`/admin/recordings/${recordingId}`);
+    await expect(
+      page.getByRole("heading", { name: "Recording Details" })
+    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Processing" })).toBeVisible();
+    await page.screenshot({
+      path: `test-results/evidence/${testInfo.project.name}-recording-smoke.png`,
+      fullPage: true,
+    });
+  });
 });

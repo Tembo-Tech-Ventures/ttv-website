@@ -47,6 +47,7 @@ declare namespace App {
   interface Locals {
     session: AuthSession | null;
     user: AuthUser | null;
+    personalAccessToken: import("@/lib/personal-access-tokens").PersonalAccessTokenSummary | null;
     isAdmin?: boolean;
   }
 }

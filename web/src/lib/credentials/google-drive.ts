@@ -32,13 +32,19 @@ function pemToDer(pem: string): Uint8Array<ArrayBuffer> {
 
 async function validatePrivateKey(pem: string): Promise<void> {
   const der = pemToDer(pem);
-  await crypto.subtle.importKey(
-    "pkcs8",
-    der,
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
+  try {
+    await crypto.subtle.importKey(
+      "pkcs8",
+      der,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+  } catch (error) {
+    throw new Error("Invalid service account: private key is not valid PKCS#8 PEM.", {
+      cause: error,
+    });
+  }
 }
 
 interface ServiceAccountJson {

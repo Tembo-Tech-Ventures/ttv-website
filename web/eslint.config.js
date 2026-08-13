@@ -1,11 +1,12 @@
 import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
-import eslintPluginAstro from "eslint-plugin-astro";
+import { configs as astroConfigs } from "eslint-plugin-astro";
+import oxlint from "eslint-plugin-oxlint";
 
 export default [
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
-  ...eslintPluginAstro.configs.recommended,
+  ...astroConfigs.recommended,
   {
     rules: {
       "@typescript-eslint/no-unused-vars": [
@@ -46,4 +47,5 @@ export default [
   {
     ignores: ["dist/", ".astro/", "node_modules/", "worker-configuration.d.ts"],
   },
+  ...oxlint.buildFromOxlintConfigFile("./.oxlintrc.json"),
 ];

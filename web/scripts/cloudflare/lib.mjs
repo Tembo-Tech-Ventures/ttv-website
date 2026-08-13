@@ -140,7 +140,7 @@ export async function cfApi(resourcePath, { method = "GET", body } = {}) {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: body ? JSON.stringify(body) : undefined,
+      ...(body ? { body: JSON.stringify(body) } : {}),
     }
   );
 
@@ -184,6 +184,15 @@ export async function ensureD1Database(name) {
       ...(jurisdiction ? { jurisdiction } : {}),
     },
   });
+}
+
+export async function findD1DatabaseByName(name) {
+  const existing = await cfApi(
+    `/d1/database?name=${encodeURIComponent(name)}&per_page=10`
+  );
+  return Array.isArray(existing)
+    ? existing.find((database) => database.name === name) ?? null
+    : null;
 }
 
 export async function queryD1Database(databaseId, sql, params = []) {
@@ -369,7 +378,7 @@ export async function deleteContainerAppByName(name, runner = runWrangler) {
   }
 
   if (!Array.isArray(containers)) {
-    throw new Error(
+    throw new TypeError(
       `Expected container list to be an array, got ${typeof containers}`
     );
   }

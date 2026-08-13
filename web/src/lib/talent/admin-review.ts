@@ -19,7 +19,7 @@ interface ProfileSortable {
 export function sortProfilesForQueue<T extends ProfileSortable>(
   profiles: T[]
 ): T[] {
-  return [...profiles].sort((a, b) => {
+  return profiles.toSorted((a, b) => {
     const aOrder = PROFILE_STATUS_ORDER[a.status] ?? 99;
     const bOrder = PROFILE_STATUS_ORDER[b.status] ?? 99;
     if (aOrder !== bOrder) return aOrder - bOrder;
@@ -45,7 +45,7 @@ interface ProjectSortable {
 export function sortProjectsForQueue<T extends ProjectSortable>(
   projects: T[]
 ): T[] {
-  return [...projects].sort((a, b) => {
+  return projects.toSorted((a, b) => {
     const aOrder = PROJECT_STATUS_ORDER[a.status] ?? 99;
     const bOrder = PROJECT_STATUS_ORDER[b.status] ?? 99;
     if (aOrder !== bOrder) return aOrder - bOrder;

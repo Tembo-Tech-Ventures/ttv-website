@@ -40,7 +40,9 @@ async function fetchChecked(fetchImpl, url, timeoutMs) {
 }
 
 function sleep(durationMs) {
-  return new Promise((resolve) => globalThis.setTimeout(resolve, durationMs));
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, durationMs);
+  });
 }
 
 function assertExpectedHealth(

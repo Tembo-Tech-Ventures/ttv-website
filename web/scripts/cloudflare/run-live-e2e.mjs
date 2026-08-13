@@ -7,6 +7,9 @@ import {
 } from "./agent-preview-auth.mjs";
 
 export function resolvePlaywrightAgentToken(environment = process.env) {
+  const personalAccessToken = environment.TTV_PERSONAL_ACCESS_TOKEN?.trim();
+  if (personalAccessToken) return personalAccessToken;
+
   const explicitToken = environment.PLAYWRIGHT_AGENT_TOKEN?.trim();
   if (explicitToken) return explicitToken;
 
