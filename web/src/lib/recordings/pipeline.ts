@@ -18,6 +18,8 @@ export interface RecordingQueueMessage {
 
 const FFMPEG_CONTAINER_TIMEOUT_MS = 25 * 60 * 1000;
 const FFMPEG_TIMEOUT_ERROR_PREFIX = "FFmpeg container timed out";
+const TRANSCRIPTION_TIMEOUT_MS = 12 * 60 * 1000;
+const TRANSCRIPTION_TIMEOUT_ERROR_PREFIX = "Transcription timed out";
 
 type StartableContainer = DurableObjectStub & {
   start(): void;
@@ -40,10 +42,37 @@ function elapsedMs(startedAt: number) {
   return Math.round(performance.now() - startedAt);
 }
 
-function isFfmpegTimeoutError(value: unknown) {
+function isRetryableTerminalError(value: unknown) {
   return (
-    typeof value === "string" && value.startsWith(FFMPEG_TIMEOUT_ERROR_PREFIX)
+    typeof value === "string" &&
+    (value.startsWith(FFMPEG_TIMEOUT_ERROR_PREFIX) ||
+      value.startsWith(TRANSCRIPTION_TIMEOUT_ERROR_PREFIX))
   );
+}
+
+async function withTimeout<T>({
+  timeoutMs,
+  errorMessage,
+  run,
+}: {
+  timeoutMs: number;
+  errorMessage: string;
+  run: (signal: AbortSignal) => Promise<T>;
+}) {
+  const abortController = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      abortController.abort();
+      reject(new Error(errorMessage));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([run(abortController.signal), timeoutPromise]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 function isRecordingQueueMessage(value: unknown): value is RecordingQueueMessage {
@@ -96,9 +125,9 @@ export async function processRecordingMessage(message: unknown, env: Env) {
 
   if (
     recording.processingStatus === "failed" &&
-    isFfmpegTimeoutError(recording.processingError)
+    isRetryableTerminalError(recording.processingError)
   ) {
-    logRecordingPipelineEvent("queue_retry_skipped_after_timeout", {
+    logRecordingPipelineEvent("queue_retry_skipped_after_terminal_error", {
       recordingId: recording.id,
       processingError: recording.processingError,
     });
@@ -144,81 +173,88 @@ export async function processRecordingMessage(message: unknown, env: Env) {
       throw new Error(`Recording ${recording.id} does not have a video source`);
     }
 
-    await updateStatus(db, recording.id, "extracting_audio");
-    const container = env.FFMPEG_CONTAINER.getByName(
-      recording.id
-    ) as StartableContainer;
-    container.start();
-    const containerStartedAt = performance.now();
-    const abortController = new AbortController();
-    const timeout = setTimeout(
-      () => abortController.abort(),
-      FFMPEG_CONTAINER_TIMEOUT_MS
-    );
-    let ffmpegResponse: Response;
-    logRecordingPipelineEvent("ffmpeg_container_fetch_start", {
-      recordingId: recording.id,
-      r2VideoKey,
-      fileSizeBytes,
-      timeoutMs: FFMPEG_CONTAINER_TIMEOUT_MS,
-    });
-    try {
-      ffmpegResponse = await container.fetch("https://ffmpeg/process", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          recordingId: recording.id,
-          r2VideoKey,
-        }),
-        signal: abortController.signal,
-      });
-    } catch (error) {
-      if (abortController.signal.aborted) {
-        throw new Error(
-          `FFmpeg container timed out after ${FFMPEG_CONTAINER_TIMEOUT_MS}ms`,
-          { cause: error }
-        );
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    logRecordingPipelineEvent("ffmpeg_container_fetch_done", {
-      recordingId: recording.id,
-      status: ffmpegResponse.status,
-      ok: ffmpegResponse.ok,
-      elapsedMs: elapsedMs(containerStartedAt),
-    });
-
-    if (!ffmpegResponse.ok) {
-      throw new Error(`FFmpeg container failed: ${await ffmpegResponse.text()}`);
-    }
-
-    const ffmpegResult = (await ffmpegResponse.json()) as {
+    let ffmpegResult: {
       r2VideoKey: string;
       r2AudioKey: string;
       durationSeconds?: number;
       fileSizeBytes?: number;
     };
-    logRecordingPipelineEvent("ffmpeg_container_result", {
-      recordingId: recording.id,
-      r2VideoKey: ffmpegResult.r2VideoKey,
-      r2AudioKey: ffmpegResult.r2AudioKey,
-      durationSeconds: ffmpegResult.durationSeconds,
-      fileSizeBytes: ffmpegResult.fileSizeBytes,
-      elapsedMs: elapsedMs(containerStartedAt),
-    });
 
-    await db
-      .update(schema.recording)
-      .set({
+    if (recording.r2AudioKey) {
+      ffmpegResult = {
+        r2VideoKey,
+        r2AudioKey: recording.r2AudioKey,
+        durationSeconds: recording.durationSeconds ?? undefined,
+        fileSizeBytes: recording.fileSizeBytes ?? fileSizeBytes ?? undefined,
+      };
+      logRecordingPipelineEvent("ffmpeg_container_skipped_existing_audio", {
+        recordingId: recording.id,
+        r2VideoKey,
+        r2AudioKey: recording.r2AudioKey,
+        durationSeconds: recording.durationSeconds,
+        fileSizeBytes: recording.fileSizeBytes ?? fileSizeBytes,
+      });
+    } else {
+      await updateStatus(db, recording.id, "extracting_audio");
+      const container = env.FFMPEG_CONTAINER.getByName(
+        recording.id
+      ) as StartableContainer;
+      container.start();
+      const containerStartedAt = performance.now();
+      logRecordingPipelineEvent("ffmpeg_container_fetch_start", {
+        recordingId: recording.id,
+        r2VideoKey,
+        fileSizeBytes,
+        timeoutMs: FFMPEG_CONTAINER_TIMEOUT_MS,
+      });
+
+      const ffmpegResponse = await withTimeout({
+        timeoutMs: FFMPEG_CONTAINER_TIMEOUT_MS,
+        errorMessage: `FFmpeg container timed out after ${FFMPEG_CONTAINER_TIMEOUT_MS}ms`,
+        run: async (signal) =>
+          await container.fetch("https://ffmpeg/process", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              recordingId: recording.id,
+              r2VideoKey,
+            }),
+            signal,
+          }),
+      });
+
+      logRecordingPipelineEvent("ffmpeg_container_fetch_done", {
+        recordingId: recording.id,
+        status: ffmpegResponse.status,
+        ok: ffmpegResponse.ok,
+        elapsedMs: elapsedMs(containerStartedAt),
+      });
+
+      if (!ffmpegResponse.ok) {
+        throw new Error(`FFmpeg container failed: ${await ffmpegResponse.text()}`);
+      }
+
+      ffmpegResult = (await ffmpegResponse.json()) as typeof ffmpegResult;
+      logRecordingPipelineEvent("ffmpeg_container_result", {
+        recordingId: recording.id,
         r2VideoKey: ffmpegResult.r2VideoKey,
         r2AudioKey: ffmpegResult.r2AudioKey,
-        durationSeconds: ffmpegResult.durationSeconds ?? recording.durationSeconds,
-        fileSizeBytes: ffmpegResult.fileSizeBytes ?? recording.fileSizeBytes,
-      })
-      .where(eq(schema.recording.id, recording.id));
+        durationSeconds: ffmpegResult.durationSeconds,
+        fileSizeBytes: ffmpegResult.fileSizeBytes,
+        elapsedMs: elapsedMs(containerStartedAt),
+      });
+
+      await db
+        .update(schema.recording)
+        .set({
+          r2VideoKey: ffmpegResult.r2VideoKey,
+          r2AudioKey: ffmpegResult.r2AudioKey,
+          durationSeconds:
+            ffmpegResult.durationSeconds ?? recording.durationSeconds,
+          fileSizeBytes: ffmpegResult.fileSizeBytes ?? recording.fileSizeBytes,
+        })
+        .where(eq(schema.recording.id, recording.id));
+    }
 
     await updateStatus(db, recording.id, "transcribing");
     const audio = await env.BUCKET.get(ffmpegResult.r2AudioKey);
@@ -226,9 +262,28 @@ export async function processRecordingMessage(message: unknown, env: Env) {
       throw new Error(`Audio object ${ffmpegResult.r2AudioKey} not found`);
     }
 
-    const transcript = await transcribeAudioObject({
-      env,
-      audio: await audio.arrayBuffer(),
+    const audioBuffer = await audio.arrayBuffer();
+    const transcriptionStartedAt = performance.now();
+    logRecordingPipelineEvent("transcription_start", {
+      recordingId: recording.id,
+      r2AudioKey: ffmpegResult.r2AudioKey,
+      audioBytes: audioBuffer.byteLength,
+      timeoutMs: TRANSCRIPTION_TIMEOUT_MS,
+    });
+    const transcript = await withTimeout({
+      timeoutMs: TRANSCRIPTION_TIMEOUT_MS,
+      errorMessage: `Transcription timed out after ${TRANSCRIPTION_TIMEOUT_MS}ms`,
+      run: async () =>
+        await transcribeAudioObject({
+          env,
+          audio: audioBuffer,
+        }),
+    });
+    logRecordingPipelineEvent("transcription_done", {
+      recordingId: recording.id,
+      segmentCount: transcript.segments.length,
+      textLength: transcript.text.length,
+      elapsedMs: elapsedMs(transcriptionStartedAt),
     });
 
     await db
