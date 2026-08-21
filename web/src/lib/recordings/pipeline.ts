@@ -19,6 +19,10 @@ export interface RecordingQueueMessage {
 const FFMPEG_CONTAINER_TIMEOUT_MS = 25 * 60 * 1000;
 const FFMPEG_TIMEOUT_ERROR_PREFIX = "FFmpeg container timed out";
 
+type StartableContainer = DurableObjectStub & {
+  start(): void;
+};
+
 function logRecordingPipelineEvent(
   event: string,
   fields: Record<string, unknown>
@@ -141,7 +145,10 @@ export async function processRecordingMessage(message: unknown, env: Env) {
     }
 
     await updateStatus(db, recording.id, "extracting_audio");
-    const container = env.FFMPEG_CONTAINER.getByName(recording.id);
+    const container = env.FFMPEG_CONTAINER.getByName(
+      recording.id
+    ) as StartableContainer;
+    container.start();
     const containerStartedAt = performance.now();
     const abortController = new AbortController();
     const timeout = setTimeout(

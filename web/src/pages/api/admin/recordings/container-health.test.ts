@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   containerFetch: vi.fn(),
+  containerStart: vi.fn(),
   getByName: vi.fn(),
 }));
 
@@ -19,7 +20,10 @@ function context(isAdmin: boolean) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.getByName.mockReturnValue({ fetch: mocks.containerFetch });
+  mocks.getByName.mockReturnValue({
+    fetch: mocks.containerFetch,
+    start: mocks.containerStart,
+  });
 });
 
 describe("GET /api/admin/recordings/container-health", () => {
@@ -41,6 +45,7 @@ describe("GET /api/admin/recordings/container-health", () => {
       service: "ffmpeg-container",
     });
     expect(mocks.getByName).toHaveBeenCalledWith("recording-container-health");
+    expect(mocks.containerStart).toHaveBeenCalledBefore(mocks.containerFetch);
     expect(mocks.containerFetch).toHaveBeenCalledWith("https://ffmpeg/health");
   });
 
