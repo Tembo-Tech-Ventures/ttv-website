@@ -57,7 +57,10 @@ function createDatabase(recording: Record<string, unknown>) {
   return { database, updates };
 }
 
-function createEnvironment(containerFetch: ReturnType<typeof vi.fn>) {
+function createEnvironment(
+  containerFetch: ReturnType<typeof vi.fn>,
+  containerStart: ReturnType<typeof vi.fn> = vi.fn()
+) {
   return {
     DB: {},
     CREDENTIALS_ENCRYPTION_KEY: "dGVzdC1rZXktMzItYnl0ZXMtZm9yLXVuaXQ=",
@@ -67,7 +70,7 @@ function createEnvironment(containerFetch: ReturnType<typeof vi.fn>) {
       }),
     },
     FFMPEG_CONTAINER: {
-      getByName: vi.fn(() => ({ fetch: containerFetch })),
+      getByName: vi.fn(() => ({ fetch: containerFetch, start: containerStart })),
     },
     AI: {},
     VECTORIZE: {},
@@ -144,11 +147,43 @@ describe("recording processing pipeline", () => {
       "complete",
     ]);
     const containerRequest = containerFetch.mock.calls[0][1] as RequestInit;
+    expect(env.FFMPEG_CONTAINER.getByName).toHaveBeenCalledWith("recording1");
     expect(JSON.parse(String(containerRequest.body))).toMatchObject({
       recordingId: "recording1",
       r2VideoKey: "recordings/recording1/source.mp4",
     });
     expect(containerRequest.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("starts the named FFmpeg container before proxying the request", async () => {
+    const recording: Record<string, unknown> = {
+      id: "recording1",
+      driveFileId: null,
+      r2VideoKey: "recordings/recording1/source.mp4",
+      r2AudioKey: null,
+      durationSeconds: null,
+      fileSizeBytes: 488_585_211,
+      processingStatus: "queued",
+    };
+    const { database } = createDatabase(recording);
+    mocks.drizzle.mockReturnValue(database);
+    const containerStart = vi.fn();
+    const containerFetch = vi.fn().mockResolvedValue(
+      Response.json({
+        r2VideoKey: "recordings/recording1/source.mp4",
+        r2AudioKey: "recordings/recording1/audio.mp3",
+        durationSeconds: 60,
+        fileSizeBytes: 488_585_211,
+      })
+    );
+    const env = createEnvironment(containerFetch, containerStart);
+
+    await processRecordingMessage(
+      { type: "process_recording", recordingId: "recording1" },
+      env
+    );
+
+    expect(containerStart).toHaveBeenCalledBefore(containerFetch);
   });
 
   it("records a failure when a queued row has no upload or Drive source", async () => {

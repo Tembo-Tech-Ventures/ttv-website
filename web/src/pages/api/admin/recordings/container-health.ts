@@ -3,13 +3,20 @@ import { env } from "cloudflare:workers";
 
 const HEALTH_INSTANCE_NAME = "recording-container-health";
 
+type StartableContainer = DurableObjectStub & {
+  start(): void;
+};
+
 export const GET: APIRoute = async ({ locals }) => {
   if (!locals.isAdmin) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const container = env.FFMPEG_CONTAINER.getByName(HEALTH_INSTANCE_NAME);
+    const container = env.FFMPEG_CONTAINER.getByName(
+      HEALTH_INSTANCE_NAME
+    ) as StartableContainer;
+    container.start();
     const response = await container.fetch("https://ffmpeg/health");
     if (!response.ok) {
       return Response.json(
