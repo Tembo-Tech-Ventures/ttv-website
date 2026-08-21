@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream } from "node:fs";
-/* global Request, Response, console, fetch, performance */
+/* global Request, Response, console, fetch, performance, process */
 import { mkdir, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -7,6 +7,7 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { spawn } from "node:child_process";
 import { Buffer } from "node:buffer";
+import { pathToFileURL } from "node:url";
 
 const R2_HOST = "http://r2.local";
 
@@ -54,14 +55,17 @@ async function download(key, target) {
   });
 }
 
-async function upload(key, source, contentType) {
+export async function upload(key, source, contentType) {
   const startedAt = performance.now();
   const fileStats = await stat(source);
   log("r2_upload_start", { key, bytes: fileStats.size, contentType });
   const stream = createReadStream(source);
   const response = await fetch(`${R2_HOST}/${encodeURIComponent(key)}`, {
     method: "PUT",
-    headers: { "content-type": contentType },
+    headers: {
+      "content-length": String(fileStats.size),
+      "content-type": contentType,
+    },
     body: stream,
     duplex: "half",
   });
@@ -173,36 +177,46 @@ async function handleProcess(request) {
   });
 }
 
-createServer(async (request, response) => {
-  try {
-    if (request.method === "POST" && request.url === "/process") {
-      const chunks = [];
-      for await (const chunk of request) chunks.push(chunk);
-      const result = await handleProcess(
-        new Request("http://container/process", {
-          method: "POST",
-          body: Buffer.concat(chunks),
-          headers: { "content-type": "application/json" },
+export function startServer(port = 8080) {
+  return createServer(async (request, response) => {
+    try {
+      if (request.method === "POST" && request.url === "/process") {
+        const chunks = [];
+        for await (const chunk of request) chunks.push(chunk);
+        const result = await handleProcess(
+          new Request("http://container/process", {
+            method: "POST",
+            body: Buffer.concat(chunks),
+            headers: { "content-type": "application/json" },
+          })
+        );
+        response.writeHead(result.status, Object.fromEntries(result.headers));
+        response.end(await result.text());
+        return;
+      }
+
+      if (request.method === "GET" && request.url === "/health") {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ ok: true }));
+        return;
+      }
+
+      response.writeHead(404);
+      response.end("Not found");
+    } catch (error) {
+      log("process_failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      response.writeHead(500, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          error: error instanceof Error ? error.message : String(error),
         })
       );
-      response.writeHead(result.status, Object.fromEntries(result.headers));
-      response.end(await result.text());
-      return;
     }
+  }).listen(port);
+}
 
-    if (request.method === "GET" && request.url === "/health") {
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify({ ok: true }));
-      return;
-    }
-
-    response.writeHead(404);
-    response.end("Not found");
-  } catch (error) {
-    log("process_failed", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    response.writeHead(500, { "content-type": "application/json" });
-    response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
-  }
-}).listen(8080);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  startServer();
+}
