@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream } from "node:fs";
-/* global Request, Response, fetch */
+/* global Request, Response, console, fetch, performance */
 import { mkdir, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -9,6 +9,20 @@ import { spawn } from "node:child_process";
 import { Buffer } from "node:buffer";
 
 const R2_HOST = "http://r2.local";
+
+function log(event, fields = {}) {
+  console.log(
+    JSON.stringify({
+      event,
+      component: "ffmpeg_container",
+      ...fields,
+    })
+  );
+}
+
+function elapsedMs(startedAt) {
+  return Math.round(performance.now() - startedAt);
+}
 
 function run(command, args) {
   return new Promise((resolve, reject) => {
@@ -25,14 +39,25 @@ function run(command, args) {
 }
 
 async function download(key, target) {
+  const startedAt = performance.now();
+  log("r2_download_start", { key });
   const response = await fetch(`${R2_HOST}/${encodeURIComponent(key)}`);
   if (!response.ok || !response.body) {
     throw new Error(`Unable to download ${key}: ${response.status}`);
   }
   await pipeline(response.body, createWriteStream(target));
+  const fileStats = await stat(target);
+  log("r2_download_done", {
+    key,
+    bytes: fileStats.size,
+    elapsedMs: elapsedMs(startedAt),
+  });
 }
 
 async function upload(key, source, contentType) {
+  const startedAt = performance.now();
+  const fileStats = await stat(source);
+  log("r2_upload_start", { key, bytes: fileStats.size, contentType });
   const stream = createReadStream(source);
   const response = await fetch(`${R2_HOST}/${encodeURIComponent(key)}`, {
     method: "PUT",
@@ -43,9 +68,16 @@ async function upload(key, source, contentType) {
   if (!response.ok) {
     throw new Error(`Unable to upload ${key}: ${response.status}`);
   }
+  log("r2_upload_done", {
+    key,
+    bytes: fileStats.size,
+    elapsedMs: elapsedMs(startedAt),
+  });
 }
 
 async function probeDuration(file) {
+  const startedAt = performance.now();
+  log("ffprobe_duration_start", { file });
   const output = await run("ffprobe", [
     "-v",
     "error",
@@ -56,6 +88,11 @@ async function probeDuration(file) {
     file,
   ]);
   const duration = Number.parseFloat(output.trim());
+  log("ffprobe_duration_done", {
+    file,
+    durationSeconds: Number.isFinite(duration) ? Math.round(duration) : undefined,
+    elapsedMs: elapsedMs(startedAt),
+  });
   return Number.isFinite(duration) ? Math.round(duration) : undefined;
 }
 
@@ -74,8 +111,19 @@ async function handleProcess(request) {
   const faststart = path.join(workDir, "faststart.mp4");
   const audio = path.join(workDir, "audio.mp3");
 
+  const processStartedAt = performance.now();
+  log("process_start", { recordingId, r2VideoKey });
   await download(r2VideoKey, input);
+  let stepStartedAt = performance.now();
+  log("ffmpeg_faststart_start", { recordingId });
   await run("ffmpeg", ["-y", "-i", input, "-c", "copy", "-movflags", "+faststart", faststart]);
+  log("ffmpeg_faststart_done", {
+    recordingId,
+    bytes: (await stat(faststart)).size,
+    elapsedMs: elapsedMs(stepStartedAt),
+  });
+  stepStartedAt = performance.now();
+  log("ffmpeg_audio_extract_start", { recordingId });
   await run("ffmpeg", [
     "-y",
     "-i",
@@ -91,6 +139,11 @@ async function handleProcess(request) {
     "16000",
     audio,
   ]);
+  log("ffmpeg_audio_extract_done", {
+    recordingId,
+    bytes: (await stat(audio)).size,
+    elapsedMs: elapsedMs(stepStartedAt),
+  });
 
   const processedVideoKey = r2VideoKey.endsWith(".mp4")
     ? r2VideoKey.replace(/\.mp4$/, ".faststart.mp4")
@@ -102,6 +155,15 @@ async function handleProcess(request) {
 
   const fileStats = await stat(faststart);
   const durationSeconds = await probeDuration(faststart);
+
+  log("process_done", {
+    recordingId,
+    processedVideoKey,
+    audioKey,
+    durationSeconds,
+    fileSizeBytes: fileStats.size,
+    elapsedMs: elapsedMs(processStartedAt),
+  });
 
   return Response.json({
     r2VideoKey: processedVideoKey,
@@ -137,6 +199,9 @@ createServer(async (request, response) => {
     response.writeHead(404);
     response.end("Not found");
   } catch (error) {
+    log("process_failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     response.writeHead(500, { "content-type": "application/json" });
     response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
   }
