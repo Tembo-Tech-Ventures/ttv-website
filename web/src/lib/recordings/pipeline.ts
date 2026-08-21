@@ -16,6 +16,25 @@ export interface RecordingQueueMessage {
   recordingId: string;
 }
 
+const FFMPEG_CONTAINER_TIMEOUT_MS = 14 * 60 * 1000;
+
+function logRecordingPipelineEvent(
+  event: string,
+  fields: Record<string, unknown>
+) {
+  console.log(
+    JSON.stringify({
+      event,
+      component: "recording_pipeline",
+      ...fields,
+    })
+  );
+}
+
+function elapsedMs(startedAt: number) {
+  return Math.round(performance.now() - startedAt);
+}
+
 function isRecordingQueueMessage(value: unknown): value is RecordingQueueMessage {
   return (
     typeof value === "object" &&
@@ -51,6 +70,10 @@ export async function processRecordingMessage(message: unknown, env: Env) {
     throw new Error("Unknown recording queue message");
   }
 
+  logRecordingPipelineEvent("queue_message_received", {
+    recordingId: message.recordingId,
+  });
+
   const db = drizzle(env.DB, { schema });
   const recording = await db.query.recording.findFirst({
     where: eq(schema.recording.id, message.recordingId),
@@ -66,6 +89,11 @@ export async function processRecordingMessage(message: unknown, env: Env) {
 
     if (!r2VideoKey && recording.driveFileId) {
       await updateStatus(db, recording.id, "downloading");
+      logRecordingPipelineEvent("drive_download_start", {
+        recordingId: recording.id,
+        driveFileId: recording.driveFileId,
+      });
+      const downloadStartedAt = performance.now();
       const credentials = await resolveGoogleDriveCredentials(env, db);
       if (!credentials) {
         throw new Error("Google Drive credentials are not configured");
@@ -78,6 +106,12 @@ export async function processRecordingMessage(message: unknown, env: Env) {
       });
       r2VideoKey = download.r2VideoKey;
       fileSizeBytes = download.fileSizeBytes ?? fileSizeBytes;
+      logRecordingPipelineEvent("drive_download_done", {
+        recordingId: recording.id,
+        r2VideoKey,
+        fileSizeBytes,
+        elapsedMs: elapsedMs(downloadStartedAt),
+      });
       await db
         .update(schema.recording)
         .set({ r2VideoKey, fileSizeBytes })
@@ -90,13 +124,46 @@ export async function processRecordingMessage(message: unknown, env: Env) {
 
     await updateStatus(db, recording.id, "extracting_audio");
     const container = env.FFMPEG_CONTAINER.getByName(recording.id);
-    const ffmpegResponse = await container.fetch("https://ffmpeg/process", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        recordingId: recording.id,
-        r2VideoKey,
-      }),
+    const containerStartedAt = performance.now();
+    const abortController = new AbortController();
+    const timeout = setTimeout(
+      () => abortController.abort(),
+      FFMPEG_CONTAINER_TIMEOUT_MS
+    );
+    let ffmpegResponse: Response;
+    logRecordingPipelineEvent("ffmpeg_container_fetch_start", {
+      recordingId: recording.id,
+      r2VideoKey,
+      fileSizeBytes,
+      timeoutMs: FFMPEG_CONTAINER_TIMEOUT_MS,
+    });
+    try {
+      ffmpegResponse = await container.fetch("https://ffmpeg/process", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          recordingId: recording.id,
+          r2VideoKey,
+        }),
+        signal: abortController.signal,
+      });
+    } catch (error) {
+      if (abortController.signal.aborted) {
+        throw new Error(
+          `FFmpeg container timed out after ${FFMPEG_CONTAINER_TIMEOUT_MS}ms`,
+          { cause: error }
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    logRecordingPipelineEvent("ffmpeg_container_fetch_done", {
+      recordingId: recording.id,
+      status: ffmpegResponse.status,
+      ok: ffmpegResponse.ok,
+      elapsedMs: elapsedMs(containerStartedAt),
     });
 
     if (!ffmpegResponse.ok) {
@@ -109,6 +176,14 @@ export async function processRecordingMessage(message: unknown, env: Env) {
       durationSeconds?: number;
       fileSizeBytes?: number;
     };
+    logRecordingPipelineEvent("ffmpeg_container_result", {
+      recordingId: recording.id,
+      r2VideoKey: ffmpegResult.r2VideoKey,
+      r2AudioKey: ffmpegResult.r2AudioKey,
+      durationSeconds: ffmpegResult.durationSeconds,
+      fileSizeBytes: ffmpegResult.fileSizeBytes,
+      elapsedMs: elapsedMs(containerStartedAt),
+    });
 
     await db
       .update(schema.recording)
@@ -162,6 +237,10 @@ export async function processRecordingMessage(message: unknown, env: Env) {
 
     await updateStatus(db, recording.id, "complete");
   } catch (error) {
+    logRecordingPipelineEvent("recording_pipeline_failed", {
+      recordingId: recording.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
     await updateStatus(
       db,
       recording.id,

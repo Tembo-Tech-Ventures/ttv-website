@@ -148,6 +148,7 @@ describe("recording processing pipeline", () => {
       recordingId: "recording1",
       r2VideoKey: "recordings/recording1/source.mp4",
     });
+    expect(containerRequest.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("records a failure when a queued row has no upload or Drive source", async () => {
@@ -207,5 +208,50 @@ describe("recording processing pipeline", () => {
       .map((update) => update.processingStatus);
     expect(statusUpdates).not.toContain("downloading");
     expect(statusUpdates[0]).toBe("extracting_audio");
+  });
+
+  it("fails the recording when the FFmpeg container request times out", async () => {
+    vi.useFakeTimers();
+    try {
+      const recording: Record<string, unknown> = {
+        id: "recording1",
+        driveFileId: null,
+        r2VideoKey: "recordings/recording1/source.mp4",
+        r2AudioKey: null,
+        durationSeconds: null,
+        fileSizeBytes: 488_585_211,
+        processingStatus: "queued",
+      };
+      const { database, updates } = createDatabase(recording);
+      mocks.drizzle.mockReturnValue(database);
+      const containerFetch = vi.fn(
+        async (_url: string, init?: RequestInit) =>
+          await new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () =>
+              reject(new Error("aborted"))
+            );
+          })
+      );
+      const env = createEnvironment(containerFetch);
+
+      const processing = processRecordingMessage(
+        { type: "process_recording", recordingId: "recording1" },
+        env
+      );
+      const rejection = processing.catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(14 * 60 * 1000);
+
+      const error = await rejection;
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe(
+        "FFmpeg container timed out after 840000ms"
+      );
+      expect(updates.at(-1)).toMatchObject({
+        processingStatus: "failed",
+        processingError: "FFmpeg container timed out after 840000ms",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
