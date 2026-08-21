@@ -163,6 +163,7 @@ describe("createGeneratedWranglerConfig", () => {
     expect(config.queues.producers[0].binding).toBe("RECORDING_QUEUE");
     expect(config.durable_objects.bindings[0].name).toBe("FFMPEG_CONTAINER");
     expect(config.containers[0].name).toBe("ttv-agent-ffmpegcontainer");
+    expect(config.containers[0].instance_type).toBe("standard-2");
   });
 
   it("keeps agent bearer auth disabled unless it is explicitly enabled", () => {
@@ -256,6 +257,7 @@ describe("createGeneratedWranglerConfig", () => {
       "ttv-website-agent-pr-72-ffmpegcontainer"
     );
     expect(config.containers[0].name).toBe(context.containerAppName);
+    expect(config.containers[0].instance_type).toBe("standard-2");
   });
 
   it("deploys and destroys the same truncated name for overlong environments", () => {

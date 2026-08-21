@@ -28,12 +28,16 @@ function elapsedMs(startedAt) {
 function run(command, args) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
     let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
     });
     child.on("close", (code) => {
-      if (code === 0) resolve(stderr);
+      if (code === 0) resolve(stdout || stderr);
       else reject(new Error(`${command} failed with exit code ${code}: ${stderr}`));
     });
   });
@@ -100,7 +104,7 @@ async function probeDuration(file) {
   return Number.isFinite(duration) ? Math.round(duration) : undefined;
 }
 
-async function handleProcess(request) {
+export async function handleProcess(request) {
   const { recordingId, r2VideoKey } = await request.json();
   if (!recordingId || !r2VideoKey) {
     return Response.json({ error: "recordingId and r2VideoKey are required" }, { status: 400 });
@@ -112,26 +116,17 @@ async function handleProcess(request) {
   const workDir = path.join(tmpdir(), recordingId);
   await mkdir(workDir, { recursive: true });
   const input = path.join(workDir, "input.mp4");
-  const faststart = path.join(workDir, "faststart.mp4");
   const audio = path.join(workDir, "audio.mp3");
 
   const processStartedAt = performance.now();
   log("process_start", { recordingId, r2VideoKey });
   await download(r2VideoKey, input);
   let stepStartedAt = performance.now();
-  log("ffmpeg_faststart_start", { recordingId });
-  await run("ffmpeg", ["-y", "-i", input, "-c", "copy", "-movflags", "+faststart", faststart]);
-  log("ffmpeg_faststart_done", {
-    recordingId,
-    bytes: (await stat(faststart)).size,
-    elapsedMs: elapsedMs(stepStartedAt),
-  });
-  stepStartedAt = performance.now();
   log("ffmpeg_audio_extract_start", { recordingId });
   await run("ffmpeg", [
     "-y",
     "-i",
-    faststart,
+    input,
     "-vn",
     "-c:a",
     "libmp3lame",
@@ -149,20 +144,16 @@ async function handleProcess(request) {
     elapsedMs: elapsedMs(stepStartedAt),
   });
 
-  const processedVideoKey = r2VideoKey.endsWith(".mp4")
-    ? r2VideoKey.replace(/\.mp4$/, ".faststart.mp4")
-    : `${r2VideoKey}.faststart.mp4`;
   const audioKey = `recordings/${recordingId}/audio.mp3`;
 
-  await upload(processedVideoKey, faststart, "video/mp4");
   await upload(audioKey, audio, "audio/mpeg");
 
-  const fileStats = await stat(faststart);
-  const durationSeconds = await probeDuration(faststart);
+  const fileStats = await stat(input);
+  const durationSeconds = await probeDuration(input);
 
   log("process_done", {
     recordingId,
-    processedVideoKey,
+    r2VideoKey,
     audioKey,
     durationSeconds,
     fileSizeBytes: fileStats.size,
@@ -170,7 +161,7 @@ async function handleProcess(request) {
   });
 
   return Response.json({
-    r2VideoKey: processedVideoKey,
+    r2VideoKey,
     r2AudioKey: audioKey,
     durationSeconds,
     fileSizeBytes: fileStats.size,

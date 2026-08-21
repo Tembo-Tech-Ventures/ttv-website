@@ -16,7 +16,8 @@ export interface RecordingQueueMessage {
   recordingId: string;
 }
 
-const FFMPEG_CONTAINER_TIMEOUT_MS = 14 * 60 * 1000;
+const FFMPEG_CONTAINER_TIMEOUT_MS = 25 * 60 * 1000;
+const FFMPEG_TIMEOUT_ERROR_PREFIX = "FFmpeg container timed out";
 
 function logRecordingPipelineEvent(
   event: string,
@@ -33,6 +34,12 @@ function logRecordingPipelineEvent(
 
 function elapsedMs(startedAt: number) {
   return Math.round(performance.now() - startedAt);
+}
+
+function isFfmpegTimeoutError(value: unknown) {
+  return (
+    typeof value === "string" && value.startsWith(FFMPEG_TIMEOUT_ERROR_PREFIX)
+  );
 }
 
 function isRecordingQueueMessage(value: unknown): value is RecordingQueueMessage {
@@ -81,6 +88,17 @@ export async function processRecordingMessage(message: unknown, env: Env) {
 
   if (!recording) {
     throw new Error(`Recording ${message.recordingId} not found`);
+  }
+
+  if (
+    recording.processingStatus === "failed" &&
+    isFfmpegTimeoutError(recording.processingError)
+  ) {
+    logRecordingPipelineEvent("queue_retry_skipped_after_timeout", {
+      recordingId: recording.id,
+      processingError: recording.processingError,
+    });
+    return;
   }
 
   try {

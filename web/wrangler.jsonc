@@ -62,6 +62,7 @@
     {
       "class_name": "FfmpegContainer",
       "image": "./containers/ffmpeg/Dockerfile",
+      "instance_type": "standard-2",
       "max_instances": 3
     }
   ],
