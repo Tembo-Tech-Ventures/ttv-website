@@ -245,6 +245,35 @@ describe("recording processing pipeline", () => {
     expect(statusUpdates[0]).toBe("extracting_audio");
   });
 
+  it("resumes from an existing audio object without rerunning FFmpeg", async () => {
+    const recording: Record<string, unknown> = {
+      id: "recording1",
+      driveFileId: null,
+      r2VideoKey: "recordings/recording1/source.mp4",
+      r2AudioKey: "recordings/recording1/audio.mp3",
+      durationSeconds: 2793,
+      fileSizeBytes: 488_585_211,
+      processingStatus: "queued",
+    };
+    const { database, updates } = createDatabase(recording);
+    mocks.drizzle.mockReturnValue(database);
+    const containerFetch = vi.fn();
+    const env = createEnvironment(containerFetch);
+
+    await processRecordingMessage(
+      { type: "process_recording", recordingId: "recording1" },
+      env
+    );
+
+    expect(containerFetch).not.toHaveBeenCalled();
+    expect(mocks.transcribeAudioObject).toHaveBeenCalled();
+    const statusUpdates = updates
+      .filter((update) => "processingStatus" in update)
+      .map((update) => update.processingStatus);
+    expect(statusUpdates).not.toContain("extracting_audio");
+    expect(statusUpdates[0]).toBe("transcribing");
+  });
+
   it("fails the recording when the FFmpeg container request times out", async () => {
     vi.useFakeTimers();
     try {
@@ -317,5 +346,47 @@ describe("recording processing pipeline", () => {
       processingStatus: "failed",
       processingError: "FFmpeg container timed out after 1500000ms",
     });
+  });
+
+  it("fails the recording when transcription times out", async () => {
+    vi.useFakeTimers();
+    try {
+      const recording: Record<string, unknown> = {
+        id: "recording1",
+        driveFileId: null,
+        r2VideoKey: "recordings/recording1/source.mp4",
+        r2AudioKey: "recordings/recording1/audio.mp3",
+        durationSeconds: 2793,
+        fileSizeBytes: 488_585_211,
+        processingStatus: "queued",
+      };
+      const { database, updates } = createDatabase(recording);
+      mocks.drizzle.mockReturnValue(database);
+      mocks.transcribeAudioObject.mockImplementation(
+        async () => await new Promise(() => {})
+      );
+      const containerFetch = vi.fn();
+      const env = createEnvironment(containerFetch);
+
+      const processing = processRecordingMessage(
+        { type: "process_recording", recordingId: "recording1" },
+        env
+      );
+      const rejection = processing.catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(12 * 60 * 1000);
+
+      const error = await rejection;
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe(
+        "Transcription timed out after 720000ms"
+      );
+      expect(containerFetch).not.toHaveBeenCalled();
+      expect(updates.at(-1)).toMatchObject({
+        processingStatus: "failed",
+        processingError: "Transcription timed out after 720000ms",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
