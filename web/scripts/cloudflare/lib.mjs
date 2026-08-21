@@ -574,6 +574,7 @@ export function createGeneratedWranglerConfig({
         name: containerAppName,
         class_name: CONTAINER_CLASS_NAME,
         image: path.relative(generatedDir, path.join(webRoot, "containers", "ffmpeg", "Dockerfile")),
+        instance_type: "standard-2",
         max_instances: 3,
       },
     ],

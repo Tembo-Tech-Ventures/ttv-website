@@ -239,19 +239,48 @@ describe("recording processing pipeline", () => {
         env
       );
       const rejection = processing.catch((error: unknown) => error);
-      await vi.advanceTimersByTimeAsync(14 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(25 * 60 * 1000);
 
       const error = await rejection;
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toBe(
-        "FFmpeg container timed out after 840000ms"
+        "FFmpeg container timed out after 1500000ms"
       );
       expect(updates.at(-1)).toMatchObject({
         processingStatus: "failed",
-        processingError: "FFmpeg container timed out after 840000ms",
+        processingError: "FFmpeg container timed out after 1500000ms",
       });
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("acks an automatic retry after a timeout without resetting the failure", async () => {
+    const recording: Record<string, unknown> = {
+      id: "recording1",
+      driveFileId: null,
+      r2VideoKey: "recordings/recording1/source.mp4",
+      r2AudioKey: null,
+      durationSeconds: null,
+      fileSizeBytes: 488_585_211,
+      processingStatus: "failed",
+      processingError: "FFmpeg container timed out after 1500000ms",
+    };
+    const { database, updates } = createDatabase(recording);
+    mocks.drizzle.mockReturnValue(database);
+    const containerFetch = vi.fn();
+    const env = createEnvironment(containerFetch);
+
+    await processRecordingMessage(
+      { type: "process_recording", recordingId: "recording1" },
+      env
+    );
+
+    expect(containerFetch).not.toHaveBeenCalled();
+    expect(updates).toEqual([]);
+    expect(recording).toMatchObject({
+      processingStatus: "failed",
+      processingError: "FFmpeg container timed out after 1500000ms",
+    });
   });
 });
