@@ -274,6 +274,62 @@ describe("recording processing pipeline", () => {
     expect(statusUpdates[0]).toBe("transcribing");
   });
 
+  it("checkpoints transcript segments as chunks complete", async () => {
+    const recording: Record<string, unknown> = {
+      id: "recording1",
+      driveFileId: null,
+      r2VideoKey: "recordings/recording1/source.mp4",
+      r2AudioKey: "recordings/recording1/audio.mp3",
+      durationSeconds: 2793,
+      fileSizeBytes: 488_585_211,
+      processingStatus: "queued",
+    };
+    const { database } = createDatabase(recording);
+    mocks.drizzle.mockReturnValue(database);
+    mocks.transcribeAudioObject.mockImplementation(
+      async ({ onChunk }: { onChunk: (chunk: unknown) => Promise<void> }) => {
+        await onChunk({
+          chunkIndex: 0,
+          byteStart: 0,
+          byteEnd: 1024,
+          offsetSeconds: 0,
+          text: "Chunk text",
+          segments: [
+            {
+              id: "segment1",
+              startTime: 0,
+              endTime: 1,
+              text: "Chunk text",
+              chunkIndex: 0,
+            },
+          ],
+        });
+        return {
+          text: "Chunk text",
+          vtt: "WEBVTT",
+          segments: [
+            {
+              id: "segment1",
+              startTime: 0,
+              endTime: 1,
+              text: "Chunk text",
+              chunkIndex: 0,
+            },
+          ],
+        };
+      }
+    );
+    const env = createEnvironment(vi.fn());
+
+    await processRecordingMessage(
+      { type: "process_recording", recordingId: "recording1" },
+      env
+    );
+
+    expect(database.delete).toHaveBeenCalled();
+    expect(database.insert).toHaveBeenCalled();
+  });
+
   it("fails the recording when the FFmpeg container request times out", async () => {
     vi.useFakeTimers();
     try {
