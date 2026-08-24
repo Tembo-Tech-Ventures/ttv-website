@@ -270,6 +270,9 @@ export async function processRecordingMessage(message: unknown, env: Env) {
       audioBytes: audioBuffer.byteLength,
       timeoutMs: TRANSCRIPTION_TIMEOUT_MS,
     });
+    await db
+      .delete(schema.transcriptSegment)
+      .where(eq(schema.transcriptSegment.recordingId, recording.id));
     const transcript = await withTimeout({
       timeoutMs: TRANSCRIPTION_TIMEOUT_MS,
       errorMessage: `Transcription timed out after ${TRANSCRIPTION_TIMEOUT_MS}ms`,
@@ -277,6 +280,26 @@ export async function processRecordingMessage(message: unknown, env: Env) {
         await transcribeAudioObject({
           env,
           audio: audioBuffer,
+          durationSeconds: ffmpegResult.durationSeconds,
+          onChunk: async (chunk) => {
+            logRecordingPipelineEvent("transcription_chunk_done", {
+              recordingId: recording.id,
+              chunkIndex: chunk.chunkIndex,
+              byteStart: chunk.byteStart,
+              byteEnd: chunk.byteEnd,
+              offsetSeconds: Math.round(chunk.offsetSeconds),
+              segmentCount: chunk.segments.length,
+              textLength: chunk.text.length,
+            });
+            if (chunk.segments.length > 0) {
+              await db.insert(schema.transcriptSegment).values(
+                chunk.segments.map((segment) => ({
+                  ...segment,
+                  recordingId: recording.id,
+                }))
+              );
+            }
+          },
         }),
     });
     logRecordingPipelineEvent("transcription_done", {
@@ -285,18 +308,6 @@ export async function processRecordingMessage(message: unknown, env: Env) {
       textLength: transcript.text.length,
       elapsedMs: elapsedMs(transcriptionStartedAt),
     });
-
-    await db
-      .delete(schema.transcriptSegment)
-      .where(eq(schema.transcriptSegment.recordingId, recording.id));
-    if (transcript.segments.length > 0) {
-      await db.insert(schema.transcriptSegment).values(
-        transcript.segments.map((segment) => ({
-          ...segment,
-          recordingId: recording.id,
-        }))
-      );
-    }
 
     await db
       .update(schema.recording)
