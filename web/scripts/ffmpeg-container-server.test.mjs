@@ -25,6 +25,10 @@ const args = process.argv.slice(2);
 const segmentTimeIndex = args.indexOf("-segment_time");
 if (segmentTimeIndex >= 0) {
   if (args[segmentTimeIndex + 1] !== "120") process.exit(43);
+  if (args[args.indexOf("-c:a") + 1] !== "libmp3lame") process.exit(44);
+  if (args[args.indexOf("-b:a") + 1] !== "64k") process.exit(45);
+  if (args[args.indexOf("-ac") + 1] !== "1") process.exit(46);
+  if (args[args.indexOf("-ar") + 1] !== "16000") process.exit(47);
   const outputPattern = args.at(-1);
   const chunksDir = path.dirname(outputPattern);
   writeFileSync(path.join(chunksDir, "chunk-00000.mp3"), "fake chunk 0");
