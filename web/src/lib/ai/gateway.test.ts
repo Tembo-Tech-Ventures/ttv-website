@@ -25,9 +25,9 @@ afterEach(() => {
 });
 
 describe("resolveChatModel", () => {
-  it("defaults to the Gemma model in unified-mode format", () => {
+  it("defaults to the GPT OSS reasoning model in unified-mode format", () => {
     expect(resolveChatModel(makeEnv())).toBe(DEFAULT_CHAT_MODEL);
-    expect(DEFAULT_CHAT_MODEL).toMatch(/^workers-ai\/@cf\/google\/gemma/);
+    expect(DEFAULT_CHAT_MODEL).toBe("workers-ai/@cf/openai/gpt-oss-20b");
   });
 
   it("uses AI_GATEWAY_MODEL when set", () => {
@@ -75,7 +75,10 @@ describe("generateChatCompletion", () => {
       AI_GATEWAY_API_KEY: "secret-token",
     });
 
-    const answer = await generateChatCompletion(env, messages);
+    const answer = await generateChatCompletion(env, messages, {
+      maxTokens: 900,
+      temperature: 0.2,
+    });
 
     expect(answer).toBe("An answer");
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -88,6 +91,8 @@ describe("generateChatCompletion", () => {
     expect(JSON.parse(init.body)).toEqual({
       model: DEFAULT_CHAT_MODEL,
       messages,
+      max_tokens: 900,
+      temperature: 0.2,
     });
     expect((env.AI.run as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
   });
@@ -142,7 +147,7 @@ describe("generateChatCompletion", () => {
     expect(answer).toBe("Binding answer");
     expect(fetchMock).not.toHaveBeenCalled();
     expect(run).toHaveBeenCalledWith(
-      "@cf/google/gemma-4-26b-a4b-it",
+      "@cf/openai/gpt-oss-20b",
       { messages },
       { gateway: { id: "ttv-ai" } }
     );
@@ -156,7 +161,7 @@ describe("generateChatCompletion", () => {
 
     expect(answer).toBe("Nested");
     expect(run).toHaveBeenCalledWith(
-      "@cf/google/gemma-4-26b-a4b-it",
+      "@cf/openai/gpt-oss-20b",
       { messages },
       undefined
     );
