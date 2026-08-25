@@ -1,7 +1,7 @@
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import { getAccessibleProgramIds } from "@/lib/recordings/access";
 import { formatTimestamp } from "@/lib/recordings/time-utils";
@@ -40,9 +40,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const results = await env.VECTORIZE.query(vector, {
-    topK: 8,
+    topK: 50,
     returnMetadata: "all",
-    filter: locals.isAdmin ? undefined : { program_id: { $in: programIds } },
   });
 
   const segmentIds = results.matches
@@ -56,15 +55,44 @@ export const POST: APIRoute = async ({ request, locals }) => {
     });
   }
 
-  const segments = await db.query.transcriptSegment.findMany({
-    where: inArray(schema.transcriptSegment.id, segmentIds),
-    with: { recording: true },
-  });
+  const segmentRows = await db
+    .select({
+      id: schema.transcriptSegment.id,
+      recordingId: schema.transcriptSegment.recordingId,
+      startTime: schema.transcriptSegment.startTime,
+      endTime: schema.transcriptSegment.endTime,
+      text: schema.transcriptSegment.text,
+      recordingTitle: schema.recording.title,
+      recordingProgramId: schema.recording.programId,
+    })
+    .from(schema.transcriptSegment)
+    .innerJoin(schema.recording, eq(schema.transcriptSegment.recordingId, schema.recording.id))
+    .where(
+      locals.isAdmin
+        ? inArray(schema.transcriptSegment.id, segmentIds)
+        : and(
+            inArray(schema.transcriptSegment.id, segmentIds),
+            inArray(schema.recording.programId, programIds)
+          )
+    );
+
+  const rowBySegmentId = new Map(segmentRows.map((row) => [row.id, row]));
+  const segments = segmentIds
+    .map((segmentId) => rowBySegmentId.get(segmentId))
+    .filter((row): row is (typeof segmentRows)[number] => Boolean(row))
+    .slice(0, 8);
+
+  if (segments.length === 0) {
+    return Response.json({
+      answer: "I could not find a relevant transcript segment for that question.",
+      citations: [],
+    });
+  }
 
   const context = segments
     .map(
       (segment) =>
-        `[Session: "${segment.recording.title}" | ${formatTimestamp(segment.startTime)}-${formatTimestamp(segment.endTime)}]\n${segment.text}`
+        `[Session: "${segment.recordingTitle}" | ${formatTimestamp(segment.startTime)}-${formatTimestamp(segment.endTime)}]\n${segment.text}`
     )
     .join("\n\n");
 
@@ -84,7 +112,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const citations = segments.map((segment) => ({
     recordingId: segment.recordingId,
-    title: segment.recording.title,
+    title: segment.recordingTitle,
     startTime: segment.startTime,
     endTime: segment.endTime,
     text:
