@@ -416,6 +416,63 @@ describe("recording processing pipeline", () => {
     expect(database.insert).toHaveBeenCalled();
   });
 
+  it("batches transcript segment checkpoint inserts for D1", async () => {
+    const recording: Record<string, unknown> = {
+      id: "recording1",
+      driveFileId: null,
+      r2VideoKey: "recordings/recording1/source.mp4",
+      r2AudioKey: "recordings/recording1/audio.mp3",
+      durationSeconds: 2793,
+      fileSizeBytes: 488_585_211,
+      processingStatus: "queued",
+    };
+    const insertedBatches: unknown[][] = [];
+    const { database } = createDatabase(recording);
+    database.insert.mockImplementation(() => ({
+      values: vi.fn(async (values: unknown[]) => {
+        insertedBatches.push(values);
+      }),
+    }));
+    mocks.drizzle.mockReturnValue(database);
+    const segments = Array.from({ length: 21 }, (_value, index) => ({
+      id: `segment${index}`,
+      startTime: index,
+      endTime: index + 1,
+      text: `Segment ${index}`,
+      chunkIndex: 0,
+    }));
+    mocks.transcribeAudioChunks.mockImplementation(
+      async ({ onChunk }: { onChunk: (chunk: unknown) => Promise<void> }) => {
+        await onChunk({
+          chunkIndex: 0,
+          r2AudioKey:
+            "recordings/recording1/transcription/chunk-00000.mp3",
+          offsetSeconds: 0,
+          durationSeconds: 120,
+          audioBytes: 960_000,
+          text: "Chunk text",
+          segments,
+        });
+        return {
+          text: "Chunk text",
+          vtt: "WEBVTT",
+          segments,
+        };
+      }
+    );
+    const env = createEnvironment(
+      vi.fn().mockResolvedValue(createSegmentResponse())
+    );
+
+    await processRecordingMessage(
+      { type: "process_recording", recordingId: "recording1" },
+      env
+    );
+
+    expect(insertedBatches.map((batch) => batch.length)).toEqual([10, 10, 1]);
+    expect(insertedBatches.flat()).toHaveLength(21);
+  });
+
   it("loads the container-produced R2 chunk instead of the full MP3", async () => {
     const recording: Record<string, unknown> = {
       id: "recording1",
