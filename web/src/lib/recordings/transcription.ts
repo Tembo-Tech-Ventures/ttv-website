@@ -15,69 +15,69 @@ export interface TranscriptSegment {
   chunkIndex: number;
 }
 
+export interface TranscriptionAudioChunk {
+  chunkIndex: number;
+  r2AudioKey: string;
+  offsetSeconds: number;
+  durationSeconds: number;
+}
+
 export interface TranscriptionChunkResult {
   chunkIndex: number;
-  byteStart: number;
-  byteEnd: number;
+  r2AudioKey: string;
   offsetSeconds: number;
+  durationSeconds: number;
+  audioBytes: number;
   segments: TranscriptSegment[];
   text: string;
 }
 
-const DEFAULT_AUDIO_CHUNK_BYTES = 1024 * 1024;
-
-export async function transcribeAudioObject({
+export async function transcribeAudioChunks({
   env,
-  audio,
-  durationSeconds,
-  chunkBytes = DEFAULT_AUDIO_CHUNK_BYTES,
+  chunks,
+  loadAudio,
   onChunk,
 }: {
   env: Env;
-  audio: ArrayBuffer;
-  durationSeconds?: number | null;
-  chunkBytes?: number;
+  chunks: TranscriptionAudioChunk[];
+  loadAudio: (
+    chunk: TranscriptionAudioChunk
+  ) => Promise<{ audio: ArrayBuffer; contentType?: string }>;
   onChunk?: (chunk: TranscriptionChunkResult) => Promise<void>;
 }) {
-  if (chunkBytes <= 0) {
-    throw new Error("Audio chunk size must be greater than zero");
+  if (chunks.length === 0) {
+    throw new Error("At least one valid audio chunk is required");
   }
 
   const segments: TranscriptSegment[] = [];
-  const totalBytes = audio.byteLength;
-  let chunkIndex = 0;
+  for (const chunk of chunks) {
+    const loaded = await loadAudio(chunk);
+    if (loaded.audio.byteLength === 0) {
+      throw new Error(`Audio chunk ${chunk.r2AudioKey} is empty`);
+    }
 
-  for (let byteStart = 0; byteStart < totalBytes; byteStart += chunkBytes) {
-    const byteEnd = Math.min(byteStart + chunkBytes, totalBytes);
-    const chunk = audio.slice(byteStart, byteEnd);
-    const offsetSeconds =
-      durationSeconds && totalBytes > 0
-        ? (durationSeconds * byteStart) / totalBytes
-        : 0;
-    const fallbackEndSeconds =
-      durationSeconds && totalBytes > 0
-        ? (durationSeconds * byteEnd) / totalBytes
-        : offsetSeconds + 1;
-
-    const result = await runWhisper(env, chunk);
+    const result = await runWhisper(
+      env,
+      loaded.audio,
+      loaded.contentType ?? "audio/mpeg"
+    );
     const chunkSegments = parseWhisperSegments({
       result,
-      chunkIndex,
-      offsetSeconds,
-      fallbackEndSeconds,
+      chunkIndex: chunk.chunkIndex,
+      offsetSeconds: chunk.offsetSeconds,
+      fallbackEndSeconds: chunk.offsetSeconds + chunk.durationSeconds,
     });
 
     segments.push(...chunkSegments);
     await onChunk?.({
-      chunkIndex,
-      byteStart,
-      byteEnd,
-      offsetSeconds,
+      chunkIndex: chunk.chunkIndex,
+      r2AudioKey: chunk.r2AudioKey,
+      offsetSeconds: chunk.offsetSeconds,
+      durationSeconds: chunk.durationSeconds,
+      audioBytes: loaded.audio.byteLength,
       segments: chunkSegments,
       text: chunkSegments.map((segment) => segment.text).join(" "),
     });
-
-    chunkIndex += 1;
   }
 
   return {
@@ -87,11 +87,15 @@ export async function transcribeAudioObject({
   };
 }
 
-async function runWhisper(env: Env, audio: ArrayBuffer) {
+async function runWhisper(
+  env: Env,
+  audio: ArrayBuffer,
+  contentType: string
+) {
   return (await env.AI.run("@cf/openai/whisper-large-v3-turbo", {
     audio: {
       body: new Uint8Array(audio),
-      contentType: "audio/mpeg",
+      contentType,
     },
     word_timestamps: true,
     vad_filter: true,
