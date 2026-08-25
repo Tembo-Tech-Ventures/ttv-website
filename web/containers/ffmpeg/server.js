@@ -1,6 +1,6 @@
 import { createReadStream, createWriteStream } from "node:fs";
 /* global Request, Response, console, fetch, performance, process */
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -10,6 +10,8 @@ import { Buffer } from "node:buffer";
 import { pathToFileURL } from "node:url";
 
 const R2_HOST = "http://r2.local";
+export const TRANSCRIPTION_CHUNK_SECONDS = 120;
+const TRANSCRIPTION_CHUNK_FILE_PATTERN = /^chunk-(\d{5})\.mp3$/;
 
 function log(event, fields = {}) {
   console.log(
@@ -98,10 +100,79 @@ async function probeDuration(file) {
   const duration = Number.parseFloat(output.trim());
   log("ffprobe_duration_done", {
     file,
-    durationSeconds: Number.isFinite(duration) ? Math.round(duration) : undefined,
+    durationSeconds: Number.isFinite(duration) ? duration : undefined,
     elapsedMs: elapsedMs(startedAt),
   });
-  return Number.isFinite(duration) ? Math.round(duration) : undefined;
+  return Number.isFinite(duration) ? duration : undefined;
+}
+
+function validateRecordingId(recordingId) {
+  return typeof recordingId === "string" && /^[a-z0-9]+$/i.test(recordingId);
+}
+
+async function createTranscriptionChunks({ recordingId, audio, workDir }) {
+  const chunksDir = path.join(workDir, "transcription-chunks");
+  await rm(chunksDir, { force: true, recursive: true });
+  await mkdir(chunksDir, { recursive: true });
+
+  const outputPattern = path.join(chunksDir, "chunk-%05d.mp3");
+  const startedAt = performance.now();
+  log("ffmpeg_audio_segment_start", {
+    recordingId,
+    chunkSeconds: TRANSCRIPTION_CHUNK_SECONDS,
+  });
+  await run("ffmpeg", [
+    "-y",
+    "-i",
+    audio,
+    "-map",
+    "0:a:0",
+    "-c:a",
+    "copy",
+    "-f",
+    "segment",
+    "-segment_time",
+    String(TRANSCRIPTION_CHUNK_SECONDS),
+    "-segment_format",
+    "mp3",
+    "-reset_timestamps",
+    "1",
+    outputPattern,
+  ]);
+
+  const files = (await readdir(chunksDir))
+    .filter((file) => TRANSCRIPTION_CHUNK_FILE_PATTERN.test(file))
+    .toSorted();
+  if (files.length === 0) {
+    throw new Error("FFmpeg did not create any transcription chunks");
+  }
+
+  const chunks = [];
+  let offsetSeconds = 0;
+  for (const [chunkIndex, file] of files.entries()) {
+    const source = path.join(chunksDir, file);
+    const durationSeconds = await probeDuration(source);
+    if (!durationSeconds || durationSeconds <= 0) {
+      throw new Error(`Unable to determine duration for transcription chunk ${file}`);
+    }
+    const r2AudioKey = `recordings/${recordingId}/transcription/${file}`;
+    await upload(r2AudioKey, source, "audio/mpeg");
+    chunks.push({
+      chunkIndex,
+      r2AudioKey,
+      offsetSeconds,
+      durationSeconds,
+    });
+    offsetSeconds += durationSeconds;
+  }
+
+  log("ffmpeg_audio_segment_done", {
+    recordingId,
+    chunkCount: chunks.length,
+    durationSeconds: offsetSeconds,
+    elapsedMs: elapsedMs(startedAt),
+  });
+  return chunks;
 }
 
 export async function handleProcess(request) {
@@ -110,7 +181,7 @@ export async function handleProcess(request) {
     return Response.json({ error: "recordingId and r2VideoKey are required" }, { status: 400 });
   }
 
-  if (!/^[a-z0-9]+$/i.test(recordingId)) {
+  if (!validateRecordingId(recordingId)) {
     return Response.json({ error: "Invalid recordingId" }, { status: 400 });
   }
   const workDir = path.join(tmpdir(), recordingId);
@@ -149,7 +220,15 @@ export async function handleProcess(request) {
   await upload(audioKey, audio, "audio/mpeg");
 
   const fileStats = await stat(input);
-  const durationSeconds = await probeDuration(input);
+  const sourceDurationSeconds = await probeDuration(input);
+  const transcriptionChunks = await createTranscriptionChunks({
+    recordingId,
+    audio,
+    workDir,
+  });
+  const durationSeconds = sourceDurationSeconds
+    ? Math.round(sourceDurationSeconds)
+    : undefined;
 
   log("process_done", {
     recordingId,
@@ -163,8 +242,57 @@ export async function handleProcess(request) {
   return Response.json({
     r2VideoKey,
     r2AudioKey: audioKey,
+    transcriptionChunks,
     durationSeconds,
     fileSizeBytes: fileStats.size,
+  });
+}
+
+export async function handleSegment(request) {
+  const { recordingId, r2AudioKey } = await request.json();
+  if (!recordingId || !r2AudioKey) {
+    return Response.json(
+      { error: "recordingId and r2AudioKey are required" },
+      { status: 400 }
+    );
+  }
+  if (!validateRecordingId(recordingId)) {
+    return Response.json({ error: "Invalid recordingId" }, { status: 400 });
+  }
+  if (!r2AudioKey.startsWith(`recordings/${recordingId}/`)) {
+    return Response.json(
+      { error: "r2AudioKey must belong to the recording" },
+      { status: 400 }
+    );
+  }
+
+  const workDir = path.join(tmpdir(), recordingId);
+  await mkdir(workDir, { recursive: true });
+  const audio = path.join(workDir, "existing-audio.mp3");
+  const processStartedAt = performance.now();
+  log("segment_process_start", { recordingId, r2AudioKey });
+  await download(r2AudioKey, audio);
+  const sourceDurationSeconds = await probeDuration(audio);
+  const transcriptionChunks = await createTranscriptionChunks({
+    recordingId,
+    audio,
+    workDir,
+  });
+  const durationSeconds = sourceDurationSeconds
+    ? Math.round(sourceDurationSeconds)
+    : undefined;
+  log("segment_process_done", {
+    recordingId,
+    r2AudioKey,
+    chunkCount: transcriptionChunks.length,
+    durationSeconds,
+    elapsedMs: elapsedMs(processStartedAt),
+  });
+
+  return Response.json({
+    r2AudioKey,
+    transcriptionChunks,
+    durationSeconds,
   });
 }
 
@@ -176,6 +304,21 @@ export function startServer(port = 8080) {
         for await (const chunk of request) chunks.push(chunk);
         const result = await handleProcess(
           new Request("http://container/process", {
+            method: "POST",
+            body: Buffer.concat(chunks),
+            headers: { "content-type": "application/json" },
+          })
+        );
+        response.writeHead(result.status, Object.fromEntries(result.headers));
+        response.end(await result.text());
+        return;
+      }
+
+      if (request.method === "POST" && request.url === "/segment") {
+        const chunks = [];
+        for await (const chunk of request) chunks.push(chunk);
+        const result = await handleSegment(
+          new Request("http://container/segment", {
             method: "POST",
             body: Buffer.concat(chunks),
             headers: { "content-type": "application/json" },
