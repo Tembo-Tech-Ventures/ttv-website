@@ -8,7 +8,7 @@ function createEnvironment(results: unknown[]) {
   const run = vi.fn(
     async (
       _model: string,
-      _input: { audio: { body: Uint8Array; contentType: string } }
+      _input: { audio: string }
     ) => results.shift()
   );
   return {
@@ -58,13 +58,8 @@ describe("transcribeAudioChunks", () => {
     expect(loadAudio).toHaveBeenNthCalledWith(1, firstChunk);
     expect(loadAudio).toHaveBeenNthCalledWith(2, secondChunk);
     expect(run).toHaveBeenCalledTimes(2);
-    expect(Array.from(run.mock.calls[0]![1].audio.body)).toEqual([
-      0x49, 0x44, 0x33, 0x01,
-    ]);
-    expect(Array.from(run.mock.calls[1]![1].audio.body)).toEqual([
-      0x49, 0x44, 0x33, 0x02, 0x03, 0x04,
-    ]);
-    expect(run.mock.calls[0]![1].audio.contentType).toBe("audio/mpeg");
+    expect(run.mock.calls[0]![1].audio).toBe("SUQzAQ==");
+    expect(run.mock.calls[1]![1].audio).toBe("SUQzAgME");
     expect(transcript.text).toBe("first chunk second chunk");
     expect(transcript.segments.map((segment) => segment.chunkIndex)).toEqual([
       0, 1,
