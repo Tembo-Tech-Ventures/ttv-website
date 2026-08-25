@@ -53,7 +53,8 @@ function context(overrides: Record<string, unknown> = {}) {
 function createDatabase(segmentRows: Array<Record<string, unknown>> = []) {
   const values = vi.fn().mockResolvedValue(undefined);
   const insert = vi.fn(() => ({ values }));
-  const where = vi.fn().mockResolvedValue(segmentRows);
+  const orderBy = vi.fn().mockResolvedValue(segmentRows);
+  const where = vi.fn(() => ({ orderBy }));
   const innerJoin = vi.fn(() => ({ where }));
   const from = vi.fn(() => ({ innerJoin }));
   const select = vi.fn(() => ({ from }));
@@ -63,6 +64,7 @@ function createDatabase(segmentRows: Array<Record<string, unknown>> = []) {
     from,
     innerJoin,
     where,
+    orderBy,
     insert,
     values,
   };
@@ -72,7 +74,16 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.env.AI.run.mockResolvedValue({ data: [[0.1, 0.2, 0.3]] });
   mocks.env.VECTORIZE.query.mockResolvedValue({
-    matches: [{ metadata: { segment_id: "segment-1" } }],
+    matches: [
+      {
+        metadata: {
+          segment_id: "segment-1",
+          recording_id: "recording-1",
+          start_time: 10,
+          end_time: 40,
+        },
+      },
+    ],
   });
   mocks.getAccessibleProgramIds.mockResolvedValue(["program-1"]);
   mocks.generateChatCompletion.mockResolvedValue("Use the cited transcript.");
@@ -93,7 +104,7 @@ describe("POST /api/chat", () => {
     expect(mocks.env.VECTORIZE.query).not.toHaveBeenCalled();
   });
 
-  it("queries candidate vectors without a metadata filter and enforces transcript access in D1", async () => {
+  it("queries candidate vectors without a metadata filter and builds natural-language context from full transcript chunks", async () => {
     const database = createDatabase([
       {
         id: "segment-1",
@@ -101,6 +112,15 @@ describe("POST /api/chat", () => {
         startTime: 12,
         endTime: 34,
         text: "Mentor hours covered customer discovery.",
+        recordingTitle: "Mentor Hours",
+        recordingProgramId: "program-1",
+      },
+      {
+        id: "segment-2",
+        recordingId: "recording-1",
+        startTime: 34,
+        endTime: 39,
+        text: "Students should interview customers before building.",
         recordingTitle: "Mentor Hours",
         recordingProgramId: "program-1",
       },
@@ -127,15 +147,31 @@ describe("POST /api/chat", () => {
           role: "system",
           content: expect.stringContaining("Mentor hours covered customer discovery."),
         }),
-      ])
+      ]),
+      expect.objectContaining({
+        maxTokens: 900,
+        temperature: 0.2,
+      })
     );
+    const systemMessage = mocks.generateChatCompletion.mock.calls[0][1][0];
+    expect(systemMessage.content).toContain("Synthesize the relevant points");
+    expect(systemMessage.content).toContain("[1] Mentor Hours");
+    expect(systemMessage.content).toContain(
+      "Mentor hours covered customer discovery. Students should interview customers before building."
+    );
+    expect(mocks.generateChatCompletion.mock.calls[0][2]).toEqual({
+      maxTokens: 900,
+      temperature: 0.2,
+    });
     expect(body.citations).toEqual([
       {
+        sourceNumber: 1,
         recordingId: "recording-1",
         title: "Mentor Hours",
         startTime: 12,
-        endTime: 34,
-        text: "Mentor hours covered customer discovery.",
+        endTime: 39,
+        url: "/dashboard/sessions/recording-1?t=12",
+        text: "Mentor hours covered customer discovery. Students should interview customers before building.",
       },
     ]);
   });

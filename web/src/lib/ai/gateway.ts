@@ -3,7 +3,7 @@ export interface ChatMessage {
   content: string;
 }
 
-export const DEFAULT_CHAT_MODEL = "workers-ai/@cf/google/gemma-4-26b-a4b-it";
+export const DEFAULT_CHAT_MODEL = "workers-ai/@cf/openai/gpt-oss-20b";
 
 export function resolveChatModel(env: Env) {
   return env.AI_GATEWAY_MODEL?.trim() || DEFAULT_CHAT_MODEL;
@@ -23,6 +23,11 @@ interface CompatChatResponse {
   choices?: Array<{ message?: { content?: string } }>;
 }
 
+interface ChatCompletionOptions {
+  maxTokens?: number;
+  temperature?: number;
+}
+
 /**
  * Generates a chat completion through Cloudflare AI Gateway in unified mode
  * (OpenAI-compatible API) so models can be swapped via AI_GATEWAY_MODEL and
@@ -31,7 +36,8 @@ interface CompatChatResponse {
  */
 export async function generateChatCompletion(
   env: Env,
-  messages: ChatMessage[]
+  messages: ChatMessage[],
+  options: ChatCompletionOptions = {}
 ): Promise<string> {
   const model = resolveChatModel(env);
   const url = gatewayCompatUrl(env);
@@ -44,7 +50,14 @@ export async function generateChatCompletion(
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ model, messages }),
+      body: JSON.stringify({
+        model,
+        messages,
+        ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
+        ...(typeof options.temperature === "number"
+          ? { temperature: options.temperature }
+          : {}),
+      }),
     });
 
     if (!response.ok) {
@@ -64,7 +77,13 @@ export async function generateChatCompletion(
   const gatewayName = env.AI_GATEWAY_NAME?.trim();
   const result = (await env.AI.run(
     bindingModel as Parameters<typeof env.AI.run>[0],
-    { messages },
+    {
+      messages,
+      ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
+      ...(typeof options.temperature === "number"
+        ? { temperature: options.temperature }
+        : {}),
+    },
     gatewayName ? { gateway: { id: gatewayName } } : undefined
   )) as { response?: string; result?: { response?: string } };
 

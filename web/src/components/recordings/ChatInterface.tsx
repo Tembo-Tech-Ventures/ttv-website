@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import TimestampBadge from "@/components/recordings/TimestampBadge";
 
 interface Citation {
+  sourceNumber?: number;
   recordingId: string;
   title: string;
   startTime: number;
   endTime: number;
+  url?: string;
   text: string;
 }
 
@@ -95,9 +97,17 @@ export default function ChatInterface() {
                         className="rounded-md border border-primary/20 bg-dark/35 p-3"
                       >
                         <div className="mb-2 flex flex-wrap items-center gap-2">
+                          {citation.sourceNumber && (
+                            <span className="rounded bg-primary/15 px-2 py-1 text-xs font-semibold text-primary">
+                              Source {citation.sourceNumber}
+                            </span>
+                          )}
                           <TimestampBadge
                             seconds={citation.startTime}
-                            href={`/dashboard/sessions/${citation.recordingId}?t=${Math.floor(citation.startTime)}`}
+                            href={
+                              citation.url ??
+                              `/dashboard/sessions/${citation.recordingId}?t=${Math.floor(citation.startTime)}`
+                            }
                           />
                           <span className="text-xs font-semibold text-white/75">
                             {citation.title}

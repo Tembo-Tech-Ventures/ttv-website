@@ -17,7 +17,7 @@ const generatedDir = path.join(webRoot, "dist", "server");
 
 const DEFAULT_APP_NAME = "ttv-website";
 const DEFAULT_COMPATIBILITY_DATE = "2026-04-01";
-const DEFAULT_AI_GATEWAY_MODEL = "workers-ai/@cf/google/gemma-4-26b-a4b-it";
+const DEFAULT_AI_GATEWAY_MODEL = "workers-ai/@cf/openai/gpt-oss-20b";
 const CONTAINER_CLASS_NAME = "FfmpegContainer";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

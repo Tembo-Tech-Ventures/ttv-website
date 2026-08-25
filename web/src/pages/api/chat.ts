@@ -1,11 +1,48 @@
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import { getAccessibleProgramIds } from "@/lib/recordings/access";
 import { formatTimestamp } from "@/lib/recordings/time-utils";
 import { generateChatCompletion, type ChatMessage } from "@/lib/ai/gateway";
+
+interface VectorMatchMetadata {
+  segment_id?: unknown;
+  recording_id?: unknown;
+  start_time?: unknown;
+  end_time?: unknown;
+}
+
+interface TranscriptSource {
+  sourceNumber: number;
+  recordingId: string;
+  title: string;
+  startTime: number;
+  endTime: number;
+  text: string;
+}
+
+function numberFromMetadata(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function stringFromMetadata(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function sanitizeModelAnswer(answer: string) {
+  return answer.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+}
+
+function buildSourceText(source: TranscriptSource) {
+  return [
+    `[${source.sourceNumber}] ${source.title}`,
+    `Timecode: ${formatTimestamp(source.startTime)}-${formatTimestamp(source.endTime)}`,
+    `Video link: /dashboard/sessions/${source.recordingId}?t=${Math.floor(source.startTime)}`,
+    `Transcript: ${source.text}`,
+  ].join("\n");
+}
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
@@ -44,11 +81,27 @@ export const POST: APIRoute = async ({ request, locals }) => {
     returnMetadata: "all",
   });
 
-  const segmentIds = results.matches
-    .map((match) => match.metadata?.segment_id)
-    .filter((id): id is string => typeof id === "string");
+  const matches = results.matches
+    .map((match) => {
+      const metadata = (match.metadata ?? {}) as VectorMatchMetadata;
+      return {
+        segmentId: stringFromMetadata(metadata.segment_id),
+        recordingId: stringFromMetadata(metadata.recording_id),
+        startTime: numberFromMetadata(metadata.start_time),
+        endTime: numberFromMetadata(metadata.end_time),
+      };
+    })
+    .filter((match) => match.segmentId || match.recordingId);
 
-  if (segmentIds.length === 0) {
+  const segmentIds = matches
+    .map((match) => match.segmentId)
+    .filter((id): id is string => Boolean(id));
+
+  const recordingIds = Array.from(
+    new Set(matches.map((match) => match.recordingId).filter((id): id is string => Boolean(id)))
+  );
+
+  if (segmentIds.length === 0 && recordingIds.length === 0) {
     return Response.json({
       answer: "I could not find a relevant transcript segment for that question.",
       citations: [],
@@ -69,34 +122,80 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .innerJoin(schema.recording, eq(schema.transcriptSegment.recordingId, schema.recording.id))
     .where(
       locals.isAdmin
-        ? inArray(schema.transcriptSegment.id, segmentIds)
+        ? recordingIds.length > 0
+          ? inArray(schema.recording.id, recordingIds)
+          : inArray(schema.transcriptSegment.id, segmentIds)
         : and(
-            inArray(schema.transcriptSegment.id, segmentIds),
+            recordingIds.length > 0
+              ? inArray(schema.recording.id, recordingIds)
+              : inArray(schema.transcriptSegment.id, segmentIds),
             inArray(schema.recording.programId, programIds)
           )
-    );
+    )
+    .orderBy(asc(schema.transcriptSegment.startTime));
 
-  const rowBySegmentId = new Map(segmentRows.map((row) => [row.id, row]));
-  const segments = segmentIds
-    .map((segmentId) => rowBySegmentId.get(segmentId))
-    .filter((row): row is (typeof segmentRows)[number] => Boolean(row))
-    .slice(0, 8);
+  const rowsByRecordingId = new Map<string, typeof segmentRows>();
+  for (const row of segmentRows) {
+    rowsByRecordingId.set(row.recordingId, [
+      ...(rowsByRecordingId.get(row.recordingId) ?? []),
+      row,
+    ]);
+  }
+  const sources: TranscriptSource[] = [];
+  const seenRanges = new Set<string>();
+  for (const match of matches) {
+    const rows = match.recordingId ? rowsByRecordingId.get(match.recordingId) ?? [] : segmentRows;
+    const matchedRows =
+      match.startTime !== null && match.endTime !== null
+        ? rows.filter(
+            (row) =>
+              row.startTime < match.endTime! + 0.5 &&
+              row.endTime > match.startTime! - 0.5
+          )
+        : rows.filter((row) => row.id === match.segmentId);
 
-  if (segments.length === 0) {
+    if (matchedRows.length === 0) continue;
+
+    const firstRow = matchedRows[0];
+    const lastRow = matchedRows.at(-1) ?? firstRow;
+    const dedupeKey = `${firstRow.recordingId}:${Math.floor(firstRow.startTime)}:${Math.floor(lastRow.endTime)}`;
+    if (seenRanges.has(dedupeKey)) continue;
+    seenRanges.add(dedupeKey);
+
+    sources.push({
+      sourceNumber: sources.length + 1,
+      recordingId: firstRow.recordingId,
+      title: firstRow.recordingTitle,
+      startTime: firstRow.startTime,
+      endTime: lastRow.endTime,
+      text: matchedRows.map((row) => row.text).join(" "),
+    });
+
+    if (sources.length >= 8) break;
+  }
+
+  if (sources.length === 0) {
     return Response.json({
       answer: "I could not find a relevant transcript segment for that question.",
       citations: [],
     });
   }
 
-  const context = segments
-    .map(
-      (segment) =>
-        `[Session: "${segment.recordingTitle}" | ${formatTimestamp(segment.startTime)}-${formatTimestamp(segment.endTime)}]\n${segment.text}`
-    )
-    .join("\n\n");
+  const context = sources.map(buildSourceText).join("\n\n---\n\n");
 
-  const system = `You are a helpful assistant for TTV students. Answer only from the transcript excerpts. Cite session titles and timestamps when they support the answer.\n\n${context}`;
+  const system = `You are TTV's session assistant. Answer the user's question in natural language using only the provided transcript sources.
+
+Requirements:
+- Synthesize the relevant points; do not just restate raw transcript snippets.
+- For technical questions, reason through the steps and call out assumptions or uncertainty.
+- Cite every substantive claim with inline source markers like [1] or [2].
+- If the sources do not contain enough information, say what is missing and cite the closest relevant source.
+- Do not mention sources that are not useful for the answer.
+- Keep the answer concise unless the question asks for depth.
+
+Transcript sources:
+
+${context}`;
 
   const messages: ChatMessage[] = [
     { role: "system", content: system },
@@ -108,17 +207,24 @@ export const POST: APIRoute = async ({ request, locals }) => {
       })),
     { role: "user", content: message },
   ];
-  const answer = await generateChatCompletion(env, messages);
+  const answer = sanitizeModelAnswer(
+    await generateChatCompletion(env, messages, {
+      maxTokens: 900,
+      temperature: 0.2,
+    })
+  );
 
-  const citations = segments.map((segment) => ({
-    recordingId: segment.recordingId,
-    title: segment.recordingTitle,
-    startTime: segment.startTime,
-    endTime: segment.endTime,
+  const citations = sources.map((source) => ({
+    sourceNumber: source.sourceNumber,
+    recordingId: source.recordingId,
+    title: source.title,
+    startTime: source.startTime,
+    endTime: source.endTime,
+    url: `/dashboard/sessions/${source.recordingId}?t=${Math.floor(source.startTime)}`,
     text:
-      segment.text.length > 180
-        ? `${segment.text.slice(0, 180).trim()}...`
-        : segment.text,
+      source.text.length > 240
+        ? `${source.text.slice(0, 240).trim()}...`
+        : source.text,
   }));
 
   await db.insert(schema.chatMessage).values([
