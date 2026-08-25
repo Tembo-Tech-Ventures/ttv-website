@@ -188,4 +188,28 @@ describe("POST /api/chat", () => {
     });
     expect(mocks.generateChatCompletion).not.toHaveBeenCalled();
   });
+
+  it("returns a non-empty fallback answer when the model returns empty text", async () => {
+    mocks.generateChatCompletion.mockResolvedValue("");
+    const database = createDatabase([
+      {
+        id: "segment-1",
+        recordingId: "recording-1",
+        startTime: 12,
+        endTime: 34,
+        text: "Mentor hours covered customer discovery.",
+        recordingTitle: "Mentor Hours",
+        recordingProgramId: "program-1",
+      },
+    ]);
+    mocks.drizzle.mockReturnValue(database);
+
+    const response = await POST(context());
+    const body = await json(response);
+
+    expect(body.answer).toContain("I found relevant transcript references");
+    expect(body.answer).toContain("Mentor Hours");
+    expect(body.answer.length).toBeGreaterThan(0);
+    expect(body.citations).toHaveLength(1);
+  });
 });
