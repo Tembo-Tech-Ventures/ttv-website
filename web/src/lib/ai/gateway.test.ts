@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_CHAT_MODEL,
+  extractChatCompletionText,
   gatewayCompatUrl,
   generateChatCompletion,
   resolveChatModel,
@@ -56,6 +57,50 @@ describe("gatewayCompatUrl", () => {
     expect(gatewayCompatUrl(env)).toBe(
       "https://gateway.ai.cloudflare.com/v1/acc-123/ttv-ai/compat/chat/completions"
     );
+  });
+});
+
+describe("extractChatCompletionText", () => {
+  it("reads Chat Completions responses", () => {
+    expect(
+      extractChatCompletionText({
+        choices: [{ message: { content: "Chat completion text" } }],
+      })
+    ).toBe("Chat completion text");
+  });
+
+  it("reads direct Workers AI text responses", () => {
+    expect(extractChatCompletionText({ response: "Workers AI text" })).toBe(
+      "Workers AI text"
+    );
+  });
+
+  it("reads Responses API output text", () => {
+    expect(
+      extractChatCompletionText({
+        output: [
+          {
+            content: [
+              { type: "output_text", text: "Responses API text" },
+            ],
+          },
+        ],
+      })
+    ).toBe("Responses API text");
+  });
+
+  it("reads nested Responses API output text", () => {
+    expect(
+      extractChatCompletionText({
+        result: {
+          output: [
+            {
+              content: [{ type: "output_text", text: "Nested response text" }],
+            },
+          ],
+        },
+      })
+    ).toBe("Nested response text");
   });
 });
 

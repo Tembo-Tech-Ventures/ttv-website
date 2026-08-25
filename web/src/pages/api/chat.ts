@@ -44,6 +44,18 @@ function buildSourceText(source: TranscriptSource) {
   ].join("\n");
 }
 
+function buildFallbackAnswer(sources: TranscriptSource[]) {
+  const summary = sources
+    .slice(0, 3)
+    .map(
+      (source) =>
+        `[${source.sourceNumber}] ${source.title} at ${formatTimestamp(source.startTime)}: ${source.text}`
+    )
+    .join("\n\n");
+
+  return `I found relevant transcript references, but the answer model returned an empty response. Here are the most relevant excerpts so you can jump into the recording:\n\n${summary}`;
+}
+
 export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -207,12 +219,13 @@ ${context}`;
       })),
     { role: "user", content: message },
   ];
-  const answer = sanitizeModelAnswer(
+  const generatedAnswer = sanitizeModelAnswer(
     await generateChatCompletion(env, messages, {
       maxTokens: 900,
       temperature: 0.2,
     })
   );
+  const answer = generatedAnswer || buildFallbackAnswer(sources);
 
   const citations = sources.map((source) => ({
     sourceNumber: source.sourceNumber,

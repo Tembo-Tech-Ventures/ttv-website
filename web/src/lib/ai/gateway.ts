@@ -21,11 +21,50 @@ export function gatewayCompatUrl(env: Env) {
 
 interface CompatChatResponse {
   choices?: Array<{ message?: { content?: string } }>;
+  response?: string;
+  output_text?: string;
+  output?: Array<{
+    content?: Array<{
+      text?: string;
+      type?: string;
+    }>;
+  }>;
+  result?: {
+    response?: string;
+    output_text?: string;
+    output?: Array<{
+      content?: Array<{
+        text?: string;
+        type?: string;
+      }>;
+    }>;
+  };
 }
 
 interface ChatCompletionOptions {
   maxTokens?: number;
   temperature?: number;
+}
+
+export function extractChatCompletionText(payload: CompatChatResponse) {
+  const directText =
+    payload.choices?.[0]?.message?.content ??
+    payload.response ??
+    payload.output_text ??
+    payload.result?.response ??
+    payload.result?.output_text;
+  if (typeof directText === "string" && directText.trim()) {
+    return directText;
+  }
+
+  const outputText = [payload.output, payload.result?.output]
+    .flatMap((output) => output ?? [])
+    .flatMap((entry) => entry.content ?? [])
+    .map((content) => content.text)
+    .filter((text): text is string => typeof text === "string" && Boolean(text.trim()))
+    .join("\n\n");
+
+  return outputText;
 }
 
 /**
@@ -67,7 +106,7 @@ export async function generateChatCompletion(
     }
 
     const payload = (await response.json()) as CompatChatResponse;
-    return payload.choices?.[0]?.message?.content ?? "";
+    return extractChatCompletionText(payload);
   }
 
   // Fallback: call Workers AI directly with the same model. Unified-mode model
@@ -85,7 +124,7 @@ export async function generateChatCompletion(
         : {}),
     },
     gatewayName ? { gateway: { id: gatewayName } } : undefined
-  )) as { response?: string; result?: { response?: string } };
+  )) as CompatChatResponse;
 
-  return result.response ?? result.result?.response ?? "";
+  return extractChatCompletionText(result);
 }
