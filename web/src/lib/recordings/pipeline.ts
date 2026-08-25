@@ -23,6 +23,7 @@ const FFMPEG_CONTAINER_TIMEOUT_MS = 25 * 60 * 1000;
 const FFMPEG_TIMEOUT_ERROR_PREFIX = "FFmpeg container timed out";
 const TRANSCRIPTION_TIMEOUT_MS = 12 * 60 * 1000;
 const TRANSCRIPTION_TIMEOUT_ERROR_PREFIX = "Transcription timed out";
+const TRANSCRIPT_SEGMENT_INSERT_BATCH_SIZE = 10;
 
 type StartableContainer = DurableObjectStub & {
   start(): void;
@@ -51,6 +52,14 @@ function logRecordingPipelineEvent(
 
 function elapsedMs(startedAt: number) {
   return Math.round(performance.now() - startedAt);
+}
+
+function chunkArray<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
 }
 
 function isRetryableTerminalError(value: unknown) {
@@ -431,12 +440,16 @@ export async function processRecordingMessage(message: unknown, env: Env) {
               textLength: chunk.text.length,
             });
             if (chunk.segments.length > 0) {
-              await db.insert(schema.transcriptSegment).values(
-                chunk.segments.map((segment) => ({
-                  ...segment,
-                  recordingId: recording.id,
-                }))
-              );
+              const segmentValues = chunk.segments.map((segment) => ({
+                ...segment,
+                recordingId: recording.id,
+              }));
+              for (const batch of chunkArray(
+                segmentValues,
+                TRANSCRIPT_SEGMENT_INSERT_BATCH_SIZE
+              )) {
+                await db.insert(schema.transcriptSegment).values(batch);
+              }
             }
           },
         }),
