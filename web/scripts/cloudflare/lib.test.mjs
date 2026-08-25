@@ -8,6 +8,8 @@ import {
   deriveAgentEnvironmentName,
   deriveEnvironmentContext,
   ensureAiGateway,
+  ensureVectorizeIndex,
+  ensureVectorizeMetadataIndexes,
   findD1DatabaseByName,
   getSecretBindings,
   queryD1Database,
@@ -488,6 +490,93 @@ describe("environment cleanup", () => {
     await expect(
       deleteVectorizeIndexByName("missing", missingRunner)
     ).resolves.toBe(false);
+  });
+
+  it("creates the program_id metadata index when it is missing", async () => {
+    const api = vi
+      .fn()
+      .mockResolvedValueOnce({ metadataIndexes: [] })
+      .mockResolvedValueOnce({});
+
+    await expect(
+      ensureVectorizeMetadataIndexes("transcripts", api)
+    ).resolves.toEqual(["program_id"]);
+    expect(api.mock.calls).toEqual([
+      ["/vectorize/v2/indexes/transcripts/metadata_index/list"],
+      [
+        "/vectorize/v2/indexes/transcripts/metadata_index/create",
+        { method: "POST", body: { propertyName: "program_id", indexType: "string" } },
+      ],
+    ]);
+  });
+
+  it("does not recreate a metadata index that already exists", async () => {
+    const api = vi
+      .fn()
+      .mockResolvedValue({ metadataIndexes: [{ propertyName: "program_id" }] });
+
+    await expect(
+      ensureVectorizeMetadataIndexes("transcripts", api)
+    ).resolves.toEqual([]);
+    expect(api).toHaveBeenCalledTimes(1);
+  });
+
+  it("backfills metadata indexes on a Vectorize index that already exists", async () => {
+    const runner = vi.fn().mockResolvedValue({ stdout: "index" });
+    const api = vi
+      .fn()
+      .mockResolvedValueOnce({ metadataIndexes: [] })
+      .mockResolvedValueOnce({});
+
+    await expect(
+      ensureVectorizeIndex("transcripts", runner, api)
+    ).resolves.toBe(true);
+    expect(runner.mock.calls).toEqual([[["vectorize", "get", "transcripts"]]]);
+    expect(api).toHaveBeenCalledTimes(2);
+  });
+
+  it("creates the Vectorize index and its metadata indexes when missing", async () => {
+    const runner = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Index name not found"))
+      .mockResolvedValueOnce({});
+    const api = vi
+      .fn()
+      .mockResolvedValueOnce({ metadataIndexes: [] })
+      .mockResolvedValueOnce({});
+
+    await expect(
+      ensureVectorizeIndex("transcripts", runner, api)
+    ).resolves.toBe(true);
+    expect(runner.mock.calls[1]).toEqual([
+      ["vectorize", "create", "transcripts", "--dimensions", "1024", "--metric", "cosine"],
+    ]);
+    expect(api).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries metadata index creation while a new index propagates", async () => {
+    const api = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Index name not found"))
+      .mockResolvedValueOnce({ metadataIndexes: [] })
+      .mockResolvedValueOnce({});
+    const wait = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      ensureVectorizeMetadataIndexes("transcripts", api, { wait })
+    ).resolves.toEqual(["program_id"]);
+    expect(wait).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces the failure after exhausting metadata index retries", async () => {
+    const api = vi.fn().mockRejectedValue(new Error("Authentication error"));
+    const wait = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      ensureVectorizeMetadataIndexes("transcripts", api, { attempts: 3, wait })
+    ).rejects.toThrow("Authentication error");
+    expect(api).toHaveBeenCalledTimes(3);
+    expect(wait).toHaveBeenCalledTimes(2);
   });
 
   it("deletes an exact-match container app by UUID", async () => {

@@ -675,4 +675,55 @@ describe("recording processing pipeline", () => {
       vi.useRealTimers();
     }
   });
+
+  it("re-embeds an existing transcript without re-running the media pipeline", async () => {
+    const recording: Record<string, unknown> = {
+      id: "recording1",
+      r2VideoKey: "recordings/recording1/source.mp4",
+      r2AudioKey: "recordings/recording1/audio.mp3",
+      processingStatus: "complete",
+    };
+    const { database, updates } = createDatabase(recording);
+    mocks.drizzle.mockReturnValue(database);
+    const containerFetch = vi.fn();
+
+    await processRecordingMessage(
+      { type: "reindex_recording", recordingId: "recording1" },
+      createEnvironment(containerFetch)
+    );
+
+    expect(mocks.embedAndIndexRecording).toHaveBeenCalledTimes(1);
+    expect(mocks.embedAndIndexRecording).toHaveBeenCalledWith({
+      db: database,
+      env: expect.any(Object),
+      recording,
+    });
+    expect(containerFetch).not.toHaveBeenCalled();
+    expect(mocks.transcribeAudioChunks).not.toHaveBeenCalled();
+    expect(mocks.downloadGoogleDriveVideoToR2).not.toHaveBeenCalled();
+    expect(updates).toEqual([]);
+  });
+
+  it("fails a re-index for a recording that no longer exists", async () => {
+    const { database } = createDatabase({});
+    database.query.recording.findFirst = vi.fn().mockResolvedValue(undefined);
+    mocks.drizzle.mockReturnValue(database);
+
+    await expect(
+      processRecordingMessage(
+        { type: "reindex_recording", recordingId: "missing" },
+        createEnvironment(vi.fn())
+      )
+    ).rejects.toThrow("Recording missing not found");
+    expect(mocks.embedAndIndexRecording).not.toHaveBeenCalled();
+  });
+
+  it("rejects a re-index message without a recording id", async () => {
+    await expect(
+      processRecordingMessage(
+        { type: "reindex_recording" },
+        createEnvironment(vi.fn())
+      )
+    ).rejects.toThrow("Unknown recording queue message");
+  });
 });

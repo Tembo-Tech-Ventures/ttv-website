@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import {
   assertAgentEnvironmentName,
@@ -249,23 +250,75 @@ export async function ensureQueue(name) {
   return true;
 }
 
-export async function ensureVectorizeIndex(name) {
+/**
+ * Vectorize only applies metadata filters to properties that have an explicit
+ * metadata index. Filtering on an unindexed property silently returns zero
+ * matches, which is how transcript chat once looked "empty" in production.
+ */
+export const VECTORIZE_METADATA_INDEXES = Object.freeze([
+  Object.freeze({ propertyName: "program_id", indexType: "string" }),
+]);
+
+const VECTORIZE_METADATA_INDEX_ATTEMPTS = 5;
+const VECTORIZE_METADATA_INDEX_RETRY_MS = 2000;
+
+export async function ensureVectorizeMetadataIndexes(
+  name,
+  api = cfApi,
+  { attempts = VECTORIZE_METADATA_INDEX_ATTEMPTS, wait = sleep } = {}
+) {
+  const basePath = `/vectorize/v2/indexes/${encodeURIComponent(name)}/metadata_index`;
+
+  // A freshly created index is not always immediately addressable, so retry
+  // rather than failing the whole deploy on a propagation delay.
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const listed = await api(`${basePath}/list`);
+      const existing = new Set(
+        (listed?.metadataIndexes ?? []).map((entry) => entry.propertyName)
+      );
+
+      const created = [];
+      for (const metadataIndex of VECTORIZE_METADATA_INDEXES) {
+        if (existing.has(metadataIndex.propertyName)) continue;
+        await api(`${basePath}/create`, { method: "POST", body: metadataIndex });
+        created.push(metadataIndex.propertyName);
+      }
+
+      return created;
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) await wait(VECTORIZE_METADATA_INDEX_RETRY_MS);
+    }
+  }
+
+  throw lastError;
+}
+
+export async function ensureVectorizeIndex(name, runner = runWrangler, api = cfApi) {
+  let exists = false;
   try {
-    const existing = await runWrangler(["vectorize", "get", name]);
-    if (existing) return true;
+    exists = Boolean(await runner(["vectorize", "get", name]));
   } catch {
     // Wrangler exits non-zero when the index does not exist.
   }
 
-  await runWrangler([
-    "vectorize",
-    "create",
-    name,
-    "--dimensions",
-    "1024",
-    "--metric",
-    "cosine",
-  ]);
+  if (!exists) {
+    await runner([
+      "vectorize",
+      "create",
+      name,
+      "--dimensions",
+      "1024",
+      "--metric",
+      "cosine",
+    ]);
+  }
+
+  // Runs for pre-existing indexes too, so environments created before metadata
+  // filtering was required get backfilled on their next deploy.
+  await ensureVectorizeMetadataIndexes(name, api);
   return true;
 }
 

@@ -45,26 +45,49 @@ export const POST: APIRoute = async ({ request, locals }) => {
     filter: locals.isAdmin ? undefined : { program_id: { $in: programIds } },
   });
 
-  const segmentIds = results.matches
-    .map((match) => match.metadata?.segment_id)
-    .filter((id): id is string => typeof id === "string");
+  const vectorIds = results.matches.map((match) => match.id);
 
-  if (segmentIds.length === 0) {
+  if (vectorIds.length === 0) {
     return Response.json({
       answer: "I could not find a relevant transcript segment for that question.",
       citations: [],
     });
   }
 
+  // Each vector covers a multi-segment chunk, so rebuild the chunk from every
+  // segment tagged with that vector id rather than a single short segment.
   const segments = await db.query.transcriptSegment.findMany({
-    where: inArray(schema.transcriptSegment.id, segmentIds),
+    where: inArray(schema.transcriptSegment.vectorId, vectorIds),
+    orderBy: (segment, { asc }) => [asc(segment.startTime)],
     with: { recording: true },
   });
 
-  const context = segments
+  const chunks = vectorIds
+    .map((vectorId) => segments.filter((segment) => segment.vectorId === vectorId))
+    .filter((chunkSegments) => chunkSegments.length > 0)
+    .map((chunkSegments) => {
+      const first = chunkSegments[0];
+      const last = chunkSegments[chunkSegments.length - 1];
+      return {
+        recordingId: first.recordingId,
+        title: first.recording.title,
+        startTime: first.startTime,
+        endTime: last.endTime,
+        text: chunkSegments.map((segment) => segment.text).join(" "),
+      };
+    });
+
+  if (chunks.length === 0) {
+    return Response.json({
+      answer: "I could not find a relevant transcript segment for that question.",
+      citations: [],
+    });
+  }
+
+  const context = chunks
     .map(
-      (segment) =>
-        `[Session: "${segment.recording.title}" | ${formatTimestamp(segment.startTime)}-${formatTimestamp(segment.endTime)}]\n${segment.text}`
+      (chunk) =>
+        `[Session: "${chunk.title}" | ${formatTimestamp(chunk.startTime)}-${formatTimestamp(chunk.endTime)}]\n${chunk.text}`
     )
     .join("\n\n");
 
@@ -82,15 +105,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
   ];
   const answer = await generateChatCompletion(env, messages);
 
-  const citations = segments.map((segment) => ({
-    recordingId: segment.recordingId,
-    title: segment.recording.title,
-    startTime: segment.startTime,
-    endTime: segment.endTime,
+  const citations = chunks.map((chunk) => ({
+    recordingId: chunk.recordingId,
+    title: chunk.title,
+    startTime: chunk.startTime,
+    endTime: chunk.endTime,
     text:
-      segment.text.length > 180
-        ? `${segment.text.slice(0, 180).trim()}...`
-        : segment.text,
+      chunk.text.length > 180
+        ? `${chunk.text.slice(0, 180).trim()}...`
+        : chunk.text,
   }));
 
   await db.insert(schema.chatMessage).values([

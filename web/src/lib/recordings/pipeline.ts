@@ -19,6 +19,15 @@ export interface RecordingQueueMessage {
   recordingId: string;
 }
 
+export interface RecordingReindexQueueMessage {
+  type: "reindex_recording";
+  recordingId: string;
+}
+
+export type RecordingQueueMessageBody =
+  | RecordingQueueMessage
+  | RecordingReindexQueueMessage;
+
 const FFMPEG_CONTAINER_TIMEOUT_MS = 25 * 60 * 1000;
 const FFMPEG_TIMEOUT_ERROR_PREFIX = "FFmpeg container timed out";
 const TRANSCRIPTION_TIMEOUT_MS = 12 * 60 * 1000;
@@ -141,6 +150,42 @@ function isRecordingQueueMessage(value: unknown): value is RecordingQueueMessage
   );
 }
 
+function isRecordingReindexQueueMessage(
+  value: unknown
+): value is RecordingReindexQueueMessage {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { type?: unknown }).type === "reindex_recording" &&
+    typeof (value as { recordingId?: unknown }).recordingId === "string"
+  );
+}
+
+/**
+ * Re-embeds an already-transcribed recording from the segments in D1. Used to
+ * repopulate Vectorize without re-downloading, re-encoding or re-transcribing,
+ * for example after a metadata index is added (Vectorize only indexes metadata
+ * for vectors upserted after the metadata index exists).
+ */
+async function reindexRecording(recordingId: string, env: Env) {
+  const db = drizzle(env.DB, { schema });
+  const recording = await db.query.recording.findFirst({
+    where: eq(schema.recording.id, recordingId),
+  });
+
+  if (!recording) {
+    throw new Error(`Recording ${recordingId} not found`);
+  }
+
+  const startedAt = performance.now();
+  logRecordingPipelineEvent("reindex_start", { recordingId });
+  await embedAndIndexRecording({ db, env, recording });
+  logRecordingPipelineEvent("reindex_done", {
+    recordingId,
+    elapsedMs: elapsedMs(startedAt),
+  });
+}
+
 async function updateStatus(
   db: Database,
   recordingId: string,
@@ -219,6 +264,11 @@ async function segmentExistingAudio({
 }
 
 export async function processRecordingMessage(message: unknown, env: Env) {
+  if (isRecordingReindexQueueMessage(message)) {
+    await reindexRecording(message.recordingId, env);
+    return;
+  }
+
   if (!isRecordingQueueMessage(message)) {
     throw new Error("Unknown recording queue message");
   }
