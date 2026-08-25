@@ -56,11 +56,7 @@ export async function transcribeAudioChunks({
       throw new Error(`Audio chunk ${chunk.r2AudioKey} is empty`);
     }
 
-    const result = await runWhisper(
-      env,
-      loaded.audio,
-      loaded.contentType ?? "audio/mpeg"
-    );
+    const result = await runWhisper(env, loaded.audio);
     const chunkSegments = parseWhisperSegments({
       result,
       chunkIndex: chunk.chunkIndex,
@@ -89,14 +85,10 @@ export async function transcribeAudioChunks({
 
 async function runWhisper(
   env: Env,
-  audio: ArrayBuffer,
-  contentType: string
+  audio: ArrayBuffer
 ) {
   return (await env.AI.run("@cf/openai/whisper-large-v3-turbo", {
-    audio: {
-      body: new Uint8Array(audio),
-      contentType,
-    },
+    audio: arrayBufferToBase64(audio),
     word_timestamps: true,
     vad_filter: true,
   })) as {
@@ -104,6 +96,14 @@ async function runWhisper(
     vtt?: string | { segments?: WhisperSegment[] };
     segments?: WhisperSegment[];
   };
+}
+
+function arrayBufferToBase64(audio: ArrayBuffer) {
+  let binary = "";
+  for (const byte of new Uint8Array(audio)) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
 }
 
 function parseWhisperSegments({
