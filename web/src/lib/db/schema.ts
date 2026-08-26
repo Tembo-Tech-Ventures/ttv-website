@@ -41,6 +41,7 @@ export const userRelations = relations(user, ({ many, one }) => ({
   files: many(file),
   programRoles: many(programRole),
   programApplications: many(programApplication),
+  chatSessions: many(chatSession),
   chatMessages: many(chatMessage),
   studentProfile: one(studentProfile),
 }));
@@ -410,10 +411,35 @@ export const transcriptSegmentRelations = relations(
   })
 );
 
+// ─── ChatSession ───────────────────────────────────────────
+
+export const chatSession = sqliteTable(
+  "chat_session",
+  {
+    id: cuid("id"),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    index("chat_session_userId_updatedAt_idx").on(table.userId, table.updatedAt),
+  ]
+);
+
+export const chatSessionRelations = relations(chatSession, ({ one, many }) => ({
+  user: one(user, { fields: [chatSession.userId], references: [user.id] }),
+  messages: many(chatMessage),
+}));
+
 // ─── ChatMessage ───────────────────────────────────────────
 
 export const chatMessage = sqliteTable("chat_message", {
   id: cuid("id"),
+  sessionId: text("sessionId").references(() => chatSession.id, {
+    onDelete: "cascade",
+  }),
   userId: text("userId")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
@@ -426,6 +452,10 @@ export const chatMessage = sqliteTable("chat_message", {
 });
 
 export const chatMessageRelations = relations(chatMessage, ({ one }) => ({
+  session: one(chatSession, {
+    fields: [chatMessage.sessionId],
+    references: [chatSession.id],
+  }),
   user: one(user, { fields: [chatMessage.userId], references: [user.id] }),
 }));
 

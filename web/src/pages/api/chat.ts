@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
+import { ensureOwnedChatSession, touchChatSession } from "@/lib/chat/sessions";
 import { getAccessibleProgramIds } from "@/lib/recordings/access";
 import { formatTimestamp } from "@/lib/recordings/time-utils";
 import { generateChatCompletion, type ChatMessage } from "@/lib/ai/gateway";
@@ -60,8 +61,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { message, conversationHistory = [] } = (await request.json()) as {
+  const { message, sessionId: requestedSessionId, conversationHistory = [] } = (await request.json()) as {
     message?: string;
+    sessionId?: string | null;
     conversationHistory?: Array<{ role: string; content: string }>;
   };
   if (!message || typeof message !== "string") {
@@ -72,9 +74,27 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const db = drizzle(env.DB, { schema });
+  const sessionId = await ensureOwnedChatSession(
+    env.DB,
+    user.id,
+    typeof requestedSessionId === "string" ? requestedSessionId : null,
+    message
+  );
   const programIds = await getAccessibleProgramIds(db, user.id);
   if (programIds.length === 0 && !locals.isAdmin) {
+    await db.insert(schema.chatMessage).values([
+      { userId: user.id, sessionId, role: "user", content: message },
+      {
+        userId: user.id,
+        sessionId,
+        role: "assistant",
+        content: "No session recordings are available for your account yet.",
+        citations: JSON.stringify([]),
+      },
+    ]);
+    await touchChatSession(env.DB, user.id, sessionId);
     return Response.json({
+      sessionId,
       answer: "No session recordings are available for your account yet.",
       citations: [],
     });
@@ -114,7 +134,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
   );
 
   if (segmentIds.length === 0 && recordingIds.length === 0) {
+    await db.insert(schema.chatMessage).values([
+      { userId: user.id, sessionId, role: "user", content: message },
+      {
+        userId: user.id,
+        sessionId,
+        role: "assistant",
+        content: "I could not find a relevant transcript segment for that question.",
+        citations: JSON.stringify([]),
+      },
+    ]);
+    await touchChatSession(env.DB, user.id, sessionId);
     return Response.json({
+      sessionId,
       answer: "I could not find a relevant transcript segment for that question.",
       citations: [],
     });
@@ -187,7 +219,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   if (sources.length === 0) {
+    await db.insert(schema.chatMessage).values([
+      { userId: user.id, sessionId, role: "user", content: message },
+      {
+        userId: user.id,
+        sessionId,
+        role: "assistant",
+        content: "I could not find a relevant transcript segment for that question.",
+        citations: JSON.stringify([]),
+      },
+    ]);
+    await touchChatSession(env.DB, user.id, sessionId);
     return Response.json({
+      sessionId,
       answer: "I could not find a relevant transcript segment for that question.",
       citations: [],
     });
@@ -200,6 +244,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 Requirements:
 - Synthesize the relevant points; do not just restate raw transcript snippets.
 - For technical questions, reason through the steps and call out assumptions or uncertainty.
+- Transcript text may contain speech-to-text mistakes, punctuation errors, missing capitalization, and homophone typos. Infer the intended wording from context when it is clear, clean up those errors in your explanation, and do not preserve obvious transcript typos unless quoting them is necessary.
 - Cite every substantive claim with inline source markers like [1] or [2].
 - If the sources do not contain enough information, say what is missing and cite the closest relevant source.
 - Do not mention sources that are not useful for the answer.
@@ -241,9 +286,10 @@ ${context}`;
   }));
 
   await db.insert(schema.chatMessage).values([
-    { userId: user.id, role: "user", content: message },
-    { userId: user.id, role: "assistant", content: answer, citations: JSON.stringify(citations) },
+    { userId: user.id, sessionId, role: "user", content: message },
+    { userId: user.id, sessionId, role: "assistant", content: answer, citations: JSON.stringify(citations) },
   ]);
+  await touchChatSession(env.DB, user.id, sessionId);
 
-  return Response.json({ answer, citations });
+  return Response.json({ sessionId, answer, citations });
 };

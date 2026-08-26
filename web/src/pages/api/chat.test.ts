@@ -23,6 +23,7 @@ vi.mock("@/lib/ai/gateway", () => ({
 import { POST } from "./chat";
 
 interface ChatResponse {
+  sessionId?: string;
   answer: string;
   citations: Array<Record<string, unknown>>;
 }
@@ -70,8 +71,19 @@ function createDatabase(segmentRows: Array<Record<string, unknown>> = []) {
   };
 }
 
+function createD1Mock() {
+  const run = vi.fn().mockResolvedValue({ meta: { changes: 1 } });
+  const first = vi.fn().mockResolvedValue(null);
+  const all = vi.fn().mockResolvedValue({ results: [] });
+  const bind = vi.fn(() => ({ run, first, all }));
+  const prepare = vi.fn(() => ({ bind }));
+
+  return { prepare, bind, run, first, all };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.env.DB = createD1Mock();
   mocks.env.AI.run.mockResolvedValue({ data: [[0.1, 0.2, 0.3]] });
   mocks.env.VECTORIZE.query.mockResolvedValue({
     matches: [
@@ -92,16 +104,27 @@ beforeEach(() => {
 describe("POST /api/chat", () => {
   it("returns the no-recordings answer before querying Vectorize when a non-admin has no accessible programs", async () => {
     mocks.getAccessibleProgramIds.mockResolvedValue([]);
-    mocks.drizzle.mockReturnValue(createDatabase());
+    const database = createDatabase();
+    mocks.drizzle.mockReturnValue(database);
 
     const response = await POST(context());
     const body = await json(response);
 
-    expect(body).toEqual({
-      answer: "No session recordings are available for your account yet.",
-      citations: [],
-    });
+    expect(body.answer).toBe("No session recordings are available for your account yet.");
+    expect(body.citations).toEqual([]);
+    expect(body.sessionId).toEqual(expect.any(String));
     expect(mocks.env.VECTORIZE.query).not.toHaveBeenCalled();
+    expect(database.values).toHaveBeenCalledWith([
+      expect.objectContaining({
+        sessionId: body.sessionId,
+        role: "user",
+      }),
+      expect.objectContaining({
+        sessionId: body.sessionId,
+        role: "assistant",
+        citations: "[]",
+      }),
+    ]);
   });
 
   it("queries candidate vectors without a metadata filter and builds natural-language context from full transcript chunks", async () => {
@@ -163,6 +186,9 @@ describe("POST /api/chat", () => {
       maxTokens: 900,
       temperature: 0.2,
     });
+    expect(systemMessage.content).toContain("speech-to-text mistakes");
+    expect(systemMessage.content).toContain("clean up those errors");
+    expect(body.sessionId).toEqual(expect.any(String));
     expect(body.citations).toEqual([
       {
         sourceNumber: 1,
@@ -182,10 +208,9 @@ describe("POST /api/chat", () => {
     const response = await POST(context());
     const body = await json(response);
 
-    expect(body).toEqual({
-      answer: "I could not find a relevant transcript segment for that question.",
-      citations: [],
-    });
+    expect(body.answer).toBe("I could not find a relevant transcript segment for that question.");
+    expect(body.citations).toEqual([]);
+    expect(body.sessionId).toEqual(expect.any(String));
     expect(mocks.generateChatCompletion).not.toHaveBeenCalled();
   });
 
