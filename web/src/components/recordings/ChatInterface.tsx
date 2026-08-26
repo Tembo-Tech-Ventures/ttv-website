@@ -227,13 +227,13 @@ export default function ChatInterface({
 
   return (
     <div className="grid min-h-[72vh] overflow-hidden rounded-2xl border border-white/10 bg-dark/50 shadow-2xl shadow-dark/40 lg:grid-cols-[20rem_minmax(0,1fr)]">
-      <aside className="border-b border-white/10 bg-dark/70 p-4 lg:border-b-0 lg:border-r">
+      <aside className="max-h-80 overflow-y-auto border-b border-white/10 bg-dark/70 p-4 lg:max-h-none lg:border-b-0 lg:border-r">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
               Discussions
             </p>
-            <h3 className="text-lg font-semibold text-white">Session chat</h3>
+          <h3 className="text-base font-semibold text-white sm:text-lg">Session chat</h3>
           </div>
           <button
             type="button"
@@ -281,17 +281,17 @@ export default function ChatInterface({
         </div>
       </aside>
 
-      <section className="flex min-h-[72vh] flex-col">
+      <section className="flex min-h-[64vh] flex-col lg:min-h-[72vh]">
         <div className="border-b border-white/10 bg-gradient-to-r from-teal/15 via-dark/30 to-primary/10 px-5 py-4">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
             Transcript assistant
           </p>
-          <h2 className="mt-1 text-xl font-semibold text-white">
+          <h2 className="mt-1 text-lg font-semibold text-white sm:text-xl">
             Ask across recordings and jump to cited moments.
           </h2>
         </div>
 
-        <div className="flex-1 space-y-5 overflow-y-auto p-5">
+        <div className="flex-1 space-y-5 overflow-y-auto p-4 sm:p-5">
           {messages.length === 0 ? (
             <div className="mx-auto flex max-w-2xl flex-col items-center justify-center py-14 text-center">
               <div className="mb-5 rounded-3xl border border-primary/20 bg-primary/10 px-5 py-4 text-primary">
@@ -320,7 +320,7 @@ export default function ChatInterface({
                 className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <article
-                  className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm leading-relaxed sm:max-w-[78%] ${
+                  className={`max-w-[94%] rounded-2xl px-4 py-3 text-sm leading-relaxed sm:max-w-[78%] ${
                     message.role === "user"
                       ? "bg-primary text-dark shadow-lg shadow-primary/10"
                       : "border border-white/10 bg-white/[0.06] text-white"
