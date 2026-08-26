@@ -8,13 +8,20 @@ import { env } from "cloudflare:workers";
 import { createCredentialCipher } from "@/lib/credentials/crypto";
 import { getGoogleDriveCredentials } from "@/lib/credentials/google-drive";
 import { parseGoogleDriveFolderId } from "@/lib/recordings/google-drive";
-import { syncRecordingImportSource } from "@/lib/recordings/importer";
+import {
+  previewRecordingImportSource,
+  syncRecordingImportSource,
+  type RecordingImportPreview,
+} from "@/lib/recordings/importer";
 
 const db = drizzle(env.DB, { schema });
 
 let credentialsConfigured = false;
 let clientEmail: string | undefined;
 let impersonatedUser: string | undefined;
+let historicalPreview:
+  | (RecordingImportPreview & { sourceId: string })
+  | undefined;
 
 if (env.CREDENTIALS_ENCRYPTION_KEY) {
   try {
@@ -60,9 +67,10 @@ if (Astro.request.method === "POST") {
         programId,
         driveFolderId,
         filenameContains,
+        enabled: false,
       });
       return Astro.redirect(
-        "/admin/recordings/import?success=Import+source+saved"
+        "/admin/recordings/import?success=Import+source+saved+and+paused.+Review+the+historical+count,+then+enable+automatic+scans."
       );
     }
 
@@ -71,37 +79,55 @@ if (Astro.request.method === "POST") {
       throw new Error("Import source is required.");
     }
 
-    if (action === "sync") {
+    if (action === "preview") {
       if (!credentialsConfigured) {
         throw new Error(
           "Google Drive credentials are not configured. Set them in Admin → Integrations."
         );
       }
-      const summary = await syncRecordingImportSource(env, sourceId);
+      historicalPreview = {
+        ...(await previewRecordingImportSource(env, sourceId)),
+        sourceId,
+      };
+    } else if (action === "confirm") {
+      if (!credentialsConfigured) {
+        throw new Error(
+          "Google Drive credentials are not configured. Set them in Admin → Integrations."
+        );
+      }
+      const expectedValue = String(
+        formData.get("expectedImportable") ?? ""
+      );
+      if (!/^\d+$/.test(expectedValue)) {
+        throw new TypeError("Review the historical import before confirming it.");
+      }
+      const expectedImportable = Number(expectedValue);
+      if (!Number.isSafeInteger(expectedImportable)) {
+        throw new TypeError("Review the historical import before confirming it.");
+      }
+      const summary = await syncRecordingImportSource(env, sourceId, {
+        expectedImportable,
+      });
       const message = encodeURIComponent(
-        `Scan complete: ${summary.created} new, ${summary.queued} queued, ${summary.skipped} already known`
+        `Historical import started: ${summary.created} new, ${summary.queued} queued, ${summary.skipped} already known`
       );
       return Astro.redirect(
         `/admin/recordings/import?success=${message}`
       );
-    }
-
-    if (action === "toggle") {
+    } else if (action === "toggle") {
       await db
         .update(schema.recordingImportSource)
         .set({ enabled: formData.get("enabled") === "true" })
         .where(eq(schema.recordingImportSource.id, sourceId));
       return Astro.redirect("/admin/recordings/import?success=Source+updated");
-    }
-
-    if (action === "delete") {
+    } else if (action === "delete") {
       await db
         .delete(schema.recordingImportSource)
         .where(eq(schema.recordingImportSource.id, sourceId));
       return Astro.redirect("/admin/recordings/import?success=Source+removed");
+    } else {
+      throw new Error("Unknown import action.");
     }
-
-    throw new Error("Unknown import action.");
   } catch (error) {
     const message = encodeURIComponent(
       error instanceof Error ? error.message : String(error)
@@ -122,6 +148,9 @@ const [programs, sources] = await Promise.all([
 
 const success = Astro.url.searchParams.get("success");
 const error = Astro.url.searchParams.get("error");
+const previewSource = historicalPreview
+  ? sources.find((source) => source.id === historicalPreview?.sourceId)
+  : undefined;
 const formatDateTime = (date: Date | null) =>
   date
     ? new Intl.DateTimeFormat("en", {
@@ -141,8 +170,9 @@ const formatDateTime = (date: Date | null) =>
         Import Session Recordings
       </h2>
       <p class="mt-1 max-w-3xl text-sm text-white/55">
-        Scan Google Drive folders for Meet recordings, copy new videos to R2,
-        and send them through the existing transcription and search pipeline.
+        Scan Google Drive folders and subfolders for Meet recordings, review
+        historical counts, and add approved videos to the transcription and
+        search queue.
       </p>
     </div>
 
@@ -199,11 +229,93 @@ const formatDateTime = (date: Date | null) =>
       )}
     </Card>
 
+    {historicalPreview && (
+      <Card>
+        <div data-testid="historical-import-preview">
+          <p class="text-xs font-semibold uppercase tracking-wide text-primary">
+            Historical import review
+          </p>
+          <h3 class="mt-1 text-lg font-semibold text-white">
+            {previewSource?.name ?? "Google Drive source"}
+          </h3>
+          <p class="mt-2 max-w-3xl text-sm text-white/60">
+            The scan checked the selected folder, all nested folders, and Drive
+            shortcuts. Nothing has been added by this review.
+          </p>
+
+          <dl class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="rounded-md border border-teal/20 bg-black/10 p-3">
+              <dt class="text-xs text-white/45">Videos found</dt>
+              <dd class="mt-1 text-xl font-semibold text-white">
+                {historicalPreview.discovered.toLocaleString()}
+              </dd>
+            </div>
+            <div class="rounded-md border border-teal/20 bg-black/10 p-3">
+              <dt class="text-xs text-white/45">New videos</dt>
+              <dd class="mt-1 text-xl font-semibold text-white">
+                {historicalPreview.new.toLocaleString()}
+              </dd>
+            </div>
+            <div class="rounded-md border border-teal/20 bg-black/10 p-3">
+              <dt class="text-xs text-white/45">Pending retry</dt>
+              <dd class="mt-1 text-xl font-semibold text-white">
+                {historicalPreview.pending.toLocaleString()}
+              </dd>
+            </div>
+            <div class="rounded-md border border-teal/20 bg-black/10 p-3">
+              <dt class="text-xs text-white/45">Already in TTV</dt>
+              <dd class="mt-1 text-xl font-semibold text-white">
+                {historicalPreview.skipped.toLocaleString()}
+              </dd>
+            </div>
+          </dl>
+
+          {historicalPreview.importable > 0 ? (
+            <div class="mt-5 flex flex-wrap items-center gap-3">
+              <form method="POST">
+                <input type="hidden" name="action" value="confirm" />
+                <input
+                  type="hidden"
+                  name="sourceId"
+                  value={historicalPreview.sourceId}
+                />
+                <input
+                  type="hidden"
+                  name="expectedImportable"
+                  value={historicalPreview.importable}
+                />
+                <button type="submit" class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90">
+                  Add {historicalPreview.importable.toLocaleString()} to queue
+                </button>
+              </form>
+              <a href="/admin/recordings/import" class="rounded-md border border-teal/40 px-4 py-2 text-sm text-white/80 hover:bg-teal/20">
+                Cancel
+              </a>
+              <p class="basis-full text-xs text-white/45">
+                The folder is scanned once more on confirmation. If the count
+                changed, you will be asked to review it again.
+              </p>
+            </div>
+          ) : (
+            <div class="mt-5 flex flex-wrap items-center gap-3">
+              <p class="text-sm text-emerald-100">
+                Every discovered video is already in TTV. There is nothing to queue.
+              </p>
+              <a href="/admin/recordings/import" class="rounded-md border border-teal/40 px-4 py-2 text-sm text-white/80 hover:bg-teal/20">
+                Done
+              </a>
+            </div>
+          )}
+        </div>
+      </Card>
+    )}
+
     <Card>
       <h3 class="text-lg font-semibold text-white">Add an import source</h3>
       <p class="mt-1 text-sm text-white/55">
         Use one source per program. An optional filename filter lets several
-        programs share the same Meet Recordings folder.
+        programs share the same Meet Recordings folder. New sources start
+        paused so the historical backlog cannot run before you review it.
       </p>
 
       <form method="POST" class="mt-5 grid gap-4 md:grid-cols-2">
@@ -253,8 +365,8 @@ const formatDateTime = (date: Date | null) =>
         <div>
           <h3 class="text-lg font-semibold text-white">Configured sources</h3>
           <p class="mt-1 text-sm text-white/55">
-            Enabled sources scan every 15 minutes. "Scan now" runs the same
-            idempotent discovery immediately.
+            Enabled sources scan every 15 minutes. Review historical import
+            scans the full folder tree and shows the count before queueing.
           </p>
         </div>
       </div>
@@ -299,10 +411,10 @@ const formatDateTime = (date: Date | null) =>
 
                 <div class="flex flex-wrap gap-2">
                   <form method="POST">
-                    <input type="hidden" name="action" value="sync" />
+                    <input type="hidden" name="action" value="preview" />
                     <input type="hidden" name="sourceId" value={source.id} />
                     <button type="submit" disabled={!credentialsConfigured} class="rounded-md bg-primary px-3 py-2 text-sm font-medium text-dark hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40">
-                      Scan now
+                      Review historical import
                     </button>
                   </form>
                   <form method="POST">

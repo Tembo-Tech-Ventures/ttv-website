@@ -19,9 +19,13 @@ test.describe("Google Drive recording import", () => {
   }, testInfo) => {
     await page.goto("/admin/recordings/import");
 
-    await expect(
-      page.getByRole("heading", { name: "Import Session Recordings" })
-    ).toBeVisible();
+    const heading = page.getByRole("heading", {
+      name: "Import Session Recordings",
+    });
+    await expect(heading).toBeVisible();
+    await expect(heading.locator("+ p")).toContainText(
+      "review historical counts"
+    );
 
     const notConfigured = page.getByTestId("drive-not-configured");
     const configured = page.getByText(

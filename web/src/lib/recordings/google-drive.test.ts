@@ -184,6 +184,111 @@ describe("Google Drive file operations", () => {
     expect(listUrl.searchParams.get("supportsAllDrives")).toBe("true");
   });
 
+  it("traverses nested folders and resolves folder and video shortcuts once", async () => {
+    const rootFolderId = "root-folder-1234567890";
+    const nestedFolderId = "nested-folder-12345678";
+    const shortcutFolderId = "shortcut-folder-123456";
+    const shortcutVideoId = "shortcut-video-1234567";
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.hostname === "oauth2.googleapis.com") {
+        return Response.json({ access_token: "token", expires_in: 3600 });
+      }
+
+      const query = url.searchParams.get("q");
+      if (query?.includes(`'${rootFolderId}'`)) {
+        return Response.json({
+          files: [
+            {
+              id: nestedFolderId,
+              name: "Archive",
+              mimeType: "application/vnd.google-apps.folder",
+            },
+            {
+              id: "folder-shortcut-12345",
+              name: "Older archive",
+              mimeType: "application/vnd.google-apps.shortcut",
+              shortcutDetails: {
+                targetId: shortcutFolderId,
+                targetMimeType: "application/vnd.google-apps.folder",
+              },
+            },
+            {
+              id: "video-shortcut-12345",
+              name: "Cohort shortcut.mp4",
+              mimeType: "application/vnd.google-apps.shortcut",
+              capabilities: { canDownload: false },
+              shortcutDetails: {
+                targetId: shortcutVideoId,
+                targetMimeType: "video/mp4",
+              },
+            },
+          ],
+        });
+      }
+      if (query?.includes(`'${nestedFolderId}'`)) {
+        return Response.json({
+          files: [
+            {
+              id: shortcutVideoId,
+              name: "Cohort duplicate target.mp4",
+              mimeType: "video/mp4",
+            },
+            {
+              id: "nested-video-12345678",
+              name: "Cohort nested session.webm",
+              mimeType: "video/webm",
+            },
+          ],
+        });
+      }
+      if (query?.includes(`'${shortcutFolderId}'`)) {
+        return Response.json({
+          files: [
+            {
+              id: "cycle-shortcut-12345",
+              name: "Back to root",
+              mimeType: "application/vnd.google-apps.shortcut",
+              shortcutDetails: {
+                targetId: rootFolderId,
+                targetMimeType: "application/vnd.google-apps.folder",
+              },
+            },
+            {
+              id: "archived-video-123456",
+              name: "Cohort archived session.mp4",
+              mimeType: "video/mp4",
+            },
+            {
+              id: "filtered-video-123456",
+              name: "Another programme.mp4",
+              mimeType: "video/mp4",
+            },
+          ],
+        });
+      }
+      return new Response("Unexpected folder", { status: 500 });
+    });
+
+    const files = await listGoogleDriveVideoFiles({
+      credentials,
+      folderId: rootFolderId,
+      filenameContains: "cohort",
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+
+    expect(files.map(({ id }) => id)).toEqual([
+      shortcutVideoId,
+      "nested-video-12345678",
+      "archived-video-123456",
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    const rootScanUrl = new URL(String(fetchMock.mock.calls[1][0]));
+    expect(rootScanUrl.searchParams.get("fields")).toContain(
+      "shortcutDetails(targetId,targetMimeType)"
+    );
+  });
+
   it("streams a Drive download into the recording's R2 key", async () => {
     const put = vi.fn().mockResolvedValue(undefined);
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

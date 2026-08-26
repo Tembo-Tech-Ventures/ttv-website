@@ -17,6 +17,8 @@ const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const GOOGLE_DRIVE_FILES_ENDPOINT =
   "https://www.googleapis.com/drive/v3/files";
 const DRIVE_FOLDER_ID_PATTERN = /^[A-Za-z0-9_-]{10,}$/;
+const DRIVE_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
+const DRIVE_SHORTCUT_MIME_TYPE = "application/vnd.google-apps.shortcut";
 
 let tokenCache:
   | { cacheKey: string; accessToken: string; expiresAt: number }
@@ -226,73 +228,113 @@ export async function listGoogleDriveVideoFiles({
     fetch: fetchImplementation,
   });
   const files: GoogleDriveVideoFile[] = [];
-  let pageToken: string | undefined;
+  const seenFileIds = new Set<string>();
+  const pendingFolderIds = [assertDriveFolderId(folderId)];
+  const seenFolderIds = new Set(pendingFolderIds);
+  let folderIndex = 0;
   const titleFilter = filenameContains?.trim().toLocaleLowerCase();
 
-  do {
-    const url = new URL(GOOGLE_DRIVE_FILES_ENDPOINT);
-    url.searchParams.set(
-      "q",
-      `'${assertDriveFolderId(folderId)}' in parents and trashed = false`
-    );
-    url.searchParams.set(
-      "fields",
-      "nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime,capabilities(canDownload))"
-    );
-    url.searchParams.set("pageSize", "1000");
-    url.searchParams.set("orderBy", "createdTime");
-    url.searchParams.set("supportsAllDrives", "true");
-    url.searchParams.set("includeItemsFromAllDrives", "true");
-    if (pageToken) url.searchParams.set("pageToken", pageToken);
+  while (folderIndex < pendingFolderIds.length) {
+    const currentFolderId = pendingFolderIds[folderIndex++];
 
-    const response = await fetchImplementation(url, {
-      headers: { authorization: `Bearer ${accessToken}` },
-    });
-    if (!response.ok) {
-      throw await responseError(response, "Google Drive folder scan");
-    }
+    let pageToken: string | undefined;
+    do {
+      const url = new URL(GOOGLE_DRIVE_FILES_ENDPOINT);
+      url.searchParams.set(
+        "q",
+        `'${currentFolderId}' in parents and trashed = false`
+      );
+      url.searchParams.set(
+        "fields",
+        "nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime,capabilities(canDownload),shortcutDetails(targetId,targetMimeType))"
+      );
+      url.searchParams.set("pageSize", "1000");
+      url.searchParams.set("orderBy", "createdTime");
+      url.searchParams.set("supportsAllDrives", "true");
+      url.searchParams.set("includeItemsFromAllDrives", "true");
+      if (pageToken) url.searchParams.set("pageToken", pageToken);
 
-    const result = (await response.json()) as {
-      nextPageToken?: unknown;
-      files?: Array<{
-        id?: unknown;
-        name?: unknown;
-        mimeType?: unknown;
-        size?: unknown;
-        createdTime?: unknown;
-        modifiedTime?: unknown;
-        capabilities?: { canDownload?: unknown };
-      }>;
-    };
-
-    for (const file of result.files ?? []) {
-      if (
-        typeof file.id !== "string" ||
-        typeof file.name !== "string" ||
-        typeof file.mimeType !== "string" ||
-        !file.mimeType.startsWith("video/") ||
-        file.capabilities?.canDownload === false ||
-        (titleFilter &&
-          !file.name.toLocaleLowerCase().includes(titleFilter))
-      ) {
-        continue;
+      const response = await fetchImplementation(url, {
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      if (!response.ok) {
+        throw await responseError(response, "Google Drive folder scan");
       }
 
-      files.push({
-        id: file.id,
-        name: file.name,
-        mimeType: file.mimeType,
-        sizeBytes: parseOptionalSize(file.size),
-        createdAt: parseOptionalDate(file.createdTime),
-        modifiedAt: parseOptionalDate(file.modifiedTime),
-      });
-    }
+      const result = (await response.json()) as {
+        nextPageToken?: unknown;
+        files?: Array<{
+          id?: unknown;
+          name?: unknown;
+          mimeType?: unknown;
+          size?: unknown;
+          createdTime?: unknown;
+          modifiedTime?: unknown;
+          capabilities?: { canDownload?: unknown };
+          shortcutDetails?: {
+            targetId?: unknown;
+            targetMimeType?: unknown;
+          };
+        }>;
+      };
 
-    pageToken =
-      typeof result.nextPageToken === "string"
-        ? result.nextPageToken
-        : undefined;
-  } while (pageToken);
+      for (const file of result.files ?? []) {
+        if (
+          typeof file.id !== "string" ||
+          typeof file.name !== "string" ||
+          typeof file.mimeType !== "string"
+        ) {
+          continue;
+        }
+
+        const isShortcut = file.mimeType === DRIVE_SHORTCUT_MIME_TYPE;
+        const targetId = isShortcut
+          ? file.shortcutDetails?.targetId
+          : file.id;
+        const targetMimeType = isShortcut
+          ? file.shortcutDetails?.targetMimeType
+          : file.mimeType;
+
+        if (
+          targetMimeType === DRIVE_FOLDER_MIME_TYPE &&
+          typeof targetId === "string" &&
+          DRIVE_FOLDER_ID_PATTERN.test(targetId) &&
+          !seenFolderIds.has(targetId)
+        ) {
+          seenFolderIds.add(targetId);
+          pendingFolderIds.push(targetId);
+          continue;
+        }
+
+        if (
+          typeof targetId !== "string" ||
+          typeof targetMimeType !== "string" ||
+          !targetMimeType.startsWith("video/") ||
+          (!isShortcut && file.capabilities?.canDownload === false) ||
+          seenFileIds.has(targetId) ||
+          (titleFilter &&
+            !file.name.toLocaleLowerCase().includes(titleFilter))
+        ) {
+          continue;
+        }
+
+        seenFileIds.add(targetId);
+        files.push({
+          id: targetId,
+          name: file.name,
+          mimeType: targetMimeType,
+          sizeBytes: parseOptionalSize(file.size),
+          createdAt: parseOptionalDate(file.createdTime),
+          modifiedAt: parseOptionalDate(file.modifiedTime),
+        });
+      }
+
+      pageToken =
+        typeof result.nextPageToken === "string"
+          ? result.nextPageToken
+          : undefined;
+    } while (pageToken);
+  }
 
   return files;
 }
