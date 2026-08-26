@@ -50,6 +50,26 @@ export interface RecordingImportSummary {
   skipped: number;
 }
 
+export interface RecordingImportPreview {
+  discovered: number;
+  importable: number;
+  new: number;
+  pending: number;
+  skipped: number;
+}
+
+export class RecordingImportPreviewChangedError extends Error {
+  constructor(
+    readonly expectedImportable: number,
+    readonly actualImportable: number
+  ) {
+    super(
+      `The folder changed after it was reviewed (${expectedImportable} videos were approved, but ${actualImportable} are now ready). Review the historical import again before adding videos to the queue.`
+    );
+    this.name = "RecordingImportPreviewChangedError";
+  }
+}
+
 const QUEUE_BATCH_SIZE = 50;
 
 function chunks<T>(values: T[], size: number): T[][] {
@@ -60,16 +80,69 @@ function chunks<T>(values: T[], size: number): T[][] {
   return result;
 }
 
+function summarizeGoogleDriveFiles(
+  files: GoogleDriveVideoFile[],
+  known: Map<string, KnownDriveRecording>
+): RecordingImportPreview {
+  const seen = new Set<string>();
+  let newFiles = 0;
+  let pending = 0;
+  let skipped = 0;
+
+  for (const file of files) {
+    if (seen.has(file.id)) {
+      skipped += 1;
+      continue;
+    }
+    seen.add(file.id);
+
+    const existing = known.get(file.id);
+    if (!existing) {
+      newFiles += 1;
+    } else if (existing.processingStatus === "pending") {
+      pending += 1;
+    } else {
+      skipped += 1;
+    }
+  }
+
+  return {
+    discovered: files.length,
+    importable: newFiles + pending,
+    new: newFiles,
+    pending,
+    skipped,
+  };
+}
+
+export async function previewGoogleDriveFiles({
+  files,
+  store,
+}: {
+  files: GoogleDriveVideoFile[];
+  store: RecordingImportStore;
+}): Promise<RecordingImportPreview> {
+  const known = new Map(
+    (await store.listKnownDriveRecordings()).map((recording) => [
+      recording.driveFileId,
+      recording,
+    ])
+  );
+  return summarizeGoogleDriveFiles(files, known);
+}
+
 export async function queueGoogleDriveFiles({
   files,
   source,
   store,
   queue,
+  expectedImportable,
 }: {
   files: GoogleDriveVideoFile[];
   source: Pick<RecordingImportSource, "programId">;
   store: RecordingImportStore;
   queue: RecordingImportQueue;
+  expectedImportable?: number;
 }): Promise<RecordingImportSummary> {
   const known = new Map(
     (await store.listKnownDriveRecordings()).map((recording) => [
@@ -77,11 +150,29 @@ export async function queueGoogleDriveFiles({
       recording,
     ])
   );
+  const preview = summarizeGoogleDriveFiles(files, known);
+  if (
+    expectedImportable !== undefined &&
+    preview.importable !== expectedImportable
+  ) {
+    throw new RecordingImportPreviewChangedError(
+      expectedImportable,
+      preview.importable
+    );
+  }
+
   const toQueue: string[] = [];
+  const seen = new Set<string>();
   let created = 0;
   let skipped = 0;
 
   for (const file of files) {
+    if (seen.has(file.id)) {
+      skipped += 1;
+      continue;
+    }
+    seen.add(file.id);
+
     const existing = known.get(file.id);
     if (existing) {
       if (existing.processingStatus === "pending") {
@@ -212,10 +303,15 @@ function createDrizzleImportStore(db: Database): RecordingImportStore {
   };
 }
 
-export async function syncRecordingImportSource(
+async function scanRecordingImportSource<T>(
   env: Env,
-  sourceId: string
-): Promise<RecordingImportSummary> {
+  sourceId: string,
+  operation: (input: {
+    files: GoogleDriveVideoFile[];
+    source: RecordingImportSource;
+    store: RecordingImportStore;
+  }) => Promise<T>
+): Promise<T> {
   const db = drizzle(env.DB, { schema });
   const source = await db.query.recordingImportSource.findFirst({
     where: eq(schema.recordingImportSource.id, sourceId),
@@ -238,11 +334,10 @@ export async function syncRecordingImportSource(
       folderId: source.driveFolderId,
       filenameContains: source.filenameContains,
     });
-    const summary = await queueGoogleDriveFiles({
+    const result = await operation({
       files,
       source,
       store: createDrizzleImportStore(db),
-      queue: env.RECORDING_QUEUE,
     });
 
     await db
@@ -250,15 +345,50 @@ export async function syncRecordingImportSource(
       .set({ lastSyncedAt: new Date(), lastError: null })
       .where(eq(schema.recordingImportSource.id, source.id));
 
-    return summary;
+    return result;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    await db
-      .update(schema.recordingImportSource)
-      .set({ lastError: message })
-      .where(eq(schema.recordingImportSource.id, source.id));
+    if (!(error instanceof RecordingImportPreviewChangedError)) {
+      const message = error instanceof Error ? error.message : String(error);
+      await db
+        .update(schema.recordingImportSource)
+        .set({ lastError: message })
+        .where(eq(schema.recordingImportSource.id, source.id));
+    }
     throw error;
   }
+}
+
+export async function previewRecordingImportSource(
+  env: Env,
+  sourceId: string
+): Promise<RecordingImportPreview> {
+  return scanRecordingImportSource(env, sourceId, ({ files, store }) =>
+    previewGoogleDriveFiles({ files, store })
+  );
+}
+
+export async function syncRecordingImportSource(
+  env: Env,
+  sourceId: string,
+  options: { expectedImportable?: number } = {}
+): Promise<RecordingImportSummary> {
+  if (
+    options.expectedImportable !== undefined &&
+    (!Number.isSafeInteger(options.expectedImportable) ||
+      options.expectedImportable < 0)
+  ) {
+    throw new TypeError("Expected import count must be a non-negative integer.");
+  }
+
+  return scanRecordingImportSource(env, sourceId, ({ files, source, store }) =>
+    queueGoogleDriveFiles({
+      files,
+      source,
+      store,
+      queue: env.RECORDING_QUEUE,
+      expectedImportable: options.expectedImportable,
+    })
+  );
 }
 
 export async function syncEnabledRecordingImportSources(

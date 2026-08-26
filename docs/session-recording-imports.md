@@ -71,8 +71,13 @@ pasted into the admin UI and encrypted at rest using the master key.
 1. Open **Admin -> Recordings -> Import from Drive**.
 2. Add a source name, Drive folder URL or ID, target program, and optional
    case-insensitive filename filter.
-3. Click **Scan now** for the initial backlog.
-4. Leave the source enabled for automatic 15-minute scans.
+3. Click **Review historical import**. TTV scans the folder tree and shows how
+   many videos are new, pending a retry, or already known without creating any
+   recordings yet.
+4. If the count looks right, click **Add _N_ to queue**. TTV scans once more and
+   refuses the import if the approved count changed in the meantime.
+5. New sources start paused. Enable the source after the historical import to
+   begin automatic 15-minute scans for later recordings.
 
 Use one source per target program. If all Meet recordings land in one folder,
 reuse the folder with distinct filename filters (e.g. a cohort or program
@@ -80,10 +85,12 @@ name). A Drive file is imported only once globally, so filters should not
 overlap. Recordings become visible to students only through the program selected
 on the source.
 
-The initial scan lists files and queues work; it does not keep the browser open
-while hundreds of videos download. The Recordings page shows each video's
-progress through **Downloading from Drive**, audio extraction, transcription,
-indexing, and completion.
+Folder scans traverse nested folders and follow Drive shortcuts to folders or
+videos. Duplicate shortcuts to the same Drive file are imported only once.
+After confirmation, the videos download asynchronously; the browser does not
+stay open while a large backlog is processed. The Recordings page shows each
+video's progress through **Downloading from Drive**, audio extraction,
+transcription, indexing, and completion.
 
 ## Operations and failures
 
@@ -105,6 +112,5 @@ indexing, and completion.
 - **Pause automatic imports:** select **Pause** on the source. Manual scanning
   remains explicit; removing a source also preserves imported recordings.
 
-Google Drive blob downloads use the official `files.get?alt=media` flow, and
-only downloadable `video/*` files directly inside the configured folder are
-selected. Subfolders are not traversed.
+Google Drive blob downloads use the official `files.get?alt=media` flow. Only
+downloadable `video/*` files found in the configured folder tree are selected.

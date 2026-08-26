@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  previewGoogleDriveFiles,
   queueGoogleDriveFiles,
+  RecordingImportPreviewChangedError,
   type KnownDriveRecording,
   type RecordingImportStore,
 } from "./importer";
@@ -76,6 +78,42 @@ function video(
 }
 
 describe("Google Drive recording queueing", () => {
+  it("previews new, retryable, and already imported videos without mutations", async () => {
+    const state = createStore([
+      {
+        id: "pending-recording",
+        driveFileId: "pending-file",
+        processingStatus: "pending",
+      },
+      {
+        id: "complete-recording",
+        driveFileId: "complete-file",
+        processingStatus: "complete",
+      },
+    ]);
+
+    await expect(
+      previewGoogleDriveFiles({
+        files: [
+          video("new-file"),
+          video("pending-file"),
+          video("complete-file"),
+          video("new-file"),
+        ],
+        store: state.store,
+      })
+    ).resolves.toEqual({
+      discovered: 4,
+      importable: 2,
+      new: 1,
+      pending: 1,
+      skipped: 2,
+    });
+    expect(state.created).toEqual([]);
+    expect(state.claimed).toEqual([]);
+    expect(state.released).toEqual([]);
+  });
+
   it("creates new recordings, retries pending rows, and skips known work", async () => {
     const state = createStore([
       {
@@ -145,6 +183,30 @@ describe("Google Drive recording queueing", () => {
       expect.arrayContaining(["pending-recording", state.created[0].id]),
     ]);
     expect(state.released).toEqual([]);
+  });
+
+  it("refuses a changed confirmation count before creating or queueing work", async () => {
+    const state = createStore();
+    const sendBatch = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      queueGoogleDriveFiles({
+        files: [video("new-file"), video("another-new-file")],
+        source: { programId: "program-1" },
+        store: state.store,
+        queue: { sendBatch },
+        expectedImportable: 1,
+      })
+    ).rejects.toEqual(
+      expect.objectContaining<Partial<RecordingImportPreviewChangedError>>({
+        name: "RecordingImportPreviewChangedError",
+        expectedImportable: 1,
+        actualImportable: 2,
+      })
+    );
+    expect(state.created).toEqual([]);
+    expect(state.claimed).toEqual([]);
+    expect(sendBatch).not.toHaveBeenCalled();
   });
 
   it("leaves recordings pending when Queue publishing fails", async () => {
