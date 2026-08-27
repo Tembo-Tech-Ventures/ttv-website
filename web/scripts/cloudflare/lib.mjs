@@ -565,6 +565,7 @@ export function createGeneratedWranglerConfig({
         {
           queue: queueName,
           max_batch_size: 1,
+          max_concurrency: 1,
           max_retries: 3,
         },
       ],
@@ -575,7 +576,7 @@ export function createGeneratedWranglerConfig({
         class_name: CONTAINER_CLASS_NAME,
         image: path.relative(generatedDir, path.join(webRoot, "containers", "ffmpeg", "Dockerfile")),
         instance_type: "standard-2",
-        max_instances: 3,
+        max_instances: 1,
       },
     ],
     durable_objects: {

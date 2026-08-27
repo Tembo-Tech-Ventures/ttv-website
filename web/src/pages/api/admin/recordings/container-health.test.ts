@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  containerFetch: vi.fn(),
-  containerStart: vi.fn(),
+  checkHealth: vi.fn(),
   getByName: vi.fn(),
 }));
 
@@ -21,8 +20,7 @@ function context(isAdmin: boolean) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getByName.mockReturnValue({
-    fetch: mocks.containerFetch,
-    start: mocks.containerStart,
+    checkHealth: mocks.checkHealth,
   });
 });
 
@@ -34,8 +32,12 @@ describe("GET /api/admin/recordings/container-health", () => {
     expect(mocks.getByName).not.toHaveBeenCalled();
   });
 
-  it("starts the named FFmpeg container and verifies its health payload", async () => {
-    mocks.containerFetch.mockResolvedValue(Response.json({ ok: true }));
+  it("verifies the named FFmpeg container health payload", async () => {
+    mocks.checkHealth.mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: JSON.stringify({ ok: true }),
+    });
 
     const response = await GET(context(true));
 
@@ -45,15 +47,20 @@ describe("GET /api/admin/recordings/container-health", () => {
       service: "ffmpeg-container",
     });
     expect(mocks.getByName).toHaveBeenCalledWith("recording-container-health");
-    expect(mocks.containerStart).toHaveBeenCalledBefore(mocks.containerFetch);
-    expect(mocks.containerFetch).toHaveBeenCalledWith("https://ffmpeg/health");
+    expect(mocks.checkHealth).toHaveBeenCalledOnce();
   });
 
   it.each([
-    ["non-success response", () => new Response("not ready", { status: 503 })],
-    ["invalid payload", () => Response.json({ ok: false })],
+    [
+      "non-success response",
+      () => ({ ok: false, status: 503, text: "not ready" }),
+    ],
+    [
+      "invalid payload",
+      () => ({ ok: true, status: 200, text: JSON.stringify({ ok: false }) }),
+    ],
   ])("returns 502 for a %s", async (_label, responseFactory) => {
-    mocks.containerFetch.mockResolvedValue(responseFactory());
+    mocks.checkHealth.mockResolvedValue(responseFactory());
 
     const response = await GET(context(true));
 
@@ -61,7 +68,7 @@ describe("GET /api/admin/recordings/container-health", () => {
   });
 
   it("returns 502 when the container binding cannot start", async () => {
-    mocks.containerFetch.mockRejectedValue(new Error("proxy export missing"));
+    mocks.checkHealth.mockRejectedValue(new Error("proxy export missing"));
 
     const response = await GET(context(true));
 

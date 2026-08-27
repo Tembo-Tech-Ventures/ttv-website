@@ -161,9 +161,12 @@ describe("createGeneratedWranglerConfig", () => {
     expect(config.ai.binding).toBe("AI");
     expect(config.vectorize[0].binding).toBe("VECTORIZE");
     expect(config.queues.producers[0].binding).toBe("RECORDING_QUEUE");
+    expect(config.queues.consumers[0].max_batch_size).toBe(1);
+    expect(config.queues.consumers[0].max_concurrency).toBe(1);
     expect(config.durable_objects.bindings[0].name).toBe("FFMPEG_CONTAINER");
     expect(config.containers[0].name).toBe("ttv-agent-ffmpegcontainer");
     expect(config.containers[0].instance_type).toBe("standard-2");
+    expect(config.containers[0].max_instances).toBe(1);
   });
 
   it("keeps agent bearer auth disabled unless it is explicitly enabled", () => {
@@ -258,6 +261,7 @@ describe("createGeneratedWranglerConfig", () => {
     );
     expect(config.containers[0].name).toBe(context.containerAppName);
     expect(config.containers[0].instance_type).toBe("standard-2");
+    expect(config.containers[0].max_instances).toBe(1);
   });
 
   it("deploys and destroys the same truncated name for overlong environments", () => {
