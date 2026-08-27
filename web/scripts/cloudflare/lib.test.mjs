@@ -567,6 +567,15 @@ describe("environment cleanup", () => {
     await expect(
       deleteVectorizeIndexByName("missing", missingRunner)
     ).resolves.toBe(false);
+
+    const deletedRunner = vi.fn().mockRejectedValue(
+      new Error(
+        'vectorize.index.deleted - Index name "deleted" [code: 3005]'
+      )
+    );
+    await expect(
+      deleteVectorizeIndexByName("deleted", deletedRunner)
+    ).resolves.toBe(false);
   });
 
   it("deletes an exact-match container app by UUID", async () => {

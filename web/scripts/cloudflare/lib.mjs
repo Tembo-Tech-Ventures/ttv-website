@@ -382,7 +382,13 @@ export async function deleteVectorizeIndexByName(name, runner = runWrangler) {
   try {
     await runner(["vectorize", "get", name]);
   } catch (error) {
-    if (isMissingResourceError(error)) return false;
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      isMissingResourceError(error) ||
+      /vectorize\.index\.deleted\b[\s\S]*\bcode:\s*3005\b/i.test(message)
+    ) {
+      return false;
+    }
     throw error;
   }
 
