@@ -46,6 +46,18 @@ hosting or another compute provider. SAM should orchestrate the work; Cloudflare
 should run the app. FFmpeg-class workloads belong in Cloudflare Containers.
 AI inference must use Cloudflare AI Gateway unified mode with Gemma 4.
 
+Cloudflare Container settings are billing controls, not harmless capacity knobs.
+Keep FFmpeg container `max_instances` at 1 unless a human explicitly approves a
+higher monthly cost. Keep the recording queue consumer `max_concurrency` at 1 so
+pending videos drain progressively through the available container instead of
+autoscaling concurrent Workers and containers. Any code path that starts or
+health-checks a container must explicitly terminate it in a `finally` block,
+using `destroy()` for one-shot FFmpeg work that does not need a warm process,
+and the behavior needs a regression test in the same change. Before raising
+container capacity or adding a new container health/smoke path, inspect live
+Cloudflare Container usage and price the change from current Cloudflare
+Container pricing.
+
 ## Definition of done
 
 Every behavior change needs an automated test. Add the test in the same commit

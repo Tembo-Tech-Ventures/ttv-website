@@ -4,7 +4,7 @@ import { env } from "cloudflare:workers";
 const HEALTH_INSTANCE_NAME = "recording-container-health";
 
 type StartableContainer = DurableObjectStub & {
-  start(): void;
+  checkHealth(): Promise<{ ok: boolean; status: number; text: string }>;
 };
 
 export const GET: APIRoute = async ({ locals }) => {
@@ -16,8 +16,7 @@ export const GET: APIRoute = async ({ locals }) => {
     const container = env.FFMPEG_CONTAINER.getByName(
       HEALTH_INSTANCE_NAME
     ) as StartableContainer;
-    container.start();
-    const response = await container.fetch("https://ffmpeg/health");
+    const response = await container.checkHealth();
     if (!response.ok) {
       return Response.json(
         { error: "FFmpeg container health check failed." },
@@ -25,7 +24,7 @@ export const GET: APIRoute = async ({ locals }) => {
       );
     }
 
-    const result = (await response.json()) as { ok?: unknown };
+    const result = JSON.parse(response.text) as { ok?: unknown };
     if (result.ok !== true) {
       return Response.json(
         { error: "FFmpeg container returned an invalid health response." },
