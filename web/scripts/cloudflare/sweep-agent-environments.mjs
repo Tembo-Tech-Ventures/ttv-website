@@ -5,6 +5,7 @@ import {
   cfApi,
   deriveEnvironmentContext,
   getOptionalEnv,
+  listContainerApplications,
   normalizeSlug,
 } from "./lib.mjs";
 
@@ -49,6 +50,7 @@ export function parseSweepArgs(args) {
 export function findStaleAgentEnvironments({
   workers = [],
   databases = [],
+  containers = [],
   appName = "ttv-website",
   now = new Date(),
   maxAgeHours = DEFAULT_MAX_AGE_HOURS,
@@ -59,11 +61,18 @@ export function findStaleAgentEnvironments({
   const environmentPrefix = `${appSlug}-`;
   const databasePrefix = `${appSlug}-db-agent-`;
   const databaseEnvironmentPrefix = `${appSlug}-db-`;
+  const containerSuffix = "-ffmpegcontainer";
   const excluded = new Set(excludedEnvironments.map(normalizeSlug));
   const cutoff = now.getTime() - maxAgeHours * 60 * 60 * 1_000;
   const inventory = new Map();
 
-  function record({ environmentName, timestamp, workerName, databaseName }) {
+  function record({
+    environmentName,
+    timestamp,
+    workerName,
+    databaseName,
+    containerAppName,
+  }) {
     if (
       !environmentName.startsWith("agent-") ||
       excluded.has(environmentName) ||
@@ -83,6 +92,7 @@ export function findStaleAgentEnvironments({
           : observedAt,
       workerName: workerName ?? existing?.workerName,
       databaseName: databaseName ?? existing?.databaseName,
+      containerAppName: containerAppName ?? existing?.containerAppName,
     });
   }
 
@@ -103,6 +113,22 @@ export function findStaleAgentEnvironments({
       environmentName: databaseName.slice(databaseEnvironmentPrefix.length),
       databaseName,
       timestamp: database.created_at,
+    });
+  }
+
+  for (const container of containers) {
+    const containerAppName = String(container.name ?? "");
+    if (
+      !containerAppName.startsWith(workerPrefix) ||
+      !containerAppName.endsWith(containerSuffix)
+    ) {
+      continue;
+    }
+    record({
+      environmentName: containerAppName
+        .slice(environmentPrefix.length, -containerSuffix.length),
+      containerAppName,
+      timestamp: container.updated_at ?? container.created_at,
     });
   }
 
@@ -149,21 +175,30 @@ export async function sweepAgentEnvironments({
   now = new Date(),
   workers,
   databases,
+  containers,
   appName = getOptionalEnv("CLOUDFLARE_APP_NAME") ?? "ttv-website",
   destroy = destroyByEnvironmentName,
 } = {}) {
   let availableWorkers = workers ?? [];
   let availableDatabases = databases ?? [];
-  if (workers === undefined && databases === undefined) {
-    [availableWorkers, availableDatabases] = await Promise.all([
-      listWorkers(),
-      listDatabases(),
-    ]);
+  let availableContainers = containers ?? [];
+  if (
+    workers === undefined &&
+    databases === undefined &&
+    containers === undefined
+  ) {
+    [availableWorkers, availableDatabases, availableContainers] =
+      await Promise.all([
+        listWorkers(),
+        listDatabases(),
+        listContainerApplications(),
+      ]);
   }
 
   const candidates = findStaleAgentEnvironments({
     workers: availableWorkers,
     databases: availableDatabases,
+    containers: availableContainers,
     appName,
     now,
     maxAgeHours,

@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URLSearchParams } from "node:url";
 import {
   assertAgentEnvironmentName,
   deriveAgentPreviewAuthSecret,
@@ -129,7 +129,7 @@ function getRequiredEnvFrom(environment, name) {
   return value;
 }
 
-export async function cfApi(resourcePath, { method = "GET", body } = {}) {
+async function cfApiResponse(resourcePath, { method = "GET", body } = {}) {
   const accountId = getRequiredEnv("CLOUDFLARE_ACCOUNT_ID");
   const token = getRequiredEnv("CLOUDFLARE_API_TOKEN");
   const response = await fetch(
@@ -149,7 +149,7 @@ export async function cfApi(resourcePath, { method = "GET", body } = {}) {
   }
 
   if (response.status === 204) {
-    return {};
+    return { success: true, result: {} };
   }
 
   const rawText = await response.text();
@@ -161,7 +161,46 @@ export async function cfApi(resourcePath, { method = "GET", body } = {}) {
     throw new Error(`${method} ${resourcePath} failed: ${details}`);
   }
 
-  return payload.result;
+  return payload;
+}
+
+export async function cfApi(resourcePath, options) {
+  const payload = await cfApiResponse(resourcePath, options);
+  return payload?.result ?? null;
+}
+
+export async function listContainerApplications() {
+  const applications = [];
+  const seenPageTokens = new Set();
+  let pageToken;
+
+  do {
+    const query = new URLSearchParams({ per_page: "100" });
+    if (pageToken) query.set("page_token", pageToken);
+
+    const payload = await cfApiResponse(
+      `/containers/dash/applications?${query.toString()}`
+    );
+    if (!payload) return [];
+    if (!Array.isArray(payload.result)) {
+      throw new TypeError(
+        `Expected container application list to be an array, got ${typeof payload.result}`
+      );
+    }
+
+    applications.push(...payload.result);
+    const nextPageToken = payload.result_info?.next_page_token;
+    if (typeof nextPageToken !== "string" || !nextPageToken) break;
+    if (seenPageTokens.has(nextPageToken)) {
+      throw new Error(
+        `Cloudflare repeated container application page token: ${nextPageToken}`
+      );
+    }
+    seenPageTokens.add(nextPageToken);
+    pageToken = nextPageToken;
+  } while (pageToken);
+
+  return applications;
 }
 
 export async function ensureD1Database(name) {
@@ -361,27 +400,12 @@ export async function deleteR2BucketByName(name) {
   return true;
 }
 
-export async function deleteContainerAppByName(name, runner = runWrangler) {
-  let listResult;
-  try {
-    listResult = await runner(["containers", "list", "--json"]);
-  } catch (error) {
-    if (isMissingResourceError(error)) return false;
-    throw error;
-  }
-
-  let containers;
-  try {
-    containers = JSON.parse(listResult.stdout.trim());
-  } catch {
-    throw new Error("Failed to parse container list output as JSON");
-  }
-
-  if (!Array.isArray(containers)) {
-    throw new TypeError(
-      `Expected container list to be an array, got ${typeof containers}`
-    );
-  }
+export async function deleteContainerAppByName(
+  name,
+  runner = runWrangler,
+  listApplications = listContainerApplications
+) {
+  const containers = await listApplications();
 
   const match = containers.find((entry) => entry.name === name);
   if (!match) {
