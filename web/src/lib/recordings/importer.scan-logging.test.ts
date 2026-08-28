@@ -131,6 +131,10 @@ describe("recording import scan logging", () => {
       new: 2,
       pending: 0,
       skipped: 0,
+      driveItemsScanned: 10,
+      visibleVideos: 2,
+      downloadBlockedVideos: 0,
+      nonVideoItemsSkipped: 7,
     });
 
     expect(mocks.listGoogleDriveVideoFiles).toHaveBeenCalledWith(
@@ -175,6 +179,9 @@ describe("recording import scan logging", () => {
           operation: "preview",
           discovered: 2,
           importable: 2,
+          driveItemsScanned: 10,
+          visibleVideos: 2,
+          downloadBlockedVideos: 0,
         }),
       ])
     );
