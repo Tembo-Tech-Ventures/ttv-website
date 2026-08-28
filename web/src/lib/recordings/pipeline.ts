@@ -25,8 +25,21 @@ const TRANSCRIPTION_TIMEOUT_MS = 12 * 60 * 1000;
 const TRANSCRIPTION_TIMEOUT_ERROR_PREFIX = "Transcription timed out";
 const TRANSCRIPT_SEGMENT_INSERT_BATCH_SIZE = 10;
 
-type StartableContainer = DurableObjectStub & {
-  start(): void;
+type FfmpegContainerResult = {
+  ok: boolean;
+  status: number;
+  text: string;
+};
+
+type FfmpegContainerStub = DurableObjectStub & {
+  processRecording(payload: {
+    recordingId: string;
+    r2VideoKey: string;
+  }): Promise<FfmpegContainerResult>;
+  segmentAudio(payload: {
+    recordingId: string;
+    r2AudioKey: string;
+  }): Promise<FfmpegContainerResult>;
 };
 
 interface FfmpegResult {
@@ -167,7 +180,7 @@ async function segmentExistingAudio({
   recordingId,
   r2AudioKey,
 }: {
-  container: StartableContainer;
+  container: FfmpegContainerStub;
   recordingId: string;
   r2AudioKey: string;
 }) {
@@ -180,13 +193,7 @@ async function segmentExistingAudio({
   const response = await withTimeout({
     timeoutMs: FFMPEG_CONTAINER_TIMEOUT_MS,
     errorMessage: `FFmpeg container timed out after ${FFMPEG_CONTAINER_TIMEOUT_MS}ms`,
-    run: async (signal) =>
-      await container.fetch("https://ffmpeg/segment", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ recordingId, r2AudioKey }),
-        signal,
-      }),
+    run: async () => await container.segmentAudio({ recordingId, r2AudioKey }),
   });
   logRecordingPipelineEvent("ffmpeg_audio_segment_fetch_done", {
     recordingId,
@@ -197,11 +204,11 @@ async function segmentExistingAudio({
   });
   if (!response.ok) {
     throw new Error(
-      `FFmpeg container failed to segment audio: ${await response.text()}`
+      `FFmpeg container failed to segment audio: ${response.text}`
     );
   }
 
-  const result = (await response.json()) as {
+  const result = JSON.parse(response.text) as {
     durationSeconds?: number;
     transcriptionChunks?: unknown;
   };
@@ -247,6 +254,8 @@ export async function processRecordingMessage(message: unknown, env: Env) {
     return;
   }
 
+  let container: FfmpegContainerStub | undefined;
+
   try {
     let r2VideoKey = recording.r2VideoKey;
     let fileSizeBytes = recording.fileSizeBytes;
@@ -286,13 +295,11 @@ export async function processRecordingMessage(message: unknown, env: Env) {
       throw new Error(`Recording ${recording.id} does not have a video source`);
     }
 
-    let container: StartableContainer | undefined;
     const getStartedContainer = () => {
       if (!container) {
         container = env.FFMPEG_CONTAINER.getByName(
           recording.id
-        ) as StartableContainer;
-        container.start();
+        ) as FfmpegContainerStub;
       }
       return container;
     };
@@ -328,15 +335,10 @@ export async function processRecordingMessage(message: unknown, env: Env) {
       const ffmpegResponse = await withTimeout({
         timeoutMs: FFMPEG_CONTAINER_TIMEOUT_MS,
         errorMessage: `FFmpeg container timed out after ${FFMPEG_CONTAINER_TIMEOUT_MS}ms`,
-        run: async (signal) =>
-          await ffmpegContainer.fetch("https://ffmpeg/process", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              recordingId: recording.id,
-              r2VideoKey,
-            }),
-            signal,
+        run: async () =>
+          await ffmpegContainer.processRecording({
+            recordingId: recording.id,
+            r2VideoKey,
           }),
       });
 
@@ -348,10 +350,10 @@ export async function processRecordingMessage(message: unknown, env: Env) {
       });
 
       if (!ffmpegResponse.ok) {
-        throw new Error(`FFmpeg container failed: ${await ffmpegResponse.text()}`);
+        throw new Error(`FFmpeg container failed: ${ffmpegResponse.text}`);
       }
 
-      const rawFfmpegResult = (await ffmpegResponse.json()) as Omit<
+      const rawFfmpegResult = JSON.parse(ffmpegResponse.text) as Omit<
         FfmpegResult,
         "transcriptionChunks"
       > & { transcriptionChunks?: unknown };

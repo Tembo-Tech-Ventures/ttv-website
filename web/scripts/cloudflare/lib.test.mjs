@@ -10,6 +10,7 @@ import {
   ensureAiGateway,
   findD1DatabaseByName,
   getSecretBindings,
+  listContainerApplications,
   queryD1Database,
   removeQueueWorkerConsumer,
   resolveDeploymentMetadata,
@@ -161,9 +162,12 @@ describe("createGeneratedWranglerConfig", () => {
     expect(config.ai.binding).toBe("AI");
     expect(config.vectorize[0].binding).toBe("VECTORIZE");
     expect(config.queues.producers[0].binding).toBe("RECORDING_QUEUE");
+    expect(config.queues.consumers[0].max_batch_size).toBe(1);
+    expect(config.queues.consumers[0].max_concurrency).toBe(1);
     expect(config.durable_objects.bindings[0].name).toBe("FFMPEG_CONTAINER");
     expect(config.containers[0].name).toBe("ttv-agent-ffmpegcontainer");
     expect(config.containers[0].instance_type).toBe("standard-2");
+    expect(config.containers[0].max_instances).toBe(1);
   });
 
   it("keeps agent bearer auth disabled unless it is explicitly enabled", () => {
@@ -258,6 +262,7 @@ describe("createGeneratedWranglerConfig", () => {
     );
     expect(config.containers[0].name).toBe(context.containerAppName);
     expect(config.containers[0].instance_type).toBe("standard-2");
+    expect(config.containers[0].max_instances).toBe(1);
   });
 
   it("deploys and destroys the same truncated name for overlong environments", () => {
@@ -375,6 +380,80 @@ describe("ensureAiGateway", () => {
   });
 });
 
+describe("listContainerApplications", () => {
+  it("retrieves every page of container applications", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          success: true,
+          result: [{ id: "app-1", name: "ttv-website-agent-one-ffmpegcontainer" }],
+          result_info: { next_page_token: "next-page" },
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          success: true,
+          result: [{ id: "app-2", name: "ttv-website-agent-two-ffmpegcontainer" }],
+          result_info: {},
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listContainerApplications()).resolves.toEqual([
+      { id: "app-1", name: "ttv-website-agent-one-ffmpegcontainer" },
+      { id: "app-2", name: "ttv-website-agent-two-ffmpegcontainer" },
+    ]);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "https://api.cloudflare.com/client/v4/accounts/acc-123/containers/dash/applications?per_page=100",
+      "https://api.cloudflare.com/client/v4/accounts/acc-123/containers/dash/applications?per_page=100&page_token=next-page",
+    ]);
+  });
+
+  it("treats a missing container endpoint as an empty inventory", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 404 }))
+    );
+
+    await expect(listContainerApplications()).resolves.toEqual([]);
+  });
+
+  it("rejects malformed and cyclic pagination responses", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({ success: true, result: { id: "not-an-array" } })
+      )
+    );
+    await expect(listContainerApplications()).rejects.toThrow(
+      "Expected container application list to be an array"
+    );
+
+    const repeatedPage = Response.json({
+      success: true,
+      result: [],
+      result_info: { next_page_token: "same-page" },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(repeatedPage)
+        .mockResolvedValueOnce(
+          Response.json({
+            success: true,
+            result: [],
+            result_info: { next_page_token: "same-page" },
+          })
+        )
+    );
+    await expect(listContainerApplications()).rejects.toThrow(
+      "repeated container application page token"
+    );
+  });
+});
+
 describe("environment cleanup", () => {
   it("deletes an existing AI gateway", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
@@ -488,113 +567,125 @@ describe("environment cleanup", () => {
     await expect(
       deleteVectorizeIndexByName("missing", missingRunner)
     ).resolves.toBe(false);
+
+    const deletedRunner = vi.fn().mockRejectedValue(
+      new Error(
+        'vectorize.index.deleted - Index name "deleted" [code: 3005]'
+      )
+    );
+    await expect(
+      deleteVectorizeIndexByName("deleted", deletedRunner)
+    ).resolves.toBe(false);
   });
 
   it("deletes an exact-match container app by UUID", async () => {
     const validUuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
-    const runner = vi
-      .fn()
-      .mockResolvedValueOnce({
-        stdout: JSON.stringify([
-          { id: validUuid, name: "ttv-website-staging-ffmpegcontainer" },
-          { id: "f1e2d3c4-b5a6-7890-abcd-ef1234567890", name: "other-app-ffmpegcontainer" },
-        ]),
-      })
-      .mockResolvedValueOnce({});
+    const runner = vi.fn().mockResolvedValue({});
+    const listApplications = vi.fn().mockResolvedValue([
+      { id: validUuid, name: "ttv-website-staging-ffmpegcontainer" },
+      {
+        id: "f1e2d3c4-b5a6-7890-abcd-ef1234567890",
+        name: "other-app-ffmpegcontainer",
+      },
+    ]);
 
     await expect(
-      deleteContainerAppByName("ttv-website-staging-ffmpegcontainer", runner)
+      deleteContainerAppByName(
+        "ttv-website-staging-ffmpegcontainer",
+        runner,
+        listApplications
+      )
     ).resolves.toBe(true);
-    expect(runner.mock.calls).toEqual([
-      [["containers", "list", "--json"]],
-      [["containers", "delete", validUuid]],
-    ]);
+    expect(listApplications).toHaveBeenCalledOnce();
+    expect(runner).toHaveBeenCalledWith(["containers", "delete", validUuid]);
   });
 
   it("treats no exact container match as already absent", async () => {
-    const runner = vi.fn().mockResolvedValueOnce({
-      stdout: JSON.stringify([
+    const runner = vi.fn();
+    const listApplications = vi
+      .fn()
+      .mockResolvedValue([
         { id: "uuid-1", name: "other-app-ffmpegcontainer" },
-      ]),
-    });
+      ]);
 
     await expect(
-      deleteContainerAppByName("ttv-website-staging-ffmpegcontainer", runner)
+      deleteContainerAppByName(
+        "ttv-website-staging-ffmpegcontainer",
+        runner,
+        listApplications
+      )
     ).resolves.toBe(false);
-    expect(runner).toHaveBeenCalledTimes(1);
+    expect(runner).not.toHaveBeenCalled();
   });
 
   it("treats an empty container list as already absent", async () => {
-    const runner = vi.fn().mockResolvedValueOnce({ stdout: "[]" });
+    const runner = vi.fn();
 
     await expect(
-      deleteContainerAppByName("missing-app", runner)
+      deleteContainerAppByName(
+        "missing-app",
+        runner,
+        vi.fn().mockResolvedValue([])
+      )
     ).resolves.toBe(false);
-  });
-
-  it("rejects malformed JSON from the container list", async () => {
-    const runner = vi.fn().mockResolvedValueOnce({
-      stdout: "not json at all",
-    });
-
-    await expect(
-      deleteContainerAppByName("any-app", runner)
-    ).rejects.toThrow("Failed to parse container list output as JSON");
-  });
-
-  it("rejects a non-array container list response", async () => {
-    const runner = vi.fn().mockResolvedValueOnce({
-      stdout: JSON.stringify({ id: "uuid-1", name: "app" }),
-    });
-
-    await expect(
-      deleteContainerAppByName("app", runner)
-    ).rejects.toThrow("Expected container list to be an array");
+    expect(runner).not.toHaveBeenCalled();
   });
 
   it("never uses substring or prefix matching for container deletion", async () => {
-    const runner = vi.fn().mockResolvedValueOnce({
-      stdout: JSON.stringify([
-        { id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890", name: "ttv-website-agent-pr-72-ffmpegcontainer-extra" },
-        { id: "f1e2d3c4-b5a6-7890-abcd-ef1234567890", name: "x-ttv-website-agent-pr-72-ffmpegcontainer" },
-      ]),
-    });
+    const runner = vi.fn();
+    const listApplications = vi.fn().mockResolvedValue([
+      {
+        id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        name: "ttv-website-agent-pr-72-ffmpegcontainer-extra",
+      },
+      {
+        id: "f1e2d3c4-b5a6-7890-abcd-ef1234567890",
+        name: "x-ttv-website-agent-pr-72-ffmpegcontainer",
+      },
+    ]);
 
     await expect(
       deleteContainerAppByName(
         "ttv-website-agent-pr-72-ffmpegcontainer",
-        runner
+        runner,
+        listApplications
       )
     ).resolves.toBe(false);
-    expect(runner).toHaveBeenCalledTimes(1);
+    expect(runner).not.toHaveBeenCalled();
   });
 
   it("rejects a non-UUID container id before calling delete", async () => {
-    const malformedRunner = vi.fn().mockResolvedValueOnce({
-      stdout: JSON.stringify([
-        { id: "not-a-uuid", name: "target-app" },
-      ]),
-    });
+    const malformedRunner = vi.fn();
     await expect(
-      deleteContainerAppByName("target-app", malformedRunner)
+      deleteContainerAppByName(
+        "target-app",
+        malformedRunner,
+        vi
+          .fn()
+          .mockResolvedValue([{ id: "not-a-uuid", name: "target-app" }])
+      )
     ).rejects.toThrow('has invalid id: "not-a-uuid"');
-    expect(malformedRunner).toHaveBeenCalledTimes(1);
+    expect(malformedRunner).not.toHaveBeenCalled();
 
-    const numericRunner = vi.fn().mockResolvedValueOnce({
-      stdout: JSON.stringify([{ id: 12345, name: "target-app" }]),
-    });
+    const numericRunner = vi.fn();
     await expect(
-      deleteContainerAppByName("target-app", numericRunner)
+      deleteContainerAppByName(
+        "target-app",
+        numericRunner,
+        vi.fn().mockResolvedValue([{ id: 12345, name: "target-app" }])
+      )
     ).rejects.toThrow("has invalid id: 12345");
-    expect(numericRunner).toHaveBeenCalledTimes(1);
+    expect(numericRunner).not.toHaveBeenCalled();
 
-    const nullRunner = vi.fn().mockResolvedValueOnce({
-      stdout: JSON.stringify([{ id: null, name: "target-app" }]),
-    });
+    const nullRunner = vi.fn();
     await expect(
-      deleteContainerAppByName("target-app", nullRunner)
+      deleteContainerAppByName(
+        "target-app",
+        nullRunner,
+        vi.fn().mockResolvedValue([{ id: null, name: "target-app" }])
+      )
     ).rejects.toThrow("has invalid id: null");
-    expect(nullRunner).toHaveBeenCalledTimes(1);
+    expect(nullRunner).not.toHaveBeenCalled();
   });
 });
 

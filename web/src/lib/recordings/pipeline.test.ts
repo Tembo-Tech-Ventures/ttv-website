@@ -59,12 +59,40 @@ function createDatabase(recording: Record<string, unknown>) {
 
 function createEnvironment(
   containerFetch: ReturnType<typeof vi.fn>,
-  containerStart: ReturnType<typeof vi.fn> = vi.fn(),
+  _unusedContainerStart: ReturnType<typeof vi.fn> = vi.fn(),
   bucketGet: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue({
     arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8)),
     httpMetadata: { contentType: "audio/mpeg" },
   })
 ) {
+  const fetchContainer = containerFetch as unknown as (
+    url: string,
+    init: RequestInit
+  ) => Promise<Response>;
+  const toContainerResult = async (response: Response) => ({
+    ok: response.ok,
+    status: response.status,
+    text: await response.text(),
+  });
+  const processRecording = vi.fn(async (payload: unknown) =>
+    toContainerResult(
+      await fetchContainer("https://ffmpeg/process", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+    )
+  );
+  const segmentAudio = vi.fn(async (payload: unknown) =>
+    toContainerResult(
+      await fetchContainer("https://ffmpeg/segment", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+    )
+  );
+
   return {
     DB: {},
     CREDENTIALS_ENCRYPTION_KEY: "dGVzdC1rZXktMzItYnl0ZXMtZm9yLXVuaXQ=",
@@ -72,7 +100,10 @@ function createEnvironment(
       get: bucketGet,
     },
     FFMPEG_CONTAINER: {
-      getByName: vi.fn(() => ({ fetch: containerFetch, start: containerStart })),
+      getByName: vi.fn(() => ({
+        processRecording,
+        segmentAudio,
+      })),
     },
     AI: {},
     VECTORIZE: {},
@@ -180,10 +211,9 @@ describe("recording processing pipeline", () => {
       recordingId: "recording1",
       r2VideoKey: "recordings/recording1/source.mp4",
     });
-    expect(containerRequest.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it("starts the named FFmpeg container before proxying the request", async () => {
+  it("routes extraction through the named FFmpeg container RPC", async () => {
     const recording: Record<string, unknown> = {
       id: "recording1",
       driveFileId: null,
@@ -195,7 +225,6 @@ describe("recording processing pipeline", () => {
     };
     const { database } = createDatabase(recording);
     mocks.drizzle.mockReturnValue(database);
-    const containerStart = vi.fn();
     const containerFetch = vi.fn().mockResolvedValue(
       Response.json({
         r2VideoKey: "recordings/recording1/source.mp4",
@@ -205,14 +234,23 @@ describe("recording processing pipeline", () => {
         transcriptionChunks: createTranscriptionChunks(),
       })
     );
-    const env = createEnvironment(containerFetch, containerStart);
+    const env = createEnvironment(containerFetch);
 
     await processRecordingMessage(
       { type: "process_recording", recordingId: "recording1" },
       env
     );
 
-    expect(containerStart).toHaveBeenCalledBefore(containerFetch);
+    expect(containerFetch).toHaveBeenCalledWith(
+      "https://ffmpeg/process",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          recordingId: "recording1",
+          r2VideoKey: "recordings/recording1/source.mp4",
+        }),
+      })
+    );
   });
 
   it("records a failure when a queued row has no upload or Drive source", async () => {
@@ -570,12 +608,7 @@ describe("recording processing pipeline", () => {
       const { database, updates } = createDatabase(recording);
       mocks.drizzle.mockReturnValue(database);
       const containerFetch = vi.fn(
-        async (_url: string, init?: RequestInit) =>
-          await new Promise<Response>((_resolve, reject) => {
-            init?.signal?.addEventListener("abort", () =>
-              reject(new Error("aborted"))
-            );
-          })
+        async () => await new Promise<Response>(() => {})
       );
       const env = createEnvironment(containerFetch);
 

@@ -24,6 +24,24 @@ const workers = [
     modified_on: "2026-01-01T00:00:00.000Z",
   },
 ];
+const containers = [
+  {
+    id: "container-old",
+    name: "ttv-website-agent-orphaned-ffmpegcontainer",
+    created_at: "2026-07-09T12:00:00.000Z",
+    updated_at: "2026-07-10T13:00:00.000Z",
+  },
+  {
+    id: "container-production",
+    name: "ttv-website-production-ffmpegcontainer",
+    updated_at: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "container-unrelated",
+    name: "unrelated-agent-old-ffmpegcontainer",
+    updated_at: "2026-01-01T00:00:00.000Z",
+  },
+];
 
 describe("stale agent environment selection", () => {
   it("selects only old agent-prefixed workers for this application", () => {
@@ -87,6 +105,67 @@ describe("stale agent environment selection", () => {
     ).toEqual([]);
   });
 
+  it("discovers orphaned container apps with exact application-name guards", () => {
+    expect(
+      findStaleAgentEnvironments({
+        workers: [],
+        databases: [],
+        containers: [
+          ...containers,
+          {
+            name: "ttv-website-agent-wrong-container",
+            updated_at: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            name: "ttv-website-agent-orphaned-ffmpegcontainer-extra",
+            updated_at: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+        now,
+        maxAgeHours: 72,
+      })
+    ).toEqual([
+      {
+        environmentName: "agent-orphaned",
+        containerAppName: "ttv-website-agent-orphaned-ffmpegcontainer",
+        lastModified: "2026-07-10T13:00:00.000Z",
+        ageHours: 95,
+      },
+    ]);
+  });
+
+  it("merges container apps with other resources and protects explicit exclusions", () => {
+    const merged = findStaleAgentEnvironments({
+      workers: [workers[0]],
+      containers: [
+        {
+          name: "ttv-website-agent-old-task-ffmpegcontainer",
+          updated_at: "2026-07-10T13:00:00.000Z",
+        },
+      ],
+      now,
+      maxAgeHours: 72,
+    });
+    expect(merged).toEqual([
+      {
+        environmentName: "agent-old-task",
+        workerName: "ttv-website-agent-old-task",
+        containerAppName: "ttv-website-agent-old-task-ffmpegcontainer",
+        lastModified: "2026-07-10T13:00:00.000Z",
+        ageHours: 95,
+      },
+    ]);
+
+    expect(
+      findStaleAgentEnvironments({
+        containers,
+        now,
+        maxAgeHours: 72,
+        excludedEnvironments: ["agent-orphaned"],
+      })
+    ).toEqual([]);
+  });
+
   it("defaults to dry-run and rejects unsafe age windows", () => {
     expect(parseSweepArgs([])).toEqual({
       execute: false,
@@ -111,6 +190,24 @@ describe("stale agent environment cleanup", () => {
     });
     expect(result.mode).toBe("dry-run");
     expect(result.candidates).toHaveLength(1);
+    expect(destroy).not.toHaveBeenCalled();
+  });
+
+  it("reports an orphaned container app in dry-run mode without deleting it", async () => {
+    const destroy = vi.fn();
+    const result = await sweepAgentEnvironments({
+      containers,
+      now,
+      maxAgeHours: 72,
+      destroy,
+    });
+    expect(result.mode).toBe("dry-run");
+    expect(result.candidates).toEqual([
+      expect.objectContaining({
+        environmentName: "agent-orphaned",
+        containerAppName: "ttv-website-agent-orphaned-ffmpegcontainer",
+      }),
+    ]);
     expect(destroy).not.toHaveBeenCalled();
   });
 

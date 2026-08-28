@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URLSearchParams } from "node:url";
 import {
   assertAgentEnvironmentName,
   deriveAgentPreviewAuthSecret,
@@ -129,7 +129,7 @@ function getRequiredEnvFrom(environment, name) {
   return value;
 }
 
-export async function cfApi(resourcePath, { method = "GET", body } = {}) {
+async function cfApiResponse(resourcePath, { method = "GET", body } = {}) {
   const accountId = getRequiredEnv("CLOUDFLARE_ACCOUNT_ID");
   const token = getRequiredEnv("CLOUDFLARE_API_TOKEN");
   const response = await fetch(
@@ -149,7 +149,7 @@ export async function cfApi(resourcePath, { method = "GET", body } = {}) {
   }
 
   if (response.status === 204) {
-    return {};
+    return { success: true, result: {} };
   }
 
   const rawText = await response.text();
@@ -161,7 +161,46 @@ export async function cfApi(resourcePath, { method = "GET", body } = {}) {
     throw new Error(`${method} ${resourcePath} failed: ${details}`);
   }
 
-  return payload.result;
+  return payload;
+}
+
+export async function cfApi(resourcePath, options) {
+  const payload = await cfApiResponse(resourcePath, options);
+  return payload?.result ?? null;
+}
+
+export async function listContainerApplications() {
+  const applications = [];
+  const seenPageTokens = new Set();
+  let pageToken;
+
+  do {
+    const query = new URLSearchParams({ per_page: "100" });
+    if (pageToken) query.set("page_token", pageToken);
+
+    const payload = await cfApiResponse(
+      `/containers/dash/applications?${query.toString()}`
+    );
+    if (!payload) return [];
+    if (!Array.isArray(payload.result)) {
+      throw new TypeError(
+        `Expected container application list to be an array, got ${typeof payload.result}`
+      );
+    }
+
+    applications.push(...payload.result);
+    const nextPageToken = payload.result_info?.next_page_token;
+    if (typeof nextPageToken !== "string" || !nextPageToken) break;
+    if (seenPageTokens.has(nextPageToken)) {
+      throw new Error(
+        `Cloudflare repeated container application page token: ${nextPageToken}`
+      );
+    }
+    seenPageTokens.add(nextPageToken);
+    pageToken = nextPageToken;
+  } while (pageToken);
+
+  return applications;
 }
 
 export async function ensureD1Database(name) {
@@ -343,7 +382,13 @@ export async function deleteVectorizeIndexByName(name, runner = runWrangler) {
   try {
     await runner(["vectorize", "get", name]);
   } catch (error) {
-    if (isMissingResourceError(error)) return false;
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      isMissingResourceError(error) ||
+      /vectorize\.index\.deleted\b[\s\S]*\bcode:\s*3005\b/i.test(message)
+    ) {
+      return false;
+    }
     throw error;
   }
 
@@ -361,27 +406,12 @@ export async function deleteR2BucketByName(name) {
   return true;
 }
 
-export async function deleteContainerAppByName(name, runner = runWrangler) {
-  let listResult;
-  try {
-    listResult = await runner(["containers", "list", "--json"]);
-  } catch (error) {
-    if (isMissingResourceError(error)) return false;
-    throw error;
-  }
-
-  let containers;
-  try {
-    containers = JSON.parse(listResult.stdout.trim());
-  } catch {
-    throw new Error("Failed to parse container list output as JSON");
-  }
-
-  if (!Array.isArray(containers)) {
-    throw new TypeError(
-      `Expected container list to be an array, got ${typeof containers}`
-    );
-  }
+export async function deleteContainerAppByName(
+  name,
+  runner = runWrangler,
+  listApplications = listContainerApplications
+) {
+  const containers = await listApplications();
 
   const match = containers.find((entry) => entry.name === name);
   if (!match) {
@@ -565,6 +595,7 @@ export function createGeneratedWranglerConfig({
         {
           queue: queueName,
           max_batch_size: 1,
+          max_concurrency: 1,
           max_retries: 3,
         },
       ],
@@ -575,7 +606,7 @@ export function createGeneratedWranglerConfig({
         class_name: CONTAINER_CLASS_NAME,
         image: path.relative(generatedDir, path.join(webRoot, "containers", "ffmpeg", "Dockerfile")),
         instance_type: "standard-2",
-        max_instances: 3,
+        max_instances: 1,
       },
     ],
     durable_objects: {

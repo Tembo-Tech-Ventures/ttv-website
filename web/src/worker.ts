@@ -7,6 +7,44 @@ import { syncEnabledRecordingImportSources } from "@/lib/recordings/importer";
 export class FfmpegContainer extends Container<Env> {
   defaultPort = 8080;
   sleepAfter = "2m";
+
+  async onActivityExpired() {
+    await this.destroy();
+  }
+
+  async checkHealth() {
+    return await this.fetchJsonWithShutdown("https://ffmpeg/health");
+  }
+
+  async processRecording(payload: { recordingId: string; r2VideoKey: string }) {
+    return await this.fetchJsonWithShutdown("https://ffmpeg/process", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async segmentAudio(payload: { recordingId: string; r2AudioKey: string }) {
+    return await this.fetchJsonWithShutdown("https://ffmpeg/segment", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  private async fetchJsonWithShutdown(input: string, init?: RequestInit) {
+    await this.start();
+    try {
+      const response = await this.containerFetch(input, init);
+      return {
+        ok: response.ok,
+        status: response.status,
+        text: await response.text(),
+      };
+    } finally {
+      await this.destroy();
+    }
+  }
 }
 
 FfmpegContainer.outboundByHost = {
