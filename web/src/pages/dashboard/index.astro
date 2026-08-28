@@ -7,8 +7,10 @@ import * as schema from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { toProgramApplicationBadgeVariant } from "@/lib/admin/program-application";
+import { getDashboardGreetingName } from "@/lib/display-name";
 
 const user = Astro.locals.user!;
+const greetingName = getDashboardGreetingName(user.name);
 const db = drizzle(env.DB, { schema });
 
 const applications = await db.query.programApplication.findMany({
@@ -21,7 +23,7 @@ const applications = await db.query.programApplication.findMany({
   <div class="space-y-6">
     <div>
       <h2 class="text-2xl font-bold text-white">
-        Welcome back, {user.name}
+        Welcome back, {greetingName}
       </h2>
       <p class="mt-1 text-white/60">
         Manage your applications and track your progress.
