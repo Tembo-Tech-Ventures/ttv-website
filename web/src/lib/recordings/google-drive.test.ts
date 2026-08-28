@@ -15,6 +15,7 @@ import {
   testGoogleDriveConnection,
   titleFromGoogleDriveFileName,
   type GoogleDriveCredentials,
+  type GoogleDriveScanEvent,
 } from "./google-drive";
 
 let credentials: GoogleDriveCredentials;
@@ -165,11 +166,13 @@ describe("Google Drive file operations", () => {
       });
     });
     const fetchImplementation = fetchMock as unknown as typeof fetch;
+    const scanEvents: GoogleDriveScanEvent[] = [];
 
     const files = await listGoogleDriveVideoFiles({
       credentials,
       folderId: "1AbCdEfGhIjKlMnOpQrStUvWxYz",
       filenameContains: "cohort 2026",
+      onScanEvent: (event) => scanEvents.push(event),
       fetch: fetchImplementation,
     });
 
@@ -181,7 +184,81 @@ describe("Google Drive file operations", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     const listUrl = new URL(String(fetchMock.mock.calls[1][0]));
     expect(listUrl.searchParams.get("q")).toContain("in parents");
+    expect(listUrl.searchParams.get("pageSize")).toBe("1000");
     expect(listUrl.searchParams.get("supportsAllDrives")).toBe("true");
+    expect(scanEvents).toEqual([
+      { type: "start", filenameFilterConfigured: true },
+      expect.objectContaining({
+        type: "page",
+        folderNumber: 1,
+        pageNumber: 1,
+        filesReturned: 3,
+        videosDiscovered: 1,
+        nonVideosSkipped: 1,
+        downloadBlockedSkipped: 1,
+        hasNextPage: true,
+      }),
+      expect.objectContaining({
+        type: "page",
+        folderNumber: 1,
+        pageNumber: 2,
+        filesReturned: 2,
+        videosDiscovered: 1,
+        filenameFilteredSkipped: 1,
+        hasNextPage: false,
+      }),
+      {
+        type: "complete",
+        foldersScanned: 1,
+        pagesScanned: 2,
+        videosDiscovered: 2,
+      },
+    ]);
+  });
+
+  it("fails fast when Google repeats a folder page token", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.hostname === "oauth2.googleapis.com") {
+        return Response.json({ access_token: "token", expires_in: 3600 });
+      }
+      return Response.json({ nextPageToken: "same-token", files: [] });
+    });
+
+    await expect(
+      listGoogleDriveVideoFiles({
+        credentials,
+        folderId: "1AbCdEfGhIjKlMnOpQrStUvWxYz",
+        fetch: fetchMock as unknown as typeof fetch,
+      })
+    ).rejects.toThrow(
+      "Google Drive returned a repeated page token while scanning a folder"
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not impose an application-side ten-video scan limit", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.hostname === "oauth2.googleapis.com") {
+        return Response.json({ access_token: "token", expires_in: 3600 });
+      }
+      return Response.json({
+        files: Array.from({ length: 125 }, (_, index) => ({
+          id: `video-${String(index + 1).padStart(3, "0")}`,
+          name: `Session ${index + 1}.mp4`,
+          mimeType: "video/mp4",
+        })),
+      });
+    });
+
+    await expect(
+      listGoogleDriveVideoFiles({
+        credentials,
+        folderId: "1AbCdEfGhIjKlMnOpQrStUvWxYz",
+        fetch: fetchMock as unknown as typeof fetch,
+      })
+    ).resolves.toHaveLength(125);
   });
 
   it("traverses nested folders and resolves folder and video shortcuts once", async () => {

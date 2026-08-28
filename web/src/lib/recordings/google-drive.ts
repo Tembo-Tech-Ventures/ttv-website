@@ -11,11 +11,42 @@ export interface GoogleDriveVideoFile {
   modifiedAt?: Date;
 }
 
+export type GoogleDriveScanEvent =
+  | {
+      type: "start";
+      filenameFilterConfigured: boolean;
+    }
+  | {
+      type: "page";
+      folderNumber: number;
+      pageNumber: number;
+      filesReturned: number;
+      videosDiscovered: number;
+      nestedFoldersQueued: number;
+      folderShortcutsQueued: number;
+      videoShortcutsDiscovered: number;
+      duplicateVideosSkipped: number;
+      nonVideosSkipped: number;
+      filenameFilteredSkipped: number;
+      downloadBlockedSkipped: number;
+      invalidItemsSkipped: number;
+      hasNextPage: boolean;
+    }
+  | {
+      type: "complete";
+      foldersScanned: number;
+      pagesScanned: number;
+      videosDiscovered: number;
+    };
+
+type GoogleDriveScanEventHandler = (event: GoogleDriveScanEvent) => void;
+
 const DRIVE_READONLY_SCOPE =
   "https://www.googleapis.com/auth/drive.readonly";
 const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const GOOGLE_DRIVE_FILES_ENDPOINT =
   "https://www.googleapis.com/drive/v3/files";
+const DRIVE_LIST_PAGE_SIZE = "1000";
 const DRIVE_FOLDER_ID_PATTERN = /^[A-Za-z0-9_-]{10,}$/;
 const DRIVE_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 const DRIVE_SHORTCUT_MIME_TYPE = "application/vnd.google-apps.shortcut";
@@ -213,15 +244,28 @@ function parseOptionalSize(value: unknown): number | undefined {
   return Number.isSafeInteger(size) && size >= 0 ? size : undefined;
 }
 
+function emitGoogleDriveScanEvent(
+  onScanEvent: GoogleDriveScanEventHandler | undefined,
+  event: GoogleDriveScanEvent
+) {
+  try {
+    onScanEvent?.(event);
+  } catch {
+    // Telemetry must not change import behavior.
+  }
+}
+
 export async function listGoogleDriveVideoFiles({
   credentials,
   folderId,
   filenameContains,
+  onScanEvent,
   fetch: fetchImplementation = fetch,
 }: {
   credentials: GoogleDriveCredentials;
   folderId: string;
   filenameContains?: string | null;
+  onScanEvent?: GoogleDriveScanEventHandler;
   fetch?: typeof fetch;
 }): Promise<GoogleDriveVideoFile[]> {
   const accessToken = await getGoogleDriveAccessToken(credentials, {
@@ -232,12 +276,19 @@ export async function listGoogleDriveVideoFiles({
   const pendingFolderIds = [assertDriveFolderId(folderId)];
   const seenFolderIds = new Set(pendingFolderIds);
   let folderIndex = 0;
+  let pagesScanned = 0;
   const titleFilter = filenameContains?.trim().toLocaleLowerCase();
+  emitGoogleDriveScanEvent(onScanEvent, {
+    type: "start",
+    filenameFilterConfigured: Boolean(titleFilter),
+  });
 
   while (folderIndex < pendingFolderIds.length) {
     const currentFolderId = pendingFolderIds[folderIndex++];
 
     let pageToken: string | undefined;
+    let pageNumber = 0;
+    const seenPageTokens = new Set<string>();
     do {
       const url = new URL(GOOGLE_DRIVE_FILES_ENDPOINT);
       url.searchParams.set(
@@ -248,7 +299,7 @@ export async function listGoogleDriveVideoFiles({
         "fields",
         "nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime,capabilities(canDownload),shortcutDetails(targetId,targetMimeType))"
       );
-      url.searchParams.set("pageSize", "1000");
+      url.searchParams.set("pageSize", DRIVE_LIST_PAGE_SIZE);
       url.searchParams.set("orderBy", "createdTime");
       url.searchParams.set("supportsAllDrives", "true");
       url.searchParams.set("includeItemsFromAllDrives", "true");
@@ -278,12 +329,29 @@ export async function listGoogleDriveVideoFiles({
         }>;
       };
 
-      for (const file of result.files ?? []) {
+      pageNumber += 1;
+      pagesScanned += 1;
+      const pageFiles = result.files ?? [];
+      const pageStats = {
+        filesReturned: pageFiles.length,
+        videosDiscovered: 0,
+        nestedFoldersQueued: 0,
+        folderShortcutsQueued: 0,
+        videoShortcutsDiscovered: 0,
+        duplicateVideosSkipped: 0,
+        nonVideosSkipped: 0,
+        filenameFilteredSkipped: 0,
+        downloadBlockedSkipped: 0,
+        invalidItemsSkipped: 0,
+      };
+
+      for (const file of pageFiles) {
         if (
           typeof file.id !== "string" ||
           typeof file.name !== "string" ||
           typeof file.mimeType !== "string"
         ) {
+          pageStats.invalidItemsSkipped += 1;
           continue;
         }
 
@@ -303,22 +371,43 @@ export async function listGoogleDriveVideoFiles({
         ) {
           seenFolderIds.add(targetId);
           pendingFolderIds.push(targetId);
+          if (isShortcut) {
+            pageStats.folderShortcutsQueued += 1;
+          } else {
+            pageStats.nestedFoldersQueued += 1;
+          }
           continue;
         }
 
+        if (typeof targetId !== "string" || typeof targetMimeType !== "string") {
+          pageStats.invalidItemsSkipped += 1;
+          continue;
+        }
+        if (!targetMimeType.startsWith("video/")) {
+          pageStats.nonVideosSkipped += 1;
+          continue;
+        }
+        if (!isShortcut && file.capabilities?.canDownload === false) {
+          pageStats.downloadBlockedSkipped += 1;
+          continue;
+        }
+        if (seenFileIds.has(targetId)) {
+          pageStats.duplicateVideosSkipped += 1;
+          continue;
+        }
         if (
-          typeof targetId !== "string" ||
-          typeof targetMimeType !== "string" ||
-          !targetMimeType.startsWith("video/") ||
-          (!isShortcut && file.capabilities?.canDownload === false) ||
-          seenFileIds.has(targetId) ||
-          (titleFilter &&
-            !file.name.toLocaleLowerCase().includes(titleFilter))
+          titleFilter &&
+          !file.name.toLocaleLowerCase().includes(titleFilter)
         ) {
+          pageStats.filenameFilteredSkipped += 1;
           continue;
         }
 
         seenFileIds.add(targetId);
+        pageStats.videosDiscovered += 1;
+        if (isShortcut) {
+          pageStats.videoShortcutsDiscovered += 1;
+        }
         files.push({
           id: targetId,
           name: file.name,
@@ -329,12 +418,35 @@ export async function listGoogleDriveVideoFiles({
         });
       }
 
-      pageToken =
+      const nextPageToken =
         typeof result.nextPageToken === "string"
-          ? result.nextPageToken
+          ? result.nextPageToken.trim()
           : undefined;
+      emitGoogleDriveScanEvent(onScanEvent, {
+        type: "page",
+        folderNumber: folderIndex,
+        pageNumber,
+        ...pageStats,
+        hasNextPage: Boolean(nextPageToken),
+      });
+      if (nextPageToken) {
+        if (seenPageTokens.has(nextPageToken)) {
+          throw new Error(
+            "Google Drive returned a repeated page token while scanning a folder."
+          );
+        }
+        seenPageTokens.add(nextPageToken);
+      }
+      pageToken = nextPageToken || undefined;
     } while (pageToken);
   }
+
+  emitGoogleDriveScanEvent(onScanEvent, {
+    type: "complete",
+    foldersScanned: folderIndex,
+    pagesScanned,
+    videosDiscovered: files.length,
+  });
 
   return files;
 }
