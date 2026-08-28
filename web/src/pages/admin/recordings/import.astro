@@ -240,14 +240,34 @@ const formatDateTime = (date: Date | null) =>
           </h3>
           <p class="mt-2 max-w-3xl text-sm text-white/60">
             The scan checked the selected folder, all nested folders, and Drive
-            shortcuts. Nothing has been added by this review.
+            shortcuts. Nothing has been added by this review. Files that Google
+            marks as not downloadable cannot be queued because TTV would not be
+            able to fetch the video bytes for processing.
           </p>
 
-          <dl class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <dl class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div class="rounded-md border border-teal/20 bg-black/10 p-3">
-              <dt class="text-xs text-white/45">Videos found</dt>
+              <dt class="text-xs text-white/45">Drive items scanned</dt>
+              <dd class="mt-1 text-xl font-semibold text-white">
+                {(historicalPreview.driveItemsScanned ?? historicalPreview.discovered).toLocaleString()}
+              </dd>
+            </div>
+            <div class="rounded-md border border-teal/20 bg-black/10 p-3">
+              <dt class="text-xs text-white/45">Visible videos</dt>
+              <dd class="mt-1 text-xl font-semibold text-white">
+                {(historicalPreview.visibleVideos ?? historicalPreview.discovered).toLocaleString()}
+              </dd>
+            </div>
+            <div class="rounded-md border border-teal/20 bg-black/10 p-3">
+              <dt class="text-xs text-white/45">Importable videos</dt>
               <dd class="mt-1 text-xl font-semibold text-white">
                 {historicalPreview.discovered.toLocaleString()}
+              </dd>
+            </div>
+            <div class="rounded-md border border-amber-400/25 bg-amber-400/10 p-3">
+              <dt class="text-xs text-amber-100/70">Download blocked by Drive</dt>
+              <dd class="mt-1 text-xl font-semibold text-amber-50">
+                {(historicalPreview.downloadBlockedVideos ?? 0).toLocaleString()}
               </dd>
             </div>
             <div class="rounded-md border border-teal/20 bg-black/10 p-3">
@@ -269,6 +289,16 @@ const formatDateTime = (date: Date | null) =>
               </dd>
             </div>
           </dl>
+
+          {(historicalPreview.downloadBlockedVideos ?? 0) > 0 && (
+            <p class="mt-4 rounded-md border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-sm text-amber-50">
+              Google returned {(historicalPreview.visibleVideos ?? historicalPreview.discovered).toLocaleString()} video files,
+              but {(historicalPreview.downloadBlockedVideos ?? 0).toLocaleString()} cannot be imported with the current
+              Drive credential because Google reports them as not downloadable.
+              Enable download access for the service account or impersonated
+              user, then review the import again.
+            </p>
+          )}
 
           {historicalPreview.importable > 0 ? (
             <div class="mt-5 flex flex-wrap items-center gap-3">

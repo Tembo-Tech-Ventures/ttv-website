@@ -57,6 +57,10 @@ export interface RecordingImportPreview {
   new: number;
   pending: number;
   skipped: number;
+  driveItemsScanned?: number;
+  visibleVideos?: number;
+  downloadBlockedVideos?: number;
+  nonVideoItemsSkipped?: number;
 }
 
 export class RecordingImportPreviewChangedError extends Error {
@@ -74,6 +78,13 @@ export class RecordingImportPreviewChangedError extends Error {
 const QUEUE_BATCH_SIZE = 50;
 
 type RecordingImportOperation = "preview" | "sync";
+
+interface RecordingImportScanDiagnostics {
+  driveItemsScanned: number;
+  visibleVideos: number;
+  downloadBlockedVideos: number;
+  nonVideoItemsSkipped: number;
+}
 
 function logRecordingImportEvent(
   event: string,
@@ -103,6 +114,48 @@ function logGoogleDriveScanEvent({
     operation,
     ...fields,
   });
+}
+
+function createRecordingImportScanDiagnostics(): RecordingImportScanDiagnostics {
+  return {
+    driveItemsScanned: 0,
+    visibleVideos: 0,
+    downloadBlockedVideos: 0,
+    nonVideoItemsSkipped: 0,
+  };
+}
+
+function addScanEventToDiagnostics(
+  diagnostics: RecordingImportScanDiagnostics,
+  event: GoogleDriveScanEvent
+) {
+  if (event.type !== "page") return;
+  diagnostics.driveItemsScanned += event.filesReturned;
+  diagnostics.visibleVideos +=
+    event.videosDiscovered +
+    event.downloadBlockedSkipped +
+    event.duplicateVideosSkipped +
+    event.filenameFilteredSkipped;
+  diagnostics.downloadBlockedVideos += event.downloadBlockedSkipped;
+  diagnostics.nonVideoItemsSkipped += event.nonVideosSkipped;
+}
+
+function attachPreviewDiagnostics<T>(
+  operationName: RecordingImportOperation,
+  result: T,
+  diagnostics: RecordingImportScanDiagnostics
+): T {
+  if (
+    operationName !== "preview" ||
+    typeof result !== "object" ||
+    result === null
+  ) {
+    return result;
+  }
+  return {
+    ...result,
+    ...diagnostics,
+  } as T;
 }
 
 function chunks<T>(values: T[], size: number): T[][] {
@@ -369,22 +422,29 @@ async function scanRecordingImportSource<T>(
       operation: operationName,
       filenameFilterConfigured: Boolean(source.filenameContains),
     });
+    const scanDiagnostics = createRecordingImportScanDiagnostics();
     const files = await listGoogleDriveVideoFiles({
       credentials,
       folderId: source.driveFolderId,
       filenameContains: source.filenameContains,
-      onScanEvent: (event) =>
+      onScanEvent: (event) => {
+        addScanEventToDiagnostics(scanDiagnostics, event);
         logGoogleDriveScanEvent({
           sourceId: source.id,
           operation: operationName,
           event,
-        }),
+        });
+      },
     });
-    const result = await operation({
-      files,
-      source,
-      store: createDrizzleImportStore(db),
-    });
+    const result = attachPreviewDiagnostics(
+      operationName,
+      await operation({
+        files,
+        source,
+        store: createDrizzleImportStore(db),
+      }),
+      scanDiagnostics
+    );
 
     await db
       .update(schema.recordingImportSource)
@@ -429,6 +489,10 @@ export async function previewRecordingImportSource(
       new: preview.new,
       pending: preview.pending,
       skipped: preview.skipped,
+      driveItemsScanned: preview.driveItemsScanned,
+      visibleVideos: preview.visibleVideos,
+      downloadBlockedVideos: preview.downloadBlockedVideos,
+      nonVideoItemsSkipped: preview.nonVideoItemsSkipped,
     })
   );
 }
