@@ -8,6 +8,7 @@ import { getGoogleDriveCredentials } from "@/lib/credentials/google-drive";
 import {
   listGoogleDriveVideoFiles,
   titleFromGoogleDriveFileName,
+  type GoogleDriveScanEvent,
   type GoogleDriveVideoFile,
 } from "@/lib/recordings/google-drive";
 import type { RecordingQueueMessage } from "@/lib/recordings/pipeline";
@@ -71,6 +72,38 @@ export class RecordingImportPreviewChangedError extends Error {
 }
 
 const QUEUE_BATCH_SIZE = 50;
+
+type RecordingImportOperation = "preview" | "sync";
+
+function logRecordingImportEvent(
+  event: string,
+  fields: Record<string, unknown>
+) {
+  console.log(
+    JSON.stringify({
+      event,
+      component: "recording_import",
+      ...fields,
+    })
+  );
+}
+
+function logGoogleDriveScanEvent({
+  sourceId,
+  operation,
+  event,
+}: {
+  sourceId: string;
+  operation: RecordingImportOperation;
+  event: GoogleDriveScanEvent;
+}) {
+  const { type, ...fields } = event;
+  logRecordingImportEvent(`drive_scan_${type}`, {
+    sourceId,
+    operation,
+    ...fields,
+  });
+}
 
 function chunks<T>(values: T[], size: number): T[][] {
   const result: T[][] = [];
@@ -306,11 +339,13 @@ function createDrizzleImportStore(db: Database): RecordingImportStore {
 async function scanRecordingImportSource<T>(
   env: Env,
   sourceId: string,
+  operationName: RecordingImportOperation,
   operation: (input: {
     files: GoogleDriveVideoFile[];
     source: RecordingImportSource;
     store: RecordingImportStore;
-  }) => Promise<T>
+  }) => Promise<T>,
+  summarizeResult: (result: T) => Record<string, unknown>
 ): Promise<T> {
   const db = drizzle(env.DB, { schema });
   const source = await db.query.recordingImportSource.findFirst({
@@ -329,10 +364,21 @@ async function scanRecordingImportSource<T>(
       );
     }
 
+    logRecordingImportEvent("drive_import_source_scan_start", {
+      sourceId: source.id,
+      operation: operationName,
+      filenameFilterConfigured: Boolean(source.filenameContains),
+    });
     const files = await listGoogleDriveVideoFiles({
       credentials,
       folderId: source.driveFolderId,
       filenameContains: source.filenameContains,
+      onScanEvent: (event) =>
+        logGoogleDriveScanEvent({
+          sourceId: source.id,
+          operation: operationName,
+          event,
+        }),
     });
     const result = await operation({
       files,
@@ -345,15 +391,25 @@ async function scanRecordingImportSource<T>(
       .set({ lastSyncedAt: new Date(), lastError: null })
       .where(eq(schema.recordingImportSource.id, source.id));
 
+    logRecordingImportEvent("drive_import_source_scan_done", {
+      sourceId: source.id,
+      operation: operationName,
+      ...summarizeResult(result),
+    });
     return result;
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     if (!(error instanceof RecordingImportPreviewChangedError)) {
-      const message = error instanceof Error ? error.message : String(error);
       await db
         .update(schema.recordingImportSource)
         .set({ lastError: message })
         .where(eq(schema.recordingImportSource.id, source.id));
     }
+    logRecordingImportEvent("drive_import_source_scan_failed", {
+      sourceId: source.id,
+      operation: operationName,
+      message,
+    });
     throw error;
   }
 }
@@ -362,8 +418,18 @@ export async function previewRecordingImportSource(
   env: Env,
   sourceId: string
 ): Promise<RecordingImportPreview> {
-  return scanRecordingImportSource(env, sourceId, ({ files, store }) =>
-    previewGoogleDriveFiles({ files, store })
+  return scanRecordingImportSource(
+    env,
+    sourceId,
+    "preview",
+    ({ files, store }) => previewGoogleDriveFiles({ files, store }),
+    (preview) => ({
+      discovered: preview.discovered,
+      importable: preview.importable,
+      new: preview.new,
+      pending: preview.pending,
+      skipped: preview.skipped,
+    })
   );
 }
 
@@ -380,13 +446,23 @@ export async function syncRecordingImportSource(
     throw new TypeError("Expected import count must be a non-negative integer.");
   }
 
-  return scanRecordingImportSource(env, sourceId, ({ files, source, store }) =>
-    queueGoogleDriveFiles({
-      files,
-      source,
-      store,
-      queue: env.RECORDING_QUEUE,
-      expectedImportable: options.expectedImportable,
+  return scanRecordingImportSource(
+    env,
+    sourceId,
+    "sync",
+    ({ files, source, store }) =>
+      queueGoogleDriveFiles({
+        files,
+        source,
+        store,
+        queue: env.RECORDING_QUEUE,
+        expectedImportable: options.expectedImportable,
+      }),
+    (summary) => ({
+      discovered: summary.discovered,
+      created: summary.created,
+      queued: summary.queued,
+      skipped: summary.skipped,
     })
   );
 }
@@ -397,7 +473,9 @@ export async function syncEnabledRecordingImportSources(
   const db = drizzle(env.DB, { schema });
 
   if (!env.CREDENTIALS_ENCRYPTION_KEY) {
-    console.log(JSON.stringify({ event: "drive_sync_skipped", reason: "no_encryption_key" }));
+    logRecordingImportEvent("drive_sync_skipped", {
+      reason: "no_encryption_key",
+    });
     return [];
   }
 
@@ -406,15 +484,14 @@ export async function syncEnabledRecordingImportSources(
     const cipher = createCredentialCipher(env);
     credentials = await getGoogleDriveCredentials(db, cipher);
   } catch (error) {
-    console.log(JSON.stringify({
-      event: "drive_sync_skipped",
+    logRecordingImportEvent("drive_sync_skipped", {
       reason: "credential_error",
       message: error instanceof Error ? error.message : String(error),
-    }));
+    });
     return [];
   }
   if (!credentials) {
-    console.log(JSON.stringify({ event: "drive_sync_skipped", reason: "no_credentials" }));
+    logRecordingImportEvent("drive_sync_skipped", { reason: "no_credentials" });
     return [];
   }
 
@@ -424,8 +501,14 @@ export async function syncEnabledRecordingImportSources(
   });
 
   if (sources.length === 0) {
+    logRecordingImportEvent("drive_sync_skipped", {
+      reason: "no_enabled_sources",
+    });
     return [];
   }
+  logRecordingImportEvent("drive_sync_sources_found", {
+    sourceCount: sources.length,
+  });
 
   const summaries: RecordingImportSummary[] = [];
   const failures: string[] = [];
@@ -434,12 +517,26 @@ export async function syncEnabledRecordingImportSources(
     try {
       summaries.push(await syncRecordingImportSource(env, source.id));
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logRecordingImportEvent("drive_sync_source_failed", {
+        sourceId: source.id,
+        message,
+      });
       failures.push(
-        `${source.name}: ${error instanceof Error ? error.message : String(error)}`
+        `${source.name}: ${message}`
       );
     }
   }
 
+  logRecordingImportEvent("drive_sync_sources_done", {
+    sourceCount: sources.length,
+    successCount: summaries.length,
+    failureCount: failures.length,
+    discovered: summaries.reduce((total, item) => total + item.discovered, 0),
+    created: summaries.reduce((total, item) => total + item.created, 0),
+    queued: summaries.reduce((total, item) => total + item.queued, 0),
+    skipped: summaries.reduce((total, item) => total + item.skipped, 0),
+  });
   if (failures.length > 0) {
     throw new Error(`Google Drive import failed for ${failures.join("; ")}`);
   }
