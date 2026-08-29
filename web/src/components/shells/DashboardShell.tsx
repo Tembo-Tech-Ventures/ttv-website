@@ -29,8 +29,6 @@ export const DASHBOARD_LINKS = [
   { href: "/auth/logout", label: "Logout", icon: PiSignOutDuotone },
 ];
 
-const links = DASHBOARD_LINKS;
-
 export default function DashboardShell({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -42,7 +40,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-[#2C6964] to-[#013D39]">
       <Sidebar
-        links={links}
+        links={DASHBOARD_LINKS}
         title="TTV Dashboard"
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}

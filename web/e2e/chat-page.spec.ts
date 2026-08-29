@@ -164,9 +164,18 @@ test("Shift+Enter adds a newline instead of sending on desktop", async ({ page }
   await expect(composer).toHaveValue("First line\nsecond line");
 });
 
-test("the answer pins the question that prompted it to the top", async ({ page }, testInfo) => {
-  test.skip(isMobile(testInfo), "Needs a viewport tall enough to show the pin clearly");
+test("sending shows the question immediately, before any answer", async ({ page }) => {
+  await gotoChat(page);
+  await page.getByPlaceholder("Ask about your sessions…").fill("Summarise the MVP advice");
+  await page.getByRole("button", { name: "Send message" }).click();
 
+  // While the answer is in flight the only feedback is the question and the
+  // thinking indicator, so both have to be on screen rather than below the fold.
+  await expect(transcript(page).getByText("Summarise the MVP advice", { exact: true })).toBeInViewport();
+  await expect(transcript(page).getByText("Thinking…")).toBeInViewport();
+});
+
+test("the answer pins the question that prompted it to the top", async ({ page }) => {
   await gotoChat(page);
   const composer = page.getByPlaceholder("Ask about your sessions…");
   await composer.fill("Summarise the MVP advice");
@@ -174,17 +183,35 @@ test("the answer pins the question that prompted it to the top", async ({ page }
 
   const question = transcript(page).getByText("Summarise the MVP advice", { exact: true });
   await expect(question).toBeVisible();
+  await expect(transcript(page).getByText("Thinking…")).toHaveCount(0);
 
-  // The reader must land on the start of the answer, not its end: the question
-  // sits near the top of the scroller rather than scrolled off it.
+  /*
+   * Two assertions, because either alone passes for the wrong reason. The
+   * offset alone is one-sided: scrolling to the bottom instead pushes the
+   * question *above* the viewport, which is an even smaller number. The
+   * distance-from-bottom alone would pass on any position that is not the
+   * bottom. Together they say: the question is at the top, and there is
+   * unread answer below it.
+   */
   await expect
     .poll(async () => {
       const scroller = await page.locator("[data-chat-scroller]").boundingBox();
       const box = await question.boundingBox();
       if (!scroller || !box) return Number.NaN;
-      return box.y - scroller.y;
+      return Math.round(box.y - scroller.y);
     })
     .toBeLessThan(120);
+
+  const offset = await page.locator("[data-chat-scroller]").evaluate((element) => ({
+    fromBottom: element.scrollHeight - element.scrollTop - element.clientHeight,
+    overflows: element.scrollHeight > element.clientHeight + 1,
+  }));
+  expect(offset.overflows).toBe(true);
+  expect(offset.fromBottom).toBeGreaterThan(0);
+
+  const questionBox = await question.boundingBox();
+  const scrollerBox = await page.locator("[data-chat-scroller]").boundingBox();
+  expect(questionBox!.y - scrollerBox!.y).toBeGreaterThanOrEqual(-1);
 });
 
 test("scrolling up reveals jump-to-latest without moving the page", async ({ page }, testInfo) => {
@@ -203,6 +230,29 @@ test("scrolling up reveals jump-to-latest without moving the page", async ({ pag
 
   await jump.click();
   await expect(jump).toBeHidden();
+});
+
+test("a new chat is not overwritten by an answer still in flight", async ({ page }, testInfo) => {
+  await gotoChat(page);
+  await page.getByPlaceholder("Ask about your sessions…").fill("Question A");
+  await page.getByRole("button", { name: "Send message" }).click();
+
+  // Abandon the conversation while the answer is still being fetched.
+  await expect(transcript(page).getByText("Thinking…")).toBeVisible();
+  await newChatControl(page, testInfo).click();
+  await expect(page.getByRole("heading", { name: "Ask across your sessions" })).toBeVisible();
+
+  /*
+   * A fixed wait, deliberately: the assertion is that something never happens,
+   * and the window it could happen in is the mock's round trip. Asserting
+   * immediately would pass whether or not the guard exists, because the
+   * transcript is empty either way until the abandoned answer lands.
+   */
+  await page.waitForTimeout(3_000);
+
+  await expect(transcript(page).getByText("Question A")).toHaveCount(0);
+  await expect(transcript(page).getByText("validate the problem with users")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Ask across your sessions" })).toBeVisible();
 });
 
 test("the header title opens the conversation sheet on mobile", async ({ page }, testInfo) => {

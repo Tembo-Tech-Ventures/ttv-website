@@ -17,6 +17,25 @@ const EXAMPLE_PROMPTS = [
   "Where did we discuss architecture tradeoffs?",
 ];
 
+/** How long an announcement stays in the DOM before it is cleared. */
+const ANNOUNCEMENT_TTL_MS = 5_000;
+
+/**
+ * Answers are markdown. Announcing them raw reads the asterisks and brackets
+ * out loud, so flatten to something a screen reader can speak.
+ */
+export function toPlainText(markdown: string) {
+  return markdown
+    .replace(/```[\s\S]*?```/g, " code block ")
+    .replace(/^[-*]\s+/gm, "")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\[(\d+)\]/g, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/(\*\*|__|\*|_|`)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function citationHref(citation: Citation) {
   return (
     citation.url ??
@@ -188,11 +207,16 @@ export default function Transcript({
     if (!appended || !last) return;
 
     if (last.role === "user") {
+      // Show the question and the thinking indicator straight away. Pinning it
+      // to the top cannot happen yet — it is the last node, so the scroller is
+      // already clamped — but without scrolling at all, both the question and
+      // the indicator sit below the fold and the send looks like it failed.
       pendingQuestionRef.current = messages.length - 1;
+      scrollToBottom();
       return;
     }
 
-    setAnnouncement(last.content);
+    setAnnouncement(toPlainText(last.content));
     const pending = pendingQuestionRef.current;
     if (pending !== null) {
       pendingQuestionRef.current = null;
@@ -205,6 +229,14 @@ export default function Transcript({
   useEffect(() => {
     if (loading) setAnnouncement("Thinking…");
   }, [loading]);
+
+  // Clear once spoken. Left in place, the last answer stays in the DOM as a
+  // second copy, which a screen reader re-reads in browse mode.
+  useEffect(() => {
+    if (!announcement) return;
+    const timer = setTimeout(() => setAnnouncement(""), ANNOUNCEMENT_TTL_MS);
+    return () => clearTimeout(timer);
+  }, [announcement]);
 
   useEffect(() => {
     const scroller = scrollerRef.current;

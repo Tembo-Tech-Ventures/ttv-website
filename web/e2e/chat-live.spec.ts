@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync } from "fs";
 
 /**
@@ -14,6 +14,16 @@ import { mkdirSync } from "fs";
 const EVIDENCE_DIR = "test-results/evidence";
 mkdirSync(EVIDENCE_DIR, { recursive: true });
 
+/**
+ * Navigate and wait for the React island to hydrate. Clicking before then hits
+ * server-rendered markup with no handlers attached, which made this suite flaky
+ * against a cold Worker.
+ */
+async function gotoAsk(page: Page) {
+  await page.goto("/dashboard/ask");
+  await expect(page.locator("astro-island")).not.toHaveAttribute("ssr", /.*/);
+}
+
 test.describe("authenticated Ask AI page", () => {
   const token = process.env.PLAYWRIGHT_AGENT_TOKEN;
   test.skip(!token, "No agent bearer token is configured for this environment.");
@@ -24,7 +34,7 @@ test.describe("authenticated Ask AI page", () => {
   test("fills the viewport with a composer that needs no scrolling to reach", async ({
     page,
   }, testInfo) => {
-    await page.goto("/dashboard/ask");
+    await gotoAsk(page);
 
     const composer = page.getByPlaceholder("Ask about your sessions…");
     await expect(composer).toBeVisible();
@@ -47,7 +57,7 @@ test.describe("authenticated Ask AI page", () => {
   });
 
   test("keeps a signed-in user's way back into the dashboard", async ({ page }, testInfo) => {
-    await page.goto("/dashboard/ask");
+    await gotoAsk(page);
 
     // Mobile puts this in the header; desktop puts it at the top of the rail.
     await expect(page.getByRole("link", { name: /Back to dashboard/ })).toBeVisible();

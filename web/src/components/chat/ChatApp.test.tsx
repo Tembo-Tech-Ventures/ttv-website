@@ -8,6 +8,7 @@ import {
   NEW_CHAT_TITLE,
   truncate,
 } from "./ConversationList";
+import { toPlainText } from "./Transcript";
 import type { ChatSession } from "./types";
 
 const SESSION: ChatSession = {
@@ -158,5 +159,19 @@ describe("conversation list helpers", () => {
 
   it("describes an empty conversation rather than rendering nothing", () => {
     expect(truncate(null)).toBe("No messages yet");
+  });
+});
+
+describe("toPlainText", () => {
+  it("flattens markdown so a screen reader does not speak the markup", () => {
+    const spoken = toPlainText(
+      "**Start here**\n\n- Interview users first. [1]\n- Read the [docs](https://x.test).\n\n```js\ncode()\n```"
+    );
+
+    expect(spoken).not.toMatch(/[*`[\]]/);
+    expect(spoken).toContain("Start here");
+    expect(spoken).toContain("Interview users first.");
+    expect(spoken).toContain("Read the docs");
+    expect(spoken).toContain("code block");
   });
 });

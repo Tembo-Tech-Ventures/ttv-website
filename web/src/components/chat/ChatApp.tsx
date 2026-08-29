@@ -23,8 +23,12 @@ const APP_NAV = DASHBOARD_LINKS.filter((link) => link.href !== "/dashboard/ask")
 /** How many prior turns to send back as context. Matches the previous UI. */
 const HISTORY_TURNS = 8;
 
-/** Stand-in round trip for `mockMode`, so the dev page renders like the real one. */
-const MOCK_LATENCY_MS = 400;
+/**
+ * Stand-in round trip for `mockMode`, so the dev page renders like the real one.
+ * Long enough that "while an answer is in flight" is a state a test can actually
+ * act in — a real retrieval round trip is seconds, not milliseconds.
+ */
+const MOCK_LATENCY_MS = 1_500;
 
 const NO_SESSIONS: ChatSession[] = [];
 const NO_MESSAGES: ChatMessage[] = [];
@@ -66,7 +70,18 @@ export default function ChatApp({
    * conversations frequently have the same number of turns.
    */
   const [conversationEpoch, setConversationEpoch] = useState(0);
+  /**
+   * The same counter, readable synchronously. In-flight requests capture it and
+   * discard their result if the user has moved on — otherwise an answer that
+   * resolves after "New chat" reinstates the conversation the user just left.
+   */
+  const conversationEpochRef = useRef(0);
   const composerRef = useRef<ComposerHandle | null>(null);
+
+  function beginNewTranscript() {
+    conversationEpochRef.current += 1;
+    setConversationEpoch(conversationEpochRef.current);
+  }
 
   const activeTitle = conversationTitle(sessions, activeSessionId);
 
@@ -133,7 +148,7 @@ export default function ChatApp({
     try {
       if (mockMode) {
         setActiveSessionId(sessionId);
-        setConversationEpoch((epoch) => epoch + 1);
+        beginNewTranscript();
         return;
       }
       const response = await fetch(`/api/chat/sessions/${encodeURIComponent(sessionId)}`);
@@ -144,7 +159,7 @@ export default function ChatApp({
       if (!response.ok) throw new Error(payload.error ?? "Unable to load chat");
       setActiveSessionId(sessionId);
       setMessages(payload.messages ?? []);
-      setConversationEpoch((epoch) => epoch + 1);
+      beginNewTranscript();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load chat");
     } finally {
@@ -157,7 +172,10 @@ export default function ChatApp({
     setMessages([]);
     setError("");
     setSheetOpen(false);
-    setConversationEpoch((epoch) => epoch + 1);
+    // Any answer still in flight belongs to the conversation being left, so
+    // stop reporting it as this one's pending work.
+    setLoading(false);
+    beginNewTranscript();
     composerRef.current?.focus();
   }
 
@@ -167,6 +185,11 @@ export default function ChatApp({
     setError("");
     const nextMessages: ChatMessage[] = [...messages, { role: "user", content: message }];
     setMessages(nextMessages);
+    // The transcript this answer belongs to. If the user starts a new chat or
+    // opens a different conversation while it is in flight, the result is stale
+    // and applying it would resurrect the conversation they just left.
+    const epoch = conversationEpochRef.current;
+    const isStale = () => conversationEpochRef.current !== epoch;
 
     try {
       if (mockMode) {
@@ -178,6 +201,7 @@ export default function ChatApp({
         await new Promise((resolve) => {
           setTimeout(resolve, MOCK_LATENCY_MS);
         });
+        if (isStale()) return;
         setActiveSessionId(activeSessionId ?? "mock-session-new");
         setMessages([
           ...nextMessages,
@@ -199,6 +223,15 @@ export default function ChatApp({
               "- Use the evidence to narrow the MVP to one workflow.\n" +
               "- Pick the workflow that tests your riskiest assumption, not the one that demos best.\n" +
               "- Write down what result would tell you the assumption was wrong.\n\n" +
+              "**Common traps**\n\n" +
+              "- Treating a demo as an interview. If you are presenting, you are not learning.\n" +
+              "- Recruiting only from your own network, which agrees with you by construction.\n" +
+              "- Writing the summary from memory a week later instead of the same afternoon.\n" +
+              "- Counting interest as evidence. Interest is free; a workaround costs something.\n\n" +
+              "**What to bring back**\n\n" +
+              "- Five quotes, verbatim, attributed to a role rather than a name.\n" +
+              "- One sentence naming the workflow you are replacing.\n" +
+              "- The assumption you are testing, and the result that would falsify it.\n\n" +
               "The common failure mode in the cohort was building the second version of something nobody had asked for the first version of.",
           },
         ]);
@@ -221,6 +254,7 @@ export default function ChatApp({
         citations: ChatMessage["citations"];
       };
       if (!response.ok) throw new Error(payload.error ?? "Unable to send message");
+      if (isStale()) return;
 
       const nextSessionId = payload.sessionId ?? activeSessionId;
       setActiveSessionId(nextSessionId);
@@ -230,9 +264,10 @@ export default function ChatApp({
       ]);
       if (nextSessionId) await refreshSessions(nextSessionId);
     } catch (err) {
+      if (isStale()) return;
       setError(err instanceof Error ? err.message : "Unable to send message");
     } finally {
-      setLoading(false);
+      if (!isStale()) setLoading(false);
     }
   }
 
