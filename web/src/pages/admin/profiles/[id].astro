@@ -112,23 +112,23 @@ function transitionLabel(to: string, from: string): string {
         <h3 class="mb-4 text-lg font-semibold text-white">Owner</h3>
         <dl class="space-y-2 text-sm">
           <div class="flex justify-between">
-            <dt class="text-white/60">Name</dt>
+            <dt class="text-ink-secondary">Name</dt>
             <dd class="text-white">{profile.user?.name ?? "Unknown"}</dd>
           </div>
           <div class="flex justify-between">
-            <dt class="text-white/60">Email</dt>
+            <dt class="text-ink-secondary">Email</dt>
             <dd class="text-white">{profile.user?.email ?? "—"}</dd>
           </div>
           <div class="flex justify-between">
-            <dt class="text-white/60">GitHub</dt>
+            <dt class="text-ink-secondary">GitHub</dt>
             <dd class="text-white">{profile.githubLogin ?? "—"}</dd>
           </div>
           <div class="flex justify-between">
-            <dt class="text-white/60">Handle</dt>
+            <dt class="text-ink-secondary">Handle</dt>
             <dd class="font-mono text-white">{profile.handle}</dd>
           </div>
           <div class="flex justify-between">
-            <dt class="text-white/60">Leads</dt>
+            <dt class="text-ink-secondary">Leads</dt>
             <dd class="text-white">{leadsCount}</dd>
           </div>
         </dl>
@@ -137,14 +137,14 @@ function transitionLabel(to: string, from: string): string {
       <Card>
         <h3 class="mb-4 text-lg font-semibold text-white">Completed Cohorts</h3>
         {cohorts.length === 0 ? (
-          <p class="text-sm text-white/40">No completed cohorts.</p>
+          <p class="text-sm text-ink-muted">No completed cohorts.</p>
         ) : (
           <ul class="space-y-2 text-sm">
             {cohorts.map((c) => (
               <li class="text-white">
                 {c.program?.name ?? "Unknown program"}
                 {c.application.completedAt && (
-                  <span class="ml-2 text-white/40">
+                  <span class="ml-2 text-ink-muted">
                     completed{" "}
                     {new Date(c.application.completedAt).toLocaleDateString()}
                   </span>
@@ -168,7 +168,7 @@ function transitionLabel(to: string, from: string): string {
 
         {profile.bio && <p class="text-sm text-white/80">{profile.bio}</p>}
 
-        <div class="flex flex-wrap gap-4 text-sm text-white/60">
+        <div class="flex flex-wrap gap-4 text-sm text-ink-secondary">
           {profile.location && <span>📍 {profile.location}</span>}
           {profile.country && <span>{profile.country}</span>}
         </div>
@@ -183,7 +183,7 @@ function transitionLabel(to: string, from: string): string {
           </div>
         )}
 
-        <div class="flex flex-wrap gap-4 text-sm text-white/60">
+        <div class="flex flex-wrap gap-4 text-sm text-ink-secondary">
           {profile.openToFreelance && <span>Open to freelance</span>}
           {profile.openToRoles && <span>Open to roles</span>}
           {!profile.openToFreelance && !profile.openToRoles && (
@@ -233,7 +233,7 @@ function transitionLabel(to: string, from: string): string {
                 >
                   {h.repoFullName}
                 </a>
-                <span class="text-xs text-white/40">
+                <span class="text-xs text-ink-muted">
                   {h.stars > 0 && `★ ${h.stars}`}
                   {h.language && (
                     <span class="ml-2">{h.language}</span>
@@ -241,7 +241,7 @@ function transitionLabel(to: string, from: string): string {
                 </span>
               </div>
               {h.description && (
-                <p class="mt-1 text-sm text-white/60">{h.description}</p>
+                <p class="mt-1 text-sm text-ink-secondary">{h.description}</p>
               )}
               {h.blurb && (
                 <p class="mt-1 text-sm italic text-white/80">{h.blurb}</p>
@@ -272,7 +272,7 @@ function transitionLabel(to: string, from: string): string {
           ))}
         </div>
       ) : (
-        <p class="text-sm text-white/40">
+        <p class="text-sm text-ink-muted">
           Waiting on the builder — no actions available for draft profiles.
         </p>
       )}

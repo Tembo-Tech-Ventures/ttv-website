@@ -49,7 +49,7 @@ export function SidebarCloseButton({ onClose }: { onClose: () => void }) {
       type="button"
       aria-label="Close navigation"
       onClick={onClose}
-      className="rounded-md p-1 text-white/60 hover:text-white"
+      className="rounded-md p-1 text-ink-secondary hover:text-white"
     >
       <PiXBold className="h-5 w-5" />
     </button>

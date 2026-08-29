@@ -110,15 +110,15 @@ const availableStatuses = getAvailableApplicationTransitions(
         <h3 class="mb-4 text-lg font-semibold text-white">Applicant</h3>
         <dl class="space-y-2 text-sm">
           <div class="flex justify-between">
-            <dt class="text-white/60">Name</dt>
+            <dt class="text-ink-secondary">Name</dt>
             <dd class="text-white">{application.user?.name ?? "Unknown"}</dd>
           </div>
           <div class="flex justify-between">
-            <dt class="text-white/60">Email</dt>
+            <dt class="text-ink-secondary">Email</dt>
             <dd class="text-white">{application.user?.email ?? "—"}</dd>
           </div>
           <div class="flex justify-between">
-            <dt class="text-white/60">User</dt>
+            <dt class="text-ink-secondary">User</dt>
             <dd>
               <a
                 href={`/admin/users/${application.userId}`}
@@ -135,11 +135,11 @@ const availableStatuses = getAvailableApplicationTransitions(
         <h3 class="mb-4 text-lg font-semibold text-white">Cohort</h3>
         <dl class="space-y-2 text-sm">
           <div class="flex justify-between">
-            <dt class="text-white/60">Cohort</dt>
+            <dt class="text-ink-secondary">Cohort</dt>
             <dd class="text-white">{application.program?.name ?? "—"}</dd>
           </div>
           <div class="flex justify-between">
-            <dt class="text-white/60">Applied</dt>
+            <dt class="text-ink-secondary">Applied</dt>
             <dd class="text-white">
               {application.createdAt
                 ? new Date(application.createdAt).toLocaleDateString()
@@ -148,7 +148,7 @@ const availableStatuses = getAvailableApplicationTransitions(
           </div>
           {application.completedAt && (
             <div class="flex justify-between">
-              <dt class="text-white/60">Completed</dt>
+              <dt class="text-ink-secondary">Completed</dt>
               <dd class="text-white">
                 {new Date(application.completedAt).toLocaleDateString()}
               </dd>
@@ -156,7 +156,7 @@ const availableStatuses = getAvailableApplicationTransitions(
           )}
           {application.status === "COMPLETED" && application.completedAt && (
             <div class="flex justify-between">
-              <dt class="text-white/60">Certificate</dt>
+              <dt class="text-ink-secondary">Certificate</dt>
               <dd>
                 <a
                   href={`/certificate/${application.id}`}
@@ -176,7 +176,7 @@ const availableStatuses = getAvailableApplicationTransitions(
       <dl class="space-y-3 text-sm">
         {Object.entries(appData).map(([key, value]) => (
           <div>
-            <dt class="font-medium capitalize text-white/60">
+            <dt class="font-medium capitalize text-ink-secondary">
               {key.replace(/([A-Z])/g, " $1").replace(/_/g, " ")}
             </dt>
             <dd class="mt-0.5 text-white">

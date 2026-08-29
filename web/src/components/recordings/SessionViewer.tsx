@@ -55,7 +55,7 @@ export default function SessionViewer({
         </div>
         <div>
           <h2 className="text-xl font-semibold text-white">{title}</h2>
-          <p className="mt-1 text-sm text-white/55">
+          <p className="mt-1 text-sm text-ink-muted">
             Use the transcript to jump to a moment in the session.
           </p>
         </div>

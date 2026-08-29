@@ -98,8 +98,8 @@ const applicationBadgeVariants = {
         )}
         <div>
           <h2 class="text-2xl font-bold text-white">{targetUser.name}</h2>
-          <p class="text-white/60">{targetUser.email}</p>
-          <p class="mt-1 text-sm text-white/40">
+          <p class="text-ink-secondary">{targetUser.email}</p>
+          <p class="mt-1 text-sm text-ink-muted">
             Joined {targetUser.createdAt ? new Date(targetUser.createdAt).toLocaleDateString() : "—"}
           </p>
         </div>
@@ -132,10 +132,10 @@ const applicationBadgeVariants = {
                   {ur.role.name}
                 </span>
               ))
-            : <span class="text-white/40">No roles assigned</span>}
+            : <span class="text-ink-muted">No roles assigned</span>}
         </div>
         {isTargetAdmin && isSignedInUser ? (
-          <p class="text-sm text-white/60">
+          <p class="text-sm text-ink-secondary">
             You cannot remove your own ADMIN role.
           </p>
         ) : (
@@ -204,7 +204,7 @@ const applicationBadgeVariants = {
           </table>
         </div>
       ) : (
-        <p class="text-white/40">No applications</p>
+        <p class="text-ink-muted">No applications</p>
       )}
     </Card>
   </div>

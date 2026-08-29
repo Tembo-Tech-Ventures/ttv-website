@@ -83,7 +83,7 @@ const tokenState = (expiresAt: Date, revokedAt: Date | null) => {
   <div class="max-w-5xl space-y-6">
     <div>
       <h2 class="text-2xl font-bold text-white">Personal Access Tokens</h2>
-      <p class="mt-2 max-w-3xl text-sm text-white/60">
+      <p class="mt-2 max-w-3xl text-sm text-ink-secondary">
         Create an expiring credential for command-line or automated verification.
         A token acts as your current account and cannot grant roles you do not have.
       </p>
@@ -103,7 +103,7 @@ const tokenState = (expiresAt: Date, revokedAt: Date | null) => {
     {createdToken && (
       <section class="rounded-lg border border-primary/40 bg-dark/80 p-5 shadow-lg">
         <h3 class="font-semibold text-white">One-time token</h3>
-        <p class="mt-1 text-sm text-white/60">
+        <p class="mt-1 text-sm text-ink-secondary">
           Store this like a password. Send it only through a secure secret channel,
           never in chat, logs, screenshots, or a command argument.
         </p>
@@ -118,7 +118,7 @@ const tokenState = (expiresAt: Date, revokedAt: Date | null) => {
             class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
           >Copy</button>
         </div>
-        <p class="mt-3 text-xs text-white/50">
+        <p class="mt-3 text-xs text-ink-muted">
           Use the HTTP header <code>Authorization: Bearer &lt;token&gt;</code>.
         </p>
       </section>
@@ -136,7 +136,7 @@ const tokenState = (expiresAt: Date, revokedAt: Date | null) => {
             maxlength="50"
             autocomplete="off"
             placeholder="SAM production verifier"
-            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/30 focus:border-primary focus:outline-none"
+            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:border-primary focus:outline-none"
           />
         </label>
         <label class="flex flex-col gap-1.5 text-sm text-white/80">
@@ -166,7 +166,7 @@ const tokenState = (expiresAt: Date, revokedAt: Date | null) => {
           class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
         >Create token</button>
       </form>
-      <p class="mt-3 text-xs text-white/45">
+      <p class="mt-3 text-xs text-ink-muted">
         Read/write tokens can submit admin changes without a browser Origin header.
         Prefer read-only unless the automation must perform a specific mutation.
       </p>
@@ -175,11 +175,11 @@ const tokenState = (expiresAt: Date, revokedAt: Date | null) => {
     <section class="rounded-lg border border-teal/20 bg-dark/80 p-5 shadow-lg">
       <h3 class="text-lg font-semibold text-white">Issued tokens</h3>
       {tokens.length === 0 ? (
-        <p class="mt-3 text-sm text-white/50">No personal access tokens have been issued.</p>
+        <p class="mt-3 text-sm text-ink-muted">No personal access tokens have been issued.</p>
       ) : (
         <div class="mt-4 overflow-x-auto">
           <table class="w-full min-w-[760px] text-left text-sm">
-            <thead class="border-b border-teal/20 text-white/50">
+            <thead class="border-b border-teal/20 text-ink-muted">
               <tr>
                 <th class="pb-2 pr-4 font-medium">Label</th>
                 <th class="pb-2 pr-4 font-medium">Token</th>
@@ -216,7 +216,7 @@ const tokenState = (expiresAt: Date, revokedAt: Date | null) => {
                           >Revoke</button>
                         </form>
                       ) : (
-                        <span class="text-white/30">—</span>
+                        <span class="text-ink-muted">—</span>
                       )}
                     </td>
                   </tr>

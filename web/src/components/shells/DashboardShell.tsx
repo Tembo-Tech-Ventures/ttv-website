@@ -38,7 +38,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-[#2C6964] to-[#013D39]">
+    <div className="flex min-h-screen bg-gradient-to-br from-surface to-dark">
       <Sidebar
         links={DASHBOARD_LINKS}
         title="TTV Dashboard"
@@ -60,7 +60,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
             aria-expanded={sidebarOpen}
             disabled={!hydrated}
             onClick={() => setSidebarOpen(true)}
-            className="rounded-md p-1.5 text-white/60 hover:text-white lg:hidden"
+            className="rounded-md p-1.5 text-ink-secondary hover:text-white lg:hidden"
           >
             <PiListBold className="h-6 w-6" />
           </button>

@@ -25,7 +25,7 @@ const applications = await db.query.programApplication.findMany({
       <h2 class="text-2xl font-bold text-white">
         Welcome back, {greetingName}
       </h2>
-      <p class="mt-1 text-white/60">
+      <p class="mt-1 text-ink-secondary">
         Manage your applications and track your progress.
       </p>
     </div>
@@ -44,12 +44,12 @@ const applications = await db.query.programApplication.findMany({
                   <Badge variant={toProgramApplicationBadgeVariant(app.status)} />
                 </div>
                 {app.program?.curriculum && (
-                  <p class="text-sm text-white/60">
+                  <p class="text-sm text-ink-secondary">
                     {app.program.curriculum.title}
                   </p>
                 )}
                 {app.program?.startDate && (
-                  <p class="text-xs text-white/40">
+                  <p class="text-xs text-ink-muted">
                     Starts {app.program.startDate.toLocaleDateString()}
                   </p>
                 )}
@@ -67,7 +67,7 @@ const applications = await db.query.programApplication.findMany({
     ) : (
       <Card>
         <div class="text-center py-8">
-          <p class="text-white/60 mb-4">
+          <p class="text-ink-secondary mb-4">
             You haven't applied to any cohorts yet.
           </p>
           <a
