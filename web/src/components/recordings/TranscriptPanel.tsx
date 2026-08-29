@@ -9,6 +9,27 @@ export interface TranscriptSegment {
   speaker?: string | null;
 }
 
+/**
+ * Where the panel should be scrolled to put a segment in its vertical centre,
+ * clamped to the scrollable range so the first and last segments don't ask for
+ * an out-of-bounds offset.
+ */
+export function centredScrollTop({
+  segmentOffsetTop,
+  segmentHeight,
+  panelHeight,
+  panelScrollHeight,
+}: {
+  segmentOffsetTop: number;
+  segmentHeight: number;
+  panelHeight: number;
+  panelScrollHeight: number;
+}) {
+  const centred = segmentOffsetTop - panelHeight / 2 + segmentHeight / 2;
+  const furthest = Math.max(0, panelScrollHeight - panelHeight);
+  return Math.max(0, Math.min(centred, furthest));
+}
+
 export default function TranscriptPanel({
   segments,
   activeSegmentId,
@@ -19,13 +40,35 @@ export default function TranscriptPanel({
   onSeek: (seconds: number) => void;
 }) {
   const activeRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
+  /*
+   * Scroll the panel, not the page. `scrollIntoView` walks up and scrolls
+   * *every* scrollable ancestor including the document, so following along with
+   * a video yanked the whole page every few seconds without the viewer touching
+   * anything. Positioning the panel's own scrollTop keeps the effect local.
+   */
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const panel = panelRef.current;
+    const active = activeRef.current;
+    if (!panel || !active) return;
+
+    const top = centredScrollTop({
+      segmentOffsetTop: active.offsetTop,
+      segmentHeight: active.clientHeight,
+      panelHeight: panel.clientHeight,
+      panelScrollHeight: panel.scrollHeight,
+    });
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    panel.scrollTo({ top, behavior: reduceMotion ? "auto" : "smooth" });
   }, [activeSegmentId]);
 
   return (
-    <div className="h-full overflow-y-auto rounded-md border border-teal/20 bg-dark/40">
+    <div
+      ref={panelRef}
+      data-transcript-panel="true"
+      className="h-full overflow-y-auto overscroll-contain rounded-md border border-teal/20 bg-dark/40"
+    >
       {segments.length === 0 ? (
         <div className="p-6 text-sm text-white/50">Transcript is not available yet.</div>
       ) : (
