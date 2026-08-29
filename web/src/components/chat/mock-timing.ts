@@ -6,3 +6,11 @@
  * a real retrieval round trip is seconds, not milliseconds.
  */
 export const MOCK_LATENCY_MS = 1_500;
+
+/**
+ * Loading a saved conversation is one D1 query, not a retrieval round trip.
+ * Keeping the mock honest about that matters: the dev page is what design
+ * review looks at, and a 1.5s pause there implies a wait production does not
+ * have.
+ */
+export const MOCK_LOAD_MS = 150;

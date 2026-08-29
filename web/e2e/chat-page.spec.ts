@@ -1,6 +1,9 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { MOCK_LATENCY_MS } from "../src/components/chat/mock-timing";
 
+/** Widened per-request so tests can act inside the in-flight window. */
+const SLOW_LOAD_MS = 1_500;
+
 /**
  * Layout and interaction guarantees for the Ask AI page.
  *
@@ -58,8 +61,8 @@ function isMobile(testInfo: TestInfo) {
  * shows up when the dev server is busy. Astro drops the `ssr` attribute from
  * `<astro-island>` once the component is live, so that is the signal to wait on.
  */
-async function gotoChat(page: Page) {
-  await page.goto("/dev/chat-ui");
+async function gotoChat(page: Page, search = "") {
+  await page.goto(`/dev/chat-ui${search}`);
   await expect(page.locator("astro-island")).not.toHaveAttribute("ssr", /.*/);
 }
 
@@ -297,9 +300,19 @@ test("switching conversation replaces the transcript and resets its scroll", asy
 
   await expect(transcript(page).getByText("Should we move the retrieval layer")).toBeVisible();
   await expect(transcript(page).getByText("What should students do before")).toHaveCount(0);
-  // Landing mid-history in a conversation you just opened is disorienting; the
-  // reset must not inherit the previous transcript's scroll position.
+
+  // Landing mid-history in a conversation you just opened is disorienting. Both
+  // halves of the reset are checked: the pill is gone, and the scroll position
+  // is actually at the bottom rather than inherited. The two conversations have
+  // the same message count on purpose — that collision is what made counting
+  // messages an unusable signal for "the transcript changed".
   await expect(page.getByRole("button", { name: "Jump to latest" })).toBeHidden();
+  const position = await scroller.evaluate((element) => ({
+    overflows: element.scrollHeight > element.clientHeight + 1,
+    fromBottom: element.scrollHeight - element.scrollTop - element.clientHeight,
+  }));
+  expect(position.overflows).toBe(true);
+  expect(position.fromBottom).toBeLessThanOrEqual(1);
 });
 
 test("switching conversation from the sheet closes it", async ({ page }, testInfo) => {
@@ -322,17 +335,22 @@ test("the desktop rail keeps a route back into the dashboard", async ({ page }, 
 });
 
 test("a conversation still loading does not replace a new chat", async ({ page }, testInfo) => {
-  await gotoChat(page);
+  // The default load time is honest about production and too short to act in,
+  // so widen it for this test rather than slowing the page for everyone.
+  await gotoChat(page, `?mockLoad=${SLOW_LOAD_MS}`);
 
   await openConversationList(page);
   await page.getByRole("button", { name: /Architecture tradeoffs/ }).first().click();
-  // Abandon the load before it lands.
+  // Tapping a conversation must say something before the fetch lands.
+  await expect(transcript(page).getByText("Loading conversation…")).toBeVisible();
+
+  // Abandon the load before it does.
   await newChatControl(page, testInfo).click();
   await expect(page.getByRole("heading", { name: "Ask across your sessions" })).toBeVisible();
 
   // Same reasoning as the in-flight send: the assertion is that a late response
   // never lands, so it has to outlast the window in which it could.
-  await page.waitForTimeout(MOCK_LATENCY_MS * 2);
+  await page.waitForTimeout(SLOW_LOAD_MS * 2);
 
   await expect(transcript(page).getByText("Should we move the retrieval layer")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Ask across your sessions" })).toBeVisible();

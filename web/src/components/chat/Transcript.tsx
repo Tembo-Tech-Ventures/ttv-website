@@ -139,6 +139,8 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
 interface TranscriptProps {
   messages: ChatMessage[];
   loading: boolean;
+  /** A saved conversation is being fetched; the transcript shown is the old one. */
+  loadingConversation?: boolean;
   onPickPrompt: (prompt: string) => void;
   /**
    * Changes whenever the transcript is replaced wholesale — a different
@@ -168,6 +170,7 @@ interface TranscriptProps {
 export default function Transcript({
   messages,
   loading,
+  loadingConversation = false,
   onPickPrompt,
   conversationEpoch,
 }: TranscriptProps) {
@@ -280,7 +283,11 @@ export default function Transcript({
         className="h-full overflow-y-auto overscroll-contain [scrollbar-gutter:stable] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
       >
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-5 sm:px-6">
-          {messages.length === 0 ? (
+          {loadingConversation ? (
+            // Otherwise tapping a conversation does nothing visible until the
+            // fetch lands, and the transcript on screen is still the old one.
+            <p className="py-10 text-center text-sm text-ink-muted">Loading conversation…</p>
+          ) : messages.length === 0 ? (
             <EmptyState onPick={onPickPrompt} />
           ) : (
             messages.map((message, index) => (

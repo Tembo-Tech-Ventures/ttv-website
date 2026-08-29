@@ -8,7 +8,7 @@ import ConversationList, {
 import ConversationSheet from "@/components/chat/ConversationSheet";
 import Transcript from "@/components/chat/Transcript";
 import type { ChatMessage, ChatSession } from "@/components/chat/types";
-import { MOCK_LATENCY_MS } from "@/components/chat/mock-timing";
+import { MOCK_LATENCY_MS, MOCK_LOAD_MS } from "@/components/chat/mock-timing";
 import { DASHBOARD_LINKS } from "@/components/shells/DashboardShell";
 
 /** Matches Tailwind's `lg:`, the breakpoint the rail appears at. */
@@ -40,6 +40,12 @@ interface ChatAppProps {
    * behaviour that switching conversations exists to exercise never happens.
    */
   mockTranscripts?: Record<string, ChatMessage[]>;
+  /**
+   * Mock timings, overridable so a test can widen the window it needs to act
+   * in without making the dev page imply latency production does not have.
+   */
+  mockLatencyMs?: number;
+  mockLoadMs?: number;
 }
 
 /**
@@ -57,6 +63,8 @@ export default function ChatApp({
   initialSessions = NO_SESSIONS,
   initialMessages = NO_MESSAGES,
   mockTranscripts = NO_TRANSCRIPTS,
+  mockLatencyMs = MOCK_LATENCY_MS,
+  mockLoadMs = MOCK_LOAD_MS,
 }: ChatAppProps) {
   const [sessions, setSessions] = useState<ChatSession[]>(initialSessions);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(
@@ -67,6 +75,8 @@ export default function ChatApp({
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
+  /** The conversation being fetched, so the tap has visible consequences. */
+  const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
   /**
    * Bumped whenever the transcript is replaced wholesale, so the scroll
    * position resets. Message count cannot stand in for this — two different
@@ -147,8 +157,11 @@ export default function ChatApp({
     if (mockMode) return;
     const response = await fetch("/api/chat/sessions");
     const payload = (await response.json()) as { sessions?: ChatSession[] };
-    if (!response.ok || isStale()) return;
+    if (!response.ok) return;
+    // The list is global, so refreshing it is always correct. Only adopting the
+    // session id is dangerous late — that is the id the next message files under.
     setSessions(payload.sessions ?? []);
+    if (isStale()) return;
     setActiveSessionId(nextActiveSessionId);
   }
 
@@ -157,18 +170,27 @@ export default function ChatApp({
     if (sessionId === activeSessionId || loading) return;
     setError("");
     setHistoryLoading(true);
+    setPendingSessionId(sessionId);
     const isStale = staleAfter(conversationEpochRef.current);
+    /*
+     * Applying a result bumps the epoch, which makes `isStale()` true for this
+     * call's own `finally`. Track completion separately, or a successful load
+     * declines to clear its own loading flags and the transcript sits on
+     * "Loading conversation…" forever.
+     */
+    let applied = false;
     try {
       if (mockMode) {
-        // Same stand-in round trip as sending, so "while a conversation is
-        // loading" is a state the dev page can actually be observed in.
+        // A stand-in for the D1 read, so "while a conversation is loading" is
+        // a state the dev page can actually be observed in.
         await new Promise((resolve) => {
-          setTimeout(resolve, MOCK_LATENCY_MS);
+          setTimeout(resolve, mockLoadMs);
         });
         if (isStale()) return;
         setActiveSessionId(sessionId);
         setMessages(mockTranscripts[sessionId] ?? []);
         beginNewTranscript();
+        applied = true;
         return;
       }
       const response = await fetch(`/api/chat/sessions/${encodeURIComponent(sessionId)}`);
@@ -181,11 +203,15 @@ export default function ChatApp({
       setActiveSessionId(sessionId);
       setMessages(payload.messages ?? []);
       beginNewTranscript();
+      applied = true;
     } catch (err) {
       if (isStale()) return;
       setError(err instanceof Error ? err.message : "Unable to load chat");
     } finally {
-      if (!isStale()) setHistoryLoading(false);
+      if (applied || !isStale()) {
+        setHistoryLoading(false);
+        setPendingSessionId(null);
+      }
     }
   }
 
@@ -194,9 +220,12 @@ export default function ChatApp({
     setMessages([]);
     setError("");
     setSheetOpen(false);
-    // Any answer still in flight belongs to the conversation being left, so
-    // stop reporting it as this one's pending work.
+    // Any request still in flight belongs to the conversation being left, so
+    // stop reporting it as this one's pending work. Both flags: their owners'
+    // `finally` blocks are epoch-guarded and will correctly decline to clear.
     setLoading(false);
+    setHistoryLoading(false);
+    setPendingSessionId(null);
     beginNewTranscript();
     composerRef.current?.focus();
   }
@@ -220,7 +249,7 @@ export default function ChatApp({
         // rendering alone first — which is most of what this page has to get
         // right.
         await new Promise((resolve) => {
-          setTimeout(resolve, MOCK_LATENCY_MS);
+          setTimeout(resolve, mockLatencyMs);
         });
         if (isStale()) return;
         setActiveSessionId(activeSessionId ?? "mock-session-new");
@@ -394,6 +423,7 @@ export default function ChatApp({
         <Transcript
           messages={messages}
           loading={loading}
+          loadingConversation={pendingSessionId !== null}
           conversationEpoch={conversationEpoch}
           onPickPrompt={(prompt) => void sendMessage(prompt)}
         />

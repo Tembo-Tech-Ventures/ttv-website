@@ -8,10 +8,30 @@
  */
 import ChatLayout from "@/layouts/ChatLayout.astro";
 import ChatApp from "@/components/chat/ChatApp";
+import { MOCK_LATENCY_MS, MOCK_LOAD_MS } from "@/components/chat/mock-timing";
 
 if (!import.meta.env.DEV) {
   return new Response("Not found", { status: 404 });
 }
+
+/*
+ * Mock timings default to something honest about production and can be widened
+ * per-request. A test that asserts a late response never lands has to be able
+ * to act inside that window, and hardcoding a long wait here instead would make
+ * the page imply latency the real app does not have.
+ */
+function timing(param: string, fallback: number) {
+  // Not `Number(searchParams.get(...))` — a missing param is null, and
+  // `Number(null)` is 0, which is finite and non-negative, so the fallback
+  // would never apply and every mock delay would silently become instant.
+  const raw = Astro.url.searchParams.get(param);
+  if (raw === null) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+const mockLatencyMs = timing("mockLatency", MOCK_LATENCY_MS);
+const mockLoadMs = timing("mockLoad", MOCK_LOAD_MS);
 
 // Enough conversations that the desktop rail actually overflows: an assertion
 // that "only the transcript scrolls" proves nothing if the rail never had
@@ -155,35 +175,101 @@ const messages = [
   },
 ];
 
-// Distinct per-session transcripts, so switching conversations actually swaps
-// the messages. Without them the dev page changes the title only, and the
-// scroll-reset behaviour that switching exists to exercise never happens.
+// A transcript for every session. Leaving some without one lets the dev page
+// render a state the real app cannot produce — a titled conversation showing
+// the new-chat empty state — which is both misleading and a trap for tests
+// that use that empty state to mean "this is a new chat".
+//
+// `mock-session-2` deliberately has the same number of messages as
+// `mock-session-1`, and is long enough to overflow. Message count is exactly
+// what must not be used to detect a conversation change, so the dev page has
+// to contain the collision, not avoid it.
+function conversation(topic: string, answers: [string, string][]) {
+  return answers.flatMap(([question, answer], index) => [
+    { id: `${topic}-q${index}`, role: "user" as const, content: question },
+    { id: `${topic}-a${index}`, role: "assistant" as const, content: answer },
+  ]);
+}
+
+const architectureTranscript = [
+  {
+    id: "arch-q0",
+    role: "user" as const,
+    content: "Should we move the retrieval layer off Cloudflare?",
+  },
+  {
+    id: "arch-a0",
+    role: "assistant" as const,
+    content:
+      "Not yet. The workshop's position was that retrieval quality is the open question, not the hosting.\n\n- Prove relevance on the current stack first.\n- Moving now changes two variables at once, so a regression tells you nothing.\n- Revisit once you have a benchmark you trust. [1]\n\nThe cost argument points the same way: the current stack is the cheap one, and the expensive alternative buys you nothing you can measure yet.",
+    citations: [
+      {
+        sourceNumber: 1,
+        recordingId: "recording-2",
+        title: "Technical Architecture Workshop",
+        startTime: 1494,
+        endTime: 1550,
+        url: "/dashboard/sessions/recording-2?t=1494",
+        text: "If one line item is bigger than everything else combined, that is a decision you will have to undo.",
+      },
+    ],
+  },
+  {
+    id: "arch-q1",
+    role: "user" as const,
+    content: "What benchmark would you trust?",
+  },
+  {
+    id: "arch-a1",
+    role: "assistant" as const,
+    content:
+      "**Build it from your own questions**\n\n- Collect thirty questions people actually asked, not ones you invented.\n- Have a human mark the passage that answers each one.\n- Score retrieval on whether that passage appears in the top five.\n\n**Then hold it still**\n\n- Freeze the set before you start tuning, or you will tune the benchmark.\n- Re-run it on every change to chunking, embedding or filtering.\n- Track one number over time rather than a dashboard nobody reads. [1]",
+    citations: [
+      {
+        sourceNumber: 1,
+        recordingId: "recording-2",
+        title: "Technical Architecture Workshop",
+        startTime: 1820,
+        endTime: 1884,
+        url: "/dashboard/sessions/recording-2?t=1820",
+        text: "Thirty real questions with a marked answer beats any amount of intuition about whether search feels good.",
+      },
+    ],
+  },
+  {
+    id: "arch-q2",
+    role: "user" as const,
+    content: "And if the numbers stay bad?",
+  },
+  {
+    id: "arch-a2",
+    role: "assistant" as const,
+    content:
+      "Then the problem is upstream of the database, and moving it would have hidden that.\n\n- Check chunking first. Most bad retrieval is chunks that split an answer in half.\n- Check what you are embedding. Titles and speaker names carry more signal than people expect.\n- Only then look at the index itself.\n\nThe order matters because each step is cheap to undo and the last one is not.",
+  },
+];
+
 const transcripts: Record<string, typeof messages> = {
   "mock-session-1": messages,
-  "mock-session-2": [
-    {
-      id: "arch-1",
-      role: "user" as const,
-      content: "Should we move the retrieval layer off Cloudflare?",
-    },
-    {
-      id: "arch-2",
-      role: "assistant" as const,
-      content:
-        "Not yet. The workshop's position was that the retrieval quality is the open question, not the hosting.\n\n- Prove relevance on the current stack first.\n- Moving now changes two variables at once, so a regression tells you nothing.\n- Revisit once you have a benchmark you trust. [1]",
-      citations: [
-        {
-          sourceNumber: 1,
-          recordingId: "recording-2",
-          title: "Technical Architecture Workshop",
-          startTime: 1494,
-          endTime: 1550,
-          url: "/dashboard/sessions/recording-2?t=1494",
-          text: "If one line item is bigger than everything else combined, that is a decision you will have to undo.",
-        },
-      ],
-    },
-  ],
+  "mock-session-2": architectureTranscript,
+  "mock-session-3": conversation("pitch", [
+    ["How did the demo day pitch land?", "Lead with traction, not architecture. The diagram answered a question nobody had asked yet."],
+  ]),
+  "mock-session-4": conversation("pricing", [
+    ["How did mentors frame pricing?", "Charge for the outcome, not the seat. Per-seat pricing punishes the customer for rolling you out."],
+  ]),
+  "mock-session-5": conversation("hiring", [
+    ["Who should we hire first?", "Hire for range before depth at this stage. The first engineer will do four jobs, none of them for long."],
+  ]),
+  "mock-session-6": conversation("positioning", [
+    ["How do we position against incumbents?", "Name the workflow you replace, not the category you join. Categories invite comparison on their terms."],
+  ]),
+  "mock-session-7": conversation("metrics", [
+    ["What should we measure in month one?", "One activation metric, reviewed weekly. A dashboard of twelve numbers is a dashboard nobody reads."],
+  ]),
+  legacy: conversation("legacy", [
+    ["What did we discuss before chats were saved?", "These are questions asked before conversations were stored separately, grouped into one bucket."],
+  ]),
 };
 ---
 
@@ -194,6 +280,8 @@ const transcripts: Record<string, typeof messages> = {
     initialSessions={sessions}
     initialMessages={messages}
     mockTranscripts={transcripts}
+    mockLatencyMs={mockLatencyMs}
+    mockLoadMs={mockLoadMs}
   />
 </ChatLayout>
 
