@@ -9,6 +9,7 @@
 import ChatLayout from "@/layouts/ChatLayout.astro";
 import ChatApp from "@/components/chat/ChatApp";
 import { MOCK_LATENCY_MS, MOCK_LOAD_MS } from "@/components/chat/mock-timing";
+import type { ChatMessage } from "@/components/chat/types";
 
 if (!import.meta.env.DEV) {
   return new Response("Not found", { status: 404 });
@@ -188,14 +189,14 @@ const messages = [
 // `mock-session-1`, and is long enough to overflow. Message count is exactly
 // what must not be used to detect a conversation change, so the dev page has
 // to contain the collision, not avoid it.
-function conversation(topic: string, answers: [string, string][]) {
+function conversation(topic: string, answers: [string, string][]): ChatMessage[] {
   return answers.flatMap(([question, answer], index) => [
     { id: `${topic}-q${index}`, role: "user" as const, content: question },
     { id: `${topic}-a${index}`, role: "assistant" as const, content: answer },
   ]);
 }
 
-const architectureTranscript = [
+const architectureTranscript: ChatMessage[] = [
   {
     id: "arch-q0",
     role: "user" as const,
@@ -253,7 +254,7 @@ const architectureTranscript = [
   },
 ];
 
-const transcripts: Record<string, typeof messages> = {
+const transcripts: Record<string, ChatMessage[]> = {
   "mock-session-1": messages,
   "mock-session-2": architectureTranscript,
   "mock-session-3": conversation("pitch", [
