@@ -1,5 +1,6 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import Button from "@/components/common/Button.astro";
 import Card from "@/components/common/Card.astro";
 import Badge from "@/components/common/Badge.astro";
 import { drizzle } from "drizzle-orm/d1";
@@ -413,7 +414,7 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
             required
             aria-invalid={Boolean(cohortFieldErrors.name)}
             aria-describedby={cohortFieldErrors.name ? "name-error" : undefined}
-            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            class="form-control placeholder:text-ink-muted"
           />
           {cohortFieldErrors.name && (
             <p id="name-error" class="text-sm text-red-300">{cohortFieldErrors.name}</p>
@@ -428,7 +429,7 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
             rows="3"
             aria-invalid={Boolean(cohortFieldErrors.description)}
             aria-describedby={cohortFieldErrors.description ? "description-error" : undefined}
-            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            class="form-control placeholder:text-ink-muted"
           >{cohortEditValues.description}</textarea>
           {cohortFieldErrors.description && (
             <p id="description-error" class="text-sm text-red-300">{cohortFieldErrors.description}</p>
@@ -444,7 +445,7 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
               value={cohortEditValues.startDate}
               aria-invalid={Boolean(cohortFieldErrors.startDate)}
               aria-describedby={cohortFieldErrors.startDate ? "start-date-error" : undefined}
-              class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+              class="form-control"
             />
             {cohortFieldErrors.startDate && (
               <p id="start-date-error" class="text-sm text-red-300">{cohortFieldErrors.startDate}</p>
@@ -459,7 +460,7 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
               value={cohortEditValues.endDate}
               aria-invalid={Boolean(cohortFieldErrors.endDate)}
               aria-describedby={cohortFieldErrors.endDate ? "end-date-error" : undefined}
-              class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+              class="form-control"
             />
             {cohortFieldErrors.endDate && (
               <p id="end-date-error" class="text-sm text-red-300">{cohortFieldErrors.endDate}</p>
@@ -476,7 +477,7 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
             required
             aria-invalid={Boolean(cohortFieldErrors.curriculumId)}
             aria-describedby={cohortFieldErrors.curriculumId ? "curriculum-error" : undefined}
-            class="w-full min-w-0 rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            class="form-control w-full min-w-0"
           >
             <option value="">Select a curriculum…</option>
             {curricula.map((curriculum) => (
@@ -518,12 +519,9 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
             </p>
           )}
         </div>
-        <button
-          type="submit"
-          class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
-        >
+        <Button type="submit">
           Save Changes
-        </button>
+        </Button>
       </form>
     </Card>
 
@@ -574,7 +572,7 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
             id="staffUserId"
             name="userId"
             required
-            class="w-full min-w-0 rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            class="form-control w-full min-w-0"
           >
             <option value="">Select user…</option>
             {allUsers.map((user) => (
@@ -588,18 +586,15 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
             id="roleName"
             name="roleName"
             required
-            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            class="form-control"
           >
             <option value="INSTRUCTOR">Instructor</option>
             <option value="TA">TA</option>
           </select>
         </div>
-        <button
-          type="submit"
-          class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
-        >
+        <Button type="submit">
           Add Staff
-        </button>
+        </Button>
       </form>
     </Card>
 
@@ -674,12 +669,9 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
               />
               <span class="text-xs text-ink-muted">Used only for COMPLETED.</span>
             </div>
-            <button
-              type="submit"
-              class="inline-flex w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-dark transition-colors hover:bg-primary/90 lg:w-auto"
-            >
+            <Button type="submit" class="w-full font-semibold lg:w-auto">
               Enroll user
-            </button>
+            </Button>
           </form>
         ) : (
           <p class="mt-4 rounded-md bg-teal/10 p-3 text-sm text-ink-secondary">

@@ -1,5 +1,6 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import Button from "@/components/common/Button.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
@@ -16,12 +17,9 @@ const programs = await db.query.program.findMany({
   <div class="space-y-6">
     <div class="flex items-center justify-between">
       <h2 class="text-2xl font-bold text-white">Cohorts</h2>
-      <a
-        href="/admin/programs/new"
-        class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
-      >
+      <Button href="/admin/programs/new">
         New Cohort
-      </a>
+      </Button>
     </div>
 
     <div class="overflow-x-auto rounded-lg border border-teal/20">

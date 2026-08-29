@@ -2,6 +2,7 @@
 import AdminLayout from "@/layouts/AdminLayout.astro";
 import Card from "@/components/common/Card.astro";
 import Badge from "@/components/common/Badge.astro";
+import Button from "@/components/common/Button.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -143,23 +144,21 @@ const applicationBadgeVariants = {
             {isTargetAdmin ? (
               <>
                 <input type="hidden" name="action" value="remove-admin" />
-                <button
+                <Button
                   type="submit"
-                  class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+                  variant="danger"
+                  size="sm"
                   onclick="return confirm('Remove admin privileges from this user?')"
                 >
                   Remove Admin
-                </button>
+                </Button>
               </>
             ) : (
               <>
                 <input type="hidden" name="action" value="add-admin" />
-                <button
-                  type="submit"
-                  class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-dark hover:bg-primary/90"
-                >
+                <Button type="submit" size="sm">
                   Make Admin
-                </button>
+                </Button>
               </>
             )}
           </form>

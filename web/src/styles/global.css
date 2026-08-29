@@ -90,6 +90,12 @@
   }
 }
 
+@layer utilities {
+  .form-control {
+    @apply w-full rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50;
+  }
+}
+
 /* Reveal utilities used by sections that want a simple in-view animation
  * when GSAP isn't warranted. Respect prefers-reduced-motion. */
 @layer utilities {

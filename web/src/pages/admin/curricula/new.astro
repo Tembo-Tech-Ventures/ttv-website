@@ -1,5 +1,6 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import Button from "@/components/common/Button.astro";
 import Card from "@/components/common/Card.astro";
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
@@ -77,8 +78,8 @@ if (Astro.request.method === "POST") {
             aria-describedby={errors.title ? "title-error" : undefined}
             placeholder="e.g. Web Development Foundations"
             class:list={[
-              "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
-              errors.title ? "border-red-400" : "border-teal focus:border-primary",
+              "form-control placeholder:text-ink-muted",
+              errors.title && "border-red-400",
             ]}
           />
           {errors.title && (
@@ -101,10 +102,8 @@ if (Astro.request.method === "POST") {
             aria-describedby={errors.description ? "description-error" : undefined}
             placeholder="Describe the learning goals and scope."
             class:list={[
-              "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
-              errors.description
-                ? "border-red-400"
-                : "border-teal focus:border-primary",
+              "form-control placeholder:text-ink-muted",
+              errors.description && "border-red-400",
             ]}
           >{values.description}</textarea>
           {errors.description && (
@@ -115,18 +114,12 @@ if (Astro.request.method === "POST") {
         </div>
 
         <div class="flex flex-wrap gap-3">
-          <button
-            type="submit"
-            class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
-          >
+          <Button type="submit">
             Create Curriculum
-          </button>
-          <a
-            href="/admin/curricula"
-            class="rounded-md border border-teal/40 px-4 py-2 text-sm font-medium text-white/80 hover:bg-teal/20"
-          >
+          </Button>
+          <Button variant="secondary" href="/admin/curricula">
             Cancel
-          </a>
+          </Button>
         </div>
       </form>
     </Card>

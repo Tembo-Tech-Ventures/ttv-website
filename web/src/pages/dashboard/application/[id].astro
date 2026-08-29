@@ -2,6 +2,7 @@
 import DashboardLayout from "@/layouts/DashboardLayout.astro";
 import Badge from "@/components/common/Badge.astro";
 import Card from "@/components/common/Card.astro";
+import Button from "@/components/common/Button.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
@@ -152,18 +153,15 @@ try {
               id="application"
               name="application"
               rows={10}
-              class="rounded-md border border-teal bg-dark/50 px-3 py-2 font-mono text-sm text-white placeholder:text-ink-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+              class="form-control font-mono text-sm placeholder:text-ink-muted"
             >{JSON.stringify(parsedApplication, null, 2)}</textarea>
             <p class="text-xs text-ink-muted">
               Enter your application details as JSON.
             </p>
           </div>
-          <button
-            type="submit"
-            class="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 font-medium text-dark hover:bg-primary/90 transition-colors"
-          >
+          <Button type="submit">
             Save Application
-          </button>
+          </Button>
         </form>
       ) : (
         <div>

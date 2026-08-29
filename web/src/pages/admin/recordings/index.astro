@@ -1,5 +1,6 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import Button from "@/components/common/Button.astro";
 import ProcessingStatus from "@/components/recordings/ProcessingStatus.astro";
 import { formatDuration } from "@/lib/recordings/time-utils";
 import { drizzle } from "drizzle-orm/d1";
@@ -23,18 +24,12 @@ const recordings = await db.query.recording.findMany({
         </p>
       </div>
       <div class="flex flex-wrap gap-2">
-        <a
-          href="/admin/recordings/import"
-          class="inline-flex items-center rounded-md border border-teal/40 px-4 py-2 text-sm font-medium text-white/80 hover:bg-teal/20"
-        >
+        <Button variant="secondary" href="/admin/recordings/import">
           Import from Drive
-        </a>
-        <a
-          href="/admin/recordings/upload"
-          class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
-        >
+        </Button>
+        <Button href="/admin/recordings/upload">
           Upload Recording
-        </a>
+        </Button>
       </div>
     </div>
 

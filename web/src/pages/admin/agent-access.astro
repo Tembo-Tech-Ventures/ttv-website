@@ -1,5 +1,6 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import Button from "@/components/common/Button.astro";
 import { env } from "cloudflare:workers";
 import {
   createAgentSession,
@@ -104,11 +105,10 @@ const formatDate = (date: Date) =>
                 id="agent-token"
                 class="min-w-0 flex-1 break-all rounded-md bg-black/30 p-3 text-sm text-primary"
               >{createdToken}</code>
-              <button
+              <Button
                 id="copy-agent-token"
                 type="button"
-                class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
-              >Copy</button>
+              >Copy</Button>
             </div>
           </section>
         )}
@@ -124,14 +124,14 @@ const formatDate = (date: Date) =>
                 required
                 maxlength="50"
                 placeholder="SAM staging verifier"
-                class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:border-primary focus:outline-none"
+                class="form-control placeholder:text-ink-muted"
               />
             </label>
             <label class="flex flex-col gap-1.5 text-sm text-white/80">
               Lifetime
               <select
                 name="duration"
-                class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none"
+                class="form-control"
               >
                 <option value="1">1 hour</option>
                 <option value="8" selected>8 hours</option>
@@ -139,10 +139,7 @@ const formatDate = (date: Date) =>
                 <option value="168">7 days</option>
               </select>
             </label>
-            <button
-              type="submit"
-              class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
-            >Create token</button>
+            <Button type="submit">Create token</Button>
           </form>
         </section>
 
@@ -171,10 +168,7 @@ const formatDate = (date: Date) =>
                         <form method="POST">
                           <input type="hidden" name="action" value="revoke" />
                           <input type="hidden" name="sessionId" value={session.id} />
-                          <button
-                            type="submit"
-                            class="rounded-md border border-red-400/30 px-3 py-1.5 text-red-200 hover:bg-red-400/10"
-                          >Revoke</button>
+                          <Button variant="danger" size="sm" type="submit">Revoke</Button>
                         </form>
                       </td>
                     </tr>

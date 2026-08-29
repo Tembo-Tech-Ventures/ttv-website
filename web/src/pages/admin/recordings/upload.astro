@@ -1,5 +1,6 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import Button from "@/components/common/Button.astro";
 import Card from "@/components/common/Card.astro";
 import { drizzle } from "drizzle-orm/d1";
 import { createId } from "@paralleldrive/cuid2";
@@ -65,12 +66,12 @@ const programs = await db.query.program.findMany({
       <form method="POST" enctype="multipart/form-data" class="mt-6 space-y-4">
         <div class="flex flex-col gap-1.5">
           <label for="title" class="text-sm font-medium text-white/90">Title *</label>
-          <input id="title" name="title" required class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50" />
+          <input id="title" name="title" required class="form-control" />
         </div>
 
         <div class="flex flex-col gap-1.5">
           <label for="programId" class="text-sm font-medium text-white/90">Program</label>
-          <select id="programId" name="programId" class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50">
+          <select id="programId" name="programId" class="form-control">
             <option value="">Unassigned</option>
             {programs.map((program) => <option value={program.id}>{program.name}</option>)}
           </select>
@@ -78,22 +79,22 @@ const programs = await db.query.program.findMany({
 
         <div class="flex flex-col gap-1.5">
           <label for="recordedAt" class="text-sm font-medium text-white/90">Recorded Date</label>
-          <input type="date" id="recordedAt" name="recordedAt" class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50" />
+          <input type="date" id="recordedAt" name="recordedAt" class="form-control" />
         </div>
 
         <div class="flex flex-col gap-1.5">
           <label for="description" class="text-sm font-medium text-white/90">Description</label>
-          <textarea id="description" name="description" rows="4" class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"></textarea>
+          <textarea id="description" name="description" rows="4" class="form-control"></textarea>
         </div>
 
         <div class="flex flex-col gap-1.5">
           <label for="video" class="text-sm font-medium text-white/90">Video File *</label>
-          <input type="file" id="video" name="video" required accept="video/*" class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1 file:text-sm file:font-semibold file:text-dark" />
+          <input type="file" id="video" name="video" required accept="video/*" class="form-control file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1 file:text-sm file:font-semibold file:text-dark" />
         </div>
 
-        <button type="submit" class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90">
+        <Button type="submit">
           Upload and Process
-        </button>
+        </Button>
       </form>
     </Card>
   </div>
