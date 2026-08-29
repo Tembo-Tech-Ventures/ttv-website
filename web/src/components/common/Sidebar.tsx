@@ -49,7 +49,7 @@ export function SidebarCloseButton({ onClose }: { onClose: () => void }) {
       type="button"
       aria-label="Close navigation"
       onClick={onClose}
-      className="rounded-md p-1 text-white/60 hover:text-white"
+      className="rounded-md p-1 text-ink-secondary hover:text-white"
     >
       <PiXBold className="h-5 w-5" />
     </button>
@@ -105,7 +105,12 @@ export default function Sidebar({ links, title, isOpen, onClose }: SidebarProps)
       */}
       <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-dvh lg:w-64 lg:shrink-0 lg:flex-col lg:self-start lg:overflow-y-auto lg:overscroll-contain lg:border-r lg:border-teal/20 lg:bg-dark/50 lg:p-4">
         <div className="mb-6">
-          <h1 className="text-lg font-semibold text-white">{title}</h1>
+          {/*
+            font-body: h1 picks up the Mattone display face by default, which is
+            a hero-heading treatment and reads far too heavy at 18px in a rail.
+            The element is an h1 for document structure, not for the type.
+          */}
+          <h1 className="font-body text-lg font-semibold text-white">{title}</h1>
         </div>
         <NavLinks links={links} />
       </aside>

@@ -30,7 +30,7 @@ const { title = "Ask AI | Tembo Tech Ventures" } = Astro.props;
     <title>{title}</title>
   </head>
   <body class="h-full overflow-hidden overscroll-none bg-dark">
-    <div class="chat-viewport flex flex-col bg-gradient-to-br from-teal to-dark">
+    <div class="chat-viewport flex flex-col bg-gradient-to-br from-surface to-dark">
       {/* Children are flex items in a container of definite height: any child
           that wants to scroll needs `min-h-0 flex-1` plus `overflow-y-auto`. */}
       <slot />

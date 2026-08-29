@@ -218,7 +218,7 @@ const hasGitHubAccount = profile
                     placeholder="your-handle"
                     value={profile?.handle ?? defaultHandle}
                     class:list={[
-                      "flex-1 rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary/50",
+                      "flex-1 rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
                       result?.handleError ? "border-red-500" : "border-teal focus:border-primary",
                     ]}
                   />
@@ -244,7 +244,7 @@ const hasGitHubAccount = profile
                   placeholder="e.g. Full-Stack Developer · Lagos, Nigeria"
                   value={profile?.headline ?? ""}
                   class:list={[
-                    "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary/50",
+                    "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
                     result?.fieldErrors?.headline ? "border-red-500" : "border-teal focus:border-primary",
                   ]}
                 />
@@ -265,7 +265,7 @@ const hasGitHubAccount = profile
                   maxlength="4000"
                   placeholder="Tell the community about yourself, your journey, and what you're building."
                   class:list={[
-                    "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary/50",
+                    "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
                     result?.fieldErrors?.bio ? "border-red-500" : "border-teal focus:border-primary",
                   ]}
                 >{profile?.bio ?? ""}</textarea>
@@ -287,7 +287,7 @@ const hasGitHubAccount = profile
                     maxlength="120"
                     placeholder="e.g. Lagos"
                     value={profile?.location ?? ""}
-                    class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
                 </div>
                 <div class="flex flex-col gap-1.5">
@@ -301,7 +301,7 @@ const hasGitHubAccount = profile
                     maxlength="56"
                     placeholder="e.g. Nigeria"
                     value={profile?.country ?? ""}
-                    class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
                 </div>
               </div>
@@ -318,7 +318,7 @@ const hasGitHubAccount = profile
                   placeholder="e.g. TypeScript, React, Node.js, Python"
                   value={skillsValue}
                   class:list={[
-                    "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary/50",
+                    "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
                     result?.fieldErrors?.skills ? "border-red-500" : "border-teal focus:border-primary",
                   ]}
                 />
@@ -366,7 +366,7 @@ const hasGitHubAccount = profile
                     placeholder="https://your-site.com"
                     value={profile?.portfolioUrl ?? ""}
                     class:list={[
-                      "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary/50",
+                      "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
                       result?.fieldErrors?.portfolioUrl ? "border-red-500" : "border-teal focus:border-primary",
                     ]}
                   />
@@ -386,7 +386,7 @@ const hasGitHubAccount = profile
                     placeholder="https://linkedin.com/in/your-profile"
                     value={profile?.linkedinUrl ?? ""}
                     class:list={[
-                      "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-primary/50",
+                      "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
                       result?.fieldErrors?.linkedinUrl ? "border-red-500" : "border-teal focus:border-primary",
                     ]}
                   />

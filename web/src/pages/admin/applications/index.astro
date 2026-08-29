@@ -53,7 +53,7 @@ if (statusFilter) {
           "rounded-full px-3 py-1 text-sm font-medium transition-colors",
           !statusFilter
             ? "bg-primary text-dark"
-            : "bg-teal/20 text-white/60 hover:text-white",
+            : "bg-teal/20 text-ink-secondary hover:text-white",
         ]}
       >
         All
@@ -65,7 +65,7 @@ if (statusFilter) {
             "rounded-full px-3 py-1 text-sm font-medium capitalize transition-colors",
             statusFilter === s
               ? "bg-primary text-dark"
-              : "bg-teal/20 text-white/60 hover:text-white",
+              : "bg-teal/20 text-ink-secondary hover:text-white",
           ]}
         >
           {s.toLowerCase()}
@@ -87,7 +87,7 @@ if (statusFilter) {
         <tbody class="divide-y divide-teal/10">
           {applications.length === 0 ? (
             <tr>
-              <td colspan="5" class="px-4 py-8 text-center text-white/40">
+              <td colspan="5" class="px-4 py-8 text-center text-ink-muted">
                 {statusFilter
                   ? `No ${statusFilter.toLowerCase()} applications found.`
                   : "No applications yet. Applications appear here when students submit them."}

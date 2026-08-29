@@ -70,7 +70,7 @@ export default function TranscriptPanel({
       className="h-full overflow-y-auto overscroll-contain rounded-md border border-teal/20 bg-dark/40"
     >
       {segments.length === 0 ? (
-        <div className="p-6 text-sm text-white/50">Transcript is not available yet.</div>
+        <div className="p-6 text-sm text-ink-muted">Transcript is not available yet.</div>
       ) : (
         <div className="divide-y divide-teal/10">
           {segments.map((segment) => {
@@ -95,7 +95,7 @@ export default function TranscriptPanel({
                   onClick={() => onSeek(segment.startTime)}
                 >
                   {segment.speaker && (
-                    <span className="mb-1 block text-xs font-semibold uppercase text-white/45">
+                    <span className="mb-1 block text-xs font-semibold uppercase text-ink-muted">
                       {segment.speaker}
                     </span>
                   )}

@@ -34,7 +34,7 @@ const projects = sortProjectsForQueue(filtered);
           "rounded-full px-3 py-1 text-sm font-medium transition-colors",
           !statusFilter
             ? "bg-primary text-dark"
-            : "bg-teal/20 text-white/60 hover:text-white",
+            : "bg-teal/20 text-ink-secondary hover:text-white",
         ]}
       >
         All
@@ -46,7 +46,7 @@ const projects = sortProjectsForQueue(filtered);
             "rounded-full px-3 py-1 text-sm font-medium capitalize transition-colors",
             statusFilter === s
               ? "bg-primary text-dark"
-              : "bg-teal/20 text-white/60 hover:text-white",
+              : "bg-teal/20 text-ink-secondary hover:text-white",
           ]}
         >
           {s.toLowerCase()}
@@ -71,7 +71,7 @@ const projects = sortProjectsForQueue(filtered);
         <tbody class="divide-y divide-teal/10">
           {projects.length === 0 ? (
             <tr>
-              <td colspan="8" class="px-4 py-8 text-center text-white/40">
+              <td colspan="8" class="px-4 py-8 text-center text-ink-muted">
                 {statusFilter
                   ? `No ${statusFilter.toLowerCase()} projects found.`
                   : "No client projects yet. Projects appear here when clients submit them."}

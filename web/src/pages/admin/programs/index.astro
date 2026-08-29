@@ -39,7 +39,7 @@ const programs = await db.query.program.findMany({
         <tbody class="divide-y divide-teal/10">
           {programs.length === 0 ? (
             <tr>
-              <td colspan="6" class="px-4 py-8 text-center text-white/40">
+              <td colspan="6" class="px-4 py-8 text-center text-ink-muted">
                 No cohorts yet
               </td>
             </tr>
@@ -64,7 +64,7 @@ const programs = await db.query.program.findMany({
                       "inline-flex rounded-full px-2.5 py-1 text-xs font-medium",
                       p.applicationsOpen
                         ? "bg-emerald-500/20 text-emerald-100"
-                        : "bg-white/10 text-white/60",
+                        : "bg-white/10 text-ink-secondary",
                     ]}
                   >{p.applicationsOpen ? "Open" : "Closed"}</span>
                 </td>

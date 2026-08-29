@@ -254,7 +254,7 @@ export default function RepoPicker({
                       type="button"
                       onClick={() => moveUp(index)}
                       disabled={index === 0}
-                      className="rounded p-1 text-white/60 hover:bg-white/10 disabled:opacity-30"
+                      className="rounded p-1 text-ink-secondary hover:bg-white/10 disabled:opacity-30"
                       aria-label={`Move ${entry.repoFullName} up`}
                     >
                       <PiArrowUpBold className="h-4 w-4" />
@@ -263,7 +263,7 @@ export default function RepoPicker({
                       type="button"
                       onClick={() => moveDown(index)}
                       disabled={index === selected.length - 1}
-                      className="rounded p-1 text-white/60 hover:bg-white/10 disabled:opacity-30"
+                      className="rounded p-1 text-ink-secondary hover:bg-white/10 disabled:opacity-30"
                       aria-label={`Move ${entry.repoFullName} down`}
                     >
                       <PiArrowDownBold className="h-4 w-4" />
@@ -279,7 +279,7 @@ export default function RepoPicker({
                   </div>
                 </div>
                 {repo?.description && (
-                  <p className="mt-1 text-xs text-white/50">
+                  <p className="mt-1 text-xs text-ink-muted">
                     {repo.description}
                   </p>
                 )}
@@ -291,10 +291,10 @@ export default function RepoPicker({
                   maxLength={MAX_BLURB}
                   rows={2}
                   placeholder="What you built, your role, the stack"
-                  className="mt-2 w-full rounded-md border border-teal bg-dark/50 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  className="mt-2 w-full rounded-md border border-teal bg-dark/50 px-3 py-2 text-sm text-white placeholder:text-ink-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
                   aria-label={`Blurb for ${entry.repoFullName}`}
                 />
-                <p className="mt-1 text-right text-xs text-white/40">
+                <p className="mt-1 text-right text-xs text-ink-muted">
                   {entry.blurb.length}/{MAX_BLURB}
                 </p>
               </div>
@@ -347,18 +347,18 @@ export default function RepoPicker({
                       {repo.full_name}
                     </span>
                     {repo.language && (
-                      <span className="rounded bg-teal/20 px-1.5 py-0.5 text-xs text-white/60">
+                      <span className="rounded bg-teal/20 px-1.5 py-0.5 text-xs text-ink-secondary">
                         {repo.language}
                       </span>
                     )}
                     {repo.stargazers_count > 0 && (
-                      <span className="text-xs text-white/40">
+                      <span className="text-xs text-ink-muted">
                         ★ {repo.stargazers_count}
                       </span>
                     )}
                   </div>
                   {repo.description && (
-                    <p className="mt-0.5 truncate text-xs text-white/50">
+                    <p className="mt-0.5 truncate text-xs text-ink-muted">
                       {repo.description}
                     </p>
                   )}

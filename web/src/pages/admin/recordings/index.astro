@@ -18,7 +18,7 @@ const recordings = await db.query.recording.findMany({
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h2 class="text-2xl font-bold text-white">Recordings</h2>
-        <p class="mt-1 text-sm text-white/55">
+        <p class="mt-1 text-sm text-ink-muted">
           Upload sessions, monitor processing, and manage transcripts.
         </p>
       </div>
@@ -53,7 +53,7 @@ const recordings = await db.query.recording.findMany({
         <tbody class="divide-y divide-teal/10">
           {recordings.length === 0 ? (
             <tr>
-              <td colspan="6" class="px-4 py-8 text-center text-white/40">
+              <td colspan="6" class="px-4 py-8 text-center text-ink-muted">
                 No recordings uploaded yet
               </td>
             </tr>

@@ -36,15 +36,15 @@ const [pendingProjects] = await db
 
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <Card>
-        <p class="text-sm text-white/60">Total Users</p>
+        <p class="text-sm text-ink-secondary">Total Users</p>
         <p class="mt-1 text-3xl font-bold text-primary">{usersResult.value}</p>
       </Card>
       <Card>
-        <p class="text-sm text-white/60">Total Applications</p>
+        <p class="text-sm text-ink-secondary">Total Applications</p>
         <p class="mt-1 text-3xl font-bold text-primary">{totalApps}</p>
       </Card>
       <Card>
-        <p class="text-sm text-white/60">Total Programs</p>
+        <p class="text-sm text-ink-secondary">Total Programs</p>
         <p class="mt-1 text-3xl font-bold text-primary">{programsResult.value}</p>
       </Card>
     </div>
@@ -52,7 +52,7 @@ const [pendingProjects] = await db
     <h3 class="text-lg font-semibold text-white">Review Queues</h3>
     <div class="grid gap-4 sm:grid-cols-2">
       <Card>
-        <p class="text-sm text-white/60">Profiles awaiting review</p>
+        <p class="text-sm text-ink-secondary">Profiles awaiting review</p>
         <p class="mt-1 text-3xl font-bold text-primary">
           {profilesInReview.value}
         </p>
@@ -64,7 +64,7 @@ const [pendingProjects] = await db
         </a>
       </Card>
       <Card>
-        <p class="text-sm text-white/60">Pending client projects</p>
+        <p class="text-sm text-ink-secondary">Pending client projects</p>
         <p class="mt-1 text-3xl font-bold text-primary">
           {pendingProjects.value}
         </p>
@@ -81,7 +81,7 @@ const [pendingProjects] = await db
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
       {["PENDING", "APPROVED", "REJECTED", "AUDIT", "COMPLETED"].map((status) => (
         <Card>
-          <p class="text-sm text-white/60 capitalize">{status.toLowerCase()}</p>
+          <p class="text-sm text-ink-secondary capitalize">{status.toLowerCase()}</p>
           <p class="mt-1 text-2xl font-bold text-white">{byStatus[status] ?? 0}</p>
         </Card>
       ))}

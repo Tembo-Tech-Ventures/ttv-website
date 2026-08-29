@@ -33,7 +33,7 @@ const profiles = sortProfilesForQueue(filtered);
           "rounded-full px-3 py-1 text-sm font-medium transition-colors",
           !statusFilter
             ? "bg-primary text-dark"
-            : "bg-teal/20 text-white/60 hover:text-white",
+            : "bg-teal/20 text-ink-secondary hover:text-white",
         ]}
       >
         All
@@ -45,7 +45,7 @@ const profiles = sortProfilesForQueue(filtered);
             "rounded-full px-3 py-1 text-sm font-medium transition-colors",
             statusFilter === s
               ? "bg-primary text-dark"
-              : "bg-teal/20 text-white/60 hover:text-white",
+              : "bg-teal/20 text-ink-secondary hover:text-white",
           ]}
         >
           {s.toLowerCase().replace("_", " ")}
@@ -68,7 +68,7 @@ const profiles = sortProfilesForQueue(filtered);
         <tbody class="divide-y divide-teal/10">
           {profiles.length === 0 ? (
             <tr>
-              <td colspan="6" class="px-4 py-8 text-center text-white/40">
+              <td colspan="6" class="px-4 py-8 text-center text-ink-muted">
                 {statusFilter
                   ? `No ${statusFilter.toLowerCase().replace("_", " ")} profiles found.`
                   : "No profiles yet. Profiles appear here when builders create them."}
@@ -79,7 +79,7 @@ const profiles = sortProfilesForQueue(filtered);
               <tr class="text-white/80 hover:bg-teal/10">
                 <td class="px-4 py-3">
                   <div>{profile.user?.name ?? "Unknown"}</div>
-                  <div class="text-xs text-white/40">
+                  <div class="text-xs text-ink-muted">
                     {profile.user?.email ?? "—"}
                   </div>
                 </td>
