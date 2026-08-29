@@ -309,7 +309,10 @@ const agentSession = isAgentSession(Astro.locals.session?.userAgent);
             const records = document.createElement("td");
             records.className = "py-1.5 text-right tabular-nums";
             records.textContent = String(count);
-            row.append(label, handling, records);
+            // appendChild rather than the variadic append(): inside an Astro
+            // client script the checker resolves `append` to a 1-2 argument
+            // overload and rejects three nodes.
+            for (const cell of [label, handling, records]) row.appendChild(cell);
             previewTbody.appendChild(row);
           }
 

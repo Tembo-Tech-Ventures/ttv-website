@@ -52,6 +52,14 @@ jobs:
       - name: Validate isolated environment name
         run: npm run cf:agent -- context
 
+      # `tsc --noEmit` type-checks zero .astro files — documented Astro
+      # behaviour, not a misconfiguration. Only `astro check` reads them, and it
+      # needs Cloudflare credentials because `astro sync` opens a remote proxy
+      # session for the always-remote `ai` and `vectorize` bindings. This job is
+      # the earliest place in the pipeline that has them.
+      - name: Type check .astro files
+        run: npm run typecheck:astro
+
       - if: ${{ inputs.action == 'deploy' }}
         id: deploy
         run: npm run cf:agent -- deploy
