@@ -1,0 +1,226 @@
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { PiArrowDownBold } from "react-icons/pi";
+import MarkdownMessage from "@/components/chat/MarkdownMessage";
+import { formatTimestamp } from "@/lib/recordings/time-utils";
+import type { ChatMessage, Citation } from "@/components/chat/types";
+
+/**
+ * Distance from the bottom, in px, still treated as "reading the latest". The
+ * same number decides whether a new answer auto-follows and whether the
+ * jump-to-latest pill is showing, so the two can never disagree.
+ */
+const NEAR_BOTTOM_PX = 100;
+
+export const EXAMPLE_PROMPTS = [
+  "What were the main action items from mentor hours?",
+  "Explain the advice about customer interviews.",
+  "Where did we discuss architecture tradeoffs?",
+];
+
+function citationHref(citation: Citation) {
+  return (
+    citation.url ??
+    `/dashboard/sessions/${citation.recordingId}?t=${Math.floor(citation.startTime)}`
+  );
+}
+
+function Citations({ citations }: { citations: Citation[] }) {
+  return (
+    <div className="mt-3 grid gap-2">
+      {citations.map((citation, index) => (
+        <a
+          key={`${citation.recordingId}-${citation.startTime}-${index}`}
+          href={citationHref(citation)}
+          className="group rounded-xl border border-rule bg-dark/40 p-3 transition hover:border-primary/50 hover:bg-dark/70"
+        >
+          <span className="mb-1.5 flex flex-wrap items-center gap-2">
+            {citation.sourceNumber !== undefined && (
+              <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-subhead text-primary">
+                Source {citation.sourceNumber}
+              </span>
+            )}
+            <span className="rounded-md bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
+              {formatTimestamp(citation.startTime)}
+            </span>
+            <span className="text-xs font-semibold text-ink-secondary group-hover:text-ink-primary">
+              {citation.title}
+            </span>
+          </span>
+          <span className="line-clamp-2 block text-xs text-ink-muted">{citation.text}</span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function MessageRow({ message, index }: { message: ChatMessage; index: number }) {
+  const isUser = message.role === "user";
+  return (
+    <div
+      data-message-index={index}
+      className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+    >
+      <article
+        className={
+          isUser
+            ? "max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm leading-relaxed text-dark"
+            : // Long-form answers read badly in a chat bubble, so only the
+              // user's own turn gets one.
+              "max-w-full text-sm leading-relaxed text-ink-primary"
+        }
+      >
+        {isUser ? (
+          <p className="whitespace-pre-wrap">{message.content}</p>
+        ) : (
+          <>
+            <MarkdownMessage content={message.content} />
+            {message.citations && message.citations.length > 0 && (
+              <Citations citations={message.citations} />
+            )}
+          </>
+        )}
+      </article>
+    </div>
+  );
+}
+
+function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
+  return (
+    <div className="mx-auto flex max-w-2xl flex-col items-center pt-6 text-center">
+      <h2 className="text-2xl tracking-display text-ink-primary">Ask across your sessions</h2>
+      <p className="mt-2 text-sm text-ink-secondary">
+        Answers cite the recording and the moment they came from.
+      </p>
+      <div className="mt-6 grid w-full gap-2">
+        {EXAMPLE_PROMPTS.map((prompt) => (
+          <button
+            key={prompt}
+            type="button"
+            onClick={() => onPick(prompt)}
+            className="rounded-xl border border-rule bg-ink-primary/[0.04] px-4 py-3 text-left text-sm text-ink-secondary transition hover:border-primary/40 hover:bg-primary/10 hover:text-ink-primary"
+          >
+            {prompt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface TranscriptProps {
+  messages: ChatMessage[];
+  loading: boolean;
+  error: string;
+  onPickPrompt: (prompt: string) => void;
+}
+
+/**
+ * The page's only scroll surface.
+ *
+ * `min-h-0` on the wrapper is load-bearing: a flex item defaults to
+ * `min-height: auto` and so refuses to shrink below its content, which would
+ * push the composer off the bottom of the viewport instead of letting this
+ * region scroll.
+ *
+ * Scroll policy: a newly sent question pins to the *top* of the viewport so the
+ * answer arrives in the space beneath it and is read from its beginning.
+ * Auto-follow only re-engages when the reader is already near the bottom;
+ * otherwise the jump-to-latest pill appears and they stay where they were.
+ */
+export default function Transcript({
+  messages,
+  loading,
+  error,
+  onPickPrompt,
+}: TranscriptProps) {
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const [nearBottom, setNearBottom] = useState(true);
+  const previousCountRef = useRef(messages.length);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior });
+  }, []);
+
+  // Mount only: land on the newest message instead of animating down to it.
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current;
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+  }, []);
+
+  useEffect(() => {
+    if (messages.length === previousCountRef.current) return;
+    previousCountRef.current = messages.length;
+    const scroller = scrollerRef.current;
+    const last = messages.at(-1);
+    if (!scroller || !last) return;
+
+    if (last.role === "user") {
+      scroller
+        .querySelector(`[data-message-index="${messages.length - 1}"]`)
+        ?.scrollIntoView({ block: "start", behavior: "smooth" });
+      setNearBottom(false);
+      return;
+    }
+    if (nearBottom) scrollToBottom();
+  }, [messages, nearBottom, scrollToBottom]);
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    function handleScroll() {
+      if (!scroller) return;
+      const distance = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      setNearBottom(distance <= NEAR_BOTTOM_PX);
+    }
+    scroller.addEventListener("scroll", handleScroll, { passive: true });
+    return () => scroller.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  return (
+    <div className="relative min-h-0 flex-1">
+      <div
+        ref={scrollerRef}
+        data-chat-scroller="true"
+        role="log"
+        // Polite, and scoped to whole messages: announcing a response token by
+        // token would be unusable with a screen reader.
+        aria-live="polite"
+        aria-relevant="additions"
+        className="h-full overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+      >
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-5 sm:px-6">
+          {messages.length === 0 ? (
+            <EmptyState onPick={onPickPrompt} />
+          ) : (
+            messages.map((message, index) => (
+              <MessageRow key={message.id ?? index} message={message} index={index} />
+            ))
+          )}
+
+          {/* Both of these sit inside the polite live region above, so they are
+              announced on insertion without a second, competing role. */}
+          {loading && <p className="text-sm text-ink-muted">Thinking…</p>}
+
+          {error && (
+            <p className="rounded-xl border border-red-300/20 bg-red-400/10 p-3 text-sm text-red-100">
+              {error}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {!nearBottom && (
+        <button
+          type="button"
+          onClick={() => scrollToBottom()}
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-rule bg-bg-raised/95 px-3 py-1.5 text-xs font-semibold text-ink-secondary shadow-lg backdrop-blur transition hover:text-ink-primary"
+        >
+          <PiArrowDownBold className="mr-1.5 inline h-3 w-3" aria-hidden="true" />
+          Jump to latest
+        </button>
+      )}
+    </div>
+  );
+}

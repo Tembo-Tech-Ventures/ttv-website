@@ -1,6 +1,13 @@
 ---
-import BaseLayout from "@/layouts/BaseLayout.astro";
-import ChatInterface from "@/components/recordings/ChatInterface";
+/**
+ * Dev-only mirror of `/dashboard/ask` with fixed data and no API calls.
+ *
+ * It renders the real `ChatApp` in the real `ChatLayout`, so the e2e layout
+ * assertions exercise the shipped component rather than a lookalike — the
+ * authenticated route is not reachable from a local dev server.
+ */
+import ChatLayout from "@/layouts/ChatLayout.astro";
+import ChatApp from "@/components/chat/ChatApp";
 
 if (!import.meta.env.DEV) {
   return new Response("Not found", { status: 404 });
@@ -23,15 +30,19 @@ const sessions = [
   },
 ];
 
+// Long enough to overflow a desktop viewport: a chat layout only shows its
+// scroll behaviour once the transcript is taller than the screen.
 const messages = [
   {
-    role: "user",
+    id: "mock-1",
+    role: "user" as const,
     content: "What should students do before building the MVP?",
   },
   {
-    role: "assistant",
+    id: "mock-2",
+    role: "assistant" as const,
     content:
-      "Students should validate the problem before building the MVP. The practical sequence is:\n\n- Run short customer interviews.\n- Look for repeated pain points rather than isolated opinions.\n- Narrow the MVP to the smallest testable workflow. [1]\n\nThis answer cleans up transcript phrasing where speech-to-text likely misheard punctuation or capitalization.",
+      "Students should validate the problem before building the MVP. The practical sequence is:\n\n- Run short customer interviews.\n- Look for repeated pain points rather than isolated opinions.\n- Narrow the MVP to the smallest testable workflow. [1]\n\nThe cost argument mattered too: a managed service that costs more per month than the whole rest of the stack is a decision you will have to unwind later. [2]",
     citations: [
       {
         sourceNumber: 1,
@@ -53,29 +64,56 @@ const messages = [
       },
     ],
   },
-] as const;
+  {
+    id: "mock-3",
+    role: "user" as const,
+    content: "How many interviews is enough to be confident?",
+  },
+  {
+    id: "mock-4",
+    role: "assistant" as const,
+    content:
+      "There is no magic number, but the sessions gave a practical stopping rule: keep going until two or three consecutive interviews stop surprising you. For most teams in the cohort that landed between eight and twelve people.\n\nTwo cautions came up repeatedly:\n\n- Interviewing people who are easy to reach is not the same as interviewing your buyer.\n- If everyone is enthusiastic and nobody has already tried to solve the problem, that enthusiasm is probably politeness. [1]",
+    citations: [
+      {
+        sourceNumber: 1,
+        recordingId: "recording-3",
+        title: "Mentor Hours: Talking to Users",
+        startTime: 902,
+        endTime: 964,
+        url: "/dashboard/sessions/recording-3?t=902",
+        text: "You stop when you stop being surprised. For most of you that is somewhere around ten conversations.",
+      },
+    ],
+  },
+  {
+    id: "mock-5",
+    role: "user" as const,
+    content: "Summarise the action items for our team.",
+  },
+  {
+    id: "mock-6",
+    role: "assistant" as const,
+    content:
+      "**This week**\n\n- Book eight discovery interviews; write the five questions before the first call.\n- Freeze the stack. No further evaluation until the interviews are done.\n\n**Next week**\n\n- Write up the repeated pain points, one line each, with a quote.\n- Cut the MVP scope to the single workflow those quotes justify. [1]",
+    citations: [
+      {
+        sourceNumber: 1,
+        recordingId: "recording-1",
+        title: "Mentor Hours: Customer Discovery",
+        startTime: 1580,
+        endTime: 1622,
+        url: "/dashboard/sessions/recording-1?t=1580",
+        text: "Come back next week with quotes, not with a feature list.",
+      },
+    ],
+  },
+];
 ---
 
-<BaseLayout title="Chat UI Mock | TTV">
-  <main class="min-h-screen bg-dark px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-    <div class="mx-auto max-w-7xl">
-      <div class="mb-6">
-        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-primary">
-          Dev preview
-        </p>
-        <h1 class="mt-2 text-2xl font-bold text-white sm:text-3xl">
-          Transcript chat UI
-        </h1>
-      </div>
-      <ChatInterface
-        client:load
-        mockMode
-        initialSessions={sessions}
-        initialMessages={messages}
-      />
-    </div>
-  </main>
-</BaseLayout>
+<ChatLayout title="Chat UI Mock | TTV">
+  <ChatApp client:load mockMode initialSessions={sessions} initialMessages={messages} />
+</ChatLayout>
 
 <style is:global>
   astro-dev-toolbar {
