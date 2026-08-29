@@ -318,8 +318,7 @@ const prog = await db.query.program.findFirst({
 });
 
 if (!prog) {
-  if (actionError) return new Response(actionError, { status: 400 });
-  return Astro.redirect("/admin/programs");
+  return Astro.redirect(`/admin/programs${actionError ? "?notice=missing" : ""}`);
 }
 
 const rosterApplications = prog.programApplications.toSorted(
