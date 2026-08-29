@@ -1,5 +1,6 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import Button from "@/components/common/Button.astro";
 import Card from "@/components/common/Card.astro";
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
@@ -29,12 +30,9 @@ const notice = outcome ? noticeByOutcome[outcome] : undefined;
           Manage the reusable learning plans required by programs and cohorts.
         </p>
       </div>
-      <a
-        href="/admin/curricula/new"
-        class="inline-flex w-fit items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
-      >
+      <Button href="/admin/curricula/new" class="w-fit">
         New Curriculum
-      </a>
+      </Button>
     </div>
 
     {notice && (
@@ -53,12 +51,9 @@ const notice = outcome ? noticeByOutcome[outcome] : undefined;
           <p class="mx-auto mt-2 max-w-xl text-sm text-ink-secondary">
             Create a curriculum before setting up a program or cohort.
           </p>
-          <a
-            href="/admin/curricula/new"
-            class="mt-5 inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
-          >
+          <Button href="/admin/curricula/new" class="mt-5">
             Create your first curriculum
-          </a>
+          </Button>
         </div>
       </Card>
     ) : (

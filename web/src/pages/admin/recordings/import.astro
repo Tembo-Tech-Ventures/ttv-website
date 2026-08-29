@@ -1,5 +1,6 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import Button from "@/components/common/Button.astro";
 import Card from "@/components/common/Card.astro";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
@@ -284,13 +285,13 @@ const formatDateTime = (date: Date | null) =>
                   name="expectedImportable"
                   value={historicalPreview.importable}
                 />
-                <button type="submit" class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90">
+                <Button type="submit">
                   Add {historicalPreview.importable.toLocaleString()} to queue
-                </button>
+                </Button>
               </form>
-              <a href="/admin/recordings/import" class="rounded-md border border-teal/40 px-4 py-2 text-sm text-white/80 hover:bg-teal/20">
+              <Button variant="secondary" href="/admin/recordings/import">
                 Cancel
-              </a>
+              </Button>
               <p class="basis-full text-xs text-ink-muted">
                 The folder is scanned once more on confirmation. If the count
                 changed, you will be asked to review it again.
@@ -301,9 +302,9 @@ const formatDateTime = (date: Date | null) =>
               <p class="text-sm text-emerald-100">
                 Every discovered video is already in TTV. There is nothing to queue.
               </p>
-              <a href="/admin/recordings/import" class="rounded-md border border-teal/40 px-4 py-2 text-sm text-white/80 hover:bg-teal/20">
+              <Button variant="secondary" href="/admin/recordings/import">
                 Done
-              </a>
+              </Button>
             </div>
           )}
         </div>
@@ -324,13 +325,13 @@ const formatDateTime = (date: Date | null) =>
           <label for="name" class="text-sm font-medium text-white/90">
             Source name *
           </label>
-          <input id="name" name="name" required placeholder="2026 cohort sessions" class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50" />
+          <input id="name" name="name" required placeholder="2026 cohort sessions" class="form-control" />
         </div>
         <div class="flex flex-col gap-1.5">
           <label for="programId" class="text-sm font-medium text-white/90">
             Program *
           </label>
-          <select id="programId" name="programId" required class="w-full max-w-full rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50">
+          <select id="programId" name="programId" required class="form-control max-w-full">
             <option value="">Select a program</option>
             {programs.map((program) => (
               <option value={program.id}>{program.name}</option>
@@ -341,21 +342,21 @@ const formatDateTime = (date: Date | null) =>
           <label for="driveFolder" class="text-sm font-medium text-white/90">
             Drive folder URL or ID *
           </label>
-          <input id="driveFolder" name="driveFolder" required placeholder="https://drive.google.com/drive/folders/..." class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50" />
+          <input id="driveFolder" name="driveFolder" required placeholder="https://drive.google.com/drive/folders/..." class="form-control" />
         </div>
         <div class="flex flex-col gap-1.5 md:col-span-2">
           <label for="filenameContains" class="text-sm font-medium text-white/90">
             Filename contains
           </label>
-          <input id="filenameContains" name="filenameContains" placeholder="Optional, e.g. Cohort 2026" class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50" />
+          <input id="filenameContains" name="filenameContains" placeholder="Optional, e.g. Cohort 2026" class="form-control" />
           <p class="text-xs text-ink-muted">
             Matching is case-insensitive. Leave blank to import every video in the folder.
           </p>
         </div>
         <div class="md:col-span-2">
-          <button type="submit" class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90">
+          <Button type="submit">
             Save Import Source
-          </button>
+          </Button>
         </div>
       </form>
     </Card>
@@ -413,24 +414,24 @@ const formatDateTime = (date: Date | null) =>
                   <form method="POST">
                     <input type="hidden" name="action" value="preview" />
                     <input type="hidden" name="sourceId" value={source.id} />
-                    <button type="submit" disabled={!credentialsConfigured} class="rounded-md bg-primary px-3 py-2 text-sm font-medium text-dark hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40">
+                    <Button type="submit" size="sm" disabled={!credentialsConfigured}>
                       Review historical import
-                    </button>
+                    </Button>
                   </form>
                   <form method="POST">
                     <input type="hidden" name="action" value="toggle" />
                     <input type="hidden" name="sourceId" value={source.id} />
                     <input type="hidden" name="enabled" value={source.enabled ? "false" : "true"} />
-                    <button type="submit" class="rounded-md border border-teal/40 px-3 py-2 text-sm text-white/80 hover:bg-teal/20">
+                    <Button type="submit" variant="secondary" size="sm">
                       {source.enabled ? "Pause" : "Enable"}
-                    </button>
+                    </Button>
                   </form>
                   <form method="POST">
                     <input type="hidden" name="action" value="delete" />
                     <input type="hidden" name="sourceId" value={source.id} />
-                    <button type="submit" class="rounded-md border border-red-400/30 px-3 py-2 text-sm text-red-100 hover:bg-red-500/15">
+                    <Button type="submit" variant="danger" size="sm">
                       Remove
-                    </button>
+                    </Button>
                   </form>
                 </div>
               </div>

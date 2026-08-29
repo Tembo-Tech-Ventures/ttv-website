@@ -1,5 +1,6 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import Button from "@/components/common/Button.astro";
 import Card from "@/components/common/Card.astro";
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
@@ -125,8 +126,8 @@ const isInUse = curriculum.programs.length > 0;
             aria-invalid={Boolean(errors.title)}
             aria-describedby={errors.title ? "title-error" : undefined}
             class:list={[
-              "rounded-md border bg-dark/50 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary/50",
-              errors.title ? "border-red-400" : "border-teal focus:border-primary",
+              "form-control",
+              errors.title && "border-red-400",
             ]}
           />
           {errors.title && (
@@ -148,10 +149,8 @@ const isInUse = curriculum.programs.length > 0;
             aria-invalid={Boolean(errors.description)}
             aria-describedby={errors.description ? "description-error" : undefined}
             class:list={[
-              "rounded-md border bg-dark/50 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary/50",
-              errors.description
-                ? "border-red-400"
-                : "border-teal focus:border-primary",
+              "form-control",
+              errors.description && "border-red-400",
             ]}
           >{values.description}</textarea>
           {errors.description && (
@@ -161,12 +160,9 @@ const isInUse = curriculum.programs.length > 0;
           )}
         </div>
 
-        <button
-          type="submit"
-          class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
-        >
+        <Button type="submit">
           Save Changes
-        </button>
+        </Button>
       </form>
     </Card>
 
@@ -220,13 +216,13 @@ const isInUse = curriculum.programs.length > 0;
           </p>
           <form method="POST" class="mt-4">
             <input type="hidden" name="action" value="delete" />
-            <button
+            <Button
+              variant="danger"
               type="submit"
-              class="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
               onclick="return confirm('Delete this unused curriculum?')"
             >
               Delete Curriculum
-            </button>
+            </Button>
           </form>
         </>
       )}

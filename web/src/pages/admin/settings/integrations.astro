@@ -1,5 +1,6 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import Button from "@/components/common/Button.astro";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
@@ -247,7 +248,7 @@ const formatDate = (date: Date) =>
                   required
                   rows={6}
                   placeholder="Paste the full service-account JSON key file here"
-                  class="rounded-md border border-teal bg-dark/50 px-3 py-2 font-mono text-xs text-white placeholder:text-ink-muted focus:border-primary focus:outline-none"
+                  class="form-control font-mono text-xs placeholder:text-ink-muted"
                 />
               </label>
               <label class="flex flex-col gap-1.5 text-sm text-white/80">
@@ -256,13 +257,10 @@ const formatDate = (date: Date) =>
                   name="impersonatedUser"
                   type="email"
                   placeholder="user@example.com"
-                  class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:border-primary focus:outline-none"
+                  class="form-control placeholder:text-ink-muted"
                 />
               </label>
-              <button
-                type="submit"
-                class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
-              >Save credential</button>
+              <Button type="submit">Save credential</Button>
             </form>
           ) : (
             <div class="mt-5 space-y-5">
@@ -312,7 +310,7 @@ const formatDate = (date: Date) =>
                         required
                         rows={4}
                         placeholder="Paste the replacement JSON key file"
-                        class="rounded-md border border-teal bg-dark/50 px-3 py-2 font-mono text-xs text-white placeholder:text-ink-muted focus:border-primary focus:outline-none"
+                        class="form-control font-mono text-xs placeholder:text-ink-muted"
                       />
                     </label>
                     <label class="flex flex-col gap-1.5 text-sm text-white/80">
@@ -321,13 +319,10 @@ const formatDate = (date: Date) =>
                         name="impersonatedUser"
                         type="email"
                         value={config.impersonatedUser ?? ""}
-                        class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:border-primary focus:outline-none"
+                        class="form-control placeholder:text-ink-muted"
                       />
                     </label>
-                    <button
-                      type="submit"
-                      class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
-                    >Replace</button>
+                    <Button type="submit">Replace</Button>
                   </form>
                 </details>
 
@@ -344,22 +339,16 @@ const formatDate = (date: Date) =>
                         type="email"
                         value={config.impersonatedUser ?? ""}
                         placeholder="user@example.com (leave empty to clear)"
-                        class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:border-primary focus:outline-none"
+                        class="form-control placeholder:text-ink-muted"
                       />
                     </label>
-                    <button
-                      type="submit"
-                      class="rounded-md border border-teal px-4 py-2 text-sm font-medium text-white hover:border-primary"
-                    >Update</button>
+                    <Button variant="secondary" type="submit">Update</Button>
                   </form>
                 </details>
 
                 <form method="POST">
                   <input type="hidden" name="action" value="test" />
-                  <button
-                    type="submit"
-                    class="rounded-md border border-teal px-4 py-2 text-sm font-medium text-white hover:border-primary"
-                  >Test connection</button>
+                  <Button variant="secondary" type="submit">Test connection</Button>
                 </form>
 
                 <details class="group">
@@ -372,10 +361,7 @@ const formatDate = (date: Date) =>
                       This will permanently delete the stored credential.
                       Recording imports that depend on it will stop working.
                     </p>
-                    <button
-                      type="submit"
-                      class="rounded-md bg-red-500/80 px-4 py-2 text-sm font-medium text-white hover:bg-red-500"
-                    >Confirm removal</button>
+                    <Button variant="danger" type="submit">Confirm removal</Button>
                   </form>
                 </details>
               </div>

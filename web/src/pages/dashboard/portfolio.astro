@@ -2,6 +2,7 @@
 import DashboardLayout from "@/layouts/DashboardLayout.astro";
 import Card from "@/components/common/Card.astro";
 import Badge from "@/components/common/Badge.astro";
+import Button from "@/components/common/Button.astro";
 import RepoPicker from "@/components/portfolio/RepoPicker";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
@@ -118,12 +119,9 @@ const hasGitHubAccount = profile
             portfolio, highlight your best projects, and connect with
             opportunities across the ecosystem.
           </p>
-          <a
-            href="/dashboard/apply"
-            class="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 font-medium text-dark transition-colors hover:bg-primary/90"
-          >
+          <Button href="/dashboard/apply" class="mt-6">
             Browse Programs
-          </a>
+          </Button>
         </div>
       </Card>
     )}
@@ -167,12 +165,9 @@ const hasGitHubAccount = profile
               {profile.status === "DRAFT" && (
                 <form method="POST">
                   <input type="hidden" name="_action" value="submit_for_review" />
-                  <button
-                    type="submit"
-                    class="whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark transition-colors hover:bg-primary/90"
-                  >
+                  <Button type="submit" class="whitespace-nowrap">
                     Submit for Review
-                  </button>
+                  </Button>
                 </form>
               )}
             </div>
@@ -287,7 +282,7 @@ const hasGitHubAccount = profile
                     maxlength="120"
                     placeholder="e.g. Lagos"
                     value={profile?.location ?? ""}
-                    class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    class="form-control placeholder:text-ink-muted"
                   />
                 </div>
                 <div class="flex flex-col gap-1.5">
@@ -301,7 +296,7 @@ const hasGitHubAccount = profile
                     maxlength="56"
                     placeholder="e.g. Nigeria"
                     value={profile?.country ?? ""}
-                    class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    class="form-control placeholder:text-ink-muted"
                   />
                 </div>
               </div>
@@ -397,12 +392,9 @@ const hasGitHubAccount = profile
               </div>
 
               <div class="flex justify-end">
-                <button
-                  type="submit"
-                  class="rounded-md bg-primary px-6 py-2 font-medium text-dark transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                >
+                <Button type="submit">
                   {profile ? "Save Changes" : "Create Profile"}
-                </button>
+                </Button>
               </div>
             </form>
           </Card>

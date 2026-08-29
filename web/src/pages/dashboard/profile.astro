@@ -1,6 +1,7 @@
 ---
 import DashboardLayout from "@/layouts/DashboardLayout.astro";
 import Card from "@/components/common/Card.astro";
+import Button from "@/components/common/Button.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -121,12 +122,9 @@ if (Astro.request.method === "POST") {
                 Upload a PNG, JPG, GIF, or WebP image. Files are resized to a maximum of 1024x1024 before storage.
               </p>
             </div>
-            <button
-              type="submit"
-              class="inline-flex w-full items-center justify-center rounded-md bg-primary px-6 py-2 font-medium text-dark hover:bg-primary/90 transition-colors"
-            >
+            <Button type="submit" class="w-full">
               Upload Photo
-            </button>
+            </Button>
           </form>
         </div>
       </Card>
@@ -146,7 +144,7 @@ if (Astro.request.method === "POST") {
               type="text"
               required
               value={user.name}
-              class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+              class="form-control placeholder:text-ink-muted"
             />
           </div>
 
@@ -159,19 +157,16 @@ if (Astro.request.method === "POST") {
               type="email"
               value={user.email}
               disabled
-              class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-ink-muted cursor-not-allowed"
+              class="form-control text-ink-muted cursor-not-allowed"
             />
             <p class="text-xs text-ink-muted">
               Email is managed by your sign-in provider and cannot be changed here.
             </p>
           </div>
 
-          <button
-            type="submit"
-            class="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 font-medium text-dark hover:bg-primary/90 transition-colors"
-          >
+          <Button type="submit">
             Save Changes
-          </button>
+          </Button>
         </form>
       </Card>
     </div>

@@ -2,6 +2,7 @@
 import DashboardLayout from "@/layouts/DashboardLayout.astro";
 import Badge from "@/components/common/Badge.astro";
 import Card from "@/components/common/Card.astro";
+import Button from "@/components/common/Button.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -70,12 +71,9 @@ const applications = await db.query.programApplication.findMany({
           <p class="text-ink-secondary mb-4">
             You haven't applied to any cohorts yet.
           </p>
-          <a
-            href="/dashboard/apply"
-            class="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 font-medium text-dark hover:bg-primary/90 transition-colors"
-          >
+          <Button href="/dashboard/apply">
             Browse Cohorts
-          </a>
+          </Button>
         </div>
       </Card>
     )}
