@@ -1,21 +1,30 @@
 import React, { useEffect, useRef, useState } from "react";
 import { PiArrowLeftBold, PiCaretUpDownBold, PiPlusBold } from "react-icons/pi";
 import Composer, { type ComposerHandle } from "@/components/chat/Composer";
-import ConversationList, { NewChatButton } from "@/components/chat/ConversationList";
+import ConversationList, {
+  conversationTitle,
+  NewChatButton,
+} from "@/components/chat/ConversationList";
 import ConversationSheet from "@/components/chat/ConversationSheet";
 import Transcript from "@/components/chat/Transcript";
 import type { ChatMessage, ChatSession } from "@/components/chat/types";
+import { DASHBOARD_LINKS } from "@/components/shells/DashboardShell";
 
-/** Links back into the rest of the dashboard, shown below the conversation list. */
-const APP_NAV = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/dashboard/sessions", label: "Sessions" },
-  { href: "/dashboard/portfolio", label: "Portfolio" },
-  { href: "/dashboard/profile", label: "Profile" },
-];
+/** Matches Tailwind's `lg:`, the breakpoint the rail appears at. */
+const DESKTOP_QUERY = "(min-width: 64rem)";
+
+/**
+ * Links back into the rest of the dashboard. Taken from the shell this route no
+ * longer renders, so nothing — Logout in particular — becomes unreachable just
+ * because the user is on the chat page. "Ask AI" is dropped as the current page.
+ */
+const APP_NAV = DASHBOARD_LINKS.filter((link) => link.href !== "/dashboard/ask");
 
 /** How many prior turns to send back as context. Matches the previous UI. */
 const HISTORY_TURNS = 8;
+
+/** Stand-in round trip for `mockMode`, so the dev page renders like the real one. */
+const MOCK_LATENCY_MS = 400;
 
 const NO_SESSIONS: ChatSession[] = [];
 const NO_MESSAGES: ChatMessage[] = [];
@@ -51,10 +60,35 @@ export default function ChatApp({
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
+  /**
+   * Bumped whenever the transcript is replaced wholesale, so the scroll
+   * position resets. Message count cannot stand in for this — two different
+   * conversations frequently have the same number of turns.
+   */
+  const [conversationEpoch, setConversationEpoch] = useState(0);
   const composerRef = useRef<ComposerHandle | null>(null);
 
-  const activeTitle =
-    sessions.find((session) => session.id === activeSessionId)?.title ?? "New chat";
+  const activeTitle = conversationTitle(sessions, activeSessionId);
+
+  // A sheet left open while the window grows past `lg` would sit in the top
+  // layer as a `display: none` modal, swallowing every click on the page.
+  useEffect(() => {
+    const desktop = window.matchMedia(DESKTOP_QUERY);
+    function close() {
+      if (desktop.matches) setSheetOpen(false);
+    }
+    close();
+    desktop.addEventListener("change", close);
+    return () => desktop.removeEventListener("change", close);
+  }, []);
+
+  function openSheet() {
+    // The trigger is `lg:hidden`, so this is unreachable on desktop today. The
+    // guard keeps that true if the class ever drifts, because the failure mode
+    // is severe: an invisible modal that blocks every click on the page.
+    if (window.matchMedia(DESKTOP_QUERY).matches) return;
+    setSheetOpen(true);
+  }
 
   useEffect(() => {
     if (mockMode) return;
@@ -99,6 +133,7 @@ export default function ChatApp({
     try {
       if (mockMode) {
         setActiveSessionId(sessionId);
+        setConversationEpoch((epoch) => epoch + 1);
         return;
       }
       const response = await fetch(`/api/chat/sessions/${encodeURIComponent(sessionId)}`);
@@ -109,6 +144,7 @@ export default function ChatApp({
       if (!response.ok) throw new Error(payload.error ?? "Unable to load chat");
       setActiveSessionId(sessionId);
       setMessages(payload.messages ?? []);
+      setConversationEpoch((epoch) => epoch + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load chat");
     } finally {
@@ -121,6 +157,7 @@ export default function ChatApp({
     setMessages([]);
     setError("");
     setSheetOpen(false);
+    setConversationEpoch((epoch) => epoch + 1);
     composerRef.current?.focus();
   }
 
@@ -133,13 +170,36 @@ export default function ChatApp({
 
     try {
       if (mockMode) {
+        // Deliberately not instant. Answering in the same synchronous batch as
+        // the question would collapse the two renders into one, hiding the
+        // loading state and the scroll behaviour that depends on the question
+        // rendering alone first — which is most of what this page has to get
+        // right.
+        await new Promise((resolve) => {
+          setTimeout(resolve, MOCK_LATENCY_MS);
+        });
         setActiveSessionId(activeSessionId ?? "mock-session-new");
         setMessages([
           ...nextMessages,
           {
             role: "assistant",
+            // Long on purpose: a short answer fits on screen, and then the
+            // scroll behaviour this page exists to get right is unobservable.
             content:
-              "Based on the session, the practical next step is to validate the problem with users before building.\n\n- Start with short customer interviews.\n- Compare what people say with their actual behaviour.\n- Use the evidence to narrow the MVP scope.",
+              "Based on the session, the practical next step is to validate the problem with users before building.\n\n" +
+              "**Start with interviews**\n\n" +
+              "- Keep them to fifteen minutes; you are looking for a pattern, not a pitch.\n" +
+              "- Ask what they did last time the problem came up, not what they would do.\n" +
+              "- Compare what people say with their actual behaviour. The gap is the finding.\n\n" +
+              "**Read the evidence honestly**\n\n" +
+              "- A repeated pain point beats a single strong opinion.\n" +
+              "- Enthusiasm from someone who has never tried to solve the problem is politeness.\n" +
+              "- If nobody has a workaround today, you may be early rather than right.\n\n" +
+              "**Then cut scope**\n\n" +
+              "- Use the evidence to narrow the MVP to one workflow.\n" +
+              "- Pick the workflow that tests your riskiest assumption, not the one that demos best.\n" +
+              "- Write down what result would tell you the assumption was wrong.\n\n" +
+              "The common failure mode in the cohort was building the second version of something nobody had asked for the first version of.",
           },
         ]);
         return;
@@ -181,6 +241,9 @@ export default function ChatApp({
       sessions={sessions}
       activeSessionId={activeSessionId}
       loading={historyLoading}
+      // Switching while an answer is in flight is refused by `selectSession`;
+      // say so in the UI rather than swallowing the tap.
+      disabled={loading}
       onSelect={(sessionId) => void selectSession(sessionId)}
     />
   );
@@ -236,24 +299,35 @@ export default function ChatApp({
           {/*
             On mobile the title doubles as the conversation switcher, so history
             costs no extra chrome; on desktop the rail already lists it, so the
-            title is inert text.
+            title is plain text. These are two elements rather than one button
+            with `lg:pointer-events-none`, because that suppresses only *pointer*
+            events — a keyboard user could still activate it on desktop and open
+            a `display: none` modal that swallows every click on the page.
           */}
-          <button
-            type="button"
-            aria-haspopup="dialog"
-            aria-expanded={sheetOpen}
-            onClick={() => setSheetOpen(true)}
-            className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 transition hover:bg-ink-primary/[0.06] lg:pointer-events-none lg:justify-start"
-          >
-            <span className="truncate font-body text-sm font-semibold text-ink-primary lg:text-base">
+          <h1 className="flex min-w-0 flex-1 justify-center lg:justify-start">
+            <span className="hidden truncate font-body text-base font-semibold text-ink-primary lg:inline">
               {activeTitle}
             </span>
-            <PiCaretUpDownBold className="h-3 w-3 shrink-0 text-ink-muted lg:hidden" aria-hidden="true" />
-          </button>
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded={sheetOpen}
+              onClick={openSheet}
+              className="flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1.5 transition hover:bg-ink-primary/[0.06] lg:hidden"
+            >
+              <span className="truncate font-body text-sm font-semibold text-ink-primary">
+                {activeTitle}
+              </span>
+              <PiCaretUpDownBold className="h-3 w-3 shrink-0 text-ink-muted" aria-hidden="true" />
+            </button>
+          </h1>
 
           <button
             type="button"
-            aria-label="New chat"
+            // Not "New chat": on an empty conversation the switcher above is
+            // also titled "New chat", and two identically named buttons doing
+            // different things is ambiguous to anyone not seeing the icons.
+            aria-label="Start a new chat"
             onClick={startNewChat}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink-secondary transition hover:bg-ink-primary/[0.06] hover:text-ink-primary lg:hidden"
           >
@@ -264,9 +338,24 @@ export default function ChatApp({
         <Transcript
           messages={messages}
           loading={loading}
-          error={error}
+          conversationEpoch={conversationEpoch}
           onPickPrompt={(prompt) => void sendMessage(prompt)}
         />
+
+        {/*
+          Above the composer rather than at the end of the transcript: a failed
+          conversation switch leaves the transcript showing the previous chat,
+          parked wherever the reader left it, so an inline banner is invisible
+          exactly when it matters.
+        */}
+        {error && (
+          <p
+            role="alert"
+            className="mx-auto w-full max-w-3xl shrink-0 px-3 pt-2 text-sm text-red-200 sm:px-6"
+          >
+            {error}
+          </p>
+        )}
 
         <Composer
           ref={composerRef}

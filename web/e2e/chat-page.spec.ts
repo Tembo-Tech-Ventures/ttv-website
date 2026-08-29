@@ -62,6 +62,14 @@ async function gotoChat(page: Page) {
   await expect(page.locator("astro-island")).not.toHaveAttribute("ssr", /.*/);
 }
 
+/**
+ * Scope text assertions to the visible transcript. The offscreen live region
+ * also contains the latest answer, so an unscoped `getByText` matches twice.
+ */
+function transcript(page: Page) {
+  return page.locator("[data-chat-scroller]");
+}
+
 test("the page does not scroll and the composer is always on screen", async ({
   page,
 }, testInfo) => {
@@ -97,21 +105,86 @@ test("sends a message and keeps the layout intact afterwards", async ({ page }, 
   await page.getByPlaceholder("Ask about your sessions…").fill("Summarise the MVP advice");
   await page.getByRole("button", { name: "Send message" }).click();
 
-  await expect(page.getByText("validate the problem with users")).toBeVisible();
+  await expect(transcript(page).getByText("validate the problem with users")).toBeVisible();
   expect(await pageScrollOverflow(page)).toBeLessThanOrEqual(1);
   await expect(page.getByPlaceholder("Ask about your sessions…")).toBeInViewport();
   expect(await countScrollableRegions(page)).toBeLessThanOrEqual(isMobile(testInfo) ? 1 : 2);
 });
 
+/** The rail button on desktop, the header's plus button on mobile. */
+function newChatControl(page: Page, testInfo: TestInfo) {
+  return isMobile(testInfo)
+    ? page.getByRole("button", { name: "Start a new chat" })
+    : page.getByRole("button", { name: "New chat" });
+}
+
 test("a new chat shows suggested prompts that send on click", async ({ page }, testInfo) => {
   await gotoChat(page);
-  await page.getByRole("button", { name: "New chat" }).first().click();
+  await newChatControl(page, testInfo).click();
 
   await expect(page.getByRole("heading", { name: "Ask across your sessions" })).toBeVisible();
   await shoot(page, testInfo, "empty-state");
 
   await page.getByRole("button", { name: /main action items/ }).click();
-  await expect(page.getByText("What were the main action items from mentor hours?")).toBeVisible();
+  await expect(
+    transcript(page).getByText("What were the main action items from mentor hours?")
+  ).toBeVisible();
+});
+
+test("Enter sends on a mouse-driven browser but never on a touch one", async ({
+  page,
+}, testInfo) => {
+  await gotoChat(page);
+  const composer = page.getByPlaceholder("Ask about your sessions…");
+
+  await composer.fill("First line");
+  await composer.press("Enter");
+
+  if (isMobile(testInfo)) {
+    // Soft keyboards have no Shift+Enter, so Enter-to-send would make
+    // multiline input impossible rather than merely awkward.
+    await expect(composer).toHaveValue("First line\n");
+    await expect(transcript(page).getByText("validate the problem with users")).toBeHidden();
+  } else {
+    await expect(composer).toHaveValue("");
+    await expect(transcript(page).getByText("validate the problem with users")).toBeVisible();
+  }
+});
+
+test("Shift+Enter adds a newline instead of sending on desktop", async ({ page }, testInfo) => {
+  test.skip(isMobile(testInfo), "Touch keyboards have no Shift+Enter");
+
+  await gotoChat(page);
+  const composer = page.getByPlaceholder("Ask about your sessions…");
+
+  await composer.fill("First line");
+  await composer.press("Shift+Enter");
+  await composer.pressSequentially("second line");
+
+  await expect(composer).toHaveValue("First line\nsecond line");
+});
+
+test("the answer pins the question that prompted it to the top", async ({ page }, testInfo) => {
+  test.skip(isMobile(testInfo), "Needs a viewport tall enough to show the pin clearly");
+
+  await gotoChat(page);
+  const composer = page.getByPlaceholder("Ask about your sessions…");
+  await composer.fill("Summarise the MVP advice");
+  await page.getByRole("button", { name: "Send message" }).click();
+
+  const question = transcript(page).getByText("Summarise the MVP advice", { exact: true });
+  await expect(question).toBeVisible();
+
+  // The reader must land on the start of the answer, not its end: the question
+  // sits near the top of the scroller rather than scrolled off it.
+  await expect
+    .poll(async () => {
+      const scroller = await page.locator("[data-chat-scroller]").boundingBox();
+      const box = await question.boundingBox();
+      if (!scroller || !box) return Number.NaN;
+      return box.y - scroller.y;
+    })
+    .toBeLessThan(120);
 });
 
 test("scrolling up reveals jump-to-latest without moving the page", async ({ page }, testInfo) => {

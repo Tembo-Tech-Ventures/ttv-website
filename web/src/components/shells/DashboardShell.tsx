@@ -13,7 +13,11 @@ import {
 } from "react-icons/pi";
 import { PiListBold } from "react-icons/pi";
 
-const links = [
+/**
+ * Exported so `/dashboard/ask`, which renders its own shell, can offer the same
+ * destinations instead of quietly dropping some of them.
+ */
+export const DASHBOARD_LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: PiGaugeDuotone },
   { href: "/dashboard/sessions", label: "Sessions", icon: PiVideoCameraDuotone },
   { href: "/dashboard/ask", label: "Ask AI", icon: PiChatCircleDotsDuotone },
@@ -24,6 +28,8 @@ const links = [
   { href: "/dashboard/profile", label: "Profile", icon: PiUserDuotone },
   { href: "/auth/logout", label: "Logout", icon: PiSignOutDuotone },
 ];
+
+const links = DASHBOARD_LINKS;
 
 export default function DashboardShell({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);

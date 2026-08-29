@@ -12,6 +12,14 @@ export function formatSessionDate(timestamp: number) {
   }).format(new Date(timestamp * 1_000));
 }
 
+/** Title for the header: the active conversation, or the unsaved-chat label. */
+export const NEW_CHAT_TITLE = "New chat";
+
+export function conversationTitle(sessions: ChatSession[], activeSessionId: string | null) {
+  if (!activeSessionId) return NEW_CHAT_TITLE;
+  return sessions.find((session) => session.id === activeSessionId)?.title ?? NEW_CHAT_TITLE;
+}
+
 export function truncate(text: string | null, maxLength = 96) {
   if (!text) return "No messages yet";
   const compact = text.replace(/\s+/g, " ").trim();
@@ -46,6 +54,8 @@ interface ConversationListProps {
   sessions: ChatSession[];
   activeSessionId: string | null;
   loading: boolean;
+  /** Switching is refused while an answer is in flight; show that. */
+  disabled?: boolean;
   onSelect: (sessionId: string) => void;
 }
 
@@ -53,6 +63,7 @@ export default function ConversationList({
   sessions,
   activeSessionId,
   loading,
+  disabled = false,
   onSelect,
 }: ConversationListProps) {
   if (loading && sessions.length === 0) {
@@ -78,8 +89,9 @@ export default function ConversationList({
             <button
               type="button"
               aria-current={isActive ? "true" : undefined}
+              disabled={disabled && !isActive}
               onClick={() => onSelect(session.id)}
-              className={`w-full rounded-xl px-3 py-2.5 text-left transition ${
+              className={`w-full rounded-xl px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
                 isActive
                   ? "bg-primary/15 text-ink-primary"
                   : "text-ink-secondary hover:bg-ink-primary/[0.06] hover:text-ink-primary"

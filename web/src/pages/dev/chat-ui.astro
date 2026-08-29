@@ -13,6 +13,9 @@ if (!import.meta.env.DEV) {
   return new Response("Not found", { status: 404 });
 }
 
+// Enough conversations that the desktop rail actually overflows: an assertion
+// that "only the transcript scrolls" proves nothing if the rail never had
+// enough content to scroll in the first place.
 const sessions = [
   {
     id: "mock-session-1",
@@ -27,6 +30,48 @@ const sessions = [
     updatedAt: 1_799_996_400,
     messageCount: 6,
     latestMessage: "Keep the implementation simple until the retrieval quality is proven.",
+  },
+  {
+    id: "mock-session-3",
+    title: "Feedback on the demo day pitch",
+    updatedAt: 1_799_910_000,
+    messageCount: 5,
+    latestMessage: "Lead with the traction slide, not the architecture diagram.",
+  },
+  {
+    id: "mock-session-4",
+    title: "How mentors framed pricing",
+    updatedAt: 1_799_823_600,
+    messageCount: 6,
+    latestMessage: "Charge for the outcome, not the seat.",
+  },
+  {
+    id: "mock-session-5",
+    title: "Hiring the first engineer",
+    updatedAt: 1_799_737_200,
+    messageCount: 4,
+    latestMessage: "Hire for range before depth at this stage.",
+  },
+  {
+    id: "mock-session-6",
+    title: "Positioning against incumbents",
+    updatedAt: 1_799_650_800,
+    messageCount: 8,
+    latestMessage: "Name the workflow you replace, not the category you join.",
+  },
+  {
+    id: "mock-session-7",
+    title: "What to measure in month one",
+    updatedAt: 1_799_564_400,
+    messageCount: 3,
+    latestMessage: "One activation metric, reviewed weekly.",
+  },
+  {
+    id: "legacy",
+    title: "Earlier discussion",
+    updatedAt: 1_799_478_000,
+    messageCount: 3,
+    latestMessage: "Questions asked before chats were saved separately.",
   },
 ];
 

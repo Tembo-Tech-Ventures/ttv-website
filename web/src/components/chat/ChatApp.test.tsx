@@ -2,9 +2,15 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import ChatApp from "./ChatApp";
-import { formatSessionDate, truncate } from "./ConversationList";
+import {
+  conversationTitle,
+  formatSessionDate,
+  NEW_CHAT_TITLE,
+  truncate,
+} from "./ConversationList";
+import type { ChatSession } from "./types";
 
-const SESSION = {
+const SESSION: ChatSession = {
   id: "session-1",
   title: "Customer discovery",
   updatedAt: 1_800_000_000,
@@ -13,7 +19,7 @@ const SESSION = {
 };
 
 describe("ChatApp", () => {
-  it("renders conversations, markdown answers and timestamped citation links", () => {
+  it("renders markdown answers and timestamped citation links", () => {
     const html = renderToStaticMarkup(
       <ChatApp
         mockMode
@@ -38,7 +44,6 @@ describe("ChatApp", () => {
       />
     );
 
-    expect(html).toContain("Customer discovery");
     expect(html).toContain("<strong>customer discovery</strong>");
     expect(html).toContain('href="/dashboard/sessions/recording-1?t=92"');
     expect(html).toContain("1:32");
@@ -71,17 +76,27 @@ describe("ChatApp", () => {
     expect(html).not.toContain("Source ");
   });
 
-  it("names the active conversation in the header and offers it as a switcher", () => {
-    const html = renderToStaticMarkup(<ChatApp mockMode initialSessions={[SESSION]} />);
+  it("puts the conversation title in the page heading", () => {
+    const html = renderToStaticMarkup(
+      <ChatApp mockMode initialSessions={[{ ...SESSION, title: "Pricing questions" }]} />
+    );
 
-    expect(html).toContain('aria-haspopup="dialog"');
-    expect(html).toContain("Customer discovery");
+    // Scoped to the <h1>, so the conversation list rendering the same string
+    // cannot make this pass on its own.
+    const heading = /<h1[^>]*>(.*?)<\/h1>/s.exec(html)?.[1] ?? "";
+    expect(heading).toContain("Pricing questions");
   });
 
-  it("titles an unsaved conversation as a new chat", () => {
-    const html = renderToStaticMarkup(<ChatApp mockMode />);
+  it("exposes the heading as a switcher on mobile and plain text on desktop", () => {
+    const html = renderToStaticMarkup(<ChatApp mockMode initialSessions={[SESSION]} />);
+    const heading = /<h1[^>]*>(.*?)<\/h1>/s.exec(html)?.[1] ?? "";
 
-    expect(html).toContain("New chat");
+    // The desktop title must not be a control. A button hidden with
+    // `pointer-events-none` is still keyboard-activatable, and activating it
+    // would open a display:none modal that swallows every click on the page.
+    expect(heading).toContain('aria-haspopup="dialog"');
+    expect(heading).toContain("lg:hidden");
+    expect(heading).toContain("lg:inline");
   });
 
   it("offers example prompts and a capability-led heading when empty", () => {
@@ -92,16 +107,37 @@ describe("ChatApp", () => {
     expect(html).toContain("Your saved chats will appear here");
   });
 
-  it("keeps the transcript as the only scrolling region in the chat column", () => {
+  it("keeps every dashboard destination reachable, logout included", () => {
+    const html = renderToStaticMarkup(<ChatApp mockMode />);
+
+    // This route drops DashboardLayout, so anything the shell offered has to be
+    // offered here or it becomes unreachable while the user is in the chat.
+    expect(html).toContain('href="/auth/logout"');
+    expect(html).toContain('href="/dashboard/sessions"');
+    expect(html).toContain('href="/dashboard/apply"');
+    // The current page is not a destination.
+    expect(html).not.toContain('href="/dashboard/ask"');
+  });
+
+  it("marks exactly one region as the transcript scroller", () => {
     const html = renderToStaticMarkup(<ChatApp mockMode initialSessions={[SESSION]} />);
 
-    // The desktop rail scrolls as a separate column; the chat column itself
-    // must expose exactly one scroller, or the composer starts drifting off
-    // the bottom of a phone screen again.
-    const scrollers = html.match(/overflow-y-auto/g) ?? [];
-    expect(scrollers).toHaveLength(3); // transcript + desktop rail + mobile sheet
-    expect(html).toContain('data-chat-scroller="true"');
-    expect(html).toContain("min-h-0 flex-1");
+    expect(html.match(/data-chat-scroller="true"/g)).toHaveLength(1);
+  });
+});
+
+describe("conversationTitle", () => {
+  it("names the active conversation", () => {
+    expect(conversationTitle([SESSION], "session-1")).toBe("Customer discovery");
+  });
+
+  it("labels an unsaved conversation", () => {
+    expect(conversationTitle([SESSION], null)).toBe(NEW_CHAT_TITLE);
+  });
+
+  it("labels a conversation that is not in the list yet", () => {
+    // The id is assigned by the send response before the list has refreshed.
+    expect(conversationTitle([SESSION], "session-not-loaded-yet")).toBe(NEW_CHAT_TITLE);
   });
 });
 

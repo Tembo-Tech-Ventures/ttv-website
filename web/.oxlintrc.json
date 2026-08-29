@@ -68,7 +68,8 @@
     {
       "files": ["src/components/chat/Transcript.tsx"],
       "rules": {
-        "react/no-array-index-key": "off"
+        "react/no-array-index-key": "off",
+        "jsx-a11y/no-noninteractive-tabindex": "off"
       }
     },
     {

@@ -51,12 +51,8 @@ const { title = "Ask AI | Tembo Tech Ventures" } = Astro.props;
          */
         height: 100svh;
         height: 100dvh;
-        /*
-         * Keyboard inset. Chromium fills `keyboard-inset-height` once the
-         * VirtualKeyboard API is opted into below; everywhere else the script
-         * measures it from visualViewport into `--keyboard-inset`.
-         */
-        padding-bottom: env(keyboard-inset-height, var(--keyboard-inset, 0px));
+        /* Keyboard inset, measured from visualViewport by the script below. */
+        padding-bottom: var(--keyboard-inset, 0px);
       }
     </style>
 
@@ -68,19 +64,26 @@ const { title = "Ask AI | Tembo Tech Ventures" } = Astro.props;
        * underneath it. `interactive-widget=resizes-content` in the viewport meta
        * fixes Chrome Android and Firefox; WebKit has not implemented it
        * (bugs.webkit.org #259770 is still open), so iOS needs the measurement
-       * fallback below.
+       * below.
+       *
+       * Deliberately NOT opting into the VirtualKeyboard API: setting
+       * `overlaysContent = true` overrides `interactive-widget` on Chromium,
+       * trading a mechanism that already works there for one that depends on
+       * `env(keyboard-inset-height)` resolving — which it does not in every
+       * embedded WebView. Where `interactive-widget` is honoured the layout
+       * viewport shrinks with the keyboard, so the measurement below reads ~0
+       * and this costs nothing.
        */
-      const virtualKeyboard = (
-        navigator as Navigator & { virtualKeyboard?: { overlaysContent: boolean } }
-      ).virtualKeyboard;
-
-      if (virtualKeyboard) {
-        virtualKeyboard.overlaysContent = true;
-      } else if (window.visualViewport) {
-        const viewport = window.visualViewport;
+      const viewport = window.visualViewport;
+      if (viewport) {
         const root = document.documentElement;
         const sync = () => {
-          const inset = Math.max(0, window.innerHeight - (viewport.height + viewport.offsetTop));
+          // Pinch-zoom also shrinks the visual viewport. Measuring it as a
+          // keyboard would crush the layout to half height on a zoomed page.
+          const inset =
+            viewport.scale > 1
+              ? 0
+              : Math.max(0, window.innerHeight - (viewport.height + viewport.offsetTop));
           root.style.setProperty("--keyboard-inset", `${inset}px`);
         };
         viewport.addEventListener("resize", sync);

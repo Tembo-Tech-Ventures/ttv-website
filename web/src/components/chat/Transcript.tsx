@@ -11,7 +11,7 @@ import type { ChatMessage, Citation } from "@/components/chat/types";
  */
 const NEAR_BOTTOM_PX = 100;
 
-export const EXAMPLE_PROMPTS = [
+const EXAMPLE_PROMPTS = [
   "What were the main action items from mentor hours?",
   "Explain the advice about customer interviews.",
   "Where did we discuss architecture tradeoffs?",
@@ -110,8 +110,14 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
 interface TranscriptProps {
   messages: ChatMessage[];
   loading: boolean;
-  error: string;
   onPickPrompt: (prompt: string) => void;
+  /**
+   * Changes whenever the transcript is replaced wholesale — a different
+   * conversation loaded, or a new chat started. Message-array length is not a
+   * usable signal for that: conversations come in user/assistant pairs, so two
+   * different four-message conversations collide.
+   */
+  conversationEpoch: number;
 }
 
 /**
@@ -122,25 +128,40 @@ interface TranscriptProps {
  * push the composer off the bottom of the viewport instead of letting this
  * region scroll.
  *
- * Scroll policy: a newly sent question pins to the *top* of the viewport so the
- * answer arrives in the space beneath it and is read from its beginning.
- * Auto-follow only re-engages when the reader is already near the bottom;
- * otherwise the jump-to-latest pill appears and they stay where they were.
+ * Scroll policy: when an answer arrives, the question that prompted it is
+ * pinned to the top of the viewport so the answer is read from its beginning
+ * rather than its end. (Pinning at the moment the question is *sent* does
+ * nothing — it is the last node, so the scroller is already clamped at the
+ * bottom. The pin has to wait until there is content beneath it.) Auto-follow
+ * only applies to messages that arrive unprompted, and only when the reader is
+ * already near the bottom.
  */
 export default function Transcript({
   messages,
   loading,
-  error,
   onPickPrompt,
+  conversationEpoch,
 }: TranscriptProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [nearBottom, setNearBottom] = useState(true);
   const previousCountRef = useRef(messages.length);
+  /** Index of a question whose answer has not arrived yet, or null. */
+  const pendingQuestionRef = useRef<number | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+  /** Latest messages, readable from effects that must not depend on them. */
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
     scroller.scrollTo({ top: scroller.scrollHeight, behavior });
+  }, []);
+
+  const pinToTop = useCallback((index: number) => {
+    scrollerRef.current
+      ?.querySelector(`[data-message-index="${index}"]`)
+      ?.scrollIntoView({ block: "start", behavior: "smooth" });
   }, []);
 
   // Mount only: land on the newest message instead of animating down to it.
@@ -149,22 +170,41 @@ export default function Transcript({
     if (scroller) scroller.scrollTop = scroller.scrollHeight;
   }, []);
 
+  // A different conversation, or a new one: start at the bottom of it rather
+  // than inheriting wherever the reader had scrolled the previous transcript.
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current;
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    previousCountRef.current = messagesRef.current.length;
+    pendingQuestionRef.current = null;
+    setNearBottom(true);
+  }, [conversationEpoch]);
+
   useEffect(() => {
     if (messages.length === previousCountRef.current) return;
+    const appended = messages.length > previousCountRef.current;
     previousCountRef.current = messages.length;
-    const scroller = scrollerRef.current;
     const last = messages.at(-1);
-    if (!scroller || !last) return;
+    if (!appended || !last) return;
 
     if (last.role === "user") {
-      scroller
-        .querySelector(`[data-message-index="${messages.length - 1}"]`)
-        ?.scrollIntoView({ block: "start", behavior: "smooth" });
-      setNearBottom(false);
+      pendingQuestionRef.current = messages.length - 1;
+      return;
+    }
+
+    setAnnouncement(last.content);
+    const pending = pendingQuestionRef.current;
+    if (pending !== null) {
+      pendingQuestionRef.current = null;
+      pinToTop(pending);
       return;
     }
     if (nearBottom) scrollToBottom();
-  }, [messages, nearBottom, scrollToBottom]);
+  }, [messages, nearBottom, pinToTop, scrollToBottom]);
+
+  useEffect(() => {
+    if (loading) setAnnouncement("Thinking…");
+  }, [loading]);
 
   useEffect(() => {
     const scroller = scrollerRef.current;
@@ -180,15 +220,19 @@ export default function Transcript({
 
   return (
     <div className="relative min-h-0 flex-1">
-      <div
+      {/*
+        The document no longer scrolls, so this region has to be focusable or
+        Page Up / Space stop working for anyone without a mouse. A named,
+        focusable scroll container is the documented exception to
+        jsx-a11y/no-noninteractive-tabindex (WCAG 2.1.1); the rule is turned off
+        for this file in .oxlintrc.json rather than the tabIndex being dropped.
+      */}
+      <section
         ref={scrollerRef}
         data-chat-scroller="true"
-        role="log"
-        // Polite, and scoped to whole messages: announcing a response token by
-        // token would be unusable with a screen reader.
-        aria-live="polite"
-        aria-relevant="additions"
-        className="h-full overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+        tabIndex={0}
+        aria-label="Conversation"
+        className="h-full overflow-y-auto overscroll-contain [scrollbar-gutter:stable] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50"
       >
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-5 sm:px-6">
           {messages.length === 0 ? (
@@ -199,17 +243,18 @@ export default function Transcript({
             ))
           )}
 
-          {/* Both of these sit inside the polite live region above, so they are
-              announced on insertion without a second, competing role. */}
           {loading && <p className="text-sm text-ink-muted">Thinking…</p>}
-
-          {error && (
-            <p className="rounded-xl border border-red-300/20 bg-red-400/10 p-3 text-sm text-red-100">
-              {error}
-            </p>
-          )}
         </div>
-      </div>
+      </section>
+
+      {/*
+        Announcements are pushed here deliberately rather than by making the
+        transcript itself a live region: loading a saved conversation replaces
+        every child at once, which a live region would read out in full.
+      */}
+      <p className="sr-only" aria-live="polite">
+        {announcement}
+      </p>
 
       {!nearBottom && (
         <button

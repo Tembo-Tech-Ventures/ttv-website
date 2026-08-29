@@ -1,6 +1,12 @@
 # Full-page chat layout — research and prototypes
 
-Status: proposal. Prototypes live at `/dev/chat-proto/{a,b,c}` (dev-only routes).
+Status: shipped. The chosen direction is live at `/dashboard/ask`; `/dev/chat-ui`
+renders the same components against fixed data.
+
+The three prototypes this decision came from lived at `/dev/chat-proto/{a,b,c}`
+and were removed once the direction was settled — see commit `67571b9` and the
+screenshots in the SAM library under `/design/chat-full-page/`. File and line
+references to the old implementation below are as of that commit.
 
 ## The problem
 
@@ -49,10 +55,13 @@ Sources are listed at the end. The findings that actually drove the design:
    non-zero, and is documented to return `0` in cases you care about — so use
    `max(0.75rem, env(...))`, never bare `env()`.
 6. **Don't yank the reader to the end.** NN/g found that auto-scrolling to the
-   bottom of a streaming answer means users never see its beginning. The
-   prototypes pin the user's own question to the *top* on submit and only
-   auto-follow when the reader is already within 100px of the bottom; otherwise a
-   "Jump to latest" pill appears, driven by the same predicate.
+   bottom of a streaming answer means users never see its beginning. When an
+   answer arrives, the question that prompted it is pinned to the *top* of the
+   viewport. Note the pin has to happen then, not at submit: at submit the
+   question is the last node, so the scroller is already clamped at the bottom
+   and `scrollIntoView` does nothing. Auto-follow applies only to messages that
+   arrive unprompted, and only within 100px of the bottom; otherwise a "Jump to
+   latest" pill appears, driven by the same predicate.
 7. **Enter must not send on touch.** Soft keyboards have no Shift+Enter, so
    Enter-to-send makes multiline input impossible rather than merely awkward.
    Gate on `matchMedia('(pointer: coarse)')` — input capability, not device
@@ -68,17 +77,23 @@ Sources are listed at the end. The findings that actually drove the design:
    all three criteria: keyboard input, changes not saved instantly, and it opens
    further surfaces (citations).
 
-## The shared spine
+## The spine
 
-All three prototypes use `ChatLayout.astro` and the same primitives:
+`ChatLayout.astro` plus the components in `src/components/chat/`:
 
 - `100svh` → `100dvh` container, document cannot scroll.
 - Header and composer are fixed-size flex siblings; the transcript is the only
   `overflow-y-auto` region, with `min-h-0 flex-1`.
 - Composer is a flex child, never `position: fixed` — a fixed element is
   positioned against the layout viewport, which does not shrink for the keyboard.
-- `role="log"` + `aria-live="polite"` scoped to completed messages.
-- Conversation drawer is a native `<dialog>` opened with `showModal()`, so the
+- The transcript carries `tabIndex={0}` and a label. The document no longer
+  scrolls, so without that, Page Up and Space stop working for anyone without a
+  mouse.
+- Announcements go to a dedicated offscreen `aria-live="polite"` element, *not*
+  to the transcript container. Making the transcript itself a live region would
+  read a whole saved conversation aloud every time one is opened, since loading
+  one replaces every child at once.
+- The conversation sheet is a native `<dialog>` opened with `showModal()`, so the
   focus trap, inert background, Escape and focus restoration come from the
   platform rather than from hand-rolled listeners.
 - Assistant messages are flat blocks, not bubbles; only user messages get a
@@ -100,17 +115,24 @@ The e2e spec enforces at most one scrolling region on mobile and two on desktop.
 | Vertical space for messages on a Pixel 7 | baseline | +56px vs A | +12px vs A |
 | Tradeoff | most conventional; the header is pure overhead | most content, but transcript ghosts under the pills and both controls are at the top, away from the thumb | switcher is thumb-reachable, but a bottom sheet is a less familiar place to find history |
 
-My recommendation is **A as the structure, with C's thumb-zone switcher**: A's
-labelled header is the honest way to keep "you are inside TTV, here is the way
-back" visible, and B's floating-pill approach buys 56px at the cost of legibility
-and reach. C's insight — that the control you use most on a phone belongs next to
-the composer, not in the far corner — is worth keeping regardless of which shell
-wins.
+**Shipped: A as the structure, with C's switcher.** A's labelled header is the
+honest way to keep "you are inside TTV, here is the way back" visible, and B's
+floating-pill approach buys 56px at the cost of legibility and reach.
+
+C's switcher shipped in a cheaper form than the prototype used. Rather than
+spending a row of chrome on a pill above the composer, the header *title* is the
+switcher and opens a bottom sheet — so the list itself lands in the thumb zone,
+which was C's actual insight, at zero pixel cost. The two elements are rendered
+separately (`lg:hidden` button, `lg:inline` text) rather than as one button with
+`pointer-events-none`, because that suppresses only pointer events: a keyboard
+user could still activate it on desktop and open a `display: none` modal that
+swallows every click on the page.
 
 ## Deliberately not decided here
 
-- Whether `/dashboard/ask` should become a top-level `/ask` route once it sheds
-  `DashboardLayout`.
+- Whether `/dashboard/ask` should become a top-level `/ask` route now that it
+  sheds `DashboardLayout`. It stays under `/dashboard/*` so the existing
+  middleware auth guard keeps covering it.
 - Streaming: the prototypes render finished messages. The scroll policy above is
   written for streaming but is not exercised by mock data.
 - Whether the conversation list needs search, rename or delete. The prototypes
