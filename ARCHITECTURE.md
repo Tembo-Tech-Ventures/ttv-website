@@ -57,7 +57,7 @@ ttv-website/
 │   │   │   └── CertificateLayout.astro # Minimal layout
 │   │   ├── components/           # Reusable components
 │   │   │   ├── auth/             # Auth components (GitHubSignInButton)
-│   │   │   ├── common/           # Shared UI (Button, Input, Table, Card, Badge, Sidebar)
+│   │   │   ├── common/           # Shared UI (Card, Badge, Sidebar, Grain)
 │   │   │   ├── homepage/         # Homepage sections (Hero, Features, Values, etc.)
 │   │   │   └── shells/           # Layout shells (AdminShell, DashboardShell)
 │   │   ├── lib/                  # Core libraries
@@ -240,5 +240,9 @@ No Docker needed. Wrangler handles local D1 database emulation.
 - **Astro first**: Use `.astro` for pages and static components. React `.tsx` only for interactivity.
 - **`client:visible`** for below-fold interactive content, **`client:load`** for above-fold
 - **Path alias**: `@/` for `src/` in imports
-- **Common components**: Use `Button`, `Input`, `Table`, `Card`, `Badge`, `Sidebar` from `src/components/common/`
+- **Common components**: Use `Card`, `Badge`, `Sidebar` from `src/components/common/`.
+  `Button`, `Input` and `Table` used to be listed here but were never imported by
+  anything — three dead files that this instruction kept pointing at, which is a
+  large part of why there are 74 hand-rolled buttons in 41 spellings. They have
+  been deleted; real primitives are a separate piece of work.
 - **Theme colors**: Use Tailwind classes (`text-primary`, `bg-dark`, `text-ink-primary`, etc.)

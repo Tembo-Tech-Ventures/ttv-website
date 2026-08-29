@@ -1,4 +1,4 @@
-import React, { useEffect, useState, type ReactNode } from "react";
+import React, { useState, useSyncExternalStore, type ReactNode } from "react";
 import Sidebar from "@/components/common/Sidebar";
 import {
   PiGaugeDuotone,
@@ -31,11 +31,11 @@ export const DASHBOARD_LINKS = [
 
 export default function DashboardShell({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    setHydrated(true);
-  }, []);
+  const hydrated = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-surface to-dark">

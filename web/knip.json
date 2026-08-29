@@ -1,0 +1,13 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreDependencies": [
+    "cloudflare"
+  ],
+  "entry": [
+    "src/pages/**/*.{astro,ts}!",
+    "scripts/**/*.mjs",
+    "containers/**/*.js",
+    "e2e/**/*.ts",
+    "*.config.{ts,mjs,js}"
+  ]
+}

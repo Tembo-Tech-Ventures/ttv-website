@@ -25,7 +25,9 @@ Check for:
 **Code Quality**
 - Uses `@/` path aliases, not relative imports for cross-module references
 - Astro components preferred over React islands where possible
-- Common components (`Button`, `Input`, `Table`, `Card`, `Badge`) used consistently
+- Shared components (`Card`, `Badge`, `Sidebar`) used where they fit. There is
+  deliberately no shared `Button`/`Input`/`Table` yet — the previous ones were
+  deleted unused, so do not invent an import for them.
 - Tests exist for new logic
 - No unused imports or dead code
 
