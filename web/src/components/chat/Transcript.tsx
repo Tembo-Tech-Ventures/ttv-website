@@ -187,7 +187,9 @@ export default function Transcript({
   const [announcement, setAnnouncement] = useState("");
   /** Latest messages, readable from effects that must not depend on them. */
   const messagesRef = useRef(messages);
-  messagesRef.current = messages;
+  useLayoutEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const scroller = scrollerRef.current;

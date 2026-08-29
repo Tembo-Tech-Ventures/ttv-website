@@ -374,6 +374,59 @@ const agentSession = isAgentSession(Astro.locals.session?.userAgent);
 
           clearBtn.addEventListener("click", resetUI);
 
+          function showStatusError(title: string, message: string) {
+            statusSection.classList.remove("hidden");
+            statusCard.className =
+              "rounded-lg border border-red-500/30 bg-red-500/10 p-6 shadow-lg";
+            statusTitle.className =
+              "mb-2 text-lg font-semibold text-red-300";
+            statusTitle.textContent = title;
+            statusMessage.className =
+              "mb-4 text-sm leading-6 text-red-200/80";
+            statusMessage.textContent = message;
+            statusDetails.classList.add("hidden");
+          }
+
+          function showStatusSuccess(result: ImportResponse) {
+            statusSection.classList.remove("hidden");
+            statusCard.className =
+              "rounded-lg border border-green-500/30 bg-green-500/10 p-6 shadow-lg";
+            statusTitle.className =
+              "mb-2 text-lg font-semibold text-green-300";
+            statusTitle.textContent = "Import complete";
+            statusMessage.className =
+              "mb-4 text-sm leading-6 text-green-200/80";
+            statusMessage.textContent = `${result.totalChanges ?? 0} rows changed, ${result.totalSkipped ?? 0} existing rows skipped, and ${result.totalIgnored ?? 0} privilege records ignored.`;
+
+            statusTbody.replaceChildren();
+            for (const definition of TABLE_DEFS) {
+              const changed = result.imported?.[definition.key] ?? 0;
+              const skipped = result.skipped?.[definition.key] ?? 0;
+              const ignored = result.ignored?.[definition.key] ?? 0;
+              if (changed === 0 && skipped === 0 && ignored === 0) continue;
+
+              const row = document.createElement("tr");
+              row.className = "border-b border-teal/10";
+              const cells = [
+                definition.label,
+                String(changed),
+                String(skipped),
+                String(ignored),
+              ];
+              for (const [index, value] of cells.entries()) {
+                const cell = document.createElement("td");
+                cell.className =
+                  index === 0
+                    ? "py-1.5 pr-4"
+                    : "py-1.5 text-right tabular-nums";
+                cell.textContent = value;
+                row.appendChild(cell);
+              }
+              statusTbody.appendChild(row);
+            }
+            statusDetails.classList.remove("hidden");
+          }
+
           importBtn.addEventListener("click", async () => {
             if (!parsedData || agentBlocked) return;
 
@@ -389,68 +442,19 @@ const agentSession = isAgentSession(Astro.locals.session?.userAgent);
               });
               const result = (await response.json()) as ImportResponse;
 
-              statusSection.classList.remove("hidden");
               if (response.ok && result.success) {
-                statusCard.className =
-                  "rounded-lg border border-green-500/30 bg-green-500/10 p-6 shadow-lg";
-                statusTitle.className =
-                  "mb-2 text-lg font-semibold text-green-300";
-                statusTitle.textContent = "Import complete";
-                statusMessage.className =
-                  "mb-4 text-sm leading-6 text-green-200/80";
-                statusMessage.textContent = `${result.totalChanges ?? 0} rows changed, ${result.totalSkipped ?? 0} existing rows skipped, and ${result.totalIgnored ?? 0} privilege records ignored.`;
-
-                statusTbody.replaceChildren();
-                for (const definition of TABLE_DEFS) {
-                  const changed = result.imported?.[definition.key] ?? 0;
-                  const skipped = result.skipped?.[definition.key] ?? 0;
-                  const ignored = result.ignored?.[definition.key] ?? 0;
-                  if (changed === 0 && skipped === 0 && ignored === 0) continue;
-
-                  const row = document.createElement("tr");
-                  row.className = "border-b border-teal/10";
-                  const cells = [
-                    definition.label,
-                    String(changed),
-                    String(skipped),
-                    String(ignored),
-                  ];
-                  for (const [index, value] of cells.entries()) {
-                    const cell = document.createElement("td");
-                    cell.className =
-                      index === 0
-                        ? "py-1.5 pr-4"
-                        : "py-1.5 text-right tabular-nums";
-                    cell.textContent = value;
-                    row.appendChild(cell);
-                  }
-                  statusTbody.appendChild(row);
-                }
-                statusDetails.classList.remove("hidden");
+                showStatusSuccess(result);
               } else {
-                statusCard.className =
-                  "rounded-lg border border-red-500/30 bg-red-500/10 p-6 shadow-lg";
-                statusTitle.className =
-                  "mb-2 text-lg font-semibold text-red-300";
-                statusTitle.textContent = "Import rejected";
-                statusMessage.className =
-                  "mb-4 text-sm leading-6 text-red-200/80";
-                statusMessage.textContent =
-                  result.error ?? "The import request was rejected.";
-                statusDetails.classList.add("hidden");
+                showStatusError(
+                  "Import rejected",
+                  result.error ?? "The import request was rejected."
+                );
               }
             } catch {
-              statusSection.classList.remove("hidden");
-              statusCard.className =
-                "rounded-lg border border-red-500/30 bg-red-500/10 p-6 shadow-lg";
-              statusTitle.className =
-                "mb-2 text-lg font-semibold text-red-300";
-              statusTitle.textContent = "Import unavailable";
-              statusMessage.className =
-                "mb-4 text-sm leading-6 text-red-200/80";
-              statusMessage.textContent =
-                "The import service could not be reached. No result was reported.";
-              statusDetails.classList.add("hidden");
+              showStatusError(
+                "Import unavailable",
+                "The import service could not be reached. No result was reported."
+              );
             } finally {
               importBtn.disabled = false;
               importBtn.textContent = "Import Data";

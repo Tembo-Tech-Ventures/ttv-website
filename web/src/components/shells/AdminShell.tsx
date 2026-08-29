@@ -1,4 +1,4 @@
-import React, { useEffect, useState, type ReactNode } from "react";
+import React, { useSyncExternalStore, useState, type ReactNode } from "react";
 import Sidebar from "@/components/common/Sidebar";
 import {
   PiGaugeDuotone,
@@ -59,11 +59,11 @@ export default function AdminShell({
   dataMigrationEnabled?: boolean;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    setHydrated(true);
-  }, []);
+  const hydrated = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
   const links = getAdminLinks(agentAuthEnabled, dataMigrationEnabled);
 
   return (
