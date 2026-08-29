@@ -40,10 +40,20 @@ if (statusFilter) {
   });
 }
 
+const notice = Astro.url.searchParams.get("notice");
 ---
 
 <AdminLayout title="Applications">
   <div class="space-y-6">
+    {notice === "missing" && (
+      <p
+        role="alert"
+        class="rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
+      >
+        That application no longer exists.
+      </p>
+    )}
+
     <h2 class="text-2xl font-bold text-white">Applications</h2>
 
     <div class="flex flex-wrap gap-2">

@@ -23,7 +23,8 @@ const defaultCompletionDate = formatDateInputValue();
 
 if (!id) return Astro.redirect("/admin/applications");
 
-// Handle POST — update status
+let actionError: string | undefined;
+
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
   const current = await db.query.programApplication.findFirst({
@@ -32,10 +33,7 @@ if (Astro.request.method === "POST") {
   });
 
   if (!current) {
-    return new Response(
-      "Application not found. Return to the application list and try again.",
-      { status: 400 }
-    );
+    return Astro.redirect("/admin/applications?notice=missing");
   }
 
   try {
@@ -60,14 +58,16 @@ if (Astro.request.method === "POST") {
       staleMessage:
         "This application changed while you were updating it. Refresh the page before trying again.",
     });
+
+    return Astro.redirect(`/admin/applications/${id}`);
   } catch (error) {
     if (error instanceof ProgramApplicationError) {
-      return new Response(error.message, { status: 400 });
+      actionError = error.message;
+      Astro.response.status = 400;
+    } else {
+      throw error;
     }
-    throw error;
   }
-
-  return Astro.redirect(`/admin/applications/${id}`);
 }
 
 const application = await db.query.programApplication.findFirst({
@@ -99,6 +99,15 @@ const availableStatuses = getAvailableApplicationTransitions(
     <a href="/admin/applications" class="text-sm text-primary hover:underline">
       &larr; Back to Applications
     </a>
+
+    {actionError && (
+      <p
+        role="alert"
+        class="rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
+      >
+        {actionError}
+      </p>
+    )}
 
     <div class="flex items-center gap-3">
       <h2 class="text-2xl font-bold text-white">Application</h2>
