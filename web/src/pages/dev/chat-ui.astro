@@ -154,10 +154,47 @@ const messages = [
     ],
   },
 ];
+
+// Distinct per-session transcripts, so switching conversations actually swaps
+// the messages. Without them the dev page changes the title only, and the
+// scroll-reset behaviour that switching exists to exercise never happens.
+const transcripts: Record<string, typeof messages> = {
+  "mock-session-1": messages,
+  "mock-session-2": [
+    {
+      id: "arch-1",
+      role: "user" as const,
+      content: "Should we move the retrieval layer off Cloudflare?",
+    },
+    {
+      id: "arch-2",
+      role: "assistant" as const,
+      content:
+        "Not yet. The workshop's position was that the retrieval quality is the open question, not the hosting.\n\n- Prove relevance on the current stack first.\n- Moving now changes two variables at once, so a regression tells you nothing.\n- Revisit once you have a benchmark you trust. [1]",
+      citations: [
+        {
+          sourceNumber: 1,
+          recordingId: "recording-2",
+          title: "Technical Architecture Workshop",
+          startTime: 1494,
+          endTime: 1550,
+          url: "/dashboard/sessions/recording-2?t=1494",
+          text: "If one line item is bigger than everything else combined, that is a decision you will have to undo.",
+        },
+      ],
+    },
+  ],
+};
 ---
 
 <ChatLayout title="Chat UI Mock | TTV">
-  <ChatApp client:load mockMode initialSessions={sessions} initialMessages={messages} />
+  <ChatApp
+    client:load
+    mockMode
+    initialSessions={sessions}
+    initialMessages={messages}
+    mockTranscripts={transcripts}
+  />
 </ChatLayout>
 
 <style is:global>

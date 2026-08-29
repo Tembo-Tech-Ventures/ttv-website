@@ -25,15 +25,25 @@ const ANNOUNCEMENT_TTL_MS = 5_000;
  * out loud, so flatten to something a screen reader can speak.
  */
 export function toPlainText(markdown: string) {
-  return markdown
-    .replace(/```[\s\S]*?```/g, " code block ")
-    .replace(/^[-*]\s+/gm, "")
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/\[(\d+)\]/g, "")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/(\*\*|__|\*|_|`)/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return (
+    markdown
+      .replace(/```[\s\S]*?```/g, " code block ")
+      .replace(/^\s*[-*]\s+/gm, "")
+      .replace(/^\s*#{1,6}\s+/gm, "")
+      .replace(/^\s*>\s?/gm, "")
+      // Links before bare citation markers, so `[text](url)` is not left as a
+      // stray `(url)` by the citation rule.
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/\[\d+\]/g, "")
+      .replace(/~~(.+?)~~/g, "$1")
+      .replace(/\*\*(.+?)\*\*|__(.+?)__/g, "$1$2")
+      // Underscore emphasis only when it wraps a word, so `snake_case` survives.
+      .replace(/\*(.+?)\*/g, "$1")
+      .replace(/(^|\s)_(.+?)_(?=\s|$|[.,;:!?])/g, "$1$2")
+      .replace(/`/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
 }
 
 function citationHref(citation: Citation) {
@@ -218,12 +228,15 @@ export default function Transcript({
 
     setAnnouncement(toPlainText(last.content));
     const pending = pendingQuestionRef.current;
+    pendingQuestionRef.current = null;
+    // A reader who scrolled away while waiting is reading something else. The
+    // pin exists to avoid yanking people around; it must not do the yanking.
+    if (!nearBottom) return;
     if (pending !== null) {
-      pendingQuestionRef.current = null;
       pinToTop(pending);
       return;
     }
-    if (nearBottom) scrollToBottom();
+    scrollToBottom();
   }, [messages, nearBottom, pinToTop, scrollToBottom]);
 
   useEffect(() => {

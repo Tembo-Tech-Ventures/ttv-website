@@ -8,6 +8,7 @@ import ConversationList, {
 import ConversationSheet from "@/components/chat/ConversationSheet";
 import Transcript from "@/components/chat/Transcript";
 import type { ChatMessage, ChatSession } from "@/components/chat/types";
+import { MOCK_LATENCY_MS } from "@/components/chat/mock-timing";
 import { DASHBOARD_LINKS } from "@/components/shells/DashboardShell";
 
 /** Matches Tailwind's `lg:`, the breakpoint the rail appears at. */
@@ -23,21 +24,22 @@ const APP_NAV = DASHBOARD_LINKS.filter((link) => link.href !== "/dashboard/ask")
 /** How many prior turns to send back as context. Matches the previous UI. */
 const HISTORY_TURNS = 8;
 
-/**
- * Stand-in round trip for `mockMode`, so the dev page renders like the real one.
- * Long enough that "while an answer is in flight" is a state a test can actually
- * act in — a real retrieval round trip is seconds, not milliseconds.
- */
-const MOCK_LATENCY_MS = 1_500;
-
 const NO_SESSIONS: ChatSession[] = [];
 const NO_MESSAGES: ChatMessage[] = [];
+
+const NO_TRANSCRIPTS: Record<string, ChatMessage[]> = {};
 
 interface ChatAppProps {
   /** Renders against fixed data and never calls the API. Used by /dev/chat-ui. */
   mockMode?: boolean;
   initialSessions?: ChatSession[];
   initialMessages?: ChatMessage[];
+  /**
+   * Per-session transcripts for `mockMode`, keyed by session id. Without these
+   * the dev page swaps the title but not the messages, and the scroll-reset
+   * behaviour that switching conversations exists to exercise never happens.
+   */
+  mockTranscripts?: Record<string, ChatMessage[]>;
 }
 
 /**
@@ -54,6 +56,7 @@ export default function ChatApp({
   mockMode = false,
   initialSessions = NO_SESSIONS,
   initialMessages = NO_MESSAGES,
+  mockTranscripts = NO_TRANSCRIPTS,
 }: ChatAppProps) {
   const [sessions, setSessions] = useState<ChatSession[]>(initialSessions);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(
@@ -130,14 +133,23 @@ export default function ChatApp({
     };
   }, [mockMode]);
 
-  async function refreshSessions(nextActiveSessionId: string) {
+  /**
+   * Every async writer of `messages` / `activeSessionId` has to check this
+   * before it lands, not just `sendMessage`. Setting `activeSessionId` late is
+   * the dangerous one: it is the id the next message is filed under, so a stale
+   * write posts the user's new question into the conversation they just left.
+   */
+  function staleAfter(epoch: number) {
+    return () => conversationEpochRef.current !== epoch;
+  }
+
+  async function refreshSessions(nextActiveSessionId: string, isStale: () => boolean) {
     if (mockMode) return;
     const response = await fetch("/api/chat/sessions");
     const payload = (await response.json()) as { sessions?: ChatSession[] };
-    if (response.ok) {
-      setSessions(payload.sessions ?? []);
-      setActiveSessionId(nextActiveSessionId);
-    }
+    if (!response.ok || isStale()) return;
+    setSessions(payload.sessions ?? []);
+    setActiveSessionId(nextActiveSessionId);
   }
 
   async function selectSession(sessionId: string) {
@@ -145,9 +157,17 @@ export default function ChatApp({
     if (sessionId === activeSessionId || loading) return;
     setError("");
     setHistoryLoading(true);
+    const isStale = staleAfter(conversationEpochRef.current);
     try {
       if (mockMode) {
+        // Same stand-in round trip as sending, so "while a conversation is
+        // loading" is a state the dev page can actually be observed in.
+        await new Promise((resolve) => {
+          setTimeout(resolve, MOCK_LATENCY_MS);
+        });
+        if (isStale()) return;
         setActiveSessionId(sessionId);
+        setMessages(mockTranscripts[sessionId] ?? []);
         beginNewTranscript();
         return;
       }
@@ -157,13 +177,15 @@ export default function ChatApp({
         error?: string;
       };
       if (!response.ok) throw new Error(payload.error ?? "Unable to load chat");
+      if (isStale()) return;
       setActiveSessionId(sessionId);
       setMessages(payload.messages ?? []);
       beginNewTranscript();
     } catch (err) {
+      if (isStale()) return;
       setError(err instanceof Error ? err.message : "Unable to load chat");
     } finally {
-      setHistoryLoading(false);
+      if (!isStale()) setHistoryLoading(false);
     }
   }
 
@@ -188,8 +210,7 @@ export default function ChatApp({
     // The transcript this answer belongs to. If the user starts a new chat or
     // opens a different conversation while it is in flight, the result is stale
     // and applying it would resurrect the conversation they just left.
-    const epoch = conversationEpochRef.current;
-    const isStale = () => conversationEpochRef.current !== epoch;
+    const isStale = staleAfter(conversationEpochRef.current);
 
     try {
       if (mockMode) {
@@ -262,7 +283,7 @@ export default function ChatApp({
         ...nextMessages,
         { role: "assistant", content: payload.answer, citations: payload.citations },
       ]);
-      if (nextSessionId) await refreshSessions(nextSessionId);
+      if (nextSessionId) await refreshSessions(nextSessionId, isStale);
     } catch (err) {
       if (isStale()) return;
       setError(err instanceof Error ? err.message : "Unable to send message");

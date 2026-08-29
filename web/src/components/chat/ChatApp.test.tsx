@@ -165,13 +165,24 @@ describe("conversation list helpers", () => {
 describe("toPlainText", () => {
   it("flattens markdown so a screen reader does not speak the markup", () => {
     const spoken = toPlainText(
-      "**Start here**\n\n- Interview users first. [1]\n- Read the [docs](https://x.test).\n\n```js\ncode()\n```"
+      "## Start here\n\n> A quote\n\n- Interview users first. [1]\n- Read the [docs](https://x.test).\n- ~~Not this~~ but _this_ and **that**.\n\n```js\ncode()\n```"
     );
 
-    expect(spoken).not.toMatch(/[*`[\]]/);
+    expect(spoken).not.toMatch(/[*`[\]>~#]/);
     expect(spoken).toContain("Start here");
+    expect(spoken).toContain("A quote");
     expect(spoken).toContain("Interview users first.");
     expect(spoken).toContain("Read the docs");
+    expect(spoken).toContain("Not this but this and that.");
     expect(spoken).toContain("code block");
+  });
+
+  it("leaves underscores that are not emphasis alone", () => {
+    // Identifiers turn up in answers about the codebase; "snakecase" is wrong.
+    expect(toPlainText("Set snake_case on the_column.")).toBe("Set snake_case on the_column.");
+  });
+
+  it("drops a bare citation marker without eating the sentence", () => {
+    expect(toPlainText("Validate first. [1]")).toBe("Validate first.");
   });
 });

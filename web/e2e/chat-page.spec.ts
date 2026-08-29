@@ -1,4 +1,5 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { MOCK_LATENCY_MS } from "../src/components/chat/mock-timing";
 
 /**
  * Layout and interaction guarantees for the Ask AI page.
@@ -110,6 +111,15 @@ test("sends a message and keeps the layout intact afterwards", async ({ page }, 
   await expect(page.getByPlaceholder("Ask about your sessions…")).toBeInViewport();
   expect(await countScrollableRegions(page)).toBeLessThanOrEqual(isMobile(testInfo) ? 1 : 2);
 });
+
+/** Desktop lists conversations in the rail; mobile needs the sheet opened. */
+async function openConversationList(page: Page) {
+  const sheetTrigger = page.locator("h1 button");
+  if (await sheetTrigger.isVisible()) {
+    await sheetTrigger.click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+  }
+}
 
 /** The rail button on desktop, the header's plus button on mobile. */
 function newChatControl(page: Page, testInfo: TestInfo) {
@@ -246,9 +256,11 @@ test("a new chat is not overwritten by an answer still in flight", async ({ page
    * A fixed wait, deliberately: the assertion is that something never happens,
    * and the window it could happen in is the mock's round trip. Asserting
    * immediately would pass whether or not the guard exists, because the
-   * transcript is empty either way until the abandoned answer lands.
+   * transcript is empty either way until the abandoned answer lands. Derived
+   * from the constant rather than hardcoded, so raising the mock latency cannot
+   * silently turn this into an assertion about nothing.
    */
-  await page.waitForTimeout(3_000);
+  await page.waitForTimeout(MOCK_LATENCY_MS * 2);
 
   await expect(transcript(page).getByText("Question A")).toHaveCount(0);
   await expect(transcript(page).getByText("validate the problem with users")).toHaveCount(0);
@@ -271,6 +283,25 @@ test("the header title opens the conversation sheet on mobile", async ({ page },
   await expect(sheet).toBeHidden();
 });
 
+test("switching conversation replaces the transcript and resets its scroll", async ({ page }) => {
+  await gotoChat(page);
+  const scroller = page.locator("[data-chat-scroller]");
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+  // Read backwards, so the reset has something to undo.
+  await scroller.evaluate((element) => element.scrollTo({ top: 0 }));
+  await expect(page.getByRole("button", { name: "Jump to latest" })).toBeVisible();
+
+  await openConversationList(page);
+  await page.getByRole("button", { name: /Architecture tradeoffs/ }).first().click();
+
+  await expect(transcript(page).getByText("Should we move the retrieval layer")).toBeVisible();
+  await expect(transcript(page).getByText("What should students do before")).toHaveCount(0);
+  // Landing mid-history in a conversation you just opened is disorienting; the
+  // reset must not inherit the previous transcript's scroll position.
+  await expect(page.getByRole("button", { name: "Jump to latest" })).toBeHidden();
+});
+
 test("switching conversation from the sheet closes it", async ({ page }, testInfo) => {
   test.skip(!isMobile(testInfo), "The sheet is the mobile switcher; desktop uses the rail");
 
@@ -288,4 +319,21 @@ test("the desktop rail keeps a route back into the dashboard", async ({ page }, 
   await gotoChat(page);
   await expect(page.getByRole("link", { name: "Back to dashboard" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Site" })).toBeVisible();
+});
+
+test("a conversation still loading does not replace a new chat", async ({ page }, testInfo) => {
+  await gotoChat(page);
+
+  await openConversationList(page);
+  await page.getByRole("button", { name: /Architecture tradeoffs/ }).first().click();
+  // Abandon the load before it lands.
+  await newChatControl(page, testInfo).click();
+  await expect(page.getByRole("heading", { name: "Ask across your sessions" })).toBeVisible();
+
+  // Same reasoning as the in-flight send: the assertion is that a late response
+  // never lands, so it has to outlast the window in which it could.
+  await page.waitForTimeout(MOCK_LATENCY_MS * 2);
+
+  await expect(transcript(page).getByText("Should we move the retrieval layer")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Ask across your sessions" })).toBeVisible();
 });
