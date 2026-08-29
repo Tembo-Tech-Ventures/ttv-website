@@ -1,0 +1,95 @@
+---
+/**
+ * A chrome-free shell for routes that should own the whole viewport.
+ *
+ * It deliberately does not extend BaseLayout: a chat page needs a different
+ * viewport meta (`viewport-fit=cover` so the composer can pad past the iOS home
+ * indicator, `interactive-widget=resizes-content` so the on-screen keyboard
+ * shrinks the layout instead of sliding it out from under the browser) and a
+ * document that cannot scroll at all. Everything inside is sized against
+ * `100dvh`, so the only scrolling region is whichever child declares it.
+ */
+import "@/styles/global.css";
+
+interface Props {
+  title?: string;
+}
+
+const { title = "Ask AI | Tembo Tech Ventures" } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+  </head>
+  <body class="h-full overflow-hidden overscroll-none bg-dark">
+    <div class="chat-viewport flex flex-col bg-gradient-to-br from-teal to-dark">
+      {/* Children are flex items in a container of definite height: any child
+          that wants to scroll needs `min-h-0 flex-1` plus `overflow-y-auto`. */}
+      <slot />
+    </div>
+
+    <style>
+      html {
+        overscroll-behavior: none;
+      }
+
+      .chat-viewport {
+        /*
+         * `svh` first as the safe fallback — plain `vh` is `lvh`, sized as if
+         * the browser chrome were retracted, which is what pushes a composer
+         * below the fold on a phone. `dvh` then wins wherever it is supported.
+         * Nothing here scrolls the document, so `dvh` resolves once and does
+         * not thrash layout the way it would on a scrolling page.
+         */
+        height: 100svh;
+        height: 100dvh;
+        /*
+         * Keyboard inset. Chromium fills `keyboard-inset-height` once the
+         * VirtualKeyboard API is opted into below; everywhere else the script
+         * measures it from visualViewport into `--keyboard-inset`.
+         */
+        padding-bottom: env(keyboard-inset-height, var(--keyboard-inset, 0px));
+      }
+    </style>
+
+    <script>
+      /*
+       * The keyboard is the one part of this that CSS cannot carry alone. Under
+       * the default `interactive-widget=resizes-visual`, `100dvh` does NOT
+       * shrink when the on-screen keyboard opens, so the composer ends up
+       * underneath it. `interactive-widget=resizes-content` in the viewport meta
+       * fixes Chrome Android and Firefox; WebKit has not implemented it
+       * (bugs.webkit.org #259770 is still open), so iOS needs the measurement
+       * fallback below.
+       */
+      const virtualKeyboard = (
+        navigator as Navigator & { virtualKeyboard?: { overlaysContent: boolean } }
+      ).virtualKeyboard;
+
+      if (virtualKeyboard) {
+        virtualKeyboard.overlaysContent = true;
+      } else if (window.visualViewport) {
+        const viewport = window.visualViewport;
+        const root = document.documentElement;
+        const sync = () => {
+          const inset = Math.max(0, window.innerHeight - (viewport.height + viewport.offsetTop));
+          root.style.setProperty("--keyboard-inset", `${inset}px`);
+        };
+        viewport.addEventListener("resize", sync);
+        viewport.addEventListener("scroll", sync);
+        // iOS has shipped builds where offsetTop does not settle back to 0 on
+        // dismiss, so re-measure after the blur has actually landed.
+        window.addEventListener("focusout", () => requestAnimationFrame(sync));
+        sync();
+      }
+    </script>
+  </body>
+</html>
