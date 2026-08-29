@@ -96,10 +96,16 @@ export default function Sidebar({ links, title, isOpen, onClose }: SidebarProps)
         </Dialog>
       </Transition>
 
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:border-r lg:border-teal/20 lg:bg-dark/50 lg:p-4">
+      {/*
+        Desktop sidebar. `self-start` is load-bearing: a flex item defaults to
+        `align-self: stretch`, which makes this as tall as the whole page, and an
+        element as tall as its container can never stick. Without it the nav
+        scrolled off the top of every long admin page while the coloured strip
+        stayed — which read as the navigation simply vanishing.
+      */}
+      <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-dvh lg:w-64 lg:shrink-0 lg:flex-col lg:self-start lg:overflow-y-auto lg:overscroll-contain lg:border-r lg:border-teal/20 lg:bg-dark/50 lg:p-4">
         <div className="mb-6">
-          <span className="text-lg font-semibold text-white">{title}</span>
+          <h1 className="text-lg font-semibold text-white">{title}</h1>
         </div>
         <NavLinks links={links} />
       </aside>
