@@ -1,11 +1,45 @@
 ---
-import BaseLayout from "@/layouts/BaseLayout.astro";
-import ChatInterface from "@/components/recordings/ChatInterface";
+/**
+ * Dev-only mirror of `/dashboard/ask` with fixed data and no API calls.
+ *
+ * It renders the real `ChatApp` in the real `ChatLayout`, so the e2e layout
+ * assertions exercise the shipped component rather than a lookalike — the
+ * authenticated route is not reachable from a local dev server.
+ */
+import ChatLayout from "@/layouts/ChatLayout.astro";
+import ChatApp from "@/components/chat/ChatApp";
+import { MOCK_LATENCY_MS, MOCK_LOAD_MS } from "@/components/chat/mock-timing";
 
 if (!import.meta.env.DEV) {
   return new Response("Not found", { status: 404 });
 }
 
+/*
+ * Mock timings default to something honest about production and can be widened
+ * per-request. A test that asserts a late response never lands has to be able
+ * to act inside that window, and hardcoding a long wait here instead would make
+ * the page imply latency the real app does not have.
+ */
+function timing(param: string, fallback: number) {
+  // Not `Number(searchParams.get(...))` — a missing param is null, and
+  // `Number(null)` is 0, which is finite and non-negative, so the fallback
+  // would never apply and every mock delay would silently become instant.
+  // `!raw` rather than `raw === null`: `Number("")` is also 0, so an explicitly
+  // empty param would otherwise mean "instant" — the same trap one layer down.
+  const raw = Astro.url.searchParams.get(param);
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  // Clamped, so a typo cannot hang a test until its timeout.
+  return Math.min(parsed, 10_000);
+}
+
+const mockLatencyMs = timing("mockLatency", MOCK_LATENCY_MS);
+const mockLoadMs = timing("mockLoad", MOCK_LOAD_MS);
+
+// Enough conversations that the desktop rail actually overflows: an assertion
+// that "only the transcript scrolls" proves nothing if the rail never had
+// enough content to scroll in the first place.
 const sessions = [
   {
     id: "mock-session-1",
@@ -21,17 +55,63 @@ const sessions = [
     messageCount: 6,
     latestMessage: "Keep the implementation simple until the retrieval quality is proven.",
   },
+  {
+    id: "mock-session-3",
+    title: "Feedback on the demo day pitch",
+    updatedAt: 1_799_910_000,
+    messageCount: 5,
+    latestMessage: "Lead with the traction slide, not the architecture diagram.",
+  },
+  {
+    id: "mock-session-4",
+    title: "How mentors framed pricing",
+    updatedAt: 1_799_823_600,
+    messageCount: 6,
+    latestMessage: "Charge for the outcome, not the seat.",
+  },
+  {
+    id: "mock-session-5",
+    title: "Hiring the first engineer",
+    updatedAt: 1_799_737_200,
+    messageCount: 4,
+    latestMessage: "Hire for range before depth at this stage.",
+  },
+  {
+    id: "mock-session-6",
+    title: "Positioning against incumbents",
+    updatedAt: 1_799_650_800,
+    messageCount: 8,
+    latestMessage: "Name the workflow you replace, not the category you join.",
+  },
+  {
+    id: "mock-session-7",
+    title: "What to measure in month one",
+    updatedAt: 1_799_564_400,
+    messageCount: 3,
+    latestMessage: "One activation metric, reviewed weekly.",
+  },
+  {
+    id: "legacy",
+    title: "Earlier discussion",
+    updatedAt: 1_799_478_000,
+    messageCount: 3,
+    latestMessage: "Questions asked before chats were saved separately.",
+  },
 ];
 
+// Long enough to overflow a desktop viewport: a chat layout only shows its
+// scroll behaviour once the transcript is taller than the screen.
 const messages = [
   {
-    role: "user",
+    id: "mock-1",
+    role: "user" as const,
     content: "What should students do before building the MVP?",
   },
   {
-    role: "assistant",
+    id: "mock-2",
+    role: "assistant" as const,
     content:
-      "Students should validate the problem before building the MVP. The practical sequence is:\n\n- Run short customer interviews.\n- Look for repeated pain points rather than isolated opinions.\n- Narrow the MVP to the smallest testable workflow. [1]\n\nThis answer cleans up transcript phrasing where speech-to-text likely misheard punctuation or capitalization.",
+      "Students should validate the problem before building the MVP. The practical sequence is:\n\n- Run short customer interviews.\n- Look for repeated pain points rather than isolated opinions.\n- Narrow the MVP to the smallest testable workflow. [1]\n\nThe cost argument mattered too: a managed service that costs more per month than the whole rest of the stack is a decision you will have to unwind later. [2]",
     citations: [
       {
         sourceNumber: 1,
@@ -53,29 +133,161 @@ const messages = [
       },
     ],
   },
-] as const;
+  {
+    id: "mock-3",
+    role: "user" as const,
+    content: "How many interviews is enough to be confident?",
+  },
+  {
+    id: "mock-4",
+    role: "assistant" as const,
+    content:
+      "There is no magic number, but the sessions gave a practical stopping rule: keep going until two or three consecutive interviews stop surprising you. For most teams in the cohort that landed between eight and twelve people.\n\nTwo cautions came up repeatedly:\n\n- Interviewing people who are easy to reach is not the same as interviewing your buyer.\n- If everyone is enthusiastic and nobody has already tried to solve the problem, that enthusiasm is probably politeness. [1]",
+    citations: [
+      {
+        sourceNumber: 1,
+        recordingId: "recording-3",
+        title: "Mentor Hours: Talking to Users",
+        startTime: 902,
+        endTime: 964,
+        url: "/dashboard/sessions/recording-3?t=902",
+        text: "You stop when you stop being surprised. For most of you that is somewhere around ten conversations.",
+      },
+    ],
+  },
+  {
+    id: "mock-5",
+    role: "user" as const,
+    content: "Summarise the action items for our team.",
+  },
+  {
+    id: "mock-6",
+    role: "assistant" as const,
+    content:
+      "**This week**\n\n- Book eight discovery interviews; write the five questions before the first call.\n- Freeze the stack. No further evaluation until the interviews are done.\n\n**Next week**\n\n- Write up the repeated pain points, one line each, with a quote.\n- Cut the MVP scope to the single workflow those quotes justify. [1]",
+    citations: [
+      {
+        sourceNumber: 1,
+        recordingId: "recording-1",
+        title: "Mentor Hours: Customer Discovery",
+        startTime: 1580,
+        endTime: 1622,
+        url: "/dashboard/sessions/recording-1?t=1580",
+        text: "Come back next week with quotes, not with a feature list.",
+      },
+    ],
+  },
+];
+
+// A transcript for every session. Leaving some without one lets the dev page
+// render a state the real app cannot produce — a titled conversation showing
+// the new-chat empty state — which is both misleading and a trap for tests
+// that use that empty state to mean "this is a new chat".
+//
+// `mock-session-2` deliberately has the same number of messages as
+// `mock-session-1`, and is long enough to overflow. Message count is exactly
+// what must not be used to detect a conversation change, so the dev page has
+// to contain the collision, not avoid it.
+function conversation(topic: string, answers: [string, string][]) {
+  return answers.flatMap(([question, answer], index) => [
+    { id: `${topic}-q${index}`, role: "user" as const, content: question },
+    { id: `${topic}-a${index}`, role: "assistant" as const, content: answer },
+  ]);
+}
+
+const architectureTranscript = [
+  {
+    id: "arch-q0",
+    role: "user" as const,
+    content: "Should we move the retrieval layer off Cloudflare?",
+  },
+  {
+    id: "arch-a0",
+    role: "assistant" as const,
+    content:
+      "Not yet. The workshop's position was that retrieval quality is the open question, not the hosting.\n\n- Prove relevance on the current stack first.\n- Moving now changes two variables at once, so a regression tells you nothing.\n- Revisit once you have a benchmark you trust. [1]\n\nThe cost argument points the same way: the current stack is the cheap one, and the expensive alternative buys you nothing you can measure yet.",
+    citations: [
+      {
+        sourceNumber: 1,
+        recordingId: "recording-2",
+        title: "Technical Architecture Workshop",
+        startTime: 1494,
+        endTime: 1550,
+        url: "/dashboard/sessions/recording-2?t=1494",
+        text: "If one line item is bigger than everything else combined, that is a decision you will have to undo.",
+      },
+    ],
+  },
+  {
+    id: "arch-q1",
+    role: "user" as const,
+    content: "What benchmark would you trust?",
+  },
+  {
+    id: "arch-a1",
+    role: "assistant" as const,
+    content:
+      "**Build it from your own questions**\n\n- Collect thirty questions people actually asked, not ones you invented.\n- Have a human mark the passage that answers each one.\n- Score retrieval on whether that passage appears in the top five.\n\n**Then hold it still**\n\n- Freeze the set before you start tuning, or you will tune the benchmark.\n- Re-run it on every change to chunking, embedding or filtering.\n- Track one number over time rather than a dashboard nobody reads. [1]",
+    citations: [
+      {
+        sourceNumber: 1,
+        recordingId: "recording-2",
+        title: "Technical Architecture Workshop",
+        startTime: 1820,
+        endTime: 1884,
+        url: "/dashboard/sessions/recording-2?t=1820",
+        text: "Thirty real questions with a marked answer beats any amount of intuition about whether search feels good.",
+      },
+    ],
+  },
+  {
+    id: "arch-q2",
+    role: "user" as const,
+    content: "And if the numbers stay bad?",
+  },
+  {
+    id: "arch-a2",
+    role: "assistant" as const,
+    content:
+      "Then the problem is upstream of the database, and moving it would have hidden that.\n\n- Check chunking first. Most bad retrieval is chunks that split an answer in half.\n- Check what you are embedding. Titles and speaker names carry more signal than people expect.\n- Only then look at the index itself.\n\nThe order matters because each step is cheap to undo and the last one is not.",
+  },
+];
+
+const transcripts: Record<string, typeof messages> = {
+  "mock-session-1": messages,
+  "mock-session-2": architectureTranscript,
+  "mock-session-3": conversation("pitch", [
+    ["How did the demo day pitch land?", "Lead with traction, not architecture. The diagram answered a question nobody had asked yet."],
+  ]),
+  "mock-session-4": conversation("pricing", [
+    ["How did mentors frame pricing?", "Charge for the outcome, not the seat. Per-seat pricing punishes the customer for rolling you out."],
+  ]),
+  "mock-session-5": conversation("hiring", [
+    ["Who should we hire first?", "Hire for range before depth at this stage. The first engineer will do four jobs, none of them for long."],
+  ]),
+  "mock-session-6": conversation("positioning", [
+    ["How do we position against incumbents?", "Name the workflow you replace, not the category you join. Categories invite comparison on their terms."],
+  ]),
+  "mock-session-7": conversation("metrics", [
+    ["What should we measure in month one?", "One activation metric, reviewed weekly. A dashboard of twelve numbers is a dashboard nobody reads."],
+  ]),
+  legacy: conversation("legacy", [
+    ["What did we discuss before chats were saved?", "These are questions asked before conversations were stored separately, grouped into one bucket."],
+  ]),
+};
 ---
 
-<BaseLayout title="Chat UI Mock | TTV">
-  <main class="min-h-screen bg-dark px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-    <div class="mx-auto max-w-7xl">
-      <div class="mb-6">
-        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-primary">
-          Dev preview
-        </p>
-        <h1 class="mt-2 text-2xl font-bold text-white sm:text-3xl">
-          Transcript chat UI
-        </h1>
-      </div>
-      <ChatInterface
-        client:load
-        mockMode
-        initialSessions={sessions}
-        initialMessages={messages}
-      />
-    </div>
-  </main>
-</BaseLayout>
+<ChatLayout title="Chat UI Mock | TTV">
+  <ChatApp
+    client:load
+    mockMode
+    initialSessions={sessions}
+    initialMessages={messages}
+    mockTranscripts={transcripts}
+    mockLatencyMs={mockLatencyMs}
+    mockLoadMs={mockLoadMs}
+  />
+</ChatLayout>
 
 <style is:global>
   astro-dev-toolbar {

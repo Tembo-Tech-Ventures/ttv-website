@@ -66,13 +66,14 @@
       }
     },
     {
-      "files": ["src/components/recordings/ChatInterface.tsx"],
+      "files": ["src/components/chat/Transcript.tsx"],
       "rules": {
-        "react/no-array-index-key": "off"
+        "react/no-array-index-key": "off",
+        "jsx-a11y/no-noninteractive-tabindex": "off"
       }
     },
     {
-      "files": ["src/layouts/BaseLayout.astro"],
+      "files": ["src/layouts/BaseLayout.astro", "src/layouts/ChatLayout.astro"],
       "rules": {
         "import/no-unassigned-import": "off"
       }
