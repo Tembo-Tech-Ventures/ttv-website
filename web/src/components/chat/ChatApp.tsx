@@ -11,6 +11,13 @@ import type { ChatMessage, ChatSession } from "@/components/chat/types";
 import { MOCK_LATENCY_MS, MOCK_LOAD_MS } from "@/components/chat/mock-timing";
 import { DASHBOARD_LINKS } from "@/components/shells/DashboardShell";
 
+/**
+ * How long a conversation load may take before it is worth saying so. Below
+ * this the response beats the indicator and announcing it only produces a
+ * flash of replaced content.
+ */
+const LOAD_INDICATOR_DELAY_MS = 300;
+
 /** Matches Tailwind's `lg:`, the breakpoint the rail appears at. */
 const DESKTOP_QUERY = "(min-width: 64rem)";
 
@@ -77,6 +84,8 @@ export default function ChatApp({
   const [sheetOpen, setSheetOpen] = useState(false);
   /** The conversation being fetched, so the tap has visible consequences. */
   const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
+  /** Same value, readable synchronously by an in-flight load. */
+  const pendingSessionIdRef = useRef<string | null>(null);
   /**
    * Bumped whenever the transcript is replaced wholesale, so the scroll
    * position resets. Message count cannot stand in for this — two different
@@ -170,8 +179,18 @@ export default function ChatApp({
     if (sessionId === activeSessionId || loading) return;
     setError("");
     setHistoryLoading(true);
-    setPendingSessionId(sessionId);
-    const isStale = staleAfter(conversationEpochRef.current);
+    pendingSessionIdRef.current = sessionId;
+    const announceSlowLoad = setTimeout(() => {
+      if (pendingSessionIdRef.current === sessionId) setPendingSessionId(sessionId);
+    }, LOAD_INDICATOR_DELAY_MS);
+    const epochStale = staleAfter(conversationEpochRef.current);
+    /*
+     * Superseded as well as stale. Two quick taps used to resolve in whichever
+     * order the responses landed; with the epoch guard the first to land would
+     * apply, bump the epoch and invalidate the second — so the user reliably
+     * got their *first* choice instead of their last.
+     */
+    const isStale = () => epochStale() || pendingSessionIdRef.current !== sessionId;
     /*
      * Applying a result bumps the epoch, which makes `isStale()` true for this
      * call's own `finally`. Track completion separately, or a successful load
@@ -208,9 +227,11 @@ export default function ChatApp({
       if (isStale()) return;
       setError(err instanceof Error ? err.message : "Unable to load chat");
     } finally {
+      clearTimeout(announceSlowLoad);
       if (applied || !isStale()) {
         setHistoryLoading(false);
         setPendingSessionId(null);
+        pendingSessionIdRef.current = null;
       }
     }
   }
@@ -226,6 +247,7 @@ export default function ChatApp({
     setLoading(false);
     setHistoryLoading(false);
     setPendingSessionId(null);
+    pendingSessionIdRef.current = null;
     beginNewTranscript();
     composerRef.current?.focus();
   }

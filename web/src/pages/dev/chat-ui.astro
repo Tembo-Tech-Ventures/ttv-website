@@ -24,10 +24,14 @@ function timing(param: string, fallback: number) {
   // Not `Number(searchParams.get(...))` — a missing param is null, and
   // `Number(null)` is 0, which is finite and non-negative, so the fallback
   // would never apply and every mock delay would silently become instant.
+  // `!raw` rather than `raw === null`: `Number("")` is also 0, so an explicitly
+  // empty param would otherwise mean "instant" — the same trap one layer down.
   const raw = Astro.url.searchParams.get(param);
-  if (raw === null) return fallback;
+  if (!raw) return fallback;
   const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  // Clamped, so a typo cannot hang a test until its timeout.
+  return Math.min(parsed, 10_000);
 }
 
 const mockLatencyMs = timing("mockLatency", MOCK_LATENCY_MS);

@@ -355,3 +355,19 @@ test("a conversation still loading does not replace a new chat", async ({ page }
   await expect(transcript(page).getByText("Should we move the retrieval layer")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Ask across your sessions" })).toBeVisible();
 });
+
+test("two quick conversation taps land on the second one", async ({ page }) => {
+  await gotoChat(page, `?mockLoad=${SLOW_LOAD_MS}`);
+
+  await openConversationList(page);
+  await page.getByRole("button", { name: /Architecture tradeoffs/ }).first().click();
+  await openConversationList(page);
+  await page.getByRole("button", { name: /How mentors framed pricing/ }).first().click();
+
+  // Whichever response lands first, the transcript must end on the tap the user
+  // made last. Resolving in response order gives them their first choice.
+  await expect(transcript(page).getByText("Charge for the outcome")).toBeVisible();
+  await page.waitForTimeout(SLOW_LOAD_MS * 2);
+  await expect(transcript(page).getByText("Charge for the outcome")).toBeVisible();
+  await expect(transcript(page).getByText("Should we move the retrieval layer")).toHaveCount(0);
+});

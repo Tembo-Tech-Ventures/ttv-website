@@ -139,7 +139,12 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
 interface TranscriptProps {
   messages: ChatMessage[];
   loading: boolean;
-  /** A saved conversation is being fetched; the transcript shown is the old one. */
+  /**
+   * A saved conversation is being fetched. The transcript is replaced while it
+   * loads rather than dimmed, so showing this for a fast load would read as a
+   * flash of missing content; `ChatApp` only sets it once the load is slow
+   * enough to be worth acknowledging.
+   */
   loadingConversation?: boolean;
   onPickPrompt: (prompt: string) => void;
   /**
