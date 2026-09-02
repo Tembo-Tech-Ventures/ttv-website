@@ -1,0 +1,346 @@
+---
+/**
+ * Prototype B — "landscape diploma".
+ *
+ * A print-first layout: full-bleed cream, edge to edge, rotated to landscape,
+ * with the signature carrying the bottom-left of the sheet the way a diploma
+ * does and the machine-checkable credential facing it on the right. This is
+ * the option that stops pretending the printed thing is a web card.
+ *
+ * The sheet is a size container, so every measurement below is in `cqw` and
+ * the on-screen preview is the printed sheet at a smaller scale rather than a
+ * separate layout that happens to look similar.
+ */
+import CertificateLayout from "@/layouts/CertificateLayout.astro";
+import SignatureMark from "@/components/certificate/prototypes/SignatureMark.astro";
+import {
+  PROTOTYPE_VIEW as view,
+  PROTOTYPE_INSTRUCTOR_TITLE,
+} from "@/lib/certificate/prototype-fixture";
+
+if (!import.meta.env.DEV) {
+  return new Response("Not found", { status: 404 });
+}
+
+const credential = [
+  { label: "Issued", value: view.issueDate },
+  { label: "Credential ID", value: view.certificateId },
+  { label: "Verify at", value: view.verifyUrl },
+];
+---
+
+<CertificateLayout title="Print prototype B — landscape diploma">
+  <main class="stage">
+    <article class="sheet">
+      <div class="band" aria-hidden="true"></div>
+
+      <div class="inner">
+        <header class="head">
+          <p class="wordmark">Tembo Tech Ventures</p>
+          <div class="seal" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M4 12.5 9.5 18 20 6.5"></path>
+            </svg>
+          </div>
+        </header>
+
+        <div class="body">
+          <h1 class="title">
+            <span class="eyebrow">Certificate of Completion</span>
+            <span class="lede">This certifies that</span>
+            <span class="name">{view.studentName}</span>
+          </h1>
+          <p class="lede lede-after">has completed</p>
+          <p class="course">{view.curriculumTitle}</p>
+          <p class="cohort">{view.programName}</p>
+        </div>
+
+        <footer class="foot">
+          <div class="sign">
+            <div class="sign-mark">
+              <SignatureMark mark="instructor" />
+            </div>
+            <p class="sign-name">{view.instructorName}</p>
+            <p class="sign-title">{PROTOTYPE_INSTRUCTOR_TITLE}</p>
+          </div>
+
+          <dl class="credential">
+            {
+              credential.map((entry) => (
+                <div class="credential-row">
+                  <dt>{entry.label}</dt>
+                  <dd>{entry.value}</dd>
+                </div>
+              ))
+            }
+          </dl>
+        </footer>
+      </div>
+    </article>
+  </main>
+</CertificateLayout>
+
+<style is:global>
+  astro-dev-toolbar {
+    display: none !important;
+  }
+
+  @media print {
+    html,
+    body {
+      background: #fff !important;
+    }
+  }
+</style>
+
+<style>
+  .stage {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(1rem, 4vw, 3rem);
+    background: var(--color-dark);
+  }
+
+  .sheet {
+    --paper: #fffcf6;
+    --ink: #10312e;
+    --ink-soft: #5b736f;
+    --hairline: rgba(1, 61, 57, 0.18);
+
+    position: relative;
+    width: 100%;
+    max-width: 62rem;
+    /* US Letter, landscape. A4 landscape is 1.414; the layout has slack for both. */
+    aspect-ratio: 11 / 8.5;
+    overflow: hidden;
+    background: var(--paper);
+    color: var(--ink);
+    box-shadow: 0 30px 70px -35px rgb(0 0 0 / 0.8);
+    /*
+     * Everything inside is measured against the sheet rather than the viewport,
+     * so the preview above and the sheet that comes out of the printer are the
+     * same layout at two scales.
+     */
+    container-type: size;
+    container-name: sheet;
+  }
+
+  .band {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 2.2cqw;
+    background: var(--color-primary);
+  }
+
+  .inner {
+    position: absolute;
+    inset: 0;
+    padding: 6cqw 7cqw 5.5cqw calc(7cqw + 2.2cqw);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2cqw;
+    padding-bottom: 3cqw;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .wordmark {
+    font-size: 1.35cqw;
+    font-weight: 600;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--color-teal);
+  }
+
+  .seal {
+    flex-shrink: 0;
+    width: 5cqw;
+    height: 5cqw;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--color-primary);
+    color: var(--color-dark);
+  }
+
+  .seal svg {
+    width: 2.4cqw;
+    height: 2.4cqw;
+  }
+
+  /*
+   * `justify-content: center` on the growing middle band keeps the recipient
+   * optically centred between the rule and the signature row whatever the
+   * course title wraps to.
+   */
+  .body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .title {
+    font-family: var(--font-body);
+  }
+
+  .eyebrow {
+    display: block;
+    font-size: 1.35cqw;
+    font-weight: 600;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .lede {
+    display: block;
+    margin-top: 2.4cqw;
+    font-size: 1.5cqw;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .lede-after {
+    margin-top: 2cqw;
+  }
+
+  .name {
+    display: block;
+    margin-top: 1.4cqw;
+    font-size: 5.6cqw;
+    font-weight: 700;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  .course {
+    margin-top: 1.2cqw;
+    font-size: 2.9cqw;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--color-teal);
+    text-wrap: balance;
+  }
+
+  .cohort {
+    margin-top: 0.9cqw;
+    font-size: 1.6cqw;
+    color: var(--ink-soft);
+  }
+
+  .foot {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 4cqw;
+    padding-top: 3cqw;
+  }
+
+  .sign {
+    width: 26cqw;
+    flex-shrink: 0;
+  }
+
+  .sign-mark {
+    height: 6.5cqw;
+    display: flex;
+    align-items: flex-end;
+    /* Let the pen stroke cross the rule, as a real signature does. */
+    margin-bottom: -1cqw;
+    color: var(--ink);
+  }
+
+  .sign-mark :global(svg) {
+    height: 100%;
+    width: auto;
+  }
+
+  .sign-name {
+    padding-top: 1cqw;
+    border-top: 1px solid var(--ink);
+    font-size: 1.7cqw;
+    font-weight: 600;
+  }
+
+  .sign-title {
+    margin-top: 0.3cqw;
+    font-size: 1.2cqw;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .credential {
+    text-align: right;
+    font-size: 1.25cqw;
+  }
+
+  .credential-row + .credential-row {
+    margin-top: 1cqw;
+  }
+
+  .credential dt {
+    font-size: 1.05cqw;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .credential dd {
+    margin-top: 0.25cqw;
+    font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+    overflow-wrap: anywhere;
+  }
+
+  /*
+   * `size: landscape` rotates whatever paper the printer holds instead of
+   * forcing Letter on an A4 tray. Zero margin because the cream is full bleed;
+   * the 7cqw padding inside the sheet is the real margin, and it is wider than
+   * any consumer printer's unprintable edge.
+   */
+  @page {
+    size: landscape;
+    margin: 0;
+  }
+
+  @media print {
+    .stage {
+      min-height: 0;
+      padding: 0;
+      display: block;
+      background: #fff;
+    }
+
+    .sheet {
+      width: 100%;
+      max-width: none;
+      height: 100vh;
+      aspect-ratio: auto;
+      box-shadow: none;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+      break-inside: avoid;
+    }
+  }
+</style>

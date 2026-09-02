@@ -1,0 +1,28 @@
+---
+/**
+ * Baseline: the certificate exactly as it ships today, driven by the
+ * prototype fixture instead of D1.
+ *
+ * Exists so the three print prototypes can be compared against something
+ * real. The shipped `@media print` block only strips the padding, radius and
+ * shadow — it sets no `@page` rule and no `print-color-adjust`, so what a
+ * browser actually puts on paper is not obvious from reading the CSS.
+ */
+import CertificateLayout from "@/layouts/CertificateLayout.astro";
+import CertificateCard from "@/components/certificate/CertificateCard.astro";
+import { PROTOTYPE_VIEW } from "@/lib/certificate/prototype-fixture";
+
+if (!import.meta.env.DEV) {
+  return new Response("Not found", { status: 404 });
+}
+---
+
+<CertificateLayout title="Print baseline — as shipped">
+  <CertificateCard view={PROTOTYPE_VIEW} />
+</CertificateLayout>
+
+<style is:global>
+  astro-dev-toolbar {
+    display: none !important;
+  }
+</style>

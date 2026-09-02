@@ -1,0 +1,109 @@
+---
+/**
+ * Dev-only index for the certificate print prototypes.
+ *
+ * Each entry renders a full sheet at `/dev/certificate-print/<key>`; open one
+ * and print-preview it, or run `node scripts/certificate-print-shots.mjs` to
+ * render every variant to PDF and PNG at both Letter and A4.
+ */
+import BaseLayout from "@/layouts/BaseLayout.astro";
+
+if (!import.meta.env.DEV) {
+  return new Response("Not found", { status: 404 });
+}
+
+const prototypes = [
+  {
+    href: "/dev/certificate-print/current",
+    name: "Baseline — as shipped",
+    note: "What the live page prints today: no @page rule, no print-color-adjust, and no signature.",
+  },
+  {
+    href: "/dev/certificate-print/a",
+    name: "A — one artefact",
+    note: "The screen card, printed faithfully. Colour preserved, signature inside the card, paper-agnostic.",
+  },
+  {
+    href: "/dev/certificate-print/b",
+    name: "B — landscape diploma",
+    note: "Print-first landscape sheet. Signature bottom-left, machine-checkable credential bottom-right.",
+  },
+  {
+    href: "/dev/certificate-print/c",
+    name: "C — ink-light portrait",
+    note: "Hairline frame, two signatories, no filled areas. Prints identically on any printer.",
+  },
+];
+---
+
+<BaseLayout title="Certificate print prototypes | TTV">
+  <main class="wrap">
+    <h1 class="heading">Certificate print prototypes</h1>
+    <p class="intro">
+      Three treatments for the printed certificate, each adding an instructor
+      signature. Compare them against the baseline.
+    </p>
+    <ul class="list">
+      {
+        prototypes.map((prototype) => (
+          <li class="item">
+            <a class="link" href={prototype.href}>
+              {prototype.name}
+            </a>
+            <p class="note">{prototype.note}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </main>
+</BaseLayout>
+
+<style is:global>
+  astro-dev-toolbar {
+    display: none !important;
+  }
+</style>
+
+<style>
+  .wrap {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: 4rem 1.5rem;
+  }
+
+  .heading {
+    font-family: var(--font-body);
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--color-ink-primary);
+  }
+
+  .intro {
+    margin-top: 0.5rem;
+    color: var(--color-ink-secondary);
+  }
+
+  .list {
+    margin-top: 2rem;
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .item {
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--color-rule);
+    border-radius: 0.75rem;
+  }
+
+  .link {
+    font-size: 1.0625rem;
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+
+  .note {
+    margin-top: 0.25rem;
+    font-size: 0.875rem;
+    color: var(--color-ink-secondary);
+  }
+</style>

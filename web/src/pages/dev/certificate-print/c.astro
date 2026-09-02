@@ -1,0 +1,373 @@
+---
+/**
+ * Prototype C — "portrait, two signatories, ink-light".
+ *
+ * A formal portrait document built to survive a bad printer. There are no
+ * large filled areas: the frame, the seal and the rules are all hairlines, so
+ * the sheet costs almost no toner, photocopies without turning to mud, and
+ * looks the same whether or not the person printing it remembered to tick
+ * "background graphics". The one orange element is a 1pt rule.
+ *
+ * It also shows the two-signatory case — instructor plus programme director —
+ * because a single centred signature and a pair are different layout problems
+ * and the schema will have to decide which it supports.
+ */
+import CertificateLayout from "@/layouts/CertificateLayout.astro";
+import SignatureMark from "@/components/certificate/prototypes/SignatureMark.astro";
+import {
+  PROTOTYPE_VIEW as view,
+  PROTOTYPE_INSTRUCTOR_TITLE,
+  PROTOTYPE_DIRECTOR,
+} from "@/lib/certificate/prototype-fixture";
+
+if (!import.meta.env.DEV) {
+  return new Response("Not found", { status: 404 });
+}
+
+const signatories = [
+  {
+    mark: "instructor",
+    name: view.instructorName ?? "",
+    title: PROTOTYPE_INSTRUCTOR_TITLE,
+  },
+  {
+    mark: "director",
+    name: PROTOTYPE_DIRECTOR.name,
+    title: PROTOTYPE_DIRECTOR.title,
+  },
+] as const;
+---
+
+<CertificateLayout title="Print prototype C — ink-light portrait">
+  <main class="stage">
+    <article class="sheet">
+      <div class="frame">
+        <header class="head">
+          <p class="wordmark">Tembo Tech Ventures</p>
+          <div class="seal" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor">
+              <circle cx="24" cy="24" r="22" stroke-width="1.5"></circle>
+              <circle
+                cx="24"
+                cy="24"
+                r="17.5"
+                stroke-width="0.75"
+                stroke-dasharray="2 3"></circle>
+              <path
+                d="M15 24.5 21.5 31 34 17.5"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"></path>
+            </svg>
+          </div>
+        </header>
+
+        <div class="body">
+          <h1 class="title">
+            <span class="eyebrow">Certificate of Completion</span>
+            <span class="rule" aria-hidden="true"></span>
+            <span class="lede">This is to certify that</span>
+            <span class="name">{view.studentName}</span>
+          </h1>
+          <p class="lede lede-after">has successfully completed</p>
+          <p class="course">{view.curriculumTitle}</p>
+          <p class="cohort">{view.programName}</p>
+        </div>
+
+        <footer class="foot">
+          <div class="signatories">
+            {
+              signatories.map((signatory) => (
+                <div class="sign">
+                  <div class="sign-mark">
+                    <SignatureMark mark={signatory.mark} />
+                  </div>
+                  <p class="sign-name">{signatory.name}</p>
+                  <p class="sign-title">{signatory.title}</p>
+                </div>
+              ))
+            }
+          </div>
+
+          <dl class="credential">
+            <div class="credential-pair">
+              <dt>Issued</dt>
+              <dd>{view.issueDate}</dd>
+            </div>
+            <div class="credential-pair">
+              <dt>Credential ID</dt>
+              <dd class="credential-mono">{view.certificateId}</dd>
+            </div>
+          </dl>
+          <p class="verify">
+            Verify at <span class="verify-url">{view.verifyUrl}</span>
+          </p>
+        </footer>
+      </div>
+    </article>
+  </main>
+</CertificateLayout>
+
+<style is:global>
+  astro-dev-toolbar {
+    display: none !important;
+  }
+
+  @media print {
+    html,
+    body {
+      background: #fff !important;
+    }
+  }
+</style>
+
+<style>
+  .stage {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(1rem, 4vw, 3rem);
+    background: var(--color-dark);
+  }
+
+  .sheet {
+    --ink: #10312e;
+    --ink-soft: #57706c;
+    --hairline: rgba(1, 61, 57, 0.35);
+
+    position: relative;
+    width: 100%;
+    max-width: 46rem;
+    /* US Letter portrait. A4 is taller (1:1.414); the frame absorbs the extra. */
+    aspect-ratio: 8.5 / 11;
+    background: #fff;
+    color: var(--ink);
+    box-shadow: 0 30px 70px -35px rgb(0 0 0 / 0.8);
+    container-type: size;
+    container-name: sheet;
+  }
+
+  /*
+   * A frame drawn in borders rather than a filled panel: nothing here depends
+   * on the browser agreeing to print backgrounds.
+   */
+  .frame {
+    position: absolute;
+    inset: 4.5cqw;
+    border: 1px solid var(--hairline);
+    padding: 6cqw 5.5cqw 5cqw;
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .head {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3cqw;
+  }
+
+  .wordmark {
+    font-size: 1.6cqw;
+    font-weight: 600;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    color: var(--color-teal);
+  }
+
+  .seal {
+    width: 10cqw;
+    height: 10cqw;
+    color: var(--color-teal);
+  }
+
+  .seal svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .title {
+    font-family: var(--font-body);
+  }
+
+  .eyebrow {
+    display: block;
+    font-size: 1.7cqw;
+    font-weight: 600;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+
+  /* The only orange on the sheet, and it is a rule rather than a fill. */
+  .rule {
+    display: block;
+    width: 9cqw;
+    height: 2px;
+    margin: 3cqw auto;
+    background: var(--color-primary);
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .lede {
+    display: block;
+    font-size: 1.8cqw;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .lede-after {
+    margin-top: 2.6cqw;
+  }
+
+  .name {
+    display: block;
+    margin-top: 2.4cqw;
+    /*
+     * Sized so a three-part name still sets on one line inside the frame.
+     * Longer names do wrap, and `text-wrap: balance` splits them evenly —
+     * but a name that only just overflows wraps to a stub first line, so the
+     * common case has to fit outright rather than rely on the wrap.
+     */
+    font-size: 6.5cqw;
+    font-weight: 700;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  .course {
+    margin-top: 2cqw;
+    font-size: 3.8cqw;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--color-teal);
+    text-wrap: balance;
+  }
+
+  .cohort {
+    margin-top: 1.3cqw;
+    font-size: 2cqw;
+    color: var(--ink-soft);
+  }
+
+  .signatories {
+    display: flex;
+    justify-content: center;
+    gap: 6cqw;
+  }
+
+  .sign {
+    flex: 1 1 0;
+    max-width: 30cqw;
+  }
+
+  .sign-mark {
+    height: 9cqw;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    margin-bottom: -1.2cqw;
+    color: var(--ink);
+  }
+
+  .sign-mark :global(svg) {
+    height: 100%;
+    width: auto;
+  }
+
+  .sign-name {
+    padding-top: 1.2cqw;
+    border-top: 1px solid var(--ink);
+    font-size: 1.9cqw;
+    font-weight: 600;
+  }
+
+  .sign-title {
+    margin-top: 0.4cqw;
+    font-size: 1.3cqw;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  /*
+   * Issue date and credential id share a row and the URL takes the line
+   * below: at this size the URL alone is wider than a third of the frame, so
+   * a three-column row would force it to wrap mid-path.
+   */
+  .credential {
+    display: flex;
+    justify-content: center;
+    gap: 7cqw;
+    margin-top: 5cqw;
+    padding-top: 2.6cqw;
+    border-top: 1px solid var(--hairline);
+  }
+
+  .credential dt {
+    font-size: 1.1cqw;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .credential dd {
+    margin-top: 0.4cqw;
+    font-size: 1.5cqw;
+    font-weight: 500;
+  }
+
+  .verify {
+    margin-top: 2.4cqw;
+    font-size: 1.35cqw;
+    color: var(--ink-soft);
+  }
+
+  .credential-mono,
+  .verify-url {
+    font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+    overflow-wrap: anywhere;
+  }
+
+  .verify-url {
+    color: var(--ink);
+  }
+
+  @page {
+    size: portrait;
+    margin: 0;
+  }
+
+  @media print {
+    .stage {
+      min-height: 0;
+      padding: 0;
+      display: block;
+      background: #fff;
+    }
+
+    .sheet {
+      width: 100%;
+      max-width: none;
+      height: 100vh;
+      aspect-ratio: auto;
+      box-shadow: none;
+      break-inside: avoid;
+    }
+  }
+</style>

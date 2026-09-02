@@ -1,0 +1,395 @@
+---
+/**
+ * Prototype A — "one artefact".
+ *
+ * The shipped screen card, printed faithfully. Same cream paper, same orange
+ * strip, same seal, same metadata rows; the print sheet is recognisably the
+ * page the recipient shared a link to. The signature sits inside the card as
+ * one more row of the credential rather than as diploma furniture.
+ *
+ * What it fixes relative to the shipped print CSS:
+ *  - `print-color-adjust: exact`, so the orange strip, the seal and the cream
+ *    paper survive a default print. Today they are dropped and the sheet
+ *    prints as black text on white.
+ *  - an `@page` rule with real margins. `size: auto` deliberately lets the
+ *    printer keep its own paper, so the same file is correct on Letter and A4.
+ *  - vertical centring on the page box, so the card is not stranded against
+ *    the top edge with a third of the sheet blank underneath.
+ *  - the verification URL prints in full. On screen the host is enough because
+ *    the page itself is the link; on paper a host alone cannot be typed back in.
+ */
+import CertificateLayout from "@/layouts/CertificateLayout.astro";
+import SignatureMark from "@/components/certificate/prototypes/SignatureMark.astro";
+import {
+  PROTOTYPE_VIEW as view,
+  PROTOTYPE_INSTRUCTOR_TITLE,
+} from "@/lib/certificate/prototype-fixture";
+
+if (!import.meta.env.DEV) {
+  return new Response("Not found", { status: 404 });
+}
+
+/*
+ * "Instructor" leaves the metadata list here — the signature block below now
+ * carries that name, and printing it twice reads as a mistake.
+ */
+const rows = [
+  { label: "Issued", value: view.issueDate },
+  { label: "Credential ID", value: view.certificateId, mono: true },
+];
+---
+
+<CertificateLayout title="Print prototype A — one artefact">
+  <main class="page">
+    <article class="card">
+      <div class="card-body">
+        <div class="card-top">
+          <p class="wordmark">Tembo Tech Ventures</p>
+          <p class="status">Verified</p>
+        </div>
+
+        <div class="seal" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M4 12.5 9.5 18 20 6.5"></path>
+          </svg>
+        </div>
+
+        <h1 class="title">
+          <span class="eyebrow">Certificate of Completion</span>
+          <span class="name">{view.studentName}</span>
+        </h1>
+
+        <p class="completed">completed</p>
+        <p class="course">{view.curriculumTitle}</p>
+        <p class="cohort">{view.programName}</p>
+
+        <div class="signature">
+          <div class="signature-mark">
+            <SignatureMark mark="instructor" />
+          </div>
+          <p class="signature-name">{view.instructorName}</p>
+          <p class="signature-title">{PROTOTYPE_INSTRUCTOR_TITLE}</p>
+        </div>
+
+        <dl class="meta">
+          {
+            rows.map((row) => (
+              <div class="meta-row">
+                <dt class="meta-label">{row.label}</dt>
+                <dd class:list={["meta-value", row.mono && "meta-value-mono"]}>
+                  {row.value}
+                </dd>
+              </div>
+            ))
+          }
+          <div class="meta-row">
+            <dt class="meta-label">Verify at</dt>
+            <dd class="meta-value meta-value-mono">
+              <span class="screen-only">{view.verifyHost}</span>
+              <span class="print-only">{view.verifyUrl}</span>
+            </dd>
+          </div>
+        </dl>
+      </div>
+    </article>
+  </main>
+</CertificateLayout>
+
+<style is:global>
+  astro-dev-toolbar {
+    display: none !important;
+  }
+
+  @media print {
+    html,
+    body {
+      background: #fff !important;
+    }
+  }
+</style>
+
+<style>
+  .page {
+    --paper: #fffcf6;
+    --ink: #10312e;
+    --ink-soft: #5b736f;
+    --hairline: rgba(1, 61, 57, 0.14);
+
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(1.25rem, 5vw, 4rem) 1rem;
+    background: var(--color-dark);
+  }
+
+  .card {
+    width: 100%;
+    max-width: 38rem;
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: 1.5rem;
+    overflow: hidden;
+    text-align: center;
+    box-shadow: 0 24px 60px -30px rgb(0 0 0 / 0.75);
+  }
+
+  .card::before {
+    content: "";
+    display: block;
+    height: 6px;
+    background: var(--color-primary);
+  }
+
+  .card-body {
+    padding: clamp(1.5rem, 5.5vw, 2.5rem);
+  }
+
+  .card-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: clamp(1.25rem, 4vw, 1.75rem);
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .wordmark,
+  .status {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-teal);
+  }
+
+  .wordmark {
+    letter-spacing: 0.26em;
+    text-align: left;
+  }
+
+  .status {
+    flex-shrink: 0;
+  }
+
+  .seal {
+    width: 3rem;
+    height: 3rem;
+    margin: clamp(1.75rem, 5vw, 2.25rem) auto 0;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--color-primary);
+    color: var(--color-dark);
+  }
+
+  .seal svg {
+    width: 1.4rem;
+    height: 1.4rem;
+  }
+
+  .title {
+    margin-top: 1.5rem;
+    font-family: var(--font-body);
+  }
+
+  .eyebrow {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .name {
+    display: block;
+    margin-top: 0.7rem;
+    font-family: var(--font-body);
+    font-size: clamp(1.75rem, 7vw, 2.5rem);
+    font-weight: 700;
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  .completed {
+    margin-top: 1.4rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .course {
+    margin-top: 0.5rem;
+    font-size: clamp(1.125rem, 4.4vw, 1.375rem);
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--color-teal);
+    text-wrap: balance;
+  }
+
+  .cohort {
+    margin-top: 0.3rem;
+    font-size: 0.9375rem;
+    color: var(--ink-soft);
+  }
+
+  /*
+   * The mark overlaps the rule slightly, the way a pen does when someone signs
+   * above a printed line. Sitting it cleanly on top reads as clip-art.
+   */
+  .signature {
+    margin: clamp(1.75rem, 5vw, 2.25rem) auto 0;
+    width: min(17rem, 100%);
+  }
+
+  .signature-mark {
+    width: 100%;
+    height: 3.25rem;
+    display: flex;
+    align-items: flex-end;
+    margin-bottom: -0.55rem;
+    color: var(--ink);
+  }
+
+  .signature-mark :global(svg) {
+    height: 100%;
+    width: auto;
+    margin: 0 auto;
+  }
+
+  .signature-name {
+    padding-top: 0.55rem;
+    border-top: 1px solid var(--hairline);
+    font-size: 0.9375rem;
+    font-weight: 600;
+  }
+
+  .signature-title {
+    margin-top: 0.15rem;
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .meta {
+    margin-top: clamp(1.75rem, 5vw, 2.25rem);
+    border: 1px solid var(--hairline);
+    border-radius: 0.9rem;
+    overflow: hidden;
+    text-align: left;
+  }
+
+  .meta-row {
+    padding: 0.65rem 1rem;
+  }
+
+  @media (min-width: 23rem) {
+    .meta-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.7rem 1rem;
+    }
+  }
+
+  .meta-row + .meta-row {
+    border-top: 1px solid var(--hairline);
+  }
+
+  .meta-label {
+    flex-shrink: 0;
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .meta-value {
+    margin-top: 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  @media (min-width: 23rem) {
+    .meta-value {
+      margin-top: 0;
+      text-align: right;
+    }
+  }
+
+  .meta-value-mono {
+    font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+    font-size: 0.75rem;
+    color: var(--ink-soft);
+    overflow-wrap: anywhere;
+  }
+
+  .print-only {
+    display: none;
+  }
+
+  /*
+   * `size: auto` keeps whatever paper the printer is loaded with, so one
+   * stylesheet is correct on both Letter and A4. The margin is the narrowest
+   * that clears the unprintable edge on common consumer printers.
+   */
+  @page {
+    size: auto;
+    margin: 14mm;
+  }
+
+  @media print {
+    .page {
+      /* The page box is the sheet, so 100vh centres the card on the paper. */
+      min-height: 100vh;
+      padding: 0;
+      background: #fff;
+    }
+
+    .card {
+      max-width: 42rem;
+      border-radius: 0;
+      box-shadow: none;
+      /*
+       * Without this the cream paper, the orange strip and the seal are all
+       * dropped: browsers do not print backgrounds unless asked.
+       */
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+      break-inside: avoid;
+    }
+
+    /*
+     * On screen the credential id and URL are muted because the page itself
+     * is the link. On paper they are the only way back to the credential and
+     * someone has to read them character by character, so they take full ink.
+     */
+    .meta-value-mono {
+      color: var(--ink);
+    }
+
+    .screen-only {
+      display: none;
+    }
+
+    .print-only {
+      display: inline;
+    }
+  }
+</style>
