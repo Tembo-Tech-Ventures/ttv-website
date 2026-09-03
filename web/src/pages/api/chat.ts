@@ -42,6 +42,8 @@ When answering from session recordings:
 - Transcript text may contain speech-to-text errors. Clean up obvious typos in your explanations.
 - If sources lack enough information, say what is missing.
 
+For questions about recent, latest, or specific sessions: call list_recordings first to identify the right recording by date, then use search_transcripts with that recording_id or get_recording_details to read it. Do not rely on search_transcripts alone for time-based questions — semantic search does not understand recency.
+
 When a question goes beyond what the recordings cover (e.g. general programming help), you may answer from your own knowledge but clearly say "This is general guidance, not from your sessions" so the user knows the difference.`
     : `
 This user does not have access to session recordings yet. You can still help them with:

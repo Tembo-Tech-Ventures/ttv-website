@@ -30,11 +30,12 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     function: {
       name: "search_transcripts",
       description:
-        "Search through session recording transcripts for specific topics, discussions, or advice. Returns relevant excerpts with timestamps. Call multiple times with different queries to broaden coverage.",
+        "Search through session recording transcripts for specific topics, discussions, or advice. Returns relevant excerpts with timestamps. Call multiple times with different queries to broaden coverage. Pass recording_id to search within a specific recording.",
       parameters: {
         type: "object",
         properties: {
           query: { type: "string", description: "What to search for" },
+          recording_id: { type: "string", description: "Optional: restrict search to a specific recording (get IDs from list_recordings)" },
         },
         required: ["query"],
       },
@@ -101,7 +102,11 @@ export async function executeTool(
 ): Promise<string> {
   switch (toolName) {
     case "search_transcripts":
-      return searchTranscripts(String(args.query ?? ""), ctx);
+      return searchTranscripts(
+        String(args.query ?? ""),
+        args.recording_id ? String(args.recording_id) : null,
+        ctx
+      );
     case "get_user_context":
       return getUserContext(ctx);
     case "list_recordings":
@@ -191,7 +196,7 @@ function deduplicateMatches(
   return sources;
 }
 
-async function searchTranscripts(query: string, ctx: ToolContext): Promise<string> {
+async function searchTranscripts(query: string, scopeRecordingId: string | null, ctx: ToolContext): Promise<string> {
   if (!query.trim()) return JSON.stringify({ results: [], note: "Empty query" });
 
   if (ctx.programIds.length === 0 && !ctx.isAdmin) {
@@ -210,15 +215,21 @@ async function searchTranscripts(query: string, ctx: ToolContext): Promise<strin
 
   interface MatchMeta { segment_id?: unknown; recording_id?: unknown; start_time?: unknown; end_time?: unknown }
 
-  const matches: ParsedMatch[] = results.matches
+  let matches: ParsedMatch[] = results.matches
     .map((match) => {
       const m = (match.metadata ?? {}) as MatchMeta;
       return { segmentId: strMeta(m.segment_id), recordingId: strMeta(m.recording_id), startTime: numMeta(m.start_time), endTime: numMeta(m.end_time) };
     })
     .filter((m) => m.segmentId || m.recordingId);
 
+  if (scopeRecordingId) {
+    matches = matches.filter((m) => m.recordingId === scopeRecordingId);
+  }
+
   const segmentIds = matches.map((m) => m.segmentId).filter((id): id is string => Boolean(id));
-  const recordingIds = Array.from(new Set(matches.map((m) => m.recordingId).filter((id): id is string => Boolean(id))));
+  const recordingIds = scopeRecordingId
+    ? [scopeRecordingId]
+    : Array.from(new Set(matches.map((m) => m.recordingId).filter((id): id is string => Boolean(id))));
 
   if (segmentIds.length === 0 && recordingIds.length === 0) {
     return JSON.stringify({ results: [], note: "No matching segments" });
