@@ -31,11 +31,19 @@
   --color-teal: #2C6964;
 
   --color-bg-raised: #063F3A;
+  /*
+   * The light end of the app shell's background gradient, and therefore the
+   * lightest surface body text is ever placed on. It is NOT --color-teal:
+   * at #2C6964 the ink ramp cannot reach 4.5:1 without collapsing muted and
+   * secondary into the same value. --color-teal stays the brand accent for
+   * borders and translucent fills, where contrast does not apply.
+   */
+  --color-surface: #1C4F4A;
   --color-accent-bright: #FFD166;
 
   --color-ink-primary: #FFF8F2;
   --color-ink-secondary: rgba(255, 248, 242, 0.72);
-  --color-ink-muted: rgba(255, 248, 242, 0.48);
+  --color-ink-muted: rgba(255, 248, 242, 0.64);
 
   --color-rule: rgba(242, 141, 104, 0.20);
 
@@ -79,6 +87,12 @@
   ::selection {
     background-color: var(--color-primary);
     color: var(--color-dark);
+  }
+}
+
+@layer utilities {
+  .form-control {
+    @apply w-full rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50;
   }
 }
 

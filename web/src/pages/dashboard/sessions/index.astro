@@ -26,14 +26,14 @@ const recordings =
   <div class="space-y-6">
     <div>
       <h2 class="text-2xl font-bold text-white">Sessions</h2>
-      <p class="mt-1 text-sm text-white/55">
+      <p class="mt-1 text-sm text-ink-muted">
         Watch recorded sessions and follow along with the transcript.
       </p>
     </div>
 
     {recordings.length === 0 ? (
       <Card>
-        <div class="py-10 text-center text-white/55">
+        <div class="py-10 text-center text-ink-muted">
           No session recordings are available for your cohorts yet.
         </div>
       </Card>
@@ -47,8 +47,8 @@ const recordings =
                   <h3 class="text-base font-semibold text-white">{recording.title}</h3>
                   <ProcessingStatus status={recording.processingStatus} />
                 </div>
-                <p class="text-sm text-white/55">{recording.program?.name ?? "Cohort session"}</p>
-                <div class="flex items-center justify-between text-xs text-white/45">
+                <p class="text-sm text-ink-muted">{recording.program?.name ?? "Cohort session"}</p>
+                <div class="flex items-center justify-between text-xs text-ink-muted">
                   <span>{recording.recordedAt ? recording.recordedAt.toISOString().split("T")[0] : "No date"}</span>
                   <span>{formatDuration(recording.durationSeconds)}</span>
                 </div>

@@ -40,10 +40,20 @@ if (statusFilter) {
   });
 }
 
+const notice = Astro.url.searchParams.get("notice");
 ---
 
 <AdminLayout title="Applications">
   <div class="space-y-6">
+    {notice === "missing" && (
+      <p
+        role="alert"
+        class="rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
+      >
+        That application no longer exists.
+      </p>
+    )}
+
     <h2 class="text-2xl font-bold text-white">Applications</h2>
 
     <div class="flex flex-wrap gap-2">
@@ -53,7 +63,7 @@ if (statusFilter) {
           "rounded-full px-3 py-1 text-sm font-medium transition-colors",
           !statusFilter
             ? "bg-primary text-dark"
-            : "bg-teal/20 text-white/60 hover:text-white",
+            : "bg-teal/20 text-ink-secondary hover:text-white",
         ]}
       >
         All
@@ -65,7 +75,7 @@ if (statusFilter) {
             "rounded-full px-3 py-1 text-sm font-medium capitalize transition-colors",
             statusFilter === s
               ? "bg-primary text-dark"
-              : "bg-teal/20 text-white/60 hover:text-white",
+              : "bg-teal/20 text-ink-secondary hover:text-white",
           ]}
         >
           {s.toLowerCase()}
@@ -87,7 +97,7 @@ if (statusFilter) {
         <tbody class="divide-y divide-teal/10">
           {applications.length === 0 ? (
             <tr>
-              <td colspan="5" class="px-4 py-8 text-center text-white/40">
+              <td colspan="5" class="px-4 py-8 text-center text-ink-muted">
                 {statusFilter
                   ? `No ${statusFilter.toLowerCase()} applications found.`
                   : "No applications yet. Applications appear here when students submit them."}

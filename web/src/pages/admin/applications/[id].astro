@@ -23,7 +23,8 @@ const defaultCompletionDate = formatDateInputValue();
 
 if (!id) return Astro.redirect("/admin/applications");
 
-// Handle POST — update status
+let actionError: string | undefined;
+
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
   const current = await db.query.programApplication.findFirst({
@@ -32,10 +33,7 @@ if (Astro.request.method === "POST") {
   });
 
   if (!current) {
-    return new Response(
-      "Application not found. Return to the application list and try again.",
-      { status: 400 }
-    );
+    return Astro.redirect("/admin/applications?notice=missing");
   }
 
   try {
@@ -60,14 +58,16 @@ if (Astro.request.method === "POST") {
       staleMessage:
         "This application changed while you were updating it. Refresh the page before trying again.",
     });
+
+    return Astro.redirect(`/admin/applications/${id}`);
   } catch (error) {
     if (error instanceof ProgramApplicationError) {
-      return new Response(error.message, { status: 400 });
+      actionError = error.message;
+      Astro.response.status = 400;
+    } else {
+      throw error;
     }
-    throw error;
   }
-
-  return Astro.redirect(`/admin/applications/${id}`);
 }
 
 const application = await db.query.programApplication.findFirst({
@@ -100,6 +100,15 @@ const availableStatuses = getAvailableApplicationTransitions(
       &larr; Back to Applications
     </a>
 
+    {actionError && (
+      <p
+        role="alert"
+        class="rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
+      >
+        {actionError}
+      </p>
+    )}
+
     <div class="flex items-center gap-3">
       <h2 class="text-2xl font-bold text-white">Application</h2>
       <Badge variant={toProgramApplicationBadgeVariant(application.status)} />
@@ -110,15 +119,15 @@ const availableStatuses = getAvailableApplicationTransitions(
         <h3 class="mb-4 text-lg font-semibold text-white">Applicant</h3>
         <dl class="space-y-2 text-sm">
           <div class="flex justify-between">
-            <dt class="text-white/60">Name</dt>
+            <dt class="text-ink-secondary">Name</dt>
             <dd class="text-white">{application.user?.name ?? "Unknown"}</dd>
           </div>
           <div class="flex justify-between">
-            <dt class="text-white/60">Email</dt>
+            <dt class="text-ink-secondary">Email</dt>
             <dd class="text-white">{application.user?.email ?? "—"}</dd>
           </div>
           <div class="flex justify-between">
-            <dt class="text-white/60">User</dt>
+            <dt class="text-ink-secondary">User</dt>
             <dd>
               <a
                 href={`/admin/users/${application.userId}`}
@@ -135,11 +144,11 @@ const availableStatuses = getAvailableApplicationTransitions(
         <h3 class="mb-4 text-lg font-semibold text-white">Cohort</h3>
         <dl class="space-y-2 text-sm">
           <div class="flex justify-between">
-            <dt class="text-white/60">Cohort</dt>
+            <dt class="text-ink-secondary">Cohort</dt>
             <dd class="text-white">{application.program?.name ?? "—"}</dd>
           </div>
           <div class="flex justify-between">
-            <dt class="text-white/60">Applied</dt>
+            <dt class="text-ink-secondary">Applied</dt>
             <dd class="text-white">
               {application.createdAt
                 ? new Date(application.createdAt).toLocaleDateString()
@@ -148,7 +157,7 @@ const availableStatuses = getAvailableApplicationTransitions(
           </div>
           {application.completedAt && (
             <div class="flex justify-between">
-              <dt class="text-white/60">Completed</dt>
+              <dt class="text-ink-secondary">Completed</dt>
               <dd class="text-white">
                 {new Date(application.completedAt).toLocaleDateString()}
               </dd>
@@ -156,7 +165,7 @@ const availableStatuses = getAvailableApplicationTransitions(
           )}
           {application.status === "COMPLETED" && application.completedAt && (
             <div class="flex justify-between">
-              <dt class="text-white/60">Certificate</dt>
+              <dt class="text-ink-secondary">Certificate</dt>
               <dd>
                 <a
                   href={`/certificate/${application.id}`}
@@ -176,7 +185,7 @@ const availableStatuses = getAvailableApplicationTransitions(
       <dl class="space-y-3 text-sm">
         {Object.entries(appData).map(([key, value]) => (
           <div>
-            <dt class="font-medium capitalize text-white/60">
+            <dt class="font-medium capitalize text-ink-secondary">
               {key.replace(/([A-Z])/g, " $1").replace(/_/g, " ")}
             </dt>
             <dd class="mt-0.5 text-white">

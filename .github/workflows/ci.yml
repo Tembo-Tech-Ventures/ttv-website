@@ -29,6 +29,11 @@ jobs:
 
       - run: npm run typecheck
 
+      # Dead files and unreferenced dependencies. Scoped to files/dependencies
+      # for now — unused *exports* has a backlog of 31 that predates this and is
+      # not worth blocking on until it is triaged.
+      - run: npm run knip
+
   test:
     name: Test
     runs-on: ubuntu-latest

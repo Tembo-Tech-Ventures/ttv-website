@@ -1,5 +1,6 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import Button from "@/components/common/Button.astro";
 import Card from "@/components/common/Card.astro";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
@@ -169,7 +170,7 @@ const formatDateTime = (date: Date | null) =>
       <h2 class="mt-3 text-2xl font-bold text-white">
         Import Session Recordings
       </h2>
-      <p class="mt-1 max-w-3xl text-sm text-white/55">
+      <p class="mt-1 max-w-3xl text-sm text-ink-muted">
         Scan Google Drive folders and subfolders for Meet recordings, review
         historical counts, and add approved videos to the transcription and
         search queue.
@@ -190,7 +191,7 @@ const formatDateTime = (date: Date | null) =>
     <Card>
       <h3 class="text-lg font-semibold text-white">Google connection</h3>
       {credentialsConfigured ? (
-        <div class="mt-3 space-y-2 text-sm text-white/65">
+        <div class="mt-3 space-y-2 text-sm text-ink-secondary">
           <p class="text-emerald-200">Service account credentials are configured.</p>
           {impersonatedUser ? (
             <p>
@@ -238,32 +239,32 @@ const formatDateTime = (date: Date | null) =>
           <h3 class="mt-1 text-lg font-semibold text-white">
             {previewSource?.name ?? "Google Drive source"}
           </h3>
-          <p class="mt-2 max-w-3xl text-sm text-white/60">
+          <p class="mt-2 max-w-3xl text-sm text-ink-secondary">
             The scan checked the selected folder, all nested folders, and Drive
             shortcuts. Nothing has been added by this review.
           </p>
 
           <dl class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div class="rounded-md border border-teal/20 bg-black/10 p-3">
-              <dt class="text-xs text-white/45">Videos found</dt>
+              <dt class="text-xs text-ink-muted">Videos found</dt>
               <dd class="mt-1 text-xl font-semibold text-white">
                 {historicalPreview.discovered.toLocaleString()}
               </dd>
             </div>
             <div class="rounded-md border border-teal/20 bg-black/10 p-3">
-              <dt class="text-xs text-white/45">New videos</dt>
+              <dt class="text-xs text-ink-muted">New videos</dt>
               <dd class="mt-1 text-xl font-semibold text-white">
                 {historicalPreview.new.toLocaleString()}
               </dd>
             </div>
             <div class="rounded-md border border-teal/20 bg-black/10 p-3">
-              <dt class="text-xs text-white/45">Pending retry</dt>
+              <dt class="text-xs text-ink-muted">Pending retry</dt>
               <dd class="mt-1 text-xl font-semibold text-white">
                 {historicalPreview.pending.toLocaleString()}
               </dd>
             </div>
             <div class="rounded-md border border-teal/20 bg-black/10 p-3">
-              <dt class="text-xs text-white/45">Already in TTV</dt>
+              <dt class="text-xs text-ink-muted">Already in TTV</dt>
               <dd class="mt-1 text-xl font-semibold text-white">
                 {historicalPreview.skipped.toLocaleString()}
               </dd>
@@ -284,14 +285,14 @@ const formatDateTime = (date: Date | null) =>
                   name="expectedImportable"
                   value={historicalPreview.importable}
                 />
-                <button type="submit" class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90">
+                <Button type="submit">
                   Add {historicalPreview.importable.toLocaleString()} to queue
-                </button>
+                </Button>
               </form>
-              <a href="/admin/recordings/import" class="rounded-md border border-teal/40 px-4 py-2 text-sm text-white/80 hover:bg-teal/20">
+              <Button variant="secondary" href="/admin/recordings/import">
                 Cancel
-              </a>
-              <p class="basis-full text-xs text-white/45">
+              </Button>
+              <p class="basis-full text-xs text-ink-muted">
                 The folder is scanned once more on confirmation. If the count
                 changed, you will be asked to review it again.
               </p>
@@ -301,9 +302,9 @@ const formatDateTime = (date: Date | null) =>
               <p class="text-sm text-emerald-100">
                 Every discovered video is already in TTV. There is nothing to queue.
               </p>
-              <a href="/admin/recordings/import" class="rounded-md border border-teal/40 px-4 py-2 text-sm text-white/80 hover:bg-teal/20">
+              <Button variant="secondary" href="/admin/recordings/import">
                 Done
-              </a>
+              </Button>
             </div>
           )}
         </div>
@@ -312,7 +313,7 @@ const formatDateTime = (date: Date | null) =>
 
     <Card>
       <h3 class="text-lg font-semibold text-white">Add an import source</h3>
-      <p class="mt-1 text-sm text-white/55">
+      <p class="mt-1 text-sm text-ink-muted">
         Use one source per program. An optional filename filter lets several
         programs share the same Meet Recordings folder. New sources start
         paused so the historical backlog cannot run before you review it.
@@ -324,13 +325,13 @@ const formatDateTime = (date: Date | null) =>
           <label for="name" class="text-sm font-medium text-white/90">
             Source name *
           </label>
-          <input id="name" name="name" required placeholder="2026 cohort sessions" class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50" />
+          <input id="name" name="name" required placeholder="2026 cohort sessions" class="form-control" />
         </div>
         <div class="flex flex-col gap-1.5">
           <label for="programId" class="text-sm font-medium text-white/90">
             Program *
           </label>
-          <select id="programId" name="programId" required class="w-full max-w-full rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50">
+          <select id="programId" name="programId" required class="form-control max-w-full">
             <option value="">Select a program</option>
             {programs.map((program) => (
               <option value={program.id}>{program.name}</option>
@@ -341,21 +342,21 @@ const formatDateTime = (date: Date | null) =>
           <label for="driveFolder" class="text-sm font-medium text-white/90">
             Drive folder URL or ID *
           </label>
-          <input id="driveFolder" name="driveFolder" required placeholder="https://drive.google.com/drive/folders/..." class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50" />
+          <input id="driveFolder" name="driveFolder" required placeholder="https://drive.google.com/drive/folders/..." class="form-control" />
         </div>
         <div class="flex flex-col gap-1.5 md:col-span-2">
           <label for="filenameContains" class="text-sm font-medium text-white/90">
             Filename contains
           </label>
-          <input id="filenameContains" name="filenameContains" placeholder="Optional, e.g. Cohort 2026" class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50" />
-          <p class="text-xs text-white/45">
+          <input id="filenameContains" name="filenameContains" placeholder="Optional, e.g. Cohort 2026" class="form-control" />
+          <p class="text-xs text-ink-muted">
             Matching is case-insensitive. Leave blank to import every video in the folder.
           </p>
         </div>
         <div class="md:col-span-2">
-          <button type="submit" class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90">
+          <Button type="submit">
             Save Import Source
-          </button>
+          </Button>
         </div>
       </form>
     </Card>
@@ -364,7 +365,7 @@ const formatDateTime = (date: Date | null) =>
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 class="text-lg font-semibold text-white">Configured sources</h3>
-          <p class="mt-1 text-sm text-white/55">
+          <p class="mt-1 text-sm text-ink-muted">
             Enabled sources scan every 15 minutes. Review historical import
             scans the full folder tree and shows the count before queueing.
           </p>
@@ -373,7 +374,7 @@ const formatDateTime = (date: Date | null) =>
 
       <div class="mt-5 space-y-4">
         {sources.length === 0 ? (
-          <p class="rounded-md border border-dashed border-teal/30 px-4 py-8 text-center text-sm text-white/45">
+          <p class="rounded-md border border-dashed border-teal/30 px-4 py-8 text-center text-sm text-ink-muted">
             No Google Drive import sources configured.
           </p>
         ) : (
@@ -387,19 +388,19 @@ const formatDateTime = (date: Date | null) =>
                       "rounded-full px-2 py-0.5 text-xs",
                       source.enabled
                         ? "bg-emerald-500/15 text-emerald-100"
-                        : "bg-white/10 text-white/50",
+                        : "bg-white/10 text-ink-muted",
                     ]}>
                       {source.enabled ? "Automatic" : "Paused"}
                     </span>
                   </div>
-                  <p class="text-sm text-white/65">{source.program.name}</p>
-                  <p class="break-all text-xs text-white/40">
+                  <p class="text-sm text-ink-secondary">{source.program.name}</p>
+                  <p class="break-all text-xs text-ink-muted">
                     Folder: {source.driveFolderId}
                   </p>
-                  <p class="text-xs text-white/40">
+                  <p class="text-xs text-ink-muted">
                     Filter: {source.filenameContains ?? "All videos"}
                   </p>
-                  <p class="text-xs text-white/40">
+                  <p class="text-xs text-ink-muted">
                     Last scan: {formatDateTime(source.lastSyncedAt)}
                   </p>
                   {source.lastError && (
@@ -413,24 +414,24 @@ const formatDateTime = (date: Date | null) =>
                   <form method="POST">
                     <input type="hidden" name="action" value="preview" />
                     <input type="hidden" name="sourceId" value={source.id} />
-                    <button type="submit" disabled={!credentialsConfigured} class="rounded-md bg-primary px-3 py-2 text-sm font-medium text-dark hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40">
+                    <Button type="submit" size="sm" disabled={!credentialsConfigured}>
                       Review historical import
-                    </button>
+                    </Button>
                   </form>
                   <form method="POST">
                     <input type="hidden" name="action" value="toggle" />
                     <input type="hidden" name="sourceId" value={source.id} />
                     <input type="hidden" name="enabled" value={source.enabled ? "false" : "true"} />
-                    <button type="submit" class="rounded-md border border-teal/40 px-3 py-2 text-sm text-white/80 hover:bg-teal/20">
+                    <Button type="submit" variant="secondary" size="sm">
                       {source.enabled ? "Pause" : "Enable"}
-                    </button>
+                    </Button>
                   </form>
                   <form method="POST">
                     <input type="hidden" name="action" value="delete" />
                     <input type="hidden" name="sourceId" value={source.id} />
-                    <button type="submit" class="rounded-md border border-red-400/30 px-3 py-2 text-sm text-red-100 hover:bg-red-500/15">
+                    <Button type="submit" variant="danger" size="sm">
                       Remove
-                    </button>
+                    </Button>
                   </form>
                 </div>
               </div>

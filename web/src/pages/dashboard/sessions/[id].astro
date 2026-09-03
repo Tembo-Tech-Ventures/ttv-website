@@ -43,7 +43,7 @@ const initialTime = parseTimestampParam(Astro.url.searchParams.get("t"));
         <div class="space-y-3 py-8 text-center">
           <ProcessingStatus status={recording.processingStatus} />
           <h2 class="text-xl font-semibold text-white">{recording.title}</h2>
-          <p class="text-white/55">
+          <p class="text-ink-muted">
             This recording is still being processed. Check back once the transcript is ready.
           </p>
         </div>

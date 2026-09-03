@@ -1,4 +1,4 @@
-import React, { useEffect, useState, type ReactNode } from "react";
+import React, { useSyncExternalStore, useState, type ReactNode } from "react";
 import Sidebar from "@/components/common/Sidebar";
 import {
   PiGaugeDuotone,
@@ -59,15 +59,15 @@ export default function AdminShell({
   dataMigrationEnabled?: boolean;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    setHydrated(true);
-  }, []);
+  const hydrated = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
   const links = getAdminLinks(agentAuthEnabled, dataMigrationEnabled);
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-[#2C6964] to-[#013D39]">
+    <div className="flex min-h-screen bg-gradient-to-br from-surface to-dark">
       <Sidebar
         links={links}
         title="TTV Admin"
@@ -77,14 +77,19 @@ export default function AdminShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
-        <header className="flex items-center gap-4 border-b border-teal/20 px-4 py-3 lg:px-6">
+        {/*
+          Mobile only. It holds the drawer trigger and the app title; on desktop
+          the sidebar shows both, so this was 52px of sticky duplication. Sticky
+          and opaque because the page scrolls beneath it.
+        */}
+        <header className="sticky top-0 z-30 flex items-center gap-4 border-b border-teal/20 bg-dark/80 px-4 py-3 backdrop-blur lg:hidden">
           <button
             type="button"
             aria-label="Open navigation"
             aria-expanded={sidebarOpen}
             disabled={!hydrated}
             onClick={() => setSidebarOpen(true)}
-            className="rounded-md p-1.5 text-white/60 hover:text-white lg:hidden"
+            className="rounded-md p-1.5 text-ink-secondary hover:text-white lg:hidden"
           >
             <PiListBold className="h-6 w-6" />
           </button>

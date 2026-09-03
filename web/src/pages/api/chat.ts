@@ -57,101 +57,37 @@ function buildFallbackAnswer(sources: TranscriptSource[]) {
   return `I found relevant transcript references, but the answer model returned an empty response. Here are the most relevant excerpts so you can jump into the recording:\n\n${summary}`;
 }
 
-export const POST: APIRoute = async ({ request, locals }) => {
-  const user = locals.user;
-  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+interface ParsedMatch {
+  segmentId: string | null;
+  recordingId: string | null;
+  startTime: number | null;
+  endTime: number | null;
+}
 
-  const { message, sessionId: requestedSessionId, conversationHistory = [] } = (await request.json()) as {
-    message?: string;
-    sessionId?: string | null;
-    conversationHistory?: Array<{ role: string; content: string }>;
-  };
-  if (!message || typeof message !== "string") {
-    return Response.json({ error: "message is required" }, { status: 400 });
-  }
-  if (message.length > 2000) {
-    return Response.json({ error: "message is too long" }, { status: 400 });
-  }
+async function saveAndReturn(
+  db: schema.Database,
+  userId: string,
+  sessionId: string,
+  message: string,
+  answer: string,
+  citations: unknown[]
+) {
+  await db.insert(schema.chatMessage).values([
+    { userId, sessionId, role: "user", content: message },
+    { userId, sessionId, role: "assistant", content: answer, citations: JSON.stringify(citations) },
+  ]);
+  await touchChatSession(env.DB, userId, sessionId);
+  return Response.json({ sessionId, answer, citations });
+}
 
-  const db = drizzle(env.DB, { schema });
-  const sessionId = await ensureOwnedChatSession(
-    env.DB,
-    user.id,
-    typeof requestedSessionId === "string" ? requestedSessionId : null,
-    message
-  );
-  const programIds = await getAccessibleProgramIds(db, user.id);
-  if (programIds.length === 0 && !locals.isAdmin) {
-    await db.insert(schema.chatMessage).values([
-      { userId: user.id, sessionId, role: "user", content: message },
-      {
-        userId: user.id,
-        sessionId,
-        role: "assistant",
-        content: "No session recordings are available for your account yet.",
-        citations: JSON.stringify([]),
-      },
-    ]);
-    await touchChatSession(env.DB, user.id, sessionId);
-    return Response.json({
-      sessionId,
-      answer: "No session recordings are available for your account yet.",
-      citations: [],
-    });
-  }
-
-  const embedding = (await env.AI.run("@cf/baai/bge-m3", {
-    text: [message],
-  })) as { data?: number[][]; result?: { data?: number[][] } };
-  const vector = embedding.data?.[0] ?? embedding.result?.data?.[0];
-  if (!Array.isArray(vector)) {
-    return Response.json({ error: "Unable to embed question" }, { status: 500 });
-  }
-
-  const results = await env.VECTORIZE.query(vector, {
-    topK: 50,
-    returnMetadata: "all",
-  });
-
-  const matches = results.matches
-    .map((match) => {
-      const metadata = (match.metadata ?? {}) as VectorMatchMetadata;
-      return {
-        segmentId: stringFromMetadata(metadata.segment_id),
-        recordingId: stringFromMetadata(metadata.recording_id),
-        startTime: numberFromMetadata(metadata.start_time),
-        endTime: numberFromMetadata(metadata.end_time),
-      };
-    })
-    .filter((match) => match.segmentId || match.recordingId);
-
-  const segmentIds = matches
-    .map((match) => match.segmentId)
-    .filter((id): id is string => Boolean(id));
-
-  const recordingIds = Array.from(
-    new Set(matches.map((match) => match.recordingId).filter((id): id is string => Boolean(id)))
-  );
-
-  if (segmentIds.length === 0 && recordingIds.length === 0) {
-    await db.insert(schema.chatMessage).values([
-      { userId: user.id, sessionId, role: "user", content: message },
-      {
-        userId: user.id,
-        sessionId,
-        role: "assistant",
-        content: "I could not find a relevant transcript segment for that question.",
-        citations: JSON.stringify([]),
-      },
-    ]);
-    await touchChatSession(env.DB, user.id, sessionId);
-    return Response.json({
-      sessionId,
-      answer: "I could not find a relevant transcript segment for that question.",
-      citations: [],
-    });
-  }
-
+async function findTranscriptSources(
+  db: schema.Database,
+  isAdmin: boolean,
+  matches: ParsedMatch[],
+  segmentIds: string[],
+  recordingIds: string[],
+  programIds: string[]
+): Promise<TranscriptSource[]> {
   const segmentRows = await db
     .select({
       id: schema.transcriptSegment.id,
@@ -165,7 +101,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .from(schema.transcriptSegment)
     .innerJoin(schema.recording, eq(schema.transcriptSegment.recordingId, schema.recording.id))
     .where(
-      locals.isAdmin
+      isAdmin
         ? recordingIds.length > 0
           ? inArray(schema.recording.id, recordingIds)
           : inArray(schema.transcriptSegment.id, segmentIds)
@@ -218,23 +154,89 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (sources.length >= 8) break;
   }
 
+  return sources;
+}
+
+export const POST: APIRoute = async ({ request, locals }) => {
+  const user = locals.user;
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { message, sessionId: requestedSessionId, conversationHistory = [] } = (await request.json()) as {
+    message?: string;
+    sessionId?: string | null;
+    conversationHistory?: Array<{ role: string; content: string }>;
+  };
+  if (!message || typeof message !== "string") {
+    return Response.json({ error: "message is required" }, { status: 400 });
+  }
+  if (message.length > 2000) {
+    return Response.json({ error: "message is too long" }, { status: 400 });
+  }
+
+  const db = drizzle(env.DB, { schema });
+  const sessionId = await ensureOwnedChatSession(
+    env.DB,
+    user.id,
+    typeof requestedSessionId === "string" ? requestedSessionId : null,
+    message
+  );
+  const programIds = await getAccessibleProgramIds(db, user.id);
+  if (programIds.length === 0 && !locals.isAdmin) {
+    return saveAndReturn(
+      db, user.id, sessionId, message,
+      "No session recordings are available for your account yet.", []
+    );
+  }
+
+  const embedding = (await env.AI.run("@cf/baai/bge-m3", {
+    text: [message],
+  })) as { data?: number[][]; result?: { data?: number[][] } };
+  const vector = embedding.data?.[0] ?? embedding.result?.data?.[0];
+  if (!Array.isArray(vector)) {
+    return Response.json({ error: "Unable to embed question" }, { status: 500 });
+  }
+
+  const results = await env.VECTORIZE.query(vector, {
+    topK: 50,
+    returnMetadata: "all",
+  });
+
+  const matches = results.matches
+    .map((match) => {
+      const metadata = (match.metadata ?? {}) as VectorMatchMetadata;
+      return {
+        segmentId: stringFromMetadata(metadata.segment_id),
+        recordingId: stringFromMetadata(metadata.recording_id),
+        startTime: numberFromMetadata(metadata.start_time),
+        endTime: numberFromMetadata(metadata.end_time),
+      };
+    })
+    .filter((match) => match.segmentId || match.recordingId);
+
+  const segmentIds = matches
+    .map((match) => match.segmentId)
+    .filter((id): id is string => Boolean(id));
+
+  const recordingIds = Array.from(
+    new Set(matches.map((match) => match.recordingId).filter((id): id is string => Boolean(id)))
+  );
+
+  if (segmentIds.length === 0 && recordingIds.length === 0) {
+    return saveAndReturn(
+      db, user.id, sessionId, message,
+      "I could not find a relevant transcript segment for that question.", []
+    );
+  }
+
+  const sources = await findTranscriptSources(
+    db, !!locals.isAdmin, matches, segmentIds, recordingIds, programIds
+  );
+
   if (sources.length === 0) {
-    await db.insert(schema.chatMessage).values([
-      { userId: user.id, sessionId, role: "user", content: message },
-      {
-        userId: user.id,
-        sessionId,
-        role: "assistant",
-        content: "I could not find a relevant transcript segment for that question.",
-        citations: JSON.stringify([]),
-      },
-    ]);
-    await touchChatSession(env.DB, user.id, sessionId);
-    return Response.json({
-      sessionId,
-      answer: "I could not find a relevant transcript segment for that question.",
-      citations: [],
-    });
+    return saveAndReturn(
+      db, user.id, sessionId, message,
+      "I could not find a relevant transcript segment for that question.", []
+    );
   }
 
   const context = sources.map(buildSourceText).join("\n\n---\n\n");
@@ -285,11 +287,5 @@ ${context}`;
         : source.text,
   }));
 
-  await db.insert(schema.chatMessage).values([
-    { userId: user.id, sessionId, role: "user", content: message },
-    { userId: user.id, sessionId, role: "assistant", content: answer, citations: JSON.stringify(citations) },
-  ]);
-  await touchChatSession(env.DB, user.id, sessionId);
-
-  return Response.json({ sessionId, answer, citations });
+  return saveAndReturn(db, user.id, sessionId, message, answer, citations);
 };

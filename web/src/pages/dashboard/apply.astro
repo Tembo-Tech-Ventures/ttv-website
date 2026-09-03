@@ -1,6 +1,7 @@
 ---
 import DashboardLayout from "@/layouts/DashboardLayout.astro";
 import Card from "@/components/common/Card.astro";
+import Button from "@/components/common/Button.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
@@ -107,7 +108,7 @@ const availablePrograms = allPrograms.filter(
   <div class="space-y-6">
     <div>
       <h2 class="text-2xl font-bold text-white">Apply to a Cohort</h2>
-      <p class="mt-1 text-white/60">
+      <p class="mt-1 text-ink-secondary">
         Browse cohorts accepting applications and submit yours.
       </p>
     </div>
@@ -131,26 +132,23 @@ const availablePrograms = allPrograms.filter(
             <Card>
               <div class="flex flex-col gap-3">
                 <h3 class="text-lg font-semibold text-white">{program.name}</h3>
-                <p class="text-sm text-white/60">{program.description}</p>
+                <p class="text-sm text-ink-secondary">{program.description}</p>
                 {program.curriculum && (
                   <div class="rounded bg-teal/20 px-2 py-1 text-xs text-white/70">
                     {program.curriculum.title}
                   </div>
                 )}
                 {program.startDate && (
-                  <p class="text-xs text-white/40">
+                  <p class="text-xs text-ink-muted">
                     Starts {program.startDate.toLocaleDateString()}
                     {program.endDate && ` — Ends ${program.endDate.toLocaleDateString()}`}
                   </p>
                 )}
                 <form method="POST" class="mt-2">
                   <input type="hidden" name="programId" value={program.id} />
-                  <button
-                    type="submit"
-                    class="inline-flex w-full items-center justify-center rounded-md bg-primary px-4 py-2 font-medium text-dark hover:bg-primary/90 transition-colors"
-                  >
+                  <Button type="submit" class="w-full">
                     Apply
-                  </button>
+                  </Button>
                 </form>
               </div>
             </Card>
@@ -160,17 +158,14 @@ const availablePrograms = allPrograms.filter(
     ) : (
       <Card>
         <div class="text-center py-8">
-          <p class="text-white/60">
+          <p class="text-ink-secondary">
             No cohorts are accepting applications right now.
             {appliedProgramIds.length > 0 && " You may already have applied to every open cohort."}
           </p>
           {appliedProgramIds.length > 0 && (
-            <a
-              href="/dashboard"
-              class="mt-4 inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 font-medium text-dark hover:bg-primary/90 transition-colors"
-            >
+            <Button href="/dashboard" class="mt-4">
               View your applications
-            </a>
+            </Button>
           )}
         </div>
       </Card>

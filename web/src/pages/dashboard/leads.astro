@@ -1,6 +1,7 @@
 ---
 import DashboardLayout from "@/layouts/DashboardLayout.astro";
 import Card from "@/components/common/Card.astro";
+import Button from "@/components/common/Button.astro";
 import Badge from "@/components/common/Badge.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
@@ -107,12 +108,9 @@ function formatDate(date: Date): string {
           <p class="mx-auto mt-2 max-w-md text-ink-secondary">
             Create your portfolio profile so people can find and reach you.
           </p>
-          <a
-            href="/dashboard/portfolio"
-            class="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 font-medium text-dark transition-colors hover:bg-primary/90"
-          >
+          <Button href="/dashboard/portfolio" class="mt-6">
             Create Portfolio
-          </a>
+          </Button>
         </div>
       </Card>
     )}

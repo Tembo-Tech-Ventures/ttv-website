@@ -56,13 +56,21 @@
     "typescript/no-explicit-any": "error",
     "vitest/no-focused-tests": "error",
     "vitest/no-identical-title": "error",
-    "vitest/valid-expect": "error"
+    "vitest/valid-expect": "error",
+    "eslint/complexity": "error"
   },
   "overrides": [
     {
       "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.test.mjs"],
       "rules": {
-        "typescript/no-extraneous-class": "off"
+        "typescript/no-extraneous-class": "off",
+        "eslint/complexity": "off"
+      }
+    },
+    {
+      "files": ["scripts/**"],
+      "rules": {
+        "eslint/complexity": "off"
       }
     },
     {

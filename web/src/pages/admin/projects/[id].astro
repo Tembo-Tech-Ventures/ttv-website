@@ -19,6 +19,8 @@ const { id } = Astro.params;
 
 if (!id) return Astro.redirect("/admin/projects");
 
+let actionError: string | undefined;
+
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
   const newStatus = formData.get("status") as string;
@@ -32,22 +34,23 @@ if (Astro.request.method === "POST") {
 
   const validation = validateProjectTransition(current.status, newStatus);
   if (!validation.valid) {
-    return new Response(validation.reason, { status: 400 });
+    actionError = validation.reason;
+    Astro.response.status = 400;
+  } else {
+    await db
+      .update(schema.clientProject)
+      .set({
+        status: newStatus as
+          | "PENDING"
+          | "APPROVED"
+          | "REJECTED"
+          | "MATCHED"
+          | "CLOSED",
+      })
+      .where(eq(schema.clientProject.id, id));
+
+    return Astro.redirect(`/admin/projects/${id}`);
   }
-
-  await db
-    .update(schema.clientProject)
-    .set({
-      status: newStatus as
-        | "PENDING"
-        | "APPROVED"
-        | "REJECTED"
-        | "MATCHED"
-        | "CLOSED",
-    })
-    .where(eq(schema.clientProject.id, id));
-
-  return Astro.redirect(`/admin/projects/${id}`);
 }
 
 const project = await db.query.clientProject.findFirst({
@@ -92,6 +95,15 @@ const TRANSITION_COLORS: Record<string, string> = {
       &larr; Back to Client Projects
     </a>
 
+    {actionError && (
+      <p
+        role="alert"
+        class="rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
+      >
+        {actionError}
+      </p>
+    )}
+
     <div class="flex items-center gap-3">
       <h2 class="text-2xl font-bold text-white">{project.title}</h2>
       <Badge
@@ -111,15 +123,15 @@ const TRANSITION_COLORS: Record<string, string> = {
         <h3 class="mb-4 text-lg font-semibold text-white">Client Contact</h3>
         <dl class="space-y-2 text-sm">
           <div class="flex justify-between">
-            <dt class="text-white/60">Organization</dt>
+            <dt class="text-ink-secondary">Organization</dt>
             <dd class="text-white">{project.organization}</dd>
           </div>
           <div class="flex justify-between">
-            <dt class="text-white/60">Contact Name</dt>
+            <dt class="text-ink-secondary">Contact Name</dt>
             <dd class="text-white">{project.contactName}</dd>
           </div>
           <div class="flex justify-between">
-            <dt class="text-white/60">Contact Email</dt>
+            <dt class="text-ink-secondary">Contact Email</dt>
             <dd>
               <a
                 href={`mailto:${project.contactEmail}`}
@@ -136,15 +148,15 @@ const TRANSITION_COLORS: Record<string, string> = {
         <h3 class="mb-4 text-lg font-semibold text-white">Project Details</h3>
         <dl class="space-y-2 text-sm">
           <div class="flex justify-between">
-            <dt class="text-white/60">Budget</dt>
+            <dt class="text-ink-secondary">Budget</dt>
             <dd class="text-white">{budgetLabel(project.budgetBand)}</dd>
           </div>
           <div class="flex justify-between">
-            <dt class="text-white/60">Timeline</dt>
+            <dt class="text-ink-secondary">Timeline</dt>
             <dd class="text-white">{project.timeline ?? "—"}</dd>
           </div>
           <div class="flex justify-between">
-            <dt class="text-white/60">Submitted</dt>
+            <dt class="text-ink-secondary">Submitted</dt>
             <dd class="text-white">
               {project.createdAt
                 ? new Date(project.createdAt).toLocaleDateString()
@@ -175,7 +187,7 @@ const TRANSITION_COLORS: Record<string, string> = {
         Interested Builders
       </h3>
       {interested.length === 0 && withdrawn.length === 0 ? (
-        <p class="text-sm text-white/40">
+        <p class="text-sm text-ink-muted">
           No builders have raised a hand yet.
         </p>
       ) : (
@@ -196,17 +208,17 @@ const TRANSITION_COLORS: Record<string, string> = {
                     </a>
                     <a
                       href={`/admin/profiles/${pi.profile.id}`}
-                      class="text-sm text-white/40 hover:text-white/60"
+                      class="text-sm text-ink-muted hover:text-ink-secondary"
                     >
                       admin profile
                     </a>
                     <Badge variant="interested" />
                   </div>
                   {pi.note && (
-                    <p class="mt-2 text-sm text-white/60">{pi.note}</p>
+                    <p class="mt-2 text-sm text-ink-secondary">{pi.note}</p>
                   )}
                   {pi.createdAt && (
-                    <p class="mt-1 text-xs text-white/30">
+                    <p class="mt-1 text-xs text-ink-muted">
                       {new Date(pi.createdAt).toLocaleDateString()}
                     </p>
                   )}
@@ -217,16 +229,16 @@ const TRANSITION_COLORS: Record<string, string> = {
 
           {withdrawn.length > 0 && (
             <div class="space-y-3 opacity-50">
-              <p class="text-xs uppercase text-white/40">Withdrawn</p>
+              <p class="text-xs uppercase text-ink-muted">Withdrawn</p>
               {withdrawn.map((pi) => (
                 <div class="rounded-md border border-teal/10 p-3">
                   <div class="flex items-center gap-3">
-                    <span class="text-sm text-white/60">
+                    <span class="text-sm text-ink-secondary">
                       {pi.profile.user?.name ?? "Unknown"}
                     </span>
                     <a
                       href={`/talent/${pi.profile.handle}`}
-                      class="text-xs text-white/40 hover:underline"
+                      class="text-xs text-ink-muted hover:underline"
                     >
                       @{pi.profile.handle}
                     </a>
@@ -260,7 +272,7 @@ const TRANSITION_COLORS: Record<string, string> = {
           ))}
         </div>
       ) : (
-        <p class="text-sm text-white/40">
+        <p class="text-sm text-ink-muted">
           No actions available — this project is in a terminal state.
         </p>
       )}

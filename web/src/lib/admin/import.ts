@@ -315,36 +315,10 @@ export function legacyImportDisabledMessage(
     : LEGACY_IMPORT_ENVIRONMENT_DISABLED_MESSAGE;
 }
 
-export function createLegacyImportPlan(input: unknown): LegacyImportPlan {
-  const payload = requireRecord(input, "root");
-  const version = payload.version;
-  if (!Number.isInteger(version) || Number(version) <= 0) {
-    fail("Invalid import payload: version must be a positive integer.");
-  }
-  timestamp(payload.exportedAt, "exportedAt");
-
-  const roles = readSection(payload, "roles");
-  const userRoles = readSection(payload, "userRoles");
-  const plan: LegacyImportPlan = {
-    statements: [],
-    attempted: emptyImportCounts(),
-    ignored: {
-      roles: roles.length,
-      userRoles: userRoles.length,
-    },
-    references: {
-      users: [],
-      curricula: [],
-      programs: [],
-      programPartners: [],
-      incomingUsers: [],
-      incomingUserIds: [],
-      incomingCurriculumIds: [],
-      incomingProgramIds: [],
-      incomingProgramPartnerIds: [],
-    },
-  };
-
+function planUsers(
+  plan: LegacyImportPlan,
+  payload: Record<string, unknown>
+): void {
   const userIds = new Set<string>();
   const userEmails = new Set<string>();
   for (const [index, value] of readSection(payload, "users").entries()) {
@@ -374,7 +348,12 @@ export function createLegacyImportPlan(input: unknown): LegacyImportPlan {
       ]
     );
   }
+}
 
+function planCurricula(
+  plan: LegacyImportPlan,
+  payload: Record<string, unknown>
+): void {
   const curriculumIds = new Set<string>();
   for (const [index, value] of readSection(payload, "curricula").entries()) {
     const path = `curricula[${index}]`;
@@ -395,7 +374,12 @@ export function createLegacyImportPlan(input: unknown): LegacyImportPlan {
       ]
     );
   }
+}
 
+function planProgramPartners(
+  plan: LegacyImportPlan,
+  payload: Record<string, unknown>
+): void {
   const partnerIds = new Set<string>();
   for (const [index, value] of readSection(
     payload,
@@ -418,7 +402,12 @@ export function createLegacyImportPlan(input: unknown): LegacyImportPlan {
       ]
     );
   }
+}
 
+function planPrograms(
+  plan: LegacyImportPlan,
+  payload: Record<string, unknown>
+): void {
   const programIds = new Set<string>();
   for (const [index, value] of readSection(payload, "programs").entries()) {
     const path = `programs[${index}]`;
@@ -451,7 +440,12 @@ export function createLegacyImportPlan(input: unknown): LegacyImportPlan {
       ]
     );
   }
+}
 
+function planProgramRoles(
+  plan: LegacyImportPlan,
+  payload: Record<string, unknown>
+): void {
   const programRoleIds = new Set<string>();
   const programRoleNaturalKeys = new Set<string>();
   for (const [index, value] of readSection(payload, "programRoles").entries()) {
@@ -489,7 +483,12 @@ export function createLegacyImportPlan(input: unknown): LegacyImportPlan {
       ]
     );
   }
+}
 
+function planProgramApplications(
+  plan: LegacyImportPlan,
+  payload: Record<string, unknown>
+): void {
   const applicationIds = new Set<string>();
   const applicationCohortPairs = new Set<string>();
   for (const [index, value] of readSection(
@@ -546,6 +545,44 @@ export function createLegacyImportPlan(input: unknown): LegacyImportPlan {
       ]
     );
   }
+}
+
+export function createLegacyImportPlan(input: unknown): LegacyImportPlan {
+  const payload = requireRecord(input, "root");
+  const version = payload.version;
+  if (!Number.isInteger(version) || Number(version) <= 0) {
+    fail("Invalid import payload: version must be a positive integer.");
+  }
+  timestamp(payload.exportedAt, "exportedAt");
+
+  const roles = readSection(payload, "roles");
+  const userRoles = readSection(payload, "userRoles");
+  const plan: LegacyImportPlan = {
+    statements: [],
+    attempted: emptyImportCounts(),
+    ignored: {
+      roles: roles.length,
+      userRoles: userRoles.length,
+    },
+    references: {
+      users: [],
+      curricula: [],
+      programs: [],
+      programPartners: [],
+      incomingUsers: [],
+      incomingUserIds: [],
+      incomingCurriculumIds: [],
+      incomingProgramIds: [],
+      incomingProgramPartnerIds: [],
+    },
+  };
+
+  planUsers(plan, payload);
+  planCurricula(plan, payload);
+  planProgramPartners(plan, payload);
+  planPrograms(plan, payload);
+  planProgramRoles(plan, payload);
+  planProgramApplications(plan, payload);
 
   if (
     plan.statements.length === 0 &&

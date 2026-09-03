@@ -238,6 +238,98 @@ function parseOptionalDate(value: unknown): Date | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
+type DriveFileEntry = {
+  id?: unknown;
+  name?: unknown;
+  mimeType?: unknown;
+  size?: unknown;
+  createdTime?: unknown;
+  modifiedTime?: unknown;
+  capabilities?: { canDownload?: unknown };
+  shortcutDetails?: {
+    targetId?: unknown;
+    targetMimeType?: unknown;
+  };
+};
+
+type DriveItemClassification =
+  | { type: "folder"; targetId: string; isShortcut: boolean }
+  | { type: "video"; file: GoogleDriveVideoFile; isShortcut: boolean }
+  | {
+      type: "skip";
+      reason:
+        | "invalid"
+        | "not_video"
+        | "download_blocked"
+        | "duplicate"
+        | "filtered";
+    };
+
+function hasRequiredFields(
+  file: DriveFileEntry
+): file is DriveFileEntry & { id: string; name: string; mimeType: string } {
+  return (
+    typeof file.id === "string" &&
+    typeof file.name === "string" &&
+    typeof file.mimeType === "string"
+  );
+}
+
+function classifyDriveItem(
+  file: DriveFileEntry,
+  seenFileIds: Set<string>,
+  seenFolderIds: Set<string>,
+  titleFilter: string | undefined
+): DriveItemClassification {
+  if (!hasRequiredFields(file)) {
+    return { type: "skip", reason: "invalid" };
+  }
+
+  const isShortcut = file.mimeType === DRIVE_SHORTCUT_MIME_TYPE;
+  const targetId = isShortcut ? file.shortcutDetails?.targetId : file.id;
+  const targetMimeType = isShortcut
+    ? file.shortcutDetails?.targetMimeType
+    : file.mimeType;
+
+  if (
+    targetMimeType === DRIVE_FOLDER_MIME_TYPE &&
+    typeof targetId === "string" &&
+    DRIVE_FOLDER_ID_PATTERN.test(targetId) &&
+    !seenFolderIds.has(targetId)
+  ) {
+    return { type: "folder", targetId, isShortcut };
+  }
+
+  if (typeof targetId !== "string" || typeof targetMimeType !== "string") {
+    return { type: "skip", reason: "invalid" };
+  }
+  if (!targetMimeType.startsWith("video/")) {
+    return { type: "skip", reason: "not_video" };
+  }
+  if (!isShortcut && file.capabilities?.canDownload === false) {
+    return { type: "skip", reason: "download_blocked" };
+  }
+  if (seenFileIds.has(targetId)) {
+    return { type: "skip", reason: "duplicate" };
+  }
+  if (titleFilter && !file.name.toLocaleLowerCase().includes(titleFilter)) {
+    return { type: "skip", reason: "filtered" };
+  }
+
+  return {
+    type: "video",
+    file: {
+      id: targetId,
+      name: file.name,
+      mimeType: targetMimeType,
+      sizeBytes: parseOptionalSize(file.size),
+      createdAt: parseOptionalDate(file.createdTime),
+      modifiedAt: parseOptionalDate(file.modifiedTime),
+    },
+    isShortcut,
+  };
+}
+
 function parseOptionalSize(value: unknown): number | undefined {
   if (typeof value !== "string") return undefined;
   const size = Number(value);
@@ -314,19 +406,7 @@ export async function listGoogleDriveVideoFiles({
 
       const result = (await response.json()) as {
         nextPageToken?: unknown;
-        files?: Array<{
-          id?: unknown;
-          name?: unknown;
-          mimeType?: unknown;
-          size?: unknown;
-          createdTime?: unknown;
-          modifiedTime?: unknown;
-          capabilities?: { canDownload?: unknown };
-          shortcutDetails?: {
-            targetId?: unknown;
-            targetMimeType?: unknown;
-          };
-        }>;
+        files?: DriveFileEntry[];
       };
 
       pageNumber += 1;
@@ -346,76 +426,42 @@ export async function listGoogleDriveVideoFiles({
       };
 
       for (const file of pageFiles) {
-        if (
-          typeof file.id !== "string" ||
-          typeof file.name !== "string" ||
-          typeof file.mimeType !== "string"
-        ) {
-          pageStats.invalidItemsSkipped += 1;
-          continue;
-        }
-
-        const isShortcut = file.mimeType === DRIVE_SHORTCUT_MIME_TYPE;
-        const targetId = isShortcut
-          ? file.shortcutDetails?.targetId
-          : file.id;
-        const targetMimeType = isShortcut
-          ? file.shortcutDetails?.targetMimeType
-          : file.mimeType;
-
-        if (
-          targetMimeType === DRIVE_FOLDER_MIME_TYPE &&
-          typeof targetId === "string" &&
-          DRIVE_FOLDER_ID_PATTERN.test(targetId) &&
-          !seenFolderIds.has(targetId)
-        ) {
-          seenFolderIds.add(targetId);
-          pendingFolderIds.push(targetId);
-          if (isShortcut) {
-            pageStats.folderShortcutsQueued += 1;
-          } else {
-            pageStats.nestedFoldersQueued += 1;
+        const classification = classifyDriveItem(
+          file,
+          seenFileIds,
+          seenFolderIds,
+          titleFilter
+        );
+        switch (classification.type) {
+          case "folder":
+            seenFolderIds.add(classification.targetId);
+            pendingFolderIds.push(classification.targetId);
+            if (classification.isShortcut) {
+              pageStats.folderShortcutsQueued += 1;
+            } else {
+              pageStats.nestedFoldersQueued += 1;
+            }
+            break;
+          case "video":
+            seenFileIds.add(classification.file.id);
+            pageStats.videosDiscovered += 1;
+            if (classification.isShortcut) {
+              pageStats.videoShortcutsDiscovered += 1;
+            }
+            files.push(classification.file);
+            break;
+          case "skip": {
+            const skipStatKey = {
+              invalid: "invalidItemsSkipped",
+              not_video: "nonVideosSkipped",
+              download_blocked: "downloadBlockedSkipped",
+              duplicate: "duplicateVideosSkipped",
+              filtered: "filenameFilteredSkipped",
+            } as const;
+            pageStats[skipStatKey[classification.reason]] += 1;
+            break;
           }
-          continue;
         }
-
-        if (typeof targetId !== "string" || typeof targetMimeType !== "string") {
-          pageStats.invalidItemsSkipped += 1;
-          continue;
-        }
-        if (!targetMimeType.startsWith("video/")) {
-          pageStats.nonVideosSkipped += 1;
-          continue;
-        }
-        if (!isShortcut && file.capabilities?.canDownload === false) {
-          pageStats.downloadBlockedSkipped += 1;
-          continue;
-        }
-        if (seenFileIds.has(targetId)) {
-          pageStats.duplicateVideosSkipped += 1;
-          continue;
-        }
-        if (
-          titleFilter &&
-          !file.name.toLocaleLowerCase().includes(titleFilter)
-        ) {
-          pageStats.filenameFilteredSkipped += 1;
-          continue;
-        }
-
-        seenFileIds.add(targetId);
-        pageStats.videosDiscovered += 1;
-        if (isShortcut) {
-          pageStats.videoShortcutsDiscovered += 1;
-        }
-        files.push({
-          id: targetId,
-          name: file.name,
-          mimeType: targetMimeType,
-          sizeBytes: parseOptionalSize(file.size),
-          createdAt: parseOptionalDate(file.createdTime),
-          modifiedAt: parseOptionalDate(file.modifiedTime),
-        });
       }
 
       const nextPageToken =

@@ -1,6 +1,5 @@
 import React, {
   forwardRef,
-  useEffect,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
@@ -31,19 +30,13 @@ const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
 ) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [enterSends, setEnterSends] = useState(true);
+  const [enterSends] = useState(() =>
+    typeof window !== "undefined" ? !window.matchMedia("(pointer: coarse)").matches : true
+  );
 
   useImperativeHandle(ref, () => ({
     focus: () => textareaRef.current?.focus(),
   }));
-
-  // Soft keyboards have no Shift+Enter, so binding Enter to send would make
-  // multiline input impossible rather than merely awkward. Gate on input
-  // capability instead of device class, so a tablet with a keyboard behaves
-  // like a desktop.
-  useEffect(() => {
-    setEnterSends(!window.matchMedia("(pointer: coarse)").matches);
-  }, []);
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;

@@ -22,13 +22,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node ./scripts/cloudflare/run-live-e2e.mjs",
-    "test:e2e:list": "node ./scripts/cloudflare/run-live-e2e.mjs --list"
+    "test:e2e:list": "node ./scripts/cloudflare/run-live-e2e.mjs --list",
+    "typecheck:astro": "astro check",
+    "knip": "knip --include files,dependencies,unlisted"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^13.7.0",
     "@astrojs/react": "^5.0.7",
     "@cloudflare/containers": "^0.3.7",
-    "@gsap/react": "^2.1.2",
     "@headlessui/react": "^2.2.10",
     "@opentelemetry/api": "^1.9.1",
     "@paralleldrive/cuid2": "^2.3.1",
@@ -59,18 +60,19 @@
     "nanoid": "^3.3.17"
   },
   "devDependencies": {
+    "@astrojs/check": "^0.9.10",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.61.1",
     "@types/hast": "^3.0.5",
     "@types/node": "^25.9.5",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
-    "@vitest/runner": "^4.1.10",
     "drizzle-kit": "^0.31.10",
     "eslint": "^10.7.0",
     "eslint-plugin-astro": "^1.7.0",
     "eslint-plugin-oxlint": "^1.78.0",
     "hast-util-sanitize": "^5.0.2",
+    "knip": "^6.33.0",
     "oxlint": "^1.78.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.64.0",

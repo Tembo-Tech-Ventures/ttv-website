@@ -1,5 +1,6 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import Button from "@/components/common/Button.astro";
 import Card from "@/components/common/Card.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
@@ -66,7 +67,7 @@ if (Astro.request.method === "POST") {
           <h3 class="text-lg font-semibold text-white">
             Create a curriculum first
           </h3>
-          <p class="mx-auto mt-2 max-w-xl text-sm text-white/60">
+          <p class="mx-auto mt-2 max-w-xl text-sm text-ink-secondary">
             Every cohort needs a curriculum. Add one, then return here to
             create the cohort.
           </p>
@@ -75,12 +76,9 @@ if (Astro.request.method === "POST") {
               {fieldErrors.curriculumId}
             </p>
           )}
-          <a
-            href="/admin/curricula/new"
-            class="mt-5 inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
-          >
+          <Button href="/admin/curricula/new" class="mt-5">
             Create Curriculum
-          </a>
+          </Button>
         </div>
       </Card>
     ) : (
@@ -104,7 +102,7 @@ if (Astro.request.method === "POST") {
             aria-describedby={fieldErrors.name ? "name-error" : undefined}
             value={values.name}
             placeholder="Cohort name"
-            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            class="form-control placeholder:text-ink-muted"
           />
           {fieldErrors.name && (
             <p id="name-error" class="text-sm text-red-200">
@@ -123,7 +121,7 @@ if (Astro.request.method === "POST") {
             aria-describedby={fieldErrors.description ? "description-error" : undefined}
             rows="3"
             placeholder="Cohort description"
-            class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white placeholder:text-white/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            class="form-control placeholder:text-ink-muted"
           >{values.description}</textarea>
           {fieldErrors.description && (
             <p id="description-error" class="text-sm text-red-200">
@@ -140,7 +138,7 @@ if (Astro.request.method === "POST") {
             required
             aria-invalid={Boolean(fieldErrors.curriculumId)}
             aria-describedby={fieldErrors.curriculumId ? "curriculum-error" : undefined}
-            class="w-full min-w-0 rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+            class="form-control w-full min-w-0"
           >
             <option value="">Select curriculum…</option>
             {curricula.map((c) => (
@@ -166,7 +164,7 @@ if (Astro.request.method === "POST") {
               aria-invalid={Boolean(fieldErrors.startDate)}
               aria-describedby={fieldErrors.startDate ? "start-date-error" : undefined}
               value={values.startDate}
-              class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+              class="form-control"
             />
             {fieldErrors.startDate && (
               <p id="start-date-error" class="text-sm text-red-200">
@@ -183,7 +181,7 @@ if (Astro.request.method === "POST") {
               aria-invalid={Boolean(fieldErrors.endDate)}
               aria-describedby={fieldErrors.endDate ? "end-date-error" : undefined}
               value={values.endDate}
-              class="rounded-md border border-teal bg-dark/50 px-3 py-2 text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+              class="form-control"
             />
             {fieldErrors.endDate && (
               <p id="end-date-error" class="text-sm text-red-200">
@@ -205,15 +203,12 @@ if (Astro.request.method === "POST") {
             />
             Applications open
           </label>
-          <p class="text-sm text-white/50">Leave unchecked to create a closed cohort.</p>
+          <p class="text-sm text-ink-muted">Leave unchecked to create a closed cohort.</p>
         </div>
 
-        <button
-          type="submit"
-          class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-dark hover:bg-primary/90"
-        >
+        <Button type="submit">
           Create Cohort
-        </button>
+        </Button>
       </form>
     </Card>
     )}
