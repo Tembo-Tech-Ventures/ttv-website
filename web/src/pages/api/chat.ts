@@ -1,160 +1,75 @@
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
-import { and, asc, eq, inArray } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import { ensureOwnedChatSession, touchChatSession } from "@/lib/chat/sessions";
 import { getAccessibleProgramIds } from "@/lib/recordings/access";
-import { formatTimestamp } from "@/lib/recordings/time-utils";
-import { generateChatCompletion, type ChatMessage } from "@/lib/ai/gateway";
+import { generateToolCompletion, type GatewayMessage } from "@/lib/ai/gateway";
+import { TOOL_DEFINITIONS, executeTool, type ToolContext, type TranscriptSource } from "@/lib/chat/tools";
 
-interface VectorMatchMetadata {
-  segment_id?: unknown;
-  recording_id?: unknown;
-  start_time?: unknown;
-  end_time?: unknown;
-}
-
-interface TranscriptSource {
-  sourceNumber: number;
-  recordingId: string;
-  title: string;
-  startTime: number;
-  endTime: number;
-  text: string;
-}
-
-function numberFromMetadata(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function stringFromMetadata(value: unknown) {
-  return typeof value === "string" && value.trim() ? value : null;
-}
+const MAX_TOOL_ROUNDS = 3;
+const MAX_ANSWER_TOKENS = 1200;
 
 function sanitizeModelAnswer(answer: string) {
   return answer.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 }
 
-function buildSourceText(source: TranscriptSource) {
-  return [
-    `[${source.sourceNumber}] ${source.title}`,
-    `Timecode: ${formatTimestamp(source.startTime)}-${formatTimestamp(source.endTime)}`,
-    `Video link: /dashboard/sessions/${source.recordingId}?t=${Math.floor(source.startTime)}`,
-    `Transcript: ${source.text}`,
-  ].join("\n");
-}
-
-function buildFallbackAnswer(sources: TranscriptSource[]) {
-  const summary = sources
-    .slice(0, 3)
-    .map(
-      (source) =>
-        `[${source.sourceNumber}] ${source.title} at ${formatTimestamp(source.startTime)}: ${source.text}`
+async function checkIsAdmin(db: D1Database, userId: string): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `SELECT ur.id FROM "UserRoles" ur
+       JOIN "Roles" r ON ur."roleId" = r."id"
+       WHERE ur."userId" = ? AND r."name" = 'ADMIN'
+       LIMIT 1`
     )
-    .join("\n\n");
-
-  return `I found relevant transcript references, but the answer model returned an empty response. Here are the most relevant excerpts so you can jump into the recording:\n\n${summary}`;
+    .bind(userId)
+    .first();
+  return Boolean(result);
 }
 
-interface ParsedMatch {
-  segmentId: string | null;
-  recordingId: string | null;
-  startTime: number | null;
-  endTime: number | null;
+function buildSystemPrompt(userName: string, hasRecordings: boolean): string {
+  const base = `You are TTV's AI assistant, helping students, mentors, and staff at Tembo Tech Ventures, a tech training platform focused on developing Africa's tech ecosystem.
+
+You are speaking with ${userName}.
+
+You have tools to look up information. Use them before answering — do not guess.`;
+
+  const transcriptGuidance = hasRecordings
+    ? `
+When answering from session recordings:
+- Cite every substantive claim with inline source markers like [1] or [2] that match the sourceNumber from search results.
+- Synthesize — do not just restate raw transcript snippets.
+- Transcript text may contain speech-to-text errors. Clean up obvious typos in your explanations.
+- If sources lack enough information, say what is missing.
+
+For questions about recent, latest, or specific sessions: call list_recordings first to identify the right recording by date, then use search_transcripts with that recording_id or get_recording_details to read it. Do not rely on search_transcripts alone for time-based questions — semantic search does not understand recency.
+
+When a question goes beyond what the recordings cover (e.g. general programming help), you may answer from your own knowledge but clearly say "This is general guidance, not from your sessions" so the user knows the difference.`
+    : `
+This user does not have access to session recordings yet. You can still help them with:
+- Questions about their application status (use the get_user_context tool)
+- Information about TTV programs (use the get_program_info tool)
+- General programming questions (clearly marked as general knowledge)`;
+
+  return `${base}
+${transcriptGuidance}
+
+Keep answers concise unless the question asks for depth.`;
 }
 
-async function saveAndReturn(
-  db: schema.Database,
-  userId: string,
-  sessionId: string,
-  message: string,
-  answer: string,
-  citations: unknown[]
-) {
-  await db.insert(schema.chatMessage).values([
-    { userId, sessionId, role: "user", content: message },
-    { userId, sessionId, role: "assistant", content: answer, citations: JSON.stringify(citations) },
-  ]);
-  await touchChatSession(env.DB, userId, sessionId);
-  return Response.json({ sessionId, answer, citations });
-}
-
-async function findTranscriptSources(
-  db: schema.Database,
-  isAdmin: boolean,
-  matches: ParsedMatch[],
-  segmentIds: string[],
-  recordingIds: string[],
-  programIds: string[]
-): Promise<TranscriptSource[]> {
-  const segmentRows = await db
-    .select({
-      id: schema.transcriptSegment.id,
-      recordingId: schema.transcriptSegment.recordingId,
-      startTime: schema.transcriptSegment.startTime,
-      endTime: schema.transcriptSegment.endTime,
-      text: schema.transcriptSegment.text,
-      recordingTitle: schema.recording.title,
-      recordingProgramId: schema.recording.programId,
-    })
-    .from(schema.transcriptSegment)
-    .innerJoin(schema.recording, eq(schema.transcriptSegment.recordingId, schema.recording.id))
-    .where(
-      isAdmin
-        ? recordingIds.length > 0
-          ? inArray(schema.recording.id, recordingIds)
-          : inArray(schema.transcriptSegment.id, segmentIds)
-        : and(
-            recordingIds.length > 0
-              ? inArray(schema.recording.id, recordingIds)
-              : inArray(schema.transcriptSegment.id, segmentIds),
-            inArray(schema.recording.programId, programIds)
-          )
-    )
-    .orderBy(asc(schema.transcriptSegment.startTime));
-
-  const rowsByRecordingId = new Map<string, typeof segmentRows>();
-  for (const row of segmentRows) {
-    rowsByRecordingId.set(row.recordingId, [
-      ...(rowsByRecordingId.get(row.recordingId) ?? []),
-      row,
-    ]);
-  }
-  const sources: TranscriptSource[] = [];
-  const seenRanges = new Set<string>();
-  for (const match of matches) {
-    const rows = match.recordingId ? rowsByRecordingId.get(match.recordingId) ?? [] : segmentRows;
-    const matchedRows =
-      match.startTime !== null && match.endTime !== null
-        ? rows.filter(
-            (row) =>
-              row.startTime < match.endTime! + 0.5 &&
-              row.endTime > match.startTime! - 0.5
-          )
-        : rows.filter((row) => row.id === match.segmentId);
-
-    if (matchedRows.length === 0) continue;
-
-    const firstRow = matchedRows[0];
-    const lastRow = matchedRows.at(-1) ?? firstRow;
-    const dedupeKey = `${firstRow.recordingId}:${Math.floor(firstRow.startTime)}:${Math.floor(lastRow.endTime)}`;
-    if (seenRanges.has(dedupeKey)) continue;
-    seenRanges.add(dedupeKey);
-
-    sources.push({
-      sourceNumber: sources.length + 1,
-      recordingId: firstRow.recordingId,
-      title: firstRow.recordingTitle,
-      startTime: firstRow.startTime,
-      endTime: lastRow.endTime,
-      text: matchedRows.map((row) => row.text).join(" "),
-    });
-
-    if (sources.length >= 8) break;
-  }
-
-  return sources;
+function buildCitations(sources: TranscriptSource[]) {
+  return sources.map((source) => ({
+    sourceNumber: source.sourceNumber,
+    recordingId: source.recordingId,
+    title: source.title,
+    startTime: source.startTime,
+    endTime: source.endTime,
+    url: `/dashboard/sessions/${source.recordingId}?t=${Math.floor(source.startTime)}`,
+    text:
+      source.text.length > 240
+        ? `${source.text.slice(0, 240).trim()}...`
+        : source.text,
+  }));
 }
 
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -180,84 +95,33 @@ export const POST: APIRoute = async ({ request, locals }) => {
     typeof requestedSessionId === "string" ? requestedSessionId : null,
     message
   );
-  const programIds = await getAccessibleProgramIds(db, user.id);
-  if (programIds.length === 0 && !locals.isAdmin) {
-    return saveAndReturn(
-      db, user.id, sessionId, message,
-      "No session recordings are available for your account yet.", []
-    );
-  }
 
-  const embedding = (await env.AI.run("@cf/baai/bge-m3", {
-    text: [message],
-  })) as { data?: number[][]; result?: { data?: number[][] } };
-  const vector = embedding.data?.[0] ?? embedding.result?.data?.[0];
-  if (!Array.isArray(vector)) {
-    return Response.json({ error: "Unable to embed question" }, { status: 500 });
-  }
+  const [programIds, isAdmin] = await Promise.all([
+    getAccessibleProgramIds(db, user.id),
+    checkIsAdmin(env.DB, user.id),
+  ]);
 
-  const results = await env.VECTORIZE.query(vector, {
-    topK: 50,
-    returnMetadata: "all",
-  });
+  const hasRecordings = programIds.length > 0 || isAdmin;
+  const systemPrompt = buildSystemPrompt(user.name, hasRecordings);
 
-  const matches = results.matches
-    .map((match) => {
-      const metadata = (match.metadata ?? {}) as VectorMatchMetadata;
-      return {
-        segmentId: stringFromMetadata(metadata.segment_id),
-        recordingId: stringFromMetadata(metadata.recording_id),
-        startTime: numberFromMetadata(metadata.start_time),
-        endTime: numberFromMetadata(metadata.end_time),
-      };
-    })
-    .filter((match) => match.segmentId || match.recordingId);
+  const toolCtx: ToolContext = {
+    env,
+    db,
+    userId: user.id,
+    userName: user.name,
+    programIds,
+    isAdmin,
+    sources: [],
+  };
 
-  const segmentIds = matches
-    .map((match) => match.segmentId)
-    .filter((id): id is string => Boolean(id));
-
-  const recordingIds = Array.from(
-    new Set(matches.map((match) => match.recordingId).filter((id): id is string => Boolean(id)))
+  const tools = hasRecordings ? TOOL_DEFINITIONS : TOOL_DEFINITIONS.filter(
+    (t) => t.function.name !== "search_transcripts" &&
+           t.function.name !== "list_recordings" &&
+           t.function.name !== "get_recording_details"
   );
 
-  if (segmentIds.length === 0 && recordingIds.length === 0) {
-    return saveAndReturn(
-      db, user.id, sessionId, message,
-      "I could not find a relevant transcript segment for that question.", []
-    );
-  }
-
-  const sources = await findTranscriptSources(
-    db, !!locals.isAdmin, matches, segmentIds, recordingIds, programIds
-  );
-
-  if (sources.length === 0) {
-    return saveAndReturn(
-      db, user.id, sessionId, message,
-      "I could not find a relevant transcript segment for that question.", []
-    );
-  }
-
-  const context = sources.map(buildSourceText).join("\n\n---\n\n");
-
-  const system = `You are TTV's session assistant. Answer the user's question in natural language using only the provided transcript sources.
-
-Requirements:
-- Synthesize the relevant points; do not just restate raw transcript snippets.
-- For technical questions, reason through the steps and call out assumptions or uncertainty.
-- Transcript text may contain speech-to-text mistakes, punctuation errors, missing capitalization, and homophone typos. Infer the intended wording from context when it is clear, clean up those errors in your explanation, and do not preserve obvious transcript typos unless quoting them is necessary.
-- Cite every substantive claim with inline source markers like [1] or [2].
-- If the sources do not contain enough information, say what is missing and cite the closest relevant source.
-- Do not mention sources that are not useful for the answer.
-- Keep the answer concise unless the question asks for depth.
-
-Transcript sources:
-
-${context}`;
-
-  const messages: ChatMessage[] = [
-    { role: "system", content: system },
+  const messages: GatewayMessage[] = [
+    { role: "system", content: systemPrompt },
     ...conversationHistory
       .filter((entry) => entry.role === "user" || entry.role === "assistant")
       .map((entry) => ({
@@ -266,26 +130,49 @@ ${context}`;
       })),
     { role: "user", content: message },
   ];
-  const generatedAnswer = sanitizeModelAnswer(
-    await generateChatCompletion(env, messages, {
-      maxTokens: 900,
+
+  let answer = "";
+  for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+    const isLastRound = round === MAX_TOOL_ROUNDS;
+    const result = await generateToolCompletion(env, messages, {
+      maxTokens: MAX_ANSWER_TOKENS,
       temperature: 0.2,
-    })
-  );
-  const answer = generatedAnswer || buildFallbackAnswer(sources);
+      tools: isLastRound ? undefined : tools,
+    });
 
-  const citations = sources.map((source) => ({
-    sourceNumber: source.sourceNumber,
-    recordingId: source.recordingId,
-    title: source.title,
-    startTime: source.startTime,
-    endTime: source.endTime,
-    url: `/dashboard/sessions/${source.recordingId}?t=${Math.floor(source.startTime)}`,
-    text:
-      source.text.length > 240
-        ? `${source.text.slice(0, 240).trim()}...`
-        : source.text,
-  }));
+    if (result.toolCalls.length > 0 && !isLastRound) {
+      messages.push({ role: "assistant", content: null, tool_calls: result.toolCalls });
 
-  return saveAndReturn(db, user.id, sessionId, message, answer, citations);
+      for (const call of result.toolCalls) {
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(call.function.arguments) as Record<string, unknown>;
+        } catch {
+          // Malformed arguments — pass empty
+        }
+        const toolResult = await executeTool(call.function.name, args, toolCtx);
+        messages.push({ role: "tool", tool_call_id: call.id, content: toolResult });
+      }
+      continue;
+    }
+
+    answer = sanitizeModelAnswer(result.content ?? "");
+    break;
+  }
+
+  if (!answer) {
+    answer = hasRecordings
+      ? "I wasn't able to generate an answer for that question. Could you try rephrasing it?"
+      : "I wasn't able to help with that. Try asking about your application status or TTV programs.";
+  }
+
+  const citations = buildCitations(toolCtx.sources);
+
+  await db.insert(schema.chatMessage).values([
+    { userId: user.id, sessionId, role: "user", content: message },
+    { userId: user.id, sessionId, role: "assistant", content: answer, citations: JSON.stringify(citations) },
+  ]);
+  await touchChatSession(env.DB, user.id, sessionId);
+
+  return Response.json({ sessionId, answer, citations });
 };
