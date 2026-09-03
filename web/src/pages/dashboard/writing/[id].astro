@@ -1,0 +1,255 @@
+---
+import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import Card from "@/components/common/Card.astro";
+import Badge from "@/components/common/Badge.astro";
+import Button from "@/components/common/Button.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { and, eq } from "drizzle-orm";
+import { env } from "cloudflare:workers";
+import {
+  savePost,
+  publishPost,
+  unpublishPost,
+  deletePost,
+  type PostFormResult,
+} from "@/components/blog/blog-handlers";
+
+const { id } = Astro.params;
+const user = Astro.locals.user!;
+const db = drizzle(env.DB, { schema });
+
+const profile = await db.query.studentProfile.findFirst({
+  where: eq(schema.studentProfile.userId, user.id),
+  columns: { id: true, status: true, handle: true },
+});
+
+if (!profile || profile.status !== "PUBLISHED") {
+  return Astro.redirect("/dashboard/writing");
+}
+
+let result: PostFormResult | null = null;
+
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  const action = formData.get("_action") as string;
+
+  if (action === "save") {
+    result = await savePost(db, profile.id, formData, id!);
+  } else if (action === "publish") {
+    result = await publishPost(db, profile.id, id!);
+  } else if (action === "unpublish") {
+    result = await unpublishPost(db, profile.id, id!);
+  } else if (action === "delete") {
+    result = await deletePost(db, profile.id, id!);
+    if (result.success) {
+      return Astro.redirect("/dashboard/writing");
+    }
+  }
+}
+
+const post = await db.query.blogPost.findFirst({
+  where: and(
+    eq(schema.blogPost.id, id!),
+    eq(schema.blogPost.profileId, profile.id),
+  ),
+});
+
+if (!post) {
+  return Astro.redirect("/dashboard/writing");
+}
+
+const isEditable = post.status === "DRAFT" || post.status === "PUBLISHED";
+const postUrl = post.status === "PUBLISHED" && profile.handle
+  ? `/blog/${profile.handle}/${post.slug}`
+  : null;
+
+function formatDate(d: Date | null) {
+  if (!d) return "";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+---
+
+<DashboardLayout title={post.title || "Edit Post"}>
+  <div class="mx-auto max-w-3xl space-y-6">
+    <div class="flex items-center gap-4">
+      <a href="/dashboard/writing" class="text-ink-secondary hover:text-white transition-colors">
+        &larr; Back
+      </a>
+      <h2 class="text-2xl font-bold text-white">Edit Post</h2>
+    </div>
+
+    {/* Status banner */}
+    <div class:list={[
+      "rounded-md border p-4",
+      post.status === "DRAFT" && "border-amber-500/30 bg-amber-500/10 text-amber-300",
+      post.status === "PUBLISHED" && "border-green-500/30 bg-green-500/10 text-green-300",
+      post.status === "SUSPENDED" && "border-red-500/30 bg-red-500/10 text-red-300",
+    ]}>
+      <div class="flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <Badge variant={post.status.toLowerCase() as "draft" | "published" | "suspended"} />
+          {post.status === "DRAFT" && (
+            <span>Draft — publish when you're ready.</span>
+          )}
+          {post.status === "PUBLISHED" && postUrl && (
+            <span>
+              Live at{" "}
+              <a href={postUrl} class="underline hover:text-white" target="_blank" rel="noopener noreferrer">{postUrl}</a>
+              {" "}— edits go live immediately.
+            </span>
+          )}
+          {post.status === "SUSPENDED" && (
+            <span>Suspended by admin{post.adminNote ? ` — ${post.adminNote}` : ""}. Contact the team for assistance.</span>
+          )}
+        </div>
+        <div class="flex gap-2">
+          {post.status === "DRAFT" && (
+            <form method="POST">
+              <input type="hidden" name="_action" value="publish" />
+              <Button type="submit" size="sm">Publish</Button>
+            </form>
+          )}
+          {post.status === "PUBLISHED" && (
+            <form method="POST">
+              <input type="hidden" name="_action" value="unpublish" />
+              <Button type="submit" variant="secondary" size="sm">Unpublish</Button>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+
+    {/* Result messages */}
+    {result && !result.success && result.error && (
+      <div class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
+        {result.error}
+      </div>
+    )}
+    {result?.success && (
+      <div class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-300">
+        Post saved.
+      </div>
+    )}
+
+    {/* Editor */}
+    {isEditable && (
+      <Card>
+        <form method="POST" class="space-y-5">
+          <input type="hidden" name="_action" value="save" />
+
+          <div class="flex flex-col gap-1.5">
+            <label for="title" class="text-sm font-medium text-white/90">
+              Title <span class="text-primary">*</span>
+            </label>
+            <input
+              id="title"
+              name="title"
+              type="text"
+              required
+              maxlength="200"
+              placeholder="What's your post about?"
+              value={post.title}
+              class:list={[
+                "form-control placeholder:text-ink-muted",
+                result?.fieldErrors?.title && "border-red-500",
+              ]}
+            />
+            {result?.fieldErrors?.title && (
+              <p class="text-sm text-red-400">{result.fieldErrors.title}</p>
+            )}
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <label for="slug" class="text-sm font-medium text-white/90">
+              Slug
+            </label>
+            <input
+              id="slug"
+              name="slug"
+              type="text"
+              maxlength="80"
+              value={post.slug}
+              class:list={[
+                "form-control placeholder:text-ink-muted",
+                result?.slugError && "border-red-500",
+              ]}
+            />
+            {result?.slugError && (
+              <p class="text-sm text-red-400">{result.slugError}</p>
+            )}
+            <p class="text-xs text-ink-muted">
+              Lowercase letters, numbers, and hyphens only. Changing the slug will break existing links.
+            </p>
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <label for="contentMarkdown" class="text-sm font-medium text-white/90">
+              Content <span class="text-primary">*</span>
+            </label>
+            <textarea
+              id="contentMarkdown"
+              name="contentMarkdown"
+              required
+              rows={16}
+              maxlength="40000"
+              placeholder="Write your post in Markdown..."
+              class:list={[
+                "form-control font-mono text-sm placeholder:text-ink-muted",
+                result?.fieldErrors?.contentMarkdown && "border-red-500",
+              ]}
+            >{post.contentMarkdown}</textarea>
+            {result?.fieldErrors?.contentMarkdown && (
+              <p class="text-sm text-red-400">{result.fieldErrors.contentMarkdown}</p>
+            )}
+            <p class="text-xs text-ink-muted">
+              Markdown with GFM (tables, strikethrough, task lists). Headings start at h2 — your title is the h1.
+            </p>
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <label for="excerpt" class="text-sm font-medium text-white/90">
+              Excerpt
+            </label>
+            <textarea
+              id="excerpt"
+              name="excerpt"
+              rows={2}
+              maxlength="300"
+              placeholder="Brief summary for the feed (auto-derived if left blank)"
+              class="form-control placeholder:text-ink-muted"
+            >{post.excerpt ?? ""}</textarea>
+          </div>
+
+          <div class="flex items-center justify-between">
+            {post.status === "DRAFT" && (
+              <form method="POST">
+                <input type="hidden" name="_action" value="delete" />
+                <Button type="submit" variant="danger" size="sm">
+                  Delete Draft
+                </Button>
+              </form>
+            )}
+            {post.status !== "DRAFT" && <div />}
+            <Button type="submit">Save Changes</Button>
+          </div>
+        </form>
+      </Card>
+    )}
+
+    {/* Suspended non-editable state */}
+    {post.status === "SUSPENDED" && (
+      <Card>
+        <div class="py-4 text-center text-ink-secondary">
+          This post is suspended. Contact the TTV team for next steps.
+        </div>
+      </Card>
+    )}
+
+    {/* Post metadata */}
+    <div class="text-sm text-ink-muted">
+      <p>{post.readingMinutes} min read · Updated {formatDate(post.updatedAt)}</p>
+      {post.publishedAt && <p>First published {formatDate(post.publishedAt)}</p>}
+    </div>
+  </div>
+</DashboardLayout>

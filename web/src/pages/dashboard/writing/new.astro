@@ -1,0 +1,148 @@
+---
+import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import Card from "@/components/common/Card.astro";
+import Button from "@/components/common/Button.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+import { env } from "cloudflare:workers";
+import { savePost, type PostFormResult } from "@/components/blog/blog-handlers";
+
+const user = Astro.locals.user!;
+const db = drizzle(env.DB, { schema });
+
+const profile = await db.query.studentProfile.findFirst({
+  where: eq(schema.studentProfile.userId, user.id),
+  columns: { id: true, status: true },
+});
+
+if (!profile || profile.status !== "PUBLISHED") {
+  return Astro.redirect("/dashboard/writing");
+}
+
+let result: PostFormResult | null = null;
+let formValues = { title: "", slug: "", contentMarkdown: "", excerpt: "" };
+
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  formValues = {
+    title: (formData.get("title") as string) || "",
+    slug: (formData.get("slug") as string) || "",
+    contentMarkdown: (formData.get("contentMarkdown") as string) || "",
+    excerpt: (formData.get("excerpt") as string) || "",
+  };
+  result = await savePost(db, profile.id, formData);
+  if (result.success && result.postId) {
+    return Astro.redirect(`/dashboard/writing/${result.postId}`);
+  }
+}
+---
+
+<DashboardLayout title="New Post">
+  <div class="mx-auto max-w-3xl space-y-6">
+    <div class="flex items-center gap-4">
+      <a href="/dashboard/writing" class="text-ink-secondary hover:text-white transition-colors">
+        &larr; Back
+      </a>
+      <h2 class="text-2xl font-bold text-white">New Post</h2>
+    </div>
+
+    {result && !result.success && result.error && (
+      <div class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
+        {result.error}
+      </div>
+    )}
+
+    <Card>
+      <form method="POST" class="space-y-5">
+        <div class="flex flex-col gap-1.5">
+          <label for="title" class="text-sm font-medium text-white/90">
+            Title <span class="text-primary">*</span>
+          </label>
+          <input
+            id="title"
+            name="title"
+            type="text"
+            required
+            maxlength="200"
+            placeholder="What's your post about?"
+            value={formValues.title}
+            class:list={[
+              "form-control placeholder:text-ink-muted",
+              result?.fieldErrors?.title && "border-red-500",
+            ]}
+          />
+          {result?.fieldErrors?.title && (
+            <p class="text-sm text-red-400">{result.fieldErrors.title}</p>
+          )}
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label for="slug" class="text-sm font-medium text-white/90">
+            Slug
+          </label>
+          <input
+            id="slug"
+            name="slug"
+            type="text"
+            maxlength="80"
+            placeholder="auto-generated-from-title"
+            value={formValues.slug}
+            class:list={[
+              "form-control placeholder:text-ink-muted",
+              result?.slugError && "border-red-500",
+            ]}
+          />
+          {result?.slugError && (
+            <p class="text-sm text-red-400">{result.slugError}</p>
+          )}
+          <p class="text-xs text-ink-muted">
+            Leave blank to auto-generate from the title. Lowercase letters, numbers, and hyphens only.
+          </p>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label for="contentMarkdown" class="text-sm font-medium text-white/90">
+            Content <span class="text-primary">*</span>
+          </label>
+          <textarea
+            id="contentMarkdown"
+            name="contentMarkdown"
+            required
+            rows={16}
+            maxlength="40000"
+            placeholder="Write your post in Markdown..."
+            class:list={[
+              "form-control font-mono text-sm placeholder:text-ink-muted",
+              result?.fieldErrors?.contentMarkdown && "border-red-500",
+            ]}
+          >{formValues.contentMarkdown}</textarea>
+          {result?.fieldErrors?.contentMarkdown && (
+            <p class="text-sm text-red-400">{result.fieldErrors.contentMarkdown}</p>
+          )}
+          <p class="text-xs text-ink-muted">
+            Markdown with GFM (tables, strikethrough, task lists). Headings start at h2 — your title is the h1.
+          </p>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label for="excerpt" class="text-sm font-medium text-white/90">
+            Excerpt
+          </label>
+          <textarea
+            id="excerpt"
+            name="excerpt"
+            rows={2}
+            maxlength="300"
+            placeholder="Brief summary for the feed (auto-derived if left blank)"
+            class="form-control placeholder:text-ink-muted"
+          >{formValues.excerpt}</textarea>
+        </div>
+
+        <div class="flex justify-end">
+          <Button type="submit">Create Draft</Button>
+        </div>
+      </form>
+    </Card>
+  </div>
+</DashboardLayout>

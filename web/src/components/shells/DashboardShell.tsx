@@ -10,6 +10,7 @@ import {
   PiSuitcaseSimpleDuotone,
   PiTrayDuotone,
   PiHandshakeDuotone,
+  PiArticleDuotone,
 } from "react-icons/pi";
 import { PiListBold } from "react-icons/pi";
 
@@ -23,6 +24,7 @@ export const DASHBOARD_LINKS = [
   { href: "/dashboard/ask", label: "Ask AI", icon: PiChatCircleDotsDuotone },
   { href: "/dashboard/apply", label: "Apply", icon: PiPaperPlaneTiltDuotone },
   { href: "/dashboard/portfolio", label: "Portfolio", icon: PiSuitcaseSimpleDuotone },
+  { href: "/dashboard/writing", label: "Writing", icon: PiArticleDuotone },
   { href: "/dashboard/leads", label: "Leads", icon: PiTrayDuotone },
   { href: "/dashboard/opportunities", label: "Opportunities", icon: PiHandshakeDuotone },
   { href: "/dashboard/profile", label: "Profile", icon: PiUserDuotone },
