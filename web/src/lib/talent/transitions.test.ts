@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   PROFILE_TRANSITIONS,
+  POST_TRANSITIONS,
   PROJECT_TRANSITIONS,
   canTransition,
 } from "./transitions";
@@ -37,6 +38,36 @@ describe("PROFILE_TRANSITIONS", () => {
       false
     );
     expect(canTransition(PROFILE_TRANSITIONS, "PUBLISHED", "DRAFT")).toBe(
+      false
+    );
+  });
+});
+
+describe("POST_TRANSITIONS", () => {
+  it("allows DRAFT → PUBLISHED (author self-publishes)", () => {
+    expect(canTransition(POST_TRANSITIONS, "DRAFT", "PUBLISHED")).toBe(true);
+  });
+
+  it("allows PUBLISHED → DRAFT (author unpublishes)", () => {
+    expect(canTransition(POST_TRANSITIONS, "PUBLISHED", "DRAFT")).toBe(true);
+  });
+
+  it("allows PUBLISHED → SUSPENDED (admin takedown)", () => {
+    expect(canTransition(POST_TRANSITIONS, "PUBLISHED", "SUSPENDED")).toBe(
+      true
+    );
+  });
+
+  it("allows SUSPENDED → DRAFT (admin lifts suspension)", () => {
+    expect(canTransition(POST_TRANSITIONS, "SUSPENDED", "DRAFT")).toBe(true);
+  });
+
+  it("disallows DRAFT → SUSPENDED (must publish first)", () => {
+    expect(canTransition(POST_TRANSITIONS, "DRAFT", "SUSPENDED")).toBe(false);
+  });
+
+  it("disallows SUSPENDED → PUBLISHED (must go through DRAFT)", () => {
+    expect(canTransition(POST_TRANSITIONS, "SUSPENDED", "PUBLISHED")).toBe(
       false
     );
   });

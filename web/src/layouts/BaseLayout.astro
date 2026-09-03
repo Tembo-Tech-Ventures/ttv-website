@@ -1,11 +1,34 @@
 ---
 import "@/styles/global.css";
+import {
+  absoluteUrl,
+  normalizeDescription,
+  pageTitle,
+  DEFAULT_DESCRIPTION,
+  SITE_NAME,
+  type SeoProps,
+} from "@/lib/seo";
 
-interface Props {
-  title?: string;
-}
+type Props = SeoProps;
 
-const { title = "Tembo Tech Ventures" } = Astro.props;
+const {
+  title,
+  description,
+  canonical,
+  ogImage,
+  ogType = "website",
+  publishedTime,
+  noIndex = false,
+} = Astro.props;
+
+const resolvedTitle = pageTitle(title);
+const resolvedDescription =
+  normalizeDescription(description) ?? DEFAULT_DESCRIPTION;
+
+// Default the canonical to the current path (not the full URL) so filtered
+// listings like `/talent?skill=react` do not read as duplicate content.
+const canonicalUrl = absoluteUrl(Astro.site, canonical ?? Astro.url.pathname);
+const ogImageUrl = absoluteUrl(Astro.site, ogImage);
 ---
 
 <!doctype html>
@@ -13,9 +36,35 @@ const { title = "Tembo Tech Ventures" } = Astro.props;
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Tembo Tech Ventures helps grow practical tech communities across Africa." />
+    <meta name="description" content={resolvedDescription} />
+    {canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
+    {noIndex && <meta name="robots" content="noindex, nofollow" />}
+
+    <meta property="og:site_name" content={SITE_NAME} />
+    <meta property="og:type" content={ogType} />
+    <meta property="og:title" content={resolvedTitle} />
+    <meta property="og:description" content={resolvedDescription} />
+    {canonicalUrl && <meta property="og:url" content={canonicalUrl} />}
+    {ogImageUrl && <meta property="og:image" content={ogImageUrl} />}
+    {
+      ogType === "article" && publishedTime && (
+        <meta property="article:published_time" content={publishedTime} />
+      )
+    }
+
+    <meta
+      name="twitter:card"
+      content={ogImageUrl ? "summary_large_image" : "summary"}
+    />
+    <meta name="twitter:title" content={resolvedTitle} />
+    <meta name="twitter:description" content={resolvedDescription} />
+    {ogImageUrl && <meta name="twitter:image" content={ogImageUrl} />}
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>{title}</title>
+    <title>{resolvedTitle}</title>
+
+    <!-- Page-specific head content, e.g. JSON-LD for blog posts. -->
+    <slot name="head" />
   </head>
   <body class="bg-dark min-h-screen">
     <slot />

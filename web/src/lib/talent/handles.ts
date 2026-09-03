@@ -29,6 +29,18 @@ export const RESERVED_HANDLES = new Set([
   "profile",
   "profiles",
   "settings",
+  // Reserved so they stay available as `/blog/<segment>/...` routes. Post URLs
+  // are `/blog/[handle]/[slug]`, so a handle of "tags" would make
+  // `/blog/tags/typescript` resolve to a person instead of a tag listing.
+  "tags",
+  "tag",
+  "feed",
+  "page",
+  "archive",
+  "rss",
+  "search",
+  "author",
+  "authors",
 ]);
 
 const HANDLE_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;

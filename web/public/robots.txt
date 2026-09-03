@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# Authenticated surfaces. These already redirect unauthenticated requests, so
+# this is about not wasting crawl budget rather than about access control.
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /api
+Disallow: /auth

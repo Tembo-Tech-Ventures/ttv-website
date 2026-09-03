@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "./BaseLayout.astro";
 import Grain from "@/components/common/Grain.astro";
+import type { SeoProps } from "@/lib/seo";
 
 /**
  * Public marketing layout (PROPOSAL §2 / §7).
@@ -13,11 +14,9 @@ import Grain from "@/components/common/Grain.astro";
  * Footer: expanded into mission + four link columns + legal row + an
  * oversized "TEMBO" signature that bleeds off the page.
  */
-interface Props {
-  title?: string;
-}
+type Props = SeoProps;
 
-const { title } = Astro.props;
+const seo = Astro.props;
 const isAuthenticated = Boolean(Astro.locals.user);
 
 const NAV_LINKS = [
@@ -60,7 +59,8 @@ const FOOTER_GROUPS = [
 ];
 ---
 
-<BaseLayout title={title}>
+<BaseLayout {...seo}>
+  <slot name="head" slot="head" />
   <Grain />
 
   <div class="relative z-[2] flex min-h-screen flex-col" style="background: radial-gradient(1200px 600px at 15% -10%, rgba(242,141,104,0.10), transparent 60%), linear-gradient(180deg, #013D39 0%, #012A28 100%);">
