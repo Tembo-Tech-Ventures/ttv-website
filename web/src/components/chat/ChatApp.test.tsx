@@ -103,7 +103,8 @@ describe("ChatApp", () => {
   it("offers example prompts and a capability-led heading when empty", () => {
     const html = renderToStaticMarkup(<ChatApp mockMode />);
 
-    expect(html).toContain("Ask across your sessions");
+    expect(html).toContain("Ask AI");
+    expect(html).toContain("Ask about your sessions, your program, or anything you need help with.");
     expect(html).toContain("What were the main action items from mentor hours?");
     expect(html).toContain("Your saved chats will appear here");
   });

@@ -3,6 +3,33 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
+export interface ToolDefinition {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}
+
+export type GatewayMessage =
+  | { role: "system"; content: string }
+  | { role: "user"; content: string }
+  | { role: "assistant"; content: string | null; tool_calls?: ToolCall[] }
+  | { role: "tool"; tool_call_id: string; content: string };
+
+export interface ToolCompletionResult {
+  content: string | null;
+  toolCalls: ToolCall[];
+  finishReason: string | null;
+}
+
 export const DEFAULT_CHAT_MODEL = "workers-ai/@cf/openai/gpt-oss-20b";
 
 export function resolveChatModel(env: Env) {
@@ -65,6 +92,77 @@ export function extractChatCompletionText(payload: CompatChatResponse) {
     .join("\n\n");
 
   return outputText;
+}
+
+function extractToolResponse(payload: CompatChatResponse & Record<string, unknown>): ToolCompletionResult {
+  const choices = payload.choices as
+    | Array<{ message?: Record<string, unknown>; finish_reason?: string }>
+    | undefined;
+  if (choices?.[0]?.message) {
+    const msg = choices[0].message;
+    return {
+      content: typeof msg.content === "string" ? msg.content : null,
+      toolCalls: Array.isArray(msg.tool_calls) ? (msg.tool_calls as ToolCall[]) : [],
+      finishReason: typeof choices[0].finish_reason === "string" ? choices[0].finish_reason : null,
+    };
+  }
+  return { content: extractChatCompletionText(payload), toolCalls: [], finishReason: "stop" };
+}
+
+interface ToolCompletionOptions {
+  maxTokens?: number;
+  temperature?: number;
+  tools?: ToolDefinition[];
+}
+
+/**
+ * Like {@link generateChatCompletion} but accepts tool definitions and returns
+ * structured output (content + tool_calls) instead of a plain string. Used by
+ * the chat agent loop.
+ */
+export async function generateToolCompletion(
+  env: Env,
+  messages: GatewayMessage[],
+  options: ToolCompletionOptions = {}
+): Promise<ToolCompletionResult> {
+  const model = resolveChatModel(env);
+  const url = gatewayCompatUrl(env);
+  const apiKey = env.AI_GATEWAY_API_KEY?.trim();
+
+  const body: Record<string, unknown> = {
+    model,
+    messages,
+    ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
+    ...(typeof options.temperature === "number" ? { temperature: options.temperature } : {}),
+  };
+  if (options.tools?.length) {
+    body.tools = options.tools;
+    body.tool_choice = "auto";
+  }
+
+  if (url && apiKey) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error(`AI Gateway chat completion failed with status ${response.status}`);
+    }
+    return extractToolResponse((await response.json()) as CompatChatResponse & Record<string, unknown>);
+  }
+
+  const bindingModel = model.replace(/^workers-ai\//, "");
+  const gatewayName = env.AI_GATEWAY_NAME?.trim();
+  const result = (await env.AI.run(
+    bindingModel as Parameters<typeof env.AI.run>[0],
+    body,
+    gatewayName ? { gateway: { id: gatewayName } } : undefined
+  )) as CompatChatResponse & Record<string, unknown>;
+  return extractToolResponse(result);
 }
 
 /**
