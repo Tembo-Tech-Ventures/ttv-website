@@ -1,0 +1,79 @@
+---
+/**
+ * A hand-drawn signature, drawn as vector paths.
+ *
+ * This is a *stand-in*. In the real feature the mark would be an image an
+ * instructor uploads once (R2, referenced from `programRole`), and this
+ * component would render that asset instead. It exists so the print
+ * prototypes can be judged on layout — how much room a mark needs, where it
+ * sits relative to the rule and the typeset name — without first building the
+ * upload pipeline.
+ *
+ * Drawn as strokes rather than shipped as a raster so it stays crisp at print
+ * resolution, and so both marks are visibly different people's handwriting.
+ */
+interface Props {
+  /** Which of the two hand-authored marks to draw. */
+  mark: "instructor" | "director";
+  /** Accessible description; the mark is decorative when a name follows it. */
+  label?: string;
+  class?: string;
+}
+
+const { mark, label, class: className } = Astro.props;
+
+/*
+ * Both paths are authored in a 320x110 box with the writing baseline at y=84,
+ * so a caller can swap marks without re-tuning the surrounding spacing.
+ */
+const PATHS: Record<Props["mark"], readonly string[]> = {
+  instructor: [
+    // Capital G: descending bowl, closing loop, then the run of minims.
+    "M 30 80 C 20 50 38 16 60 20 C 76 23 76 45 60 55 C 45 64 32 57 36 45 C 40 33 58 29 70 39 C 82 49 84 70 78 82 C 74 90 65 89 66 79 C 68 66 80 57 92 60 C 103 63 105 73 101 81 C 97 89 88 85 92 74 C 96 63 109 55 121 58 C 132 61 134 73 130 81 C 126 89 117 85 121 74 C 125 63 138 55 150 59 C 160 62 162 74 158 82",
+    // Trailing stroke: the long flourish that crosses back under the name.
+    "M 158 82 C 154 89 147 87 150 78 C 156 60 180 48 206 53 C 228 57 249 70 260 85 C 265 92 258 96 250 89 C 239 79 234 65 243 57 C 254 47 276 52 296 68",
+  ],
+  director: [
+    // Capital D: a taller, more upright hand with a single crossing loop.
+    "M 34 86 C 40 60 46 34 52 20 C 54 14 60 15 62 22 C 68 44 70 66 66 84 C 64 92 56 92 58 83 C 62 68 82 56 98 62 C 108 66 108 78 100 83 C 92 88 84 82 88 73 C 93 62 108 56 120 61 C 130 65 130 77 122 82",
+    // Second stroke: the surname run plus a short, flat exit.
+    "M 122 82 C 114 87 108 82 114 74 C 124 61 142 55 154 62 C 162 67 160 78 152 82 C 145 86 139 80 144 71 C 151 59 168 53 182 59 C 192 63 192 76 184 82 C 196 78 214 74 232 78 C 248 82 260 88 268 94",
+  ],
+};
+
+const strokes = PATHS[mark];
+---
+
+<svg
+  class:list={["signature", className]}
+  viewBox="0 0 320 110"
+  fill="none"
+  role={label ? "img" : "presentation"}
+  aria-label={label}
+  aria-hidden={label ? undefined : "true"}
+>
+  {
+    strokes.map((d) => (
+      <path
+        d={d}
+        stroke="currentColor"
+        stroke-width="4.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    ))
+  }
+</svg>
+
+<style>
+  .signature {
+    display: block;
+    width: 100%;
+    height: auto;
+    /*
+     * Ink, not brand colour: a signature that prints orange reads as artwork.
+     * Callers set the tone by setting `color` on the wrapper.
+     */
+    overflow: visible;
+  }
+</style>

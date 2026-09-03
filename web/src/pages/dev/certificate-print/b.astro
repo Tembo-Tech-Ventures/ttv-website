@@ -1,80 +1,97 @@
 ---
-import type { CertificateView } from "@/lib/certificate/view-model";
-import CertificateActions from "./CertificateActions.astro";
-import SignatureMark from "./SignatureMark.astro";
+/**
+ * Prototype B — "landscape diploma".
+ *
+ * A print-first layout: full-bleed cream, edge to edge, rotated to landscape,
+ * with the signature carrying the bottom-left of the sheet the way a diploma
+ * does and the machine-checkable credential facing it on the right. This is
+ * the option that stops pretending the printed thing is a web card.
+ *
+ * The sheet is a size container, so every measurement below is in `cqw` and
+ * the on-screen preview is the printed sheet at a smaller scale rather than a
+ * separate layout that happens to look similar.
+ */
+import CertificateLayout from "@/layouts/CertificateLayout.astro";
+import SignatureMark from "@/components/certificate/SignatureMark.astro";
+import {
+  PROTOTYPE_VIEW as view,
+  PROTOTYPE_INSTRUCTOR_TITLE,
+} from "@/lib/certificate/prototype-fixture";
 
-interface Props {
-  view: CertificateView;
+if (!import.meta.env.DEV) {
+  return new Response("Not found", { status: 404 });
 }
-
-const { view } = Astro.props;
 
 const credential = [
   { label: "Issued", value: view.issueDate },
   { label: "Credential ID", value: view.certificateId },
+  { label: "Verify at", value: view.verifyUrl },
 ];
 ---
 
-<main class="stage">
-  <article class="sheet">
-    <div class="band" aria-hidden="true"></div>
+<CertificateLayout title="Print prototype B — landscape diploma">
+  <main class="stage">
+    <article class="sheet">
+      <div class="band" aria-hidden="true"></div>
 
-    <div class="inner">
-      <header class="head">
-        <p class="wordmark">Tembo Tech Ventures</p>
-        <div class="seal" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 12.5 9.5 18 20 6.5" />
-          </svg>
+      <div class="inner">
+        <header class="head">
+          <p class="wordmark">Tembo Tech Ventures</p>
+          <div class="seal" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M4 12.5 9.5 18 20 6.5"></path>
+            </svg>
+          </div>
+        </header>
+
+        <div class="body">
+          <h1 class="title">
+            <span class="eyebrow">Certificate of Completion</span>
+            <span class="lede">This certifies that</span>
+            <span class="name">{view.studentName}</span>
+          </h1>
+          <p class="lede lede-after">has completed</p>
+          <p class="course">{view.curriculumTitle}</p>
+          <p class="cohort">{view.programName}</p>
         </div>
-      </header>
 
-      <div class="body">
-        <h1 class="title">
-          <span class="eyebrow">Certificate of Completion</span>
-          <span class="lede">This certifies that</span>
-          <span class="name">{view.studentName}</span>
-        </h1>
-        <p class="lede lede-after">has completed</p>
-        <p class="course">{view.curriculumTitle}</p>
-        {view.programName && <p class="cohort">{view.programName}</p>}
-      </div>
-
-      <footer class="foot">
-        {view.instructorName && (
+        <footer class="foot">
           <div class="sign">
             <div class="sign-mark">
               <SignatureMark mark="instructor" />
             </div>
             <p class="sign-name">{view.instructorName}</p>
-            <p class="sign-title">Instructor</p>
+            <p class="sign-title">{PROTOTYPE_INSTRUCTOR_TITLE}</p>
           </div>
-        )}
 
-        <dl class="credential">
-          {credential.map((entry) => (
-            <div class="credential-row">
-              <dt>{entry.label}</dt>
-              <dd>{entry.value}</dd>
-            </div>
-          ))}
-          <div class="credential-row">
-            <dt>Verify at</dt>
-            <dd>
-              <span class="screen-only">{view.verifyHost}</span>
-              <span class="print-only">{view.verifyUrl}</span>
-            </dd>
-          </div>
-        </dl>
-      </footer>
-    </div>
-  </article>
-
-  <CertificateActions view={view} tone="light" />
-</main>
+          <dl class="credential">
+            {
+              credential.map((entry) => (
+                <div class="credential-row">
+                  <dt>{entry.label}</dt>
+                  <dd>{entry.value}</dd>
+                </div>
+              ))
+            }
+          </dl>
+        </footer>
+      </div>
+    </article>
+  </main>
+</CertificateLayout>
 
 <style is:global>
+  astro-dev-toolbar {
+    display: none !important;
+  }
+
   @media print {
     html,
     body {
@@ -87,10 +104,8 @@ const credential = [
   .stage {
     min-height: 100vh;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 1.75rem;
     padding: clamp(1rem, 4vw, 3rem);
     background: var(--color-dark);
   }
@@ -104,11 +119,17 @@ const credential = [
     position: relative;
     width: 100%;
     max-width: 62rem;
+    /* US Letter, landscape. A4 landscape is 1.414; the layout has slack for both. */
     aspect-ratio: 11 / 8.5;
     overflow: hidden;
     background: var(--paper);
     color: var(--ink);
     box-shadow: 0 30px 70px -35px rgb(0 0 0 / 0.8);
+    /*
+     * Everything inside is measured against the sheet rather than the viewport,
+     * so the preview above and the sheet that comes out of the printer are the
+     * same layout at two scales.
+     */
     container-type: size;
     container-name: sheet;
   }
@@ -161,6 +182,11 @@ const credential = [
     height: 2.4cqw;
   }
 
+  /*
+   * `justify-content: center` on the growing middle band keeps the recipient
+   * optically centred between the rule and the signature row whatever the
+   * course title wraps to.
+   */
   .body {
     flex: 1;
     display: flex;
@@ -238,6 +264,7 @@ const credential = [
     height: 6.5cqw;
     display: flex;
     align-items: flex-end;
+    /* Let the pen stroke cross the rule, as a real signature does. */
     margin-bottom: -1cqw;
     color: var(--ink);
   }
@@ -286,14 +313,12 @@ const credential = [
     overflow-wrap: anywhere;
   }
 
-  .screen-only {
-    display: inline;
-  }
-
-  .print-only {
-    display: none;
-  }
-
+  /*
+   * `size: landscape` rotates whatever paper the printer holds instead of
+   * forcing Letter on an A4 tray. Zero margin because the cream is full bleed;
+   * the 7cqw padding inside the sheet is the real margin, and it is wider than
+   * any consumer printer's unprintable edge.
+   */
   @page {
     size: landscape;
     margin: 0;
@@ -316,14 +341,6 @@ const credential = [
       print-color-adjust: exact;
       -webkit-print-color-adjust: exact;
       break-inside: avoid;
-    }
-
-    .screen-only {
-      display: none;
-    }
-
-    .print-only {
-      display: inline;
     }
   }
 </style>

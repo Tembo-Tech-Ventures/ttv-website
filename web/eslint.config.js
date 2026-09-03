@@ -33,6 +33,20 @@ export default [
     },
   },
   {
+    /*
+     * `page.evaluate` serialises its callback and runs it inside the browser,
+     * where `document` exists and Node's globals do not. ESLint cannot tell
+     * those callbacks apart from the surrounding Node code, so the browser
+     * globals are declared for the browser-driving scripts rather than
+     * disabled inline at each call site. Scoped to the files that need it so
+     * `no-undef` keeps working on every other script.
+     */
+    files: ["scripts/certificate-print-shots.mjs"],
+    languageOptions: {
+      globals: { document: "readonly" },
+    },
+  },
+  {
     files: ["src/env.d.ts"],
     rules: {
       "@typescript-eslint/triple-slash-reference": "off",
