@@ -8,7 +8,7 @@ const SLOW_LOAD_MS = 1_500;
  * Layout and interaction guarantees for the Ask AI page.
  *
  * These run against `/dev/chat-ui`, which renders the real `ChatApp` in the
- * real `ChatLayout` with fixed data — the authenticated `/dashboard/ask` route
+ * real `ImmersiveLayout` with fixed data — the authenticated `/dashboard/ask` route
  * is not reachable from a local dev server, and the point of these assertions
  * is the layout, which is identical.
  *

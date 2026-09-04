@@ -2,11 +2,11 @@
 /**
  * Dev-only mirror of `/dashboard/ask` with fixed data and no API calls.
  *
- * It renders the real `ChatApp` in the real `ChatLayout`, so the e2e layout
+ * It renders the real `ChatApp` in the real `ImmersiveLayout`, so the e2e layout
  * assertions exercise the shipped component rather than a lookalike — the
  * authenticated route is not reachable from a local dev server.
  */
-import ChatLayout from "@/layouts/ChatLayout.astro";
+import ImmersiveLayout from "@/layouts/ImmersiveLayout.astro";
 import ChatApp from "@/components/chat/ChatApp";
 import { MOCK_LATENCY_MS, MOCK_LOAD_MS } from "@/components/chat/mock-timing";
 import type { ChatMessage } from "@/components/chat/types";
@@ -278,7 +278,7 @@ const transcripts: Record<string, ChatMessage[]> = {
 };
 ---
 
-<ChatLayout title="Chat UI Mock | TTV">
+<ImmersiveLayout title="Chat UI Mock | TTV">
   <ChatApp
     client:load
     mockMode
@@ -288,7 +288,7 @@ const transcripts: Record<string, ChatMessage[]> = {
     mockLatencyMs={mockLatencyMs}
     mockLoadMs={mockLoadMs}
   />
-</ChatLayout>
+</ImmersiveLayout>
 
 <style is:global>
   astro-dev-toolbar {

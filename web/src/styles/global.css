@@ -116,3 +116,83 @@
     }
   }
 }
+
+/*
+ * The post editor's writing surface.
+ *
+ * These are utilities rather than Tailwind classes on the nodes because Lexical
+ * owns the DOM inside the canvas: it renders elements from its own theme map,
+ * so anything more structural than a class name has nowhere to be written. The
+ * values match `renderPostHtml`'s output on the published page — what the
+ * author sees while writing should be within a hair of what readers get.
+ */
+@layer components {
+  .post-body {
+    font-size: 1.125rem;
+    line-height: 1.8;
+    color: var(--color-ink-primary);
+  }
+
+  .post-code-block {
+    display: block;
+    margin: 1.5rem 0;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--color-rule);
+    border-radius: 0.75rem;
+    background-color: color-mix(in srgb, var(--color-dark) 70%, transparent);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.9rem;
+    line-height: 1.7;
+    /* `pre-wrap` rather than `pre`: a long line has to wrap, because a code
+     * block that scrolls sideways is a second scrolling surface on a page whose
+     * whole layout exists to have exactly one. */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    tab-size: 2;
+  }
+
+  .post-hr {
+    margin: 2.5rem 0;
+    border: 0;
+    border-top: 1px solid var(--color-rule);
+  }
+
+  /* Lexical draws a task list's checkbox itself; without this the items render
+   * as unmarked text and the checked state is invisible. */
+  .post-checkbox {
+    position: relative;
+    list-style: none;
+    padding-left: 1.75rem;
+    outline: none;
+  }
+
+  .post-checkbox::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.45em;
+    width: 1.05rem;
+    height: 1.05rem;
+    border: 1px solid var(--color-teal);
+    border-radius: 0.3rem;
+    background-color: color-mix(in srgb, var(--color-dark) 50%, transparent);
+    cursor: pointer;
+  }
+
+  .post-checkbox[aria-checked="true"]::before {
+    border-color: var(--color-primary);
+    background-color: var(--color-primary);
+  }
+
+  .post-checkbox[aria-checked="true"]::after {
+    content: "";
+    position: absolute;
+    left: 0.36rem;
+    top: 0.68em;
+    width: 0.3rem;
+    height: 0.6rem;
+    border: solid var(--color-dark);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+}

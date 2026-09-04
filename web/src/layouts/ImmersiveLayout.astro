@@ -2,8 +2,12 @@
 /**
  * A chrome-free shell for routes that should own the whole viewport.
  *
- * It deliberately does not extend BaseLayout: a chat page needs a different
- * viewport meta (`viewport-fit=cover` so the composer can pad past the iOS home
+ * Used by the two routes where the app gets out of the way — Ask AI and the
+ * post editor. Both put a fixed control strip against the bottom of the screen
+ * above a keyboard, which is the whole reason this layout exists.
+ *
+ * It deliberately does not extend BaseLayout: these pages need a different
+ * viewport meta (`viewport-fit=cover` so a bottom bar can pad past the iOS home
  * indicator, `interactive-widget=resizes-content` so the on-screen keyboard
  * shrinks the layout instead of sliding it out from under the browser) and a
  * document that cannot scroll at all. Everything inside is sized against
@@ -12,10 +16,10 @@
 import "@/styles/global.css";
 
 interface Props {
-  title?: string;
+  title: string;
 }
 
-const { title = "Ask AI | Tembo Tech Ventures" } = Astro.props;
+const { title } = Astro.props;
 ---
 
 <!doctype html>
@@ -30,7 +34,7 @@ const { title = "Ask AI | Tembo Tech Ventures" } = Astro.props;
     <title>{title}</title>
   </head>
   <body class="h-full overflow-hidden overscroll-none bg-dark">
-    <div class="chat-viewport flex flex-col bg-gradient-to-br from-surface to-dark">
+    <div class="immersive-viewport flex flex-col bg-gradient-to-br from-surface to-dark">
       {/* Children are flex items in a container of definite height: any child
           that wants to scroll needs `min-h-0 flex-1` plus `overflow-y-auto`. */}
       <slot />
@@ -41,10 +45,10 @@ const { title = "Ask AI | Tembo Tech Ventures" } = Astro.props;
         overscroll-behavior: none;
       }
 
-      .chat-viewport {
+      .immersive-viewport {
         /*
          * `svh` first as the safe fallback — plain `vh` is `lvh`, sized as if
-         * the browser chrome were retracted, which is what pushes a composer
+         * the browser chrome were retracted, which is what pushes a bottom bar
          * below the fold on a phone. `dvh` then wins wherever it is supported.
          * Nothing here scrolls the document, so `dvh` resolves once and does
          * not thrash layout the way it would on a scrolling page.
@@ -60,7 +64,7 @@ const { title = "Ask AI | Tembo Tech Ventures" } = Astro.props;
       /*
        * The keyboard is the one part of this that CSS cannot carry alone. Under
        * the default `interactive-widget=resizes-visual`, `100dvh` does NOT
-       * shrink when the on-screen keyboard opens, so the composer ends up
+       * shrink when the on-screen keyboard opens, so the bottom bar ends up
        * underneath it. `interactive-widget=resizes-content` in the viewport meta
        * fixes Chrome Android and Firefox; WebKit has not implemented it
        * (bugs.webkit.org #259770 is still open), so iOS needs the measurement

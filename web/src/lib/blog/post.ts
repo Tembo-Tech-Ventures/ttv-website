@@ -2,7 +2,9 @@ import { z } from "zod";
 
 const MAX_CONTENT_LENGTH = 40_000;
 const MAX_TITLE_LENGTH = 200;
-const MAX_EXCERPT_LENGTH = 300;
+
+/** Exported so the editor's counter and the validator cannot drift apart. */
+export const MAX_EXCERPT_LENGTH = 300;
 
 export const WORDS_PER_MINUTE = 200;
 

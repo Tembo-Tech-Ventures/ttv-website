@@ -81,7 +81,7 @@
       }
     },
     {
-      "files": ["src/layouts/BaseLayout.astro", "src/layouts/ChatLayout.astro"],
+      "files": ["src/layouts/BaseLayout.astro", "src/layouts/ImmersiveLayout.astro"],
       "rules": {
         "import/no-unassigned-import": "off"
       }

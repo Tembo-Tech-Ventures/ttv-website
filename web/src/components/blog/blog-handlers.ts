@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 import { postEditorSchema, deriveExcerpt, estimateReadingMinutes } from "@/lib/blog/post";
@@ -20,9 +20,33 @@ export interface PostFormResult {
   error?: string;
   slugError?: string;
   fieldErrors?: Record<string, string>;
+  /**
+   * What was actually stored, for callers that show it back. The editor's
+   * autosave uses this so the metadata panel reports the derived slug, excerpt
+   * and reading time the server settled on rather than its own guess.
+   */
+  saved?: {
+    slug: string;
+    excerpt: string;
+    readingMinutes: number;
+  };
 }
 
-function extractPostFormData(formData: FormData) {
+/**
+ * The fields a post editor submits. Named separately from `FormData` so the
+ * JSON autosave endpoint and the plain `<form>` fallback validate through
+ * exactly the same path — two spellings of "save a post" would eventually
+ * disagree about something, and it would be the one nobody tested.
+ */
+export interface PostInput {
+  title: string;
+  slug: string;
+  contentMarkdown: string;
+  excerpt?: string;
+  coverImageAlt?: string;
+}
+
+export function postInputFromFormData(formData: FormData): PostInput {
   return {
     title: (formData.get("title") as string) || "",
     slug: (formData.get("slug") as string) || "",
@@ -61,11 +85,9 @@ async function validatePostSlug(
 export async function savePost(
   db: Database,
   profileId: string,
-  formData: FormData,
+  data: PostInput,
   existingPostId?: string,
 ): Promise<PostFormResult> {
-  const data = extractPostFormData(formData);
-
   const slug = data.slug || slugifyTitle(data.title);
   const slugResult = await validatePostSlug(slug, profileId, db, existingPostId);
   if (!slugResult.ok) {
@@ -99,17 +121,33 @@ export async function savePost(
     coverImageAlt: parsed.data.coverImageAlt ?? null,
   };
 
+  const saved = {
+    slug: values.slug,
+    excerpt: values.excerpt,
+    readingMinutes: values.readingMinutes,
+  };
+
   if (existingPostId) {
-    await db
+    const updated = await db
       .update(schema.blogPost)
       .set(values)
       .where(
         and(
           eq(schema.blogPost.id, existingPostId),
           eq(schema.blogPost.profileId, profileId),
+          // A suspended post is read-only. The page hides the editor for one,
+          // but the POST handler and the autosave endpoint are reachable
+          // without it, and an author who kept typing through a takedown would
+          // otherwise keep rewriting the content an admin removed.
+          ne(schema.blogPost.status, "SUSPENDED"),
         ),
-      );
-    return { success: true, postId: existingPostId };
+      )
+      .returning({ id: schema.blogPost.id });
+
+    if (updated.length === 0) {
+      return { success: false, error: "This post can no longer be edited" };
+    }
+    return { success: true, postId: existingPostId, saved };
   }
 
   const [inserted] = await db
@@ -121,7 +159,7 @@ export async function savePost(
     })
     .returning({ id: schema.blogPost.id });
 
-  return { success: true, postId: inserted.id };
+  return { success: true, postId: inserted.id, saved };
 }
 
 export async function publishPost(
@@ -226,4 +264,77 @@ export async function deletePost(
     );
 
   return { success: true };
+}
+
+/**
+ * The actions a post editor form can ask for.
+ *
+ * `publish` and `unpublish` save first. The editor's forms carry the whole
+ * draft rather than an id, so pressing Publish cannot publish a copy of the
+ * post that is one autosave behind what is on screen.
+ */
+export type PostAction = "save" | "publish" | "unpublish" | "delete";
+
+const POST_ACTIONS = new Set<PostAction>([
+  "save",
+  "publish",
+  "unpublish",
+  "delete",
+]);
+
+export function parsePostAction(value: unknown): PostAction {
+  return typeof value === "string" && POST_ACTIONS.has(value as PostAction)
+    ? (value as PostAction)
+    : "save";
+}
+
+export interface PostActionOutcome {
+  result: PostFormResult;
+  /** Where to send the browser next, if the action changed which page applies. */
+  redirectTo?: string;
+}
+
+export async function handlePostAction(
+  db: Database,
+  profileId: string,
+  formData: FormData,
+  existingPostId?: string,
+): Promise<PostActionOutcome> {
+  const action = parsePostAction(formData.get("_action"));
+
+  if (action === "delete") {
+    if (!existingPostId) {
+      return { result: { success: false, error: "Post not found" } };
+    }
+    const result = await deletePost(db, profileId, existingPostId);
+    return result.success
+      ? { result, redirectTo: "/dashboard/writing" }
+      : { result };
+  }
+
+  const saved = await savePost(
+    db,
+    profileId,
+    postInputFromFormData(formData),
+    existingPostId,
+  );
+  if (!saved.success || !saved.postId) return { result: saved };
+
+  if (action === "save") {
+    // A post that has just been created lives at a different URL than the one
+    // the form was submitted to, and leaving the browser on /new would make the
+    // next save create a second post.
+    return existingPostId
+      ? { result: saved }
+      : { result: saved, redirectTo: `/dashboard/writing/${saved.postId}` };
+  }
+
+  const transitioned =
+    action === "publish"
+      ? await publishPost(db, profileId, saved.postId)
+      : await unpublishPost(db, profileId, saved.postId);
+
+  return transitioned.success
+    ? { result: transitioned, redirectTo: `/dashboard/writing/${saved.postId}` }
+    : { result: transitioned };
 }
