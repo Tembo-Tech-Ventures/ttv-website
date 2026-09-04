@@ -222,7 +222,6 @@ describe("renderPostHtml", () => {
   // ─── XSS: URL scheme injection ─────────────────────────
   // allowDangerousHtml: false does NOT block these — rehype-sanitize's
   // protocol allowlist is the sole defense here.
-  /* eslint-disable no-script-url */
 
   it("strips javascript: from a markdown link", async () => {
     const html = await renderPostHtml("[click](javascript:alert(1))");

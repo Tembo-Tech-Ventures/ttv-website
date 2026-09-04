@@ -19,6 +19,11 @@ export const ALLOWLISTED_ADVISORIES = new Set([
   // sharp (transitive via astro's build-time asset pipeline); fix ships with
   // the same Astro major.
   "GHSA-f88m-g3jw-g9cj",
+  // browserslist: unbounded memory growth and crash via crafted stats JSON.
+  // Transitive dep (via Tailwind/Autoprefixer); we never pass user-supplied
+  // queries or custom stats files. Fix requires upstream major.
+  "GHSA-c83g-rgw3-j3cx",
+  "GHSA-73wf-gq98-2v4g",
 ]);
 
 const FAILING_SEVERITIES = new Set(["high", "critical"]);
