@@ -31,7 +31,6 @@
     "@astrojs/react": "^5.0.7",
     "@cloudflare/containers": "^0.3.7",
     "@headlessui/react": "^2.2.10",
-    "@lexical/clipboard": "^0.50.0",
     "@lexical/code-core": "^0.50.0",
     "@lexical/link": "^0.50.0",
     "@lexical/list": "^0.50.0",
