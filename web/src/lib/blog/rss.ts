@@ -1,5 +1,5 @@
 import type { FeedItem } from "./feed";
-import { SITE_NAME } from "../seo";
+import { SITE_NAME } from "@/lib/seo";
 
 function escapeXml(s: string): string {
   return s

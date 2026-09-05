@@ -188,7 +188,7 @@ export function effectiveSlug(draft: PostDraft): string {
  */
 export function wordCount(markdown: string): number {
   const matches = markdown
-    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/(?:```[\s\S]*?```|~~~[\s\S]*?~~~)/g, " ")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/^\s*>+/gm, " ")

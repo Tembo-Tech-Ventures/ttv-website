@@ -50,9 +50,11 @@ Markdown string, because the editor legitimately rewrites punctuation — `* ite
 comes back as `- item` — and a string comparison would fail on that while
 missing the differences that matter.
 
-Constructs the editor has no transformer for (tables, footnotes, raw HTML,
-images, reference links) are kept as literal text and written back untouched.
-They show as raw Markdown while writing, and render correctly once published.
+Constructs the editor has no transformer for (tables, footnotes, reference
+links) are kept as literal text and written back untouched. They show as raw
+Markdown while writing but render correctly once published. Raw HTML and images
+are also preserved in Markdown, but `POST_SANITIZE_SCHEMA` strips them during
+rendering, so they will not appear on the published page.
 
 ### Saving
 

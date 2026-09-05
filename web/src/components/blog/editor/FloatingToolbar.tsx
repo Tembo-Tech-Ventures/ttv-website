@@ -184,6 +184,12 @@ export default function FloatingToolbar({ anchorRef }: FloatingToolbarProps) {
         ? anchor.clientWidth / 2
         : Math.min(Math.max(state.placement.left, min), max);
     element.style.left = `${left}px`;
+
+    const above = state.placement.top - OFFSET - element.offsetHeight;
+    element.style.top =
+      above < anchor.scrollTop + EDGE_MARGIN
+        ? `${state.placement.top + OFFSET + element.offsetHeight}px`
+        : `${state.placement.top - OFFSET}px`;
   }, [anchorRef, linkDraft, state.placement]);
 
   const { placement } = state;

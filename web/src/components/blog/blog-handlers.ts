@@ -46,13 +46,18 @@ export interface PostInput {
   coverImageAlt?: string;
 }
 
+function str(formData: FormData, name: string): string {
+  const v = formData.get(name);
+  return typeof v === "string" ? v : "";
+}
+
 export function postInputFromFormData(formData: FormData): PostInput {
   return {
-    title: (formData.get("title") as string) || "",
-    slug: (formData.get("slug") as string) || "",
-    contentMarkdown: (formData.get("contentMarkdown") as string) || "",
-    excerpt: (formData.get("excerpt") as string) || undefined,
-    coverImageAlt: (formData.get("coverImageAlt") as string) || undefined,
+    title: str(formData, "title"),
+    slug: str(formData, "slug"),
+    contentMarkdown: str(formData, "contentMarkdown"),
+    excerpt: str(formData, "excerpt") || undefined,
+    coverImageAlt: str(formData, "coverImageAlt") || undefined,
   };
 }
 
@@ -183,7 +188,7 @@ export async function publishPost(
     return { success: false, error: "This post cannot be published from its current status" };
   }
 
-  await db
+  const result = await db
     .update(schema.blogPost)
     .set({
       status: "PUBLISHED",
@@ -193,8 +198,13 @@ export async function publishPost(
       and(
         eq(schema.blogPost.id, postId),
         eq(schema.blogPost.profileId, profileId),
+        eq(schema.blogPost.status, "DRAFT"),
       ),
     );
+
+  if (!result.meta.changes) {
+    return { success: false, error: "Post status changed concurrently" };
+  }
 
   return { success: true, postId };
 }
@@ -220,15 +230,20 @@ export async function unpublishPost(
     return { success: false, error: "This post cannot be unpublished from its current status" };
   }
 
-  await db
+  const result = await db
     .update(schema.blogPost)
     .set({ status: "DRAFT" })
     .where(
       and(
         eq(schema.blogPost.id, postId),
         eq(schema.blogPost.profileId, profileId),
+        eq(schema.blogPost.status, "PUBLISHED"),
       ),
     );
+
+  if (!result.meta.changes) {
+    return { success: false, error: "Post status changed concurrently" };
+  }
 
   return { success: true, postId };
 }
@@ -254,14 +269,19 @@ export async function deletePost(
     return { success: false, error: "Only draft posts can be deleted" };
   }
 
-  await db
+  const result = await db
     .delete(schema.blogPost)
     .where(
       and(
         eq(schema.blogPost.id, postId),
         eq(schema.blogPost.profileId, profileId),
+        eq(schema.blogPost.status, "DRAFT"),
       ),
     );
+
+  if (!result.meta.changes) {
+    return { success: false, error: "Post status changed concurrently" };
+  }
 
   return { success: true };
 }

@@ -87,7 +87,9 @@ type StateName = keyof typeof STATES;
 
 const requested = Astro.url.searchParams.get("state");
 const name: StateName =
-  requested && requested in STATES ? (requested as StateName) : "draft";
+  requested && Object.prototype.hasOwnProperty.call(STATES, requested)
+    ? (requested as StateName)
+    : "draft";
 const state = STATES[name];
 ---
 

@@ -19,11 +19,21 @@ import {
 // layer down instead, which also keeps the real validation in the path.
 const findFirst = vi.fn();
 const returning = vi.fn();
+
+function withReturning(changes = 1) {
+  const resolved = { meta: { changes } };
+  const p = Promise.resolve(resolved) as Promise<typeof resolved> & {
+    returning: typeof returning;
+  };
+  p.returning = returning;
+  return p;
+}
+
 const db = {
   query: { blogPost: { findFirst } },
-  update: () => ({ set: () => ({ where: () => ({ returning }) }) }),
+  update: () => ({ set: () => ({ where: () => withReturning() }) }),
   insert: () => ({ values: () => ({ returning }) }),
-  delete: () => ({ where: () => Promise.resolve() }),
+  delete: () => ({ where: () => Promise.resolve({ meta: { changes: 1 } }) }),
 } as unknown as Database;
 
 /**
@@ -143,7 +153,7 @@ describe("handlePostAction", () => {
       .mockResolvedValueOnce(undefined)
       // Then `publishPost` reads the post it is about to transition.
       .mockResolvedValue({ status: "DRAFT", publishedAt: null });
-    const set = vi.fn((_values: unknown) => ({ where: () => ({ returning }) }));
+    const set = vi.fn((_values: unknown) => ({ where: () => withReturning() }));
     const publishing = {
       ...db,
       update: () => ({ set }),
@@ -170,7 +180,7 @@ describe("handlePostAction", () => {
   });
 
   it("does not change status when the save is rejected", async () => {
-    const set = vi.fn((_values: unknown) => ({ where: () => ({ returning }) }));
+    const set = vi.fn((_values: unknown) => ({ where: () => withReturning() }));
     const rejecting = { ...db, update: () => ({ set }) } as unknown as Database;
 
     const outcome = await handlePostAction(
@@ -257,7 +267,7 @@ describe("handlePostAction", () => {
   it("reports a rejected slug without touching the post", async () => {
     // Another post of this author's already owns the slug.
     findFirst.mockResolvedValue({ id: "other-post" });
-    const set = vi.fn((_values: unknown) => ({ where: () => ({ returning }) }));
+    const set = vi.fn((_values: unknown) => ({ where: () => withReturning() }));
     const clashing = { ...db, update: () => ({ set }) } as unknown as Database;
 
     const outcome = await handlePostAction(

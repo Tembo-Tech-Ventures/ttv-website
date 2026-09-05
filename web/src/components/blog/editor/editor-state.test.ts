@@ -244,8 +244,12 @@ describe("wordCount", () => {
     expect(wordCount("see [the docs](https://example.com/deep/path)")).toBe(3);
   });
 
-  it("ignores fenced code blocks", () => {
+  it("ignores backtick-fenced code blocks", () => {
     expect(wordCount("intro text\n\n```\nconst x = 1;\n```\n\nafter")).toBe(3);
+  });
+
+  it("ignores tilde-fenced code blocks", () => {
+    expect(wordCount("intro text\n\n~~~\nconst x = 1;\n~~~\n\nafter")).toBe(3);
   });
 
   it("keeps hyphenated and apostrophised words whole", () => {
