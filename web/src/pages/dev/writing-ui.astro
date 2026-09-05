@@ -1,0 +1,115 @@
+---
+/**
+ * Dev-only mirror of `/dashboard/writing/[id]` with fixed data and no API calls.
+ *
+ * It renders the real `PostEditor` in the real `ImmersiveLayout`, so the layout
+ * assertions and the screenshots exercise the shipped component — the
+ * authenticated route needs a session and a published profile, neither of which
+ * a local dev server has.
+ *
+ * `?state=` picks which post is being edited, because the states worth looking
+ * at are not reachable from one another: an empty new post, a draft mid-write,
+ * and a published post whose controls differ.
+ */
+import ImmersiveLayout from "@/layouts/ImmersiveLayout.astro";
+import PostEditor from "@/components/blog/editor/PostEditor";
+import { deriveExcerpt, estimateReadingMinutes } from "@/lib/blog/post";
+
+if (!import.meta.env.DEV) {
+  return new Response("Not found", { status: 404 });
+}
+
+const BODY = [
+  "We spent the first week of the cohort talking to people instead of writing code, and it changed the whole shape of what we built.",
+  "",
+  "# What we heard",
+  "",
+  "Three things came up in **every** conversation:",
+  "",
+  "- The tool they have is slow enough that they avoid it.",
+  "- Nobody trusts the numbers it reports.",
+  "- Everyone keeps a spreadsheet on the side.",
+  "",
+  "> The spreadsheet is the product. The tool is the invoice.",
+  "",
+  "## What we changed",
+  "",
+  "We cut the roadmap down to the one workflow those quotes justified, and wrote the reasoning down in [the plan](https://example.com/plan) so we could argue with it later.",
+  "",
+  "```ts",
+  "const scope = features.filter(isJustifiedByAQuote);",
+  "```",
+  "",
+  "---",
+  "",
+  "Next week: ten more conversations, and the first thing anyone can click.",
+].join("\n");
+
+const STATES = {
+  empty: {
+    title: "New post | TTV",
+    postId: null as string | null,
+    status: "DRAFT" as const,
+    draft: { title: "", slug: "", excerpt: "", contentMarkdown: "" },
+    updatedLabel: null as string | null,
+    publishedLabel: null as string | null,
+  },
+  draft: {
+    title: "Draft | TTV",
+    postId: "mock-draft",
+    status: "DRAFT" as const,
+    draft: {
+      title: "What ten conversations changed about our roadmap",
+      slug: "",
+      excerpt: "",
+      contentMarkdown: BODY,
+    },
+    updatedLabel: "Sep 4, 2026",
+    publishedLabel: null as string | null,
+  },
+  published: {
+    title: "Published | TTV",
+    postId: "mock-published",
+    status: "PUBLISHED" as const,
+    draft: {
+      title: "What ten conversations changed about our roadmap",
+      slug: "ten-conversations",
+      excerpt:
+        "We spent the first week talking to people instead of writing code, and cut the roadmap to what the quotes justified.",
+      contentMarkdown: BODY,
+    },
+    updatedLabel: "Sep 4, 2026",
+    publishedLabel: "Sep 2, 2026",
+  },
+} as const;
+
+type StateName = keyof typeof STATES;
+
+const requested = Astro.url.searchParams.get("state");
+const name: StateName =
+  requested && Object.prototype.hasOwnProperty.call(STATES, requested)
+    ? (requested as StateName)
+    : "draft";
+const state = STATES[name];
+---
+
+<ImmersiveLayout title={state.title}>
+  <PostEditor
+    client:load
+    mockMode
+    postId={state.postId}
+    status={state.status}
+    initialDraft={state.draft}
+    handle="amara"
+    initialReadingMinutes={estimateReadingMinutes(state.draft.contentMarkdown)}
+    initialDerivedExcerpt={deriveExcerpt(state.draft.contentMarkdown)}
+    updatedLabel={state.updatedLabel}
+    publishedLabel={state.publishedLabel}
+  />
+</ImmersiveLayout>
+
+<style is:global>
+  astro-dev-toolbar {
+    display: none !important;
+  }
+</style>

@@ -7,6 +7,12 @@ export const PROFILE_TRANSITIONS: TransitionMap = {
   SUSPENDED: ["PUBLISHED"],
 };
 
+export const POST_TRANSITIONS: TransitionMap = {
+  DRAFT: ["PUBLISHED"],
+  PUBLISHED: ["DRAFT", "SUSPENDED"],
+  SUSPENDED: ["DRAFT"],
+};
+
 export const PROJECT_TRANSITIONS: TransitionMap = {
   PENDING: ["APPROVED", "REJECTED"],
   APPROVED: ["CLOSED", "MATCHED"],

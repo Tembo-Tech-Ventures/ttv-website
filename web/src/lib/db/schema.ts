@@ -501,6 +501,7 @@ export const studentProfileRelations = relations(
     highlights: many(profileHighlight),
     contacts: many(profileContact),
     projectInterests: many(projectInterest),
+    posts: many(blogPost),
   })
 );
 
@@ -571,6 +572,58 @@ export const profileContactRelations = relations(
     }),
   })
 );
+
+// ─── BlogPost ─────────────────────────────────────────────
+
+export const blogPost = sqliteTable(
+  "blogPost",
+  {
+    id: cuid("id"),
+    profileId: text("profileId")
+      .notNull()
+      .references(() => studentProfile.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    excerpt: text("excerpt"),
+    contentMarkdown: text("contentMarkdown").notNull(),
+    contentHtml: text("contentHtml").notNull().default(""),
+    renderedWith: integer("renderedWith").notNull().default(0),
+    coverImageKey: text("coverImageKey"),
+    coverImageAlt: text("coverImageAlt"),
+    readingMinutes: integer("readingMinutes").notNull().default(1),
+    status: text("status", {
+      enum: ["DRAFT", "PUBLISHED", "SUSPENDED"],
+    })
+      .notNull()
+      .default("DRAFT"),
+    adminNote: text("adminNote"),
+    publishedAt: integer("publishedAt", { mode: "timestamp" }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("blogPost_profileId_slug_unique").on(
+      table.profileId,
+      table.slug
+    ),
+    index("blogPost_status_publishedAt_idx").on(
+      table.status,
+      table.publishedAt
+    ),
+    index("blogPost_profileId_status_publishedAt_idx").on(
+      table.profileId,
+      table.status,
+      table.publishedAt
+    ),
+    index("blogPost_renderedWith_idx").on(table.renderedWith),
+  ]
+);
+
+export const blogPostRelations = relations(blogPost, ({ one }) => ({
+  profile: one(studentProfile, {
+    fields: [blogPost.profileId],
+    references: [studentProfile.id],
+  }),
+}));
 
 // ─── ClientProject ────────────────────────────────────────
 

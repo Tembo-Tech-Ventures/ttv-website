@@ -1,0 +1,78 @@
+---
+/**
+ * A post that does not exist yet.
+ *
+ * Nothing is written on GET. Opening the editor and changing your mind should
+ * not leave an empty draft behind, so the row is created by the first autosave
+ * — or by the first form submission without scripting — and the browser is sent
+ * to `/dashboard/writing/<id>` once it exists.
+ */
+import ImmersiveLayout from "@/layouts/ImmersiveLayout.astro";
+import PostEditor from "@/components/blog/editor/PostEditor";
+import PlainPostForm from "@/components/blog/editor/PlainPostForm.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+import { env } from "cloudflare:workers";
+import {
+  handlePostAction,
+  postInputFromFormData,
+  type PostFormResult,
+} from "@/components/blog/blog-handlers";
+
+const user = Astro.locals.user!;
+const db = drizzle(env.DB, { schema });
+
+const profile = await db.query.studentProfile.findFirst({
+  where: eq(schema.studentProfile.userId, user.id),
+  columns: { id: true, status: true, handle: true },
+});
+
+if (!profile || profile.status !== "PUBLISHED") {
+  return Astro.redirect("/dashboard/writing");
+}
+
+let result: PostFormResult | null = null;
+let draft = { title: "", slug: "", excerpt: "", contentMarkdown: "" };
+
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  const submitted = postInputFromFormData(formData);
+  // Keep what was typed on screen: a rejected slug should not also cost the
+  // author the post they just wrote.
+  draft = {
+    title: submitted.title,
+    slug: submitted.slug,
+    excerpt: submitted.excerpt ?? "",
+    contentMarkdown: submitted.contentMarkdown,
+  };
+
+  const outcome = await handlePostAction(db, profile.id, formData);
+  result = outcome.result;
+  if (outcome.redirectTo) return Astro.redirect(outcome.redirectTo);
+}
+---
+
+<ImmersiveLayout title="New post | TTV">
+  <PostEditor
+    client:load
+    postId={null}
+    status="DRAFT"
+    initialDraft={draft}
+    handle={profile.handle}
+    initialReadingMinutes={1}
+    initialDerivedExcerpt=""
+    updatedLabel={null}
+    publishedLabel={null}
+    serverError={result && !result.success ? (result.error ?? null) : null}
+    serverSlugError={result?.slugError ?? null}
+  />
+
+  <PlainPostForm
+    draft={draft}
+    status="DRAFT"
+    error={result && !result.success
+      ? (result.error ?? result.slugError ?? null)
+      : null}
+  />
+</ImmersiveLayout>

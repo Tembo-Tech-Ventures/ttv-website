@@ -33,7 +33,7 @@ test.describe("public certificate page", () => {
 
     // The credential id and verification host are what make the page checkable,
     // so they must survive any future restyling.
-    await expect(page.getByText("ttv-fixture-app-amina")).toBeVisible();
+    await expect(page.getByText("ttv-fixture-app-amina", { exact: true })).toBeVisible();
     await expect(page.getByText("Verify at")).toBeVisible();
 
     await page.screenshot({ path: evidence("certificate"), fullPage: true });

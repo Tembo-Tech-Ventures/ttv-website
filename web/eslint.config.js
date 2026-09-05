@@ -25,6 +25,12 @@ export default [
         fetch: "readonly",
         URL: "readonly",
         Response: "readonly",
+        // Browser globals, for the bodies of `page.evaluate` callbacks. Those
+        // run in the page rather than in Node, and are lexically inside these
+        // files with no way for the linter to tell the difference.
+        document: "readonly",
+        window: "readonly",
+        NodeFilter: "readonly",
       },
     },
     rules: {

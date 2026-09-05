@@ -59,7 +59,7 @@ interface ChatAppProps {
  * The Ask AI page.
  *
  * Layout contract, which the rest of the components depend on: this renders
- * inside `ChatLayout`, a container of definite height that cannot scroll. The
+ * inside `ImmersiveLayout`, a container of definite height that cannot scroll. The
  * header, the conversation rail and the composer are fixed-size flex children;
  * the transcript is the only region with `overflow-y-auto`. Anything added here
  * must keep that true, or the composer starts sliding off the bottom of a phone

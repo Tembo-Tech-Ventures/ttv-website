@@ -62,6 +62,12 @@ describe("extractProfileFormData", () => {
 function mockDb(overrides: {
   findProfile?: unknown;
   findProfileByHandle?: unknown;
+  /**
+   * Row returned to the handle-lock lookup in `saveProfile`, which is the only
+   * query selecting `publishedAt`. Defaults to null so existing cases behave as
+   * an unpublished profile and the lock stays out of the way.
+   */
+  findProfileForLock?: { handle: string; publishedAt: Date | null } | null;
   insertProfile?: () => void;
   updateProfile?: () => void;
 } = {}) {
@@ -71,7 +77,12 @@ function mockDb(overrides: {
   return {
     query: {
       studentProfile: {
-        findFirst: vi.fn(async (opts?: { where?: unknown; columns?: unknown }) => {
+        findFirst: vi.fn(async (opts?: { where?: unknown; columns?: Record<string, unknown> }) => {
+          // Dispatch on requested columns: `saveProfile` issues two distinct
+          // lookups (handle lock, then handle uniqueness) against this mock.
+          if (opts?.columns && "publishedAt" in opts.columns) {
+            return overrides.findProfileForLock ?? null;
+          }
           if (opts?.where && typeof opts.where === "function") {
             return overrides.findProfile ?? null;
           }
@@ -224,6 +235,87 @@ describe("saveProfile", () => {
       "profile-1",
     );
     expect(result.success).toBe(true);
+  });
+
+  // A published handle is part of every blog post permalink
+  // (`/blog/[handle]/[slug]`), so renaming would 404 every post.
+  describe("handle lock after publish", () => {
+    it("rejects a handle change once the profile is published", async () => {
+      const updateFn = vi.fn();
+      const db = mockDb({
+        findProfileForLock: {
+          handle: "old-handle",
+          publishedAt: new Date("2026-01-01"),
+        },
+        updateProfile: updateFn,
+      });
+
+      const fd = makeFormData({ handle: "new-handle", headline: "Dev" });
+      const result = await saveProfile(db as never, "user-1", fd, "profile-1");
+
+      expect(result.success).toBe(false);
+      expect(result.handleError).toBe(
+        "Your handle is locked once your profile is published, because it is part of your post links.",
+      );
+      // The assertion that actually matters: nothing was written. Without it a
+      // mutant that returns the error but still updates would pass.
+      expect(updateFn).not.toHaveBeenCalled();
+    });
+
+    it("allows saving other fields when the published handle is unchanged", async () => {
+      const updateFn = vi.fn();
+      const db = mockDb({
+        findProfileForLock: {
+          handle: "existing-user",
+          publishedAt: new Date("2026-01-01"),
+        },
+        findProfileByHandle: { id: "profile-1" },
+        updateProfile: updateFn,
+      });
+
+      const fd = makeFormData({
+        handle: "existing-user",
+        headline: "Updated headline",
+      });
+      const result = await saveProfile(db as never, "user-1", fd, "profile-1");
+
+      expect(result.success).toBe(true);
+      expect(updateFn).toHaveBeenCalledTimes(1);
+    });
+
+    it("treats a differently-cased submission of the same handle as unchanged", async () => {
+      const updateFn = vi.fn();
+      const db = mockDb({
+        findProfileForLock: {
+          handle: "existing-user",
+          publishedAt: new Date("2026-01-01"),
+        },
+        findProfileByHandle: { id: "profile-1" },
+        updateProfile: updateFn,
+      });
+
+      const fd = makeFormData({ handle: "  Existing-User  " });
+      const result = await saveProfile(db as never, "user-1", fd, "profile-1");
+
+      expect(result.success).toBe(true);
+      expect(result.handleError).toBeUndefined();
+      expect(updateFn).toHaveBeenCalledTimes(1);
+    });
+
+    it("allows a handle change while the profile is still unpublished", async () => {
+      const updateFn = vi.fn();
+      const db = mockDb({
+        findProfileForLock: { handle: "old-handle", publishedAt: null },
+        findProfileByHandle: null,
+        updateProfile: updateFn,
+      });
+
+      const fd = makeFormData({ handle: "new-handle" });
+      const result = await saveProfile(db as never, "user-1", fd, "profile-1");
+
+      expect(result.success).toBe(true);
+      expect(updateFn).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("rejects skills exceeding max 12", async () => {

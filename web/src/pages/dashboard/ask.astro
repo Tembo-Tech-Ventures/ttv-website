@@ -5,13 +5,13 @@
  * This is the one dashboard route that does not use `DashboardLayout`. A chat
  * needs the whole viewport — the shell's header and the page's own scrolling
  * pushed the composer off the bottom of a phone screen — so it uses
- * `ChatLayout` and carries its own way back into the dashboard instead.
+ * `ImmersiveLayout` and carries its own way back into the dashboard instead.
  * Auth is still enforced by middleware on `/dashboard/*`.
  */
-import ChatLayout from "@/layouts/ChatLayout.astro";
+import ImmersiveLayout from "@/layouts/ImmersiveLayout.astro";
 import ChatApp from "@/components/chat/ChatApp";
 ---
 
-<ChatLayout title="Ask AI | Tembo Tech Ventures">
+<ImmersiveLayout title="Ask AI | Tembo Tech Ventures">
   <ChatApp client:load />
-</ChatLayout>
+</ImmersiveLayout>

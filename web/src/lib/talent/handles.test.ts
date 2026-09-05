@@ -120,4 +120,25 @@ describe("validateHandle", () => {
       expect(RESERVED_HANDLES.has(h)).toBe(true);
     }
   });
+
+  // Blog post URLs are `/blog/[handle]/[slug]`. Any listing route we add under
+  // `/blog/<segment>/...` collides with a handle of the same name, and by then
+  // it is a data migration rather than a one-line change.
+  it("reserves the segments that `/blog/[handle]/[slug]` would otherwise swallow", () => {
+    const blogRouteSegments = [
+      "tags",
+      "tag",
+      "feed",
+      "page",
+      "archive",
+      "rss",
+      "search",
+      "author",
+      "authors",
+    ];
+    for (const segment of blogRouteSegments) {
+      expect(RESERVED_HANDLES.has(segment)).toBe(true);
+      expect(validateHandle(segment)).toEqual({ ok: false, error: "reserved" });
+    }
+  });
 });

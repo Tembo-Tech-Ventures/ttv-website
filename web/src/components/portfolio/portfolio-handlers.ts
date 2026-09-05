@@ -83,6 +83,28 @@ export async function saveProfile(
 ): Promise<ProfileFormResult> {
   const data = extractProfileFormData(formData);
 
+  // A published profile's handle is part of every blog post permalink
+  // (`/blog/[handle]/[slug]`), so a rename would silently 404 every post and
+  // every inbound link to it. Lock the handle once the profile has gone public.
+  if (existingProfileId) {
+    const current = await db.query.studentProfile.findFirst({
+      where: and(
+        eq(schema.studentProfile.id, existingProfileId),
+        eq(schema.studentProfile.userId, userId),
+      ),
+      columns: { handle: true, publishedAt: true },
+    });
+    // `findFirst` yields undefined when there is no row; a Date is always
+    // truthy, so this covers "no profile" and "not yet published" together.
+    if (current?.publishedAt && normalizeHandle(data.handle) !== current.handle) {
+      return {
+        success: false,
+        handleError:
+          "Your handle is locked once your profile is published, because it is part of your post links.",
+      };
+    }
+  }
+
   const handleResult = await validateProfileHandle(
     data.handle,
     db,

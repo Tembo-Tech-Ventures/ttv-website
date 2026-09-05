@@ -1,0 +1,101 @@
+---
+/**
+ * The post editor.
+ *
+ * The page itself is thin on purpose: it resolves the author, runs whichever
+ * action the form asked for, and hands the rest to `PostEditor`. Everything the
+ * island can do — save, publish, unpublish, delete — is also reachable through
+ * the plain form in the `<noscript>` block below, so the route degrades to a
+ * textarea rather than to nothing.
+ */
+import ImmersiveLayout from "@/layouts/ImmersiveLayout.astro";
+import PostEditor from "@/components/blog/editor/PostEditor";
+import PlainPostForm from "@/components/blog/editor/PlainPostForm.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { and, eq } from "drizzle-orm";
+import { env } from "cloudflare:workers";
+import { deriveExcerpt } from "@/lib/blog/post";
+import {
+  handlePostAction,
+  type PostFormResult,
+} from "@/components/blog/blog-handlers";
+
+const { id } = Astro.params;
+const user = Astro.locals.user!;
+const db = drizzle(env.DB, { schema });
+
+const profile = await db.query.studentProfile.findFirst({
+  where: eq(schema.studentProfile.userId, user.id),
+  columns: { id: true, status: true, handle: true },
+});
+
+if (!profile || profile.status !== "PUBLISHED") {
+  return Astro.redirect("/dashboard/writing");
+}
+
+let result: PostFormResult | null = null;
+
+if (Astro.request.method === "POST") {
+  const outcome = await handlePostAction(
+    db,
+    profile.id,
+    await Astro.request.formData(),
+    id!,
+  );
+  result = outcome.result;
+  if (outcome.redirectTo) return Astro.redirect(outcome.redirectTo);
+}
+
+const post = await db.query.blogPost.findFirst({
+  where: and(
+    eq(schema.blogPost.id, id!),
+    eq(schema.blogPost.profileId, profile.id),
+  ),
+});
+
+if (!post) {
+  return Astro.redirect("/dashboard/writing");
+}
+
+function formatDate(date: Date | null) {
+  if (!date) return null;
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+const draft = {
+  title: post.title,
+  slug: post.slug,
+  excerpt: post.excerpt ?? "",
+  contentMarkdown: post.contentMarkdown,
+};
+---
+
+<ImmersiveLayout title={`${post.title || "Untitled"} | TTV`}>
+  <PostEditor
+    client:load
+    postId={post.id}
+    status={post.status}
+    initialDraft={draft}
+    handle={profile.handle}
+    initialReadingMinutes={post.readingMinutes}
+    initialDerivedExcerpt={deriveExcerpt(post.contentMarkdown)}
+    updatedLabel={formatDate(post.updatedAt)}
+    publishedLabel={formatDate(post.publishedAt)}
+    adminNote={post.status === "SUSPENDED" ? (post.adminNote ?? "") : null}
+    serverError={result && !result.success ? (result.error ?? null) : null}
+    serverSlugError={result?.slugError ?? null}
+  />
+
+  <PlainPostForm
+    draft={draft}
+    status={post.status}
+    error={result && !result.success
+      ? (result.error ?? result.slugError ?? null)
+      : null}
+  />
+</ImmersiveLayout>

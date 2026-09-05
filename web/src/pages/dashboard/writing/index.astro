@@ -1,0 +1,185 @@
+---
+import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import Card from "@/components/common/Card.astro";
+import Badge from "@/components/common/Badge.astro";
+import Button from "@/components/common/Button.astro";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { eq, desc } from "drizzle-orm";
+import { env } from "cloudflare:workers";
+
+const user = Astro.locals.user!;
+const db = drizzle(env.DB, { schema });
+
+const profile = await db.query.studentProfile.findFirst({
+  where: eq(schema.studentProfile.userId, user.id),
+  columns: { id: true, status: true, handle: true },
+});
+
+const hasPublishedProfile = profile?.status === "PUBLISHED";
+
+const posts = hasPublishedProfile
+  ? await db.query.blogPost.findMany({
+      where: eq(schema.blogPost.profileId, profile!.id),
+      orderBy: [desc(schema.blogPost.updatedAt)],
+      columns: {
+        id: true,
+        title: true,
+        slug: true,
+        status: true,
+        readingMinutes: true,
+        publishedAt: true,
+        updatedAt: true,
+      },
+    })
+  : [];
+
+const drafts = posts.filter((p) => p.status === "DRAFT");
+const published = posts.filter((p) => p.status === "PUBLISHED");
+const suspended = posts.filter((p) => p.status === "SUSPENDED");
+
+function formatDate(d: Date | null) {
+  if (!d) return "";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+---
+
+<DashboardLayout title="Writing">
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="text-2xl font-bold text-white">Writing</h2>
+        <p class="mt-1 text-ink-secondary">
+          Write and publish posts to the TTV blog.
+        </p>
+      </div>
+      {hasPublishedProfile && (
+        <Button href="/dashboard/writing/new">New Post</Button>
+      )}
+    </div>
+
+    {!profile && (
+      <Card>
+        <div class="py-8 text-center">
+          <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <p class="text-lg font-semibold text-white">
+            Blog access requires a published profile
+          </p>
+          <p class="mx-auto mt-2 max-w-md text-ink-secondary">
+            Complete a cohort, build your portfolio, and get it published.
+            Once your profile is live, you can start writing posts.
+          </p>
+          <Button href="/dashboard/portfolio" class="mt-6">
+            Go to Portfolio
+          </Button>
+        </div>
+      </Card>
+    )}
+
+    {profile && !hasPublishedProfile && (
+      <Card>
+        <div class="py-8 text-center">
+          <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/10">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <p class="text-lg font-semibold text-white">
+            Your profile isn't published yet
+          </p>
+          <p class="mx-auto mt-2 max-w-md text-ink-secondary">
+            Your profile is currently <span class="font-medium text-white">{profile.status.toLowerCase().replace("_", " ")}</span>.
+            Blog writing unlocks once your profile is published.
+          </p>
+          <Button href="/dashboard/portfolio" class="mt-6">
+            Go to Portfolio
+          </Button>
+        </div>
+      </Card>
+    )}
+
+    {hasPublishedProfile && posts.length === 0 && (
+      <Card>
+        <div class="py-8 text-center">
+          <p class="text-lg font-semibold text-white">No posts yet</p>
+          <p class="mt-2 text-ink-secondary">
+            Write your first post — share what you've learned, what you're building, or what caught your attention.
+          </p>
+          <Button href="/dashboard/writing/new" class="mt-6">
+            Start Writing
+          </Button>
+        </div>
+      </Card>
+    )}
+
+    {drafts.length > 0 && (
+      <div class="space-y-3">
+        <h3 class="text-sm font-medium uppercase tracking-wider text-ink-muted">Drafts</h3>
+        {drafts.map((post) => (
+          <a href={`/dashboard/writing/${post.id}`} class="block">
+            <Card>
+              <div class="flex items-center justify-between gap-4">
+                <div class="min-w-0">
+                  <p class="truncate font-medium text-white">{post.title || "Untitled"}</p>
+                  <p class="mt-0.5 text-sm text-ink-muted">
+                    Updated {formatDate(post.updatedAt)} · {post.readingMinutes} min read
+                  </p>
+                </div>
+                <Badge variant="draft" />
+              </div>
+            </Card>
+          </a>
+        ))}
+      </div>
+    )}
+
+    {published.length > 0 && (
+      <div class="space-y-3">
+        <h3 class="text-sm font-medium uppercase tracking-wider text-ink-muted">Published</h3>
+        {published.map((post) => (
+          <a href={`/dashboard/writing/${post.id}`} class="block">
+            <Card>
+              <div class="flex items-center justify-between gap-4">
+                <div class="min-w-0">
+                  <p class="truncate font-medium text-white">{post.title}</p>
+                  <p class="mt-0.5 text-sm text-ink-muted">
+                    Published {formatDate(post.publishedAt)} · {post.readingMinutes} min read
+                    {profile!.handle && (
+                      <span> · <span class="text-ink-secondary">/blog/{profile!.handle}/{post.slug}</span></span>
+                    )}
+                  </p>
+                </div>
+                <Badge variant="published" />
+              </div>
+            </Card>
+          </a>
+        ))}
+      </div>
+    )}
+
+    {suspended.length > 0 && (
+      <div class="space-y-3">
+        <h3 class="text-sm font-medium uppercase tracking-wider text-ink-muted">Suspended</h3>
+        {suspended.map((post) => (
+          <a href={`/dashboard/writing/${post.id}`} class="block">
+            <Card>
+              <div class="flex items-center justify-between gap-4">
+                <div class="min-w-0">
+                  <p class="truncate font-medium text-white">{post.title}</p>
+                  <p class="mt-0.5 text-sm text-ink-muted">
+                    Suspended by admin
+                  </p>
+                </div>
+                <Badge variant="suspended" />
+              </div>
+            </Card>
+          </a>
+        ))}
+      </div>
+    )}
+  </div>
+</DashboardLayout>
