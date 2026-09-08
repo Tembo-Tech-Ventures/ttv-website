@@ -20,6 +20,8 @@ export interface ToolContext {
   userName: string;
   programIds: string[];
   isAdmin: boolean;
+  /** Tool names the caller offered the model. Omit to allow every tool. */
+  allowedTools?: ReadonlySet<string>;
   /** Accumulates sources across tool calls for citation building. */
   sources: TranscriptSource[];
 }
@@ -100,6 +102,13 @@ export async function executeTool(
   args: Record<string, unknown>,
   ctx: ToolContext
 ): Promise<string> {
+  // The model can emit a call for a tool that was never offered to it. Dispatching
+  // on the name alone would let it reach past the caller's tool filter, so the
+  // allowed set is enforced here rather than only when the tools are advertised.
+  if (ctx.allowedTools && !ctx.allowedTools.has(toolName)) {
+    return JSON.stringify({ error: `Tool not available: ${toolName}` });
+  }
+
   switch (toolName) {
     case "search_transcripts":
       return searchTranscripts(
@@ -294,13 +303,18 @@ async function getUserContext(ctx: ToolContext): Promise<string> {
 async function listRecordings(limit: number, ctx: ToolContext): Promise<string> {
   const cap = Math.min(Math.max(limit, 1), 25);
 
-  const where =
-    ctx.isAdmin || ctx.programIds.length === 0
-      ? eq(schema.recording.processingStatus, "complete")
-      : and(
-          eq(schema.recording.processingStatus, "complete"),
-          inArray(schema.recording.programId, ctx.programIds)
-        );
+  // A non-admin with no accessible programs can see nothing. Falling through to
+  // an unconstrained query here would list every recording in the deployment.
+  if (!ctx.isAdmin && ctx.programIds.length === 0) {
+    return JSON.stringify({ recordings: [] });
+  }
+
+  const where = ctx.isAdmin
+    ? eq(schema.recording.processingStatus, "complete")
+    : and(
+        eq(schema.recording.processingStatus, "complete"),
+        inArray(schema.recording.programId, ctx.programIds)
+      );
 
   const recordings = await ctx.db
     .select({

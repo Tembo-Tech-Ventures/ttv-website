@@ -119,6 +119,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
            t.function.name !== "list_recordings" &&
            t.function.name !== "get_recording_details"
   );
+  toolCtx.allowedTools = new Set(tools.map((t) => t.function.name));
 
   const messages: GatewayMessage[] = [
     { role: "system", content: systemPrompt },
