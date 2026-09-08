@@ -82,6 +82,7 @@ export default function ChatApp({
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   /** The conversation being fetched, so the tap has visible consequences. */
   const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
   /** Same value, readable synchronously by an in-flight load. */
@@ -130,23 +131,33 @@ export default function ChatApp({
   useEffect(() => {
     if (mockMode) return;
     let cancelled = false;
-    async function loadSessions() {
+    async function loadInitial() {
       setHistoryLoading(true);
       try {
-        const response = await fetch("/api/chat/sessions");
-        const payload = (await response.json()) as {
+        const [sessionsRes, suggestionsRes] = await Promise.all([
+          fetch("/api/chat/sessions"),
+          fetch("/api/chat/suggestions"),
+        ]);
+        const sessionsPayload = (await sessionsRes.json()) as {
           sessions?: ChatSession[];
           error?: string;
         };
-        if (!response.ok) throw new Error(payload.error ?? "Unable to load chats");
-        if (!cancelled) setSessions(payload.sessions ?? []);
+        if (!sessionsRes.ok) throw new Error(sessionsPayload.error ?? "Unable to load chats");
+        if (!cancelled) setSessions(sessionsPayload.sessions ?? []);
+
+        if (suggestionsRes.ok) {
+          const suggestionsPayload = (await suggestionsRes.json()) as {
+            suggestions?: string[];
+          };
+          if (!cancelled) setSuggestions(suggestionsPayload.suggestions ?? []);
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load chats");
       } finally {
         if (!cancelled) setHistoryLoading(false);
       }
     }
-    void loadSessions();
+    void loadInitial();
     return () => {
       cancelled = true;
     };
@@ -448,6 +459,7 @@ export default function ChatApp({
           loadingConversation={pendingSessionId !== null}
           conversationEpoch={conversationEpoch}
           onPickPrompt={(prompt) => void sendMessage(prompt)}
+          suggestions={suggestions}
         />
 
         {/*

@@ -11,7 +11,9 @@ import type { ChatMessage, Citation } from "@/components/chat/types";
  */
 const NEAR_BOTTOM_PX = 100;
 
-const EXAMPLE_PROMPTS = [
+const NO_SUGGESTIONS: string[] = [];
+
+const FALLBACK_PROMPTS = [
   "What were the main action items from mentor hours?",
   "Explain the advice about customer interviews.",
   "Where did we discuss architecture tradeoffs?",
@@ -113,15 +115,16 @@ function MessageRow({ message, index }: { message: ChatMessage; index: number })
   );
 }
 
-function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
+function EmptyState({ onPick, suggestions }: { onPick: (prompt: string) => void; suggestions: string[] }) {
+  const prompts = suggestions.length > 0 ? suggestions : FALLBACK_PROMPTS;
   return (
     <div className="mx-auto flex max-w-2xl flex-col items-center pt-6 text-center">
-      <h2 className="text-2xl tracking-display text-ink-primary">Ask across your sessions</h2>
+      <h2 className="text-2xl tracking-display text-ink-primary">Ask AI</h2>
       <p className="mt-2 text-sm text-ink-secondary">
-        Answers cite the recording and the moment they came from.
+        Ask about your sessions, your program, or anything you need help with.
       </p>
       <div className="mt-6 grid w-full gap-2">
-        {EXAMPLE_PROMPTS.map((prompt) => (
+        {prompts.map((prompt) => (
           <button
             key={prompt}
             type="button"
@@ -154,6 +157,8 @@ interface TranscriptProps {
    * different four-message conversations collide.
    */
   conversationEpoch: number;
+  /** Contextual prompts from the API, based on the user's actual recordings. */
+  suggestions?: string[];
 }
 
 /**
@@ -178,6 +183,7 @@ export default function Transcript({
   loadingConversation = false,
   onPickPrompt,
   conversationEpoch,
+  suggestions = NO_SUGGESTIONS,
 }: TranscriptProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [nearBottom, setNearBottom] = useState(true);
@@ -295,7 +301,7 @@ export default function Transcript({
             // fetch lands, and the transcript on screen is still the old one.
             <p className="py-10 text-center text-sm text-ink-muted">Loading conversation…</p>
           ) : messages.length === 0 ? (
-            <EmptyState onPick={onPickPrompt} />
+            <EmptyState onPick={onPickPrompt} suggestions={suggestions} />
           ) : (
             messages.map((message, index) => (
               <MessageRow key={message.id ?? index} message={message} index={index} />

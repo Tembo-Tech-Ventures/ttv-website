@@ -4,8 +4,11 @@ import {
   extractChatCompletionText,
   gatewayCompatUrl,
   generateChatCompletion,
+  generateToolCompletion,
   resolveChatModel,
   type ChatMessage,
+  type GatewayMessage,
+  type ToolDefinition,
 } from "@/lib/ai/gateway";
 
 function makeEnv(overrides: Record<string, unknown> = {}) {
@@ -210,5 +213,139 @@ describe("generateChatCompletion", () => {
       { messages },
       undefined
     );
+  });
+});
+
+const toolMessages: GatewayMessage[] = [
+  { role: "system", content: "You are helpful." },
+  { role: "user", content: "Search for something" },
+];
+
+const sampleTools: ToolDefinition[] = [
+  {
+    type: "function",
+    function: {
+      name: "search",
+      description: "Search transcripts",
+      parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+    },
+  },
+];
+
+describe("generateToolCompletion", () => {
+  it("returns content and empty toolCalls for a normal response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { content: "An answer" }, finish_reason: "stop" }],
+          }),
+          { status: 200 }
+        )
+      )
+    );
+
+    const env = makeEnv({
+      AI_GATEWAY_ACCOUNT_ID: "acc-123",
+      AI_GATEWAY_NAME: "ttv-ai",
+      AI_GATEWAY_API_KEY: "secret",
+    });
+
+    const result = await generateToolCompletion(env, toolMessages);
+
+    expect(result.content).toBe("An answer");
+    expect(result.toolCalls).toEqual([]);
+    expect(result.finishReason).toBe("stop");
+  });
+
+  it("returns tool_calls when the model requests them", async () => {
+    const toolCall = {
+      id: "call-1",
+      type: "function",
+      function: { name: "search", arguments: '{"query":"test"}' },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            choices: [{
+              message: { content: null, tool_calls: [toolCall] },
+              finish_reason: "tool_calls",
+            }],
+          }),
+          { status: 200 }
+        )
+      )
+    );
+
+    const env = makeEnv({
+      AI_GATEWAY_ACCOUNT_ID: "acc-123",
+      AI_GATEWAY_NAME: "ttv-ai",
+      AI_GATEWAY_API_KEY: "secret",
+    });
+
+    const result = await generateToolCompletion(env, toolMessages, { tools: sampleTools });
+
+    expect(result.content).toBeNull();
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].function.name).toBe("search");
+    expect(result.finishReason).toBe("tool_calls");
+  });
+
+  it("sends tools and tool_choice in the request body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ choices: [{ message: { content: "ok" }, finish_reason: "stop" }] }),
+        { status: 200 }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const env = makeEnv({
+      AI_GATEWAY_ACCOUNT_ID: "acc-123",
+      AI_GATEWAY_NAME: "ttv-ai",
+      AI_GATEWAY_API_KEY: "secret",
+    });
+
+    await generateToolCompletion(env, toolMessages, { tools: sampleTools });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.tools).toEqual(sampleTools);
+    expect(body.tool_choice).toBe("auto");
+  });
+
+  it("does not send tools when the tools array is empty", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ choices: [{ message: { content: "ok" }, finish_reason: "stop" }] }),
+        { status: 200 }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const env = makeEnv({
+      AI_GATEWAY_ACCOUNT_ID: "acc-123",
+      AI_GATEWAY_NAME: "ttv-ai",
+      AI_GATEWAY_API_KEY: "secret",
+    });
+
+    await generateToolCompletion(env, toolMessages, { tools: [] });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body).not.toHaveProperty("tools");
+    expect(body).not.toHaveProperty("tool_choice");
+  });
+
+  it("falls back to Workers AI binding and returns text-only result", async () => {
+    const run = vi.fn().mockResolvedValue({ response: "Binding answer" });
+    const env = makeEnv({ AI: { run } });
+
+    const result = await generateToolCompletion(env, toolMessages);
+
+    expect(result.content).toBe("Binding answer");
+    expect(result.toolCalls).toEqual([]);
+    expect(result.finishReason).toBe("stop");
   });
 });
