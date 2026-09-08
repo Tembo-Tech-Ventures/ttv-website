@@ -20,7 +20,11 @@ describe("Drive historical import page", () => {
 
   it("shows the historical scan breakdown and explains the rescan guard", () => {
     expect(pageSource).toContain('data-testid="historical-import-preview"');
-    expect(pageSource).toContain("Videos found");
+    expect(pageSource).toContain("Drive items scanned");
+    expect(pageSource).toContain("Visible videos");
+    expect(pageSource).toContain("Importable videos");
+    expect(pageSource).toContain("Download blocked by Drive");
+    expect(pageSource).toContain("Google reports them as not downloadable");
     expect(pageSource).toContain("New videos");
     expect(pageSource).toContain("Pending retry");
     expect(pageSource).toContain("Already in TTV");

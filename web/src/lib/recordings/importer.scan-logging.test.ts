@@ -131,6 +131,10 @@ describe("recording import scan logging", () => {
       new: 2,
       pending: 0,
       skipped: 0,
+      driveItemsScanned: 10,
+      visibleVideos: 2,
+      downloadBlockedVideos: 0,
+      nonVideoItemsSkipped: 7,
     });
 
     expect(mocks.listGoogleDriveVideoFiles).toHaveBeenCalledWith(
@@ -175,6 +179,9 @@ describe("recording import scan logging", () => {
           operation: "preview",
           discovered: 2,
           importable: 2,
+          driveItemsScanned: 10,
+          visibleVideos: 2,
+          downloadBlockedVideos: 0,
         }),
       ])
     );
@@ -189,6 +196,81 @@ describe("recording import scan logging", () => {
     );
   });
 
+  it("accumulates download-blocked and visible video counts across pages", async () => {
+    const state = createMockDb();
+    mocks.drizzle.mockReturnValue(state.db);
+    mocks.listGoogleDriveVideoFiles.mockImplementation(
+      async ({
+        onScanEvent,
+      }: {
+        onScanEvent?: (event: GoogleDriveScanEvent) => void;
+      }) => {
+        onScanEvent?.({ type: "start", filenameFilterConfigured: false });
+        // Mirrors the production scan that motivated these counters: most video
+        // files came back flagged by Drive as not downloadable.
+        onScanEvent?.({
+          type: "page",
+          folderNumber: 1,
+          pageNumber: 1,
+          filesReturned: 50,
+          videosDiscovered: 6,
+          nestedFoldersQueued: 0,
+          folderShortcutsQueued: 0,
+          videoShortcutsDiscovered: 0,
+          duplicateVideosSkipped: 1,
+          nonVideosSkipped: 2,
+          filenameFilteredSkipped: 3,
+          downloadBlockedSkipped: 38,
+          invalidItemsSkipped: 0,
+          hasNextPage: true,
+        });
+        onScanEvent?.({
+          type: "page",
+          folderNumber: 1,
+          pageNumber: 2,
+          filesReturned: 41,
+          videosDiscovered: 4,
+          nestedFoldersQueued: 0,
+          folderShortcutsQueued: 0,
+          videoShortcutsDiscovered: 0,
+          duplicateVideosSkipped: 0,
+          nonVideosSkipped: 2,
+          filenameFilteredSkipped: 0,
+          downloadBlockedSkipped: 35,
+          invalidItemsSkipped: 0,
+          hasNextPage: false,
+        });
+        onScanEvent?.({
+          type: "complete",
+          foldersScanned: 1,
+          pagesScanned: 2,
+          videosDiscovered: 10,
+        });
+        return Array.from({ length: 10 }, (_, index) => ({
+          id: `file-${index}`,
+          name: `Session ${index}.mp4`,
+          mimeType: "video/mp4",
+        }));
+      }
+    );
+
+    await expect(
+      previewRecordingImportSource({ DB: {} } as Env, source.id)
+    ).resolves.toEqual({
+      discovered: 10,
+      importable: 10,
+      new: 10,
+      pending: 0,
+      skipped: 0,
+      // 50 + 41 items returned across the two pages.
+      driveItemsScanned: 91,
+      // Videos Drive showed us: (6 + 38 + 1 + 3) + (4 + 35 + 0 + 0).
+      visibleVideos: 87,
+      // 38 on page one plus 35 on page two — only 10 were actually importable.
+      downloadBlockedVideos: 73,
+      nonVideoItemsSkipped: 4,
+    });
+  });
   it("logs and persists scan failures for source diagnostics", async () => {
     const state = createMockDb();
     mocks.drizzle.mockReturnValue(state.db);
