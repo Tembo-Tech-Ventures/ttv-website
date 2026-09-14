@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { TTV_IMAGE_SERVICE } from "../astro.config.mjs";
 import { evaluateAudit } from "./audit-ci.mjs";
 
 const advisory = (id, title = "Example advisory") => ({
@@ -7,6 +8,10 @@ const advisory = (id, title = "Example advisory") => ({
 });
 
 describe("evaluateAudit", () => {
+  it("keeps runtime image processing off the vulnerable Sharp path", () => {
+    expect(TTV_IMAGE_SERVICE).toBe("cloudflare-binding");
+  });
+
   it("passes a clean report", () => {
     expect(evaluateAudit({ vulnerabilities: {} }).ok).toBe(true);
   });
@@ -42,6 +47,28 @@ describe("evaluateAudit", () => {
     );
     expect(result.ok).toBe(true);
     expect(result.allowed).toHaveLength(1);
+  });
+
+  it("allows the reviewed Astro 6 image-pipeline advisories", () => {
+    const result = evaluateAudit({
+      vulnerabilities: {
+        astro: {
+          severity: "critical",
+          via: [
+            advisory("GHSA-376h-93r7-7g6f"),
+            advisory("GHSA-26w7-cxv4-gfx2"),
+          ],
+        },
+        sharp: {
+          severity: "high",
+          via: [advisory("GHSA-rgj7-g3m4-5g8c")],
+        },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+    expect(result.allowed.map(({ name }) => name)).toEqual(["astro", "sharp"]);
   });
 
   it("fails when a package mixes allowlisted and unlisted advisories", () => {
