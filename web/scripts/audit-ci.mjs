@@ -5,10 +5,12 @@ import { execFileSync } from "node:child_process";
  *
  * Fails on any high/critical advisory that is not allowlisted below. The
  * allowlist exists solely for advisories whose only fix is the Astro 6→7
- * major upgrade (tracked as a follow-up); their attack surfaces (View
- * Transition directives, spread attribute names, sharp asset pipeline) are
- * not exercised by this codebase. Remove the entries when Astro 7 lands —
- * a stale entry costs nothing, a missing one fails the build loudly.
+ * major upgrade; their attack surfaces (View
+ * Transition directives, spread attribute names, Sharp asset pipeline) are
+ * not exercised by this codebase. The Cloudflare adapter is explicitly pinned
+ * to its Cloudflare Images binding, and the app does not use `astro:assets`.
+ * Remove the entries when Astro 7 lands — a stale entry costs nothing, a
+ * missing one fails the build loudly.
  */
 export const ALLOWLISTED_ADVISORIES = new Set([
   // Astro XSS advisories fixed only in astro@7 (major); View Transitions and
@@ -16,9 +18,15 @@ export const ALLOWLISTED_ADVISORIES = new Set([
   "GHSA-4g3v-8h47-v7g6",
   "GHSA-f48w-9m4c-m7f5",
   "GHSA-7pw4-f3q4-r2p2",
-  // sharp (transitive via astro's build-time asset pipeline); fix ships with
-  // the same Astro major.
+  // Requires a configured non-root base. TTV uses Astro's default root base.
+  "GHSA-376h-93r7-7g6f",
+  // Requires an untrusted AVIF to reach Sharp. TTV has no Astro asset calls,
+  // and the adapter is pinned to Cloudflare Images.
+  "GHSA-26w7-cxv4-gfx2",
+  // Sharp (transitive via Astro's unused asset pipeline); fixes ship with the
+  // same Astro major. Runtime images use Cloudflare Images instead.
   "GHSA-f88m-g3jw-g9cj",
+  "GHSA-rgj7-g3m4-5g8c",
 ]);
 
 const FAILING_SEVERITIES = new Set(["high", "critical"]);
