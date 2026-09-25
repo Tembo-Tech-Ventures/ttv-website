@@ -1,4 +1,12 @@
-import { sqliteTable, text, integer, real, uniqueIndex, index } from "drizzle-orm/sqlite-core";
+import {
+  check,
+  index,
+  integer,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import type { drizzle } from "drizzle-orm/d1";
@@ -381,6 +389,92 @@ export const recordingImportSourceRelations = relations(
       references: [program.id],
     }),
   })
+);
+
+// ─── Observability ─────────────────────────────────────────
+
+export const errorEvent = sqliteTable(
+  "errorEvent",
+  {
+    id: cuid("id"),
+    signature: text("signature").notNull(),
+    source: text("source", {
+      enum: ["request", "queue", "cron", "import", "pipeline"],
+    }).notNull(),
+    route: text("route").notNull(),
+    message: text("message").notNull(),
+    level: text("level", { enum: ["error", "warning"] })
+      .notNull()
+      .default("error"),
+    count: integer("count").notNull().default(1),
+    firstSeenAt: integer("firstSeenAt", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    lastSeenAt: integer("lastSeenAt", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    lastVersion: text("lastVersion").notNull(),
+    lastNotifiedAt: integer("lastNotifiedAt", { mode: "timestamp" }),
+    notifiedCount: integer("notifiedCount").notNull().default(0),
+  },
+  (table) => [
+    uniqueIndex("errorEvent_signature_unique").on(table.signature),
+    index("errorEvent_lastSeenAt_idx").on(table.lastSeenAt),
+    check(
+      "errorEvent_source_check",
+      sql`${table.source} in ('request', 'queue', 'cron', 'import', 'pipeline')`
+    ),
+    check(
+      "errorEvent_level_check",
+      sql`${table.level} in ('error', 'warning')`
+    ),
+    check("errorEvent_message_length_check", sql`length(${table.message}) <= 500`),
+    check("errorEvent_count_check", sql`${table.count} >= 1`),
+    check("errorEvent_notifiedCount_check", sql`${table.notifiedCount} >= 0`),
+  ]
+);
+
+export const platformAlert = sqliteTable(
+  "platformAlert",
+  {
+    id: cuid("id"),
+    kind: text("kind", {
+      enum: [
+        "error.new",
+        "error.spike",
+        "recording.failed",
+        "import.error",
+        "health.degraded",
+      ],
+    }).notNull(),
+    subject: text("subject").notNull(),
+    idempotencyKey: text("idempotencyKey").notNull(),
+    payload: text("payload").notNull(),
+    status: text("status", { enum: ["pending", "sent"] })
+      .notNull()
+      .default("pending"),
+    sentAt: integer("sentAt", { mode: "timestamp" }),
+    attempts: integer("attempts").notNull().default(0),
+    createdAt: integer("createdAt", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    uniqueIndex("platformAlert_idempotencyKey_unique").on(table.idempotencyKey),
+    index("platformAlert_status_attempts_idx").on(table.status, table.attempts),
+    check(
+      "platformAlert_kind_check",
+      sql`${table.kind} in ('error.new', 'error.spike', 'recording.failed', 'import.error', 'health.degraded')`
+    ),
+    check(
+      "platformAlert_status_check",
+      sql`${table.status} in ('pending', 'sent')`
+    ),
+    check(
+      "platformAlert_attempts_check",
+      sql`${table.attempts} between 0 and 5`
+    ),
+  ]
 );
 
 // ─── TranscriptSegment ─────────────────────────────────────

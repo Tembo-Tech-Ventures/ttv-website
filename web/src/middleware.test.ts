@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   enforcePersonalAccessTokenMutationScope: vi.fn(),
   getSession: vi.fn(),
   hasPersonalAccessTokenAuthorization: vi.fn(),
+  recordError: vi.fn().mockResolvedValue(null),
   roleFirst: vi.fn(),
 }));
 
@@ -14,6 +15,7 @@ vi.mock("astro:middleware", () => ({
 }));
 vi.mock("cloudflare:workers", () => ({
   env: {
+    DEPLOYMENT_VERSION: "test-version",
     DB: {
       prepare: vi.fn(() => ({
         bind: vi.fn(() => ({ first: mocks.roleFirst })),
@@ -22,6 +24,10 @@ vi.mock("cloudflare:workers", () => ({
   },
 }));
 vi.mock("@/lib/auth", () => ({ createAuth: mocks.createAuth }));
+vi.mock("@/lib/observability/errors", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/observability/errors")>()),
+  recordError: mocks.recordError,
+}));
 vi.mock("@/lib/personal-access-tokens", () => ({
   authenticatePersonalAccessToken: mocks.authenticatePersonalAccessToken,
   enforcePersonalAccessTokenMutationScope:
@@ -224,5 +230,37 @@ describe("personal access token middleware", () => {
     expect(response.status).toBe(403);
     await expect(response.text()).resolves.toBe("scope denied");
     expect(next).not.toHaveBeenCalled();
+  });
+});
+
+describe("request error capture", () => {
+  it("returns the unchanged response when the downstream request succeeds", async () => {
+    const { context, next } = createContext(
+      new Request("https://example.com/api/projects/123")
+    );
+    const expected = new Response("downstream", { status: 201 });
+    next.mockResolvedValue(expected);
+
+    await expect(onRequest(context as never, next)).resolves.toBe(expected);
+    expect(mocks.recordError).not.toHaveBeenCalled();
+  });
+
+  it("records a collapsed route and rethrows the downstream error", async () => {
+    const { context, next } = createContext(
+      new Request("https://example.com/api/projects/123?token=private")
+    );
+    const failure = new Error("downstream failed");
+    next.mockRejectedValue(failure);
+
+    await expect(onRequest(context as never, next)).rejects.toBe(failure);
+    expect(mocks.recordError).toHaveBeenCalledWith(
+      expect.anything(),
+      {
+        source: "request",
+        route: "/api/projects/:id",
+        error: failure,
+        version: "test-version",
+      }
+    );
   });
 });

@@ -74,6 +74,8 @@ automatically; manual cleanup runs remain dry-run-first.
 | `STAGING_AGENT_TOKEN` | GitHub `staging` environment only | Shared staging D1 only | Optional authenticated checks of the persistent shared staging application |
 | `TTV_PERSONAL_ACCESS_TOKEN` | An authorized SAM profile's encrypted runtime variables | The TTV environment where an admin issued it | Expiring, revocable browser and API verification as the issuing user |
 | Production auth secrets | GitHub `production` environment only | Production | Real application auth; never supplied to previews or SAM implementers |
+| `SAM_ALERT_WEBHOOK_URL` | GitHub `production` environment variable | Production Worker | SAM alert ingest URL; alert delivery is disabled when absent |
+| `SAM_ALERT_WEBHOOK_TOKEN` | GitHub `production` environment secret | Production Worker | Authorizes app alerts to SAM; never supplied to previews or logged |
 
 Shared staging and production retain the repository's existing deterministic
 Better Auth fallback when an explicit `BETTER_AUTH_SECRET` is absent, avoiding

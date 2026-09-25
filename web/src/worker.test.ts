@@ -1,9 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   syncEnabledRecordingImportSources: vi.fn().mockResolvedValue([]),
   handle: vi.fn(),
   processRecordingMessage: vi.fn(),
+  pushAlerts: vi.fn().mockResolvedValue({ created: 0, attempted: 0, sent: 0 }),
+  recordError: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@cloudflare/containers", () => ({
@@ -20,8 +22,16 @@ vi.mock("@/lib/recordings/importer", () => ({
   syncEnabledRecordingImportSources:
     mocks.syncEnabledRecordingImportSources,
 }));
+vi.mock("@/lib/observability/alerts", () => ({
+  pushAlerts: mocks.pushAlerts,
+}));
+vi.mock("@/lib/observability/errors", () => ({
+  recordError: mocks.recordError,
+}));
 
 import worker, { ContainerProxy, FfmpegContainer } from "./worker";
+
+beforeEach(() => vi.clearAllMocks());
 
 describe("Worker container exports", () => {
   it("exports the proxy entrypoint required by outbound R2 interception", () => {
@@ -143,5 +153,51 @@ describe("Worker scheduled imports", () => {
     expect(mocks.syncEnabledRecordingImportSources).toHaveBeenCalledWith(env);
     expect(waitUntil).toHaveBeenCalledOnce();
     await expect(waitUntil.mock.calls[0][0]).resolves.toEqual([]);
+    expect(mocks.pushAlerts).toHaveBeenCalledWith(env);
+  });
+
+  it("records an import error, still pushes alerts, and preserves the rejection", async () => {
+    const failure = new Error("Drive import failed");
+    mocks.syncEnabledRecordingImportSources.mockRejectedValueOnce(failure);
+    const waitUntil = vi.fn();
+    const env = { DB: {}, DEPLOYMENT_VERSION: "v1" } as unknown as Env;
+
+    worker.scheduled?.(
+      { cron: "*/15 * * * *" } as ScheduledController,
+      env,
+      { waitUntil } as unknown as ExecutionContext
+    );
+
+    await expect(waitUntil.mock.calls[0][0]).rejects.toBe(failure);
+    expect(mocks.recordError).toHaveBeenCalledWith(env.DB, {
+      source: "import",
+      route: "/scheduled/recording-import",
+      error: failure,
+      version: "v1",
+    });
+    expect(mocks.pushAlerts).toHaveBeenCalledWith(env);
+  });
+});
+
+describe("Worker recording queue", () => {
+  it("records and rethrows a processing failure without acknowledging it", async () => {
+    const failure = new Error("queue failed");
+    mocks.processRecordingMessage.mockRejectedValueOnce(failure);
+    const ack = vi.fn();
+    const env = { DB: {}, DEPLOYMENT_VERSION: "v2" } as unknown as Env;
+    const batch = {
+      messages: [{ body: { type: "process_recording", recordingId: "r1" }, ack }],
+    } as unknown as MessageBatch<unknown>;
+
+    await expect(worker.queue?.(batch, env)).rejects.toBe(
+      failure
+    );
+    expect(ack).not.toHaveBeenCalled();
+    expect(mocks.recordError).toHaveBeenCalledWith(env.DB, {
+      source: "queue",
+      route: "/queue/process_recording",
+      error: failure,
+      version: "v2",
+    });
   });
 });

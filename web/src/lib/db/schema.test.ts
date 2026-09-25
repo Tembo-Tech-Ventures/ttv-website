@@ -18,6 +18,8 @@ describe("Database Schema", () => {
     expect(schema.programApplication).toBeDefined();
     expect(schema.recording).toBeDefined();
     expect(schema.recordingImportSource).toBeDefined();
+    expect(schema.errorEvent).toBeDefined();
+    expect(schema.platformAlert).toBeDefined();
     expect(schema.transcriptSegment).toBeDefined();
     expect(schema.chatMessage).toBeDefined();
     expect(schema.integrationCredential).toBeDefined();

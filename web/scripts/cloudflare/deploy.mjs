@@ -28,6 +28,7 @@ async function main() {
   const primaryDomain = getOptionalEnv("CLOUDFLARE_PRIMARY_DOMAIN");
   const redirectDomain = getOptionalEnv("CLOUDFLARE_REDIRECT_DOMAIN");
   const configuredBetterAuthUrl = getOptionalEnv("CLOUDFLARE_BETTER_AUTH_URL");
+  const samAlertWebhookUrl = getOptionalEnv("SAM_ALERT_WEBHOOK_URL");
 
   const d1Database = await ensureD1Database(context.d1Name);
   await ensureR2Bucket(context.bucketName);
@@ -56,6 +57,7 @@ async function main() {
     primaryDomain,
     redirectDomain,
     betterAuthUrl,
+    samAlertWebhookUrl,
   });
 
   await setWorkerSecrets(configPath, getSecretBindings());

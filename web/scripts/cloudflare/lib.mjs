@@ -498,6 +498,7 @@ export function createGeneratedWranglerConfig({
   primaryDomain,
   redirectDomain,
   betterAuthUrl,
+  samAlertWebhookUrl,
 }) {
   const migrationsDir = path.relative(
     generatedDir,
@@ -560,6 +561,9 @@ export function createGeneratedWranglerConfig({
         DEFAULT_AI_GATEWAY_MODEL,
       ...(primaryDomain ? { PRIMARY_DOMAIN: primaryDomain } : {}),
       ...(redirectDomain ? { REDIRECT_DOMAIN: redirectDomain } : {}),
+      ...(!deployment.environment.startsWith("agent-") && samAlertWebhookUrl
+        ? { SAM_ALERT_WEBHOOK_URL: samAlertWebhookUrl }
+        : {}),
     },
     d1_databases: [
       {
@@ -680,6 +684,13 @@ export function getSecretBindings() {
     : getOptionalEnv("CREDENTIALS_ENCRYPTION_KEY");
   if (credentialKey) {
     bindings.push({ key: "CREDENTIALS_ENCRYPTION_KEY", value: credentialKey });
+  }
+
+  const samAlertWebhookToken = isAgentPreview
+    ? undefined
+    : getOptionalEnv("SAM_ALERT_WEBHOOK_TOKEN");
+  if (samAlertWebhookToken) {
+    bindings.push({ key: "SAM_ALERT_WEBHOOK_TOKEN", value: samAlertWebhookToken });
   }
 
   return bindings;

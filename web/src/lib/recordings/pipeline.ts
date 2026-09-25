@@ -13,6 +13,7 @@ import {
 } from "@/lib/recordings/google-drive";
 import { createCredentialCipher } from "@/lib/credentials/crypto";
 import { getGoogleDriveCredentials } from "@/lib/credentials/google-drive";
+import { recordError, redactErrorMessage } from "@/lib/observability/errors";
 
 export interface RecordingQueueMessage {
   type: "process_recording";
@@ -555,16 +556,18 @@ export async function processRecordingMessage(message: unknown, env: Env) {
 
     await updateStatus(db, recording.id, "complete");
   } catch (error) {
+    const failureMessage = redactErrorMessage(error);
     logRecordingPipelineEvent("recording_pipeline_failed", {
       recordingId: recording.id,
-      error: error instanceof Error ? error.message : String(error),
+      error: failureMessage,
     });
-    await updateStatus(
-      db,
-      recording.id,
-      "failed",
-      error instanceof Error ? error.message : String(error)
-    );
+    await updateStatus(db, recording.id, "failed", failureMessage);
+    await recordError(env.DB, {
+      source: "pipeline",
+      route: "/recordings/:id/pipeline",
+      error,
+      version: env.DEPLOYMENT_VERSION,
+    });
     throw error;
   }
 }

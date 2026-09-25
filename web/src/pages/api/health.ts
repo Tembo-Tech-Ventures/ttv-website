@@ -4,4 +4,4 @@ import { createHealthResponse } from "@/lib/health";
 
 export const prerender = false;
 
-export const GET: APIRoute = () => createHealthResponse(env);
+export const GET: APIRoute = async () => createHealthResponse(env);

@@ -3,6 +3,8 @@ export { ContainerProxy } from "@cloudflare/containers";
 import { handle } from "@astrojs/cloudflare/handler";
 import { processRecordingMessage } from "@/lib/recordings/pipeline";
 import { syncEnabledRecordingImportSources } from "@/lib/recordings/importer";
+import { pushAlerts } from "@/lib/observability/alerts";
+import { recordError } from "@/lib/observability/errors";
 
 export class FfmpegContainer extends Container<Env> {
   defaultPort = 8080;
@@ -84,19 +86,79 @@ FfmpegContainer.outboundByHost = {
   },
 };
 
+function queueRoute(body: unknown) {
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "type" in body &&
+    (body.type === "process_recording" || body.type === "reindex_recording")
+  ) {
+    return `/queue/${body.type}`;
+  }
+  return "/queue/recording";
+}
+
+export async function processRecordingQueue(
+  batch: MessageBatch<unknown>,
+  env: Env
+) {
+  for (const message of batch.messages) {
+    try {
+      await processRecordingMessage(message.body, env);
+      message.ack();
+    } catch (error) {
+      await recordError(env.DB, {
+        source: "queue",
+        route: queueRoute(message.body),
+        error,
+        version: env.DEPLOYMENT_VERSION,
+      });
+      throw error;
+    }
+  }
+}
+
+export async function runScheduledTasks(env: Env) {
+  let importFailure: unknown;
+  let summaries: Awaited<ReturnType<typeof syncEnabledRecordingImportSources>> = [];
+  try {
+    summaries = await syncEnabledRecordingImportSources(env);
+  } catch (error) {
+    importFailure = error;
+    await recordError(env.DB, {
+      source: "import",
+      route: "/scheduled/recording-import",
+      error,
+      version: env.DEPLOYMENT_VERSION,
+    });
+  }
+
+  try {
+    await pushAlerts(env);
+  } catch (error) {
+    await recordError(env.DB, {
+      source: "cron",
+      route: "/scheduled/alert-push",
+      error,
+      version: env.DEPLOYMENT_VERSION,
+    });
+    if (importFailure === undefined) throw error;
+  }
+
+  if (importFailure !== undefined) throw importFailure;
+  return summaries;
+}
+
 export default {
   fetch(request, env, ctx) {
     return handle(request, env, ctx);
   },
 
   async queue(batch, env) {
-    for (const message of batch.messages) {
-      await processRecordingMessage(message.body, env);
-      message.ack();
-    }
+    await processRecordingQueue(batch, env);
   },
 
   scheduled(_event, env, ctx) {
-    ctx.waitUntil(syncEnabledRecordingImportSources(env));
+    ctx.waitUntil(runScheduledTasks(env));
   },
 } satisfies ExportedHandler<Env, unknown>;
