@@ -129,7 +129,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // Protect /dashboard/* routes — require authentication
   if (url.pathname.startsWith("/dashboard")) {
     if (!locals.user) {
-      return redirect("/auth/login");
+      const returnPath = `${url.pathname}${url.search}`;
+      return redirect(`/auth/login?next=${encodeURIComponent(returnPath)}`);
     }
   }
 

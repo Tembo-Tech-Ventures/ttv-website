@@ -42,8 +42,9 @@ test("keeps the login route operable", async ({ page }) => {
   await page.goto("/auth/login");
   await expect(page).toHaveURL(/\/auth\/login$/);
   await expect(
-    page.getByRole("heading", { name: /pick up where you left off/i })
+    page.getByRole("heading", { name: /sign in to tembo/i })
   ).toBeVisible();
+  await expect(page.getByText(/a github account is required/i)).toBeVisible();
 });
 
 test.describe("authenticated delivery agent", () => {

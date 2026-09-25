@@ -11,7 +11,131 @@ import { expect, test } from "@playwright/test";
 
 const TOLERANCE_PX = 1;
 
+const expectedPublicLinks = [
+  { label: "How", href: "/#what-we-do" },
+  { label: "Why", href: "/#why-tembo" },
+  { label: "Builders", href: "/talent" },
+  { label: "Hire", href: "/hire" },
+  { label: "Blog", href: "/blog" },
+];
+
 test.describe("layout integrity", () => {
+  test("public navigation and footer expose the front-door links", async ({
+    page,
+    viewport,
+  }) => {
+    await page.goto("/");
+    const header = page.locator("header");
+    const isMobile = (viewport?.width ?? 1280) < 1024;
+
+    if (isMobile) {
+      await header.getByRole("button", { name: "Open menu" }).click();
+    }
+
+    for (const link of expectedPublicLinks) {
+      await expect(
+        header.getByRole("link", { name: link.label, exact: true })
+      ).toHaveAttribute("href", link.href);
+    }
+    await expect(
+      header.getByRole("link", { name: "Sign in", exact: true })
+    ).toHaveAttribute("href", "/auth/login");
+    await expect(
+      header.getByRole("link", { name: "Apply", exact: true })
+    ).toHaveAttribute("href", "/dashboard/apply");
+
+    const footer = page.locator("footer");
+    await footer.scrollIntoViewIfNeeded();
+    for (const link of [
+      ...expectedPublicLinks,
+      { label: "Sign in", href: "/auth/login" },
+      { label: "Apply", href: "/dashboard/apply" },
+    ]) {
+      await expect(
+        footer.getByRole("link", { name: link.label, exact: true })
+      ).toHaveAttribute("href", link.href);
+    }
+  });
+
+  test("the mobile menu closes after a same-page anchor tap", async ({
+    page,
+    viewport,
+  }) => {
+    test.skip((viewport?.width ?? 1280) >= 1024, "Mobile navigation only");
+    await page.goto("/");
+
+    const opener = page.getByRole("button", { name: "Open menu" });
+    const menu = page.locator("#mobile-menu");
+    await opener.click();
+    await expect(opener).toHaveAttribute("aria-expanded", "true");
+    await expect(menu).toBeVisible();
+
+    await menu.getByRole("link", { name: "How", exact: true }).click();
+
+    await expect(opener).toHaveAttribute("aria-expanded", "false");
+    await expect(menu).toBeHidden();
+    await expect(page).toHaveURL(/\/#what-we-do$/);
+  });
+
+  test("the public 404 keeps the site navigation and a 404 status", async ({
+    page,
+    viewport,
+  }) => {
+    const response = await page.goto("/this-does-not-exist");
+    expect(response?.status()).toBe(404);
+    await expect(
+      page.getByRole("heading", { name: "This page isn't here." })
+    ).toBeVisible();
+
+    const main = page.locator("main");
+    await expect(
+      main.getByRole("link", { name: "Builders", exact: true })
+    ).toHaveAttribute("href", "/talent");
+    await expect(main.getByRole("link", { name: /Blog/ })).toHaveAttribute(
+      "href",
+      "/blog"
+    );
+    await expect(main.getByRole("link", { name: /Home/ })).toHaveAttribute(
+      "href",
+      "/"
+    );
+
+    const header = page.locator("header");
+    if ((viewport?.width ?? 1280) < 1024) {
+      await header.getByRole("button", { name: "Open menu" }).click();
+    }
+    await expect(
+      header.getByRole("link", { name: "Builders", exact: true })
+    ).toHaveAttribute("href", "/talent");
+    await expect(
+      header.getByRole("link", { name: "Blog", exact: true })
+    ).toHaveAttribute("href", "/blog");
+  });
+
+  test("Apply preserves its destination through the login page", async ({
+    page,
+  }) => {
+    const redirect = await page.request.get("/dashboard/apply", {
+      maxRedirects: 0,
+    });
+    expect(redirect.status()).toBe(302);
+    const location = redirect.headers().location;
+    expect(location).toBeTruthy();
+    const loginUrl = new URL(location!, "https://example.test");
+    expect(loginUrl.pathname).toBe("/auth/login");
+    expect(loginUrl.searchParams.get("next")).toBe("/dashboard/apply");
+
+    await page.goto(`${loginUrl.pathname}${loginUrl.search}`);
+    await expect(
+      page.getByRole("button", { name: "Sign in with GitHub" })
+    ).toHaveAttribute("data-callback-url", "/dashboard/apply");
+    await expect(
+      page.getByText("A GitHub account is required to sign in and continue.")
+    ).toBeVisible();
+    await expect(page.getByText(/mentor notes/i)).toHaveCount(0);
+    await expect(page.getByText(/terms of service/i)).toHaveCount(0);
+  });
+
   test("the hero wordmark is never cropped by its own box", async ({ page }) => {
     await page.goto("/");
     await page.evaluate(() => document.fonts.ready);

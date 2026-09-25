@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { SITE_FACTS } from "@/lib/site";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -19,9 +20,12 @@ interface HeroSectionProps {
 }
 
 const PROOF_STATS = [
-  { value: "~25", label: "Students across Africa" },
-  { value: "01", label: "Partner school \u00B7 Embu College" },
-  { value: "04", label: "Cohort in flight" },
+  { value: SITE_FACTS.approximateStudentCount, label: "Students across Africa" },
+  {
+    value: SITE_FACTS.partnerSchoolCount,
+    label: `Partner school \u00B7 ${SITE_FACTS.partnerSchoolName}`,
+  },
+  { value: SITE_FACTS.currentCohortNumber, label: "Cohort in flight" },
 ];
 
 export default function HeroSection({ isAuthenticated = false }: HeroSectionProps) {

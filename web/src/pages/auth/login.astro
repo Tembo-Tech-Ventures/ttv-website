@@ -2,6 +2,7 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import Grain from "@/components/common/Grain.astro";
 import GitHubSignInButton from "@/components/auth/GitHubSignInButton";
+import { validateNextPath } from "@/lib/auth/next-path";
 
 /**
  * Auth / Login — split-screen editorial.
@@ -11,9 +12,9 @@ import GitHubSignInButton from "@/components/auth/GitHubSignInButton";
  * student testimonial and a broken line-art elephant; both are gone.
  */
 
-if (Astro.locals.user) {
-  return Astro.redirect("/dashboard");
-}
+const callbackURL = validateNextPath(Astro.url.searchParams.get("next"));
+
+if (Astro.locals.user) return Astro.redirect(callbackURL);
 ---
 
 <BaseLayout title="Sign In · Tembo Tech Ventures">
@@ -34,28 +35,22 @@ if (Astro.locals.user) {
         </a>
 
         <p class="font-body mt-12 text-xs font-semibold uppercase tracking-[0.4em] text-primary">
-          § Welcome back
+          § Sign in
         </p>
 
         <h1
           class="font-heading tracking-heading mt-4 text-ink-primary"
           style="font-size: clamp(2.5rem, 6vw, 4.5rem); line-height: 0.95;"
         >
-          Pick up where
-          <br />
-          you left off.
+          Sign in to Tembo.
         </h1>
 
         <p class="font-body mt-6 text-lg text-ink-secondary">
-          Sign in and get back to building. Your cohort, applications, and
-          mentor notes are all waiting.
+          A GitHub account is required to sign in and continue.
         </p>
 
-        <div class="mt-10 space-y-4">
-          <GitHubSignInButton client:load />
-          <p class="font-body text-center text-xs text-ink-muted">
-            By signing in, you agree to our terms of service.
-          </p>
+        <div class="mt-10">
+          <GitHubSignInButton client:load callbackURL={callbackURL} />
         </div>
       </div>
     </section>

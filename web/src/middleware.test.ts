@@ -108,6 +108,21 @@ beforeEach(() => {
   });
 });
 
+describe("dashboard authentication", () => {
+  it("preserves the requested dashboard path for sign-in", async () => {
+    const { context, redirect, next } = createContext(
+      new Request("https://example.com/dashboard/apply")
+    );
+
+    await onRequest(context as never, next);
+
+    expect(redirect).toHaveBeenCalledWith(
+      "/auth/login?next=%2Fdashboard%2Fapply"
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
+});
+
 describe("personal access token middleware", () => {
   it("uses a valid PAT as the request identity and keeps its secret out of locals", async () => {
     mocks.hasPersonalAccessTokenAuthorization.mockReturnValue(true);
