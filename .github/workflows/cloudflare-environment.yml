@@ -104,20 +104,37 @@ jobs:
 
       - run: npm ci --legacy-peer-deps
 
+      # `tsc --noEmit` ignores .astro files. `astro check` must run here because
+      # Astro sync opens the remote Cloudflare binding proxy.
+      - if: ${{ inputs.action == 'deploy' }}
+        name: Type check .astro files
+        run: npm run typecheck:astro
+
+      - if: ${{ inputs.action == 'deploy' && inputs.environment_name == 'production' }}
+        id: rollback_target
+        name: Capture production rollback target
+        run: npm run cf:rollback -- capture --environment="${{ inputs.environment_name }}" --worker-name="${{ inputs.app_name }}-${{ inputs.environment_name }}" --health-url="${{ inputs.better_auth_url }}/api/health"
+
       - if: ${{ inputs.action == 'deploy' }}
         id: deploy
         run: npm run cf:deploy
 
       - if: ${{ inputs.action == 'deploy' }}
+        id: smoke
         name: Verify deployment identity and public routes
+        continue-on-error: ${{ inputs.environment_name == 'production' }}
         run: npm run cf:smoke -- --base-url="${{ steps.deploy.outputs.better_auth_url }}" --expected-environment="${{ inputs.environment_name }}" --expected-version="$GITHUB_SHA"
 
       - if: ${{ inputs.action == 'deploy' }}
+        id: browser_install
         name: Install browser
+        continue-on-error: ${{ inputs.environment_name == 'production' }}
         run: npx playwright install --with-deps chromium
 
       - if: ${{ inputs.action == 'deploy' }}
+        id: browser
         name: Verify live browser journeys and capture Worker logs
+        continue-on-error: ${{ inputs.environment_name == 'production' }}
         env:
           PLAYWRIGHT_BASE_URL: ${{ steps.deploy.outputs.better_auth_url }}
           EXPECTED_DEPLOYMENT_ENVIRONMENT: ${{ inputs.environment_name }}
@@ -136,6 +153,18 @@ jobs:
           sleep 3
           npm run test:e2e
 
+      - if: ${{ always() && inputs.action == 'deploy' && inputs.environment_name == 'production' && (steps.smoke.outcome == 'failure' || steps.browser_install.outcome == 'failure' || steps.browser.outcome == 'failure') }}
+        id: rollback
+        name: Roll back failed production verification
+        continue-on-error: true
+        run: npm run cf:rollback -- rollback --environment="${{ inputs.environment_name }}" --worker-name="${{ steps.deploy.outputs.worker_name }}" --version-id="${{ steps.rollback_target.outputs.worker_version_id }}"
+
+      - if: ${{ always() && steps.rollback.outcome == 'success' }}
+        id: rollback_smoke
+        name: Verify production rollback
+        continue-on-error: true
+        run: npm run cf:smoke -- --base-url="${{ steps.deploy.outputs.better_auth_url }}" --expected-environment="production" --expected-version="${{ steps.rollback_target.outputs.health_version }}"
+
       - if: ${{ always() && inputs.action == 'deploy' }}
         name: Upload live verification evidence
         uses: actions/upload-artifact@v4
@@ -146,6 +175,43 @@ jobs:
           path: |
             web/test-results
             ${{ runner.temp }}/cloudflare-worker-tail.log
+
+      - if: ${{ always() && inputs.action == 'deploy' && inputs.environment_name == 'production' && (steps.smoke.outcome == 'failure' || steps.browser_install.outcome == 'failure' || steps.browser.outcome == 'failure') }}
+        name: Fail production deployment after rollback
+        shell: bash
+        run: |
+          {
+            echo "## Production verification failed"
+            echo "Smoke: ${{ steps.smoke.outcome }}; browser install: ${{ steps.browser_install.outcome }}; browser journeys: ${{ steps.browser.outcome }}."
+            echo "Rollback: ${{ steps.rollback.outcome }}; rollback smoke: ${{ steps.rollback_smoke.outcome }}."
+          } >> "${GITHUB_STEP_SUMMARY}"
+          if [[ "${{ steps.rollback.outcome }}" != "success" || "${{ steps.rollback_smoke.outcome }}" != "success" ]]; then
+            echo "::error::Production verification failed and the automatic rollback did not verify successfully."
+          else
+            echo "::error::Production verification failed. The previous Worker version was restored and verified."
+          fi
+          exit 1
+
+      - if: ${{ failure() && inputs.action == 'deploy' && inputs.environment_name == 'production' }}
+        name: Notify SAM of production failure
+        env:
+          SAM_ALERT_WEBHOOK_URL: ${{ vars.SAM_ALERT_WEBHOOK_URL }}
+          SAM_ALERT_WEBHOOK_TOKEN: ${{ secrets.SAM_ALERT_WEBHOOK_TOKEN }}
+        shell: bash
+        run: |
+          if [[ -z "${SAM_ALERT_WEBHOOK_URL}" || -z "${SAM_ALERT_WEBHOOK_TOKEN}" ]]; then
+            echo "::notice::SAM deploy alert skipped because SAM_ALERT_WEBHOOK_URL or SAM_ALERT_WEBHOOK_TOKEN is unset."
+            exit 0
+          fi
+          npm run cf:notify-sam -- \
+            --kind="${{ (steps.rollback.outcome == 'failure' || steps.rollback_smoke.outcome == 'failure') && 'rollback.failed' || 'deploy.failed' }}" \
+            --environment="${{ inputs.environment_name }}" \
+            --version="$GITHUB_SHA" \
+            --run-id="${{ github.run_id }}" \
+            --run-attempt="${{ github.run_attempt }}" \
+            --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --health-url="${{ inputs.better_auth_url }}/api/health" \
+            --message="Production deployment failed; see the GitHub Actions run for verification and rollback details."
 
       - if: ${{ inputs.action == 'destroy' }}
         run: npm run cf:destroy
@@ -194,20 +260,37 @@ jobs:
 
       - run: npm ci --legacy-peer-deps
 
+      # `tsc --noEmit` ignores .astro files. `astro check` must run here because
+      # Astro sync opens the remote Cloudflare binding proxy.
+      - if: ${{ inputs.action == 'deploy' }}
+        name: Type check .astro files
+        run: npm run typecheck:astro
+
+      - if: ${{ inputs.action == 'deploy' && inputs.environment_name == 'production' }}
+        id: rollback_target
+        name: Capture production rollback target
+        run: npm run cf:rollback -- capture --environment="${{ inputs.environment_name }}" --worker-name="${{ inputs.app_name }}-${{ inputs.environment_name }}" --health-url="${{ inputs.better_auth_url }}/api/health"
+
       - if: ${{ inputs.action == 'deploy' }}
         id: deploy
         run: npm run cf:deploy
 
       - if: ${{ inputs.action == 'deploy' }}
+        id: smoke
         name: Verify deployment identity and public routes
+        continue-on-error: ${{ inputs.environment_name == 'production' }}
         run: npm run cf:smoke -- --base-url="${{ steps.deploy.outputs.better_auth_url }}" --expected-environment="${{ inputs.environment_name }}" --expected-version="$GITHUB_SHA"
 
       - if: ${{ inputs.action == 'deploy' }}
+        id: browser_install
         name: Install browser
+        continue-on-error: ${{ inputs.environment_name == 'production' }}
         run: npx playwright install --with-deps chromium
 
       - if: ${{ inputs.action == 'deploy' }}
+        id: browser
         name: Verify live browser journeys and capture Worker logs
+        continue-on-error: ${{ inputs.environment_name == 'production' }}
         env:
           PLAYWRIGHT_BASE_URL: ${{ steps.deploy.outputs.better_auth_url }}
           EXPECTED_DEPLOYMENT_ENVIRONMENT: ${{ inputs.environment_name }}
@@ -226,6 +309,18 @@ jobs:
           sleep 3
           npm run test:e2e
 
+      - if: ${{ always() && inputs.action == 'deploy' && inputs.environment_name == 'production' && (steps.smoke.outcome == 'failure' || steps.browser_install.outcome == 'failure' || steps.browser.outcome == 'failure') }}
+        id: rollback
+        name: Roll back failed production verification
+        continue-on-error: true
+        run: npm run cf:rollback -- rollback --environment="${{ inputs.environment_name }}" --worker-name="${{ steps.deploy.outputs.worker_name }}" --version-id="${{ steps.rollback_target.outputs.worker_version_id }}"
+
+      - if: ${{ always() && steps.rollback.outcome == 'success' }}
+        id: rollback_smoke
+        name: Verify production rollback
+        continue-on-error: true
+        run: npm run cf:smoke -- --base-url="${{ steps.deploy.outputs.better_auth_url }}" --expected-environment="production" --expected-version="${{ steps.rollback_target.outputs.health_version }}"
+
       - if: ${{ always() && inputs.action == 'deploy' }}
         name: Upload live verification evidence
         uses: actions/upload-artifact@v4
@@ -236,6 +331,43 @@ jobs:
           path: |
             web/test-results
             ${{ runner.temp }}/cloudflare-worker-tail.log
+
+      - if: ${{ always() && inputs.action == 'deploy' && inputs.environment_name == 'production' && (steps.smoke.outcome == 'failure' || steps.browser_install.outcome == 'failure' || steps.browser.outcome == 'failure') }}
+        name: Fail production deployment after rollback
+        shell: bash
+        run: |
+          {
+            echo "## Production verification failed"
+            echo "Smoke: ${{ steps.smoke.outcome }}; browser install: ${{ steps.browser_install.outcome }}; browser journeys: ${{ steps.browser.outcome }}."
+            echo "Rollback: ${{ steps.rollback.outcome }}; rollback smoke: ${{ steps.rollback_smoke.outcome }}."
+          } >> "${GITHUB_STEP_SUMMARY}"
+          if [[ "${{ steps.rollback.outcome }}" != "success" || "${{ steps.rollback_smoke.outcome }}" != "success" ]]; then
+            echo "::error::Production verification failed and the automatic rollback did not verify successfully."
+          else
+            echo "::error::Production verification failed. The previous Worker version was restored and verified."
+          fi
+          exit 1
+
+      - if: ${{ failure() && inputs.action == 'deploy' && inputs.environment_name == 'production' }}
+        name: Notify SAM of production failure
+        env:
+          SAM_ALERT_WEBHOOK_URL: ${{ vars.SAM_ALERT_WEBHOOK_URL }}
+          SAM_ALERT_WEBHOOK_TOKEN: ${{ secrets.SAM_ALERT_WEBHOOK_TOKEN }}
+        shell: bash
+        run: |
+          if [[ -z "${SAM_ALERT_WEBHOOK_URL}" || -z "${SAM_ALERT_WEBHOOK_TOKEN}" ]]; then
+            echo "::notice::SAM deploy alert skipped because SAM_ALERT_WEBHOOK_URL or SAM_ALERT_WEBHOOK_TOKEN is unset."
+            exit 0
+          fi
+          npm run cf:notify-sam -- \
+            --kind="${{ (steps.rollback.outcome == 'failure' || steps.rollback_smoke.outcome == 'failure') && 'rollback.failed' || 'deploy.failed' }}" \
+            --environment="${{ inputs.environment_name }}" \
+            --version="$GITHUB_SHA" \
+            --run-id="${{ github.run_id }}" \
+            --run-attempt="${{ github.run_attempt }}" \
+            --run-url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --health-url="${{ inputs.better_auth_url }}/api/health" \
+            --message="Production deployment failed; see the GitHub Actions run for verification and rollback details."
 
       - if: ${{ inputs.action == 'destroy' }}
         run: npm run cf:destroy

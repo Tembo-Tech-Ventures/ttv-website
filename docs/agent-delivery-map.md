@@ -66,6 +66,38 @@ stacks older than 72 hours when close-triggered or explicit teardown was missed.
 It queries open pull requests first and excludes their preview names
 automatically; manual cleanup runs remain dry-run-first.
 
+## The production merge path
+
+Main is production. Merging a pull request starts the `Cloudflare Production`
+workflow, whose concurrency group has `cancel-in-progress: false`. Never
+cancel, re-run, pause, or manually dispatch that workflow. Cancelling is not a
+safety tool: a Worker deploy can finish before smoke and browser verification,
+which is how the 2026-09-21 run left a new version live without verification.
+
+The reusable deploy job runs the Astro typecheck, captures the active Worker
+version and current `/api/health` revision, deploys, then runs exact-revision
+smoke plus desktop/mobile Playwright. A failed production verification rolls
+the Worker back to the captured version, smoke-checks the previously served
+revision, and fails the job with a summary. The same reusable workflow serves
+previews, but rollback conditions require the exact `production` environment;
+an `agent-*` stack is never rolled back.
+
+The rollback changes the active Worker version, including its code, assets,
+bindings, compatibility settings, and Durable Object class code. It does not
+rewind D1 or Durable Object data, queue state, R2 objects, or the FFmpeg
+Container image/configuration rollout. Cloudflare also blocks rollback across
+incompatible Durable Object lifecycle changes or missing bound resources.
+Deployment and migration changes must remain backward compatible with the
+previous Worker version.
+
+After any production job failure, the final step posts the shared mission alert
+payload to SAM through `web/scripts/cloudflare/notify-sam.mjs`. The GitHub
+`production` environment owns `SAM_ALERT_WEBHOOK_URL` as a variable and
+`SAM_ALERT_WEBHOOK_TOKEN` as a secret. If either is absent, the step emits a
+notice and skips delivery. The payload links the Actions run and uses a stable
+`deploy.failed:<run_id>:<run_attempt>` idempotency key; rollback command or
+rollback verification failures use `kind: rollback.failed`.
+
 ## Authentication secrets
 
 | Secret | Stored in | Valid against | Purpose |
@@ -74,8 +106,8 @@ automatically; manual cleanup runs remain dry-run-first.
 | `STAGING_AGENT_TOKEN` | GitHub `staging` environment only | Shared staging D1 only | Optional authenticated checks of the persistent shared staging application |
 | `TTV_PERSONAL_ACCESS_TOKEN` | An authorized SAM profile's encrypted runtime variables | The TTV environment where an admin issued it | Expiring, revocable browser and API verification as the issuing user |
 | Production auth secrets | GitHub `production` environment only | Production | Real application auth; never supplied to previews or SAM implementers |
-| `SAM_ALERT_WEBHOOK_URL` | GitHub `production` environment variable | Production Worker | SAM alert ingest URL; alert delivery is disabled when absent |
-| `SAM_ALERT_WEBHOOK_TOKEN` | GitHub `production` environment secret | Production Worker | Authorizes app alerts to SAM; never supplied to previews or logged |
+| `SAM_ALERT_WEBHOOK_URL` | GitHub `production` environment variable | SAM webhook ingest endpoint | Destination for Worker, production deploy, and rollback alerts; delivery is disabled when absent |
+| `SAM_ALERT_WEBHOOK_TOKEN` | GitHub `production` environment secret | SAM webhook trigger | Bearer credential for Worker and GitHub Actions alert delivery; never supplied to previews or logged |
 
 Shared staging and production retain the repository's existing deterministic
 Better Auth fallback when an explicit `BETTER_AUTH_SECRET` is absent, avoiding

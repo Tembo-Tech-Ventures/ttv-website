@@ -81,8 +81,63 @@ The production workflow is preconfigured to use:
 - primary domain: `tembotechventures.com`
 - redirect domain: `www.tembotechventures.com`
 
-Production deploys automatically on every push to `main` via `.github/workflows/cloudflare-production.yml`.
-It can also be triggered manually with `action=deploy` or `action=destroy`.
+Production deploys automatically on every push to `main` via
+`.github/workflows/cloudflare-production.yml`. A merge is the production
+release path. Agents do not manually dispatch, re-run, pause, or cancel that
+workflow. Its concurrency group keeps `cancel-in-progress: false`: cancelling
+is not a safety tool because the Worker may already be live while later
+verification steps are still pending.
+
+For each deploy, the reusable job:
+
+1. Runs `npm run typecheck:astro` before any production mutation.
+2. Captures the active Worker version with `wrangler deployments status` and
+   the Git revision currently returned by `/api/health`.
+3. Deploys, verifies the new revision with `cf:smoke`, and runs the desktop and
+   mobile Playwright journeys while collecting Worker tail evidence.
+4. If smoke, browser installation, or a browser journey fails, runs
+   `wrangler rollback <captured-version-id> --name <worker>` and re-runs smoke
+   with the previously served health revision.
+5. Fails the job with the verification and rollback outcomes, then sends a
+   `deploy.failed` alert to SAM. A rollback command or rollback smoke failure
+   sends `rollback.failed` instead.
+
+Rollback is production-only. The reusable job never rolls back `agent-*`,
+staging, or other environments.
+
+### What a Worker rollback restores
+
+[Cloudflare Worker versions](https://developers.cloudflare.com/workers/versions-and-deployments/)
+contain the bundled Worker code, static assets, bindings, and compatibility
+settings. [`wrangler rollback`](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)
+immediately creates a deployment that sends 100% of traffic to the captured
+version, restoring that version of the Worker and its Durable Object class
+code.
+
+Connected resource state is not versioned. A rollback does not undo D1
+migrations or data, R2 objects, queue messages, Durable Object storage, or a
+Container image/configuration rollout started by `wrangler deploy`; Container
+[rollouts are separate and non-transactional](https://developers.cloudflare.com/containers/configuration/rollouts/).
+The restored Worker must therefore remain compatible with additive data
+changes and with the active FFmpeg Container image. Cloudflare refuses a rollback
+across an incompatible Durable Object class lifecycle change or when a bound
+resource required by the target version no longer exists. Those cases surface
+as `rollback.failed`; the pipeline does not attempt a different production
+mutation.
+
+### SAM failure notification
+
+The GitHub `production` environment owns both values used by the final
+`if: failure()` step:
+
+- `SAM_ALERT_WEBHOOK_URL`: GitHub Actions variable containing the SAM ingest URL
+- `SAM_ALERT_WEBHOOK_TOKEN`: GitHub secret containing the bearer token
+
+When either value is absent, the step emits a GitHub Actions notice and exits
+successfully. When configured, `web/scripts/cloudflare/notify-sam.mjs` posts
+the shared mission alert payload with `source: github-actions`, the Actions run
+URL, and `Idempotency-Key: deploy.failed:<run_id>:<run_attempt>`. Only HTTP 202
+is accepted, and the script never includes the token in output or errors.
 
 ## Production deployment checklist
 
@@ -96,10 +151,14 @@ Before the first production deploy, complete the following:
    - `BETTER_AUTH_SECRET`
    - `GH_CLIENT_ID`
    - `GH_CLIENT_SECRET`
-4. Create a GitHub OAuth App for production with the callback URL:
+   - `SAM_ALERT_WEBHOOK_TOKEN` after the owner creates the SAM webhook trigger
+4. Add `SAM_ALERT_WEBHOOK_URL` as a variable on the `production` GitHub
+   environment after the owner creates the SAM webhook trigger.
+5. Create a GitHub OAuth App for production with the callback URL:
    - `https://tembotechventures.com/api/auth/callback/github`
-5. Optionally add a review/approval gate on the `production` GitHub environment for extra safety.
-6. Merge the `cf-transition` branch to `main` — the workflow triggers automatically.
+6. Optionally add a review/approval gate on the `production` GitHub environment
+   for extra safety.
+7. Merge to `main`; the workflow triggers automatically.
 
 ## What production deploy creates
 

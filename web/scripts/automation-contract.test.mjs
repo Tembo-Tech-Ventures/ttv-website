@@ -68,6 +68,79 @@ describe("GitHub delivery contracts", () => {
     );
   });
 
+  it("gates both reusable deploy jobs on Astro typechecking before deploy", async () => {
+    const workflow = await readRepositoryFile(
+      ".github/workflows/cloudflare-environment.yml"
+    );
+
+    expect(workflow.match(/name: Type check \.astro files/g)).toHaveLength(2);
+    expect(workflow.match(/run: npm run typecheck:astro/g)).toHaveLength(2);
+    const jobMarkers = [
+      "  cloudflare-with-environment:",
+      "  cloudflare:",
+    ];
+    for (const [index, marker] of jobMarkers.entries()) {
+      const jobStart = workflow.indexOf(marker);
+      const nextJob =
+        index + 1 < jobMarkers.length
+          ? workflow.indexOf(jobMarkers[index + 1], jobStart + marker.length)
+          : -1;
+      const jobBody = workflow.slice(jobStart, nextJob === -1 ? undefined : nextJob);
+      expect(jobBody.indexOf("npm run typecheck:astro")).toBeGreaterThan(-1);
+      expect(jobBody.indexOf("npm run typecheck:astro")).toBeLessThan(
+        jobBody.indexOf("npm run cf:deploy")
+      );
+    }
+  });
+
+  it("rolls production back only after post-deploy verification fails", async () => {
+    const workflow = await readRepositoryFile(
+      ".github/workflows/cloudflare-environment.yml"
+    );
+
+    expect(workflow.match(/name: Capture production rollback target/g)).toHaveLength(2);
+    expect(workflow.match(/name: Roll back failed production verification/g)).toHaveLength(2);
+    expect(workflow.match(/name: Verify production rollback/g)).toHaveLength(2);
+    expect(workflow.match(/inputs\.environment_name == 'production'/g).length).toBeGreaterThanOrEqual(8);
+    expect(workflow).toContain("steps.smoke.outcome == 'failure'");
+    expect(workflow).toContain("steps.browser.outcome == 'failure'");
+    expect(workflow).toContain(
+      '--expected-version="${{ steps.rollback_target.outputs.health_version }}"'
+    );
+    expect(workflow).not.toMatch(
+      /Roll back failed production verification[\s\S]{0,400}startsWith\(inputs\.environment_name, 'agent-'\)/
+    );
+
+    const production = await readRepositoryFile(
+      ".github/workflows/cloudflare-production.yml"
+    );
+    expect(production).toContain("cancel-in-progress: false");
+  });
+
+  it("notifies SAM on production failures and skips safely when configuration is absent", async () => {
+    const workflow = await readRepositoryFile(
+      ".github/workflows/cloudflare-environment.yml"
+    );
+
+    expect(workflow.match(/name: Notify SAM of production failure/g)).toHaveLength(2);
+    expect(
+      workflow.match(
+        /failure\(\) && inputs\.action == 'deploy' && inputs\.environment_name == 'production'/g
+      )
+    ).toHaveLength(2);
+    expect(workflow.match(/npm run cf:notify-sam/g)).toHaveLength(2);
+    expect(workflow.match(/SAM_ALERT_WEBHOOK_URL: \$\{\{ vars\./g)).toHaveLength(2);
+    expect(workflow.match(/SAM_ALERT_WEBHOOK_TOKEN: \$\{\{ secrets\./g)).toHaveLength(2);
+    expect(
+      workflow.match(
+        /SAM deploy alert skipped because SAM_ALERT_WEBHOOK_URL or SAM_ALERT_WEBHOOK_TOKEN is unset\./g
+      )
+    ).toHaveLength(2);
+    expect(workflow).toContain(
+      "--kind=\"${{ (steps.rollback.outcome == 'failure' || steps.rollback_smoke.outcome == 'failure') && 'rollback.failed' || 'deploy.failed' }}\""
+    );
+  });
+
   it("provides an isolated GitHub-hosted agent deploy path with staging-scoped credentials", async () => {
     const workflow = await readRepositoryFile(
       ".github/workflows/cloudflare-agent.yml"

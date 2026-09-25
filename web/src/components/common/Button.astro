@@ -7,7 +7,14 @@ interface Props extends HTMLAttributes<"button"> {
   href?: string;
 }
 
-const { variant = "primary", size = "md", href, class: className, ...attrs } = Astro.props;
+const {
+  variant = "primary",
+  size = "md",
+  href,
+  type = "button",
+  class: className,
+  ...attrs
+} = Astro.props;
 
 const sizeClass = size === "sm" ? "px-3 py-1.5 text-sm" : "px-4 py-2 text-sm font-medium";
 
@@ -18,13 +25,16 @@ const variantClass = {
 }[variant];
 
 const base = `inline-flex items-center justify-center rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${variantClass} ${sizeClass}`;
-const Tag = href ? "a" : "button";
 ---
 
-<Tag
-  class:list={[base, className]}
-  {...href ? { href } : { type: (attrs as Record<string, unknown>).type ?? "button" }}
-  {...attrs}
->
-  <slot />
-</Tag>
+{
+  href ? (
+    <a class:list={[base, className]} href={href} {...attrs}>
+      <slot />
+    </a>
+  ) : (
+    <button class:list={[base, className]} type={type} {...attrs}>
+      <slot />
+    </button>
+  )
+}
