@@ -13,7 +13,8 @@ When `SAM_WORKSPACE_ID` is present, the workspace is ephemeral.
 3. Use `list_project_agents`, `search_tasks`, and `search_messages` before
    changing shared deployment, schema, auth, or lock files.
 4. Read the project knowledge and policies before architecture, content, or
-   dependency decisions.
+   dependency decisions. Read `docs/operations.md` before touching triggers,
+   the production workflow, monitoring code or the alert contract.
 5. Run `npm ci --legacy-peer-deps` in `web/`, then establish a baseline with
    `npm test`, `npm run lint`, and `npm run typecheck`.
 6. Report meaningful milestones with `update_task_status`.
@@ -127,9 +128,12 @@ change.
 apply only to SAM-hosted Compose environments and are not the source of truth for
 this Cloudflare Workers application.
 
-Do not deploy to `staging`, `production`, or a custom domain unless the human
-explicitly asks. Production promotion stays behind repository review and the
-GitHub production environment. Never add manual Cloudflare container registry
+Do not deploy to `staging`, `production`, or a custom domain by hand. Merging
+to `main` deploys production through the `Cloudflare Production` workflow, and
+that is the only production path: never cancel, re-run or manually dispatch
+that workflow, and never run `wrangler` or the Cloudflare API against
+production or staging resources (read-only diagnostics are fine). See
+`docs/operations.md`. Never add manual Cloudflare container registry
 login; `wrangler deploy` handles the managed registry.
 
 ## Auth and agent limitations
