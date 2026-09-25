@@ -4,7 +4,27 @@ test("serves the expected live deployment and homepage", async ({ page }) => {
   const healthResponse = await page.request.get("/api/health");
   expect(healthResponse.ok()).toBe(true);
   const health = await healthResponse.json();
-  expect(health).toMatchObject({ status: "ok", service: "ttv-website" });
+  expect(health).toMatchObject({
+    status: "ok",
+    service: "ttv-website",
+    checks: {
+      db: "ok",
+      failedRecordings: expect.any(Number),
+      stuckRecordings: expect.any(Number),
+      importSourceErrors: expect.any(Number),
+      errorSignatures24h: expect.any(Number),
+    },
+    degraded: expect.any(Boolean),
+    alerts: expect.any(Array),
+  });
+  expect(Object.keys(health.checks).toSorted()).toEqual([
+    "db",
+    "errorSignatures24h",
+    "failedRecordings",
+    "importSourceErrors",
+    "lastErrorAt",
+    "stuckRecordings",
+  ]);
 
   if (process.env.EXPECTED_DEPLOYMENT_ENVIRONMENT) {
     expect(health.environment).toBe(process.env.EXPECTED_DEPLOYMENT_ENVIRONMENT);
@@ -40,6 +60,9 @@ test.describe("authenticated delivery agent", () => {
     await page.goto("/admin");
     await expect(page).toHaveURL(/\/admin\/?$/);
     await expect(page.getByRole("heading", { name: "TTV Admin" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Attention" })).toBeVisible();
+    await expect(page.getByText("Preview recording needing attention")).toBeVisible();
+    await expect(page.getByText("Preview Drive source needing attention")).toBeVisible();
 
     await page.goto("/admin/agent-access");
     await expect(page).toHaveURL(/\/admin\/?$/);

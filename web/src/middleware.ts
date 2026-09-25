@@ -4,6 +4,7 @@ import { createAuth } from "@/lib/auth";
 import { isAgentSession } from "@/lib/agent-auth";
 import { isHealthCheckPath } from "@/lib/health";
 import { enforceAdminMutationOrigin } from "@/lib/admin/mutation-security";
+import { collapseRoutePattern, recordError } from "@/lib/observability/errors";
 import {
   authenticatePersonalAccessToken,
   enforcePersonalAccessTokenMutationScope,
@@ -138,5 +139,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
     if (guardResponse) return guardResponse;
   }
 
-  return next();
+  try {
+    return await next();
+  } catch (error) {
+    await recordError(env.DB, {
+      source: "request",
+      route: collapseRoutePattern(url.pathname),
+      error,
+      version: env.DEPLOYMENT_VERSION,
+    });
+    throw error;
+  }
 });

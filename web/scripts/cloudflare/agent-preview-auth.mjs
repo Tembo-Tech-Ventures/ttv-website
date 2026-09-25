@@ -771,4 +771,50 @@ export async function seedAgentPreviewFixtures({
       createdAt,
     ]
   );
+
+  // Observability attention fixtures: one failed recording and one Drive
+  // source error keep the authenticated admin journey deterministic.
+  await executeQuery(
+    databaseId,
+    `INSERT INTO "recording"
+      ("id", "programId", "title", "processingStatus", "processingError", "createdAt", "updatedAt")
+     VALUES (?, ?, ?, 'failed', ?, ?, ?)
+     ON CONFLICT("id") DO UPDATE SET
+       "programId" = excluded."programId",
+       "title" = excluded."title",
+       "processingStatus" = 'failed',
+       "processingError" = excluded."processingError",
+       "updatedAt" = excluded."updatedAt"`,
+    [
+      "ttv-fixture-recording-failed",
+      "ttv-fixture-program-cohort-04",
+      "Preview recording needing attention",
+      "Fixture transcription failed",
+      createdAt,
+      createdAt,
+    ]
+  );
+
+  await executeQuery(
+    databaseId,
+    `INSERT INTO "recording_import_source"
+      ("id", "programId", "name", "driveFolderId", "enabled", "lastError", "createdAt", "updatedAt")
+     VALUES (?, ?, ?, ?, 1, ?, ?, ?)
+     ON CONFLICT("id") DO UPDATE SET
+       "programId" = excluded."programId",
+       "name" = excluded."name",
+       "driveFolderId" = excluded."driveFolderId",
+       "enabled" = 1,
+       "lastError" = excluded."lastError",
+       "updatedAt" = excluded."updatedAt"`,
+    [
+      "ttv-fixture-import-error",
+      "ttv-fixture-program-cohort-04",
+      "Preview Drive source needing attention",
+      "ttv-fixture-drive-folder",
+      "Fixture Drive scan failed",
+      createdAt,
+      createdAt,
+    ]
+  );
 }

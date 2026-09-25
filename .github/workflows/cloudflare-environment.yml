@@ -76,6 +76,8 @@ jobs:
       GITHUB_CLIENT_ID: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.GH_CLIENT_ID || '' }}
       GITHUB_CLIENT_SECRET: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.GH_CLIENT_SECRET || '' }}
       CLOUDFLARE_AI_GATEWAY_TOKEN: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.CLOUDFLARE_AI_GATEWAY_TOKEN || '' }}
+      SAM_ALERT_WEBHOOK_URL: ${{ !startsWith(inputs.environment_name, 'agent-') && vars.SAM_ALERT_WEBHOOK_URL || '' }}
+      SAM_ALERT_WEBHOOK_TOKEN: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.SAM_ALERT_WEBHOOK_TOKEN || '' }}
       CREDENTIALS_ENCRYPTION_KEY: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.CREDENTIALS_ENCRYPTION_KEY || '' }}
       AGENT_PREVIEW_SECRET: ${{ startsWith(inputs.environment_name, 'agent-') && secrets.AGENT_PREVIEW_SECRET || '' }}
       CLOUDFLARE_APP_NAME: ${{ inputs.app_name }}
@@ -164,6 +166,8 @@ jobs:
       GITHUB_CLIENT_ID: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.GH_CLIENT_ID || '' }}
       GITHUB_CLIENT_SECRET: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.GH_CLIENT_SECRET || '' }}
       CLOUDFLARE_AI_GATEWAY_TOKEN: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.CLOUDFLARE_AI_GATEWAY_TOKEN || '' }}
+      SAM_ALERT_WEBHOOK_URL: ${{ !startsWith(inputs.environment_name, 'agent-') && vars.SAM_ALERT_WEBHOOK_URL || '' }}
+      SAM_ALERT_WEBHOOK_TOKEN: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.SAM_ALERT_WEBHOOK_TOKEN || '' }}
       CREDENTIALS_ENCRYPTION_KEY: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.CREDENTIALS_ENCRYPTION_KEY || '' }}
       AGENT_PREVIEW_SECRET: ${{ startsWith(inputs.environment_name, 'agent-') && secrets.AGENT_PREVIEW_SECRET || '' }}
       CLOUDFLARE_APP_NAME: ${{ inputs.app_name }}

@@ -186,6 +186,39 @@ describe("createGeneratedWranglerConfig", () => {
     expect(config.vars).not.toHaveProperty("AGENT_AUTH_ENABLED");
   });
 
+  it("passes the SAM alert URL as a plain-text var only outside previews", () => {
+    const shared = createGeneratedWranglerConfig({
+      workerName: "ttv-production",
+      containerAppName: "ttv-production-ffmpegcontainer",
+      d1Name: "ttv-db-production",
+      d1Id: "db-id",
+      bucketName: "ttv-files-production",
+      queueName: "ttv-queue-production",
+      vectorizeIndexName: "ttv-vector-production",
+      aiGatewayName: "ttv-ai-production",
+      betterAuthUrl: "https://example.com",
+      samAlertWebhookUrl: "https://sam.example.test/ingest",
+    });
+    expect(shared.vars.SAM_ALERT_WEBHOOK_URL).toBe(
+      "https://sam.example.test/ingest"
+    );
+
+    vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME", "agent-pr-55");
+    const preview = createGeneratedWranglerConfig({
+      workerName: "ttv-agent",
+      containerAppName: "ttv-agent-ffmpegcontainer",
+      d1Name: "ttv-db-agent",
+      d1Id: "db-id",
+      bucketName: "ttv-files-agent",
+      queueName: "ttv-queue-agent",
+      vectorizeIndexName: "ttv-vector-agent",
+      aiGatewayName: "ttv-ai-agent",
+      betterAuthUrl: "https://example.com",
+      samAlertWebhookUrl: "https://sam.example.test/must-not-leak",
+    });
+    expect(preview.vars).not.toHaveProperty("SAM_ALERT_WEBHOOK_URL");
+  });
+
   it("lets Wrangler disable workers.dev and preview routes for custom domains", () => {
     const config = createGeneratedWranglerConfig({
       workerName: "ttv-production",
@@ -723,6 +756,20 @@ describe("getSecretBindings", () => {
       key: "CREDENTIALS_ENCRYPTION_KEY",
       value: "test-credential-key-base64==",
     });
+  });
+
+  it("includes the SAM alert token only for configured shared environments", () => {
+    vi.stubEnv("SAM_ALERT_WEBHOOK_TOKEN", "sam_wh_scoped-token");
+    expect(getSecretBindings()).toContainEqual({
+      key: "SAM_ALERT_WEBHOOK_TOKEN",
+      value: "sam_wh_scoped-token",
+    });
+
+    vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME", "agent-pr-55");
+    vi.stubEnv("AGENT_PREVIEW_SECRET", "p".repeat(32));
+    expect(getSecretBindings()).not.toContainEqual(
+      expect.objectContaining({ key: "SAM_ALERT_WEBHOOK_TOKEN" })
+    );
   });
 
   it("derives a unique credential key for agent preview environments", () => {

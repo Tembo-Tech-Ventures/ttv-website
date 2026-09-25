@@ -8,6 +8,8 @@ declare namespace Cloudflare {
     DEPLOYMENT_ENVIRONMENT?: string;
     DEPLOYMENT_VERSION?: string;
     AGENT_AUTH_ENABLED?: string;
+    SAM_ALERT_WEBHOOK_URL?: string;
+    SAM_ALERT_WEBHOOK_TOKEN?: string;
   }
 }
 

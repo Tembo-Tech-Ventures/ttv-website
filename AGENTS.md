@@ -160,6 +160,11 @@ or extend credentials. Never put either secret or a derived bearer token in a
 command argument, log, issue, task message, commit, screenshot, or SAM knowledge
 entry.
 
+Production alert delivery uses `SAM_ALERT_WEBHOOK_URL` as a Worker plain-text
+variable and `SAM_ALERT_WEBHOOK_TOKEN` as a Worker secret. They are optional and
+must remain absent from local and isolated `agent-*` environments; when either
+is missing, alert delivery is disabled. Never print or log the token.
+
 Current SAM project configuration may not supply `GH_TOKEN` or Cloudflare
 credentials to every profile. Check credential presence before planning a push,
 PR, or live deploy. Missing authority is a blocker to report, not permission to

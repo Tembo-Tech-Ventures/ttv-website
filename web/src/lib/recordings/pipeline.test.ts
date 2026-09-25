@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getGoogleDriveCredentials: vi.fn(),
   transcribeAudioChunks: vi.fn(),
   embedAndIndexRecording: vi.fn(),
+  recordError: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("drizzle-orm/d1", () => ({ drizzle: mocks.drizzle }));
@@ -24,6 +25,10 @@ vi.mock("@/lib/recordings/transcription", () => ({
 }));
 vi.mock("@/lib/recordings/embeddings", () => ({
   embedAndIndexRecording: mocks.embedAndIndexRecording,
+}));
+vi.mock("@/lib/observability/errors", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/observability/errors")>()),
+  recordError: mocks.recordError,
 }));
 
 import { processRecordingMessage } from "./pipeline";
@@ -274,6 +279,14 @@ describe("recording processing pipeline", () => {
     expect(updates.at(-1)).toMatchObject({
       processingStatus: "failed",
       processingError: "Recording recording1 does not have a video source",
+    });
+    expect(mocks.recordError).toHaveBeenCalledWith(env.DB, {
+      source: "pipeline",
+      route: "/recordings/:id/pipeline",
+      error: expect.objectContaining({
+        message: "Recording recording1 does not have a video source",
+      }),
+      version: undefined,
     });
   });
 

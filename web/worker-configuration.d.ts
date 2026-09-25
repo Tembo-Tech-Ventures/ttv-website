@@ -23,6 +23,8 @@ declare namespace Cloudflare {
 		AGENT_AUTH_ENABLED?: string;
 		CREDENTIALS_ENCRYPTION_KEY?: string;
 		CREDENTIALS_ENCRYPTION_KEY_PREVIOUS?: string;
+		SAM_ALERT_WEBHOOK_URL?: string;
+		SAM_ALERT_WEBHOOK_TOKEN?: string;
 	}
 }
 interface Env extends Cloudflare.Env {}

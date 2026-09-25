@@ -101,8 +101,9 @@ describe("seedAgentPreviewFixtures", () => {
     // reset, staff-role reset, two staff users/roles, cohort-application reset,
     // ten cohort users, six eligible cohort applications, preview app, amina
     // user/app/profile, invalid-completion user/app/profile, two amina
-    // highlights, kwame user/app/profile, and two projects = 47 total
-    expect(executeQuery).toHaveBeenCalledTimes(47);
+    // highlights, kwame user/app/profile, two projects, and two attention
+    // fixtures = 49 total
+    expect(executeQuery).toHaveBeenCalledTimes(49);
 
     // All calls should target the correct database
     for (const call of executeQuery.mock.calls) {
@@ -254,6 +255,10 @@ describe("seedAgentPreviewFixtures", () => {
     expect(findByParam("ttv-fixture-project-pending")?.[2]).toContain(
       "Baraka Health"
     );
+    expect(findByParam("ttv-fixture-recording-failed")?.[1]).toContain(
+      "processingError"
+    );
+    expect(findByParam("ttv-fixture-import-error")?.[1]).toContain("lastError");
 
     // Every INSERT must be idempotent; deterministic DELETEs only reset
     // isolated fixture rows before recreating their convergent state.
