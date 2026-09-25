@@ -13,6 +13,12 @@ import {
   validateProfileTransition,
   shouldSetPublishedAt,
 } from "@/lib/talent/admin-review";
+import {
+  moderatePost,
+  normalizeAdminNote,
+  parsePostModerationAction,
+} from "@/lib/blog/moderation";
+import { postPath } from "@/lib/blog/feed";
 
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
@@ -23,31 +29,53 @@ let actionError: string | undefined;
 
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
-  const newStatus = formData.get("status") as string;
-
-  const current = await db.query.studentProfile.findFirst({
-    where: eq(schema.studentProfile.id, id),
-    columns: { status: true, publishedAt: true },
-  });
-
-  if (!current) return Astro.redirect("/admin/profiles");
-
-  const validation = validateProfileTransition(current.status, newStatus);
-  if (!validation.valid) {
-    actionError = validation.reason;
-    Astro.response.status = 400;
-  } else {
-    const updateData: Record<string, unknown> = { status: newStatus };
-    if (shouldSetPublishedAt(newStatus, current.publishedAt)) {
-      updateData.publishedAt = new Date();
+  if (formData.get("_action") === "moderate-post") {
+    const postId = formData.get("postId");
+    const action = parsePostModerationAction(formData.get("postAction"));
+    if (typeof postId !== "string" || !action) {
+      actionError = "Invalid post moderation request.";
+      Astro.response.status = 400;
+    } else {
+      const result = await moderatePost(db, {
+        profileId: id,
+        postId,
+        action,
+        adminNote: normalizeAdminNote(formData.get("adminNote")),
+      });
+      if (!result.success) {
+        actionError = result.error;
+        Astro.response.status = 409;
+      } else {
+        return Astro.redirect(`/admin/profiles/${id}#posts`);
+      }
     }
+  } else {
+    const newStatus = formData.get("status") as string;
 
-    await db
-      .update(schema.studentProfile)
-      .set(updateData)
-      .where(eq(schema.studentProfile.id, id));
+    const current = await db.query.studentProfile.findFirst({
+      where: eq(schema.studentProfile.id, id),
+      columns: { status: true, publishedAt: true },
+    });
 
-    return Astro.redirect(`/admin/profiles/${id}`);
+    if (!current) return Astro.redirect("/admin/profiles");
+
+    const validation = validateProfileTransition(current.status, newStatus);
+    if (!validation.valid) {
+      actionError = validation.reason;
+      Astro.response.status = 400;
+    } else {
+      const updateData: Record<string, unknown> = { status: newStatus };
+      if (shouldSetPublishedAt(newStatus, current.publishedAt)) {
+        updateData.publishedAt = new Date();
+      }
+
+      await db
+        .update(schema.studentProfile)
+        .set(updateData)
+        .where(eq(schema.studentProfile.id, id));
+
+      return Astro.redirect(`/admin/profiles/${id}`);
+    }
   }
 }
 
@@ -56,6 +84,7 @@ const profile = await db.query.studentProfile.findFirst({
   with: {
     user: true,
     highlights: { orderBy: (h, { asc }) => [asc(h.sortOrder)] },
+    posts: { orderBy: (post, { desc }) => [desc(post.updatedAt)] },
   },
 });
 
@@ -263,6 +292,83 @@ function transitionLabel(to: string, from: string): string {
         </div>
       </Card>
     )}
+
+    <div id="posts">
+      <Card>
+        <h3 class="mb-4 text-lg font-semibold text-white">Posts</h3>
+        {profile.posts.length === 0 ? (
+          <p class="text-sm text-ink-muted">No posts from this builder.</p>
+        ) : (
+          <div class="space-y-4">
+            {profile.posts.map((post) => (
+              <section class="rounded-lg border border-teal/15 p-4" aria-label={post.title}>
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <h4 class="font-medium text-white">{post.title}</h4>
+                      <Badge
+                        variant={post.status.toLowerCase() as "draft" | "published" | "suspended"}
+                      />
+                    </div>
+                    <p class="mt-1 break-all font-mono text-xs text-ink-muted">
+                      /blog/{profile.handle}/{post.slug}
+                    </p>
+                    {post.adminNote && (
+                      <p class="mt-2 text-sm text-ink-secondary">
+                        Admin note: {post.adminNote}
+                      </p>
+                    )}
+                  </div>
+                  {post.status === "PUBLISHED" && (
+                    <a
+                      href={postPath(profile.handle, post.slug)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="shrink-0 text-sm font-medium text-primary hover:underline"
+                    >
+                      View live
+                    </a>
+                  )}
+                </div>
+
+                {(post.status === "PUBLISHED" || post.status === "SUSPENDED") && (
+                  <form method="POST" class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <input type="hidden" name="_action" value="moderate-post" />
+                    <input type="hidden" name="postId" value={post.id} />
+                    <input
+                      type="hidden"
+                      name="postAction"
+                      value={post.status === "PUBLISHED" ? "suspend" : "restore"}
+                    />
+                    <label class="min-w-0 flex-1 text-xs font-medium uppercase tracking-wider text-ink-muted">
+                      Admin note <span class="normal-case tracking-normal">(optional)</span>
+                      <input
+                        name="adminNote"
+                        type="text"
+                        maxlength="1000"
+                        value={post.adminNote ?? ""}
+                        class="mt-1.5 block w-full rounded-md border border-teal/20 bg-dark px-3 py-2 text-sm font-normal normal-case tracking-normal text-white outline-none focus:border-primary"
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      class:list={[
+                        "shrink-0 rounded-md px-4 py-2 text-sm font-medium text-white transition-colors",
+                        post.status === "PUBLISHED"
+                          ? "bg-red-600 hover:bg-red-700"
+                          : "bg-green-600 hover:bg-green-700",
+                      ]}
+                    >
+                      {post.status === "PUBLISHED" ? "Suspend post" : "Restore post"}
+                    </button>
+                  </form>
+                )}
+              </section>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
 
     <Card>
       <h3 class="mb-4 text-lg font-semibold text-white">Actions</h3>

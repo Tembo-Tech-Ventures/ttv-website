@@ -130,6 +130,46 @@ test.describe("admin review surfaces", () => {
     });
   });
 
+  test("admin can suspend and restore a published post", async ({
+    page,
+    viewport,
+  }) => {
+    const isMobile = (viewport?.width ?? 1280) < 1024;
+    test.skip(isMobile, "Post moderation mutation runs once on desktop");
+
+    await page.goto("/admin/profiles/ttv-fixture-profile-amina#posts");
+    const post = page.getByRole("region", {
+      name: "Notes on debugging at the edge",
+    });
+    await expect(post).toBeVisible();
+    await post.getByLabel(/admin note/i).fill("Checked in the preview journey");
+    await post.getByRole("button", { name: "Suspend post" }).click();
+
+    await expect(
+      page
+        .getByRole("region", { name: "Notes on debugging at the edge" })
+        .getByRole("button", { name: "Restore post" })
+    ).toBeVisible();
+    expect(
+      (await page.request.get("/blog/amina-preview/debugging-at-the-edge")).status()
+    ).toBe(404);
+
+    const suspended = page.getByRole("region", {
+      name: "Notes on debugging at the edge",
+    });
+    await expect(suspended.getByText(/Checked in the preview journey/)).toBeVisible();
+    await suspended.getByRole("button", { name: "Restore post" }).click();
+
+    await expect(
+      page
+        .getByRole("region", { name: "Notes on debugging at the edge" })
+        .getByRole("button", { name: "Suspend post" })
+    ).toBeVisible();
+    expect(
+      (await page.request.get("/blog/amina-preview/debugging-at-the-edge")).status()
+    ).toBe(200);
+  });
+
   test("projects index renders fixture projects", async ({ page }) => {
     await page.goto("/admin/projects");
     await expect(

@@ -1,0 +1,297 @@
+---
+import PublicLayout from "@/layouts/PublicLayout.astro";
+import { drizzle } from "drizzle-orm/d1";
+import { env } from "cloudflare:workers";
+import * as schema from "@/lib/db/schema";
+import { findPublicPost } from "@/lib/blog/public";
+import { postPath } from "@/lib/blog/feed";
+import { absoluteUrl, normalizeDescription } from "@/lib/seo";
+import {
+  buildArticleJsonLd,
+  serializeJsonLd,
+} from "@/lib/seo/structured-data";
+import { getInitials } from "@/components/talent/directory-helpers";
+
+const { handle, slug } = Astro.params;
+const db = drizzle(env.DB, { schema });
+const result =
+  handle && slug ? await findPublicPost(db, handle, slug) : undefined;
+
+if (!result) Astro.response.status = 404;
+
+const post = result?.post;
+const more = result?.more ?? [];
+const canonical = post
+  ? postPath(post.profile.handle, post.slug)
+  : Astro.url.pathname;
+const description = normalizeDescription(post?.excerpt ?? undefined);
+const siteOrigin = Astro.site?.origin ?? "https://tembotechventures.com";
+const canonicalUrl =
+  absoluteUrl(Astro.site, canonical) ?? `${siteOrigin}${canonical}`;
+const profileUrl = post
+  ? `${siteOrigin}/talent/${post.profile.handle}`
+  : siteOrigin;
+const authorImage = post?.profile.user.image
+  ? absoluteUrl(Astro.site, post.profile.user.image)
+  : null;
+
+const articleJsonLd = post
+  ? buildArticleJsonLd({
+      title: post.title,
+      url: canonicalUrl,
+      description,
+      publishedAt: post.publishedAt,
+      updatedAt: post.updatedAt,
+      siteOrigin,
+      image: `${siteOrigin}/og-default.png`,
+      author: {
+        name: post.profile.user.name,
+        url: profileUrl,
+        image: authorImage,
+        headline: post.profile.headline,
+      },
+    })
+  : null;
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString("en", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+---
+
+<PublicLayout
+  title={post?.title ?? "Post not found"}
+  description={description}
+  canonical={canonical}
+  ogType={post ? "article" : "website"}
+  publishedTime={post?.publishedAt.toISOString()}
+  noIndex={!post}
+>
+  <link
+    slot="head"
+    rel="alternate"
+    type="application/rss+xml"
+    title="Tembo Tech Ventures field notes"
+    href="/blog/rss.xml"
+  />
+  {articleJsonLd && (
+    <script
+      slot="head"
+      type="application/ld+json"
+      set:html={serializeJsonLd(articleJsonLd)}
+    />
+  )}
+
+  {!post ? (
+    <section class="mx-auto max-w-4xl px-4 py-28 text-center sm:px-8 md:py-36">
+      <h1
+        class="font-heading tracking-heading text-ink-primary"
+        style="font-size: clamp(2rem, 6vw, 4rem); line-height: 0.95;"
+      >
+        This post isn&rsquo;t published
+      </h1>
+      <p class="mt-6 font-body text-lg text-ink-secondary">
+        The field note you&rsquo;re looking for is unavailable, or its address has
+        changed.
+      </p>
+      <a
+        href="/blog"
+        class="mt-8 inline-flex rounded-full bg-primary px-6 py-3 font-body text-sm font-semibold uppercase tracking-[0.14em] text-dark transition-transform hover:scale-[1.03]"
+      >
+        Back to field notes
+      </a>
+    </section>
+  ) : (
+    <article class="mx-auto max-w-4xl px-4 py-28 sm:px-8 md:py-36">
+      <a
+        href="/blog"
+        class="font-body text-sm font-semibold uppercase tracking-[0.18em] text-primary transition-colors hover:text-ink-primary"
+      >
+        &larr; Back to field notes
+      </a>
+
+      <header class="mt-10 border-b border-[color:var(--color-rule)] pb-10 md:pb-14">
+        <p class="font-body text-sm text-ink-muted">
+          <time datetime={post.publishedAt.toISOString()}>
+            {formatDate(post.publishedAt)}
+          </time>
+          <span aria-hidden="true"> &middot; </span>
+          {post.readingMinutes} min read
+        </p>
+
+        <h1
+          class="font-heading tracking-heading mt-5 break-words text-ink-primary"
+          style="font-size: clamp(2.5rem, 8vw, 5.5rem); line-height: 0.95;"
+        >
+          {post.title}
+        </h1>
+
+        <a
+          href={`/talent/${post.profile.handle}`}
+          class="mt-9 flex max-w-xl items-center gap-4 rounded-xl border border-[color:var(--color-rule)] bg-[color:var(--color-bg-raised)] p-4 transition-colors hover:border-primary/50"
+        >
+          {post.profile.user.image ? (
+            <img
+              src={post.profile.user.image}
+              alt=""
+              class="h-14 w-14 shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <span class="font-heading flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary/15 text-lg text-primary">
+              {getInitials(post.profile.user.name)}
+            </span>
+          )}
+          <span class="min-w-0 font-body">
+            <span class="block font-semibold text-ink-primary">
+              {post.profile.user.name}
+            </span>
+            {post.profile.headline && (
+              <span class="mt-0.5 block text-sm text-ink-secondary">
+                {post.profile.headline}
+              </span>
+            )}
+            <span class="mt-1 block text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+              View profile
+            </span>
+          </span>
+        </a>
+      </header>
+
+      <div
+        class="post-content mt-12 font-body text-ink-secondary"
+        set:html={post.contentHtml}
+      />
+
+      {more.length > 0 && (
+        <section
+          class="mt-16 border-t border-[color:var(--color-rule)] pt-10"
+          aria-labelledby="more-from-author"
+        >
+          <p class="font-body text-xs font-semibold uppercase tracking-[0.28em] text-primary">
+            Keep reading
+          </p>
+          <h2
+            id="more-from-author"
+            class="font-heading tracking-subhead mt-3 text-2xl text-ink-primary sm:text-3xl"
+          >
+            More from {post.profile.user.name}
+          </h2>
+          <ul class="mt-6 divide-y divide-[color:var(--color-rule)] border-y border-[color:var(--color-rule)]">
+            {more.map((other) => (
+              <li>
+                <a
+                  href={postPath(other.profile.handle, other.slug)}
+                  class="flex flex-col gap-1 py-5 font-body transition-colors hover:text-primary sm:flex-row sm:items-center sm:justify-between sm:gap-6"
+                >
+                  <span class="font-semibold text-ink-primary">{other.title}</span>
+                  <span class="shrink-0 text-sm text-ink-muted">
+                    {formatDate(other.publishedAt)} &middot; {other.readingMinutes} min
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </article>
+  )}
+</PublicLayout>
+
+<style>
+  :global(.post-content) {
+    font-size: 1.0625rem;
+    line-height: 1.8;
+    overflow-wrap: anywhere;
+  }
+
+  :global(.post-content > * + *) {
+    margin-top: 1.5rem;
+  }
+
+  :global(.post-content h2),
+  :global(.post-content h3),
+  :global(.post-content h4),
+  :global(.post-content h5),
+  :global(.post-content h6) {
+    margin-top: 2.75rem;
+    color: var(--color-ink-primary);
+    font-family: var(--font-heading);
+    line-height: 1.08;
+  }
+
+  :global(.post-content h2) {
+    font-size: clamp(1.75rem, 5vw, 2.5rem);
+  }
+
+  :global(.post-content h3) {
+    font-size: clamp(1.4rem, 4vw, 2rem);
+  }
+
+  :global(.post-content a) {
+    color: var(--color-primary);
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+  }
+
+  :global(.post-content ul),
+  :global(.post-content ol) {
+    padding-left: 1.5rem;
+  }
+
+  :global(.post-content ul) {
+    list-style: disc;
+  }
+
+  :global(.post-content ol) {
+    list-style: decimal;
+  }
+
+  :global(.post-content li + li) {
+    margin-top: 0.5rem;
+  }
+
+  :global(.post-content blockquote) {
+    border-left: 3px solid var(--color-primary);
+    padding-left: 1.25rem;
+    color: var(--color-ink-primary);
+    font-style: italic;
+  }
+
+  :global(.post-content pre) {
+    max-width: 100%;
+    overflow-x: auto;
+    border: 1px solid var(--color-rule);
+    border-radius: 0.75rem;
+    background: color-mix(in srgb, var(--color-dark) 80%, black);
+    padding: 1rem;
+    font-size: 0.875rem;
+  }
+
+  :global(.post-content :not(pre) > code) {
+    border-radius: 0.25rem;
+    background: rgb(255 255 255 / 0.08);
+    padding: 0.1rem 0.3rem;
+    color: var(--color-ink-primary);
+  }
+
+  :global(.post-content table) {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+  }
+
+  :global(.post-content th),
+  :global(.post-content td) {
+    border: 1px solid var(--color-rule);
+    padding: 0.6rem 0.8rem;
+    text-align: left;
+  }
+
+  :global(.post-content hr) {
+    border-color: var(--color-rule);
+  }
+</style>

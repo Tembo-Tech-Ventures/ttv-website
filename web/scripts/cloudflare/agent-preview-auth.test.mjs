@@ -100,10 +100,10 @@ describe("seedAgentPreviewFixtures", () => {
     // profile reset, curriculum, eight convergent cohorts, self-application
     // reset, staff-role reset, two staff users/roles, cohort-application reset,
     // ten cohort users, six eligible cohort applications, preview app, amina
-    // user/app/profile, invalid-completion user/app/profile, two amina
-    // highlights, kwame user/app/profile, two projects, and two attention
-    // fixtures = 49 total
-    expect(executeQuery).toHaveBeenCalledTimes(49);
+    // user/app/profile, four blog posts, invalid-completion user/app/profile,
+    // two amina highlights, kwame user/app/profile, two projects, and two
+    // attention fixtures = 53 total
+    expect(executeQuery).toHaveBeenCalledTimes(53);
 
     // All calls should target the correct database
     for (const call of executeQuery.mock.calls) {
@@ -232,6 +232,19 @@ describe("seedAgentPreviewFixtures", () => {
     const aminaProfile = findByParam("ttv-fixture-profile-amina");
     expect(aminaProfile?.[2]).toContain("amina-preview");
     expect(aminaProfile?.[2]).toContain("Kenya");
+    const readerPost = findByParam("ttv-fixture-post-amina-reader");
+    expect(readerPost?.[1]).toContain('INSERT INTO "blogPost"');
+    expect(readerPost?.[2]).toContain("building-resilient-interfaces");
+    expect(readerPost?.[2]).toContain("PUBLISHED");
+    expect(findByParam("ttv-fixture-post-amina-moderation")?.[2]).toContain(
+      "PUBLISHED"
+    );
+    expect(findByParam("ttv-fixture-post-amina-draft")?.[2]).toContain(
+      "DRAFT"
+    );
+    expect(findByParam("ttv-fixture-post-amina-suspended")?.[2]).toContain(
+      "SUSPENDED"
+    );
     const invalidCompletionApp = findByParam(
       "ttv-fixture-app-invalid-completion"
     );

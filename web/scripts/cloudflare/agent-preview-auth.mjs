@@ -516,6 +516,105 @@ export async function seedAgentPreviewFixtures({
     ]
   );
 
+  // Public-reader and moderation fixtures. The second published post is kept
+  // separate from the reader assertion so the admin mutation journey can
+  // suspend and restore it without racing the public blog journey.
+  const blogPostFixtures = [
+    {
+      id: "ttv-fixture-post-amina-reader",
+      slug: "building-resilient-interfaces",
+      title: "Building resilient interfaces from field conversations",
+      excerpt:
+        "A field note on turning conversations with Nairobi commuters into clearer, more resilient product decisions.",
+      contentMarkdown:
+        "## Start with the conversation\n\nA useful interface begins with the people who will use it. We listened, tested small ideas, and changed the flow together.\n\n## Build for the real conditions\n\nSlow connections and small screens shaped every decision.",
+      contentHtml:
+        "<h3>Start with the conversation</h3><p>A useful interface begins with the people who will use it. We listened, tested small ideas, and changed the flow together.</p><h3>Build for the real conditions</h3><p>Slow connections and small screens shaped every decision.</p>",
+      readingMinutes: 2,
+      status: "PUBLISHED",
+      adminNote: null,
+      publishedAt,
+    },
+    {
+      id: "ttv-fixture-post-amina-moderation",
+      slug: "debugging-at-the-edge",
+      title: "Notes on debugging at the edge",
+      excerpt:
+        "What a small team learned while tracing an intermittent edge failure.",
+      contentMarkdown:
+        "## Follow the evidence\n\nWe narrowed the failure together, one request at a time.",
+      contentHtml:
+        "<h3>Follow the evidence</h3><p>We narrowed the failure together, one request at a time.</p>",
+      readingMinutes: 1,
+      status: "PUBLISHED",
+      adminNote: null,
+      publishedAt,
+    },
+    {
+      id: "ttv-fixture-post-amina-draft",
+      slug: "draft-not-public",
+      title: "A draft field note",
+      excerpt: "This draft must never appear publicly.",
+      contentMarkdown: "Still drafting.",
+      contentHtml: "<p>Still drafting.</p>",
+      readingMinutes: 1,
+      status: "DRAFT",
+      adminNote: null,
+      publishedAt: null,
+    },
+    {
+      id: "ttv-fixture-post-amina-suspended",
+      slug: "suspended-not-public",
+      title: "A suspended field note",
+      excerpt: "This suspended post must never appear publicly.",
+      contentMarkdown: "Taken down for review.",
+      contentHtml: "<p>Taken down for review.</p>",
+      readingMinutes: 1,
+      status: "SUSPENDED",
+      adminNote: "Preview moderation fixture",
+      publishedAt,
+    },
+  ];
+
+  for (const fixture of blogPostFixtures) {
+    await executeQuery(
+      databaseId,
+      `INSERT INTO "blogPost"
+        ("id", "profileId", "slug", "title", "excerpt", "contentMarkdown",
+         "contentHtml", "renderedWith", "readingMinutes", "status", "adminNote",
+         "publishedAt", "createdAt", "updatedAt")
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT("id") DO UPDATE SET
+         "profileId" = excluded."profileId",
+         "slug" = excluded."slug",
+         "title" = excluded."title",
+         "excerpt" = excluded."excerpt",
+         "contentMarkdown" = excluded."contentMarkdown",
+         "contentHtml" = excluded."contentHtml",
+         "renderedWith" = 1,
+         "readingMinutes" = excluded."readingMinutes",
+         "status" = excluded."status",
+         "adminNote" = excluded."adminNote",
+         "publishedAt" = excluded."publishedAt",
+         "updatedAt" = excluded."updatedAt"`,
+      [
+        fixture.id,
+        "ttv-fixture-profile-amina",
+        fixture.slug,
+        fixture.title,
+        fixture.excerpt,
+        fixture.contentMarkdown,
+        fixture.contentHtml,
+        fixture.readingMinutes,
+        fixture.status,
+        fixture.adminNote,
+        fixture.publishedAt,
+        createdAt,
+        createdAt,
+      ]
+    );
+  }
+
   // Published profile with a legacy COMPLETED row missing completedAt. Public
   // talent and certificate routes must treat this as an invalid completion.
   await executeQuery(

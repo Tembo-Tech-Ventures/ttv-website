@@ -6,13 +6,95 @@ import FeaturesSection from "@/components/homepage/FeaturesSection";
 import Marquee from "@/components/homepage/Marquee.astro";
 import ValuesSection from "@/components/homepage/ValuesSection";
 import HumansSection from "@/components/homepage/HumansSection.astro";
+import { drizzle } from "drizzle-orm/d1";
+import { env } from "cloudflare:workers";
+import * as schema from "@/lib/db/schema";
+import { listPublicPosts } from "@/lib/blog/public";
+import { postPath } from "@/lib/blog/feed";
+
+const db = drizzle(env.DB, { schema });
+const latestPosts = await listPublicPosts(db, { limit: 3 });
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString("en", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
 ---
 
-<PublicLayout title="Tembo Tech Ventures">
+<PublicLayout
+  title="Tembo Tech Ventures"
+  description="Tembo Tech Ventures helps grow practical tech communities across Africa through cohorts, mentorship, and lasting professional relationships."
+  canonical="/"
+>
   <HeroSection client:visible isAuthenticated={Boolean(Astro.locals.user)} />
   <ValueSection client:visible />
   <FeaturesSection client:visible />
   <Marquee />
   <ValuesSection client:visible />
+  {latestPosts.length > 0 && (
+    <section
+      aria-labelledby="latest-posts-heading"
+      class="border-y border-[color:var(--color-rule)] py-16 md:py-20"
+    >
+      <div class="mx-auto max-w-7xl px-4 sm:px-8">
+        <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p class="font-body text-xs font-semibold uppercase tracking-[0.4em] text-primary">
+              &sect; Field notes
+            </p>
+            <h2
+              id="latest-posts-heading"
+              class="font-heading tracking-heading mt-4 text-3xl text-ink-primary md:text-5xl"
+            >
+              Latest posts
+            </h2>
+          </div>
+          <a
+            href="/blog"
+            class="font-body text-sm font-semibold uppercase tracking-[0.16em] text-primary transition-colors hover:text-ink-primary"
+          >
+            Read all field notes &rarr;
+          </a>
+        </div>
+
+        <ol class="mt-10 grid gap-px overflow-hidden rounded-xl border border-[color:var(--color-rule)] bg-[color:var(--color-rule)] md:grid-cols-3">
+          {latestPosts.map((post) => (
+            <li class="min-w-0 bg-dark p-6 sm:p-8">
+              <article class="flex h-full flex-col">
+                <p class="font-body text-xs uppercase tracking-[0.18em] text-ink-muted">
+                  {formatDate(post.publishedAt)} &middot; {post.readingMinutes} min
+                </p>
+                <h3 class="font-heading tracking-subhead mt-4 break-words text-2xl text-ink-primary">
+                  <a
+                    href={postPath(post.profile.handle, post.slug)}
+                    class="transition-colors hover:text-primary"
+                  >
+                    {post.title}
+                  </a>
+                </h3>
+                {post.excerpt && (
+                  <p class="mt-4 line-clamp-3 font-body text-sm leading-relaxed text-ink-secondary">
+                    {post.excerpt}
+                  </p>
+                )}
+                <p class="mt-auto pt-6 font-body text-sm text-ink-muted">
+                  By{" "}
+                  <a
+                    href={`/talent/${post.profile.handle}`}
+                    class="font-semibold text-ink-primary transition-colors hover:text-primary"
+                  >
+                    {post.profile.user.name}
+                  </a>
+                </p>
+              </article>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  )}
   <HumansSection />
 </PublicLayout>
