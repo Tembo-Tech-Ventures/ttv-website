@@ -2,14 +2,14 @@
 import BaseLayout from "./BaseLayout.astro";
 import Grain from "@/components/common/Grain.astro";
 import type { SeoProps } from "@/lib/seo";
+import { PUBLIC_FOOTER_GROUPS, PUBLIC_NAV_LINKS } from "@/lib/site";
 
 /**
  * Public marketing layout (PROPOSAL §2 / §7).
  *
- * Nav: drops "Home", promotes Blog/Apply, demotes Sign In to a ghost
- * button. The branding mark switches to a tight sans "TTV" monogram
- * paired with the elephant — the display face is reserved for 48px+
- * per the typography role split (§A).
+ * Nav: public routes plus sign-in and application actions. The branding mark
+ * switches to a tight sans "TTV" monogram paired with the elephant — the
+ * display face is reserved for 48px+ per the typography role split (§A).
  *
  * Footer: expanded into mission + four link columns + legal row + an
  * oversized "TEMBO" signature that bleeds off the page.
@@ -19,44 +19,6 @@ type Props = SeoProps;
 const seo = Astro.props;
 const isAuthenticated = Boolean(Astro.locals.user);
 
-const NAV_LINKS = [
-  { label: "How", href: "/#what-we-do" },
-  { label: "Why", href: "/#why-tembo" },
-  { label: "Cohort", href: "/#humans" },
-  { label: "Blog", href: "/blog" },
-];
-
-const FOOTER_GROUPS = [
-  {
-    heading: "The work",
-    links: [
-      { label: "How we work", href: "/#what-we-do" },
-      { label: "Why Tembo", href: "/#why-tembo" },
-      { label: "Values", href: "/#values" },
-      { label: "Cohort 04", href: "/#humans" },
-    ],
-  },
-  {
-    heading: "Join",
-    links: [
-      { label: "Apply", href: "/dashboard/apply" },
-      { label: "Sign in", href: "/auth/login" },
-    ],
-  },
-  {
-    heading: "Read",
-    links: [
-      { label: "Blog", href: "/blog" },
-    ],
-  },
-  {
-    heading: "Connect",
-    links: [
-      { label: "Email", href: "mailto:hello@tembotechventures.com" },
-      { label: "LinkedIn", href: "https://www.linkedin.com/company/tembo-tech-ventures/" },
-    ],
-  },
-];
 ---
 
 <BaseLayout {...seo}>
@@ -77,8 +39,8 @@ const FOOTER_GROUPS = [
         </a>
 
         <div class="flex items-center gap-6 md:gap-8">
-          <div class="hidden items-center gap-6 md:flex">
-            {NAV_LINKS.map((link) => (
+          <div class="hidden items-center gap-6 lg:flex">
+            {PUBLIC_NAV_LINKS.map((link) => (
               <a
                 href={link.href}
                 class="font-body text-sm font-medium uppercase tracking-[0.18em] text-ink-secondary transition-colors hover:text-ink-primary"
@@ -115,8 +77,10 @@ const FOOTER_GROUPS = [
           {/* Mobile hamburger */}
           <button
             type="button"
-            class="inline-flex items-center justify-center rounded-md p-2 text-ink-secondary transition-colors hover:text-ink-primary md:hidden"
+            class="inline-flex items-center justify-center rounded-md p-2 text-ink-secondary transition-colors hover:text-ink-primary lg:hidden"
             aria-label="Open menu"
+            aria-controls="mobile-menu"
+            aria-expanded="false"
             id="mobile-menu-btn"
           >
             <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -129,12 +93,13 @@ const FOOTER_GROUPS = [
       {/* Mobile menu panel */}
       <div
         id="mobile-menu"
-        class="hidden border-t border-[color:var(--color-rule)] bg-[#012A28]/95 backdrop-blur md:hidden"
+        class="hidden border-t border-[color:var(--color-rule)] bg-[#012A28]/95 backdrop-blur lg:hidden"
       >
         <div class="space-y-1 px-4 py-4">
-          {NAV_LINKS.map((link) => (
+          {PUBLIC_NAV_LINKS.map((link) => (
             <a
               href={link.href}
+              data-mobile-menu-link
               class="block rounded-md px-3 py-3 font-body text-sm font-medium uppercase tracking-[0.18em] text-ink-secondary transition-colors hover:bg-teal/20 hover:text-ink-primary"
             >
               {link.label}
@@ -155,7 +120,18 @@ const FOOTER_GROUPS = [
     <script>
       const btn = document.getElementById("mobile-menu-btn");
       const menu = document.getElementById("mobile-menu");
-      btn?.addEventListener("click", () => menu?.classList.toggle("hidden"));
+      const setMenuOpen = (open: boolean) => {
+        menu?.classList.toggle("hidden", !open);
+        btn?.setAttribute("aria-expanded", String(open));
+      };
+
+      btn?.addEventListener("click", () => {
+        setMenuOpen(menu?.classList.contains("hidden") ?? false);
+      });
+
+      menu?.querySelectorAll("[data-mobile-menu-link]").forEach((link) => {
+        link.addEventListener("click", () => setMenuOpen(false));
+      });
     </script>
 
     <main class="flex-1">
@@ -183,7 +159,7 @@ const FOOTER_GROUPS = [
           </div>
 
           <div class="grid grid-cols-2 gap-8 sm:grid-cols-4 md:gap-10">
-            {FOOTER_GROUPS.map((group) => (
+            {PUBLIC_FOOTER_GROUPS.map((group) => (
               <div class="space-y-4">
                 <p class="font-body text-xs font-semibold uppercase tracking-[0.24em] text-ink-muted">
                   {group.heading}

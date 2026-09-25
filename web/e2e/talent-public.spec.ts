@@ -175,6 +175,14 @@ test.describe("homepage humans section", () => {
     await expect(
       section.getByText("Invalid Completion Fixture")
     ).toHaveCount(0);
+    await expect(section.getByText("Profile coming")).toHaveCount(0);
+    const cards = section.locator("ul > li");
+    const cardCount = await cards.count();
+    expect(cardCount).toBeGreaterThan(0);
+    expect(cardCount).toBeLessThanOrEqual(4);
+    await expect(
+      section.locator('ul > li > a[href^="/talent/"]')
+    ).toHaveCount(cardCount);
     await page.screenshot({
       path: evidence("homepage-humans"),
       fullPage: true,

@@ -2,7 +2,13 @@ import { useState } from "react";
 
 import { signIn } from "@/lib/auth-client";
 
-export default function GitHubSignInButton() {
+interface GitHubSignInButtonProps {
+  callbackURL: string;
+}
+
+export default function GitHubSignInButton({
+  callbackURL,
+}: GitHubSignInButtonProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,7 +23,7 @@ export default function GitHubSignInButton() {
     try {
       const result = await signIn.social({
         provider: "github",
-        callbackURL: "/dashboard",
+        callbackURL,
       });
 
       const redirectUrl = result?.data?.url;
@@ -41,6 +47,7 @@ export default function GitHubSignInButton() {
         type="button"
         onClick={handleSignIn}
         disabled={isSubmitting}
+        data-callback-url={callbackURL}
         className="flex w-full items-center justify-center gap-3 rounded-lg bg-[#24292f] px-6 py-3 text-base font-medium text-white transition-colors hover:bg-[#3b434b] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-dark disabled:cursor-not-allowed disabled:opacity-70"
       >
         <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">

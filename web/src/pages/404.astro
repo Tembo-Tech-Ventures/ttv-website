@@ -1,0 +1,43 @@
+---
+import PublicLayout from "@/layouts/PublicLayout.astro";
+---
+
+<PublicLayout title="Page not found · Tembo Tech Ventures">
+  <section class="px-4 py-28 sm:px-8 md:py-36">
+    <div class="mx-auto max-w-3xl">
+      <p class="font-body text-xs font-semibold uppercase tracking-[0.4em] text-primary">
+        § 404
+      </p>
+      <h1
+        class="font-heading tracking-heading mt-5 text-ink-primary"
+        style="font-size: clamp(3rem, 8vw, 6.5rem); line-height: 0.95;"
+      >
+        This page isn&apos;t here.
+      </h1>
+      <p class="font-body mt-8 max-w-xl text-lg text-ink-secondary md:text-xl">
+        Meet the builders, read the latest from the community, or head back to
+        the homepage.
+      </p>
+      <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-4">
+        <a
+          href="/talent"
+          class="font-body inline-flex items-center rounded-full bg-primary px-6 py-3 text-sm font-semibold uppercase tracking-[0.14em] text-dark transition-transform hover:scale-[1.03]"
+        >
+          Builders
+        </a>
+        <a
+          href="/blog"
+          class="font-body text-sm font-medium uppercase tracking-[0.18em] text-ink-primary transition-colors hover:text-primary"
+        >
+          Blog &rarr;
+        </a>
+        <a
+          href="/"
+          class="font-body text-sm font-medium uppercase tracking-[0.18em] text-ink-primary transition-colors hover:text-primary"
+        >
+          Home &rarr;
+        </a>
+      </div>
+    </div>
+  </section>
+</PublicLayout>
