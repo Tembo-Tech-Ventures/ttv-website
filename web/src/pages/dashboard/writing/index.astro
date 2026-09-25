@@ -141,22 +141,32 @@ function formatDate(d: Date | null) {
       <div class="space-y-3">
         <h3 class="text-sm font-medium uppercase tracking-wider text-ink-muted">Published</h3>
         {published.map((post) => (
-          <a href={`/dashboard/writing/${post.id}`} class="block">
-            <Card>
-              <div class="flex items-center justify-between gap-4">
-                <div class="min-w-0">
-                  <p class="truncate font-medium text-white">{post.title}</p>
-                  <p class="mt-0.5 text-sm text-ink-muted">
-                    Published {formatDate(post.publishedAt)} · {post.readingMinutes} min read
-                    {profile!.handle && (
-                      <span> · <span class="text-ink-secondary">/blog/{profile!.handle}/{post.slug}</span></span>
-                    )}
-                  </p>
-                </div>
-                <Badge variant="published" />
+          <Card>
+            <div class="flex items-center justify-between gap-4">
+              <div class="min-w-0">
+                <a
+                  href={`/dashboard/writing/${post.id}`}
+                  class="block truncate font-medium text-white hover:text-primary"
+                >
+                  {post.title}
+                </a>
+                <p class="mt-0.5 text-sm text-ink-muted">
+                  Published {formatDate(post.publishedAt)} · {post.readingMinutes} min read
+                </p>
+                {profile!.handle && (
+                  <a
+                    href={`/blog/${profile!.handle}/${post.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="mt-1 inline-block break-all text-sm text-primary hover:underline"
+                  >
+                    View live · /blog/{profile!.handle}/{post.slug}
+                  </a>
+                )}
               </div>
-            </Card>
-          </a>
+              <Badge variant="published" />
+            </div>
+          </Card>
         ))}
       </div>
     )}

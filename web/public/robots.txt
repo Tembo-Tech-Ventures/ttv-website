@@ -7,3 +7,5 @@ Disallow: /dashboard
 Disallow: /admin
 Disallow: /api
 Disallow: /auth
+
+Sitemap: https://tembotechventures.com/sitemap.xml

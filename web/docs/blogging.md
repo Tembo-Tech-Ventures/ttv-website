@@ -79,6 +79,35 @@ rendering, so they will not appear on the published page.
   tab; links to `tembotechventures.com` do not.
 - The sanitiser allow-list is small and deliberate. No `img`, no raw HTML.
 
+## Public reader and discovery
+
+Published posts are available only when the author has a `PUBLISHED` profile
+and at least one valid completed cohort application (status `COMPLETED` with a
+non-null `completedAt`). The listing, reader, RSS feed, homepage strip and
+sitemap all use the same query helper, so taking down a post or profile removes
+it from every public surface together.
+
+- `/blog` lists public posts newest first.
+- `/blog/[handle]/[slug]` renders the stored, sanitised `contentHtml` with the
+  author profile, Article JSON-LD and sharing metadata.
+- `/blog/rss.xml` is the public RSS feed and is cached for ten minutes.
+- `/sitemap.xml` includes eligible profiles and posts and is cached for one
+  hour.
+
+Draft and suspended posts return the public post-unavailable page with HTTP
+404. Authors can open a published post from both the Writing list and the
+editor's metadata panel.
+
+## Moderation
+
+An admin opens `/admin/profiles/[id]` to see every post by that builder. A
+published post has one **Suspend post** button and a suspended post has one
+**Restore post** button; either action accepts an optional admin note. The
+transition is conditional on the post still belonging to that profile and
+still having the expected status. Suspension immediately removes the post from
+the reader, listing, RSS feed, homepage strip and sitemap. Restore returns it
+to `PUBLISHED` without changing its original publication date.
+
 ## Reviewing a change to the editor
 
 `/dev/writing-ui` renders the real `PostEditor` with fixed data and no API

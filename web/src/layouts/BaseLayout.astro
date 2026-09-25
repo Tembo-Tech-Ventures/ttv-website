@@ -28,7 +28,7 @@ const resolvedDescription =
 // Default the canonical to the current path (not the full URL) so filtered
 // listings like `/talent?skill=react` do not read as duplicate content.
 const canonicalUrl = absoluteUrl(Astro.site, canonical ?? Astro.url.pathname);
-const ogImageUrl = absoluteUrl(Astro.site, ogImage);
+const ogImageUrl = absoluteUrl(Astro.site, ogImage ?? "/og-default.png");
 ---
 
 <!doctype html>

@@ -15,6 +15,11 @@ import {
   FORM_TOKEN_FIELD,
 } from "@/lib/spam/protection";
 import { formatDistanceToNow } from "date-fns";
+import { absoluteUrl, normalizeDescription } from "@/lib/seo";
+import {
+  buildPersonJsonLd,
+  serializeJsonLd,
+} from "@/lib/seo/structured-data";
 
 const { handle } = Astro.params;
 
@@ -103,13 +108,53 @@ if (Astro.request.method === "POST" && profile) {
 const formToken = profile
   ? await issueFormToken(env.BETTER_AUTH_SECRET)
   : "";
+
+const canonical = profile ? `/talent/${profile.handle}` : Astro.url.pathname;
+const profileDescription = profile
+  ? normalizeDescription(
+      profile.bio ??
+        (profile.headline
+          ? `Meet ${profile.user.name}, ${profile.headline}, and explore their work as part of the TTV builder community across Africa.`
+          : `Meet ${profile.user.name} and explore their work as part of the TTV builder community across Africa.`)
+    )
+  : undefined;
+const profileUrl = absoluteUrl(Astro.site, canonical);
+const personJsonLd =
+  profile && profileUrl
+    ? buildPersonJsonLd({
+        name: profile.user.name,
+        url: profileUrl,
+        image: profile.user.image
+          ? absoluteUrl(Astro.site, profile.user.image)
+          : null,
+        headline: profile.headline,
+        description: profile.bio,
+        sameAs: [
+          profile.githubLogin
+            ? `https://github.com/${profile.githubLogin}`
+            : null,
+          profile.portfolioUrl,
+          profile.linkedinUrl,
+        ],
+      })
+    : null;
 ---
 
 <PublicLayout
   title={profile
     ? `${profile.user.name} — Builder at Tembo Tech Ventures`
     : "Profile Not Found · Tembo Tech Ventures"}
+  description={profileDescription}
+  canonical={canonical}
+  noIndex={!profile}
 >
+  {personJsonLd && (
+    <script
+      slot="head"
+      type="application/ld+json"
+      set:html={serializeJsonLd(personJsonLd)}
+    />
+  )}
   {!profile ? (
     <section class="mx-auto max-w-4xl px-4 py-28 sm:px-8 md:py-36 text-center">
       <h1
