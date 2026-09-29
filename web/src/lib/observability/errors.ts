@@ -1,4 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
+import { isD1OverloadError } from "@/lib/db/d1-errors";
 
 export const MAX_ACTIVE_ERROR_SIGNATURES = 500;
 export const ACTIVE_ERROR_WINDOW_SECONDS = 24 * 60 * 60;
@@ -13,6 +14,10 @@ export interface RecordErrorInput {
   version?: string;
   level?: ErrorLevel;
 }
+
+type WaitUntilContext = Pick<ExecutionContext, "waitUntil">;
+
+const ERROR_LEDGER_RETRY_DELAYS_MS = [50, 100] as const;
 
 const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CUID_SEGMENT = /^[a-z][a-z0-9]{23,31}$/i;
@@ -135,74 +140,117 @@ function reportLedgerFailure(error: unknown) {
   }
 }
 
+function waitBeforeLedgerRetry(delayMs: number) {
+  const jitterMs = Math.floor(Math.random() * Math.max(1, delayMs / 2));
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, delayMs + jitterMs);
+  });
+}
+
+async function writeErrorEvent(
+  db: D1Database,
+  input: RecordErrorInput,
+  now: Date,
+  signature: string
+): Promise<string | null> {
+  const route = collapseRoutePattern(input.route);
+  const message = redactErrorMessage(input.error);
+  const seenAt = Math.floor(now.getTime() / 1_000);
+  const version = input.version?.trim() || "unknown";
+  const level = input.level ?? "error";
+
+  const existing = await db
+    .prepare(
+      `UPDATE "errorEvent"
+       SET "count" = "count" + 1,
+           "lastSeenAt" = ?,
+           "lastVersion" = ?,
+           "message" = ?,
+           "level" = ?
+       WHERE "signature" = ?
+       RETURNING "id"`
+    )
+    .bind(seenAt, version, message, level, signature)
+    .first<{ id: string }>();
+  if (existing) return signature;
+
+  const activeSince = seenAt - ACTIVE_ERROR_WINDOW_SECONDS;
+  const active = await db
+    .prepare(
+      `SELECT COUNT(*) AS "count"
+       FROM "errorEvent"
+       WHERE "lastSeenAt" >= ?`
+    )
+    .bind(activeSince)
+    .first<{ count: number }>();
+  if (Number(active?.count ?? 0) >= MAX_ACTIVE_ERROR_SIGNATURES) return null;
+
+  await db
+    .prepare(
+      `INSERT INTO "errorEvent"
+       ("id", "signature", "source", "route", "message", "level", "count",
+        "firstSeenAt", "lastSeenAt", "lastVersion", "lastNotifiedAt", "notifiedCount")
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, NULL, 0)
+       ON CONFLICT("signature") DO UPDATE SET
+         "count" = "errorEvent"."count" + 1,
+         "lastSeenAt" = excluded."lastSeenAt",
+         "lastVersion" = excluded."lastVersion",
+         "message" = excluded."message",
+         "level" = excluded."level"`
+    )
+    .bind(
+      createId(),
+      signature,
+      input.source,
+      route,
+      message,
+      level,
+      seenAt,
+      seenAt,
+      version
+    )
+    .run();
+
+  return signature;
+}
+
 export async function recordError(
   db: D1Database,
   input: RecordErrorInput,
   now = new Date()
 ): Promise<string | null> {
+  let signature: string;
   try {
-    const route = collapseRoutePattern(input.route);
-    const message = redactErrorMessage(input.error);
-    const signature = await createErrorSignature({ ...input, route });
-    const seenAt = Math.floor(now.getTime() / 1_000);
-    const version = input.version?.trim() || "unknown";
-    const level = input.level ?? "error";
-
-    const existing = await db
-      .prepare(
-        `UPDATE "errorEvent"
-         SET "count" = "count" + 1,
-             "lastSeenAt" = ?,
-             "lastVersion" = ?,
-             "message" = ?,
-             "level" = ?
-         WHERE "signature" = ?
-         RETURNING "id"`
-      )
-      .bind(seenAt, version, message, level, signature)
-      .first<{ id: string }>();
-    if (existing) return signature;
-
-    const activeSince = seenAt - ACTIVE_ERROR_WINDOW_SECONDS;
-    const active = await db
-      .prepare(
-        `SELECT COUNT(*) AS "count"
-         FROM "errorEvent"
-         WHERE "lastSeenAt" >= ?`
-      )
-      .bind(activeSince)
-      .first<{ count: number }>();
-    if (Number(active?.count ?? 0) >= MAX_ACTIVE_ERROR_SIGNATURES) return null;
-
-    await db
-      .prepare(
-        `INSERT INTO "errorEvent"
-         ("id", "signature", "source", "route", "message", "level", "count",
-          "firstSeenAt", "lastSeenAt", "lastVersion", "lastNotifiedAt", "notifiedCount")
-         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, NULL, 0)
-         ON CONFLICT("signature") DO UPDATE SET
-           "count" = "errorEvent"."count" + 1,
-           "lastSeenAt" = excluded."lastSeenAt",
-           "lastVersion" = excluded."lastVersion",
-           "message" = excluded."message",
-           "level" = excluded."level"`
-      )
-      .bind(
-        createId(),
-        signature,
-        input.source,
-        route,
-        message,
-        level,
-        seenAt,
-        seenAt,
-        version
-      )
-      .run();
-
-    return signature;
+    signature = await createErrorSignature(input);
   } catch (error) {
     reportLedgerFailure(error);
     return null;
   }
+
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await writeErrorEvent(db, input, now, signature);
+    } catch (error) {
+      const retryDelay = ERROR_LEDGER_RETRY_DELAYS_MS[attempt];
+      if (retryDelay !== undefined && isD1OverloadError(error)) {
+        await waitBeforeLedgerRetry(retryDelay);
+        continue;
+      }
+      reportLedgerFailure(error);
+      return null;
+    }
+  }
+}
+
+export function recordErrorInBackground(
+  context: WaitUntilContext | undefined,
+  db: D1Database,
+  input: RecordErrorInput
+) {
+  const capture = recordError(db, input);
+  if (context) {
+    context.waitUntil(capture);
+    return;
+  }
+  void capture;
 }
