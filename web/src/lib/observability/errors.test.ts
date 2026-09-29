@@ -4,6 +4,7 @@ import {
   collapseRoutePattern,
   createErrorSignature,
   recordError,
+  recordErrorInBackground,
   redactErrorMessage,
 } from "./errors";
 
@@ -20,11 +21,21 @@ interface StoredError {
   lastVersion: string;
 }
 
-function createErrorDatabase(initial: StoredError[] = []) {
+function createErrorDatabase(
+  initial: StoredError[] = [],
+  options: { overloads?: number } = {}
+) {
   const rows = new Map(initial.map((row) => [row.signature, { ...row }]));
+  let overloadsRemaining = options.overloads ?? 0;
   const prepare = vi.fn((sql: string) => ({
     bind: (...values: unknown[]) => ({
       first: async () => {
+        if (overloadsRemaining > 0) {
+          overloadsRemaining -= 1;
+          throw new Error(
+            "D1_ERROR: D1 DB is overloaded. Requests queued for too long."
+          );
+        }
         if (sql.startsWith('UPDATE "errorEvent"')) {
           const [lastSeenAt, lastVersion, message, level, signature] = values as [
             number,
@@ -253,5 +264,35 @@ describe("recordError", () => {
     expect(consoleError).toHaveBeenCalledOnce();
     expect(JSON.stringify(consoleError.mock.calls)).not.toContain("private-token");
     expect(JSON.stringify(consoleError.mock.calls)).not.toContain("application-token");
+  });
+
+  it("retries a ledger write after the confirmed D1 overload", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const { db, rows, prepare } = createErrorDatabase([], { overloads: 1 });
+
+    const capture = recordError(db, {
+      source: "request",
+      route: "/talent/:handle",
+      error: new Error("Public page database read unavailable"),
+      version: "v1",
+    });
+    await expect(capture).resolves.toMatch(/^[a-f0-9]{64}$/);
+    expect(rows).toHaveLength(1);
+    expect(prepare).toHaveBeenCalledTimes(4);
+  });
+
+  it("keeps background capture alive with the request execution context", async () => {
+    const { db } = createErrorDatabase();
+    const waitUntil = vi.fn();
+
+    recordErrorInBackground({ waitUntil }, db, {
+      source: "request",
+      route: "/",
+      error: new Error("failed"),
+      version: "v1",
+    });
+
+    expect(waitUntil).toHaveBeenCalledOnce();
+    await expect(waitUntil.mock.calls[0][0]).resolves.toMatch(/^[a-f0-9]{64}$/);
   });
 });

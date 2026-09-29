@@ -11,9 +11,18 @@ import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
 import { listPublicPosts } from "@/lib/blog/public";
 import { postPath } from "@/lib/blog/feed";
+import { loadPublicPageData } from "@/lib/public-page-data";
 
 const db = drizzle(env.DB, { schema });
-const latestPosts = await listPublicPosts(db, { limit: 3 });
+const latestPostsRead = await loadPublicPageData({
+  db: env.DB,
+  fallback: [],
+  load: () => listPublicPosts(db, { limit: 3 }),
+  route: "/",
+  version: env.DEPLOYMENT_VERSION,
+  waitUntil: Astro.locals.cfContext,
+});
+const latestPosts = latestPostsRead.data;
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString("en", {

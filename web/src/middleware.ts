@@ -4,7 +4,10 @@ import { createAuth } from "@/lib/auth";
 import { isAgentSession } from "@/lib/agent-auth";
 import { isHealthCheckPath } from "@/lib/health";
 import { enforceAdminMutationOrigin } from "@/lib/admin/mutation-security";
-import { collapseRoutePattern, recordError } from "@/lib/observability/errors";
+import {
+  collapseRoutePattern,
+  recordErrorInBackground,
+} from "@/lib/observability/errors";
 import {
   authenticatePersonalAccessToken,
   enforcePersonalAccessTokenMutationScope,
@@ -111,39 +114,51 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const primaryDomain = env.PRIMARY_DOMAIN;
   const redirectDomain = env.REDIRECT_DOMAIN;
 
-  if (primaryDomain && redirectDomain && url.hostname === redirectDomain) {
-    url.hostname = primaryDomain;
-    url.protocol = "https:";
-    return redirect(url.toString(), 301);
-  }
-
-  if (isHealthCheckPath(url.pathname)) {
-    return next();
-  }
-
-  const authResult = await resolveAuthentication(env, request);
-  locals.session = authResult.session;
-  locals.user = authResult.user;
-  locals.personalAccessToken = authResult.personalAccessToken;
-
-  // Protect /dashboard/* routes — require authentication
-  if (url.pathname.startsWith("/dashboard")) {
-    if (!locals.user) {
-      const returnPath = `${url.pathname}${url.search}`;
-      return redirect(`/auth/login?next=${encodeURIComponent(returnPath)}`);
-    }
-  }
-
-  // Protect /admin/* and /api/admin/* routes — require ADMIN role
-  if (url.pathname.startsWith("/admin") || url.pathname.startsWith("/api/admin")) {
-    const guardResponse = await enforceAdminGuards(context, locals);
-    if (guardResponse) return guardResponse;
-  }
-
   try {
-    return await next();
+    if (primaryDomain && redirectDomain && url.hostname === redirectDomain) {
+      url.hostname = primaryDomain;
+      url.protocol = "https:";
+      return redirect(url.toString(), 301);
+    }
+
+    if (isHealthCheckPath(url.pathname)) {
+      return await next();
+    }
+
+    const authResult = await resolveAuthentication(env, request);
+    locals.session = authResult.session;
+    locals.user = authResult.user;
+    locals.personalAccessToken = authResult.personalAccessToken;
+
+    // Protect /dashboard/* routes — require authentication
+    if (url.pathname.startsWith("/dashboard")) {
+      if (!locals.user) {
+        const returnPath = `${url.pathname}${url.search}`;
+        return redirect(`/auth/login?next=${encodeURIComponent(returnPath)}`);
+      }
+    }
+
+    // Protect /admin/* and /api/admin/* routes — require ADMIN role
+    if (
+      url.pathname.startsWith("/admin") ||
+      url.pathname.startsWith("/api/admin")
+    ) {
+      const guardResponse = await enforceAdminGuards(context, locals);
+      if (guardResponse) return guardResponse;
+    }
+
+    const response = await next();
+    if (response.status === 500) {
+      recordErrorInBackground(locals.cfContext, env.DB, {
+        source: "request",
+        route: collapseRoutePattern(url.pathname),
+        error: new Error("Request completed with HTTP 500"),
+        version: env.DEPLOYMENT_VERSION,
+      });
+    }
+    return response;
   } catch (error) {
-    await recordError(env.DB, {
+    recordErrorInBackground(locals.cfContext, env.DB, {
       source: "request",
       route: collapseRoutePattern(url.pathname),
       error,

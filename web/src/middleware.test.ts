@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   hasPersonalAccessTokenAuthorization: vi.fn(),
   recordError: vi.fn().mockResolvedValue(null),
+  recordErrorInBackground: vi.fn(),
   roleFirst: vi.fn(),
 }));
 
@@ -27,6 +28,7 @@ vi.mock("@/lib/auth", () => ({ createAuth: mocks.createAuth }));
 vi.mock("@/lib/observability/errors", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/observability/errors")>()),
   recordError: mocks.recordError,
+  recordErrorInBackground: mocks.recordErrorInBackground,
 }));
 vi.mock("@/lib/personal-access-tokens", () => ({
   authenticatePersonalAccessToken: mocks.authenticatePersonalAccessToken,
@@ -39,17 +41,19 @@ vi.mock("@/lib/personal-access-tokens", () => ({
 import { onRequest } from "./middleware";
 
 function createContext(request: Request) {
+  const waitUntil = vi.fn();
   const redirect = vi.fn((location: string, status = 302) =>
     new Response(null, { status, headers: { location } })
   );
   return {
     context: {
-      locals: {},
+      locals: { cfContext: { waitUntil } },
       request,
       url: new URL(request.url),
       redirect,
     },
     redirect,
+    waitUntil,
     next: vi.fn().mockResolvedValue(new Response("ok")),
   };
 }
@@ -257,23 +261,68 @@ describe("request error capture", () => {
     next.mockResolvedValue(expected);
 
     await expect(onRequest(context as never, next)).resolves.toBe(expected);
-    expect(mocks.recordError).not.toHaveBeenCalled();
+    expect(mocks.recordErrorInBackground).not.toHaveBeenCalled();
   });
 
-  it("records a collapsed route and rethrows the downstream error", async () => {
-    const { context, next } = createContext(
+  it("records a collapsed route in the execution context and rethrows", async () => {
+    const { context, next, waitUntil } = createContext(
       new Request("https://example.com/api/projects/123?token=private")
     );
     const failure = new Error("downstream failed");
     next.mockRejectedValue(failure);
 
     await expect(onRequest(context as never, next)).rejects.toBe(failure);
-    expect(mocks.recordError).toHaveBeenCalledWith(
+    expect(mocks.recordErrorInBackground).toHaveBeenCalledWith(
+      context.locals.cfContext,
       expect.anything(),
       {
         source: "request",
         route: "/api/projects/:id",
         error: failure,
+        version: "test-version",
+      }
+    );
+    expect(context.locals.cfContext.waitUntil).toBe(waitUntil);
+  });
+
+  it("captures authentication failures that happen before page rendering", async () => {
+    const { context, next } = createContext(
+      new Request("https://example.com/talent/some-builder")
+    );
+    const failure = new Error("authentication lookup failed");
+    mocks.getSession.mockRejectedValue(failure);
+
+    await expect(onRequest(context as never, next)).rejects.toBe(failure);
+    expect(mocks.recordErrorInBackground).toHaveBeenCalledWith(
+      context.locals.cfContext,
+      expect.anything(),
+      {
+        source: "request",
+        route: "/talent/some-builder",
+        error: failure,
+        version: "test-version",
+      }
+    );
+  });
+
+  it("captures a server failure returned as a response", async () => {
+    const { context, next } = createContext(
+      new Request("https://example.com/talent/some-builder")
+    );
+    next.mockResolvedValue(new Response("failed", { status: 500 }));
+
+    const response = requireResponse(await onRequest(context as never, next));
+
+    expect(response.status).toBe(500);
+    expect(mocks.recordErrorInBackground).toHaveBeenCalledWith(
+      context.locals.cfContext,
+      expect.anything(),
+      {
+        source: "request",
+        route: "/talent/some-builder",
+        error: expect.objectContaining({
+          message: "Request completed with HTTP 500",
+        }),
         version: "test-version",
       }
     );

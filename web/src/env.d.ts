@@ -47,6 +47,7 @@ interface AuthUser {
 
 declare namespace App {
   interface Locals {
+    cfContext: ExecutionContext;
     session: AuthSession | null;
     user: AuthUser | null;
     personalAccessToken: import("@/lib/personal-access-tokens").PersonalAccessTokenSummary | null;

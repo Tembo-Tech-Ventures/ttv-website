@@ -20,6 +20,10 @@ import {
   buildPersonJsonLd,
   serializeJsonLd,
 } from "@/lib/seo/structured-data";
+import {
+  loadPublicPageData,
+  markPublicDataUnavailable,
+} from "@/lib/public-page-data";
 
 const { handle } = Astro.params;
 
@@ -29,29 +33,44 @@ if (!handle) {
 
 const db = drizzle(env.DB, { schema });
 
-const candidateProfile = handle
-  ? await db.query.studentProfile.findFirst({
-      where: and(
-        eq(schema.studentProfile.handle, handle),
-        eq(schema.studentProfile.status, "PUBLISHED"),
-      ),
-      with: {
-        user: { columns: { id: true, name: true, image: true } },
-        highlights: { orderBy: [asc(schema.profileHighlight.sortOrder)] },
+const profileRead = handle
+  ? await loadPublicPageData({
+      db: env.DB,
+      fallback: { candidateProfile: undefined, candidateCohorts: [] },
+      load: async () => {
+        const candidateProfile = await db.query.studentProfile.findFirst({
+          where: and(
+            eq(schema.studentProfile.handle, handle),
+            eq(schema.studentProfile.status, "PUBLISHED"),
+          ),
+          with: {
+            user: { columns: { id: true, name: true, image: true } },
+            highlights: { orderBy: [asc(schema.profileHighlight.sortOrder)] },
+          },
+        });
+        const candidateCohorts = candidateProfile
+          ? await getCompletedCohorts(db, candidateProfile.user.id)
+          : [];
+        return { candidateProfile, candidateCohorts };
       },
+      route: "/talent/:handle",
+      version: env.DEPLOYMENT_VERSION,
+      waitUntil: Astro.locals.cfContext,
     })
-  : undefined;
-
-const candidateCohorts = candidateProfile
-  ? await getCompletedCohorts(db, candidateProfile.user.id)
-  : [];
+  : {
+      available: true,
+      data: { candidateProfile: undefined, candidateCohorts: [] },
+    };
+const { candidateProfile, candidateCohorts } = profileRead.data;
 const profile =
   candidateProfile && candidateCohorts.length > 0
     ? candidateProfile
     : undefined;
 const cohorts = profile ? candidateCohorts : [];
 
-if (!profile) {
+if (!profileRead.available) {
+  markPublicDataUnavailable(Astro.response);
+} else if (!profile) {
   Astro.response.status = 404;
 }
 
@@ -143,6 +162,8 @@ const personJsonLd =
 <PublicLayout
   title={profile
     ? `${profile.user.name} — Builder at Tembo Tech Ventures`
+    : !profileRead.available
+      ? "Profile Temporarily Unavailable · Tembo Tech Ventures"
     : "Profile Not Found · Tembo Tech Ventures"}
   description={profileDescription}
   canonical={canonical}
@@ -155,7 +176,25 @@ const personJsonLd =
       set:html={serializeJsonLd(personJsonLd)}
     />
   )}
-  {!profile ? (
+  {!profileRead.available ? (
+    <section class="mx-auto max-w-4xl px-4 py-28 sm:px-8 md:py-36 text-center">
+      <h1
+        class="font-heading tracking-heading text-ink-primary"
+        style="font-size: clamp(2rem, 6vw, 4rem); line-height: 0.95;"
+      >
+        This profile is temporarily unavailable
+      </h1>
+      <p class="mt-6 font-body text-lg text-ink-secondary">
+        We couldn&rsquo;t load this builder&rsquo;s profile just now. Please try again in a moment.
+      </p>
+      <a
+        href={Astro.url.pathname}
+        class="mt-8 inline-flex rounded-full bg-primary px-6 py-3 font-body text-sm font-semibold uppercase tracking-[0.14em] text-dark transition-transform hover:scale-[1.03]"
+      >
+        Try again
+      </a>
+    </section>
+  ) : !profile ? (
     <section class="mx-auto max-w-4xl px-4 py-28 sm:px-8 md:py-36 text-center">
       <h1
         class="font-heading tracking-heading text-ink-primary"
