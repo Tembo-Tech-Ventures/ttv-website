@@ -16,7 +16,7 @@ export interface PublicPageData<T> {
 }
 
 export function markPublicDataUnavailable(response: {
-  status: number;
+  status?: number;
   headers: Headers;
 }) {
   response.status = 503;
