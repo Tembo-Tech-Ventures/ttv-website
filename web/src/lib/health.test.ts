@@ -13,6 +13,7 @@ const healthyChecks: HealthChecks = {
   failedRecordings: 0,
   stuckRecordings: 0,
   importSourceErrors: 0,
+  staleImportSources: 0,
   errorSignatures24h: 0,
   lastErrorAt: null,
 };
@@ -51,6 +52,7 @@ describe("health checks", () => {
       failedRecordings: 2,
       stuckRecordings: 3,
       importSourceErrors: 1,
+      staleImportSources: 5,
       errorSignatures24h: 4,
       lastErrorAt: 1_795_000_000,
     });
@@ -60,6 +62,7 @@ describe("health checks", () => {
       failedRecordings: 2,
       stuckRecordings: 3,
       importSourceErrors: 1,
+      staleImportSources: 5,
       errorSignatures24h: 4,
       lastErrorAt: new Date(1_795_000_000_000).toISOString(),
     });
@@ -108,6 +111,24 @@ describe("health checks", () => {
     ]);
   });
 
+  it("marks enabled import sources stale after the 24-hour health window", () => {
+    const payload = createHealthPayload(
+      {
+        DEPLOYMENT_ENVIRONMENT: "production",
+        DEPLOYMENT_VERSION: "v1",
+      },
+      {
+        ...healthyChecks,
+        staleImportSources: 2,
+      }
+    );
+
+    expect(payload.degraded).toBe(true);
+    expect(payload.alerts).toEqual([
+      "2 enabled recording import sources are stale",
+    ]);
+  });
+
   it("returns non-cacheable JSON and 503 only when the database is unavailable", async () => {
     const { db } = createDatabase({}, { reject: new Error("D1 unavailable") });
     const response = await createHealthResponse({
@@ -129,6 +150,7 @@ describe("health checks", () => {
         failedRecordings: 0,
         stuckRecordings: 0,
         importSourceErrors: 0,
+        staleImportSources: 0,
         errorSignatures24h: 0,
         lastErrorAt: null,
       },

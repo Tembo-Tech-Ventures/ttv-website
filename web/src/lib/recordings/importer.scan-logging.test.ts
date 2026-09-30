@@ -47,9 +47,15 @@ const source = {
   updatedAt: new Date("2026-08-01T00:00:00Z"),
 };
 
-function createMockDb() {
+function createMockDb({
+  enabledSources = [],
+}: {
+  enabledSources?: typeof source[];
+} = {}) {
   const updateWhere = vi.fn().mockResolvedValue(undefined);
-  const updateSet = vi.fn(() => ({ where: updateWhere }));
+  const updateSet = vi.fn((_value: Record<string, unknown>) => ({
+    where: updateWhere,
+  }));
   const selectWhere = vi.fn().mockResolvedValue([]);
   const selectFrom = vi.fn(() => ({ where: selectWhere }));
 
@@ -58,7 +64,7 @@ function createMockDb() {
       query: {
         recordingImportSource: {
           findFirst: vi.fn().mockResolvedValue(source),
-          findMany: vi.fn().mockResolvedValue([]),
+          findMany: vi.fn().mockResolvedValue(enabledSources),
         },
       },
       select: vi.fn(() => ({ from: selectFrom })),
@@ -66,6 +72,15 @@ function createMockDb() {
     },
     updateSet,
   };
+}
+
+function createEnv(overrides: Partial<Env> = {}) {
+  return {
+    CREDENTIALS_ENCRYPTION_KEY: "configured",
+    DB: {},
+    RECORDING_QUEUE: { sendBatch: vi.fn().mockResolvedValue(undefined) },
+    ...overrides,
+  } as unknown as Env;
 }
 
 function parseLogs(log: { mock: { calls: unknown[][] } }) {
@@ -81,6 +96,7 @@ describe("recording import scan logging", () => {
       clientEmail: "drive@example.com",
       privateKey: "unused",
     });
+    mocks.listGoogleDriveVideoFiles.mockResolvedValue([]);
   });
 
   it("writes source-scoped scan counts without Drive identifiers", async () => {
@@ -124,7 +140,7 @@ describe("recording import scan logging", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     await expect(
-      previewRecordingImportSource({ DB: {} } as Env, source.id)
+      previewRecordingImportSource(createEnv(), source.id)
     ).resolves.toEqual({
       discovered: 2,
       importable: 2,
@@ -255,7 +271,7 @@ describe("recording import scan logging", () => {
     );
 
     await expect(
-      previewRecordingImportSource({ DB: {} } as Env, source.id)
+      previewRecordingImportSource(createEnv(), source.id)
     ).resolves.toEqual({
       discovered: 10,
       importable: 10,
@@ -280,7 +296,7 @@ describe("recording import scan logging", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     await expect(
-      previewRecordingImportSource({ DB: {} } as Env, source.id)
+      previewRecordingImportSource(createEnv(), source.id)
     ).rejects.toThrow("Google Drive folder scan failed with HTTP 403: notFound");
 
     expect(state.updateSet).toHaveBeenCalledWith({
@@ -305,11 +321,10 @@ describe("recording import scan logging", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     await expect(
-      syncEnabledRecordingImportSources({
-        CREDENTIALS_ENCRYPTION_KEY: "configured",
-        DB: {},
-      } as Env)
+      syncEnabledRecordingImportSources(createEnv())
     ).resolves.toEqual([]);
+
+    expect(mocks.getGoogleDriveCredentials).not.toHaveBeenCalled();
 
     expect(parseLogs(log)).toEqual(
       expect.arrayContaining([
@@ -320,5 +335,113 @@ describe("recording import scan logging", () => {
         }),
       ])
     );
+  });
+
+  it("updates lastSyncedAt after a successful scheduled source scan", async () => {
+    const state = createMockDb({ enabledSources: [source] });
+    mocks.drizzle.mockReturnValue(state.db);
+    const startedAt = Date.now();
+
+    await expect(
+      syncEnabledRecordingImportSources(createEnv())
+    ).resolves.toEqual([
+      { discovered: 0, created: 0, queued: 0, skipped: 0 },
+    ]);
+
+    const successUpdate = state.updateSet.mock.calls.find(
+      ([value]) => value.lastError === null
+    )?.[0];
+    expect(successUpdate?.lastSyncedAt).toBeInstanceOf(Date);
+    const lastSyncedAt = successUpdate?.lastSyncedAt;
+    if (!(lastSyncedAt instanceof Date)) {
+      throw new TypeError("Expected the successful sync to persist a Date.");
+    }
+    expect(lastSyncedAt.getTime()).toBeGreaterThanOrEqual(startedAt);
+  });
+
+  it("marks enabled sources failed when credential encryption is absent", async () => {
+    const state = createMockDb({ enabledSources: [source] });
+    mocks.drizzle.mockReturnValue(state.db);
+
+    await expect(
+      syncEnabledRecordingImportSources(
+        createEnv({ CREDENTIALS_ENCRYPTION_KEY: undefined })
+      )
+    ).rejects.toThrow(
+      "Google Drive import failed for 1 of 1 enabled sources."
+    );
+
+    expect(state.updateSet).toHaveBeenCalledWith({
+      lastError:
+        "Google Drive import cannot load credentials because credential encryption is not configured.",
+    });
+    expect(mocks.getGoogleDriveCredentials).not.toHaveBeenCalled();
+  });
+
+  it("redacts and bounds credential-loading failures on every enabled source", async () => {
+    const secondSource = { ...source, id: "source-2", name: "Second source" };
+    const state = createMockDb({ enabledSources: [source, secondSource] });
+    state.db.query.recordingImportSource.findFirst
+      .mockResolvedValueOnce(source)
+      .mockResolvedValueOnce(secondSource);
+    mocks.drizzle.mockReturnValue(state.db);
+    const privateValue = "credential-value-that-must-not-leak";
+    mocks.getGoogleDriveCredentials.mockRejectedValue(
+      new Error(`token=${privateValue} ${"x".repeat(600)}`)
+    );
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await expect(
+      syncEnabledRecordingImportSources(createEnv())
+    ).rejects.toThrow(
+      "Google Drive import failed for 2 of 2 enabled sources."
+    );
+
+    const failures = state.updateSet.mock.calls
+      .map(([value]) => value.lastError)
+      .filter((value): value is string => typeof value === "string");
+    expect(failures).toHaveLength(2);
+    expect(failures.every((message) => message.length <= 500)).toBe(true);
+    expect(JSON.stringify(failures)).toContain("token=[REDACTED]");
+    expect(JSON.stringify(failures)).not.toContain(privateValue);
+    expect(JSON.stringify(parseLogs(log))).not.toContain(privateValue);
+  });
+
+  it("marks enabled sources failed when Google Drive credentials are missing", async () => {
+    const state = createMockDb({ enabledSources: [source] });
+    mocks.drizzle.mockReturnValue(state.db);
+    mocks.getGoogleDriveCredentials.mockResolvedValue(null);
+
+    await expect(
+      syncEnabledRecordingImportSources(createEnv())
+    ).rejects.toThrow(
+      "Google Drive import failed for 1 of 1 enabled sources."
+    );
+
+    expect(state.updateSet).toHaveBeenCalledWith({
+      lastError:
+        "Google Drive credentials are not configured. Set them in Admin → Integrations.",
+    });
+  });
+
+  it("makes scheduled scan failures visible without leaking their details", async () => {
+    const state = createMockDb({ enabledSources: [source] });
+    mocks.drizzle.mockReturnValue(state.db);
+    const privateValue = "scan-secret-that-must-not-leak";
+    mocks.listGoogleDriveVideoFiles.mockRejectedValue(
+      new Error(`API key=${privateValue} rejected`)
+    );
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await expect(
+      syncEnabledRecordingImportSources(createEnv())
+    ).rejects.toThrow(
+      "Google Drive import failed for 1 of 1 enabled sources."
+    );
+
+    expect(state.updateSet).toHaveBeenCalledWith({
+      lastError: "API key=[REDACTED] rejected",
+    });
+    expect(JSON.stringify(parseLogs(log))).not.toContain(privateValue);
   });
 });

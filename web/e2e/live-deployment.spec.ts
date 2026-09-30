@@ -12,6 +12,7 @@ test("serves the expected live deployment and homepage", async ({ page }) => {
       failedRecordings: expect.any(Number),
       stuckRecordings: expect.any(Number),
       importSourceErrors: expect.any(Number),
+      staleImportSources: expect.any(Number),
       errorSignatures24h: expect.any(Number),
     },
     degraded: expect.any(Boolean),
@@ -23,6 +24,7 @@ test("serves the expected live deployment and homepage", async ({ page }) => {
     "failedRecordings",
     "importSourceErrors",
     "lastErrorAt",
+    "staleImportSources",
     "stuckRecordings",
   ]);
 

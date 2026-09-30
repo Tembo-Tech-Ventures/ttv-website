@@ -19,6 +19,7 @@ const DEFAULT_APP_NAME = "ttv-website";
 const DEFAULT_COMPATIBILITY_DATE = "2026-04-01";
 const DEFAULT_AI_GATEWAY_MODEL = "workers-ai/@cf/openai/gpt-oss-20b";
 const CONTAINER_CLASS_NAME = "FfmpegContainer";
+const SCHEDULED_TASK_CRON = "*/15 * * * *";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -603,6 +604,9 @@ export function createGeneratedWranglerConfig({
           max_retries: 3,
         },
       ],
+    },
+    triggers: {
+      crons: [SCHEDULED_TASK_CRON],
     },
     containers: [
       {

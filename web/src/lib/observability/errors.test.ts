@@ -172,12 +172,16 @@ describe("error redaction", () => {
     const secret = "sam_wh_do-not-log-this";
     const redacted = redactErrorMessage(
       `Authorization: Bearer ${secret}; api_key=key-value token: token-value ` +
+        `API key=space-key private key=private-value access token=access-value ` +
         `for person@example.com at 192.168.10.22 via https://example.com/run?id=12&secret=x`
     );
 
     expect(redacted).toContain("Authorization: [REDACTED]");
     expect(redacted).toContain("api_key=[REDACTED]");
     expect(redacted).toContain("token: [REDACTED]");
+    expect(redacted).toContain("API key=[REDACTED]");
+    expect(redacted).toContain("private key=[REDACTED]");
+    expect(redacted).toContain("access token=[REDACTED]");
     expect(redacted).toContain("[EMAIL]");
     expect(redacted).toContain("[IP]");
     expect(redacted).toContain("https://example.com/run?[QUERY]");
