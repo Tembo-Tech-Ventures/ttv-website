@@ -5,6 +5,7 @@ import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 import { createCredentialCipher } from "@/lib/credentials/crypto";
 import { getGoogleDriveCredentials } from "@/lib/credentials/google-drive";
+import { redactErrorMessage } from "@/lib/observability/errors";
 import {
   listGoogleDriveVideoFiles,
   titleFromGoogleDriveFileName,
@@ -409,6 +410,11 @@ async function scanRecordingImportSource<T>(
   }
 
   try {
+    if (!env.CREDENTIALS_ENCRYPTION_KEY?.trim()) {
+      throw new Error(
+        "Google Drive import cannot load credentials because credential encryption is not configured."
+      );
+    }
     const cipher = createCredentialCipher(env);
     const credentials = await getGoogleDriveCredentials(db, cipher);
     if (!credentials) {
@@ -458,7 +464,7 @@ async function scanRecordingImportSource<T>(
     });
     return result;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = redactErrorMessage(error);
     if (!(error instanceof RecordingImportPreviewChangedError)) {
       await db
         .update(schema.recordingImportSource)
@@ -470,7 +476,8 @@ async function scanRecordingImportSource<T>(
       operation: operationName,
       message,
     });
-    throw error;
+    if (error instanceof RecordingImportPreviewChangedError) throw error;
+    throw new Error(message, { cause: error });
   }
 }
 
@@ -536,29 +543,6 @@ export async function syncEnabledRecordingImportSources(
 ): Promise<RecordingImportSummary[]> {
   const db = drizzle(env.DB, { schema });
 
-  if (!env.CREDENTIALS_ENCRYPTION_KEY) {
-    logRecordingImportEvent("drive_sync_skipped", {
-      reason: "no_encryption_key",
-    });
-    return [];
-  }
-
-  let credentials;
-  try {
-    const cipher = createCredentialCipher(env);
-    credentials = await getGoogleDriveCredentials(db, cipher);
-  } catch (error) {
-    logRecordingImportEvent("drive_sync_skipped", {
-      reason: "credential_error",
-      message: error instanceof Error ? error.message : String(error),
-    });
-    return [];
-  }
-  if (!credentials) {
-    logRecordingImportEvent("drive_sync_skipped", { reason: "no_credentials" });
-    return [];
-  }
-
   const sources = await db.query.recordingImportSource.findMany({
     where: eq(schema.recordingImportSource.enabled, true),
     orderBy: (source, { asc }) => [asc(source.createdAt)],
@@ -575,34 +559,34 @@ export async function syncEnabledRecordingImportSources(
   });
 
   const summaries: RecordingImportSummary[] = [];
-  const failures: string[] = [];
+  let failureCount = 0;
 
   for (const source of sources) {
     try {
       summaries.push(await syncRecordingImportSource(env, source.id));
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = redactErrorMessage(error);
       logRecordingImportEvent("drive_sync_source_failed", {
         sourceId: source.id,
         message,
       });
-      failures.push(
-        `${source.name}: ${message}`
-      );
+      failureCount += 1;
     }
   }
 
   logRecordingImportEvent("drive_sync_sources_done", {
     sourceCount: sources.length,
     successCount: summaries.length,
-    failureCount: failures.length,
+    failureCount,
     discovered: summaries.reduce((total, item) => total + item.discovered, 0),
     created: summaries.reduce((total, item) => total + item.created, 0),
     queued: summaries.reduce((total, item) => total + item.queued, 0),
     skipped: summaries.reduce((total, item) => total + item.skipped, 0),
   });
-  if (failures.length > 0) {
-    throw new Error(`Google Drive import failed for ${failures.join("; ")}`);
+  if (failureCount > 0) {
+    throw new Error(
+      `Google Drive import failed for ${failureCount} of ${sources.length} enabled sources.`
+    );
   }
   return summaries;
 }

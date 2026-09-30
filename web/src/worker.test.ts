@@ -140,7 +140,9 @@ describe("Worker container exports", () => {
 });
 
 describe("Worker scheduled imports", () => {
-  it("registers enabled Drive source syncing with the execution context", async () => {
+  it("returns successful Drive scan summaries from the execution context", async () => {
+    const summary = { discovered: 1, created: 0, queued: 0, skipped: 1 };
+    mocks.syncEnabledRecordingImportSources.mockResolvedValueOnce([summary]);
     const waitUntil = vi.fn();
     const env = {} as Env;
 
@@ -152,7 +154,7 @@ describe("Worker scheduled imports", () => {
 
     expect(mocks.syncEnabledRecordingImportSources).toHaveBeenCalledWith(env);
     expect(waitUntil).toHaveBeenCalledOnce();
-    await expect(waitUntil.mock.calls[0][0]).resolves.toEqual([]);
+    await expect(waitUntil.mock.calls[0][0]).resolves.toEqual([summary]);
     expect(mocks.pushAlerts).toHaveBeenCalledWith(env);
   });
 
@@ -176,6 +178,37 @@ describe("Worker scheduled imports", () => {
       version: "v1",
     });
     expect(mocks.pushAlerts).toHaveBeenCalledWith(env);
+    expect(mocks.recordError).toHaveBeenCalledBefore(mocks.pushAlerts);
+  });
+
+  it("records an alert failure after an import failure and preserves the import rejection", async () => {
+    const importFailure = new Error("Drive import failed");
+    const alertFailure = new Error("Alert push failed");
+    mocks.syncEnabledRecordingImportSources.mockRejectedValueOnce(importFailure);
+    mocks.pushAlerts.mockRejectedValueOnce(alertFailure);
+    const waitUntil = vi.fn();
+    const env = { DB: {}, DEPLOYMENT_VERSION: "v1" } as unknown as Env;
+
+    worker.scheduled?.(
+      { cron: "*/15 * * * *" } as ScheduledController,
+      env,
+      { waitUntil } as unknown as ExecutionContext
+    );
+
+    await expect(waitUntil.mock.calls[0][0]).rejects.toBe(importFailure);
+    expect(mocks.pushAlerts).toHaveBeenCalledWith(env);
+    expect(mocks.recordError).toHaveBeenNthCalledWith(1, env.DB, {
+      source: "import",
+      route: "/scheduled/recording-import",
+      error: importFailure,
+      version: "v1",
+    });
+    expect(mocks.recordError).toHaveBeenNthCalledWith(2, env.DB, {
+      source: "cron",
+      route: "/scheduled/alert-push",
+      error: alertFailure,
+      version: "v1",
+    });
   });
 });
 

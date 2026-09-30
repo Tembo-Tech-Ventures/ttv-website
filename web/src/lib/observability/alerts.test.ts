@@ -30,6 +30,7 @@ function createAlertDatabase(options: {
     failedRecordings: number;
     stuckRecordings: number;
     importSourceErrors: number;
+    staleImportSources: number;
     errorSignatures24h: number;
     lastErrorAt: number | null;
   }>;
@@ -93,6 +94,7 @@ function createAlertDatabase(options: {
               failedRecordings: 0,
               stuckRecordings: 0,
               importSourceErrors: 0,
+              staleImportSources: 0,
               errorSignatures24h: 0,
               lastErrorAt: null,
               ...options.health,
@@ -203,7 +205,7 @@ describe("pushAlerts", () => {
           updatedAt: nowSeconds,
         },
       ],
-      health: { stuckRecordings: 1 },
+      health: { stuckRecordings: 1, staleImportSources: 2 },
     });
     const fetchImpl = vi.fn().mockResolvedValue(new Response(null, { status: 500 }));
 
@@ -236,6 +238,21 @@ describe("pushAlerts", () => {
       },
     });
     expect(JSON.stringify(payload)).not.toContain("payload-secret");
+    const healthPayload = JSON.parse(
+      alerts.find((alert) => alert.kind === "health.degraded")?.payload ?? "{}"
+    ) as Record<string, unknown>;
+    expect(healthPayload).toMatchObject({
+      count: 2,
+      message:
+        "1 recording is stuck in processing; 2 enabled recording import sources are stale",
+    });
+    const importPayload = JSON.parse(
+      alerts.find((alert) => alert.kind === "import.error")?.payload ?? "{}"
+    ) as Record<string, unknown>;
+    expect(importPayload.message).toBe(
+      "Drive folder: API key=[REDACTED] rejected"
+    );
+    expect(JSON.stringify(importPayload)).not.toContain("private-key");
     expect(fetchImpl.mock.calls[0][1]).toMatchObject({
       method: "POST",
       headers: {

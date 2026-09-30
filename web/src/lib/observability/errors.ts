@@ -83,7 +83,7 @@ export function redactErrorMessage(value: unknown) {
     "[REDACTED]"
   );
   message = message.replace(
-    /\b(authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret)\b(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}]+)/gi,
+    /\b(authorization|api[_\s-]?key|private[_\s-]?key|access[_\s-]?token|refresh[_\s-]?token|token|secret|credential)\b(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}]+)/gi,
     (_match, key: string, separator: string) => `${key}${separator}[REDACTED]`
   );
   message = message.replace(

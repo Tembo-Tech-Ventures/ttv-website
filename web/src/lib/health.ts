@@ -10,6 +10,7 @@ export interface HealthChecks {
   failedRecordings: number;
   stuckRecordings: number;
   importSourceErrors: number;
+  staleImportSources: number;
   errorSignatures24h: number;
   lastErrorAt: string | null;
 }
@@ -18,6 +19,7 @@ interface HealthQueryRow {
   failedRecordings: number;
   stuckRecordings: number;
   importSourceErrors: number;
+  staleImportSources: number;
   errorSignatures24h: number;
   lastErrorAt: number | string | null;
 }
@@ -34,6 +36,10 @@ const HEALTH_QUERY = `
     (SELECT COUNT(*) FROM "recording_import_source"
       WHERE "lastError" IS NOT NULL AND trim("lastError") <> '')
       AS "importSourceErrors",
+    (SELECT COUNT(*) FROM "recording_import_source"
+      WHERE "enabled" = 1
+        AND coalesce("lastSyncedAt", "createdAt") < unixepoch() - 86400)
+      AS "staleImportSources",
     (SELECT COUNT(*) FROM "errorEvent"
       WHERE "lastSeenAt" >= unixepoch() - 86400)
       AS "errorSignatures24h",
@@ -66,6 +72,7 @@ export async function readHealthChecks(db: D1Database): Promise<HealthChecks> {
     failedRecordings: count(row.failedRecordings),
     stuckRecordings: count(row.stuckRecordings),
     importSourceErrors: count(row.importSourceErrors),
+    staleImportSources: count(row.staleImportSources),
     errorSignatures24h: count(row.errorSignatures24h),
     lastErrorAt: toIsoTimestamp(row.lastErrorAt),
   };
@@ -87,6 +94,11 @@ export function createHealthAlerts(checks: HealthChecks) {
   if (checks.importSourceErrors > 0) {
     alerts.push(
       `${checks.importSourceErrors} recording import source${checks.importSourceErrors === 1 ? " has" : "s have"} errors`
+    );
+  }
+  if (checks.staleImportSources > 0) {
+    alerts.push(
+      `${checks.staleImportSources} enabled recording import source${checks.staleImportSources === 1 ? " is" : "s are"} stale`
     );
   }
   if (checks.errorSignatures24h > 0) {
@@ -126,6 +138,7 @@ export async function createHealthResponse(runtimeEnv: HealthRuntimeEnv) {
       failedRecordings: 0,
       stuckRecordings: 0,
       importSourceErrors: 0,
+      staleImportSources: 0,
       errorSignatures24h: 0,
       lastErrorAt: null,
     };
