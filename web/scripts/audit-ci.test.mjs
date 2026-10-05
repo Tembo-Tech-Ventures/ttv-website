@@ -71,6 +71,21 @@ describe("evaluateAudit", () => {
     expect(result.allowed.map(({ name }) => name)).toEqual(["astro", "sharp"]);
   });
 
+  it("allows the dev-only braces advisory until an upstream patch exists", () => {
+    const result = evaluateAudit({
+      vulnerabilities: {
+        braces: {
+          severity: "high",
+          via: [advisory("GHSA-vfj7-8cjw-p6xm")],
+        },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+    expect(result.allowed.map(({ name }) => name)).toEqual(["braces"]);
+  });
+
   it("fails when a package mixes allowlisted and unlisted advisories", () => {
     const result = evaluateAudit(
       {

@@ -13,6 +13,12 @@ import { execFileSync } from "node:child_process";
  * missing one fails the build loudly.
  */
 export const ALLOWLISTED_ADVISORIES = new Set([
+  // No patched braces release exists. The only installed path is the dev-only
+  // eslint-plugin-astro -> astro-eslint-parser globbing stack, which receives
+  // repository-controlled paths rather than untrusted network patterns.
+  // Remove this when braces publishes a fix or the separately reviewed
+  // eslint-plugin-astro 3 migration removes fast-glob from the parser.
+  "GHSA-vfj7-8cjw-p6xm",
   // Astro XSS advisories fixed only in astro@7 (major); View Transitions and
   // spread-attribute rendering are unused here.
   "GHSA-4g3v-8h47-v7g6",
