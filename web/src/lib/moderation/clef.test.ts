@@ -118,6 +118,30 @@ describe("checkProfileContent", () => {
     );
   });
 
+  it("applies the calibrated threshold for every question independently", async () => {
+    const scores = Object.fromEntries(
+      Object.entries(PROFILE_MODERATION_THRESHOLDS).map(([question, value]) => [
+        question,
+        value,
+      ]),
+    );
+
+    await expect(
+      checkProfileContent(aiReturning(response(scores)), state, {
+        gatewayName: "ttv-ai",
+      }),
+    ).resolves.toEqual({
+      outcome: "hold",
+      flags: [
+        "contains_contact_details",
+        "abusive_or_sexual",
+        "promotes_unrelated_business",
+        "impersonation_risk",
+      ],
+      scores,
+    });
+  });
+
   it("returns a fail-open error result when the binding rejects", async () => {
     const ai = {
       run: vi.fn().mockRejectedValue(new Error("Workers AI unavailable")),

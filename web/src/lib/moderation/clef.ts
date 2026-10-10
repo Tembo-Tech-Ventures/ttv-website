@@ -6,7 +6,7 @@ export const PROFILE_MODERATION_QUESTIONS = {
   contains_contact_details: {
     type: "noul",
     instructions:
-      "Does any public profile text or attached profile image contain a phone number, email address, or national identity number? Do not count an HTTPS portfolio or LinkedIn URL by itself.",
+      "Interpret profile text in its original language, including English, Swahili, French, or another language. Does any public profile text or attached profile image contain a phone number, email address, or national identity number? Do not count an HTTPS portfolio or LinkedIn URL by itself.",
     criteria: {
       true: "The profile exposes a phone number, email address, or national identity number.",
       false: "The profile does not expose those contact or identity details.",
@@ -15,7 +15,7 @@ export const PROFILE_MODERATION_QUESTIONS = {
   abusive_or_sexual: {
     type: "noul",
     instructions:
-      "Does any public profile text or attached profile image contain abusive, threatening, hateful, or sexual content?",
+      "Interpret profile text in its original language, including English, Swahili, French, or another language. Does any public profile text or attached profile image contain abusive, threatening, hateful, or sexual content?",
     criteria: {
       true: "The profile contains abusive, threatening, hateful, or sexual content.",
       false: "The profile does not contain that content.",
@@ -24,7 +24,7 @@ export const PROFILE_MODERATION_QUESTIONS = {
   promotes_unrelated_business: {
     type: "noul",
     instructions:
-      "Does this builder profile, including its attached image, promote an unrelated business, multi-level marketing scheme, or spam instead of describing the builder and their work?",
+      "Interpret profile text in its original language, including English, Swahili, French, or another language. Does this builder profile, including its attached image, promote an unrelated business, multi-level marketing scheme, or spam instead of describing the builder and their work?",
     criteria: {
       true: "The profile is primarily unrelated promotion, multi-level marketing, or spam.",
       false:
@@ -34,7 +34,7 @@ export const PROFILE_MODERATION_QUESTIONS = {
   impersonation_risk: {
     type: "noul",
     instructions:
-      "Does any public profile text or attached profile image falsely claim that the builder represents Tembo Tech Ventures, its staff, or another organisation?",
+      "Interpret profile text in its original language, including English, Swahili, French, or another language. Does any public profile text or attached profile image falsely claim that the builder represents Tembo Tech Ventures, its staff, or another organisation?",
     criteria: {
       true: "The profile makes a likely false claim of representing an organisation or its staff.",
       false: "The profile makes no such claim.",
@@ -48,10 +48,13 @@ export const PROFILE_MODERATION_THRESHOLDS: Record<
   ProfileModerationFlag,
   number
 > = {
+  // Calibrated with clearly safe and unsafe synthetic profiles in English,
+  // Swahili, and French. A positive result only pauses publication for a
+  // person to review; it never rejects a student.
   contains_contact_details: 0.8,
-  abusive_or_sexual: 0.85,
-  promotes_unrelated_business: 0.85,
-  impersonation_risk: 0.8,
+  abusive_or_sexual: 0.25,
+  promotes_unrelated_business: 0.5,
+  impersonation_risk: 0.7,
 };
 
 export const PROFILE_MODERATION_MESSAGES: Record<
