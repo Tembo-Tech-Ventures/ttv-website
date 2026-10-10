@@ -6,8 +6,8 @@ export const HONEYPOT_FIELD = "website_confirm";
 export const FORM_TOKEN_FIELD = "_form_token";
 
 const TOKEN_SEPARATOR = ".";
-const MIN_FILL_SECONDS = 3;
-const MAX_FILL_SECONDS = 7200;
+const MIN_FILL_SECONDS = 1;
+const MAX_FILL_SECONDS = 86400;
 const MAX_SUBMISSIONS_PER_HOUR = 5;
 const CLEANUP_AGE_SECONDS = 86400;
 

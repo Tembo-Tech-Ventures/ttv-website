@@ -11,6 +11,7 @@ import { env } from "cloudflare:workers";
 import { hasCompletedCohort } from "@/lib/talent/eligibility";
 import { parseSkillsJson } from "@/lib/talent/profile";
 import { fetchGitHubLogin } from "@/lib/talent/github";
+import { preserveFormTextValues } from "@/lib/form-values";
 import {
   saveProfile,
   submitForReview,
@@ -22,18 +23,48 @@ const db = drizzle(env.DB, { schema });
 
 const eligible = await hasCompletedCohort(db, user.id);
 
+const PROFILE_TEXT_FIELDS = [
+  "handle",
+  "headline",
+  "bio",
+  "location",
+  "country",
+  "skills",
+  "portfolioUrl",
+  "linkedinUrl",
+] as const;
+type ProfileTextField = (typeof PROFILE_TEXT_FIELDS)[number];
+
 let result: ProfileFormResult | null = null;
+let saveFailed = false;
+let submittedProfileValues: Record<ProfileTextField, string> | null = null;
+let submittedAvailability = {
+  openToFreelance: false,
+  openToRoles: false,
+};
 
 if (Astro.request.method === "POST" && eligible) {
   const formData = await Astro.request.formData();
   const action = formData.get("_action") as string;
 
   if (action === "save") {
+    submittedProfileValues = preserveFormTextValues(
+      formData,
+      PROFILE_TEXT_FIELDS,
+    );
+    submittedAvailability = {
+      openToFreelance: formData.get("openToFreelance") === "on",
+      openToRoles: formData.get("openToRoles") === "on",
+    };
     const existing = await db.query.studentProfile.findFirst({
       where: eq(schema.studentProfile.userId, user.id),
       columns: { id: true },
     });
     result = await saveProfile(db, user.id, formData, existing?.id);
+    if (!result.success) {
+      saveFailed = true;
+      Astro.response.status = 400;
+    }
   } else if (action === "submit_for_review") {
     const existing = await db.query.studentProfile.findFirst({
       where: eq(schema.studentProfile.userId, user.id),
@@ -73,6 +104,58 @@ if (eligible && !profile) {
 }
 
 const isEditable = !profile || profile.status === "DRAFT" || profile.status === "PUBLISHED";
+
+const invalidProfileValues = saveFailed ? submittedProfileValues : null;
+const profileFormValues: Record<ProfileTextField, string> = {
+  handle: invalidProfileValues?.handle ?? profile?.handle ?? defaultHandle,
+  headline: invalidProfileValues?.headline ?? profile?.headline ?? "",
+  bio: invalidProfileValues?.bio ?? profile?.bio ?? "",
+  location: invalidProfileValues?.location ?? profile?.location ?? "",
+  country: invalidProfileValues?.country ?? profile?.country ?? "",
+  skills: invalidProfileValues?.skills ?? skillsValue,
+  portfolioUrl: invalidProfileValues?.portfolioUrl ?? profile?.portfolioUrl ?? "",
+  linkedinUrl: invalidProfileValues?.linkedinUrl ?? profile?.linkedinUrl ?? "",
+};
+const profileAvailability = saveFailed
+  ? submittedAvailability
+  : {
+      openToFreelance: profile?.openToFreelance ?? false,
+      openToRoles: profile?.openToRoles ?? false,
+    };
+
+const profileFieldErrors: Partial<Record<ProfileTextField, string>> = {};
+if (result?.handleError) profileFieldErrors.handle = result.handleError;
+for (const field of PROFILE_TEXT_FIELDS) {
+  if (field === "handle") continue;
+  const directError = result?.fieldErrors?.[field];
+  const nestedError = Object.entries(result?.fieldErrors ?? {}).find(
+    ([path]) => path.startsWith(`${field}.`),
+  )?.[1];
+  const fieldError = directError ?? nestedError;
+  if (fieldError) profileFieldErrors[field] = fieldError;
+}
+
+const PROFILE_FIELD_LABELS: Record<ProfileTextField, string> = {
+  handle: "Handle",
+  headline: "Headline",
+  bio: "Bio",
+  location: "City / Region",
+  country: "Country",
+  skills: "Skills",
+  portfolioUrl: "Portfolio URL",
+  linkedinUrl: "LinkedIn URL",
+};
+const firstProfileError = PROFILE_TEXT_FIELDS.find(
+  (field) => profileFieldErrors[field],
+);
+const profileFieldDescription = (
+  field: ProfileTextField,
+  helperId?: string,
+) =>
+  [helperId, profileFieldErrors[field] ? `${field}-error` : undefined]
+    .filter(Boolean)
+    .join(" ") || undefined;
+const skillsPattern = String.raw`\s*[^,]{1,30}\s*(,\s*[^,]{1,30}\s*){0,11}`;
 
 const existingHighlights = profile?.highlights
   ? profile.highlights
@@ -175,7 +258,28 @@ const hasGitHubAccount = profile
         )}
 
         {/* Result messages */}
-        {result && !result.success && result.error && (
+        {saveFailed && (
+          <div
+            class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300"
+            role="alert"
+          >
+            <p class="font-medium">
+              We couldn&rsquo;t save your profile. Your changes are still in the form.
+            </p>
+            {firstProfileError ? (
+              <a
+                href={`#${firstProfileError}`}
+                class="mt-1 inline-block underline hover:text-white"
+              >
+                Go to the first error: {PROFILE_FIELD_LABELS[firstProfileError]}
+              </a>
+            ) : result?.error ? (
+              <p class="mt-1">{result.error}</p>
+            ) : null}
+          </div>
+        )}
+
+        {result && !result.success && result.error && !saveFailed && (
           <div class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
             {result.error}
           </div>
@@ -190,7 +294,7 @@ const hasGitHubAccount = profile
         {/* Profile editor */}
         {isEditable && (
           <Card>
-            <form method="POST" class="space-y-5">
+            <form id="profile-editor" method="POST" class="space-y-5">
               <input type="hidden" name="_action" value="save" />
 
               <h3 class="text-lg font-semibold text-white">
@@ -211,17 +315,21 @@ const hasGitHubAccount = profile
                     required
                     maxlength="39"
                     placeholder="your-handle"
-                    value={profile?.handle ?? defaultHandle}
+                    value={profileFormValues.handle}
+                    aria-invalid={Boolean(profileFieldErrors.handle)}
+                    aria-describedby={profileFieldDescription("handle", "handle-help")}
                     class:list={[
                       "flex-1 rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
-                      result?.handleError ? "border-red-500" : "border-teal focus:border-primary",
+                      profileFieldErrors.handle ? "border-red-500" : "border-teal focus:border-primary",
                     ]}
                   />
                 </div>
-                {result?.handleError && (
-                  <p class="text-sm text-red-400">{result.handleError}</p>
+                {profileFieldErrors.handle && (
+                  <p id="handle-error" class="text-sm text-red-400">
+                    {profileFieldErrors.handle}
+                  </p>
                 )}
-                <p class="text-xs text-ink-muted">
+                <p id="handle-help" class="text-xs text-ink-muted">
                   3-39 characters. Lowercase letters, numbers, and hyphens only.
                 </p>
               </div>
@@ -237,14 +345,18 @@ const hasGitHubAccount = profile
                   type="text"
                   maxlength="120"
                   placeholder="e.g. Full-Stack Developer · Lagos, Nigeria"
-                  value={profile?.headline ?? ""}
+                  value={profileFormValues.headline}
+                  aria-invalid={Boolean(profileFieldErrors.headline)}
+                  aria-describedby={profileFieldDescription("headline")}
                   class:list={[
                     "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
-                    result?.fieldErrors?.headline ? "border-red-500" : "border-teal focus:border-primary",
+                    profileFieldErrors.headline ? "border-red-500" : "border-teal focus:border-primary",
                   ]}
                 />
-                {result?.fieldErrors?.headline && (
-                  <p class="text-sm text-red-400">{result.fieldErrors.headline}</p>
+                {profileFieldErrors.headline && (
+                  <p id="headline-error" class="text-sm text-red-400">
+                    {profileFieldErrors.headline}
+                  </p>
                 )}
               </div>
 
@@ -259,13 +371,17 @@ const hasGitHubAccount = profile
                   rows={4}
                   maxlength="4000"
                   placeholder="Tell the community about yourself, your journey, and what you're building."
+                  aria-invalid={Boolean(profileFieldErrors.bio)}
+                  aria-describedby={profileFieldDescription("bio")}
                   class:list={[
                     "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
-                    result?.fieldErrors?.bio ? "border-red-500" : "border-teal focus:border-primary",
+                    profileFieldErrors.bio ? "border-red-500" : "border-teal focus:border-primary",
                   ]}
-                >{profile?.bio ?? ""}</textarea>
-                {result?.fieldErrors?.bio && (
-                  <p class="text-sm text-red-400">{result.fieldErrors.bio}</p>
+                >{profileFormValues.bio}</textarea>
+                {profileFieldErrors.bio && (
+                  <p id="bio-error" class="text-sm text-red-400">
+                    {profileFieldErrors.bio}
+                  </p>
                 )}
               </div>
 
@@ -281,9 +397,19 @@ const hasGitHubAccount = profile
                     type="text"
                     maxlength="120"
                     placeholder="e.g. Lagos"
-                    value={profile?.location ?? ""}
-                    class="form-control placeholder:text-ink-muted"
+                    value={profileFormValues.location}
+                    aria-invalid={Boolean(profileFieldErrors.location)}
+                    aria-describedby={profileFieldDescription("location")}
+                    class:list={[
+                      "form-control placeholder:text-ink-muted",
+                      profileFieldErrors.location && "border-red-500",
+                    ]}
                   />
+                  {profileFieldErrors.location && (
+                    <p id="location-error" class="text-sm text-red-400">
+                      {profileFieldErrors.location}
+                    </p>
+                  )}
                 </div>
                 <div class="flex flex-col gap-1.5">
                   <label for="country" class="text-sm font-medium text-white/90">
@@ -295,9 +421,19 @@ const hasGitHubAccount = profile
                     type="text"
                     maxlength="56"
                     placeholder="e.g. Nigeria"
-                    value={profile?.country ?? ""}
-                    class="form-control placeholder:text-ink-muted"
+                    value={profileFormValues.country}
+                    aria-invalid={Boolean(profileFieldErrors.country)}
+                    aria-describedby={profileFieldDescription("country")}
+                    class:list={[
+                      "form-control placeholder:text-ink-muted",
+                      profileFieldErrors.country && "border-red-500",
+                    ]}
                   />
+                  {profileFieldErrors.country && (
+                    <p id="country-error" class="text-sm text-red-400">
+                      {profileFieldErrors.country}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -310,18 +446,24 @@ const hasGitHubAccount = profile
                   id="skills"
                   name="skills"
                   type="text"
+                  pattern={skillsPattern}
+                  title="Use up to 12 comma-separated skills, with 30 characters or fewer in each skill."
                   placeholder="e.g. TypeScript, React, Node.js, Python"
-                  value={skillsValue}
+                  value={profileFormValues.skills}
+                  aria-invalid={Boolean(profileFieldErrors.skills)}
+                  aria-describedby={profileFieldDescription("skills", "skills-help")}
                   class:list={[
                     "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
-                    result?.fieldErrors?.skills ? "border-red-500" : "border-teal focus:border-primary",
+                    profileFieldErrors.skills ? "border-red-500" : "border-teal focus:border-primary",
                   ]}
                 />
-                {result?.fieldErrors?.skills && (
-                  <p class="text-sm text-red-400">{result.fieldErrors.skills}</p>
+                {profileFieldErrors.skills && (
+                  <p id="skills-error" class="text-sm text-red-400">
+                    {profileFieldErrors.skills}
+                  </p>
                 )}
-                <p class="text-xs text-ink-muted">
-                  Comma-separated, up to 12 skills (30 characters each).
+                <p id="skills-help" class="text-xs text-ink-muted">
+                  Add up to 12 comma-separated skills. Each skill can be up to 30 characters.
                 </p>
               </div>
 
@@ -331,7 +473,7 @@ const hasGitHubAccount = profile
                   <input
                     type="checkbox"
                     name="openToFreelance"
-                    checked={profile?.openToFreelance ?? false}
+                    checked={profileAvailability.openToFreelance}
                     class="h-4 w-4 rounded border-teal bg-dark/50 text-primary focus:ring-primary/50"
                   />
                   Open to freelance work
@@ -340,7 +482,7 @@ const hasGitHubAccount = profile
                   <input
                     type="checkbox"
                     name="openToRoles"
-                    checked={profile?.openToRoles ?? false}
+                    checked={profileAvailability.openToRoles}
                     class="h-4 w-4 rounded border-teal bg-dark/50 text-primary focus:ring-primary/50"
                   />
                   Open to full-time roles
@@ -359,14 +501,18 @@ const hasGitHubAccount = profile
                     type="url"
                     maxlength="300"
                     placeholder="https://your-site.com"
-                    value={profile?.portfolioUrl ?? ""}
+                    value={profileFormValues.portfolioUrl}
+                    aria-invalid={Boolean(profileFieldErrors.portfolioUrl)}
+                    aria-describedby={profileFieldDescription("portfolioUrl")}
                     class:list={[
                       "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
-                      result?.fieldErrors?.portfolioUrl ? "border-red-500" : "border-teal focus:border-primary",
+                      profileFieldErrors.portfolioUrl ? "border-red-500" : "border-teal focus:border-primary",
                     ]}
                   />
-                  {result?.fieldErrors?.portfolioUrl && (
-                    <p class="text-sm text-red-400">{result.fieldErrors.portfolioUrl}</p>
+                  {profileFieldErrors.portfolioUrl && (
+                    <p id="portfolioUrl-error" class="text-sm text-red-400">
+                      {profileFieldErrors.portfolioUrl}
+                    </p>
                   )}
                 </div>
                 <div class="flex flex-col gap-1.5">
@@ -379,14 +525,18 @@ const hasGitHubAccount = profile
                     type="url"
                     maxlength="300"
                     placeholder="https://linkedin.com/in/your-profile"
-                    value={profile?.linkedinUrl ?? ""}
+                    value={profileFormValues.linkedinUrl}
+                    aria-invalid={Boolean(profileFieldErrors.linkedinUrl)}
+                    aria-describedby={profileFieldDescription("linkedinUrl")}
                     class:list={[
                       "rounded-md border bg-dark/50 px-3 py-2 text-white placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/50",
-                      result?.fieldErrors?.linkedinUrl ? "border-red-500" : "border-teal focus:border-primary",
+                      profileFieldErrors.linkedinUrl ? "border-red-500" : "border-teal focus:border-primary",
                     ]}
                   />
-                  {result?.fieldErrors?.linkedinUrl && (
-                    <p class="text-sm text-red-400">{result.fieldErrors.linkedinUrl}</p>
+                  {profileFieldErrors.linkedinUrl && (
+                    <p id="linkedinUrl-error" class="text-sm text-red-400">
+                      {profileFieldErrors.linkedinUrl}
+                    </p>
                   )}
                 </div>
               </div>

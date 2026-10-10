@@ -83,8 +83,8 @@ test.describe("/hire form submission", () => {
     await page.getByLabel(/skills needed/i).fill("React, TypeScript");
     await page.getByLabel(/budget range/i).selectOption("FROM_1K_TO_5K");
 
-    // The form token requires MIN_FILL_SECONDS (3s) between issue and submit
-    await page.waitForTimeout(3500);
+    // The form token requires one second between issue and submit.
+    await page.waitForTimeout(1100);
 
     await page.getByLabel(/timeline/i).fill("4 weeks");
     await page.getByRole("button", { name: /submit project/i }).click();
@@ -132,6 +132,69 @@ test.describe("/hire form submission", () => {
 
     await page.screenshot({
       path: evidence("hire-honeypot-success"),
+      fullPage: true,
+    });
+  });
+
+  test("an immediate submission keeps every value and asks for another try", async ({
+    page,
+  }) => {
+    await page.goto("/hire");
+
+    let hasFreshToken = false;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const millisecondsToNextSecond = 1000 - (Date.now() % 1000) + 20;
+      await page.waitForTimeout(millisecondsToNextSecond);
+      await page.reload();
+
+      const token = await page
+        .locator('input[name="_form_token"]')
+        .inputValue();
+      const issuedAtSeconds = Number(token.split(".", 1)[0]);
+      const now = Date.now();
+      hasFreshToken =
+        Math.floor(now / 1000) === issuedAtSeconds && now % 1000 < 650;
+      if (hasFreshToken) break;
+    }
+    expect(hasFreshToken).toBe(true);
+
+    const values = {
+      organization: "Preserved Test Org",
+      contactName: "Preserved Person",
+      contactEmail: "preserved@example.com",
+      title: "Preserved project title",
+      description: "Every submitted hire-form value should remain here.",
+      skills: "Astro, TypeScript",
+      budgetBand: "FROM_1K_TO_5K",
+      timeline: "Six weeks",
+    };
+    const form = page.locator('form:has(input[name="organization"])');
+    const [response] = await Promise.all([
+      page.waitForNavigation(),
+      form.evaluate((formElement: HTMLFormElement, submittedValues) => {
+        for (const [name, value] of Object.entries(submittedValues)) {
+          const field = formElement.elements.namedItem(name);
+          if (
+            field instanceof HTMLInputElement ||
+            field instanceof HTMLTextAreaElement ||
+            field instanceof HTMLSelectElement
+          ) {
+            field.value = value;
+          }
+        }
+        formElement.submit();
+      }, values),
+    ]);
+
+    expect(response?.status()).toBe(200);
+    await expect(page.getByRole("alert")).toContainText(
+      "Please press Submit project again.",
+    );
+    for (const [name, value] of Object.entries(values)) {
+      await expect(page.locator(`[name="${name}"]`)).toHaveValue(value);
+    }
+    await page.screenshot({
+      path: evidence("hire-too-fast-preserved"),
       fullPage: true,
     });
   });
