@@ -13,13 +13,8 @@ import {
   parseAdminProfileAction,
   parseAdminProfileVersion,
   parseModerationFlags,
-  parseModerationScores,
 } from "@/lib/talent/profile-moderation";
-import {
-  PROFILE_MODERATION_LABELS,
-  PROFILE_MODERATION_MESSAGES,
-  type ProfileModerationFlag,
-} from "@/lib/moderation/clef";
+import { PROFILE_MODERATION_MESSAGES } from "@/lib/moderation/clef";
 import {
   moderatePost,
   normalizeAdminNote,
@@ -121,11 +116,6 @@ const leadsCount = leadsResult?.value ?? 0;
 
 const skills = parseSkillsJson(profile.skills);
 const moderationFlags = parseModerationFlags(profile.moderationFlags);
-const moderationScores = parseModerationScores(profile.moderationScores);
-const moderationScoreRows = Object.entries(moderationScores) as [
-  ProfileModerationFlag,
-  number,
-][];
 const moderationOutcomeLabel = profile.moderationOutcome
   ? {
       pass: "Passed",
@@ -182,16 +172,6 @@ const moderationOutcomeLabel = profile.moderationOutcome
             The check was unavailable. The profile published automatically and was flagged for this review.
           </p>
         ) : null}
-        {moderationScoreRows.length > 0 && (
-          <dl class="mt-4 grid gap-2 text-sm sm:grid-cols-2">
-            {moderationScoreRows.map(([flag, score]) => (
-              <div class="flex items-center justify-between gap-3 rounded-md bg-dark/40 px-3 py-2">
-                <dt class="text-ink-secondary">{PROFILE_MODERATION_LABELS[flag]}</dt>
-                <dd class="font-mono text-white">{Math.round(score * 100)}%</dd>
-              </div>
-            ))}
-          </dl>
-        )}
       </Card>
     )}
 

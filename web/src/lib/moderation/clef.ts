@@ -71,14 +71,6 @@ export const PROFILE_MODERATION_MESSAGES: Record<
     "Remove claims that you represent TTV or another organisation unless that role is accurate.",
 };
 
-export const PROFILE_MODERATION_LABELS: Record<ProfileModerationFlag, string> =
-  {
-    contains_contact_details: "Contact or identity details",
-    abusive_or_sexual: "Abusive or sexual content",
-    promotes_unrelated_business: "Unrelated promotion or spam",
-    impersonation_risk: "Impersonation risk",
-  };
-
 export interface ProfileModerationState {
   displayName: string;
   handle: string;

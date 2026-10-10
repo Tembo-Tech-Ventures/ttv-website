@@ -60,32 +60,6 @@ export function parseModerationFlags(
   }
 }
 
-export function parseModerationScores(
-  raw: string | null,
-): Partial<Record<ProfileModerationFlag, number>> {
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-      return {};
-    const scores: Partial<Record<ProfileModerationFlag, number>> = {};
-    for (const [key, value] of Object.entries(parsed)) {
-      if (!PROFILE_MODERATION_FLAGS.has(key as ProfileModerationFlag)) continue;
-      if (
-        typeof value === "number" &&
-        Number.isFinite(value) &&
-        value >= 0 &&
-        value <= 1
-      ) {
-        scores[key as ProfileModerationFlag] = value;
-      }
-    }
-    return scores;
-  } catch {
-    return {};
-  }
-}
-
 interface ModerationListRow extends StoredProfileModeration {
   status: string;
   updatedAt: Date | null;

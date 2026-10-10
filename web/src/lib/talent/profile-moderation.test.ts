@@ -7,7 +7,6 @@ import {
   parseAdminProfileAction,
   parseAdminProfileVersion,
   parseModerationFlags,
-  parseModerationScores,
   publishesAfterModeration,
   resolveAdminProfileUpdate,
   splitModerationReviewLists,
@@ -50,17 +49,11 @@ describe("profile moderation transitions", () => {
     });
   });
 
-  it("parses only known, valid stored flags and scores", () => {
+  it("parses only known stored flags", () => {
     expect(
       parseModerationFlags('["contains_contact_details","unknown",12]'),
     ).toEqual(["contains_contact_details"]);
-    expect(
-      parseModerationScores(
-        '{"contains_contact_details":0.9,"abusive_or_sexual":2,"unknown":0.5}',
-      ),
-    ).toEqual({ contains_contact_details: 0.9 });
     expect(parseModerationFlags("not json")).toEqual([]);
-    expect(parseModerationScores("not json")).toEqual({});
   });
 
   it("separates held and fail-open profiles newest first", () => {
