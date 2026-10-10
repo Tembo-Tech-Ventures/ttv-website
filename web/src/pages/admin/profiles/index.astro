@@ -8,13 +8,14 @@ import { env } from "cloudflare:workers";
 import { sortProfilesForQueue } from "@/lib/talent/admin-review";
 import { PROFILE_MODERATION_MESSAGES } from "@/lib/moderation/clef";
 import {
+  applyAdminProfileAction,
   parseAdminProfileAction,
   parseModerationFlags,
-  resolveAdminProfileUpdate,
   splitModerationReviewLists,
 } from "@/lib/talent/profile-moderation";
 
 const db = drizzle(env.DB, { schema });
+let actionError: string | undefined;
 
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
@@ -28,18 +29,26 @@ if (Astro.request.method === "POST") {
       columns: {
         status: true,
         publishedAt: true,
+        contentVersion: true,
         publicName: true,
         publicAvatarUrl: true,
       },
       with: { user: { columns: { name: true, image: true } } },
     });
     if (current) {
-      await db
-        .update(schema.studentProfile)
-        .set(resolveAdminProfileUpdate(current, action))
-        .where(eq(schema.studentProfile.id, profileId));
+      const updated = await applyAdminProfileAction(
+        db,
+        profileId,
+        current,
+        action,
+      );
+      if (!updated) {
+        actionError =
+          "This profile changed while the action was running. Reload and try again.";
+        Astro.response.status = 409;
+      }
     }
-    return Astro.redirect("/admin/profiles#moderation");
+    if (!actionError) return Astro.redirect("/admin/profiles#moderation");
   }
 }
 
@@ -79,6 +88,15 @@ const reviewSections = [
 <AdminLayout title="Profiles">
   <div class="space-y-6">
     <h2 class="text-2xl font-bold text-white">Profiles</h2>
+
+    {actionError && (
+      <p
+        role="alert"
+        class="rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
+      >
+        {actionError}
+      </p>
+    )}
 
     <div id="moderation" class="grid gap-4 xl:grid-cols-2">
       {reviewSections.map((section) => (

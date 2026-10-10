@@ -76,11 +76,12 @@ function mockDb(
       githubLogin?: string | null;
       publicName?: string | null;
       publicAvatarUrl?: string | null;
+      contentVersion?: number;
       user?: { name: string; image?: string | null };
     } | null;
     insertProfile?: () => void;
     updateProfile?: (condition?: unknown) => void;
-    updateChanges?: number;
+    updateChanges?: number | (() => number);
     setProfile?: (values: unknown) => void;
   } = {},
 ) {
@@ -98,7 +99,9 @@ function mockDb(
             // Dispatch on requested columns: `saveProfile` issues two distinct
             // lookups (handle lock, then handle uniqueness) against this mock.
             if (opts?.columns && "publishedAt" in opts.columns) {
-              return overrides.findProfileForLock ?? null;
+              return overrides.findProfileForLock
+                ? { contentVersion: 0, ...overrides.findProfileForLock }
+                : null;
             }
             if (opts?.where && typeof opts.where === "function") {
               return overrides.findProfile ?? null;
@@ -119,7 +122,14 @@ function mockDb(
         return {
           where: (condition: unknown) => {
             updateFn(condition);
-            return { meta: { changes: overrides.updateChanges ?? 1 } };
+            return {
+              meta: {
+                changes:
+                  typeof overrides.updateChanges === "function"
+                    ? overrides.updateChanges()
+                    : (overrides.updateChanges ?? 1),
+              },
+            };
           },
         };
       }),
@@ -409,7 +419,7 @@ describe("saveProfile", () => {
         error:
           "This profile changed while your request was running. Reload and try again.",
       });
-      expectStatusWriteGuard(updateFn, "DRAFT");
+      expectVersionedStatusWriteGuard(updateFn, "DRAFT");
     });
   });
 
@@ -428,6 +438,7 @@ describe("saveProfile", () => {
 
 const draftProfile = {
   status: "DRAFT" as const,
+  contentVersion: 0,
   handle: "new-user",
   headline: "Developer",
   bio: "I build useful things",
@@ -474,14 +485,17 @@ function moderationDb(
   };
 }
 
-function expectStatusWriteGuard(
+function expectVersionedStatusWriteGuard(
   where: ReturnType<typeof vi.fn>,
   expectedStatus: "DRAFT" | "PUBLISHED",
+  expectedVersion = 0,
 ) {
   const condition = where.mock.calls[0]?.[0];
   const query = new SQLiteSyncDialect().sqlToQuery(condition);
   expect(query.sql).toContain('"studentProfile"."status" = ?');
   expect(query.params).toContain(expectedStatus);
+  expect(query.sql).toContain('"studentProfile"."contentVersion" = ?');
+  expect(query.params.at(-1)).toBe(expectedVersion);
 }
 
 describe("publishProfile", () => {
@@ -516,7 +530,7 @@ describe("publishProfile", () => {
       expect.objectContaining({ displayName: "New User" }),
       "/api/avatar/avatars/user-1/photo.webp",
     );
-    expectStatusWriteGuard(where, "DRAFT");
+    expectVersionedStatusWriteGuard(where, "DRAFT");
     vi.useRealTimers();
   });
 
@@ -569,7 +583,7 @@ describe("publishProfile", () => {
       error:
         "This profile changed while your request was running. Reload and try again.",
     });
-    expectStatusWriteGuard(where, "DRAFT");
+    expectVersionedStatusWriteGuard(where, "DRAFT");
   });
 
   it("fails open when the check is unavailable and flags the published profile", async () => {
@@ -623,6 +637,7 @@ describe("published profile edits", () => {
     githubLogin: "existing-user",
     publicName: "Checked Public Name",
     publicAvatarUrl: "/api/avatar/avatars/user-1/checked.webp",
+    contentVersion: 7,
     user: { name: "Mutable Account Name", image: null },
   };
 
@@ -660,7 +675,7 @@ describe("published profile edits", () => {
       expect.objectContaining({ displayName: "Checked Public Name" }),
       "/api/avatar/avatars/user-1/checked.webp",
     );
-    expectStatusWriteGuard(updateProfile, "PUBLISHED");
+    expectVersionedStatusWriteGuard(updateProfile, "PUBLISHED", 7);
   });
 
   it("publishes a passing edit and fails open on an unavailable check", async () => {
@@ -720,7 +735,7 @@ describe("published profile edits", () => {
         Promise.resolve({ outcome: "pass" as const, flags: [], scores: {} }),
     ],
   ])(
-    "reports a conflict when a %s published edit loses its status race",
+    "reports a conflict when a %s published edit loses its content-version race",
     async (_case, checkContent) => {
       const updateProfile = vi.fn();
       const db = mockDb({
@@ -743,7 +758,42 @@ describe("published profile edits", () => {
         error:
           "This profile changed while your request was running. Reload and try again.",
       });
-      expectStatusWriteGuard(updateProfile, "PUBLISHED");
+      expectVersionedStatusWriteGuard(updateProfile, "PUBLISHED", 7);
     },
   );
+
+  it("cannot restore a stale avatar after a concurrent avatar update wins", async () => {
+    const oldAvatar = current.publicAvatarUrl;
+    const newAvatar = "/api/avatar/avatars/user-1/new.webp";
+    let persistedVersion = current.contentVersion;
+    let persistedAvatar = oldAvatar;
+    const updateProfile = vi.fn();
+    const db = mockDb({
+      findProfileForLock: current,
+      findProfileByHandle: { id: "profile-1" },
+      updateProfile,
+      updateChanges: () =>
+        persistedVersion === current.contentVersion ? 1 : 0,
+    });
+
+    const result = await saveProfile(
+      db as never,
+      "user-1",
+      makeFormData({ handle: "existing-user", bio: "Delayed edit" }),
+      "profile-1",
+      async () => {
+        persistedVersion += 1;
+        persistedAvatar = newAvatar;
+        return { outcome: "pass", flags: [], scores: {} };
+      },
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error:
+        "This profile changed while your request was running. Reload and try again.",
+    });
+    expect(persistedAvatar).toBe(newAvatar);
+    expectVersionedStatusWriteGuard(updateProfile, "PUBLISHED", 7);
+  });
 });

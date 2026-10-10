@@ -9,10 +9,10 @@ import { env } from "cloudflare:workers";
 import { getCompletedCohorts } from "@/lib/talent/eligibility";
 import { parseSkillsJson } from "@/lib/talent/profile";
 import {
+  applyAdminProfileAction,
   parseAdminProfileAction,
   parseModerationFlags,
   parseModerationScores,
-  resolveAdminProfileUpdate,
 } from "@/lib/talent/profile-moderation";
 import {
   PROFILE_MODERATION_LABELS,
@@ -62,6 +62,7 @@ if (Astro.request.method === "POST") {
       columns: {
         status: true,
         publishedAt: true,
+        contentVersion: true,
         publicName: true,
         publicAvatarUrl: true,
       },
@@ -73,12 +74,15 @@ if (Astro.request.method === "POST") {
       actionError = "Invalid profile moderation request.";
       Astro.response.status = 400;
     } else {
-      await db
-        .update(schema.studentProfile)
-        .set(resolveAdminProfileUpdate(current, action))
-        .where(eq(schema.studentProfile.id, id));
+      const updated = await applyAdminProfileAction(db, id, current, action);
 
-      return Astro.redirect(`/admin/profiles/${id}`);
+      if (!updated) {
+        actionError =
+          "This profile changed while the action was running. Reload and try again.";
+        Astro.response.status = 409;
+      } else {
+        return Astro.redirect(`/admin/profiles/${id}`);
+      }
     }
   } else {
     actionError = "Invalid moderation request.";

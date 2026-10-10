@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 import { parseSkillsJson } from "@/lib/talent/profile";
@@ -56,6 +56,7 @@ export async function saveProfileIdentity(
     columns: {
       id: true,
       status: true,
+      contentVersion: true,
       handle: true,
       headline: true,
       bio: true,
@@ -82,12 +83,16 @@ export async function saveProfileIdentity(
   if (profile.status === "DRAFT") {
     const updateResult = await db
       .update(schema.studentProfile)
-      .set(clearedModeration)
+      .set({
+        ...clearedModeration,
+        contentVersion: sql`${schema.studentProfile.contentVersion} + 1`,
+      })
       .where(
         and(
           eq(schema.studentProfile.id, profile.id),
           eq(schema.studentProfile.userId, userId),
           eq(schema.studentProfile.status, "DRAFT"),
+          eq(schema.studentProfile.contentVersion, profile.contentVersion),
         ),
       );
     if (!updateResult.meta.changes) return changedDuringCheck();
@@ -140,12 +145,16 @@ export async function saveProfileIdentity(
     : moderationValues;
   const updateResult = await db
     .update(schema.studentProfile)
-    .set(profileValues)
+    .set({
+      ...profileValues,
+      contentVersion: sql`${schema.studentProfile.contentVersion} + 1`,
+    })
     .where(
       and(
         eq(schema.studentProfile.id, profile.id),
         eq(schema.studentProfile.userId, userId),
         eq(schema.studentProfile.status, "PUBLISHED"),
+        eq(schema.studentProfile.contentVersion, profile.contentVersion),
       ),
     );
   if (!updateResult.meta.changes) return changedDuringCheck();

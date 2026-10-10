@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 import {
@@ -81,6 +81,7 @@ interface CurrentProfile {
   handle: string;
   publishedAt: Date | null;
   status: "DRAFT" | "PUBLISHED" | "SUSPENDED";
+  contentVersion: number;
   githubLogin: string | null;
   publicName: string | null;
   publicAvatarUrl: string | null;
@@ -126,16 +127,21 @@ async function updateDraftProfile(
   db: Database,
   userId: string,
   profileId: string,
+  contentVersion: number,
   values: ProfileValues,
 ): Promise<ProfileFormResult> {
   const updateResult = await db
     .update(schema.studentProfile)
-    .set(values)
+    .set({
+      ...values,
+      contentVersion: sql`${schema.studentProfile.contentVersion} + 1`,
+    })
     .where(
       and(
         eq(schema.studentProfile.id, profileId),
         eq(schema.studentProfile.userId, userId),
         eq(schema.studentProfile.status, "DRAFT"),
+        eq(schema.studentProfile.contentVersion, contentVersion),
       ),
     );
   return updateResult.meta.changes
@@ -159,9 +165,7 @@ function saveNonDraftProfile(
       profileId,
       values,
       skills,
-      current.publicName ?? current.user.name,
-      current.githubLogin,
-      current.publicAvatarUrl,
+      current,
       checkContent,
     );
   }
@@ -177,39 +181,41 @@ async function savePublishedProfileEdit(
   profileId: string,
   values: ProfileValues,
   skills: string[],
-  displayName: string,
-  githubLogin: string | null,
-  avatarUrl: string | null,
+  current: CurrentProfile,
   checkContent?: ProfileContentCheck,
 ): Promise<ProfileFormResult> {
   const moderationState: ProfileModerationState = {
-    displayName,
+    displayName: current.publicName ?? current.user.name,
     handle: values.handle,
     headline: values.headline,
     bio: values.bio,
     location: values.location,
     country: values.country,
     skills,
-    githubLogin,
+    githubLogin: current.githubLogin,
     portfolioUrl: values.portfolioUrl,
     linkedinUrl: values.linkedinUrl,
   };
   const moderation = await runContentCheck(
     checkContent,
     moderationState,
-    avatarUrl,
+    current.publicAvatarUrl,
   );
   const moderationValues = moderationColumns(moderation);
 
   if (!publishesAfterModeration(moderation)) {
     const updateResult = await db
       .update(schema.studentProfile)
-      .set(moderationValues)
+      .set({
+        ...moderationValues,
+        contentVersion: sql`${schema.studentProfile.contentVersion} + 1`,
+      })
       .where(
         and(
           eq(schema.studentProfile.id, profileId),
           eq(schema.studentProfile.userId, userId),
           eq(schema.studentProfile.status, "PUBLISHED"),
+          eq(schema.studentProfile.contentVersion, current.contentVersion),
         ),
       );
     if (!updateResult.meta.changes) return profileChangedDuringCheck();
@@ -226,13 +232,19 @@ async function savePublishedProfileEdit(
     .set({
       ...values,
       ...moderationValues,
-      ...publicIdentityColumns(moderation, moderationState, avatarUrl),
+      ...publicIdentityColumns(
+        moderation,
+        moderationState,
+        current.publicAvatarUrl,
+      ),
+      contentVersion: sql`${schema.studentProfile.contentVersion} + 1`,
     })
     .where(
       and(
         eq(schema.studentProfile.id, profileId),
         eq(schema.studentProfile.userId, userId),
         eq(schema.studentProfile.status, "PUBLISHED"),
+        eq(schema.studentProfile.contentVersion, current.contentVersion),
       ),
     );
   if (!updateResult.meta.changes) return profileChangedDuringCheck();
@@ -316,6 +328,7 @@ export async function saveProfile(
         handle: true,
         publishedAt: true,
         status: true,
+        contentVersion: true,
         githubLogin: true,
         publicName: true,
         publicAvatarUrl: true,
@@ -384,7 +397,13 @@ export async function saveProfile(
       );
     }
 
-    return updateDraftProfile(db, userId, existingProfileId, values);
+    return updateDraftProfile(
+      db,
+      userId,
+      existingProfileId,
+      current.contentVersion,
+      values,
+    );
   }
 
   await db.insert(schema.studentProfile).values({
@@ -418,6 +437,7 @@ export async function publishProfile(
       portfolioUrl: true,
       linkedinUrl: true,
       publishedAt: true,
+      contentVersion: true,
     },
     with: { user: { columns: { name: true, image: true } } },
   });
@@ -466,14 +486,20 @@ export async function publishProfile(
             ...identityValues,
             status: "PUBLISHED",
             publishedAt: profile.publishedAt ?? new Date(),
+            contentVersion: sql`${schema.studentProfile.contentVersion} + 1`,
           }
-        : { ...moderationValues, ...identityValues },
+        : {
+            ...moderationValues,
+            ...identityValues,
+            contentVersion: sql`${schema.studentProfile.contentVersion} + 1`,
+          },
     )
     .where(
       and(
         eq(schema.studentProfile.id, profileId),
         eq(schema.studentProfile.userId, userId),
         eq(schema.studentProfile.status, "DRAFT"),
+        eq(schema.studentProfile.contentVersion, profile.contentVersion),
       ),
     );
   if (!updateResult.meta.changes) return profileChangedDuringCheck();

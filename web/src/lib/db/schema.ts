@@ -600,6 +600,7 @@ export const studentProfile = sqliteTable("studentProfile", {
   portfolioUrl: text("portfolioUrl"),
   linkedinUrl: text("linkedinUrl"),
   publishedAt: integer("publishedAt", { mode: "timestamp" }),
+  contentVersion: integer("contentVersion").notNull().default(0),
   publicName: text("publicName"),
   publicAvatarUrl: text("publicAvatarUrl"),
   moderationOutcome: text("moderationOutcome", {

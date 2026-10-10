@@ -6,6 +6,7 @@ import { saveProfileIdentity } from "./profile-handlers";
 const publishedProfile = {
   id: "profile-1",
   status: "PUBLISHED" as const,
+  contentVersion: 4,
   handle: "builder",
   headline: "Developer",
   bio: "I build useful tools.",
@@ -56,10 +57,15 @@ function mockDb(profile: TestProfile | null, profileChanges = 1) {
   };
 }
 
-function expectPublishedGuard(where: ReturnType<typeof vi.fn>) {
+function expectVersionedStatusGuard(
+  where: ReturnType<typeof vi.fn>,
+  status: "DRAFT" | "PUBLISHED",
+) {
   const query = new SQLiteSyncDialect().sqlToQuery(where.mock.calls[0][0]);
   expect(query.sql).toContain('"studentProfile"."status" = ?');
-  expect(query.params).toContain("PUBLISHED");
+  expect(query.params).toContain(status);
+  expect(query.sql).toContain('"studentProfile"."contentVersion" = ?');
+  expect(query.params.at(-1)).toBe(4);
 }
 
 describe("saveProfileIdentity", () => {
@@ -96,7 +102,7 @@ describe("saveProfileIdentity", () => {
       }),
     );
     expect(setUser).toHaveBeenCalledWith({ name: "New Name" });
-    expectPublishedGuard(profileWhere);
+    expectVersionedStatusGuard(profileWhere, "PUBLISHED");
   });
 
   it("keeps the prior public identity when an avatar change is held", async () => {
@@ -154,7 +160,7 @@ describe("saveProfileIdentity", () => {
     expect(setUser).toHaveBeenCalledWith({ name: "New Name" });
   });
 
-  it("does not update account identity after losing the published-status race", async () => {
+  it("rejects a delayed name check after a concurrent avatar version wins", async () => {
     const { db, setUser, profileWhere } = mockDb(publishedProfile, 0);
     const result = await saveProfileIdentity(
       db as never,
@@ -169,11 +175,11 @@ describe("saveProfileIdentity", () => {
         "This profile changed while your request was running. Reload and try again.",
     });
     expect(setUser).not.toHaveBeenCalled();
-    expectPublishedGuard(profileWhere);
+    expectVersionedStatusGuard(profileWhere, "PUBLISHED");
   });
 
   it("clears a held draft decision when private identity changes", async () => {
-    const { db, setProfile, setUser } = mockDb({
+    const { db, setProfile, setUser, profileWhere } = mockDb({
       ...publishedProfile,
       status: "DRAFT",
     });
@@ -197,5 +203,6 @@ describe("saveProfileIdentity", () => {
       }),
     );
     expect(setUser).toHaveBeenCalledWith({ name: "Draft Name" });
+    expectVersionedStatusGuard(profileWhere, "DRAFT");
   });
 });

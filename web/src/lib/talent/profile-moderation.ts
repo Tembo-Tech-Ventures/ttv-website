@@ -3,6 +3,9 @@ import type {
   ProfileModerationResult,
 } from "@/lib/moderation/clef";
 import { safePublicProfileAvatarUrl } from "@/lib/avatar";
+import { and, eq } from "drizzle-orm";
+import * as schema from "@/lib/db/schema";
+import type { Database } from "@/lib/db/schema";
 
 export type ProfileModerationOutcome = ProfileModerationResult["outcome"];
 
@@ -112,6 +115,15 @@ export function splitModerationReviewLists<T extends ModerationListRow>(
 
 export type AdminProfileAction = "publish" | "unpublish" | "clear_flag";
 
+interface AdminProfileState {
+  status: string;
+  publishedAt: Date | null;
+  publicName?: string | null;
+  publicAvatarUrl?: string | null;
+  contentVersion: number;
+  user?: { name: string; image: string | null };
+}
+
 export function parseAdminProfileAction(value: FormDataEntryValue | null) {
   if (value === "publish" || value === "unpublish" || value === "clear_flag") {
     return value;
@@ -120,24 +132,25 @@ export function parseAdminProfileAction(value: FormDataEntryValue | null) {
 }
 
 export function resolveAdminProfileUpdate(
-  current: {
-    status: string;
-    publishedAt: Date | null;
-    publicName?: string | null;
-    publicAvatarUrl?: string | null;
-    user?: { name: string; image: string | null };
-  },
+  current: AdminProfileState,
   action: AdminProfileAction,
   now = new Date(),
 ): Record<string, unknown> {
   if (action === "clear_flag") {
-    return { moderationReviewRequired: false };
+    return {
+      moderationReviewRequired: false,
+      contentVersion: current.contentVersion + 1,
+    };
   }
   if (action === "unpublish") {
-    return { status: "SUSPENDED" };
+    return {
+      status: "SUSPENDED",
+      contentVersion: current.contentVersion + 1,
+    };
   }
   return {
     status: "PUBLISHED",
+    contentVersion: current.contentVersion + 1,
     moderationReviewRequired: false,
     publicName: current.publicName ?? current.user?.name ?? "TTV Builder",
     publicAvatarUrl:
@@ -145,4 +158,22 @@ export function resolveAdminProfileUpdate(
       safePublicProfileAvatarUrl(current.user?.image),
     ...(current.publishedAt ? {} : { publishedAt: now }),
   };
+}
+
+export async function applyAdminProfileAction(
+  db: Database,
+  profileId: string,
+  current: AdminProfileState,
+  action: AdminProfileAction,
+): Promise<boolean> {
+  const result = await db
+    .update(schema.studentProfile)
+    .set(resolveAdminProfileUpdate(current, action))
+    .where(
+      and(
+        eq(schema.studentProfile.id, profileId),
+        eq(schema.studentProfile.contentVersion, current.contentVersion),
+      ),
+    );
+  return result.meta.changes > 0;
 }

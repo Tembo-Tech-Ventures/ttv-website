@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
+import type { SQL } from "drizzle-orm";
+import { describe, expect, it, vi } from "vitest";
 import {
+  applyAdminProfileAction,
   moderationColumns,
   parseAdminProfileAction,
   parseModerationFlags,
@@ -117,6 +120,7 @@ describe("admin profile moderation actions", () => {
         {
           status: "DRAFT",
           publishedAt,
+          contentVersion: 3,
           publicName: "Checked Builder",
           publicAvatarUrl: "/api/avatar/avatars/user-1/checked.webp",
         },
@@ -125,6 +129,7 @@ describe("admin profile moderation actions", () => {
       ),
     ).toEqual({
       status: "PUBLISHED",
+      contentVersion: 4,
       moderationReviewRequired: false,
       publicName: "Checked Builder",
       publicAvatarUrl: "/api/avatar/avatars/user-1/checked.webp",
@@ -138,6 +143,7 @@ describe("admin profile moderation actions", () => {
         {
           status: "DRAFT",
           publishedAt: null,
+          contentVersion: 6,
           user: {
             name: "Draft Builder",
             image: "https://avatars.githubusercontent.com/u/123",
@@ -148,6 +154,7 @@ describe("admin profile moderation actions", () => {
       ),
     ).toEqual({
       status: "PUBLISHED",
+      contentVersion: 7,
       moderationReviewRequired: false,
       publicName: "Draft Builder",
       publicAvatarUrl: null,
@@ -155,15 +162,60 @@ describe("admin profile moderation actions", () => {
     });
     expect(
       resolveAdminProfileUpdate(
-        { status: "PUBLISHED", publishedAt: now },
+        { status: "PUBLISHED", publishedAt: now, contentVersion: 7 },
         "unpublish",
       ),
-    ).toEqual({ status: "SUSPENDED" });
+    ).toEqual({ status: "SUSPENDED", contentVersion: 8 });
     expect(
       resolveAdminProfileUpdate(
-        { status: "DRAFT", publishedAt: null },
+        { status: "DRAFT", publishedAt: null, contentVersion: 2 },
         "clear_flag",
       ),
-    ).toEqual({ moderationReviewRequired: false });
+    ).toEqual({ moderationReviewRequired: false, contentVersion: 3 });
+  });
+
+  it("applies admin actions only to the version that was reviewed", async () => {
+    const where = vi.fn((_condition: unknown) => ({ meta: { changes: 1 } }));
+    const set = vi.fn(() => ({ where }));
+    const db = { update: vi.fn(() => ({ set })) };
+
+    await expect(
+      applyAdminProfileAction(
+        db as never,
+        "profile-1",
+        { status: "PUBLISHED", publishedAt: new Date(), contentVersion: 9 },
+        "unpublish",
+      ),
+    ).resolves.toBe(true);
+
+    expect(set).toHaveBeenCalledWith({
+      status: "SUSPENDED",
+      contentVersion: 10,
+    });
+    const query = new SQLiteSyncDialect().sqlToQuery(
+      where.mock.calls[0][0] as SQL,
+    );
+    expect(query.sql).toContain('"studentProfile"."id" = ?');
+    expect(query.sql).toContain('"studentProfile"."contentVersion" = ?');
+    expect(query.params).toEqual(["profile-1", 9]);
+  });
+
+  it("reports an admin conflict when another write wins", async () => {
+    const db = {
+      update: vi.fn(() => ({
+        set: vi.fn(() => ({
+          where: vi.fn(() => ({ meta: { changes: 0 } })),
+        })),
+      })),
+    };
+
+    await expect(
+      applyAdminProfileAction(
+        db as never,
+        "profile-1",
+        { status: "DRAFT", publishedAt: null, contentVersion: 4 },
+        "publish",
+      ),
+    ).resolves.toBe(false);
   });
 });

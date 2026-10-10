@@ -10,6 +10,10 @@ const identitySnapshotMigrationSql = readFileSync(
   new URL("./0013_solid_zzzax.sql", import.meta.url),
   "utf8",
 ).replaceAll("--> statement-breakpoint", "");
+const contentVersionMigrationSql = readFileSync(
+  new URL("./0014_fat_omega_red.sql", import.meta.url),
+  "utf8",
+).replaceAll("--> statement-breakpoint", "");
 
 function createPreMigrationDatabase() {
   const database = new DatabaseSync(":memory:");
@@ -102,6 +106,7 @@ describe("public identity snapshot migration", () => {
     `);
 
     database.exec(identitySnapshotMigrationSql);
+    database.exec(contentVersionMigrationSql);
 
     expect(
       database
@@ -137,6 +142,16 @@ describe("public identity snapshot migration", () => {
         )
         .get("draft-profile"),
     ).toEqual({ publicName: null, publicAvatarUrl: null });
+    expect(
+      database
+        .prepare('SELECT "contentVersion" FROM "studentProfile" ORDER BY "id"')
+        .all(),
+    ).toEqual([
+      { contentVersion: 0 },
+      { contentVersion: 0 },
+      { contentVersion: 0 },
+      { contentVersion: 0 },
+    ]);
     database.close();
   });
 });
