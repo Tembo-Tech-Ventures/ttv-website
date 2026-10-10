@@ -113,8 +113,8 @@ test.describe("authenticated talent foundation", () => {
     await expect(page.getByRole("link", { name: "Profile" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Leads" })).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "Opportunities" }),
-    ).toBeVisible();
+      page.getByRole("link", { name: "Opportunities" })
+    ).toHaveCount(0);
     await page.screenshot({
       path: evidence("dashboard-nav"),
       fullPage: true,
