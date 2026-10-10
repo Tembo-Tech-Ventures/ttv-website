@@ -45,6 +45,49 @@ test.describe("authenticated portfolio editor", () => {
     });
   });
 
+  test("invalid skill keeps the submitted bio and shows the field error", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/dashboard/portfolio");
+
+    const isLocked = await page
+      .getByText(/your portfolio unlocks/i)
+      .isVisible()
+      .catch(() => false);
+    if (isLocked) {
+      test.skip(true, "User has not completed a cohort");
+      return;
+    }
+
+    const handleInput = page.locator('input[name="handle"]');
+    if ((await handleInput.inputValue()) === "") {
+      await handleInput.fill("preview-agent");
+    }
+
+    const sentinelBio = `Preserved ${testInfo.project.name} bio`;
+    const invalidSkill = "x".repeat(31);
+    await page.locator('textarea[name="bio"]').fill(sentinelBio);
+    await page.locator('input[name="skills"]').fill(invalidSkill);
+
+    const editor = page.locator('form:has(input[name="handle"])');
+    const [response] = await Promise.all([
+      page.waitForNavigation(),
+      editor.evaluate((form: HTMLFormElement) => form.submit()),
+    ]);
+
+    expect(response?.status()).toBe(400);
+    await expect(page.locator('textarea[name="bio"]')).toHaveValue(sentinelBio);
+    await expect(page.locator('input[name="skills"]')).toHaveValue(invalidSkill);
+    await expect(page.locator("#skills-error")).toContainText("30");
+    await expect(
+      page.getByRole("alert").getByRole("link", { name: /first error: skills/i }),
+    ).toHaveAttribute("href", "#skills");
+    await page.screenshot({
+      path: `test-results/evidence/${testInfo.project.name}-portfolio-invalid-skill.png`,
+      fullPage: true,
+    });
+  });
+
   test("portfolio create-or-update convergent journey", async ({
     page,
   }, testInfo) => {

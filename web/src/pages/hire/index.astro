@@ -9,18 +9,50 @@ import {
   HONEYPOT_FIELD,
   FORM_TOKEN_FIELD,
 } from "@/lib/spam/protection";
+import { preserveFormTextValues } from "@/lib/form-values";
 import { BUDGET_BAND_OPTIONS } from "@/components/hire/budget-bands";
 import { hireFormSchema, parseSkillTags } from "@/components/hire/validation";
 
+const HIRE_FORM_FIELDS = [
+  "organization",
+  "contactName",
+  "contactEmail",
+  "title",
+  "description",
+  "skills",
+  "budgetBand",
+  "timeline",
+] as const;
+
 let formToken = "";
 let success = false;
-let rateLimited = false;
 const errors: Record<string, string> = {};
-let prev: Record<string, string> = {};
+let prev: Record<(typeof HIRE_FORM_FIELDS)[number], string> = {
+  organization: "",
+  contactName: "",
+  contactEmail: "",
+  title: "",
+  description: "",
+  skills: "",
+  budgetBand: "",
+  timeline: "",
+};
 
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
   const db = drizzle(env.DB, { schema });
+  prev = preserveFormTextValues(formData, HIRE_FORM_FIELDS);
+
+  const raw = {
+    organization: prev.organization,
+    contactName: prev.contactName,
+    contactEmail: prev.contactEmail,
+    title: prev.title,
+    description: prev.description,
+    skillsRaw: prev.skills,
+    budgetBand: prev.budgetBand,
+    timeline: prev.timeline,
+  };
 
   const guard = await guardPublicForm({
     db,
@@ -32,55 +64,36 @@ if (Astro.request.method === "POST") {
 
   if (guard.ok && guard.silent) {
     success = true;
-  } else if (!guard.ok && guard.reason === "rate_limit") {
-    rateLimited = true;
-  } else if (!guard.ok && guard.reason === "token") {
+  } else if (!guard.ok) {
     formToken = await issueFormToken(env.BETTER_AUTH_SECRET);
-    errors._form = "Something went wrong. Please try again.";
+    errors._form =
+      guard.reason === "rate_limit"
+        ? "You’ve reached the hourly submission limit. Please wait an hour, then submit your project again."
+        : "Please press Submit project again.";
   } else {
-    const raw = {
-      organization: (formData.get("organization") as string) ?? "",
-      contactName: (formData.get("contactName") as string) ?? "",
-      contactEmail: (formData.get("contactEmail") as string) ?? "",
-      title: (formData.get("title") as string) ?? "",
-      description: (formData.get("description") as string) ?? "",
-      skillsRaw: (formData.get("skills") as string) ?? "",
-      budgetBand: (formData.get("budgetBand") as string) ?? "",
-      timeline: (formData.get("timeline") as string) ?? "",
-    };
+    const validation = hireFormSchema.safeParse(raw);
 
-    prev = {
-      organization: raw.organization,
-      contactName: raw.contactName,
-      contactEmail: raw.contactEmail,
-      title: raw.title,
-      description: raw.description,
-      skills: raw.skillsRaw,
-      budgetBand: raw.budgetBand,
-      timeline: raw.timeline,
-    };
-
-    const result = hireFormSchema.safeParse(raw);
-
-    if (!result.success) {
+    if (!validation.success) {
       formToken = await issueFormToken(env.BETTER_AUTH_SECRET);
-      for (const issue of result.error.issues) {
+      errors._form =
+        "Please correct the highlighted fields and submit your project again.";
+      for (const issue of validation.error.issues) {
         const field = issue.path[0] as string;
         const key = field === "skillsRaw" ? "skills" : field;
         if (!errors[key]) errors[key] = issue.message;
       }
     } else {
-      const skillTags = parseSkillTags(result.data.skillsRaw);
+      const skillTags = parseSkillTags(validation.data.skillsRaw);
 
       await db.insert(schema.clientProject).values({
-        organization: result.data.organization,
-        contactName: result.data.contactName,
-        contactEmail: result.data.contactEmail,
-        title: result.data.title,
-        description: result.data.description,
+        organization: validation.data.organization,
+        contactName: validation.data.contactName,
+        contactEmail: validation.data.contactEmail,
+        title: validation.data.title,
+        description: validation.data.description,
         skills: skillTags.length > 0 ? JSON.stringify(skillTags) : null,
-        budgetBand: result.data.budgetBand,
-        timeline: result.data.timeline || null,
+        budgetBand: validation.data.budgetBand,
+        timeline: validation.data.timeline || null,
         status: "PENDING",
       });
 
@@ -203,21 +216,6 @@ const hasErrors = Object.keys(errors).length > 0;
           </h2>
           <p class="mt-4 font-body text-lg text-ink-secondary">
             The TTV team reviews every project and will be in touch.
-          </p>
-        </div>
-      ) : rateLimited ? (
-        <div role="alert">
-          <p class="font-body text-xs font-semibold uppercase tracking-[0.28em] text-primary">
-            § Hold on
-          </p>
-          <h2
-            class="font-heading tracking-subhead mt-4 text-3xl text-ink-primary md:text-4xl"
-          >
-            Too many submissions.
-          </h2>
-          <p class="mt-4 font-body text-lg text-ink-secondary">
-            We limit submissions to keep things running smoothly. Please try
-            again in a bit.
           </p>
         </div>
       ) : (
@@ -494,7 +492,7 @@ const hasErrors = Object.keys(errors).length > 0;
 
   <!-- What happens next -->
   {
-    !success && !rateLimited && (
+    !success && (
       <section class="border-t border-[color:var(--color-rule)] py-16 md:py-24">
         <div class="mx-auto max-w-4xl px-4 sm:px-8">
           <p class="font-body text-xs font-semibold uppercase tracking-[0.28em] text-primary">

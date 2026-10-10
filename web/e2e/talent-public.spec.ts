@@ -120,8 +120,39 @@ test.describe("public talent profile", () => {
 // row with a null completedAt 404s) plus the credential id, verification host,
 // page actions and mobile overflow.
 
-test.describe("contact form (desktop-only mutations)", () => {
+test.describe("contact form submissions", () => {
   test.skip(!FIXTURE_ENVIRONMENT, "Requires seeded fixtures (agent-* environments only).");
+  test("token failure keeps every submitted value", async ({ page }) => {
+    await page.goto("/talent/amina-preview");
+
+    const values = {
+      fromName: "Preserved Contact",
+      fromEmail: "preserved-contact@example.com",
+      organization: "Preserved Organization",
+      message: "Please keep this contact message after a failed spam check.",
+    };
+    for (const [name, value] of Object.entries(values)) {
+      await page.locator(`[name="${name}"]`).fill(value);
+    }
+    await page.locator('input[name="_form_token"]').evaluate(
+      (input: HTMLInputElement) => {
+        input.value = "invalid.token";
+      },
+    );
+    await page.getByRole("button", { name: /send note/i }).click();
+
+    await expect(page.getByRole("alert")).toContainText(
+      "Please press Send note again.",
+    );
+    for (const [name, value] of Object.entries(values)) {
+      await expect(page.locator(`[name="${name}"]`)).toHaveValue(value);
+    }
+    await page.screenshot({
+      path: evidence("talent-contact-token-preserved"),
+      fullPage: true,
+    });
+  });
+
   test("contact submit shows success", async ({ page, viewport }) => {
     const isMobile = (viewport?.width ?? 1280) < 768;
     test.skip(isMobile, "Contact form submission is desktop-only");
@@ -131,8 +162,8 @@ test.describe("contact form (desktop-only mutations)", () => {
     await page.getByLabel("Name").fill("E2E Tester");
     await page.getByLabel("Email").fill("e2e@example.com");
     await page.getByLabel("Message").fill("Hello from the e2e test suite.");
-    // Token requires MIN_FILL_SECONDS=3 to elapse before submission
-    await page.waitForTimeout(3500);
+    // Token requires one second to elapse before submission.
+    await page.waitForTimeout(1100);
     await page.getByRole("button", { name: /send note/i }).click();
 
     await expect(page.getByText(/on its way/i)).toBeVisible();

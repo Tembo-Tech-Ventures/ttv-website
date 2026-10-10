@@ -14,6 +14,7 @@ import {
   HONEYPOT_FIELD,
   FORM_TOKEN_FIELD,
 } from "@/lib/spam/protection";
+import { preserveFormTextValues } from "@/lib/form-values";
 import { formatDistanceToNow } from "date-fns";
 import { absoluteUrl, normalizeDescription } from "@/lib/seo";
 import {
@@ -78,9 +79,16 @@ const skills = profile ? parseSkillsJson(profile.skills) : [];
 const initials = profile ? getInitials(profile.user.name) : "?";
 const firstName = profile?.user.name.split(/\s+/)[0] ?? "";
 
-let formState: "idle" | "success" | "rate_limited" = "idle";
+const CONTACT_FORM_FIELDS = [
+  "fromName",
+  "fromEmail",
+  "organization",
+  "message",
+] as const;
+
+let formState: "idle" | "success" = "idle";
 let formErrors: Record<string, string> = {};
-let formValues: Record<string, string> = {
+let formValues: Record<(typeof CONTACT_FORM_FIELDS)[number], string> = {
   fromName: "",
   fromEmail: "",
   organization: "",
@@ -89,11 +97,14 @@ let formValues: Record<string, string> = {
 
 if (Astro.request.method === "POST" && profile) {
   const formData = await Astro.request.formData();
+  formValues = preserveFormTextValues(formData, CONTACT_FORM_FIELDS);
 
   const parsed = parseContactForm(formData);
   if (!parsed.valid) {
-    formErrors = parsed.errors;
-    formValues = parsed.values;
+    formErrors = {
+      _form: "Please correct the highlighted fields and send your note again.",
+      ...parsed.errors,
+    };
   } else {
     const guard = await guardPublicForm({
       db,
@@ -105,9 +116,14 @@ if (Astro.request.method === "POST" && profile) {
 
     if (!guard.ok) {
       if (guard.reason === "rate_limit") {
-        formState = "rate_limited";
+        formErrors = {
+          _form:
+            "You’ve reached the hourly submission limit. Please wait an hour, then send your note again.",
+        };
       } else {
-        formErrors = { _form: "Something went wrong. Please try again." };
+        formErrors = {
+          _form: "Please press Send note again.",
+        };
       }
     } else if (guard.silent) {
       formState = "success";
@@ -449,12 +465,6 @@ const personJsonLd =
             </p>
             <p class="mt-2 font-body text-sm text-ink-secondary">
               They&rsquo;ll be able to see your message and reach out if interested.
-            </p>
-          </div>
-        ) : formState === "rate_limited" ? (
-          <div class="rounded-lg border border-amber-500/30 bg-amber-500/10 p-6 text-center" role="alert">
-            <p class="font-body text-base font-semibold text-amber-300">
-              Lots of interest right now &mdash; try again in a bit.
             </p>
           </div>
         ) : (

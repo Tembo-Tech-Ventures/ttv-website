@@ -20,16 +20,32 @@ describe("issueFormToken / validateFormToken", () => {
     expect(valid).toBe(true);
   });
 
-  it("rejects tokens submitted too quickly (<3s)", async () => {
+  it("rejects tokens submitted in less than 1 second", async () => {
     const token = await issueFormToken(SECRET, BASE_TIME);
-    const valid = await validateFormToken(SECRET, token, BASE_TIME + 2000);
+    const valid = await validateFormToken(SECRET, token, BASE_TIME + 999);
     expect(valid).toBe(false);
   });
 
-  it("rejects tokens older than 2 hours", async () => {
+  it("accepts tokens at the 1-second minimum", async () => {
     const token = await issueFormToken(SECRET, BASE_TIME);
-    const twoHoursPlus = BASE_TIME + 7201 * 1000;
-    const valid = await validateFormToken(SECRET, token, twoHoursPlus);
+    const valid = await validateFormToken(SECRET, token, BASE_TIME + 1000);
+    expect(valid).toBe(true);
+  });
+
+  it("accepts tokens at the 24-hour maximum", async () => {
+    const token = await issueFormToken(SECRET, BASE_TIME);
+    const valid = await validateFormToken(
+      SECRET,
+      token,
+      BASE_TIME + 86400 * 1000,
+    );
+    expect(valid).toBe(true);
+  });
+
+  it("rejects tokens older than 24 hours", async () => {
+    const token = await issueFormToken(SECRET, BASE_TIME);
+    const oneDayPlus = BASE_TIME + 86401 * 1000;
+    const valid = await validateFormToken(SECRET, token, oneDayPlus);
     expect(valid).toBe(false);
   });
 
