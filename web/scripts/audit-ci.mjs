@@ -33,6 +33,10 @@ export const ALLOWLISTED_ADVISORIES = new Set([
   // same Astro major. Runtime images use Cloudflare Images instead.
   "GHSA-f88m-g3jw-g9cj",
   "GHSA-rgj7-g3m4-5g8c",
+  // Sharp's librsvg fix requires sharp@0.35.5, outside Astro 6's ^0.34.0
+  // range. TTV does not use astro:assets, and the adapter routes runtime image
+  // processing through the Cloudflare Images binding. Remove with Astro 7.
+  "GHSA-wq5f-xc86-pv6w",
 ]);
 
 const FAILING_SEVERITIES = new Set(["high", "critical"]);
