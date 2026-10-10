@@ -3,13 +3,42 @@ import AdminLayout from "@/layouts/AdminLayout.astro";
 import Badge from "@/components/common/Badge.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { sortProfilesForQueue } from "@/lib/talent/admin-review";
+import { PROFILE_MODERATION_MESSAGES } from "@/lib/moderation/clef";
+import {
+  parseAdminProfileAction,
+  parseModerationFlags,
+  resolveAdminProfileUpdate,
+  splitModerationReviewLists,
+} from "@/lib/talent/profile-moderation";
 
 const db = drizzle(env.DB, { schema });
 
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  const profileId = formData.get("profileId");
+  const action = parseAdminProfileAction(formData.get("_action"));
+  if (typeof profileId !== "string" || !action) {
+    Astro.response.status = 400;
+  } else {
+    const current = await db.query.studentProfile.findFirst({
+      where: eq(schema.studentProfile.id, profileId),
+      columns: { status: true, publishedAt: true },
+    });
+    if (current) {
+      await db
+        .update(schema.studentProfile)
+        .set(resolveAdminProfileUpdate(current, action))
+        .where(eq(schema.studentProfile.id, profileId));
+    }
+    return Astro.redirect("/admin/profiles#moderation");
+  }
+}
+
 const statusFilter = Astro.url.searchParams.get("status");
-const statuses = ["DRAFT", "IN_REVIEW", "PUBLISHED", "SUSPENDED"] as const;
+const statuses = ["DRAFT", "PUBLISHED", "SUSPENDED"] as const;
 
 const allProfiles = await db.query.studentProfile.findMany({
   with: { user: true },
@@ -20,11 +49,111 @@ const filtered = statusFilter
   : allProfiles;
 
 const profiles = sortProfilesForQueue(filtered);
+const moderationLists = splitModerationReviewLists(allProfiles);
+const reviewSections = [
+  {
+    id: "held",
+    title: "Held by check",
+    description:
+      "These profiles are not public unless an older public version was already live.",
+    empty: "No profiles are held by the content check.",
+    profiles: moderationLists.held,
+  },
+  {
+    id: "unavailable",
+    title: "Published, needs a look (check unavailable)",
+    description:
+      "These profiles published automatically because the content check could not complete.",
+    empty: "No published profiles are waiting after an unavailable check.",
+    profiles: moderationLists.unavailable,
+  },
+];
 ---
 
 <AdminLayout title="Profiles">
   <div class="space-y-6">
     <h2 class="text-2xl font-bold text-white">Profiles</h2>
+
+    <div id="moderation" class="grid gap-4 xl:grid-cols-2">
+      {reviewSections.map((section) => (
+        <section
+          aria-labelledby={`moderation-${section.id}`}
+          class="rounded-lg border border-teal/20 bg-dark/30 p-4"
+        >
+          <h3 id={`moderation-${section.id}`} class="font-semibold text-white">
+            {section.title}
+          </h3>
+          <p class="mt-1 text-sm text-ink-secondary">{section.description}</p>
+          {section.profiles.length === 0 ? (
+            <p class="mt-4 text-sm text-ink-muted">{section.empty}</p>
+          ) : (
+            <ul class="mt-4 space-y-3">
+              {section.profiles.map((profile) => {
+                const flags = parseModerationFlags(profile.moderationFlags);
+                return (
+                  <li class="rounded-md border border-teal/15 bg-dark/50 p-3">
+                    <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                      <div>
+                        <a
+                          href={`/admin/profiles/${profile.id}`}
+                          class="font-medium text-white hover:text-primary"
+                        >
+                          {profile.user?.name ?? profile.handle}
+                        </a>
+                        <p class="font-mono text-xs text-ink-muted">
+                          /talent/{profile.handle}
+                        </p>
+                      </div>
+                      <Badge
+                        variant={profile.status.toLowerCase() as "draft" | "published" | "suspended"}
+                      />
+                    </div>
+                    {flags.length > 0 ? (
+                      <ul class="mt-3 list-disc space-y-1 pl-5 text-sm text-ink-secondary">
+                        {flags.map((flag) => (
+                          <li>{PROFILE_MODERATION_MESSAGES[flag]}</li>
+                        ))}
+                      </ul>
+                    ) : profile.moderationOutcome === "error" ? (
+                      <p class="mt-3 text-sm text-ink-secondary">
+                        The content check was unavailable, so this profile published automatically.
+                      </p>
+                    ) : (
+                      <p class="mt-3 text-sm text-ink-secondary">
+                        This profile was held by the content check.
+                      </p>
+                    )}
+                    <div class="mt-3 flex flex-wrap gap-2">
+                      {(["publish", "unpublish", "clear_flag"] as const).map((action) => (
+                        <form method="POST">
+                          <input type="hidden" name="profileId" value={profile.id} />
+                          <input type="hidden" name="_action" value={action} />
+                          <button
+                            type="submit"
+                            class:list={[
+                              "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
+                              action === "unpublish"
+                                ? "border-red-400/30 text-red-200 hover:bg-red-500/10"
+                                : "border-teal/30 text-white hover:bg-teal/20",
+                            ]}
+                          >
+                            {action === "clear_flag"
+                              ? "Clear flag"
+                              : action === "unpublish"
+                                ? "Unpublish"
+                                : "Publish"}
+                          </button>
+                        </form>
+                      ))}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      ))}
+    </div>
 
     <div class="flex flex-wrap gap-2">
       <a
@@ -91,7 +220,6 @@ const profiles = sortProfilesForQueue(filtered);
                     variant={
                       profile.status.toLowerCase() as
                         | "draft"
-                        | "in_review"
                         | "published"
                         | "suspended"
                     }

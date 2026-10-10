@@ -271,12 +271,6 @@ describe("resolveGateState", () => {
     expect(result.message).toContain("published");
   });
 
-  it("returns not_published for IN_REVIEW", () => {
-    const result = resolveGateState({ status: "IN_REVIEW" });
-    expect(result.state).toBe("not_published");
-    expect(result.message).toContain("reviewed");
-  });
-
   it("returns not_published for SUSPENDED", () => {
     const result = resolveGateState({ status: "SUSPENDED" });
     expect(result.state).toBe("not_published");

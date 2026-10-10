@@ -20,10 +20,10 @@ const statusCounts = await db
 const totalApps = statusCounts.reduce((sum, r) => sum + r.value, 0);
 const byStatus = Object.fromEntries(statusCounts.map((r) => [r.status, r.value]));
 
-const [profilesInReview] = await db
+const [flaggedProfiles] = await db
   .select({ value: count() })
   .from(schema.studentProfile)
-  .where(eq(schema.studentProfile.status, "IN_REVIEW"));
+  .where(eq(schema.studentProfile.moderationReviewRequired, true));
 
 const [pendingProjects] = await db
   .select({ value: count() })
@@ -115,18 +115,18 @@ const formatAttentionDate = (value: string) =>
       </Card>
     </div>
 
-    <h3 class="text-lg font-semibold text-white">Review Queues</h3>
+    <h3 class="text-lg font-semibold text-white">Follow-up</h3>
     <div class="grid gap-4 sm:grid-cols-2">
       <Card>
-        <p class="text-sm text-ink-secondary">Profiles awaiting review</p>
+        <p class="text-sm text-ink-secondary">Profiles flagged by checks</p>
         <p class="mt-1 text-3xl font-bold text-primary">
-          {profilesInReview.value}
+          {flaggedProfiles.value}
         </p>
         <a
-          href="/admin/profiles?status=IN_REVIEW"
+          href="/admin/profiles#moderation"
           class="mt-2 inline-block text-sm text-primary hover:underline"
         >
-          View queue &rarr;
+          View flagged profiles &rarr;
         </a>
       </Card>
       <Card>

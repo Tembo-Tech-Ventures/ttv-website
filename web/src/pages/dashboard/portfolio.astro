@@ -12,9 +12,16 @@ import { hasCompletedCohort } from "@/lib/talent/eligibility";
 import { parseSkillsJson } from "@/lib/talent/profile";
 import { fetchGitHubLogin } from "@/lib/talent/github";
 import { preserveFormTextValues } from "@/lib/form-values";
+import { isAgentSession } from "@/lib/agent-auth";
 import {
+  checkProfileContent,
+  previewProfileModerationResult,
+  PROFILE_MODERATION_PREVIEW_HEADER,
+} from "@/lib/moderation/clef";
+import {
+  publishProfile,
   saveProfile,
-  submitForReview,
+  type ProfileContentCheck,
   type ProfileFormResult,
 } from "@/components/portfolio/portfolio-handlers";
 
@@ -22,6 +29,17 @@ const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
 
 const eligible = await hasCompletedCohort(db, user.id);
+const previewModeration = previewProfileModerationResult(
+  env.DEPLOYMENT_ENVIRONMENT,
+  isAgentSession(Astro.locals.session?.userAgent),
+  Astro.request.headers.get(PROFILE_MODERATION_PREVIEW_HEADER),
+);
+const moderateProfile: ProfileContentCheck = (state) =>
+  previewModeration
+    ? Promise.resolve(previewModeration)
+    : checkProfileContent(env.AI, state, {
+        gatewayName: env.AI_GATEWAY_NAME,
+      });
 
 const PROFILE_TEXT_FIELDS = [
   "handle",
@@ -36,6 +54,7 @@ const PROFILE_TEXT_FIELDS = [
 type ProfileTextField = (typeof PROFILE_TEXT_FIELDS)[number];
 
 let result: ProfileFormResult | null = null;
+let successMessage: string | null = null;
 let saveFailed = false;
 let submittedProfileValues: Record<ProfileTextField, string> | null = null;
 let submittedAvailability = {
@@ -60,20 +79,38 @@ if (Astro.request.method === "POST" && eligible) {
       where: eq(schema.studentProfile.userId, user.id),
       columns: { id: true },
     });
-    result = await saveProfile(db, user.id, formData, existing?.id);
+    result = await saveProfile(
+      db,
+      user.id,
+      formData,
+      existing?.id,
+      moderateProfile,
+    );
     if (!result.success) {
       saveFailed = true;
       Astro.response.status = 400;
+    } else {
+      successMessage = result.published
+        ? "Your changes are live."
+        : existing
+          ? "Draft saved."
+          : "Profile created as a draft.";
     }
-  } else if (action === "submit_for_review") {
+  } else if (action === "publish") {
     const existing = await db.query.studentProfile.findFirst({
       where: eq(schema.studentProfile.userId, user.id),
       columns: { id: true },
     });
     if (existing) {
-      result = await submitForReview(db, user.id, existing.id);
+      result = await publishProfile(db, user.id, existing.id, moderateProfile);
+      if (result.success) {
+        successMessage = "Your profile is live.";
+      } else {
+        Astro.response.status = result.moderationOutcome === "hold" ? 422 : 400;
+      }
     } else {
       result = { success: false, error: "Create your profile first" };
+      Astro.response.status = 400;
     }
   }
 }
@@ -216,18 +253,14 @@ const hasGitHubAccount = profile
           <div class:list={[
             "rounded-md border p-4",
             profile.status === "DRAFT" && "border-amber-500/30 bg-amber-500/10 text-amber-300",
-            profile.status === "IN_REVIEW" && "border-blue-500/30 bg-blue-500/10 text-blue-300",
             profile.status === "PUBLISHED" && "border-green-500/30 bg-green-500/10 text-green-300",
             profile.status === "SUSPENDED" && "border-red-500/30 bg-red-500/10 text-red-300",
           ]}>
             <div class="flex items-center justify-between gap-4">
               <div class="flex items-center gap-3">
-                <Badge variant={profile.status.toLowerCase() as "draft" | "in_review" | "published" | "suspended"} />
+                <Badge variant={profile.status.toLowerCase() as "draft" | "published" | "suspended"} />
                 {profile.status === "DRAFT" && (
-                  <span>Your profile is a draft. Submit it for review when you're ready.</span>
-                )}
-                {profile.status === "IN_REVIEW" && (
-                  <span>The TTV team is reviewing your profile.</span>
+                  <span>Your profile is a draft. Publish it when you&rsquo;re ready.</span>
                 )}
                 {profile.status === "PUBLISHED" && (
                   <span>
@@ -238,7 +271,7 @@ const hasGitHubAccount = profile
                       target="_blank"
                       rel="noopener noreferrer"
                     >/talent/{profile.handle}</a>
-                    {" "}— edits go live immediately.
+                    {" "}— edits are checked before they update your live profile.
                   </span>
                 )}
                 {profile.status === "SUSPENDED" && (
@@ -247,9 +280,9 @@ const hasGitHubAccount = profile
               </div>
               {profile.status === "DRAFT" && (
                 <form method="POST">
-                  <input type="hidden" name="_action" value="submit_for_review" />
+                  <input type="hidden" name="_action" value="publish" />
                   <Button type="submit" class="whitespace-nowrap">
-                    Submit for Review
+                    Publish Profile
                   </Button>
                 </form>
               )}
@@ -276,18 +309,31 @@ const hasGitHubAccount = profile
             ) : result?.error ? (
               <p class="mt-1">{result.error}</p>
             ) : null}
+            {result?.moderationMessages && result.moderationMessages.length > 0 && (
+              <ul class="mt-2 list-disc space-y-1 pl-5">
+                {result.moderationMessages.map((message) => <li>{message}</li>)}
+              </ul>
+            )}
           </div>
         )}
 
         {result && !result.success && result.error && !saveFailed && (
-          <div class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
-            {result.error}
+          <div
+            class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300"
+            role="alert"
+          >
+            <p class="font-medium">{result.error}</p>
+            {result.moderationMessages && result.moderationMessages.length > 0 && (
+              <ul class="mt-2 list-disc space-y-1 pl-5">
+                {result.moderationMessages.map((message) => <li>{message}</li>)}
+              </ul>
+            )}
           </div>
         )}
 
-        {result?.success && (
+        {result?.success && successMessage && (
           <div class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-300">
-            Profile saved successfully.
+            {successMessage}
           </div>
         )}
 
@@ -547,15 +593,6 @@ const hasGitHubAccount = profile
                 </Button>
               </div>
             </form>
-          </Card>
-        )}
-
-        {/* IN_REVIEW non-editable state */}
-        {profile && profile.status === "IN_REVIEW" && (
-          <Card>
-            <div class="py-4 text-center text-ink-secondary">
-              Your profile is under review. You'll be able to edit it again once the team responds.
-            </div>
           </Card>
         )}
 

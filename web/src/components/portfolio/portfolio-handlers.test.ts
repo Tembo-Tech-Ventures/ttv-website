@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   extractProfileFormData,
+  publishProfile,
   validateProfileHandle,
   saveProfile,
-  submitForReview,
 } from "./portfolio-handlers";
 
 function makeFormData(entries: Record<string, string>): FormData {
@@ -67,9 +67,16 @@ function mockDb(overrides: {
    * query selecting `publishedAt`. Defaults to null so existing cases behave as
    * an unpublished profile and the lock stays out of the way.
    */
-  findProfileForLock?: { handle: string; publishedAt: Date | null } | null;
+  findProfileForLock?: {
+    handle: string;
+    publishedAt: Date | null;
+    status?: "DRAFT" | "PUBLISHED" | "SUSPENDED";
+    githubLogin?: string | null;
+    user?: { name: string };
+  } | null;
   insertProfile?: () => void;
   updateProfile?: () => void;
+  setProfile?: (values: unknown) => void;
 } = {}) {
   const insertFn = vi.fn(overrides.insertProfile ?? (() => {}));
   const updateFn = vi.fn(overrides.updateProfile ?? (() => {}));
@@ -94,9 +101,10 @@ function mockDb(overrides: {
       values: insertFn,
     })),
     update: vi.fn(() => ({
-      set: vi.fn(() => ({
-        where: updateFn,
-      })),
+      set: vi.fn((values: unknown) => {
+        overrides.setProfile?.(values);
+        return { where: updateFn };
+      }),
     })),
   } as unknown;
 }
@@ -219,6 +227,12 @@ describe("saveProfile", () => {
   it("updates existing profile when ID provided", async () => {
     const updateFn = vi.fn();
     const db = mockDb({
+      findProfileForLock: {
+        handle: "existing-user",
+        publishedAt: null,
+        status: "DRAFT",
+        githubLogin: "existing-user",
+      },
       findProfileByHandle: null,
       updateProfile: updateFn,
     });
@@ -268,6 +282,9 @@ describe("saveProfile", () => {
         findProfileForLock: {
           handle: "existing-user",
           publishedAt: new Date("2026-01-01"),
+          status: "PUBLISHED",
+          githubLogin: "existing-user",
+          user: { name: "Existing User" },
         },
         findProfileByHandle: { id: "profile-1" },
         updateProfile: updateFn,
@@ -289,6 +306,9 @@ describe("saveProfile", () => {
         findProfileForLock: {
           handle: "existing-user",
           publishedAt: new Date("2026-01-01"),
+          status: "PUBLISHED",
+          githubLogin: "existing-user",
+          user: { name: "Existing User" },
         },
         findProfileByHandle: { id: "profile-1" },
         updateProfile: updateFn,
@@ -331,62 +351,208 @@ describe("saveProfile", () => {
   });
 });
 
-describe("submitForReview", () => {
-  it("transitions DRAFT to IN_REVIEW", async () => {
-    const updateFn = vi.fn();
+const draftProfile = {
+  status: "DRAFT" as const,
+  handle: "new-user",
+  headline: "Developer",
+  bio: "I build useful things",
+  location: "Lagos",
+  country: "Nigeria",
+  skills: '["TypeScript"]',
+  githubLogin: "new-user",
+  user: { name: "New User" },
+  portfolioUrl: "https://example.com",
+  linkedinUrl: null,
+  publishedAt: null,
+};
+
+type ModerationProfile = Omit<typeof draftProfile, "status" | "publishedAt"> & {
+  status: "DRAFT" | "PUBLISHED" | "SUSPENDED";
+  publishedAt: Date | null;
+};
+
+function moderationDb(profile: ModerationProfile | null, setProfile = vi.fn()) {
+  const where = vi.fn();
+  return {
+    db: {
+      query: {
+        studentProfile: {
+          findFirst: vi.fn(async () => profile),
+        },
+      },
+      update: vi.fn(() => ({
+        set: vi.fn((values: unknown) => {
+          setProfile(values);
+          return { where };
+        }),
+      })),
+    },
+    setProfile,
+    where,
+  };
+}
+
+describe("publishProfile", () => {
+  it("publishes a passing draft immediately", async () => {
+    const { db, setProfile } = moderationDb(draftProfile);
+    const checkedAt = new Date("2026-10-10T12:00:00Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(checkedAt);
+
+    const result = await publishProfile(db as never, "user-1", "profile-1", () =>
+      Promise.resolve({ outcome: "pass", flags: [], scores: {} })
+    );
+
+    expect(result).toMatchObject({ success: true, published: true });
+    expect(setProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "PUBLISHED",
+        publishedAt: checkedAt,
+        moderationOutcome: "pass",
+        moderationReviewRequired: false,
+      })
+    );
+    vi.useRealTimers();
+  });
+
+  it("holds flagged content with a fixed explanation and keeps the draft private", async () => {
+    const { db, setProfile } = moderationDb(draftProfile);
+    const result = await publishProfile(db as never, "user-1", "profile-1", () =>
+      Promise.resolve({
+        outcome: "hold",
+        flags: ["contains_contact_details"],
+        scores: { contains_contact_details: 0.92 },
+      })
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        success: false,
+        published: false,
+        moderationOutcome: "hold",
+        moderationMessages: [
+          "Remove phone numbers, email addresses, or ID numbers from your public profile.",
+        ],
+      })
+    );
+    expect(setProfile).toHaveBeenCalledWith(
+      expect.not.objectContaining({ status: "PUBLISHED", publishedAt: expect.anything() })
+    );
+  });
+
+  it("fails open when the check is unavailable and flags the published profile", async () => {
+    const { db, setProfile } = moderationDb(draftProfile);
+    const result = await publishProfile(db as never, "user-1", "profile-1", () =>
+      Promise.reject(new Error("binding unavailable"))
+    );
+
+    expect(result).toMatchObject({
+      success: true,
+      published: true,
+      moderationOutcome: "error",
+    });
+    expect(setProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "PUBLISHED",
+        moderationOutcome: "error",
+        moderationReviewRequired: true,
+      })
+    );
+  });
+
+  it("rejects a missing or already-published profile", async () => {
+    const missing = moderationDb(null);
+    expect(
+      await publishProfile(missing.db as never, "user-1", "profile-1")
+    ).toMatchObject({ success: false, error: "Profile not found" });
+
+    const published = moderationDb({
+      ...draftProfile,
+      status: "PUBLISHED",
+      publishedAt: new Date("2026-01-01"),
+    });
+    expect(
+      await publishProfile(published.db as never, "user-1", "profile-1")
+    ).toMatchObject({ success: false, error: "Only a draft profile can be published" });
+  });
+});
+
+describe("published profile edits", () => {
+  const current = {
+    handle: "existing-user",
+    publishedAt: new Date("2026-01-01"),
+    status: "PUBLISHED" as const,
+    githubLogin: "existing-user",
+    user: { name: "Existing User" },
+  };
+
+  it("keeps the previous public fields live when an edit is held", async () => {
+    const setProfile = vi.fn();
     const db = mockDb({
-      findProfile: { status: "DRAFT" },
-      updateProfile: updateFn,
-    }) as Record<string, unknown>;
+      findProfileForLock: current,
+      findProfileByHandle: { id: "profile-1" },
+      setProfile,
+    });
+    const result = await saveProfile(
+      db as never,
+      "user-1",
+      makeFormData({ handle: "existing-user", bio: "email me@example.com" }),
+      "profile-1",
+      () =>
+        Promise.resolve({
+          outcome: "hold",
+          flags: ["contains_contact_details"],
+          scores: { contains_contact_details: 0.99 },
+        })
+    );
 
-    db.query = {
-      studentProfile: {
-        findFirst: vi.fn(async () => ({ status: "DRAFT" })),
-      },
-    };
-
-    const result = await submitForReview(db as never, "user-1", "profile-1");
-    expect(result.success).toBe(true);
+    expect(result).toMatchObject({ success: false, moderationOutcome: "hold" });
+    expect(setProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        moderationOutcome: "hold",
+        moderationReviewRequired: true,
+      })
+    );
+    expect(setProfile.mock.calls[0]?.[0]).not.toHaveProperty("bio");
   });
 
-  it("rejects transition from non-DRAFT status", async () => {
-    const db = {
-      query: {
-        studentProfile: {
-          findFirst: vi.fn(async () => ({ status: "IN_REVIEW" })),
-        },
-      },
-    };
+  it("publishes a passing edit and fails open on an unavailable check", async () => {
+    const cases = [
+      [
+        "pass",
+        () => Promise.resolve({ outcome: "pass" as const, flags: [], scores: {} }),
+        false,
+      ],
+      ["error", () => Promise.reject(new Error("binding unavailable")), true],
+    ] as const;
 
-    const result = await submitForReview(db as never, "user-1", "profile-1");
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("cannot be submitted");
-  });
+    for (const [outcome, check, reviewRequired] of cases) {
+      const setProfile = vi.fn();
+      const db = mockDb({
+        findProfileForLock: current,
+        findProfileByHandle: { id: "profile-1" },
+        setProfile,
+      });
+      const result = await saveProfile(
+        db as never,
+        "user-1",
+        makeFormData({ handle: "existing-user", headline: "Updated headline" }),
+        "profile-1",
+        check
+      );
 
-  it("rejects when profile not found", async () => {
-    const db = {
-      query: {
-        studentProfile: {
-          findFirst: vi.fn(async () => null),
-        },
-      },
-    };
-
-    const result = await submitForReview(db as never, "user-1", "profile-1");
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("Profile not found");
-  });
-
-  it("rejects PUBLISHED status transition to IN_REVIEW", async () => {
-    const db = {
-      query: {
-        studentProfile: {
-          findFirst: vi.fn(async () => ({ status: "PUBLISHED" })),
-        },
-      },
-    };
-
-    const result = await submitForReview(db as never, "user-1", "profile-1");
-    expect(result.success).toBe(false);
+      expect(result).toMatchObject({
+        success: true,
+        published: true,
+        moderationOutcome: outcome,
+      });
+      expect(setProfile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headline: "Updated headline",
+          moderationOutcome: outcome,
+          moderationReviewRequired: reviewRequired,
+        })
+      );
+    }
   });
 });

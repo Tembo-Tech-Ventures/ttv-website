@@ -490,8 +490,10 @@ export async function seedAgentPreviewFixtures({
     databaseId,
     `INSERT INTO "studentProfile"
       ("id", "userId", "handle", "status", "headline", "country", "skills",
-       "openToFreelance", "openToRoles", "publishedAt", "createdAt", "updatedAt")
-     VALUES (?, ?, ?, 'PUBLISHED', ?, ?, ?, 1, 0, ?, ?, ?)
+       "openToFreelance", "openToRoles", "publishedAt", "moderationOutcome",
+       "moderationFlags", "moderationScores", "moderationCheckedAt",
+       "moderationReviewRequired", "createdAt", "updatedAt")
+     VALUES (?, ?, ?, 'PUBLISHED', ?, ?, ?, 1, 0, ?, 'error', '[]', '{}', ?, 1, ?, ?)
      ON CONFLICT("id") DO UPDATE SET
        "userId" = excluded."userId",
        "handle" = excluded."handle",
@@ -502,6 +504,11 @@ export async function seedAgentPreviewFixtures({
        "openToFreelance" = 1,
        "openToRoles" = 0,
        "publishedAt" = excluded."publishedAt",
+       "moderationOutcome" = 'error',
+       "moderationFlags" = '[]',
+       "moderationScores" = '{}',
+       "moderationCheckedAt" = excluded."moderationCheckedAt",
+       "moderationReviewRequired" = 1,
        "updatedAt" = excluded."updatedAt"`,
     [
       "ttv-fixture-profile-amina",
@@ -510,6 +517,7 @@ export async function seedAgentPreviewFixtures({
       "Full-stack developer · Nairobi",
       "Kenya",
       '["TypeScript","React","D1"]',
+      publishedAt,
       publishedAt,
       createdAt,
       createdAt,
@@ -789,21 +797,30 @@ export async function seedAgentPreviewFixtures({
     ]
   );
 
-  // IN_REVIEW profile for Kwame
+  // Profile held by the content check for Kwame
   await executeQuery(
     databaseId,
     `INSERT INTO "studentProfile"
-      ("id", "userId", "handle", "status", "createdAt", "updatedAt")
-     VALUES (?, ?, ?, 'IN_REVIEW', ?, ?)
+      ("id", "userId", "handle", "status", "moderationOutcome",
+       "moderationFlags", "moderationScores", "moderationCheckedAt",
+       "moderationReviewRequired", "createdAt", "updatedAt")
+     VALUES (?, ?, ?, 'DRAFT', 'hold', '["contains_contact_details"]',
+       '{"contains_contact_details":0.91}', ?, 1, ?, ?)
      ON CONFLICT("id") DO UPDATE SET
        "userId" = excluded."userId",
        "handle" = excluded."handle",
-       "status" = 'IN_REVIEW',
+       "status" = 'DRAFT',
+       "moderationOutcome" = 'hold',
+       "moderationFlags" = '["contains_contact_details"]',
+       "moderationScores" = '{"contains_contact_details":0.91}',
+       "moderationCheckedAt" = excluded."moderationCheckedAt",
+       "moderationReviewRequired" = 1,
        "updatedAt" = excluded."updatedAt"`,
     [
       "ttv-fixture-profile-kwame",
       "ttv-fixture-user-kwame",
       "kwame-preview",
+      createdAt,
       createdAt,
       createdAt,
     ]

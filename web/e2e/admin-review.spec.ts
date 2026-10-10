@@ -31,6 +31,20 @@ test.describe("admin review surfaces", () => {
     await expect(table.getByText("Amina Fixture")).toBeVisible();
     await expect(table.getByText("Kwame Fixture")).toBeVisible();
 
+    const held = page.getByRole("region", { name: "Held by check" });
+    await expect(held.getByText("Kwame Fixture")).toBeVisible();
+    await expect(held.getByRole("button", { name: "Publish" })).toBeVisible();
+    await expect(held.getByRole("button", { name: "Unpublish" })).toBeVisible();
+    await expect(held.getByRole("button", { name: "Clear flag" })).toBeVisible();
+
+    const unavailable = page.getByRole("region", {
+      name: "Published, needs a look (check unavailable)",
+    });
+    await expect(unavailable.getByText("Amina Fixture")).toBeVisible();
+    await expect(unavailable.getByRole("button", { name: "Publish" })).toBeVisible();
+    await expect(unavailable.getByRole("button", { name: "Unpublish" })).toBeVisible();
+    await expect(unavailable.getByRole("button", { name: "Clear flag" })).toBeVisible();
+
     await page.screenshot({
       path: evidence("admin-profiles-index"),
       fullPage: true,
@@ -48,7 +62,7 @@ test.describe("admin review surfaces", () => {
     });
   });
 
-  test("kwame profile detail convergent journey", async ({
+  test("kwame profile detail exposes moderation actions", async ({
     page,
     viewport,
   }) => {
@@ -71,63 +85,10 @@ test.describe("admin review surfaces", () => {
       path: evidence("admin-profile-kwame-detail"),
       fullPage: true,
     });
-
-    if (isMobile) return;
-
-    const statusBadge = page.locator(".flex.items-center.gap-3 span").first();
-    const statusText =
-      (await statusBadge.textContent())
-        ?.trim()
-        .toUpperCase()
-        .replace(" ", "_") ?? "";
-
-    if (statusText === "IN_REVIEW") {
-      await page.getByRole("button", { name: /publish/i }).click();
-      await expect(
-        page.locator("span", { hasText: /published/i }).first()
-      ).toBeVisible();
-    }
-
-    const currentStatus1 =
-      (
-        await page
-          .locator(".flex.items-center.gap-3 span")
-          .first()
-          .textContent()
-      )
-        ?.trim()
-        .toUpperCase()
-        .replace(" ", "_") ?? "";
-
-    if (currentStatus1 === "PUBLISHED") {
-      await page.getByRole("button", { name: /suspend/i }).click();
-      await expect(
-        page.locator("span", { hasText: /suspended/i }).first()
-      ).toBeVisible();
-    }
-
-    const currentStatus2 =
-      (
-        await page
-          .locator(".flex.items-center.gap-3 span")
-          .first()
-          .textContent()
-      )
-        ?.trim()
-        .toUpperCase()
-        .replace(" ", "_") ?? "";
-
-    if (currentStatus2 === "SUSPENDED") {
-      await page.getByRole("button", { name: /republish/i }).click();
-      await expect(
-        page.locator("span", { hasText: /published/i }).first()
-      ).toBeVisible();
-    }
-
-    await page.screenshot({
-      path: evidence("admin-profile-kwame-final"),
-      fullPage: true,
-    });
+    await expect(page.getByRole("heading", { name: "Content check" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Publish" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Unpublish" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Clear flag" })).toBeVisible();
   });
 
   test("admin can suspend and restore a published post", async ({

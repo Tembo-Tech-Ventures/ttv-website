@@ -6,8 +6,20 @@ import {
   validateHandle,
   type HandleValidationError,
 } from "@/lib/talent/handles";
-import { profileEditorSchema, serializeSkills } from "@/lib/talent/profile";
-import { canTransition, PROFILE_TRANSITIONS } from "@/lib/talent/transitions";
+import {
+  parseSkillsJson,
+  profileEditorSchema,
+  serializeSkills,
+} from "@/lib/talent/profile";
+import {
+  profileModerationMessages,
+  type ProfileModerationResult,
+  type ProfileModerationState,
+} from "@/lib/moderation/clef";
+import {
+  moderationColumns,
+  publishesAfterModeration,
+} from "@/lib/talent/profile-moderation";
 
 const HANDLE_ERROR_MESSAGES: Record<HandleValidationError, string> = {
   too_short: "Handle must be at least 3 characters",
@@ -23,6 +35,109 @@ export interface ProfileFormResult {
   error?: string;
   handleError?: string;
   fieldErrors?: Record<string, string>;
+  moderationOutcome?: ProfileModerationResult["outcome"];
+  moderationMessages?: string[];
+  published?: boolean;
+}
+
+export type ProfileContentCheck = (
+  state: ProfileModerationState
+) => Promise<ProfileModerationResult>;
+
+const failOpenCheck: ProfileContentCheck = () =>
+  Promise.resolve({ outcome: "error", flags: [], scores: {} });
+
+async function runContentCheck(
+  checkContent: ProfileContentCheck | undefined,
+  state: ProfileModerationState
+): Promise<ProfileModerationResult> {
+  try {
+    return await (checkContent ?? failOpenCheck)(state);
+  } catch {
+    return failOpenCheck(state);
+  }
+}
+
+interface ProfileValues {
+  handle: string;
+  headline: string | null;
+  bio: string | null;
+  location: string | null;
+  country: string | null;
+  skills: string | null;
+  openToFreelance: boolean;
+  openToRoles: boolean;
+  portfolioUrl: string | null;
+  linkedinUrl: string | null;
+}
+
+function collectFieldErrors(
+  issues: readonly { path: PropertyKey[]; message: string }[]
+): Record<string, string> {
+  const fieldErrors: Record<string, string> = {};
+  for (const issue of issues) {
+    const path = issue.path.join(".");
+    if (!fieldErrors[path]) fieldErrors[path] = issue.message;
+  }
+  return fieldErrors;
+}
+
+async function savePublishedProfileEdit(
+  db: Database,
+  userId: string,
+  profileId: string,
+  values: ProfileValues,
+  skills: string[],
+  displayName: string,
+  githubLogin: string | null,
+  checkContent?: ProfileContentCheck
+): Promise<ProfileFormResult> {
+  const moderation = await runContentCheck(checkContent, {
+    displayName,
+    handle: values.handle,
+    headline: values.headline,
+    bio: values.bio,
+    location: values.location,
+    country: values.country,
+    skills,
+    githubLogin,
+    portfolioUrl: values.portfolioUrl,
+    linkedinUrl: values.linkedinUrl,
+  });
+  const moderationValues = moderationColumns(moderation);
+
+  if (!publishesAfterModeration(moderation)) {
+    await db
+      .update(schema.studentProfile)
+      .set(moderationValues)
+      .where(
+        and(
+          eq(schema.studentProfile.id, profileId),
+          eq(schema.studentProfile.userId, userId)
+        )
+      );
+    return {
+      success: false,
+      error: "Your changes need attention before they can go live.",
+      moderationOutcome: moderation.outcome,
+      moderationMessages: profileModerationMessages(moderation.flags),
+    };
+  }
+
+  await db
+    .update(schema.studentProfile)
+    .set({ ...values, ...moderationValues })
+    .where(
+      and(
+        eq(schema.studentProfile.id, profileId),
+        eq(schema.studentProfile.userId, userId)
+      )
+    );
+  return {
+    success: true,
+    moderationOutcome: moderation.outcome,
+    published: true,
+  };
 }
 
 export function extractProfileFormData(formData: FormData) {
@@ -80,19 +195,35 @@ export async function saveProfile(
   userId: string,
   formData: FormData,
   existingProfileId?: string,
+  checkContent?: ProfileContentCheck,
 ): Promise<ProfileFormResult> {
   const data = extractProfileFormData(formData);
+  let current:
+    | {
+        handle: string;
+        publishedAt: Date | null;
+        status: "DRAFT" | "PUBLISHED" | "SUSPENDED";
+        githubLogin: string | null;
+        user: { name: string };
+      }
+    | undefined;
 
   // A published profile's handle is part of every blog post permalink
   // (`/blog/[handle]/[slug]`), so a rename would silently 404 every post and
   // every inbound link to it. Lock the handle once the profile has gone public.
   if (existingProfileId) {
-    const current = await db.query.studentProfile.findFirst({
+    current = await db.query.studentProfile.findFirst({
       where: and(
         eq(schema.studentProfile.id, existingProfileId),
         eq(schema.studentProfile.userId, userId),
       ),
-      columns: { handle: true, publishedAt: true },
+      columns: {
+        handle: true,
+        publishedAt: true,
+        status: true,
+        githubLogin: true,
+      },
+      with: { user: { columns: { name: true } } },
     });
     // `findFirst` yields undefined when there is no row; a Date is always
     // truthy, so this covers "no profile" and "not yet published" together.
@@ -117,14 +248,10 @@ export async function saveProfile(
   const { handle: _handle, ...profileFields } = data;
   const parsed = profileEditorSchema.safeParse(profileFields);
   if (!parsed.success) {
-    const fieldErrors: Record<string, string> = {};
-    for (const issue of parsed.error.issues) {
-      const path = issue.path.join(".");
-      if (!fieldErrors[path]) {
-        fieldErrors[path] = issue.message;
-      }
-    }
-    return { success: false, fieldErrors };
+    return {
+      success: false,
+      fieldErrors: collectFieldErrors(parsed.error.issues),
+    };
   }
 
   const values = {
@@ -141,6 +268,23 @@ export async function saveProfile(
   };
 
   if (existingProfileId) {
+    if (!current) {
+      return { success: false, error: "Profile not found" };
+    }
+
+    if (current.status === "PUBLISHED") {
+      return savePublishedProfileEdit(
+        db,
+        userId,
+        existingProfileId,
+        values,
+        parsed.data.skills ?? [],
+        current.user.name,
+        current.githubLogin,
+        checkContent
+      );
+    }
+
     await db
       .update(schema.studentProfile)
       .set(values)
@@ -161,33 +305,69 @@ export async function saveProfile(
   return { success: true };
 }
 
-export async function submitForReview(
+export async function publishProfile(
   db: Database,
   userId: string,
   profileId: string,
+  checkContent?: ProfileContentCheck,
 ): Promise<ProfileFormResult> {
   const profile = await db.query.studentProfile.findFirst({
     where: and(
       eq(schema.studentProfile.id, profileId),
       eq(schema.studentProfile.userId, userId),
     ),
-    columns: { status: true },
+    columns: {
+      status: true,
+      handle: true,
+      headline: true,
+      bio: true,
+      location: true,
+      country: true,
+      skills: true,
+      githubLogin: true,
+      portfolioUrl: true,
+      linkedinUrl: true,
+      publishedAt: true,
+    },
+    with: { user: { columns: { name: true } } },
   });
 
   if (!profile) {
     return { success: false, error: "Profile not found" };
   }
 
-  if (!canTransition(PROFILE_TRANSITIONS, profile.status, "IN_REVIEW")) {
+  if (profile.status !== "DRAFT") {
     return {
       success: false,
-      error: "Profile cannot be submitted for review from its current status",
+      error: "Only a draft profile can be published",
     };
   }
 
+  const moderation = await runContentCheck(checkContent, {
+    displayName: profile.user.name,
+    handle: profile.handle,
+    headline: profile.headline,
+    bio: profile.bio,
+    location: profile.location,
+    country: profile.country,
+    skills: parseSkillsJson(profile.skills),
+    githubLogin: profile.githubLogin,
+    portfolioUrl: profile.portfolioUrl,
+    linkedinUrl: profile.linkedinUrl,
+  });
+  const moderationValues = moderationColumns(moderation);
+
   await db
     .update(schema.studentProfile)
-    .set({ status: "IN_REVIEW" })
+    .set(
+      publishesAfterModeration(moderation)
+        ? {
+            ...moderationValues,
+            status: "PUBLISHED",
+            publishedAt: profile.publishedAt ?? new Date(),
+          }
+        : moderationValues
+    )
     .where(
       and(
         eq(schema.studentProfile.id, profileId),
@@ -195,5 +375,19 @@ export async function submitForReview(
       ),
     );
 
-  return { success: true };
+  if (!publishesAfterModeration(moderation)) {
+    return {
+      success: false,
+      error: "Your profile needs attention before it can go live.",
+      moderationOutcome: moderation.outcome,
+      moderationMessages: profileModerationMessages(moderation.flags),
+      published: false,
+    };
+  }
+
+  return {
+    success: true,
+    moderationOutcome: moderation.outcome,
+    published: true,
+  };
 }

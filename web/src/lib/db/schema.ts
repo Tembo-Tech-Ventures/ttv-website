@@ -563,7 +563,7 @@ export const studentProfile = sqliteTable("studentProfile", {
     .references(() => user.id, { onDelete: "cascade" }),
   handle: text("handle").notNull().unique(),
   status: text("status", {
-    enum: ["DRAFT", "IN_REVIEW", "PUBLISHED", "SUSPENDED"],
+    enum: ["DRAFT", "PUBLISHED", "SUSPENDED"],
   })
     .notNull()
     .default("DRAFT"),
@@ -582,6 +582,17 @@ export const studentProfile = sqliteTable("studentProfile", {
   portfolioUrl: text("portfolioUrl"),
   linkedinUrl: text("linkedinUrl"),
   publishedAt: integer("publishedAt", { mode: "timestamp" }),
+  moderationOutcome: text("moderationOutcome", {
+    enum: ["pass", "hold", "error"],
+  }),
+  moderationFlags: text("moderationFlags"),
+  moderationScores: text("moderationScores"),
+  moderationCheckedAt: integer("moderationCheckedAt", { mode: "timestamp" }),
+  moderationReviewRequired: integer("moderationReviewRequired", {
+    mode: "boolean",
+  })
+    .notNull()
+    .default(false),
   ...timestamps,
 });
 
