@@ -140,6 +140,12 @@ try {
       </div>
     </Card>
 
+    {application.status === "AUDIT" && (
+      <p class="text-sm text-ink-secondary">
+        As an Audit participant, you can learn alongside the cohort through session recordings and Ask AI, but Audit does not include a completion certificate.
+      </p>
+    )}
+
     <Card>
       <h3 class="mb-4 text-lg font-semibold text-white">Application Details</h3>
 

@@ -2,12 +2,21 @@ import { and, eq, inArray } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 
+type ProgramApplicationStatus =
+  typeof schema.programApplication.$inferSelect.status;
+
+export const COHORT_ACCESS_STATUSES = [
+  "APPROVED",
+  "AUDIT",
+  "COMPLETED",
+] as const satisfies readonly ProgramApplicationStatus[];
+
 export async function getAccessibleProgramIds(db: Database, userId: string) {
   const applications: Array<{ programId: string | null }> =
     await db.query.programApplication.findMany({
       where: and(
         eq(schema.programApplication.userId, userId),
-        inArray(schema.programApplication.status, ["APPROVED", "COMPLETED"])
+        inArray(schema.programApplication.status, [...COHORT_ACCESS_STATUSES])
       ),
     });
 
@@ -39,7 +48,7 @@ export async function userCanAccessProgram(
     where: and(
       eq(schema.programApplication.userId, userId),
       eq(schema.programApplication.programId, programId),
-      inArray(schema.programApplication.status, ["APPROVED", "COMPLETED"])
+      inArray(schema.programApplication.status, [...COHORT_ACCESS_STATUSES])
     ),
   });
 

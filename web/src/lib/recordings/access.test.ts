@@ -1,6 +1,41 @@
 import { describe, expect, it, vi } from "vitest";
-import { getAccessibleProgramIds, userCanAccessProgram } from "./access";
+import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
+import type { SQL } from "drizzle-orm";
+import {
+  COHORT_ACCESS_STATUSES,
+  getAccessibleProgramIds,
+  userCanAccessProgram,
+} from "./access";
 import type { Database } from "@/lib/db/schema";
+
+const dialect = new SQLiteSyncDialect();
+
+type ApplicationStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | "AUDIT"
+  | "COMPLETED";
+
+const APPLICATION_STATUSES = new Set<ApplicationStatus>([
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+  "AUDIT",
+  "COMPLETED",
+]);
+
+function getAllowedApplicationStatuses(where: SQL) {
+  return new Set(
+    dialect
+      .sqlToQuery(where)
+      .params.filter(
+        (value): value is ApplicationStatus =>
+          typeof value === "string" &&
+          APPLICATION_STATUSES.has(value as ApplicationStatus)
+      )
+  );
+}
 
 function createDatabase({
   applications = [],
@@ -8,16 +43,38 @@ function createDatabase({
   applicationAccess = null,
   staffRoleAccess = null,
 }: {
-  applications?: Array<{ programId: string | null }>;
+  applications?: Array<{
+    programId: string | null;
+    status?: ApplicationStatus;
+  }>;
   staffRoles?: Array<{ programId: string }>;
-  applicationAccess?: unknown;
+  applicationAccess?: { id: string; status?: ApplicationStatus } | null;
   staffRoleAccess?: unknown;
 }) {
+  const findManyApplications = vi.fn(
+    async ({ where }: { where: SQL }) => {
+      const allowedStatuses = getAllowedApplicationStatuses(where);
+
+      return applications
+        .filter(
+          (application) =>
+            !application.status || allowedStatuses.has(application.status)
+        )
+        .map(({ programId }) => ({ programId }));
+    }
+  );
+  const findApplication = vi.fn(async ({ where }: { where: SQL }) => {
+    if (!applicationAccess?.status) return applicationAccess;
+    return getAllowedApplicationStatuses(where).has(applicationAccess.status)
+      ? applicationAccess
+      : null;
+  });
+
   return {
     query: {
       programApplication: {
-        findMany: vi.fn().mockResolvedValue(applications),
-        findFirst: vi.fn().mockResolvedValue(applicationAccess),
+        findMany: findManyApplications,
+        findFirst: findApplication,
       },
       programRole: {
         findMany: vi.fn().mockResolvedValue(staffRoles),
@@ -28,12 +85,33 @@ function createDatabase({
 }
 
 describe("recording access", () => {
-  it("returns programs from approved or completed applications", async () => {
+  it("defines audit, approved, and completed as the only cohort-access statuses", () => {
+    expect(COHORT_ACCESS_STATUSES).toEqual([
+      "APPROVED",
+      "AUDIT",
+      "COMPLETED",
+    ]);
+    expect(COHORT_ACCESS_STATUSES).not.toContain("PENDING");
+    expect(COHORT_ACCESS_STATUSES).not.toContain("REJECTED");
+  });
+
+  it("returns programs for audit, approved, and completed applications only", async () => {
     const db = createDatabase({
-      applications: [{ programId: "program-2024" }, { programId: null }],
+      applications: [
+        { programId: "program-audit", status: "AUDIT" },
+        { programId: "program-approved", status: "APPROVED" },
+        { programId: "program-completed", status: "COMPLETED" },
+        { programId: "program-pending", status: "PENDING" },
+        { programId: "program-rejected", status: "REJECTED" },
+        { programId: null, status: "AUDIT" },
+      ],
     });
 
-    await expect(getAccessibleProgramIds(db, "user-1")).resolves.toEqual(["program-2024"]);
+    await expect(getAccessibleProgramIds(db, "user-1")).resolves.toEqual([
+      "program-audit",
+      "program-approved",
+      "program-completed",
+    ]);
   });
 
   it("returns programs where the user is an instructor or TA", async () => {
@@ -59,11 +137,26 @@ describe("recording access", () => {
     ]);
   });
 
-  it("allows direct recording access through an approved application", async () => {
-    const db = createDatabase({ applicationAccess: { id: "application-1" } });
+  it("allows direct recording access through an audit application", async () => {
+    const db = createDatabase({
+      applicationAccess: { id: "application-1", status: "AUDIT" },
+    });
 
     await expect(userCanAccessProgram(db, "user-1", "program-2024")).resolves.toBe(true);
   });
+
+  it.each(["PENDING", "REJECTED"] as const)(
+    "denies direct recording access through a %s application",
+    async (status) => {
+      const db = createDatabase({
+        applicationAccess: { id: "application-1", status },
+      });
+
+      await expect(
+        userCanAccessProgram(db, "user-1", "program-2024")
+      ).resolves.toBe(false);
+    }
+  );
 
   it("allows direct recording access through an instructor or TA role", async () => {
     const db = createDatabase({ staffRoleAccess: { id: "role-1" } });
