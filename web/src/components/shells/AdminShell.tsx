@@ -51,10 +51,12 @@ export function getAdminLinks(
 
 export default function AdminShell({
   children,
+  currentPath = "/admin",
   agentAuthEnabled = false,
   dataMigrationEnabled = false,
 }: {
   children: ReactNode;
+  currentPath?: string;
   agentAuthEnabled?: boolean;
   dataMigrationEnabled?: boolean;
 }) {
@@ -71,6 +73,7 @@ export default function AdminShell({
       <Sidebar
         links={links}
         title="TTV Admin"
+        currentPath={currentPath}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />

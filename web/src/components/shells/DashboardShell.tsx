@@ -13,37 +13,71 @@ import {
   PiArticleDuotone,
 } from "react-icons/pi";
 import { PiListBold } from "react-icons/pi";
+import type { IconType } from "react-icons";
+import type { StudentDashboardLinkId } from "@/lib/student/journey";
+
+export interface DashboardLink {
+  id: StudentDashboardLinkId;
+  href: string;
+  label: string;
+  icon: IconType;
+  badge?: number;
+}
 
 /**
  * Exported so `/dashboard/ask`, which renders its own shell, can offer the same
  * destinations instead of quietly dropping some of them.
  */
-export const DASHBOARD_LINKS = [
-  { href: "/dashboard", label: "Dashboard", icon: PiGaugeDuotone },
-  { href: "/dashboard/sessions", label: "Sessions", icon: PiVideoCameraDuotone },
-  { href: "/dashboard/ask", label: "Ask AI", icon: PiChatCircleDotsDuotone },
-  { href: "/dashboard/apply", label: "Apply", icon: PiPaperPlaneTiltDuotone },
-  { href: "/dashboard/portfolio", label: "Portfolio", icon: PiSuitcaseSimpleDuotone },
-  { href: "/dashboard/writing", label: "Writing", icon: PiArticleDuotone },
-  { href: "/dashboard/leads", label: "Leads", icon: PiTrayDuotone },
-  { href: "/dashboard/opportunities", label: "Opportunities", icon: PiHandshakeDuotone },
-  { href: "/dashboard/profile", label: "Profile", icon: PiUserDuotone },
-  { href: "/auth/logout", label: "Logout", icon: PiSignOutDuotone },
+export const DASHBOARD_LINKS: DashboardLink[] = [
+  { id: "home", href: "/dashboard", label: "Home", icon: PiGaugeDuotone },
+  { id: "apply", href: "/dashboard/apply", label: "Apply", icon: PiPaperPlaneTiltDuotone },
+  { id: "sessions", href: "/dashboard/sessions", label: "Sessions", icon: PiVideoCameraDuotone },
+  { id: "ask", href: "/dashboard/ask", label: "Ask AI", icon: PiChatCircleDotsDuotone },
+  { id: "profile", href: "/dashboard/portfolio", label: "Profile", icon: PiSuitcaseSimpleDuotone },
+  { id: "writing", href: "/dashboard/writing", label: "Writing", icon: PiArticleDuotone },
+  { id: "opportunities", href: "/dashboard/opportunities", label: "Opportunities", icon: PiHandshakeDuotone },
+  { id: "leads", href: "/dashboard/leads", label: "Leads", icon: PiTrayDuotone },
+  { id: "account", href: "/dashboard/profile", label: "Account", icon: PiUserDuotone },
+  { id: "logout", href: "/auth/logout", label: "Logout", icon: PiSignOutDuotone },
 ];
 
-export default function DashboardShell({ children }: { children: ReactNode }) {
+export function getDashboardLinks(
+  visibleLinkIds: StudentDashboardLinkId[],
+  unreadLeadCount = 0
+): DashboardLink[] {
+  const visible = new Set(visibleLinkIds);
+  return DASHBOARD_LINKS.filter((link) => visible.has(link.id)).map((link) =>
+    link.id === "leads" && unreadLeadCount > 0
+      ? { ...link, badge: unreadLeadCount }
+      : link
+  );
+}
+
+export default function DashboardShell({
+  children,
+  currentPath,
+  visibleLinkIds,
+  unreadLeadCount = 0,
+}: {
+  children: ReactNode;
+  currentPath: string;
+  visibleLinkIds: StudentDashboardLinkId[];
+  unreadLeadCount?: number;
+}) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const hydrated = useSyncExternalStore(
     () => () => {},
     () => true,
     () => false
   );
+  const links = getDashboardLinks(visibleLinkIds, unreadLeadCount);
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-surface to-dark">
       <Sidebar
-        links={DASHBOARD_LINKS}
+        links={links}
         title="TTV Dashboard"
+        currentPath={currentPath}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
@@ -66,7 +100,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
           >
             <PiListBold className="h-6 w-6" />
           </button>
-          <h1 className="text-lg font-semibold text-white">TTV Dashboard</h1>
+          <span className="text-lg font-semibold text-white">TTV Dashboard</span>
         </header>
 
         {/* Content */}

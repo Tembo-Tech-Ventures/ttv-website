@@ -10,8 +10,19 @@
  */
 import ImmersiveLayout from "@/layouts/ImmersiveLayout.astro";
 import ChatApp from "@/components/chat/ChatApp";
+import { drizzle } from "drizzle-orm/d1";
+import { env } from "cloudflare:workers";
+import * as schema from "@/lib/db/schema";
+import { getStudentJourney } from "@/lib/student/journey";
+
+const user = Astro.locals.user!;
+const journey = await getStudentJourney(drizzle(env.DB, { schema }), user.id);
 ---
 
 <ImmersiveLayout title="Ask AI | Tembo Tech Ventures">
-  <ChatApp client:load />
+  <ChatApp
+    client:load
+    visibleLinkIds={journey.visibleLinkIds}
+    unreadLeadCount={journey.unreadLeadCount}
+  />
 </ImmersiveLayout>

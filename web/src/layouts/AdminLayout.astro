@@ -20,6 +20,7 @@ if (!Astro.locals.isAdmin) {
 <BaseLayout title={`${title} | TTV Admin`}>
   <AdminShell
     client:load
+    currentPath={Astro.url.pathname}
     agentAuthEnabled={isAgentAuthEnabled(env.AGENT_AUTH_ENABLED)}
     dataMigrationEnabled={isLegacyImportEnabled(env.DEPLOYMENT_ENVIRONMENT)}
   >

@@ -1,16 +1,33 @@
 ---
 import BaseLayout from "./BaseLayout.astro";
 import DashboardShell from "@/components/shells/DashboardShell";
+import { drizzle } from "drizzle-orm/d1";
+import { env } from "cloudflare:workers";
+import * as schema from "@/lib/db/schema";
+import {
+  getStudentJourney,
+  type StudentJourney,
+} from "@/lib/student/journey";
 
 interface Props {
   title?: string;
+  journey?: StudentJourney;
 }
 
-const { title = "Dashboard" } = Astro.props;
+const { title = "Dashboard", journey: suppliedJourney } = Astro.props;
+const user = Astro.locals.user!;
+const journey =
+  suppliedJourney ??
+  (await getStudentJourney(drizzle(env.DB, { schema }), user.id));
 ---
 
 <BaseLayout title={`${title} | TTV`}>
-  <DashboardShell client:load>
+  <DashboardShell
+    client:load
+    currentPath={Astro.url.pathname}
+    visibleLinkIds={journey.visibleLinkIds}
+    unreadLeadCount={journey.unreadLeadCount}
+  >
     <slot />
   </DashboardShell>
 </BaseLayout>
