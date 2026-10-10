@@ -131,6 +131,14 @@ export function parseAdminProfileAction(value: FormDataEntryValue | null) {
   return null;
 }
 
+export function parseAdminProfileVersion(
+  value: FormDataEntryValue | null,
+): number | null {
+  if (typeof value !== "string" || !/^\d+$/.test(value)) return null;
+  const version = Number(value);
+  return Number.isSafeInteger(version) ? version : null;
+}
+
 export function resolveAdminProfileUpdate(
   current: AdminProfileState,
   action: AdminProfileAction,
@@ -165,14 +173,16 @@ export async function applyAdminProfileAction(
   profileId: string,
   current: AdminProfileState,
   action: AdminProfileAction,
+  expectedVersion: number,
 ): Promise<boolean> {
+  if (current.contentVersion !== expectedVersion) return false;
   const result = await db
     .update(schema.studentProfile)
     .set(resolveAdminProfileUpdate(current, action))
     .where(
       and(
         eq(schema.studentProfile.id, profileId),
-        eq(schema.studentProfile.contentVersion, current.contentVersion),
+        eq(schema.studentProfile.contentVersion, expectedVersion),
       ),
     );
   return result.meta.changes > 0;

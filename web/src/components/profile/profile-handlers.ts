@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, exists, sql } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 import { parseSkillsJson } from "@/lib/talent/profile";
@@ -45,6 +45,49 @@ function userIdentityValues(input: ProfileIdentityInput) {
   };
 }
 
+async function applyVersionedIdentityUpdate(
+  db: Database,
+  userId: string,
+  profile: { id: string; contentVersion: number },
+  expectedStatus: "DRAFT" | "PUBLISHED",
+  input: ProfileIdentityInput,
+  profileValues: Record<string, unknown>,
+): Promise<boolean> {
+  const expectedProfile = and(
+    eq(schema.studentProfile.id, profile.id),
+    eq(schema.studentProfile.userId, userId),
+    eq(schema.studentProfile.status, expectedStatus),
+    eq(schema.studentProfile.contentVersion, profile.contentVersion),
+  );
+  const userWrite = db
+    .update(schema.user)
+    .set(userIdentityValues(input))
+    .where(
+      and(
+        eq(schema.user.id, userId),
+        exists(
+          db
+            .select({ id: schema.studentProfile.id })
+            .from(schema.studentProfile)
+            .where(expectedProfile),
+        ),
+      ),
+    );
+  const profileWrite = db
+    .update(schema.studentProfile)
+    .set({
+      ...profileValues,
+      contentVersion: sql`${schema.studentProfile.contentVersion} + 1`,
+    })
+    .where(expectedProfile);
+
+  // D1 batches are atomic. Writing the user first keeps both predicates on the
+  // same expected profile version; either both identity rows move together or
+  // neither does.
+  const [userResult, profileResult] = await db.batch([userWrite, profileWrite]);
+  return userResult.meta.changes > 0 && profileResult.meta.changes > 0;
+}
+
 export async function saveProfileIdentity(
   db: Database,
   userId: string,
@@ -69,7 +112,12 @@ export async function saveProfileIdentity(
       publicName: true,
       publicAvatarUrl: true,
     },
-    with: { user: { columns: { name: true, image: true } } },
+    with: {
+      user: { columns: { name: true, image: true } },
+      highlights: {
+        columns: { repoFullName: true, description: true, blurb: true },
+      },
+    },
   });
 
   if (!profile) {
@@ -81,25 +129,15 @@ export async function saveProfileIdentity(
   }
 
   if (profile.status === "DRAFT") {
-    const updateResult = await db
-      .update(schema.studentProfile)
-      .set({
-        ...clearedModeration,
-        contentVersion: sql`${schema.studentProfile.contentVersion} + 1`,
-      })
-      .where(
-        and(
-          eq(schema.studentProfile.id, profile.id),
-          eq(schema.studentProfile.userId, userId),
-          eq(schema.studentProfile.status, "DRAFT"),
-          eq(schema.studentProfile.contentVersion, profile.contentVersion),
-        ),
-      );
-    if (!updateResult.meta.changes) return changedDuringCheck();
-    await db
-      .update(schema.user)
-      .set(userIdentityValues(input))
-      .where(eq(schema.user.id, userId));
+    const updated = await applyVersionedIdentityUpdate(
+      db,
+      userId,
+      profile,
+      "DRAFT",
+      input,
+      clearedModeration,
+    );
+    if (!updated) return changedDuringCheck();
     return { success: true };
   }
 
@@ -124,6 +162,13 @@ export async function saveProfileIdentity(
     githubLogin: profile.githubLogin,
     portfolioUrl: profile.portfolioUrl,
     linkedinUrl: profile.linkedinUrl,
+    highlights: profile.highlights.map(
+      ({ repoFullName, description, blurb }) => ({
+        repoFullName,
+        description,
+        blurb,
+      }),
+    ),
   };
   let moderation: Awaited<ReturnType<ProfileContentCheck>>;
   try {
@@ -143,23 +188,22 @@ export async function saveProfileIdentity(
           : proposedAvatarUrl,
       }
     : moderationValues;
-  const updateResult = await db
-    .update(schema.studentProfile)
-    .set({
-      ...profileValues,
-      contentVersion: sql`${schema.studentProfile.contentVersion} + 1`,
-    })
-    .where(
-      and(
-        eq(schema.studentProfile.id, profile.id),
-        eq(schema.studentProfile.userId, userId),
-        eq(schema.studentProfile.status, "PUBLISHED"),
-        eq(schema.studentProfile.contentVersion, profile.contentVersion),
-      ),
-    );
-  if (!updateResult.meta.changes) return changedDuringCheck();
-
   if (!publishesAfterModeration(moderation)) {
+    const updateResult = await db
+      .update(schema.studentProfile)
+      .set({
+        ...profileValues,
+        contentVersion: sql`${schema.studentProfile.contentVersion} + 1`,
+      })
+      .where(
+        and(
+          eq(schema.studentProfile.id, profile.id),
+          eq(schema.studentProfile.userId, userId),
+          eq(schema.studentProfile.status, "PUBLISHED"),
+          eq(schema.studentProfile.contentVersion, profile.contentVersion),
+        ),
+      );
+    if (!updateResult.meta.changes) return changedDuringCheck();
     return {
       success: false,
       error: "Your changes need attention before they can go live.",
@@ -168,10 +212,15 @@ export async function saveProfileIdentity(
     };
   }
 
-  await db
-    .update(schema.user)
-    .set(userIdentityValues(input))
-    .where(eq(schema.user.id, userId));
+  const updated = await applyVersionedIdentityUpdate(
+    db,
+    userId,
+    profile,
+    "PUBLISHED",
+    input,
+    profileValues,
+  );
+  if (!updated) return changedDuringCheck();
   return {
     success: true,
     moderationOutcome: moderation.outcome,

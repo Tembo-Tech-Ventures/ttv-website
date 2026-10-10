@@ -11,6 +11,7 @@ import { parseSkillsJson } from "@/lib/talent/profile";
 import {
   applyAdminProfileAction,
   parseAdminProfileAction,
+  parseAdminProfileVersion,
   parseModerationFlags,
   parseModerationScores,
 } from "@/lib/talent/profile-moderation";
@@ -57,6 +58,9 @@ if (Astro.request.method === "POST") {
     }
   } else if (formData.get("_action") === "moderate-profile") {
     const action = parseAdminProfileAction(formData.get("profileAction"));
+    const expectedVersion = parseAdminProfileVersion(
+      formData.get("contentVersion"),
+    );
     const current = await db.query.studentProfile.findFirst({
       where: eq(schema.studentProfile.id, id),
       columns: {
@@ -70,11 +74,17 @@ if (Astro.request.method === "POST") {
     });
 
     if (!current) return Astro.redirect("/admin/profiles");
-    if (!action) {
+    if (!action || expectedVersion === null) {
       actionError = "Invalid profile moderation request.";
       Astro.response.status = 400;
     } else {
-      const updated = await applyAdminProfileAction(db, id, current, action);
+      const updated = await applyAdminProfileAction(
+        db,
+        id,
+        current,
+        action,
+        expectedVersion,
+      );
 
       if (!updated) {
         actionError =
@@ -414,6 +424,7 @@ const moderationOutcomeLabel = profile.moderationOutcome
           <form method="POST">
             <input type="hidden" name="_action" value="moderate-profile" />
             <input type="hidden" name="profileAction" value="publish" />
+            <input type="hidden" name="contentVersion" value={profile.contentVersion} />
             <button type="submit" class="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">
               {profile.status === "SUSPENDED" ? "Republish" : "Publish"}
             </button>
@@ -423,6 +434,7 @@ const moderationOutcomeLabel = profile.moderationOutcome
           <form method="POST">
             <input type="hidden" name="_action" value="moderate-profile" />
             <input type="hidden" name="profileAction" value="unpublish" />
+            <input type="hidden" name="contentVersion" value={profile.contentVersion} />
             <button type="submit" class="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
               Unpublish
             </button>
@@ -432,6 +444,7 @@ const moderationOutcomeLabel = profile.moderationOutcome
           <form method="POST">
             <input type="hidden" name="_action" value="moderate-profile" />
             <input type="hidden" name="profileAction" value="clear_flag" />
+            <input type="hidden" name="contentVersion" value={profile.contentVersion} />
             <button type="submit" class="rounded-md bg-teal/30 px-4 py-2 text-sm font-medium text-white hover:bg-teal/40">
               Clear flag
             </button>

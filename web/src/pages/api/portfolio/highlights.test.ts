@@ -17,19 +17,47 @@ const mockFindProfile = vi.fn();
 const mockFindAccount = vi.fn();
 const mockFindHighlights = vi.fn();
 const mockDeleteWhere = vi.fn();
-const mockInsertValues = vi.fn();
+const mockInsertSelect = vi.fn();
 const mockBatch = vi.fn();
 const mockUpdateSetWhere = vi.fn();
+
+const DEFAULT_PROFILE = {
+  id: "profile-1",
+  userId: "user-1",
+  status: "DRAFT" as const,
+  contentVersion: 2,
+  handle: "builder",
+  headline: "Developer",
+  bio: "I build useful tools.",
+  location: "Lagos",
+  country: "Nigeria",
+  skills: '["TypeScript"]',
+  githubLogin: "builder",
+  portfolioUrl: null,
+  linkedinUrl: null,
+  publicName: null,
+  publicAvatarUrl: null,
+  user: { name: "Builder", image: null },
+  highlights: [],
+};
 
 vi.mock("drizzle-orm/d1", () => ({
   drizzle: () => ({
     query: {
-      studentProfile: { findFirst: mockFindProfile },
+      studentProfile: {
+        findFirst: async (...args: unknown[]) => {
+          const profile = await mockFindProfile(...args);
+          if (!profile) return profile;
+          const highlights =
+            profile.highlights ?? (await mockFindHighlights()) ?? [];
+          return { ...DEFAULT_PROFILE, ...profile, highlights };
+        },
+      },
       account: { findFirst: mockFindAccount },
       profileHighlight: { findMany: mockFindHighlights },
     },
     delete: () => ({ where: mockDeleteWhere }),
-    insert: () => ({ values: mockInsertValues }),
+    insert: () => ({ select: mockInsertSelect }),
     update: () => ({
       set: () => ({ where: mockUpdateSetWhere }),
     }),
@@ -45,6 +73,18 @@ vi.mock("@/lib/talent/github", async () => {
   return {
     ...actual,
     fetchPublicRepos: (...args: unknown[]) => mockFetchPublicRepos(...args),
+  };
+});
+
+const mockCheckProfileContent = vi.fn();
+vi.mock("@/lib/moderation/clef", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/moderation/clef")>(
+    "@/lib/moderation/clef",
+  );
+  return {
+    ...actual,
+    checkProfileContent: (...args: unknown[]) =>
+      mockCheckProfileContent(...args),
   };
 });
 
@@ -90,6 +130,16 @@ const SAMPLE_REPOS = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockFindHighlights.mockResolvedValue([]);
+  mockDeleteWhere.mockReturnValue({ meta: { changes: 1 } });
+  mockInsertSelect.mockReturnValue({ meta: { changes: 1 } });
+  mockUpdateSetWhere.mockReturnValue({ meta: { changes: 1 } });
+  mockBatch.mockImplementation(async (queries: unknown[]) => queries);
+  mockCheckProfileContent.mockResolvedValue({
+    outcome: "pass",
+    flags: [],
+    scores: {},
+  });
 });
 
 describe("POST /api/portfolio/highlights", () => {
@@ -198,6 +248,151 @@ describe("POST /api/portfolio/highlights", () => {
     expect(mockBatch).toHaveBeenCalledTimes(1);
   });
 
+  it("checks and saves a published highlight edit", async () => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "user-1" },
+      session: {},
+    });
+    mockFindProfile.mockResolvedValue({
+      id: "profile-1",
+      status: "PUBLISHED",
+      publicName: "Checked Builder",
+    });
+    mockFindAccount.mockResolvedValue({ accessToken: "ghp_test" });
+    mockFetchPublicRepos.mockResolvedValue(SAMPLE_REPOS);
+
+    const res = await POST(
+      makeRequest("POST", [
+        {
+          repoFullName: "user/repo-a",
+          blurb: "A checked project summary",
+          sortOrder: 0,
+        },
+      ]),
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockCheckProfileContent).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({
+        displayName: "Checked Builder",
+        highlights: [
+          expect.objectContaining({
+            repoFullName: "user/repo-a",
+            blurb: "A checked project summary",
+          }),
+        ],
+      }),
+      expect.any(Object),
+    );
+    expect(mockBatch).toHaveBeenCalledOnce();
+  });
+
+  it("holds a published highlight edit without replacing the live rows", async () => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "user-1" },
+      session: {},
+    });
+    mockFindProfile.mockResolvedValue({
+      id: "profile-1",
+      status: "PUBLISHED",
+    });
+    mockFindAccount.mockResolvedValue({ accessToken: "ghp_test" });
+    mockFetchPublicRepos.mockResolvedValue(SAMPLE_REPOS);
+    mockCheckProfileContent.mockResolvedValue({
+      outcome: "hold",
+      flags: ["contains_contact_details"],
+      scores: { contains_contact_details: 0.98 },
+    });
+
+    const res = await POST(
+      makeRequest("POST", [
+        { repoFullName: "user/repo-a", blurb: "Needs changes", sortOrder: 0 },
+      ]),
+    );
+
+    expect(res.status).toBe(422);
+    expect(await json(res)).toEqual({
+      error: "Your changes need attention before they can go live.",
+      moderationMessages: [
+        "Remove phone numbers, email addresses, or ID numbers from your public profile.",
+      ],
+    });
+    expect(mockBatch).not.toHaveBeenCalled();
+    expect(mockDeleteWhere).not.toHaveBeenCalled();
+  });
+
+  it("fails open for a published highlight edit and stores the review flag", async () => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "user-1" },
+      session: {},
+    });
+    mockFindProfile.mockResolvedValue({
+      id: "profile-1",
+      status: "PUBLISHED",
+    });
+    mockFindAccount.mockResolvedValue({ accessToken: "ghp_test" });
+    mockFetchPublicRepos.mockResolvedValue(SAMPLE_REPOS);
+    mockCheckProfileContent.mockResolvedValue({
+      outcome: "error",
+      flags: [],
+      scores: {},
+    });
+
+    const res = await POST(
+      makeRequest("POST", [
+        { repoFullName: "user/repo-a", blurb: "Project", sortOrder: 0 },
+      ]),
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockBatch).toHaveBeenCalledOnce();
+  });
+
+  it("rejects highlight edits while the profile is suspended", async () => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "user-1" },
+      session: {},
+    });
+    mockFindProfile.mockResolvedValue({
+      id: "profile-1",
+      status: "SUSPENDED",
+    });
+
+    const res = await POST(makeRequest("POST", []));
+
+    expect(res.status).toBe(409);
+    expect(mockBatch).not.toHaveBeenCalled();
+    expect(mockCheckProfileContent).not.toHaveBeenCalled();
+  });
+
+  it("reports a conflict when a concurrent profile write wins", async () => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "user-1" },
+      session: {},
+    });
+    mockFindProfile.mockResolvedValue({
+      id: "profile-1",
+      status: "PUBLISHED",
+    });
+    mockFindAccount.mockResolvedValue({ accessToken: "ghp_test" });
+    mockFetchPublicRepos.mockResolvedValue(SAMPLE_REPOS);
+    mockBatch.mockImplementationOnce(async (queries: unknown[]) =>
+      queries.map((query, index) =>
+        index === queries.length - 1 ? { meta: { changes: 0 } } : query,
+      ),
+    );
+
+    const res = await POST(
+      makeRequest("POST", [
+        { repoFullName: "user/repo-a", blurb: "Project", sortOrder: 0 },
+      ]),
+    );
+
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toContain("changed");
+  });
+
   it("returns 400 on GitHubAuthError", async () => {
     mockGetSession.mockResolvedValue({
       user: { id: "user-1" },
@@ -205,9 +400,7 @@ describe("POST /api/portfolio/highlights", () => {
     });
     mockFindProfile.mockResolvedValue({ id: "profile-1" });
     mockFindAccount.mockResolvedValue({ accessToken: "ghp_bad" });
-    mockFetchPublicRepos.mockRejectedValue(
-      new GitHubAuthError(401, "Invalid"),
-    );
+    mockFetchPublicRepos.mockRejectedValue(new GitHubAuthError(401, "Invalid"));
 
     const body = [{ repoFullName: "user/repo", blurb: "", sortOrder: 0 }];
     const res = await POST(makeRequest("POST", body));
@@ -248,6 +441,22 @@ describe("PUT /api/portfolio/highlights (refresh)", () => {
 
     const res = await PUT(makeRequest("PUT"));
     expect(res.status).toBe(400);
+  });
+
+  it("rejects refresh while the profile is suspended", async () => {
+    mockGetSession.mockResolvedValue({
+      user: { id: "user-1" },
+      session: {},
+    });
+    mockFindProfile.mockResolvedValue({
+      id: "profile-1",
+      status: "SUSPENDED",
+    });
+
+    const res = await PUT(makeRequest("PUT"));
+
+    expect(res.status).toBe(409);
+    expect(mockFetchPublicRepos).not.toHaveBeenCalled();
   });
 
   it("returns ok with 0 refreshed when no existing highlights", async () => {
@@ -316,7 +525,8 @@ describe("PUT /api/portfolio/highlights (refresh)", () => {
     const data = await json(res);
     expect(data.refreshed).toBe(1);
     expect(mockBatch).toHaveBeenCalledTimes(1);
-    expect(mockDeleteWhere).not.toHaveBeenCalled();
+    expect(mockDeleteWhere).toHaveBeenCalledOnce();
+    expect(mockInsertSelect).toHaveBeenCalledTimes(2);
   });
 
   it("returns 0 refreshed when no repos match but preserves all highlights", async () => {

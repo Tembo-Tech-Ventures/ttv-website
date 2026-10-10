@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { discardUnreferencedProfilePhoto } from "./profile-photo-cleanup";
+import {
+  discardReplacedProfilePhotos,
+  discardUnreferencedProfilePhoto,
+} from "./profile-photo-cleanup";
 
 const oldAvatar = "/api/avatar/avatars/user-1/old.webp";
 const candidateAvatar = "/api/avatar/avatars/user-1/candidate.webp";
@@ -95,5 +98,46 @@ describe("discardUnreferencedProfilePhoto", () => {
       }),
     ).resolves.toBe(false);
     expect(deleteObject).not.toHaveBeenCalled();
+  });
+
+  it("cleans both replaced account and moderated public snapshots", async () => {
+    const accountAvatar = "/api/avatar/avatars/user-1/account-old.webp";
+    const moderatedAvatar =
+      "/api/avatar/avatars/user-1/moderated/checked-old.webp";
+    const { db, bucket, deleteObject } = cleanupContext({
+      accountImage: candidateAvatar,
+      publicAvatarUrl: candidateAvatar,
+    });
+
+    await discardReplacedProfilePhotos({
+      db: db as never,
+      bucket: bucket as never,
+      userId: "user-1",
+      imageUrls: [accountAvatar, moderatedAvatar],
+    });
+
+    expect(deleteObject).toHaveBeenCalledTimes(2);
+    expect(deleteObject).toHaveBeenCalledWith(
+      "avatars/user-1/account-old.webp",
+    );
+    expect(deleteObject).toHaveBeenCalledWith(
+      "avatars/user-1/moderated/checked-old.webp",
+    );
+  });
+
+  it("deduplicates a held-draft snapshot shared with the account", async () => {
+    const { db, bucket, deleteObject } = cleanupContext({
+      accountImage: candidateAvatar,
+      publicAvatarUrl: candidateAvatar,
+    });
+
+    await discardReplacedProfilePhotos({
+      db: db as never,
+      bucket: bucket as never,
+      userId: "user-1",
+      imageUrls: [oldAvatar, oldAvatar],
+    });
+
+    expect(deleteObject).toHaveBeenCalledOnce();
   });
 });

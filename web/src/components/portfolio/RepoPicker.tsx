@@ -45,12 +45,14 @@ export default function RepoPicker({
   hasGitHubToken,
 }: RepoPickerProps) {
   const [fetchState, setFetchState] = useState<FetchState>({ status: "idle" });
-  const [selected, setSelected] = useState<HighlightEntry[]>(existingHighlights);
+  const [selected, setSelected] =
+    useState<HighlightEntry[]>(existingHighlights);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{
     type: "success" | "error";
     text: string;
+    details?: string[];
   } | null>(null);
 
   const fetchRepos = useCallback(async () => {
@@ -115,9 +117,7 @@ export default function RepoPicker({
 
   function updateBlurb(fullName: string, blurb: string) {
     setSelected(
-      selected.map((s) =>
-        s.repoFullName === fullName ? { ...s, blurb } : s,
-      ),
+      selected.map((s) => (s.repoFullName === fullName ? { ...s, blurb } : s)),
     );
   }
 
@@ -149,11 +149,15 @@ export default function RepoPicker({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = (await res.json()) as { error?: string };
+      const data = (await res.json()) as {
+        error?: string;
+        moderationMessages?: string[];
+      };
       if (!res.ok) {
         setSaveMessage({
           type: "error",
           text: data.error ?? "Failed to save highlights",
+          details: data.moderationMessages,
         });
       } else {
         setSaveMessage({ type: "success", text: "Highlights saved" });
@@ -172,14 +176,21 @@ export default function RepoPicker({
       const res = await fetch("/api/portfolio/highlights", {
         method: "PUT",
       });
-      const data = (await res.json()) as { error?: string };
+      const data = (await res.json()) as {
+        error?: string;
+        moderationMessages?: string[];
+      };
       if (!res.ok) {
         setSaveMessage({
           type: "error",
           text: data.error ?? "Failed to refresh",
+          details: data.moderationMessages,
         });
       } else {
-        setSaveMessage({ type: "success", text: "Snapshots refreshed from GitHub" });
+        setSaveMessage({
+          type: "success",
+          text: "Snapshots refreshed from GitHub",
+        });
       }
     } catch {
       setSaveMessage({ type: "error", text: "Network error" });
@@ -189,9 +200,7 @@ export default function RepoPicker({
   }
 
   if (fetchState.status === "idle" || fetchState.status === "loading") {
-    return (
-      <p className="text-ink-secondary">Fetching your repositories…</p>
-    );
+    return <p className="text-ink-secondary">Fetching your repositories…</p>;
   }
 
   if (fetchState.status === "no_token") {
@@ -237,9 +246,7 @@ export default function RepoPicker({
             Selected ({selected.length}/{MAX_HIGHLIGHTS})
           </h4>
           {selected.map((entry, index) => {
-            const repo = repos.find(
-              (r) => r.full_name === entry.repoFullName,
-            );
+            const repo = repos.find((r) => r.full_name === entry.repoFullName);
             return (
               <div
                 key={entry.repoFullName}
@@ -305,9 +312,7 @@ export default function RepoPicker({
 
       {/* Repo list */}
       <div className="space-y-2">
-        <h4 className="text-sm font-medium text-white/90">
-          Your Repositories
-        </h4>
+        <h4 className="text-sm font-medium text-white/90">Your Repositories</h4>
         {repos.length === 0 && (
           <p className="text-sm text-ink-secondary">
             No public repositories found.
@@ -378,7 +383,14 @@ export default function RepoPicker({
               : "border-red-500/30 bg-red-500/10 text-red-300"
           }`}
         >
-          {saveMessage.text}
+          <p>{saveMessage.text}</p>
+          {saveMessage.details && saveMessage.details.length > 0 && (
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {saveMessage.details.map((detail) => (
+                <li key={detail}>{detail}</li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

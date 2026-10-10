@@ -20,7 +20,10 @@ import {
   saveProfileIdentity,
   type ProfileIdentityInput,
 } from "@/components/profile/profile-handlers";
-import { discardUnreferencedProfilePhoto } from "@/components/profile/profile-photo-cleanup";
+import {
+  discardReplacedProfilePhotos,
+  discardUnreferencedProfilePhoto,
+} from "@/components/profile/profile-photo-cleanup";
 import type { ProfileContentCheck } from "@/components/portfolio/portfolio-handlers";
 
 const user = Astro.locals.user!;
@@ -72,6 +75,10 @@ if (Astro.request.method === "POST") {
       }
 
       const previousImageUrl = user.image;
+      const previousProfile = await db.query.studentProfile.findFirst({
+        where: (profile, { eq }) => eq(profile.userId, user.id),
+        columns: { publicAvatarUrl: true },
+      });
       const uploadedAvatar = await storeProfilePhoto(env, {
         userId: user.id,
         file: avatarFile,
@@ -95,7 +102,12 @@ if (Astro.request.method === "POST") {
       } else {
         user.image = uploadedAvatar.imageUrl;
         success = "Profile photo updated successfully!";
-        await discardAvatar(previousImageUrl);
+        await discardReplacedProfilePhotos({
+          db,
+          bucket: env.BUCKET,
+          userId: user.id,
+          imageUrls: [previousImageUrl, previousProfile?.publicAvatarUrl],
+        });
       }
     } else {
       const name = (formData.get("name") as string)?.trim();

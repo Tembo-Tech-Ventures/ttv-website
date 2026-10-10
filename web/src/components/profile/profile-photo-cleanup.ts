@@ -10,6 +10,13 @@ interface ProfilePhotoCleanupOptions {
   imageUrl: string | null | undefined;
 }
 
+interface ReplacedProfilePhotosCleanupOptions extends Omit<
+  ProfilePhotoCleanupOptions,
+  "imageUrl"
+> {
+  imageUrls: readonly (string | null | undefined)[];
+}
+
 /**
  * Delete a profile-photo object only after checking every persisted identity
  * reference that can make it public. Cleanup is deliberately best-effort:
@@ -43,5 +50,17 @@ export async function discardUnreferencedProfilePhoto({
     return true;
   } catch {
     return false;
+  }
+}
+
+export async function discardReplacedProfilePhotos({
+  imageUrls,
+  ...options
+}: ReplacedProfilePhotosCleanupOptions): Promise<void> {
+  for (const imageUrl of new Set(imageUrls.filter(Boolean))) {
+    await discardUnreferencedProfilePhoto({
+      ...options,
+      imageUrl,
+    });
   }
 }

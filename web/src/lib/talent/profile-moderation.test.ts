@@ -5,6 +5,7 @@ import {
   applyAdminProfileAction,
   moderationColumns,
   parseAdminProfileAction,
+  parseAdminProfileVersion,
   parseModerationFlags,
   parseModerationScores,
   publishesAfterModeration,
@@ -111,6 +112,11 @@ describe("admin profile moderation actions", () => {
     expect(parseAdminProfileAction("unpublish")).toBe("unpublish");
     expect(parseAdminProfileAction("clear_flag")).toBe("clear_flag");
     expect(parseAdminProfileAction("delete")).toBeNull();
+    expect(parseAdminProfileVersion("0")).toBe(0);
+    expect(parseAdminProfileVersion("12")).toBe(12);
+    expect(parseAdminProfileVersion("-1")).toBeNull();
+    expect(parseAdminProfileVersion("1.5")).toBeNull();
+    expect(parseAdminProfileVersion(null)).toBeNull();
   });
 
   it("publishes, preserves an existing publication date, and clears the flag", () => {
@@ -185,6 +191,7 @@ describe("admin profile moderation actions", () => {
         "profile-1",
         { status: "PUBLISHED", publishedAt: new Date(), contentVersion: 9 },
         "unpublish",
+        9,
       ),
     ).resolves.toBe(true);
 
@@ -215,7 +222,24 @@ describe("admin profile moderation actions", () => {
         "profile-1",
         { status: "DRAFT", publishedAt: null, contentVersion: 4 },
         "publish",
+        4,
       ),
     ).resolves.toBe(false);
+  });
+
+  it("rejects an action rendered for an older profile version", async () => {
+    const update = vi.fn();
+    const db = { update };
+
+    await expect(
+      applyAdminProfileAction(
+        db as never,
+        "profile-1",
+        { status: "DRAFT", publishedAt: null, contentVersion: 6 },
+        "publish",
+        5,
+      ),
+    ).resolves.toBe(false);
+    expect(update).not.toHaveBeenCalled();
   });
 });

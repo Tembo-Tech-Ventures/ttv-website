@@ -1,7 +1,7 @@
 import type { APIRoute } from "astro";
 import { z } from "zod";
 import { drizzle } from "drizzle-orm/d1";
-import { eq, and } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
@@ -11,6 +11,21 @@ import {
   GitHubAuthError,
 } from "@/lib/talent/github";
 import { createAuth } from "@/lib/auth";
+import { parseSkillsJson } from "@/lib/talent/profile";
+import { isAgentSession } from "@/lib/agent-auth";
+import { loadProfilePhotoForModeration } from "@/lib/avatar";
+import {
+  checkProfileContent,
+  previewProfileModerationResult,
+  profileModerationMessages,
+  PROFILE_MODERATION_PREVIEW_HEADER,
+} from "@/lib/moderation/clef";
+import {
+  profileStateWithHighlights,
+  replaceProfileHighlights,
+  type HighlightProfileState,
+  type ProfileHighlightValues,
+} from "@/lib/talent/profile-highlights";
 
 const highlightEntrySchema = z.object({
   repoFullName: z.string().min(1).max(200),
@@ -27,16 +42,20 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
-async function getSessionUser(request: Request) {
+async function getSession(request: Request) {
   const auth = createAuth(env);
-  const session = await auth.api.getSession({ headers: request.headers });
-  return session?.user ?? null;
+  return auth.api.getSession({ headers: request.headers });
 }
 
 async function getUserProfile(db: Database, userId: string) {
   return db.query.studentProfile.findFirst({
     where: eq(schema.studentProfile.userId, userId),
-    columns: { id: true },
+    with: {
+      user: { columns: { name: true, image: true } },
+      highlights: {
+        orderBy: (highlight, { asc }) => [asc(highlight.sortOrder)],
+      },
+    },
   });
 }
 
@@ -54,13 +73,104 @@ async function getGitHubToken(
   return ghAccount?.accessToken ?? null;
 }
 
+function toStoredHighlights(
+  entries: z.infer<typeof highlightsBodySchema>,
+  repos: Awaited<ReturnType<typeof fetchPublicRepos>>,
+): ProfileHighlightValues[] {
+  const repoMap = new Map(repos.map((repo) => [repo.full_name, repo]));
+  return entries.map((entry) => {
+    const repo = repoMap.get(entry.repoFullName);
+    if (!repo) throw new Error("Unknown repository");
+    return {
+      ...toHighlightSnapshot(repo),
+      blurb: entry.blurb || null,
+      sortOrder: entry.sortOrder,
+    };
+  });
+}
+
+async function moderateHighlights(
+  request: Request,
+  sessionUserAgent: string | null | undefined,
+  profile: HighlightProfileState,
+  highlights: readonly ProfileHighlightValues[],
+) {
+  const previewResult = previewProfileModerationResult(
+    env.DEPLOYMENT_ENVIRONMENT,
+    isAgentSession(sessionUserAgent),
+    request.headers.get(PROFILE_MODERATION_PREVIEW_HEADER),
+  );
+  if (previewResult) return previewResult;
+
+  const avatarUrl = profile.publicAvatarUrl ?? profile.user.image;
+  return checkProfileContent(
+    env.AI,
+    profileStateWithHighlights(
+      profile,
+      parseSkillsJson(profile.skills),
+      highlights,
+    ),
+    {
+      gatewayName: env.AI_GATEWAY_NAME,
+      loadAvatarImage: avatarUrl
+        ? () => loadProfilePhotoForModeration(env.BUCKET, avatarUrl)
+        : undefined,
+    },
+  );
+}
+
+async function persistHighlights(
+  request: Request,
+  db: Database,
+  profile: HighlightProfileState,
+  sessionUserAgent: string | null | undefined,
+  highlights: readonly ProfileHighlightValues[],
+): Promise<Response | null> {
+  const moderation =
+    profile.status === "PUBLISHED"
+      ? await moderateHighlights(request, sessionUserAgent, profile, highlights)
+      : undefined;
+  const result = await replaceProfileHighlights(
+    db,
+    profile,
+    highlights,
+    moderation,
+  );
+
+  if (result.outcome === "suspended") {
+    return jsonResponse({ error: "A paused profile cannot be edited." }, 409);
+  }
+  if (result.outcome === "conflict") {
+    return jsonResponse(
+      {
+        error:
+          "This profile changed while your request was running. Reload and try again.",
+      },
+      409,
+    );
+  }
+  if (result.outcome === "hold" && moderation) {
+    return jsonResponse(
+      {
+        error: "Your changes need attention before they can go live.",
+        moderationMessages: profileModerationMessages(moderation.flags),
+      },
+      422,
+    );
+  }
+  return null;
+}
+
 export const POST: APIRoute = async ({ request }) => {
-  const user = await getSessionUser(request);
-  if (!user) return jsonResponse({ error: "unauthorized" }, 401);
+  const session = await getSession(request);
+  if (!session?.user) return jsonResponse({ error: "unauthorized" }, 401);
 
   const db = drizzle(env.DB, { schema });
-  const profile = await getUserProfile(db, user.id);
+  const profile = await getUserProfile(db, session.user.id);
   if (!profile) return jsonResponse({ error: "Profile not found" }, 400);
+  if (profile.status === "SUSPENDED") {
+    return jsonResponse({ error: "A paused profile cannot be edited." }, 409);
+  }
 
   let body: unknown;
   try {
@@ -77,85 +187,63 @@ export const POST: APIRoute = async ({ request }) => {
     );
   }
 
-  const entries = parsed.data;
-  if (entries.length === 0) {
-    await db
-      .delete(schema.profileHighlight)
-      .where(eq(schema.profileHighlight.profileId, profile.id));
-    return jsonResponse({ ok: true });
-  }
-
-  const accessToken = await getGitHubToken(db, user.id);
-  if (!accessToken) {
-    return jsonResponse({ error: "GitHub account not connected" }, 400);
-  }
-
-  let repos;
-  try {
-    repos = await fetchPublicRepos(accessToken);
-  } catch (err) {
-    if (err instanceof GitHubAuthError) {
-      return jsonResponse({ error: "auth_error" }, 400);
+  let rows: ProfileHighlightValues[] = [];
+  if (parsed.data.length > 0) {
+    const accessToken = await getGitHubToken(db, session.user.id);
+    if (!accessToken) {
+      return jsonResponse({ error: "GitHub account not connected" }, 400);
     }
-    return jsonResponse({ error: "Failed to fetch GitHub repos" }, 500);
-  }
 
-  const repoMap = new Map(repos.map((r) => [r.full_name, r]));
-  const unknownRepos = entries.filter((e) => !repoMap.has(e.repoFullName));
-  if (unknownRepos.length > 0) {
-    return jsonResponse(
-      {
-        error: `Unknown repositories: ${unknownRepos.map((r) => r.repoFullName).join(", ")}`,
-      },
-      400,
+    let repos;
+    try {
+      repos = await fetchPublicRepos(accessToken);
+    } catch (error) {
+      if (error instanceof GitHubAuthError) {
+        return jsonResponse({ error: "auth_error" }, 400);
+      }
+      return jsonResponse({ error: "Failed to fetch GitHub repos" }, 500);
+    }
+
+    const repoNames = new Set(repos.map((repo) => repo.full_name));
+    const unknownRepos = parsed.data.filter(
+      (entry) => !repoNames.has(entry.repoFullName),
     );
+    if (unknownRepos.length > 0) {
+      return jsonResponse(
+        {
+          error: `Unknown repositories: ${unknownRepos.map((entry) => entry.repoFullName).join(", ")}`,
+        },
+        400,
+      );
+    }
+    rows = toStoredHighlights(parsed.data, repos);
   }
 
-  const rows = entries.map((entry) => {
-    const repo = repoMap.get(entry.repoFullName)!;
-    const snapshot = toHighlightSnapshot(repo);
-    return {
-      profileId: profile.id,
-      repoFullName: snapshot.repoFullName,
-      repoUrl: snapshot.repoUrl,
-      description: snapshot.description,
-      language: snapshot.language,
-      topics: snapshot.topics,
-      stars: snapshot.stars,
-      pushedAt: snapshot.pushedAt,
-      blurb: entry.blurb || null,
-      sortOrder: entry.sortOrder,
-      snapshotAt: snapshot.snapshotAt,
-    };
-  });
-
-  await db.batch([
-    db
-      .delete(schema.profileHighlight)
-      .where(eq(schema.profileHighlight.profileId, profile.id)),
-    db.insert(schema.profileHighlight).values(rows),
-  ]);
-
-  return jsonResponse({ ok: true });
+  const errorResponse = await persistHighlights(
+    request,
+    db,
+    profile,
+    session.session?.userAgent,
+    rows,
+  );
+  return errorResponse ?? jsonResponse({ ok: true });
 };
 
 export const PUT: APIRoute = async ({ request }) => {
-  const user = await getSessionUser(request);
-  if (!user) return jsonResponse({ error: "unauthorized" }, 401);
+  const session = await getSession(request);
+  if (!session?.user) return jsonResponse({ error: "unauthorized" }, 401);
 
   const db = drizzle(env.DB, { schema });
-  const profile = await getUserProfile(db, user.id);
+  const profile = await getUserProfile(db, session.user.id);
   if (!profile) return jsonResponse({ error: "Profile not found" }, 400);
-
-  const existing = await db.query.profileHighlight.findMany({
-    where: eq(schema.profileHighlight.profileId, profile.id),
-  });
-
-  if (existing.length === 0) {
+  if (profile.status === "SUSPENDED") {
+    return jsonResponse({ error: "A paused profile cannot be edited." }, 409);
+  }
+  if (profile.highlights.length === 0) {
     return jsonResponse({ ok: true, refreshed: 0 });
   }
 
-  const accessToken = await getGitHubToken(db, user.id);
+  const accessToken = await getGitHubToken(db, session.user.id);
   if (!accessToken) {
     return jsonResponse({ error: "GitHub account not connected" }, 400);
   }
@@ -163,39 +251,49 @@ export const PUT: APIRoute = async ({ request }) => {
   let repos;
   try {
     repos = await fetchPublicRepos(accessToken);
-  } catch (err) {
-    if (err instanceof GitHubAuthError) {
+  } catch (error) {
+    if (error instanceof GitHubAuthError) {
       return jsonResponse({ error: "auth_error" }, 400);
     }
     return jsonResponse({ error: "Failed to fetch GitHub repos" }, 500);
   }
 
-  const repoMap = new Map(repos.map((r) => [r.full_name, r]));
+  const repoMap = new Map(repos.map((repo) => [repo.full_name, repo]));
+  let refreshed = 0;
+  const rows: ProfileHighlightValues[] = profile.highlights.map((highlight) => {
+    const repo = repoMap.get(highlight.repoFullName);
+    if (!repo) {
+      return {
+        repoFullName: highlight.repoFullName,
+        repoUrl: highlight.repoUrl,
+        description: highlight.description,
+        language: highlight.language,
+        topics: highlight.topics ?? "[]",
+        stars: highlight.stars,
+        pushedAt: highlight.pushedAt,
+        blurb: highlight.blurb,
+        sortOrder: highlight.sortOrder,
+        snapshotAt: highlight.snapshotAt,
+      };
+    }
+    refreshed += 1;
+    return {
+      ...toHighlightSnapshot(repo),
+      blurb: highlight.blurb,
+      sortOrder: highlight.sortOrder,
+    };
+  });
 
-  // Only update highlights whose repos appear in the listing;
-  // unmatched highlights (older/renamed repos beyond the 100-repo cap)
-  // are preserved with their stale snapshot and hand-written blurb.
-  const matched = existing.filter((h) => repoMap.has(h.repoFullName));
-
-  if (matched.length > 0) {
-    const updates = matched.map((h) => {
-      const repo = repoMap.get(h.repoFullName)!;
-      const snapshot = toHighlightSnapshot(repo);
-      return db
-        .update(schema.profileHighlight)
-        .set({
-          repoUrl: snapshot.repoUrl,
-          description: snapshot.description,
-          language: snapshot.language,
-          topics: snapshot.topics,
-          stars: snapshot.stars,
-          pushedAt: snapshot.pushedAt,
-          snapshotAt: snapshot.snapshotAt,
-        })
-        .where(eq(schema.profileHighlight.id, h.id));
-    });
-    await db.batch(updates as [typeof updates[0], ...typeof updates]);
+  if (refreshed === 0) {
+    return jsonResponse({ ok: true, refreshed: 0 });
   }
 
-  return jsonResponse({ ok: true, refreshed: matched.length });
+  const errorResponse = await persistHighlights(
+    request,
+    db,
+    profile,
+    session.session?.userAgent,
+    rows,
+  );
+  return errorResponse ?? jsonResponse({ ok: true, refreshed });
 };

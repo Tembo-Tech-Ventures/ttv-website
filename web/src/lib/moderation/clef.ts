@@ -87,6 +87,11 @@ export interface ProfileModerationState {
   githubLogin: string | null;
   portfolioUrl: string | null;
   linkedinUrl: string | null;
+  highlights?: Array<{
+    repoFullName: string;
+    description: string | null;
+    blurb: string | null;
+  }>;
 }
 
 export interface ProfileModerationResult {

@@ -10,6 +10,7 @@ import { PROFILE_MODERATION_MESSAGES } from "@/lib/moderation/clef";
 import {
   applyAdminProfileAction,
   parseAdminProfileAction,
+  parseAdminProfileVersion,
   parseModerationFlags,
   splitModerationReviewLists,
 } from "@/lib/talent/profile-moderation";
@@ -21,7 +22,11 @@ if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
   const profileId = formData.get("profileId");
   const action = parseAdminProfileAction(formData.get("_action"));
-  if (typeof profileId !== "string" || !action) {
+  const expectedVersion = parseAdminProfileVersion(
+    formData.get("contentVersion"),
+  );
+  if (typeof profileId !== "string" || !action || expectedVersion === null) {
+    actionError = "Invalid profile moderation request.";
     Astro.response.status = 400;
   } else {
     const current = await db.query.studentProfile.findFirst({
@@ -41,6 +46,7 @@ if (Astro.request.method === "POST") {
         profileId,
         current,
         action,
+        expectedVersion,
       );
       if (!updated) {
         actionError =
@@ -152,6 +158,7 @@ const reviewSections = [
                         <form method="POST">
                           <input type="hidden" name="profileId" value={profile.id} />
                           <input type="hidden" name="_action" value={action} />
+                          <input type="hidden" name="contentVersion" value={profile.contentVersion} />
                           <button
                             type="submit"
                             class:list={[

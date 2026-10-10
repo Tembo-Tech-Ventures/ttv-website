@@ -85,7 +85,22 @@ interface CurrentProfile {
   githubLogin: string | null;
   publicName: string | null;
   publicAvatarUrl: string | null;
+  highlights?: Array<{
+    repoFullName: string;
+    description: string | null;
+    blurb: string | null;
+  }>;
   user: { name: string; image: string | null };
+}
+
+function moderationHighlights(
+  highlights: CurrentProfile["highlights"],
+): NonNullable<ProfileModerationState["highlights"]> {
+  return (highlights ?? []).map(({ repoFullName, description, blurb }) => ({
+    repoFullName,
+    description,
+    blurb,
+  }));
 }
 
 function collectFieldErrors(
@@ -195,6 +210,7 @@ async function savePublishedProfileEdit(
     githubLogin: current.githubLogin,
     portfolioUrl: values.portfolioUrl,
     linkedinUrl: values.linkedinUrl,
+    highlights: moderationHighlights(current.highlights),
   };
   const moderation = await runContentCheck(
     checkContent,
@@ -333,7 +349,12 @@ export async function saveProfile(
         publicName: true,
         publicAvatarUrl: true,
       },
-      with: { user: { columns: { name: true, image: true } } },
+      with: {
+        user: { columns: { name: true, image: true } },
+        highlights: {
+          columns: { repoFullName: true, description: true, blurb: true },
+        },
+      },
     });
     // `findFirst` yields undefined when there is no row; a Date is always
     // truthy, so this covers "no profile" and "not yet published" together.
@@ -439,7 +460,12 @@ export async function publishProfile(
       publishedAt: true,
       contentVersion: true,
     },
-    with: { user: { columns: { name: true, image: true } } },
+    with: {
+      user: { columns: { name: true, image: true } },
+      highlights: {
+        columns: { repoFullName: true, description: true, blurb: true },
+      },
+    },
   });
 
   if (!profile) {
@@ -464,6 +490,7 @@ export async function publishProfile(
     githubLogin: profile.githubLogin,
     portfolioUrl: profile.portfolioUrl,
     linkedinUrl: profile.linkedinUrl,
+    highlights: moderationHighlights(profile.highlights),
   };
   const moderation = await runContentCheck(
     checkContent,

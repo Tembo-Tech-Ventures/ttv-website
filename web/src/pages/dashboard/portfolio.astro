@@ -642,7 +642,7 @@ const hasGitHubAccount = profile
         )}
 
         {/* GitHub Highlights */}
-        {profile && (
+        {profile && profile.status !== "SUSPENDED" && (
           <Card>
             <h3 class="mb-4 text-lg font-semibold text-white">
               GitHub Highlights

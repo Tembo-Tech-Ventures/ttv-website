@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import * as schema from "@/lib/db/schema";
@@ -18,6 +19,7 @@ const publishedProfile = {
   linkedinUrl: null,
   publicName: "Old Name",
   publicAvatarUrl: "/api/avatar/avatars/user-1/old.webp",
+  highlights: [],
   user: {
     name: "Old Name",
     image: "/api/avatar/avatars/user-1/old.webp",
@@ -34,7 +36,10 @@ function mockDb(profile: TestProfile | null, profileChanges = 1) {
   const profileWhere = vi
     .fn()
     .mockReturnValue({ meta: { changes: profileChanges } });
-  const userWhere = vi.fn().mockReturnValue({ meta: { changes: 1 } });
+  const userWhere = vi
+    .fn()
+    .mockReturnValue({ meta: { changes: profileChanges } });
+  const batch = vi.fn(async (queries: unknown[]) => queries);
   return {
     db: {
       query: {
@@ -50,10 +55,15 @@ function mockDb(profile: TestProfile | null, profileChanges = 1) {
           return { where: userWhere };
         }),
       })),
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({ where: vi.fn(() => sql`1`) })),
+      })),
+      batch,
     },
     setProfile,
     setUser,
     profileWhere,
+    batch,
   };
 }
 
@@ -161,7 +171,7 @@ describe("saveProfileIdentity", () => {
   });
 
   it("rejects a delayed name check after a concurrent avatar version wins", async () => {
-    const { db, setUser, profileWhere } = mockDb(publishedProfile, 0);
+    const { db, batch, profileWhere } = mockDb(publishedProfile, 0);
     const result = await saveProfileIdentity(
       db as never,
       "user-1",
@@ -174,8 +184,113 @@ describe("saveProfileIdentity", () => {
       error:
         "This profile changed while your request was running. Reload and try again.",
     });
-    expect(setUser).not.toHaveBeenCalled();
+    expect(batch).toHaveBeenCalledOnce();
     expectVersionedStatusGuard(profileWhere, "PUBLISHED");
+  });
+
+  it("lets only one checked identity update win a deterministic interleaving", async () => {
+    let persistedVersion = publishedProfile.contentVersion;
+    let persistedName = publishedProfile.user.name;
+    let releaseFirstCheck!: () => void;
+    let markFirstCheckStarted!: () => void;
+    const firstCheckStarted = new Promise<void>((resolve) => {
+      markFirstCheckStarted = resolve;
+    });
+    const firstCheckCanFinish = new Promise<void>((resolve) => {
+      releaseFirstCheck = resolve;
+    });
+
+    interface PendingWrite {
+      table: unknown;
+      values: Record<string, unknown>;
+    }
+
+    const db = {
+      query: {
+        studentProfile: {
+          findFirst: vi.fn(async () => ({ ...publishedProfile })),
+        },
+      },
+      update: vi.fn((table: unknown) => ({
+        set: (values: Record<string, unknown>) => ({
+          where: (_condition: unknown): PendingWrite => ({ table, values }),
+        }),
+      })),
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({ where: vi.fn(() => sql`1`) })),
+      })),
+      batch: vi.fn(async (writes: PendingWrite[]) => {
+        const wins = persistedVersion === publishedProfile.contentVersion;
+        if (wins) {
+          const userWrite = writes.find((write) => write.table === schema.user);
+          persistedName = String(userWrite?.values.name);
+          persistedVersion += 1;
+        }
+        return writes.map(() => ({ meta: { changes: wins ? 1 : 0 } }));
+      }),
+    };
+    const pass = { outcome: "pass" as const, flags: [], scores: {} };
+
+    const delayed = saveProfileIdentity(
+      db as never,
+      "user-1",
+      { name: "Delayed Name" },
+      async () => {
+        markFirstCheckStarted();
+        await firstCheckCanFinish;
+        return pass;
+      },
+    );
+    await firstCheckStarted;
+    const winner = await saveProfileIdentity(
+      db as never,
+      "user-1",
+      { name: "Winning Name" },
+      () => Promise.resolve(pass),
+    );
+    releaseFirstCheck();
+    const loser = await delayed;
+
+    expect(winner).toMatchObject({ success: true });
+    expect(loser).toEqual({
+      success: false,
+      error:
+        "This profile changed while your request was running. Reload and try again.",
+    });
+    expect(persistedVersion).toBe(5);
+    expect(persistedName).toBe("Winning Name");
+  });
+
+  it("queues the checked identity and version change in one atomic batch", async () => {
+    const { db, batch } = mockDb(publishedProfile);
+    let checkFinished = false;
+
+    const result = await saveProfileIdentity(
+      db as never,
+      "user-1",
+      { avatarUrl: "/api/avatar/avatars/user-1/new.webp" },
+      async () => {
+        checkFinished = true;
+        return { outcome: "pass", flags: [], scores: {} };
+      },
+    );
+
+    expect(result.success).toBe(true);
+    expect(checkFinished).toBe(true);
+    expect(batch).toHaveBeenCalledOnce();
+    expect(batch.mock.calls[0][0]).toHaveLength(2);
+  });
+
+  it("surfaces an atomic batch failure without running a second write", async () => {
+    const { db, batch } = mockDb(publishedProfile);
+    batch.mockRejectedValueOnce(new Error("D1 batch failed"));
+
+    await expect(
+      saveProfileIdentity(db as never, "user-1", { name: "New Name" }, () =>
+        Promise.resolve({ outcome: "pass", flags: [], scores: {} }),
+      ),
+    ).rejects.toThrow("D1 batch failed");
+    expect(batch).toHaveBeenCalledOnce();
   });
 
   it("clears a held draft decision when private identity changes", async () => {
