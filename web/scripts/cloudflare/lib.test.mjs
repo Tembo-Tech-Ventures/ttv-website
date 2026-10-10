@@ -4,6 +4,7 @@ import {
   deleteAiGatewayByName,
   deleteContainerAppByName,
   deleteQueueByName,
+  deleteR2BucketObject,
   deleteVectorizeIndexByName,
   deriveAgentEnvironmentName,
   deriveEnvironmentContext,
@@ -11,6 +12,7 @@ import {
   findD1DatabaseByName,
   getSecretBindings,
   listContainerApplications,
+  listR2BucketObjectsPage,
   queryD1Database,
   removeQueueWorkerConsumer,
   resolveDeploymentMetadata,
@@ -489,6 +491,77 @@ describe("listContainerApplications", () => {
 });
 
 describe("environment cleanup", () => {
+  it("lists an R2 object page with its opaque pagination cursor", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        success: true,
+        result: [{ key: "avatars/user one/photo.png" }],
+        result_info: { cursor: "next/page", is_truncated: true },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      listR2BucketObjectsPage("ttv-files-agent-one", "previous/page")
+    ).resolves.toEqual({
+      objects: [{ key: "avatars/user one/photo.png" }],
+      cursor: "next/page",
+      isTruncated: true,
+    });
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://api.cloudflare.com/client/v4/accounts/acc-123/r2/buckets/ttv-files-agent-one/objects?per_page=1000&cursor=previous%2Fpage"
+    );
+  });
+
+  it("treats a missing R2 bucket as an absent object page", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 404 }))
+    );
+    await expect(
+      listR2BucketObjectsPage("ttv-files-agent-missing")
+    ).resolves.toBeNull();
+  });
+
+  it("surfaces the R2 API operation and message when listing fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json(
+          {
+            success: false,
+            errors: [{ message: "R2 control plane unavailable" }],
+          },
+          { status: 503 }
+        )
+      )
+    );
+
+    await expect(
+      listR2BucketObjectsPage("ttv-files-agent-one")
+    ).rejects.toThrow(
+      "GET /r2/buckets/ttv-files-agent-one/objects?per_page=1000 failed: R2 control plane unavailable"
+    );
+  });
+
+  it("deletes R2 object keys without encoding their path separators", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({ success: true, result: { key: "avatar photo.png" } })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      deleteR2BucketObject(
+        "ttv-files-agent-one",
+        "avatars/user one/avatar photo.png"
+      )
+    ).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.cloudflare.com/client/v4/accounts/acc-123/r2/buckets/ttv-files-agent-one/objects/avatars/user%20one/avatar%20photo.png",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
   it("deletes an existing AI gateway", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
