@@ -74,10 +74,10 @@ function mockDb(
       publishedAt: Date | null;
       status?: "DRAFT" | "PUBLISHED" | "SUSPENDED";
       githubLogin?: string | null;
-      user?: { name: string };
+      user?: { name: string; image?: string | null };
     } | null;
     insertProfile?: () => void;
-    updateProfile?: () => void;
+    updateProfile?: (condition?: unknown) => void;
     setProfile?: (values: unknown) => void;
   } = {},
 ) {
@@ -113,7 +113,12 @@ function mockDb(
     update: vi.fn(() => ({
       set: vi.fn((values: unknown) => {
         overrides.setProfile?.(values);
-        return { where: updateFn };
+        return {
+          where: (condition: unknown) => {
+            updateFn(condition);
+            return { meta: { changes: 1 } };
+          },
+        };
       }),
     })),
   } as unknown;
@@ -413,8 +418,12 @@ type ModerationProfile = Omit<typeof draftProfile, "status" | "publishedAt"> & {
   publishedAt: Date | null;
 };
 
-function moderationDb(profile: ModerationProfile | null, setProfile = vi.fn()) {
-  const where = vi.fn();
+function moderationDb(
+  profile: ModerationProfile | null,
+  setProfile = vi.fn(),
+  changes = 1,
+) {
+  const where = vi.fn().mockReturnValue({ meta: { changes } });
   return {
     db: {
       query: {
@@ -510,6 +519,20 @@ describe("publishProfile", () => {
     );
   });
 
+  it("does not overwrite an admin status change made during the check", async () => {
+    const { db, where } = moderationDb(draftProfile, vi.fn(), 0);
+    const result = await publishProfile(db as never, "user-1", "profile-1", () =>
+      Promise.resolve({ outcome: "pass", flags: [], scores: {} }),
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error:
+        "This profile changed while its content check was running. Reload and try again.",
+    });
+    expectStatusWriteGuard(where, "DRAFT");
+  });
+
   it("fails open when the check is unavailable and flags the published profile", async () => {
     const { db, setProfile } = moderationDb(draftProfile);
     const result = await publishProfile(
@@ -559,7 +582,7 @@ describe("published profile edits", () => {
     publishedAt: new Date("2026-01-01"),
     status: "PUBLISHED" as const,
     githubLogin: "existing-user",
-    user: { name: "Existing User" },
+    user: { name: "Existing User", image: null },
   };
 
   it("keeps the previous public fields live when an edit is held", async () => {

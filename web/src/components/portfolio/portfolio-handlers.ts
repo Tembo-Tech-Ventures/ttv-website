@@ -88,6 +88,13 @@ function serializeOptionalSkills(skills: string[] | undefined): string | null {
   return skills ? serializeSkills(skills) : null;
 }
 
+function profileChangedDuringCheck(): ProfileFormResult {
+  return {
+    success: false,
+    error: "This profile changed while its content check was running. Reload and try again.",
+  };
+}
+
 async function savePublishedProfileEdit(
   db: Database,
   userId: string,
@@ -118,7 +125,7 @@ async function savePublishedProfileEdit(
   const moderationValues = moderationColumns(moderation);
 
   if (!publishesAfterModeration(moderation)) {
-    await db
+    const updateResult = await db
       .update(schema.studentProfile)
       .set(moderationValues)
       .where(
@@ -128,6 +135,7 @@ async function savePublishedProfileEdit(
           eq(schema.studentProfile.status, "PUBLISHED"),
         ),
       );
+    if (!updateResult.meta.changes) return profileChangedDuringCheck();
     return {
       success: false,
       error: "Your changes need attention before they can go live.",
@@ -136,7 +144,7 @@ async function savePublishedProfileEdit(
     };
   }
 
-  await db
+  const updateResult = await db
     .update(schema.studentProfile)
     .set({ ...values, ...moderationValues })
     .where(
@@ -146,6 +154,7 @@ async function savePublishedProfileEdit(
         eq(schema.studentProfile.status, "PUBLISHED"),
       ),
     );
+  if (!updateResult.meta.changes) return profileChangedDuringCheck();
   return {
     success: true,
     moderationOutcome: moderation.outcome,
@@ -383,7 +392,7 @@ export async function publishProfile(
   );
   const moderationValues = moderationColumns(moderation);
 
-  await db
+  const updateResult = await db
     .update(schema.studentProfile)
     .set(
       publishesAfterModeration(moderation)
@@ -401,6 +410,7 @@ export async function publishProfile(
         eq(schema.studentProfile.status, "DRAFT"),
       ),
     );
+  if (!updateResult.meta.changes) return profileChangedDuringCheck();
 
   if (!publishesAfterModeration(moderation)) {
     return {
