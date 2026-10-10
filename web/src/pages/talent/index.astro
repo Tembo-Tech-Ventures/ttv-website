@@ -14,6 +14,7 @@ import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { isValidCompletion } from "@/lib/talent/eligibility";
+import { resolvePublicProfileIdentity } from "@/lib/talent/public-identity";
 
 const db = drizzle(env.DB, { schema });
 
@@ -21,7 +22,7 @@ const rawProfiles = await db.query.studentProfile.findMany({
   where: eq(schema.studentProfile.status, "PUBLISHED"),
   with: {
     user: {
-      columns: { id: true, name: true, image: true },
+      columns: { id: true },
       with: {
         programApplications: {
           where: and(
@@ -40,25 +41,28 @@ const allProfiles: DirectoryProfile[] = rawProfiles
   .filter((profile) =>
     profile.user.programApplications.some(isValidCompletion)
   )
-  .map((profile) => ({
-    id: profile.id,
-    handle: profile.handle,
-    headline: profile.headline,
-    country: profile.country,
-    skills: profile.skills,
-    openToFreelance: profile.openToFreelance,
-    openToRoles: profile.openToRoles,
-    user: { name: profile.user.name, image: profile.user.image },
-    completedCohorts: profile.user.programApplications
-      .filter(
-        (application) =>
-          isValidCompletion(application) && Boolean(application.program)
-      )
-      .map((application) => ({
-        programName: application.program!.name,
-        applicationId: application.id,
-      })),
-  }));
+  .map((profile) => {
+    const publicIdentity = resolvePublicProfileIdentity(profile);
+    return {
+      id: profile.id,
+      handle: profile.handle,
+      headline: profile.headline,
+      country: profile.country,
+      skills: profile.skills,
+      openToFreelance: profile.openToFreelance,
+      openToRoles: profile.openToRoles,
+      user: publicIdentity,
+      completedCohorts: profile.user.programApplications
+        .filter(
+          (application) =>
+            isValidCompletion(application) && Boolean(application.program)
+        )
+        .map((application) => ({
+          programName: application.program!.name,
+          applicationId: application.id,
+        })),
+    };
+  });
 
 const url = new URL(Astro.request.url);
 const filters = parseDirectoryFilters(url.searchParams);

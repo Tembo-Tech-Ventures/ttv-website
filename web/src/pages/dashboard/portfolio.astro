@@ -13,7 +13,11 @@ import { parseSkillsJson } from "@/lib/talent/profile";
 import { fetchGitHubLogin } from "@/lib/talent/github";
 import { preserveFormTextValues } from "@/lib/form-values";
 import { isAgentSession } from "@/lib/agent-auth";
-import { loadProfilePhotoForModeration } from "@/lib/avatar";
+import {
+  loadProfilePhotoForModeration,
+  safePublicProfileAvatarUrl,
+  storeModeratedProfilePhotoSnapshot,
+} from "@/lib/avatar";
 import {
   checkProfileContent,
   previewProfileModerationResult,
@@ -35,15 +39,43 @@ const previewModeration = previewProfileModerationResult(
   isAgentSession(Astro.locals.session?.userAgent),
   Astro.request.headers.get(PROFILE_MODERATION_PREVIEW_HEADER),
 );
-const moderateProfile: ProfileContentCheck = (state, avatarUrl) =>
-  previewModeration
-    ? Promise.resolve(previewModeration)
-    : checkProfileContent(env.AI, state, {
-        gatewayName: env.AI_GATEWAY_NAME,
-        loadAvatarImage: avatarUrl
-          ? () => loadProfilePhotoForModeration(env.BUCKET, avatarUrl)
-          : undefined,
-      });
+const moderateProfile: ProfileContentCheck = async (state, avatarUrl) => {
+  if (previewModeration) {
+    return {
+      ...previewModeration,
+      publicAvatarUrl: safePublicProfileAvatarUrl(avatarUrl),
+    };
+  }
+
+  let loadedAvatarImage: string | null | undefined;
+  const moderation = await checkProfileContent(env.AI, state, {
+    gatewayName: env.AI_GATEWAY_NAME,
+    loadAvatarImage: avatarUrl
+      ? async () => {
+          loadedAvatarImage = await loadProfilePhotoForModeration(
+            env.BUCKET,
+            avatarUrl,
+          );
+          return loadedAvatarImage;
+        }
+      : undefined,
+  });
+
+  let publicAvatarUrl = safePublicProfileAvatarUrl(avatarUrl);
+  if (!publicAvatarUrl && loadedAvatarImage) {
+    try {
+      publicAvatarUrl = await storeModeratedProfilePhotoSnapshot(
+        env.BUCKET,
+        user.id,
+        loadedAvatarImage,
+      );
+    } catch {
+      publicAvatarUrl = null;
+    }
+  }
+
+  return { ...moderation, publicAvatarUrl };
+};
 
 const PROFILE_TEXT_FIELDS = [
   "handle",

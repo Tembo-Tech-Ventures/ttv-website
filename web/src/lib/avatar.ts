@@ -103,6 +103,58 @@ function base64Encode(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+function base64Decode(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+export function safePublicProfileAvatarUrl(imageUrl?: string | null) {
+  return extractAvatarObjectKey(imageUrl) ? (imageUrl ?? null) : null;
+}
+
+export async function storeModeratedProfilePhotoSnapshot(
+  bucket: Pick<R2Bucket, "put">,
+  userId: string,
+  dataUrl: string,
+): Promise<string> {
+  const match =
+    /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(
+      dataUrl,
+    );
+  if (!match) throw new Error("Invalid moderated profile image");
+
+  const contentType = match[1];
+  const bytes = base64Decode(match[2]);
+  assertClefAvatar(contentType, bytes.byteLength);
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", Uint8Array.from(bytes).buffer),
+  );
+  const hash = Array.from(digest, (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+  const extension =
+    contentType === "image/jpeg" ? "jpg" : contentType.slice("image/".length);
+  const objectKey = `${AVATAR_OBJECT_PREFIX}/${userId}/moderated/${hash}.${extension}`;
+
+  await bucket.put(objectKey, bytes, { httpMetadata: { contentType } });
+  return `${AVATAR_ROUTE_PREFIX}${objectKey}`;
+}
+
+export async function discardStoredProfilePhoto(
+  bucket: Pick<R2Bucket, "delete">,
+  userId: string,
+  imageUrl?: string | null,
+) {
+  const objectKey = extractAvatarObjectKey(imageUrl);
+  if (objectKey?.startsWith(`${AVATAR_OBJECT_PREFIX}/${userId}/`)) {
+    await bucket.delete(objectKey);
+  }
+}
+
 export async function loadProfilePhotoForModeration(
   bucket: Pick<R2Bucket, "get">,
   imageUrl: string | null | undefined,
@@ -151,6 +203,7 @@ export async function storeProfilePhoto(
     userId: string;
     file: File;
     previousImageUrl?: string | null;
+    deletePrevious?: boolean;
   },
 ) {
   assertImageFile(params.file);
@@ -191,7 +244,13 @@ export async function storeProfilePhoto(
   });
 
   const previousObjectKey = extractAvatarObjectKey(params.previousImageUrl);
-  if (previousObjectKey && previousObjectKey !== objectKey) {
+  if (
+    params.deletePrevious !== false &&
+    previousObjectKey?.startsWith(
+      `${AVATAR_OBJECT_PREFIX}/${params.userId}/`,
+    ) &&
+    previousObjectKey !== objectKey
+  ) {
     await env.BUCKET.delete(previousObjectKey);
   }
 

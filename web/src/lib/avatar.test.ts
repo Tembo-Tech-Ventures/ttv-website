@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  discardStoredProfilePhoto,
   extractAvatarObjectKey,
   loadProfilePhotoForModeration,
+  safePublicProfileAvatarUrl,
+  storeModeratedProfilePhotoSnapshot,
   storeProfilePhoto,
 } from "./avatar";
 
@@ -106,6 +109,26 @@ describe("avatar uploads", () => {
 
     expect(bucket.put).not.toHaveBeenCalled();
   });
+
+  it("can retain the previous image while a published replacement is checked", async () => {
+    const bucket = {
+      put: vi.fn().mockResolvedValue({}),
+      delete: vi.fn().mockResolvedValue({}),
+    };
+    await storeProfilePhoto(
+      { BUCKET: bucket as never, IMAGES: createMockImages() as never },
+      {
+        userId: "user_123",
+        file: new File([new Uint8Array([1])], "avatar.png", {
+          type: "image/png",
+        }),
+        previousImageUrl: "/api/avatar/avatars/user_123/old.webp",
+        deletePrevious: false,
+      },
+    );
+
+    expect(bucket.delete).not.toHaveBeenCalled();
+  });
 });
 
 describe("avatar moderation input", () => {
@@ -179,5 +202,52 @@ describe("avatar moderation input", () => {
         "/api/avatar/avatars/user_123/photo.webp",
       ),
     ).rejects.toThrow("Profile image is outside the Clef size limit");
+  });
+
+  it("stores external checked bytes at a content-addressed local URL", async () => {
+    const bucket = { put: vi.fn().mockResolvedValue({}) };
+    const first = await storeModeratedProfilePhotoSnapshot(
+      bucket as never,
+      "user_123",
+      "data:image/png;base64,AQID",
+    );
+    const second = await storeModeratedProfilePhotoSnapshot(
+      bucket as never,
+      "user_123",
+      "data:image/png;base64,AQID",
+    );
+
+    expect(first).toBe(second);
+    expect(first).toMatch(
+      /^\/api\/avatar\/avatars\/user_123\/moderated\/[a-f0-9]{64}\.png$/,
+    );
+    expect(bucket.put).toHaveBeenCalledWith(
+      expect.stringMatching(/^avatars\/user_123\/moderated\//),
+      new Uint8Array([1, 2, 3]),
+      { httpMetadata: { contentType: "image/png" } },
+    );
+    expect(safePublicProfileAvatarUrl(first)).toBe(first);
+    expect(
+      safePublicProfileAvatarUrl("https://avatars.githubusercontent.com/u/123"),
+    ).toBeNull();
+  });
+
+  it("only discards avatar objects owned by the user", async () => {
+    const bucket = { delete: vi.fn().mockResolvedValue({}) };
+    await discardStoredProfilePhoto(
+      bucket as never,
+      "user_123",
+      "/api/avatar/avatars/user_123/candidate.webp",
+    );
+    await discardStoredProfilePhoto(
+      bucket as never,
+      "user_123",
+      "/api/avatar/avatars/another-user/photo.webp",
+    );
+
+    expect(bucket.delete).toHaveBeenCalledTimes(1);
+    expect(bucket.delete).toHaveBeenCalledWith(
+      "avatars/user_123/candidate.webp",
+    );
   });
 });

@@ -20,7 +20,10 @@ const token = process.env.PLAYWRIGHT_AGENT_TOKEN;
  * retries and repeated runs on a persistent preview stack stay green.
  */
 test.describe.serial("talent platform integration journey", () => {
-  test.skip(!token, "No agent bearer token is configured for this environment.");
+  test.skip(
+    !token,
+    "No agent bearer token is configured for this environment.",
+  );
   test.use({
     extraHTTPHeaders: token ? { Authorization: `Bearer ${token}` } : {},
   });
@@ -46,7 +49,7 @@ test.describe.serial("talent platform integration journey", () => {
         .fill("Profile exercised end-to-end by the integration suite.");
       await createButton.click();
       await expect(
-        page.getByRole("button", { name: "Save Changes" })
+        page.getByRole("button", { name: "Save Changes" }),
       ).toBeVisible();
     }
     await page.screenshot({
@@ -54,12 +57,13 @@ test.describe.serial("talent platform integration journey", () => {
       fullPage: true,
     });
 
-    const publishButton = page.getByRole("button", { name: /^publish profile$/i });
+    const publishButton = page.getByRole("button", {
+      name: /^publish profile$/i,
+    });
     if (await publishButton.isVisible().catch(() => false)) {
       const mobileContext = await browser.newContext({
         ...devices["Pixel 7"],
-        baseURL:
-          process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:4321",
+        baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:4321",
         extraHTTPHeaders: {
           Authorization: `Bearer ${token}`,
           "x-ttv-profile-check": "hold",
@@ -73,11 +77,11 @@ test.describe.serial("talent platform integration journey", () => {
           .click();
         await expect(
           mobilePage.getByText(
-            /remove phone numbers, email addresses, or id numbers/i
-          )
+            /remove phone numbers, email addresses, or id numbers/i,
+          ),
         ).toBeVisible();
         await expect(
-          mobilePage.getByRole("button", { name: /^publish profile$/i })
+          mobilePage.getByRole("button", { name: /^publish profile$/i }),
         ).toBeVisible();
         await mobilePage.screenshot({
           path: evidence("integration-02-mobile-held"),
@@ -118,11 +122,11 @@ test.describe.serial("talent platform integration journey", () => {
 
       await expect(
         mobilePage.getByText(
-          /remove phone numbers, email addresses, or id numbers/i
-        )
+          /remove phone numbers, email addresses, or id numbers/i,
+        ),
       ).toBeVisible();
       await expect(mobilePage.locator('textarea[name="bio"]')).toHaveValue(
-        heldBio
+        heldBio,
       );
       await mobilePage.goto("/talent/preview-agent");
       await expect(mobilePage.getByText(heldBio)).toHaveCount(0);
@@ -135,15 +139,73 @@ test.describe.serial("talent platform integration journey", () => {
     }
   });
 
+  test("published identity edits are checked and a held name stays private", async ({
+    page,
+    browser,
+  }) => {
+    const heldName = "Held Identity Name";
+    const checkedName = "Checked Preview Agent";
+    const mobileContext = await browser.newContext({
+      ...devices["Pixel 7"],
+      baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:4321",
+      extraHTTPHeaders: {
+        Authorization: `Bearer ${token}`,
+        "x-ttv-profile-check": "hold",
+      },
+    });
+
+    try {
+      const mobilePage = await mobileContext.newPage();
+      await mobilePage.goto("/dashboard/profile");
+      await mobilePage.locator('input[name="name"]').fill(heldName);
+      await mobilePage.getByRole("button", { name: "Save Changes" }).click();
+      await expect(
+        mobilePage.getByText(
+          /remove phone numbers, email addresses, or id numbers/i,
+        ),
+      ).toBeVisible();
+      await expect(mobilePage.locator('input[name="name"]')).toHaveValue(
+        heldName,
+      );
+      await mobilePage.goto("/talent/preview-agent");
+      await expect(
+        mobilePage.getByRole("heading", { name: heldName }),
+      ).toHaveCount(0);
+      await mobilePage.screenshot({
+        path: evidence("integration-05-mobile-held-identity"),
+        fullPage: true,
+      });
+    } finally {
+      await mobileContext.close();
+    }
+
+    await page.context().setExtraHTTPHeaders({
+      Authorization: `Bearer ${token}`,
+      "x-ttv-profile-check": "pass",
+    });
+    await page.goto("/dashboard/profile");
+    await page.locator('input[name="name"]').fill(checkedName);
+    await page.getByRole("button", { name: "Save Changes" }).click();
+    await expect(page.getByText("Profile updated successfully!")).toBeVisible();
+    await page.goto("/talent/preview-agent");
+    await expect(
+      page.getByRole("heading", { name: checkedName }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: evidence("integration-06-checked-identity"),
+      fullPage: true,
+    });
+  });
+
   test("published profile appears publicly and receives a lead", async ({
     page,
   }) => {
     await page.goto("/talent/preview-agent");
     await expect(
-      page.getByRole("heading", { name: /ttv preview agent/i })
+      page.getByRole("heading", { name: /checked preview agent/i }),
     ).toBeVisible();
     await page.screenshot({
-      path: evidence("integration-05-public-profile"),
+      path: evidence("integration-07-public-profile"),
       fullPage: true,
     });
 
@@ -156,10 +218,12 @@ test.describe.serial("talent platform integration journey", () => {
     await page.locator('textarea[name="message"]').fill(uniqueMessage);
     // The spam guard enforces a minimum fill time of three seconds.
     await page.waitForTimeout(3_600);
-    await page.getByRole("button", { name: /send|get in touch|submit/i }).click();
+    await page
+      .getByRole("button", { name: /send|get in touch|submit/i })
+      .click();
     await expect(page.getByText(/on its way/i)).toBeVisible();
     await page.screenshot({
-      path: evidence("integration-06-contact-sent"),
+      path: evidence("integration-08-contact-sent"),
       fullPage: true,
     });
 
@@ -175,7 +239,7 @@ test.describe.serial("talent platform integration journey", () => {
     }
     await expect(page.getByText(uniqueMessage).first()).toBeVisible();
     await page.screenshot({
-      path: evidence("integration-07-lead-inbox"),
+      path: evidence("integration-09-lead-inbox"),
       fullPage: true,
     });
   });
@@ -204,10 +268,10 @@ test.describe.serial("talent platform integration journey", () => {
         .click();
     }
     await expect(
-      page.getByText(/raised your hand|withdraw/i).first()
+      page.getByText(/raised your hand|withdraw/i).first(),
     ).toBeVisible();
     await page.screenshot({
-      path: evidence("integration-08-opportunities"),
+      path: evidence("integration-10-opportunities"),
       fullPage: true,
     });
 
@@ -222,10 +286,10 @@ test.describe.serial("talent platform integration journey", () => {
       .filter({ hasText: /interested builders/i })
       .last();
     await expect(
-      interested.getByText(/preview.agent|ttv preview agent/i).first()
+      interested.getByText(/preview.agent|ttv preview agent/i).first(),
     ).toBeVisible();
     await page.screenshot({
-      path: evidence("integration-09-admin-interest"),
+      path: evidence("integration-11-admin-interest"),
       fullPage: true,
     });
   });
@@ -237,7 +301,7 @@ test.describe.serial("talent platform integration journey", () => {
     const humansLink = page.locator('#humans a[href^="/talent/"]').first();
     await expect(humansLink).toBeVisible();
     await page.screenshot({
-      path: evidence("integration-10-homepage-humans"),
+      path: evidence("integration-12-homepage-humans"),
       fullPage: true,
     });
   });

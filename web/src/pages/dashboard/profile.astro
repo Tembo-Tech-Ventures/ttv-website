@@ -6,16 +6,60 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
-import { AvatarUploadError, storeProfilePhoto } from "@/lib/avatar";
+import {
+  AvatarUploadError,
+  discardStoredProfilePhoto,
+  loadProfilePhotoForModeration,
+  storeProfilePhoto,
+} from "@/lib/avatar";
+import { isAgentSession } from "@/lib/agent-auth";
+import {
+  checkProfileContent,
+  previewProfileModerationResult,
+  PROFILE_MODERATION_PREVIEW_HEADER,
+} from "@/lib/moderation/clef";
+import {
+  saveProfileIdentity,
+  type ProfileIdentityInput,
+} from "@/components/profile/profile-handlers";
+import type { ProfileContentCheck } from "@/components/portfolio/portfolio-handlers";
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
 
 let success = "";
 let error = "";
+let moderationMessages: string[] = [];
+let submittedName: string | null = null;
+
+const previewModeration = previewProfileModerationResult(
+  env.DEPLOYMENT_ENVIRONMENT,
+  isAgentSession(Astro.locals.session?.userAgent),
+  Astro.request.headers.get(PROFILE_MODERATION_PREVIEW_HEADER),
+);
+const moderateProfile: ProfileContentCheck = async (state, avatarUrl) => {
+  if (previewModeration) {
+    return { ...previewModeration, publicAvatarUrl: avatarUrl };
+  }
+  const moderation = await checkProfileContent(env.AI, state, {
+    gatewayName: env.AI_GATEWAY_NAME,
+    loadAvatarImage: avatarUrl
+      ? () => loadProfilePhotoForModeration(env.BUCKET, avatarUrl)
+      : undefined,
+  });
+  return { ...moderation, publicAvatarUrl: avatarUrl };
+};
+const discardAvatar = async (imageUrl: string | null | undefined) => {
+  try {
+    await discardStoredProfilePhoto(env.BUCKET, user.id, imageUrl);
+  } catch {
+    // Cleanup must not replace the moderation result shown to the student.
+  }
+};
 
 // Handle POST — update user profile or avatar
 if (Astro.request.method === "POST") {
+  let uploadedAvatarUrl: string | null = null;
   try {
     const formData = await Astro.request.formData();
     const action = formData.get("action");
@@ -27,32 +71,61 @@ if (Astro.request.method === "POST") {
         throw new AvatarUploadError("Please choose an image to upload.");
       }
 
+      const currentProfile = await db.query.studentProfile.findFirst({
+        where: eq(schema.studentProfile.userId, user.id),
+        columns: { status: true },
+      });
+      const previousImageUrl = user.image;
       const uploadedAvatar = await storeProfilePhoto(env, {
         userId: user.id,
         file: avatarFile,
-        previousImageUrl: user.image,
+        previousImageUrl,
+        deletePrevious: false,
       });
+      uploadedAvatarUrl = uploadedAvatar.imageUrl;
 
-      await db
-        .update(schema.user)
-        .set({ image: uploadedAvatar.imageUrl })
-        .where(eq(schema.user.id, user.id));
-
-      user.image = uploadedAvatar.imageUrl;
-      success = "Profile photo updated successfully!";
+      const result = await saveProfileIdentity(
+        db,
+        user.id,
+        { avatarUrl: uploadedAvatar.imageUrl },
+        moderateProfile,
+      );
+      if (!result.success) {
+        await discardAvatar(uploadedAvatarUrl);
+        uploadedAvatarUrl = null;
+        error = result.error ?? "The profile photo could not be updated.";
+        moderationMessages = result.moderationMessages ?? [];
+        Astro.response.status = result.moderationOutcome === "hold" ? 422 : 409;
+      } else {
+        user.image = uploadedAvatar.imageUrl;
+        success = "Profile photo updated successfully!";
+        if (currentProfile?.status !== "SUSPENDED") {
+          await discardAvatar(previousImageUrl);
+        }
+      }
     } else {
       const name = (formData.get("name") as string)?.trim();
 
       if (!name) {
         error = "Name is required.";
       } else {
-        await db
-          .update(schema.user)
-          .set({ name })
-          .where(eq(schema.user.id, user.id));
-
-        user.name = name;
-        success = "Profile updated successfully!";
+        submittedName = name;
+        const input: ProfileIdentityInput = { name };
+        const result = await saveProfileIdentity(
+          db,
+          user.id,
+          input,
+          moderateProfile,
+        );
+        if (!result.success) {
+          error = result.error ?? "The profile could not be updated.";
+          moderationMessages = result.moderationMessages ?? [];
+          Astro.response.status = result.moderationOutcome === "hold" ? 422 : 409;
+        } else {
+          user.name = name;
+          submittedName = null;
+          success = "Profile updated successfully!";
+        }
       }
     }
   } catch (e) {
@@ -81,7 +154,12 @@ if (Astro.request.method === "POST") {
 
     {error && (
       <div class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
-        {error}
+        <p>{error}</p>
+        {moderationMessages.length > 0 && (
+          <ul class="mt-2 list-disc space-y-1 pl-5">
+            {moderationMessages.map((message) => <li>{message}</li>)}
+          </ul>
+        )}
       </div>
     )}
 
@@ -143,7 +221,7 @@ if (Astro.request.method === "POST") {
               name="name"
               type="text"
               required
-              value={user.name}
+              value={submittedName ?? user.name}
               class="form-control placeholder:text-ink-muted"
             />
           </div>

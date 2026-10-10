@@ -4,7 +4,11 @@ import { describe, expect, it } from "vitest";
 
 const migrationSql = readFileSync(
   new URL("./0012_round_punisher.sql", import.meta.url),
-  "utf8"
+  "utf8",
+).replaceAll("--> statement-breakpoint", "");
+const identitySnapshotMigrationSql = readFileSync(
+  new URL("./0013_solid_zzzax.sql", import.meta.url),
+  "utf8",
 ).replaceAll("--> statement-breakpoint", "");
 
 function createPreMigrationDatabase() {
@@ -24,7 +28,7 @@ describe("profile moderation migration", () => {
     const database = createPreMigrationDatabase();
     database
       .prepare(
-        'INSERT INTO "studentProfile" ("id", "status", "publishedAt") VALUES (?, ?, ?)'
+        'INSERT INTO "studentProfile" ("id", "status", "publishedAt") VALUES (?, ?, ?)',
       )
       .run("published", "PUBLISHED", 1_700_000_000);
 
@@ -49,7 +53,7 @@ describe("profile moderation migration", () => {
     const database = createPreMigrationDatabase();
     database
       .prepare(
-        'INSERT INTO "studentProfile" ("id", "status", "publishedAt") VALUES (?, ?, NULL)'
+        'INSERT INTO "studentProfile" ("id", "status", "publishedAt") VALUES (?, ?, NULL)',
       )
       .run("legacy-review", "IN_REVIEW");
 
@@ -67,6 +71,60 @@ describe("profile moderation migration", () => {
     });
     expect(row.publishedAt).toEqual(expect.any(Number));
     expect(row.moderationCheckedAt).toEqual(expect.any(Number));
+    database.close();
+  });
+});
+
+describe("public identity snapshot migration", () => {
+  it("freezes names and only locally stored avatars for existing public profiles", () => {
+    const database = new DatabaseSync(":memory:");
+    database.exec(`
+      CREATE TABLE "user" (
+        "id" text PRIMARY KEY NOT NULL,
+        "name" text NOT NULL,
+        "image" text
+      );
+      CREATE TABLE "studentProfile" (
+        "id" text PRIMARY KEY NOT NULL,
+        "userId" text NOT NULL,
+        "status" text DEFAULT 'DRAFT' NOT NULL
+      );
+      INSERT INTO "user" ("id", "name", "image") VALUES
+        ('local-user', 'Local Builder', '/api/avatar/avatars/local-user/photo.webp'),
+        ('remote-user', 'Remote Builder', 'https://avatars.githubusercontent.com/u/123'),
+        ('draft-user', 'Draft Builder', '/api/avatar/avatars/draft-user/photo.webp');
+      INSERT INTO "studentProfile" ("id", "userId", "status") VALUES
+        ('local-profile', 'local-user', 'PUBLISHED'),
+        ('remote-profile', 'remote-user', 'PUBLISHED'),
+        ('draft-profile', 'draft-user', 'DRAFT');
+    `);
+
+    database.exec(identitySnapshotMigrationSql);
+
+    expect(
+      database
+        .prepare(
+          'SELECT "publicName", "publicAvatarUrl" FROM "studentProfile" WHERE "id" = ?',
+        )
+        .get("local-profile"),
+    ).toEqual({
+      publicName: "Local Builder",
+      publicAvatarUrl: "/api/avatar/avatars/local-user/photo.webp",
+    });
+    expect(
+      database
+        .prepare(
+          'SELECT "publicName", "publicAvatarUrl" FROM "studentProfile" WHERE "id" = ?',
+        )
+        .get("remote-profile"),
+    ).toEqual({ publicName: "Remote Builder", publicAvatarUrl: null });
+    expect(
+      database
+        .prepare(
+          'SELECT "publicName", "publicAvatarUrl" FROM "studentProfile" WHERE "id" = ?',
+        )
+        .get("draft-profile"),
+    ).toEqual({ publicName: null, publicAvatarUrl: null });
     database.close();
   });
 });

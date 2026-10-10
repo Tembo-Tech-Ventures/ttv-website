@@ -59,7 +59,13 @@ if (Astro.request.method === "POST") {
     const action = parseAdminProfileAction(formData.get("profileAction"));
     const current = await db.query.studentProfile.findFirst({
       where: eq(schema.studentProfile.id, id),
-      columns: { status: true, publishedAt: true },
+      columns: {
+        status: true,
+        publishedAt: true,
+        publicName: true,
+        publicAvatarUrl: true,
+      },
+      with: { user: { columns: { name: true, image: true } } },
     });
 
     if (!current) return Astro.redirect("/admin/profiles");

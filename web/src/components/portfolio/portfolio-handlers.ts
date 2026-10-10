@@ -20,6 +20,7 @@ import {
   moderationColumns,
   publishesAfterModeration,
 } from "@/lib/talent/profile-moderation";
+import { safePublicProfileAvatarUrl } from "@/lib/avatar";
 
 const HANDLE_ERROR_MESSAGES: Record<HandleValidationError, string> = {
   too_short: "Handle must be at least 3 characters",
@@ -40,10 +41,13 @@ export interface ProfileFormResult {
   published?: boolean;
 }
 
+export const PROFILE_CHANGED_MESSAGE =
+  "This profile changed while your request was running. Reload and try again.";
+
 export type ProfileContentCheck = (
   state: ProfileModerationState,
   avatarUrl: string | null,
-) => Promise<ProfileModerationResult>;
+) => Promise<ProfileModerationResult & { publicAvatarUrl?: string | null }>;
 
 const failOpenCheck: ProfileContentCheck = () =>
   Promise.resolve({ outcome: "error", flags: [], scores: {} });
@@ -52,7 +56,7 @@ async function runContentCheck(
   checkContent: ProfileContentCheck | undefined,
   state: ProfileModerationState,
   avatarUrl: string | null,
-): Promise<ProfileModerationResult> {
+): ReturnType<ProfileContentCheck> {
   try {
     return await (checkContent ?? failOpenCheck)(state, avatarUrl);
   } catch {
@@ -73,6 +77,16 @@ interface ProfileValues {
   linkedinUrl: string | null;
 }
 
+interface CurrentProfile {
+  handle: string;
+  publishedAt: Date | null;
+  status: "DRAFT" | "PUBLISHED" | "SUSPENDED";
+  githubLogin: string | null;
+  publicName: string | null;
+  publicAvatarUrl: string | null;
+  user: { name: string; image: string | null };
+}
+
 function collectFieldErrors(
   issues: readonly { path: PropertyKey[]; message: string }[],
 ): Record<string, string> {
@@ -91,8 +105,70 @@ function serializeOptionalSkills(skills: string[] | undefined): string | null {
 function profileChangedDuringCheck(): ProfileFormResult {
   return {
     success: false,
-    error: "This profile changed while its content check was running. Reload and try again.",
+    error: PROFILE_CHANGED_MESSAGE,
   };
+}
+
+function publicIdentityColumns(
+  moderation: Awaited<ReturnType<ProfileContentCheck>>,
+  state: ProfileModerationState,
+  avatarUrl: string | null,
+) {
+  return {
+    publicName: state.displayName,
+    publicAvatarUrl: Object.hasOwn(moderation, "publicAvatarUrl")
+      ? (moderation.publicAvatarUrl ?? null)
+      : safePublicProfileAvatarUrl(avatarUrl),
+  };
+}
+
+async function updateDraftProfile(
+  db: Database,
+  userId: string,
+  profileId: string,
+  values: ProfileValues,
+): Promise<ProfileFormResult> {
+  const updateResult = await db
+    .update(schema.studentProfile)
+    .set(values)
+    .where(
+      and(
+        eq(schema.studentProfile.id, profileId),
+        eq(schema.studentProfile.userId, userId),
+        eq(schema.studentProfile.status, "DRAFT"),
+      ),
+    );
+  return updateResult.meta.changes
+    ? { success: true }
+    : profileChangedDuringCheck();
+}
+
+function saveNonDraftProfile(
+  db: Database,
+  userId: string,
+  profileId: string,
+  current: CurrentProfile,
+  values: ProfileValues,
+  skills: string[],
+  checkContent?: ProfileContentCheck,
+): Promise<ProfileFormResult> {
+  if (current.status === "PUBLISHED") {
+    return savePublishedProfileEdit(
+      db,
+      userId,
+      profileId,
+      values,
+      skills,
+      current.publicName ?? current.user.name,
+      current.githubLogin,
+      current.publicAvatarUrl,
+      checkContent,
+    );
+  }
+  return Promise.resolve({
+    success: false,
+    error: "A suspended profile cannot be edited.",
+  });
 }
 
 async function savePublishedProfileEdit(
@@ -106,20 +182,21 @@ async function savePublishedProfileEdit(
   avatarUrl: string | null,
   checkContent?: ProfileContentCheck,
 ): Promise<ProfileFormResult> {
+  const moderationState: ProfileModerationState = {
+    displayName,
+    handle: values.handle,
+    headline: values.headline,
+    bio: values.bio,
+    location: values.location,
+    country: values.country,
+    skills,
+    githubLogin,
+    portfolioUrl: values.portfolioUrl,
+    linkedinUrl: values.linkedinUrl,
+  };
   const moderation = await runContentCheck(
     checkContent,
-    {
-      displayName,
-      handle: values.handle,
-      headline: values.headline,
-      bio: values.bio,
-      location: values.location,
-      country: values.country,
-      skills,
-      githubLogin,
-      portfolioUrl: values.portfolioUrl,
-      linkedinUrl: values.linkedinUrl,
-    },
+    moderationState,
     avatarUrl,
   );
   const moderationValues = moderationColumns(moderation);
@@ -146,7 +223,11 @@ async function savePublishedProfileEdit(
 
   const updateResult = await db
     .update(schema.studentProfile)
-    .set({ ...values, ...moderationValues })
+    .set({
+      ...values,
+      ...moderationValues,
+      ...publicIdentityColumns(moderation, moderationState, avatarUrl),
+    })
     .where(
       and(
         eq(schema.studentProfile.id, profileId),
@@ -220,15 +301,7 @@ export async function saveProfile(
   checkContent?: ProfileContentCheck,
 ): Promise<ProfileFormResult> {
   const data = extractProfileFormData(formData);
-  let current:
-    | {
-        handle: string;
-        publishedAt: Date | null;
-        status: "DRAFT" | "PUBLISHED" | "SUSPENDED";
-        githubLogin: string | null;
-        user: { name: string; image: string | null };
-      }
-    | undefined;
+  let current: CurrentProfile | undefined;
 
   // A published profile's handle is part of every blog post permalink
   // (`/blog/[handle]/[slug]`), so a rename would silently 404 every post and
@@ -244,6 +317,8 @@ export async function saveProfile(
         publishedAt: true,
         status: true,
         githubLogin: true,
+        publicName: true,
+        publicAvatarUrl: true,
       },
       with: { user: { columns: { name: true, image: true } } },
     });
@@ -298,41 +373,25 @@ export async function saveProfile(
     }
 
     if (current.status !== "DRAFT") {
-      return current.status === "PUBLISHED"
-        ? savePublishedProfileEdit(
-            db,
-            userId,
-            existingProfileId,
-            values,
-            parsed.data.skills ?? [],
-            current.user.name,
-            current.githubLogin,
-            current.user.image,
-            checkContent,
-          )
-        : {
-            success: false,
-            error: "A suspended profile cannot be edited.",
-          };
+      return saveNonDraftProfile(
+        db,
+        userId,
+        existingProfileId,
+        current,
+        values,
+        parsed.data.skills ?? [],
+        checkContent,
+      );
     }
 
-    await db
-      .update(schema.studentProfile)
-      .set(values)
-      .where(
-        and(
-          eq(schema.studentProfile.id, existingProfileId),
-          eq(schema.studentProfile.userId, userId),
-        ),
-      );
-  } else {
-    await db.insert(schema.studentProfile).values({
-      ...values,
-      userId,
-      status: "DRAFT",
-    });
+    return updateDraftProfile(db, userId, existingProfileId, values);
   }
 
+  await db.insert(schema.studentProfile).values({
+    ...values,
+    userId,
+    status: "DRAFT",
+  });
   return { success: true };
 }
 
@@ -374,23 +433,29 @@ export async function publishProfile(
     };
   }
 
+  const moderationState: ProfileModerationState = {
+    displayName: profile.user.name,
+    handle: profile.handle,
+    headline: profile.headline,
+    bio: profile.bio,
+    location: profile.location,
+    country: profile.country,
+    skills: parseSkillsJson(profile.skills),
+    githubLogin: profile.githubLogin,
+    portfolioUrl: profile.portfolioUrl,
+    linkedinUrl: profile.linkedinUrl,
+  };
   const moderation = await runContentCheck(
     checkContent,
-    {
-      displayName: profile.user.name,
-      handle: profile.handle,
-      headline: profile.headline,
-      bio: profile.bio,
-      location: profile.location,
-      country: profile.country,
-      skills: parseSkillsJson(profile.skills),
-      githubLogin: profile.githubLogin,
-      portfolioUrl: profile.portfolioUrl,
-      linkedinUrl: profile.linkedinUrl,
-    },
+    moderationState,
     profile.user.image,
   );
   const moderationValues = moderationColumns(moderation);
+  const identityValues = publicIdentityColumns(
+    moderation,
+    moderationState,
+    profile.user.image,
+  );
 
   const updateResult = await db
     .update(schema.studentProfile)
@@ -398,10 +463,11 @@ export async function publishProfile(
       publishesAfterModeration(moderation)
         ? {
             ...moderationValues,
+            ...identityValues,
             status: "PUBLISHED",
             publishedAt: profile.publishedAt ?? new Date(),
           }
-        : moderationValues,
+        : { ...moderationValues, ...identityValues },
     )
     .where(
       and(

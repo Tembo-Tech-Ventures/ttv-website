@@ -17,7 +17,7 @@ export function isAgentEnvironmentName(value) {
 export function assertAgentEnvironmentName(value) {
   if (!isAgentEnvironmentName(value)) {
     throw new Error(
-      `Agent environment names must start with "agent-", contain at most 40 lowercase letters, numbers, or hyphens, and may not end in a hyphen; received "${value}".`
+      `Agent environment names must start with "agent-", contain at most 40 lowercase letters, numbers, or hyphens, and may not end in a hyphen; received "${value}".`,
     );
   }
   return value;
@@ -26,7 +26,7 @@ export function assertAgentEnvironmentName(value) {
 function assertPreviewSecret(secret) {
   if (secret.length < MINIMUM_PREVIEW_SECRET_LENGTH) {
     throw new Error(
-      `AGENT_PREVIEW_SECRET must contain at least ${MINIMUM_PREVIEW_SECRET_LENGTH} characters.`
+      `AGENT_PREVIEW_SECRET must contain at least ${MINIMUM_PREVIEW_SECRET_LENGTH} characters.`,
     );
   }
 }
@@ -50,7 +50,7 @@ export function deriveAgentPreviewAuthSecret(secret, environmentName) {
 export function deriveAgentPreviewCredentialKey(secret, environmentName) {
   return Buffer.from(
     deriveSecret(secret, environmentName, PREVIEW_CREDENTIAL_KEY_CONTEXT),
-    "hex"
+    "hex",
   )
     .subarray(0, 32)
     .toString("base64");
@@ -94,7 +94,7 @@ export async function seedAgentPreviewAccess({
       "agent-preview@invalid.ttv",
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   await executeQuery(
@@ -102,13 +102,13 @@ export async function seedAgentPreviewAccess({
     `INSERT INTO "Roles" ("id", "name", "createdAt", "updatedAt")
      VALUES (?, 'ADMIN', ?, ?)
      ON CONFLICT("name") DO NOTHING`,
-    ["ttv-agent-preview-admin-role", createdAt, createdAt]
+    ["ttv-agent-preview-admin-role", createdAt, createdAt],
   );
 
   const roleResult = await executeQuery(
     databaseId,
     `SELECT "id" FROM "Roles" WHERE "name" = 'ADMIN' LIMIT 1`,
-    []
+    [],
   );
   const roleId = firstQueryRow(roleResult)?.id;
   if (!roleId) throw new Error("Unable to resolve the preview ADMIN role.");
@@ -128,7 +128,7 @@ export async function seedAgentPreviewAccess({
       roleId,
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   await executeQuery(
@@ -151,7 +151,7 @@ export async function seedAgentPreviewAccess({
       AGENT_PREVIEW_USER_ID,
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   return {
@@ -182,7 +182,7 @@ export async function seedAgentPreviewFixtures({
   await executeQuery(
     databaseId,
     `DELETE FROM "studentProfile" WHERE "userId" = ?`,
-    [AGENT_PREVIEW_USER_ID]
+    [AGENT_PREVIEW_USER_ID],
   );
 
   // Curriculum
@@ -200,7 +200,7 @@ export async function seedAgentPreviewFixtures({
       "Fixture curriculum for preview environments",
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   // Browser projects share one preview identity. Give every project/retry a
@@ -215,7 +215,7 @@ export async function seedAgentPreviewFixtures({
         name: `Open Cohort ${viewportLabel} Applications ${retry + 1}`,
         description: `Open self-application fixture for ${viewport} retry ${retry}`,
       };
-    })
+    }),
   );
   const closedApplicationFixture = {
     id: "ttv-fixture-program-applications-closed",
@@ -259,27 +259,26 @@ export async function seedAgentPreviewFixtures({
         fixture.applicationsOpen ? 1 : 0,
         createdAt,
         createdAt,
-      ]
+      ],
     );
   }
 
   const selfApplicationProgramIds = selfApplicationFixtures.map(
-    (fixture) => fixture.id
+    (fixture) => fixture.id,
   );
   await executeQuery(
     databaseId,
     `DELETE FROM "programApplication"
      WHERE "userId" = ?
        AND "programId" IN (${selfApplicationProgramIds.map(() => "?").join(", ")})`,
-    [AGENT_PREVIEW_USER_ID, ...selfApplicationProgramIds]
+    [AGENT_PREVIEW_USER_ID, ...selfApplicationProgramIds],
   );
 
   // Each browser project also gets a distinct existing staff user. Remove
   // roles those journeys may have created, while preserving deterministic
   // cross-cohort roles used to prove scoped deletion.
   const staffFixtures = ["desktop", "mobile"].map((viewport) => {
-    const viewportLabel =
-      viewport.charAt(0).toUpperCase() + viewport.slice(1);
+    const viewportLabel = viewport.charAt(0).toUpperCase() + viewport.slice(1);
     return {
       viewport,
       userId: `ttv-fixture-user-staff-${viewport}`,
@@ -296,7 +295,7 @@ export async function seedAgentPreviewFixtures({
     [
       ...staffFixtures.map((fixture) => fixture.userId),
       ...selfApplicationProgramIds,
-    ]
+    ],
   );
 
   for (const fixture of staffFixtures) {
@@ -310,7 +309,7 @@ export async function seedAgentPreviewFixtures({
          "email" = excluded."email",
          "emailVerified" = 1,
          "updatedAt" = excluded."updatedAt"`,
-      [fixture.userId, fixture.name, fixture.email, createdAt, createdAt]
+      [fixture.userId, fixture.name, fixture.email, createdAt, createdAt],
     );
     await executeQuery(
       databaseId,
@@ -328,7 +327,7 @@ export async function seedAgentPreviewFixtures({
         fixture.userId,
         createdAt,
         createdAt,
-      ]
+      ],
     );
   }
 
@@ -336,43 +335,40 @@ export async function seedAgentPreviewFixtures({
   // mobile journeys can mutate concurrently without racing each other. Reset
   // only these deterministic isolated-preview users on every seed so retries
   // and redeploys converge to the same starting roster.
-  const cohortManagementFixtures = ["desktop", "mobile"].flatMap(
-    (viewport) => {
-      const viewportLabel =
-        viewport.charAt(0).toUpperCase() + viewport.slice(1);
-      const fixture = ({ key, label, applicationStatus = null }) => ({
-        userId: `ttv-fixture-user-cohort-${viewport}-${key}`,
-        applicationId: applicationStatus
-          ? `ttv-fixture-app-cohort-${viewport}-${key}`
-          : null,
-        name: `Cohort ${viewportLabel} ${label}`,
-        email: `cohort-${viewport}-${key}@invalid.ttv`,
-        applicationStatus,
-      });
+  const cohortManagementFixtures = ["desktop", "mobile"].flatMap((viewport) => {
+    const viewportLabel = viewport.charAt(0).toUpperCase() + viewport.slice(1);
+    const fixture = ({ key, label, applicationStatus = null }) => ({
+      userId: `ttv-fixture-user-cohort-${viewport}-${key}`,
+      applicationId: applicationStatus
+        ? `ttv-fixture-app-cohort-${viewport}-${key}`
+        : null,
+      name: `Cohort ${viewportLabel} ${label}`,
+      email: `cohort-${viewport}-${key}@invalid.ttv`,
+      applicationStatus,
+    });
 
-      return [
-        fixture({ key: "current", label: "Current Learner" }),
-        fixture({ key: "alumni", label: "Historical Alumni" }),
-        fixture({
-          key: "pending",
-          label: "Pending Learner",
-          applicationStatus: "PENDING",
-        }),
-        fixture({
-          key: "audit",
-          label: "Audit Learner",
-          applicationStatus: "AUDIT",
-        }),
-        fixture({
-          key: "approved",
-          label: "Approved Learner",
-          applicationStatus: "APPROVED",
-        }),
-      ];
-    }
-  );
+    return [
+      fixture({ key: "current", label: "Current Learner" }),
+      fixture({ key: "alumni", label: "Historical Alumni" }),
+      fixture({
+        key: "pending",
+        label: "Pending Learner",
+        applicationStatus: "PENDING",
+      }),
+      fixture({
+        key: "audit",
+        label: "Audit Learner",
+        applicationStatus: "AUDIT",
+      }),
+      fixture({
+        key: "approved",
+        label: "Approved Learner",
+        applicationStatus: "APPROVED",
+      }),
+    ];
+  });
   const cohortManagementUserIds = cohortManagementFixtures.map(
-    (fixture) => fixture.userId
+    (fixture) => fixture.userId,
   );
 
   await executeQuery(
@@ -380,7 +376,7 @@ export async function seedAgentPreviewFixtures({
     `DELETE FROM "programApplication"
      WHERE "programId" = ?
        AND "userId" IN (${cohortManagementUserIds.map(() => "?").join(", ")})`,
-    ["ttv-fixture-program-cohort-04", ...cohortManagementUserIds]
+    ["ttv-fixture-program-cohort-04", ...cohortManagementUserIds],
   );
 
   for (const fixture of cohortManagementFixtures) {
@@ -394,7 +390,7 @@ export async function seedAgentPreviewFixtures({
          "email" = excluded."email",
          "emailVerified" = 1,
          "updatedAt" = excluded."updatedAt"`,
-      [fixture.userId, fixture.name, fixture.email, createdAt, createdAt]
+      [fixture.userId, fixture.name, fixture.email, createdAt, createdAt],
     );
 
     if (!fixture.applicationId || !fixture.applicationStatus) continue;
@@ -418,7 +414,7 @@ export async function seedAgentPreviewFixtures({
         fixture.applicationStatus,
         createdAt,
         createdAt,
-      ]
+      ],
     );
   }
 
@@ -442,7 +438,7 @@ export async function seedAgentPreviewFixtures({
       completedAt,
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   // User: Amina Fixture
@@ -460,7 +456,7 @@ export async function seedAgentPreviewFixtures({
       "amina-fixture@invalid.ttv",
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   // COMPLETED application for Amina
@@ -482,7 +478,7 @@ export async function seedAgentPreviewFixtures({
       completedAt,
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   // PUBLISHED profile for Amina
@@ -490,10 +486,10 @@ export async function seedAgentPreviewFixtures({
     databaseId,
     `INSERT INTO "studentProfile"
       ("id", "userId", "handle", "status", "headline", "country", "skills",
-       "openToFreelance", "openToRoles", "publishedAt", "moderationOutcome",
+       "openToFreelance", "openToRoles", "publishedAt", "publicName", "moderationOutcome",
        "moderationFlags", "moderationScores", "moderationCheckedAt",
        "moderationReviewRequired", "createdAt", "updatedAt")
-     VALUES (?, ?, ?, 'PUBLISHED', ?, ?, ?, 1, 0, ?, 'error', '[]', '{}', ?, 1, ?, ?)
+     VALUES (?, ?, ?, 'PUBLISHED', ?, ?, ?, 1, 0, ?, 'Amina Fixture', 'error', '[]', '{}', ?, 1, ?, ?)
      ON CONFLICT("id") DO UPDATE SET
        "userId" = excluded."userId",
        "handle" = excluded."handle",
@@ -504,6 +500,7 @@ export async function seedAgentPreviewFixtures({
        "openToFreelance" = 1,
        "openToRoles" = 0,
        "publishedAt" = excluded."publishedAt",
+       "publicName" = 'Amina Fixture',
        "moderationOutcome" = 'error',
        "moderationFlags" = '[]',
        "moderationScores" = '{}',
@@ -521,7 +518,7 @@ export async function seedAgentPreviewFixtures({
       publishedAt,
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   // Public-reader and moderation fixtures. The second published post is kept
@@ -619,7 +616,7 @@ export async function seedAgentPreviewFixtures({
         fixture.publishedAt,
         createdAt,
         createdAt,
-      ]
+      ],
     );
   }
 
@@ -639,7 +636,7 @@ export async function seedAgentPreviewFixtures({
       "invalid-completion-fixture@invalid.ttv",
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   await executeQuery(
@@ -660,15 +657,15 @@ export async function seedAgentPreviewFixtures({
       "ttv-fixture-user-invalid-completion",
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   await executeQuery(
     databaseId,
     `INSERT INTO "studentProfile"
       ("id", "userId", "handle", "status", "headline", "country", "skills",
-       "openToFreelance", "openToRoles", "publishedAt", "createdAt", "updatedAt")
-     VALUES (?, ?, ?, 'PUBLISHED', ?, ?, '[]', 0, 0, ?, ?, ?)
+       "openToFreelance", "openToRoles", "publishedAt", "publicName", "createdAt", "updatedAt")
+     VALUES (?, ?, ?, 'PUBLISHED', ?, ?, '[]', 0, 0, ?, 'Invalid Completion Fixture', ?, ?)
      ON CONFLICT("id") DO UPDATE SET
        "userId" = excluded."userId",
        "handle" = excluded."handle",
@@ -679,6 +676,7 @@ export async function seedAgentPreviewFixtures({
        "openToFreelance" = 0,
        "openToRoles" = 0,
        "publishedAt" = excluded."publishedAt",
+       "publicName" = 'Invalid Completion Fixture',
        "updatedAt" = excluded."updatedAt"`,
     [
       "ttv-fixture-profile-invalid-completion",
@@ -689,7 +687,7 @@ export async function seedAgentPreviewFixtures({
       publishedAt,
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   // Highlights for Amina
@@ -722,7 +720,7 @@ export async function seedAgentPreviewFixtures({
       createdAt,
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   await executeQuery(
@@ -754,7 +752,7 @@ export async function seedAgentPreviewFixtures({
       createdAt,
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   // User: Kwame Fixture
@@ -772,7 +770,7 @@ export async function seedAgentPreviewFixtures({
       "kwame-fixture@invalid.ttv",
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   // COMPLETED application for Kwame
@@ -794,23 +792,24 @@ export async function seedAgentPreviewFixtures({
       completedAt,
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   // Profile held by the content check for Kwame
   await executeQuery(
     databaseId,
     `INSERT INTO "studentProfile"
-      ("id", "userId", "handle", "status", "moderationOutcome",
+      ("id", "userId", "handle", "status", "moderationOutcome", "publicName",
        "moderationFlags", "moderationScores", "moderationCheckedAt",
        "moderationReviewRequired", "createdAt", "updatedAt")
-     VALUES (?, ?, ?, 'DRAFT', 'hold', '["contains_contact_details"]',
+     VALUES (?, ?, ?, 'DRAFT', 'hold', 'Kwame Fixture', '["contains_contact_details"]',
        '{"contains_contact_details":0.91}', ?, 1, ?, ?)
      ON CONFLICT("id") DO UPDATE SET
        "userId" = excluded."userId",
        "handle" = excluded."handle",
        "status" = 'DRAFT',
        "moderationOutcome" = 'hold',
+       "publicName" = 'Kwame Fixture',
        "moderationFlags" = '["contains_contact_details"]',
        "moderationScores" = '{"contains_contact_details":0.91}',
        "moderationCheckedAt" = excluded."moderationCheckedAt",
@@ -823,7 +822,7 @@ export async function seedAgentPreviewFixtures({
       createdAt,
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   // Client project: APPROVED
@@ -856,7 +855,7 @@ export async function seedAgentPreviewFixtures({
       "6 weeks",
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   // Client project: PENDING
@@ -885,7 +884,7 @@ export async function seedAgentPreviewFixtures({
       '["React","Node"]',
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   // Observability attention fixtures: one failed recording and one Drive
@@ -908,7 +907,7 @@ export async function seedAgentPreviewFixtures({
       "Fixture transcription failed",
       createdAt,
       createdAt,
-    ]
+    ],
   );
 
   await executeQuery(
@@ -931,6 +930,6 @@ export async function seedAgentPreviewFixtures({
       "Fixture Drive scan failed",
       createdAt,
       createdAt,
-    ]
+    ],
   );
 }

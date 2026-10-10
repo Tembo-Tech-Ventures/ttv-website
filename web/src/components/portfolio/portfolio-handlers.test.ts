@@ -74,10 +74,13 @@ function mockDb(
       publishedAt: Date | null;
       status?: "DRAFT" | "PUBLISHED" | "SUSPENDED";
       githubLogin?: string | null;
+      publicName?: string | null;
+      publicAvatarUrl?: string | null;
       user?: { name: string; image?: string | null };
     } | null;
     insertProfile?: () => void;
     updateProfile?: (condition?: unknown) => void;
+    updateChanges?: number;
     setProfile?: (values: unknown) => void;
   } = {},
 ) {
@@ -116,7 +119,7 @@ function mockDb(
         return {
           where: (condition: unknown) => {
             updateFn(condition);
-            return { meta: { changes: 1 } };
+            return { meta: { changes: overrides.updateChanges ?? 1 } };
           },
         };
       }),
@@ -380,6 +383,34 @@ describe("saveProfile", () => {
       expect(result.success).toBe(true);
       expect(updateFn).toHaveBeenCalledTimes(1);
     });
+
+    it("does not mutate a draft suspended while the save is in flight", async () => {
+      const updateFn = vi.fn();
+      const db = mockDb({
+        findProfileForLock: {
+          handle: "draft-user",
+          publishedAt: null,
+          status: "DRAFT",
+        },
+        findProfileByHandle: { id: "profile-1" },
+        updateProfile: updateFn,
+        updateChanges: 0,
+      });
+
+      const result = await saveProfile(
+        db as never,
+        "user-1",
+        makeFormData({ handle: "draft-user", bio: "Changed content" }),
+        "profile-1",
+      );
+
+      expect(result).toEqual({
+        success: false,
+        error:
+          "This profile changed while your request was running. Reload and try again.",
+      });
+      expectStatusWriteGuard(updateFn, "DRAFT");
+    });
   });
 
   it("rejects skills exceeding max 12", async () => {
@@ -475,6 +506,8 @@ describe("publishProfile", () => {
       expect.objectContaining({
         status: "PUBLISHED",
         publishedAt: checkedAt,
+        publicName: "New User",
+        publicAvatarUrl: "/api/avatar/avatars/user-1/photo.webp",
         moderationOutcome: "pass",
         moderationReviewRequired: false,
       }),
@@ -512,23 +545,29 @@ describe("publishProfile", () => {
       }),
     );
     expect(setProfile).toHaveBeenCalledWith(
-      expect.not.objectContaining({
-        status: "PUBLISHED",
-        publishedAt: expect.anything(),
+      expect.objectContaining({
+        publicName: "New User",
+        publicAvatarUrl: "/api/avatar/avatars/user-1/photo.webp",
+        moderationOutcome: "hold",
       }),
     );
+    expect(setProfile.mock.calls[0]?.[0]).not.toHaveProperty("status");
+    expect(setProfile.mock.calls[0]?.[0]).not.toHaveProperty("publishedAt");
   });
 
   it("does not overwrite an admin status change made during the check", async () => {
     const { db, where } = moderationDb(draftProfile, vi.fn(), 0);
-    const result = await publishProfile(db as never, "user-1", "profile-1", () =>
-      Promise.resolve({ outcome: "pass", flags: [], scores: {} }),
+    const result = await publishProfile(
+      db as never,
+      "user-1",
+      "profile-1",
+      () => Promise.resolve({ outcome: "pass", flags: [], scores: {} }),
     );
 
     expect(result).toEqual({
       success: false,
       error:
-        "This profile changed while its content check was running. Reload and try again.",
+        "This profile changed while your request was running. Reload and try again.",
     });
     expectStatusWriteGuard(where, "DRAFT");
   });
@@ -582,7 +621,9 @@ describe("published profile edits", () => {
     publishedAt: new Date("2026-01-01"),
     status: "PUBLISHED" as const,
     githubLogin: "existing-user",
-    user: { name: "Existing User", image: null },
+    publicName: "Checked Public Name",
+    publicAvatarUrl: "/api/avatar/avatars/user-1/checked.webp",
+    user: { name: "Mutable Account Name", image: null },
   };
 
   it("keeps the previous public fields live when an edit is held", async () => {
@@ -594,17 +635,17 @@ describe("published profile edits", () => {
       setProfile,
       updateProfile,
     });
+    const checkContent = vi.fn().mockResolvedValue({
+      outcome: "hold",
+      flags: ["contains_contact_details"],
+      scores: { contains_contact_details: 0.99 },
+    });
     const result = await saveProfile(
       db as never,
       "user-1",
       makeFormData({ handle: "existing-user", bio: "email me@example.com" }),
       "profile-1",
-      () =>
-        Promise.resolve({
-          outcome: "hold",
-          flags: ["contains_contact_details"],
-          scores: { contains_contact_details: 0.99 },
-        }),
+      checkContent,
     );
 
     expect(result).toMatchObject({ success: false, moderationOutcome: "hold" });
@@ -615,6 +656,10 @@ describe("published profile edits", () => {
       }),
     );
     expect(setProfile.mock.calls[0]?.[0]).not.toHaveProperty("bio");
+    expect(checkContent).toHaveBeenCalledWith(
+      expect.objectContaining({ displayName: "Checked Public Name" }),
+      "/api/avatar/avatars/user-1/checked.webp",
+    );
     expectStatusWriteGuard(updateProfile, "PUBLISHED");
   });
 

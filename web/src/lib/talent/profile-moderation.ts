@@ -2,6 +2,7 @@ import type {
   ProfileModerationFlag,
   ProfileModerationResult,
 } from "@/lib/moderation/clef";
+import { safePublicProfileAvatarUrl } from "@/lib/avatar";
 
 export type ProfileModerationOutcome = ProfileModerationResult["outcome"];
 
@@ -22,7 +23,7 @@ const PROFILE_MODERATION_FLAGS = new Set<ProfileModerationFlag>([
 
 export function moderationColumns(
   result: ProfileModerationResult,
-  checkedAt = new Date()
+  checkedAt = new Date(),
 ) {
   return {
     moderationOutcome: result.outcome,
@@ -34,12 +35,14 @@ export function moderationColumns(
 }
 
 export function publishesAfterModeration(
-  result: ProfileModerationResult
+  result: ProfileModerationResult,
 ): boolean {
   return result.outcome !== "hold";
 }
 
-export function parseModerationFlags(raw: string | null): ProfileModerationFlag[] {
+export function parseModerationFlags(
+  raw: string | null,
+): ProfileModerationFlag[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -47,7 +50,7 @@ export function parseModerationFlags(raw: string | null): ProfileModerationFlag[
     return parsed.filter(
       (value): value is ProfileModerationFlag =>
         typeof value === "string" &&
-        PROFILE_MODERATION_FLAGS.has(value as ProfileModerationFlag)
+        PROFILE_MODERATION_FLAGS.has(value as ProfileModerationFlag),
     );
   } catch {
     return [];
@@ -55,12 +58,13 @@ export function parseModerationFlags(raw: string | null): ProfileModerationFlag[
 }
 
 export function parseModerationScores(
-  raw: string | null
+  raw: string | null,
 ): Partial<Record<ProfileModerationFlag, number>> {
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      return {};
     const scores: Partial<Record<ProfileModerationFlag, number>> = {};
     for (const [key, value] of Object.entries(parsed)) {
       if (!PROFILE_MODERATION_FLAGS.has(key as ProfileModerationFlag)) continue;
@@ -85,13 +89,15 @@ interface ModerationListRow extends StoredProfileModeration {
 }
 
 export function splitModerationReviewLists<T extends ModerationListRow>(
-  profiles: readonly T[]
+  profiles: readonly T[],
 ): { held: T[]; unavailable: T[] } {
   const flagged = profiles
     .filter((profile) => profile.moderationReviewRequired)
     .toSorted((a, b) => {
-      const aTime = a.moderationCheckedAt?.getTime() ?? a.updatedAt?.getTime() ?? 0;
-      const bTime = b.moderationCheckedAt?.getTime() ?? b.updatedAt?.getTime() ?? 0;
+      const aTime =
+        a.moderationCheckedAt?.getTime() ?? a.updatedAt?.getTime() ?? 0;
+      const bTime =
+        b.moderationCheckedAt?.getTime() ?? b.updatedAt?.getTime() ?? 0;
       return bTime - aTime;
     });
 
@@ -99,7 +105,7 @@ export function splitModerationReviewLists<T extends ModerationListRow>(
     held: flagged.filter((profile) => profile.moderationOutcome === "hold"),
     unavailable: flagged.filter(
       (profile) =>
-        profile.moderationOutcome === "error" && profile.status === "PUBLISHED"
+        profile.moderationOutcome === "error" && profile.status === "PUBLISHED",
     ),
   };
 }
@@ -114,9 +120,15 @@ export function parseAdminProfileAction(value: FormDataEntryValue | null) {
 }
 
 export function resolveAdminProfileUpdate(
-  current: { status: string; publishedAt: Date | null },
+  current: {
+    status: string;
+    publishedAt: Date | null;
+    publicName?: string | null;
+    publicAvatarUrl?: string | null;
+    user?: { name: string; image: string | null };
+  },
   action: AdminProfileAction,
-  now = new Date()
+  now = new Date(),
 ): Record<string, unknown> {
   if (action === "clear_flag") {
     return { moderationReviewRequired: false };
@@ -127,6 +139,10 @@ export function resolveAdminProfileUpdate(
   return {
     status: "PUBLISHED",
     moderationReviewRequired: false,
+    publicName: current.publicName ?? current.user?.name ?? "TTV Builder",
+    publicAvatarUrl:
+      current.publicAvatarUrl ??
+      safePublicProfileAvatarUrl(current.user?.image),
     ...(current.publishedAt ? {} : { publishedAt: now }),
   };
 }

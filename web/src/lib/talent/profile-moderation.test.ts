@@ -11,18 +11,18 @@ import {
 
 describe("profile moderation transitions", () => {
   it("publishes pass and error outcomes but holds flagged content", () => {
-    expect(publishesAfterModeration({ outcome: "pass", flags: [], scores: {} })).toBe(
-      true
-    );
     expect(
-      publishesAfterModeration({ outcome: "error", flags: [], scores: {} })
+      publishesAfterModeration({ outcome: "pass", flags: [], scores: {} }),
+    ).toBe(true);
+    expect(
+      publishesAfterModeration({ outcome: "error", flags: [], scores: {} }),
     ).toBe(true);
     expect(
       publishesAfterModeration({
         outcome: "hold",
         flags: ["contains_contact_details"],
         scores: { contains_contact_details: 0.9 },
-      })
+      }),
     ).toBe(false);
   });
 
@@ -35,8 +35,8 @@ describe("profile moderation transitions", () => {
           flags: ["contains_contact_details"],
           scores: { contains_contact_details: 0.91 },
         },
-        checkedAt
-      )
+        checkedAt,
+      ),
     ).toEqual({
       moderationOutcome: "hold",
       moderationFlags: '["contains_contact_details"]',
@@ -48,12 +48,12 @@ describe("profile moderation transitions", () => {
 
   it("parses only known, valid stored flags and scores", () => {
     expect(
-      parseModerationFlags('["contains_contact_details","unknown",12]')
+      parseModerationFlags('["contains_contact_details","unknown",12]'),
     ).toEqual(["contains_contact_details"]);
     expect(
       parseModerationScores(
-        '{"contains_contact_details":0.9,"abusive_or_sexual":2,"unknown":0.5}'
-      )
+        '{"contains_contact_details":0.9,"abusive_or_sexual":2,"unknown":0.5}',
+      ),
     ).toEqual({ contains_contact_details: 0.9 });
     expect(parseModerationFlags("not json")).toEqual([]);
     expect(parseModerationScores("not json")).toEqual({});
@@ -114,33 +114,56 @@ describe("admin profile moderation actions", () => {
     const publishedAt = new Date("2026-01-01");
     expect(
       resolveAdminProfileUpdate(
-        { status: "DRAFT", publishedAt },
+        {
+          status: "DRAFT",
+          publishedAt,
+          publicName: "Checked Builder",
+          publicAvatarUrl: "/api/avatar/avatars/user-1/checked.webp",
+        },
         "publish",
-        new Date("2026-10-10")
-      )
+        new Date("2026-10-10"),
+      ),
     ).toEqual({
       status: "PUBLISHED",
       moderationReviewRequired: false,
+      publicName: "Checked Builder",
+      publicAvatarUrl: "/api/avatar/avatars/user-1/checked.webp",
     });
   });
 
   it("sets the first publication date and supports unpublish and clear flag", () => {
     const now = new Date("2026-10-10");
     expect(
-      resolveAdminProfileUpdate({ status: "DRAFT", publishedAt: null }, "publish", now)
+      resolveAdminProfileUpdate(
+        {
+          status: "DRAFT",
+          publishedAt: null,
+          user: {
+            name: "Draft Builder",
+            image: "https://avatars.githubusercontent.com/u/123",
+          },
+        },
+        "publish",
+        now,
+      ),
     ).toEqual({
       status: "PUBLISHED",
       moderationReviewRequired: false,
+      publicName: "Draft Builder",
+      publicAvatarUrl: null,
       publishedAt: now,
     });
     expect(
       resolveAdminProfileUpdate(
         { status: "PUBLISHED", publishedAt: now },
-        "unpublish"
-      )
+        "unpublish",
+      ),
     ).toEqual({ status: "SUSPENDED" });
     expect(
-      resolveAdminProfileUpdate({ status: "DRAFT", publishedAt: null }, "clear_flag")
+      resolveAdminProfileUpdate(
+        { status: "DRAFT", publishedAt: null },
+        "clear_flag",
+      ),
     ).toEqual({ moderationReviewRequired: false });
   });
 });
