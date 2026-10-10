@@ -116,7 +116,7 @@ describe("POST /api/chat", () => {
     expect(response.status).toBe(400);
   });
 
-  it("calls the model with tools and returns the answer for enrolled users", async () => {
+  it("offers transcript tools when the shared access helper grants cohort access", async () => {
     const response = await POST(context());
     const body = await json(response);
 
@@ -126,6 +126,10 @@ describe("POST /api/chat", () => {
     expect(body.citations).toEqual([]);
 
     expect(mocks.generateToolCompletion).toHaveBeenCalledTimes(1);
+    expect(mocks.getAccessibleProgramIds).toHaveBeenCalledWith(
+      expect.anything(),
+      "user-1"
+    );
     const [, messages, options] = mocks.generateToolCompletion.mock.calls[0];
     expect(messages[0].role).toBe("system");
     expect(messages[0].content).toContain("Test User");
