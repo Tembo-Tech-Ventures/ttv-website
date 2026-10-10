@@ -11,18 +11,16 @@ test.describe("admin review surfaces", () => {
   const token = process.env.PLAYWRIGHT_AGENT_TOKEN;
   test.skip(
     !token,
-    "No agent bearer token is configured for this environment."
+    "No agent bearer token is configured for this environment.",
   );
   test.use({
     extraHTTPHeaders: token ? { Authorization: `Bearer ${token}` } : {},
   });
 
-  test("profiles index renders rows for fixture profiles", async ({
-    page,
-  }) => {
+  test("profiles index renders rows for fixture profiles", async ({ page }) => {
     await page.goto("/admin/profiles");
     await expect(
-      page.getByRole("heading", { name: /profiles/i })
+      page.getByRole("heading", { name: /profiles/i }),
     ).toBeVisible();
 
     const table = page.locator("table");
@@ -33,17 +31,29 @@ test.describe("admin review surfaces", () => {
 
     const held = page.getByRole("region", { name: "Held by check" });
     await expect(held.getByText("Kwame Fixture")).toBeVisible();
-    await expect(held.getByRole("button", { name: "Publish" })).toBeVisible();
-    await expect(held.getByRole("button", { name: "Unpublish" })).toBeVisible();
-    await expect(held.getByRole("button", { name: "Clear flag" })).toBeVisible();
+    await expect(
+      held.getByRole("button", { name: "Publish", exact: true }),
+    ).toBeVisible();
+    await expect(
+      held.getByRole("button", { name: "Unpublish", exact: true }),
+    ).toBeVisible();
+    await expect(
+      held.getByRole("button", { name: "Clear flag" }),
+    ).toBeVisible();
 
     const unavailable = page.getByRole("region", {
       name: "Published, needs a look (check unavailable)",
     });
     await expect(unavailable.getByText("Amina Fixture")).toBeVisible();
-    await expect(unavailable.getByRole("button", { name: "Publish" })).toBeVisible();
-    await expect(unavailable.getByRole("button", { name: "Unpublish" })).toBeVisible();
-    await expect(unavailable.getByRole("button", { name: "Clear flag" })).toBeVisible();
+    await expect(
+      unavailable.getByRole("button", { name: "Publish", exact: true }),
+    ).toBeVisible();
+    await expect(
+      unavailable.getByRole("button", { name: "Unpublish", exact: true }),
+    ).toBeVisible();
+    await expect(
+      unavailable.getByRole("button", { name: "Clear flag" }),
+    ).toBeVisible();
 
     await page.screenshot({
       path: evidence("admin-profiles-index"),
@@ -77,18 +87,24 @@ test.describe("admin review surfaces", () => {
       await kwameRow.getByRole("link", { name: "View" }).click();
     }
 
-    await expect(
-      page.getByRole("heading", { name: /profile/i })
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: /profile/i })).toBeVisible();
 
     await page.screenshot({
       path: evidence("admin-profile-kwame-detail"),
       fullPage: true,
     });
-    await expect(page.getByRole("heading", { name: "Content check" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Publish" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Unpublish" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Clear flag" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Content check" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Publish", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Unpublish", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Clear flag" }),
+    ).toBeVisible();
   });
 
   test("admin can suspend and restore a published post", async ({
@@ -109,32 +125,38 @@ test.describe("admin review surfaces", () => {
     await expect(
       page
         .getByRole("region", { name: "Notes on debugging at the edge" })
-        .getByRole("button", { name: "Restore post" })
+        .getByRole("button", { name: "Restore post" }),
     ).toBeVisible();
     expect(
-      (await page.request.get("/blog/amina-preview/debugging-at-the-edge")).status()
+      (
+        await page.request.get("/blog/amina-preview/debugging-at-the-edge")
+      ).status(),
     ).toBe(404);
 
     const suspended = page.getByRole("region", {
       name: "Notes on debugging at the edge",
     });
-    await expect(suspended.getByText(/Checked in the preview journey/)).toBeVisible();
+    await expect(
+      suspended.getByText(/Checked in the preview journey/),
+    ).toBeVisible();
     await suspended.getByRole("button", { name: "Restore post" }).click();
 
     await expect(
       page
         .getByRole("region", { name: "Notes on debugging at the edge" })
-        .getByRole("button", { name: "Suspend post" })
+        .getByRole("button", { name: "Suspend post" }),
     ).toBeVisible();
     expect(
-      (await page.request.get("/blog/amina-preview/debugging-at-the-edge")).status()
+      (
+        await page.request.get("/blog/amina-preview/debugging-at-the-edge")
+      ).status(),
     ).toBe(200);
   });
 
   test("projects index renders fixture projects", async ({ page }) => {
     await page.goto("/admin/projects");
     await expect(
-      page.getByRole("heading", { name: /client projects/i })
+      page.getByRole("heading", { name: /client projects/i }),
     ).toBeVisible();
 
     const table = page.locator("table");
@@ -162,12 +184,12 @@ test.describe("admin review surfaces", () => {
     }
 
     await expect(
-      page.getByRole("heading", { name: /clinic booking website/i })
+      page.getByRole("heading", { name: /clinic booking website/i }),
     ).toBeVisible();
 
     await expect(page.getByText("Fixture Contact")).toBeVisible();
     await expect(
-      page.getByRole("link", { name: /contact@baraka-fixture\.invalid/i })
+      page.getByRole("link", { name: /contact@baraka-fixture\.invalid/i }),
     ).toBeVisible();
 
     await page.screenshot({
@@ -178,18 +200,17 @@ test.describe("admin review surfaces", () => {
     if (isMobile) return;
 
     const badge = page.locator(".flex.items-center.gap-3 span").first();
-    const statusText =
-      (await badge.textContent())?.trim().toUpperCase() ?? "";
+    const statusText = (await badge.textContent())?.trim().toUpperCase() ?? "";
 
     if (statusText === "PENDING") {
       await page.getByRole("button", { name: /approve/i }).click();
       await expect(
-        page.locator("span", { hasText: /approved/i }).first()
+        page.locator("span", { hasText: /approved/i }).first(),
       ).toBeVisible();
     }
 
     await expect(
-      page.locator("span", { hasText: /approved/i }).first()
+      page.locator("span", { hasText: /approved/i }).first(),
     ).toBeVisible();
 
     await page.screenshot({
@@ -216,11 +237,11 @@ test.describe("admin review surfaces", () => {
     }
 
     await expect(
-      page.getByRole("heading", { name: /delivery tracking dashboard/i })
+      page.getByRole("heading", { name: /delivery tracking dashboard/i }),
     ).toBeVisible();
 
     await expect(
-      page.getByRole("heading", { name: /interested builders/i })
+      page.getByRole("heading", { name: /interested builders/i }),
     ).toBeVisible();
 
     await page.screenshot({
@@ -229,13 +250,15 @@ test.describe("admin review surfaces", () => {
     });
   });
 
-  test("admin dashboard shows review queues", async ({ page }) => {
+  test("admin dashboard links to profiles flagged by checks", async ({
+    page,
+  }) => {
     await page.goto("/admin");
     await expect(
-      page.getByRole("heading", { name: /review queues/i })
+      page.getByText("Profiles flagged by checks", { exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: /view queue/i }).first()
+      page.getByRole("link", { name: /view flagged profiles/i }),
     ).toBeVisible();
 
     await page.screenshot({
