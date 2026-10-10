@@ -61,7 +61,10 @@ describe("evaluateAudit", () => {
         },
         sharp: {
           severity: "high",
-          via: [advisory("GHSA-rgj7-g3m4-5g8c")],
+          via: [
+            advisory("GHSA-rgj7-g3m4-5g8c"),
+            advisory("GHSA-wq5f-xc86-pv6w"),
+          ],
         },
       },
     });
