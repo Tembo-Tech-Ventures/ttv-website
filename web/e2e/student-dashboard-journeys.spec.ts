@@ -56,6 +56,7 @@ const personas = [
       "/dashboard/sessions",
       "/dashboard/ask",
       "/dashboard/portfolio",
+      "/dashboard/leads",
       "/dashboard/profile",
       "/auth/logout",
     ],
@@ -105,10 +106,14 @@ for (const persona of personas) {
       expect(response?.status()).toBe(200);
       await page.waitForLoadState("networkidle");
 
-      const nextStep = page.getByTestId("student-next-step");
+      const nextStepCard = page.getByRole("region", { name: persona.nextStep });
+      const nextStep = nextStepCard.getByTestId("student-next-step");
       await expect(nextStep).toHaveText(persona.nextStep);
       await expect(
-        page.getByRole("link", { name: persona.actionName, exact: true })
+        nextStepCard.getByRole("link", {
+          name: persona.actionName,
+          exact: true,
+        })
       ).toHaveAttribute("href", persona.actionHref);
       await expect(page.getByText("Your next step", { exact: true })).toHaveCount(1);
 

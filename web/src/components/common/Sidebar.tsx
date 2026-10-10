@@ -61,10 +61,10 @@ function NavLinks({
             aria-current={isActive ? "page" : undefined}
           >
             {Icon && <Icon className="h-5 w-5" />}
-            <span className="min-w-0 flex-1">{label}</span>
+            {label}
             {badge !== undefined && badge > 0 && (
               <span
-                className="rounded-full bg-primary/20 px-2 py-0.5 text-xs font-semibold text-primary"
+                className="ml-auto rounded-full bg-primary/20 px-2 py-0.5 text-xs font-semibold text-primary"
                 aria-label={`${badge} unread`}
               >
                 {badge}
