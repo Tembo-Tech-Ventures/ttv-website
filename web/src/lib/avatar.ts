@@ -138,7 +138,12 @@ export async function storeModeratedProfilePhotoSnapshot(
   ).join("");
   const extension =
     contentType === "image/jpeg" ? "jpg" : contentType.slice("image/".length);
-  const objectKey = `${AVATAR_OBJECT_PREFIX}/${userId}/moderated/${hash}.${extension}`;
+  // A cleanup check and the R2 delete cannot be atomic with the D1 profile
+  // write. Keep the content hash for traceability, but give every moderation
+  // attempt its own object so a losing request can never delete the object a
+  // concurrent winner is about to publish.
+  const attemptId = crypto.randomUUID();
+  const objectKey = `${AVATAR_OBJECT_PREFIX}/${userId}/moderated/${hash}-${attemptId}.${extension}`;
 
   await bucket.put(objectKey, bytes, { httpMetadata: { contentType } });
   return `${AVATAR_ROUTE_PREFIX}${objectKey}`;

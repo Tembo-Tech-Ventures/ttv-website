@@ -205,7 +205,7 @@ describe("avatar moderation input", () => {
     ).rejects.toThrow("Profile image is outside the Clef size limit");
   });
 
-  it("stores external checked bytes at a content-addressed local URL", async () => {
+  it("stores external checked bytes at a unique local URL per moderation attempt", async () => {
     const bucket = { put: vi.fn().mockResolvedValue({}) };
     const first = await storeModeratedProfilePhotoSnapshot(
       bucket as never,
@@ -218,9 +218,9 @@ describe("avatar moderation input", () => {
       "data:image/png;base64,AQID",
     );
 
-    expect(first).toBe(second);
+    expect(first).not.toBe(second);
     expect(first).toMatch(
-      /^\/api\/avatar\/avatars\/user_123\/moderated\/[a-f0-9]{64}\.png$/,
+      /^\/api\/avatar\/avatars\/user_123\/moderated\/[a-f0-9]{64}-[a-f0-9-]{36}\.png$/,
     );
     expect(bucket.put).toHaveBeenCalledWith(
       expect.stringMatching(/^avatars\/user_123\/moderated\//),
@@ -258,7 +258,7 @@ describe("avatar moderation input", () => {
       outcome: "error",
     });
     expect(published.publicAvatarUrl).toMatch(
-      /^\/api\/avatar\/avatars\/user_123\/moderated\/[a-f0-9]{64}\.png$/,
+      /^\/api\/avatar\/avatars\/user_123\/moderated\/[a-f0-9]{64}-[a-f0-9-]{36}\.png$/,
     );
     expect(published.createdSnapshotUrl).toBe(published.publicAvatarUrl);
     expect(bucket.put).toHaveBeenCalledOnce();

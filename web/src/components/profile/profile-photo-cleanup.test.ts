@@ -3,6 +3,10 @@ import {
   discardReplacedProfilePhotos,
   discardUnreferencedProfilePhoto,
 } from "./profile-photo-cleanup";
+import {
+  extractAvatarObjectKey,
+  storeModeratedProfilePhotoSnapshot,
+} from "@/lib/avatar";
 
 const oldAvatar = "/api/avatar/avatars/user-1/old.webp";
 const candidateAvatar = "/api/avatar/avatars/user-1/candidate.webp";
@@ -105,6 +109,59 @@ describe("discardUnreferencedProfilePhoto", () => {
     expect(deleteObject).toHaveBeenCalledWith(
       "avatars/user-1/moderated/candidate.webp",
     );
+  });
+
+  it("cannot delete a concurrent winner's same-content moderated snapshot", async () => {
+    const objects = new Set<string>();
+    const bucket = {
+      put: vi.fn(async (key: string) => {
+        objects.add(key);
+      }),
+      delete: vi.fn(async (key: string) => {
+        objects.delete(key);
+      }),
+    };
+    const loserSnapshot = await storeModeratedProfilePhotoSnapshot(
+      bucket as never,
+      "user-1",
+      "data:image/png;base64,AQID",
+    );
+    const winnerSnapshot = await storeModeratedProfilePhotoSnapshot(
+      bucket as never,
+      "user-1",
+      "data:image/png;base64,AQID",
+    );
+    const winnerKey = extractAvatarObjectKey(winnerSnapshot);
+    expect(winnerSnapshot).not.toBe(loserSnapshot);
+    expect(winnerKey).not.toBeNull();
+
+    const db = {
+      query: {
+        user: {
+          findFirst: vi.fn().mockResolvedValue({ image: oldAvatar }),
+        },
+        studentProfile: {
+          // These reads represent the losing request observing the old row.
+          // The winning request may adopt its distinct object immediately
+          // afterwards without sharing the loser's deletion target.
+          findFirst: vi
+            .fn()
+            .mockResolvedValue({ publicAvatarUrl: oldAvatar }),
+        },
+      },
+    };
+
+    await expect(
+      discardUnreferencedProfilePhoto({
+        db: db as never,
+        bucket: bucket as never,
+        userId: "user-1",
+        imageUrl: loserSnapshot,
+      }),
+    ).resolves.toBe(true);
+
+    expect(objects.has(extractAvatarObjectKey(loserSnapshot)!)).toBe(false);
+    expect(objects.has(winnerKey!)).toBe(true);
   });
 
   it("fails closed on lookup errors and never deletes an uncertain object", async () => {
