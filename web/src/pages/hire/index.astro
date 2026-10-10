@@ -54,8 +54,22 @@ if (Astro.request.method === "POST") {
     timeline: prev.timeline,
   };
 
-  if (formData.get(HONEYPOT_FIELD)) {
+  const guard = await guardPublicForm({
+    db,
+    secret: env.BETTER_AUTH_SECRET,
+    scope: "hire",
+    request: Astro.request,
+    formData,
+  });
+
+  if (guard.ok && guard.silent) {
     success = true;
+  } else if (!guard.ok) {
+    formToken = await issueFormToken(env.BETTER_AUTH_SECRET);
+    errors._form =
+      guard.reason === "rate_limit"
+        ? "You’ve reached the hourly submission limit. Please wait an hour, then submit your project again."
+        : "Please press Submit project again.";
   } else {
     const validation = hireFormSchema.safeParse(raw);
 
@@ -69,39 +83,21 @@ if (Astro.request.method === "POST") {
         if (!errors[key]) errors[key] = issue.message;
       }
     } else {
-      const guard = await guardPublicForm({
-        db,
-        secret: env.BETTER_AUTH_SECRET,
-        scope: "hire",
-        request: Astro.request,
-        formData,
+      const skillTags = parseSkillTags(validation.data.skillsRaw);
+
+      await db.insert(schema.clientProject).values({
+        organization: validation.data.organization,
+        contactName: validation.data.contactName,
+        contactEmail: validation.data.contactEmail,
+        title: validation.data.title,
+        description: validation.data.description,
+        skills: skillTags.length > 0 ? JSON.stringify(skillTags) : null,
+        budgetBand: validation.data.budgetBand,
+        timeline: validation.data.timeline || null,
+        status: "PENDING",
       });
 
-      if (guard.ok && guard.silent) {
-        success = true;
-      } else if (!guard.ok) {
-        formToken = await issueFormToken(env.BETTER_AUTH_SECRET);
-        errors._form =
-          guard.reason === "rate_limit"
-            ? "You’ve reached the hourly submission limit. Please wait an hour, then submit your project again."
-            : "Please press Submit project again.";
-      } else {
-        const skillTags = parseSkillTags(validation.data.skillsRaw);
-
-        await db.insert(schema.clientProject).values({
-          organization: validation.data.organization,
-          contactName: validation.data.contactName,
-          contactEmail: validation.data.contactEmail,
-          title: validation.data.title,
-          description: validation.data.description,
-          skills: skillTags.length > 0 ? JSON.stringify(skillTags) : null,
-          budgetBand: validation.data.budgetBand,
-          timeline: validation.data.timeline || null,
-          status: "PENDING",
-        });
-
-        success = true;
-      }
+      success = true;
     }
   }
 } else {
