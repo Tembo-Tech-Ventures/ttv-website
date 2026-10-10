@@ -60,42 +60,51 @@ describe("extractProfileFormData", () => {
   });
 });
 
-function mockDb(overrides: {
-  findProfile?: unknown;
-  findProfileByHandle?: unknown;
-  /**
-   * Row returned to the handle-lock lookup in `saveProfile`, which is the only
-   * query selecting `publishedAt`. Defaults to null so existing cases behave as
-   * an unpublished profile and the lock stays out of the way.
-   */
-  findProfileForLock?: {
-    handle: string;
-    publishedAt: Date | null;
-    status?: "DRAFT" | "PUBLISHED" | "SUSPENDED";
-    githubLogin?: string | null;
-    user?: { name: string };
-  } | null;
-  insertProfile?: () => void;
-  updateProfile?: () => void;
-  setProfile?: (values: unknown) => void;
-} = {}) {
+function mockDb(
+  overrides: {
+    findProfile?: unknown;
+    findProfileByHandle?: unknown;
+    /**
+     * Row returned to the handle-lock lookup in `saveProfile`, which is the only
+     * query selecting `publishedAt`. Defaults to null so existing cases behave as
+     * an unpublished profile and the lock stays out of the way.
+     */
+    findProfileForLock?: {
+      handle: string;
+      publishedAt: Date | null;
+      status?: "DRAFT" | "PUBLISHED" | "SUSPENDED";
+      githubLogin?: string | null;
+      user?: { name: string };
+    } | null;
+    insertProfile?: () => void;
+    updateProfile?: () => void;
+    setProfile?: (values: unknown) => void;
+  } = {},
+) {
   const insertFn = vi.fn(overrides.insertProfile ?? (() => {}));
   const updateFn = vi.fn(overrides.updateProfile ?? (() => {}));
 
   return {
     query: {
       studentProfile: {
-        findFirst: vi.fn(async (opts?: { where?: unknown; columns?: Record<string, unknown> }) => {
-          // Dispatch on requested columns: `saveProfile` issues two distinct
-          // lookups (handle lock, then handle uniqueness) against this mock.
-          if (opts?.columns && "publishedAt" in opts.columns) {
-            return overrides.findProfileForLock ?? null;
-          }
-          if (opts?.where && typeof opts.where === "function") {
-            return overrides.findProfile ?? null;
-          }
-          return overrides.findProfileByHandle ?? overrides.findProfile ?? null;
-        }),
+        findFirst: vi.fn(
+          async (opts?: {
+            where?: unknown;
+            columns?: Record<string, unknown>;
+          }) => {
+            // Dispatch on requested columns: `saveProfile` issues two distinct
+            // lookups (handle lock, then handle uniqueness) against this mock.
+            if (opts?.columns && "publishedAt" in opts.columns) {
+              return overrides.findProfileForLock ?? null;
+            }
+            if (opts?.where && typeof opts.where === "function") {
+              return overrides.findProfile ?? null;
+            }
+            return (
+              overrides.findProfileByHandle ?? overrides.findProfile ?? null
+            );
+          },
+        ),
       },
     },
     insert: vi.fn(() => ({
@@ -243,12 +252,7 @@ describe("saveProfile", () => {
       headline: "Updated headline",
     });
 
-    const result = await saveProfile(
-      db as never,
-      "user-1",
-      fd,
-      "profile-1",
-    );
+    const result = await saveProfile(db as never, "user-1", fd, "profile-1");
     expect(result.success).toBe(true);
   });
 
@@ -395,7 +399,10 @@ const draftProfile = {
   country: "Nigeria",
   skills: '["TypeScript"]',
   githubLogin: "new-user",
-  user: { name: "New User" },
+  user: {
+    name: "New User",
+    image: "/api/avatar/avatars/user-1/photo.webp",
+  },
   portfolioUrl: "https://example.com",
   linkedinUrl: null,
   publishedAt: null,
@@ -441,11 +448,17 @@ describe("publishProfile", () => {
   it("publishes a passing draft immediately", async () => {
     const { db, setProfile, where } = moderationDb(draftProfile);
     const checkedAt = new Date("2026-10-10T12:00:00Z");
+    const checkContent = vi
+      .fn()
+      .mockResolvedValue({ outcome: "pass", flags: [], scores: {} });
     vi.useFakeTimers();
     vi.setSystemTime(checkedAt);
 
-    const result = await publishProfile(db as never, "user-1", "profile-1", () =>
-      Promise.resolve({ outcome: "pass", flags: [], scores: {} })
+    const result = await publishProfile(
+      db as never,
+      "user-1",
+      "profile-1",
+      checkContent,
     );
 
     expect(result).toMatchObject({ success: true, published: true });
@@ -455,7 +468,11 @@ describe("publishProfile", () => {
         publishedAt: checkedAt,
         moderationOutcome: "pass",
         moderationReviewRequired: false,
-      })
+      }),
+    );
+    expect(checkContent).toHaveBeenCalledWith(
+      expect.objectContaining({ displayName: "New User" }),
+      "/api/avatar/avatars/user-1/photo.webp",
     );
     expectStatusWriteGuard(where, "DRAFT");
     vi.useRealTimers();
@@ -463,12 +480,16 @@ describe("publishProfile", () => {
 
   it("holds flagged content with a fixed explanation and keeps the draft private", async () => {
     const { db, setProfile } = moderationDb(draftProfile);
-    const result = await publishProfile(db as never, "user-1", "profile-1", () =>
-      Promise.resolve({
-        outcome: "hold",
-        flags: ["contains_contact_details"],
-        scores: { contains_contact_details: 0.92 },
-      })
+    const result = await publishProfile(
+      db as never,
+      "user-1",
+      "profile-1",
+      () =>
+        Promise.resolve({
+          outcome: "hold",
+          flags: ["contains_contact_details"],
+          scores: { contains_contact_details: 0.92 },
+        }),
     );
 
     expect(result).toEqual(
@@ -479,17 +500,23 @@ describe("publishProfile", () => {
         moderationMessages: [
           "Remove phone numbers, email addresses, or ID numbers from your public profile.",
         ],
-      })
+      }),
     );
     expect(setProfile).toHaveBeenCalledWith(
-      expect.not.objectContaining({ status: "PUBLISHED", publishedAt: expect.anything() })
+      expect.not.objectContaining({
+        status: "PUBLISHED",
+        publishedAt: expect.anything(),
+      }),
     );
   });
 
   it("fails open when the check is unavailable and flags the published profile", async () => {
     const { db, setProfile } = moderationDb(draftProfile);
-    const result = await publishProfile(db as never, "user-1", "profile-1", () =>
-      Promise.reject(new Error("binding unavailable"))
+    const result = await publishProfile(
+      db as never,
+      "user-1",
+      "profile-1",
+      () => Promise.reject(new Error("binding unavailable")),
     );
 
     expect(result).toMatchObject({
@@ -502,14 +529,14 @@ describe("publishProfile", () => {
         status: "PUBLISHED",
         moderationOutcome: "error",
         moderationReviewRequired: true,
-      })
+      }),
     );
   });
 
   it("rejects a missing or already-published profile", async () => {
     const missing = moderationDb(null);
     expect(
-      await publishProfile(missing.db as never, "user-1", "profile-1")
+      await publishProfile(missing.db as never, "user-1", "profile-1"),
     ).toMatchObject({ success: false, error: "Profile not found" });
 
     const published = moderationDb({
@@ -518,8 +545,11 @@ describe("publishProfile", () => {
       publishedAt: new Date("2026-01-01"),
     });
     expect(
-      await publishProfile(published.db as never, "user-1", "profile-1")
-    ).toMatchObject({ success: false, error: "Only a draft profile can be published" });
+      await publishProfile(published.db as never, "user-1", "profile-1"),
+    ).toMatchObject({
+      success: false,
+      error: "Only a draft profile can be published",
+    });
   });
 });
 
@@ -551,7 +581,7 @@ describe("published profile edits", () => {
           outcome: "hold",
           flags: ["contains_contact_details"],
           scores: { contains_contact_details: 0.99 },
-        })
+        }),
     );
 
     expect(result).toMatchObject({ success: false, moderationOutcome: "hold" });
@@ -559,7 +589,7 @@ describe("published profile edits", () => {
       expect.objectContaining({
         moderationOutcome: "hold",
         moderationReviewRequired: true,
-      })
+      }),
     );
     expect(setProfile.mock.calls[0]?.[0]).not.toHaveProperty("bio");
     expectStatusWriteGuard(updateProfile, "PUBLISHED");
@@ -569,7 +599,8 @@ describe("published profile edits", () => {
     const cases = [
       [
         "pass",
-        () => Promise.resolve({ outcome: "pass" as const, flags: [], scores: {} }),
+        () =>
+          Promise.resolve({ outcome: "pass" as const, flags: [], scores: {} }),
         false,
       ],
       ["error", () => Promise.reject(new Error("binding unavailable")), true],
@@ -587,7 +618,7 @@ describe("published profile edits", () => {
         "user-1",
         makeFormData({ handle: "existing-user", headline: "Updated headline" }),
         "profile-1",
-        check
+        check,
       );
 
       expect(result).toMatchObject({
@@ -600,7 +631,7 @@ describe("published profile edits", () => {
           headline: "Updated headline",
           moderationOutcome: outcome,
           moderationReviewRequired: reviewRequired,
-        })
+        }),
       );
     }
   });

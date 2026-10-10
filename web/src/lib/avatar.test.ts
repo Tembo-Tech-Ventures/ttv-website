@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { extractAvatarObjectKey, storeProfilePhoto } from "./avatar";
+import {
+  extractAvatarObjectKey,
+  loadProfilePhotoForModeration,
+  storeProfilePhoto,
+} from "./avatar";
 
 function createMockImages() {
   const transform = vi.fn().mockReturnValue({
@@ -7,7 +11,7 @@ function createMockImages() {
       response: vi.fn().mockResolvedValue(
         new Response(new Uint8Array([1, 2, 3]), {
           headers: { "content-type": "image/webp" },
-        })
+        }),
       ),
       contentType: vi.fn().mockResolvedValue("image/webp"),
     }),
@@ -47,7 +51,7 @@ describe("avatar uploads", () => {
         userId: "user_123",
         file,
         previousImageUrl: "/api/avatar/avatars/user_123/old.webp",
-      }
+      },
     );
 
     expect(images.info).toHaveBeenCalledTimes(1);
@@ -68,10 +72,12 @@ describe("avatar uploads", () => {
       },
     });
     expect(bucket.delete).toHaveBeenCalledWith("avatars/user_123/old.webp");
-    expect(result.imageUrl).toMatch(/^\/api\/avatar\/avatars\/user_123\/.+\.webp$/);
+    expect(result.imageUrl).toMatch(
+      /^\/api\/avatar\/avatars\/user_123\/.+\.webp$/,
+    );
     expect(result.contentType).toBe("image/webp");
     expect(extractAvatarObjectKey(result.imageUrl)).toMatch(
-      /^avatars\/user_123\/.+\.webp$/
+      /^avatars\/user_123\/.+\.webp$/,
     );
   });
 
@@ -94,10 +100,84 @@ describe("avatar uploads", () => {
         {
           userId: "user_123",
           file,
-        }
-      )
+        },
+      ),
     ).rejects.toThrow("Please upload a PNG, JPG, GIF, or WebP image.");
 
     expect(bucket.put).not.toHaveBeenCalled();
+  });
+});
+
+describe("avatar moderation input", () => {
+  it("embeds a stored profile image as a Clef data URL", async () => {
+    const bucket = {
+      get: vi.fn().mockResolvedValue({
+        size: 3,
+        httpMetadata: { contentType: "image/webp" },
+        bytes: vi.fn().mockResolvedValue(new Uint8Array([9, 8, 7])),
+      }),
+    };
+
+    await expect(
+      loadProfilePhotoForModeration(
+        bucket as never,
+        "/api/avatar/avatars/user_123/photo.webp",
+      ),
+    ).resolves.toBe("data:image/webp;base64,CQgH");
+    expect(bucket.get).toHaveBeenCalledWith("avatars/user_123/photo.webp");
+  });
+
+  it("loads only trusted external GitHub avatars", async () => {
+    const fetchImage = vi.fn().mockResolvedValue(
+      new Response(new Uint8Array([1, 2, 3]), {
+        headers: { "content-type": "image/png" },
+      }),
+    );
+
+    await expect(
+      loadProfilePhotoForModeration(
+        { get: vi.fn() } as never,
+        "https://avatars.githubusercontent.com/u/123?v=4",
+        fetchImage,
+      ),
+    ).resolves.toBe("data:image/png;base64,AQID");
+    await expect(
+      loadProfilePhotoForModeration(
+        { get: vi.fn() } as never,
+        "https://example.com/avatar.png",
+        fetchImage,
+      ),
+    ).rejects.toThrow("Untrusted external profile image");
+    expect(fetchImage).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects images outside Clef's supported types and size limit", async () => {
+    const unsupported = {
+      get: vi.fn().mockResolvedValue({
+        size: 3,
+        httpMetadata: { contentType: "image/gif" },
+        bytes: vi.fn(),
+      }),
+    };
+    await expect(
+      loadProfilePhotoForModeration(
+        unsupported as never,
+        "/api/avatar/avatars/user_123/photo.gif",
+      ),
+    ).rejects.toThrow("Unsupported profile image type");
+
+    const oversized = {
+      get: vi.fn().mockResolvedValue({
+        size: 4 * 1024 * 1024 + 1,
+        httpMetadata: { contentType: "image/webp" },
+        bytes: vi.fn(),
+      }),
+    };
+    await expect(
+      loadProfilePhotoForModeration(
+        oversized as never,
+        "/api/avatar/avatars/user_123/photo.webp",
+      ),
+    ).rejects.toThrow("Profile image is outside the Clef size limit");
   });
 });

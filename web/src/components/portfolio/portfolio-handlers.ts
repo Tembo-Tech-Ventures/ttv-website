@@ -41,7 +41,8 @@ export interface ProfileFormResult {
 }
 
 export type ProfileContentCheck = (
-  state: ProfileModerationState
+  state: ProfileModerationState,
+  avatarUrl: string | null,
 ) => Promise<ProfileModerationResult>;
 
 const failOpenCheck: ProfileContentCheck = () =>
@@ -49,12 +50,13 @@ const failOpenCheck: ProfileContentCheck = () =>
 
 async function runContentCheck(
   checkContent: ProfileContentCheck | undefined,
-  state: ProfileModerationState
+  state: ProfileModerationState,
+  avatarUrl: string | null,
 ): Promise<ProfileModerationResult> {
   try {
-    return await (checkContent ?? failOpenCheck)(state);
+    return await (checkContent ?? failOpenCheck)(state, avatarUrl);
   } catch {
-    return failOpenCheck(state);
+    return failOpenCheck(state, avatarUrl);
   }
 }
 
@@ -72,7 +74,7 @@ interface ProfileValues {
 }
 
 function collectFieldErrors(
-  issues: readonly { path: PropertyKey[]; message: string }[]
+  issues: readonly { path: PropertyKey[]; message: string }[],
 ): Record<string, string> {
   const fieldErrors: Record<string, string> = {};
   for (const issue of issues) {
@@ -94,20 +96,25 @@ async function savePublishedProfileEdit(
   skills: string[],
   displayName: string,
   githubLogin: string | null,
-  checkContent?: ProfileContentCheck
+  avatarUrl: string | null,
+  checkContent?: ProfileContentCheck,
 ): Promise<ProfileFormResult> {
-  const moderation = await runContentCheck(checkContent, {
-    displayName,
-    handle: values.handle,
-    headline: values.headline,
-    bio: values.bio,
-    location: values.location,
-    country: values.country,
-    skills,
-    githubLogin,
-    portfolioUrl: values.portfolioUrl,
-    linkedinUrl: values.linkedinUrl,
-  });
+  const moderation = await runContentCheck(
+    checkContent,
+    {
+      displayName,
+      handle: values.handle,
+      headline: values.headline,
+      bio: values.bio,
+      location: values.location,
+      country: values.country,
+      skills,
+      githubLogin,
+      portfolioUrl: values.portfolioUrl,
+      linkedinUrl: values.linkedinUrl,
+    },
+    avatarUrl,
+  );
   const moderationValues = moderationColumns(moderation);
 
   if (!publishesAfterModeration(moderation)) {
@@ -118,8 +125,8 @@ async function savePublishedProfileEdit(
         and(
           eq(schema.studentProfile.id, profileId),
           eq(schema.studentProfile.userId, userId),
-          eq(schema.studentProfile.status, "PUBLISHED")
-        )
+          eq(schema.studentProfile.status, "PUBLISHED"),
+        ),
       );
     return {
       success: false,
@@ -136,8 +143,8 @@ async function savePublishedProfileEdit(
       and(
         eq(schema.studentProfile.id, profileId),
         eq(schema.studentProfile.userId, userId),
-        eq(schema.studentProfile.status, "PUBLISHED")
-      )
+        eq(schema.studentProfile.status, "PUBLISHED"),
+      ),
     );
   return {
     success: true,
@@ -210,7 +217,7 @@ export async function saveProfile(
         publishedAt: Date | null;
         status: "DRAFT" | "PUBLISHED" | "SUSPENDED";
         githubLogin: string | null;
-        user: { name: string };
+        user: { name: string; image: string | null };
       }
     | undefined;
 
@@ -229,11 +236,14 @@ export async function saveProfile(
         status: true,
         githubLogin: true,
       },
-      with: { user: { columns: { name: true } } },
+      with: { user: { columns: { name: true, image: true } } },
     });
     // `findFirst` yields undefined when there is no row; a Date is always
     // truthy, so this covers "no profile" and "not yet published" together.
-    if (current?.publishedAt && normalizeHandle(data.handle) !== current.handle) {
+    if (
+      current?.publishedAt &&
+      normalizeHandle(data.handle) !== current.handle
+    ) {
       return {
         success: false,
         handleError:
@@ -288,7 +298,8 @@ export async function saveProfile(
             parsed.data.skills ?? [],
             current.user.name,
             current.githubLogin,
-            checkContent
+            current.user.image,
+            checkContent,
           )
         : {
             success: false,
@@ -340,7 +351,7 @@ export async function publishProfile(
       linkedinUrl: true,
       publishedAt: true,
     },
-    with: { user: { columns: { name: true } } },
+    with: { user: { columns: { name: true, image: true } } },
   });
 
   if (!profile) {
@@ -354,18 +365,22 @@ export async function publishProfile(
     };
   }
 
-  const moderation = await runContentCheck(checkContent, {
-    displayName: profile.user.name,
-    handle: profile.handle,
-    headline: profile.headline,
-    bio: profile.bio,
-    location: profile.location,
-    country: profile.country,
-    skills: parseSkillsJson(profile.skills),
-    githubLogin: profile.githubLogin,
-    portfolioUrl: profile.portfolioUrl,
-    linkedinUrl: profile.linkedinUrl,
-  });
+  const moderation = await runContentCheck(
+    checkContent,
+    {
+      displayName: profile.user.name,
+      handle: profile.handle,
+      headline: profile.headline,
+      bio: profile.bio,
+      location: profile.location,
+      country: profile.country,
+      skills: parseSkillsJson(profile.skills),
+      githubLogin: profile.githubLogin,
+      portfolioUrl: profile.portfolioUrl,
+      linkedinUrl: profile.linkedinUrl,
+    },
+    profile.user.image,
+  );
   const moderationValues = moderationColumns(moderation);
 
   await db
@@ -377,7 +392,7 @@ export async function publishProfile(
             status: "PUBLISHED",
             publishedAt: profile.publishedAt ?? new Date(),
           }
-        : moderationValues
+        : moderationValues,
     )
     .where(
       and(

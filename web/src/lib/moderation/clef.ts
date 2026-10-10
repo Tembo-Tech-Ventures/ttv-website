@@ -6,25 +6,25 @@ export const PROFILE_MODERATION_QUESTIONS = {
   contains_contact_details: {
     type: "noul",
     instructions:
-      "Does any public profile text contain a phone number, email address, or national identity number? Do not count an HTTPS portfolio or LinkedIn URL by itself.",
+      "Does any public profile text or attached profile image contain a phone number, email address, or national identity number? Do not count an HTTPS portfolio or LinkedIn URL by itself.",
     criteria: {
-      true: "The text exposes a phone number, email address, or national identity number.",
-      false: "The text does not expose those contact or identity details.",
+      true: "The profile exposes a phone number, email address, or national identity number.",
+      false: "The profile does not expose those contact or identity details.",
     },
   },
   abusive_or_sexual: {
     type: "noul",
     instructions:
-      "Does any public profile text contain abusive, threatening, hateful, or sexual content?",
+      "Does any public profile text or attached profile image contain abusive, threatening, hateful, or sexual content?",
     criteria: {
-      true: "The text contains abusive, threatening, hateful, or sexual content.",
-      false: "The text does not contain that content.",
+      true: "The profile contains abusive, threatening, hateful, or sexual content.",
+      false: "The profile does not contain that content.",
     },
   },
   promotes_unrelated_business: {
     type: "noul",
     instructions:
-      "Does this builder profile promote an unrelated business, multi-level marketing scheme, or spam instead of describing the builder and their work?",
+      "Does this builder profile, including its attached image, promote an unrelated business, multi-level marketing scheme, or spam instead of describing the builder and their work?",
     criteria: {
       true: "The profile is primarily unrelated promotion, multi-level marketing, or spam.",
       false:
@@ -34,7 +34,7 @@ export const PROFILE_MODERATION_QUESTIONS = {
   impersonation_risk: {
     type: "noul",
     instructions:
-      "Does any public profile text falsely claim that the builder represents Tembo Tech Ventures, its staff, or another organisation?",
+      "Does any public profile text or attached profile image falsely claim that the builder represents Tembo Tech Ventures, its staff, or another organisation?",
     criteria: {
       true: "The profile makes a likely false claim of representing an organisation or its staff.",
       false: "The profile makes no such claim.",
@@ -159,25 +159,33 @@ function parseResponse(response: unknown): ProfileModerationResult {
 export async function checkProfileContent(
   ai: Pick<Ai, "run">,
   state: ProfileModerationState,
-  options: { gatewayName?: string; timeoutMs?: number } = {},
+  options: {
+    gatewayName?: string;
+    timeoutMs?: number;
+    loadAvatarImage?: () => Promise<string | null>;
+  } = {},
 ): Promise<ProfileModerationResult> {
   try {
-    const request = {
-      model: "clef-flash",
-      state,
-      questions: PROFILE_MODERATION_QUESTIONS,
-    };
     const gatewayName = options.gatewayName?.trim();
     if (!gatewayName) throw new Error("AI Gateway is not configured");
     const response = await withTimeout(
-      ai.run(
-        CLEF_PROFILE_MODEL as Parameters<typeof ai.run>[0],
-        request as never,
-        // Profile text can contain the exact contact or identity details this
-        // check detects. Keep Gateway routing without persisting the request or
-        // response in AI Gateway logs.
-        { gateway: { id: gatewayName, collectLog: false } },
-      ) as Promise<unknown>,
+      (async () => {
+        const avatarImage = await options.loadAvatarImage?.();
+        const request = {
+          model: "clef-flash",
+          state,
+          questions: PROFILE_MODERATION_QUESTIONS,
+          ...(avatarImage ? { images: [avatarImage] } : {}),
+        };
+        return ai.run(
+          CLEF_PROFILE_MODEL as Parameters<typeof ai.run>[0],
+          request as never,
+          // Profile text can contain the exact contact or identity details this
+          // check detects. Keep Gateway routing without persisting the request or
+          // response in AI Gateway logs.
+          { gateway: { id: gatewayName, collectLog: false } },
+        ) as Promise<unknown>;
+      })(),
       options.timeoutMs ?? CLEF_TIMEOUT_MS,
     );
     return parseResponse(response);

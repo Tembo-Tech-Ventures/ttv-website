@@ -13,6 +13,7 @@ import { parseSkillsJson } from "@/lib/talent/profile";
 import { fetchGitHubLogin } from "@/lib/talent/github";
 import { preserveFormTextValues } from "@/lib/form-values";
 import { isAgentSession } from "@/lib/agent-auth";
+import { loadProfilePhotoForModeration } from "@/lib/avatar";
 import {
   checkProfileContent,
   previewProfileModerationResult,
@@ -34,11 +35,14 @@ const previewModeration = previewProfileModerationResult(
   isAgentSession(Astro.locals.session?.userAgent),
   Astro.request.headers.get(PROFILE_MODERATION_PREVIEW_HEADER),
 );
-const moderateProfile: ProfileContentCheck = (state) =>
+const moderateProfile: ProfileContentCheck = (state, avatarUrl) =>
   previewModeration
     ? Promise.resolve(previewModeration)
     : checkProfileContent(env.AI, state, {
         gatewayName: env.AI_GATEWAY_NAME,
+        loadAvatarImage: avatarUrl
+          ? () => loadProfilePhotoForModeration(env.BUCKET, avatarUrl)
+          : undefined,
       });
 
 const PROFILE_TEXT_FIELDS = [

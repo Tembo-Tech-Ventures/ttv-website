@@ -68,6 +68,34 @@ describe("checkProfileContent", () => {
     );
   });
 
+  it("embeds the avatar using Clef's documented images array", async () => {
+    const ai = aiReturning(response(clearScores));
+    const avatarImage = "data:image/webp;base64,AQID";
+
+    await expect(
+      checkProfileContent(ai, state, {
+        gatewayName: "ttv-ai",
+        loadAvatarImage: () => Promise.resolve(avatarImage),
+      }),
+    ).resolves.toMatchObject({ outcome: "pass" });
+    expect(ai.run).toHaveBeenCalledWith(
+      CLEF_PROFILE_MODEL,
+      expect.objectContaining({ images: [avatarImage] }),
+      { gateway: { id: "ttv-ai", collectLog: false } },
+    );
+  });
+
+  it("fails open when an avatar cannot be loaded", async () => {
+    const ai = aiReturning(response(clearScores));
+    await expect(
+      checkProfileContent(ai, state, {
+        gatewayName: "ttv-ai",
+        loadAvatarImage: () => Promise.reject(new Error("avatar unavailable")),
+      }),
+    ).resolves.toEqual({ outcome: "error", flags: [], scores: {} });
+    expect(ai.run).not.toHaveBeenCalled();
+  });
+
   it("holds content at a question's threshold and returns fixed flags", async () => {
     const scores = {
       ...clearScores,
@@ -117,6 +145,21 @@ describe("checkProfileContent", () => {
     await expect(
       checkProfileContent(ai, state, { gatewayName: "ttv-ai", timeoutMs: 5 }),
     ).resolves.toEqual({ outcome: "error", flags: [], scores: {} });
+  });
+
+  it("applies the same timeout while loading an avatar", async () => {
+    const ai = aiReturning(response(clearScores));
+    await expect(
+      checkProfileContent(ai, state, {
+        gatewayName: "ttv-ai",
+        timeoutMs: 5,
+        loadAvatarImage: () =>
+          new Promise(() => {
+            // Intentionally never settles so media loading cannot extend the check.
+          }),
+      }),
+    ).resolves.toEqual({ outcome: "error", flags: [], scores: {} });
+    expect(ai.run).not.toHaveBeenCalled();
   });
 
   it("returns a fail-open error result for malformed output", async () => {
