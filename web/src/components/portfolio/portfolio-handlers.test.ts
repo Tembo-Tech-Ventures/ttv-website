@@ -703,4 +703,47 @@ describe("published profile edits", () => {
       );
     }
   });
+
+  it.each([
+    [
+      "held",
+      () =>
+        Promise.resolve({
+          outcome: "hold" as const,
+          flags: ["contains_contact_details" as const],
+          scores: { contains_contact_details: 0.99 },
+        }),
+    ],
+    [
+      "passing",
+      () =>
+        Promise.resolve({ outcome: "pass" as const, flags: [], scores: {} }),
+    ],
+  ])(
+    "reports a conflict when a %s published edit loses its status race",
+    async (_case, checkContent) => {
+      const updateProfile = vi.fn();
+      const db = mockDb({
+        findProfileForLock: current,
+        findProfileByHandle: { id: "profile-1" },
+        updateProfile,
+        updateChanges: 0,
+      });
+
+      const result = await saveProfile(
+        db as never,
+        "user-1",
+        makeFormData({ handle: "existing-user", bio: "Updated biography" }),
+        "profile-1",
+        checkContent,
+      );
+
+      expect(result).toEqual({
+        success: false,
+        error:
+          "This profile changed while your request was running. Reload and try again.",
+      });
+      expectStatusWriteGuard(updateProfile, "PUBLISHED");
+    },
+  );
 });

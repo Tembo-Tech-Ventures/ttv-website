@@ -4,11 +4,9 @@ import Card from "@/components/common/Card.astro";
 import Button from "@/components/common/Button.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import {
   AvatarUploadError,
-  discardStoredProfilePhoto,
   loadProfilePhotoForModeration,
   storeProfilePhoto,
 } from "@/lib/avatar";
@@ -22,6 +20,7 @@ import {
   saveProfileIdentity,
   type ProfileIdentityInput,
 } from "@/components/profile/profile-handlers";
+import { discardUnreferencedProfilePhoto } from "@/components/profile/profile-photo-cleanup";
 import type { ProfileContentCheck } from "@/components/portfolio/portfolio-handlers";
 
 const user = Astro.locals.user!;
@@ -50,11 +49,12 @@ const moderateProfile: ProfileContentCheck = async (state, avatarUrl) => {
   return { ...moderation, publicAvatarUrl: avatarUrl };
 };
 const discardAvatar = async (imageUrl: string | null | undefined) => {
-  try {
-    await discardStoredProfilePhoto(env.BUCKET, user.id, imageUrl);
-  } catch {
-    // Cleanup must not replace the moderation result shown to the student.
-  }
+  await discardUnreferencedProfilePhoto({
+    db,
+    bucket: env.BUCKET,
+    userId: user.id,
+    imageUrl,
+  });
 };
 
 // Handle POST — update user profile or avatar
@@ -71,10 +71,6 @@ if (Astro.request.method === "POST") {
         throw new AvatarUploadError("Please choose an image to upload.");
       }
 
-      const currentProfile = await db.query.studentProfile.findFirst({
-        where: eq(schema.studentProfile.userId, user.id),
-        columns: { status: true },
-      });
       const previousImageUrl = user.image;
       const uploadedAvatar = await storeProfilePhoto(env, {
         userId: user.id,
@@ -99,9 +95,7 @@ if (Astro.request.method === "POST") {
       } else {
         user.image = uploadedAvatar.imageUrl;
         success = "Profile photo updated successfully!";
-        if (currentProfile?.status !== "SUSPENDED") {
-          await discardAvatar(previousImageUrl);
-        }
+        await discardAvatar(previousImageUrl);
       }
     } else {
       const name = (formData.get("name") as string)?.trim();
@@ -129,6 +123,7 @@ if (Astro.request.method === "POST") {
       }
     }
   } catch (e) {
+    await discardAvatar(uploadedAvatarUrl);
     error =
       e instanceof AvatarUploadError
         ? e.message

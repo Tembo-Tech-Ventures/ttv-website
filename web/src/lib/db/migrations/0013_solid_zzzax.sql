@@ -15,4 +15,4 @@ SET
     FROM `user`
     WHERE `user`.`id` = `studentProfile`.`userId`
   )
-WHERE `status` = 'PUBLISHED';
+WHERE `status` IN ('PUBLISHED', 'SUSPENDED');

@@ -76,7 +76,7 @@ describe("profile moderation migration", () => {
 });
 
 describe("public identity snapshot migration", () => {
-  it("freezes names and only locally stored avatars for existing public profiles", () => {
+  it("freezes names and only local avatars for published and suspended profiles", () => {
     const database = new DatabaseSync(":memory:");
     database.exec(`
       CREATE TABLE "user" (
@@ -92,10 +92,12 @@ describe("public identity snapshot migration", () => {
       INSERT INTO "user" ("id", "name", "image") VALUES
         ('local-user', 'Local Builder', '/api/avatar/avatars/local-user/photo.webp'),
         ('remote-user', 'Remote Builder', 'https://avatars.githubusercontent.com/u/123'),
+        ('suspended-user', 'Suspended Builder', '/api/avatar/avatars/suspended-user/photo.webp'),
         ('draft-user', 'Draft Builder', '/api/avatar/avatars/draft-user/photo.webp');
       INSERT INTO "studentProfile" ("id", "userId", "status") VALUES
         ('local-profile', 'local-user', 'PUBLISHED'),
         ('remote-profile', 'remote-user', 'PUBLISHED'),
+        ('suspended-profile', 'suspended-user', 'SUSPENDED'),
         ('draft-profile', 'draft-user', 'DRAFT');
     `);
 
@@ -118,6 +120,16 @@ describe("public identity snapshot migration", () => {
         )
         .get("remote-profile"),
     ).toEqual({ publicName: "Remote Builder", publicAvatarUrl: null });
+    expect(
+      database
+        .prepare(
+          'SELECT "publicName", "publicAvatarUrl" FROM "studentProfile" WHERE "id" = ?',
+        )
+        .get("suspended-profile"),
+    ).toEqual({
+      publicName: "Suspended Builder",
+      publicAvatarUrl: "/api/avatar/avatars/suspended-user/photo.webp",
+    });
     expect(
       database
         .prepare(
