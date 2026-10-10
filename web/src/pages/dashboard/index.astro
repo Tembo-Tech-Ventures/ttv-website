@@ -12,14 +12,27 @@ const user = Astro.locals.user!;
 const journey = await getStudentJourney(drizzle(env.DB, { schema }), user.id);
 const { nextStep } = journey;
 const greetingName = getDashboardGreetingName(user.name);
+const hasVisitedDashboard =
+  Astro.cookies.get("ttv-dashboard-visited")?.value === user.id;
+
+Astro.cookies.set("ttv-dashboard-visited", user.id, {
+  httpOnly: true,
+  maxAge: 60 * 60 * 24 * 365,
+  path: "/dashboard",
+  sameSite: "lax",
+  secure: Astro.url.protocol === "https:",
+});
 ---
 
 <DashboardLayout title="Dashboard" journey={journey}>
   <div class="mx-auto max-w-3xl space-y-6">
-    <header>
-      <h2 class="text-2xl font-bold text-white">Welcome back, {greetingName}</h2>
-      <p class="mt-1 text-ink-secondary">Here is the clearest way forward.</p>
-    </header>
+    {hasVisitedDashboard && (
+      <header>
+        <h2 class="text-2xl font-bold text-white">
+          Welcome back, {greetingName}
+        </h2>
+      </header>
+    )}
 
     <section aria-labelledby="next-step-title">
       <Card>

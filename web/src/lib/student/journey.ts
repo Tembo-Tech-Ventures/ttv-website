@@ -258,7 +258,7 @@ function buildPendingNextStep(
     detail: formatApplicationDetail(pending),
     action: {
       href: pending ? `/dashboard/application/${pending.id}` : "/dashboard/apply",
-      label: "View application",
+      label: "Edit answers",
     },
   };
 }

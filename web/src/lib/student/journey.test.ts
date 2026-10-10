@@ -98,12 +98,14 @@ describe("student journey", () => {
     unread?: number;
     expectedTitle: string;
     expectedAction: string;
+    expectedActionLabel: string;
   }> = [
     {
       name: "new sign-in",
       expectedState: "no_application",
       expectedTitle: "Apply to Builders Cohort",
       expectedAction: "/dashboard/apply",
+      expectedActionLabel: "Apply",
     },
     {
       name: "pending applicant",
@@ -111,6 +113,7 @@ describe("student journey", () => {
       applications: [application("PENDING")],
       expectedTitle: "Your application is with the team",
       expectedAction: "/dashboard/application/application-pending",
+      expectedActionLabel: "Edit answers",
     },
     {
       name: "audit participant",
@@ -119,6 +122,7 @@ describe("student journey", () => {
       accessible: true,
       expectedTitle: "Keep learning with the cohort",
       expectedAction: "/dashboard/sessions",
+      expectedActionLabel: "Watch sessions",
     },
     {
       name: "rejected applicant",
@@ -126,6 +130,7 @@ describe("student journey", () => {
       applications: [application("REJECTED")],
       expectedTitle: "Keep building with the community",
       expectedAction: "/dashboard/apply",
+      expectedActionLabel: "See the next cohort",
     },
     {
       name: "accepted student",
@@ -134,6 +139,7 @@ describe("student journey", () => {
       accessible: true,
       expectedTitle: "Start with your cohort sessions",
       expectedAction: "/dashboard/sessions",
+      expectedActionLabel: "Watch sessions",
     },
     {
       name: "graduate",
@@ -143,6 +149,7 @@ describe("student journey", () => {
       completed: true,
       expectedTitle: "Your certificate is ready",
       expectedAction: "/certificate/application-completed",
+      expectedActionLabel: "View certificate",
     },
     {
       name: "published builder",
@@ -154,6 +161,7 @@ describe("student journey", () => {
       unread: 2,
       expectedTitle: "Your builder profile is live",
       expectedAction: "/dashboard/leads",
+      expectedActionLabel: "Read messages",
     },
   ];
 
@@ -176,6 +184,7 @@ describe("student journey", () => {
       expect(journey.state).toBe(testCase.expectedState);
       expect(journey.nextStep.title).toBe(testCase.expectedTitle);
       expect(journey.nextStep.action.href).toBe(testCase.expectedAction);
+      expect(journey.nextStep.action.label).toBe(testCase.expectedActionLabel);
       expect(journey.visibleLinkIds).toEqual(
         expect.arrayContaining(["home", "apply", "ask", "account", "logout"])
       );
