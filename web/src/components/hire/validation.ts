@@ -62,7 +62,7 @@ export const interestNoteSchema = z
   .optional()
   .default("");
 
-export type ProfileStatus = "DRAFT" | "IN_REVIEW" | "PUBLISHED" | "SUSPENDED";
+export type ProfileStatus = "DRAFT" | "PUBLISHED" | "SUSPENDED";
 
 export type OpportunityGateState = "no_profile" | "not_published" | "published";
 
@@ -81,8 +81,6 @@ export function resolveGateState(
     const statusMessages: Record<string, string> = {
       DRAFT:
         "Once your profile is published, client projects will open up here.",
-      IN_REVIEW:
-        "Your profile is being reviewed. Once it is published, client projects will open up here.",
       SUSPENDED:
         "Your profile is currently suspended. Contact the TTV team for help.",
     };

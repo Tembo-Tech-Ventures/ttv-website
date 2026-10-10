@@ -25,6 +25,7 @@ import {
   loadPublicPageData,
   markPublicDataUnavailable,
 } from "@/lib/public-page-data";
+import { resolvePublicProfileIdentity } from "@/lib/talent/public-identity";
 
 const { handle } = Astro.params;
 
@@ -45,7 +46,7 @@ const profileRead = handle
             eq(schema.studentProfile.status, "PUBLISHED"),
           ),
           with: {
-            user: { columns: { id: true, name: true, image: true } },
+            user: { columns: { id: true } },
             highlights: { orderBy: [asc(schema.profileHighlight.sortOrder)] },
           },
         });
@@ -68,6 +69,12 @@ const profile =
     ? candidateProfile
     : undefined;
 const cohorts = profile ? candidateCohorts : [];
+const publicIdentity = resolvePublicProfileIdentity({
+  publicName: profile?.publicName ?? null,
+  publicAvatarUrl: profile?.publicAvatarUrl ?? null,
+});
+const publicName = publicIdentity.name;
+const publicAvatarUrl = publicIdentity.image;
 
 if (!profileRead.available) {
   markPublicDataUnavailable(Astro.response);
@@ -76,8 +83,8 @@ if (!profileRead.available) {
 }
 
 const skills = profile ? parseSkillsJson(profile.skills) : [];
-const initials = profile ? getInitials(profile.user.name) : "?";
-const firstName = profile?.user.name.split(/\s+/)[0] ?? "";
+const initials = profile ? getInitials(publicName) : "?";
+const firstName = profile ? publicName.split(/\s+/)[0] : "";
 
 const CONTACT_FORM_FIELDS = [
   "fromName",
@@ -149,18 +156,18 @@ const profileDescription = profile
   ? normalizeDescription(
       profile.bio ??
         (profile.headline
-          ? `Meet ${profile.user.name}, ${profile.headline}, and explore their work as part of the TTV builder community across Africa.`
-          : `Meet ${profile.user.name} and explore their work as part of the TTV builder community across Africa.`)
+          ? `Meet ${publicName}, ${profile.headline}, and explore their work as part of the TTV builder community across Africa.`
+          : `Meet ${publicName} and explore their work as part of the TTV builder community across Africa.`)
     )
   : undefined;
 const profileUrl = absoluteUrl(Astro.site, canonical);
 const personJsonLd =
   profile && profileUrl
     ? buildPersonJsonLd({
-        name: profile.user.name,
+        name: publicName,
         url: profileUrl,
-        image: profile.user.image
-          ? absoluteUrl(Astro.site, profile.user.image)
+        image: publicAvatarUrl
+          ? absoluteUrl(Astro.site, publicAvatarUrl)
           : null,
         headline: profile.headline,
         description: profile.bio,
@@ -177,7 +184,7 @@ const personJsonLd =
 
 <PublicLayout
   title={profile
-    ? `${profile.user.name} — Builder at Tembo Tech Ventures`
+    ? `${publicName} — Builder at Tembo Tech Ventures`
     : !profileRead.available
       ? "Profile Temporarily Unavailable · Tembo Tech Ventures"
     : "Profile Not Found · Tembo Tech Ventures"}
@@ -233,9 +240,9 @@ const personJsonLd =
       {/* Identity header */}
       <header class="flex flex-col gap-6 sm:flex-row sm:items-start sm:gap-8">
         <div class="shrink-0">
-          {profile.user.image ? (
+          {publicAvatarUrl ? (
             <img
-              src={profile.user.image}
+              src={publicAvatarUrl}
               alt=""
               class="h-28 w-28 rounded-full border-2 border-primary/30 object-cover sm:h-36 sm:w-36"
             />
@@ -256,7 +263,7 @@ const personJsonLd =
             class="font-heading tracking-heading text-ink-primary"
             style="font-size: clamp(2rem, 6vw, 3.5rem); line-height: 0.95;"
           >
-            {profile.user.name}
+            {publicName}
           </h1>
 
           {profile.headline && (

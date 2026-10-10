@@ -128,7 +128,7 @@ test.describe("authenticated portfolio editor", () => {
     await page.waitForLoadState("networkidle");
 
     await expect(
-      page.getByText(/profile saved/i).or(page.locator('input[name="handle"]')).first(),
+      page.getByText(/profile created as a draft|draft saved|changes are live/i),
     ).toBeVisible();
 
     await page.reload();

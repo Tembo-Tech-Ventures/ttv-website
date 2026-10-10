@@ -14,7 +14,7 @@ test.describe("public talent stubs", () => {
     const response = await page.goto("/talent");
     expect(response?.status()).toBe(200);
     await expect(
-      page.getByRole("heading", { name: /meet our/i })
+      page.getByRole("heading", { name: /meet our/i }),
     ).toBeVisible();
     await page.screenshot({
       path: evidence("talent-stub"),
@@ -26,7 +26,7 @@ test.describe("public talent stubs", () => {
     const response = await page.goto("/hire");
     expect(response?.status()).toBe(200);
     await expect(
-      page.getByRole("heading", { name: /work with/i })
+      page.getByRole("heading", { name: /work with/i }),
     ).toBeVisible();
     await page.screenshot({
       path: evidence("hire-stub"),
@@ -37,7 +37,10 @@ test.describe("public talent stubs", () => {
 
 test.describe("authenticated talent foundation", () => {
   const token = process.env.PLAYWRIGHT_AGENT_TOKEN;
-  test.skip(!token, "No agent bearer token is configured for this environment.");
+  test.skip(
+    !token,
+    "No agent bearer token is configured for this environment.",
+  );
   test.use({
     extraHTTPHeaders: token ? { Authorization: `Bearer ${token}` } : {},
   });
@@ -45,7 +48,7 @@ test.describe("authenticated talent foundation", () => {
   test("dashboard/portfolio stub renders", async ({ page }) => {
     await page.goto("/dashboard/portfolio");
     await expect(
-      page.getByRole("heading", { name: /portfolio/i })
+      page.getByRole("heading", { name: /portfolio/i }),
     ).toBeVisible();
     await page.screenshot({
       path: evidence("dashboard-portfolio"),
@@ -55,9 +58,7 @@ test.describe("authenticated talent foundation", () => {
 
   test("dashboard/leads stub renders", async ({ page }) => {
     await page.goto("/dashboard/leads");
-    await expect(
-      page.getByRole("heading", { name: /leads/i })
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: /leads/i })).toBeVisible();
     await page.screenshot({
       path: evidence("dashboard-leads"),
       fullPage: true,
@@ -67,7 +68,7 @@ test.describe("authenticated talent foundation", () => {
   test("dashboard/opportunities stub renders", async ({ page }) => {
     await page.goto("/dashboard/opportunities");
     await expect(
-      page.getByRole("heading", { name: /opportunities/i })
+      page.getByRole("heading", { name: /opportunities/i }),
     ).toBeVisible();
     await page.screenshot({
       path: evidence("dashboard-opportunities"),
@@ -78,7 +79,7 @@ test.describe("authenticated talent foundation", () => {
   test("admin/profiles stub renders", async ({ page }) => {
     await page.goto("/admin/profiles");
     await expect(
-      page.getByRole("heading", { name: /profiles/i })
+      page.getByRole("heading", { name: /profiles/i }),
     ).toBeVisible();
     await page.screenshot({
       path: evidence("admin-profiles"),
@@ -89,7 +90,7 @@ test.describe("authenticated talent foundation", () => {
   test("admin/projects stub renders", async ({ page }) => {
     await page.goto("/admin/projects");
     await expect(
-      page.getByRole("heading", { name: /client projects/i })
+      page.getByRole("heading", { name: /client projects/i }),
     ).toBeVisible();
     await page.screenshot({
       path: evidence("admin-projects"),
@@ -112,7 +113,7 @@ test.describe("authenticated talent foundation", () => {
     await expect(page.getByRole("link", { name: "Portfolio" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Leads" })).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "Opportunities" })
+      page.getByRole("link", { name: "Opportunities" }),
     ).toBeVisible();
     await page.screenshot({
       path: evidence("dashboard-nav"),
@@ -132,9 +133,11 @@ test.describe("authenticated talent foundation", () => {
       await opener.click();
       await expect(opener).toHaveAttribute("aria-expanded", "true");
     }
-    await expect(page.getByRole("link", { name: "Profiles" })).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "Client Projects" })
+      page.getByRole("link", { name: "Profiles", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Client Projects" }),
     ).toBeVisible();
     await page.screenshot({
       path: evidence("admin-nav"),

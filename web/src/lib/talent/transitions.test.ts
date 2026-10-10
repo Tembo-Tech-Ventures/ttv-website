@@ -7,15 +7,9 @@ import {
 } from "./transitions";
 
 describe("PROFILE_TRANSITIONS", () => {
-  it("allows DRAFT → IN_REVIEW", () => {
-    expect(canTransition(PROFILE_TRANSITIONS, "DRAFT", "IN_REVIEW")).toBe(true);
-  });
-
-  it("allows IN_REVIEW → PUBLISHED and IN_REVIEW → DRAFT", () => {
-    expect(canTransition(PROFILE_TRANSITIONS, "IN_REVIEW", "PUBLISHED")).toBe(
-      true
-    );
-    expect(canTransition(PROFILE_TRANSITIONS, "IN_REVIEW", "DRAFT")).toBe(true);
+  it("allows DRAFT → PUBLISHED and DRAFT → SUSPENDED", () => {
+    expect(canTransition(PROFILE_TRANSITIONS, "DRAFT", "PUBLISHED")).toBe(true);
+    expect(canTransition(PROFILE_TRANSITIONS, "DRAFT", "SUSPENDED")).toBe(true);
   });
 
   it("allows PUBLISHED → SUSPENDED", () => {
@@ -31,13 +25,10 @@ describe("PROFILE_TRANSITIONS", () => {
   });
 
   it("disallows invalid transitions", () => {
-    expect(canTransition(PROFILE_TRANSITIONS, "DRAFT", "PUBLISHED")).toBe(
-      false
-    );
-    expect(canTransition(PROFILE_TRANSITIONS, "DRAFT", "SUSPENDED")).toBe(
-      false
-    );
     expect(canTransition(PROFILE_TRANSITIONS, "PUBLISHED", "DRAFT")).toBe(
+      false
+    );
+    expect(canTransition(PROFILE_TRANSITIONS, "SUSPENDED", "DRAFT")).toBe(
       false
     );
   });

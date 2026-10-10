@@ -232,6 +232,8 @@ describe("seedAgentPreviewFixtures", () => {
     const aminaProfile = findByParam("ttv-fixture-profile-amina");
     expect(aminaProfile?.[2]).toContain("amina-preview");
     expect(aminaProfile?.[2]).toContain("Kenya");
+    expect(aminaProfile?.[1]).toContain("'error'");
+    expect(aminaProfile?.[1]).toContain('"moderationReviewRequired" = 1');
     const readerPost = findByParam("ttv-fixture-post-amina-reader");
     expect(readerPost?.[1]).toContain('INSERT INTO "blogPost"');
     expect(readerPost?.[2]).toContain("building-resilient-interfaces");
@@ -258,9 +260,11 @@ describe("seedAgentPreviewFixtures", () => {
     expect(findByParam("ttv-fixture-highlight-amina-2")).toBeDefined();
 
     expect(findByParam("ttv-fixture-user-kwame")).toBeDefined();
-    expect(findByParam("ttv-fixture-profile-kwame")?.[2]).toContain(
-      "kwame-preview"
-    );
+    const kwameProfile = findByParam("ttv-fixture-profile-kwame");
+    expect(kwameProfile?.[2]).toContain("kwame-preview");
+    expect(kwameProfile?.[1]).toContain("'DRAFT'");
+    expect(kwameProfile?.[1]).toContain("'hold'");
+    expect(kwameProfile?.[1]).toContain("contains_contact_details");
 
     expect(findByParam("ttv-fixture-project-approved")?.[2]).toContain(
       "Savanna Logistics"

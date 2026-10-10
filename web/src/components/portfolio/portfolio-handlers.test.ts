@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
+import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import {
   extractProfileFormData,
+  publishProfile,
   validateProfileHandle,
   saveProfile,
-  submitForReview,
 } from "./portfolio-handlers";
 
 function makeFormData(entries: Record<string, string>): FormData {
@@ -59,44 +60,86 @@ describe("extractProfileFormData", () => {
   });
 });
 
-function mockDb(overrides: {
-  findProfile?: unknown;
-  findProfileByHandle?: unknown;
-  /**
-   * Row returned to the handle-lock lookup in `saveProfile`, which is the only
-   * query selecting `publishedAt`. Defaults to null so existing cases behave as
-   * an unpublished profile and the lock stays out of the way.
-   */
-  findProfileForLock?: { handle: string; publishedAt: Date | null } | null;
-  insertProfile?: () => void;
-  updateProfile?: () => void;
-} = {}) {
+function mockDb(
+  overrides: {
+    findProfile?: unknown;
+    findProfileByHandle?: unknown;
+    /**
+     * Row returned to the handle-lock lookup in `saveProfile`, which is the only
+     * query selecting `publishedAt`. Defaults to null so existing cases behave as
+     * an unpublished profile and the lock stays out of the way.
+     */
+    findProfileForLock?: {
+      handle: string;
+      publishedAt: Date | null;
+      status?: "DRAFT" | "PUBLISHED" | "SUSPENDED";
+      githubLogin?: string | null;
+      publicName?: string | null;
+      publicAvatarUrl?: string | null;
+      contentVersion?: number;
+      user?: { name: string; image?: string | null };
+      highlights?: Array<{
+        repoFullName: string;
+        description: string | null;
+        blurb: string | null;
+        language: string | null;
+        topics: string | null;
+      }>;
+    } | null;
+    insertProfile?: () => void;
+    updateProfile?: (condition?: unknown) => void;
+    updateChanges?: number | (() => number);
+    setProfile?: (values: unknown) => void;
+  } = {},
+) {
   const insertFn = vi.fn(overrides.insertProfile ?? (() => {}));
   const updateFn = vi.fn(overrides.updateProfile ?? (() => {}));
 
   return {
     query: {
       studentProfile: {
-        findFirst: vi.fn(async (opts?: { where?: unknown; columns?: Record<string, unknown> }) => {
-          // Dispatch on requested columns: `saveProfile` issues two distinct
-          // lookups (handle lock, then handle uniqueness) against this mock.
-          if (opts?.columns && "publishedAt" in opts.columns) {
-            return overrides.findProfileForLock ?? null;
-          }
-          if (opts?.where && typeof opts.where === "function") {
-            return overrides.findProfile ?? null;
-          }
-          return overrides.findProfileByHandle ?? overrides.findProfile ?? null;
-        }),
+        findFirst: vi.fn(
+          async (opts?: {
+            where?: unknown;
+            columns?: Record<string, unknown>;
+          }) => {
+            // Dispatch on requested columns: `saveProfile` issues two distinct
+            // lookups (handle lock, then handle uniqueness) against this mock.
+            if (opts?.columns && "publishedAt" in opts.columns) {
+              return overrides.findProfileForLock
+                ? { contentVersion: 0, ...overrides.findProfileForLock }
+                : null;
+            }
+            if (opts?.where && typeof opts.where === "function") {
+              return overrides.findProfile ?? null;
+            }
+            return (
+              overrides.findProfileByHandle ?? overrides.findProfile ?? null
+            );
+          },
+        ),
       },
     },
     insert: vi.fn(() => ({
       values: insertFn,
     })),
     update: vi.fn(() => ({
-      set: vi.fn(() => ({
-        where: updateFn,
-      })),
+      set: vi.fn((values: unknown) => {
+        overrides.setProfile?.(values);
+        return {
+          where: (condition: unknown) => {
+            updateFn(condition);
+            return {
+              meta: {
+                changes:
+                  typeof overrides.updateChanges === "function"
+                    ? overrides.updateChanges()
+                    : (overrides.updateChanges ?? 1),
+              },
+            };
+          },
+        };
+      }),
     })),
   } as unknown;
 }
@@ -219,6 +262,12 @@ describe("saveProfile", () => {
   it("updates existing profile when ID provided", async () => {
     const updateFn = vi.fn();
     const db = mockDb({
+      findProfileForLock: {
+        handle: "existing-user",
+        publishedAt: null,
+        status: "DRAFT",
+        githubLogin: "existing-user",
+      },
       findProfileByHandle: null,
       updateProfile: updateFn,
     });
@@ -228,13 +277,38 @@ describe("saveProfile", () => {
       headline: "Updated headline",
     });
 
+    const result = await saveProfile(db as never, "user-1", fd, "profile-1");
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects edits to a suspended profile at the handler boundary", async () => {
+    const updateFn = vi.fn();
+    const checkContent = vi.fn();
+    const db = mockDb({
+      findProfileForLock: {
+        handle: "suspended-user",
+        publishedAt: new Date("2026-01-01"),
+        status: "SUSPENDED",
+        githubLogin: "suspended-user",
+        user: { name: "Suspended User" },
+      },
+      updateProfile: updateFn,
+    });
+
     const result = await saveProfile(
       db as never,
       "user-1",
-      fd,
+      makeFormData({ handle: "suspended-user", bio: "Changed content" }),
       "profile-1",
+      checkContent,
     );
-    expect(result.success).toBe(true);
+
+    expect(result).toEqual({
+      success: false,
+      error: "A suspended profile cannot be edited.",
+    });
+    expect(checkContent).not.toHaveBeenCalled();
+    expect(updateFn).not.toHaveBeenCalled();
   });
 
   // A published handle is part of every blog post permalink
@@ -268,6 +342,9 @@ describe("saveProfile", () => {
         findProfileForLock: {
           handle: "existing-user",
           publishedAt: new Date("2026-01-01"),
+          status: "PUBLISHED",
+          githubLogin: "existing-user",
+          user: { name: "Existing User" },
         },
         findProfileByHandle: { id: "profile-1" },
         updateProfile: updateFn,
@@ -289,6 +366,9 @@ describe("saveProfile", () => {
         findProfileForLock: {
           handle: "existing-user",
           publishedAt: new Date("2026-01-01"),
+          status: "PUBLISHED",
+          githubLogin: "existing-user",
+          user: { name: "Existing User" },
         },
         findProfileByHandle: { id: "profile-1" },
         updateProfile: updateFn,
@@ -305,7 +385,11 @@ describe("saveProfile", () => {
     it("allows a handle change while the profile is still unpublished", async () => {
       const updateFn = vi.fn();
       const db = mockDb({
-        findProfileForLock: { handle: "old-handle", publishedAt: null },
+        findProfileForLock: {
+          handle: "old-handle",
+          publishedAt: null,
+          status: "DRAFT",
+        },
         findProfileByHandle: null,
         updateProfile: updateFn,
       });
@@ -315,6 +399,34 @@ describe("saveProfile", () => {
 
       expect(result.success).toBe(true);
       expect(updateFn).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not mutate a draft suspended while the save is in flight", async () => {
+      const updateFn = vi.fn();
+      const db = mockDb({
+        findProfileForLock: {
+          handle: "draft-user",
+          publishedAt: null,
+          status: "DRAFT",
+        },
+        findProfileByHandle: { id: "profile-1" },
+        updateProfile: updateFn,
+        updateChanges: 0,
+      });
+
+      const result = await saveProfile(
+        db as never,
+        "user-1",
+        makeFormData({ handle: "draft-user", bio: "Changed content" }),
+        "profile-1",
+      );
+
+      expect(result).toEqual({
+        success: false,
+        error:
+          "This profile changed while your request was running. Reload and try again.",
+      });
+      expectVersionedStatusWriteGuard(updateFn, "DRAFT");
     });
   });
 
@@ -331,62 +443,386 @@ describe("saveProfile", () => {
   });
 });
 
-describe("submitForReview", () => {
-  it("transitions DRAFT to IN_REVIEW", async () => {
-    const updateFn = vi.fn();
+const draftProfile = {
+  status: "DRAFT" as const,
+  contentVersion: 0,
+  handle: "new-user",
+  headline: "Developer",
+  bio: "I build useful things",
+  location: "Lagos",
+  country: "Nigeria",
+  skills: '["TypeScript"]',
+  githubLogin: "new-user",
+  user: {
+    name: "New User",
+    image: "/api/avatar/avatars/user-1/photo.webp",
+  },
+  portfolioUrl: "https://example.com",
+  linkedinUrl: null,
+  publishedAt: null,
+};
+
+type ModerationProfile = Omit<typeof draftProfile, "status" | "publishedAt"> & {
+  status: "DRAFT" | "PUBLISHED" | "SUSPENDED";
+  publishedAt: Date | null;
+};
+
+function moderationDb(
+  profile: ModerationProfile | null,
+  setProfile = vi.fn(),
+  changes = 1,
+) {
+  const where = vi.fn().mockReturnValue({ meta: { changes } });
+  return {
+    db: {
+      query: {
+        studentProfile: {
+          findFirst: vi.fn(async () => profile),
+        },
+      },
+      update: vi.fn(() => ({
+        set: vi.fn((values: unknown) => {
+          setProfile(values);
+          return { where };
+        }),
+      })),
+    },
+    setProfile,
+    where,
+  };
+}
+
+function expectVersionedStatusWriteGuard(
+  where: ReturnType<typeof vi.fn>,
+  expectedStatus: "DRAFT" | "PUBLISHED",
+  expectedVersion = 0,
+) {
+  const condition = where.mock.calls[0]?.[0];
+  const query = new SQLiteSyncDialect().sqlToQuery(condition);
+  expect(query.sql).toContain('"studentProfile"."status" = ?');
+  expect(query.params).toContain(expectedStatus);
+  expect(query.sql).toContain('"studentProfile"."contentVersion" = ?');
+  expect(query.params.at(-1)).toBe(expectedVersion);
+}
+
+describe("publishProfile", () => {
+  it("publishes a passing draft immediately", async () => {
+    const { db, setProfile, where } = moderationDb(draftProfile);
+    const checkedAt = new Date("2026-10-10T12:00:00Z");
+    const checkContent = vi
+      .fn()
+      .mockResolvedValue({ outcome: "pass", flags: [], scores: {} });
+    vi.useFakeTimers();
+    vi.setSystemTime(checkedAt);
+
+    const result = await publishProfile(
+      db as never,
+      "user-1",
+      "profile-1",
+      checkContent,
+    );
+
+    expect(result).toMatchObject({ success: true, published: true });
+    expect(setProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "PUBLISHED",
+        publishedAt: checkedAt,
+        publicName: "New User",
+        publicAvatarUrl: "/api/avatar/avatars/user-1/photo.webp",
+        moderationOutcome: "pass",
+        moderationReviewRequired: false,
+      }),
+    );
+    expect(checkContent).toHaveBeenCalledWith(
+      expect.objectContaining({ displayName: "New User" }),
+      "/api/avatar/avatars/user-1/photo.webp",
+    );
+    expectVersionedStatusWriteGuard(where, "DRAFT");
+    vi.useRealTimers();
+  });
+
+  it("holds flagged content with a fixed explanation and keeps the draft private", async () => {
+    const { db, setProfile } = moderationDb(draftProfile);
+    const result = await publishProfile(
+      db as never,
+      "user-1",
+      "profile-1",
+      () =>
+        Promise.resolve({
+          outcome: "hold",
+          flags: ["contains_contact_details"],
+          scores: { contains_contact_details: 0.92 },
+        }),
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        success: false,
+        published: false,
+        moderationOutcome: "hold",
+        moderationMessages: [
+          "Remove phone numbers, email addresses, or ID numbers from your public profile.",
+        ],
+      }),
+    );
+    expect(setProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        publicName: "New User",
+        publicAvatarUrl: "/api/avatar/avatars/user-1/photo.webp",
+        moderationOutcome: "hold",
+      }),
+    );
+    expect(setProfile.mock.calls[0]?.[0]).not.toHaveProperty("status");
+    expect(setProfile.mock.calls[0]?.[0]).not.toHaveProperty("publishedAt");
+  });
+
+  it("does not overwrite an admin status change made during the check", async () => {
+    const { db, where } = moderationDb(draftProfile, vi.fn(), 0);
+    const result = await publishProfile(
+      db as never,
+      "user-1",
+      "profile-1",
+      () => Promise.resolve({ outcome: "pass", flags: [], scores: {} }),
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error:
+        "This profile changed while your request was running. Reload and try again.",
+    });
+    expectVersionedStatusWriteGuard(where, "DRAFT");
+  });
+
+  it("fails open when the check is unavailable and flags the published profile", async () => {
+    const { db, setProfile } = moderationDb(draftProfile);
+    const result = await publishProfile(
+      db as never,
+      "user-1",
+      "profile-1",
+      () => Promise.reject(new Error("binding unavailable")),
+    );
+
+    expect(result).toMatchObject({
+      success: true,
+      published: true,
+      moderationOutcome: "error",
+    });
+    expect(setProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "PUBLISHED",
+        moderationOutcome: "error",
+        moderationReviewRequired: true,
+      }),
+    );
+  });
+
+  it("rejects a missing or already-published profile", async () => {
+    const missing = moderationDb(null);
+    expect(
+      await publishProfile(missing.db as never, "user-1", "profile-1"),
+    ).toMatchObject({ success: false, error: "Profile not found" });
+
+    const published = moderationDb({
+      ...draftProfile,
+      status: "PUBLISHED",
+      publishedAt: new Date("2026-01-01"),
+    });
+    expect(
+      await publishProfile(published.db as never, "user-1", "profile-1"),
+    ).toMatchObject({
+      success: false,
+      error: "Only a draft profile can be published",
+    });
+  });
+});
+
+describe("published profile edits", () => {
+  const current = {
+    handle: "existing-user",
+    publishedAt: new Date("2026-01-01"),
+    status: "PUBLISHED" as const,
+    githubLogin: "existing-user",
+    publicName: "Checked Public Name",
+    publicAvatarUrl: "/api/avatar/avatars/user-1/checked.webp",
+    contentVersion: 7,
+    user: { name: "Mutable Account Name", image: null },
+  };
+
+  it("keeps the previous public fields live when an edit is held", async () => {
+    const setProfile = vi.fn();
+    const updateProfile = vi.fn();
     const db = mockDb({
-      findProfile: { status: "DRAFT" },
-      updateProfile: updateFn,
-    }) as Record<string, unknown>;
-
-    db.query = {
-      studentProfile: {
-        findFirst: vi.fn(async () => ({ status: "DRAFT" })),
+      findProfileForLock: {
+        ...current,
+        highlights: [
+          {
+            repoFullName: "builder/project",
+            description: "A public description",
+            blurb: "A public blurb",
+            language: "TypeScript",
+            topics: '["community","education"]',
+          },
+        ],
       },
-    };
+      findProfileByHandle: { id: "profile-1" },
+      setProfile,
+      updateProfile,
+    });
+    const checkContent = vi.fn().mockResolvedValue({
+      outcome: "hold",
+      flags: ["contains_contact_details"],
+      scores: { contains_contact_details: 0.99 },
+    });
+    const result = await saveProfile(
+      db as never,
+      "user-1",
+      makeFormData({ handle: "existing-user", bio: "email me@example.com" }),
+      "profile-1",
+      checkContent,
+    );
 
-    const result = await submitForReview(db as never, "user-1", "profile-1");
-    expect(result.success).toBe(true);
+    expect(result).toMatchObject({ success: false, moderationOutcome: "hold" });
+    expect(setProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        moderationOutcome: "hold",
+        moderationReviewRequired: true,
+      }),
+    );
+    expect(setProfile.mock.calls[0]?.[0]).not.toHaveProperty("bio");
+    expect(checkContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        displayName: "Checked Public Name",
+        highlights: [
+          {
+            repoFullName: "builder/project",
+            description: "A public description",
+            blurb: "A public blurb",
+            language: "TypeScript",
+            topics: ["community", "education"],
+          },
+        ],
+      }),
+      "/api/avatar/avatars/user-1/checked.webp",
+    );
+    expectVersionedStatusWriteGuard(updateProfile, "PUBLISHED", 7);
   });
 
-  it("rejects transition from non-DRAFT status", async () => {
-    const db = {
-      query: {
-        studentProfile: {
-          findFirst: vi.fn(async () => ({ status: "IN_REVIEW" })),
-        },
-      },
-    };
+  it("publishes a passing edit and fails open on an unavailable check", async () => {
+    const cases = [
+      [
+        "pass",
+        () =>
+          Promise.resolve({ outcome: "pass" as const, flags: [], scores: {} }),
+        false,
+      ],
+      ["error", () => Promise.reject(new Error("binding unavailable")), true],
+    ] as const;
 
-    const result = await submitForReview(db as never, "user-1", "profile-1");
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("cannot be submitted");
+    for (const [outcome, check, reviewRequired] of cases) {
+      const setProfile = vi.fn();
+      const db = mockDb({
+        findProfileForLock: current,
+        findProfileByHandle: { id: "profile-1" },
+        setProfile,
+      });
+      const result = await saveProfile(
+        db as never,
+        "user-1",
+        makeFormData({ handle: "existing-user", headline: "Updated headline" }),
+        "profile-1",
+        check,
+      );
+
+      expect(result).toMatchObject({
+        success: true,
+        published: true,
+        moderationOutcome: outcome,
+      });
+      expect(setProfile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headline: "Updated headline",
+          moderationOutcome: outcome,
+          moderationReviewRequired: reviewRequired,
+        }),
+      );
+    }
   });
 
-  it("rejects when profile not found", async () => {
-    const db = {
-      query: {
-        studentProfile: {
-          findFirst: vi.fn(async () => null),
-        },
+  it.each([
+    [
+      "held",
+      () =>
+        Promise.resolve({
+          outcome: "hold" as const,
+          flags: ["contains_contact_details" as const],
+          scores: { contains_contact_details: 0.99 },
+        }),
+    ],
+    [
+      "passing",
+      () =>
+        Promise.resolve({ outcome: "pass" as const, flags: [], scores: {} }),
+    ],
+  ])(
+    "reports a conflict when a %s published edit loses its content-version race",
+    async (_case, checkContent) => {
+      const updateProfile = vi.fn();
+      const db = mockDb({
+        findProfileForLock: current,
+        findProfileByHandle: { id: "profile-1" },
+        updateProfile,
+        updateChanges: 0,
+      });
+
+      const result = await saveProfile(
+        db as never,
+        "user-1",
+        makeFormData({ handle: "existing-user", bio: "Updated biography" }),
+        "profile-1",
+        checkContent,
+      );
+
+      expect(result).toEqual({
+        success: false,
+        error:
+          "This profile changed while your request was running. Reload and try again.",
+      });
+      expectVersionedStatusWriteGuard(updateProfile, "PUBLISHED", 7);
+    },
+  );
+
+  it("cannot restore a stale avatar after a concurrent avatar update wins", async () => {
+    const oldAvatar = current.publicAvatarUrl;
+    const newAvatar = "/api/avatar/avatars/user-1/new.webp";
+    let persistedVersion = current.contentVersion;
+    let persistedAvatar = oldAvatar;
+    const updateProfile = vi.fn();
+    const db = mockDb({
+      findProfileForLock: current,
+      findProfileByHandle: { id: "profile-1" },
+      updateProfile,
+      updateChanges: () =>
+        persistedVersion === current.contentVersion ? 1 : 0,
+    });
+
+    const result = await saveProfile(
+      db as never,
+      "user-1",
+      makeFormData({ handle: "existing-user", bio: "Delayed edit" }),
+      "profile-1",
+      async () => {
+        persistedVersion += 1;
+        persistedAvatar = newAvatar;
+        return { outcome: "pass", flags: [], scores: {} };
       },
-    };
+    );
 
-    const result = await submitForReview(db as never, "user-1", "profile-1");
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("Profile not found");
-  });
-
-  it("rejects PUBLISHED status transition to IN_REVIEW", async () => {
-    const db = {
-      query: {
-        studentProfile: {
-          findFirst: vi.fn(async () => ({ status: "PUBLISHED" })),
-        },
-      },
-    };
-
-    const result = await submitForReview(db as never, "user-1", "profile-1");
-    expect(result.success).toBe(false);
+    expect(result).toEqual({
+      success: false,
+      error:
+        "This profile changed while your request was running. Reload and try again.",
+    });
+    expect(persistedAvatar).toBe(newAvatar);
+    expectVersionedStatusWriteGuard(updateProfile, "PUBLISHED", 7);
   });
 });

@@ -6,6 +6,7 @@ import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { isValidCompletion } from "@/lib/talent/eligibility";
 import { getInitials } from "@/components/talent/directory-helpers";
 import { formatCohortLocation, SITE_FACTS } from "@/lib/site";
+import { resolvePublicProfileIdentity } from "@/lib/talent/public-identity";
 
 const db = drizzle(env.DB, { schema });
 
@@ -14,7 +15,7 @@ const publishedProfiles = await db.query.studentProfile.findMany({
   orderBy: desc(schema.studentProfile.publishedAt),
   with: {
     user: {
-      columns: { id: true, name: true, image: true },
+      columns: { id: true },
       with: {
         programApplications: {
           where: and(
@@ -40,11 +41,12 @@ const profileCards = publishedProfiles
       latestCompletion.program?.name,
       profile.country
     );
+    const publicIdentity = resolvePublicProfileIdentity(profile);
     return [{
       handle: profile.handle,
-      name: profile.user.name,
-      image: profile.user.image,
-      initials: getInitials(profile.user.name),
+      name: publicIdentity.name,
+      image: publicIdentity.image,
+      initials: getInitials(publicIdentity.name),
       label: cohortLabel,
     }];
   })

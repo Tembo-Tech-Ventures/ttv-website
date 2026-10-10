@@ -11,7 +11,9 @@ import { relations, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import type { drizzle } from "drizzle-orm/d1";
 
-export type Database = ReturnType<typeof drizzle<typeof import("@/lib/db/schema")>>;
+export type Database = ReturnType<
+  typeof drizzle<typeof import("@/lib/db/schema")>
+>;
 
 // ─── Helpers ───────────────────────────────────────────────
 
@@ -36,7 +38,9 @@ export const user = sqliteTable("user", {
   id: cuid("id"),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
-  emailVerified: integer("emailVerified", { mode: "boolean" }).notNull().default(false),
+  emailVerified: integer("emailVerified", { mode: "boolean" })
+    .notNull()
+    .default(false),
   image: text("image"),
   ...timestamps,
 });
@@ -67,7 +71,9 @@ export const account = sqliteTable("account", {
   refreshToken: text("refreshToken"),
   idToken: text("idToken"),
   accessTokenExpiresAt: integer("accessTokenExpiresAt", { mode: "timestamp" }),
-  refreshTokenExpiresAt: integer("refreshTokenExpiresAt", { mode: "timestamp" }),
+  refreshTokenExpiresAt: integer("refreshTokenExpiresAt", {
+    mode: "timestamp",
+  }),
   scope: text("scope"),
   password: text("password"),
   ...timestamps,
@@ -116,7 +122,7 @@ export const personalAccessToken = sqliteTable(
   (table) => [
     index("personal_access_token_userId_idx").on(table.userId),
     index("personal_access_token_expiresAt_idx").on(table.expiresAt),
-  ]
+  ],
 );
 
 export const personalAccessTokenRelations = relations(
@@ -126,7 +132,7 @@ export const personalAccessTokenRelations = relations(
       fields: [personalAccessToken.userId],
       references: [user.id],
     }),
-  })
+  }),
 );
 
 // ─── Verification (matches better-auth expected schema) ───
@@ -166,8 +172,11 @@ export const userRole = sqliteTable(
     ...timestamps,
   },
   (table) => [
-    uniqueIndex("UserRoles_userId_roleId_unique").on(table.userId, table.roleId),
-  ]
+    uniqueIndex("UserRoles_userId_roleId_unique").on(
+      table.userId,
+      table.roleId,
+    ),
+  ],
 );
 
 export const userRoleRelations = relations(userRole, ({ one }) => ({
@@ -253,9 +262,9 @@ export const programRole = sqliteTable(
     uniqueIndex("programRole_programId_userId_name_unique").on(
       table.programId,
       table.userId,
-      table.name
+      table.name,
     ),
-  ]
+  ],
 );
 
 export const programRoleRelations = relations(programRole, ({ one }) => ({
@@ -274,9 +283,12 @@ export const programPartner = sqliteTable("programPartner", {
   ...timestamps,
 });
 
-export const programPartnerRelations = relations(programPartner, ({ many }) => ({
-  programApplications: many(programApplication),
-}));
+export const programPartnerRelations = relations(
+  programPartner,
+  ({ many }) => ({
+    programApplications: many(programApplication),
+  }),
+);
 
 // ─── ProgramApplication ────────────────────────────────────
 
@@ -301,9 +313,9 @@ export const programApplication = sqliteTable(
   (table) => [
     uniqueIndex("programApplication_programId_userId_unique").on(
       table.programId,
-      table.userId
+      table.userId,
     ),
-  ]
+  ],
 );
 
 export const programApplicationRelations = relations(
@@ -321,7 +333,7 @@ export const programApplicationRelations = relations(
       fields: [programApplication.partnerId],
       references: [programPartner.id],
     }),
-  })
+  }),
 );
 
 // ─── Recording ─────────────────────────────────────────────
@@ -388,7 +400,7 @@ export const recordingImportSourceRelations = relations(
       fields: [recordingImportSource.programId],
       references: [program.id],
     }),
-  })
+  }),
 );
 
 // ─── Observability ─────────────────────────────────────────
@@ -422,16 +434,19 @@ export const errorEvent = sqliteTable(
     index("errorEvent_lastSeenAt_idx").on(table.lastSeenAt),
     check(
       "errorEvent_source_check",
-      sql`${table.source} in ('request', 'queue', 'cron', 'import', 'pipeline')`
+      sql`${table.source} in ('request', 'queue', 'cron', 'import', 'pipeline')`,
     ),
     check(
       "errorEvent_level_check",
-      sql`${table.level} in ('error', 'warning')`
+      sql`${table.level} in ('error', 'warning')`,
     ),
-    check("errorEvent_message_length_check", sql`length(${table.message}) <= 500`),
+    check(
+      "errorEvent_message_length_check",
+      sql`length(${table.message}) <= 500`,
+    ),
     check("errorEvent_count_check", sql`${table.count} >= 1`),
     check("errorEvent_notifiedCount_check", sql`${table.notifiedCount} >= 0`),
-  ]
+  ],
 );
 
 export const platformAlert = sqliteTable(
@@ -464,17 +479,17 @@ export const platformAlert = sqliteTable(
     index("platformAlert_status_attempts_idx").on(table.status, table.attempts),
     check(
       "platformAlert_kind_check",
-      sql`${table.kind} in ('error.new', 'error.spike', 'recording.failed', 'import.error', 'health.degraded')`
+      sql`${table.kind} in ('error.new', 'error.spike', 'recording.failed', 'import.error', 'health.degraded')`,
     ),
     check(
       "platformAlert_status_check",
-      sql`${table.status} in ('pending', 'sent')`
+      sql`${table.status} in ('pending', 'sent')`,
     ),
     check(
       "platformAlert_attempts_check",
-      sql`${table.attempts} between 0 and 5`
+      sql`${table.attempts} between 0 and 5`,
     ),
-  ]
+  ],
 );
 
 // ─── TranscriptSegment ─────────────────────────────────────
@@ -502,7 +517,7 @@ export const transcriptSegmentRelations = relations(
       fields: [transcriptSegment.recordingId],
       references: [recording.id],
     }),
-  })
+  }),
 );
 
 // ─── ChatSession ───────────────────────────────────────────
@@ -518,8 +533,11 @@ export const chatSession = sqliteTable(
     ...timestamps,
   },
   (table) => [
-    index("chat_session_userId_updatedAt_idx").on(table.userId, table.updatedAt),
-  ]
+    index("chat_session_userId_updatedAt_idx").on(
+      table.userId,
+      table.updatedAt,
+    ),
+  ],
 );
 
 export const chatSessionRelations = relations(chatSession, ({ one, many }) => ({
@@ -563,7 +581,7 @@ export const studentProfile = sqliteTable("studentProfile", {
     .references(() => user.id, { onDelete: "cascade" }),
   handle: text("handle").notNull().unique(),
   status: text("status", {
-    enum: ["DRAFT", "IN_REVIEW", "PUBLISHED", "SUSPENDED"],
+    enum: ["DRAFT", "PUBLISHED", "SUSPENDED"],
   })
     .notNull()
     .default("DRAFT"),
@@ -582,6 +600,20 @@ export const studentProfile = sqliteTable("studentProfile", {
   portfolioUrl: text("portfolioUrl"),
   linkedinUrl: text("linkedinUrl"),
   publishedAt: integer("publishedAt", { mode: "timestamp" }),
+  contentVersion: integer("contentVersion").notNull().default(0),
+  publicName: text("publicName"),
+  publicAvatarUrl: text("publicAvatarUrl"),
+  moderationOutcome: text("moderationOutcome", {
+    enum: ["pass", "hold", "error"],
+  }),
+  moderationFlags: text("moderationFlags"),
+  moderationScores: text("moderationScores"),
+  moderationCheckedAt: integer("moderationCheckedAt", { mode: "timestamp" }),
+  moderationReviewRequired: integer("moderationReviewRequired", {
+    mode: "boolean",
+  })
+    .notNull()
+    .default(false),
   ...timestamps,
 });
 
@@ -596,7 +628,7 @@ export const studentProfileRelations = relations(
     contacts: many(profileContact),
     projectInterests: many(projectInterest),
     posts: many(blogPost),
-  })
+  }),
 );
 
 // ─── ProfileHighlight ─────────────────────────────────────
@@ -623,9 +655,9 @@ export const profileHighlight = sqliteTable(
   (table) => [
     uniqueIndex("profileHighlight_profileId_repoFullName_unique").on(
       table.profileId,
-      table.repoFullName
+      table.repoFullName,
     ),
-  ]
+  ],
 );
 
 export const profileHighlightRelations = relations(
@@ -635,7 +667,7 @@ export const profileHighlightRelations = relations(
       fields: [profileHighlight.profileId],
       references: [studentProfile.id],
     }),
-  })
+  }),
 );
 
 // ─── ProfileContact ───────────────────────────────────────
@@ -657,15 +689,12 @@ export const profileContact = sqliteTable("profileContact", {
   ...timestamps,
 });
 
-export const profileContactRelations = relations(
-  profileContact,
-  ({ one }) => ({
-    profile: one(studentProfile, {
-      fields: [profileContact.profileId],
-      references: [studentProfile.id],
-    }),
-  })
-);
+export const profileContactRelations = relations(profileContact, ({ one }) => ({
+  profile: one(studentProfile, {
+    fields: [profileContact.profileId],
+    references: [studentProfile.id],
+  }),
+}));
 
 // ─── BlogPost ─────────────────────────────────────────────
 
@@ -697,19 +726,19 @@ export const blogPost = sqliteTable(
   (table) => [
     uniqueIndex("blogPost_profileId_slug_unique").on(
       table.profileId,
-      table.slug
+      table.slug,
     ),
     index("blogPost_status_publishedAt_idx").on(
       table.status,
-      table.publishedAt
+      table.publishedAt,
     ),
     index("blogPost_profileId_status_publishedAt_idx").on(
       table.profileId,
       table.status,
-      table.publishedAt
+      table.publishedAt,
     ),
     index("blogPost_renderedWith_idx").on(table.renderedWith),
-  ]
+  ],
 );
 
 export const blogPostRelations = relations(blogPost, ({ one }) => ({
@@ -749,12 +778,9 @@ export const clientProject = sqliteTable("clientProject", {
   ...timestamps,
 });
 
-export const clientProjectRelations = relations(
-  clientProject,
-  ({ many }) => ({
-    projectInterests: many(projectInterest),
-  })
-);
+export const clientProjectRelations = relations(clientProject, ({ many }) => ({
+  projectInterests: many(projectInterest),
+}));
 
 // ─── ProjectInterest ──────────────────────────────────────
 
@@ -779,9 +805,9 @@ export const projectInterest = sqliteTable(
   (table) => [
     uniqueIndex("projectInterest_projectId_profileId_unique").on(
       table.projectId,
-      table.profileId
+      table.profileId,
     ),
-  ]
+  ],
 );
 
 export const projectInterestRelations = relations(
@@ -795,7 +821,7 @@ export const projectInterestRelations = relations(
       fields: [projectInterest.profileId],
       references: [studentProfile.id],
     }),
-  })
+  }),
 );
 
 // ─── IntegrationCredential ────────────────────────────────
@@ -845,7 +871,7 @@ export const formSubmissionLog = sqliteTable(
     index("formSubmissionLog_scope_ipHash_createdAt_idx").on(
       table.scope,
       table.ipHash,
-      table.createdAt
+      table.createdAt,
     ),
-  ]
+  ],
 );

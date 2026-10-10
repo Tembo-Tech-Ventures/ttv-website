@@ -2,6 +2,7 @@ import { and, desc, eq, isNotNull } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 import { isValidCompletion, type CompletionState } from "@/lib/talent/eligibility";
+import { resolvePublicProfileIdentity } from "@/lib/talent/public-identity";
 
 export interface PublicProfile {
   id: string;
@@ -45,11 +46,11 @@ interface PublicProfileRow extends PublicProfileCandidate {
   handle: string;
   headline: string | null;
   bio: string | null;
+  publicName: string | null;
+  publicAvatarUrl: string | null;
   updatedAt: Date;
   user: PublicProfileCandidate["user"] & {
     id: string;
-    name: string;
-    image: string | null;
   };
 }
 
@@ -73,6 +74,8 @@ const profileColumns = {
   status: true,
   headline: true,
   bio: true,
+  publicName: true,
+  publicAvatarUrl: true,
   updatedAt: true,
 } as const;
 
@@ -99,7 +102,7 @@ async function queryEligibleProfileRowsWithPosts(db: Database) {
     columns: profileColumns,
     with: {
       user: {
-        columns: { id: true, name: true, image: true },
+        columns: { id: true },
         with: {
           programApplications: {
             where: and(
@@ -125,6 +128,7 @@ async function queryEligibleProfileRowsWithPosts(db: Database) {
 }
 
 function toPublicProfile(row: PublicProfileRow): PublicProfile {
+  const identity = resolvePublicProfileIdentity(row);
   return {
     id: row.id,
     handle: row.handle,
@@ -133,8 +137,7 @@ function toPublicProfile(row: PublicProfileRow): PublicProfile {
     updatedAt: row.updatedAt,
     user: {
       id: row.user.id,
-      name: row.user.name,
-      image: row.user.image,
+      ...identity,
     },
   };
 }
@@ -163,7 +166,7 @@ export async function listPublicProfiles(db: Database): Promise<PublicProfile[]>
     columns: profileColumns,
     with: {
       user: {
-        columns: { id: true, name: true, image: true },
+        columns: { id: true },
         with: {
           programApplications: {
             where: and(
@@ -210,7 +213,7 @@ export async function findPublicPost(
     columns: profileColumns,
     with: {
       user: {
-        columns: { id: true, name: true, image: true },
+        columns: { id: true },
         with: {
           programApplications: {
             where: and(

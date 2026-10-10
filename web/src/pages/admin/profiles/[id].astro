@@ -6,13 +6,15 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq, count } from "drizzle-orm";
 import { env } from "cloudflare:workers";
-import { PROFILE_TRANSITIONS } from "@/lib/talent/transitions";
 import { getCompletedCohorts } from "@/lib/talent/eligibility";
 import { parseSkillsJson } from "@/lib/talent/profile";
 import {
-  validateProfileTransition,
-  shouldSetPublishedAt,
-} from "@/lib/talent/admin-review";
+  applyAdminProfileAction,
+  parseAdminProfileAction,
+  parseAdminProfileVersion,
+  parseModerationFlags,
+} from "@/lib/talent/profile-moderation";
+import { PROFILE_MODERATION_MESSAGES } from "@/lib/moderation/clef";
 import {
   moderatePost,
   normalizeAdminNote,
@@ -49,33 +51,47 @@ if (Astro.request.method === "POST") {
         return Astro.redirect(`/admin/profiles/${id}#posts`);
       }
     }
-  } else {
-    const newStatus = formData.get("status") as string;
-
+  } else if (formData.get("_action") === "moderate-profile") {
+    const action = parseAdminProfileAction(formData.get("profileAction"));
+    const expectedVersion = parseAdminProfileVersion(
+      formData.get("contentVersion"),
+    );
     const current = await db.query.studentProfile.findFirst({
       where: eq(schema.studentProfile.id, id),
-      columns: { status: true, publishedAt: true },
+      columns: {
+        status: true,
+        publishedAt: true,
+        contentVersion: true,
+        publicName: true,
+        publicAvatarUrl: true,
+      },
+      with: { user: { columns: { name: true, image: true } } },
     });
 
     if (!current) return Astro.redirect("/admin/profiles");
-
-    const validation = validateProfileTransition(current.status, newStatus);
-    if (!validation.valid) {
-      actionError = validation.reason;
+    if (!action || expectedVersion === null) {
+      actionError = "Invalid profile moderation request.";
       Astro.response.status = 400;
     } else {
-      const updateData: Record<string, unknown> = { status: newStatus };
-      if (shouldSetPublishedAt(newStatus, current.publishedAt)) {
-        updateData.publishedAt = new Date();
+      const updated = await applyAdminProfileAction(
+        db,
+        id,
+        current,
+        action,
+        expectedVersion,
+      );
+
+      if (!updated) {
+        actionError =
+          "This profile changed while the action was running. Reload and try again.";
+        Astro.response.status = 409;
+      } else {
+        return Astro.redirect(`/admin/profiles/${id}`);
       }
-
-      await db
-        .update(schema.studentProfile)
-        .set(updateData)
-        .where(eq(schema.studentProfile.id, id));
-
-      return Astro.redirect(`/admin/profiles/${id}`);
     }
+  } else {
+    actionError = "Invalid moderation request.";
+    Astro.response.status = 400;
   }
 }
 
@@ -99,25 +115,14 @@ const [leadsResult] = await db
 const leadsCount = leadsResult?.value ?? 0;
 
 const skills = parseSkillsJson(profile.skills);
-
-const allowed = PROFILE_TRANSITIONS[profile.status] ?? [];
-
-const TRANSITION_LABELS: Record<string, string> = {
-  PUBLISHED: "Publish",
-  DRAFT: "Send back to draft",
-  SUSPENDED: "Suspend",
-};
-
-const TRANSITION_COLORS: Record<string, string> = {
-  PUBLISHED: "bg-green-600 text-white hover:bg-green-700",
-  DRAFT: "bg-gray-600 text-white hover:bg-gray-700",
-  SUSPENDED: "bg-red-600 text-white hover:bg-red-700",
-};
-
-function transitionLabel(to: string, from: string): string {
-  if (to === "PUBLISHED" && from === "SUSPENDED") return "Republish";
-  return TRANSITION_LABELS[to] ?? to;
-}
+const moderationFlags = parseModerationFlags(profile.moderationFlags);
+const moderationOutcomeLabel = profile.moderationOutcome
+  ? {
+      pass: "Passed",
+      hold: "Held",
+      error: "Check unavailable",
+    }[profile.moderationOutcome]
+  : null;
 ---
 
 <AdminLayout title="Profile Detail">
@@ -141,12 +146,34 @@ function transitionLabel(to: string, from: string): string {
         variant={
           profile.status.toLowerCase() as
             | "draft"
-            | "in_review"
             | "published"
             | "suspended"
         }
       />
     </div>
+
+    {profile.moderationOutcome && (
+      <Card>
+        <h3 class="mb-2 text-lg font-semibold text-white">Content check</h3>
+        <p class="text-sm text-ink-secondary">
+          Outcome: <span class="font-medium text-white">{moderationOutcomeLabel}</span>
+          {profile.moderationCheckedAt && (
+            <> · {new Date(profile.moderationCheckedAt).toLocaleString()}</>
+          )}
+        </p>
+        {moderationFlags.length > 0 ? (
+          <ul class="mt-3 space-y-2 text-sm text-ink-secondary">
+            {moderationFlags.map((flag) => (
+              <li>{PROFILE_MODERATION_MESSAGES[flag]}</li>
+            ))}
+          </ul>
+        ) : profile.moderationOutcome === "error" ? (
+          <p class="mt-3 text-sm text-ink-secondary">
+            The check was unavailable. The profile published automatically and was flagged for this review.
+          </p>
+        ) : null}
+      </Card>
+    )}
 
     <div class="grid gap-6 lg:grid-cols-2">
       <Card>
@@ -372,28 +399,38 @@ function transitionLabel(to: string, from: string): string {
 
     <Card>
       <h3 class="mb-4 text-lg font-semibold text-white">Actions</h3>
-      {allowed.length > 0 ? (
-        <div class="flex flex-wrap gap-2">
-          {allowed.map((status) => (
-            <form method="POST">
-              <input type="hidden" name="status" value={status} />
-              <button
-                type="submit"
-                class:list={[
-                  "rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                  TRANSITION_COLORS[status] ?? "bg-teal/30 text-white hover:bg-teal/40",
-                ]}
-              >
-                {transitionLabel(status, profile.status)}
-              </button>
-            </form>
-          ))}
-        </div>
-      ) : (
-        <p class="text-sm text-ink-muted">
-          Waiting on the builder — no actions available for draft profiles.
-        </p>
-      )}
+      <div class="flex flex-wrap gap-2">
+        {profile.status !== "PUBLISHED" && (
+          <form method="POST">
+            <input type="hidden" name="_action" value="moderate-profile" />
+            <input type="hidden" name="profileAction" value="publish" />
+            <input type="hidden" name="contentVersion" value={profile.contentVersion} />
+            <button type="submit" class="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">
+              {profile.status === "SUSPENDED" ? "Republish" : "Publish"}
+            </button>
+          </form>
+        )}
+        {profile.status !== "SUSPENDED" && (
+          <form method="POST">
+            <input type="hidden" name="_action" value="moderate-profile" />
+            <input type="hidden" name="profileAction" value="unpublish" />
+            <input type="hidden" name="contentVersion" value={profile.contentVersion} />
+            <button type="submit" class="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
+              Unpublish
+            </button>
+          </form>
+        )}
+        {profile.moderationReviewRequired && (
+          <form method="POST">
+            <input type="hidden" name="_action" value="moderate-profile" />
+            <input type="hidden" name="profileAction" value="clear_flag" />
+            <input type="hidden" name="contentVersion" value={profile.contentVersion} />
+            <button type="submit" class="rounded-md bg-teal/30 px-4 py-2 text-sm font-medium text-white hover:bg-teal/40">
+              Clear flag
+            </button>
+          </form>
+        )}
+      </div>
     </Card>
   </div>
 </AdminLayout>

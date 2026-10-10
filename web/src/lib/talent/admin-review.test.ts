@@ -9,25 +9,25 @@ import {
 } from "./admin-review";
 
 describe("sortProfilesForQueue", () => {
-  it("places IN_REVIEW before other statuses", () => {
+  it("places editable drafts before public and suspended profiles", () => {
     const profiles = [
       { status: "PUBLISHED", updatedAt: new Date("2026-01-03") },
-      { status: "IN_REVIEW", updatedAt: new Date("2026-01-01") },
+      { status: "SUSPENDED", updatedAt: new Date("2026-01-01") },
       { status: "DRAFT", updatedAt: new Date("2026-01-02") },
     ];
     const sorted = sortProfilesForQueue(profiles);
     expect(sorted.map((p) => p.status)).toEqual([
-      "IN_REVIEW",
       "DRAFT",
       "PUBLISHED",
+      "SUSPENDED",
     ]);
   });
 
   it("sorts same-status profiles by updatedAt descending", () => {
     const profiles = [
-      { status: "IN_REVIEW", updatedAt: new Date("2026-01-01") },
-      { status: "IN_REVIEW", updatedAt: new Date("2026-01-03") },
-      { status: "IN_REVIEW", updatedAt: new Date("2026-01-02") },
+      { status: "DRAFT", updatedAt: new Date("2026-01-01") },
+      { status: "DRAFT", updatedAt: new Date("2026-01-03") },
+      { status: "DRAFT", updatedAt: new Date("2026-01-02") },
     ];
     const sorted = sortProfilesForQueue(profiles);
     expect(sorted.map((p) => p.updatedAt!.toISOString().slice(0, 10))).toEqual([
@@ -49,7 +49,7 @@ describe("sortProfilesForQueue", () => {
   it("does not mutate the input array", () => {
     const profiles = [
       { status: "PUBLISHED", updatedAt: new Date("2026-01-01") },
-      { status: "IN_REVIEW", updatedAt: new Date("2026-01-01") },
+      { status: "DRAFT", updatedAt: new Date("2026-01-01") },
     ];
     const original = [...profiles];
     sortProfilesForQueue(profiles);
@@ -97,14 +97,14 @@ describe("sortProjectsForQueue", () => {
 });
 
 describe("validateProfileTransition", () => {
-  it("accepts IN_REVIEW → PUBLISHED", () => {
-    expect(validateProfileTransition("IN_REVIEW", "PUBLISHED")).toEqual({
+  it("accepts DRAFT → PUBLISHED", () => {
+    expect(validateProfileTransition("DRAFT", "PUBLISHED")).toEqual({
       valid: true,
     });
   });
 
-  it("accepts IN_REVIEW → DRAFT", () => {
-    expect(validateProfileTransition("IN_REVIEW", "DRAFT")).toEqual({
+  it("accepts DRAFT → SUSPENDED", () => {
+    expect(validateProfileTransition("DRAFT", "SUSPENDED")).toEqual({
       valid: true,
     });
   });
@@ -121,11 +121,6 @@ describe("validateProfileTransition", () => {
     });
   });
 
-  it("rejects DRAFT → PUBLISHED (must go through review)", () => {
-    const result = validateProfileTransition("DRAFT", "PUBLISHED");
-    expect(result.valid).toBe(false);
-  });
-
   it("rejects PUBLISHED → DRAFT", () => {
     const result = validateProfileTransition("PUBLISHED", "DRAFT");
     expect(result.valid).toBe(false);
@@ -137,11 +132,11 @@ describe("validateProfileTransition", () => {
   });
 
   it("includes from/to in error reason", () => {
-    const result = validateProfileTransition("DRAFT", "SUSPENDED");
+    const result = validateProfileTransition("PUBLISHED", "DRAFT");
     expect(result.valid).toBe(false);
     if (!result.valid) {
+      expect(result.reason).toContain("PUBLISHED");
       expect(result.reason).toContain("DRAFT");
-      expect(result.reason).toContain("SUSPENDED");
     }
   });
 });
@@ -207,7 +202,6 @@ describe("shouldSetPublishedAt", () => {
   it("returns false for non-PUBLISHED transitions", () => {
     expect(shouldSetPublishedAt("DRAFT", null)).toBe(false);
     expect(shouldSetPublishedAt("SUSPENDED", null)).toBe(false);
-    expect(shouldSetPublishedAt("IN_REVIEW", null)).toBe(false);
   });
 });
 

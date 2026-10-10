@@ -5,10 +5,9 @@ import {
 } from "./transitions";
 
 const PROFILE_STATUS_ORDER: Record<string, number> = {
-  IN_REVIEW: 0,
-  DRAFT: 1,
-  PUBLISHED: 2,
-  SUSPENDED: 3,
+  DRAFT: 0,
+  PUBLISHED: 1,
+  SUSPENDED: 2,
 };
 
 interface ProfileSortable {
