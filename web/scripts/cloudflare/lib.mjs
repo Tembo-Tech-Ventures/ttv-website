@@ -170,6 +170,44 @@ export async function cfApi(resourcePath, options) {
   return payload?.result ?? null;
 }
 
+export async function listR2BucketObjectsPage(name, cursor) {
+  const query = new URLSearchParams({ per_page: "1000" });
+  if (cursor) query.set("cursor", cursor);
+
+  const payload = await cfApiResponse(
+    `/r2/buckets/${encodeURIComponent(name)}/objects?${query.toString()}`
+  );
+  if (!payload) return null;
+  if (!Array.isArray(payload.result)) {
+    throw new TypeError(
+      `Expected R2 object list for bucket "${name}" to be an array, got ${typeof payload.result}`
+    );
+  }
+
+  const nextCursor = payload.result_info?.cursor;
+  return {
+    objects: payload.result,
+    cursor:
+      typeof nextCursor === "string" && nextCursor ? nextCursor : undefined,
+    isTruncated:
+      payload.result_info?.is_truncated === true ||
+      (typeof nextCursor === "string" && nextCursor.length > 0),
+  };
+}
+
+function encodeR2ObjectKey(key) {
+  // Cloudflare requires path separators in R2 object keys to remain literal.
+  return key.split("/").map(encodeURIComponent).join("/");
+}
+
+export async function deleteR2BucketObject(bucketName, objectKey) {
+  const deleted = await cfApi(
+    `/r2/buckets/${encodeURIComponent(bucketName)}/objects/${encodeR2ObjectKey(objectKey)}`,
+    { method: "DELETE" }
+  );
+  return deleted !== null;
+}
+
 export async function listContainerApplications() {
   const applications = [];
   const seenPageTokens = new Set();
