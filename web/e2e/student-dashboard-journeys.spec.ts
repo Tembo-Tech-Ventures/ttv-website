@@ -44,10 +44,10 @@ const personas = [
   },
   {
     name: "graduate",
-    token: process.env.PLAYWRIGHT_AGENT_TOKEN,
+    token: process.env.PLAYWRIGHT_GRADUATE_STUDENT_TOKEN,
     nextStep: "Your certificate is ready",
     actionName: "View certificate",
-    actionHref: "/certificate/ttv-fixture-app-preview",
+    actionHref: "/certificate/ttv-fixture-app-journey-graduate",
     activePath: "/dashboard/sessions",
     activeLabel: "Sessions",
     links: [
@@ -56,7 +56,6 @@ const personas = [
       "/dashboard/sessions",
       "/dashboard/ask",
       "/dashboard/portfolio",
-      "/dashboard/leads",
       "/dashboard/profile",
       "/auth/logout",
     ],

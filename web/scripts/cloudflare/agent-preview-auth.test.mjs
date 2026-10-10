@@ -50,10 +50,17 @@ describe("agent preview identity", () => {
       "agent-pr-55",
       "acceptedStudent"
     );
+    const graduateStudent = deriveAgentPreviewPersonaToken(
+      secret,
+      "agent-pr-55",
+      "graduateStudent"
+    );
 
     expect(newStudent).toHaveLength(64);
     expect(acceptedStudent).toHaveLength(64);
+    expect(graduateStudent).toHaveLength(64);
     expect(acceptedStudent).not.toBe(newStudent);
+    expect(graduateStudent).not.toBe(acceptedStudent);
     expect(() =>
       deriveAgentPreviewPersonaToken(secret, "agent-pr-55", "unknown")
     ).toThrow("Unknown agent preview persona");
@@ -135,9 +142,9 @@ describe("seedAgentPreviewFixtures", () => {
     // ten cohort users, six eligible cohort applications, preview app, amina
     // user/app/profile, four blog posts, invalid-completion user/app/profile,
     // two amina highlights, kwame user/app/profile, two projects, and two
-    // attention fixtures, plus two isolated student-journey users and one
-    // approved application = 57 total
-    expect(executeQuery).toHaveBeenCalledTimes(57);
+    // attention fixtures, plus three isolated student-journey users, their
+    // profile reset, and two applications = 60 total
+    expect(executeQuery).toHaveBeenCalledTimes(60);
 
     // All calls should target the correct database
     for (const call of executeQuery.mock.calls) {
@@ -168,6 +175,18 @@ describe("seedAgentPreviewFixtures", () => {
         AGENT_PREVIEW_PERSONAS.acceptedStudent.userId
       )?.[1]
     ).toContain('INSERT INTO "user"');
+    expect(
+      findInsertByParam(
+        "user",
+        AGENT_PREVIEW_PERSONAS.graduateStudent.userId
+      )?.[1]
+    ).toContain('INSERT INTO "user"');
+    expect(
+      findInsertByParam(
+        "programApplication",
+        "ttv-fixture-app-journey-graduate"
+      )?.[2]
+    ).toContain("COMPLETED");
     const programCall = findByParam("ttv-fixture-program-cohort-04");
     expect(programCall?.[1]).toContain("program");
     expect(programCall?.[2]).toContain("Cohort 04");
@@ -343,10 +362,11 @@ describe("seedAgentPreviewFixtures", () => {
     const sessionCalls = executeQuery.mock.calls.filter((call) =>
       call[1].includes('INSERT INTO "session"')
     );
-    expect(sessionCalls).toHaveLength(2);
+    expect(sessionCalls).toHaveLength(3);
     expect(sessionCalls.map((call) => call[2][0])).toEqual([
       AGENT_PREVIEW_PERSONAS.newStudent.sessionId,
       AGENT_PREVIEW_PERSONAS.acceptedStudent.sessionId,
+      AGENT_PREVIEW_PERSONAS.graduateStudent.sessionId,
     ]);
     expect(sessionCalls[0][2][2]).toBe(
       deriveAgentPreviewPersonaToken(
@@ -360,6 +380,13 @@ describe("seedAgentPreviewFixtures", () => {
         previewSecret,
         "agent-pr-55",
         "acceptedStudent"
+      )
+    );
+    expect(sessionCalls[2][2][2]).toBe(
+      deriveAgentPreviewPersonaToken(
+        previewSecret,
+        "agent-pr-55",
+        "graduateStudent"
       )
     );
   });

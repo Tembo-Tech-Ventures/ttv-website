@@ -73,6 +73,11 @@ describe("live browser authentication", () => {
         "agent-pr-55",
         "acceptedStudent"
       ),
+      PLAYWRIGHT_GRADUATE_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
+        previewSecret,
+        "agent-pr-55",
+        "graduateStudent"
+      ),
     });
   });
 

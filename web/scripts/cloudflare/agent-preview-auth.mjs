@@ -19,6 +19,10 @@ export const AGENT_PREVIEW_PERSONAS = {
     userId: "ttv-fixture-user-journey-accepted",
     sessionId: "ttv-fixture-session-journey-accepted",
   },
+  graduateStudent: {
+    userId: "ttv-fixture-user-journey-graduate",
+    sessionId: "ttv-fixture-session-journey-graduate",
+  },
 };
 
 export function isAgentEnvironmentName(value) {
@@ -462,6 +466,7 @@ export async function seedAgentPreviewFixtures({
       email: "journey-new@invalid.ttv",
       applicationId: null,
       applicationStatus: null,
+      completedAt: null,
     },
     {
       ...AGENT_PREVIEW_PERSONAS.acceptedStudent,
@@ -470,8 +475,25 @@ export async function seedAgentPreviewFixtures({
       email: "journey-accepted@invalid.ttv",
       applicationId: "ttv-fixture-app-journey-accepted",
       applicationStatus: "APPROVED",
+      completedAt: null,
+    },
+    {
+      ...AGENT_PREVIEW_PERSONAS.graduateStudent,
+      persona: "graduateStudent",
+      name: "Graduate Journey Student",
+      email: "journey-graduate@invalid.ttv",
+      applicationId: "ttv-fixture-app-journey-graduate",
+      applicationStatus: "COMPLETED",
+      completedAt,
     },
   ];
+
+  await executeQuery(
+    databaseId,
+    `DELETE FROM "studentProfile"
+     WHERE "userId" IN (${studentJourneyFixtures.map(() => "?").join(", ")})`,
+    studentJourneyFixtures.map((fixture) => fixture.userId)
+  );
 
   await executeQuery(
     databaseId,
@@ -499,19 +521,20 @@ export async function seedAgentPreviewFixtures({
         databaseId,
         `INSERT INTO "programApplication"
           ("id", "programId", "userId", "status", "application", "completedAt", "createdAt", "updatedAt")
-         VALUES (?, ?, ?, ?, '{}', NULL, ?, ?)
+         VALUES (?, ?, ?, ?, '{}', ?, ?, ?)
          ON CONFLICT("id") DO UPDATE SET
            "programId" = excluded."programId",
            "userId" = excluded."userId",
            "status" = excluded."status",
            "application" = '{}',
-           "completedAt" = NULL,
+           "completedAt" = excluded."completedAt",
            "updatedAt" = excluded."updatedAt"`,
         [
           fixture.applicationId,
           "ttv-fixture-program-cohort-04",
           fixture.userId,
           fixture.applicationStatus,
+          fixture.completedAt,
           createdAt,
           createdAt,
         ]

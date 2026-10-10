@@ -53,6 +53,11 @@ export function resolvePlaywrightPersonaTokens(environment = process.env) {
       environmentName,
       "acceptedStudent"
     ),
+    PLAYWRIGHT_GRADUATE_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
+      previewSecret,
+      environmentName,
+      "graduateStudent"
+    ),
   };
 }
 
