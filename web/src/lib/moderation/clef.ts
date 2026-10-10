@@ -27,7 +27,8 @@ export const PROFILE_MODERATION_QUESTIONS = {
       "Does this builder profile promote an unrelated business, multi-level marketing scheme, or spam instead of describing the builder and their work?",
     criteria: {
       true: "The profile is primarily unrelated promotion, multi-level marketing, or spam.",
-      false: "The profile describes the builder, their work, skills, or availability.",
+      false:
+        "The profile describes the builder, their work, skills, or availability.",
     },
   },
   impersonation_risk: {
@@ -67,6 +68,14 @@ export const PROFILE_MODERATION_MESSAGES: Record<
     "Remove claims that you represent TTV or another organisation unless that role is accurate.",
 };
 
+export const PROFILE_MODERATION_LABELS: Record<ProfileModerationFlag, string> =
+  {
+    contains_contact_details: "Contact or identity details",
+    abusive_or_sexual: "Abusive or sexual content",
+    promotes_unrelated_business: "Unrelated promotion or spam",
+    impersonation_risk: "Impersonation risk",
+  };
+
 export interface ProfileModerationState {
   displayName: string;
   handle: string;
@@ -102,10 +111,16 @@ function isNoulAnswer(value: unknown): value is { type: "noul"; noul: number } {
   );
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new Error("Clef check timed out")), timeoutMs);
+    timer = setTimeout(
+      () => reject(new Error("Clef check timed out")),
+      timeoutMs,
+    );
   });
 
   try {
@@ -126,7 +141,7 @@ function parseResponse(response: unknown): ProfileModerationResult {
   const scores: Partial<Record<ProfileModerationFlag, number>> = {};
   const flags: ProfileModerationFlag[] = [];
   const questionIds = Object.keys(
-    PROFILE_MODERATION_QUESTIONS
+    PROFILE_MODERATION_QUESTIONS,
   ) as ProfileModerationFlag[];
 
   for (const questionId of questionIds) {
@@ -144,7 +159,7 @@ function parseResponse(response: unknown): ProfileModerationResult {
 export async function checkProfileContent(
   ai: Pick<Ai, "run">,
   state: ProfileModerationState,
-  options: { gatewayName?: string; timeoutMs?: number } = {}
+  options: { gatewayName?: string; timeoutMs?: number } = {},
 ): Promise<ProfileModerationResult> {
   try {
     const request = {
@@ -158,9 +173,12 @@ export async function checkProfileContent(
       ai.run(
         CLEF_PROFILE_MODEL as Parameters<typeof ai.run>[0],
         request as never,
-        { gateway: { id: gatewayName } }
+        // Profile text can contain the exact contact or identity details this
+        // check detects. Keep Gateway routing without persisting the request or
+        // response in AI Gateway logs.
+        { gateway: { id: gatewayName, collectLog: false } },
       ) as Promise<unknown>,
-      options.timeoutMs ?? CLEF_TIMEOUT_MS
+      options.timeoutMs ?? CLEF_TIMEOUT_MS,
     );
     return parseResponse(response);
   } catch {
@@ -169,7 +187,7 @@ export async function checkProfileContent(
 }
 
 export function profileModerationMessages(
-  flags: readonly ProfileModerationFlag[]
+  flags: readonly ProfileModerationFlag[],
 ): string[] {
   return flags.map((flag) => PROFILE_MODERATION_MESSAGES[flag]);
 }
@@ -177,9 +195,10 @@ export function profileModerationMessages(
 export function previewProfileModerationResult(
   deploymentEnvironment: string | undefined,
   agentSession: boolean,
-  requestedOutcome: string | null
+  requestedOutcome: string | null,
 ): ProfileModerationResult | null {
-  if (!deploymentEnvironment?.startsWith("agent-") || !agentSession) return null;
+  if (!deploymentEnvironment?.startsWith("agent-") || !agentSession)
+    return null;
 
   if (requestedOutcome === "pass") {
     return { outcome: "pass", flags: [], scores: {} };

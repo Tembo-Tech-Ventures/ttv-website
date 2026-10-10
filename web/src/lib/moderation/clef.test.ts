@@ -28,7 +28,7 @@ function response(scores: Record<string, number>) {
       Object.entries(scores).map(([key, noul]) => [
         key,
         { type: "noul", noul },
-      ])
+      ]),
     ),
     usage: { input_tokens: 100, output_tokens: 4 },
   };
@@ -42,7 +42,10 @@ const clearScores = {
 };
 
 function aiReturning(value: unknown) {
-  return { run: vi.fn().mockResolvedValue(value) } as unknown as Pick<Ai, "run">;
+  return { run: vi.fn().mockResolvedValue(value) } as unknown as Pick<
+    Ai,
+    "run"
+  >;
 }
 
 describe("checkProfileContent", () => {
@@ -50,7 +53,7 @@ describe("checkProfileContent", () => {
     const ai = aiReturning(response(clearScores));
 
     await expect(
-      checkProfileContent(ai, state, { gatewayName: "ttv-ai" })
+      checkProfileContent(ai, state, { gatewayName: "ttv-ai" }),
     ).resolves.toEqual({ outcome: "pass", flags: [], scores: clearScores });
     expect(ai.run).toHaveBeenCalledWith(
       CLEF_PROFILE_MODEL,
@@ -61,7 +64,7 @@ describe("checkProfileContent", () => {
           contains_contact_details: expect.objectContaining({ type: "noul" }),
         }),
       }),
-      { gateway: { id: "ttv-ai" } }
+      { gateway: { id: "ttv-ai", collectLog: false } },
     );
   });
 
@@ -76,15 +79,15 @@ describe("checkProfileContent", () => {
     await expect(
       checkProfileContent(aiReturning(response(scores)), state, {
         gatewayName: "ttv-ai",
-      })
+      }),
     ).resolves.toEqual({
       outcome: "hold",
       flags: ["contains_contact_details", "impersonation_risk"],
       scores,
     });
-    expect(
-      profileModerationMessages(["contains_contact_details"])[0]
-    ).toMatch(/remove phone numbers/i);
+    expect(profileModerationMessages(["contains_contact_details"])[0]).toMatch(
+      /remove phone numbers/i,
+    );
   });
 
   it("returns a fail-open error result when the binding rejects", async () => {
@@ -93,7 +96,7 @@ describe("checkProfileContent", () => {
     } as unknown as Pick<Ai, "run">;
 
     await expect(
-      checkProfileContent(ai, state, { gatewayName: "ttv-ai" })
+      checkProfileContent(ai, state, { gatewayName: "ttv-ai" }),
     ).resolves.toEqual({
       outcome: "error",
       flags: [],
@@ -107,12 +110,12 @@ describe("checkProfileContent", () => {
         () =>
           new Promise(() => {
             // Intentionally never settles so the timeout path wins.
-          })
+          }),
       ),
     } as unknown as Pick<Ai, "run">;
 
     await expect(
-      checkProfileContent(ai, state, { gatewayName: "ttv-ai", timeoutMs: 5 })
+      checkProfileContent(ai, state, { gatewayName: "ttv-ai", timeoutMs: 5 }),
     ).resolves.toEqual({ outcome: "error", flags: [], scores: {} });
   });
 
@@ -120,7 +123,7 @@ describe("checkProfileContent", () => {
     await expect(
       checkProfileContent(aiReturning({ answers: {} }), state, {
         gatewayName: "ttv-ai",
-      })
+      }),
     ).resolves.toEqual({ outcome: "error", flags: [], scores: {} });
   });
 
@@ -137,17 +140,23 @@ describe("checkProfileContent", () => {
 
 describe("previewProfileModerationResult", () => {
   it("provides deterministic pass, hold, and error outcomes only to agent previews", () => {
-    expect(previewProfileModerationResult("agent-pr-123", true, "pass")).toEqual({
+    expect(
+      previewProfileModerationResult("agent-pr-123", true, "pass"),
+    ).toEqual({
       outcome: "pass",
       flags: [],
       scores: {},
     });
-    expect(previewProfileModerationResult("agent-pr-123", true, "hold")).toEqual({
+    expect(
+      previewProfileModerationResult("agent-pr-123", true, "hold"),
+    ).toEqual({
       outcome: "hold",
       flags: ["contains_contact_details"],
       scores: { contains_contact_details: 0.99 },
     });
-    expect(previewProfileModerationResult("agent-pr-123", true, "error")).toEqual({
+    expect(
+      previewProfileModerationResult("agent-pr-123", true, "error"),
+    ).toEqual({
       outcome: "error",
       flags: [],
       scores: {},
@@ -155,8 +164,14 @@ describe("previewProfileModerationResult", () => {
   });
 
   it("ignores preview controls outside an authenticated agent preview", () => {
-    expect(previewProfileModerationResult("production", true, "hold")).toBeNull();
-    expect(previewProfileModerationResult("agent-pr-123", false, "hold")).toBeNull();
-    expect(previewProfileModerationResult("agent-pr-123", true, "unknown")).toBeNull();
+    expect(
+      previewProfileModerationResult("production", true, "hold"),
+    ).toBeNull();
+    expect(
+      previewProfileModerationResult("agent-pr-123", false, "hold"),
+    ).toBeNull();
+    expect(
+      previewProfileModerationResult("agent-pr-123", true, "unknown"),
+    ).toBeNull();
   });
 });

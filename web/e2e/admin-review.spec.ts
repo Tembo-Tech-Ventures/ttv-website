@@ -96,6 +96,7 @@ test.describe("admin review surfaces", () => {
     await expect(
       page.getByRole("heading", { name: "Content check" }),
     ).toBeVisible();
+    await expect(page.getByText("91%", { exact: true })).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Publish", exact: true }),
     ).toBeVisible();
