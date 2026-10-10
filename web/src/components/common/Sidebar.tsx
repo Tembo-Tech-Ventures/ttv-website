@@ -8,6 +8,7 @@ interface SidebarLink {
   label: string;
   icon?: IconType;
   badge?: number;
+  activePrefixes?: string[];
 }
 
 interface SidebarProps {
@@ -18,9 +19,20 @@ interface SidebarProps {
   onClose: () => void;
 }
 
-export function isSidebarLinkActive(currentPath: string, href: string): boolean {
+export function isSidebarLinkActive(
+  currentPath: string,
+  href: string,
+  activePrefixes: string[] = []
+): boolean {
   if (href === "/auth/logout") return false;
   if (currentPath === href) return true;
+  if (
+    activePrefixes.some(
+      (prefix) => currentPath === prefix || currentPath.startsWith(`${prefix}/`)
+    )
+  ) {
+    return true;
+  }
   if (href === "/" || href === "/admin" || href === "/dashboard") return false;
   return currentPath.startsWith(`${href}/`);
 }
@@ -35,8 +47,8 @@ function NavLinks({
 
   return (
     <nav className="flex flex-col gap-1">
-      {links.map(({ href, label, icon: Icon, badge }) => {
-        const isActive = isSidebarLinkActive(currentPath, href);
+      {links.map(({ href, label, icon: Icon, badge, activePrefixes }) => {
+        const isActive = isSidebarLinkActive(currentPath, href, activePrefixes);
         return (
           <a
             key={href}

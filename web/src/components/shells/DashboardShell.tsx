@@ -22,6 +22,7 @@ export interface DashboardLink {
   label: string;
   icon: IconType;
   badge?: number;
+  activePrefixes?: string[];
 }
 
 /**
@@ -30,7 +31,13 @@ export interface DashboardLink {
  */
 export const DASHBOARD_LINKS: DashboardLink[] = [
   { id: "home", href: "/dashboard", label: "Home", icon: PiGaugeDuotone },
-  { id: "apply", href: "/dashboard/apply", label: "Apply", icon: PiPaperPlaneTiltDuotone },
+  {
+    id: "apply",
+    href: "/dashboard/apply",
+    label: "Apply",
+    icon: PiPaperPlaneTiltDuotone,
+    activePrefixes: ["/dashboard/application"],
+  },
   { id: "sessions", href: "/dashboard/sessions", label: "Sessions", icon: PiVideoCameraDuotone },
   { id: "ask", href: "/dashboard/ask", label: "Ask AI", icon: PiChatCircleDotsDuotone },
   { id: "profile", href: "/dashboard/portfolio", label: "Profile", icon: PiSuitcaseSimpleDuotone },

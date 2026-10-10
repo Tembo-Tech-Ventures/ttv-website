@@ -325,6 +325,10 @@ export async function getStudentJourney(
     ]);
 
   const profileGate = resolveGateState(profile);
+  // Writing and Opportunities share the published-profile gate today, while
+  // Leads opens as soon as that resolver sees any profile. Deriving all three
+  // from the existing resolver keeps navigation aligned with those pages
+  // without creating another profile-status policy here.
   const unreadLeadCount = profile
     ? Number(
         (

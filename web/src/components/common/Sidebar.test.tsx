@@ -33,6 +33,16 @@ describe("Sidebar", () => {
     expect(html).not.toContain("Prop className did not match");
   });
 
+  it("supports a server-owned active alias for application details", () => {
+    expect(
+      isSidebarLinkActive(
+        "/dashboard/application/application-1",
+        "/dashboard/apply",
+        ["/dashboard/application"]
+      )
+    ).toBe(true);
+  });
+
   it("shows an unread badge without making Logout active", () => {
     const html = renderToStaticMarkup(
       <Sidebar
