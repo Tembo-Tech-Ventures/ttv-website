@@ -251,6 +251,36 @@ describe("saveProfile", () => {
     expect(result.success).toBe(true);
   });
 
+  it("rejects edits to a suspended profile at the handler boundary", async () => {
+    const updateFn = vi.fn();
+    const checkContent = vi.fn();
+    const db = mockDb({
+      findProfileForLock: {
+        handle: "suspended-user",
+        publishedAt: new Date("2026-01-01"),
+        status: "SUSPENDED",
+        githubLogin: "suspended-user",
+        user: { name: "Suspended User" },
+      },
+      updateProfile: updateFn,
+    });
+
+    const result = await saveProfile(
+      db as never,
+      "user-1",
+      makeFormData({ handle: "suspended-user", bio: "Changed content" }),
+      "profile-1",
+      checkContent,
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error: "A suspended profile cannot be edited.",
+    });
+    expect(checkContent).not.toHaveBeenCalled();
+    expect(updateFn).not.toHaveBeenCalled();
+  });
+
   // A published handle is part of every blog post permalink
   // (`/blog/[handle]/[slug]`), so renaming would 404 every post.
   describe("handle lock after publish", () => {
@@ -325,7 +355,11 @@ describe("saveProfile", () => {
     it("allows a handle change while the profile is still unpublished", async () => {
       const updateFn = vi.fn();
       const db = mockDb({
-        findProfileForLock: { handle: "old-handle", publishedAt: null },
+        findProfileForLock: {
+          handle: "old-handle",
+          publishedAt: null,
+          status: "DRAFT",
+        },
         findProfileByHandle: null,
         updateProfile: updateFn,
       });

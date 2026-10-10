@@ -82,6 +82,10 @@ function collectFieldErrors(
   return fieldErrors;
 }
 
+function serializeOptionalSkills(skills: string[] | undefined): string | null {
+  return skills ? serializeSkills(skills) : null;
+}
+
 async function savePublishedProfileEdit(
   db: Database,
   userId: string,
@@ -260,7 +264,7 @@ export async function saveProfile(
     bio: parsed.data.bio ?? null,
     location: parsed.data.location ?? null,
     country: parsed.data.country ?? null,
-    skills: parsed.data.skills ? serializeSkills(parsed.data.skills) : null,
+    skills: serializeOptionalSkills(parsed.data.skills),
     openToFreelance: parsed.data.openToFreelance ?? false,
     openToRoles: parsed.data.openToRoles ?? false,
     portfolioUrl: parsed.data.portfolioUrl || null,
@@ -272,17 +276,22 @@ export async function saveProfile(
       return { success: false, error: "Profile not found" };
     }
 
-    if (current.status === "PUBLISHED") {
-      return savePublishedProfileEdit(
-        db,
-        userId,
-        existingProfileId,
-        values,
-        parsed.data.skills ?? [],
-        current.user.name,
-        current.githubLogin,
-        checkContent
-      );
+    if (current.status !== "DRAFT") {
+      return current.status === "PUBLISHED"
+        ? savePublishedProfileEdit(
+            db,
+            userId,
+            existingProfileId,
+            values,
+            parsed.data.skills ?? [],
+            current.user.name,
+            current.githubLogin,
+            checkContent
+          )
+        : {
+            success: false,
+            error: "A suspended profile cannot be edited.",
+          };
     }
 
     await db
