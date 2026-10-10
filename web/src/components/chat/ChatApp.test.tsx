@@ -1,7 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import ChatApp from "./ChatApp";
+import ChatApp, { getAppNav } from "./ChatApp";
 import {
   conversationTitle,
   formatSessionDate,
@@ -119,6 +119,18 @@ describe("ChatApp", () => {
     expect(html).toContain('href="/dashboard/apply"');
     // The current page is not a destination.
     expect(html).not.toContain('href="/dashboard/ask"');
+  });
+
+  it("uses the same state-filtered links as the dashboard shell", () => {
+    const links = getAppNav(["home", "apply", "ask", "account", "logout"]);
+
+    expect(links.map((link) => link.label)).toEqual([
+      "Home",
+      "Apply",
+      "Account",
+      "Logout",
+    ]);
+    expect(links.map((link) => link.label)).not.toContain("Sessions");
   });
 
   it("marks exactly one region as the transcript scroller", () => {

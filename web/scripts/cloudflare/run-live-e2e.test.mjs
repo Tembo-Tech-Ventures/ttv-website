@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { deriveAgentPreviewToken } from "./agent-preview-auth.mjs";
-import { resolvePlaywrightAgentToken } from "./run-live-e2e.mjs";
+import {
+  deriveAgentPreviewPersonaToken,
+  deriveAgentPreviewToken,
+} from "./agent-preview-auth.mjs";
+import {
+  resolvePlaywrightAgentToken,
+  resolvePlaywrightPersonaTokens,
+} from "./run-live-e2e.mjs";
 
 describe("live browser authentication", () => {
   it("uses a securely supplied personal access token for live verification", () => {
@@ -47,5 +53,40 @@ describe("live browser authentication", () => {
         EXPECTED_DEPLOYMENT_ENVIRONMENT: "staging",
       })
     ).toBeUndefined();
+  });
+
+  it("supplies deterministic tokens for the isolated student journeys", () => {
+    const previewSecret = "p".repeat(32);
+    expect(
+      resolvePlaywrightPersonaTokens({
+        AGENT_PREVIEW_SECRET: previewSecret,
+        EXPECTED_DEPLOYMENT_ENVIRONMENT: "agent-pr-55",
+      })
+    ).toEqual({
+      PLAYWRIGHT_NEW_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
+        previewSecret,
+        "agent-pr-55",
+        "newStudent"
+      ),
+      PLAYWRIGHT_ACCEPTED_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
+        previewSecret,
+        "agent-pr-55",
+        "acceptedStudent"
+      ),
+      PLAYWRIGHT_GRADUATE_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
+        previewSecret,
+        "agent-pr-55",
+        "graduateStudent"
+      ),
+    });
+  });
+
+  it("never derives persona tokens outside isolated previews", () => {
+    expect(
+      resolvePlaywrightPersonaTokens({
+        AGENT_PREVIEW_SECRET: "p".repeat(32),
+        EXPECTED_DEPLOYMENT_ENVIRONMENT: "production",
+      })
+    ).toEqual({});
   });
 });

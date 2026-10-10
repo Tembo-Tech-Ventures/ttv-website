@@ -20,7 +20,7 @@ test.describe("authenticated dashboard greeting", () => {
     extraHTTPHeaders: token ? { Authorization: `Bearer ${token}` } : {},
   });
 
-  test("uses the user's first name", async ({ page }) => {
+  test("uses the user's first name only on a return visit", async ({ page }) => {
     const sessionResponse = await page.request.get("/api/auth/get-session");
     expect(sessionResponse.ok()).toBe(true);
     const session = (await sessionResponse.json()) as BetterAuthSession | null;
@@ -32,6 +32,11 @@ test.describe("authenticated dashboard greeting", () => {
     const firstName = fullName.split(/\s+/)[0]!;
 
     await page.goto("/dashboard");
+    await expect(
+      page.getByRole("heading", { name: `Welcome back, ${firstName}` })
+    ).toHaveCount(0);
+
+    await page.reload();
 
     await expect(
       page.getByRole("heading", { name: `Welcome back, ${firstName}` })

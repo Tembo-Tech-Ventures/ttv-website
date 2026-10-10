@@ -98,7 +98,7 @@ test.describe("authenticated talent foundation", () => {
     });
   });
 
-  test("new nav items are visible in dashboard sidebar", async ({
+  test("applicable nav items are visible in dashboard sidebar", async ({
     page,
     viewport,
   }) => {
@@ -110,11 +110,11 @@ test.describe("authenticated talent foundation", () => {
       await opener.click();
       await expect(opener).toHaveAttribute("aria-expanded", "true");
     }
-    await expect(page.getByRole("link", { name: "Portfolio" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Profile" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Leads" })).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "Opportunities" }),
-    ).toBeVisible();
+      page.getByRole("link", { name: "Opportunities" })
+    ).toHaveCount(0);
     await page.screenshot({
       path: evidence("dashboard-nav"),
       fullPage: true,

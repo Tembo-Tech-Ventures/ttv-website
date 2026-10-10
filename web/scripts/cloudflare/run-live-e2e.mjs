@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   deriveAgentPreviewToken,
+  deriveAgentPreviewPersonaToken,
   isAgentEnvironmentName,
 } from "./agent-preview-auth.mjs";
 
@@ -28,14 +29,48 @@ export function resolvePlaywrightAgentToken(environment = process.env) {
   return undefined;
 }
 
+export function resolvePlaywrightPersonaTokens(environment = process.env) {
+  const environmentName =
+    environment.EXPECTED_DEPLOYMENT_ENVIRONMENT?.trim() ||
+    environment.CLOUDFLARE_ENVIRONMENT_NAME?.trim();
+  const previewSecret = environment.AGENT_PREVIEW_SECRET?.trim();
+  if (
+    !environmentName ||
+    !isAgentEnvironmentName(environmentName) ||
+    !previewSecret
+  ) {
+    return {};
+  }
+
+  return {
+    PLAYWRIGHT_NEW_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
+      previewSecret,
+      environmentName,
+      "newStudent"
+    ),
+    PLAYWRIGHT_ACCEPTED_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
+      previewSecret,
+      environmentName,
+      "acceptedStudent"
+    ),
+    PLAYWRIGHT_GRADUATE_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
+      previewSecret,
+      environmentName,
+      "graduateStudent"
+    ),
+  };
+}
+
 export async function main(args = process.argv.slice(2)) {
   const token = resolvePlaywrightAgentToken();
+  const personaTokens = resolvePlaywrightPersonaTokens();
   const binary = process.platform === "win32" ? "npx.cmd" : "npx";
   const child = spawn(binary, ["playwright", "test", ...args], {
     cwd: path.resolve(fileURLToPath(new URL("../..", import.meta.url))),
     env: {
       ...process.env,
       ...(token ? { PLAYWRIGHT_AGENT_TOKEN: token } : {}),
+      ...personaTokens,
     },
     stdio: "inherit",
   });

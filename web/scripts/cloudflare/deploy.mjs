@@ -91,6 +91,8 @@ async function main() {
     await seedAgentPreviewFixtures({
       databaseId: d1Database.uuid,
       executeQuery: queryD1Database,
+      environmentName: context.environmentName,
+      previewSecret: getOptionalEnv("AGENT_PREVIEW_SECRET") ?? "",
     });
   }
 

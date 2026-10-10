@@ -9,7 +9,11 @@ import ConversationSheet from "@/components/chat/ConversationSheet";
 import Transcript from "@/components/chat/Transcript";
 import type { ChatMessage, ChatSession } from "@/components/chat/types";
 import { MOCK_LATENCY_MS, MOCK_LOAD_MS } from "@/components/chat/mock-timing";
-import { DASHBOARD_LINKS } from "@/components/shells/DashboardShell";
+import {
+  DASHBOARD_LINKS,
+  getDashboardLinks,
+} from "@/components/shells/DashboardShell";
+import type { StudentDashboardLinkId } from "@/lib/student/journey";
 
 /**
  * How long a conversation load may take before it is worth saying so. Below
@@ -26,7 +30,14 @@ const DESKTOP_QUERY = "(min-width: 64rem)";
  * longer renders, so nothing — Logout in particular — becomes unreachable just
  * because the user is on the chat page. "Ask AI" is dropped as the current page.
  */
-const APP_NAV = DASHBOARD_LINKS.filter((link) => link.href !== "/dashboard/ask");
+export function getAppNav(
+  visibleLinkIds: StudentDashboardLinkId[],
+  unreadLeadCount = 0
+) {
+  return getDashboardLinks(visibleLinkIds, unreadLeadCount).filter(
+    (link) => link.id !== "ask"
+  );
+}
 
 /** How many prior turns to send back as context. Matches the previous UI. */
 const HISTORY_TURNS = 8;
@@ -53,6 +64,8 @@ interface ChatAppProps {
    */
   mockLatencyMs?: number;
   mockLoadMs?: number;
+  visibleLinkIds?: StudentDashboardLinkId[];
+  unreadLeadCount?: number;
 }
 
 /**
@@ -72,6 +85,8 @@ export default function ChatApp({
   mockTranscripts = NO_TRANSCRIPTS,
   mockLatencyMs = MOCK_LATENCY_MS,
   mockLoadMs = MOCK_LOAD_MS,
+  visibleLinkIds = DASHBOARD_LINKS.map((link) => link.id),
+  unreadLeadCount = 0,
 }: ChatAppProps) {
   const [sessions, setSessions] = useState<ChatSession[]>(initialSessions);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(
@@ -100,6 +115,7 @@ export default function ChatApp({
    */
   const conversationEpochRef = useRef(0);
   const composerRef = useRef<ComposerHandle | null>(null);
+  const appNav = getAppNav(visibleLinkIds, unreadLeadCount);
 
   function beginNewTranscript() {
     conversationEpochRef.current += 1;
@@ -392,13 +408,16 @@ export default function ChatApp({
           {conversationList}
         </nav>
         <nav aria-label="Site" className="shrink-0 border-t border-rule px-2 py-2">
-          {APP_NAV.map((item) => (
+          {appNav.map((item) => (
             <a
               key={item.href}
               href={item.href}
               className="block rounded-lg px-3 py-1.5 text-sm text-ink-muted transition hover:bg-ink-primary/[0.06] hover:text-ink-primary"
             >
               {item.label}
+              {item.badge !== undefined && item.badge > 0
+                ? ` (${item.badge} unread)`
+                : ""}
             </a>
           ))}
         </nav>
@@ -500,13 +519,16 @@ export default function ChatApp({
           aria-label="Site"
           className="flex shrink-0 flex-wrap gap-x-4 gap-y-1 border-t border-rule px-4 py-3"
         >
-          {APP_NAV.map((item) => (
+          {appNav.map((item) => (
             <a
               key={item.href}
               href={item.href}
               className="text-sm text-ink-muted transition hover:text-ink-primary"
             >
               {item.label}
+              {item.badge !== undefined && item.badge > 0
+                ? ` (${item.badge} unread)`
+                : ""}
             </a>
           ))}
         </nav>

@@ -7,22 +7,48 @@ interface SidebarLink {
   href: string;
   label: string;
   icon?: IconType;
+  badge?: number;
+  activePrefixes?: string[];
 }
 
 interface SidebarProps {
   links: SidebarLink[];
   title: string;
+  currentPath: string;
   isOpen: boolean;
   onClose: () => void;
 }
 
-function NavLinks({ links }: { links: SidebarLink[] }) {
-  const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+export function isSidebarLinkActive(
+  currentPath: string,
+  href: string,
+  activePrefixes: string[] = []
+): boolean {
+  if (href === "/auth/logout") return false;
+  if (currentPath === href) return true;
+  if (
+    activePrefixes.some(
+      (prefix) => currentPath === prefix || currentPath.startsWith(`${prefix}/`)
+    )
+  ) {
+    return true;
+  }
+  if (href === "/" || href === "/admin" || href === "/dashboard") return false;
+  return currentPath.startsWith(`${href}/`);
+}
+
+function NavLinks({
+  links,
+  currentPath,
+}: {
+  links: SidebarLink[];
+  currentPath: string;
+}) {
 
   return (
     <nav className="flex flex-col gap-1">
-      {links.map(({ href, label, icon: Icon }) => {
-        const isActive = currentPath === href || (href !== "/" && href !== "/admin" && href !== "/dashboard" && currentPath.startsWith(href));
+      {links.map(({ href, label, icon: Icon, badge, activePrefixes }) => {
+        const isActive = isSidebarLinkActive(currentPath, href, activePrefixes);
         return (
           <a
             key={href}
@@ -36,6 +62,14 @@ function NavLinks({ links }: { links: SidebarLink[] }) {
           >
             {Icon && <Icon className="h-5 w-5" />}
             {label}
+            {badge !== undefined && badge > 0 && (
+              <span
+                className="ml-auto rounded-full bg-primary/20 px-2 py-0.5 text-xs font-semibold text-primary"
+                aria-label={`${badge} unread`}
+              >
+                {badge}
+              </span>
+            )}
           </a>
         );
       })}
@@ -56,7 +90,13 @@ export function SidebarCloseButton({ onClose }: { onClose: () => void }) {
   );
 }
 
-export default function Sidebar({ links, title, isOpen, onClose }: SidebarProps) {
+export default function Sidebar({
+  links,
+  title,
+  currentPath,
+  isOpen,
+  onClose,
+}: SidebarProps) {
   return (
     <>
       {/* Mobile sidebar overlay */}
@@ -90,7 +130,7 @@ export default function Sidebar({ links, title, isOpen, onClose }: SidebarProps)
                 </span>
                 <SidebarCloseButton onClose={onClose} />
               </div>
-              <NavLinks links={links} />
+              <NavLinks links={links} currentPath={currentPath} />
             </Dialog.Panel>
           </Transition.Child>
         </Dialog>
@@ -112,7 +152,7 @@ export default function Sidebar({ links, title, isOpen, onClose }: SidebarProps)
           */}
           <h1 className="font-body text-lg font-semibold text-white">{title}</h1>
         </div>
-        <NavLinks links={links} />
+        <NavLinks links={links} currentPath={currentPath} />
       </aside>
     </>
   );
