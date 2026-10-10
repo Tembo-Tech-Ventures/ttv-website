@@ -5,10 +5,21 @@ const MINIMUM_PREVIEW_SECRET_LENGTH = 32;
 const PREVIEW_TOKEN_CONTEXT = "ttv-agent-preview-token";
 const PREVIEW_AUTH_SECRET_CONTEXT = "ttv-agent-preview-auth-secret";
 const PREVIEW_CREDENTIAL_KEY_CONTEXT = "ttv-agent-preview-credential-key";
+const PREVIEW_PERSONA_TOKEN_CONTEXT = "ttv-agent-preview-persona-token";
 
 export const AGENT_PREVIEW_USER_ID = "ttv-agent-preview-user";
 export const AGENT_PREVIEW_SESSION_ID = "ttv-agent-preview-session";
 export const AGENT_PREVIEW_SESSION_MARKER = "ttv-agent:isolated-preview";
+export const AGENT_PREVIEW_PERSONAS = {
+  newStudent: {
+    userId: "ttv-fixture-user-journey-new",
+    sessionId: "ttv-fixture-session-journey-new",
+  },
+  acceptedStudent: {
+    userId: "ttv-fixture-user-journey-accepted",
+    sessionId: "ttv-fixture-session-journey-accepted",
+  },
+};
 
 export function isAgentEnvironmentName(value) {
   return /^agent-[a-z0-9](?:[a-z0-9-]{0,32}[a-z0-9])?$/.test(value);
@@ -54,6 +65,21 @@ export function deriveAgentPreviewCredentialKey(secret, environmentName) {
   )
     .subarray(0, 32)
     .toString("base64");
+}
+
+export function deriveAgentPreviewPersonaToken(
+  secret,
+  environmentName,
+  persona
+) {
+  if (!Object.hasOwn(AGENT_PREVIEW_PERSONAS, persona)) {
+    throw new Error(`Unknown agent preview persona "${persona}".`);
+  }
+  return deriveSecret(
+    secret,
+    environmentName,
+    `${PREVIEW_PERSONA_TOKEN_CONTEXT}:${persona}`
+  );
 }
 
 function firstQueryRow(result) {
@@ -164,6 +190,8 @@ export async function seedAgentPreviewAccess({
 export async function seedAgentPreviewFixtures({
   databaseId,
   executeQuery,
+  environmentName,
+  previewSecret,
   now = new Date(),
 }) {
   if (!databaseId) throw new Error("A D1 database ID is required.");
@@ -174,6 +202,11 @@ export async function seedAgentPreviewFixtures({
   const createdAt = Math.floor(now.getTime() / 1_000);
   const completedAt = createdAt;
   const publishedAt = createdAt;
+  if (Boolean(environmentName) !== Boolean(previewSecret)) {
+    throw new Error(
+      "Preview fixture persona sessions require both environmentName and previewSecret."
+    );
+  }
 
   // Reset the preview user's own profile so every deploy starts pristine:
   // live journeys create and publish it, and per-feature suites assert the
@@ -416,6 +449,103 @@ export async function seedAgentPreviewFixtures({
         createdAt,
       ],
     );
+  }
+
+  // Read-only student journey personas. These rows are deliberately separate
+  // from cohort-management fixtures, whose application statuses are mutated by
+  // parallel browser projects during the same preview run.
+  const studentJourneyFixtures = [
+    {
+      ...AGENT_PREVIEW_PERSONAS.newStudent,
+      persona: "newStudent",
+      name: "New Journey Student",
+      email: "journey-new@invalid.ttv",
+      applicationId: null,
+      applicationStatus: null,
+    },
+    {
+      ...AGENT_PREVIEW_PERSONAS.acceptedStudent,
+      persona: "acceptedStudent",
+      name: "Accepted Journey Student",
+      email: "journey-accepted@invalid.ttv",
+      applicationId: "ttv-fixture-app-journey-accepted",
+      applicationStatus: "APPROVED",
+    },
+  ];
+
+  await executeQuery(
+    databaseId,
+    `DELETE FROM "programApplication"
+     WHERE "userId" IN (${studentJourneyFixtures.map(() => "?").join(", ")})`,
+    studentJourneyFixtures.map((fixture) => fixture.userId)
+  );
+
+  for (const fixture of studentJourneyFixtures) {
+    await executeQuery(
+      databaseId,
+      `INSERT INTO "user"
+        ("id", "name", "email", "emailVerified", "image", "createdAt", "updatedAt")
+       VALUES (?, ?, ?, 1, NULL, ?, ?)
+       ON CONFLICT("id") DO UPDATE SET
+         "name" = excluded."name",
+         "email" = excluded."email",
+         "emailVerified" = 1,
+         "updatedAt" = excluded."updatedAt"`,
+      [fixture.userId, fixture.name, fixture.email, createdAt, createdAt]
+    );
+
+    if (fixture.applicationId && fixture.applicationStatus) {
+      await executeQuery(
+        databaseId,
+        `INSERT INTO "programApplication"
+          ("id", "programId", "userId", "status", "application", "completedAt", "createdAt", "updatedAt")
+         VALUES (?, ?, ?, ?, '{}', NULL, ?, ?)
+         ON CONFLICT("id") DO UPDATE SET
+           "programId" = excluded."programId",
+           "userId" = excluded."userId",
+           "status" = excluded."status",
+           "application" = '{}',
+           "completedAt" = NULL,
+           "updatedAt" = excluded."updatedAt"`,
+        [
+          fixture.applicationId,
+          "ttv-fixture-program-cohort-04",
+          fixture.userId,
+          fixture.applicationStatus,
+          createdAt,
+          createdAt,
+        ]
+      );
+    }
+
+    if (environmentName && previewSecret) {
+      await executeQuery(
+        databaseId,
+        `INSERT INTO "session"
+          ("id", "expiresAt", "token", "ipAddress", "userAgent", "userId", "createdAt", "updatedAt")
+         VALUES (?, ?, ?, NULL, ?, ?, ?, ?)
+         ON CONFLICT("id") DO UPDATE SET
+           "expiresAt" = excluded."expiresAt",
+           "token" = excluded."token",
+           "ipAddress" = NULL,
+           "userAgent" = excluded."userAgent",
+           "userId" = excluded."userId",
+           "updatedAt" = excluded."updatedAt"`,
+        [
+          fixture.sessionId,
+          createdAt + 8 * 60 * 60,
+          deriveAgentPreviewPersonaToken(
+            previewSecret,
+            environmentName,
+            fixture.persona
+          ),
+          `${AGENT_PREVIEW_SESSION_MARKER}:persona`,
+          fixture.userId,
+          createdAt,
+          createdAt,
+        ]
+      );
+    }
   }
 
   // COMPLETED application for existing preview user

@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   AGENT_PREVIEW_SESSION_MARKER,
+  AGENT_PREVIEW_PERSONAS,
   AGENT_PREVIEW_USER_ID,
   assertAgentEnvironmentName,
   deriveAgentPreviewAuthSecret,
+  deriveAgentPreviewPersonaToken,
   deriveAgentPreviewToken,
   seedAgentPreviewAccess,
   seedAgentPreviewFixtures,
@@ -34,6 +36,27 @@ describe("agent preview identity", () => {
     expect(() => deriveAgentPreviewToken("too-short", "agent-pr-55")).toThrow(
       "at least 32"
     );
+  });
+
+  it("derives bounded tokens for the seeded student personas", () => {
+    const secret = "s".repeat(32);
+    const newStudent = deriveAgentPreviewPersonaToken(
+      secret,
+      "agent-pr-55",
+      "newStudent"
+    );
+    const acceptedStudent = deriveAgentPreviewPersonaToken(
+      secret,
+      "agent-pr-55",
+      "acceptedStudent"
+    );
+
+    expect(newStudent).toHaveLength(64);
+    expect(acceptedStudent).toHaveLength(64);
+    expect(acceptedStudent).not.toBe(newStudent);
+    expect(() =>
+      deriveAgentPreviewPersonaToken(secret, "agent-pr-55", "unknown")
+    ).toThrow("Unknown agent preview persona");
   });
 
   it("seeds an expiring isolated admin without exposing the token", async () => {
@@ -87,6 +110,16 @@ describe("seedAgentPreviewFixtures", () => {
     ).rejects.toThrow("query executor");
   });
 
+  it("requires both persona-session inputs when either is supplied", async () => {
+    await expect(
+      seedAgentPreviewFixtures({
+        databaseId: "db-123",
+        executeQuery: vi.fn(),
+        environmentName: "agent-pr-55",
+      })
+    ).rejects.toThrow("require both environmentName and previewSecret");
+  });
+
   it("seeds all fixture data with idempotent statements", async () => {
     const executeQuery = vi.fn().mockResolvedValue([]);
     const now = new Date("2026-07-14T12:00:00.000Z");
@@ -102,8 +135,9 @@ describe("seedAgentPreviewFixtures", () => {
     // ten cohort users, six eligible cohort applications, preview app, amina
     // user/app/profile, four blog posts, invalid-completion user/app/profile,
     // two amina highlights, kwame user/app/profile, two projects, and two
-    // attention fixtures = 53 total
-    expect(executeQuery).toHaveBeenCalledTimes(53);
+    // attention fixtures, plus two isolated student-journey users and one
+    // approved application = 57 total
+    expect(executeQuery).toHaveBeenCalledTimes(57);
 
     // All calls should target the correct database
     for (const call of executeQuery.mock.calls) {
@@ -125,6 +159,15 @@ describe("seedAgentPreviewFixtures", () => {
     expect(calls[0][1]).toContain('DELETE FROM "studentProfile"');
 
     expect(findByParam("ttv-fixture-curriculum")?.[1]).toContain("curriculum");
+    expect(
+      findInsertByParam("user", AGENT_PREVIEW_PERSONAS.newStudent.userId)?.[1]
+    ).toContain('INSERT INTO "user"');
+    expect(
+      findInsertByParam(
+        "user",
+        AGENT_PREVIEW_PERSONAS.acceptedStudent.userId
+      )?.[1]
+    ).toContain('INSERT INTO "user"');
     const programCall = findByParam("ttv-fixture-program-cohort-04");
     expect(programCall?.[1]).toContain("program");
     expect(programCall?.[2]).toContain("Cohort 04");
@@ -283,6 +326,42 @@ describe("seedAgentPreviewFixtures", () => {
       if (call[1].trimStart().startsWith("DELETE")) continue;
       expect(call[1]).toContain("ON CONFLICT");
     }
+  });
+
+  it("seeds expiring bearer sessions for journey personas when configured", async () => {
+    const executeQuery = vi.fn().mockResolvedValue([]);
+    const previewSecret = "p".repeat(32);
+
+    await seedAgentPreviewFixtures({
+      databaseId: "db-fixture-test",
+      executeQuery,
+      environmentName: "agent-pr-55",
+      previewSecret,
+      now: new Date("2026-07-14T12:00:00.000Z"),
+    });
+
+    const sessionCalls = executeQuery.mock.calls.filter((call) =>
+      call[1].includes('INSERT INTO "session"')
+    );
+    expect(sessionCalls).toHaveLength(2);
+    expect(sessionCalls.map((call) => call[2][0])).toEqual([
+      AGENT_PREVIEW_PERSONAS.newStudent.sessionId,
+      AGENT_PREVIEW_PERSONAS.acceptedStudent.sessionId,
+    ]);
+    expect(sessionCalls[0][2][2]).toBe(
+      deriveAgentPreviewPersonaToken(
+        previewSecret,
+        "agent-pr-55",
+        "newStudent"
+      )
+    );
+    expect(sessionCalls[1][2][2]).toBe(
+      deriveAgentPreviewPersonaToken(
+        previewSecret,
+        "agent-pr-55",
+        "acceptedStudent"
+      )
+    );
   });
 
   it("does NOT seed a studentProfile for the preview user", async () => {
