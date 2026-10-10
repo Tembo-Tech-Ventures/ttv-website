@@ -86,6 +86,8 @@ export interface ProfileModerationState {
     repoFullName: string;
     description: string | null;
     blurb: string | null;
+    language: string | null;
+    topics: string[];
   }>;
 }
 

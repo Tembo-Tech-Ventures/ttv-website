@@ -86,6 +86,27 @@ describe("discardUnreferencedProfilePhoto", () => {
     expect(deleteObject).toHaveBeenCalledWith("avatars/user-1/candidate.webp");
   });
 
+  it("deletes an unreferenced moderated snapshot after a profile write loses its version race", async () => {
+    const moderatedCandidate =
+      "/api/avatar/avatars/user-1/moderated/candidate.webp";
+    const { db, bucket, deleteObject } = cleanupContext({
+      accountImage: oldAvatar,
+      publicAvatarUrl: oldAvatar,
+    });
+
+    await expect(
+      discardUnreferencedProfilePhoto({
+        db: db as never,
+        bucket: bucket as never,
+        userId: "user-1",
+        imageUrl: moderatedCandidate,
+      }),
+    ).resolves.toBe(true);
+    expect(deleteObject).toHaveBeenCalledWith(
+      "avatars/user-1/moderated/candidate.webp",
+    );
+  });
+
   it("fails closed on lookup errors and never deletes an uncertain object", async () => {
     const { db, bucket, deleteObject } = cleanupContext({ queryError: true });
 

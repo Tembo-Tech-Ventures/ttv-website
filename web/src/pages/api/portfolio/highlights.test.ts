@@ -280,6 +280,8 @@ describe("POST /api/portfolio/highlights", () => {
           expect.objectContaining({
             repoFullName: "user/repo-a",
             blurb: "A checked project summary",
+            language: "TypeScript",
+            topics: ["web"],
           }),
         ],
       }),

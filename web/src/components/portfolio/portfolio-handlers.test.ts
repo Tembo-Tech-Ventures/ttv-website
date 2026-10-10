@@ -78,6 +78,13 @@ function mockDb(
       publicAvatarUrl?: string | null;
       contentVersion?: number;
       user?: { name: string; image?: string | null };
+      highlights?: Array<{
+        repoFullName: string;
+        description: string | null;
+        blurb: string | null;
+        language: string | null;
+        topics: string | null;
+      }>;
     } | null;
     insertProfile?: () => void;
     updateProfile?: (condition?: unknown) => void;
@@ -645,7 +652,18 @@ describe("published profile edits", () => {
     const setProfile = vi.fn();
     const updateProfile = vi.fn();
     const db = mockDb({
-      findProfileForLock: current,
+      findProfileForLock: {
+        ...current,
+        highlights: [
+          {
+            repoFullName: "builder/project",
+            description: "A public description",
+            blurb: "A public blurb",
+            language: "TypeScript",
+            topics: '["community","education"]',
+          },
+        ],
+      },
       findProfileByHandle: { id: "profile-1" },
       setProfile,
       updateProfile,
@@ -672,7 +690,18 @@ describe("published profile edits", () => {
     );
     expect(setProfile.mock.calls[0]?.[0]).not.toHaveProperty("bio");
     expect(checkContent).toHaveBeenCalledWith(
-      expect.objectContaining({ displayName: "Checked Public Name" }),
+      expect.objectContaining({
+        displayName: "Checked Public Name",
+        highlights: [
+          {
+            repoFullName: "builder/project",
+            description: "A public description",
+            blurb: "A public blurb",
+            language: "TypeScript",
+            topics: ["community", "education"],
+          },
+        ],
+      }),
       "/api/avatar/avatars/user-1/checked.webp",
     );
     expectVersionedStatusWriteGuard(updateProfile, "PUBLISHED", 7);

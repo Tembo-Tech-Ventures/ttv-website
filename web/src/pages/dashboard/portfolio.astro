@@ -15,14 +15,15 @@ import { preserveFormTextValues } from "@/lib/form-values";
 import { isAgentSession } from "@/lib/agent-auth";
 import {
   loadProfilePhotoForModeration,
+  resolveModeratedProfileAvatar,
   safePublicProfileAvatarUrl,
-  storeModeratedProfilePhotoSnapshot,
 } from "@/lib/avatar";
 import {
   checkProfileContent,
   previewProfileModerationResult,
   PROFILE_MODERATION_PREVIEW_HEADER,
 } from "@/lib/moderation/clef";
+import { discardUnreferencedProfilePhoto } from "@/components/profile/profile-photo-cleanup";
 import {
   publishProfile,
   saveProfile,
@@ -39,6 +40,7 @@ const previewModeration = previewProfileModerationResult(
   isAgentSession(Astro.locals.session?.userAgent),
   Astro.request.headers.get(PROFILE_MODERATION_PREVIEW_HEADER),
 );
+let moderatedSnapshotUrl: string | null = null;
 const moderateProfile: ProfileContentCheck = async (state, avatarUrl) => {
   if (previewModeration) {
     return {
@@ -61,21 +63,33 @@ const moderateProfile: ProfileContentCheck = async (state, avatarUrl) => {
       : undefined,
   });
 
-  let publicAvatarUrl = safePublicProfileAvatarUrl(avatarUrl);
-  if (!publicAvatarUrl && loadedAvatarImage) {
-    try {
-      publicAvatarUrl = await storeModeratedProfilePhotoSnapshot(
-        env.BUCKET,
-        user.id,
-        loadedAvatarImage,
-      );
-    } catch {
-      publicAvatarUrl = null;
-    }
-  }
+  const resolvedAvatar = await resolveModeratedProfileAvatar({
+    bucket: env.BUCKET,
+    userId: user.id,
+    avatarUrl,
+    avatarImage: loadedAvatarImage,
+    outcome: moderation.outcome,
+  });
+  moderatedSnapshotUrl = resolvedAvatar.createdSnapshotUrl;
 
-  return { ...moderation, publicAvatarUrl };
+  return { ...moderation, publicAvatarUrl: resolvedAvatar.publicAvatarUrl };
 };
+
+async function withModeratedSnapshotCleanup<T>(
+  write: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await write();
+  } finally {
+    await discardUnreferencedProfilePhoto({
+      db,
+      bucket: env.BUCKET,
+      userId: user.id,
+      imageUrl: moderatedSnapshotUrl,
+    });
+    moderatedSnapshotUrl = null;
+  }
+}
 
 const PROFILE_TEXT_FIELDS = [
   "handle",
@@ -115,12 +129,14 @@ if (Astro.request.method === "POST" && eligible) {
       where: eq(schema.studentProfile.userId, user.id),
       columns: { id: true },
     });
-    result = await saveProfile(
-      db,
-      user.id,
-      formData,
-      existing?.id,
-      moderateProfile,
+    result = await withModeratedSnapshotCleanup(() =>
+      saveProfile(
+        db,
+        user.id,
+        formData,
+        existing?.id,
+        moderateProfile,
+      ),
     );
     if (!result.success) {
       saveFailed = true;
@@ -138,7 +154,9 @@ if (Astro.request.method === "POST" && eligible) {
       columns: { id: true },
     });
     if (existing) {
-      result = await publishProfile(db, user.id, existing.id, moderateProfile);
+      result = await withModeratedSnapshotCleanup(() =>
+        publishProfile(db, user.id, existing.id, moderateProfile),
+      );
       if (result.success) {
         successMessage = "Your profile is live.";
       } else {

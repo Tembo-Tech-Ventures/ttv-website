@@ -92,6 +92,8 @@ describe("profile highlight moderation writes", () => {
             repoFullName: "builder/project",
             description: "A useful project",
             blurb: "What I built",
+            language: "TypeScript",
+            topics: ["web"],
           },
         ],
       }),

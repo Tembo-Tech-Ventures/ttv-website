@@ -144,6 +144,45 @@ export async function storeModeratedProfilePhotoSnapshot(
   return `${AVATAR_ROUTE_PREFIX}${objectKey}`;
 }
 
+export async function resolveModeratedProfileAvatar({
+  bucket,
+  userId,
+  avatarUrl,
+  avatarImage,
+  outcome,
+}: {
+  bucket: Pick<R2Bucket, "put">;
+  userId: string;
+  avatarUrl: string | null;
+  avatarImage: string | null | undefined;
+  outcome: "pass" | "hold" | "error";
+}): Promise<{
+  publicAvatarUrl: string | null;
+  createdSnapshotUrl: string | null;
+}> {
+  const safeAvatarUrl = safePublicProfileAvatarUrl(avatarUrl);
+  if (safeAvatarUrl || !avatarImage || outcome === "hold") {
+    return {
+      publicAvatarUrl: safeAvatarUrl,
+      createdSnapshotUrl: null,
+    };
+  }
+
+  try {
+    const snapshotUrl = await storeModeratedProfilePhotoSnapshot(
+      bucket,
+      userId,
+      avatarImage,
+    );
+    return {
+      publicAvatarUrl: snapshotUrl,
+      createdSnapshotUrl: snapshotUrl,
+    };
+  } catch {
+    return { publicAvatarUrl: null, createdSnapshotUrl: null };
+  }
+}
+
 export async function discardStoredProfilePhoto(
   bucket: Pick<R2Bucket, "delete">,
   userId: string,

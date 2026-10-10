@@ -1,7 +1,7 @@
 import { and, eq, exists, sql } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
-import { parseSkillsJson } from "@/lib/talent/profile";
+import { parseSkillsJson, parseTopicsJson } from "@/lib/talent/profile";
 import {
   profileModerationMessages,
   type ProfileModerationState,
@@ -115,7 +115,13 @@ export async function saveProfileIdentity(
     with: {
       user: { columns: { name: true, image: true } },
       highlights: {
-        columns: { repoFullName: true, description: true, blurb: true },
+        columns: {
+          repoFullName: true,
+          description: true,
+          blurb: true,
+          language: true,
+          topics: true,
+        },
       },
     },
   });
@@ -163,10 +169,12 @@ export async function saveProfileIdentity(
     portfolioUrl: profile.portfolioUrl,
     linkedinUrl: profile.linkedinUrl,
     highlights: profile.highlights.map(
-      ({ repoFullName, description, blurb }) => ({
+      ({ repoFullName, description, blurb, language, topics }) => ({
         repoFullName,
         description,
         blurb,
+        language,
+        topics: parseTopicsJson(topics),
       }),
     ),
   };

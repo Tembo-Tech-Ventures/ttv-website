@@ -8,6 +8,7 @@ import {
 } from "@/lib/talent/handles";
 import {
   parseSkillsJson,
+  parseTopicsJson,
   profileEditorSchema,
   serializeSkills,
 } from "@/lib/talent/profile";
@@ -89,6 +90,8 @@ interface CurrentProfile {
     repoFullName: string;
     description: string | null;
     blurb: string | null;
+    language: string | null;
+    topics: string | null;
   }>;
   user: { name: string; image: string | null };
 }
@@ -96,11 +99,15 @@ interface CurrentProfile {
 function moderationHighlights(
   highlights: CurrentProfile["highlights"],
 ): NonNullable<ProfileModerationState["highlights"]> {
-  return (highlights ?? []).map(({ repoFullName, description, blurb }) => ({
-    repoFullName,
-    description,
-    blurb,
-  }));
+  return (highlights ?? []).map(
+    ({ repoFullName, description, blurb, language, topics }) => ({
+      repoFullName,
+      description,
+      blurb,
+      language,
+      topics: parseTopicsJson(topics),
+    }),
+  );
 }
 
 function collectFieldErrors(
@@ -352,7 +359,13 @@ export async function saveProfile(
       with: {
         user: { columns: { name: true, image: true } },
         highlights: {
-          columns: { repoFullName: true, description: true, blurb: true },
+          columns: {
+            repoFullName: true,
+            description: true,
+            blurb: true,
+            language: true,
+            topics: true,
+          },
         },
       },
     });
@@ -463,7 +476,13 @@ export async function publishProfile(
     with: {
       user: { columns: { name: true, image: true } },
       highlights: {
-        columns: { repoFullName: true, description: true, blurb: true },
+        columns: {
+          repoFullName: true,
+          description: true,
+          blurb: true,
+          language: true,
+          topics: true,
+        },
       },
     },
   });

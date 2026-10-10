@@ -3,6 +3,7 @@ import {
   discardStoredProfilePhoto,
   extractAvatarObjectKey,
   loadProfilePhotoForModeration,
+  resolveModeratedProfileAvatar,
   safePublicProfileAvatarUrl,
   storeModeratedProfilePhotoSnapshot,
   storeProfilePhoto,
@@ -230,6 +231,37 @@ describe("avatar moderation input", () => {
     expect(
       safePublicProfileAvatarUrl("https://avatars.githubusercontent.com/u/123"),
     ).toBeNull();
+  });
+
+  it("creates a public snapshot only when the checked result can publish", async () => {
+    const bucket = { put: vi.fn().mockResolvedValue({}) };
+
+    await expect(
+      resolveModeratedProfileAvatar({
+        bucket: bucket as never,
+        userId: "user_123",
+        avatarUrl: "https://avatars.githubusercontent.com/u/123",
+        avatarImage: "data:image/png;base64,AQID",
+        outcome: "hold",
+      }),
+    ).resolves.toEqual({
+      publicAvatarUrl: null,
+      createdSnapshotUrl: null,
+    });
+    expect(bucket.put).not.toHaveBeenCalled();
+
+    const published = await resolveModeratedProfileAvatar({
+      bucket: bucket as never,
+      userId: "user_123",
+      avatarUrl: "https://avatars.githubusercontent.com/u/123",
+      avatarImage: "data:image/png;base64,AQID",
+      outcome: "error",
+    });
+    expect(published.publicAvatarUrl).toMatch(
+      /^\/api\/avatar\/avatars\/user_123\/moderated\/[a-f0-9]{64}\.png$/,
+    );
+    expect(published.createdSnapshotUrl).toBe(published.publicAvatarUrl);
+    expect(bucket.put).toHaveBeenCalledOnce();
   });
 
   it("only discards avatar objects owned by the user", async () => {

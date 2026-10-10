@@ -10,6 +10,7 @@ import {
   moderationColumns,
   publishesAfterModeration,
 } from "@/lib/talent/profile-moderation";
+import { parseTopicsJson } from "@/lib/talent/profile";
 
 export interface ProfileHighlightValues {
   repoFullName: string;
@@ -73,11 +74,15 @@ export function profileStateWithHighlights(
     githubLogin: profile.githubLogin,
     portfolioUrl: profile.portfolioUrl,
     linkedinUrl: profile.linkedinUrl,
-    highlights: highlights.map(({ repoFullName, description, blurb }) => ({
-      repoFullName,
-      description,
-      blurb,
-    })),
+    highlights: highlights.map(
+      ({ repoFullName, description, blurb, language, topics }) => ({
+        repoFullName,
+        description,
+        blurb,
+        language,
+        topics: parseTopicsJson(topics),
+      }),
+    ),
   };
 }
 
