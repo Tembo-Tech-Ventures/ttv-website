@@ -52,7 +52,10 @@ export function getDashboardLinks(
   visibleLinkIds: StudentDashboardLinkId[],
   unreadLeadCount = 0
 ): DashboardLink[] {
-  const visible = new Set(visibleLinkIds);
+  const visible = new Set<StudentDashboardLinkId>([
+    ...visibleLinkIds,
+    "logout",
+  ]);
   return DASHBOARD_LINKS.filter((link) => visible.has(link.id)).map((link) =>
     link.id === "leads" && unreadLeadCount > 0
       ? { ...link, badge: unreadLeadCount }

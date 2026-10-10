@@ -29,7 +29,10 @@ describe("dashboard shell hydration", () => {
 
   it("renders only the server-derived links and always keeps logout", () => {
     const html = renderToStaticMarkup(
-      <DashboardShell currentPath="/dashboard" visibleLinkIds={[...BASE_LINKS]}>
+      <DashboardShell
+        currentPath="/dashboard"
+        visibleLinkIds={["home", "apply", "ask", "account"]}
+      >
         <div>Dashboard content</div>
       </DashboardShell>
     );
