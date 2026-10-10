@@ -191,7 +191,7 @@ test.describe("/hire form submission", () => {
       "Please press Submit project again.",
     );
     for (const [name, value] of Object.entries(values)) {
-      await expect(page.locator(`[name="${name}"]`)).toHaveValue(value);
+      await expect(form.locator(`[name="${name}"]`)).toHaveValue(value);
     }
     await page.screenshot({
       path: evidence("hire-too-fast-preserved"),
