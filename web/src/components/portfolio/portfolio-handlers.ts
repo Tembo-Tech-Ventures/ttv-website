@@ -117,7 +117,8 @@ async function savePublishedProfileEdit(
       .where(
         and(
           eq(schema.studentProfile.id, profileId),
-          eq(schema.studentProfile.userId, userId)
+          eq(schema.studentProfile.userId, userId),
+          eq(schema.studentProfile.status, "PUBLISHED")
         )
       );
     return {
@@ -134,7 +135,8 @@ async function savePublishedProfileEdit(
     .where(
       and(
         eq(schema.studentProfile.id, profileId),
-        eq(schema.studentProfile.userId, userId)
+        eq(schema.studentProfile.userId, userId),
+        eq(schema.studentProfile.status, "PUBLISHED")
       )
     );
   return {
@@ -381,6 +383,7 @@ export async function publishProfile(
       and(
         eq(schema.studentProfile.id, profileId),
         eq(schema.studentProfile.userId, userId),
+        eq(schema.studentProfile.status, "DRAFT"),
       ),
     );
 

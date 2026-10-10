@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import {
   extractProfileFormData,
   publishProfile,
@@ -426,9 +427,19 @@ function moderationDb(profile: ModerationProfile | null, setProfile = vi.fn()) {
   };
 }
 
+function expectStatusWriteGuard(
+  where: ReturnType<typeof vi.fn>,
+  expectedStatus: "DRAFT" | "PUBLISHED",
+) {
+  const condition = where.mock.calls[0]?.[0];
+  const query = new SQLiteSyncDialect().sqlToQuery(condition);
+  expect(query.sql).toContain('"studentProfile"."status" = ?');
+  expect(query.params).toContain(expectedStatus);
+}
+
 describe("publishProfile", () => {
   it("publishes a passing draft immediately", async () => {
-    const { db, setProfile } = moderationDb(draftProfile);
+    const { db, setProfile, where } = moderationDb(draftProfile);
     const checkedAt = new Date("2026-10-10T12:00:00Z");
     vi.useFakeTimers();
     vi.setSystemTime(checkedAt);
@@ -446,6 +457,7 @@ describe("publishProfile", () => {
         moderationReviewRequired: false,
       })
     );
+    expectStatusWriteGuard(where, "DRAFT");
     vi.useRealTimers();
   });
 
@@ -522,10 +534,12 @@ describe("published profile edits", () => {
 
   it("keeps the previous public fields live when an edit is held", async () => {
     const setProfile = vi.fn();
+    const updateProfile = vi.fn();
     const db = mockDb({
       findProfileForLock: current,
       findProfileByHandle: { id: "profile-1" },
       setProfile,
+      updateProfile,
     });
     const result = await saveProfile(
       db as never,
@@ -548,6 +562,7 @@ describe("published profile edits", () => {
       })
     );
     expect(setProfile.mock.calls[0]?.[0]).not.toHaveProperty("bio");
+    expectStatusWriteGuard(updateProfile, "PUBLISHED");
   });
 
   it("publishes a passing edit and fails open on an unavailable check", async () => {
