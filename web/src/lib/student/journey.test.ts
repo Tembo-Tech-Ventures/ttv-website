@@ -5,6 +5,7 @@ import { hasCompletedCohort } from "@/lib/talent/eligibility";
 import {
   formatJourneyDate,
   getStudentJourney,
+  type StudentDashboardLinkId,
   type StudentJourneyState,
 } from "./journey";
 
@@ -99,6 +100,7 @@ describe("student journey", () => {
     expectedTitle: string;
     expectedAction: string;
     expectedActionLabel: string;
+    expectedLinks: StudentDashboardLinkId[];
   }> = [
     {
       name: "new sign-in",
@@ -106,6 +108,7 @@ describe("student journey", () => {
       expectedTitle: "Apply to Builders Cohort",
       expectedAction: "/dashboard/apply",
       expectedActionLabel: "Apply",
+      expectedLinks: ["home", "apply", "ask", "account", "logout"],
     },
     {
       name: "pending applicant",
@@ -114,6 +117,7 @@ describe("student journey", () => {
       expectedTitle: "Your application is with the team",
       expectedAction: "/dashboard/application/application-pending",
       expectedActionLabel: "Edit answers",
+      expectedLinks: ["home", "apply", "ask", "account", "logout"],
     },
     {
       name: "audit participant",
@@ -123,6 +127,14 @@ describe("student journey", () => {
       expectedTitle: "Keep learning with the cohort",
       expectedAction: "/dashboard/sessions",
       expectedActionLabel: "Watch sessions",
+      expectedLinks: [
+        "home",
+        "apply",
+        "sessions",
+        "ask",
+        "account",
+        "logout",
+      ],
     },
     {
       name: "rejected applicant",
@@ -131,6 +143,7 @@ describe("student journey", () => {
       expectedTitle: "Keep building with the community",
       expectedAction: "/dashboard/apply",
       expectedActionLabel: "See the next cohort",
+      expectedLinks: ["home", "apply", "ask", "account", "logout"],
     },
     {
       name: "accepted student",
@@ -140,6 +153,14 @@ describe("student journey", () => {
       expectedTitle: "Start with your cohort sessions",
       expectedAction: "/dashboard/sessions",
       expectedActionLabel: "Watch sessions",
+      expectedLinks: [
+        "home",
+        "apply",
+        "sessions",
+        "ask",
+        "account",
+        "logout",
+      ],
     },
     {
       name: "graduate",
@@ -150,6 +171,15 @@ describe("student journey", () => {
       expectedTitle: "Your certificate is ready",
       expectedAction: "/certificate/application-completed",
       expectedActionLabel: "View certificate",
+      expectedLinks: [
+        "home",
+        "apply",
+        "sessions",
+        "ask",
+        "profile",
+        "account",
+        "logout",
+      ],
     },
     {
       name: "published builder",
@@ -162,6 +192,18 @@ describe("student journey", () => {
       expectedTitle: "Your builder profile is live",
       expectedAction: "/dashboard/leads",
       expectedActionLabel: "Read messages",
+      expectedLinks: [
+        "home",
+        "apply",
+        "sessions",
+        "ask",
+        "profile",
+        "writing",
+        "opportunities",
+        "leads",
+        "account",
+        "logout",
+      ],
     },
   ];
 
@@ -185,12 +227,7 @@ describe("student journey", () => {
       expect(journey.nextStep.title).toBe(testCase.expectedTitle);
       expect(journey.nextStep.action.href).toBe(testCase.expectedAction);
       expect(journey.nextStep.action.label).toBe(testCase.expectedActionLabel);
-      expect(journey.visibleLinkIds).toEqual(
-        expect.arrayContaining(["home", "apply", "ask", "account", "logout"])
-      );
-      expect(journey.visibleLinkIds.includes("sessions")).toBe(
-        testCase.accessible ?? false
-      );
+      expect(journey.visibleLinkIds).toEqual(testCase.expectedLinks);
     });
   }
 
