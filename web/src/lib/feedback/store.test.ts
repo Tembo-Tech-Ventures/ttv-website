@@ -376,3 +376,81 @@ describe("listing and updating", () => {
     expect(attachmentQueries).toHaveLength(2);
   });
 });
+
+describe("dropped D1 connections", () => {
+  const lost = () => new Error("D1_ERROR: Network connection lost.");
+
+  /** Makes the first batch or UPDATE fail, optionally after it committed. */
+  function dropOnce(
+    db: D1Database,
+    target: "batch" | "update",
+    { afterCommit }: { afterCommit: boolean }
+  ) {
+    let dropped = false;
+    const fail = async <T>(run: () => Promise<T>) => {
+      if (dropped) return run();
+      dropped = true;
+      if (afterCommit) await run();
+      throw lost();
+    };
+    const mutable = db as unknown as Record<string, unknown>;
+    if (target === "batch") {
+      const batch = db.batch.bind(db);
+      mutable.batch = (statements: D1PreparedStatement[]) => fail(() => batch(statements));
+      return;
+    }
+    const prepare = db.prepare.bind(db);
+    mutable.prepare = (sql: string) => {
+      const statement = prepare(sql);
+      if (!sql.startsWith("UPDATE")) return statement;
+      const bind = statement.bind.bind(statement);
+      return Object.assign(statement, {
+        bind: (...values: unknown[]) => {
+          const bound = bind(...values);
+          const run = bound.run.bind(bound);
+          return Object.assign(bound, { run: () => fail(run) });
+        },
+      });
+    };
+  }
+
+  for (const afterCommit of [false, true]) {
+    it(`stores feedback once when the insert drops ${afterCommit ? "after" : "before"} committing`, async () => {
+      const setup = createFeedbackTestDb();
+      const bucket = createMemoryBucket();
+      dropOnce(setup.db, "batch", { afterCommit });
+
+      await submit(setup, bucket, form({ message: "hi" }, [imageFile(PNG_BYTES)]));
+
+      expect(await countFeedbackByStatus(setup.db)).toMatchObject({ NEW: 1 });
+      expect((await getFeedback(setup.db, "id-1"))?.attachments).toHaveLength(1);
+      expect(bucket.delete).not.toHaveBeenCalled();
+    });
+  }
+
+  it("reports a claim whose first attempt landed as claimed, not as taken", async () => {
+    const setup = createFeedbackTestDb();
+    await submit(setup, createMemoryBucket(), form({ message: "hi" }));
+    dropOnce(setup.db, "update", { afterCommit: true });
+
+    const result = await updateFeedback(
+      setup.db,
+      "id-1",
+      { status: "IN_PROGRESS" },
+      { actorId: ADMIN.id, expectedStatus: "NEW", now: NOW }
+    );
+    expect(result).toMatchObject({ outcome: "updated", feedback: { status: "IN_PROGRESS" } });
+
+    // Someone else's claim is still a conflict.
+    expect(
+      (
+        await updateFeedback(
+          setup.db,
+          "id-1",
+          { status: "IN_PROGRESS" },
+          { actorId: OTHER_STUDENT.id, expectedStatus: "NEW" }
+        )
+      ).outcome
+    ).toBe("conflict");
+  });
+});

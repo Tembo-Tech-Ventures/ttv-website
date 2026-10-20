@@ -1,3 +1,4 @@
+import { retryTransientD1 } from "@/lib/db/d1-errors";
 import {
   isClosedFeedbackStatus,
   sanitizeFeedbackContext,
@@ -193,11 +194,34 @@ export async function countRecentFeedback(
   return Number(row?.count ?? 0);
 }
 
-/** Inserts the feedback and its attachment rows in one D1 transaction. */
+async function feedbackExists(db: D1Database, id: string): Promise<boolean> {
+  const row = await db
+    .prepare(`SELECT 1 AS "found" FROM "feedback" WHERE "id" = ? LIMIT 1`)
+    .bind(id)
+    .first();
+  return row !== null;
+}
+
+/**
+ * Inserts the feedback and its attachment rows in one D1 transaction,
+ * retrying a dropped connection. The batch is all-or-nothing, so if the
+ * feedback row exists the earlier attempt landed and there is nothing to redo.
+ */
 export async function insertFeedback(
   db: D1Database,
   feedback: NewFeedback,
   now = new Date()
+): Promise<void> {
+  await retryTransientD1(async (attempt) => {
+    if (attempt > 1 && (await feedbackExists(db, feedback.id))) return;
+    await insertFeedbackBatch(db, feedback, now);
+  });
+}
+
+async function insertFeedbackBatch(
+  db: D1Database,
+  feedback: NewFeedback,
+  now: Date
 ): Promise<void> {
   const nowSeconds = toSeconds(now);
   await db.batch([
@@ -373,17 +397,29 @@ export async function updateFeedback(
     bindings.push(expectedStatus);
   }
 
-  const result = await db
+  const statement = db
     .prepare(
       `UPDATE "feedback" SET ${assignments.join(", ")}
        WHERE ${conditions.join(" AND ")}`
     )
-    .bind(...bindings)
-    .run();
+    .bind(...bindings);
+  const { changes, attempts } = await retryTransientD1(async (attempt) => {
+    const result = await statement.run();
+    return { changes: result.meta.changes ?? 0, attempts: attempt };
+  });
 
   const feedback = await getFeedback(db, id);
   if (!feedback) return { outcome: "not-found" };
-  if ((result.meta.changes ?? 0) === 0) return { outcome: "conflict", feedback };
+  if (changes === 0) {
+    // A conditional write retried after a dropped connection finds its own
+    // earlier success; it carries this actor and this exact timestamp.
+    const ownEarlierWrite =
+      attempts > 1 &&
+      feedback.handledBy?.id === actorId &&
+      toSeconds(feedback.updatedAt) === nowSeconds &&
+      (patch.status === undefined || feedback.status === patch.status);
+    if (!ownEarlierWrite) return { outcome: "conflict", feedback };
+  }
   return { outcome: "updated", feedback };
 }
 
