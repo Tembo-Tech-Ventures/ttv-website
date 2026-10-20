@@ -63,7 +63,8 @@ function isMobile(testInfo: TestInfo) {
  */
 async function gotoChat(page: Page, search = "") {
   await page.goto(`/dev/chat-ui${search}`);
-  await expect(page.locator("astro-island")).not.toHaveAttribute("ssr", /.*/);
+  // Every island, not just the first: signed-in pages also carry the feedback widget.
+  await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
 }
 
 /**

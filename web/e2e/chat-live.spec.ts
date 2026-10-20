@@ -21,7 +21,8 @@ mkdirSync(EVIDENCE_DIR, { recursive: true });
  */
 async function gotoAsk(page: Page) {
   await page.goto("/dashboard/ask");
-  await expect(page.locator("astro-island")).not.toHaveAttribute("ssr", /.*/);
+  // Every island, not just the first: signed-in pages also carry the feedback widget.
+  await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
 }
 
 test.describe("authenticated Ask AI page", () => {

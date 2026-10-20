@@ -14,6 +14,10 @@ describe("FeedbackWidget", () => {
     expect(html).toContain("print:hidden");
   });
 
+  it("keeps the launcher disabled until hydration attaches its handler", () => {
+    expect(renderToStaticMarkup(<FeedbackWidget />)).toMatch(/<button[^>]*disabled=""/);
+  });
+
   it("renders nothing visible on immersive pages that open it from a menu", () => {
     const html = renderToStaticMarkup(<FeedbackWidget showLauncher={false} />);
     expect(html).not.toContain("<button");

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   Dialog,
   DialogBackdrop,
@@ -110,6 +110,12 @@ export default function FeedbackWidget({
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
+  // The launcher is server-rendered; until hydration a click would do nothing.
+  const hydrated = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
 
   useEffect(() => {
     const show = () => setOpen(true);
@@ -269,6 +275,7 @@ export default function FeedbackWidget({
           type="button"
           {...IGNORE_ATTRIBUTE}
           onClick={() => setOpen(true)}
+          disabled={!hydrated}
           aria-haspopup="dialog"
           className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-full border border-primary/40 bg-dark/90 p-3 text-sm font-semibold text-ink-primary shadow-lg shadow-black/30 backdrop-blur transition hover:border-primary hover:bg-dark sm:px-4 sm:py-2.5 print:hidden"
         >
