@@ -5,6 +5,23 @@ import { isAgentSession } from "@/lib/agent-auth";
 
 export const ADMIN_ROLE_NAME = "ADMIN";
 
+/** Raw D1 lookup for request paths that run before any Drizzle client exists. */
+export async function userHasAdminRole(
+  db: D1Database,
+  userId: string
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `SELECT ur.id FROM "UserRoles" ur
+       JOIN "Roles" r ON ur."roleId" = r."id"
+       WHERE ur."userId" = ? AND r."name" = 'ADMIN'
+       LIMIT 1`
+    )
+    .bind(userId)
+    .first();
+  return Boolean(result);
+}
+
 export type AdminRoleErrorCode =
   | "ADMIN_ROLE_MISSING"
   | "USER_NOT_FOUND"

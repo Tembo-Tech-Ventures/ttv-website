@@ -875,3 +875,130 @@ export const formSubmissionLog = sqliteTable(
     ),
   ],
 );
+
+// ─── Feedback ─────────────────────────────────────────────
+
+export const FEEDBACK_KINDS = [
+  "BUG",
+  "CONFUSING",
+  "IDEA",
+  "PRAISE",
+  "OTHER",
+] as const;
+export const FEEDBACK_STATUSES = [
+  "NEW",
+  "IN_PROGRESS",
+  "RESOLVED",
+  "DECLINED",
+] as const;
+export const FEEDBACK_ATTACHMENT_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+] as const;
+export const FEEDBACK_ATTACHMENT_SOURCES = ["CAPTURE", "UPLOAD"] as const;
+
+export const feedback = sqliteTable(
+  "feedback",
+  {
+    id: cuid("id"),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: FEEDBACK_KINDS }).notNull(),
+    message: text("message").notNull(),
+    pageUrl: text("pageUrl").notNull(),
+    pageTitle: text("pageTitle"),
+    /** JSON written by the widget: viewport, browser, recent client errors. */
+    context: text("context").notNull().default("{}"),
+    appVersion: text("appVersion"),
+    status: text("status", { enum: FEEDBACK_STATUSES })
+      .notNull()
+      .default("NEW"),
+    /** Shown to the student on /dashboard/feedback. */
+    response: text("response"),
+    /** Staff and agents only. */
+    adminNote: text("adminNote"),
+    resolutionUrl: text("resolutionUrl"),
+    handledById: text("handledById").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    resolvedAt: integer("resolvedAt", { mode: "timestamp" }),
+    ...timestamps,
+  },
+  (table) => [
+    index("feedback_status_createdAt_idx").on(table.status, table.createdAt),
+    index("feedback_userId_createdAt_idx").on(table.userId, table.createdAt),
+    check(
+      "feedback_kind_check",
+      sql`${table.kind} in ('BUG', 'CONFUSING', 'IDEA', 'PRAISE', 'OTHER')`,
+    ),
+    check(
+      "feedback_status_check",
+      sql`${table.status} in ('NEW', 'IN_PROGRESS', 'RESOLVED', 'DECLINED')`,
+    ),
+    check("feedback_message_length_check", sql`length(${table.message}) <= 5000`),
+    check("feedback_pageUrl_length_check", sql`length(${table.pageUrl}) <= 2000`),
+    check("feedback_context_length_check", sql`length(${table.context}) <= 20000`),
+    check(
+      "feedback_response_length_check",
+      sql`${table.response} is null or length(${table.response}) <= 2000`,
+    ),
+    check(
+      "feedback_adminNote_length_check",
+      sql`${table.adminNote} is null or length(${table.adminNote}) <= 5000`,
+    ),
+  ],
+);
+
+export const feedbackRelations = relations(feedback, ({ one, many }) => ({
+  user: one(user, { fields: [feedback.userId], references: [user.id] }),
+  attachments: many(feedbackAttachment),
+}));
+
+export const feedbackAttachment = sqliteTable(
+  "feedback_attachment",
+  {
+    id: cuid("id"),
+    feedbackId: text("feedbackId")
+      .notNull()
+      .references(() => feedback.id, { onDelete: "cascade" }),
+    objectKey: text("objectKey").notNull().unique(),
+    contentType: text("contentType", {
+      enum: FEEDBACK_ATTACHMENT_TYPES,
+    }).notNull(),
+    size: integer("size").notNull(),
+    source: text("source", { enum: FEEDBACK_ATTACHMENT_SOURCES }).notNull(),
+    position: integer("position").notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [
+    index("feedback_attachment_feedbackId_idx").on(table.feedbackId),
+    check(
+      "feedback_attachment_contentType_check",
+      sql`${table.contentType} in ('image/png', 'image/jpeg', 'image/webp', 'image/gif')`,
+    ),
+    check(
+      "feedback_attachment_source_check",
+      sql`${table.source} in ('CAPTURE', 'UPLOAD')`,
+    ),
+    check("feedback_attachment_size_check", sql`${table.size} > 0`),
+    check(
+      "feedback_attachment_position_check",
+      sql`${table.position} between 0 and 9`,
+    ),
+  ],
+);
+
+export const feedbackAttachmentRelations = relations(
+  feedbackAttachment,
+  ({ one }) => ({
+    feedback: one(feedback, {
+      fields: [feedbackAttachment.feedbackId],
+      references: [feedback.id],
+    }),
+  }),
+);

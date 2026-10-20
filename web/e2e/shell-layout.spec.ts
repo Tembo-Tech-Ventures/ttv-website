@@ -20,7 +20,8 @@ const SCROLL_TO = 2_000;
 
 async function gotoShell(page: Page) {
   await page.goto("/dev/shell-preview");
-  await expect(page.locator("astro-island")).not.toHaveAttribute("ssr", /.*/);
+  // Every island, not just the first: signed-in pages also carry the feedback widget.
+  await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
 }
 
 function isMobile(testInfo: TestInfo) {

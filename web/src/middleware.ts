@@ -4,6 +4,7 @@ import { createAuth } from "@/lib/auth";
 import { isAgentSession } from "@/lib/agent-auth";
 import { isHealthCheckPath } from "@/lib/health";
 import { enforceAdminMutationOrigin } from "@/lib/admin/mutation-security";
+import { userHasAdminRole } from "@/lib/admin/roles";
 import {
   collapseRoutePattern,
   recordErrorInBackground,
@@ -58,19 +59,7 @@ async function enforceAdminGuards(
     return redirect("/auth/login");
   }
 
-  // Check admin role via D1 query
-  const db = env.DB;
-  const result = await db
-    .prepare(
-      `SELECT ur.id FROM "UserRoles" ur
-       JOIN "Roles" r ON ur."roleId" = r."id"
-       WHERE ur."userId" = ? AND r."name" = 'ADMIN'
-       LIMIT 1`
-    )
-    .bind(locals.user.id)
-    .first();
-
-  if (!result) {
+  if (!(await userHasAdminRole(env.DB, locals.user.id))) {
     return redirect("/dashboard");
   }
 

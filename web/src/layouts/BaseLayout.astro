@@ -1,5 +1,7 @@
 ---
 import "@/styles/global.css";
+import ClientErrorBuffer from "@/components/feedback/ClientErrorBuffer.astro";
+import FeedbackWidget from "@/components/feedback/FeedbackWidget";
 import {
   absoluteUrl,
   normalizeDescription,
@@ -29,6 +31,8 @@ const resolvedDescription =
 // listings like `/talent?skill=react` do not read as duplicate content.
 const canonicalUrl = absoluteUrl(Astro.site, canonical ?? Astro.url.pathname);
 const ogImageUrl = absoluteUrl(Astro.site, ogImage ?? "/og-default.png");
+// Feedback is for people with an account; anonymous visitors never see it.
+const signedIn = Boolean(Astro.locals.user);
 ---
 
 <!doctype html>
@@ -62,11 +66,13 @@ const ogImageUrl = absoluteUrl(Astro.site, ogImage ?? "/og-default.png");
 
     <link rel="icon" type="image/png" href="/favicon.png" />
     <title>{resolvedTitle}</title>
+    {signedIn && <ClientErrorBuffer />}
 
     <!-- Page-specific head content, e.g. JSON-LD for blog posts. -->
     <slot name="head" />
   </head>
   <body class="bg-dark min-h-screen">
     <slot />
+    {signedIn && <FeedbackWidget client:idle />}
   </body>
 </html>
