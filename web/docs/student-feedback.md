@@ -51,12 +51,23 @@ form, not the sidebar.
 ## Working the queue as an agent
 
 Agents use an admin **personal access token**, created at
-`/admin/personal-access-tokens`. Pick *read/write* if the agent should update
-items. Tokens last at most 30 days.
+`/admin/personal-access-tokens`. Tokens last at most 30 days.
+
+The script reads `TTV_FEEDBACK_TOKEN`, falling back to the project's
+`TTV_PERSONAL_ACCESS_TOKEN`. As of 2026-10-20 that project token is
+**read-only**: `list` and `show` work, but `claim`, `resolve` and `decline`
+get `403 … does not grant admin:write`. To let an agent update items, add a
+separate read/write token as `TTV_FEEDBACK_TOKEN` rather than widening the
+shared one, which the read-only health monitor and live e2e runs also use.
+
+In a SAM workspace, secret env vars hold placeholders. Run the script through
+SAM's `exec_with_secrets` with `secretNames: ["TTV_PERSONAL_ACCESS_TOKEN"]`
+(or `TTV_FEEDBACK_TOKEN`) so the real value is injected and redacted from
+output.
 
 ```bash
 cd web
-export TTV_FEEDBACK_TOKEN=ttv_pat_…            # never commit or log it
+export TTV_FEEDBACK_TOKEN=ttv_pat_…            # or TTV_PERSONAL_ACCESS_TOKEN; never commit or log it
 # export TTV_BASE_URL=https://agent-pr-123…    # defaults to production
 
 node scripts/feedback.mjs list                          # open queue (NEW + IN_PROGRESS)

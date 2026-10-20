@@ -6,6 +6,7 @@ import { URLSearchParams, fileURLToPath } from "node:url";
  * Work the student feedback queue from a terminal or an agent session.
  *
  *   export TTV_FEEDBACK_TOKEN=ttv_pat_…      # admin PAT; read/write to update
+ *                                            # (falls back to TTV_PERSONAL_ACCESS_TOKEN)
  *   node scripts/feedback.mjs list [--status=open|all|NEW,IN_PROGRESS] [--kind=BUG] [--limit=50] [--json]
  *   node scripts/feedback.mjs show <id> [--download=<dir>]
  *   node scripts/feedback.mjs claim <id> [--note=…]
@@ -66,11 +67,21 @@ export function parseFeedbackCliArgs(argv) {
   return { command, id: positional[0], options };
 }
 
+/**
+ * TTV_FEEDBACK_TOKEN wins so the queue can have its own read/write token;
+ * otherwise the project's general (often read-only) admin token is used,
+ * which is enough for list and show.
+ */
+const TOKEN_VARIABLES = ["TTV_FEEDBACK_TOKEN", "TTV_PERSONAL_ACCESS_TOKEN"];
+
 export function resolveConfig(env) {
-  const token = env.TTV_FEEDBACK_TOKEN?.trim();
-  if (!token || !TOKEN_PATTERN.test(token)) {
+  const name = TOKEN_VARIABLES.find((variable) => env[variable]?.trim());
+  const token = name ? env[name].trim() : "";
+  if (!TOKEN_PATTERN.test(token)) {
     throw new FeedbackCliError(
-      "Set TTV_FEEDBACK_TOKEN to an admin personal access token (ttv_pat_…)."
+      name
+        ? `${name} is not an admin personal access token (ttv_pat_…). In a SAM workspace, run this through exec_with_secrets so the real value is injected.`
+        : `Set ${TOKEN_VARIABLES.join(" or ")} to an admin personal access token (ttv_pat_…).`
     );
   }
   const baseUrl = new URL(env.TTV_BASE_URL?.trim() || DEFAULT_BASE_URL);

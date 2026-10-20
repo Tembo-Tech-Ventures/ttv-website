@@ -52,8 +52,12 @@ describe("parseFeedbackCliArgs", () => {
 
 describe("resolveConfig", () => {
   it("requires a well-formed PAT and HTTPS outside localhost", () => {
-    expect(() => resolveConfig({})).toThrow(/TTV_FEEDBACK_TOKEN/);
-    expect(() => resolveConfig({ TTV_FEEDBACK_TOKEN: "ttv_pat_short" })).toThrow(/TTV_FEEDBACK_TOKEN/);
+    expect(() => resolveConfig({})).toThrow(
+      "Set TTV_FEEDBACK_TOKEN or TTV_PERSONAL_ACCESS_TOKEN to an admin personal access token"
+    );
+    expect(() => resolveConfig({ TTV_FEEDBACK_TOKEN: "ttv_pat_short" })).toThrow(
+      /TTV_FEEDBACK_TOKEN is not an admin personal access token/
+    );
     expect(() =>
       resolveConfig({ TTV_FEEDBACK_TOKEN: TOKEN, TTV_BASE_URL: "http://staging.example" })
     ).toThrow(/HTTPS/);
@@ -64,6 +68,21 @@ describe("resolveConfig", () => {
     expect(
       resolveConfig({ TTV_FEEDBACK_TOKEN: TOKEN, TTV_BASE_URL: "http://127.0.0.1:4321/x" }).baseUrl
     ).toBe("http://127.0.0.1:4321");
+  });
+});
+
+describe("token selection", () => {
+  const OTHER = `ttv_pat_${"b".repeat(64)}`;
+
+  it("prefers the dedicated feedback token and falls back to the project PAT", () => {
+    expect(resolveConfig({ TTV_FEEDBACK_TOKEN: TOKEN, TTV_PERSONAL_ACCESS_TOKEN: OTHER }).token).toBe(TOKEN);
+    expect(resolveConfig({ TTV_FEEDBACK_TOKEN: " ", TTV_PERSONAL_ACCESS_TOKEN: OTHER }).token).toBe(OTHER);
+  });
+
+  it("explains SAM's secret placeholders instead of sending them", () => {
+    expect(() =>
+      resolveConfig({ TTV_PERSONAL_ACCESS_TOKEN: "__SAM_SECRET_PLACEHOLDER__" })
+    ).toThrow(/TTV_PERSONAL_ACCESS_TOKEN is not .* exec_with_secrets/);
   });
 });
 
