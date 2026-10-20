@@ -1,0 +1,59 @@
+---
+/**
+ * Keeps the last few browser errors so a feedback note can carry them.
+ *
+ * Inline and in <head> because it has to be listening before any island
+ * hydrates: a bundled module runs deferred and would miss exactly the
+ * hydration and script-load failures a "this page is broken" note is about.
+ * The buffer never leaves the browser unless the student sends feedback.
+ */
+import { CLIENT_ERROR_BUFFER_KEY } from "./feedback-client";
+---
+
+<script is:inline define:vars={{ key: CLIENT_ERROR_BUFFER_KEY }}>
+  (() => {
+    if (window[key]) return;
+    const buffer = (window[key] = []);
+    const text = (value) => {
+      if (value instanceof Error) return value.message;
+      if (typeof value === "string") return value;
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const push = (message, source) => {
+      buffer.push({
+        message: String(message || "Unknown error").slice(0, 500),
+        source: source ? String(source).slice(0, 300) : undefined,
+        at: new Date().toISOString(),
+      });
+      if (buffer.length > 10) buffer.shift();
+    };
+    window.addEventListener(
+      "error",
+      (event) => {
+        const target = event.target;
+        if (target && target !== window && (target.src || target.href)) {
+          push(`Failed to load ${target.src || target.href}`, target.tagName);
+        } else {
+          push(event.message, event.filename && `${event.filename}:${event.lineno}`);
+        }
+      },
+      true
+    );
+    window.addEventListener("unhandledrejection", (event) =>
+      push(text(event.reason), "unhandledrejection")
+    );
+    const original = console.error;
+    console.error = function (...args) {
+      try {
+        push(args.map(text).join(" "), "console.error");
+      } catch {
+        // Never let the recorder break the page.
+      }
+      return original.apply(this, args);
+    };
+  })();
+</script>

@@ -13,6 +13,7 @@ import {
   PiBriefcaseDuotone,
   PiBooksDuotone,
   PiPlugsDuotone,
+  PiChatTeardropTextDuotone,
 } from "react-icons/pi";
 import { PiListBold } from "react-icons/pi";
 
@@ -21,6 +22,7 @@ const primaryLinks = [
   { href: "/admin/users", label: "Users", icon: PiUsersDuotone },
   { href: "/admin/applications", label: "Applications", icon: PiFileTextDuotone },
   { href: "/admin/profiles", label: "Profiles", icon: PiIdentificationCardDuotone },
+  { href: "/admin/feedback", label: "Feedback", icon: PiChatTeardropTextDuotone },
   { href: "/admin/projects", label: "Client Projects", icon: PiBriefcaseDuotone },
   { href: "/admin/curricula", label: "Curricula", icon: PiBooksDuotone },
   { href: "/admin/programs", label: "Cohorts", icon: PiBookOpenDuotone },
@@ -100,7 +102,8 @@ export default function AdminShell({
         </header>
 
         {/* Content */}
-        <main className="min-w-0 flex-1 p-4 lg:p-6">{children}</main>
+        {/* Bottom padding keeps the last control clear of the floating feedback button. */}
+        <main className="min-w-0 flex-1 p-4 pb-24 lg:p-6 lg:pb-24">{children}</main>
       </div>
     </div>
   );

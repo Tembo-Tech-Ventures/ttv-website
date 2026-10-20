@@ -1,4 +1,5 @@
 import { redactErrorMessage } from "@/lib/observability/errors";
+import { FEEDBACK_KIND_LABELS, type FeedbackKind } from "@/lib/feedback/model";
 
 export interface AdminAttentionItem {
   id: string;
@@ -9,7 +10,13 @@ export interface AdminAttentionItem {
 }
 
 export interface AdminAttentionGroup {
-  id: "failed-recordings" | "import-errors" | "error-signatures" | "pending-projects" | "stale-contacts";
+  id:
+    | "new-feedback"
+    | "failed-recordings"
+    | "import-errors"
+    | "error-signatures"
+    | "pending-projects"
+    | "stale-contacts";
   label: string;
   items: AdminAttentionItem[];
 }
@@ -43,6 +50,14 @@ interface PendingProjectRow {
   createdAt: number;
 }
 
+interface NewFeedbackRow {
+  id: string;
+  kind: FeedbackKind;
+  message: string;
+  userName: string;
+  createdAt: number;
+}
+
 interface StaleContactRow {
   id: string;
   profileId: string;
@@ -57,6 +72,12 @@ function rows<T>(result: D1Result<unknown> | undefined) {
 
 function iso(seconds: number) {
   return new Date(Number(seconds) * 1_000).toISOString();
+}
+
+function summarizeFeedback(message: string) {
+  const text = message.replace(/\s+/g, " ").trim();
+  if (!text) return "Screenshot only";
+  return text.length > 120 ? `${text.slice(0, 119)}…` : text;
 }
 
 export async function getAdminAttention(
@@ -111,9 +132,28 @@ export async function getAdminAttention(
          LIMIT 10`
       )
       .bind(sevenDaysAgo),
+    db.prepare(
+      `SELECT f."id", f."kind", f."message", f."createdAt", u."name" AS "userName"
+       FROM "feedback" AS f
+       JOIN "user" AS u ON u."id" = f."userId"
+       WHERE f."status" = 'NEW'
+       ORDER BY f."createdAt" ASC
+       LIMIT 10`
+    ),
   ]);
 
   return [
+    {
+      id: "new-feedback",
+      label: "New student feedback",
+      items: rows<NewFeedbackRow>(results[5]).map((row) => ({
+        id: row.id,
+        title: `${FEEDBACK_KIND_LABELS[row.kind]} from ${row.userName}`,
+        detail: summarizeFeedback(row.message),
+        href: `/admin/feedback/${encodeURIComponent(row.id)}`,
+        occurredAt: iso(row.createdAt),
+      })),
+    },
     {
       id: "failed-recordings",
       label: "Failed recordings",

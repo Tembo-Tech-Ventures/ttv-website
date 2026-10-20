@@ -1,0 +1,274 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import Card from "@/components/common/Card.astro";
+import FeedbackStatusPill from "@/components/feedback/FeedbackStatusPill.astro";
+import { env } from "cloudflare:workers";
+import { getFeedback, updateFeedback } from "@/lib/feedback/store";
+import {
+  feedbackAttachmentPath,
+  feedbackUpdateFromForm,
+} from "@/lib/feedback/api";
+import {
+  FEEDBACK_ADMIN_STATUS_LABELS,
+  FEEDBACK_KIND_LABELS,
+  FEEDBACK_STATUSES,
+  FeedbackValidationError,
+  MAX_FEEDBACK_ADMIN_NOTE_LENGTH,
+  MAX_FEEDBACK_RESPONSE_LENGTH,
+  feedbackPagePath,
+} from "@/lib/feedback/model";
+import { formatBytes } from "@/components/feedback/feedback-client";
+
+const id = Astro.params.id ?? "";
+let actionError = "";
+let saved = Astro.url.searchParams.get("saved") === "1";
+
+if (Astro.request.method === "POST") {
+  try {
+    const update = feedbackUpdateFromForm(await Astro.request.formData());
+    const result = await updateFeedback(env.DB, id, update.patch, {
+      actorId: Astro.locals.user!.id,
+    });
+    if (result.outcome === "not-found") return Astro.redirect("/admin/feedback");
+    return Astro.redirect(`/admin/feedback/${encodeURIComponent(id)}?saved=1`);
+  } catch (error) {
+    if (!(error instanceof FeedbackValidationError)) throw error;
+    actionError = error.message;
+    saved = false;
+    Astro.response.status = 400;
+  }
+}
+
+const feedback = await getFeedback(env.DB, id);
+if (!feedback) return Astro.redirect("/admin/feedback");
+
+const { context } = feedback;
+const formatDateTime = (date: Date) =>
+  `${date.toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+  })} UTC`;
+const facts = [
+  ["From", `${feedback.user.name} (${feedback.user.email})`],
+  ["Sent", formatDateTime(feedback.createdAt)],
+  ["Page title", feedback.pageTitle ?? "—"],
+  [
+    "Viewport",
+    context.viewport
+      ? `${context.viewport.width}×${context.viewport.height}${context.devicePixelRatio ? ` @${context.devicePixelRatio}x` : ""}`
+      : "—",
+  ],
+  ["Browser", context.userAgent ?? "—"],
+  [
+    "Locale",
+    [context.language, context.timezone].filter(Boolean).join(" · ") || "—",
+  ],
+  ["App version", feedback.appVersion ?? "—"],
+  [
+    "Last handled",
+    feedback.handledBy
+      ? `${feedback.handledBy.name}, ${formatDateTime(feedback.updatedAt)}`
+      : "—",
+  ],
+] as const;
+---
+
+<AdminLayout title="Feedback">
+  <div class="space-y-6">
+    <a href="/admin/feedback" class="text-sm text-primary hover:underline">
+      &larr; Back to Feedback
+    </a>
+
+    {
+      actionError && (
+        <p
+          role="alert"
+          class="rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100"
+        >
+          {actionError}
+        </p>
+      )
+    }
+    {
+      saved && (
+        <p
+          role="status"
+          class="rounded-md border border-green-400/40 bg-green-500/15 px-4 py-3 text-sm text-green-100"
+        >
+          Saved. The student sees the status and reply on their feedback page.
+        </p>
+      )
+    }
+
+    <div class="flex flex-wrap items-center gap-3">
+      <h2 class="text-2xl font-bold text-white">
+        {FEEDBACK_KIND_LABELS[feedback.kind]}
+      </h2>
+      <FeedbackStatusPill status={feedback.status} audience="admin" />
+      <a
+        href={feedback.pageUrl}
+        class="truncate text-sm text-primary hover:underline"
+        target="_blank"
+        rel="noopener">{feedbackPagePath(feedback.pageUrl)}</a
+      >
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div class="min-w-0 space-y-6">
+        <Card>
+          <h3 class="mb-3 text-lg font-semibold text-white">What they said</h3>
+          {/* Expression on the tag's own line: pre-wrap would show indentation. */}
+          <p class="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-primary">{feedback.message || "(No text. See the screenshots.)"}</p>
+        </Card>
+
+        {
+          feedback.attachments.length > 0 && (
+            <Card>
+              <h3 class="mb-3 text-lg font-semibold text-white">Screenshots</h3>
+              <ul class="space-y-4">
+                {feedback.attachments.map((attachment, index) => (
+                  <li>
+                    <a
+                      href={feedbackAttachmentPath(attachment.id)}
+                      target="_blank"
+                      rel="noopener"
+                      class="block overflow-hidden rounded-md border border-rule hover:border-primary"
+                    >
+                      <img
+                        src={feedbackAttachmentPath(attachment.id)}
+                        alt={`Screenshot ${index + 1} from ${feedback.user.name}`}
+                        loading="lazy"
+                        class="w-full"
+                      />
+                    </a>
+                    <p class="mt-1 text-xs text-ink-muted">
+                      {attachment.source === "CAPTURE"
+                        ? "Captured in the browser (a redraw of the page, not a pixel-exact screenshot)"
+                        : "Uploaded by the student"}
+                      {` · ${formatBytes(attachment.size)}`}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )
+        }
+
+        {
+          context.errors.length > 0 && (
+            <Card>
+              <h3 class="mb-3 text-lg font-semibold text-white">
+                Errors the page logged
+              </h3>
+              <ol class="space-y-2 font-mono text-xs text-ink-secondary">
+                {context.errors.map((clientError) => (
+                  <li class="break-words rounded border border-rule bg-dark/60 p-2">
+                    <span class="text-ink-primary">{clientError.message}</span>
+                    {clientError.source && (
+                      <span class="block text-ink-muted">{clientError.source}</span>
+                    )}
+                    {clientError.at && (
+                      <span class="block text-ink-muted">{clientError.at}</span>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </Card>
+          )
+        }
+      </div>
+
+      <div class="min-w-0 space-y-6">
+        <Card>
+          <h3 class="mb-4 text-lg font-semibold text-white">Respond</h3>
+          <form method="POST" class="space-y-4">
+            <div>
+              <label for="status" class="mb-1 block text-sm text-ink-secondary"
+                >Status</label
+              >
+              <select
+                id="status"
+                name="status"
+                class="w-full rounded-md border border-teal/40 bg-dark px-3 py-2 text-sm text-ink-primary"
+              >
+                {
+                  FEEDBACK_STATUSES.map((status) => (
+                    <option value={status} selected={status === feedback.status}>
+                      {FEEDBACK_ADMIN_STATUS_LABELS[status]}
+                    </option>
+                  ))
+                }
+              </select>
+            </div>
+            <div>
+              <label for="response" class="mb-1 block text-sm text-ink-secondary"
+                >Reply to {feedback.user.name}
+                <span class="text-ink-muted">(they see this)</span></label
+              >
+              <textarea
+                id="response"
+                name="response"
+                rows="4"
+                maxlength={MAX_FEEDBACK_RESPONSE_LENGTH}
+                class="w-full rounded-md border border-teal/40 bg-dark px-3 py-2 text-sm text-ink-primary"
+                >{feedback.response ?? ""}</textarea
+              >
+            </div>
+            <div>
+              <label
+                for="resolutionUrl"
+                class="mb-1 block text-sm text-ink-secondary"
+                >Link to the fix <span class="text-ink-muted">(they see this)</span></label
+              >
+              <input
+                id="resolutionUrl"
+                name="resolutionUrl"
+                type="url"
+                value={feedback.resolutionUrl ?? ""}
+                placeholder="https://github.com/…/pull/123"
+                class="w-full rounded-md border border-teal/40 bg-dark px-3 py-2 text-sm text-ink-primary"
+              />
+            </div>
+            <div>
+              <label for="adminNote" class="mb-1 block text-sm text-ink-secondary"
+                >Internal note <span class="text-ink-muted">(staff and agents only)</span></label
+              >
+              <textarea
+                id="adminNote"
+                name="adminNote"
+                rows="3"
+                maxlength={MAX_FEEDBACK_ADMIN_NOTE_LENGTH}
+                class="w-full rounded-md border border-teal/40 bg-dark px-3 py-2 text-sm text-ink-primary"
+                >{feedback.adminNote ?? ""}</textarea
+              >
+            </div>
+            <button
+              type="submit"
+              class="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-dark hover:bg-primary/90"
+            >
+              Save
+            </button>
+          </form>
+        </Card>
+
+        <Card>
+          <h3 class="mb-4 text-lg font-semibold text-white">Context</h3>
+          <dl class="space-y-3 text-sm">
+            {
+              facts.map(([label, value]) => (
+                <div>
+                  <dt class="text-ink-muted">{label}</dt>
+                  <dd class="break-words text-ink-primary">{value}</dd>
+                </div>
+              ))
+            }
+          </dl>
+        </Card>
+      </div>
+    </div>
+  </div>
+</AdminLayout>

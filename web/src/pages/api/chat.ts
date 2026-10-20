@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { ensureOwnedChatSession, touchChatSession } from "@/lib/chat/sessions";
 import { getAccessibleProgramIds } from "@/lib/recordings/access";
+import { userHasAdminRole } from "@/lib/admin/roles";
 import { generateToolCompletion, type GatewayMessage } from "@/lib/ai/gateway";
 import { TOOL_DEFINITIONS, executeTool, type ToolContext, type TranscriptSource } from "@/lib/chat/tools";
 
@@ -12,19 +13,6 @@ const MAX_ANSWER_TOKENS = 1200;
 
 function sanitizeModelAnswer(answer: string) {
   return answer.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
-}
-
-async function checkIsAdmin(db: D1Database, userId: string): Promise<boolean> {
-  const result = await db
-    .prepare(
-      `SELECT ur.id FROM "UserRoles" ur
-       JOIN "Roles" r ON ur."roleId" = r."id"
-       WHERE ur."userId" = ? AND r."name" = 'ADMIN'
-       LIMIT 1`
-    )
-    .bind(userId)
-    .first();
-  return Boolean(result);
 }
 
 function buildSystemPrompt(userName: string, hasRecordings: boolean): string {
@@ -98,7 +86,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const [programIds, isAdmin] = await Promise.all([
     getAccessibleProgramIds(db, user.id),
-    checkIsAdmin(env.DB, user.id),
+    userHasAdminRole(env.DB, user.id),
   ]);
 
   const hasRecordings = programIds.length > 0 || isAdmin;

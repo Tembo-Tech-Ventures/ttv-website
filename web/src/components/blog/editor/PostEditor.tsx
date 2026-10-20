@@ -40,6 +40,7 @@ import React, {
 } from "react";
 import {
   PiArrowLeftBold,
+  PiChatTeardropTextBold,
   PiCloudCheckBold,
   PiMarkdownLogoBold,
   PiNotePencilBold,
@@ -48,6 +49,7 @@ import {
   PiWarningCircleBold,
 } from "react-icons/pi";
 import { estimateReadingMinutes } from "@/lib/blog/post";
+import { openFeedbackWidget } from "@/components/feedback/feedback-client";
 import { BlockInsertBar, BlockInsertGutter } from "./BlockInsertMenu";
 import FloatingToolbar from "./FloatingToolbar";
 import MetadataPanel, { type PostStatus } from "./MetadataPanel";
@@ -438,6 +440,16 @@ function TopBar({
       <SaveIndicator label={saveLabel} state={saveState} />
 
       <div className="ml-auto flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={openFeedbackWidget}
+          aria-label="Send feedback"
+          title="Send feedback"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-ink-secondary transition-colors hover:bg-white/10 hover:text-ink-primary"
+        >
+          <PiChatTeardropTextBold />
+        </button>
+
         <button
           type="button"
           onClick={onToggleMode}

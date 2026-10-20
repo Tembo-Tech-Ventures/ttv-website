@@ -14,6 +14,7 @@ import {
   getDashboardLinks,
 } from "@/components/shells/DashboardShell";
 import type { StudentDashboardLinkId } from "@/lib/student/journey";
+import { openFeedbackWidget } from "@/components/feedback/feedback-client";
 
 /**
  * How long a conversation load may take before it is worth saying so. Below
@@ -420,6 +421,13 @@ export default function ChatApp({
                 : ""}
             </a>
           ))}
+          <button
+            type="button"
+            onClick={openFeedbackWidget}
+            className="block w-full rounded-lg px-3 py-1.5 text-left text-sm text-ink-muted transition hover:bg-ink-primary/[0.06] hover:text-ink-primary"
+          >
+            Send feedback
+          </button>
         </nav>
       </aside>
 
@@ -531,6 +539,16 @@ export default function ChatApp({
                 : ""}
             </a>
           ))}
+          <button
+            type="button"
+            onClick={() => {
+              setSheetOpen(false);
+              openFeedbackWidget();
+            }}
+            className="text-sm text-ink-muted transition hover:text-ink-primary"
+          >
+            Send feedback
+          </button>
         </nav>
       </ConversationSheet>
     </div>

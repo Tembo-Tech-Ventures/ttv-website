@@ -72,14 +72,33 @@ describe("admin attention query", () => {
           },
         ],
       },
+      {
+        results: [
+          {
+            id: "feedback-1",
+            kind: "BUG",
+            message: "The   apply button\ndoes nothing",
+            userName: "Kwame",
+            createdAt: timestamp,
+          },
+          {
+            id: "feedback-2",
+            kind: "IDEA",
+            message: "",
+            userName: "Amina",
+            createdAt: timestamp,
+          },
+        ],
+      },
     ]);
     const db = { prepare, batch } as unknown as D1Database;
 
     const groups = await getAdminAttention(db, now);
 
     expect(batch).toHaveBeenCalledOnce();
-    expect(batch.mock.calls[0][0]).toHaveLength(5);
+    expect(batch.mock.calls[0][0]).toHaveLength(6);
     expect(groups.map((group) => group.items[0]?.href)).toEqual([
+      "/admin/feedback/feedback-1",
       "/admin/recordings/recording-1",
       "/admin/recordings/import",
       "/admin#attention-error-signatures",
@@ -87,7 +106,11 @@ describe("admin attention query", () => {
       "/admin/profiles/profile-1",
     ]);
     expect(JSON.stringify(groups)).not.toContain("private-value");
-    expect(groups[2].items[0]).toMatchObject({
+    expect(groups[0].items).toMatchObject([
+      { title: "Something's broken from Kwame", detail: "The apply button does nothing" },
+      { title: "Idea from Amina", detail: "Screenshot only" },
+    ]);
+    expect(groups[3].items[0]).toMatchObject({
       title: "request · /api/projects/:id",
       detail: "14 occurrences",
     });

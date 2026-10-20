@@ -114,7 +114,8 @@ export default function DashboardShell({
         </header>
 
         {/* Content */}
-        <main className="min-w-0 flex-1 p-4 lg:p-6">{children}</main>
+        {/* Bottom padding keeps the last control clear of the floating feedback button. */}
+        <main className="min-w-0 flex-1 p-4 pb-24 lg:p-6 lg:pb-24">{children}</main>
       </div>
     </div>
   );
