@@ -117,6 +117,7 @@ node scripts/feedback.mjs show <id> --download=./feedback   # JSON + screenshots
 node scripts/feedback.mjs claim <id> --note="SAM task 01M…"  # NEW → IN_PROGRESS, 409 if taken
 node scripts/feedback.mjs resolve <id> --response="What changed, in plain words" --url=https://github.com/…/pull/123
 node scripts/feedback.mjs decline <id> --response="Why not, kindly"
+node scripts/feedback.mjs reply <id> --response="A workaround until the fix lands: …"   # answers without closing
 node scripts/feedback.mjs sensitive <id> --note="Raised with the owner"
 
 node scripts/feedback.mjs list --untriaged                    # notes nobody has sorted

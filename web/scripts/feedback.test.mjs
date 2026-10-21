@@ -141,6 +141,10 @@ describe("theme commands", () => {
       body: { themeId: "t1" },
     });
     expect(build(["detach", "n1"]).body).toEqual({ themeId: null });
+    expect(build(["reply", "n1", "--response=Try reloading once; a fix is coming."]).body).toEqual({
+      response: "Try reloading once; a fix is coming.",
+    });
+    expect(() => build(["reply", "n1"])).toThrow(/needs --response/);
     expect(build(["themes", "--status=all"]).path).toBe("/api/admin/feedback/themes?status=all");
     expect(build(["theme", "t1"])).toEqual({ method: "GET", path: "/api/admin/feedback/themes/t1" });
     expect(build(["theme-create", "--title=Dark mode", "--kind=IDEA", "--change=ADD"])).toEqual({

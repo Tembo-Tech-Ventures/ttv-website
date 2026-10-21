@@ -12,6 +12,7 @@ import { URLSearchParams, fileURLToPath } from "node:url";
  *   node scripts/feedback.mjs claim <id> [--note=…]
  *   node scripts/feedback.mjs resolve <id> --response=… [--url=…] [--note=…]
  *   node scripts/feedback.mjs decline <id> --response=… [--note=…]
+ *   node scripts/feedback.mjs reply <id> --response=… [--note=…]  # answer without closing
  *   node scripts/feedback.mjs sensitive <id> [--note=…]     # personal content: off themes, out of public
  *
  * Themes group notes into one problem or wish (titles and summaries may be
@@ -43,6 +44,7 @@ const COMMANDS = {
   claim: { args: ["id"], options: ["note"] },
   resolve: { args: ["id"], options: ["response", "url", "note"], required: ["response"] },
   decline: { args: ["id"], options: ["response", "note"], required: ["response"] },
+  reply: { args: ["id"], options: ["response", "note"], required: ["response"] },
   sensitive: { args: ["id"], options: ["note"] },
   themes: { args: [], options: ["status", "json"] },
   theme: { args: ["id"], options: [] },
@@ -164,6 +166,8 @@ export function buildFeedbackRequest({ command, id, themeId, options }) {
       });
     case "decline":
       return patch({ status: "DECLINED", response: options.response, ...note });
+    case "reply":
+      return patch({ response: options.response, ...note });
     case "sensitive":
       return patch({ sensitive: true, ...note });
     case "attach":
