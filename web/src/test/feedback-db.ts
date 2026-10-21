@@ -10,6 +10,7 @@ export function createFeedbackTestDb() {
   const { database, db } = createSqliteD1();
   database.exec(MINIMAL_AUTH_SCHEMA);
   database.exec(readMigration("0015_student_feedback.sql"));
+  database.exec(readMigration("0016_feedback_themes.sql"));
   const insertUser = database.prepare(
     `INSERT INTO "user" ("id", "name", "email") VALUES (?, ?, ?)`
   );

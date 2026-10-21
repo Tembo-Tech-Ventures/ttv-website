@@ -494,7 +494,7 @@ export default function FeedbackWidget({
                   {errorCount > 0
                     ? `, and ${errorCount} error message${errorCount === 1 ? "" : "s"} this page logged`
                     : ""}
-                  . Only the TTV team sees it.
+                  . Only the TTV team sees your note and screenshots. If we plan a fix in public, we never say who asked.
                 </p>
 
                 {error && (

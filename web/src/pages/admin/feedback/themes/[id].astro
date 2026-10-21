@@ -1,0 +1,251 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import Card from "@/components/common/Card.astro";
+import FeedbackStatusPill from "@/components/feedback/FeedbackStatusPill.astro";
+import { env } from "cloudflare:workers";
+import {
+  FEEDBACK_KIND_LABELS,
+  FEEDBACK_KINDS,
+  FEEDBACK_STATUSES,
+  FeedbackValidationError,
+  feedbackPagePath,
+} from "@/lib/feedback/model";
+import { listFeedback } from "@/lib/feedback/store";
+import { getTheme, updateTheme } from "@/lib/feedback/theme-store";
+import { themeUpdateFromForm } from "@/lib/feedback/theme-api";
+import {
+  FEEDBACK_THEME_CHANGES,
+  FEEDBACK_THEME_STATUS_LABELS,
+  FEEDBACK_THEME_STATUSES,
+  assessTheme,
+} from "@/lib/feedback/themes";
+
+const id = Astro.params.id ?? "";
+let actionError = "";
+const saved = Astro.url.searchParams.get("saved") === "1";
+
+if (Astro.request.method === "POST") {
+  try {
+    const update = themeUpdateFromForm(await Astro.request.formData());
+    const result = await updateTheme(env.DB, id, update.patch, {
+      actorId: Astro.locals.user!.id,
+      studentMessage: update.studentMessage,
+    });
+    if (!result) return Astro.redirect("/admin/feedback/themes");
+    return Astro.redirect(`/admin/feedback/themes/${encodeURIComponent(id)}?saved=1`);
+  } catch (error) {
+    if (!(error instanceof FeedbackValidationError)) throw error;
+    actionError = error.message;
+    Astro.response.status = 400;
+  }
+}
+
+const now = new Date();
+const theme = await getTheme(env.DB, id, now);
+if (!theme) return Astro.redirect("/admin/feedback/themes");
+const notes = await listFeedback(env.DB, {
+  statuses: FEEDBACK_STATUSES,
+  themeId: theme.id,
+  limit: 200,
+});
+const assessment = assessTheme(
+  {
+    kind: theme.kind,
+    status: theme.status,
+    change: theme.change,
+    recentStudents: theme.stats.recentStudents,
+    lastReportAt: theme.stats.lastReportAt,
+  },
+  now
+);
+const APPROVAL_LABELS = {
+  owner: "Needs the owner's yes",
+  default: "Proceeds after 7 days without an answer",
+  none: "No approval needed",
+} as const;
+const CHANGE_LABELS = {
+  FIX: "Fix: repairs something broken",
+  SIMPLIFY: "Simplify: removes a step, page or rule",
+  ADD: "Add: a new page, step, status or cost",
+} as const;
+const formatDate = (date: Date) =>
+  date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+const field =
+  "w-full rounded-md border border-teal/40 bg-dark px-3 py-2 text-sm text-ink-primary";
+---
+
+<AdminLayout title="Feedback theme">
+  <div class="space-y-6">
+    <a href="/admin/feedback/themes" class="text-sm text-primary hover:underline">
+      &larr; Back to Themes
+    </a>
+
+    {
+      actionError && (
+        <p role="alert" class="rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100">
+          {actionError}
+        </p>
+      )
+    }
+    {
+      saved && (
+        <p role="status" class="rounded-md border border-green-400/40 bg-green-500/15 px-4 py-3 text-sm text-green-100">
+          Saved. Students on this theme see the new status on their feedback page.
+        </p>
+      )
+    }
+
+    <div class="flex flex-wrap items-center gap-3">
+      <h2 class="text-2xl font-bold text-white">{theme.title}</h2>
+      <FeedbackStatusPill theme={theme.status} />
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div class="min-w-0 space-y-6">
+        <Card>
+          <h3 class="mb-3 text-lg font-semibold text-white">Where it stands</h3>
+          <dl class="grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt class="text-ink-muted">Students</dt>
+              <dd class="text-ink-primary">
+                {theme.stats.students} ({theme.stats.recentStudents} in the last 60 days)
+              </dd>
+            </div>
+            <div>
+              <dt class="text-ink-muted">Last report</dt>
+              <dd class="text-ink-primary">
+                {theme.stats.lastReportAt ? formatDate(theme.stats.lastReportAt) : "—"}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-ink-muted">Triage rules</dt>
+              <dd class="text-ink-primary">{assessment.reason}</dd>
+            </div>
+            <div>
+              <dt class="text-ink-muted">Approval</dt>
+              <dd class="text-ink-primary">{APPROVAL_LABELS[assessment.approval]}</dd>
+            </div>
+          </dl>
+          {theme.summary && (
+            <p class="mt-4 whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-secondary">{theme.summary}</p>
+          )}
+        </Card>
+
+        <Card>
+          <h3 class="mb-3 text-lg font-semibold text-white">Notes on this theme</h3>
+          {
+            notes.length === 0 ? (
+              <p class="text-sm text-ink-secondary">No notes attached yet.</p>
+            ) : (
+              <ul class="space-y-3">
+                {notes.map((note) => (
+                  <li>
+                    <a
+                      href={`/admin/feedback/${encodeURIComponent(note.id)}`}
+                      class="block rounded-md border border-rule p-3 hover:border-primary/60"
+                    >
+                      <span class="flex flex-wrap items-center gap-2 text-xs text-ink-muted">
+                        <FeedbackStatusPill note={note.status} />
+                        {FEEDBACK_KIND_LABELS[note.kind]} · {note.user.name} ·{" "}
+                        {formatDate(note.createdAt)} · {feedbackPagePath(note.pageUrl)}
+                      </span>
+                      <span class="mt-1 block break-words text-sm text-ink-secondary">
+                        {note.message || "(screenshot only)"}
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )
+          }
+        </Card>
+      </div>
+
+      <div class="min-w-0 space-y-6">
+        <Card>
+          <h3 class="mb-4 text-lg font-semibold text-white">Update</h3>
+          <form method="POST" class="space-y-4">
+            <div>
+              <label for="title" class="mb-1 block text-sm text-ink-secondary"
+                >Title <span class="text-ink-muted">(may be published)</span></label
+              >
+              <input id="title" name="title" value={theme.title} maxlength="120" required class={field} />
+            </div>
+            <div>
+              <label for="summary" class="mb-1 block text-sm text-ink-secondary"
+                >Summary <span class="text-ink-muted">(may be published, never identifying)</span></label
+              >
+              <textarea id="summary" name="summary" rows="4" maxlength="4000" class={field}>{theme.summary}</textarea>
+            </div>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label for="status" class="mb-1 block text-sm text-ink-secondary">Status</label>
+                <select id="status" name="status" class={field}>
+                  {
+                    FEEDBACK_THEME_STATUSES.map((status) => (
+                      <option value={status} selected={status === theme.status}>
+                        {FEEDBACK_THEME_STATUS_LABELS[status]}
+                      </option>
+                    ))
+                  }
+                </select>
+              </div>
+              <div>
+                <label for="kind" class="mb-1 block text-sm text-ink-secondary">Kind</label>
+                <select id="kind" name="kind" class={field}>
+                  {
+                    FEEDBACK_KINDS.map((kind) => (
+                      <option value={kind} selected={kind === theme.kind}>
+                        {FEEDBACK_KIND_LABELS[kind]}
+                      </option>
+                    ))
+                  }
+                </select>
+              </div>
+            </div>
+            <div>
+              <label for="change" class="mb-1 block text-sm text-ink-secondary">Change</label>
+              <select id="change" name="change" class={field}>
+                <option value="" selected={theme.change === null}>Not decided yet</option>
+                {
+                  FEEDBACK_THEME_CHANGES.map((change) => (
+                    <option value={change} selected={change === theme.change}>
+                      {CHANGE_LABELS[change]}
+                    </option>
+                  ))
+                }
+              </select>
+            </div>
+            <div>
+              <label for="issueUrl" class="mb-1 block text-sm text-ink-secondary">Public issue</label>
+              <input id="issueUrl" name="issueUrl" type="url" value={theme.issueUrl ?? ""} class={field} />
+            </div>
+            <div>
+              <label for="prUrl" class="mb-1 block text-sm text-ink-secondary">Pull request</label>
+              <input id="prUrl" name="prUrl" type="url" value={theme.prUrl ?? ""} class={field} />
+            </div>
+            <div>
+              <label for="studentMessage" class="mb-1 block text-sm text-ink-secondary"
+                >Message to students
+                <span class="text-ink-muted">(required to ship or decline; becomes every open note's reply)</span></label
+              >
+              <textarea id="studentMessage" name="studentMessage" rows="3" maxlength="2000" class={field}></textarea>
+            </div>
+            <div>
+              <label for="decisionNote" class="mb-1 block text-sm text-ink-secondary"
+                >Decision note <span class="text-ink-muted">(private)</span></label
+              >
+              <textarea id="decisionNote" name="decisionNote" rows="3" maxlength="5000" class={field}>{theme.decisionNote ?? ""}</textarea>
+            </div>
+            <button
+              type="submit"
+              class="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-dark hover:bg-primary/90"
+            >
+              Save
+            </button>
+          </form>
+        </Card>
+      </div>
+    </div>
+  </div>
+</AdminLayout>

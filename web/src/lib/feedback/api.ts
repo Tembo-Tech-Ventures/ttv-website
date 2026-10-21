@@ -32,6 +32,8 @@ export function toFeedbackJson(record: FeedbackRecord, origin: string) {
     adminNote: record.adminNote,
     resolutionUrl: record.resolutionUrl,
     handledBy: record.handledBy,
+    sensitive: record.sensitive,
+    theme: record.theme,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
     resolvedAt: record.resolvedAt?.toISOString() ?? null,
@@ -55,6 +57,8 @@ export interface ParsedFeedbackUpdate {
 
 const UPDATE_KEYS = new Set([
   "status",
+  "themeId",
+  "sensitive",
   "expectedStatus",
   "response",
   "adminNote",
@@ -79,6 +83,18 @@ export function parseFeedbackUpdate(body: unknown): ParsedFeedbackUpdate {
     const status = parseFeedbackStatus(input.status);
     if (!status) throw new FeedbackValidationError("Unknown status.");
     patch.status = status;
+  }
+  if ("themeId" in input) {
+    if (input.themeId !== null && (typeof input.themeId !== "string" || !input.themeId)) {
+      throw new FeedbackValidationError("themeId must be a theme id or null.");
+    }
+    patch.themeId = input.themeId;
+  }
+  if ("sensitive" in input) {
+    if (typeof input.sensitive !== "boolean") {
+      throw new FeedbackValidationError("sensitive must be true or false.");
+    }
+    patch.sensitive = input.sensitive;
   }
   if ("response" in input) {
     patch.response = normalizeOptionalText(
@@ -112,10 +128,14 @@ export function parseFeedbackUpdate(body: unknown): ParsedFeedbackUpdate {
 
 /** The admin console form posts the same fields as the API. */
 export function feedbackUpdateFromForm(formData: FormData): ParsedFeedbackUpdate {
-  const fields: Record<string, string> = {};
+  const fields: Record<string, unknown> = {};
   for (const key of ["status", "response", "adminNote", "resolutionUrl"]) {
     const entry = formData.get(key);
     if (typeof entry === "string") fields[key] = entry;
   }
+  // The console form always carries both controls; an unchecked box is false.
+  const themeId = formData.get("themeId");
+  if (typeof themeId === "string") fields.themeId = themeId || null;
+  if (formData.has("themeId")) fields.sensitive = formData.has("sensitive");
   return parseFeedbackUpdate(fields);
 }

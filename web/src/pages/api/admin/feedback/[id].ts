@@ -52,6 +52,9 @@ export const PATCH: APIRoute = async ({ params, request, url, locals }) => {
   if (result.outcome === "not-found") {
     return json({ error: "Feedback not found." }, 404);
   }
+  if (result.outcome === "invalid") {
+    return json({ error: result.message }, 400);
+  }
   if (result.outcome === "conflict") {
     return json(
       {

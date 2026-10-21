@@ -18,6 +18,9 @@ import {
   feedbackPagePath,
 } from "@/lib/feedback/model";
 import { formatBytes } from "@/components/feedback/feedback-client";
+import { listThemes } from "@/lib/feedback/theme-store";
+import { OPEN_FEEDBACK_THEME_STATUSES } from "@/lib/feedback/themes";
+import { themeAdminPath } from "@/lib/feedback/theme-api";
 
 const id = Astro.params.id ?? "";
 let actionError = "";
@@ -30,6 +33,7 @@ if (Astro.request.method === "POST") {
       actorId: Astro.locals.user!.id,
     });
     if (result.outcome === "not-found") return Astro.redirect("/admin/feedback");
+    if (result.outcome === "invalid") throw new FeedbackValidationError(result.message);
     return Astro.redirect(`/admin/feedback/${encodeURIComponent(id)}?saved=1`);
   } catch (error) {
     if (!(error instanceof FeedbackValidationError)) throw error;
@@ -43,6 +47,12 @@ const feedback = await getFeedback(env.DB, id);
 if (!feedback) return Astro.redirect("/admin/feedback");
 
 const { context } = feedback;
+const openThemes = await listThemes(env.DB, { statuses: OPEN_FEEDBACK_THEME_STATUSES });
+// Keep a closed theme selectable so saving the form never detaches it silently.
+const themeOptions =
+  feedback.theme && !openThemes.some((theme) => theme.id === feedback.theme?.id)
+    ? [{ id: feedback.theme.id, title: `${feedback.theme.title} (closed)` }, ...openThemes]
+    : openThemes;
 const formatDateTime = (date: Date) =>
   `${date.toLocaleString("en-GB", {
     day: "numeric",
@@ -108,7 +118,14 @@ const facts = [
       <h2 class="text-2xl font-bold text-white">
         {FEEDBACK_KIND_LABELS[feedback.kind]}
       </h2>
-      <FeedbackStatusPill status={feedback.status} audience="admin" />
+      <FeedbackStatusPill note={feedback.status} />
+      {
+        feedback.sensitive && (
+          <span class="rounded-full border border-rose-500/30 bg-rose-500/15 px-2.5 py-0.5 text-xs font-medium text-rose-200">
+            Sensitive
+          </span>
+        )
+      }
       <a
         href={feedback.pageUrl}
         class="truncate text-sm text-primary hover:underline"
@@ -204,6 +221,47 @@ const facts = [
                 }
               </select>
             </div>
+            <div>
+              <label for="themeId" class="mb-1 block text-sm text-ink-secondary"
+                >Theme</label
+              >
+              <select
+                id="themeId"
+                name="themeId"
+                class="w-full rounded-md border border-teal/40 bg-dark px-3 py-2 text-sm text-ink-primary"
+              >
+                <option value="">Not on a theme</option>
+                {
+                  themeOptions.map((theme) => (
+                    <option value={theme.id} selected={theme.id === feedback.theme?.id}>
+                      {theme.title}
+                    </option>
+                  ))
+                }
+              </select>
+              {
+                feedback.theme && (
+                  <a
+                    href={themeAdminPath(feedback.theme.id)}
+                    class="mt-1 inline-block text-xs text-primary hover:underline"
+                  >
+                    Open theme
+                  </a>
+                )
+              }
+            </div>
+            <label class="flex items-start gap-2 text-sm text-ink-secondary">
+              <input
+                type="checkbox"
+                name="sensitive"
+                checked={feedback.sensitive}
+                class="mt-0.5"
+              />
+              <span>
+                Sensitive: personal or wellbeing content. Keeps it off themes and out
+                of anything public.
+              </span>
+            </label>
             <div>
               <label for="response" class="mb-1 block text-sm text-ink-secondary"
                 >Reply to {feedback.user.name}

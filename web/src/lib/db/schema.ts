@@ -899,6 +899,74 @@ export const FEEDBACK_ATTACHMENT_TYPES = [
 ] as const;
 export const FEEDBACK_ATTACHMENT_SOURCES = ["CAPTURE", "UPLOAD"] as const;
 
+export const FEEDBACK_THEME_STATUSES = [
+  "COLLECTING",
+  "PROPOSED",
+  "PLANNED",
+  "IN_PROGRESS",
+  "SHIPPED",
+  "DECLINED",
+  "DORMANT",
+] as const;
+export const FEEDBACK_THEME_CHANGES = ["FIX", "SIMPLIFY", "ADD"] as const;
+
+/**
+ * One problem or wish that several notes can share. Title and summary are
+ * written to be publishable: they feed public GitHub issues, so they never
+ * carry names, quotes or anything else that could identify a student.
+ */
+export const feedbackTheme = sqliteTable(
+  "feedback_theme",
+  {
+    id: cuid("id"),
+    title: text("title").notNull(),
+    summary: text("summary").notNull().default(""),
+    kind: text("kind", { enum: FEEDBACK_KINDS }).notNull(),
+    status: text("status", { enum: FEEDBACK_THEME_STATUSES })
+      .notNull()
+      .default("COLLECTING"),
+    /** FIX, SIMPLIFY or ADD: decides whether the owner must approve it. */
+    change: text("change", { enum: FEEDBACK_THEME_CHANGES }),
+    issueUrl: text("issueUrl"),
+    prUrl: text("prUrl"),
+    /** Private: decision reasons, digest links, task IDs. */
+    decisionNote: text("decisionNote"),
+    closedAt: integer("closedAt", { mode: "timestamp" }),
+    ...timestamps,
+  },
+  (table) => [
+    index("feedback_theme_status_updatedAt_idx").on(table.status, table.updatedAt),
+    check(
+      "feedback_theme_kind_check",
+      sql`${table.kind} in ('BUG', 'CONFUSING', 'IDEA', 'PRAISE', 'OTHER')`,
+    ),
+    check(
+      "feedback_theme_status_check",
+      sql`${table.status} in ('COLLECTING', 'PROPOSED', 'PLANNED', 'IN_PROGRESS', 'SHIPPED', 'DECLINED', 'DORMANT')`,
+    ),
+    check(
+      "feedback_theme_change_check",
+      sql`${table.change} is null or ${table.change} in ('FIX', 'SIMPLIFY', 'ADD')`,
+    ),
+    check(
+      "feedback_theme_title_length_check",
+      sql`length(${table.title}) between 1 and 120`,
+    ),
+    check(
+      "feedback_theme_summary_length_check",
+      sql`length(${table.summary}) <= 4000`,
+    ),
+    check(
+      "feedback_theme_decisionNote_length_check",
+      sql`${table.decisionNote} is null or length(${table.decisionNote}) <= 5000`,
+    ),
+  ],
+);
+
+export const feedbackThemeRelations = relations(feedbackTheme, ({ many }) => ({
+  notes: many(feedback),
+}));
+
 export const feedback = sqliteTable(
   "feedback",
   {
@@ -925,10 +993,19 @@ export const feedback = sqliteTable(
       onDelete: "set null",
     }),
     resolvedAt: integer("resolvedAt", { mode: "timestamp" }),
+    themeId: text("themeId").references(() => feedbackTheme.id, {
+      onDelete: "set null",
+    }),
+    /**
+     * Personal or wellbeing content. Never attached to a theme and never
+     * summarised anywhere public; the owner handles it directly.
+     */
+    sensitive: integer("sensitive", { mode: "boolean" }).notNull().default(false),
     ...timestamps,
   },
   (table) => [
     index("feedback_status_createdAt_idx").on(table.status, table.createdAt),
+    index("feedback_themeId_idx").on(table.themeId),
     index("feedback_userId_createdAt_idx").on(table.userId, table.createdAt),
     check(
       "feedback_kind_check",
@@ -954,6 +1031,10 @@ export const feedback = sqliteTable(
 
 export const feedbackRelations = relations(feedback, ({ one, many }) => ({
   user: one(user, { fields: [feedback.userId], references: [user.id] }),
+  theme: one(feedbackTheme, {
+    fields: [feedback.themeId],
+    references: [feedbackTheme.id],
+  }),
   attachments: many(feedbackAttachment),
 }));
 
