@@ -123,13 +123,15 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/admin/programs/new` | Create program | ADMIN |
 | `/admin/data-migration` | Import data from old stack | ADMIN |
 | `/dashboard/feedback` | The student's own feedback, status and replies | Session |
-| `/admin/feedback` | Feedback queue; `/admin/feedback/[id]` to reply and resolve | ADMIN |
+| `/admin/feedback` | Feedback queue; `/admin/feedback/[id]` to reply, theme and resolve | ADMIN |
+| `/admin/feedback/themes` | Feedback themes with agreement stats; `[id]` to plan, ship or decline | ADMIN |
 | `/certificate/[id]` | Certificate display | None |
 | `/api/auth/[...all]` | better-auth API handler | N/A |
 | `/api/admin/import` | Data import API | ADMIN |
 | `/api/feedback` | Feedback widget submission (multipart, same-origin) | Session |
 | `/api/feedback/attachments/[id]` | Feedback screenshot (author or admin only) | Session |
 | `/api/admin/feedback` | Feedback queue JSON for admins and PAT-holding agents (GET, PATCH `[id]`) | ADMIN |
+| `/api/admin/feedback/themes` | Feedback themes JSON (GET, POST; GET/PATCH `[id]`) | ADMIN |
 
 ## Database
 
@@ -165,6 +167,7 @@ SQLite via Cloudflare D1, managed with Drizzle ORM. Schema at `web/src/lib/db/sc
 **Feedback** (see `web/docs/student-feedback.md`)
 - `feedback` — a signed-in user's note: kind, message, page URL, browser context JSON, status (NEW → IN_PROGRESS → RESOLVED/DECLINED), reply shown to the student, staff-only note, link to the fix
 - `feedback_attachment` — screenshots in R2 under `feedback/<feedbackId>/`, type sniffed from the bytes
+- `feedback_theme` — one problem or wish several notes share (publishable title/summary, status COLLECTING → PROPOSED → PLANNED → IN_PROGRESS → SHIPPED/DECLINED, or DORMANT; issue and PR links); `feedback.themeId` and `feedback.sensitive` link and fence notes
 
 ### Conventions
 

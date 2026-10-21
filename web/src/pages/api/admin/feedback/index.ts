@@ -19,7 +19,9 @@ function json(body: unknown, status = 200): Response {
 /**
  * Lists feedback for admins and for agents holding an admin personal access
  * token. `?status=` takes `open` (default), `all`, or a comma list such as
- * `NEW,IN_PROGRESS`; `?kind=BUG` narrows by kind; `?limit=` caps at 200.
+ * `NEW,IN_PROGRESS`; `?kind=BUG` narrows by kind; `?untriaged=1` keeps notes
+ * with no theme that are not sensitive; `?themeId=` lists one theme's notes;
+ * `?limit=` caps at 200.
  */
 export const GET: APIRoute = async ({ url, locals }) => {
   if (!locals.isAdmin) return json({ error: "Forbidden" }, 403);
@@ -46,6 +48,8 @@ export const GET: APIRoute = async ({ url, locals }) => {
     listFeedback(env.DB, {
       statuses,
       kind: kindParam as FeedbackKind | null,
+      untriaged: url.searchParams.get("untriaged") === "1",
+      themeId: url.searchParams.get("themeId"),
       limit: Number(url.searchParams.get("limit") ?? 50),
     }),
     countFeedbackByStatus(env.DB),

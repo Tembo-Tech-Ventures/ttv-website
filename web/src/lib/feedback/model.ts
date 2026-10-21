@@ -34,14 +34,6 @@ export const FEEDBACK_KIND_LABELS: Record<FeedbackKind, string> = {
   OTHER: "Other",
 };
 
-/** Students see outcomes, not workflow states. */
-export const FEEDBACK_STATUS_LABELS: Record<FeedbackStatus, string> = {
-  NEW: "Received",
-  IN_PROGRESS: "Being worked on",
-  RESOLVED: "Done",
-  DECLINED: "Not planned",
-};
-
 export const FEEDBACK_ADMIN_STATUS_LABELS: Record<FeedbackStatus, string> = {
   NEW: "New",
   IN_PROGRESS: "In progress",

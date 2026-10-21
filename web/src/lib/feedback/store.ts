@@ -1,4 +1,5 @@
 import { retryTransientD1 } from "@/lib/db/d1-errors";
+import type { FeedbackThemeStatus } from "./themes";
 import {
   isClosedFeedbackStatus,
   sanitizeFeedbackContext,
@@ -31,10 +32,23 @@ export interface FeedbackRecord {
   resolutionUrl: string | null;
   user: { id: string; name: string; email: string };
   handledBy: { id: string; name: string } | null;
+  /** Personal content: never on a theme, never summarised publicly. */
+  sensitive: boolean;
+  theme: FeedbackNoteTheme | null;
   createdAt: Date;
   updatedAt: Date;
   resolvedAt: Date | null;
   attachments: FeedbackAttachmentRecord[];
+}
+
+/** The slice of a theme a note carries: enough to show a student where it stands. */
+export interface FeedbackNoteTheme {
+  id: string;
+  title: string;
+  status: FeedbackThemeStatus;
+  issueUrl: string | null;
+  /** Distinct students on the theme, this one included. */
+  students: number;
 }
 
 export interface NewFeedbackAttachment extends FeedbackAttachmentRecord {
@@ -55,6 +69,9 @@ export interface NewFeedback {
 
 export interface FeedbackPatch {
   status?: FeedbackStatus;
+  /** Attach to a theme, or `null` to detach. */
+  themeId?: string | null;
+  sensitive?: boolean;
   response?: string | null;
   adminNote?: string | null;
   resolutionUrl?: string | null;
@@ -77,6 +94,12 @@ interface FeedbackRow {
   userEmail: string;
   handledById: string | null;
   handledByName: string | null;
+  sensitive: number;
+  themeId: string | null;
+  themeTitle: string | null;
+  themeStatus: FeedbackThemeStatus | null;
+  themeIssueUrl: string | null;
+  themeStudents: number | null;
   createdAt: number;
   updatedAt: number;
   resolvedAt: number | null;
@@ -91,10 +114,15 @@ const FEEDBACK_SELECT = `
          f."context", f."appVersion", f."response", f."adminNote",
          f."resolutionUrl", f."createdAt", f."updatedAt", f."resolvedAt",
          u."id" AS "userId", u."name" AS "userName", u."email" AS "userEmail",
-         h."id" AS "handledById", h."name" AS "handledByName"
+         h."id" AS "handledById", h."name" AS "handledByName",
+         f."sensitive", f."themeId", t."title" AS "themeTitle",
+         t."status" AS "themeStatus", t."issueUrl" AS "themeIssueUrl",
+         (SELECT COUNT(DISTINCT x."userId") FROM "feedback" x
+          WHERE x."themeId" = f."themeId" AND x."sensitive" = 0) AS "themeStudents"
   FROM "feedback" f
   JOIN "user" u ON u."id" = f."userId"
-  LEFT JOIN "user" h ON h."id" = f."handledById"`;
+  LEFT JOIN "user" h ON h."id" = f."handledById"
+  LEFT JOIN "feedback_theme" t ON t."id" = f."themeId"`;
 
 function toSeconds(date: Date): number {
   return Math.floor(date.getTime() / 1_000);
@@ -121,6 +149,17 @@ function toRecord(row: FeedbackRow, attachments: AttachmentRow[]): FeedbackRecor
     handledBy:
       row.handledById && row.handledByName
         ? { id: row.handledById, name: row.handledByName }
+        : null,
+    sensitive: Boolean(row.sensitive),
+    theme:
+      row.themeId && row.themeTitle && row.themeStatus
+        ? {
+            id: row.themeId,
+            title: row.themeTitle,
+            status: row.themeStatus,
+            issueUrl: row.themeIssueUrl,
+            students: Number(row.themeStudents ?? 0),
+          }
         : null,
     createdAt: fromSeconds(row.createdAt),
     updatedAt: fromSeconds(row.updatedAt),
@@ -269,12 +308,15 @@ async function insertFeedbackBatch(
 export interface ListFeedbackOptions {
   statuses: readonly FeedbackStatus[];
   kind?: FeedbackKind | null;
+  /** Only notes nobody has sorted yet: no theme and not marked sensitive. */
+  untriaged?: boolean;
+  themeId?: string | null;
   limit?: number;
 }
 
 export async function listFeedback(
   db: D1Database,
-  { statuses, kind = null, limit = 50 }: ListFeedbackOptions
+  { statuses, kind = null, untriaged = false, themeId = null, limit = 50 }: ListFeedbackOptions
 ): Promise<FeedbackRecord[]> {
   if (statuses.length === 0) return [];
   const boundedLimit = Math.min(Math.max(Math.trunc(limit) || 50, 1), 200);
@@ -283,6 +325,11 @@ export async function listFeedback(
   if (kind) {
     filters.push(`f."kind" = ?`);
     bindings.push(kind);
+  }
+  if (untriaged) filters.push(`f."themeId" IS NULL AND f."sensitive" = 0`);
+  if (themeId) {
+    filters.push(`f."themeId" = ?`);
+    bindings.push(themeId);
   }
   const result = await db
     .prepare(
@@ -348,27 +395,55 @@ export async function countFeedbackByStatus(
 export type UpdateFeedbackResult =
   | { outcome: "updated"; feedback: FeedbackRecord }
   | { outcome: "not-found" }
-  | { outcome: "conflict"; feedback: FeedbackRecord };
+  | { outcome: "conflict"; feedback: FeedbackRecord }
+  | { outcome: "invalid"; message: string };
+
+async function themeExists(db: D1Database, id: string): Promise<boolean> {
+  const row = await db
+    .prepare(`SELECT 1 AS "found" FROM "feedback_theme" WHERE "id" = ? LIMIT 1`)
+    .bind(id)
+    .first();
+  return row !== null;
+}
 
 /**
- * Applies a staff or agent update. `expectedStatus` makes the write
- * conditional, so two agents polling the same queue cannot both claim one
- * item: the second sees `conflict` and moves on.
+ * Theme membership rules: a sensitive note is never on a theme, and marking a
+ * note sensitive takes it off its theme in the same write.
  */
-export async function updateFeedback(
+async function validateThemeChange(
   db: D1Database,
   id: string,
-  patch: FeedbackPatch,
-  {
-    actorId,
-    expectedStatus,
-    now = new Date(),
-  }: { actorId: string; expectedStatus?: FeedbackStatus; now?: Date }
-): Promise<UpdateFeedbackResult> {
+  patch: FeedbackPatch
+): Promise<string | null> {
+  if (typeof patch.themeId !== "string") return null;
+  if (patch.sensitive === true) {
+    return "A sensitive note cannot be attached to a theme.";
+  }
+  if (!(await themeExists(db, patch.themeId))) return "That theme does not exist.";
+  if (patch.sensitive === undefined) {
+    const note = await db
+      .prepare(`SELECT "sensitive" FROM "feedback" WHERE "id" = ? LIMIT 1`)
+      .bind(id)
+      .first<{ sensitive: number }>();
+    if (note?.sensitive) return "A sensitive note cannot be attached to a theme.";
+  }
+  return null;
+}
+
+/** The SET clause for a note update. Only fields present in the patch change. */
+function buildAssignments(patch: FeedbackPatch, actorId: string, nowSeconds: number) {
   const assignments = [`"handledById" = ?`, `"updatedAt" = ?`];
-  const nowSeconds = toSeconds(now);
   const bindings: unknown[] = [actorId, nowSeconds];
 
+  if (patch.sensitive !== undefined) {
+    assignments.push(`"sensitive" = ?`);
+    bindings.push(patch.sensitive ? 1 : 0);
+    if (patch.sensitive) assignments.push(`"themeId" = NULL`);
+  }
+  if (patch.themeId !== undefined && !patch.sensitive) {
+    assignments.push(`"themeId" = ?`);
+    bindings.push(patch.themeId);
+  }
   if (patch.status !== undefined) {
     assignments.push(`"status" = ?`);
     bindings.push(patch.status);
@@ -389,6 +464,29 @@ export async function updateFeedback(
       bindings.push(patch[column]);
     }
   }
+  return { assignments, bindings };
+}
+
+/**
+ * Applies a staff or agent update. `expectedStatus` makes the write
+ * conditional, so two agents polling the same queue cannot both claim one
+ * item: the second sees `conflict` and moves on.
+ */
+export async function updateFeedback(
+  db: D1Database,
+  id: string,
+  patch: FeedbackPatch,
+  {
+    actorId,
+    expectedStatus,
+    now = new Date(),
+  }: { actorId: string; expectedStatus?: FeedbackStatus; now?: Date }
+): Promise<UpdateFeedbackResult> {
+  const invalid = await validateThemeChange(db, id, patch);
+  if (invalid) return { outcome: "invalid", message: invalid };
+
+  const nowSeconds = toSeconds(now);
+  const { assignments, bindings } = buildAssignments(patch, actorId, nowSeconds);
 
   const conditions = [`"id" = ?`];
   bindings.push(id);

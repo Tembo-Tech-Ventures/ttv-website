@@ -12,6 +12,22 @@ import { URLSearchParams, fileURLToPath } from "node:url";
  *   node scripts/feedback.mjs claim <id> [--note=…]
  *   node scripts/feedback.mjs resolve <id> --response=… [--url=…] [--note=…]
  *   node scripts/feedback.mjs decline <id> --response=… [--note=…]
+ *   node scripts/feedback.mjs sensitive <id> [--note=…]     # personal content: off themes, out of public
+ *
+ * Themes group notes into one problem or wish (titles and summaries may be
+ * published, so never identify a student):
+ *
+ *   node scripts/feedback.mjs list --untriaged              # notes nobody has sorted yet
+ *   node scripts/feedback.mjs themes [--status=open|all|COLLECTING,…] [--json]
+ *   node scripts/feedback.mjs theme <id>
+ *   node scripts/feedback.mjs theme-create --title=… --kind=IDEA [--summary=…] [--change=FIX|SIMPLIFY|ADD]
+ *   node scripts/feedback.mjs attach <noteId> <themeId>
+ *   node scripts/feedback.mjs detach <noteId>
+ *   node scripts/feedback.mjs theme-update <id> [--status=…] [--title=…] [--summary=…] [--kind=…]
+ *       [--change=…] [--issue=<url>] [--pr=<url>] [--note=…] [--message=…]
+ *
+ * Shipping or declining a theme needs --message: it becomes the reply on every
+ * open note on it.
  *
  * `claim` only succeeds while the item is still NEW, so two agents on the
  * same queue cannot pick up the same note. `--response` is shown to the
@@ -20,22 +36,43 @@ import { URLSearchParams, fileURLToPath } from "node:url";
 
 export const DEFAULT_BASE_URL = "https://tembotechventures.com";
 const TOKEN_PATTERN = /^ttv_pat_[a-f0-9]{64}$/;
-const COMMANDS = new Set(["list", "show", "claim", "resolve", "decline"]);
-const OPTIONS = {
-  list: new Set(["status", "kind", "limit", "json"]),
-  show: new Set(["download"]),
-  claim: new Set(["note"]),
-  resolve: new Set(["response", "url", "note"]),
-  decline: new Set(["response", "note"]),
+/** Each command's positional arguments, options, and required options. */
+const COMMANDS = {
+  list: { args: [], options: ["status", "kind", "limit", "json", "untriaged", "theme"] },
+  show: { args: ["id"], options: ["download"] },
+  claim: { args: ["id"], options: ["note"] },
+  resolve: { args: ["id"], options: ["response", "url", "note"], required: ["response"] },
+  decline: { args: ["id"], options: ["response", "note"], required: ["response"] },
+  sensitive: { args: ["id"], options: ["note"] },
+  themes: { args: [], options: ["status", "json"] },
+  theme: { args: ["id"], options: [] },
+  "theme-create": {
+    args: [],
+    options: ["title", "kind", "summary", "change"],
+    required: ["title", "kind"],
+  },
+  attach: { args: ["id", "themeId"], options: [] },
+  detach: { args: ["id"], options: [] },
+  "theme-update": {
+    args: ["id"],
+    options: ["status", "title", "summary", "kind", "change", "issue", "pr", "note", "message"],
+  },
+};
+
+const REQUIRED_HINTS = {
+  response: "the student sees it, so say what changed or why not",
+  title: "titles may be published, so never identify a student",
+  kind: "BUG, CONFUSING, IDEA, PRAISE or OTHER",
 };
 
 export class FeedbackCliError extends Error {}
 
 export function parseFeedbackCliArgs(argv) {
   const [command, ...rest] = argv;
-  if (!COMMANDS.has(command)) {
+  const spec = Object.hasOwn(COMMANDS, command) ? COMMANDS[command] : null;
+  if (!spec) {
     throw new FeedbackCliError(
-      `Usage: feedback.mjs <${[...COMMANDS].join("|")}> [id] [--option=value]`
+      `Usage: feedback.mjs <${Object.keys(COMMANDS).join("|")}> [ids] [--option=value]`
     );
   }
   const positional = [];
@@ -46,25 +83,26 @@ export function parseFeedbackCliArgs(argv) {
       continue;
     }
     const [name, ...valueParts] = arg.slice(2).split("=");
-    if (!OPTIONS[command].has(name)) {
+    if (!spec.options.includes(name)) {
       throw new FeedbackCliError(`Unknown option for ${command}: --${name}`);
     }
     options[name] = valueParts.length > 0 ? valueParts.join("=") : true;
   }
 
-  if (command === "list") {
-    if (positional.length > 0) throw new FeedbackCliError("list takes no id.");
-    return { command, options };
-  }
-  if (positional.length !== 1) {
-    throw new FeedbackCliError(`${command} needs exactly one feedback id.`);
-  }
-  if ((command === "resolve" || command === "decline") && typeof options.response !== "string") {
+  if (positional.length !== spec.args.length) {
     throw new FeedbackCliError(
-      `${command} needs --response=… : the student sees it, so say what changed or why not.`
+      spec.args.length === 0
+        ? `${command} takes no id.`
+        : `${command} needs ${spec.args.length === 1 ? "exactly one id" : spec.args.join(" and ")}.`
     );
   }
-  return { command, id: positional[0], options };
+  for (const name of spec.required ?? []) {
+    if (typeof options[name] !== "string") {
+      throw new FeedbackCliError(`${command} needs --${name}=… : ${REQUIRED_HINTS[name]}.`);
+    }
+  }
+  const ids = Object.fromEntries(spec.args.map((name, index) => [name, positional[index]]));
+  return { command, ...ids, options };
 }
 
 /**
@@ -93,20 +131,26 @@ export function resolveConfig(env) {
 }
 
 /** Turns a parsed command into the API call it makes. */
-export function buildFeedbackRequest({ command, id, options }) {
+export function buildFeedbackRequest({ command, id, themeId, options }) {
   const item = `/api/admin/feedback/${encodeURIComponent(id ?? "")}`;
-  const patch = (body) => ({ method: "PATCH", path: item, body });
+  const themePath = `/api/admin/feedback/themes/${encodeURIComponent(id ?? "")}`;
+  const patch = (body, target = item) => ({ method: "PATCH", path: target, body });
   const note = typeof options.note === "string" ? { adminNote: options.note } : {};
+  const query = (keys, rename = {}) => {
+    const params = new URLSearchParams();
+    for (const key of keys) {
+      if (typeof options[key] === "string") params.set(rename[key] ?? key, options[key]);
+      if (options[key] === true) params.set(rename[key] ?? key, "1");
+    }
+    return params.size > 0 ? `?${params}` : "";
+  };
 
   switch (command) {
-    case "list": {
-      const query = new URLSearchParams();
-      for (const key of ["status", "kind", "limit"]) {
-        if (typeof options[key] === "string") query.set(key, options[key]);
-      }
-      const search = query.size > 0 ? `?${query}` : "";
-      return { method: "GET", path: `/api/admin/feedback${search}` };
-    }
+    case "list":
+      return {
+        method: "GET",
+        path: `/api/admin/feedback${query(["status", "kind", "limit", "untriaged", "theme"], { theme: "themeId" })}`,
+      };
     case "show":
       return { method: "GET", path: item };
     case "claim":
@@ -120,9 +164,62 @@ export function buildFeedbackRequest({ command, id, options }) {
       });
     case "decline":
       return patch({ status: "DECLINED", response: options.response, ...note });
+    case "sensitive":
+      return patch({ sensitive: true, ...note });
+    case "attach":
+      return patch({ themeId });
+    case "detach":
+      return patch({ themeId: null });
+    case "themes":
+      return { method: "GET", path: `/api/admin/feedback/themes${query(["status"])}` };
+    case "theme":
+      return { method: "GET", path: themePath };
+    case "theme-create":
+      return {
+        method: "POST",
+        path: "/api/admin/feedback/themes",
+        body: {
+          title: options.title,
+          kind: options.kind,
+          ...(typeof options.summary === "string" ? { summary: options.summary } : {}),
+          ...(typeof options.change === "string" ? { change: options.change } : {}),
+        },
+      };
+    case "theme-update": {
+      const fields = {
+        status: "status",
+        title: "title",
+        summary: "summary",
+        kind: "kind",
+        change: "change",
+        issue: "issueUrl",
+        pr: "prUrl",
+        note: "decisionNote",
+        message: "studentMessage",
+      };
+      const body = {};
+      for (const [option, field] of Object.entries(fields)) {
+        if (typeof options[option] === "string") body[field] = options[option];
+      }
+      if (Object.keys(body).length === 0) {
+        throw new FeedbackCliError("theme-update needs at least one option to change.");
+      }
+      return patch(body, themePath);
+    }
     default:
       throw new FeedbackCliError(`Unknown command: ${command}`);
   }
+}
+
+export function formatThemeList({ items }) {
+  if (items.length === 0) return "(no themes match)";
+  return items
+    .map((theme) => {
+      const { students, recentStudents } = theme.stats;
+      const flag = theme.assessment.readyToPropose ? "  READY" : "";
+      return `${theme.id}  ${theme.status.padEnd(11)} ${theme.kind.padEnd(9)} ${students} students (${recentStudents} recent)${flag}\n    ${theme.title}\n    ${theme.assessment.reason}`;
+    })
+    .join("\n");
 }
 
 export function formatFeedbackList({ counts, items }) {
@@ -132,10 +229,11 @@ export function formatFeedbackList({ counts, items }) {
   if (items.length === 0) return `${header}\n(no feedback matches)`;
   const lines = items.map((item) => {
     const firstLine = (item.message || "(screenshot only)").split("\n")[0];
+    const theme = item.theme ? ` → ${item.theme.title}` : item.sensitive ? " [sensitive]" : "";
     const text = firstLine.length > 100 ? `${firstLine.slice(0, 99)}…` : firstLine;
     const images = item.attachments.length > 0 ? ` [${item.attachments.length} img]` : "";
     const page = new URL(item.page.url).pathname;
-    return `${item.id}  ${item.status.padEnd(11)} ${item.kind.padEnd(9)} ${page}${images}\n    ${text}`;
+    return `${item.id}  ${item.status.padEnd(11)} ${item.kind.padEnd(9)} ${page}${images}${theme}\n    ${text}`;
   });
   return [header, ...lines].join("\n");
 }
@@ -205,6 +303,10 @@ export async function runFeedbackCli(
 
   if (parsed.command === "list" && parsed.options.json !== true) {
     log(formatFeedbackList(body));
+    return body;
+  }
+  if (parsed.command === "themes" && parsed.options.json !== true) {
+    log(formatThemeList(body));
     return body;
   }
   log(JSON.stringify(body, null, 2));

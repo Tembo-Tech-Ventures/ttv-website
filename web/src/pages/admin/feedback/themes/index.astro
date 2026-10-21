@@ -1,0 +1,118 @@
+---
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import Card from "@/components/common/Card.astro";
+import FeedbackStatusPill from "@/components/feedback/FeedbackStatusPill.astro";
+import { env } from "cloudflare:workers";
+import { FEEDBACK_KIND_LABELS, FeedbackValidationError } from "@/lib/feedback/model";
+import { listThemes } from "@/lib/feedback/theme-store";
+import { themeAdminPath } from "@/lib/feedback/theme-api";
+import {
+  FEEDBACK_THEME_STATUS_LABELS,
+  FEEDBACK_THEME_STATUSES,
+  THEME_AGREEMENT_STUDENTS,
+  THEME_AGREEMENT_WINDOW_DAYS,
+  assessTheme,
+  parseThemeStatusFilter,
+} from "@/lib/feedback/themes";
+
+const requested = Astro.url.searchParams.get("status") ?? "open";
+let statuses;
+try {
+  statuses = parseThemeStatusFilter(requested);
+} catch (error) {
+  if (!(error instanceof FeedbackValidationError)) throw error;
+  return Astro.redirect("/admin/feedback/themes");
+}
+const now = new Date();
+const themes = await listThemes(env.DB, { statuses, now });
+const tabs = [
+  { value: "open", label: "Open" },
+  ...FEEDBACK_THEME_STATUSES.map((status) => ({
+    value: status,
+    label: FEEDBACK_THEME_STATUS_LABELS[status],
+  })),
+  { value: "all", label: "All" },
+];
+---
+
+<AdminLayout title="Feedback themes">
+  <div class="space-y-6">
+    <a href="/admin/feedback" class="text-sm text-primary hover:underline">
+      &larr; Back to Feedback
+    </a>
+    <header>
+      <h2 class="text-2xl font-bold text-white">Themes</h2>
+      <p class="mt-1 max-w-2xl text-sm text-ink-secondary">
+        One problem or wish that several students raised. Ideas and confusing
+        spots are put forward once {THEME_AGREEMENT_STUDENTS} students raise them
+        within {THEME_AGREEMENT_WINDOW_DAYS} days; a bug needs one report. Titles
+        and summaries may be published, so they never identify a student.
+      </p>
+    </header>
+
+    <nav aria-label="Filter by status" class="flex flex-wrap gap-2">
+      {
+        tabs.map((tab) => (
+          <a
+            href={`/admin/feedback/themes?status=${tab.value}`}
+            aria-current={requested === tab.value ? "page" : undefined}
+            class:list={[
+              "rounded-full border px-3 py-1 text-sm transition-colors",
+              requested === tab.value
+                ? "border-primary bg-primary/15 text-ink-primary"
+                : "border-rule text-ink-secondary hover:text-ink-primary",
+            ]}
+          >
+            {tab.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    {
+      themes.length === 0 ? (
+        <Card>
+          <p class="text-sm text-ink-secondary">No themes here yet.</p>
+        </Card>
+      ) : (
+        <ul class="space-y-3" data-testid="admin-theme-list">
+          {themes.map((theme) => {
+            const assessment = assessTheme(
+              {
+                kind: theme.kind,
+                status: theme.status,
+                change: theme.change,
+                recentStudents: theme.stats.recentStudents,
+                lastReportAt: theme.stats.lastReportAt,
+              },
+              now
+            );
+            return (
+              <li>
+                <a
+                  href={themeAdminPath(theme.id)}
+                  class="block rounded-lg border border-teal/20 bg-dark/80 p-4 transition-colors hover:border-primary/60"
+                >
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <FeedbackStatusPill theme={theme.status} />
+                    <span class="font-medium text-ink-primary">{theme.title}</span>
+                    {assessment.readyToPropose && (
+                      <span class="rounded-full border border-primary/40 px-2 py-0.5 text-xs text-primary">
+                        Ready to propose
+                      </span>
+                    )}
+                  </div>
+                  <p class="mt-2 text-xs text-ink-muted">
+                    {FEEDBACK_KIND_LABELS[theme.kind]} · {theme.stats.students} student
+                    {theme.stats.students === 1 ? "" : "s"} ({theme.stats.recentStudents} in{" "}
+                    {THEME_AGREEMENT_WINDOW_DAYS} days) · {assessment.reason}
+                  </p>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      )
+    }
+  </div>
+</AdminLayout>

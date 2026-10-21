@@ -57,7 +57,12 @@ const excerpt = (text: string) =>
 <AdminLayout title="Feedback">
   <div class="space-y-6">
     <header>
-      <h2 class="text-2xl font-bold text-white">Feedback</h2>
+      <div class="flex flex-wrap items-baseline justify-between gap-3">
+        <h2 class="text-2xl font-bold text-white">Feedback</h2>
+        <a href="/admin/feedback/themes" class="text-sm text-primary hover:underline">
+          Themes &rarr;
+        </a>
+      </div>
       <p class="mt-1 max-w-2xl text-sm text-ink-secondary">
         Notes and screenshots from signed-in students. Agents read and update
         the same queue through <code class="text-ink-primary">/api/admin/feedback</code>
@@ -107,10 +112,20 @@ const excerpt = (text: string) =>
                 )}
                 <div class="min-w-0 flex-1">
                   <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <FeedbackStatusPill status={item.status} audience="admin" />
+                    <FeedbackStatusPill note={item.status} />
                     <span class="text-sm font-medium text-ink-primary">
                       {FEEDBACK_KIND_LABELS[item.kind]}
                     </span>
+                    {item.theme && (
+                      <span class="truncate rounded-full border border-rule px-2 py-0.5 text-xs text-ink-secondary">
+                        {item.theme.title}
+                      </span>
+                    )}
+                    {item.sensitive && (
+                      <span class="rounded-full border border-rose-500/30 px-2 py-0.5 text-xs text-rose-200">
+                        Sensitive
+                      </span>
+                    )}
                     <span class="text-sm text-ink-muted">
                       {item.user.name} · {formatDate(item.createdAt)} UTC
                     </span>

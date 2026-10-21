@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   FeedbackCliError,
   buildFeedbackRequest,
+  formatThemeList,
   formatFeedbackList,
   parseFeedbackCliArgs,
   resolveConfig,
@@ -44,7 +45,7 @@ describe("parseFeedbackCliArgs", () => {
   it("rejects unknown commands, stray options, missing ids and silent closes", () => {
     expect(() => parseFeedbackCliArgs(["delete", "fb1"])).toThrow(FeedbackCliError);
     expect(() => parseFeedbackCliArgs(["claim", "fb1", "--response=x"])).toThrow(/Unknown option/);
-    expect(() => parseFeedbackCliArgs(["show"])).toThrow(/exactly one feedback id/);
+    expect(() => parseFeedbackCliArgs(["show"])).toThrow("show needs exactly one id.");
     expect(() => parseFeedbackCliArgs(["list", "fb1"])).toThrow(/no id/);
     expect(() => parseFeedbackCliArgs(["decline", "fb1"])).toThrow(/needs --response/);
   });
@@ -106,6 +107,86 @@ describe("buildFeedbackRequest", () => {
       status: "DECLINED",
       response: "Not now",
     });
+  });
+});
+
+describe("theme commands", () => {
+  it("parse two ids for attach and require a public-safe title and kind to create", () => {
+    expect(parseFeedbackCliArgs(["attach", "n1", "t1"])).toEqual({
+      command: "attach",
+      id: "n1",
+      themeId: "t1",
+      options: {},
+    });
+    expect(() => parseFeedbackCliArgs(["attach", "n1"])).toThrow("attach needs id and themeId.");
+    expect(() => parseFeedbackCliArgs(["theme-create", "--kind=IDEA"])).toThrow(
+      /needs --title=… : titles may be published/
+    );
+    expect(() => parseFeedbackCliArgs(["themes", "t1"])).toThrow("themes takes no id.");
+    expect(() => parseFeedbackCliArgs(["constructor"])).toThrow(/Usage/);
+  });
+
+  it("map onto the theme API", () => {
+    const build = (argv) => buildFeedbackRequest(parseFeedbackCliArgs(argv));
+    expect(build(["list", "--untriaged", "--theme=t1"]).path).toBe(
+      "/api/admin/feedback?untriaged=1&themeId=t1"
+    );
+    expect(build(["sensitive", "n1", "--note=Wellbeing; raised with owner"]).body).toEqual({
+      sensitive: true,
+      adminNote: "Wellbeing; raised with owner",
+    });
+    expect(build(["attach", "n1", "t1"])).toEqual({
+      method: "PATCH",
+      path: "/api/admin/feedback/n1",
+      body: { themeId: "t1" },
+    });
+    expect(build(["detach", "n1"]).body).toEqual({ themeId: null });
+    expect(build(["themes", "--status=all"]).path).toBe("/api/admin/feedback/themes?status=all");
+    expect(build(["theme", "t1"])).toEqual({ method: "GET", path: "/api/admin/feedback/themes/t1" });
+    expect(build(["theme-create", "--title=Dark mode", "--kind=IDEA", "--change=ADD"])).toEqual({
+      method: "POST",
+      path: "/api/admin/feedback/themes",
+      body: { title: "Dark mode", kind: "IDEA", change: "ADD" },
+    });
+    expect(
+      build([
+        "theme-update",
+        "t1",
+        "--status=SHIPPED",
+        "--pr=https://x/pull/2",
+        "--message=It's live",
+        "--note=Digest 2026-10-26",
+      ])
+    ).toEqual({
+      method: "PATCH",
+      path: "/api/admin/feedback/themes/t1",
+      body: {
+        status: "SHIPPED",
+        prUrl: "https://x/pull/2",
+        studentMessage: "It's live",
+        decisionNote: "Digest 2026-10-26",
+      },
+    });
+    expect(() => build(["theme-update", "t1"])).toThrow(/at least one option/);
+  });
+
+  it("prints themes with their readiness", () => {
+    const output = formatThemeList({
+      items: [
+        {
+          id: "t1",
+          status: "COLLECTING",
+          kind: "IDEA",
+          title: "Dark mode",
+          stats: { students: 3, recentStudents: 3 },
+          assessment: { readyToPropose: true, reason: "3 students raised this in the last 60 days." },
+        },
+      ],
+    });
+    expect(output).toBe(
+      "t1  COLLECTING  IDEA      3 students (3 recent)  READY\n    Dark mode\n    3 students raised this in the last 60 days."
+    );
+    expect(formatThemeList({ items: [] })).toBe("(no themes match)");
   });
 });
 
