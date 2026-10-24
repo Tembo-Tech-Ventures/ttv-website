@@ -161,6 +161,53 @@ Populate only from PM-authorized, exact-revision results:
 - Model-quality findings, latency, observed logs and cost assumptions: pending.
 - Authenticated MCP role-specific goal evidence: pending.
 
+## Short demo script and claims ledger
+
+Draft for PM review, not an organizer submission. Center the member's work;
+agent coordination is supporting context. All names, projects and statements in
+the demonstration are explicitly fictional. Do not imply a real job outcome.
+
+**Opening:** “How does someone without an established network help a hiring
+manager understand their work? Here is a fictional example: Amina Wanjiku.”
+
+**Member:** “Amina records her contribution to a community library project:
+keyboard navigation, what she changed and a supporting link.” Show the saved
+entry and reload it. Explain sharing at the save action, not in another speech.
+
+**Mentor:** “Grace Njeri adds what she personally checked and how. Her note
+applies to this contribution, not to every claim about Amina.” Show the note,
+method and contribution revision.
+
+**Institution:** “An approved institutional user searches for React and
+accessibility work, opens Amina's profile and examines the contribution and
+mentor note. The question is: ‘Why should I interview this person?’ The work
+and its context give the hiring manager a starting point for that conversation.”
+
+**Assessment, only after a verified live model result:** “These criteria rate
+the support in documented evidence, not Amina's ability. Insufficient evidence
+is unscored, and the hiring decision stays with the person reviewing it.” If
+live inference is unavailable, omit the generated-result segment or explicitly
+label a separate mocked illustration. Never present sample output as live.
+
+**Close:** “TTV already had cohort learning and public builder profiles. This
+hackathon adds an open community journey, contribution-scoped mentor notes and
+institutional discovery with evidence exploration.” Verify the final demo
+revision and actual Codex contribution before presentation. Do not claim a
+specific organizer rubric, winning outcome, OpenAI inference or provider switch.
+
+| Script claim | Evidence / release condition |
+| --- | --- |
+| Save and reload profile/contribution | Staging run `40110466615`, artifact `12566246811`: Marketing privately inspected the sanitized manifest, exact deployed SHA `144367fab48be597f00b64a50dd4fff748522f9d`, synthetic=true, browser-actions-and-api-readback, desktop/mobile passed, database-and-browser cleanup passed. Corresponding verifier assertions check save, API readback and reload. PM final evidence acceptance remains pending. |
+| Mentor note and institution sees contribution/provenance | Same run and inspected verifier assertions check mentor method/statement/role/revision, institution skill search and authorized profile evidence on both viewports. No claim of independent artifact verification. |
+| Known-person direct link | Functional assertions passed in the reported run, but Architect found blank/incomplete known-profile PNGs. Visual acceptance remains open; do not use those captures as a successful visual demonstration. |
+| Institution-defined assessment criteria and 1–5 results | Implemented source only for this evidence package. Manifest explicitly says modelCalls=not-tested. No verified live inference, rating quality, latency or cost claim. The tested skill filters are not an assessment rubric. |
+| “Why should I interview this person?” | Narrative question, not a demonstrated model answer. Human judgment remains required. |
+| Codex contribution | Final presentation must identify actual inspected development work/commits; no quantified productivity claim or runtime inference claim follows from using Codex to build. |
+
+No raw logs, traces or screenshots are republished by this draft. The manifest
+was downloaded privately and checked without printing credentials or private
+identifiers. Screenshots require their publisher's own visual/privacy inspection.
+
 ## Items to resolve through PM
 
 1. **Approval next step:** approval exists but no institutional request UI was found. Current copy explains the requirement and links to the journey. Track a streamlined institutional request process as an unresolved enhancement. PM should determine a real next step before adding any request/contact promise; this is not a prerequisite for truthful copy.
