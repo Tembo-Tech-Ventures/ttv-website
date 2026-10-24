@@ -14,7 +14,7 @@ function fixture(fault) {
       getByRole:vi.fn((kind,options)=>{
         if(kind==="heading")return {waitFor:async()=>{},textContent:async()=>fault==="wrong-heading"?"PRIVATE":expected};
         const link={first:()=>link,click:vi.fn(),getAttribute:async()=>fault==="wrong-link"?"https://example.com":options.name==="Go to your journey"?"/dashboard/community":role==="anonymous"?`/auth/login?next=${encodeURIComponent(destination)}`:destination};return link;
-      }),locator:()=>page,
+      }),locator:vi.fn(()=>page),
     };pages.push(page);return page;
   }});
   return {pages,visits,options:{baseUrl:"https://staging.tembotechventures.com",contextsByRole:Object.fromEntries(["member","mentor","institution"].map(role=>[role,context(role)])),anonymousContext:context("anonymous"),users:Object.fromEntries(["member","mentor","institution"].map(role=>[role,{userId:`ttv-staging-fixture-${"a".repeat(24)}-${role}`}]))}};
@@ -26,6 +26,7 @@ describe("audience activation and role navigation",()=>{
   });
   it("checks anonymous, eligible and missing-role desktop/mobile journeys and closes all pages",async()=>{
     const f=fixture();await verifyAudienceAccess(f.options);expect(f.visits).toHaveLength(16);
+    expect(f.pages.every(p=>p.locator.mock.calls.some(([selector])=>selector===".audience-hero"))).toBe(true);
     expect(f.visits.filter(v=>v.role==="anonymous")).toHaveLength(6);
     expect(f.pages.every(p=>p.close.mock.calls.length===1)).toBe(true);
     expect(f.pages.map(p=>p.setViewportSize.mock.calls[0][0].width)).toEqual([...Array(8).fill(1440),...Array(8).fill(390)]);
@@ -33,7 +34,7 @@ describe("audience activation and role navigation",()=>{
   it.each(["wrong-link","wrong-heading","missing-route","close"])("fails closed and sanitizes %s",async fault=>{
     const f=fixture(fault);await expect(verifyAudienceAccess(f.options)).rejects.toThrow(fault==="close"?"Synthetic audience page cleanup failed":"Synthetic audience access verification failed");
     expect(f.pages.every(p=>p.close.mock.calls.length===1)).toBe(true);
-  });
+  }, 10000);
   it("rejects non-staging and mixed-run identities before browser activity",async()=>{
     const f=fixture();f.options.baseUrl="https://example.com";await expect(verifyAudienceAccess(f.options)).rejects.toThrow("Expected values to be strictly equal");expect(f.pages).toHaveLength(0);
   });

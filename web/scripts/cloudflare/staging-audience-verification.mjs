@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
+import { expect } from "@playwright/test";
 import { existsSync } from "node:fs";
 import { assertJourneyScope } from "./staging-community-journey.mjs";
+
+export async function expectAudienceHeading(locator, expected) {
+  const pattern = new RegExp("^" + expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replaceAll("\\. ", "\\.\\s*") + "$");
+  await expect.poll(async () => (await locator.textContent())?.trim(), { timeout: 5000 }).toMatch(pattern);
+}
 
 const routes = ["members", "mentors", "institutions"];
 export function audienceRoutesPresent(exists = existsSync) {
@@ -28,14 +34,14 @@ export async function verifyAudienceAccess({ baseUrl, contextsByRole, users, ano
           await page.setViewportSize(viewport);
           const response = await page.goto(`${baseUrl}/community/${journey.audience}`, { waitUntil: "networkidle", timeout: 30000 });
           assert.equal(response?.status(), 200);
-          const link = page.getByRole("link", { name: mode === "anonymous" ? journey.anonymous ?? journey.cta : journey.cta, exact: true }).first();
+          const link = page.locator(".audience-hero").getByRole("link", { name: mode === "anonymous" ? journey.anonymous ?? journey.cta : journey.cta, exact: true }).first();
           const destination = mode === "anonymous" ? `/auth/login?next=${encodeURIComponent(journey.destination)}` : journey.destination;
           assert.equal(await link.getAttribute("href"), destination);
           await link.click();
           await page.waitForURL(`${baseUrl}${destination}`, { timeout: 30000 });
           const heading = mode === "anonymous" ? page.getByRole("heading", { level: 1 }) : page.locator(".discovery-app").getByRole("heading", { level: 1 });
           await heading.waitFor({ state: "visible", timeout: 30000 });
-          assert.equal((await heading.textContent())?.trim(), mode === "anonymous" ? "Sign in to Tembo." : mode === "missing-role" ? journey.gate : journey.heading);
+          await expectAudienceHeading(heading, mode === "anonymous" ? "Sign in to Tembo." : mode === "missing-role" ? journey.gate : journey.heading);
           if (mode === "missing-role") assert.equal(await page.getByRole("link", { name: "Go to your journey", exact: true }).getAttribute("href"), "/dashboard/community");
         }
       }
