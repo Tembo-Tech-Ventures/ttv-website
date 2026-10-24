@@ -338,3 +338,22 @@ describe("personal access token authentication", () => {
     ).toBeNull();
   });
 });
+
+describe("community personal access token scopes", () => {
+  it("stores community scopes without granting admin access", async () => {
+    const { db, calls } = mockDatabase();
+    const result = await createPersonalAccessToken({ db, userId: "member", label: "Community agent", durationHours: 8, scopes: ["community:read", "community:write"], now, cryptoImpl: deterministicCrypto() });
+    expect(result.scopes).toEqual(["community:read", "community:write"]);
+    expect(personalAccessTokenCanWrite(result)).toBe(false);
+    expect(calls.some(call => call.values.includes('["community:read","community:write"]'))).toBe(true);
+  });
+  it("requires a base read scope", async () => {
+    const { db } = mockDatabase();
+    await expect(createPersonalAccessToken({ db, userId: "member", label: "Community agent", durationHours: 8, scopes: ["institution:read"], now, cryptoImpl: deterministicCrypto() })).rejects.toThrow("Every token must include");
+  });
+  it("refuses mixed admin and community scope grants", async () => {
+    const { db } = mockDatabase();
+    await expect(createPersonalAccessToken({ db, userId: "member", label: "Mixed agent", durationHours: 8, scopes: ["admin:read", "community:read"], now, cryptoImpl: deterministicCrypto() })).rejects.toThrow("cannot be combined");
+  });
+
+});

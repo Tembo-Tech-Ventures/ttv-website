@@ -5,6 +5,9 @@ export const PERSONAL_ACCESS_TOKEN_DURATIONS = [8, 24, 168, 720] as const;
 export const PERSONAL_ACCESS_TOKEN_SCOPES = [
   "admin:read",
   "admin:write",
+  "community:read",
+  "community:write",
+  "institution:read",
 ] as const;
 export const MAX_ACTIVE_PERSONAL_ACCESS_TOKENS = 10;
 export const PERSONAL_ACCESS_TOKEN_WRITE_ERROR =
@@ -181,8 +184,12 @@ export async function createPersonalAccessToken({
     throw new Error("Choose a supported token duration.");
   }
   const validatedScopes = parseStoredScopes(JSON.stringify(scopes));
-  if (!validatedScopes || !validatedScopes.includes("admin:read")) {
-    throw new Error("Every token must include admin:read access.");
+  if (!validatedScopes || (!validatedScopes.includes("admin:read") && !validatedScopes.includes("community:read"))) {
+    throw new Error("Every token must include admin:read or community:read access.");
+  }
+
+  if (validatedScopes.some(scope => scope.startsWith("admin:")) && validatedScopes.some(scope => !scope.startsWith("admin:"))) {
+    throw new Error("Admin and community token scopes cannot be combined.");
   }
 
   const nowSeconds = Math.floor(now.getTime() / 1_000);
