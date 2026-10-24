@@ -23,7 +23,14 @@ describe("staging credential audit", () => {
   });
   it("keeps permissions unknown on denied details", async () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce(ok({ id, status: "active" })).mockResolvedValueOnce(new Response("private", { status: 403 }));
-    expect(await auditStagingCredential(env, { fetchImpl })).toMatchObject({ status: "failed", tokenStatus: "active", stage: "permissions", permissions: [] }); expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(await auditStagingCredential(env, { fetchImpl })).toMatchObject({ status: "failed", tokenStatus: "active", stage: "permissions", httpStatus: 403, permissions: [] }); expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+  it("does not retain verify HTTP status when details transport fails", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(ok({ id, status: "active" })).mockRejectedValueOnce(new Error(env.CLOUDFLARE_API_TOKEN));
+    const report = await auditStagingCredential(env, { fetchImpl });
+    expect(report).toEqual({ status: "failed", tokenStatus: "active", stage: "permissions", httpStatus: null, permissions: [], otherPermissionCount: 0 });
+    expect(JSON.stringify(report)).not.toContain(env.CLOUDFLARE_API_TOKEN);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
   it.each(["malformed", "oversized", "throw", "invalid-id", "expired"])("sanitizes %s without retry", async mode => {
     const fetchImpl = vi.fn();

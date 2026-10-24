@@ -12,6 +12,7 @@ export async function auditStagingCredential(env, { fetchImpl = fetch } = {}) {
     if (env.CLOUDFLARE_ENVIRONMENT_NAME !== "staging" || env.CLOUDFLARE_ACCOUNT_ID !== ACCOUNT || !env.CLOUDFLARE_API_TOKEN || !["user", "account"].includes(env.AUDIT_TOKEN_KIND)) throw new Error();
     const root = env.AUDIT_TOKEN_KIND === "user" ? "/user/tokens" : `/accounts/${ACCOUNT}/tokens`;
     async function read(path) {
+      httpStatus = null;
       const response = await fetchImpl(`https://api.cloudflare.com/client/v4${path}`, {
         method: "GET", redirect: "error", signal: globalThis.AbortSignal.timeout(10_000),
         headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}` },
