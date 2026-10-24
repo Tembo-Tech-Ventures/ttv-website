@@ -109,6 +109,14 @@ function client() {
   return {personas,result,fetchImpl,target:{baseUrl,expectedVersion}};
 }
 describe("fixed assessment HTTP program",()=>{
+  it.each([["unavailable","provider_unavailable",false],["invalid_output","invalid_output",true]])("retains %s and claim before rejecting the real HTTP response",async(status,errorCode,claimed)=>{
+    const f=client(),{options}=runner();
+    Object.assign(f.result.assessment,{status,errorCode,criteria:[]});f.result.probe.claimed=claimed;
+    options.verifyAssessment.mockImplementation(({progress})=>verifyStagingAssessment({...f,progress}));
+    await expect(runStagingAssessment(options)).rejects.toThrow("Synthetic assessment failed");
+    expect(options.publishFailure).toHaveBeenCalledWith(expect.objectContaining({stage:"assessment",code:"validation-failed",httpStatus:200,assessmentStatus:status,assessmentErrorCode:errorCode,claim:claimed,providerInvocation:"unknown"}));
+    expect(f.fetchImpl).toHaveBeenCalledTimes(5);
+  });
   it("times out only the evidence POST after successful prerequisites without retry",async()=>{
     const f=client(),progress=vi.fn(),original=f.fetchImpl.getMockImplementation();let count=0;
     f.fetchImpl.mockImplementation(async(...args)=>{if(++count===5)throw new Error("PRIVATE timeout");return original(...args);});
