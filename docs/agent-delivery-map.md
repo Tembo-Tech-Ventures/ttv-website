@@ -159,3 +159,24 @@ SAM’s `get_workspace_diff_summary` reports aggregate workspace bookkeeping:
 commit count, changed paths, insertions/deletions, and untracked files since the
 workspace was created. It is useful for task reporting and detecting forgotten
 files, but it does not replace a normal Git diff.
+
+### Feedback browser-test identities
+
+Isolated `agent-*` live E2E runs create a fresh, no-role feedback writer at runtime.
+`run-live-e2e.mjs` passes its one-hour bearer session only through the child process
+variable `PLAYWRIGHT_FEEDBACK_STUDENT_TOKEN`; it is never a command argument or
+persisted credential. The reusable new-student persona remains unchanged for
+other tests. Listing tests and shared staging/production do not provision it.
+
+Before writes, the runner checks the Worker origin, environment, revision, bearer
+feature, D1 name/ID and R2 binding against the selected isolated stack and health
+endpoint. After Playwright exits (including failure), it revokes that exact
+session, deletes only attachment object keys belonging to that invocation's
+feedback, and deletes its exact user with database cascades. Existing feedback,
+other identities and the real 30-notes/day limit remain unchanged.
+
+Cleanup errors fail verification. If object cleanup fails, database rows remain
+for diagnosis and the session has already been revoked. Abrupt runner termination
+can prevent cleanup; the one-hour expiry bounds session lifetime, and normal
+isolated-stack teardown remains the final resource cleanup. Never resolve this
+by resetting a shared user's feedback counter or deleting historical feedback.
