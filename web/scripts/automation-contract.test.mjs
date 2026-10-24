@@ -9,6 +9,28 @@ async function readRepositoryFile(relativePath) {
 }
 
 describe("GitHub delivery contracts", () => {
+  it("runs CI and isolated previews for supporting hackathon PRs", async () => {
+    for (const name of ["ci.yml", "cloudflare-staging-pr.yml"]) {
+      const workflow = await readRepositoryFile(`.github/workflows/${name}`);
+      expect(workflow.slice(workflow.indexOf("pull_request:"), workflow.indexOf("jobs:")))
+        .toContain("sam/use-sam-mcp-tools-m8a3jp");
+    }
+  });
+
+  it("guards shared staging by exact integration revision and never cancels verification", async () => {
+    const workflow = await readRepositoryFile(".github/workflows/cloudflare-staging.yml");
+    expect(workflow).toContain("cancel-in-progress: false");
+    expect(workflow).not.toContain("cancel-in-progress: true");
+    expect(workflow).toContain("needs: preflight");
+    expect(workflow).toContain("node web/scripts/cloudflare/staging-preflight.mjs");
+    expect(workflow).toContain("STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}");
+    expect(workflow).toContain("STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp");
+    expect(workflow).toContain('STAGING_INTEGRATION_PR: "171"');
+    expect(workflow).toContain("action: deploy");
+    expect(workflow).not.toContain("destroy");
+    expect(workflow.indexOf("concurrency:")).toBeLessThan(workflow.indexOf("jobs:"));
+  });
+
   it("uses Node 24-compatible checkout and setup actions", async () => {
     const workflows = await Promise.all(
       [
