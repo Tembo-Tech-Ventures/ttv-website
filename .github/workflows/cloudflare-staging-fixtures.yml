@@ -8,6 +8,12 @@ on:
         required: true
         type: string
 
+      browser_assessment:
+        description: One bounded desktop assessment after both viewport journeys
+        required: false
+        type: boolean
+        default: false
+
 # The registered caller holds the shared staging lock through this entire job.
 # Reusing that concurrency group here would deadlock the caller.
 
@@ -26,6 +32,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_BROWSER_ASSESSMENT: ${{ inputs.browser_assessment }}
           STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
           STAGING_INTEGRATION_PR: "171"
         run: node web/scripts/cloudflare/staging-preflight.mjs
@@ -53,6 +60,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_BROWSER_ASSESSMENT: ${{ inputs.browser_assessment }}
           STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
           STAGING_INTEGRATION_PR: "171"
           CLOUDFLARE_ENVIRONMENT_NAME: staging
@@ -80,4 +88,5 @@ jobs:
             web/test-results/staging-community/mobile-mentor.png
             web/test-results/staging-community/mobile-scout.png
             web/test-results/staging-community/mobile-known-profile.png
+            web/test-results/staging-community/desktop-assessment.png
             web/test-results/staging-community/manifest.json
