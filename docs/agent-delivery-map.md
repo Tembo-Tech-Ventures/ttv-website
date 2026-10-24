@@ -66,6 +66,21 @@ stacks older than 72 hours when close-triggered or explicit teardown was missed.
 It queries open pull requests first and excludes their preview names
 automatically; manual cleanup runs remain dry-run-first.
 
+PR-close, explicit agent teardown and stale cleanup share a fail-closed R2
+preflight. A nonempty bucket, incomplete listing or failed emptiness check stops
+teardown before any resource deletion. Preserve that environment and report the
+blocker; do not purge objects or bypass the check. Existing per-run fixture
+cleanup may delete only objects whose ownership it independently established.
+An object arriving after the check must make bucket deletion fail, leaving the
+remaining resources intact.
+
+The [R2 list API](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/objects/methods/list/)
+marks pagination metadata optional. Teardown deliberately requires a successful
+response with an explicit boolean `is_truncated`, no continuation cursor and no
+delimited prefixes before treating an empty listing as complete. Missing metadata
+therefore blocks cleanup even if the bucket may be empty. Only the R2 bucket-not-found
+404 code `10006` is accepted as already absent; other failures preserve the stack.
+
 ## The production merge path
 
 Main is production. Merging a pull request starts the `Cloudflare Production`
@@ -200,5 +215,5 @@ other identities and the real 30-notes/day limit remain unchanged.
 Cleanup errors fail verification. If object cleanup fails, database rows remain
 for diagnosis and the session has already been revoked. Abrupt runner termination
 can prevent cleanup; the one-hour expiry bounds session lifetime, and normal
-isolated-stack teardown remains the final resource cleanup. Never resolve this
+isolated-stack teardown refuses nonempty R2 and preserves the stack for review. Never resolve this
 by resetting a shared user's feedback counter or deleting historical feedback.
