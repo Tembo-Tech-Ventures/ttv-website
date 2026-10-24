@@ -3,13 +3,15 @@ import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
 import { CommunityError } from "./model";
 import { createCommunityService, type CommunityService } from "./service";
 import { assessCommunityProfile } from "./assessment-ai";
+import { createAssessmentProvider } from "./assessment-provider";
+import { stagingAssessmentProbe } from "./staging-assessment-probe";
 import { runCommunityChat } from "./chat";
 
 export function communityJson(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store", Vary: "Cookie, Authorization" } });
 }
 interface Actor { id: string; scopes: readonly string[] | null; delegatedSession?: boolean; fixture?: StagingFixtureIdentity | null }
-interface RouteContext { request: Request; path: string; actor: Actor; service: CommunityService; body: unknown; env?: Env }
+interface RouteContext { request: Request; path: string; actor: Actor; service: CommunityService; body: unknown; db: D1Database; env?: Env }
 type Handler = (ctx: RouteContext) => Promise<Response>;
 
 function requireBrowser(actor: Actor, admin = false) {
@@ -84,7 +86,16 @@ async function dynamicRoute(ctx: RouteContext) {
   if (parts[0] !== "profiles" || parts.length < 2) return communityJson({error:"Route not found."},404);
   if (parts.length === 2 && ctx.request.method === "GET") return communityJson({profile: await ctx.service.getProfile(parts[1]),entries: await ctx.service.listJourney(parts[1])});
   if (parts.length === 3 && parts[2] === "assessment" && ctx.request.method === "POST") {
-    return communityJson({assessment: await assessCommunityProfile(ctx.env,ctx.service,parts[1],ctx.body)});
+    const probe = stagingAssessmentProbe(ctx.db, ctx.env?.DEPLOYMENT_ENVIRONMENT, ctx.actor);
+    const measurement = { claimed: false, payloadBytes: 0, payloadCharacters: 0 };
+    const provider = createAssessmentProvider(ctx.env, probe ? { syntheticProbe: {
+      claim: async (size: { payloadBytes: number; payloadCharacters: number }) => {
+        await probe.claim();
+        Object.assign(measurement, { claimed: true, payloadBytes: size.payloadBytes, payloadCharacters: size.payloadCharacters });
+      },
+    } } : undefined);
+    const assessment = await assessCommunityProfile(ctx.env,ctx.service,parts[1],ctx.body,provider);
+    return communityJson({assessment, ...(probe ? {probe: measurement} : {})});
   }
   return communityJson({error:"Route not found."},404);
 }
@@ -93,7 +104,7 @@ export async function handleCommunityRequest(request: Request, path: string, act
   if (request.headers.has("Authorization") && actor.scopes === null) return communityJson({error:"Scoped personal access token required."},401);
   try {
     authorizeRequest(request,path,actor);
-    const ctx = {request,path,actor,service:createCommunityService(db,actor.id,actor.fixture,env?.DEPLOYMENT_ENVIRONMENT),body:await readBody(request),env};
+    const ctx = {request,path,actor,service:createCommunityService(db,actor.id,actor.fixture,env?.DEPLOYMENT_ENVIRONMENT),body:await readBody(request),db,env};
     const route = routes[`${request.method} ${path}`];
     return route ? await route(ctx) : await dynamicRoute(ctx);
   } catch (error) {

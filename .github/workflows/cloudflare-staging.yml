@@ -4,13 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: Deploy staging or verify existing deployment with synthetic identities
+        description: Deploy, verify synthetic journeys, or run one bounded synthetic assessment (PM slot required)
         required: true
         type: choice
         default: deploy
         options:
           - deploy
           - verify
+          - assess
       expected_sha:
         description: Exact current head SHA of integration PR 171 (reserve a PM deployment slot first)
         required: true
@@ -64,6 +65,17 @@ jobs:
       contents: read
       pull-requests: read
     uses: ./.github/workflows/cloudflare-staging-fixtures.yml
+    with:
+      expected_sha: ${{ inputs.expected_sha }}
+    secrets: inherit
+
+  assess:
+    if: ${{ inputs.action == 'assess' }}
+    needs: preflight
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/cloudflare-staging-assessment.yml
     with:
       expected_sha: ${{ inputs.expected_sha }}
     secrets: inherit
