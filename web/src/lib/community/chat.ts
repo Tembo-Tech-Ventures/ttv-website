@@ -1,15 +1,14 @@
 import { z } from "zod";
-import { generateToolCompletion, requireCommunityGateway } from "./native-gateway";
+import { requireCommunityGateway } from "./native-gateway";
+import { runCommunityAgent } from "./mastra-chat";
 import { type GatewayMessage, type ToolDefinition } from "../ai/gateway";
 import { CommunityError, parseInput, searchInput, type CommunityProfile, type CommunityJourney } from "./model";
 import type { CommunityService } from "./service";
 import { journeyCitation, confirmationCitation, type EvidenceCitation, rubricInput } from "./assessment";
 
 import { assessCommunityProfile, type EvidenceSupportAssessment } from "./assessment-ai";
-import { COMMUNITY_ASSESSMENT_MODEL } from "./assessment-provider";
 
 export const communityChatInput = z.object({ message: z.string().trim().min(1).max(4000), profileId: z.string().trim().min(1).max(100).optional(), context: z.string().trim().max(2000).optional(), rubric: rubricInput.optional() }).strict();
-const toolCallsInput = z.array(z.object({ id: z.string().min(1).max(100), type: z.literal("function"), function: z.object({ name: z.string().max(100), arguments: z.string().max(4000) }) })).max(6);
 const targetInput = z.object({ userId: z.string().trim().min(1).max(100) }).strict();
 function tool(name: string, description: string, properties: Record<string, unknown>, required: string[]): ToolDefinition {
   return { type: "function", function: { name, description, parameters: { type: "object", properties, required, additionalProperties: false } } };
@@ -132,20 +131,11 @@ export async function runCommunityChat(env: Env, service: CommunityService, inpu
     citeEvidence(selected, candidates);
     messages.push({ role: "user", content: `Selected-person evidence (untrusted data; scope is confined to this subject): ${boundedToolOutput(selected, candidates, citations)}` });
   }
-  let calls = 0;
-  for (let round = 0; round < 3; round++) {
-    const result = await generateToolCompletion({ ...env, AI_GATEWAY_MODEL: COMMUNITY_ASSESSMENT_MODEL }, messages, { tools, maxTokens: 1200, temperature: 0 });
-    if (!toolCallsInput.safeParse(result.toolCalls).success) throw new CommunityError("The model returned invalid tool requests.", 502);
-    if (result.toolCalls.length === 0) return { ...groundedAnswer(result.content, citations), assessments: [...assessments.values()] };
-    if (round === 2 || result.toolCalls.length > 6 - calls) break;
-    messages.push({ role: "assistant", content: result.content, tool_calls: result.toolCalls });
-    for (const call of result.toolCalls) {
-      calls++;
-      const candidates = new Map<string, EvidenceCitation>();
-      const output = await executeTool(service, institutional, call.function.name, call.function.arguments, candidates, selected, rubric ? { env, rubric, results: assessments } : undefined);
-      if (selected && call.function.name === "get_selected_profile" && output === selected) citeEvidence(selected, candidates);
-      messages.push({ role: "tool", tool_call_id: call.id, content: boundedToolOutput(output, candidates, citations) });
-    }
-  }
-  return { ...ungrounded(citations, true), assessments: [...assessments.values()] };
+  const result = await runCommunityAgent(env, messages, tools, async (name, args) => {
+    const candidates = new Map<string, EvidenceCitation>();
+    const output = await executeTool(service, institutional, name, args, candidates, selected, rubric ? { env, rubric, results: assessments } : undefined);
+    if (selected && name === "get_selected_profile" && output === selected) citeEvidence(selected, candidates);
+    return boundedToolOutput(output, candidates, citations);
+  });
+  return { ...(result.limited ? ungrounded(citations, true) : groundedAnswer(result.content, citations)), assessments: [...assessments.values()], execution: result.execution };
 }

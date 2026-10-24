@@ -155,3 +155,42 @@ The assessment request now sets `response_format: { type: "json_object" }`, expl
 The existing `Cloudflare Staging` workflow supports `action=verify` with the explicit `browser_assessment=true` opt-in, only under a fresh PM slot for its exact integrated SHA. Default verification remains model-free. The opt-in checks native binding readiness, rejects workflow reruns, and provisions the existing dedicated one-shot institution assessment session. After both viewport journeys, one desktop form submission uses the same fictional member and mentor-confirmed entries; the runner checks a bounded provider claim, evidence-support rating, current citation identities/versions, rendered result/source link, and consumed-session denial. No second mobile inference or chat call occurs. A failed or unscored result fails this specific demo check; it is not repaired or retried.
 
 The optional `desktop-assessment.png` and bounded rating/citation-count receipt are published only after database/browser cleanup. The earlier apparent blank known-profile images were an inspection error: their actual PNGs were byte-identical to the valid scout images, confirmed by hashes, decoded pixels and individual reinspection. No capture defect was established and no capture timing change is included. No production runtime or authorization changes are included.
+
+### Request-local Mastra chat (24 October 2026)
+
+Chat now uses `@mastra/core` 1.79.0 with `agents/models/ai-sdk` 0.30.1,
+`ai` 7.0.153 and provider spec 4.0.29 (aligned with Mastra's internal v7
+provider). The request-local Agent owns the tool loop; existing authenticated
+CommunityService closures, selected-person scope and delivered-source citation
+validation still own access and grounding. Assessment continues to use Gemma;
+its provider and schema are unchanged.
+
+The Architect's selected [GLM 5.3 Flash](https://developers.cloudflare.com/workers-ai/models/glm-5.3-flash/)
+runs through the [native Cloudflare provider](https://developers.cloudflare.com/agents/models/ai-sdk/)
+with the existing explicit Gateway ID, low reasoning effort, cache/log collection
+disabled and requested Gateway maxAttempts=1. Reasoning cannot be disabled on
+this model. Mastra retries and processor retries are zero; no repair, fallback,
+additional structured-output generation, memory store or telemetry exporter is
+configured. The logger is disabled to avoid retaining source/provider errors.
+
+The run allows at most three model steps and six executed tools, serializes tool
+execution (including the one-profile assessment limit), and executes no tools
+after the third model response. Each response stream is capped at 64KB before
+SDK parsing, tool arguments at 4K characters, existing tool results at 60K
+characters, and requested output at 1,200 tokens per step. Step timeout is 20s;
+total timeout is 60s. Truncation, cancellation and invalid/undelivered citations
+produce no grounded answer. These request settings do not prove actual upstream
+cancellation, a tokenized input bound or a hard dollar ceiling.
+
+Local validation exercised the actual Mastra/provider loop with mocked native
+binding responses, including tool/auth/citation limits and raw-output bounds.
+A Wrangler dry-run bundle plus a local workerd invocation with outbound network
+blocked completed two mocked model steps and one evidence tool. This establishes
+local Workers import/tool-loop feasibility, not live GLM entitlement or behavior.
+GLM requires a paid Workers plan or prepaid credits; account entitlement,
+representative output/tool behavior and latency remain staging checks owned by
+PM. No billing setting, credentials, runtime binding or deployment was changed.
+The chat response adds only server-generated `execution.model`, `modelSteps`
+and `executedToolCalls` metadata. The execution count increments when a validated
+tool actually starts after cancellation checking, so prefetched selected-person
+evidence alone cannot be mistaken for proof of model-driven tool use.
