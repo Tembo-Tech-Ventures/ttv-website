@@ -149,3 +149,38 @@ evidence semantics, the one-attempt claim and cleanup remain enforced.
 The bounded synthetic assessment on integrated revision `23fdd5d181fed57548135bf9a8488c1127d1b17c` returned `outputReason=json`; cleanup passed. This proves a nonempty completion reached JSON parsing and failed, not what its raw formatting contained. No raw completion was retained.
 
 The assessment request now sets `response_format: { type: "json_object" }`, explicitly supported by the selected [Gemma synchronous input schema](https://developers.cloudflare.com/workers-ai/models/gemma-4-26b-a4b-it/sync-input.json). This is the smallest change targeting the observed syntax failure. The rubric schema remains in the prompt and all server-side schema, criterion, citation, refusal and truncation checks remain authoritative. JSON object mode does not establish factual correctness or schema compliance. There is no text repair, fallback or retry. The serialized request measurement includes the new setting before the atomic probe claim. Live effectiveness remains unverified until the next authorized staging assessment.
+
+### Request-local Mastra chat (24 October 2026)
+
+Chat now uses `@mastra/core` 1.79.0 with `agents/models/ai-sdk` 0.30.1,
+`ai` 7.0.153 and provider spec 4.0.29 (aligned with Mastra's internal v7
+provider). The request-local Agent owns the tool loop; existing authenticated
+CommunityService closures, selected-person scope and delivered-source citation
+validation still own access and grounding. Assessment continues to use Gemma;
+its provider and schema are unchanged.
+
+The Architect's selected [GLM 5.3 Flash](https://developers.cloudflare.com/workers-ai/models/glm-5.3-flash/)
+runs through the [native Cloudflare provider](https://developers.cloudflare.com/agents/models/ai-sdk/)
+with the existing explicit Gateway ID, low reasoning effort, cache/log collection
+disabled and requested Gateway maxAttempts=1. Reasoning cannot be disabled on
+this model. Mastra retries and processor retries are zero; no repair, fallback,
+additional structured-output generation, memory store or telemetry exporter is
+configured. The logger is disabled to avoid retaining source/provider errors.
+
+The run allows at most three model steps and six executed tools, serializes tool
+execution (including the one-profile assessment limit), and executes no tools
+after the third model response. Each response stream is capped at 64KB before
+SDK parsing, tool arguments at 4K characters, existing tool results at 60K
+characters, and requested output at 1,200 tokens per step. Step timeout is 20s;
+total timeout is 60s. Truncation, cancellation and invalid/undelivered citations
+produce no grounded answer. These request settings do not prove actual upstream
+cancellation, a tokenized input bound or a hard dollar ceiling.
+
+Local validation exercised the actual Mastra/provider loop with mocked native
+binding responses, including tool/auth/citation limits and raw-output bounds.
+A Wrangler dry-run bundle plus a local workerd invocation with outbound network
+blocked completed two mocked model steps and one evidence tool. This establishes
+local Workers import/tool-loop feasibility, not live GLM entitlement or behavior.
+GLM requires a paid Workers plan or prepaid credits; account entitlement,
+representative output/tool behavior and latency remain staging checks owned by
+PM. No billing setting, credentials, runtime binding or deployment was changed.

@@ -29,6 +29,7 @@
     "knip": "knip --include files,dependencies,unlisted"
   },
   "dependencies": {
+    "@ai-sdk/provider": "4.0.29",
     "@astrojs/cloudflare": "14.3.0",
     "@astrojs/react": "6.0.6",
     "@cloudflare/containers": "^0.3.7",
@@ -41,10 +42,13 @@
     "@lexical/rich-text": "^0.50.0",
     "@lexical/selection": "^0.50.0",
     "@lexical/utils": "^0.50.0",
+    "@mastra/core": "1.79.0",
     "@opentelemetry/api": "^1.9.1",
     "@paralleldrive/cuid2": "^2.3.1",
     "@phosphor-icons/react": "^2.1.10",
     "@tailwindcss/vite": "^4.3.3",
+    "agents": "0.30.1",
+    "ai": "7.0.153",
     "astro": "7.3.2",
     "better-auth": "~1.6.33",
     "date-fns": "^4.4.0",
