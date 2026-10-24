@@ -56,6 +56,11 @@ it("shows low evidence support separately from each unscored state and escapes s
     <AssessmentResults assessment={value} profile={profile} />,
   );
   expect(html).toContain("Evidence support 1/5");
+  expect(html).toContain("AI-generated evidence support");
+  expect(html).not.toContain("No AI assessment was run.");
+  expect(html).toContain(
+    "Assessments use profile text and skills, published contribution text, and current review notes. Linked artifacts are not fetched.",
+  );
   for (const state of ["Insufficient", "Uncertain", "Contradictory"])
     expect(html).toContain(`${state} evidence · Not scored`);
   expect(html).not.toContain("javascript:");

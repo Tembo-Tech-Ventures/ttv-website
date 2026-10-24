@@ -103,7 +103,9 @@ export function AssessmentResults({
       <p className="discovery-chat-note">
         Ratings describe support in the documented evidence, not ability,
         verification or a hiring recommendation. Check sources and discuss gaps
-        with the person.
+        with the person. Assessments use profile text and skills, published
+        contribution text, and current review notes. Linked artifacts are not
+        fetched.
       </p>
       {assessment.model && (
         <p className="discovery-muted">Model: {assessment.model}</p>
