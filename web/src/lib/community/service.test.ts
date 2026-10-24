@@ -44,6 +44,37 @@ describe("community service real SQL boundaries", () => {
     f.sql.prepare("DELETE FROM UserRoles WHERE userId=?").run("institution");
     await expect(f.institution.searchProfiles({})).rejects.toMatchObject({status:403});
   });
+  it("applies talent eligibility before query, skill filtering and pagination", async () => {
+    const f = fixture();
+    f.sql.exec(`INSERT INTO Roles(id,name) VALUES ('student','STUDENT'),('admin','ADMIN');`);
+    const candidates: [string,string[],boolean][] = [
+      ["open",[],true],["student",["STUDENT"],true],["institution-only",["INSTITUTION"],true],
+      ["dual",["STUDENT","INSTITUTION"],true],["mentor-only",["MENTOR"],false],
+      ["admin-only",["ADMIN"],false],["mixed-mentor",["STUDENT","MENTOR","INSTITUTION"],false],
+      ["mixed-admin",["STUDENT","ADMIN","INSTITUTION"],false],
+    ];
+    for (const [id,roles,included] of candidates) {
+      f.sql.prepare("INSERT INTO user VALUES (?,?,null)").run(id,`${included ? "Z" : "A"} ${id}`);
+      for (const role of roles) f.sql.prepare("INSERT INTO UserRoles VALUES (?,?,(SELECT id FROM Roles WHERE name=?))").run(`${id}-${role}`,id,role);
+      const service=createCommunityService(f.db,id);
+      await service.updateOwnProfile({...profile,headline:"Eligibility candidate",skills:["TypeScript"]});
+      await service.createJourney(entry);
+      await service.createJourney({...entry,visibility:"private",description:"Hidden evidence"});
+    }
+    const all=await f.institution.searchProfiles({query:"Eligibility candidate",skills:["typescript"]});
+    expect(all.map(p=>p.userId).toSorted()).toEqual(candidates.filter(c=>c[2]).map(c=>c[0]).toSorted());
+    expect(await f.institution.searchProfiles({query:"Eligibility candidate",skills:["typescript"],limit:1})).toHaveLength(1);
+    expect((await f.institution.searchProfiles({query:"Eligibility candidate",skills:["typescript"],limit:1}))[0].userId).toBe("dual");
+    for (const [id,,included] of candidates) if (!included) {
+      expect(await f.institution.searchProfiles({query:id})).toEqual([]);
+      expect(await f.institution.getProfile(id)).toMatchObject({userId:id});
+      const entries=await f.institution.listJourney(id);
+      expect(entries).toHaveLength(1);
+      expect(JSON.stringify(entries)).not.toContain("Hidden evidence");
+      f.sql.prepare("DELETE FROM communityProfile WHERE userId=?").run(id);
+      expect(await f.institution.searchProfiles({query:id})).toEqual([]);
+    }
+  });
   it("AND matches skill criteria before limiting results", async () => {
     const f = fixture();
     await f.member.updateOwnProfile({...profile,skills:["React","TypeScript"]});

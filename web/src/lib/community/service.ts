@@ -90,7 +90,8 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       const skillFilter = clauses.length > 0 ? ` AND ${clauses.join(" AND ")}` : "";
       const scope = fixtureScope("u.id");
       const { results } = await db.prepare(`${PROFILE_SELECT}
-        WHERE instr(lower(u.name || ' ' || coalesce(p.headline,'') || ' ' || coalesce(p.skills,'') || ' ' || coalesce(p.bio,'')),?)>0${skillFilter}${scope.clause}
+        WHERE NOT EXISTS (SELECT 1 FROM UserRoles directoryRole JOIN Roles directoryRoleName ON directoryRoleName.id=directoryRole.roleId WHERE directoryRole.userId=u.id AND directoryRoleName.name IN ('MENTOR','ADMIN'))
+          AND instr(lower(u.name || ' ' || coalesce(p.headline,'') || ' ' || coalesce(p.skills,'') || ' ' || coalesce(p.bio,'')),?)>0${skillFilter}${scope.clause}
         ORDER BY u.name,u.id LIMIT ?`).bind(query,...skills,...scope.values,p.limit).all<ProfileRow>();
       await Promise.all(results.map(row=>requireFixtureTarget(row.userId)));
       return results.map(profile);
