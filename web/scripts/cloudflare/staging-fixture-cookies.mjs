@@ -1,10 +1,11 @@
 import { createHmac } from "node:crypto";
 import { getCookies } from "better-auth/cookies";
+import { STAGING_FIXTURE_ORIGIN } from "./staging-fixture-target.mjs";
 
 /** Matches pinned Better Auth/better-call signing; integration-tested, not a new auth protocol. */
 export function createStagingBrowserCookies({ baseUrl, secret, token, expiresAt }) {
   const url = new URL(baseUrl);
-  if (url.protocol !== "https:" || !/^ttv-website-staging\.[a-z0-9-]+\.workers\.dev$/.test(url.hostname) ||
+  if (url.protocol !== "https:" || url.origin !== STAGING_FIXTURE_ORIGIN ||
       url.username || url.password || url.port || url.pathname !== "/" || url.search || url.hash ||
       typeof secret !== "string" || secret.length < 32 || !/^[a-f0-9]{64}$/.test(token) ||
       !Number.isSafeInteger(expiresAt) || expiresAt <= Date.now() / 1000 || expiresAt > Date.now() / 1000 + 3601) {

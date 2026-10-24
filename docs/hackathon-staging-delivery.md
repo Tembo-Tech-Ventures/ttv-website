@@ -64,7 +64,12 @@ access is not delivered.
 
 `staging-fixture-target.mjs` reads the configured account, actual staging Worker
 bindings, exact D1 metadata and public deployment health. It requires the known
-staging D1 UUID, staging Worker origin and exact expected deployed commit. Only
+staging D1 UUID, staging Worker origin and exact expected deployed commit. The
+only fixture origin is `https://staging.tembotechventures.com`; live
+`PRIMARY_DOMAIN` and `BETTER_AUTH_URL` must agree with it. Staging disables
+workers.dev for its custom domain, so the runner never uses a workers.dev URL.
+Health and authenticated API requests do not follow redirects, and browser
+verification blocks cross-origin requests and redirect responses. Only
 that verified target exposes a database executor, permanently bound to staging.
 No credentialed writes occur in preflight. The main integration branch and PM
 serialized slot rules still apply to verification and provisioning.

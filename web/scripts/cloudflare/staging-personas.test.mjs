@@ -15,13 +15,13 @@ async function fixture() {
   const accountId = "a".repeat(32), expectedVersion = "b".repeat(40);
   const api = vi.fn(async (path, options) => {
     if (path === "") return { id: accountId };
-    if (path.endsWith("settings")) return { bindings: [{ name: "DB", type: "d1", id: dbId }, { name: "DEPLOYMENT_ENVIRONMENT", text: "staging" }, { name: "DEPLOYMENT_VERSION", text: expectedVersion }] };
+    if (path.endsWith("settings")) return { bindings: [{ name: "DB", type: "d1", id: dbId }, { name: "DEPLOYMENT_ENVIRONMENT", text: "staging" }, { name: "DEPLOYMENT_VERSION", text: expectedVersion }, { name: "PRIMARY_DOMAIN", text: "staging.tembotechventures.com" }, { name: "BETTER_AUTH_URL", text: "https://staging.tembotechventures.com" }] };
     if (path.endsWith(dbId)) return { uuid: dbId, name: "ttv-website-db-staging" };
     const { sql, params } = options.body;
     const statement = db.prepare(sql);
     return [{ results: sql.startsWith("SELECT") ? statement.all(...params) : (statement.run(...params), []) }];
   });
-  const target = await verifyStagingFixtureTarget({ environmentName: "staging", accountId, expectedVersion, baseUrl: "https://ttv-website-staging.fixture.workers.dev", api,
+  const target = await verifyStagingFixtureTarget({ environmentName: "staging", accountId, expectedVersion, baseUrl: "https://staging.tembotechventures.com", api,
     fetchImpl: async () => Response.json({ service: "ttv-website", environment: "staging", version: expectedVersion, checks: { db: "ok" } }) });
   return { db, api, options: { target, signingSecret } };
 }

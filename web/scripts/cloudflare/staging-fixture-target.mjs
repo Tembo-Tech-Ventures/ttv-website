@@ -1,4 +1,5 @@
 export const STAGING_FIXTURE_DATABASE_ID = "8df53ce1-0e9d-4e51-aaac-329f84cf1d5f";
+export const STAGING_FIXTURE_ORIGIN = "https://staging.tembotechventures.com";
 const targets = new WeakSet();
 
 /** Read-only preflight. The returned executor is permanently bound to staging. */
@@ -8,7 +9,7 @@ export async function verifyStagingFixtureTarget({ environmentName, accountId, e
   }
   const url = new URL(baseUrl);
   if (url.protocol !== "https:" || url.username || url.password || url.port || url.search || url.hash || url.pathname !== "/" ||
-      !/^ttv-website-staging\.[a-z0-9-]+\.workers\.dev$/.test(url.hostname)) {
+      url.origin !== STAGING_FIXTURE_ORIGIN) {
     throw new Error("Only the shared staging Worker origin is supported.");
   }
   try {
@@ -18,7 +19,8 @@ export async function verifyStagingFixtureTarget({ environmentName, accountId, e
     const bindings = settings?.bindings ?? [];
     const binding = (name) => bindings.find((item) => item.name === name);
     if (binding("DB")?.type !== "d1" || binding("DB")?.id !== STAGING_FIXTURE_DATABASE_ID ||
-        binding("DEPLOYMENT_ENVIRONMENT")?.text !== "staging" || binding("DEPLOYMENT_VERSION")?.text !== expectedVersion) {
+        binding("DEPLOYMENT_ENVIRONMENT")?.text !== "staging" || binding("DEPLOYMENT_VERSION")?.text !== expectedVersion ||
+        binding("PRIMARY_DOMAIN")?.text !== url.hostname || binding("BETTER_AUTH_URL")?.text !== STAGING_FIXTURE_ORIGIN) {
       throw new Error("Worker binding mismatch");
     }
     const database = await api(`/d1/database/${STAGING_FIXTURE_DATABASE_ID}`);
