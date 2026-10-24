@@ -110,7 +110,9 @@ test.describe("authenticated talent foundation", () => {
       await opener.click();
       await expect(opener).toHaveAttribute("aria-expanded", "true");
     }
-    await expect(page.getByRole("link", { name: "Profile" })).toBeVisible();
+    const profileLink = page.getByRole("link", { name: "Profile", exact: true });
+    await expect(profileLink).toBeVisible();
+    await expect(profileLink).toHaveAttribute("href", "/dashboard/portfolio");
     await expect(page.getByRole("link", { name: "Leads" })).toBeVisible();
     await expect(
       page.getByRole("link", { name: "Opportunities" })
