@@ -5,6 +5,7 @@ import DiscoveryShell from "../discovery/DiscoveryShell";
 import { EvidenceLinks } from "../discovery/ScoutWorkspace";
 import { evidenceHref } from "../discovery/types";
 import type { CommunityProfile, JourneyClaim } from "../discovery/types";
+import ProfileEditor, { type EditableCommunityProfile } from "./ProfileEditor";
 
 export interface ClaimDraft {
   title: string;
@@ -32,15 +33,21 @@ export function validateClaimDraft(draft: ClaimDraft): string | null {
 }
 
 export default function JourneyWorkspace({
-  profile,
+  profile: initialProfile,
   demo = false,
   onSave,
+  onSaveProfile,
 }: {
   profile: CommunityProfile;
   demo?: boolean;
   onSave?: (draft: ClaimDraft) => Promise<JourneyClaim>;
+  onSaveProfile?: (
+    draft: EditableCommunityProfile,
+  ) => Promise<CommunityProfile>;
 }) {
-  const [claims, setClaims] = useState(profile.claims);
+  const [profile, setProfile] = useState(initialProfile);
+  const [claims, setClaims] = useState(initialProfile.claims);
+  const [editingProfile, setEditingProfile] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<ClaimDraft>({
     title: "",
@@ -153,6 +160,37 @@ export default function JourneyWorkspace({
               recordings, and internal information do not belong here.
             </p>
           </div>
+          <button
+            type="button"
+            className="discovery-text-button"
+            onClick={() => setEditingProfile(!editingProfile)}
+            aria-expanded={editingProfile}
+          >
+            {editingProfile ? "Close profile editor" : "Edit your profile"}
+          </button>
+          {editingProfile && (
+            <ProfileEditor
+              demo={demo}
+              initial={{
+                headline: profile.headline,
+                bio: profile.about,
+                skills: profile.skills,
+                opportunityGoals: profile.goal,
+              }}
+              onSave={async (profileDraft) => {
+                if (onSaveProfile) setProfile(await onSaveProfile(profileDraft));
+                else if (demo)
+                  setProfile((current) => ({
+                    ...current,
+                    headline: profileDraft.headline,
+                    about: profileDraft.bio,
+                    skills: profileDraft.skills,
+                    goal: profileDraft.opportunityGoals,
+                  }));
+                else throw new Error("Profile saving is unavailable.");
+              }}
+            />
+          )}
           <div className="discovery-results-bar">
             <div>
               <span className="discovery-eyebrow">Keep the story moving</span>

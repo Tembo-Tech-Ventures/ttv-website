@@ -160,3 +160,38 @@ test("mentor save failure preserves the note for retry", async ({ page }) => {
     page.getByRole("button", { name: "Save demo review" }),
   ).toBeEnabled();
 });
+
+test("member can edit profile and see updated opportunity goals", async ({
+  page,
+}) => {
+  await page.goto("/dev/community-ui?view=journey");
+  await page.getByRole("button", { name: "Edit your profile" }).click();
+  await page
+    .getByLabel("Headline", { exact: true })
+    .fill("Building accessible community tools");
+  await page.getByLabel("Opportunity goals").fill("A frontend apprenticeship");
+  await page.getByRole("button", { name: "Save demo profile" }).click();
+  await expect(
+    page.getByText("Demo profile saved.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("complementary")
+      .getByText("A frontend apprenticeship", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close profile editor" }).click();
+  await expect(
+    page.getByText("Building accessible community tools", { exact: true }),
+  ).toBeVisible();
+});
+
+test("profile failure keeps edited text available", async ({ page }) => {
+  await page.goto("/dev/community-ui?view=journey&fail=1");
+  await page.getByRole("button", { name: "Edit your profile" }).click();
+  await page.getByLabel("Headline", { exact: true }).fill("My new headline");
+  await page.getByRole("button", { name: "Save demo profile" }).click();
+  await expect(page.getByRole("alert")).toContainText("could not be saved");
+  await expect(page.getByLabel("Headline", { exact: true })).toHaveValue(
+    "My new headline",
+  );
+});

@@ -18,6 +18,13 @@ export default function CommunityDemo({
       <JourneyWorkspace
         profile={profile}
         demo
+        onSaveProfile={
+          fail
+            ? async () => {
+                throw new Error("Demo save failure");
+              }
+            : undefined
+        }
         onSave={
           fail
             ? async () => {
