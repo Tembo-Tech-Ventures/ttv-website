@@ -1,10 +1,18 @@
+const guardedContexts = new WeakSet();
+const pendingSaves = new WeakMap();
+
 /** Keep synthetic feedback bearer requests inside their original browser origin. */
 export async function guardFeedbackBrowserContext(context, baseURL) {
+  if (guardedContexts.has(context)) throw new Error("Feedback context already guarded.");
   const origin = new URL(baseURL).origin;
   await context.route("**/*", async route => {
     const request = route.request();
     if (new URL(request.url()).origin !== origin || request.redirectedFrom()) {
       return route.abort();
+    }
+    const save = pendingSaves.get(request.frame?.()?.page());
+    if (save && request.url() === save.url && request.method() === "POST") {
+      return save.handle(route);
     }
     let response;
     try {
@@ -16,6 +24,18 @@ export async function guardFeedbackBrowserContext(context, baseURL) {
     if (response.status() >= 300 && response.status() < 400) return route.abort();
     return route.fulfill({ response });
   });
+  guardedContexts.add(context);
+}
+
+/** Stop page traffic before draining handlers and disposing fetched responses. */
+export async function closeFeedbackBrowserContext(context) {
+  try {
+    await Promise.all(context.pages().map(page => page.close()));
+    await context.unrouteAll({ behavior: "wait" });
+    await context.close();
+  } catch {
+    throw new Error("Feedback browser cleanup failed safely.");
+  }
 }
 
 /** APIRequestContext bypasses browser routing and can include headers in errors. */
@@ -37,39 +57,38 @@ export async function feedbackApiRequest(api, baseURL, target, options = {}) {
 export async function submitFeedbackAdminSave(page, baseURL, submit) {
   const current = new URL(page.url());
   const base = new URL(baseURL);
-  if (base.username || base.password || current.origin !== base.origin || current.username || current.password ||
+  if (!guardedContexts.has(page.context()) || pendingSaves.has(page) || base.username || base.password || current.origin !== base.origin || current.username || current.password ||
       !/^\/admin\/feedback\/(?:themes\/)?[^/]+$/.test(current.pathname)) {
     throw new Error("Feedback save requires an exact admin page.");
   }
   const receipt = new URL(current.pathname, base.origin);
   receipt.search = "?saved=1";
   let accepted = false;
-  const match = url => url.href === current.href;
+  // Keep one stable interceptor: removing a page route while context fetches
+  // run can auto-forward the original request and bypass redirect containment.
   const handler = async route => {
     const request = route.request();
-    if (request.method() !== "POST") return route.fallback();
     try {
       if (!request.isNavigationRequest() || request.redirectedFrom()) throw new Error();
       const response = await route.fetch({ maxRedirects: 0 });
       const location = response.headers().location;
       accepted = [302, 303].includes(response.status()) && Boolean(location) &&
         new URL(location, current).href === receipt.href;
-      // No Location header or upstream body reaches the browser. The test
-      // explicitly navigates only after validating the expected receipt URL.
-      await route.fulfill({ status: accepted ? 200 : 400, contentType: "text/html", body: "<!doctype html><title>Save response</title>" });
     } catch {
       accepted = false;
-      await route.abort();
+      return route.abort();
     }
+    // Never attempt a second terminal action if fulfill itself fails.
+    return route.fulfill({ status: accepted ? 200 : 400, contentType: "text/html", body: "<!doctype html><title>Save response</title>" });
   };
   try {
     try {
-      await page.route(match, handler);
+      pendingSaves.set(page, { url: current.href, handle: handler });
       await submit();
       if (!accepted) throw new Error();
       await page.goto(receipt.href);
     } finally {
-      await page.unroute(match, handler);
+      pendingSaves.delete(page);
     }
   } catch {
     throw new Error("Feedback save failed safely; receipt was not validated.");

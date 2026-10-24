@@ -82,20 +82,27 @@ describe("admin save receipt containment", () => {
     const sensitive = new Error("fictional-secret-in-call-log");
     let handler;
     const route = {
-      request: () => ({ method: () => "POST", isNavigationRequest: () => navigation, redirectedFrom: () => redirected ? {} : null }),
+      request: () => ({ url: () => current, frame: () => ({ page: () => page }), method: () => "POST", isNavigationRequest: () => navigation, redirectedFrom: () => redirected ? {} : null }),
       fetch: failure === "fetch" ? vi.fn().mockRejectedValue(sensitive) : vi.fn().mockResolvedValue({ status: () => status, headers: () => ({ location, "set-cookie": "must-not-copy" }) }),
-      fulfill: vi.fn(), abort: vi.fn(), fallback: vi.fn(),
+      fulfill: failure === "fulfill" ? vi.fn().mockRejectedValue(sensitive) : vi.fn(), abort: vi.fn(), fallback: vi.fn(),
     };
+    const context = { route: vi.fn(async (_match, callback) => { handler = callback; }) };
     const page = {
+      context: () => context,
       url: () => current,
-      route: vi.fn(async (_match, callback) => { handler = callback; }),
-      unroute: failure === "cleanup" ? vi.fn().mockRejectedValue(sensitive) : vi.fn(),
+      route: vi.fn(),
+      unroute: vi.fn(),
       goto: failure === "goto" ? vi.fn().mockRejectedValue(sensitive) : vi.fn(),
     };
+    await guardFeedbackBrowserContext(context, "https://preview.example");
     const error = await submitFeedbackAdminSave(page, "https://preview.example", async () => {
       if (failure === "submit") throw sensitive;
       await handler(route);
     }).catch(value => value);
+    expect(context.route).toHaveBeenCalledOnce();
+    expect(page.route).not.toHaveBeenCalled();
+    expect(page.unroute).not.toHaveBeenCalled();
+    if (failure === "fulfill") expect(route.abort).not.toHaveBeenCalled();
     return { error, page, route };
   }
   it.each([302, 303])("accepts only a validated %s receipt without copying upstream data", async status => {
@@ -104,7 +111,6 @@ describe("admin save receipt containment", () => {
     expect(route.fetch).toHaveBeenCalledWith({ maxRedirects: 0 });
     expect(route.fulfill).toHaveBeenCalledWith({ status: 200, contentType: "text/html", body: "<!doctype html><title>Save response</title>" });
     expect(page.goto).toHaveBeenCalledWith("https://preview.example/admin/feedback/fictional?saved=1");
-    expect(page.unroute).toHaveBeenCalledOnce();
   });
   it.each([
     "https://foreign.example/admin/feedback/fictional?saved=1",
@@ -116,21 +122,46 @@ describe("admin save receipt containment", () => {
     const { error, page } = await scenario({ location });
     expect(error.message).toContain("failed safely");
     expect(page.goto).not.toHaveBeenCalled();
-    expect(page.unroute).toHaveBeenCalledOnce();
   });
   it.each([{ navigation: false }, { redirected: true }])("rejects non-form/redirect-chain requests before fetch: %j", async options => {
     const { error, route, page } = await scenario(options);
     expect(error.message).toContain("failed safely");
     expect(route.fetch).not.toHaveBeenCalled();
     expect(page.goto).not.toHaveBeenCalled();
-    expect(page.unroute).toHaveBeenCalledOnce();
   });
-  it.each(["fetch", "submit", "goto", "cleanup"])("sanitizes %s failure and always attempts route cleanup", async failure => {
-    const { error, page } = await scenario({ failure });
+  it.each(["fetch", "submit", "goto", "fulfill"])("sanitizes %s failure without changing interceptor ownership", async failure => {
+    const { error } = await scenario({ failure });
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toContain("failed safely");
     expect(`${error}\n${error.stack}\n${JSON.stringify(error)}`).not.toContain("fictional-secret-in-call-log");
     expect(error.cause).toBeUndefined();
-    expect(page.unroute).toHaveBeenCalledOnce();
+  });
+});
+
+describe("feedback browser cleanup ordering", () => {
+  it("closes pages while guarded, drains handlers, then disposes the context", async () => {
+    const { closeFeedbackBrowserContext } = await import("./feedback-browser-guard.mjs");
+    const order = [];
+    const context = {
+      pages: () => [{ close: async () => { order.push("page"); } }],
+      unrouteAll: vi.fn(async () => { order.push("drain"); }),
+      close: vi.fn(async () => { order.push("context"); }),
+    };
+    await closeFeedbackBrowserContext(context);
+    expect(order).toEqual(["page", "drain", "context"]);
+    expect(context.unrouteAll).toHaveBeenCalledWith({ behavior: "wait" });
+  });
+  it("reports a sanitized drain failure without pretending cleanup completed", async () => {
+    const { closeFeedbackBrowserContext } = await import("./feedback-browser-guard.mjs");
+    const context = {
+      pages: () => [],
+      unrouteAll: vi.fn().mockRejectedValue(new Error("fictional-secret-in-call-log")),
+      close: vi.fn(),
+    };
+    const error = await closeFeedbackBrowserContext(context).catch(value => value);
+    expect(error.message).toBe("Feedback browser cleanup failed safely.");
+    expect(error.cause).toBeUndefined();
+    expect(error.stack).not.toContain("fictional-secret-in-call-log");
+    expect(context.close).not.toHaveBeenCalled();
   });
 });

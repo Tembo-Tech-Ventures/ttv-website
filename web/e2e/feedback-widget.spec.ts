@@ -1,7 +1,7 @@
 import { expect, test, type Browser } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { FIXTURE_ENVIRONMENT } from "./fixture-env";
-import { guardFeedbackBrowserContext, feedbackApiRequest, submitFeedbackAdminSave } from "../scripts/cloudflare/feedback-browser-guard.mjs";
+import { guardFeedbackBrowserContext, closeFeedbackBrowserContext, feedbackApiRequest, submitFeedbackAdminSave } from "../scripts/cloudflare/feedback-browser-guard.mjs";
 
 const EVIDENCE_DIR = "test-results/evidence";
 mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -94,7 +94,12 @@ test.describe("student feedback loop", () => {
     await adminPage.goto(`/admin/feedback/${item!.id}`);
     await adminPage.getByLabel("Status").selectOption("RESOLVED");
     await adminPage.getByLabel(/Reply to/).fill("Thanks! Fixed in the latest release.");
+    await expect(adminPage.getByLabel(/Reply to/)).toHaveValue("Thanks! Fixed in the latest release.");
+    const submittedReplyMatches = adminPage.waitForRequest(request =>
+      request.url() === adminPage.url() && request.method() === "POST"
+    ).then(request => new URLSearchParams(request.postData() ?? "").get("response") === "Thanks! Fixed in the latest release.");
     await submitFeedbackAdminSave(adminPage, baseURL!, () => adminPage.getByRole("button", { name: "Save" }).click());
+    expect(await submittedReplyMatches, "Submitted fictional reply must match the filled form").toBe(true);
     await expect(adminPage.getByText("Saved.")).toBeVisible();
     await adminPage.reload();
     await expect(adminPage.getByLabel("Status")).toHaveValue("RESOLVED");
@@ -106,8 +111,8 @@ test.describe("student feedback loop", () => {
     await expect(entry).toContainText("Thanks! Fixed in the latest release.");
     await page.screenshot({ path: evidence("replied"), fullPage: true });
 
-    await student.close();
-    await admin.close();
+    await closeFeedbackBrowserContext(student);
+    await closeFeedbackBrowserContext(admin);
   });
 
   test("a theme carries every student on it from planned to done", async ({ browser, baseURL }) => {
@@ -178,8 +183,8 @@ test.describe("student feedback loop", () => {
     await expect(entry.getByRole("link", { name: "Follow the plan" })).toHaveCount(0);
     await page.screenshot({ path: evidence("theme-shipped"), fullPage: true });
 
-    await student.close();
-    await admin.close();
+    await closeFeedbackBrowserContext(student);
+    await closeFeedbackBrowserContext(admin);
   });
 
   test("signed-out visitors cannot open feedback screenshots", async ({ browser, baseURL }) => {
@@ -194,7 +199,7 @@ test.describe("student feedback loop", () => {
     const anonymous = await browser.newContext({ baseURL });
     const anonymousResponse = await anonymous.request.get(withImage!.attachments[0].url);
     expect(anonymousResponse.status()).toBe(401);
-    await anonymous.close();
-    await admin.close();
+    await closeFeedbackBrowserContext(anonymous);
+    await closeFeedbackBrowserContext(admin);
   });
 });
