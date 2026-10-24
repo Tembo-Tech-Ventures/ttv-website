@@ -20,6 +20,8 @@ import {
   type CommunityAccess,
 } from "./community-client";
 
+import { assessProfile } from "./assessment-client";
+
 type View = "journey" | "scout" | "mentor";
 export function canOpenWorkspace(view: View, access: CommunityAccess) {
   return (
@@ -141,6 +143,7 @@ export default function CommunityApp({ view }: { view: View }) {
         onSearch={searchProfiles}
         onOpenProfile={loadProfile}
         onAsk={askProfile}
+        onAssess={assessProfile}
       />
     );
   else if (view === "journey" && profile)

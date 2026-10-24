@@ -126,6 +126,7 @@ describe("ChatApp", () => {
 
     expect(links.map((link) => link.label)).toEqual([
       "Home",
+      "Community",
       "Apply",
       "Account",
       "Logout",

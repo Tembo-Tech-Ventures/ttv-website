@@ -1,0 +1,8 @@
+---
+import PublicLayout from "@/layouts/PublicLayout.astro";
+import CommunityIntro from "@/components/community/CommunityIntro";
+---
+
+<PublicLayout title="Community | Tembo Tech Ventures" description="A community for TTV students and builders beyond our cohorts. Share contributions, connect work to evidence, and explore opportunities through informed conversations." canonical="/community">
+  <CommunityIntro full isAuthenticated={Boolean(Astro.locals.user)} />
+</PublicLayout>

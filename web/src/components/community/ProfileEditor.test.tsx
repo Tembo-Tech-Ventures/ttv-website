@@ -39,6 +39,8 @@ describe("ProfileEditor", () => {
     expect(html).toContain('maxLength="4000"');
     expect(html).toContain('maxLength="2000"');
     expect(html).toContain("aria-labelledby=");
+    expect(html).toContain("Saving updates the community profile that approved institutions can");
+    expect(html).toContain("-visibility");
     expect(html).not.toContain("Profile saved.");
     expect(save).not.toHaveBeenCalled();
   });

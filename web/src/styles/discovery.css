@@ -1023,3 +1023,77 @@
     overflow-wrap: anywhere;
   }
 }
+
+.discovery-assessment {
+  border-bottom: 1px solid var(--d-rule);
+  padding-bottom: 28px;
+  margin-bottom: 28px;
+}
+.discovery-assessment h3 {
+  margin-bottom: 12px;
+}
+.discovery-assessment fieldset {
+  border: 0;
+  padding: 0;
+  margin: 20px 0 0;
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+.discovery-assessment-criterion {
+  display: grid;
+  gap: 8px;
+  padding: 16px 0;
+  border-top: 1px solid var(--d-rule);
+}
+.discovery-assessment input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--d-rule);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--d-paper);
+  color: var(--d-ink);
+}
+.discovery-assessment-results {
+  margin-top: 24px;
+  overflow-wrap: anywhere;
+}
+.discovery-assessment-results section {
+  border-top: 1px solid var(--d-rule);
+  margin-top: 16px;
+  padding-top: 12px;
+}
+.discovery-assessment-results h4 {
+  margin: 0 0 8px;
+}
+.discovery-assessment-results ul {
+  padding-left: 20px;
+}
+.discovery-assessment-results li {
+  margin-bottom: 12px;
+}
+.discovery-assessment-results blockquote {
+  margin: 8px 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--d-rule);
+}
+.discovery-assessment-status {
+  color: var(--d-accent);
+  font-weight: 600;
+}
+.discovery-assessment-results li > a {
+  display: block;
+  margin-top: 6px;
+}
+.discovery-assessment-scale {
+  margin-top: 14px;
+  font-size: 0.875rem;
+}
+.discovery-assessment-scale summary {
+  cursor: pointer;
+  text-decoration: underline;
+}
+.discovery-assessment-scale ol {
+  padding-left: 22px;
+}

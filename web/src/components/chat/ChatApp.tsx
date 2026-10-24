@@ -86,7 +86,7 @@ export default function ChatApp({
   mockTranscripts = NO_TRANSCRIPTS,
   mockLatencyMs = MOCK_LATENCY_MS,
   mockLoadMs = MOCK_LOAD_MS,
-  visibleLinkIds = DASHBOARD_LINKS.map((link) => link.id),
+  visibleLinkIds = DASHBOARD_LINKS.map((link) => link.id).filter((id) => id !== "community"),
   unreadLeadCount = 0,
 }: ChatAppProps) {
   const [sessions, setSessions] = useState<ChatSession[]>(initialSessions);

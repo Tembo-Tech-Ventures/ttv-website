@@ -109,7 +109,7 @@ export default function ProfileEditor({
       <form
         onSubmit={submit}
         aria-busy={busy}
-        aria-describedby={error ? `${id}-error` : undefined}
+        aria-describedby={`${id}-visibility${error ? ` ${id}-error` : ""}`}
       >
         <fieldset disabled={busy}>
           <legend>Profile details</legend>
@@ -157,6 +157,10 @@ export default function ProfileEditor({
               }
             />
           </label>
+          <p id={`${id}-visibility`} className="discovery-notice">
+            Saving updates the community profile that approved institutions can
+            discover. Only include information you want to share with them.
+          </p>
           <button className="discovery-button" type="submit">
             {busy
               ? "Saving profile…"

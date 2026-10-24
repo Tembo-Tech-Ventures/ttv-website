@@ -8,6 +8,9 @@ import {
   Sparkle,
   Link as LinkIcon,
 } from "@phosphor-icons/react";
+import EvidenceAssessment, {
+  type AssessEvidence,
+} from "../community/EvidenceAssessment";
 import DiscoveryShell from "./DiscoveryShell";
 import ClaimConfirmations from "./ClaimConfirmations";
 import { displayUiError } from "./ui-errors";
@@ -27,6 +30,7 @@ interface Props {
   profiles: CommunityProfile[];
   initialProfile?: CommunityProfile | null;
   demo?: boolean;
+  onAssess?: AssessEvidence;
   onSearch?: (criteria: ScoutCriteria) => Promise<CommunityProfile[]>;
   onOpenProfile?: (profileId: string) => Promise<CommunityProfile>;
   onAsk?: (
@@ -69,11 +73,13 @@ function ProfileEvidence({
   criteria,
   demo,
   onAsk,
+  onAssess,
 }: {
   profile: CommunityProfile;
   criteria: ScoutCriteria;
   demo: boolean;
   onAsk?: Props["onAsk"];
+  onAssess?: AssessEvidence;
 }) {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<EvidenceAnswer | null>(null);
@@ -183,6 +189,9 @@ function ProfileEvidence({
           <Sparkle size={22} aria-hidden="true" />
           <span className="discovery-eyebrow">Go beyond the headline</span>
         </div>
+        {onAssess && (
+          <EvidenceAssessment profile={profile} onAssess={onAssess} />
+        )}
         <h2>Ask about the work.</h2>
         <p>
           Explore this person's contributions, sources, and what still needs a
@@ -284,6 +293,7 @@ export default function ScoutWorkspace({
   onSearch,
   onAsk,
   onOpenProfile,
+  onAssess,
 }: Props) {
   const [criteria, setCriteria] = useState<ScoutCriteria>({
     context: "",
@@ -390,6 +400,7 @@ export default function ScoutWorkspace({
             criteria={appliedCriteria}
             demo={demo}
             onAsk={onAsk}
+            onAssess={onAssess}
           />
         </>
       ) : (

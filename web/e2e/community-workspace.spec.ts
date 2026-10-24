@@ -112,6 +112,17 @@ test("save failure preserves a member's contribution", async ({ page }) => {
   await expect(page.getByLabel("Entry title")).toHaveValue("My saved draft");
 });
 
+test("member editors explain who can see their work before saving", async ({ page }) => {
+  await page.goto("/dev/community-ui?view=journey");
+  await expect(page.getByText("Unpublished drafts are visible only to you", { exact: false })).toHaveCount(0);
+  await page.getByRole("button", { name: "Add a contribution" }).click();
+  await expect(page.locator("#contribution-sharing")).toContainText("Saving shares this contribution with approved institutions");
+  await expect(page.locator("#contribution-sharing")).toContainText("This is not a private draft");
+  await expect(page.locator("form.discovery-entry-form")).toHaveAttribute("aria-describedby", "contribution-sharing");
+  await page.getByRole("button", { name: "Edit your profile" }).click();
+  await expect(page.getByText("Saving updates the community profile", { exact: false })).toBeVisible();
+});
+
 test("mentor confirms the reviewed claim with a personal note", async ({
   page,
 }, testInfo) => {

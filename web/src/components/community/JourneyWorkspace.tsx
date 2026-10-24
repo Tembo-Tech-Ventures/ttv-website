@@ -166,10 +166,10 @@ export default function JourneyWorkspace({
           <div className="discovery-visibility">
             <strong>Who can discover this?</strong>
             <p>
-              Your profile and journey contributions help approved institutions
-              discover community members for opportunities. Unpublished drafts
-              are visible only to you. Private calls, recordings, and internal
-              information do not belong here.
+              Your community profile and the contributions you save here are
+              available to approved institutions. Mentors can review those shared
+              contributions. Private calls, recordings, and internal information
+              do not belong here.
             </p>
           </div>
           <button
@@ -225,6 +225,7 @@ export default function JourneyWorkspace({
             <form
               className="discovery-panel discovery-entry-form"
               onSubmit={save}
+              aria-describedby="contribution-sharing"
             >
               <h2>What did you contribute?</h2>
               <p>
@@ -294,6 +295,10 @@ export default function JourneyWorkspace({
                     {error}
                   </p>
                 )}
+                <p id="contribution-sharing" className="discovery-notice">
+                  Saving shares this contribution with approved institutions and
+                  makes it available for mentor review. This is not a private draft.
+                </p>
                 <div className="discovery-actions">
                   <button className="discovery-button" disabled={busy}>
                     {busy ? "Saving…" : "Save contribution"}
