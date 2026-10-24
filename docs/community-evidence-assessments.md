@@ -143,3 +143,9 @@ text, schema errors, IDs, prompts or credentials are added to diagnostics.
 This is diagnostic preparation for the next authorized single attempt, not proof
 of a working assessment or permission to retry. Citation/schema checks, missing
 evidence semantics, the one-attempt claim and cleanup remain enforced.
+
+### Request JSON from Gemma (2026-10-24)
+
+The bounded synthetic assessment on integrated revision `23fdd5d181fed57548135bf9a8488c1127d1b17c` returned `outputReason=json`; cleanup passed. This proves a nonempty completion reached JSON parsing and failed, not what its raw formatting contained. No raw completion was retained.
+
+The assessment request now sets `response_format: { type: "json_object" }`, explicitly supported by the selected [Gemma synchronous input schema](https://developers.cloudflare.com/workers-ai/models/gemma-4-26b-a4b-it/sync-input.json). This is the smallest change targeting the observed syntax failure. The rubric schema remains in the prompt and all server-side schema, criterion, citation, refusal and truncation checks remain authoritative. JSON object mode does not establish factual correctness or schema compliance. There is no text repair, fallback or retry. The serialized request measurement includes the new setting before the atomic probe claim. Live effectiveness remains unverified until the next authorized staging assessment.

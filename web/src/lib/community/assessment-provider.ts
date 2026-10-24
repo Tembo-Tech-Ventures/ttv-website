@@ -61,6 +61,7 @@ export function createAssessmentProvider(env?: Env, options: AssessmentProviderO
 
 function serializeAssessmentRequest(messages: GatewayMessage[], isProbe: boolean) {
   const body = JSON.stringify({ messages, stream: false, temperature: 0,
+    response_format: { type: "json_object" },
     max_completion_tokens: 3000, chat_template_kwargs: { enable_thinking: false },
   });
   const measurement = isProbe

@@ -11,7 +11,7 @@ describe("native Gateway assessment provider", () => {
     expect(options.returnRawResponse).toBe(true); expect(options.signal).toBeInstanceOf(AbortSignal);
     expect(options.gateway).toMatchObject({id:"gateway",skipCache:true,collectLog:false,retries:{maxAttempts:1}});
     expect(body).toMatchObject({ max_completion_tokens: 3000, temperature: 0 });
-    expect(body).not.toHaveProperty("response_format"); expect(body).not.toHaveProperty("tools");
+    expect(body.response_format).toEqual({ type: "json_object" }); expect(body).not.toHaveProperty("tools");
   });
   it.each([undefined, { ...env, AI_GATEWAY_NAME: "" }, { ...env, AI: undefined }, { ...env, AI_GATEWAY_NAME: "default" }])("requires explicit Gateway and binding configuration, no direct fallback", async config => {
     const fetch = vi.fn(); nativeRun = fetch;
