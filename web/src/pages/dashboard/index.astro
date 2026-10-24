@@ -2,6 +2,7 @@
 import DashboardLayout from "@/layouts/DashboardLayout.astro";
 import Card from "@/components/common/Card.astro";
 import Button from "@/components/common/Button.astro";
+import { CommunityJourneyCard } from "@/components/community/CommunityIntro";
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
@@ -61,5 +62,6 @@ Astro.cookies.set("ttv-dashboard-visited", user.id, {
         </div>
       </Card>
     </section>
+    <CommunityJourneyCard />
   </div>
 </DashboardLayout>

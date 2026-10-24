@@ -1,0 +1,3 @@
+@import "../../src/styles/global.css";
+/* The Vite fixture root is outside src; include the actual component utilities. */
+@source "../../src";

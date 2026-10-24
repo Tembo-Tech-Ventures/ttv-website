@@ -9,6 +9,7 @@ const config = {
   // import analysis; older Vite versions ignore this option.
   oxc: { jsx: { runtime: "automatic" as const } },
   root: fileURLToPath(new URL("./component-preview", import.meta.url)),
+  resolve: { alias: { "@": fileURLToPath(new URL("../src", import.meta.url)) } },
   plugins: [tailwindcss()],
   server: { host: "127.0.0.1", port: 4322, strictPort: true },
 };

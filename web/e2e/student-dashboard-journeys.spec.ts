@@ -19,6 +19,7 @@ const personas = [
     activeLabel: "Apply",
     links: [
       "/dashboard",
+      "/dashboard/community",
       "/dashboard/apply",
       "/dashboard/ask",
       "/dashboard/profile",
@@ -35,6 +36,7 @@ const personas = [
     activeLabel: "Sessions",
     links: [
       "/dashboard",
+      "/dashboard/community",
       "/dashboard/apply",
       "/dashboard/sessions",
       "/dashboard/ask",
@@ -52,6 +54,7 @@ const personas = [
     activeLabel: "Sessions",
     links: [
       "/dashboard",
+      "/dashboard/community",
       "/dashboard/apply",
       "/dashboard/sessions",
       "/dashboard/ask",
