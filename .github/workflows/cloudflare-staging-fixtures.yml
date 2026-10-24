@@ -1,16 +1,15 @@
 name: Cloudflare Staging Synthetic Verification
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       expected_sha:
         description: Exact deployed integration PR 171 head (reserve PM verification slot first)
         required: true
         type: string
 
-concurrency:
-  group: ttv-cloudflare-staging
-  cancel-in-progress: false
+# The registered caller holds the shared staging lock through this entire job.
+# Reusing that concurrency group here would deadlock the caller.
 
 jobs:
   preflight:

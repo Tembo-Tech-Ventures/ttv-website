@@ -28,6 +28,8 @@ describe("shared staging preflight", () => {
   });
 
   it.each([
+    { STAGING_ACTION: "production" },
+    { STAGING_ACTION: "" },
     { STAGING_INTEGRATION_BRANCH: "" },
     { STAGING_INTEGRATION_BRANCH: "main" },
     { STAGING_INTEGRATION_BRANCH: "production" },
@@ -41,7 +43,7 @@ describe("shared staging preflight", () => {
     { GH_TOKEN: "" },
   ])("rejects invalid dispatch before network access: %j", async (change) => {
     const fetchImpl = respond();
-    await expect(validateStagingRevision({ ...env, ...change }, { fetchImpl })).rejects.toThrow(/required|configured|Dispatch|Expected SHA/);
+    await expect(validateStagingRevision({ ...env, ...change }, { fetchImpl })).rejects.toThrow(/required|configured|Dispatch|Expected SHA|Staging action/);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
