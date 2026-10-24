@@ -2,7 +2,7 @@ import type { StagingFixtureIdentity } from "@/lib/staging-fixtures";
 import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
 import { CommunityError } from "./model";
 import { createCommunityService, type CommunityService } from "./service";
-import { assessEvidence } from "./assessment";
+import { assessCommunityProfile } from "./assessment-ai";
 import { runCommunityChat } from "./chat";
 
 export function communityJson(body: unknown, status = 200) {
@@ -84,7 +84,7 @@ async function dynamicRoute(ctx: RouteContext) {
   if (parts[0] !== "profiles" || parts.length < 2) return communityJson({error:"Route not found."},404);
   if (parts.length === 2 && ctx.request.method === "GET") return communityJson({profile: await ctx.service.getProfile(parts[1]),entries: await ctx.service.listJourney(parts[1])});
   if (parts.length === 3 && parts[2] === "assessment" && ctx.request.method === "POST") {
-    return communityJson({assessment: assessEvidence(await ctx.service.getProfile(parts[1]),await ctx.service.listJourney(parts[1]),ctx.body)});
+    return communityJson({assessment: await assessCommunityProfile(ctx.env,ctx.service,parts[1],ctx.body)});
   }
   return communityJson({error:"Route not found."},404);
 }
