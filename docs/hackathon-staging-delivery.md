@@ -150,3 +150,20 @@ verification. Signing credentials remain in GitHub's staging environment.
 
 GitHub documents same-commit relative workflow calls and staging job environment
 secret precedence in its [reusable workflow guide](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows).
+
+### Synthetic community screenshot publication
+
+The verification-only runner captures eight fixed synthetic desktop/mobile journey
+images. Publication is gated on the complete persona lifecycle (including database
+cleanup), every browser/context closing successfully, and a complete journey
+manifest. The runner clears stale evidence before starting and discards all nine
+allowlisted files on failure. The workflow uploads only those explicit filenames,
+only after success; it does not upload traces, storage state, logs, or arbitrary
+files from the results directory. Evidence expires after seven days.
+
+The final manifest is rebuilt from fixed fields with the verified deployed SHA,
+synthetic caption, completed viewports and cleanup receipt. It deliberately says
+model calls were not tested. An artifact upload is not itself proof of the journey:
+review the run's checks and cleanup receipt, then inspect the images before sharing
+accessible screenshot links in issue #170 with the exact revision and synthetic
+staging labels. Failed runs publish no screenshot artifacts.
