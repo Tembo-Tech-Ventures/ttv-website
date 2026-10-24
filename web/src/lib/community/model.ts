@@ -24,6 +24,7 @@ export const journeyInput = z.object({
   occurredAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((s) => {
     const d = new Date(s); return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === s;
   }, "Use a valid calendar date."),
+  // "private" is an unpublished draft, never an institutional discovery opt-out.
   visibility: z.enum(["institution", "private"]),
 }).strict();
 export const confirmationInput = z.object({

@@ -98,6 +98,13 @@ export function createCommunityService(db: D1Database, actorId: string) {
       const stored = await db.prepare(`SELECT createdAt FROM communityJourney WHERE id=?`).bind(id).first<{createdAt:number}>();
       return { id, ...p, userId: actorId, version: 1, createdAt: stored?.createdAt ?? null, confirmations: [] };
     },
+    async updateJourney(id: string,input: unknown) {
+      const p = parseInput(journeyInput,input);
+      const result = await db.prepare(`UPDATE communityJourney SET title=?,description=?,evidenceUrl=?,occurredAt=?,visibility=?,version=version+1,updatedAt=unixepoch() WHERE id=? AND userId=?`)
+        .bind(p.title,p.description,p.evidenceUrl ?? null,p.occurredAt,p.visibility,id,actorId).run();
+      if (!result.meta.changes) throw new CommunityError("Contribution not found.",404);
+      return {id,updated:true};
+    },
     async setJourneyVisibility(id: string, input: unknown) {
       if (!input || typeof input !== "object" || Array.isArray(input)) throw new CommunityError("Send a visibility change.");
       const p = input as Record<string, unknown>;
@@ -122,8 +129,8 @@ export function createCommunityService(db: D1Database, actorId: string) {
       const confirmationId = createId();
       // Repeat visibility/ownership predicates in the write to avoid a check/write race.
       const result = await db.prepare(`INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journeyVersion)
-        SELECT ?,id,?,?,?,version FROM communityJourney WHERE id=? AND visibility='institution' AND userId<>?`)
-        .bind(confirmationId,actorId,p.statement,p.method,id,actorId).run();
+        SELECT ?,id,?,?,?,version FROM communityJourney WHERE id=? AND visibility='institution' AND userId<>? AND version=?`)
+        .bind(confirmationId,actorId,p.statement,p.method,id,actorId,entry.version).run();
       if (!result.meta.changes) throw new CommunityError("Contribution no longer available.", 409);
       return { id: confirmationId, journeyId: id, mentorId: actorId, ...p, journeyVersion: entry.version };
     },

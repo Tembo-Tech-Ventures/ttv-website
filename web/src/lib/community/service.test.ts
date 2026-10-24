@@ -83,6 +83,15 @@ describe("community service real SQL boundaries", () => {
     expect((await createCommunityService(f.db,"other").access()).isInstitution).toBe(false);
     await expect(f.member.setAccess({userId:"other",role:"ADMIN",granted:true})).rejects.toMatchObject({status:400});
   });
+  it("versions edited evidence without transferring a mentor confirmation to the revision", async () => {
+    const f = fixture(); const item = await f.member.createJourney(entry);
+    await f.mentor.confirmJourney(item.id,{statement:"I checked the original implementation",method:"Review"});
+    await expect(createCommunityService(f.db,"other").updateJourney(item.id,{...entry,title:"Changed"})).rejects.toMatchObject({status:404});
+    await f.member.updateJourney(item.id,{...entry,title:"Changed implementation"});
+    const [saved] = await f.institution.listJourney("member");
+    expect(saved).toMatchObject({version:2,title:"Changed implementation"});
+    expect(saved.confirmations[0].journeyVersion).toBe(1);
+  });
   it("lets owners retract shared evidence while rejecting other users", async () => {
     const f = fixture(); const item = await f.member.createJourney(entry);
     await f.mentor.confirmJourney(item.id,{statement:"I reviewed this code",method:"Review"});

@@ -64,6 +64,7 @@ const routes: Record<string, Handler> = {
   },
 };
 async function journeyMutation(ctx: RouteContext,id: string) {
+  if (ctx.request.method === "PUT") return communityJson(await ctx.service.updateJourney(id,ctx.body));
   if (ctx.request.method === "PATCH") return communityJson(await ctx.service.setJourneyVisibility(id,ctx.body));
   if (ctx.request.method === "DELETE") return communityJson(await ctx.service.deleteJourney(id));
   return communityJson({error:"Route not found."},404);
