@@ -71,3 +71,11 @@ jobs:
           retention-days: 7
           if-no-files-found: error
           path: web/test-results/staging-assessment/manifest.json
+      - name: Publish allowlisted failure diagnostics without response bodies
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-assessment-failure-${{ inputs.expected_sha }}-${{ github.run_id }}
+          retention-days: 7
+          if-no-files-found: warn
+          path: web/test-results/staging-assessment/failure.json

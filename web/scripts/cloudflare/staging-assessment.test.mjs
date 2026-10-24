@@ -6,11 +6,51 @@ const baseUrl="https://staging.tembotechventures.com", expectedVersion="a".repea
 function runner() {
   const cleanup=vi.fn();
   const options={environment:{GITHUB_RUN_ATTEMPT:"1",CLOUDFLARE_ENVIRONMENT_NAME:"staging",STAGING_EXPECTED_SHA:expectedVersion},
+    api:vi.fn(async()=>({bindings:[{name:"AI_GATEWAY_API_KEY",type:"secret_text"},{name:"AI_GATEWAY_ACCOUNT_ID",type:"plain_text",text:"fictional"},{name:"AI_GATEWAY_NAME",type:"plain_text",text:"fictional"}]})),
     validateRevision:vi.fn(),verifyTarget:vi.fn(async()=>({baseUrl,expectedVersion})),getBindings:vi.fn(()=>[{key:"BETTER_AUTH_SECRET",value:"fictional-test-only"}]),
-    withPersonas:vi.fn(async({run})=>{try{await run({});}finally{await cleanup();}}),verifyAssessment:vi.fn(async()=>({synthetic:true})),discard:vi.fn(),publish:vi.fn()};
+    withPersonas:vi.fn(async({run})=>{try{await run({});}finally{await cleanup();}}),verifyAssessment:vi.fn(async()=>({synthetic:true})),discard:vi.fn(),publish:vi.fn(),publishFailure:vi.fn(),audit:vi.fn()};
   return {options,cleanup};
 }
 describe("assessment runner lifecycle",()=>{
+  it.each(["AI_GATEWAY_API_KEY","AI_GATEWAY_ACCOUNT_ID","AI_GATEWAY_NAME"])("fails before fixture writes when %s is absent",async name=>{
+    const {options}=runner(); const settings=await options.api(); settings.bindings=settings.bindings.filter(b=>b.name!==name);options.api.mockResolvedValue(settings);
+    await expect(runStagingAssessment(options)).rejects.toThrow("Synthetic assessment failed");
+    expect(options.withPersonas).not.toHaveBeenCalled();expect(options.verifyAssessment).not.toHaveBeenCalled();
+    expect(options.publishFailure).toHaveBeenCalledWith(expect.objectContaining({stage:"provider-readiness",code:"required-binding-missing",claim:"unknown",cleanupStatus:"not-started"}));
+  });
+  it("retains only allowlisted assessment claim metadata before failure",async()=>{
+    const {options}=runner();options.verifyAssessment.mockImplementation(async({progress})=>{
+      progress({stage:"assessment",code:"assessment-response",claimed:false,assessmentStatus:"unavailable",assessmentErrorCode:"provider_unavailable",payloadBytes:0,payloadCharacters:0,body:"PRIVATE"});throw new Error("PRIVATE");
+    });
+    await expect(runStagingAssessment(options)).rejects.toThrow("Synthetic assessment failed");
+    expect(options.publishFailure).toHaveBeenCalledWith(expect.objectContaining({claim:false,assessmentStatus:"unavailable",assessmentErrorCode:"provider_unavailable",payloadBytes:0,providerInvocation:"unknown"}));
+    expect(JSON.stringify(options.publishFailure.mock.calls)).not.toContain("PRIVATE");
+  });
+  it("retains safe phase/status and independent cleanup after a hostile failure",async()=>{
+    const {options}=runner();
+    options.withPersonas.mockImplementation(async({run,audit})=>{
+      try { await run({}); } finally { audit({event:"fixture-run-outcome",operation:"verification",operationStatus:"failed",cleanupStatus:"passed",token:"PRIVATE"}); }
+    });
+    options.verifyAssessment.mockImplementation(async({progress})=>{
+      progress({stage:"assessment",code:"http-response",httpStatus:503,body:"PRIVATE"});
+      progress({stage:"assessment",code:"validation-failed"});
+      progress({stage:"PRIVATE",code:"PRIVATE",httpStatus:999});
+      throw new Error("PRIVATE credential/provider body");
+    });
+    await expect(runStagingAssessment(options)).rejects.toThrow("Synthetic assessment failed");
+    expect(options.publishFailure).toHaveBeenCalledWith(expect.objectContaining({stage:"assessment",code:"validation-failed",httpStatus:503,operationStatus:"failed",cleanupStatus:"passed",providerInvocation:"unknown",retryAllowed:false}));
+    expect(JSON.stringify([options.publishFailure.mock.calls,options.audit.mock.calls])).not.toContain("PRIVATE");
+    expect(options.publish).not.toHaveBeenCalled();
+  });
+  it("distinguishes cleanup failure from successful verification",async()=>{
+    const {options}=runner();
+    options.withPersonas.mockImplementation(async({run,audit})=>{
+      await run({}); audit({event:"fixture-run-outcome",operation:"verification",operationStatus:"passed",cleanupStatus:"failed"});throw new Error("PRIVATE SQL");
+    });
+    await expect(runStagingAssessment(options)).rejects.toThrow("Synthetic assessment failed");
+    expect(options.publishFailure).toHaveBeenCalledWith(expect.objectContaining({operationStatus:"passed",cleanupStatus:"failed"}));
+    expect(options.publish).not.toHaveBeenCalled();
+  });
   it("publishes only after target verification and successful cleanup",async()=>{
     const {options,cleanup}=runner();await runStagingAssessment(options);
     expect(options.validateRevision.mock.invocationCallOrder[0]).toBeLessThan(options.verifyTarget.mock.invocationCallOrder[0]);
@@ -44,6 +84,9 @@ describe("assessment runner lifecycle",()=>{
     expect(workflow.split("  assess:")[0]).not.toContain("secrets.");
     expect(workflow).toContain('test "$GITHUB_RUN_ATTEMPT" = 1');
     expect(workflow).toContain("path: web/test-results/staging-assessment/manifest.json");
+    expect(workflow).toContain("path: web/test-results/staging-assessment/failure.json");
+    expect(workflow).toContain("if: ${{ failure() }}");
+    expect(workflow).not.toContain("test-results/staging-assessment/**");
     expect(workflow).not.toContain("AI_GATEWAY_TOKEN");expect(workflow).not.toContain("playwright");
     const caller=readFileSync(new URL("../../../.github/workflows/cloudflare-staging.yml",import.meta.url),"utf8");
     expect(caller).toContain("group: ttv-cloudflare-staging");expect(caller).toContain("cancel-in-progress: false");
@@ -66,6 +109,39 @@ function client() {
   return {personas,result,fetchImpl,target:{baseUrl,expectedVersion}};
 }
 describe("fixed assessment HTTP program",()=>{
+  it.each([["unavailable","provider_unavailable",false],["invalid_output","invalid_output",true]])("retains %s and claim before rejecting the real HTTP response",async(status,errorCode,claimed)=>{
+    const f=client(),{options}=runner();
+    Object.assign(f.result.assessment,{status,errorCode,criteria:[]});f.result.probe.claimed=claimed;
+    options.verifyAssessment.mockImplementation(({progress})=>verifyStagingAssessment({...f,progress}));
+    await expect(runStagingAssessment(options)).rejects.toThrow("Synthetic assessment failed");
+    expect(options.publishFailure).toHaveBeenCalledWith(expect.objectContaining({stage:"assessment",code:"validation-failed",httpStatus:200,assessmentStatus:status,assessmentErrorCode:errorCode,claim:claimed,providerInvocation:"unknown"}));
+    expect(f.fetchImpl).toHaveBeenCalledTimes(5);
+  });
+  it("times out only the evidence POST after successful prerequisites without retry",async()=>{
+    const f=client(),progress=vi.fn(),original=f.fetchImpl.getMockImplementation();let count=0;
+    f.fetchImpl.mockImplementation(async(...args)=>{if(++count===5)throw new Error("PRIVATE timeout");return original(...args);});
+    await expect(verifyStagingAssessment({...f,progress})).rejects.toThrow("Synthetic assessment verification failed");
+    expect(progress).toHaveBeenLastCalledWith({stage:"assessment",code:"transport-failed"});expect(f.fetchImpl).toHaveBeenCalledTimes(5);
+    expect(f.fetchImpl.mock.calls.filter(([url,o])=>url.includes(f.personas.member.userId)&&o.method==="POST"&&o.headers.Authorization.endsWith("fixture-institution"))).toHaveLength(1);
+  });
+  it.each([1,2,3,4,5,6])("reports the exact HTTP failure phase at call %s without reading error bodies",async call=>{
+    const f=client(),progress=vi.fn(),original=f.fetchImpl.getMockImplementation();let count=0;
+    f.fetchImpl.mockImplementation(async(...args)=>++count===call?new Response("PRIVATE",{status:500}):original(...args));
+    await expect(verifyStagingAssessment({...f,progress})).rejects.toThrow("Synthetic assessment verification failed");
+    const stage=["profile-write","journey-write","denied-role","no-evidence","assessment","consumed-session"][call-1];
+    expect(progress).toHaveBeenCalledWith({stage,code:"http-response",httpStatus:500});
+    expect(progress).toHaveBeenLastCalledWith({stage,code:"validation-failed"});
+    expect(JSON.stringify(progress.mock.calls)).not.toContain("PRIVATE");expect(f.fetchImpl).toHaveBeenCalledTimes(call);
+  });
+  it("reports transport and JSON failure classes without raw error messages",async()=>{
+    const f=client(),progress=vi.fn();f.fetchImpl.mockRejectedValue(new Error("PRIVATE"));
+    await expect(verifyStagingAssessment({...f,progress})).rejects.toThrow("Synthetic assessment verification failed");
+    expect(progress).toHaveBeenLastCalledWith({stage:"profile-write",code:"transport-failed"});
+    f.fetchImpl.mockResolvedValue(new Response("PRIVATE",{status:200}));
+    await expect(verifyStagingAssessment({...f,progress})).rejects.toThrow("Synthetic assessment verification failed");
+    expect(progress).toHaveBeenLastCalledWith({stage:"profile-write",code:"response-json-invalid"});
+    expect(JSON.stringify(progress.mock.calls)).not.toContain("PRIVATE");
+  });
   it("rejects an ordinary fixture source session before requests",async()=>{
     const f=client();f.personas.institution.sessionId=`${f.personas.institution.userId}-session`;
     await expect(verifyStagingAssessment(f)).rejects.toThrow("Synthetic assessment verification failed");expect(f.fetchImpl).not.toHaveBeenCalled();
@@ -82,7 +158,7 @@ describe("fixed assessment HTTP program",()=>{
     if(reason==="invalid") f.result.assessment.status="invalid_output";
     if(reason==="oversized-metadata") f.result.probe.payloadBytes=8001;
     if(reason==="timeout") f.fetchImpl.mockRejectedValue(new Error("timeout"));
-    await expect(verifyStagingAssessment(f)).rejects.toThrow(reason==="timeout"?"timeout":"Synthetic assessment verification failed");
+    await expect(verifyStagingAssessment(f)).rejects.toThrow("Synthetic assessment verification failed");
     expect(f.fetchImpl.mock.calls.filter(([url,o])=>url.includes(f.personas.member.userId)&&o.method==="POST"&&o.headers.Authorization.endsWith("fixture-institution")).length).toBeLessThanOrEqual(1);
   });
   it("rejects wrong origin before any request",async()=>{

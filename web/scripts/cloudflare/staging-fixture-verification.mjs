@@ -1,7 +1,8 @@
+import { audienceRoutesPresent, verifyAudienceAccess } from "./staging-audience-verification.mjs";
 import { COMMUNITY_EVIDENCE_DIRECTORY, verifyStagingCommunityJourney } from "./staging-community-journey.mjs";
 
 /** Fixed verification program. Do not accept arbitrary scripts, roles or target IDs from workflow input. */
-export async function verifyStagingPersonas({ browser, target, personas, verifyJourney = verifyStagingCommunityJourney }) {
+export async function verifyStagingPersonas({ browser, target, personas, verifyJourney = verifyStagingCommunityJourney, verifyAudience = verifyAudienceAccess, audienceEnabled = audienceRoutesPresent() }) {
   const contexts = [];
   const clients = {};
   const contextsByRole = {};
@@ -10,6 +11,17 @@ export async function verifyStagingPersonas({ browser, target, personas, verifyJ
     get: (path, options = {}) => request.get(path, { ...options, maxRedirects: 0 }),
     post: (path, options = {}) => request.post(path, { ...options, maxRedirects: 0 }),
   });
+  const guardContext = async context => {
+    await context.route("**/*", async route => {
+      const request = route.request();
+      if (new URL(request.url()).origin !== target.baseUrl || request.redirectedFrom()) return route.abort();
+      // Intercept the response as well: browser routing may only see the first
+      // URL of a redirect chain. Never hand a redirect back to the browser.
+      const response = await route.fetch({ maxRedirects: 0 });
+      if (response.status() >= 300 && response.status() < 400) return route.abort();
+      return route.fulfill({ response });
+    });
+  };
   let failure;
   const requireStatus = (response, status) => {
     if (response.status() !== status) throw new Error("Synthetic staging verification failed.");
@@ -19,15 +31,7 @@ export async function verifyStagingPersonas({ browser, target, personas, verifyJ
       const context = await browser.newContext({ baseURL: target.baseUrl, serviceWorkers: "block" });
       contexts.push(context);
       contextsByRole[name] = context;
-      await context.route("**/*", async route => {
-        const request = route.request();
-        if (new URL(request.url()).origin !== target.baseUrl || request.redirectedFrom()) return route.abort();
-        // Intercept the response as well: browser routing may only see the first
-        // URL of a redirect chain. Never hand a redirect back to the browser.
-        const response = await route.fetch({ maxRedirects: 0 });
-        if (response.status() >= 300 && response.status() < 400) return route.abort();
-        return route.fulfill({ response });
-      });
+      await guardContext(context);
       await context.addCookies(persona.cookies);
       clients[name] = noRedirectClient(context.request);
       const own = await clients[name].get("/api/community/profile");
@@ -60,6 +64,13 @@ export async function verifyStagingPersonas({ browser, target, personas, verifyJ
       requireStatus(initialize, 200);
       const initialized = await initialize.json();
       if (initialized.error || !initialized.result?.protocolVersion) throw new Error("Synthetic MCP initialization failed.");
+    }
+    if (audienceEnabled) {
+      const anonymousContext = await browser.newContext({ baseURL: target.baseUrl, serviceWorkers: "block" });
+      contexts.push(anonymousContext);
+      await guardContext(anonymousContext);
+      await verifyAudience({ baseUrl: target.baseUrl, contextsByRole, anonymousContext,
+        users: Object.fromEntries(["member", "mentor", "institution"].map(role => [role, { userId: personas[role].userId }])) });
     }
     await verifyJourney({
       baseUrl: target.baseUrl,
