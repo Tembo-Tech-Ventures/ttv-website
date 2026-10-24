@@ -13,6 +13,7 @@ on:
           - verify
           - assess
           - credential-audit
+          - gateway-setup
       expected_sha:
         description: Exact current head SHA of integration PR 171 (reserve a PM deployment slot first)
         required: true
@@ -98,4 +99,15 @@ jobs:
     with:
       expected_sha: ${{ inputs.expected_sha }}
       token_kind: ${{ inputs.token_kind }}
+    secrets: inherit
+
+  gateway-setup:
+    if: ${{ inputs.action == 'gateway-setup' }}
+    needs: preflight
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/cloudflare-staging-gateway-setup.yml
+    with:
+      expected_sha: ${{ inputs.expected_sha }}
     secrets: inherit
