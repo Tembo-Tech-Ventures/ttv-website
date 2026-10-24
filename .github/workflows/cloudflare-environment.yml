@@ -80,6 +80,7 @@ jobs:
       SAM_ALERT_WEBHOOK_TOKEN: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.SAM_ALERT_WEBHOOK_TOKEN || '' }}
       CREDENTIALS_ENCRYPTION_KEY: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.CREDENTIALS_ENCRYPTION_KEY || '' }}
       AGENT_PREVIEW_SECRET: ${{ startsWith(inputs.environment_name, 'agent-') && secrets.AGENT_PREVIEW_SECRET || '' }}
+      AGENT_PREVIEW_RUN_ID: github-${{ github.run_id }}-${{ github.run_attempt }}
       CLOUDFLARE_APP_NAME: ${{ inputs.app_name }}
       CLOUDFLARE_ENVIRONMENT_NAME: ${{ inputs.environment_name }}
       CLOUDFLARE_PRIMARY_DOMAIN: ${{ inputs.primary_domain }}
@@ -236,6 +237,7 @@ jobs:
       SAM_ALERT_WEBHOOK_TOKEN: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.SAM_ALERT_WEBHOOK_TOKEN || '' }}
       CREDENTIALS_ENCRYPTION_KEY: ${{ !startsWith(inputs.environment_name, 'agent-') && secrets.CREDENTIALS_ENCRYPTION_KEY || '' }}
       AGENT_PREVIEW_SECRET: ${{ startsWith(inputs.environment_name, 'agent-') && secrets.AGENT_PREVIEW_SECRET || '' }}
+      AGENT_PREVIEW_RUN_ID: github-${{ github.run_id }}-${{ github.run_attempt }}
       CLOUDFLARE_APP_NAME: ${{ inputs.app_name }}
       CLOUDFLARE_ENVIRONMENT_NAME: ${{ inputs.environment_name }}
       CLOUDFLARE_PRIMARY_DOMAIN: ${{ inputs.primary_domain }}

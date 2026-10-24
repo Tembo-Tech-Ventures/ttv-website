@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createHmac } from "node:crypto";
 import {
   AGENT_PREVIEW_SESSION_MARKER,
   AGENT_PREVIEW_PERSONAS,
@@ -9,9 +10,27 @@ import {
   deriveAgentPreviewToken,
   seedAgentPreviewAccess,
   seedAgentPreviewFixtures,
+  requirePreviewRunId,
 } from "./agent-preview-auth.mjs";
 
 describe("agent preview identity", () => {
+  it("separates runs and attempts and never recreates the legacy bearer", () => {
+    const secret = "s".repeat(32), environment = "agent-pr-55";
+    const legacy = createHmac("sha256", secret).update(`ttv-agent-preview-token:${environment}`).digest("hex");
+    const tokens = ["github-123-1", "github-123-2", "github-124-1"].map(run => deriveAgentPreviewToken(secret, environment, run));
+    expect(new Set(tokens).size).toBe(3);
+    expect(tokens).not.toContain(legacy);
+    expect(deriveAgentPreviewToken(secret, environment, "github-123-1")).toBe(tokens[0]);
+    expect(deriveAgentPreviewPersonaToken(secret, environment, "newStudent", "github-123-1"))
+      .not.toBe(deriveAgentPreviewPersonaToken(secret, environment, "newStudent", "github-123-2"));
+    expect(requirePreviewRunId(`local-${"a".repeat(32)}`)).toBe(`local-${"a".repeat(32)}`);
+  });
+  it.each([undefined, "", "github-123", "github-0-1", "local-short", "old-secret-value"])("fails closed before seed writes with invalid scope %s", async runId => {
+    const executeQuery = vi.fn();
+    await expect(seedAgentPreviewAccess({ databaseId: "fictional", environmentName: "agent-pr-55", previewSecret: "s".repeat(32), runId, executeQuery })).rejects.toThrow("AGENT_PREVIEW_RUN_ID");
+    await expect(seedAgentPreviewFixtures({ databaseId: "fictional", environmentName: "agent-pr-55", previewSecret: "s".repeat(32), runId, executeQuery })).rejects.toThrow("AGENT_PREVIEW_RUN_ID");
+    expect(executeQuery).not.toHaveBeenCalled();
+  });
   it("accepts bounded agent names and rejects ambiguous resource names", () => {
     expect(assertAgentEnvironmentName("agent-pr-55")).toBe("agent-pr-55");
     expect(() => assertAgentEnvironmentName("staging")).toThrow(
@@ -27,13 +46,13 @@ describe("agent preview identity", () => {
 
   it("derives separate, environment-specific session and auth secrets", () => {
     const secret = "s".repeat(32);
-    const firstToken = deriveAgentPreviewToken(secret, "agent-pr-55");
+    const firstToken = deriveAgentPreviewToken(secret, "agent-pr-55", "github-123-1");
     expect(firstToken).toHaveLength(64);
-    expect(deriveAgentPreviewToken(secret, "agent-pr-56")).not.toBe(firstToken);
+    expect(deriveAgentPreviewToken(secret, "agent-pr-56", "github-123-1")).not.toBe(firstToken);
     expect(deriveAgentPreviewAuthSecret(secret, "agent-pr-55")).not.toBe(
       firstToken
     );
-    expect(() => deriveAgentPreviewToken("too-short", "agent-pr-55")).toThrow(
+    expect(() => deriveAgentPreviewToken("too-short", "agent-pr-55", "github-123-1")).toThrow(
       "at least 32"
     );
   });
@@ -43,17 +62,17 @@ describe("agent preview identity", () => {
     const newStudent = deriveAgentPreviewPersonaToken(
       secret,
       "agent-pr-55",
-      "newStudent"
+      "newStudent", "github-123-1"
     );
     const acceptedStudent = deriveAgentPreviewPersonaToken(
       secret,
       "agent-pr-55",
-      "acceptedStudent"
+      "acceptedStudent", "github-123-1"
     );
     const graduateStudent = deriveAgentPreviewPersonaToken(
       secret,
       "agent-pr-55",
-      "graduateStudent"
+      "graduateStudent", "github-123-1"
     );
 
     expect(newStudent).toHaveLength(64);
@@ -79,6 +98,7 @@ describe("agent preview identity", () => {
       databaseId: "db-123",
       environmentName: "agent-pr-55",
       previewSecret: "p".repeat(32),
+      runId: "github-123-1",
       executeQuery,
       now: new Date("2026-07-14T12:00:00.000Z"),
     });
@@ -356,6 +376,7 @@ describe("seedAgentPreviewFixtures", () => {
       executeQuery,
       environmentName: "agent-pr-55",
       previewSecret,
+      runId: "github-123-1",
       now: new Date("2026-07-14T12:00:00.000Z"),
     });
 
@@ -372,21 +393,21 @@ describe("seedAgentPreviewFixtures", () => {
       deriveAgentPreviewPersonaToken(
         previewSecret,
         "agent-pr-55",
-        "newStudent"
+        "newStudent", "github-123-1"
       )
     );
     expect(sessionCalls[1][2][2]).toBe(
       deriveAgentPreviewPersonaToken(
         previewSecret,
         "agent-pr-55",
-        "acceptedStudent"
+        "acceptedStudent", "github-123-1"
       )
     );
     expect(sessionCalls[2][2][2]).toBe(
       deriveAgentPreviewPersonaToken(
         previewSecret,
         "agent-pr-55",
-        "graduateStudent"
+        "graduateStudent", "github-123-1"
       )
     );
   });

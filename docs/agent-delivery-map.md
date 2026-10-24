@@ -128,16 +128,36 @@ desktop/mobile smoke suite. Personal access tokens are user-bound, hashed in
 D1, expiring, revocable, and either read-only or read/write. A delegated bearer
 session or another personal access token cannot mint one.
 
-`AGENT_PREVIEW_SECRET` is not inserted into D1. The deployer derives a
-per-environment token from it, stores only that token in the isolated database,
-and refreshes its expiry on deploy. The Playwright wrapper independently derives
-the same token without printing it.
+`AGENT_PREVIEW_SECRET` is not inserted into D1. Preview admin and persona tokens
+are derived from the environment and `AGENT_PREVIEW_RUN_ID`. GitHub workflows set
+this nonsecret scope to `github-<run_id>-<run_attempt>` for both deployment and
+verification. A new run or attempt rotates those tokens; the legacy
+environment-only token is never derived. Better Auth signing and credential
+encryption keys remain stable. Missing or malformed scope fails before preview
+provisioning. Staging and production credentials do not use this derivation.
+
+For a local/manual isolated deployment, generate a fresh scope once and preserve
+it for that deployment's verification commands in the same shell:
+
+```sh
+export AGENT_PREVIEW_RUN_ID="local-$(node -e 'process.stdout.write(require("node:crypto").randomBytes(16).toString("hex"))')"
+npm run cf:agent -- deploy
+# Use the same scope for this deployment's live browser verification.
+```
+
+Never reuse a scope for a new deployment or rerun a cancelled legacy workflow.
+Deploy reseeds the synthetic sessions with a new creation time and an eight-hour
+deadline; auth refresh cannot extend their original expiry or absolute eight-hour
+lifetime. Shorter feedback/staging fixture deadlines stay shorter. These guards
+apply only to identified synthetic sessions in staging/agent environments with
+agent auth enabled; normal user refresh and production behavior are unchanged.
 
 ## Logs and evidence
 
 - Direct SAM runs use `npm run cf:agent -- tail`.
 - GitHub-hosted previews start `wrangler tail` before Playwright and upload the
-  tail output, traces, and failure screenshots as a run artifact.
+  tail output and failure screenshots as a run artifact. Authenticated live
+  browser traces are disabled because request traces retain bearer headers.
 - Generated Workers explicitly enable persistent Cloudflare observability. Agent
   previews sample every invocation; shared staging and production sample 10%.
 - `/api/health` binds every result to the expected environment and Git revision,

@@ -11,6 +11,11 @@ import {
 } from "./run-live-e2e.mjs";
 
 describe("live browser authentication", () => {
+  it("rejects missing run scope instead of deriving legacy preview credentials", () => {
+    const environment = { AGENT_PREVIEW_SECRET: "p".repeat(32), EXPECTED_DEPLOYMENT_ENVIRONMENT: "agent-pr-55" };
+    expect(() => resolvePlaywrightAgentToken(environment)).toThrow("AGENT_PREVIEW_RUN_ID");
+    expect(() => resolvePlaywrightPersonaTokens(environment)).toThrow("AGENT_PREVIEW_RUN_ID");
+  });
   it("uses a securely supplied personal access token for live verification", () => {
     expect(
       resolvePlaywrightAgentToken({
@@ -43,15 +48,17 @@ describe("live browser authentication", () => {
     expect(
       resolvePlaywrightAgentToken({
         AGENT_PREVIEW_SECRET: previewSecret,
+        AGENT_PREVIEW_RUN_ID: "github-123-1",
         EXPECTED_DEPLOYMENT_ENVIRONMENT: "agent-pr-55",
       })
-    ).toBe(deriveAgentPreviewToken(previewSecret, "agent-pr-55"));
+    ).toBe(deriveAgentPreviewToken(previewSecret, "agent-pr-55", "github-123-1"));
   });
 
   it("never treats the preview secret as a shared staging token", () => {
     expect(
       resolvePlaywrightAgentToken({
         AGENT_PREVIEW_SECRET: "p".repeat(32),
+        AGENT_PREVIEW_RUN_ID: "github-123-1",
         EXPECTED_DEPLOYMENT_ENVIRONMENT: "staging",
       })
     ).toBeUndefined();
@@ -62,23 +69,24 @@ describe("live browser authentication", () => {
     expect(
       resolvePlaywrightPersonaTokens({
         AGENT_PREVIEW_SECRET: previewSecret,
+        AGENT_PREVIEW_RUN_ID: "github-123-1",
         EXPECTED_DEPLOYMENT_ENVIRONMENT: "agent-pr-55",
       })
     ).toEqual({
       PLAYWRIGHT_NEW_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
         previewSecret,
         "agent-pr-55",
-        "newStudent"
+        "newStudent", "github-123-1"
       ),
       PLAYWRIGHT_ACCEPTED_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
         previewSecret,
         "agent-pr-55",
-        "acceptedStudent"
+        "acceptedStudent", "github-123-1"
       ),
       PLAYWRIGHT_GRADUATE_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
         previewSecret,
         "agent-pr-55",
-        "graduateStudent"
+        "graduateStudent", "github-123-1"
       ),
     });
   });
@@ -87,6 +95,7 @@ describe("live browser authentication", () => {
     expect(
       resolvePlaywrightPersonaTokens({
         AGENT_PREVIEW_SECRET: "p".repeat(32),
+        AGENT_PREVIEW_RUN_ID: "github-123-1",
         EXPECTED_DEPLOYMENT_ENVIRONMENT: "production",
       })
     ).toEqual({});

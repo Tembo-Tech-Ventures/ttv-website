@@ -24,7 +24,7 @@ export function resolvePlaywrightAgentToken(environment = process.env) {
     isAgentEnvironmentName(environmentName) &&
     previewSecret
   ) {
-    return deriveAgentPreviewToken(previewSecret, environmentName);
+    return deriveAgentPreviewToken(previewSecret, environmentName, environment.AGENT_PREVIEW_RUN_ID);
   }
 
   return undefined;
@@ -47,17 +47,20 @@ export function resolvePlaywrightPersonaTokens(environment = process.env) {
     PLAYWRIGHT_NEW_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
       previewSecret,
       environmentName,
-      "newStudent"
+      "newStudent",
+      environment.AGENT_PREVIEW_RUN_ID
     ),
     PLAYWRIGHT_ACCEPTED_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
       previewSecret,
       environmentName,
-      "acceptedStudent"
+      "acceptedStudent",
+      environment.AGENT_PREVIEW_RUN_ID
     ),
     PLAYWRIGHT_GRADUATE_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
       previewSecret,
       environmentName,
-      "graduateStudent"
+      "graduateStudent",
+      environment.AGENT_PREVIEW_RUN_ID
     ),
   };
 }
