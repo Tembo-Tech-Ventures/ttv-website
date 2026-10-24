@@ -6,17 +6,35 @@ const baseUrl="https://staging.tembotechventures.com", expectedVersion="a".repea
 function runner() {
   const cleanup=vi.fn();
   const options={environment:{GITHUB_RUN_ATTEMPT:"1",CLOUDFLARE_ENVIRONMENT_NAME:"staging",STAGING_EXPECTED_SHA:expectedVersion},
-    api:vi.fn(async()=>({bindings:[{name:"AI_GATEWAY_API_KEY",type:"secret_text"},{name:"AI_GATEWAY_ACCOUNT_ID",type:"plain_text",text:"fictional"},{name:"AI_GATEWAY_NAME",type:"plain_text",text:"fictional"}]})),
+    api:vi.fn(async()=>({bindings:[{name:"AI",type:"ai"},{name:"AI_GATEWAY_NAME",type:"plain_text",text:"ttv-website-ai-staging"}]})),
     validateRevision:vi.fn(),verifyTarget:vi.fn(async()=>({baseUrl,expectedVersion})),getBindings:vi.fn(()=>[{key:"BETTER_AUTH_SECRET",value:"fictional-test-only"}]),
     withPersonas:vi.fn(async({run})=>{try{await run({});}finally{await cleanup();}}),verifyAssessment:vi.fn(async()=>({synthetic:true})),discard:vi.fn(),publish:vi.fn(),publishFailure:vi.fn(),audit:vi.fn()};
   return {options,cleanup};
 }
 describe("assessment runner lifecycle",()=>{
-  it.each(["AI_GATEWAY_API_KEY","AI_GATEWAY_ACCOUNT_ID","AI_GATEWAY_NAME"])("fails before fixture writes when %s is absent",async name=>{
+  it.each(["AI","AI_GATEWAY_NAME"])("fails before fixture writes when %s is absent",async name=>{
     const {options}=runner(); const settings=await options.api(); settings.bindings=settings.bindings.filter(b=>b.name!==name);options.api.mockResolvedValue(settings);
     await expect(runStagingAssessment(options)).rejects.toThrow("Synthetic assessment failed");
     expect(options.withPersonas).not.toHaveBeenCalled();expect(options.verifyAssessment).not.toHaveBeenCalled();
     expect(options.publishFailure).toHaveBeenCalledWith(expect.objectContaining({stage:"provider-readiness",code:"required-binding-missing",claim:"unknown",cleanupStatus:"not-started"}));
+  });
+  it.each([
+    [{name:"AI",type:"plain_text"},{name:"AI_GATEWAY_NAME",type:"plain_text",text:"ttv-website-ai-staging"}],
+    ...["", "default", "ttv-website-ai-production", "ttv-website-ai-agent-pr-196", " ttv-website-ai-staging "].map(text=>[{name:"AI",type:"ai"},{name:"AI_GATEWAY_NAME",type:"plain_text",text}]),
+    [{name:"AI",type:"ai"},{name:"AI_GATEWAY_NAME",type:"secret_text"}],
+    [{name:"AI_GATEWAY_API_KEY",type:"secret_text"},{name:"AI_GATEWAY_ACCOUNT_ID",type:"plain_text",text:"fictional"},{name:"AI_GATEWAY_NAME",type:"plain_text",text:"ttv-website-ai-staging"}],
+    null, {}, [null],
+  ].map(bindings=>({bindings})))("rejects invalid native readiness before signing or fixture writes %#",async({bindings})=>{
+    const {options}=runner();options.api.mockResolvedValue({bindings});
+    await expect(runStagingAssessment(options)).rejects.toThrow("Synthetic assessment failed");
+    expect(options.getBindings).not.toHaveBeenCalled();expect(options.withPersonas).not.toHaveBeenCalled();expect(options.verifyAssessment).not.toHaveBeenCalled();
+    expect(options.publishFailure).toHaveBeenCalledWith(expect.objectContaining({stage:"provider-readiness",code:"required-binding-missing",providerInvocation:"unknown",cleanupStatus:"not-started",retryAllowed:false}));
+  });
+  it("accepts native AI and exact staging Gateway without HTTP token/account bindings",async()=>{
+    const {options,cleanup}=runner();await runStagingAssessment(options);
+    expect(options.api).toHaveBeenCalledExactlyOnceWith("/workers/scripts/ttv-website-staging/settings");
+    expect(options.verifyAssessment).toHaveBeenCalledOnce();expect(cleanup).toHaveBeenCalledOnce();expect(options.publish).toHaveBeenCalledOnce();
+    expect(options.publishFailure).not.toHaveBeenCalled();
   });
   it("retains only allowlisted assessment claim metadata before failure",async()=>{
     const {options}=runner();options.verifyAssessment.mockImplementation(async({progress})=>{

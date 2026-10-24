@@ -42,9 +42,12 @@ export async function runStagingAssessment({ environment = process.env, api = cf
       expectedVersion: environment.STAGING_EXPECTED_SHA, baseUrl: STAGING_FIXTURE_ORIGIN, api });
     diagnostic.stage = "provider-readiness";
     const settings = await api("/workers/scripts/ttv-website-staging/settings");
-    const bindings = settings?.bindings ?? [];
-    if (!bindings.some(b => b.name === "AI_GATEWAY_API_KEY" && b.type === "secret_text") ||
-        !["AI_GATEWAY_ACCOUNT_ID", "AI_GATEWAY_NAME"].every(name => bindings.some(b => b.name === name && b.type === "plain_text" && typeof b.text === "string" && b.text.trim()))) {
+    const bindings = Array.isArray(settings?.bindings) ? settings.bindings : [];
+    // Native inference uses the preauthenticated AI binding, not an HTTP token.
+    // This fixed staging runner must not route to another environment's gateway.
+    if (!bindings.some(b => b?.name === "AI" && b.type === "ai") ||
+        !bindings.some(b => b?.name === "AI_GATEWAY_NAME" && b.type === "plain_text" &&
+          b.text === "ttv-website-ai-staging")) {
       diagnostic.code = "required-binding-missing";
       throw new Error("Assessment binding readiness failed.");
     }
