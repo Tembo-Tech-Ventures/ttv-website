@@ -3,7 +3,6 @@ import { STAGING_FIXTURE_ORIGIN } from "./staging-fixture-target.mjs";
 const MODEL = "workers-ai/@cf/google/gemma-4-26b-a4b-it";
 const rubric = { id: "synthetic-hiring", version: 1, criteria: [{ id: "typescript", label: "Documented TypeScript contribution", terms: ["TypeScript"] }] };
 
-
 /** Fixed program: no arbitrary endpoint, prompt, identity, retries or live chat. */
 export async function verifyStagingAssessment({ target, personas, fetchImpl = fetch, now = Date.now, progress = () => {} }) {
   let stage = "client-preflight";
@@ -71,6 +70,7 @@ export async function verifyStagingAssessment({ target, personas, fetchImpl = fe
   const elapsedMs = now() - started;
   const assessment = result.data?.assessment;
   const probe = result.data?.probe;
+  progress({ stage, code: "assessment-response", claimed: probe?.claimed, payloadBytes: probe?.payloadBytes, payloadCharacters: probe?.payloadCharacters, assessmentStatus: assessment?.status, assessmentErrorCode: assessment?.errorCode });
   if (result.status !== 200 || assessment?.status !== "completed" || assessment.model !== MODEL ||
       assessment.subject?.userId !== member.userId || assessment.criteria?.length !== 1 ||
       probe?.claimed !== true || !Number.isInteger(probe.payloadBytes) || probe.payloadBytes < 1 || probe.payloadBytes > 8000 ||

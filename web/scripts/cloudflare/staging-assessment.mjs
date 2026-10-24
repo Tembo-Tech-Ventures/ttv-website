@@ -8,18 +8,24 @@ import { verifyStagingAssessment } from "./staging-assessment-verification.mjs";
 
 const directory = "test-results/staging-assessment";
 const stages = new Set(["client-preflight", "profile-write", "journey-write", "denied-role", "no-evidence", "assessment", "assessment-validation", "consumed-session"]);
-const codes = new Set(["started", "http-response", "validation-failed", "transport-failed", "response-too-large", "response-read-failed", "response-json-invalid"]);
+const codes = new Set(["started", "http-response", "validation-failed", "transport-failed", "response-too-large", "response-read-failed", "response-json-invalid", "assessment-response"]);
 export async function runStagingAssessment({ environment = process.env, api = cfApi, getBindings = getSecretBindings,
   validateRevision = validateStagingRevision, verifyTarget = verifyStagingFixtureTarget, withPersonas = withStagingPersonas,
   verifyAssessment = verifyStagingAssessment, discard = () => rm(directory, { recursive: true, force: true }),
   publish = async evidence => { await mkdir(directory, { recursive: true }); await writeFile(`${directory}/manifest.json`, JSON.stringify(evidence, null, 2)); },
   publishFailure = async evidence => { await mkdir(directory, { recursive: true }); await writeFile(`${directory}/failure.json`, JSON.stringify(evidence, null, 2)); },
   audit = record => console.log(JSON.stringify(record)) } = {}) {
-  const diagnostic = { stage: "runner-preflight", code: "started", httpStatus: null };
+  const diagnostic = { stage: "runner-preflight", code: "started", httpStatus: null, claim: "unknown", assessmentStatus: "unknown", assessmentErrorCode: "unknown" };
   let lifecycle = { operation: "unknown", operationStatus: "unknown", cleanupStatus: "not-started" };
   const progress = record => {
     if (!stages.has(record?.stage) || !codes.has(record?.code)) return;
     if (record.stage !== diagnostic.stage) diagnostic.httpStatus = null;
+    if (record.stage === "assessment") {
+      if (typeof record.claimed === "boolean") diagnostic.claim = record.claimed;
+      if (["completed", "unavailable", "invalid_output"].includes(record.assessmentStatus)) diagnostic.assessmentStatus = record.assessmentStatus;
+      if (["provider_unavailable", "invalid_output"].includes(record.assessmentErrorCode)) diagnostic.assessmentErrorCode = record.assessmentErrorCode;
+      for (const key of ["payloadBytes", "payloadCharacters"]) if (Number.isInteger(record[key]) && record[key] >= 0 && record[key] <= 8000) diagnostic[key] = record[key];
+    }
     diagnostic.stage = record.stage;
     diagnostic.code = record.code;
     if (Number.isInteger(record.httpStatus) && record.httpStatus >= 100 && record.httpStatus <= 599) diagnostic.httpStatus = record.httpStatus;
@@ -34,6 +40,14 @@ export async function runStagingAssessment({ environment = process.env, api = cf
     diagnostic.stage = "target-preflight";
     const target = await verifyTarget({ environmentName: "staging", accountId: environment.CLOUDFLARE_ACCOUNT_ID,
       expectedVersion: environment.STAGING_EXPECTED_SHA, baseUrl: STAGING_FIXTURE_ORIGIN, api });
+    diagnostic.stage = "provider-readiness";
+    const settings = await api("/workers/scripts/ttv-website-staging/settings");
+    const bindings = settings?.bindings ?? [];
+    if (!bindings.some(b => b.name === "AI_GATEWAY_API_KEY" && b.type === "secret_text") ||
+        !["AI_GATEWAY_ACCOUNT_ID", "AI_GATEWAY_NAME"].every(name => bindings.some(b => b.name === name && b.type === "plain_text" && typeof b.text === "string" && b.text.trim()))) {
+      diagnostic.code = "required-binding-missing";
+      throw new Error("Assessment binding readiness failed.");
+    }
     diagnostic.stage = "signing-configuration";
     const signingSecret = getBindings().find(binding => binding.key === "BETTER_AUTH_SECRET")?.value;
     let evidence;
@@ -47,7 +61,7 @@ export async function runStagingAssessment({ environment = process.env, api = cf
       }
     }, run: async personas => { evidence = await verifyAssessment({ target, personas, progress }); } });
     // Only fixed sanitized metadata is returned; no response text, credentials or traces.
-    diagnostic.stage = "success-artifact";
+    Object.assign(diagnostic, { stage: "success-artifact", code: "started", httpStatus: null });
     await publish(evidence);
   } catch {
     await discard();

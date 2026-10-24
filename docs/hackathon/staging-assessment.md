@@ -62,3 +62,16 @@ but does not guess their cause. A runner failure before fixture creation leaves
 cleanup marked not-started. Workflow installation/preflight failures may have no
 manifest. Read-only deployment binding presence and Gateway metadata can be
 correlated separately, without exposing values or making another inference call.
+
+Before fixture provisioning, the runner checks deployed binding metadata for the
+Gateway account/name and secret-key binding. Presence does not validate a token
+or prove provider readiness; missing metadata fails closed without a model call.
+The failure artifact may retain an allowlisted assessment status/error code,
+boolean claim and bounded payload-size integers from the fixed assessment
+response. A consumed claim does not establish inference completion or billing.
+
+Deployment supplies `AI_GATEWAY_API_KEY` from the optional GitHub staging secret
+`CLOUDFLARE_AI_GATEWAY_TOKEN`. Supplying it to the assessment workflow alone does
+not repair the deployed Worker. Missing credential provisioning requires the
+coordinator's secure configuration decision and a newly authorized integrated
+revision deployment; this runner never creates credentials or modifies settings.
