@@ -1,7 +1,8 @@
+import { feedbackApiRequest as safeApiRequest } from "../scripts/cloudflare/feedback-browser-guard.mjs";
 import { expect, test } from "@playwright/test";
 
-test("serves the expected live deployment and homepage", async ({ page }) => {
-  const healthResponse = await page.request.get("/api/health");
+test("serves the expected live deployment and homepage", async ({ page, baseURL }) => {
+  const healthResponse = await safeApiRequest(page.request, baseURL!, "/api/health");
   expect(healthResponse.ok()).toBe(true);
   const health = await healthResponse.json();
   expect(health).toMatchObject({
@@ -71,10 +72,8 @@ test.describe("authenticated delivery agent", () => {
     await expect(page).toHaveURL(/\/admin\/?$/);
   });
 
-  test("can start and reach the FFmpeg container", async ({ request }) => {
-    const response = await request.get(
-      "/api/admin/recordings/container-health"
-    );
+  test("can start and reach the FFmpeg container", async ({ request, baseURL }) => {
+    const response = await safeApiRequest(request, baseURL!, "/api/admin/recordings/container-health");
 
     expect(response.ok()).toBe(true);
     await expect(response.json()).resolves.toEqual({

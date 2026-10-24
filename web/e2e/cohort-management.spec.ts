@@ -1,3 +1,4 @@
+import { feedbackApiRequest as safeApiRequest } from "../scripts/cloudflare/feedback-browser-guard.mjs";
 import { expect, test, type Locator } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { FIXTURE_ENVIRONMENT } from "./fixture-env";
@@ -27,6 +28,7 @@ test.describe("admin cohort management", () => {
   test("direct enrollment and atomic bulk actions converge", async ({
     page,
     request,
+    baseURL,
   }) => {
     const viewport =
       test.info().project.name === "mobile-chromium" ? "mobile" : "desktop";
@@ -169,7 +171,7 @@ test.describe("admin cohort management", () => {
         ["applicationIds", pending.applicationId],
         ["applicationIds", "ttv-fixture-app-preview"],
       ]);
-      const invalidResponse = await request.post(PROGRAM_PATH, {
+      const invalidResponse = await safeApiRequest(request, baseURL!, PROGRAM_PATH, { method: "POST",
         headers: {
           "content-type": "application/x-www-form-urlencoded",
           Origin: new URL(page.url()).origin,
@@ -253,6 +255,7 @@ test.describe("admin cohort management", () => {
   test("self-application, cohort editing, and staff boundaries converge", async ({
     page,
     request,
+    baseURL,
   }) => {
     const viewport =
       test.info().project.name === "mobile-chromium" ? "mobile" : "desktop";
@@ -275,7 +278,7 @@ test.describe("admin cohort management", () => {
       path: string,
       entries: [string, string][]
     ) =>
-      request.post(path, {
+      safeApiRequest(request, baseURL!, path, { method: "POST",
         headers: {
           "content-type": "application/x-www-form-urlencoded",
           Origin: origin,

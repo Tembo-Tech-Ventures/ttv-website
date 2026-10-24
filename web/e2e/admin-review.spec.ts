@@ -1,3 +1,4 @@
+import { feedbackApiRequest as safeApiRequest } from "../scripts/cloudflare/feedback-browser-guard.mjs";
 import { expect, test } from "@playwright/test";
 import { mkdirSync } from "fs";
 
@@ -116,6 +117,7 @@ test.describe("admin review surfaces", () => {
   test("admin can suspend and restore a published post", async ({
     page,
     viewport,
+    baseURL,
   }) => {
     const isMobile = (viewport?.width ?? 1280) < 1024;
     test.skip(isMobile, "Post moderation mutation runs once on desktop");
@@ -135,7 +137,7 @@ test.describe("admin review surfaces", () => {
     ).toBeVisible();
     expect(
       (
-        await page.request.get("/blog/amina-preview/debugging-at-the-edge")
+        await safeApiRequest(page.request, baseURL!, "/blog/amina-preview/debugging-at-the-edge")
       ).status(),
     ).toBe(404);
 
@@ -154,7 +156,7 @@ test.describe("admin review surfaces", () => {
     ).toBeVisible();
     expect(
       (
-        await page.request.get("/blog/amina-preview/debugging-at-the-edge")
+        await safeApiRequest(page.request, baseURL!, "/blog/amina-preview/debugging-at-the-edge")
       ).status(),
     ).toBe(200);
   });

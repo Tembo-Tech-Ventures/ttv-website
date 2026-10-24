@@ -18,6 +18,7 @@ import {
 } from "./lib.mjs";
 import {
   isAgentEnvironmentName,
+  requirePreviewRunId,
   seedAgentPreviewAccess,
   seedAgentPreviewFixtures,
 } from "./agent-preview-auth.mjs";
@@ -25,6 +26,9 @@ import { assertNoBlockingDuplicates } from "./migration-preflight.mjs";
 
 async function main() {
   const context = deriveEnvironmentContext();
+  // Reject missing run scope before provisioning or mutating any resource.
+  const previewRunId = isAgentEnvironmentName(context.environmentName)
+    ? requirePreviewRunId(getOptionalEnv("AGENT_PREVIEW_RUN_ID")) : undefined;
   const primaryDomain = getOptionalEnv("CLOUDFLARE_PRIMARY_DOMAIN");
   const redirectDomain = getOptionalEnv("CLOUDFLARE_REDIRECT_DOMAIN");
   const configuredBetterAuthUrl = getOptionalEnv("CLOUDFLARE_BETTER_AUTH_URL");
@@ -86,6 +90,7 @@ async function main() {
       databaseId: d1Database.uuid,
       environmentName: context.environmentName,
       previewSecret: getOptionalEnv("AGENT_PREVIEW_SECRET") ?? "",
+      runId: previewRunId,
       executeQuery: queryD1Database,
     });
     await seedAgentPreviewFixtures({
@@ -93,6 +98,7 @@ async function main() {
       executeQuery: queryD1Database,
       environmentName: context.environmentName,
       previewSecret: getOptionalEnv("AGENT_PREVIEW_SECRET") ?? "",
+      runId: previewRunId,
     });
   }
 
