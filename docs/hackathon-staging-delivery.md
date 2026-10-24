@@ -130,3 +130,23 @@ Audit output contains only random run ID, deployed revision and start/result
 event. Browser storage, trace, HAR and page content are never uploaded by this
 runner. Abrupt runner termination can prevent finally-cleanup; the runtime
 registry expiry remains mandatory, and failed runs require scoped cleanup review.
+
+### Verification-only dispatch
+
+The new synthetic workflow is reusable, called by the already registered
+`Cloudflare Staging` workflow. GitHub rejected direct dispatch of the new filename
+with 404 because it was absent from the default-branch workflow registry. Do not
+merge to production merely to register a workflow.
+
+After PM reserves the slot and the exact integration head is deployed, dispatch
+`cloudflare-staging.yml` on the integration branch with `action=verify` and
+`expected_sha=<full integration head>`. This action does not deploy or apply
+migrations. The default `action=deploy` preserves existing deployment behavior.
+The parent holds the shared concurrency lock; the reusable child must not acquire
+that same lock. Both preflight and the credentialed fixture runner recheck the
+revision, and the runner rejects a live deployment whose SHA differs. A new
+workflow-only commit therefore still requires PM-coordinated deployment before
+verification. Signing credentials remain in GitHub's staging environment.
+
+GitHub documents same-commit relative workflow calls and staging job environment
+secret precedence in its [reusable workflow guide](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows).
