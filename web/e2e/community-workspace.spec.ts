@@ -467,16 +467,22 @@ test("profile deep link checks access first and safely handles missing profiles"
   page,
 }) => {
   let approved = false;
-  let missing = false;
+  let deniedStatus = 0;
   let detailRequests = 0;
   await page.route("**/api/community/**", async (route) => {
     if (new URL(route.request().url()).pathname.endsWith("/access"))
       return route.fulfill({
         json: { isAdmin: false, isMentor: false, isInstitution: approved },
       });
+    expect(new URL(route.request().url()).pathname).not.toBe(
+      "/api/community/profiles",
+    );
     detailRequests++;
-    if (missing)
-      return route.fulfill({ status: 404, json: { error: "private detail" } });
+    if (deniedStatus)
+      return route.fulfill({
+        status: deniedStatus,
+        json: { error: "private detail" },
+      });
     return route.fulfill({
       json: {
         profile: {
@@ -510,13 +516,65 @@ test("profile deep link checks access first and safely handles missing profiles"
     page.getByRole("link", { name: "Open profile link" }),
   ).toHaveAttribute("href", "/dashboard/discover?profile=synthetic-lookup");
   expect(detailRequests).toBe(1);
-  missing = true;
-  await page.reload();
+  await page.getByLabel("Your question").fill("An unsent question about Njeri");
+  for (const status of [403, 404]) {
+    deniedStatus = status;
+    await page.reload();
+    await expect(
+      page.getByRole("heading", { name: "We could not open this workspace." }),
+    ).toBeVisible();
+    await expect(page.getByRole("alert")).not.toContainText("private detail");
+    await expect(
+      page.getByRole("link", { name: "Start a new discovery" }),
+    ).toHaveAttribute("href", "/dashboard/discover");
+    await expect(page.getByLabel("Your question")).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "Fictional Njeri Kamau", exact: true }),
+    ).toHaveCount(0);
+  }
+});
+
+test("changing a profile link discards the prior question and encodes unusual IDs", async ({
+  page,
+}) => {
+  let detailPath = "";
+  await page.route("**/api/community/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/access"))
+      return route.fulfill({
+        json: { isAdmin: false, isMentor: false, isInstitution: true },
+      });
+    detailPath = path;
+    const id = decodeURIComponent(path.split("/").at(-1)!);
+    return route.fulfill({
+      json: {
+        profile: {
+          userId: id,
+          name: id === "first" ? "Fictional Amina" : "Fictional Brian",
+          image: null,
+          headline: "Synthetic profile",
+          bio: "Fictional evidence only",
+          skills: [],
+          opportunityGoals: "Learning",
+          version: 1,
+          updatedAt: 123,
+        },
+        entries: [],
+      },
+    });
+  });
+  await page.goto("/dev/community-ui?api=mock&view=scout&profile=first");
+  await page.getByLabel("Your question").fill("Question about Amina only");
+  await page.goto(
+    "/dev/community-ui?api=mock&view=scout&profile=" +
+      encodeURIComponent("second/with?delimiter"),
+  );
   await expect(
-    page.getByRole("heading", { name: "We could not open this workspace." }),
+    page.getByRole("heading", { name: "Fictional Brian", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("alert")).not.toContainText("private detail");
+  await expect(page.getByLabel("Your question")).toHaveValue("");
   await expect(
-    page.getByRole("link", { name: "Start a new discovery" }),
-  ).toHaveAttribute("href", "/dashboard/discover");
+    page.getByRole("heading", { name: "Fictional Amina", exact: true }),
+  ).toHaveCount(0);
+  expect(detailPath).toBe("/api/community/profiles/second%2Fwith%3Fdelimiter");
 });

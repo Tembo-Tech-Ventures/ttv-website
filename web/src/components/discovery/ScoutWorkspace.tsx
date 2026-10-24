@@ -468,8 +468,10 @@ export default function ScoutWorkspace({
                       placeholder="Enter their name"
                     />
                     <small>
-                      Search without your scouting skills or opportunity
-                      criteria. Choose the right person from the results.
+                      Search eligible talent without your scouting skills or
+                      opportunity criteria. Mentor and administrator profiles
+                      may not appear here; use a direct profile link if you have
+                      one.
                     </small>
                   </label>
                 ) : (
