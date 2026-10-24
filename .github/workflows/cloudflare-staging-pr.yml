@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - staging
+      - sam/use-sam-mcp-tools-m8a3jp
     types:
       - opened
       - reopened
