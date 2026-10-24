@@ -23,13 +23,15 @@ const journeys = [
 /** Fixed same-origin browser navigation only; no model endpoints or credentials. */
 export async function verifyAudienceAccess({ baseUrl, contextsByRole, users, anonymousContext }) {
   assertJourneyScope({ baseUrl, contextsByRole, users });
+  assert.ok(contextsByRole?.admin, "Synthetic admin context required.");
+  assert.equal(users?.admin?.userId, users.member.userId.replace(/-member$/, "-admin"), "Synthetic admin must belong to the same run.");
   const pages = [];
   let failure;
   try {
     for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
       for (const journey of journeys) {
-        for (const mode of ["anonymous", "eligible", ...(journey.gate ? ["missing-role"] : [])]) {
-          const context = mode === "anonymous" ? anonymousContext : contextsByRole[mode === "missing-role" ? "member" : journey.role];
+        for (const mode of ["anonymous", "eligible", "admin", ...(journey.gate ? ["missing-role"] : [])]) {
+          const context = mode === "anonymous" ? anonymousContext : contextsByRole[mode === "missing-role" ? "member" : mode === "admin" ? "admin" : journey.role];
           const page = await context.newPage(); pages.push(page);
           await page.setViewportSize(viewport);
           const response = await page.goto(`${baseUrl}/community/${journey.audience}`, { waitUntil: "networkidle", timeout: 30000 });

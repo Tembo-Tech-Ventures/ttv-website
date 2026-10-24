@@ -21,3 +21,7 @@ still runs. No assessment or chat endpoint is invoked by these checks.
 Unit tests validate role navigation, activation, failures, cleanup and exact path
 boundaries. They do not establish live audience acceptance. That requires a
 PM-reserved staging verification of an integrated revision containing the pages.
+
+Admin coverage uses the existing same-run signed-cookie admin fixture for all
+three audience routes on desktop and mobile. The fixed matrix has 22 cases;
+missing or mixed-run admin identities fail before browser navigation.

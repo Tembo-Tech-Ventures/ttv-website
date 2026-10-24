@@ -92,9 +92,9 @@ describe("restricted staging runner", () => {
   });
 });
 
-function browserFixture({ failOwn = false } = {}) {
+function browserFixture({ failOwn = false, sameRun = false } = {}) {
   const names = ["member", "otherMember", "mentor", "institution", "unapprovedInstitution", "admin"];
-  const personas = Object.fromEntries(names.map(name => [name, { userId: name, cookies: [{ name: "fixture", value: name }], personalAccessToken: name }]));
+  const personas = Object.fromEntries(names.map(name => [name, { userId: sameRun ? `ttv-staging-fixture-${"a".repeat(24)}-${name}` : name, cookies: [{ name: "fixture", value: name }], personalAccessToken: name }]));
   const contexts = [];
   let granted = false;
   const response = (status, data = {}) => ({ status: () => status, json: async () => data });
@@ -106,7 +106,7 @@ function browserFixture({ failOwn = false } = {}) {
       newPage: vi.fn(async () => ({ goto: async url => response(stagingFixturePathAllowed(new URL(url).pathname) ? 200 : 403), url: () => "https://staging.tembotechventures.com/dashboard/community", close: vi.fn() })),
       request: {
         get: vi.fn(async path => {
-          if (path === "/api/community/profile") return response(failOwn ? 401 : 200, { profile: { userId: name } });
+          if (path === "/api/community/profile") return response(failOwn ? 401 : 200, { profile: { userId: personas[name].userId } });
           if (path === "/api/community/tokens" || path === "/admin/agent-access") return response(403);
           if (path === "/api/community/mentorship") return response(200);
           return response(name === "institution" || (name === "unapprovedInstitution" && granted) ? 200 : 403);
@@ -124,11 +124,11 @@ function browserFixture({ failOwn = false } = {}) {
 }
 describe("fixed browser verification", () => {
   it.each([false,true])("audience wiring reuses guarded contexts and cleans on failure=%s", async fails => {
-    const f=browserFixture(),verifyAudience=vi.fn();if(fails)verifyAudience.mockRejectedValue(new Error("PRIVATE"));
+    const f=browserFixture({sameRun:true}),verifyAudience=vi.fn();if(fails)verifyAudience.mockRejectedValue(new Error("PRIVATE"));
     const result=verifyStagingPersonas({...f,audienceEnabled:true,verifyAudience});
     if(fails)await expect(result).rejects.toThrow("Synthetic staging verification failed");else await result;
     expect(f.contexts).toHaveLength(10);expect(f.contexts[9].route).toHaveBeenCalledOnce();expect(f.contexts[9].addCookies).not.toHaveBeenCalled();
-    expect(verifyAudience).toHaveBeenCalledWith(expect.objectContaining({anonymousContext:f.contexts[9],contextsByRole:expect.objectContaining({member:f.contexts[0],mentor:f.contexts[2],institution:f.contexts[3]})}));
+    expect(verifyAudience).toHaveBeenCalledWith(expect.objectContaining({anonymousContext:f.contexts[9],contextsByRole:expect.objectContaining({member:f.contexts[0],mentor:f.contexts[2],institution:f.contexts[3],admin:f.contexts[5]}),users:Object.fromEntries(["member","mentor","institution","admin"].map(role=>[role,{userId:`ttv-staging-fixture-${"a".repeat(24)}-${role}`}]))}));
     expect(f.contexts.every(c=>c.close.mock.calls.length===1)).toBe(true);
     if(fails)expect(f.verifyJourney).not.toHaveBeenCalled();
   });

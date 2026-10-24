@@ -12,10 +12,18 @@ on:
           - deploy
           - verify
           - assess
+          - credential-audit
       expected_sha:
         description: Exact current head SHA of integration PR 171 (reserve a PM deployment slot first)
         required: true
         type: string
+
+      token_kind:
+        description: Known credential owner kind, required only for credential-audit
+        required: false
+        type: choice
+        default: unknown
+        options: [unknown, user, account]
 
 # Covers preflight AND reusable deployment/verification. PM must still reserve
 # the channel slot: Actions concurrency is not a FIFO deployment queue.
@@ -78,4 +86,16 @@ jobs:
     uses: ./.github/workflows/cloudflare-staging-assessment.yml
     with:
       expected_sha: ${{ inputs.expected_sha }}
+    secrets: inherit
+
+  credential-audit:
+    if: ${{ inputs.action == 'credential-audit' }}
+    needs: preflight
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/cloudflare-staging-credential-audit.yml
+    with:
+      expected_sha: ${{ inputs.expected_sha }}
+      token_kind: ${{ inputs.token_kind }}
     secrets: inherit

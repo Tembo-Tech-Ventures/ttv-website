@@ -17,24 +17,31 @@ function fixture(fault) {
       }),locator:vi.fn(()=>page),
     };pages.push(page);return page;
   }});
-  return {pages,visits,options:{baseUrl:"https://staging.tembotechventures.com",contextsByRole:Object.fromEntries(["member","mentor","institution"].map(role=>[role,context(role)])),anonymousContext:context("anonymous"),users:Object.fromEntries(["member","mentor","institution"].map(role=>[role,{userId:`ttv-staging-fixture-${"a".repeat(24)}-${role}`}]))}};
+  return {pages,visits,options:{baseUrl:"https://staging.tembotechventures.com",contextsByRole:Object.fromEntries(["member","mentor","institution","admin"].map(role=>[role,context(role)])),anonymousContext:context("anonymous"),users:Object.fromEntries(["member","mentor","institution","admin"].map(role=>[role,{userId:`ttv-staging-fixture-${"a".repeat(24)}-${role}`}]))}};
 }
 describe("audience activation and role navigation",()=>{
   it("activates only for a complete integrated route set",()=>{
     expect(audienceRoutesPresent(()=>false)).toBe(false);expect(audienceRoutesPresent(()=>true)).toBe(true);
     expect(()=>audienceRoutesPresent(url=>url.pathname.endsWith("members.astro"))).toThrow("integrated together");
   });
-  it("checks anonymous, eligible and missing-role desktop/mobile journeys and closes all pages",async()=>{
-    const f=fixture();await verifyAudienceAccess(f.options);expect(f.visits).toHaveLength(16);
+  it("checks anonymous, eligible, admin and missing-role desktop/mobile journeys and closes all pages",async()=>{
+    const f=fixture();await verifyAudienceAccess(f.options);expect(f.visits).toHaveLength(22);
     expect(f.pages.every(p=>p.locator.mock.calls.some(([selector])=>selector===".audience-hero"))).toBe(true);
     expect(f.visits.filter(v=>v.role==="anonymous")).toHaveLength(6);
+    expect(f.visits.filter(v=>v.role==="admin").map(v=>v.audience)).toEqual(["members","mentors","institutions","members","mentors","institutions"]);
     expect(f.pages.every(p=>p.close.mock.calls.length===1)).toBe(true);
-    expect(f.pages.map(p=>p.setViewportSize.mock.calls[0][0].width)).toEqual([...Array(8).fill(1440),...Array(8).fill(390)]);
+    expect(f.pages.map(p=>p.setViewportSize.mock.calls[0][0].width)).toEqual([...Array(11).fill(1440),...Array(11).fill(390)]);
   });
   it.each(["wrong-link","wrong-heading","missing-route","close"])("fails closed and sanitizes %s",async fault=>{
     const f=fixture(fault);await expect(verifyAudienceAccess(f.options)).rejects.toThrow(fault==="close"?"Synthetic audience page cleanup failed":"Synthetic audience access verification failed");
     expect(f.pages.every(p=>p.close.mock.calls.length===1)).toBe(true);
   }, 10000);
+  it.each(["missing", "mixed-run"])("rejects %s admin before browser activity",async fault=>{
+    const f=fixture();
+    if(fault==="missing")delete f.options.contextsByRole.admin;
+    else f.options.users.admin.userId=`ttv-staging-fixture-${"b".repeat(24)}-admin`;
+    await expect(verifyAudienceAccess(f.options)).rejects.toThrow(/Synthetic admin/);expect(f.pages).toHaveLength(0);
+  });
   it("rejects non-staging and mixed-run identities before browser activity",async()=>{
     const f=fixture();f.options.baseUrl="https://example.com";await expect(verifyAudienceAccess(f.options)).rejects.toThrow("Expected values to be strictly equal");expect(f.pages).toHaveLength(0);
   });

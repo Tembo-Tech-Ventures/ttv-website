@@ -70,7 +70,7 @@ export async function verifyStagingPersonas({ browser, target, personas, verifyJ
       contexts.push(anonymousContext);
       await guardContext(anonymousContext);
       await verifyAudience({ baseUrl: target.baseUrl, contextsByRole, anonymousContext,
-        users: Object.fromEntries(["member", "mentor", "institution"].map(role => [role, { userId: personas[role].userId }])) });
+        users: Object.fromEntries(["member", "mentor", "institution", "admin"].map(role => [role, { userId: personas[role].userId }])) });
     }
     await verifyJourney({
       baseUrl: target.baseUrl,
