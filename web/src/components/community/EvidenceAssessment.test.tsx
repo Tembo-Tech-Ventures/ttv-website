@@ -2,7 +2,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
-import { AssessmentResults } from "./EvidenceAssessment";
+import EvidenceAssessmentForm, { AssessmentResults } from "./EvidenceAssessment";
 import type { EvidenceAssessment } from "./assessment-contract";
 import type { CommunityProfile } from "../discovery/types";
 
@@ -111,4 +111,13 @@ it("does not claim AI generation when empty evidence bypasses the model", () => 
   expect(html).toContain("Insufficient evidence · Not scored");
   expect(html).not.toContain("AI-generated");
   expect(html).not.toContain("/5");
+});
+
+ it("keeps accessible criteria grouping and evidence limits without a second visible title", () => {
+  const html = renderToStaticMarkup(<EvidenceAssessmentForm profile={profile} onAssess={async () => assessment} />);
+  expect(html).toContain('class="discovery-sr-only">Your assessment criteria');
+  expect(html).toContain("documented evidence, not ability");
+  expect(html).toContain("change your search filters");
+  expect(html).toContain("What the 1–5 scale means");
+  expect(html).toContain("Missing, uncertain or conflicting evidence is not scored");
 });

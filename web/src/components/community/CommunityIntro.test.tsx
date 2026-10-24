@@ -15,7 +15,7 @@ describe("community entry points", () => {
   it("explains noncohort membership and approval without exposing a people directory", () => {
     const html = renderToStaticMarkup(<CommunityIntro full />);
     expect(html).toContain("You do not need to join or complete a cohort");
-    expect(html).toContain("Signing in does not grant institutional access");
+    expect(html).toContain("Institutional access requires administrator approval after sign-in");
     expect(html).toContain("Cohort recordings and internal records are not part");
     expect(html).toContain("does not guarantee a job");
     expect(html.match(/<h1/g)).toHaveLength(1);

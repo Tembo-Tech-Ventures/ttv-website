@@ -144,9 +144,6 @@ export default function JourneyWorkspace({
     <DiscoveryShell active="journey" demo={demo}>
       <div className="discovery-page-heading">
         <div>
-          <span className="discovery-eyebrow">
-            Your community profile / journey
-          </span>
           <h1>
             Your work.
             <br />
@@ -154,11 +151,7 @@ export default function JourneyWorkspace({
           </h1>
         </div>
         <p>
-          Small contributions add up.
-          <br />
-          Show what you made, what you learned,
-          <br />
-          and the part that was yours.
+          Show what you made, what you learned, and the part that was yours.
         </p>
       </div>
       <div className="discovery-member-grid">
@@ -206,7 +199,6 @@ export default function JourneyWorkspace({
           )}
           <div className="discovery-results-bar">
             <div>
-              <span className="discovery-eyebrow">Keep the story moving</span>
               <h2>Your journey</h2>
             </div>
             <button
@@ -352,14 +344,12 @@ export default function JourneyWorkspace({
               .slice(0, 2)
               .join("")}
           </div>
-          <span className="discovery-eyebrow">Your next chapter</span>
           <h2>{profile.name}</h2>
           <p>{profile.headline}</p>
           <div className="discovery-goal">
-            <span className="discovery-eyebrow">Working toward</span>
+            <strong>Opportunity goals</strong>
             <p>{profile.goal}</p>
           </div>
-          <h3>Make your contribution clear.</h3>
           <p>
             Say what was yours. Link the work. Describe what changed. A mentor
             can confirm the specific work they reviewed.

@@ -183,9 +183,8 @@ export default function EvidenceAssessment({
     >
       <h3>Assess evidence against your criteria</h3>
       <p id="assessment-help">
-        Define what you want to understand about this person's work. These
-        criteria are separate from search filters. Ratings describe evidence
-        support, not ability.
+        Add criteria to assess documented evidence, not ability. This does not
+        change your search filters.
       </p>
       <details className="discovery-assessment-scale">
         <summary>What the 1–5 scale means</summary>
@@ -211,7 +210,7 @@ export default function EvidenceAssessment({
         aria-busy={busy}
       >
         <fieldset disabled={busy}>
-          <legend className="discovery-eyebrow">
+          <legend className="discovery-sr-only">
             Your assessment criteria
           </legend>
           {rows.map((row, index) => (

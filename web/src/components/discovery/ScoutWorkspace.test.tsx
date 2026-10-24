@@ -13,9 +13,12 @@ describe("institution scouting", () => {
     expect(html).toContain("Fictional profiles and sample responses");
     expect(html).toContain("What are you working on?");
     expect(html).toContain("Skills to explore");
+    expect(html).toContain("Find community builders through their work.");
     expect(html).toContain("Already have someone in mind?");
     expect(html).toContain("does not rank these sample profiles");
     expect(html).not.toContain("verified person");
+    expect(html).not.toContain("Your search, in your words");
+    expect(html).not.toContain("Built in community. Seen in context.");
   });
   it("does not render demo personas or navigation in the production initial state", () => {
     const html = renderToStaticMarkup(<ScoutWorkspace profiles={[]} />);

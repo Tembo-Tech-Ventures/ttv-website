@@ -95,8 +95,7 @@ export default function ProfileEditor({
 
   return (
     <section className="discovery-panel" aria-labelledby={`${id}-heading`}>
-      <p className="discovery-eyebrow">Your community profile</p>
-      <h2 id={`${id}-heading`}>Describe your work and what comes next</h2>
+      <h2 id={`${id}-heading`}>Edit your community profile</h2>
       <p>
         Share your experience, skills and the opportunities you want to explore.
       </p>
@@ -112,7 +111,7 @@ export default function ProfileEditor({
         aria-describedby={`${id}-visibility${error ? ` ${id}-error` : ""}`}
       >
         <fieldset disabled={busy}>
-          <legend>Profile details</legend>
+          <legend className="discovery-sr-only">Profile details</legend>
           <label className="discovery-field" htmlFor={`${id}-headline`}>
             Headline
             <input
