@@ -1,92 +1,138 @@
 import { DatabaseSync } from "node:sqlite";
+import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { withStagingPersonas } from "./staging-personas.mjs";
-
-function fixture() {
+import { verifyStagingFixtureTarget, STAGING_FIXTURE_DATABASE_ID as dbId } from "./staging-fixture-target.mjs";
+import { createAuth } from "../../src/lib/auth";
+import { isAgentSession } from "../../src/lib/agent-auth";
+const signingSecret = "fictional-staging-secret-at-least-thirty-two-characters";
+async function fixture() {
   const db = new DatabaseSync(":memory:");
-  db.exec(`CREATE TABLE user (id TEXT PRIMARY KEY, name TEXT, email TEXT UNIQUE, emailVerified INTEGER, createdAt INTEGER, updatedAt INTEGER);
-    CREATE TABLE Roles (id TEXT PRIMARY KEY, name TEXT UNIQUE);
-    CREATE TABLE UserRoles (id TEXT PRIMARY KEY, userId TEXT, roleId TEXT, createdAt INTEGER, updatedAt INTEGER);
-    CREATE TABLE session (id TEXT PRIMARY KEY, expiresAt INTEGER, token TEXT UNIQUE, userAgent TEXT, userId TEXT, createdAt INTEGER, updatedAt INTEGER);
-    INSERT INTO Roles VALUES ('mentor', 'MENTOR'), ('institution', 'INSTITUTION');`);
-  const executeQuery = vi.fn(async (_id, sql, params) => {
+  db.exec("PRAGMA foreign_keys=ON");
+  const migrations = new URL("../../src/lib/db/migrations/", import.meta.url);
+  for (const name of readdirSync(migrations).filter(n => n.endsWith(".sql")).toSorted()) db.exec(readFileSync(new URL(name, migrations), "utf8"));
+  // Proposed Developer-owned registry contract; replaced by actual migration on integration.
+  db.exec(`CREATE TABLE IF NOT EXISTS stagingFixtureIdentity (userId TEXT PRIMARY KEY REFERENCES user(id) ON DELETE CASCADE, sessionId TEXT UNIQUE REFERENCES session(id) ON DELETE CASCADE, runId TEXT NOT NULL, persona TEXT NOT NULL, expiresAt INTEGER NOT NULL);
+    INSERT OR IGNORE INTO Roles (id,name) VALUES ('mentor','MENTOR'),('institution','INSTITUTION');`);
+  const accountId = "a".repeat(32), expectedVersion = "b".repeat(40);
+  const api = vi.fn(async (path, options) => {
+    if (path === "") return { id: accountId };
+    if (path.endsWith("settings")) return { bindings: [{ name: "DB", type: "d1", id: dbId }, { name: "DEPLOYMENT_ENVIRONMENT", text: "staging" }, { name: "DEPLOYMENT_VERSION", text: expectedVersion }] };
+    if (path.endsWith(dbId)) return { uuid: dbId, name: "ttv-website-db-staging" };
+    const { sql, params } = options.body;
     const statement = db.prepare(sql);
     return [{ results: sql.startsWith("SELECT") ? statement.all(...params) : (statement.run(...params), []) }];
   });
-  return { db, options: { environmentName: "staging", database: { uuid: "staging-db", name: "ttv-website-db-staging" }, executeQuery, now: new Date("2026-10-24T10:00:00Z") } };
+  const target = await verifyStagingFixtureTarget({ environmentName: "staging", accountId, expectedVersion, baseUrl: "https://ttv-website-staging.fixture.workers.dev", api,
+    fetchImpl: async () => Response.json({ service: "ttv-website", environment: "staging", version: expectedVersion, checks: { db: "ok" } }) });
+  return { db, api, options: { target, signingSecret } };
 }
-
-describe("synthetic shared staging personas", () => {
-  it("uses distinct nonadmin identities, one-hour tokens and revokes them after verification", async () => {
-    const { db, options } = fixture();
+const count = (db, table) => db.prepare(`SELECT count(*) n FROM "${table}"`).get().n;
+describe("staging personas on application migrations", () => {
+  it("authenticates fixture cookies through real schema/Drizzle/BetterAuth with second timestamps", async () => {
+    const { db, options } = await fixture();
+    const d1 = { prepare(sql) {
+      const statement = db.prepare(sql);
+      let params = [];
+      return {
+        bind(...values) { params = values; return this; },
+        async raw() { statement.setReturnArrays(true); return statement.all(...params); },
+        async all() { return { results: statement.all(...params) }; },
+        async run() { return { meta: statement.run(...params) }; },
+      };
+    } };
+    const auth = createAuth({ DB: d1, BETTER_AUTH_SECRET: signingSecret, BETTER_AUTH_URL: options.target.baseUrl,
+      GITHUB_CLIENT_ID: "fictional", GITHUB_CLIENT_SECRET: "fictional", AGENT_AUTH_ENABLED: "true" });
+    let headers;
+    let callbackError;
     try {
-      await expect(withStagingPersonas({ ...options, run: async (personas) => {
-        expect(Object.keys(personas)).toHaveLength(5);
-        expect(new Set(Object.values(personas).map(p => p.token)).size).toBe(5);
-        expect(db.prepare("SELECT count(*) n FROM session").get().n).toBe(5);
-        expect(db.prepare("SELECT roleId FROM UserRoles ORDER BY roleId").all().map(r => r.roleId)).toEqual(["institution", "mentor"]);
-        for (const persona of Object.values(personas)) expect(persona.expiresAt).toBe(Date.parse("2026-10-24T11:00:00Z") / 1000);
-        return "must not escape callback";
-      } })).resolves.toBeUndefined();
-      expect(db.prepare("SELECT count(*) n FROM session").get().n).toBe(0);
-      expect(db.prepare("SELECT count(*) n FROM user").get().n).toBe(5);
+      await withStagingPersonas({ ...options, run: async personas => {
+        try {
+        const p = personas.mentor;
+        headers = new globalThis.Headers({ cookie: p.cookies.map(c => `${c.name}=${c.value}`).join("; ") });
+        const resolved = await auth.api.getSession({ headers });
+        expect(resolved?.user.id).toBe(p.userId);
+        expect(resolved?.session.id).toBe(p.sessionId);
+        expect(resolved?.session.expiresAt.getTime()).toBe(p.expiresAt * 1000);
+        expect(isAgentSession(resolved?.session.userAgent)).toBe(true);
+        db.prepare('UPDATE session SET expiresAt=? WHERE id=?').run(Math.floor(Date.now() / 1000) - 1, p.sessionId);
+        expect(await auth.api.getSession({ headers })).toBeNull();
+        } catch (error) { callbackError = error; }
+      } });
+      if (callbackError) throw callbackError;
+      expect(await auth.api.getSession({ headers })).toBeNull();
     } finally { db.close(); }
   });
-
-  it.each(["production", "prod", "agent-pr-172", ""])("rejects %s before SQL", async (environmentName) => {
-    const executeQuery = vi.fn();
-    await expect(withStagingPersonas({ environmentName, database: { uuid: "db", name: "ttv-website-db-staging" }, executeQuery, run: vi.fn() })).rejects.toThrow("exact shared staging database");
-    expect(executeQuery).not.toHaveBeenCalled();
-  });
-
-  it("rejects a mismatched database even when environment says staging", async () => {
-    await expect(withStagingPersonas({ environmentName: "staging", database: { uuid: "db", name: "ttv-website-db-production" } })).rejects.toThrow("exact shared staging database");
-  });
-
-  it("revokes sessions and sanitizes callback errors", async () => {
-    const { db, options } = fixture();
+  it("creates bounded synthetic roles/cookies/scoped PATs then removes all fixture records", async () => {
+    const { db, options } = await fixture();
     try {
-      await expect(withStagingPersonas({ ...options, run: async (p) => { throw new Error(p.member.token); } })).rejects.toThrow("setup or verification failed");
-      expect(db.prepare("SELECT count(*) n FROM session").get().n).toBe(0);
-    } finally { db.close(); }
-  });
-
-  it("fails before user creation when role migrations are absent", async () => {
-    const { db, options } = fixture();
-    try {
-      db.exec("DELETE FROM Roles");
-      const run = vi.fn();
-      await expect(withStagingPersonas({ ...options, run })).rejects.toThrow("setup or verification failed");
-      expect(run).not.toHaveBeenCalled();
-      expect(db.prepare("SELECT count(*) n FROM user").get().n).toBe(0);
-    } finally { db.close(); }
-  });
-
-  it("cleans up partial setup without touching existing sessions", async () => {
-    const { db, options } = fixture();
-    try {
-      db.exec("INSERT INTO session (id, userId, userAgent) VALUES ('existing', 'real-user', 'browser')");
-      const executeQuery = vi.fn(async (id, sql, params) => {
-        if (sql.startsWith('INSERT INTO "user"') && params[0].endsWith("-mentor")) {
-          throw new Error("simulated interrupted setup");
+      await expect(withStagingPersonas({ ...options, run: async personas => {
+        expect(Object.keys(personas)).toHaveLength(6);
+        expect(count(db, "session")).toBe(6);
+        expect(count(db, "stagingFixtureIdentity")).toBe(6);
+        expect(count(db, "personal_access_token")).toBe(3);
+        expect(new Set(Object.values(personas).map(p => p.runId)).size).toBe(1);
+        for (const p of Object.values(personas)) {
+          expect(p.userId).toMatch(/^ttv-staging-fixture-[a-f0-9]{24}-/);
+          expect(p.cookies[0].httpOnly).toBe(true);
+          expect(p.expiresAt).toBeLessThanOrEqual(Date.now() / 1000 + 3601);
+          expect(p.token).toBeUndefined();
         }
-        return options.executeQuery(id, sql, params);
-      });
-      const run = vi.fn();
-      await expect(withStagingPersonas({ ...options, executeQuery, run })).rejects.toThrow("setup or verification failed");
-      expect(run).not.toHaveBeenCalled();
-      expect(db.prepare("SELECT id FROM session").all().map(r => r.id)).toEqual(["existing"]);
+        const pats = db.prepare("SELECT tokenHash,scopes FROM personal_access_token").all();
+        expect(pats.every(p => /^[a-f0-9]{64}$/.test(p.tokenHash))).toBe(true);
+        expect(pats.some(p => p.scopes.includes("admin:"))).toBe(false);
+        return "not forwarded";
+      } })).resolves.toBeUndefined();
+      for (const table of ["session", "stagingFixtureIdentity", "personal_access_token", "UserRoles", "user"]) expect(count(db, table)).toBe(0);
     } finally { db.close(); }
   });
-
-  it("reports failed revocation explicitly without exposing bindings", async () => {
-    const { db, options } = fixture();
+  it("rejects unverified targets before SQL", async () => {
+    await expect(withStagingPersonas({ target: {}, signingSecret, run: vi.fn() })).rejects.toThrow("verified staging");
+  });
+  it("fails closed before provisioning if roles or registry are missing", async () => {
+    const { db, options } = await fixture();
     try {
-      const executeQuery = vi.fn(async (id, sql, params) => {
-        if (sql.startsWith('DELETE FROM "session"')) throw new Error("unsafe provider body");
-        return options.executeQuery(id, sql, params);
+      db.exec("DELETE FROM Roles WHERE name='MENTOR'");
+      await expect(withStagingPersonas({ ...options, run: vi.fn() })).rejects.toThrow("setup or verification failed");
+      expect(count(db, "user")).toBe(0);
+      db.exec("DROP TABLE stagingFixtureIdentity");
+      await expect(withStagingPersonas({ ...options, run: vi.fn() })).rejects.toThrow("setup or verification failed");
+      expect(count(db, "user")).toBe(0);
+    } finally { db.close(); }
+  });
+  it("cleans partial setup and preserves real users/sessions", async () => {
+    const { db, api, options } = await fixture();
+    try {
+      db.exec("INSERT INTO user (id,name,email) VALUES ('real','Existing user','real@example.test'); INSERT INTO session (id,userId,token,expiresAt) VALUES ('real-session','real','real-token',9999999999)");
+      const original = api.getMockImplementation();
+      api.mockImplementation(async (path, args) => {
+        if (args?.body.sql.startsWith('INSERT INTO "user"') && args.body.params[0].endsWith("-mentor")) throw new Error("sensitive credential");
+        return original(path, args);
       });
-      await expect(withStagingPersonas({ ...options, executeQuery, run: async () => {} })).rejects.toThrow("cleanup failed; sessions expire within one hour");
+      await expect(withStagingPersonas({ ...options, run: vi.fn() })).rejects.toThrow("setup or verification failed");
+      expect(db.prepare("SELECT id FROM user").all().map(r => r.id)).toEqual(["real"]);
+      expect(db.prepare("SELECT id FROM session").all().map(r => r.id)).toEqual(["real-session"]);
+    } finally { db.close(); }
+  });
+  it("cleans callback failures without leaking credentials", async () => {
+    const { db, options } = await fixture();
+    try {
+      await expect(withStagingPersonas({ ...options, run: async p => { throw new Error(p.member.personalAccessToken); } })).rejects.toThrow(/^Staging persona setup or verification failed; inspect sanitized test evidence\.$/);
+      expect(count(db, "user")).toBe(0);
+    } finally { db.close(); }
+  });
+  it("continues cleanup after a deletion error and reports it", async () => {
+    const { db, api, options } = await fixture();
+    try {
+      const original = api.getMockImplementation();
+      api.mockImplementation(async (path, args) => {
+        if (args?.body.sql.startsWith('DELETE FROM "personal_access_token"')) throw new Error("sensitive binding");
+        return original(path, args);
+      });
+      await expect(withStagingPersonas({ ...options, run: async () => {} })).rejects.toThrow("cleanup failed");
+      expect(count(db, "session")).toBe(0);
+      expect(count(db, "user")).toBe(0);
+      expect(count(db, "personal_access_token")).toBe(0); // user FK cascade still removes PATs
     } finally { db.close(); }
   });
 });

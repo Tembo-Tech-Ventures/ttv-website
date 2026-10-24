@@ -54,26 +54,56 @@ The preflight receives only a read-scoped GitHub token; Cloudflare secrets are
 scoped to the subsequent reusable staging job. Production workflow, rollback
 behavior and production credentials are unchanged.
 
-## Synthetic persona verification helper
+## Reusable synthetic staging verification
 
-`web/scripts/cloudflare/staging-personas.mjs` provides a runner-only
-`withStagingPersonas` callback for a later credentialed verification step. It
-is not wired into deployment yet and must not be called without the PM slot.
-The runner must resolve actual Cloudflare D1 metadata and bind the executor to
-that database; never accept a user-supplied database name as proof of identity.
-The helper requires `staging` and `ttv-website-db-staging`, and migrated MENTOR
-and INSTITUTION roles. It does not create reference roles or ADMIN users.
+The runner helpers are implemented but **not wired into a workflow yet**. Runtime
+fixture authorization and its registry migration must be integrated and tested
+before live provisioning. This is intended to support repeatable workflow-dispatch
+browser verification beyond the hackathon; arbitrary interactive local browser
+access is not delivered.
 
-Each invocation creates distinct fictional member, other-member, mentor,
-institution and unapproved-institution identities with one-hour random bearer
-sessions. Pass tokens to browser contexts only in runner memory. Disable traces
-or redact authorization headers wherever test tooling records requests. Revoke
-the invocation's sessions on success, test failure or partial setup. Labelled
-fictional data is retained for review; cleanup of that data must be separately
-scoped. Failed revocation is an error, with one-hour expiry as the backstop.
+`staging-fixture-target.mjs` reads the configured account, actual staging Worker
+bindings, exact D1 metadata and public deployment health. It requires the known
+staging D1 UUID, staging Worker origin and exact expected deployed commit. Only
+that verified target exposes a database executor, permanently bound to staging.
+No credentialed writes occur in preflight. The main integration branch and PM
+serialized slot rules still apply to verification and provisioning.
 
-This tests application role and ownership enforcement using the staging bearer
-plugin. It does not establish GitHub OAuth, owner admin approval or external MCP
-token issuance behavior. Those paths need separate acceptance evidence. A
-workflow completion or an admin-authorized request cannot substitute for the
-member-denied and unapproved-institution-denied checks.
+`withStagingPersonas` requires that verified target, the same signing configuration
+used by the staging deployment and the migrated registry/ADMIN/MENTOR/INSTITUTION
+roles. Never read secrets back from Cloudflare or log the resolved signing config.
+The existing credentialed runner can resolve it through deployment helpers; no
+new public endpoint or shared secret is introduced. No reference roles or real
+user records are created or modified by the fixture helper.
+
+Each run creates six namespaced fictional identities: member, otherMember,
+mentor, institution, unapprovedInstitution and admin. Each has a registry entry
+bound to its user/session/run/persona and absolute one-hour expiry. Member and
+institution test requests use independently scoped, hashed PAT fixtures; admin
+receives no PAT. Cookies and PATs remain within the callback and browser memory:
+no workflow outputs, arguments, storageState, traces, HAR or credential artifacts.
+Only explicitly sanitized results and fictional screenshots may be uploaded.
+
+The pinned Better Auth implementation renews short database sessions by default.
+The runner supplies a signed dont-remember cookie to suppress routine renewal.
+This is NOT an authorization boundary: runtime must check the registry's absolute
+expiry and live session on every synthetic request, even when a cached cookie
+or renewed database expiry exists. Production must reject fixture identities
+regardless of flags. Prefixes and request User-Agent headers cannot authorize a
+fixture: authenticated session plus DB-backed run membership is required.
+
+Runtime exceptions, owned by Developer, must allow only fixed fixture roles and
+same-run synthetic targets. Credential minting and agent-access remain blocked.
+An admin fixture may test synthetic approvals, never grant privileges to a real
+user. Every invocation attempts registry/PAT/session/role/user cleanup, including
+partial setup and callback failures; deletion failures are reported without
+provider bodies or bound values. Default retention is zero. Any later evidence
+retention mode needs explicit labelling and scope.
+
+Tests apply actual existing application migrations, authenticate signed cookies
+through the real createAuth/Drizzle/BetterAuth stack, check seconds-to-Date
+conversion, expiry/revocation and delegated-session marking. The proposed new
+registry currently has a contract fixture in the tests until Developer's migration
+lands; this does not yet prove production isolation, runtime exceptions, or
+staging browser acceptance. GitHub OAuth and external MCP client compatibility
+also need their own evidence.
