@@ -20,3 +20,8 @@ it("rejects invalid versions and duplicate criterion IDs", () => {
  expect(() => assessEvidence(p, [], { ...rubric, version: 0 })).toThrow(/greater|positive|small/i);
  expect(() => assessEvidence(p, [], { ...rubric, criteria: [rubric.criteria[0], rubric.criteria[0]] })).toThrow("Criterion IDs must be unique.");
 });
+it("cites actual bounded quotes, observed source dates and mentor role snapshots", () => {
+ const c = { id: "c", journeyId: "j", mentorId: "mentor", mentorName: "Mentor", mentorRole: "MENTOR" as const, statement: "Reviewed implementation", method: "code review", journeyVersion: 3, createdAt: 50 };
+ const r = assessEvidence(p, [{ ...j, description: "TypeScript " + "x".repeat(450), createdAt: 10, updatedAt: 40, confirmations: [c] }], rubric);
+ expect(r.criteria[0].citations).toMatchObject([{ quote: ("TypeScript " + "x".repeat(450)).slice(0,400), observedAt: 40, version: 3 }, { quote: "Reviewed implementation", observedAt: 50, actorId: "mentor", roleSnapshot: "MENTOR", version: 3 }]);
+});

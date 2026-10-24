@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parseInput, type CommunityJourney, type CommunityProfile } from "./model";
+import { parseInput, type CommunityJourney, type CommunityProfile, type CommunityConfirmation } from "./model";
 
 export const rubricInput = z.object({
   id: z.string().trim().min(1).max(100),
@@ -18,6 +18,19 @@ export interface EvidenceCitation {
   version: number;
   userId: string;
   url?: string | null;
+  quote?: string;
+  observedAt?: number | null;
+  roleSnapshot?: string;
+  actorId?: string;
+}
+
+export function journeyCitation(j: CommunityJourney): EvidenceCitation {
+  return { kind: "journey", id: j.id, version: j.version, userId: j.userId, url: j.evidenceUrl,
+    quote: j.description?.slice(0, 400), observedAt: j.updatedAt ?? j.createdAt };
+}
+export function confirmationCitation(c: CommunityConfirmation, userId: string): EvidenceCitation {
+  return { kind: "confirmation", id: c.id, version: c.journeyVersion, userId,
+    quote: c.statement?.slice(0, 400), actorId: c.mentorId, roleSnapshot: c.mentorRole, observedAt: c.createdAt };
 }
 
 /** Literal coverage of supplied criteria, never an inference of ability or truth. */
@@ -38,8 +51,8 @@ export function assessEvidence(profile: CommunityProfile, journeys: CommunityJou
       return { criterionId: criterion.id, label: criterion.label, status,
         explanation: status === "supported" ? "Published contribution text contains a supplied term; this does not establish proficiency." : status === "contradictory" ? "Both supplied supporting and contrary terms occur; human review required." : status === "uncertain" ? "Contrary terms or outdated confirmations require human review." : "No published contribution contains the supplied terms; absence is not evidence of inability.",
         citations: cited.flatMap((j): EvidenceCitation[] => [
-          { kind: "journey", id: j.id, version: j.version, userId: j.userId, url: j.evidenceUrl },
-          ...j.confirmations.filter((c) => c.journeyVersion === j.version).map((c): EvidenceCitation => ({ kind: "confirmation", id: c.id, version: c.journeyVersion, userId: j.userId })),
+          journeyCitation(j),
+          ...j.confirmations.filter((c) => c.journeyVersion === j.version).map((c): EvidenceCitation => confirmationCitation(c, j.userId)),
         ]),
       };
     }),

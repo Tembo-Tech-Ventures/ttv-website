@@ -52,7 +52,7 @@ const routes: Record<string, Handler> = {
   "POST journey": async ({service,body}) => communityJson({entry: await service.createJourney(body)},201),
   "GET profiles": async ({service,request}) => {
     const url = new URL(request.url);
-    return communityJson({profiles: await service.searchProfiles({query: url.searchParams.get("query") ?? "",limit:Number(url.searchParams.get("limit") ?? 20)})});
+    return communityJson({profiles: await service.searchProfiles({query: url.searchParams.get("query") ?? "",limit:Number(url.searchParams.get("limit") ?? 20),skills:(url.searchParams.get("skills") ?? "").split(",").map(s=>s.trim()).filter(Boolean)})});
   },
   "POST chat": async ({service,body,env,actor}) => {
     // The first-party chat can perform multiple tools; require the matching delegated read scope.

@@ -1117,5 +1117,6 @@ export const communityConfirmation = sqliteTable("communityConfirmation", {
   statement: text("statement").notNull(),
   method: text("method").notNull(),
   journeyVersion: integer("journeyVersion").notNull(),
+  mentorRole: text("mentorRole", {enum:["MENTOR", "ADMIN", "UNKNOWN"]}).notNull().default("UNKNOWN"),
   ...timestamps,
 }, (table) => [index("communityConfirmation_journeyId_idx").on(table.journeyId)]);

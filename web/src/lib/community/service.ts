@@ -40,10 +40,10 @@ export function createCommunityService(db: D1Database, actorId: string) {
   }
   async function listJourney(target = actorId): Promise<CommunityJourney[]> {
     await requireProfileAccess(target);
-    const { results } = await db.prepare(`SELECT id,userId,title,description,evidenceUrl,occurredAt,visibility,version,createdAt FROM communityJourney
+    const { results } = await db.prepare(`SELECT id,userId,title,description,evidenceUrl,occurredAt,visibility,version,createdAt,updatedAt FROM communityJourney
       WHERE userId=? AND (?=userId OR visibility='institution') ORDER BY occurredAt DESC,id DESC LIMIT 100`).bind(target, actorId).all<Omit<CommunityJourney, "confirmations">>();
     if (results.length === 0) return [];
-    const { results: confirmations } = await db.prepare(`SELECT c.id,c.journeyId,c.mentorId,u.name AS mentorName,c.statement,c.method,c.journeyVersion,c.createdAt
+    const { results: confirmations } = await db.prepare(`SELECT c.id,c.journeyId,c.mentorId,u.name AS mentorName,c.statement,c.method,c.journeyVersion,c.mentorRole,c.createdAt
       FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=c.mentorId
       WHERE j.userId=? AND (?=j.userId OR j.visibility='institution') ORDER BY c.createdAt DESC LIMIT 500`).bind(target, actorId).all<CommunityConfirmation>();
     return results.map((entry) => ({ ...entry, confirmations: confirmations.filter((c) => c.journeyId === entry.id) }));
@@ -64,17 +64,23 @@ export function createCommunityService(db: D1Database, actorId: string) {
       const p = parseInput(searchInput, input);
       // instr treats wildcard characters literally; all values are bound.
       const query = (p.query ?? "").toLowerCase();
+      const skills = [...new Set((p.skills ?? []).map(skill => skill.toLowerCase()))];
+      const clauses = skills.map(() => `EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(p.skills) THEN p.skills ELSE '[]' END) skill WHERE lower(skill.value)=?)`);
+      const skillFilter = clauses.length > 0 ? ` AND ${clauses.join(" AND ")}` : "";
       const { results } = await db.prepare(`${PROFILE_SELECT}
-        WHERE instr(lower(u.name || ' ' || coalesce(p.headline,'') || ' ' || coalesce(p.skills,'') || ' ' || coalesce(p.bio,'')),?)>0
-        ORDER BY u.name,u.id LIMIT ?`).bind(query,p.limit).all<ProfileRow>();
+        WHERE instr(lower(u.name || ' ' || coalesce(p.headline,'') || ' ' || coalesce(p.skills,'') || ' ' || coalesce(p.bio,'')),?)>0${skillFilter}
+        ORDER BY u.name,u.id LIMIT ?`).bind(query,...skills,p.limit).all<ProfileRow>();
       return results.map(profile);
     },
     async listMentorship() {
       const a = await access();
       if (!a.isMentor && !a.isAdmin) throw new CommunityError("Mentor access is required.", 403);
-      const { results } = await db.prepare(`SELECT j.id,j.userId,u.name AS memberName,j.title,j.description,j.evidenceUrl,j.occurredAt,j.visibility,j.version,j.createdAt
+      const { results } = await db.prepare(`SELECT j.id,j.userId,u.name AS memberName,j.title,j.description,j.evidenceUrl,j.occurredAt,j.visibility,j.version,j.createdAt,j.updatedAt
         FROM communityJourney j JOIN user u ON u.id=j.userId WHERE j.visibility='institution' AND j.userId<>? ORDER BY j.createdAt DESC,j.id DESC LIMIT 50`).bind(actorId).all<Omit<CommunityJourney, "confirmations"> & { memberName: string }>();
-      return results;
+      const {results: confirmations} = await db.prepare(`SELECT c.id,c.journeyId,c.mentorId,u.name AS mentorName,c.statement,c.method,c.journeyVersion,c.mentorRole,c.createdAt
+        FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=c.mentorId
+        WHERE j.visibility='institution' AND j.userId<>? ORDER BY c.createdAt DESC LIMIT 500`).bind(actorId).all<CommunityConfirmation>();
+      return results.map(entry => ({...entry,confirmations:confirmations.filter(c=>c.journeyId===entry.id)}));
     },
     async setAccess(input: unknown) {
       const a = await access();
@@ -125,14 +131,15 @@ export function createCommunityService(db: D1Database, actorId: string) {
       const p = parseInput(confirmationInput, input);
       const entry = await db.prepare(`SELECT userId,version FROM communityJourney WHERE id=? AND visibility='institution'`).bind(id).first<{ userId: string; version: number }>();
       if (!entry) throw new CommunityError("Contribution not found.", 404);
+      if (entry.version !== p.expectedRevision) throw new CommunityError("Contribution changed. Review the current revision before confirming.",409);
       if (entry.userId === actorId) throw new CommunityError("You cannot confirm your own contribution.", 403);
       const confirmationId = createId();
       // Repeat visibility/ownership predicates in the write to avoid a check/write race.
-      const result = await db.prepare(`INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journeyVersion)
-        SELECT ?,id,?,?,?,version FROM communityJourney WHERE id=? AND visibility='institution' AND userId<>? AND version=?`)
-        .bind(confirmationId,actorId,p.statement,p.method,id,actorId,entry.version).run();
+      const result = await db.prepare(`INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journeyVersion,mentorRole)
+        SELECT ?,id,?,?,?,version,? FROM communityJourney WHERE id=? AND visibility='institution' AND userId<>? AND version=?`)
+        .bind(confirmationId,actorId,p.statement,p.method,a.isMentor ? "MENTOR" : "ADMIN",id,actorId,entry.version).run();
       if (!result.meta.changes) throw new CommunityError("Contribution no longer available.", 409);
-      return { id: confirmationId, journeyId: id, mentorId: actorId, ...p, journeyVersion: entry.version };
+      return { id: confirmationId, journeyId: id, mentorId: actorId, ...p, journeyVersion: entry.version,mentorRole:a.isMentor ? "MENTOR" : "ADMIN" };
     },
   };
 }

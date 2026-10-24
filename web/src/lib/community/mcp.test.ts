@@ -73,7 +73,7 @@ describe("community MCP boundary", () => {
   it("assesses own evidence while denying other subjects without institutional scope", async () => {
     const deps = service();
     vi.mocked(deps.getProfile).mockResolvedValue({ userId: "member", name: "Member", image: null, headline: "", bio: "", skills: [], opportunityGoals: "", version: 1, updatedAt: null });
-    vi.mocked(deps.listJourney).mockResolvedValue([{ id: "private-entry", userId: "member", title: "TypeScript private work", description: "private-only-secret", occurredAt: "2026-10-24", visibility: "private", version: 1, createdAt: 1, confirmations: [] }]);
+    vi.mocked(deps.listJourney).mockResolvedValue([{ id: "private-entry", userId: "member", title: "TypeScript private work", description: "private-only-secret", occurredAt: "2026-10-24", visibility: "private", version: 1, createdAt: 1, updatedAt: 1, confirmations: [] }]);
     const rubric = { id: "test", version: 1, criteria: [{ id: "code", label: "Code", terms: ["TypeScript"] }] };
     const own = await handleCommunityMcp(request("tools/call", { name: "assess_profile", arguments: { userId: "member", rubric } }), member, deps);
     const text = await own.text();

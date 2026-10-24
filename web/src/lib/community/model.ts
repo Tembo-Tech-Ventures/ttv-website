@@ -28,10 +28,12 @@ export const journeyInput = z.object({
   visibility: z.enum(["institution", "private"]),
 }).strict();
 export const confirmationInput = z.object({
+  expectedRevision: z.number().int().positive(),
   statement: z.string().trim().min(10).max(2000),
   method: z.string().trim().min(3).max(500),
 }).strict();
 export const searchInput = z.object({
+  skills: z.array(z.string().trim().min(1).max(60)).max(10).default([]),
   query: z.string().trim().max(200).default(""),
   limit: z.number().int().min(1).max(50).default(20),
 }).strict();
@@ -48,9 +50,9 @@ export interface CommunityProfile extends CommunityProfileInput {
 }
 export interface CommunityConfirmation {
   id: string; journeyId: string; mentorId: string; mentorName: string;
-  statement: string; method: string; journeyVersion: number; createdAt: number;
+  statement: string; method: string; journeyVersion: number; mentorRole: "MENTOR" | "ADMIN" | "UNKNOWN"; createdAt: number;
 }
 export interface CommunityJourney extends CommunityJourneyInput {
-  id: string; userId: string; version: number; createdAt: number;
+  id: string; userId: string; version: number; createdAt: number; updatedAt: number;
   confirmations: CommunityConfirmation[];
 }

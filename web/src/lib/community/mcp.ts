@@ -6,7 +6,7 @@ import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
 export interface CommunityMcpService {
   getOwnProfile(): Promise<unknown>;
   updateOwnProfile(input: unknown): Promise<unknown>;
-  searchProfiles(input: { query?: string; limit?: number }): Promise<unknown>;
+  searchProfiles(input: { query?: string; limit?: number; skills?: string[] }): Promise<unknown>;
   getProfile(userId: string): Promise<CommunityProfile>;
   listJourney(userId?: string): Promise<CommunityJourney[]>;
   access(): Promise<{ isInstitution: boolean }>;
@@ -21,7 +21,7 @@ const tools = [
   { name: "list_journey", description: "Read documented journey evidence", inputSchema: { type: "object", properties: { userId: { type: "string" } }, additionalProperties: false } },
   { name: "get_own_profile", description: "Read your own community profile", inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "update_own_profile", description: "Update your own community profile", inputSchema: { type: "object", additionalProperties: true } },
-  { name: "search_profiles", description: "Search discoverable community profiles as an approved institution", inputSchema: { type: "object", properties: { query: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 50 } }, additionalProperties: false } },
+  { name: "search_profiles", description: "Search discoverable community profiles as an approved institution", inputSchema: { type: "object", properties: { query: { type: "string" }, skills:{type:"array",maxItems:10,items:{type:"string",maxLength:60}}, limit: { type: "integer", minimum: 1, maximum: 50 } }, additionalProperties: false } },
   { name: "get_profile", description: "Read a discoverable community profile as an approved institution", inputSchema: { type: "object", properties: { userId: { type: "string" } }, required: ["userId"], additionalProperties: false } },
 ];
 function response(body: unknown, status = 200): Response {
@@ -29,7 +29,7 @@ function response(body: unknown, status = 200): Response {
 }
 const rpcSchema = z.object({ jsonrpc: z.literal("2.0"), method: z.string(), id: z.union([z.string(), z.number(), z.null()]).optional(), params: z.unknown().optional() });
 const callSchema = z.object({ name: z.enum(["get_own_profile", "update_own_profile", "search_profiles", "get_profile", "list_journey", "assess_profile"]), arguments: z.record(z.unknown()).default({}) });
-const searchSchema = z.object({ query: z.string().max(2000).optional(), limit: z.number().int().min(1).max(50).optional() }).strict();
+const searchSchema = z.object({ skills:z.array(z.string().trim().min(1).max(60)).max(10).optional(), query: z.string().max(2000).optional(), limit: z.number().int().min(1).max(50).optional() }).strict();
 const targetSchema = z.object({ userId: z.string().min(1) }).strict();
 const assessmentSchema = z.object({ userId: z.string().min(1), rubric: rubricInput }).strict();
 const journeySchema = z.object({ userId: z.string().min(1).optional() }).strict();

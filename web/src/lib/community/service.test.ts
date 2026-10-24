@@ -6,13 +6,14 @@ import { handleCommunityRequest } from "./http";
 const databases: DatabaseSync[] = [];
 afterEach(() => { for (const db of databases.splice(0)) db.close(); });
 const migration = readFileSync(new URL("../db/migrations/0017_community_discovery.sql", import.meta.url),"utf8").replaceAll("--> statement-breakpoint", "");
-function fixture() {
+function fixture(beforeWrite?: (sql: DatabaseSync,query: string) => void) {
   const sql = new DatabaseSync(":memory:"); databases.push(sql);
   sql.exec(`PRAGMA foreign_keys=ON; CREATE TABLE user (id TEXT PRIMARY KEY,name TEXT NOT NULL,image TEXT);
     CREATE TABLE Roles (id TEXT PRIMARY KEY,name TEXT UNIQUE,createdAt INTEGER DEFAULT(unixepoch()),updatedAt INTEGER DEFAULT(unixepoch()));
     CREATE TABLE UserRoles (id TEXT PRIMARY KEY,userId TEXT,roleId TEXT,UNIQUE(userId,roleId));
     INSERT INTO user VALUES ('member','Member',null),('other','Other',null),('mentor','Mentor',null),('institution','Institution',null);`);
   sql.exec(migration);
+  sql.exec(readFileSync(new URL("../db/migrations/0018_confirmation_role_snapshot.sql",import.meta.url),"utf8"));
   for (const [actor,role] of [["mentor","MENTOR"],["institution","INSTITUTION"]]) sql.prepare(`INSERT INTO UserRoles VALUES (?,?,(SELECT id FROM Roles WHERE name=?))`).run(actor,actor,role);
   const db = { prepare(query: string) {
     let values: (string | number | null)[] = [];
@@ -20,7 +21,7 @@ function fixture() {
       bind(...args: (string | number | null)[]) { values = args; return statement; },
       async first() { return sql.prepare(query).get(...values) ?? null; },
       async all() { return { results: sql.prepare(query).all(...values) }; },
-      async run() { const r = sql.prepare(query).run(...values); return { success: true, meta: { changes: Number(r.changes) } }; },
+      async run() { beforeWrite?.(sql,query); const r = sql.prepare(query).run(...values); return { success: true, meta: { changes: Number(r.changes) } }; },
     }; return statement;
   } } as unknown as D1Database;
   return { db, sql, member: createCommunityService(db,"member"), institution: createCommunityService(db,"institution"), mentor: createCommunityService(db,"mentor") };
@@ -43,20 +44,28 @@ describe("community service real SQL boundaries", () => {
     f.sql.prepare("DELETE FROM UserRoles WHERE userId=?").run("institution");
     await expect(f.institution.searchProfiles({})).rejects.toMatchObject({status:403});
   });
+  it("AND matches skill criteria before limiting results", async () => {
+    const f = fixture();
+    await f.member.updateOwnProfile({...profile,skills:["React","TypeScript"]});
+    await createCommunityService(f.db,"other").updateOwnProfile({...profile,skills:["React"]});
+    expect(await f.institution.searchProfiles({skills:["react","typescript"],limit:1})).toEqual([expect.objectContaining({userId:"member"})]);
+    expect(await f.institution.searchProfiles({skills:["act"]})).toEqual([]);
+    await expect(f.institution.searchProfiles({skills:Array(11).fill("React")})).rejects.toMatchObject({status:400});
+  });
   it("excludes private contributions from institution and mentor reads", async () => {
     const f = fixture(); await f.member.createJourney(entry);
     const hidden = await f.member.createJourney({...entry,title:"Private",description:"Private call",visibility:"private"});
     expect(await f.member.listJourney()).toHaveLength(2);
     const shared = await f.institution.listJourney("member"); expect(shared).toHaveLength(1);
     expect(JSON.stringify(shared)).not.toContain("Private call");
-    await expect(f.mentor.confirmJourney(hidden.id,{statement:"I checked the code",method:"Review"})).rejects.toMatchObject({status:404});
+    await expect(f.mentor.confirmJourney(hidden.id,{expectedRevision:1,statement:"I checked the code",method:"Review"})).rejects.toMatchObject({status:404});
     await expect(createCommunityService(f.db,"other").getProfile("member")).rejects.toMatchObject({status:403});
   });
   it("records scoped mentor provenance and rejects self confirmation and revoked mentors", async () => {
     const f = fixture(); const item = await f.member.createJourney(entry);
-    const claim = {statement:"I reviewed the test implementation",method:"Repository review"};
+    const claim = {expectedRevision:1,statement:"I reviewed the test implementation",method:"Repository review"};
     await f.mentor.confirmJourney(item.id,claim);
-    expect((await f.institution.listJourney("member"))[0].confirmations).toEqual([expect.objectContaining({mentorId:"mentor",journeyVersion:1,...claim})]);
+    expect((await f.institution.listJourney("member"))[0].confirmations).toEqual([expect.objectContaining({mentorId:"mentor",journeyVersion:1,mentorRole:"MENTOR",statement:claim.statement,method:claim.method})]);
     await expect(f.member.confirmJourney(item.id,claim)).rejects.toMatchObject({status:403});
     const own = await f.mentor.createJourney(entry); await expect(f.mentor.confirmJourney(own.id,claim)).rejects.toMatchObject({status:403});
     f.sql.prepare("DELETE FROM UserRoles WHERE userId=?").run("mentor"); await expect(f.mentor.confirmJourney(item.id,claim)).rejects.toMatchObject({status:403});
@@ -83,23 +92,35 @@ describe("community service real SQL boundaries", () => {
     expect((await createCommunityService(f.db,"other").access()).isInstitution).toBe(false);
     await expect(f.member.setAccess({userId:"other",role:"ADMIN",granted:true})).rejects.toMatchObject({status:400});
   });
+  it("rejects confirmation if its evidence revision changes during review", async () => {
+    let edit = false;
+    const f = fixture((sql,query) => {
+      if (edit && query.includes("INSERT INTO communityConfirmation")) { edit = false; sql.exec("UPDATE communityJourney SET version=version+1"); }
+    });
+    const item = await f.member.createJourney(entry); edit = true;
+    await expect(f.mentor.confirmJourney(item.id,{expectedRevision:1,statement:"I checked the earlier revision",method:"Review"})).rejects.toMatchObject({status:409});
+    expect(f.sql.prepare("SELECT count(*) AS count FROM communityConfirmation").get()).toMatchObject({count:0});
+  });
   it("versions edited evidence without transferring a mentor confirmation to the revision", async () => {
     const f = fixture(); const item = await f.member.createJourney(entry);
-    await f.mentor.confirmJourney(item.id,{statement:"I checked the original implementation",method:"Review"});
+    await f.mentor.confirmJourney(item.id,{expectedRevision:1,statement:"I checked the original implementation",method:"Review"});
     await expect(createCommunityService(f.db,"other").updateJourney(item.id,{...entry,title:"Changed"})).rejects.toMatchObject({status:404});
     await f.member.updateJourney(item.id,{...entry,title:"Changed implementation"});
     const [saved] = await f.institution.listJourney("member");
     expect(saved).toMatchObject({version:2,title:"Changed implementation"});
     expect(saved.confirmations[0].journeyVersion).toBe(1);
+    await expect(f.mentor.confirmJourney(item.id,{expectedRevision:1,statement:"I checked the old revision",method:"Review"})).rejects.toMatchObject({status:409});
+    const queue = await f.mentor.listMentorship();
+    expect(queue[0].confirmations[0]).toMatchObject({journeyVersion:1,mentorRole:"MENTOR"});
   });
   it("lets owners retract shared evidence while rejecting other users", async () => {
     const f = fixture(); const item = await f.member.createJourney(entry);
-    await f.mentor.confirmJourney(item.id,{statement:"I reviewed this code",method:"Review"});
+    await f.mentor.confirmJourney(item.id,{expectedRevision:1,statement:"I reviewed this code",method:"Review"});
     await expect(createCommunityService(f.db,"other").setJourneyVisibility(item.id,{visibility:"private"})).rejects.toMatchObject({status:404});
     await f.member.setJourneyVisibility(item.id,{visibility:"private"});
     expect(await f.institution.listJourney("member")).toEqual([]);
     expect(await f.mentor.listMentorship()).toEqual([]);
-    await expect(f.mentor.confirmJourney(item.id,{statement:"I checked this code",method:"Review"})).rejects.toMatchObject({status:404});
+    await expect(f.mentor.confirmJourney(item.id,{expectedRevision:1,statement:"I checked this code",method:"Review"})).rejects.toMatchObject({status:404});
     await f.member.deleteJourney(item.id);
     expect(await f.member.listJourney()).toEqual([]);
     expect(f.sql.prepare("SELECT count(*) AS count FROM communityConfirmation").get()).toMatchObject({count:0});
