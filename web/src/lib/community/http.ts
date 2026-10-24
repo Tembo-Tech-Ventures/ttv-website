@@ -1,3 +1,4 @@
+import type { StagingFixtureIdentity } from "@/lib/staging-fixtures";
 import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
 import { CommunityError } from "./model";
 import { createCommunityService, type CommunityService } from "./service";
@@ -7,12 +8,16 @@ import { runCommunityChat } from "./chat";
 export function communityJson(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store", Vary: "Cookie, Authorization" } });
 }
-interface Actor { id: string; scopes: readonly string[] | null; delegatedSession?: boolean }
+interface Actor { id: string; scopes: readonly string[] | null; delegatedSession?: boolean; fixture?: StagingFixtureIdentity | null }
 interface RouteContext { request: Request; path: string; actor: Actor; service: CommunityService; body: unknown; env?: Env }
 type Handler = (ctx: RouteContext) => Promise<Response>;
 
-function requireBrowser(actor: Actor) {
-  if (actor.scopes !== null || actor.delegatedSession) throw new CommunityError("Use a browser session to manage access or review mentorship.", 403);
+function requireBrowser(actor: Actor, admin = false) {
+  if (actor.scopes !== null) throw new CommunityError("Use a browser session to manage access or review mentorship.",403);
+  if (!actor.delegatedSession) return;
+  const personas = admin ? ["admin"] : ["mentor","admin"];
+  if (actor.fixture && personas.includes(actor.fixture.persona)) return;
+  throw new CommunityError("Use a browser session to manage access or review mentorship.",403);
 }
 async function readBody(request: Request) {
   if (["GET", "HEAD", "DELETE"].includes(request.method)) return undefined;
@@ -46,7 +51,7 @@ const routes: Record<string, Handler> = {
   "GET profile": async ({service}) => communityJson({profile: await service.getOwnProfile()}),
   "PUT profile": async ({service,body}) => communityJson({profile: await service.updateOwnProfile(body)}),
   "GET access": async ({service}) => communityJson(await service.access()),
-  "POST access": async ({service,actor,body}) => { requireBrowser(actor); return communityJson(await service.setAccess(body)); },
+  "POST access": async ({service,actor,body}) => { requireBrowser(actor,true); return communityJson(await service.setAccess(body)); },
   "GET mentorship": async ({service,actor}) => { requireBrowser(actor); return communityJson({entries: await service.listMentorship()}); },
   "GET journey": async ({service}) => communityJson({entries: await service.listJourney()}),
   "POST journey": async ({service,body}) => communityJson({entry: await service.createJourney(body)},201),
@@ -88,7 +93,7 @@ export async function handleCommunityRequest(request: Request, path: string, act
   if (request.headers.has("Authorization") && actor.scopes === null) return communityJson({error:"Scoped personal access token required."},401);
   try {
     authorizeRequest(request,path,actor);
-    const ctx = {request,path,actor,service:createCommunityService(db,actor.id),body:await readBody(request),env};
+    const ctx = {request,path,actor,service:createCommunityService(db,actor.id,actor.fixture,env?.DEPLOYMENT_ENVIRONMENT),body:await readBody(request),env};
     const route = routes[`${request.method} ${path}`];
     return route ? await route(ctx) : await dynamicRoute(ctx);
   } catch (error) {

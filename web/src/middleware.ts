@@ -1,6 +1,8 @@
 import { defineMiddleware } from "astro:middleware";
 import { env } from "cloudflare:workers";
 import { createAuth } from "@/lib/auth";
+import { resolveStagingFixtureIdentity, StagingFixtureAccessError } from "@/lib/staging-fixtures";
+import { stagingFixturePathAllowed } from "@/lib/staging-fixture-policy";
 import { isAgentSession } from "@/lib/agent-auth";
 import { isHealthCheckPath } from "@/lib/health";
 import { enforceAdminMutationOrigin } from "@/lib/admin/mutation-security";
@@ -102,6 +104,22 @@ async function enforceAdminGuards(
   return null;
 }
 
+async function enforceStagingFixtureBoundary(locals: App.Locals, pathname: string): Promise<Response | null> {
+  locals.stagingFixture = null;
+  if (!locals.user) return null;
+  try {
+    locals.stagingFixture = await resolveStagingFixtureIdentity({
+      db:env.DB,envName:env.DEPLOYMENT_ENVIRONMENT,user:locals.user,
+      session:locals.session ?? {id:""},isPat:Boolean(locals.personalAccessToken),
+    });
+    if (locals.stagingFixture && !stagingFixturePathAllowed(pathname)) throw new StagingFixtureAccessError();
+    return null;
+  } catch (error) {
+    if (!(error instanceof StagingFixtureAccessError)) throw error;
+    return new Response(error.message,{status:403,headers:{"Cache-Control":"no-store"}});
+  }
+}
+
 export const onRequest = defineMiddleware(async (context, next) => {
   const { locals, request, url, redirect } = context;
   const primaryDomain = env.PRIMARY_DOMAIN;
@@ -122,6 +140,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
     locals.session = authResult.session;
     locals.user = authResult.user;
     locals.personalAccessToken = authResult.personalAccessToken;
+
+    const fixtureFailure = await enforceStagingFixtureBoundary(locals,url.pathname);
+    if (fixtureFailure) return fixtureFailure;
 
     // Community delegation never inherits the owner's unrelated application access.
     // Use Astro's normalized route pathname, as with the admin origin guards.

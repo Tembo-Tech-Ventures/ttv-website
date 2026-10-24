@@ -1120,3 +1120,12 @@ export const communityConfirmation = sqliteTable("communityConfirmation", {
   mentorRole: text("mentorRole", {enum:["MENTOR", "ADMIN", "UNKNOWN"]}).notNull().default("UNKNOWN"),
   ...timestamps,
 }, (table) => [index("communityConfirmation_journeyId_idx").on(table.journeyId)]);
+
+// Registry membership is required for synthetic staging authority; names alone never grant it.
+export const stagingFixtureIdentity = sqliteTable("stagingFixtureIdentity", {
+  userId: text("userId").primaryKey().references(() => user.id, {onDelete:"cascade"}),
+  sessionId: text("sessionId").notNull().unique().references(() => session.id, {onDelete:"cascade"}),
+  runId: text("runId").notNull(),
+  persona: text("persona", {enum:["member","otherMember","mentor","institution","unapprovedInstitution","admin"]}).notNull(),
+  expiresAt: integer("expiresAt").notNull(),
+}, table => [index("stagingFixtureIdentity_runId_idx").on(table.runId)]);

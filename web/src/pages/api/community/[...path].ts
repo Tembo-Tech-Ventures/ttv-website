@@ -5,6 +5,6 @@ import { handleCommunityRequest } from "@/lib/community/http";
 
 export const ALL: APIRoute = ({ request, params, locals }) => handleCommunityRequest(
   request, params.path ?? "", locals.user ? {
-    id: locals.user.id, delegatedSession: isAgentSession(locals.session?.userAgent), scopes: locals.personalAccessToken?.scopes ?? null,
+    id: locals.user.id, fixture: locals.stagingFixture, delegatedSession: isAgentSession(locals.session?.userAgent), scopes: locals.personalAccessToken?.scopes ?? null,
   } : null, env.DB, env,
 );
