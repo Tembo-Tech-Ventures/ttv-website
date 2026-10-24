@@ -124,3 +124,17 @@ for (const audience of ["members", "mentors", "institutions"]) {
     }
   });
 }
+
+// Workspace headings separate sentences with <br>, which textContent omits.
+test("workspace heading assertions preserve rendered sentence breaks", async ({ page }) => {
+  for (const [first, second] of [
+    ["Your work.", "Your story."],
+    ["Recognise the work.", "Name what you saw."],
+    ["Find the person.", "See the work."],
+  ]) {
+    await page.setContent(`<h1>${first}<br><em>${second}</em></h1>`);
+    const heading = page.getByRole("heading", { level: 1 });
+    expect(await heading.textContent()).toBe(first + second);
+    await expect(heading).toHaveText(`${first} ${second}`, { useInnerText: true });
+  }
+});

@@ -64,7 +64,9 @@ test("isolated preview ADMIN audience CTAs reach their actual workspaces", async
       { audience: "institutions", cta: "Continue to institutional access", destination: "/dashboard/discover", heading: "Find the person. See the work." },
     ]) {
       await page.goto(`/community/${entry.audience}`);
-      await page.getByRole("link", { name: entry.cta }).first().click();
+      const cta = page.locator(".audience-hero").getByRole("link", { name: entry.cta, exact: true });
+      await expect(cta).toHaveAttribute("href", entry.destination);
+      await cta.click();
       await expect(page).toHaveURL(new URL(entry.destination, baseURL!).href);
       await expect(page.locator(".discovery-app").getByRole("heading", { level: 1 })).toHaveText(entry.heading, { useInnerText: true });
     }
