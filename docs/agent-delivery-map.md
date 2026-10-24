@@ -149,7 +149,9 @@ Never reuse a scope for a new deployment or rerun a cancelled legacy workflow.
 Deploy reseeds the synthetic sessions with a new creation time and an eight-hour
 deadline; auth refresh cannot extend their original expiry or absolute eight-hour
 lifetime. Shorter feedback/staging fixture deadlines stay shorter. These guards
-apply only to identified synthetic sessions in staging/agent environments with
+also recheck synthetic cookie sessions against D1 so revocation or run-token
+rotation invalidates cached cookies immediately; lookup failure denies access.
+They apply only to identified synthetic sessions in staging/agent environments with
 agent auth enabled; normal user refresh and production behavior are unchanged.
 
 ## Logs and evidence

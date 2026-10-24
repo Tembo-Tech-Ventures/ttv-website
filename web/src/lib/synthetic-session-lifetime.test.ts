@@ -3,6 +3,7 @@ import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { bearer } from "better-auth/plugins";
 import { syntheticSessionHooks, syntheticSessionResponseHook } from "./synthetic-session-lifetime";
+import { deriveAgentPreviewToken } from "../../scripts/cloudflare/agent-preview-auth.mjs";
 
 afterEach(() => { vi.useRealTimers(); });
 
@@ -91,6 +92,34 @@ describe("synthetic session absolute lifetime", () => {
     const response = await auth.api.getSession({ headers, asResponse: true });
     expect(response.status).toBe(401);
     expect(await response.json()).not.toHaveProperty("session");
+  });
+  it.each(["rotate", "revoke"])("rejects old-run bearer and fresh cached cookie after %s", async action => {
+    const { auth, data } = fixture(admin);
+    const secret = "fictional-preview-secret-at-least-32-characters";
+    const oldToken = deriveAgentPreviewToken(secret, "agent-test", "github-123-1");
+    const newToken = deriveAgentPreviewToken(secret, "agent-test", "github-123-2");
+    data.session[0].token = oldToken;
+    const headers = new Headers({ authorization: `Bearer ${oldToken}` });
+    const response = await auth.api.getSession({ headers, asResponse: true });
+    const cookie = response.headers.getSetCookie().map(value => value.split(";", 1)[0]).join("; ");
+    expect(cookie).toContain("session_data=");
+    if (action === "rotate") data.session[0].token = newToken;
+    else data.session.splice(0);
+    expect(await auth.api.getSession({ headers })).toBeNull();
+    expect(await auth.api.getSession({ headers: new Headers({ cookie }) })).toBeNull();
+    const direct = await auth.handler(new Request("http://localhost:4321/api/auth/get-session", { headers: { cookie } }));
+    expect(await direct.json()).toBeNull();
+    if (action === "rotate") expect(await auth.api.getSession({ headers: new Headers({ authorization: `Bearer ${newToken}` }) })).not.toBeNull();
+  });
+  it("fails closed when the authoritative lookup for a cached fixture is unavailable", async () => {
+    const { auth, headers } = fixture(admin);
+    const response = await auth.api.getSession({ headers, asResponse: true });
+    const cookie = response.headers.getSetCookie().map(value => value.split(";", 1)[0]).join("; ");
+    const context = await auth.$context;
+    const lookup = vi.spyOn(context.internalAdapter, "findSession").mockRejectedValue(new Error("fictional backend unavailable"));
+    try {
+      expect(await auth.api.getSession({ headers: new Headers({ cookie }) })).toBeNull();
+    } finally { lookup.mockRestore(); }
   });
   it.each([
     { ...admin, id: "ordinary-session", userId: "ordinary-user", userAgent: "browser" },

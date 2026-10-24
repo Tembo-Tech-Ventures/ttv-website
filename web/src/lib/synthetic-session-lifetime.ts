@@ -25,13 +25,26 @@ export function syntheticSessionResponseHook(environment: string | undefined, en
     if (!returned || typeof returned !== "object" || !("session" in returned) || !returned.session) return;
     const result = ctx.context.session;
     if (!result || !isSynthetic(result.session)) return;
-    const deadline = Math.min(new Date(result.session.expiresAt).getTime(), new Date(result.session.createdAt).getTime() + 8 * 3600_000);
+    // Cookie caching must not keep an old run alive after revocation/rotation.
+    let authoritative;
+    try {
+      authoritative = await ctx.context.internalAdapter.findSession(result.session.token);
+    } catch {
+      authoritative = null;
+    }
+    if (!authoritative || authoritative.session.id !== result.session.id || !isSynthetic(authoritative.session)) {
+      ctx.context.session = null;
+      deleteSessionCookie(ctx);
+      return ctx.json(null);
+    }
+    const deadline = Math.min(new Date(result.session.expiresAt).getTime(), new Date(authoritative.session.expiresAt).getTime(), new Date(authoritative.session.createdAt).getTime() + 8 * 3600_000);
     if (!Number.isFinite(deadline) || deadline <= Date.now()) {
       ctx.context.session = null;
       deleteSessionCookie(ctx);
       return ctx.json(null);
     }
-    return ctx.json({ ...result, session: { ...result.session, expiresAt: new Date(deadline) } });
+    ctx.context.session = { ...authoritative, session: { ...authoritative.session, expiresAt: new Date(deadline) } };
+    return ctx.json(ctx.context.session);
   }) };
 }
 
