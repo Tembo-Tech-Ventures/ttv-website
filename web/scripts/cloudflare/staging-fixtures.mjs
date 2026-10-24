@@ -8,6 +8,9 @@ import { verifyStagingPersonas } from "./staging-fixture-verification.mjs";
 import { discardCommunityEvidence, sealCommunityEvidence } from "./staging-community-evidence.mjs";
 
 export async function runStagingFixtures({ environment = process.env, api = cfApi, browserType = chromium, getBindings = getSecretBindings, validateRevision = validateStagingRevision, verifyTarget = verifyStagingFixtureTarget, withPersonas = withStagingPersonas, verifyPersonas = verifyStagingPersonas, discardEvidence = discardCommunityEvidence, sealEvidence = sealCommunityEvidence } = {}) {
+  const browserAssessment = environment.STAGING_BROWSER_ASSESSMENT === "true";
+  if (![undefined, "false", "true"].includes(environment.STAGING_BROWSER_ASSESSMENT)) throw new Error("Invalid browser assessment option.");
+  if (browserAssessment && environment.GITHUB_RUN_ATTEMPT !== "1") throw new Error("Assessment workflow reruns are disabled.");
   await discardEvidence();
   try {
     // Repeat the GitHub check inside the credentialed runner immediately before writes.
@@ -15,11 +18,16 @@ export async function runStagingFixtures({ environment = process.env, api = cfAp
     if (environment.CLOUDFLARE_ENVIRONMENT_NAME !== "staging") throw new Error("Shared staging required.");
     const target = await verifyTarget({ environmentName: "staging", accountId: environment.CLOUDFLARE_ACCOUNT_ID,
       expectedVersion: environment.STAGING_EXPECTED_SHA, baseUrl: STAGING_FIXTURE_ORIGIN, api });
+    if (browserAssessment) {
+      const settings = await api("/workers/scripts/ttv-website-staging/settings");
+      const bindings = Array.isArray(settings?.bindings) ? settings.bindings : [];
+      if (!bindings.some(b => b?.name === "AI" && b.type === "ai") || !bindings.some(b => b?.name === "AI_GATEWAY_NAME" && b.type === "plain_text" && b.text === "ttv-website-ai-staging")) throw new Error("Assessment binding readiness failed.");
+    }
     const signingSecret = getBindings().find(binding => binding.key === "BETTER_AUTH_SECRET")?.value;
     let browser;
     try {
       browser = await browserType.launch({ headless: true });
-      await withPersonas({ target, signingSecret, audit: record => console.log(JSON.stringify(record)), run: personas => verifyPersonas({ browser, target, personas }) });
+      await withPersonas({ target, signingSecret, assessmentProbe: browserAssessment, audit: record => console.log(JSON.stringify(record)), run: personas => verifyPersonas({ browser, target, personas, browserAssessment }) });
     } finally {
       await browser?.close();
     }
