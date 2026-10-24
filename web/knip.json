@@ -9,7 +9,7 @@
     "scripts/**/*.mjs",
     "containers/**/*.js",
     "e2e/**/*.ts",
-    "e2e/component-preview/main.tsx",
+    "e2e/component-preview/*.tsx",
     "*.config.{ts,mjs,js}"
   ]
 }
