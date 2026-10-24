@@ -5,15 +5,13 @@ import { withStagingPersonas } from "./staging-personas.mjs";
 import { verifyStagingFixtureTarget, STAGING_FIXTURE_DATABASE_ID as dbId } from "./staging-fixture-target.mjs";
 import { createAuth } from "../../src/lib/auth";
 import { isAgentSession } from "../../src/lib/agent-auth";
+import { resolveStagingFixtureIdentity } from "../../src/lib/staging-fixtures";
 const signingSecret = "fictional-staging-secret-at-least-thirty-two-characters";
 async function fixture() {
   const db = new DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys=ON");
   const migrations = new URL("../../src/lib/db/migrations/", import.meta.url);
   for (const name of readdirSync(migrations).filter(n => n.endsWith(".sql")).toSorted()) db.exec(readFileSync(new URL(name, migrations), "utf8"));
-  // Proposed Developer-owned registry contract; replaced by actual migration on integration.
-  db.exec(`CREATE TABLE IF NOT EXISTS stagingFixtureIdentity (userId TEXT PRIMARY KEY REFERENCES user(id) ON DELETE CASCADE, sessionId TEXT UNIQUE REFERENCES session(id) ON DELETE CASCADE, runId TEXT NOT NULL, persona TEXT NOT NULL, expiresAt INTEGER NOT NULL);
-    INSERT OR IGNORE INTO Roles (id,name) VALUES ('mentor','MENTOR'),('institution','INSTITUTION');`);
   const accountId = "a".repeat(32), expectedVersion = "b".repeat(40);
   const api = vi.fn(async (path, options) => {
     if (path === "") return { id: accountId };
@@ -38,6 +36,7 @@ describe("staging personas on application migrations", () => {
         bind(...values) { params = values; return this; },
         async raw() { statement.setReturnArrays(true); return statement.all(...params); },
         async all() { return { results: statement.all(...params) }; },
+        async first() { return statement.get(...params) ?? null; },
         async run() { return { meta: statement.run(...params) }; },
       };
     } };
@@ -55,6 +54,11 @@ describe("staging personas on application migrations", () => {
         expect(resolved?.session.id).toBe(p.sessionId);
         expect(resolved?.session.expiresAt.getTime()).toBe(p.expiresAt * 1000);
         expect(isAgentSession(resolved?.session.userAgent)).toBe(true);
+        const actor = { db: d1, envName: "staging", user: resolved.user, session: resolved.session, isPat: false };
+        expect(await resolveStagingFixtureIdentity(actor)).toMatchObject({ userId: p.userId, runId: p.runId, persona: "mentor" });
+        db.prepare('UPDATE stagingFixtureIdentity SET expiresAt=? WHERE userId=?').run(Math.floor(Date.now() / 1000) - 1, p.userId);
+        await expect(resolveStagingFixtureIdentity(actor)).rejects.toMatchObject({ status: 403 });
+        db.prepare('UPDATE stagingFixtureIdentity SET expiresAt=? WHERE userId=?').run(p.expiresAt, p.userId);
         db.prepare('UPDATE session SET expiresAt=? WHERE id=?').run(Math.floor(Date.now() / 1000) - 1, p.sessionId);
         expect(await auth.api.getSession({ headers })).toBeNull();
         } catch (error) { callbackError = error; }

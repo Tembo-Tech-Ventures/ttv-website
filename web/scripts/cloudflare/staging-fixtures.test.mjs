@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { runStagingFixtures } from "./staging-fixtures.mjs";
 import { verifyStagingPersonas } from "./staging-fixture-verification.mjs";
+import { stagingFixturePathAllowed } from "../../src/lib/staging-fixture-policy";
 function runner() {
   const close = vi.fn();
   const launch = vi.fn(async () => ({ close }));
@@ -65,7 +66,7 @@ function browserFixture({ failOwn = false } = {}) {
     let name = options.extraHTTPHeaders?.Authorization?.slice(7);
     const context = {
       addCookies: vi.fn(async cookies => { name = cookies[0].value; }), close: vi.fn(),
-      newPage: vi.fn(async () => ({ goto: async () => response(200), url: () => "https://ttv-website-staging.fixture.workers.dev/dashboard", close: vi.fn() })),
+      newPage: vi.fn(async () => ({ goto: async url => response(stagingFixturePathAllowed(new URL(url).pathname) ? 200 : 403), url: () => "https://ttv-website-staging.fixture.workers.dev/dashboard/community", close: vi.fn() })),
       request: {
         get: vi.fn(async path => {
           if (path === "/api/community/profile") return response(failOwn ? 401 : 200, { profile: { userId: name } });

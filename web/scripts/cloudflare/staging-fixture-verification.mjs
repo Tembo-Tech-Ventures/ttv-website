@@ -16,7 +16,7 @@ export async function verifyStagingPersonas({ browser, target, personas }) {
       requireStatus(own, 200);
       if ((await own.json()).profile?.userId !== persona.userId) throw new Error("Synthetic identity mismatch.");
       const page = await context.newPage();
-      const response = await page.goto(`${target.baseUrl}/dashboard`, { waitUntil: "domcontentloaded", timeout: 30000 });
+      const response = await page.goto(`${target.baseUrl}/dashboard/community`, { waitUntil: "domcontentloaded", timeout: 30000 });
       if (!response || response.status() !== 200 || new URL(page.url()).pathname.startsWith("/auth/")) throw new Error("Synthetic browser authentication failed.");
       await page.close();
       requireStatus(await context.request.get("/api/community/tokens"), 403);
