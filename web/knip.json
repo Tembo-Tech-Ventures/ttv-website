@@ -1,7 +1,8 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreDependencies": [
-    "cloudflare"
+    "cloudflare",
+    "@astrojs/compiler"
   ],
   "entry": [
     "src/pages/**/*.{astro,ts}!",

@@ -36,7 +36,7 @@ export const hireFormSchema = z.object({
     .optional()
     .default(""),
   budgetBand: z.enum(BUDGET_BAND_VALUES, {
-    errorMap: () => ({ message: "Please select a budget range." }),
+    error: "Please select a budget range.",
   }),
   timeline: z
     .string()

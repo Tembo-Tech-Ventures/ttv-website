@@ -29,8 +29,8 @@
     "knip": "knip --include files,dependencies,unlisted"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^13.7.0",
-    "@astrojs/react": "^5.0.7",
+    "@astrojs/cloudflare": "14.3.0",
+    "@astrojs/react": "6.0.6",
     "@cloudflare/containers": "^0.3.7",
     "@headlessui/react": "^2.2.10",
     "@lexical/code-core": "^0.50.0",
@@ -45,7 +45,7 @@
     "@paralleldrive/cuid2": "^2.3.1",
     "@phosphor-icons/react": "^2.1.10",
     "@tailwindcss/vite": "^4.3.3",
-    "astro": "^6.4.8",
+    "astro": "7.3.2",
     "better-auth": "~1.6.33",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.4",
@@ -63,21 +63,25 @@
     "remark-rehype": "^11.1.2",
     "tailwindcss": "^4.3.3",
     "unified": "^11.0.5",
-    "zod": "^3.25.76"
+    "zod": "^4.6.7"
   },
   "overrides": {
-    "vite": "^7",
+    "vite": "^8.0.13",
     "kysely": "^0.28.14",
-    "undici": "^7.29.0",
+    "undici": "^7.30.1",
     "nanoid": "^3.3.17",
     "browserslist": "^4.28.7",
     "fast-uri": "^3.1.8",
     "http-cache-semantics": "^4.3.0",
     "postcss-selector-parser": "^7.1.6",
-    "smol-toml": "^1.9.1"
+    "smol-toml": "^1.9.1",
+    "@lexical/headless": {
+      "happy-dom": "21.0.4"
+    }
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
+    "@astrojs/compiler": "^4.0.0",
     "@eslint/js": "^10.0.1",
     "@lexical/headless": "^0.50.0",
     "@playwright/test": "^1.63.0",
