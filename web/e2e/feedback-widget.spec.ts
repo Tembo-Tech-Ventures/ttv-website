@@ -11,6 +11,9 @@ const evidence = (name: string) =>
 const studentToken = process.env.PLAYWRIGHT_FEEDBACK_STUDENT_TOKEN;
 const adminToken = process.env.PLAYWRIGHT_AGENT_TOKEN;
 
+// Bearer headers must never be retained in Playwright request traces.
+test.use({ trace: "off" });
+
 async function contextFor(browser: Browser, token: string, baseURL: string | undefined) {
   return browser.newContext({
     ...test.info().project.use,
