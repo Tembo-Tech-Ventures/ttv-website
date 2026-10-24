@@ -30,6 +30,17 @@ describe("assessment runner lifecycle",()=>{
     expect(options.getBindings).not.toHaveBeenCalled();expect(options.withPersonas).not.toHaveBeenCalled();expect(options.verifyAssessment).not.toHaveBeenCalled();
     expect(options.publishFailure).toHaveBeenCalledWith(expect.objectContaining({stage:"provider-readiness",code:"required-binding-missing",providerInvocation:"unknown",cleanupStatus:"not-started",retryAllowed:false}));
   });
+  it.each(["response_shape", "refusal", "finish_reason", "empty_content", "output_size", "json", "schema", "criterion", "citation", "PRIVATE"])("allowlists output reason %s in failure artifacts", async reason => {
+    const { options } = runner();
+    options.verifyAssessment.mockImplementation(async ({ progress }) => {
+      progress({ stage: "assessment", code: "assessment-response", outputReason: reason });
+      throw new Error("PRIVATE");
+    });
+    await expect(runStagingAssessment(options)).rejects.toThrow("Synthetic assessment failed");
+    const failure = options.publishFailure.mock.calls[0][0];
+    expect(failure.outputReason).toBe(reason === "PRIVATE" ? undefined : reason);
+    expect(JSON.stringify(failure)).not.toContain("PRIVATE");
+  });
   it("accepts native AI and exact staging Gateway without HTTP token/account bindings",async()=>{
     const {options,cleanup}=runner();await runStagingAssessment(options);
     expect(options.api).toHaveBeenCalledExactlyOnceWith("/workers/scripts/ttv-website-staging/settings");
@@ -129,10 +140,10 @@ function client() {
 describe("fixed assessment HTTP program",()=>{
   it.each([["unavailable","provider_unavailable",false],["invalid_output","invalid_output",true]])("retains %s and claim before rejecting the real HTTP response",async(status,errorCode,claimed)=>{
     const f=client(),{options}=runner();
-    Object.assign(f.result.assessment,{status,errorCode,criteria:[]});f.result.probe.claimed=claimed;
+    Object.assign(f.result.assessment,{status,errorCode,criteria:[]});f.result.probe.claimed=claimed;f.result.probe.outputReason="json";
     options.verifyAssessment.mockImplementation(({progress})=>verifyStagingAssessment({...f,progress}));
     await expect(runStagingAssessment(options)).rejects.toThrow("Synthetic assessment failed");
-    expect(options.publishFailure).toHaveBeenCalledWith(expect.objectContaining({stage:"assessment",code:"validation-failed",httpStatus:200,assessmentStatus:status,assessmentErrorCode:errorCode,claim:claimed,providerInvocation:"unknown"}));
+    expect(options.publishFailure).toHaveBeenCalledWith(expect.objectContaining({stage:"assessment",code:"validation-failed",httpStatus:200,assessmentStatus:status,assessmentErrorCode:errorCode,claim:claimed,outputReason:"json",providerInvocation:"unknown"}));
     expect(f.fetchImpl).toHaveBeenCalledTimes(5);
   });
   it("times out only the evidence POST after successful prerequisites without retry",async()=>{

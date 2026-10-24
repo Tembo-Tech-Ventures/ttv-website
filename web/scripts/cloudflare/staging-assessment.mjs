@@ -21,6 +21,7 @@ export async function runStagingAssessment({ environment = process.env, api = cf
     if (!stages.has(record?.stage) || !codes.has(record?.code)) return;
     if (record.stage !== diagnostic.stage) diagnostic.httpStatus = null;
     if (record.stage === "assessment") {
+      if (["response_shape", "refusal", "finish_reason", "empty_content", "output_size", "json", "schema", "criterion", "citation"].includes(record.outputReason)) diagnostic.outputReason = record.outputReason;
       if (typeof record.claimed === "boolean") diagnostic.claim = record.claimed;
       if (["completed", "unavailable", "invalid_output"].includes(record.assessmentStatus)) diagnostic.assessmentStatus = record.assessmentStatus;
       if (["provider_unavailable", "invalid_output"].includes(record.assessmentErrorCode)) diagnostic.assessmentErrorCode = record.assessmentErrorCode;

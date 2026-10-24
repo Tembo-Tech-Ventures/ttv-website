@@ -121,3 +121,25 @@ It excludes Workers/D1/CI costs and any free allocation. Do not multiply the
 request through ad-hoc retries. The planned test is the assessment route, not
 a multi-round chat run. Preserve postpaid settings and use the normal review,
 integration and PM-slot gate; no separate billing-change approval is needed.
+
+### Diagnosing a rejected native assessment
+
+The October 24 staging attempt at `75f2775b` reached the evidence POST with
+HTTP 200 and `invalid_output`; fixture cleanup passed. The retained artifact
+cannot identify the exact rejection, so it does not establish a model/schema bug.
+The current [Gemma model contract](https://developers.cloudflare.com/workers-ai/models/gemma-4-26b-a4b-it/)
+documents chat-completion `choices`. The
+[Workers binding implementation](https://github.com/cloudflare/workerd/blob/main/src/cloudflare/internal/ai-api.ts)
+returns the raw response when requested; it does not document an alternate
+response envelope that we should silently accept.
+
+Synthetic staging probes now retain only the first bounded `outputReason`:
+response shape, refusal, finish reason, empty content, output size, JSON, schema,
+criterion, or citation validation. The first provider rejection is not overwritten
+by the subsequent empty-content parse failure. Only the existing restricted
+staging probe returns this field; ordinary assessment responses remain unchanged.
+The runner separately allowlists these codes before publishing. No raw model
+text, schema errors, IDs, prompts or credentials are added to diagnostics.
+This is diagnostic preparation for the next authorized single attempt, not proof
+of a working assessment or permission to retry. Citation/schema checks, missing
+evidence semantics, the one-attempt claim and cleanup remain enforced.
