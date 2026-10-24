@@ -1083,3 +1083,49 @@ export const feedbackAttachmentRelations = relations(
     }),
   }),
 );
+
+// Community contributions are independent of graduation-gated public talent pages.
+export const communityProfile = sqliteTable("communityProfile", {
+  userId: text("userId").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  headline: text("headline").notNull().default(""),
+  bio: text("bio").notNull().default(""),
+  skills: text("skills", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+  opportunityGoals: text("opportunityGoals").notNull().default(""),
+  version: integer("version").notNull().default(1),
+  ...timestamps,
+});
+
+export const communityJourney = sqliteTable("communityJourney", {
+  id: cuid("id"),
+  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  evidenceUrl: text("evidenceUrl"),
+  occurredAt: text("occurredAt").notNull(),
+  visibility: text("visibility", { enum: ["institution", "private"] }).notNull(),
+  version: integer("version").notNull().default(1),
+  ...timestamps,
+}, (table) => [
+  index("communityJourney_userId_visibility_idx").on(table.userId, table.visibility),
+  check("communityJourney_visibility_check", sql`${table.visibility} IN ('institution', 'private')`),
+]);
+
+export const communityConfirmation = sqliteTable("communityConfirmation", {
+  id: cuid("id"),
+  journeyId: text("journeyId").notNull().references(() => communityJourney.id, { onDelete: "cascade" }),
+  mentorId: text("mentorId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  statement: text("statement").notNull(),
+  method: text("method").notNull(),
+  journeyVersion: integer("journeyVersion").notNull(),
+  mentorRole: text("mentorRole", {enum:["MENTOR", "ADMIN", "UNKNOWN"]}).notNull().default("UNKNOWN"),
+  ...timestamps,
+}, (table) => [index("communityConfirmation_journeyId_idx").on(table.journeyId)]);
+
+// Registry membership is required for synthetic staging authority; names alone never grant it.
+export const stagingFixtureIdentity = sqliteTable("stagingFixtureIdentity", {
+  userId: text("userId").primaryKey().references(() => user.id, {onDelete:"cascade"}),
+  sessionId: text("sessionId").notNull().unique().references(() => session.id, {onDelete:"cascade"}),
+  runId: text("runId").notNull(),
+  persona: text("persona", {enum:["member","otherMember","mentor","institution","unapprovedInstitution","admin"]}).notNull(),
+  expiresAt: integer("expiresAt").notNull(),
+}, table => [index("stagingFixtureIdentity_runId_idx").on(table.runId)]);
