@@ -2,7 +2,7 @@ import { pathToFileURL } from "node:url";
 import { chromium } from "@playwright/test";
 import { cfApi, getSecretBindings } from "./lib.mjs";
 import { validateStagingRevision } from "./staging-preflight.mjs";
-import { verifyStagingFixtureTarget } from "./staging-fixture-target.mjs";
+import { verifyStagingFixtureTarget, STAGING_FIXTURE_ORIGIN } from "./staging-fixture-target.mjs";
 import { withStagingPersonas } from "./staging-personas.mjs";
 import { verifyStagingPersonas } from "./staging-fixture-verification.mjs";
 
@@ -10,10 +10,8 @@ export async function runStagingFixtures({ environment = process.env, api = cfAp
   // Repeat the GitHub check inside the credentialed runner immediately before writes.
   await validateRevision(environment);
   if (environment.CLOUDFLARE_ENVIRONMENT_NAME !== "staging") throw new Error("Shared staging required.");
-  const subdomain = await api("/workers/subdomain");
-  if (!/^[a-z0-9-]+$/.test(subdomain?.subdomain ?? "")) throw new Error("Staging Worker subdomain unavailable.");
   const target = await verifyTarget({ environmentName: "staging", accountId: environment.CLOUDFLARE_ACCOUNT_ID,
-    expectedVersion: environment.STAGING_EXPECTED_SHA, baseUrl: `https://ttv-website-staging.${subdomain.subdomain}.workers.dev`, api });
+    expectedVersion: environment.STAGING_EXPECTED_SHA, baseUrl: STAGING_FIXTURE_ORIGIN, api });
   const signingSecret = getBindings().find(binding => binding.key === "BETTER_AUTH_SECRET")?.value;
   let browser;
   try {

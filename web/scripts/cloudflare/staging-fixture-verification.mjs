@@ -2,24 +2,38 @@
 export async function verifyStagingPersonas({ browser, target, personas }) {
   const contexts = [];
   const clients = {};
+  // APIRequestContext follows redirects by default, including bearer headers.
+  const noRedirectClient = request => ({
+    get: (path, options = {}) => request.get(path, { ...options, maxRedirects: 0 }),
+    post: (path, options = {}) => request.post(path, { ...options, maxRedirects: 0 }),
+  });
   let failure;
   const requireStatus = (response, status) => {
     if (response.status() !== status) throw new Error("Synthetic staging verification failed.");
   };
   try {
     for (const [name, persona] of Object.entries(personas)) {
-      const context = await browser.newContext({ baseURL: target.baseUrl });
+      const context = await browser.newContext({ baseURL: target.baseUrl, serviceWorkers: "block" });
       contexts.push(context);
+      await context.route("**/*", async route => {
+        const request = route.request();
+        if (new URL(request.url()).origin !== target.baseUrl || request.redirectedFrom()) return route.abort();
+        // Intercept the response as well: browser routing may only see the first
+        // URL of a redirect chain. Never hand a redirect back to the browser.
+        const response = await route.fetch({ maxRedirects: 0 });
+        if (response.status() >= 300 && response.status() < 400) return route.abort();
+        return route.fulfill({ response });
+      });
       await context.addCookies(persona.cookies);
-      clients[name] = context.request;
-      const own = await context.request.get("/api/community/profile");
+      clients[name] = noRedirectClient(context.request);
+      const own = await clients[name].get("/api/community/profile");
       requireStatus(own, 200);
       if ((await own.json()).profile?.userId !== persona.userId) throw new Error("Synthetic identity mismatch.");
       const page = await context.newPage();
       const response = await page.goto(`${target.baseUrl}/dashboard/community`, { waitUntil: "domcontentloaded", timeout: 30000 });
       if (!response || response.status() !== 200 || new URL(page.url()).pathname.startsWith("/auth/")) throw new Error("Synthetic browser authentication failed.");
       await page.close();
-      requireStatus(await context.request.get("/api/community/tokens"), 403);
+      requireStatus(await clients[name].get("/api/community/tokens"), 403);
     }
     const profilePath = `/api/community/profiles/${personas.otherMember.userId}`;
     requireStatus(await clients.member.get(profilePath), 403);
@@ -35,9 +49,10 @@ export async function verifyStagingPersonas({ browser, target, personas }) {
     for (const name of ["member", "institution", "unapprovedInstitution"]) {
       const context = await browser.newContext({ baseURL: target.baseUrl, extraHTTPHeaders: { Authorization: `Bearer ${personas[name].personalAccessToken}` } });
       contexts.push(context);
-      requireStatus(await context.request.get("/api/community/profile"), 200);
-      requireStatus(await context.request.get(profilePath), name === "institution" ? 200 : 403);
-      const initialize = await context.request.post("/api/mcp", { data: { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "ttv-staging-fixture", version: "1" } } } });
+      const client = noRedirectClient(context.request);
+      requireStatus(await client.get("/api/community/profile"), 200);
+      requireStatus(await client.get(profilePath), name === "institution" ? 200 : 403);
+      const initialize = await client.post("/api/mcp", { data: { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "ttv-staging-fixture", version: "1" } } } });
       requireStatus(initialize, 200);
       const initialized = await initialize.json();
       if (initialized.error || !initialized.result?.protocolVersion) throw new Error("Synthetic MCP initialization failed.");

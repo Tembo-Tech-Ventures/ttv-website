@@ -3,11 +3,11 @@ import { verifyStagingFixtureTarget, assertVerifiedStagingFixtureTarget, STAGING
 function fixture() {
   const accountId = "a".repeat(32), expectedVersion = "b".repeat(40);
   const account = { id: accountId };
-  const settings = { bindings: [{ name: "DB", type: "d1", id: dbId }, { name: "DEPLOYMENT_ENVIRONMENT", text: "staging" }, { name: "DEPLOYMENT_VERSION", text: expectedVersion }] };
+  const settings = { bindings: [{ name: "DB", type: "d1", id: dbId }, { name: "DEPLOYMENT_ENVIRONMENT", text: "staging" }, { name: "DEPLOYMENT_VERSION", text: expectedVersion }, { name: "PRIMARY_DOMAIN", text: "staging.tembotechventures.com" }, { name: "BETTER_AUTH_URL", text: "https://staging.tembotechventures.com" }] };
   const database = { uuid: dbId, name: "ttv-website-db-staging" };
   const health = { service: "ttv-website", environment: "staging", version: expectedVersion, checks: { db: "ok" } };
   const api = vi.fn(async path => path === "" ? account : path.endsWith("settings") ? settings : path.endsWith(dbId) ? database : []);
-  return { account, settings, database, health, options: { environmentName: "staging", accountId, expectedVersion, baseUrl: "https://ttv-website-staging.fixture.workers.dev", api, fetchImpl: vi.fn(async () => Response.json(health)) } };
+  return { account, settings, database, health, options: { environmentName: "staging", accountId, expectedVersion, baseUrl: "https://staging.tembotechventures.com", api, fetchImpl: vi.fn(async () => Response.json(health)) } };
 }
 describe("staging fixture target", () => {
   it("verifies read-only then binds executor to exact staging DB", async () => {
@@ -25,19 +25,29 @@ describe("staging fixture target", () => {
     await expect(verifyStagingFixtureTarget({ ...options, environmentName })).rejects.toThrow("Exact staging");
     expect(options.api).not.toHaveBeenCalled();
   });
-  it.each(["https://ttv-website-production.fixture.workers.dev", "https://example.com", "http://ttv-website-staging.fixture.workers.dev", "https://ttv-website-staging.fixture.workers.dev/path"])("rejects origin %s", async baseUrl => {
+  it.each(["https://ttv-website-production.fixture.workers.dev", "https://ttv-website-staging.fixture.workers.dev", "https://tembotechventures.com", "https://example.com", "http://staging.tembotechventures.com", "https://staging.tembotechventures.com/path", "https://user@staging.tembotechventures.com", "https://staging.tembotechventures.com?redirect=production"])("rejects origin %s", async baseUrl => {
     const { options } = fixture();
     await expect(verifyStagingFixtureTarget({ ...options, baseUrl })).rejects.toThrow("shared staging");
     expect(options.api).not.toHaveBeenCalled();
   });
-  it.each(["account", "binding", "database", "revision", "health"])("rejects %s mismatch before writes", async mismatch => {
+  it.each(["account", "binding", "database", "revision", "health", "primary", "auth", "missingOrigin"])("rejects %s mismatch before writes", async mismatch => {
     const f = fixture();
     if (mismatch === "account") f.account.id = "c".repeat(32);
     if (mismatch === "binding") f.settings.bindings[0].id = "production-db";
     if (mismatch === "database") f.database.name = "production";
     if (mismatch === "revision") f.settings.bindings[2].text = "c".repeat(40);
     if (mismatch === "health") f.health.environment = "production";
+    if (mismatch === "primary") f.settings.bindings[3].text = "tembotechventures.com";
+    if (mismatch === "auth") f.settings.bindings[4].text = "https://tembotechventures.com";
+    if (mismatch === "missingOrigin") f.settings.bindings.splice(3);
     await expect(verifyStagingFixtureTarget(f.options)).rejects.toThrow("preflight failed");
+    expect(f.options.api.mock.calls.every(c => c.length === 1)).toBe(true);
+  });
+  it("refuses redirected health before creating a write capability", async () => {
+    const f = fixture();
+    f.options.fetchImpl.mockResolvedValue(new Response(null, { status: 302, headers: { Location: "https://tembotechventures.com" } }));
+    await expect(verifyStagingFixtureTarget(f.options)).rejects.toThrow("preflight failed");
+    expect(f.options.fetchImpl).toHaveBeenCalledWith(expect.any(URL), expect.objectContaining({ redirect: "error" }));
     expect(f.options.api.mock.calls.every(c => c.length === 1)).toBe(true);
   });
   it("sanitizes failed query bindings", async () => {

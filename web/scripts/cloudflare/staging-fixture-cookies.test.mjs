@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { createStagingBrowserCookies } from "./staging-fixture-cookies.mjs";
-const baseUrl = "https://ttv-website-staging.fixture.workers.dev";
+const baseUrl = "https://staging.tembotechventures.com";
 const secret = "fictional-staging-fixture-signing-secret-123456";
 const token = "a".repeat(64);
 describe("synthetic staging browser cookie", () => {
@@ -15,7 +15,7 @@ describe("synthetic staging browser cookie", () => {
     const auth = betterAuth({ database: memoryAdapter(data), baseURL: baseUrl, secret, session: { cookieCache: { enabled: true, maxAge: 300 } } });
     const cookies = createStagingBrowserCookies({ baseUrl, secret, token, expiresAt });
     const headers = new globalThis.Headers({ cookie: cookies.map(c => `${c.name}=${c.value}`).join("; ") });
-    expect(cookies[0]).toMatchObject({ httpOnly: true, secure: true, sameSite: "Lax", expires: expiresAt });
+    expect(cookies[0]).toMatchObject({ domain: "staging.tembotechventures.com", httpOnly: true, secure: true, sameSite: "Lax", expires: expiresAt });
     expect((await auth.api.getSession({ headers }))?.user.id).toBe("synthetic");
     const wrong = createStagingBrowserCookies({ baseUrl, secret: "wrong-fictional-signing-secret-1234567890", token, expiresAt });
     expect(await auth.api.getSession({ headers: new globalThis.Headers({ cookie: wrong.map(c => `${c.name}=${c.value}`).join("; ") }) })).toBeNull();
@@ -24,7 +24,7 @@ describe("synthetic staging browser cookie", () => {
     data.session.length = 0;
     expect(await auth.api.getSession({ headers })).toBeNull();
   });
-  it.each(["https://ttv-website-production.fixture.workers.dev", "https://example.com", "http://ttv-website-staging.fixture.workers.dev"])("rejects nonstaging %s", url => {
+  it.each(["https://ttv-website-production.fixture.workers.dev", "https://ttv-website-staging.fixture.workers.dev", "https://tembotechventures.com", "https://example.com", "http://staging.tembotechventures.com", "https://user@staging.tembotechventures.com", "https://staging.tembotechventures.com/path", "https://staging.tembotechventures.com?redirect=production"])("rejects nonstaging %s", url => {
     expect(() => createStagingBrowserCookies({ baseUrl: url, secret, token, expiresAt: Math.floor(Date.now() / 1000) + 3600 })).toThrow("Invalid staging");
   });
   it.each([-1, 7200])("rejects lifetime %s", seconds => {
