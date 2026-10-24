@@ -1,6 +1,4 @@
 import { expect, test } from "@playwright/test";
-import { FIXTURE_ENVIRONMENT } from "./fixture-env";
-import { guardFeedbackBrowserContext, closeFeedbackBrowserContext } from "../scripts/cloudflare/feedback-browser-guard.mjs";
 
 test("public navigation leads to community and preserves sign-in return paths", async ({ page, baseURL }) => {
   test.skip(baseURL === "http://127.0.0.1:4322", "Requires actual Astro routes, not the component harness.");
@@ -48,29 +46,8 @@ for (const [audience, headline, cta, destination] of [
   });
 }
 
-test("isolated preview ADMIN audience CTAs reach their actual workspaces", async ({ browser, baseURL }, testInfo) => {
-  const token = process.env.PLAYWRIGHT_AGENT_TOKEN;
-  test.skip(!FIXTURE_ENVIRONMENT || !token, "Requires the isolated preview seeded ADMIN session; non-admin role verification is separate.");
-  const context = await browser.newContext({ baseURL, extraHTTPHeaders: { Authorization: `Bearer ${token}` }, viewport: testInfo.project.use.viewport });
-  try {
-    await guardFeedbackBrowserContext(context, baseURL!);
-    // agent-preview-auth.mjs seeds this Better Auth session with ADMIN.
-    // Community APIs require scoped PATs; this browser-only check must not use
-    // the session bearer as a PAT. PR191's cookie personas cover non-admin roles.
-    const page = await context.newPage();
-    for (const entry of [
-      { audience: "members", cta: "Open my community journey", destination: "/dashboard/community", heading: "Your work. Your story." },
-      { audience: "mentors", cta: "Continue to mentor review", destination: "/dashboard/mentorship", heading: "Recognise the work. Name what you saw." },
-      { audience: "institutions", cta: "Continue to institutional access", destination: "/dashboard/discover", heading: "Find the person. See the work." },
-    ]) {
-      await page.goto(`/community/${entry.audience}`);
-      const cta = page.locator(".audience-hero").getByRole("link", { name: entry.cta, exact: true });
-      await expect(cta).toHaveAttribute("href", entry.destination);
-      await cta.click();
-      await expect(page).toHaveURL(new URL(entry.destination, baseURL!).href);
-      await expect(page.locator(".discovery-app").getByRole("heading", { level: 1 })).toHaveText(entry.heading, { useInnerText: true });
-    }
-  } finally {
-    await closeFeedbackBrowserContext(context);
-  }
-});
+// Preview Better Auth bearer sessions cannot authorize the hydrated community
+// API, which requires scoped PATs for Authorization requests. This is NOT an
+// authenticated acceptance result. Real success/role assertions belong to the
+// protected cookie-persona staging matrix, including ADMIN.
+test.skip("authenticated audience workspaces: unsupported with preview bearer; cookie staging acceptance required", () => {});

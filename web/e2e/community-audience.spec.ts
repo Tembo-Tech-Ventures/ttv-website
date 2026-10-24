@@ -136,5 +136,7 @@ test("workspace heading assertions preserve rendered sentence breaks", async ({ 
     const heading = page.getByRole("heading", { level: 1 });
     expect(await heading.textContent()).toBe(first + second);
     await expect(heading).toHaveText(`${first} ${second}`, { useInnerText: true });
+    await page.setContent("<h1>We could not open this workspace.</h1>");
+    await expect(heading).not.toHaveText(`${first} ${second}`, { useInnerText: true });
   }
 });
