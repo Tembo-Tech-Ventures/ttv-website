@@ -24,6 +24,8 @@ names are descriptive, not proof of effective account access: resource and deny
 conditions still apply. This audit does not prove inference works, reveal a
 missing dedicated token, or authorize storing a broad deploy token in the app.
 
-New workflow dispatch availability must be checked by PM; GitHub may require a
-workflow to exist on the default branch before dispatch. Do not merge to main or
-change production registration to bypass that limitation. Report it if present.
+Dispatch through the already registered `Cloudflare Staging` workflow (ID
+262791353), action `credential-audit`, on the integration branch. Its local
+reusable workflow resolves from that same revision. No new workflow registration
+or main/production change is required. PM must verify the actual dispatch receipt;
+registration evidence is not proof that a run executed.

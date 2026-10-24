@@ -39,6 +39,11 @@ describe("staging credential audit", () => {
   });
   it("separates preflight from staging credentials", () => {
     const workflow = readFileSync(new URL("../../../.github/workflows/cloudflare-staging-credential-audit.yml", import.meta.url), "utf8");
-    const [preflight, audit] = workflow.split("  audit:"); expect(preflight).toContain("workflow_dispatch:"); expect(preflight).not.toContain("secrets."); expect(preflight).toContain('test "$GITHUB_RUN_ATTEMPT" = 1'); expect(audit).toContain("needs: preflight"); expect(audit).toContain("environment: staging"); expect(workflow).not.toContain("wrangler");
+    const [preflight, audit] = workflow.split("  audit:"); expect(preflight).toContain("workflow_call:"); expect(preflight).not.toContain("secrets."); expect(preflight).toContain('test "$GITHUB_RUN_ATTEMPT" = 1'); expect(audit).toContain("needs: preflight"); expect(audit).toContain("environment: staging"); expect(workflow).not.toContain("wrangler");
+    expect(workflow).not.toContain("concurrency:");
+    const caller = readFileSync(new URL("../../../.github/workflows/cloudflare-staging.yml", import.meta.url), "utf8");
+    expect(caller).toContain("workflow_dispatch:"); expect(caller).toContain("group: ttv-cloudflare-staging");
+    expect(caller).toContain("if: ${{ inputs.action == 'credential-audit' }}");
+    for (const action of ["deploy", "verify", "assess"]) expect(caller).toContain("if: ${{ inputs.action == '" + action + "' }}");
   });
 });
