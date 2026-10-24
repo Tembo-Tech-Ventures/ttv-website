@@ -65,6 +65,10 @@ async function enforceAdminGuards(
 
   locals.isAdmin = true;
 
+  if (locals.personalAccessToken && !locals.personalAccessToken.scopes.includes("admin:read")) {
+    return new Response("Forbidden: admin:read scope required.", { status: 403 });
+  }
+
   if (
     (locals.personalAccessToken || isAgentSession(locals.session?.userAgent)) &&
     url.pathname.startsWith("/admin/personal-access-tokens")
@@ -118,6 +122,17 @@ export const onRequest = defineMiddleware(async (context, next) => {
     locals.session = authResult.session;
     locals.user = authResult.user;
     locals.personalAccessToken = authResult.personalAccessToken;
+
+    // Community delegation never inherits the owner's unrelated application access.
+    // Use Astro's normalized route pathname, as with the admin origin guards.
+    if (locals.personalAccessToken && !locals.personalAccessToken.scopes.includes("admin:read")) {
+      const communityApi = url.pathname === "/api/community" || url.pathname.startsWith("/api/community/");
+      if (url.pathname !== "/api/mcp" && !communityApi) {
+        return new Response("Forbidden: community token cannot access this route.", {
+          status: 403, headers: { "Cache-Control": "no-store" },
+        });
+      }
+    }
 
     // Protect /dashboard/* routes — require authentication
     if (url.pathname.startsWith("/dashboard")) {

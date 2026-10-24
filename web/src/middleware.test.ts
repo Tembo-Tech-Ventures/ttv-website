@@ -128,6 +128,23 @@ describe("dashboard authentication", () => {
 });
 
 describe("personal access token middleware", () => {
+  it.each(["/dashboard", "/api/recordings/private", "/api/mcp/private", "/api/community-other", "/auth/get-session"])("restricts community PATs from unrelated route %s", async pathname => {
+    mocks.hasPersonalAccessTokenAuthorization.mockReturnValue(true);
+    mocks.authenticatePersonalAccessToken.mockResolvedValue({ ...tokenAuth, token: { ...tokenSummary, scopes: ["community:read"] } });
+    const { context, next } = createContext(new Request(`https://example.com${pathname}`));
+    const response = requireResponse(await onRequest(context as never, next));
+    expect(response.status).toBe(403);
+    expect(next).not.toHaveBeenCalled();
+  });
+  it.each(["/api/mcp", "/api/community/profile"])("allows scoped community API %s", async pathname => {
+    mocks.hasPersonalAccessTokenAuthorization.mockReturnValue(true);
+    mocks.authenticatePersonalAccessToken.mockResolvedValue({ ...tokenAuth, token: { ...tokenSummary, scopes: ["community:read"] } });
+    const { context, next } = createContext(new Request(`https://example.com${pathname}`));
+    const response = requireResponse(await onRequest(context as never, next));
+    expect(response.status).toBe(200);
+    expect(next).toHaveBeenCalledOnce();
+  });
+
   it("uses a valid PAT as the request identity and keeps its secret out of locals", async () => {
     mocks.hasPersonalAccessTokenAuthorization.mockReturnValue(true);
     mocks.authenticatePersonalAccessToken.mockResolvedValue(tokenAuth);
@@ -229,6 +246,15 @@ describe("personal access token middleware", () => {
 
     expect(response.status).toBe(200);
     expect(next).toHaveBeenCalledOnce();
+  });
+
+  it("rejects community-only PATs from admin reads even for a current admin", async () => {
+    mocks.hasPersonalAccessTokenAuthorization.mockReturnValue(true);
+    mocks.authenticatePersonalAccessToken.mockResolvedValue({ ...tokenAuth, token: { ...tokenAuth.token, scopes: ["community:read"] } });
+    const { context, next } = createContext(new Request("https://example.com/api/admin/recordings"));
+    const response = requireResponse(await onRequest(context as never, next));
+    expect(response.status).toBe(403);
+    expect(next).not.toHaveBeenCalled();
   });
 
   it("returns the scope failure before the origin guard for a PAT mutation", async () => {
