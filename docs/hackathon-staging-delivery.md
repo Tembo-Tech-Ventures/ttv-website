@@ -53,3 +53,27 @@ Do not print secrets or copy them into workflow inputs, issues or screenshots.
 The preflight receives only a read-scoped GitHub token; Cloudflare secrets are
 scoped to the subsequent reusable staging job. Production workflow, rollback
 behavior and production credentials are unchanged.
+
+## Synthetic persona verification helper
+
+`web/scripts/cloudflare/staging-personas.mjs` provides a runner-only
+`withStagingPersonas` callback for a later credentialed verification step. It
+is not wired into deployment yet and must not be called without the PM slot.
+The runner must resolve actual Cloudflare D1 metadata and bind the executor to
+that database; never accept a user-supplied database name as proof of identity.
+The helper requires `staging` and `ttv-website-db-staging`, and migrated MENTOR
+and INSTITUTION roles. It does not create reference roles or ADMIN users.
+
+Each invocation creates distinct fictional member, other-member, mentor,
+institution and unapproved-institution identities with one-hour random bearer
+sessions. Pass tokens to browser contexts only in runner memory. Disable traces
+or redact authorization headers wherever test tooling records requests. Revoke
+the invocation's sessions on success, test failure or partial setup. Labelled
+fictional data is retained for review; cleanup of that data must be separately
+scoped. Failed revocation is an error, with one-hour expiry as the backstop.
+
+This tests application role and ownership enforcement using the staging bearer
+plugin. It does not establish GitHub OAuth, owner admin approval or external MCP
+token issuance behavior. Those paths need separate acceptance evidence. A
+workflow completion or an admin-authorized request cannot substitute for the
+member-denied and unapproved-institution-denied checks.
