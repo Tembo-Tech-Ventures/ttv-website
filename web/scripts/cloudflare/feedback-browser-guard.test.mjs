@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { guardFeedbackBrowserContext } from "./feedback-browser-guard.mjs";
+import { guardFeedbackBrowserContext, feedbackApiRequest } from "./feedback-browser-guard.mjs";
 
 async function guardedRequest(url, status = 200, redirected = false, failure = false) {
   let handler;
@@ -42,5 +42,35 @@ describe("feedback bearer browser containment", () => {
     expect(route.fetch).toHaveBeenCalledWith({ maxRedirects: 0 });
     expect(route.fulfill).not.toHaveBeenCalled();
     expect(route.abort).toHaveBeenCalledOnce();
+  });
+});
+
+describe("direct feedback API credential containment", () => {
+  it("sanitizes a real Playwright transport failure without retaining its bearer or cause", async () => {
+    const { request } = await import("@playwright/test");
+    const marker = "fictional-review-bearer-marker";
+    const api = await request.newContext({ extraHTTPHeaders: { Authorization: `Bearer ${marker}` } });
+    try {
+      const error = await feedbackApiRequest(api, "http://127.0.0.1:1", "/unreachable").catch(value => value);
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toBe("Feedback API request failed safely.");
+      expect(`${error}\n${error.stack}\n${JSON.stringify(error)}`).not.toContain(marker);
+      expect(error.cause).toBeUndefined();
+    } finally { await api.dispose(); }
+  });
+  it.each(["https://foreign.example/path", "http://preview.example/path", "https://user:password@preview.example/path"])("rejects credential escape target %s before dispatch", async target => {
+    const api = { fetch: vi.fn() };
+    await expect(feedbackApiRequest(api, "https://preview.example", target)).rejects.toThrow("failed safely");
+    expect(api.fetch).not.toHaveBeenCalled();
+  });
+  it.each(["GET", "POST", "PATCH"])("preserves %s options but always disables redirects", async method => {
+    const response = { status: () => 201 };
+    const api = { fetch: vi.fn().mockResolvedValue(response) };
+    expect(await feedbackApiRequest(api, "https://preview.example", "/api/feedback", { method, data: { fictional: true }, maxRedirects: 20 })).toBe(response);
+    expect(api.fetch).toHaveBeenCalledWith("https://preview.example/api/feedback", { method, data: { fictional: true }, maxRedirects: 0 });
+  });
+  it.each([301, 302, 303, 307, 308])("rejects redirect response %s", async status => {
+    const api = { fetch: vi.fn().mockResolvedValue({ status: () => status }) };
+    await expect(feedbackApiRequest(api, "https://preview.example", "/api/feedback")).rejects.toThrow("failed safely");
   });
 });

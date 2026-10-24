@@ -1,7 +1,7 @@
 import { expect, test, type Browser } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { FIXTURE_ENVIRONMENT } from "./fixture-env";
-import { guardFeedbackBrowserContext } from "../scripts/cloudflare/feedback-browser-guard.mjs";
+import { guardFeedbackBrowserContext, feedbackApiRequest } from "../scripts/cloudflare/feedback-browser-guard.mjs";
 
 const EVIDENCE_DIR = "test-results/evidence";
 mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -83,7 +83,7 @@ test.describe("student feedback loop", () => {
     // ── An admin replies from the console ──
     const admin = await contextFor(browser, adminToken!, baseURL);
     const adminPage = await admin.newPage();
-    const listResponse = await adminPage.request.get("/api/admin/feedback?status=NEW&kind=BUG", { maxRedirects: 0 });
+    const listResponse = await feedbackApiRequest(adminPage.request, baseURL!, "/api/admin/feedback?status=NEW&kind=BUG");
     expect(listResponse.ok()).toBe(true);
     const { items } = (await listResponse.json()) as {
       items: Array<{ id: string; message: string; attachments: unknown[] }>;
@@ -131,22 +131,22 @@ test.describe("student feedback loop", () => {
     // Browser-session tokens must pass the same-origin guard on admin writes;
     // the request API sends no Origin of its own.
     const headers = { Origin: new URL(baseURL!).origin };
-    const untriaged = await api.get("/api/admin/feedback?untriaged=1&kind=IDEA", { maxRedirects: 0 });
+    const untriaged = await feedbackApiRequest(api, baseURL!, "/api/admin/feedback?untriaged=1&kind=IDEA");
     const { items } = (await untriaged.json()) as { items: Array<{ id: string; message: string }> };
     const noteId = items.find((item) => item.message === note)!.id;
 
-    const created = await api.post("/api/admin/feedback/themes", {
-      maxRedirects: 0,
+    const created = await feedbackApiRequest(api, baseURL!, "/api/admin/feedback/themes", {
+      method: "POST",
       headers,
       data: { title: `Theme e2e ${stamp}`, kind: "IDEA", change: "ADD" },
     });
     expect(created.status()).toBe(201);
     const theme = (await created.json()) as { id: string };
-    expect((await api.patch(`/api/admin/feedback/${noteId}`, { maxRedirects: 0, headers, data: { themeId: theme.id } })).ok()).toBe(true);
+    expect((await feedbackApiRequest(api, baseURL!, `/api/admin/feedback/${noteId}`, { method: "PATCH", headers, data: { themeId: theme.id } })).ok()).toBe(true);
     expect(
       (
-        await api.patch(`/api/admin/feedback/themes/${theme.id}`, {
-          maxRedirects: 0,
+        await feedbackApiRequest(api, baseURL!, `/api/admin/feedback/themes/${theme.id}`, {
+          method: "PATCH",
           headers,
           data: { status: "PLANNED", issueUrl: "https://github.com/Tembo-Tech-Ventures/ttv-website/issues/1" },
         })
@@ -179,7 +179,7 @@ test.describe("student feedback loop", () => {
 
   test("signed-out visitors cannot open feedback screenshots", async ({ browser, baseURL }) => {
     const admin = await contextFor(browser, adminToken!, baseURL);
-    const response = await admin.request.get("/api/admin/feedback?status=all&limit=50", { maxRedirects: 0 });
+    const response = await feedbackApiRequest(admin.request, baseURL!, "/api/admin/feedback?status=all&limit=50");
     const { items } = (await response.json()) as {
       items: Array<{ attachments: Array<{ url: string }>; submittedBy: { id: string } }>;
     };

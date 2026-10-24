@@ -17,3 +17,18 @@ export async function guardFeedbackBrowserContext(context, baseURL) {
     return route.fulfill({ response });
   });
 }
+
+/** APIRequestContext bypasses browser routing and can include headers in errors. */
+export async function feedbackApiRequest(api, baseURL, target, options = {}) {
+  try {
+    const base = new URL(baseURL);
+    const url = new URL(target, base);
+    if (base.username || base.password || url.username || url.password || url.origin !== base.origin) throw new Error();
+    const response = await api.fetch(url.href, { ...options, maxRedirects: 0 });
+    if (response.status() >= 300 && response.status() < 400) throw new Error();
+    return response;
+  } catch {
+    // No original error/cause: Playwright call logs can contain bearer headers.
+    throw new Error("Feedback API request failed safely.");
+  }
+}
