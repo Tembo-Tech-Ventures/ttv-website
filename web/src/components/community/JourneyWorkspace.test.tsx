@@ -26,6 +26,10 @@ describe("community contribution editor", () => {
     );
     expect(html).toContain("Checked by Grace Njeri");
     expect(html).toContain("Member-reported");
+    expect(html).toContain("Opportunity goals");
+    expect(html).toContain("Show what you made, what you learned, and the part that was yours.");
+    expect(html).not.toContain("Keep the story moving");
+    expect(html).not.toContain("Your next chapter");
   });
   it("supports a contribution before evidence or mentor confirmation exists", () => {
     expect(validateClaimDraft(draft)).toBeNull();

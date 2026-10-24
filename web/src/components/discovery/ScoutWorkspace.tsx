@@ -5,7 +5,6 @@ import {
   ArrowUpRight,
   ArrowRight,
   MagnifyingGlass,
-  Sparkle,
   Link as LinkIcon,
 } from "@phosphor-icons/react";
 import EvidenceAssessment, {
@@ -137,14 +136,13 @@ function ProfileEvidence({
               .slice(0, 2)
               .join("")}
           </div>
-          <span className="discovery-eyebrow">Community profile</span>
         </div>
         <h1>{profile.name}</h1>
         <p className="discovery-profile-headline">{profile.headline}</p>
         <p className="discovery-muted">{profile.location}</p>
         <p className="discovery-about">{profile.about}</p>
         <div className="discovery-goal">
-          <span className="discovery-eyebrow">Looking toward</span>
+          <strong>Opportunity goals</strong>
           <p>{profile.goal}</p>
         </div>
         <div className="discovery-section-heading">
@@ -185,10 +183,6 @@ function ProfileEvidence({
         )}
       </section>
       <aside className="discovery-chat" aria-label="Explore profile evidence">
-        <div className="discovery-chat-title">
-          <Sparkle size={22} aria-hidden="true" />
-          <span className="discovery-eyebrow">Go beyond the headline</span>
-        </div>
         {onAssess && (
           <EvidenceAssessment profile={profile} onAssess={onAssess} />
         )}
@@ -407,9 +401,6 @@ export default function ScoutWorkspace({
         <>
           <div className="discovery-page-heading">
             <div>
-              <span className="discovery-eyebrow">
-                Institution workspace / discover
-              </span>
               <h1>
                 Find the person.
                 <br />
@@ -417,11 +408,7 @@ export default function ScoutWorkspace({
               </h1>
             </div>
             <p>
-              Start with what matters to your team.
-              <br />
-              Meet community builders through their
-              <br className="discovery-desktop-break" /> projects, progress, and
-              evidence.
+              Find community builders through their work.
             </p>
           </div>
           <div className="discovery-actions">
@@ -464,9 +451,6 @@ export default function ScoutWorkspace({
           {step === "criteria" ? (
             <section className="discovery-criteria-grid">
               <form className="discovery-criteria" onSubmit={search}>
-                <span className="discovery-eyebrow">
-                  Your search, in your words
-                </span>
                 <h2>{modeText.title}</h2>
                 {lookup ? (
                   <label className="discovery-field">
@@ -575,9 +559,6 @@ export default function ScoutWorkspace({
                   mentor actually checked.
                 </p>
                 <p>No single score tells a person's whole story.</p>
-                <span className="discovery-eyebrow">
-                  Built in community. Seen in context.
-                </span>
               </aside>
             </section>
           ) : (
@@ -589,7 +570,6 @@ export default function ScoutWorkspace({
               )}
               <div className="discovery-results-bar">
                 <div>
-                  <span className="discovery-eyebrow">Explore people</span>
                   <h2>
                     {results.length}{" "}
                     {results.length === 1 ? "builder" : "builders"} to get to

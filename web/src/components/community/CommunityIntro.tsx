@@ -20,7 +20,7 @@ export default function CommunityIntro({ isAuthenticated = false, full = false }
             </Heading>
           </div>
           <div>
-            <p className="text-lg leading-relaxed text-ink-secondary">For TTV students and builders beyond our cohorts. Share what you have contributed, connect it to evidence, and make your next conversation more informed.</p>
+            <p className="text-lg leading-relaxed text-ink-secondary">For TTV students and builders beyond our cohorts. Share your contributions, supporting evidence, and what you want to do next.</p>
             <p className="mt-4 text-sm leading-relaxed text-ink-muted">You do not need to join or complete a cohort to build a community profile.</p>
             <div className="mt-7 flex flex-wrap items-center gap-5">
               <a href={communityEntryHref(isAuthenticated)} className="inline-flex rounded-full bg-primary px-6 py-3 font-semibold text-dark hover:bg-primary/90">
@@ -47,9 +47,9 @@ export default function CommunityIntro({ isAuthenticated = false, full = false }
             </section>
             <section id="institutions" aria-labelledby="community-institution-heading">
               <h2 id="community-institution-heading" className="font-heading text-2xl text-ink-primary">Exploring talent for an opportunity?</h2>
-              <p className="mt-4 leading-relaxed text-ink-secondary">Institutional access needs administrator approval after sign-in. Explore documented work in the community, including members who have not joined a TTV cohort.</p>
+              <p className="mt-4 leading-relaxed text-ink-secondary">Explore community members and their documented work.</p>
               <a href={communityEntryHref(isAuthenticated, true)} className="mt-5 inline-block font-semibold text-primary underline underline-offset-4">Continue to institutional access</a>
-              <p className="mt-3 text-sm leading-relaxed text-ink-muted">Signing in does not grant institutional access. The next screen shows whether approval is needed.</p>
+              <p className="mt-3 text-sm leading-relaxed text-ink-muted">Institutional access requires administrator approval after sign-in.</p>
             </section>
           </div>
         </>}
@@ -60,9 +60,8 @@ export default function CommunityIntro({ isAuthenticated = false, full = false }
 
 export function CommunityJourneyCard() {
   return <section aria-labelledby="dashboard-community-title" className="rounded-xl border border-primary/30 bg-dark p-6 sm:p-8">
-    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Beyond the cohort</p>
     <h2 id="dashboard-community-title" className="mt-3 text-2xl font-semibold text-ink-primary">Your work has a story.</h2>
-    <p className="mt-3 leading-relaxed text-ink-secondary">Build your community profile and add the contributions behind it. Open to every member, whether or not you have joined a cohort.</p>
+    <p className="mt-3 leading-relaxed text-ink-secondary">Share your work and contributions. Open to every member, with or without a cohort.</p>
     <div className="mt-5 flex flex-wrap gap-x-6 gap-y-3">
       <a href="/dashboard/community" className="font-semibold text-primary underline underline-offset-4">Open my profile and journey</a>
       <a href="/community" className="text-ink-secondary underline underline-offset-4">About the community</a>

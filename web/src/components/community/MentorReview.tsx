@@ -248,17 +248,14 @@ export default function MentorReview({
   const id = useId();
   return (
     <section className="discovery-panel" aria-labelledby={`${id}-heading`}>
-      <p className="discovery-eyebrow">Mentor review</p>
       <h2 id={`${id}-heading`}>Confirm what you have personally checked</h2>
       <p>
-        Your confirmation applies only to the named claim and the evidence you
-        reviewed. It is not an endorsement of the whole person. An assistant
-        response does not confirm a claim.
+        Confirm only the named contribution and evidence you reviewed, not the
+        whole person. An assistant response does not confirm a claim.
       </p>
       <p>
-        These are published contributions, including previously reviewed work.
-        Check the confirmation history before adding a statement. Refreshing
-        this list does not mean a new review was requested.
+        Published contributions may already have reviews. Check the confirmation
+        history; this list is not a queue of review requests.
       </p>
       {demo && (
         <p className="discovery-demo-notice">

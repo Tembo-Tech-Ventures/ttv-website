@@ -37,7 +37,7 @@ describe("MentorReview", () => {
   it("identifies the exact claim, scope, evidence and labelled review fields", () => {
     const html = render();
     expect(html).toContain("Built a scheduling API");
-    expect(html).toContain("not an endorsement of the whole person");
+    expect(html).toContain("not the whole person");
     expect(html).toContain("An assistant response does not confirm a claim");
     expect(html).toContain('href="https://example.com/project"');
     expect(html).toContain('rel="noopener noreferrer"');
@@ -66,7 +66,7 @@ describe("MentorReview", () => {
     expect(html).toContain("Confirmation history");
     expect(html).toContain("Administrator");
     expect(html).toContain(
-      "Refreshing this list does not mean a new review was requested",
+      "this list is not a queue of review requests",
     );
     expect(html).not.toContain("Awaiting your review");
   });
