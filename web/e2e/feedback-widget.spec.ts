@@ -1,7 +1,7 @@
 import { expect, test, type Browser } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { FIXTURE_ENVIRONMENT } from "./fixture-env";
-import { guardFeedbackBrowserContext, feedbackApiRequest } from "../scripts/cloudflare/feedback-browser-guard.mjs";
+import { guardFeedbackBrowserContext, feedbackApiRequest, submitFeedbackAdminSave } from "../scripts/cloudflare/feedback-browser-guard.mjs";
 
 const EVIDENCE_DIR = "test-results/evidence";
 mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -94,7 +94,7 @@ test.describe("student feedback loop", () => {
     await adminPage.goto(`/admin/feedback/${item!.id}`);
     await adminPage.getByLabel("Status").selectOption("RESOLVED");
     await adminPage.getByLabel(/Reply to/).fill("Thanks! Fixed in the latest release.");
-    await adminPage.getByRole("button", { name: "Save" }).click();
+    await submitFeedbackAdminSave(adminPage, baseURL!, () => adminPage.getByRole("button", { name: "Save" }).click());
     await expect(adminPage.getByText("Saved.")).toBeVisible();
 
     // ── The student sees the outcome ──
@@ -164,7 +164,7 @@ test.describe("student feedback loop", () => {
     await expect(adminPage.getByText(note)).toBeVisible();
     await adminPage.getByLabel("Status").selectOption("SHIPPED");
     await adminPage.getByLabel(/Message to students/).fill("This shipped. Thank you for asking!");
-    await adminPage.getByRole("button", { name: "Save" }).click();
+    await submitFeedbackAdminSave(adminPage, baseURL!, () => adminPage.getByRole("button", { name: "Save" }).click());
     await expect(adminPage.getByText("Saved.")).toBeVisible();
 
     await page.reload();

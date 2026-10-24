@@ -32,3 +32,42 @@ export async function feedbackApiRequest(api, baseURL, target, options = {}) {
     throw new Error("Feedback API request failed safely.");
   }
 }
+
+/** Exercise a form save without letting the browser forward a redirect. */
+export async function submitFeedbackAdminSave(page, baseURL, submit) {
+  const current = new URL(page.url());
+  const base = new URL(baseURL);
+  if (current.origin !== base.origin || current.username || current.password ||
+      !/^\/admin\/feedback\/(?:themes\/)?[^/]+$/.test(current.pathname)) {
+    throw new Error("Feedback save requires an exact admin page.");
+  }
+  const receipt = new URL(current.pathname, base.origin);
+  receipt.search = "?saved=1";
+  let accepted = false;
+  const match = url => url.href === current.href;
+  const handler = async route => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.fallback();
+    try {
+      if (!request.isNavigationRequest() || request.redirectedFrom()) throw new Error();
+      const response = await route.fetch({ maxRedirects: 0 });
+      const location = response.headers().location;
+      accepted = [302, 303].includes(response.status()) && Boolean(location) &&
+        new URL(location, current).href === receipt.href;
+      // No Location header or upstream body reaches the browser. The test
+      // explicitly navigates only after validating the expected receipt URL.
+      await route.fulfill({ status: accepted ? 200 : 400, contentType: "text/html", body: "<!doctype html><title>Save response</title>" });
+    } catch {
+      accepted = false;
+      await route.abort();
+    }
+  };
+  await page.route(match, handler);
+  try {
+    await submit();
+    if (!accepted) throw new Error("Feedback save receipt was not validated.");
+    await page.goto(receipt.href);
+  } finally {
+    await page.unroute(match, handler);
+  }
+}
