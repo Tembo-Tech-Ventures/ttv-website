@@ -23,6 +23,17 @@ describe("community evidence publication boundary", () => {
     expect(receipt.screenshots).toContain("desktop-assessment.png");
     expect(JSON.stringify(receipt)).not.toContain("private");
   });
+  it("seals only bounded chat metadata and rejects missing actual tool execution", async () => {
+    const chat = { model: "@cf/zai-org/glm-5.3-flash", modelSteps: 2, executedToolCalls: 1, citationCount: 2, privatePrompt: "private" };
+    readFile.mockResolvedValue(JSON.stringify({ ...valid, modelCalls: "one-bounded-desktop-chat", chat }));
+    await sealCommunityEvidence(sha);
+    const receipt = JSON.parse(writeFile.mock.calls[0][1]);
+    expect(receipt).toMatchObject({ chatViewport: "desktop", assessment: "not-tested", chat: { modelSteps: 2, executedToolCalls: 1 } });
+    expect(receipt.screenshots).toContain("desktop-chat.png");
+    expect(JSON.stringify(receipt)).not.toContain("private");
+    readFile.mockResolvedValue(JSON.stringify({ ...valid, modelCalls: "one-bounded-desktop-chat", chat: { ...chat, executedToolCalls: 0 } }));
+    await expect(sealCommunityEvidence(sha)).rejects.toThrow("Chat evidence incomplete");
+  });
   it("rejects an assessment receipt with no citations", async () => {
     readFile.mockResolvedValue(JSON.stringify({ ...valid, modelCalls: "one-bounded-desktop-assessment", assessment: { rating: 3, citationCount: 0 } }));
     await expect(sealCommunityEvidence(sha)).rejects.toThrow("incomplete");
@@ -41,7 +52,7 @@ describe("community evidence publication boundary", () => {
     await expect(sealCommunityEvidence(sha)).rejects.toThrow("incomplete"); expect(writeFile).not.toHaveBeenCalled();
   });
   it("discards only the fixed evidence files including optional assessment", async () => {
-    await discardCommunityEvidence(); expect(rm).toHaveBeenCalledTimes(10);
+    await discardCommunityEvidence(); expect(rm).toHaveBeenCalledTimes(11);
     expect(rm.mock.calls.every(([path, options]) => path.startsWith("test-results/staging-community/") && options.force && !options.recursive)).toBe(true);
   });
 });

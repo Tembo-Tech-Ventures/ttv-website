@@ -1,3 +1,4 @@
+import { verifyBrowserChat } from "./staging-browser-chat.mjs";
 import { verifyBrowserAssessment } from "./staging-browser-assessment.mjs";
 import assert from "node:assert/strict";
 import { mkdir, rm, writeFile } from "node:fs/promises";
@@ -5,6 +6,7 @@ import { join } from "node:path";
 import { expect } from "@playwright/test";
 
 export const COMMUNITY_EVIDENCE_DIRECTORY = "test-results/staging-community";
+export const CHAT_EVIDENCE_FILE = "desktop-chat.png";
 export const ASSESSMENT_EVIDENCE_FILE = "desktop-assessment.png";
 export const COMMUNITY_EVIDENCE_FILES = Object.freeze([
   "desktop-member.png", "desktop-mentor.png", "desktop-scout.png", "desktop-known-profile.png",
@@ -61,7 +63,7 @@ async function navigate(page, path) {
   await page.locator(".discovery-app").waitFor({ state: "visible" });
 }
 async function capture(page, locator, directory, filename) {
-  assert.ok(COMMUNITY_EVIDENCE_FILES.includes(filename) || filename === ASSESSMENT_EVIDENCE_FILE);
+  assert.ok(COMMUNITY_EVIDENCE_FILES.includes(filename) || filename === ASSESSMENT_EVIDENCE_FILE || filename === CHAT_EVIDENCE_FILE);
   assert.equal(new URL(page.url()).origin, origin);
   assert.ok(["/dashboard/community", "/dashboard/mentorship", "/dashboard/discover"].includes(new URL(page.url()).pathname));
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
@@ -72,17 +74,19 @@ async function capture(page, locator, directory, filename) {
  * The caller owns protected contexts and run-scoped cleanup. Publish evidence ONLY
  * after its cleanup has succeeded; a passed manifest does not attest cleanup/deploy identity.
  */
-export async function verifyStagingCommunityJourney({ baseUrl, contextsByRole, users, evidenceDirectory = COMMUNITY_EVIDENCE_DIRECTORY, browserAssessment = false }) {
+export async function verifyStagingCommunityJourney({ baseUrl, contextsByRole, users, evidenceDirectory = COMMUNITY_EVIDENCE_DIRECTORY, browserAssessment = false, browserChat = false }) {
   const pages = [];
   let failure;
   let stage = "scope";
   const completed = [];
+  let chat = null;
+  let chatAttempted = false;
   let assessment = null;
   let assessmentAttempted = false;
   // Evidence path is not a workflow input. Reject arbitrary writes/deletes.
   if (evidenceDirectory !== COMMUNITY_EVIDENCE_DIRECTORY) throw new Error("Synthetic community evidence directory rejected.");
   await mkdir(evidenceDirectory, { recursive: true });
-  await Promise.all([...COMMUNITY_EVIDENCE_FILES, ASSESSMENT_EVIDENCE_FILE].map(file => rm(join(evidenceDirectory, file), { force: true })));
+  await Promise.all([...COMMUNITY_EVIDENCE_FILES, ASSESSMENT_EVIDENCE_FILE, CHAT_EVIDENCE_FILE].map(file => rm(join(evidenceDirectory, file), { force: true })));
   try {
     assertJourneyScope({ baseUrl, contextsByRole, users });
     stage = "identity";
@@ -191,6 +195,14 @@ export async function verifyStagingCommunityJourney({ baseUrl, contextsByRole, u
       completed.push(viewport);
       lastInstitution = institution;
     }
+    if (browserChat) {
+      stage = "desktop-chat";
+      await lastInstitution.setViewportSize({ width: 1280, height: 900 });
+      const detail = await read(contextsByRole.institution, profilePath);
+      chatAttempted = true;
+      chat = await verifyBrowserChat({ page: lastInstitution, memberId, entries: detail.entries, profileVersion: detail.profile.version });
+      await capture(lastInstitution, lastInstitution.locator(".discovery-chat"), evidenceDirectory, CHAT_EVIDENCE_FILE);
+    }
     if (browserAssessment) {
       stage = "desktop-assessment";
       await lastInstitution.setViewportSize({ width: 1280, height: 900 });
@@ -204,8 +216,8 @@ export async function verifyStagingCommunityJourney({ baseUrl, contextsByRole, u
   } finally {
     const closed = await Promise.allSettled(pages.map(page => page.close()));
     if (closed.some(result => result.status === "rejected")) { failure = true; stage = "page-cleanup"; }
-    if (failure) await Promise.all([...COMMUNITY_EVIDENCE_FILES, ASSESSMENT_EVIDENCE_FILE].filter(file => file.endsWith(".png")).map(file => rm(join(evidenceDirectory, file), { force: true })));
-    await writeFile(join(evidenceDirectory, "manifest.json"), JSON.stringify({ schemaVersion: 1, synthetic: true, verification: "browser-actions-and-api-readback", status: failure ? "failed" : "passed", completedViewports: completed, failureStage: failure ? stage : null, modelCalls: assessment ? "one-bounded-desktop-assessment" : assessmentAttempted ? "attempted-unverified" : "not-tested", ...(assessment ? { assessment } : {}), cleanup: "caller-must-verify-before-publication" }, null, 2) + "\n");
+    if (failure) await Promise.all([...COMMUNITY_EVIDENCE_FILES, ASSESSMENT_EVIDENCE_FILE, CHAT_EVIDENCE_FILE].filter(file => file.endsWith(".png")).map(file => rm(join(evidenceDirectory, file), { force: true })));
+    await writeFile(join(evidenceDirectory, "manifest.json"), JSON.stringify({ schemaVersion: 1, synthetic: true, verification: "browser-actions-and-api-readback", status: failure ? "failed" : "passed", completedViewports: completed, failureStage: failure ? stage : null, modelCalls: chat ? "one-bounded-desktop-chat" : chatAttempted ? "attempted-unverified" : assessment ? "one-bounded-desktop-assessment" : assessmentAttempted ? "attempted-unverified" : "not-tested", ...(assessment ? { assessment } : {}), ...(chat ? { chat } : {}), cleanup: "caller-must-verify-before-publication" }, null, 2) + "\n");
   }
   if (failure) throw new Error("Synthetic community journey failed; inspect sanitized manifest.");
 }

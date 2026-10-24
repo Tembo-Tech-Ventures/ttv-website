@@ -2,7 +2,7 @@ import { audienceRoutesPresent, verifyAudienceAccess } from "./staging-audience-
 import { COMMUNITY_EVIDENCE_DIRECTORY, verifyStagingCommunityJourney } from "./staging-community-journey.mjs";
 
 /** Fixed verification program. Do not accept arbitrary scripts, roles or target IDs from workflow input. */
-export async function verifyStagingPersonas({ browser, target, personas, verifyJourney = verifyStagingCommunityJourney, verifyAudience = verifyAudienceAccess, audienceEnabled = audienceRoutesPresent(), browserAssessment = false }) {
+export async function verifyStagingPersonas({ browser, target, personas, verifyJourney = verifyStagingCommunityJourney, verifyAudience = verifyAudienceAccess, audienceEnabled = audienceRoutesPresent(), browserAssessment = false, browserChat = false }) {
   if (browserAssessment && personas.institution?.sessionId !== `${personas.institution?.userId}-assessment-session`) throw new Error("Bounded assessment session required.");
   const contexts = [];
   const clients = {};
@@ -79,6 +79,7 @@ export async function verifyStagingPersonas({ browser, target, personas, verifyJ
       users: Object.fromEntries(["member", "mentor", "institution"].map(role => [role, { userId: personas[role].userId }])),
       evidenceDirectory: COMMUNITY_EVIDENCE_DIRECTORY,
       browserAssessment,
+      browserChat,
     });
   } catch {
     failure = new Error("Synthetic staging verification failed.");
