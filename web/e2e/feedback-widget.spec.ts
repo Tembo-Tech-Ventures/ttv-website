@@ -8,7 +8,7 @@ mkdirSync(EVIDENCE_DIR, { recursive: true });
 const evidence = (name: string) =>
   `${EVIDENCE_DIR}/${test.info().project.name}-feedback-${name}.png`;
 
-const studentToken = process.env.PLAYWRIGHT_NEW_STUDENT_TOKEN;
+const studentToken = process.env.PLAYWRIGHT_FEEDBACK_STUDENT_TOKEN;
 const adminToken = process.env.PLAYWRIGHT_AGENT_TOKEN;
 
 async function contextFor(browser: Browser, token: string, baseURL: string | undefined) {
@@ -22,9 +22,13 @@ async function contextFor(browser: Browser, token: string, baseURL: string | und
 test.describe("student feedback loop", () => {
   // Writes feedback rows, so it runs only against isolated agent-* stacks.
   test.skip(
-    !FIXTURE_ENVIRONMENT || !studentToken || !adminToken,
-    "Needs an isolated agent environment with student and admin tokens."
+    !FIXTURE_ENVIRONMENT,
+    "Writes are restricted to isolated agent environments."
   );
+  test.beforeAll(() => {
+    expect(Boolean(studentToken), "Isolated preview requires a run-scoped feedback student token").toBe(true);
+    expect(Boolean(adminToken), "Isolated preview requires an admin token").toBe(true);
+  });
 
   test("a student sends a marked-up screenshot and sees the team's reply", async ({
     browser,
@@ -56,7 +60,11 @@ test.describe("student feedback loop", () => {
     await expect(panel.getByText("Marked up")).toBeVisible();
     await page.screenshot({ path: evidence("ready") });
 
+    const submission = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === "/api/feedback" && response.request().method() === "POST"
+    );
     await panel.getByRole("button", { name: "Send feedback" }).click();
+    expect((await submission).status(), "Feedback submission must succeed before checking the receipt").toBe(201);
     await expect(panel.getByText("Thank you, it's with the team.")).toBeVisible();
 
     await panel.getByRole("link", { name: "See your feedback" }).click();
@@ -102,7 +110,11 @@ test.describe("student feedback loop", () => {
     const panel = page.getByTestId("feedback-panel");
     await panel.getByText("Idea").click();
     await panel.getByLabel("Your feedback").fill(note);
+    const submission = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === "/api/feedback" && response.request().method() === "POST"
+    );
     await panel.getByRole("button", { name: "Send feedback" }).click();
+    expect((await submission).status(), "Feedback submission must succeed before checking the receipt").toBe(201);
     await expect(panel.getByText("Thank you, it's with the team.")).toBeVisible();
 
     // ── Triage, the way the agent does it: theme, attach, plan ──
