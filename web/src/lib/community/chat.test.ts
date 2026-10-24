@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { generateToolCompletion } from "../ai/gateway";
 import { runCommunityChat } from "./chat";
 import type { CommunityService } from "./service";
+import { COMMUNITY_ASSESSMENT_MODEL } from "./assessment-provider";
 vi.mock("../ai/gateway", () => ({ generateToolCompletion: vi.fn() }));
 const complete = vi.mocked(generateToolCompletion);
 const env = { AI_GATEWAY_MODEL: "configured", AI_GATEWAY_ACCOUNT_ID: "account", AI_GATEWAY_NAME: "gateway", AI_GATEWAY_API_KEY: "placeholder" } as Env;
@@ -9,6 +10,15 @@ function service(institution = false) { return { access: vi.fn().mockResolvedVal
 function call(name: string, args: unknown) { return { id: "c", type: "function" as const, function: { name, arguments: JSON.stringify(args) } }; }
 const done = { content: "Summary", toolCalls: [], finishReason: "stop" };
 beforeEach(() => complete.mockReset());
+it("pins community chat to Gemma without changing the original global model configuration", async () => {
+ const globalEnv = {...env,AI_GATEWAY_MODEL:"workers-ai/@cf/openai/gpt-oss-20b"} as Env;
+ complete.mockResolvedValueOnce(done);
+ await runCommunityChat(globalEnv,service(),{message:"Explain my evidence"});
+ expect(complete.mock.calls[0][0].AI_GATEWAY_MODEL).toBe(COMMUNITY_ASSESSMENT_MODEL);
+ expect(complete.mock.calls[0][0]).not.toBe(globalEnv);
+ expect(complete.mock.calls[0][2]).toMatchObject({requireUnifiedGateway:true,timeoutMs:20_000});
+ expect(globalEnv.AI_GATEWAY_MODEL).toBe("workers-ai/@cf/openai/gpt-oss-20b");
+});
 it("requires unified config and bounds user prompt", async () => {
  await expect(runCommunityChat({} as Env, service(), { message: "hello" })).rejects.toThrow("configured");
  await expect(runCommunityChat(env, service(), { message: "a".repeat(4001) })).rejects.toThrow(/4000/); expect(complete).not.toHaveBeenCalled();

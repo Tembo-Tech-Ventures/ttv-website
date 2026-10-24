@@ -1,10 +1,11 @@
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as assessmentProvider from "./assessment-provider";
 import { createCommunityService } from "./service";
 import { handleCommunityRequest } from "./http";
 const databases: DatabaseSync[] = [];
-afterEach(() => { for (const db of databases.splice(0)) db.close(); });
+afterEach(() => { for (const db of databases.splice(0)) db.close(); vi.restoreAllMocks(); });
 const migration = readFileSync(new URL("../db/migrations/0017_community_discovery.sql", import.meta.url),"utf8").replaceAll("--> statement-breakpoint", "");
 function fixture(beforeWrite?: (sql: DatabaseSync,query: string) => void) {
   const sql = new DatabaseSync(":memory:"); databases.push(sql);
@@ -197,9 +198,22 @@ describe("community HTTP", () => {
     const body = {id:"hiring",version:1,criteria:[{id:"tool",label:"Tool evidence",terms:["implemented"]}]};
     const req = new Request("https://ttv.example/api/community/profiles/member/assessment",{method:"POST",body:JSON.stringify(body)});
     const res = await handleCommunityRequest(req,"profiles/member/assessment",{id:"institution",scopes:["institution:read"]},f.db);
-    expect(res.status).toBe(200); expect(await res.json()).toMatchObject({assessment:{rubric:{version:1},criteria:[{status:"supported"}]}});
+    expect(res.status).toBe(200); expect(await res.json()).toMatchObject({assessment:{status:"unavailable",errorCode:"provider_unavailable",rubric:{version:1},criteria:[]}});
     const spoof = new Request("https://ttv.example/api/community/profile",{headers:{Authorization:"Bearer unknown"}});
     expect((await handleCommunityRequest(spoof,"profile",{id:"member",scopes:null},f.db)).status).toBe(401);
+  });
+  it("uses the validated model contract over REST and authorizes before inference", async () => {
+    const f = fixture(); const contribution = await f.member.createJourney(entry);
+    await f.member.createJourney({...entry,description:"private-only-secret",visibility:"private"});
+    const complete = vi.fn().mockResolvedValue(JSON.stringify({criteria:[{criterionId:"tool",status:"assessed",rating:3,explanation:"Specific documented contribution, not inferred ability.",citations:[{kind:"journey",id:contribution.id,version:1}]}]}));
+    vi.spyOn(assessmentProvider,"createAssessmentProvider").mockReturnValue({model:"test-model",complete});
+    const body = {id:"hiring",version:1,criteria:[{id:"tool",label:"Tool evidence",terms:["implemented"]}]};
+    const request = () => new Request("https://ttv.example/api/community/profiles/member/assessment",{method:"POST",body:JSON.stringify(body)});
+    const denied = await handleCommunityRequest(request(),"profiles/member/assessment",{id:"other",scopes:["institution:read"]},f.db);
+    expect(denied.status).toBe(403); expect(complete).not.toHaveBeenCalled();
+    const response = await handleCommunityRequest(request(),"profiles/member/assessment",{id:"institution",scopes:["institution:read"]},f.db);
+    expect(await response.json()).toMatchObject({assessment:{status:"completed",method:"model-evidence-support-v1",criteria:[{criterionId:"tool",label:"Tool evidence",rating:3,citations:[{id:contribution.id,userId:"member",quote:entry.description}]}]}});
+    expect(JSON.stringify(complete.mock.calls)).not.toContain("private-only-secret");
   });
 
 });

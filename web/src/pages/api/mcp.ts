@@ -10,5 +10,5 @@ export const ALL: APIRoute = async ({ request, locals }) => {
   return handleCommunityMcp(request, {
     userId: locals.user.id,
     scopes: locals.personalAccessToken?.scopes ?? null,
-  }, createCommunityService(env.DB, locals.user.id, locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT));
+  }, createCommunityService(env.DB, locals.user.id, locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT), env);
 };
