@@ -24,6 +24,12 @@ after each coherent, passing slice. Re-check CI after every push. If credentials
 or the workspace network fail, report the environment issue instead of working
 around security boundaries.
 
+Managed secrets are not injected into the ordinary workspace shell; placeholder
+values there are expected and do not prove that a secret is unavailable. Run a
+secret-backed command through SAM `exec_with_secrets`, pass only the required
+`secretNames`, and prefer literal `argv` with the command's exact working
+directory. Never inspect, print, copy, or transform a secret to test it.
+
 ## Architecture and hotspots
 
 - `web/src/pages`: Astro routes and APIs.

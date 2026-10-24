@@ -104,7 +104,12 @@ shared one, which the read-only health monitor and live e2e runs also use.
 In a SAM workspace, secret env vars hold placeholders. Run the script through
 SAM's `exec_with_secrets` with `secretNames: ["TTV_PERSONAL_ACCESS_TOKEN"]`
 (or `TTV_FEEDBACK_TOKEN`) so the real value is injected and redacted from
-output.
+output. The placeholder in the ordinary shell is expected; do not use it to
+decide whether the managed secret exists. Prefer a literal argument vector and
+the exact `web/` working directory, for example `argv: ["node",
+"scripts/feedback.mjs", "list", "--untriaged", "--json"]`, `cwd:
+"<workspace>/web"`, and `secretNames: ["TTV_FEEDBACK_TOKEN"]`. Never print or
+transform the token to test the injection.
 
 ```bash
 cd web
