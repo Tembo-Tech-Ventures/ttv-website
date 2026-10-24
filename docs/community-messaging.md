@@ -282,3 +282,13 @@ The personas are differentiated by decision and responsibility, not by stereotyp
 - Live assessment availability, reliability, latency, cost and usefulness: require separate exact-revision tests. Scores describe evidence support against a criterion, never inferred ability; insufficient evidence stays separate.
 
 No interviews, campaigns, messages to external audiences, new product commitments or runtime changes are authorized by this brief. PM owns scope and release decisions; Designer owns runtime placement and implementation; Marketing owns claims and copy review.
+
+## Demo milestone update: live assessment (24 October 2026)
+
+PM reports a successful bounded assessment in [run 40135089431](https://github.com/Tembo-Tech-Ventures/ttv-website/actions/runs/40135089431) at deployed revision `8a68c1075eace9e3d5e3a9fc5c4b86f3dab44a65`; [deploy 40134741608](https://github.com/Tembo-Tech-Ventures/ttv-website/actions/runs/40134741608) succeeded at the same revision. Marketing independently checked both workflow conclusions and SHAs, but has not independently inspected this run's assessment output. The output details below are PM-attested: a fictional TypeScript criterion returned **1/5 evidence support**, with one versioned journey citation. No-evidence remains distinct from low support, and the decision stays with the human reviewer.
+
+This supersedes the earlier blanket “no verified live inference” limitation only for this bounded PM-confirmed assessment. It does not prove model quality, general reliability, latency/cost performance, candidate ability, or a complete end-to-end demonstration. Architect's exact-revision desktop/mobile member → mentor → institution browser verification is still in progress at this checkpoint. Earlier `144367f` evidence remains historical and must not stand in for that verification.
+
+Presentation wording: “In this fictional example, the documented evidence received 1 out of 5 for support of the TypeScript criterion, with a citation to a specific journey version. That is a statement about the evidence available for this criterion, not the person's skill. Missing evidence is a separate result. The reviewer decides what to ask next.” Show the actual sanitized result only after its artifact has been inspected; do not substitute a mock and call it live.
+
+Keep the concise member-opportunity story and the earlier pre-existing-versus-hackathon distinction. Identify actual inspected Codex development contributions rather than attributing inference to OpenAI or inventing productivity gains. This update authorizes no new model calls, outreach, submission or schedules.
