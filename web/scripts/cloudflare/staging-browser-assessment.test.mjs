@@ -14,9 +14,9 @@ describe("browser assessment evidence", () => {
     value.assessment.subject.profileVersion = 2;
     value.assessment.criteria[0].citations.push({ kind: "profile", id: "member", version: 2, userId: "member" });
     expect(validateBrowserAssessment(value, "member", entries, 2)).toEqual({ rating: 2, citationCount: 2 });
-    expect(() => validateBrowserAssessment(value, "member", entries, 3)).toThrow();
+    expect(() => validateBrowserAssessment(value, "member", entries, 3)).toThrow(/Expected values to be strictly equal/);
     value.assessment.criteria[0].citations = [value.assessment.criteria[0].citations[1]];
-    expect(() => validateBrowserAssessment(value, "member", entries, 2)).toThrow();
+    expect(() => validateBrowserAssessment(value, "member", entries, 2)).toThrow(/assertion failed|falsy/i);
   });
   it.each([{ version: 0 }, { id: "unknown" }, { userId: "other" }, { kind: "profile" }])("rejects stale/foreign evidence %j", change => {
     const value = result(); Object.assign(value.assessment.criteria[0].citations[0], change);
