@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 test.beforeEach(async ({ page, baseURL }) => {
   test.skip(baseURL !== "http://127.0.0.1:4322", "Local component verification, not live auth or route evidence.");
   await page.goto("/community-audience.html");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
 });
 
@@ -55,6 +56,7 @@ for (const [audience, headline, cta, destination] of [
 ]) {
   test(`${audience} explains approval, supports keyboard disclosures and retains its CTA destination`, async ({ page }) => {
     await page.goto(`/community-audience.html?audience=${audience}`);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(headline);
     const link = page.getByRole("link", { name: cta }).first();
@@ -80,6 +82,7 @@ for (const [audience, headline, cta, destination] of [
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.setViewportSize({ width: 320, height: 740 });
     await page.goto(`/community-audience.html?audience=${audience}`);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
     await page.evaluate(() => {
       const elements = [...document.querySelectorAll<HTMLElement>(".community-audience h1, .community-audience h2, .community-audience h3, .community-audience p, .community-audience a, .community-audience summary")];
@@ -93,6 +96,31 @@ for (const [audience, headline, cta, destination] of [
       await expect(node).toBeVisible();
       expect(await node.evaluate(el => getComputedStyle(el).animationName)).toBe("none");
       expect(await node.evaluate(el => getComputedStyle(el).opacity)).toBe("1");
+    }
+  });
+}
+
+for (const audience of ["members", "mentors", "institutions"]) {
+  test(`${audience} context text stays within its column at desktop and tablet widths`, async ({ page }) => {
+    await page.goto(`/community-audience.html?audience=${audience}`);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    for (const width of [701, 900, 1280, 1536]) {
+      await page.setViewportSize({ width, height: 1000 });
+      const geometry = await page.locator(".audience-context").evaluate(section => {
+        const [left, right] = [...section.children].map(column => column.getBoundingClientRect());
+        const escapedText: string[] = [];
+        for (const column of section.children) {
+          const bounds = column.getBoundingClientRect();
+          for (const text of column.querySelectorAll("h2,h3,p")) {
+            const range = document.createRange(); range.selectNodeContents(text);
+            if ([...range.getClientRects()].some(rect => rect.left < bounds.left - 1 || rect.right > bounds.right + 1)) escapedText.push(text.textContent ?? "");
+          }
+        }
+        return { gap: right.left - left.right, escapedText };
+      });
+      expect(geometry.escapedText, `text escaped a context column at ${width}px`).toEqual([]);
+      expect(geometry.gap, `columns overlap at ${width}px`).toBeGreaterThanOrEqual(31);
     }
   });
 }

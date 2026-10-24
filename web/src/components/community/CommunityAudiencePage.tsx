@@ -31,7 +31,7 @@ export default function CommunityAudiencePage({ isAuthenticated = false }: { isA
           <h1 id="audience-title">Give your work <em>a story.</em></h1>
           <p className="audience-lead">You are more than a list of skills. Show what you have made, the part you played, and where you want to go.</p>
           <a className="audience-button" href={href}>{cta}<span aria-hidden="true">↗</span></a>
-          <p className="audience-cta-note">Open to builders within and beyond TTV cohorts.{!isAuthenticated && " Continue with GitHub to join or sign in."}</p>
+          <p className="audience-cta-note">Open to builders within and beyond TTV cohorts. Approved institutions can discover your saved profile.{!isAuthenticated && " Continue with GitHub to join or sign in."}</p>
           <a className="audience-text-link" href="#your-first-contribution">See how it works <span aria-hidden="true">↓</span></a>
         </div>
         <ContributionTrail />
