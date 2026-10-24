@@ -96,6 +96,9 @@ test.describe("student feedback loop", () => {
     await adminPage.getByLabel(/Reply to/).fill("Thanks! Fixed in the latest release.");
     await submitFeedbackAdminSave(adminPage, baseURL!, () => adminPage.getByRole("button", { name: "Save" }).click());
     await expect(adminPage.getByText("Saved.")).toBeVisible();
+    await adminPage.reload();
+    await expect(adminPage.getByLabel("Status")).toHaveValue("RESOLVED");
+    await expect(adminPage.getByLabel(/Reply to/)).toHaveValue("Thanks! Fixed in the latest release.");
 
     // ── The student sees the outcome ──
     await page.reload();
@@ -166,6 +169,8 @@ test.describe("student feedback loop", () => {
     await adminPage.getByLabel(/Message to students/).fill("This shipped. Thank you for asking!");
     await submitFeedbackAdminSave(adminPage, baseURL!, () => adminPage.getByRole("button", { name: "Save" }).click());
     await expect(adminPage.getByText("Saved.")).toBeVisible();
+    await adminPage.reload();
+    await expect(adminPage.getByLabel("Status")).toHaveValue("SHIPPED");
 
     await page.reload();
     await expect(entry).toContainText("Done");

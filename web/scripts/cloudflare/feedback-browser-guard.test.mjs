@@ -74,3 +74,63 @@ describe("direct feedback API credential containment", () => {
     await expect(feedbackApiRequest(api, "https://preview.example", "/api/feedback")).rejects.toThrow("failed safely");
   });
 });
+
+// Route-level failures complement the real-browser persistence/redirect tests.
+describe("admin save receipt containment", () => {
+  async function scenario({ location = "/admin/feedback/fictional?saved=1", status = 303, navigation = true, redirected = false, failure = "", current = "https://preview.example/admin/feedback/fictional" } = {}) {
+    const { submitFeedbackAdminSave } = await import("./feedback-browser-guard.mjs");
+    const sensitive = new Error("fictional-secret-in-call-log");
+    let handler;
+    const route = {
+      request: () => ({ method: () => "POST", isNavigationRequest: () => navigation, redirectedFrom: () => redirected ? {} : null }),
+      fetch: failure === "fetch" ? vi.fn().mockRejectedValue(sensitive) : vi.fn().mockResolvedValue({ status: () => status, headers: () => ({ location, "set-cookie": "must-not-copy" }) }),
+      fulfill: vi.fn(), abort: vi.fn(), fallback: vi.fn(),
+    };
+    const page = {
+      url: () => current,
+      route: vi.fn(async (_match, callback) => { handler = callback; }),
+      unroute: failure === "cleanup" ? vi.fn().mockRejectedValue(sensitive) : vi.fn(),
+      goto: failure === "goto" ? vi.fn().mockRejectedValue(sensitive) : vi.fn(),
+    };
+    const error = await submitFeedbackAdminSave(page, "https://preview.example", async () => {
+      if (failure === "submit") throw sensitive;
+      await handler(route);
+    }).catch(value => value);
+    return { error, page, route };
+  }
+  it.each([302, 303])("accepts only a validated %s receipt without copying upstream data", async status => {
+    const { error, page, route } = await scenario({ status, current: "https://preview.example/admin/feedback/fictional?saved=1" });
+    expect(error).toBeUndefined();
+    expect(route.fetch).toHaveBeenCalledWith({ maxRedirects: 0 });
+    expect(route.fulfill).toHaveBeenCalledWith({ status: 200, contentType: "text/html", body: "<!doctype html><title>Save response</title>" });
+    expect(page.goto).toHaveBeenCalledWith("https://preview.example/admin/feedback/fictional?saved=1");
+    expect(page.unroute).toHaveBeenCalledOnce();
+  });
+  it.each([
+    "https://foreign.example/admin/feedback/fictional?saved=1",
+    "https://user:password@preview.example/admin/feedback/fictional?saved=1",
+    "/admin/feedback/other?saved=1", "/admin/feedback/fictional?saved=1&extra=1",
+    "/admin/feedback/fictional?saved=1&saved=1", "/admin/feedback/fictional?saved=1#fragment",
+    "http://[invalid", "",
+  ])("rejects unexpected receipt %s", async location => {
+    const { error, page } = await scenario({ location });
+    expect(error.message).toContain("failed safely");
+    expect(page.goto).not.toHaveBeenCalled();
+    expect(page.unroute).toHaveBeenCalledOnce();
+  });
+  it.each([{ navigation: false }, { redirected: true }])("rejects non-form/redirect-chain requests before fetch: %j", async options => {
+    const { error, route, page } = await scenario(options);
+    expect(error.message).toContain("failed safely");
+    expect(route.fetch).not.toHaveBeenCalled();
+    expect(page.goto).not.toHaveBeenCalled();
+    expect(page.unroute).toHaveBeenCalledOnce();
+  });
+  it.each(["fetch", "submit", "goto", "cleanup"])("sanitizes %s failure and always attempts route cleanup", async failure => {
+    const { error, page } = await scenario({ failure });
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain("failed safely");
+    expect(`${error}\n${error.stack}\n${JSON.stringify(error)}`).not.toContain("fictional-secret-in-call-log");
+    expect(error.cause).toBeUndefined();
+    expect(page.unroute).toHaveBeenCalledOnce();
+  });
+});

@@ -37,7 +37,7 @@ export async function feedbackApiRequest(api, baseURL, target, options = {}) {
 export async function submitFeedbackAdminSave(page, baseURL, submit) {
   const current = new URL(page.url());
   const base = new URL(baseURL);
-  if (current.origin !== base.origin || current.username || current.password ||
+  if (base.username || base.password || current.origin !== base.origin || current.username || current.password ||
       !/^\/admin\/feedback\/(?:themes\/)?[^/]+$/.test(current.pathname)) {
     throw new Error("Feedback save requires an exact admin page.");
   }
@@ -62,12 +62,16 @@ export async function submitFeedbackAdminSave(page, baseURL, submit) {
       await route.abort();
     }
   };
-  await page.route(match, handler);
   try {
-    await submit();
-    if (!accepted) throw new Error("Feedback save receipt was not validated.");
-    await page.goto(receipt.href);
-  } finally {
-    await page.unroute(match, handler);
+    try {
+      await page.route(match, handler);
+      await submit();
+      if (!accepted) throw new Error();
+      await page.goto(receipt.href);
+    } finally {
+      await page.unroute(match, handler);
+    }
+  } catch {
+    throw new Error("Feedback save failed safely; receipt was not validated.");
   }
 }
