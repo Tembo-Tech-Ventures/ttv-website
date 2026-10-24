@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { generateToolCompletion, type GatewayMessage, type ToolDefinition } from "../ai/gateway";
+import { generateToolCompletion, requireCommunityGateway } from "./native-gateway";
+import { type GatewayMessage, type ToolDefinition } from "../ai/gateway";
 import { CommunityError, parseInput, searchInput, type CommunityProfile, type CommunityJourney } from "./model";
 import type { CommunityService } from "./service";
 import { journeyCitation, confirmationCitation, type EvidenceCitation, rubricInput } from "./assessment";
@@ -106,9 +107,7 @@ function boundedToolOutput(output: unknown, candidates: Map<string, EvidenceCita
 }
 
 function requireGateway(env: Env) {
-  if (!env.AI_GATEWAY_ACCOUNT_ID?.trim() || !env.AI_GATEWAY_NAME?.trim() || !env.AI_GATEWAY_API_KEY?.trim()) {
-    throw new CommunityError("Community chat requires an explicitly configured model and unified AI Gateway.", 503);
-  }
+  try { requireCommunityGateway(env); } catch { throw new CommunityError("Community model configuration unavailable.", 503); }
 }
 
 export async function runCommunityChat(env: Env, service: CommunityService, input: unknown) {
@@ -135,7 +134,7 @@ export async function runCommunityChat(env: Env, service: CommunityService, inpu
   }
   let calls = 0;
   for (let round = 0; round < 3; round++) {
-    const result = await generateToolCompletion({ ...env, AI_GATEWAY_MODEL: COMMUNITY_ASSESSMENT_MODEL }, messages, { tools, maxTokens: 1200, temperature: 0, requireUnifiedGateway: true, timeoutMs: 20_000 });
+    const result = await generateToolCompletion({ ...env, AI_GATEWAY_MODEL: COMMUNITY_ASSESSMENT_MODEL }, messages, { tools, maxTokens: 1200, temperature: 0 });
     if (!toolCallsInput.safeParse(result.toolCalls).success) throw new CommunityError("The model returned invalid tool requests.", 502);
     if (result.toolCalls.length === 0) return { ...groundedAnswer(result.content, citations), assessments: [...assessments.values()] };
     if (round === 2 || result.toolCalls.length > 6 - calls) break;

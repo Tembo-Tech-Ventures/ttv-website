@@ -33,10 +33,10 @@ their actor and role snapshot. Citation checks establish allowed source identity
 and version, not semantic truth of generated explanations.
 
 The isolated provider adapter and community chat share the explicit community model
-`workers-ai/@cf/google/gemma-4-26b-a4b-it` through the existing unified AI Gateway.
+`workers-ai/@cf/google/gemma-4-26b-a4b-it` through the explicit existing AI Gateway using the preauthenticated `AI` binding.
 This scoped choice leaves recording chat, global defaults and the original caller
 environment unchanged. Missing Gateway configuration fails closed. Calls have a twenty-second
-timeout, bounded context/output, no redirects, retries or direct-provider fallback.
+abort signal and Gateway first-response timeout, bounded context/output, and no application retry or direct-provider fallback. Gateway retry policy requests `maxAttempts: 1`; timeout does not prove upstream generation or billing stopped. The native adapter sets `skipCache: true` and `collectLog: false` to avoid caching or logging personal evidence. No HTTP API key is required.
 The prompt requests JSON; server validation is mandatory. Cloudflare's model page
 advertises `response_format`, but the general JSON-mode compatibility list does
 not establish a Gemma guarantee, so this slice does not enable strict response
@@ -48,3 +48,34 @@ coverage for compatibility tests; public assessment endpoints use the model path
 This implementation and mocked provider tests do not establish live inference,
 account/model availability or quality of ratings. Those require the PM's separate
 controlled staging validation gate.
+
+## Native transport verification and live gate (2026-10-24)
+
+The community adapter uses `@cf/google/gemma-4-26b-a4b-it` with an explicit
+non-default gateway name. It requires the AI binding, requests a raw Response,
+and bounds the body before JSON parsing. Tool calls must use the documented
+completion shape with valid IDs, arguments and finish reason; unsupported shapes
+fail closed. AssessmentProvider remains the seam for a future reviewed provider.
+No automatic model selection or OpenAI integration was added.
+
+Cloudflare's [runtime source](https://github.com/cloudflare/workerd/blob/main/src/cloudflare/internal/ai-api.ts)
+forwards the abort signal to fetch, selects the Gateway path when a gateway ID
+is supplied, and returns raw responses before error parsing. Its
+[Gateway options](https://github.com/cloudflare/workerd/blob/main/src/cloudflare/internal/aig-api.ts)
+include retry and request-timeout settings. Source inspection establishes the
+client contract, not deployed upstream cancellation or actual attempt counts.
+[Authenticated bindings](https://developers.cloudflare.com/ai-gateway/configuration/authentication/)
+need no manually supplied token and do not require disabling gateway security.
+
+Read-only staging metadata inspection found `workers_ai_billing_mode: postpaid`,
+authentication false, cache TTL zero, log collection true, rate limit/interval
+zero, and retry fields null. No settings were changed. Gateway routing alone is
+not proof of Unified Billing: the current postpaid setting must be reconciled
+with the owner's billing requirement by PM before live inference. Per-request
+cache/log/retry controls above do not alter global settings. No credential
+creation, secret installation, inference or paid probe occurred in this change.
+
+After independent review and integration, PM must reserve an exact-SHA staging
+slot and resolve billing before the single existing synthetic assessment and
+cleanup. Verify deployed identity, binding response shape, assessment/citation
+semantics and cleanup; do not infer successful model execution from unit mocks.
