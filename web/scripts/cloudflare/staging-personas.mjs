@@ -8,7 +8,7 @@ export const STAGING_PERSONA_ROLES = Object.freeze({
 const rows = result => (Array.isArray(result) ? result : [result]).flatMap(statement => statement?.results ?? []);
 
 /** Runner-only. Credentials never leave the callback; default cleanup deletes all fixture-owned records. */
-export async function withStagingPersonas({ target, signingSecret, run, now = new Date() }) {
+export async function withStagingPersonas({ target, signingSecret, run, audit = () => {}, now = new Date() }) {
   assertVerifiedStagingFixtureTarget(target);
   if (typeof run !== "function" || typeof signingSecret !== "string" || signingSecret.length < 32) throw new Error("A verification callback and staging signing configuration are required.");
   const timestamp = Math.floor(now.getTime() / 1000);
@@ -21,6 +21,7 @@ export async function withStagingPersonas({ target, signingSecret, run, now = ne
   const personas = {};
   let failure;
   try {
+    audit({ event: "fixture-run-started", runId, version: target.expectedVersion });
     // Fail closed before identities are inserted if migrations have not landed.
     await execute('SELECT "userId","sessionId","runId","persona","expiresAt" FROM "stagingFixtureIdentity" LIMIT 0');
     const roles = {};
@@ -47,7 +48,7 @@ export async function withStagingPersonas({ target, signingSecret, run, now = ne
       let personalAccessToken;
       if (["member", "institution", "unapprovedInstitution"].includes(persona)) {
         personalAccessToken = `ttv_pat_${randomBytes(32).toString("hex")}`;
-        const scopes = ["community:read", ...(persona === "member" ? ["community:write"] : []), ...(persona === "institution" ? ["institution:read"] : [])];
+      const scopes = ["community:read", ...(persona === "member" ? ["community:write"] : []), ...(["institution", "unapprovedInstitution"].includes(persona) ? ["institution:read"] : [])];
         await execute('INSERT INTO "personal_access_token" ("id","userId","tokenHash","tokenPrefix","label","scopes","expiresAt","createdAt","updatedAt") VALUES (?,?,?,?,?,?,?,?,?)',
           [`${userId}-pat`, userId, createHash("sha256").update(personalAccessToken).digest("hex"), personalAccessToken.slice(0, 16), "Synthetic staging fixture", JSON.stringify(scopes), expiresAt, timestamp, timestamp]);
       }
@@ -74,5 +75,6 @@ export async function withStagingPersonas({ target, signingSecret, run, now = ne
       }
     }
   }
+  audit({ event: failure ? "fixture-run-failed" : "fixture-run-cleaned", runId, version: target.expectedVersion });
   if (failure) throw failure;
 }

@@ -56,7 +56,7 @@ behavior and production credentials are unchanged.
 
 ## Reusable synthetic staging verification
 
-The runner helpers are implemented but **not wired into a workflow yet**. Runtime
+The runner and manual verification workflow are implemented but **not live-validated**. Runtime
 fixture authorization and its registry migration must be integrated and tested
 before live provisioning. This is intended to support repeatable workflow-dispatch
 browser verification beyond the hackathon; arbitrary interactive local browser
@@ -107,3 +107,21 @@ registry currently has a contract fixture in the tests until Developer's migrati
 lands; this does not yet prove production isolation, runtime exceptions, or
 staging browser acceptance. GitHub OAuth and external MCP client compatibility
 also need their own evidence.
+
+After integration, reserve the same PM slot used for deployment and dispatch
+`Cloudflare Staging Synthetic Verification` on the integration branch with its
+exact `expected_sha`. The workflow performs credential-free GitHub preflight,
+then repeats the check and verifies the live Worker/D1/revision before fixtures.
+It uses the deployment concurrency group with cancellation disabled. It does
+not deploy. Only the fixed verification program runs: six authenticated browser
+identities, member/institution access denials, same-run synthetic approval and
+revocation, credential-mint denial, scoped PAT reads and MCP initialization.
+It does not invoke a model or certify complete product journeys. No arbitrary
+script, role, user ID or external URL is accepted as workflow input.
+
+The unapproved institutional PAT deliberately carries institution read scope
+without the matching role, testing that scope alone does not grant access.
+Audit output contains only random run ID, deployed revision and start/result
+event. Browser storage, trace, HAR and page content are never uploaded by this
+runner. Abrupt runner termination can prevent finally-cleanup; the runtime
+registry expiry remains mandatory, and failed runs require scoped cleanup review.

@@ -65,8 +65,9 @@ describe("staging personas on application migrations", () => {
   });
   it("creates bounded synthetic roles/cookies/scoped PATs then removes all fixture records", async () => {
     const { db, options } = await fixture();
+    const audit = vi.fn();
     try {
-      await expect(withStagingPersonas({ ...options, run: async personas => {
+      await expect(withStagingPersonas({ ...options, audit, run: async personas => {
         expect(Object.keys(personas)).toHaveLength(6);
         expect(count(db, "session")).toBe(6);
         expect(count(db, "stagingFixtureIdentity")).toBe(6);
@@ -83,6 +84,8 @@ describe("staging personas on application migrations", () => {
         expect(pats.some(p => p.scopes.includes("admin:"))).toBe(false);
         return "not forwarded";
       } })).resolves.toBeUndefined();
+      expect(audit.mock.calls.map(([record]) => record.event)).toEqual(["fixture-run-started", "fixture-run-cleaned"]);
+      expect(audit.mock.calls.every(([record]) => Object.keys(record).toSorted().join(",") === "event,runId,version")).toBe(true);
       for (const table of ["session", "stagingFixtureIdentity", "personal_access_token", "UserRoles", "user"]) expect(count(db, table)).toBe(0);
     } finally { db.close(); }
   });
