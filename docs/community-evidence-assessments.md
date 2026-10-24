@@ -190,3 +190,7 @@ local Workers import/tool-loop feasibility, not live GLM entitlement or behavior
 GLM requires a paid Workers plan or prepaid credits; account entitlement,
 representative output/tool behavior and latency remain staging checks owned by
 PM. No billing setting, credentials, runtime binding or deployment was changed.
+The chat response adds only server-generated `execution.model`, `modelSteps`
+and `executedToolCalls` metadata. The execution count increments when a validated
+tool actually starts after cancellation checking, so prefetched selected-person
+evidence alone cannot be mistaken for proof of model-driven tool use.

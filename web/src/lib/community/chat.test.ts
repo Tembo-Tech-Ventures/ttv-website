@@ -126,7 +126,7 @@ function groundedContent(refs: Array<{kind:string;id:string;version:number}>) { 
 it("accepts exact delivered source references and separates unused retrieved evidence", async () => {
  complete.mockResolvedValueOnce({ content: null, toolCalls: [call("get_own_profile", {})], finishReason: null }).mockResolvedValueOnce(groundedContent([{kind:"journey",id:"j",version:3}]));
  const r = await runCommunityChat(env,service(),{message:"My evidence"});
- expect(r.grounded).toBe(true); expect(r.citations).toHaveLength(1); expect(r.citations[0]).toMatchObject({id:"j",version:3}); expect(r.retrievedSources).toHaveLength(2);
+ expect(r.grounded).toBe(true); expect(r.execution).toEqual({model: COMMUNITY_CHAT_MODEL,modelSteps:2,executedToolCalls:1}); expect(r.citations).toHaveLength(1); expect(r.citations[0]).toMatchObject({id:"j",version:3}); expect(r.retrievedSources).toHaveLength(2);
 });
 it.each([{kind:"journey",id:"invented",version:3},{kind:"journey",id:"j",version:999},{kind:"confirmation",id:"j",version:3}])("rejects hallucinated source identity or version %j", async ref => {
  complete.mockResolvedValueOnce({content:null,toolCalls:[call("get_own_profile",{})],finishReason:null}).mockResolvedValueOnce(groundedContent([ref]));
@@ -161,7 +161,7 @@ it("never executes more than six tools or tools after the final model step", asy
  const s = service();
  complete.mockResolvedValue({content:null,toolCalls:Array.from({length:6},(_,i)=>({...call("get_own_profile",{}),id:`tool-${i}`})),finishReason:null});
  const result=await runCommunityChat(env,s,{message:"continue"});
- expect(complete).toHaveBeenCalledTimes(3); expect(s.getOwnProfile).toHaveBeenCalledTimes(6); expect(result.limited).toBe(true);
+ expect(complete).toHaveBeenCalledTimes(3); expect(s.getOwnProfile).toHaveBeenCalledTimes(6); expect(result.execution).toEqual({model:COMMUNITY_CHAT_MODEL,modelSteps:3,executedToolCalls:6}); expect(result.limited).toBe(true);
 });
 it("sanitizes transport errors without application retry or evidence claims", async () => {
  complete.mockRejectedValue(new Error("PRIVATE credential/body"));
@@ -185,6 +185,7 @@ it("honors an already aborted Mastra run before inference", async () => {
  try {
   const result=await runCommunityChat(env,service(),{message:"hello"});
   expect(result.grounded).toBe(false); expect(result.limited).toBe(true);
+  expect(result.execution.executedToolCalls).toBe(0);
   expect(complete).not.toHaveBeenCalled();
  } finally { timeout.mockRestore(); }
 });

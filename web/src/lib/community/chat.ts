@@ -137,5 +137,5 @@ export async function runCommunityChat(env: Env, service: CommunityService, inpu
     if (selected && name === "get_selected_profile" && output === selected) citeEvidence(selected, candidates);
     return boundedToolOutput(output, candidates, citations);
   });
-  return { ...(result.limited ? ungrounded(citations, true) : groundedAnswer(result.content, citations)), assessments: [...assessments.values()] };
+  return { ...(result.limited ? ungrounded(citations, true) : groundedAnswer(result.content, citations)), assessments: [...assessments.values()], execution: result.execution };
 }

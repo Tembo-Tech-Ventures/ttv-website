@@ -11,7 +11,7 @@ export const COMMUNITY_CHAT_MODEL = "@cf/zai-org/glm-5.3-flash";
 /** Request-local agent: no persistence, exporters, provider keys or model fallbacks. */
 export async function runCommunityAgent(env: Env, messages: GatewayMessage[], definitions: ToolDefinition[], execute: (name: string, args: string) => Promise<string>) {
   requireCommunityGateway(env);
-  let steps = 0, calls = 0, limited = false;
+  let steps = 0, calls = 0, executed = 0, limited = false;
   let pending: Promise<unknown> = Promise.resolve();
   const abortSignal = AbortSignal.timeout(60_000);
   // Bound the raw stream before the SDK parses or retains provider output.
@@ -54,6 +54,7 @@ export async function runCommunityAgent(env: Env, messages: GatewayMessage[], de
       calls++;
       const result = pending.then(() => {
         if (abortSignal.aborted) throw new Error("Chat cancelled.");
+        executed++;
         return execute(definition.name, serialized);
       });
       pending = result.catch(() => undefined);
@@ -67,7 +68,8 @@ export async function runCommunityAgent(env: Env, messages: GatewayMessage[], de
       maxSteps: 3, maxProcessorRetries: 0, abortSignal,
       modelSettings: { maxOutputTokens: 1200, temperature: 0, maxRetries: 0, timeout: { stepMs: 20_000, totalMs: 60_000 } },
     });
-    return { content: result.finishReason === "stop" ? result.text : null, limited: limited || result.finishReason !== "stop" };
+    return { content: result.finishReason === "stop" ? result.text : null, limited: limited || result.finishReason !== "stop",
+      execution: { model: COMMUNITY_CHAT_MODEL, modelSteps: steps, executedToolCalls: executed } };
   } catch {
     // SDK errors can retain prompts, tool results, response bodies and credentials.
     throw new Error("Community chat unavailable.");
