@@ -73,6 +73,8 @@ describe("staging personas on application migrations", () => {
     try {
       await expect(withStagingPersonas({ ...options, audit, run: async personas => {
         expect(Object.keys(personas)).toHaveLength(6);
+        expect(db.prepare('SELECT name FROM user WHERE id=?').get(personas.member.userId).name).toBe("Fictional Amina Wanjiku");
+        expect(db.prepare('SELECT name FROM user WHERE id=?').get(personas.mentor.userId).name).toBe("Fictional Grace Njeri");
         expect(count(db, "session")).toBe(6);
         expect(count(db, "stagingFixtureIdentity")).toBe(6);
         expect(count(db, "personal_access_token")).toBe(3);

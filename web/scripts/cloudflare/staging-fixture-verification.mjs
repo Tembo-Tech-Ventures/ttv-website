@@ -1,7 +1,10 @@
+import { COMMUNITY_EVIDENCE_DIRECTORY, verifyStagingCommunityJourney } from "./staging-community-journey.mjs";
+
 /** Fixed verification program. Do not accept arbitrary scripts, roles or target IDs from workflow input. */
-export async function verifyStagingPersonas({ browser, target, personas }) {
+export async function verifyStagingPersonas({ browser, target, personas, verifyJourney = verifyStagingCommunityJourney }) {
   const contexts = [];
   const clients = {};
+  const contextsByRole = {};
   // APIRequestContext follows redirects by default, including bearer headers.
   const noRedirectClient = request => ({
     get: (path, options = {}) => request.get(path, { ...options, maxRedirects: 0 }),
@@ -15,6 +18,7 @@ export async function verifyStagingPersonas({ browser, target, personas }) {
     for (const [name, persona] of Object.entries(personas)) {
       const context = await browser.newContext({ baseURL: target.baseUrl, serviceWorkers: "block" });
       contexts.push(context);
+      contextsByRole[name] = context;
       await context.route("**/*", async route => {
         const request = route.request();
         if (new URL(request.url()).origin !== target.baseUrl || request.redirectedFrom()) return route.abort();
@@ -57,6 +61,12 @@ export async function verifyStagingPersonas({ browser, target, personas }) {
       const initialized = await initialize.json();
       if (initialized.error || !initialized.result?.protocolVersion) throw new Error("Synthetic MCP initialization failed.");
     }
+    await verifyJourney({
+      baseUrl: target.baseUrl,
+      contextsByRole: Object.fromEntries(["member", "mentor", "institution"].map(role => [role, contextsByRole[role]])),
+      users: Object.fromEntries(["member", "mentor", "institution"].map(role => [role, { userId: personas[role].userId }])),
+      evidenceDirectory: COMMUNITY_EVIDENCE_DIRECTORY,
+    });
   } catch {
     failure = new Error("Synthetic staging verification failed.");
   } finally {

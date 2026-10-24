@@ -5,6 +5,7 @@ import { createStagingBrowserCookies } from "./staging-fixture-cookies.mjs";
 export const STAGING_PERSONA_ROLES = Object.freeze({
   member: null, otherMember: null, mentor: "MENTOR", institution: "INSTITUTION", unapprovedInstitution: null, admin: "ADMIN",
 });
+const displayNames = Object.freeze({ member: "Fictional Amina Wanjiku", otherMember: "Fictional Brian Otieno", mentor: "Fictional Grace Njeri", institution: "Fictional David Mwangi", unapprovedInstitution: "Fictional Faith Achieng", admin: "Fictional Peter Kamau" });
 const rows = result => (Array.isArray(result) ? result : [result]).flatMap(statement => statement?.results ?? []);
 
 /** Runner-only. Credentials never leave the callback; default cleanup deletes all fixture-owned records. */
@@ -36,7 +37,7 @@ export async function withStagingPersonas({ target, signingSecret, run, audit = 
       const expiresAt = timestamp + 3600;
       userIds.push(userId);
       await execute('INSERT INTO "user" ("id","name","email","emailVerified","createdAt","updatedAt") VALUES (?,?,?,1,?,?)',
-        [userId, `Fictional staging ${persona}`, `${userId}@invalid.ttv`, timestamp, timestamp]);
+        [userId, displayNames[persona], `${userId}@invalid.ttv`, timestamp, timestamp]);
       if (role) await execute('INSERT INTO "UserRoles" ("id","userId","roleId","createdAt","updatedAt") VALUES (?,?,?,?,?)',
         [`${userId}-role`, userId, roles[role], timestamp, timestamp]);
       const token = randomBytes(32).toString("hex");

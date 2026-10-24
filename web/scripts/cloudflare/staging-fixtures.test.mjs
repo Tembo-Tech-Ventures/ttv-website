@@ -96,7 +96,7 @@ function browserFixture({ failOwn = false } = {}) {
     contexts.push(context);
     return context;
   }) };
-  return { browser, personas, contexts, target: { baseUrl: "https://staging.tembotechventures.com" } };
+  return { browser, personas, contexts, verifyJourney: vi.fn(), target: { baseUrl: "https://staging.tembotechventures.com" } };
 }
 describe("fixed browser verification", () => {
   it("checks role-denied paths and closes all browser/PAT contexts", async () => {
@@ -108,6 +108,18 @@ describe("fixed browser verification", () => {
     const paths = f.contexts.flatMap(c => [...c.request.get.mock.calls, ...c.request.post.mock.calls].map(call => call[0]));
     expect(paths.some(path => path.includes("chat") || path.includes("decisions"))).toBe(false);
     expect(f.contexts.flatMap(c => [...c.request.get.mock.calls, ...c.request.post.mock.calls]).every(call => call[1].maxRedirects === 0)).toBe(true);
+  });
+  it("passes only same-run role contexts and IDs to the journey, with cleanup on failure", async () => {
+    const f = browserFixture();
+    f.verifyJourney.mockRejectedValue(new Error("sensitive failure must not escape"));
+    await expect(verifyStagingPersonas(f)).rejects.toThrow("Synthetic staging verification failed.");
+    expect(f.verifyJourney).toHaveBeenCalledWith({
+      baseUrl: f.target.baseUrl,
+      contextsByRole: { member: f.contexts[0], mentor: f.contexts[2], institution: f.contexts[3] },
+      users: { member: { userId: "member" }, mentor: { userId: "mentor" }, institution: { userId: "institution" } },
+      evidenceDirectory: "test-results/staging-community",
+    });
+    expect(f.contexts.every(context => context.close.mock.calls.length === 1)).toBe(true);
   });
   it("blocks browser redirects and cross-origin requests before continuing", async () => {
     const f = browserFixture();
