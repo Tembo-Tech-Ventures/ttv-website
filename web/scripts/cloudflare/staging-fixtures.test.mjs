@@ -54,8 +54,11 @@ describe("restricted staging runner", () => {
   });
   it("holds the deployment concurrency group and scopes secrets to verification after preflight", () => {
     const workflow = readFileSync(new URL("../../../.github/workflows/cloudflare-staging-fixtures.yml", import.meta.url), "utf8");
-    expect(workflow).toContain("group: ttv-cloudflare-staging");
-    expect(workflow).toContain("cancel-in-progress: false");
+    const caller = readFileSync(new URL("../../../.github/workflows/cloudflare-staging.yml", import.meta.url), "utf8");
+    expect(caller).toContain("group: ttv-cloudflare-staging");
+    expect(caller).toContain("cancel-in-progress: false");
+    expect(caller).toContain("uses: ./.github/workflows/cloudflare-staging-fixtures.yml");
+    expect(workflow).not.toMatch(/^concurrency:/m);
     expect(workflow).toContain("needs: preflight");
     expect(workflow).toContain("environment: staging");
     expect(workflow.split("  verify:")[0]).not.toContain("secrets.");

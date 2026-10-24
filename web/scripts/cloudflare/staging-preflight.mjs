@@ -2,6 +2,9 @@ import { pathToFileURL } from "node:url";
 
 /** Fail closed before the staging job receives Cloudflare credentials. */
 export async function validateStagingRevision(env, { fetchImpl = fetch } = {}) {
+  if (env.STAGING_ACTION !== undefined && !["deploy", "verify"].includes(env.STAGING_ACTION)) {
+    throw new Error("Staging action must be deploy or verify.");
+  }
   const branch = env.STAGING_INTEGRATION_BRANCH;
   const sha = env.STAGING_EXPECTED_SHA;
   const repository = env.GITHUB_REPOSITORY;

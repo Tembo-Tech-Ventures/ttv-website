@@ -3,6 +3,14 @@ name: Cloudflare Staging
 on:
   workflow_dispatch:
     inputs:
+      action:
+        description: Deploy staging or verify existing deployment with synthetic identities
+        required: true
+        type: choice
+        default: deploy
+        options:
+          - deploy
+          - verify
       expected_sha:
         description: Exact current head SHA of integration PR 171 (reserve a PM deployment slot first)
         required: true
@@ -28,11 +36,13 @@ jobs:
       - name: Require the exact pushed integration PR revision
         env:
           GH_TOKEN: ${{ github.token }}
+          STAGING_ACTION: ${{ inputs.action }}
           STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
           STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
           STAGING_INTEGRATION_PR: "171"
         run: node web/scripts/cloudflare/staging-preflight.mjs
   staging:
+    if: ${{ inputs.action == 'deploy' }}
     needs: preflight
     uses: ./.github/workflows/cloudflare-environment.yml
     with:
@@ -45,4 +55,15 @@ jobs:
       agent_auth_enabled: true
       workers_subdomain: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
       protected_environments: production,prod
+    secrets: inherit
+
+  verify:
+    if: ${{ inputs.action == 'verify' }}
+    needs: preflight
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/cloudflare-staging-fixtures.yml
+    with:
+      expected_sha: ${{ inputs.expected_sha }}
     secrets: inherit
