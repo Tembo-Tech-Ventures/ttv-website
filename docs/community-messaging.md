@@ -278,7 +278,7 @@ The personas are differentiated by decision and responsibility, not by stereotyp
 - Members' career goals and comfort with public/institution-shared work: unknown. Do not equate openness with unrestricted access to private records.
 - Mentor time availability, consent/attribution expectations and GitHub familiarity: unknown. No invented “five-minute” promise.
 - Institutional demand, procurement/hiring practices, GitHub familiarity and the actual admin approval next step: unknown. PM must resolve any promised access/request path.
-- Whether three separate routes outperform a concise shared page: untested. PM/Designer can choose placement after reviewing audience differentiation; this research is not a conversion experiment.
+- Required scope: retain `/community/members`, `/community/mentors` and `/community/institutions`, as explicitly requested by the user through PM. Shared components may support them. Whether this arrangement improves understanding or conversion is untested; the requirement is not a research finding.
 - Live assessment availability, reliability, latency, cost and usefulness: require separate exact-revision tests. Scores describe evidence support against a criterion, never inferred ability; insufficient evidence stays separate.
 
 No interviews, campaigns, messages to external audiences, new product commitments or runtime changes are authorized by this brief. PM owns scope and release decisions; Designer owns runtime placement and implementation; Marketing owns claims and copy review.
