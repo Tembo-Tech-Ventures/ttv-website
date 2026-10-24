@@ -1,7 +1,9 @@
 import React, { useId, useRef, useState } from "react";
+import { UiApiError, displayUiError } from "../discovery/ui-errors";
 
 export interface MentorReviewRequest {
   id: string;
+  version: number;
   memberName: string;
   claimTitle: string;
   claimDescription: string;
@@ -12,12 +14,15 @@ export interface MentorReviewRequest {
 export interface MentorReviewDecision {
   decision: "confirmed" | "declined";
   note: string;
+  method: string;
+  expectedRevision: number;
 }
 
 export interface MentorReviewProps {
   requests: MentorReviewRequest[];
   onReview: (id: string, review: MentorReviewDecision) => Promise<void>;
   demo?: boolean;
+  allowDecline?: boolean;
 }
 
 export function validateMentorNote(note: string): string | null {
@@ -28,6 +33,13 @@ export function validateMentorNote(note: string): string | null {
   if (text.length > 2000)
     return "Keep your review note within 2,000 characters.";
   return null;
+}
+
+export function validateMentorMethod(method: string): string | null {
+  const length = method.trim().length;
+  return length < 3 || length > 500
+    ? "Describe how you checked the claim in 3 to 500 characters."
+    : null;
 }
 
 export function safeMentorEvidenceUrl(value: string): string | null {
@@ -47,13 +59,16 @@ function ReviewRequest({
   request,
   onReview,
   demo,
+  allowDecline,
 }: {
   request: MentorReviewRequest;
   onReview: MentorReviewProps["onReview"];
   demo: boolean;
+  allowDecline: boolean;
 }) {
   const id = useId();
   const [note, setNote] = useState("");
+  const [method, setMethod] = useState("");
   const [decision, setDecision] = useState<
     MentorReviewDecision["decision"] | ""
   >("");
@@ -68,8 +83,8 @@ function ReviewRequest({
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting.current || status !== "pending") return;
-    const validation = validateMentorNote(note);
-    if (validation || !decision) {
+    const validation = validateMentorNote(note) ?? validateMentorMethod(method);
+    if (validation || !decision || (decision === "declined" && !allowDecline)) {
       setError(validation ?? "Choose a review decision.");
       return;
     }
@@ -77,11 +92,21 @@ function ReviewRequest({
     setBusy(true);
     setError(null);
     try {
-      await onReview(request.id, { decision, note: note.trim() });
+      await onReview(request.id, {
+        decision,
+        note: note.trim(),
+        method: method.trim(),
+        expectedRevision: request.version,
+      });
       setSaved(decision);
-    } catch {
+    } catch (failure) {
       setError(
-        "Your review could not be saved. Your note is still here; please try again.",
+        failure instanceof UiApiError && failure.status === 409
+          ? "This claim changed since you opened it. Refresh the claim and review its latest evidence before confirming. Your note is still here."
+          : displayUiError(
+              failure,
+              "Your review could not be saved. Your note is still here; please try again.",
+            ),
       );
     } finally {
       submitting.current = false;
@@ -93,6 +118,7 @@ function ReviewRequest({
     <article className="discovery-panel" aria-labelledby={`${id}-title`}>
       <p className="discovery-eyebrow">{request.memberName}</p>
       <h3 id={`${id}-title`}>{request.claimTitle}</h3>
+      <p>Claim revision {request.version}</p>
       <p>{request.claimDescription}</p>
       <h4>Evidence for this claim</h4>
       {request.evidence.length > 0 ? (
@@ -144,8 +170,22 @@ function ReviewRequest({
               >
                 <option value="">Choose a decision</option>
                 <option value="confirmed">Confirm this claim</option>
-                <option value="declined">Decline confirmation</option>
+                {allowDecline && (
+                  <option value="declined">Decline confirmation</option>
+                )}
               </select>
+            </label>
+            <label className="discovery-field" htmlFor={`${id}-method`}>
+              How did you check it?
+              <input
+                id={`${id}-method`}
+                value={method}
+                onChange={(event) => setMethod(event.target.value)}
+                required
+                minLength={3}
+                maxLength={500}
+                aria-describedby={error ? `${id}-error` : undefined}
+              />
             </label>
             <label className="discovery-field" htmlFor={`${id}-note`}>
               What did you personally check?
@@ -188,6 +228,7 @@ export default function MentorReview({
   requests,
   onReview,
   demo = false,
+  allowDecline = false,
 }: MentorReviewProps) {
   const id = useId();
   return (
@@ -210,10 +251,11 @@ export default function MentorReview({
       ) : (
         requests.map((request) => (
           <ReviewRequest
-            key={request.id}
+            key={`${request.id}:${request.version}`}
             request={request}
             onReview={onReview}
             demo={demo}
+            allowDecline={allowDecline}
           />
         ))
       )}

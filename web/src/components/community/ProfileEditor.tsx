@@ -1,4 +1,5 @@
 import React, { useId, useRef, useState } from "react";
+import { displayUiError } from "../discovery/ui-errors";
 
 export interface EditableCommunityProfile {
   headline: string;
@@ -27,12 +28,19 @@ export function validateCommunityProfile(
     return "Keep your headline within 160 characters.";
   if (profile.bio.length > 4000)
     return "Keep the description of your work within 4,000 characters.";
-  if (profile.skills.length > 20) return "Add no more than 20 skills.";
+  if (profile.skills.length > 30) return "Add no more than 30 skills.";
   if (profile.skills.some((skill) => skill.length > 60))
     return "Keep each skill within 60 characters.";
-  if (profile.opportunityGoals.length > 1000)
-    return "Keep your opportunity goals within 1,000 characters.";
+  if (profile.opportunityGoals.length > 2000)
+    return "Keep your opportunity goals within 2,000 characters.";
   return null;
+}
+
+export function profileSaveError(error: unknown): string {
+  return displayUiError(
+    error,
+    "Your profile could not be saved. Your draft is still here; please try again.",
+  );
 }
 
 export default function ProfileEditor({
@@ -77,10 +85,8 @@ export default function ProfileEditor({
     try {
       await onSave(profile);
       setSaved(true);
-    } catch {
-      setError(
-        "Your profile could not be saved. Your draft is still here; please try again.",
-      );
+    } catch (failure) {
+      setError(profileSaveError(failure));
     } finally {
       submitting.current = false;
       setBusy(false);
@@ -136,7 +142,7 @@ export default function ProfileEditor({
             />
           </label>
           <p id={`${id}-skills-help`}>
-            Separate skills with commas. Add up to 20 skills, each no longer
+            Separate skills with commas. Add up to 30 skills, each no longer
             than 60 characters.
           </p>
           <label className="discovery-field" htmlFor={`${id}-goals`}>
@@ -144,7 +150,7 @@ export default function ProfileEditor({
             <textarea
               id={`${id}-goals`}
               value={draft.opportunityGoals}
-              maxLength={1000}
+              maxLength={2000}
               rows={4}
               onChange={(event) =>
                 change("opportunityGoals", event.target.value)

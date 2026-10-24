@@ -60,6 +60,7 @@ export default function CommunityDemo({
           requests={[
             {
               id: "demo-review",
+              version: 1,
               memberName: profile.name,
               claimTitle: profile.claims[0].title,
               claimDescription: profile.claims[0].description,

@@ -5,11 +5,13 @@ import { describe, expect, it, vi } from "vitest";
 import MentorReview, {
   safeMentorEvidenceUrl,
   validateMentorNote,
+  validateMentorMethod,
   type MentorReviewRequest,
 } from "./MentorReview";
 
 const request: MentorReviewRequest = {
   id: "claim-1",
+  version: 3,
   memberName: "Demo member",
   claimTitle: "Built a scheduling API",
   claimDescription: "Implemented documented API routes with tests.",
@@ -113,4 +115,41 @@ describe("mentor review validation", () => {
       expect(safeMentorEvidenceUrl(url)).toBe(url);
     },
   );
+});
+
+describe("mentor revision and method contract", () => {
+  it("shows the reviewed revision and requires a method", () => {
+    const html = render();
+    expect(html).toContain("Claim revision 3");
+    expect(html).toContain("How did you check it?");
+    expect(html).toMatch(
+      /<input[^>]+required=""[^>]+minLength="3"[^>]+maxLength="500"/,
+    );
+    expect(render([{ ...request, version: 4 }])).toContain("Claim revision 4");
+  });
+  it("does not offer decline unless explicitly enabled", () => {
+    expect(render()).not.toContain('value="declined"');
+    const html = renderToStaticMarkup(
+      <MentorReview
+        requests={[request]}
+        onReview={vi.fn(async () => {})}
+        demo
+        allowDecline
+      />,
+    );
+    expect(html).toContain('value="declined"');
+  });
+  it.each(["", "  ", "ab", "a".repeat(501)])(
+    "rejects an invalid method",
+    (method) => {
+      expect(validateMentorMethod(method)).not.toBeNull();
+    },
+  );
+  it.each([
+    "  ran  ",
+    "a".repeat(500),
+    "Ran the project's tests and reviewed the source",
+  ])("accepts a method within the limits", (method) => {
+    expect(validateMentorMethod(method)).toBeNull();
+  });
 });

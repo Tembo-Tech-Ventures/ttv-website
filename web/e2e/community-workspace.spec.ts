@@ -77,7 +77,6 @@ test("add a contribution with evidence and show its unconfirmed provenance", asy
       "I built and tested keyboard navigation for the community library search.",
     );
   await page.getByLabel("Date", { exact: true }).fill("2026-10-24");
-  await page.getByLabel("Source title").fill("My walkthrough");
   await page.getByLabel("Source link").fill("https://example.com/walkthrough");
   await page.getByRole("button", { name: "Save contribution" }).click();
   await expect(
@@ -85,7 +84,7 @@ test("add a contribution with evidence and show its unconfirmed provenance", asy
   ).toBeVisible();
   await expect(page.getByRole("status")).toContainText("Demo entry added");
   await expect(
-    page.getByRole("link", { name: /My walkthrough/ }),
+    page.getByRole("link", { name: /Supporting work/ }),
   ).toHaveAttribute("href", "https://example.com/walkthrough");
   expect(
     await page.evaluate(
@@ -125,6 +124,9 @@ test("mentor confirms the reviewed claim with a personal note", async ({
     .fill(
       "I reviewed the borrowing flow and checked its keyboard navigation with Amara.",
     );
+  await page
+    .getByLabel("How did you check it?")
+    .fill("Reviewed the code and tested keyboard navigation together.");
   await page.getByRole("button", { name: "Save demo review" }).click();
   await expect(page.locator("output")).toContainText(
     "Claim confirmed: Made a community library easier to use",
@@ -151,6 +153,9 @@ test("mentor save failure preserves the note for retry", async ({ page }) => {
   const note =
     "I personally reviewed the implementation and its keyboard navigation.";
   await page.getByLabel("What did you personally check?").fill(note);
+  await page
+    .getByLabel("How did you check it?")
+    .fill("Reviewed the code and tested keyboard navigation together.");
   await page.getByRole("button", { name: "Save demo review" }).click();
   await expect(page.getByRole("alert")).toContainText("could not be saved");
   await expect(page.getByLabel("What did you personally check?")).toHaveValue(
@@ -193,5 +198,160 @@ test("profile failure keeps edited text available", async ({ page }) => {
   await expect(page.getByRole("alert")).toContainText("could not be saved");
   await expect(page.getByLabel("Headline", { exact: true })).toHaveValue(
     "My new headline",
+  );
+});
+
+test("role-gated workspace refuses discovery before loading member data (mock API)", async ({
+  page,
+}) => {
+  const calls: string[] = [];
+  await page.route("**/api/community/**", async (route) => {
+    calls.push(new URL(route.request().url()).pathname);
+    await route.fulfill({
+      json: { isAdmin: false, isMentor: false, isInstitution: false },
+    });
+  });
+  await page.goto("/dev/community-ui?api=mock&view=scout");
+  await expect(
+    page.getByRole("heading", { name: "Institutional access needs approval." }),
+  ).toBeVisible();
+  expect(calls).toEqual(["/api/community/access"]);
+  await expect(
+    page.getByRole("button", { name: "Discover people", exact: true }),
+  ).toHaveCount(0);
+});
+
+test("institution search loads real component API contracts and recovers from chat failure (mock API)", async ({
+  page,
+}) => {
+  const profile = {
+    userId: "fictional-member",
+    name: "Fictional Builder",
+    image: null,
+    headline: "Community tools",
+    bio: "Building libraries",
+    skills: ["React"],
+    opportunityGoals: "An apprenticeship",
+    version: 1,
+    updatedAt: 123,
+  };
+  let search = "";
+  let chatFailed = false;
+  await page.route("**/api/community/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/access"))
+      return route.fulfill({
+        json: { isAdmin: false, isMentor: false, isInstitution: true },
+      });
+    if (url.pathname.endsWith("/profiles")) {
+      search = url.search;
+      return route.fulfill({ json: { profiles: [profile] } });
+    }
+    if (url.pathname.endsWith("/fictional-member"))
+      return route.fulfill({ json: { profile, entries: [] } });
+    if (!chatFailed) {
+      chatFailed = true;
+      return route.fulfill({
+        status: 503,
+        json: { error: "private gateway detail" },
+      });
+    }
+    return route.fulfill({
+      json: {
+        answer: "Ask about their community tools.",
+        grounded: true,
+        aiGenerated: true,
+        limited: false,
+        citations: [
+          {
+            kind: "profile",
+            id: profile.userId,
+            userId: profile.userId,
+            version: 1,
+          },
+        ],
+      },
+    });
+  });
+  await page.goto("/dev/community-ui?api=mock&view=scout");
+  await page.getByLabel("Skills to explore").fill("React");
+  await page
+    .getByRole("button", { name: "Discover people", exact: true })
+    .click();
+  expect(new URLSearchParams(search).get("skills")).toBe("React");
+  await page.getByRole("button", { name: "Explore Fictional's work" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Fictional Builder", exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("Your question").fill("What should I ask next?");
+  await page
+    .getByRole("button", { name: "Explore evidence", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).not.toContainText(
+    "private gateway detail",
+  );
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByLabel("Your question")).toHaveValue(
+    "What should I ask next?",
+  );
+  await page
+    .getByRole("button", { name: "Explore evidence", exact: true })
+    .click();
+  await expect(
+    page.getByText("Ask about their community tools."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("list", { name: "Cited community evidence" }),
+  ).toContainText("Community profile · Revision 1");
+});
+
+test("mentor revision conflict preserves the review and requires a refresh (mock API)", async ({
+  page,
+}) => {
+  let submitted: unknown;
+  await page.route("**/api/community/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/access"))
+      return route.fulfill({
+        json: { isAdmin: false, isMentor: true, isInstitution: false },
+      });
+    if (path.endsWith("/mentorship"))
+      return route.fulfill({
+        json: {
+          entries: [
+            {
+              id: "entry",
+              userId: "member",
+              memberName: "Fictional Builder",
+              title: "Library contribution",
+              description: "Built the library search with keyboard support",
+              occurredAt: "2026-10-24",
+              visibility: "institution",
+              version: 3,
+              evidenceUrl: null,
+              confirmations: [],
+            },
+          ],
+        },
+      });
+    submitted = route.request().postDataJSON();
+    return route.fulfill({ status: 409, json: { error: "revision changed" } });
+  });
+  await page.goto("/dev/community-ui?api=mock&view=mentor");
+  await page
+    .getByRole("combobox", { name: "Decision", exact: true })
+    .selectOption("confirmed");
+  await page
+    .getByLabel("What did you personally check?")
+    .fill("Reviewed the keyboard navigation and search flow.");
+  await page.getByLabel("How did you check it?").fill("Paired code review");
+  await page.getByRole("button", { name: "Save review", exact: true }).click();
+  expect(submitted).toMatchObject({
+    expectedRevision: 3,
+    method: "Paired code review",
+  });
+  await expect(page.getByRole("alert")).toContainText("changed");
+  await expect(page.getByLabel("What did you personally check?")).toHaveValue(
+    "Reviewed the keyboard navigation and search flow.",
   );
 });

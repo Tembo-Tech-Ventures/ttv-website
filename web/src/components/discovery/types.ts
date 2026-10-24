@@ -12,11 +12,29 @@ export interface JourneyClaim {
   date: string;
   skills: string[];
   evidence: EvidenceSource[];
-  confirmation?: { mentorName: string; note: string; date: string };
+  version: number;
+  visibility: "institution" | "private";
+  confirmations: ClaimConfirmation[];
+}
+
+export interface ClaimConfirmation {
+  id: string;
+  mentorName: string;
+  note: string;
+  method: string;
+  date: string;
+  journeyVersion: number;
+}
+
+export function currentConfirmations(claim: JourneyClaim): ClaimConfirmation[] {
+  return claim.confirmations.filter(
+    (confirmation) => confirmation.journeyVersion === claim.version,
+  );
 }
 
 export interface CommunityProfile {
   id: string;
+  version?: number;
   name: string;
   headline: string;
   location: string;
@@ -24,6 +42,7 @@ export interface CommunityProfile {
   about: string;
   skills: string[];
   claims: JourneyClaim[];
+  evidenceLoaded?: boolean;
 }
 
 export interface ScoutCriteria {
@@ -34,6 +53,8 @@ export interface ScoutCriteria {
 
 export interface EvidenceAnswer {
   text: string;
+  references?: string[];
+  limited?: boolean;
   sources: EvidenceSource[];
 }
 

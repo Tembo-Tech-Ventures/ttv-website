@@ -1,0 +1,9 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import CommunityApp from "@/components/community/CommunityApp";
+// oxlint-disable-next-line import/no-unassigned-import -- Workspace stylesheet.
+import "@/styles/discovery.css";
+---
+<BaseLayout title="Review community contributions | TTV" noIndex>
+  <CommunityApp client:load view="mentor" />
+</BaseLayout>

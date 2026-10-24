@@ -1,4 +1,7 @@
-import React, { type ReactNode } from "react";
+import React, { createContext, useContext, type ReactNode } from "react";
+
+type WorkspaceView = "scout" | "journey" | "mentor";
+export const CommunityNavigation = createContext<WorkspaceView[] | null>(null);
 
 export default function DiscoveryShell({
   children,
@@ -6,9 +9,10 @@ export default function DiscoveryShell({
   demo = false,
 }: {
   children: ReactNode;
-  active: "scout" | "journey" | "mentor";
+  active: WorkspaceView;
   demo?: boolean;
 }) {
+  const availableViews = useContext(CommunityNavigation) ?? [active];
   const links = demo
     ? [
         {
@@ -23,18 +27,21 @@ export default function DiscoveryShell({
           label: "Mentor review",
         },
       ]
-    : [
-        {
-          id: active,
-          href: "#main-content",
-          label:
-            active === "scout"
-              ? "Discover people"
-              : active === "mentor"
-                ? "Mentor review"
-                : "My journey",
-        },
-      ];
+    : availableViews.map((view) => ({
+        id: view,
+        href:
+          view === "scout"
+            ? "/dashboard/discover"
+            : view === "mentor"
+              ? "/dashboard/mentorship"
+              : "/dashboard/community",
+        label:
+          view === "scout"
+            ? "Discover people"
+            : view === "mentor"
+              ? "Mentor review"
+              : "My journey",
+      }));
   return (
     <div className="discovery-app">
       <a className="discovery-skip" href="#main-content">

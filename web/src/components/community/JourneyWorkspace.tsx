@@ -1,34 +1,48 @@
 import React, { useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { ArrowRight, Plus, CheckCircle } from "@phosphor-icons/react";
+import { ArrowRight, Plus } from "@phosphor-icons/react";
 import DiscoveryShell from "../discovery/DiscoveryShell";
 import { EvidenceLinks } from "../discovery/ScoutWorkspace";
-import { evidenceHref } from "../discovery/types";
+
 import type { CommunityProfile, JourneyClaim } from "../discovery/types";
+import ClaimConfirmations from "../discovery/ClaimConfirmations";
+import { displayUiError } from "../discovery/ui-errors";
 import ProfileEditor, { type EditableCommunityProfile } from "./ProfileEditor";
 
 export interface ClaimDraft {
   title: string;
   description: string;
   date: string;
-  skills: string;
-  sourceTitle: string;
   sourceUrl: string;
 }
 export function validateClaimDraft(draft: ClaimDraft): string | null {
+  if (draft.title.length > 160) return "Keep the title within 160 characters.";
+  if (draft.description.length > 6000)
+    return "Keep the contribution within 6,000 characters.";
   if (draft.title.trim().length < 3)
     return "Give this entry a title of at least 3 characters.";
   if (draft.description.trim().length < 20)
     return "Describe your contribution in at least 20 characters.";
   if (
     !/^\d{4}-\d{2}-\d{2}$/.test(draft.date) ||
-    Number.isNaN(Date.parse(draft.date))
+    Number.isNaN(Date.parse(draft.date)) ||
+    new Date(draft.date).toISOString().slice(0, 10) !== draft.date
   )
     return "Choose a date for this contribution.";
-  if (draft.sourceUrl.trim() && !evidenceHref(draft.sourceUrl.trim()))
-    return "Use a complete http or https link for your source.";
-  if (draft.sourceUrl.trim() && !draft.sourceTitle.trim())
-    return "Add a title so people know what your source shows.";
+  if (draft.sourceUrl.trim()) {
+    try {
+      const url = new URL(draft.sourceUrl.trim());
+      if (
+        url.protocol !== "https:" ||
+        url.username ||
+        url.password ||
+        /^\/(admin|api|dashboard)(?:\/|$)/i.test(url.pathname)
+      )
+        return "Use a public HTTPS link without credentials or private application paths.";
+    } catch {
+      return "Use a complete public HTTPS link for your source.";
+    }
+  }
   return null;
 }
 
@@ -53,8 +67,6 @@ export default function JourneyWorkspace({
     title: "",
     description: "",
     date: "",
-    skills: "",
-    sourceTitle: "",
     sourceUrl: "",
   });
   const [busy, setBusy] = useState(false);
@@ -81,18 +93,18 @@ export default function JourneyWorkspace({
       else if (demo)
         claim = {
           id: `demo-${crypto.randomUUID()}`,
+          version: 1,
+          visibility: "institution",
+          confirmations: [],
           title: draft.title.trim(),
           description: draft.description.trim(),
           date: draft.date,
-          skills: draft.skills
-            .split(",")
-            .map((skill) => skill.trim())
-            .filter(Boolean),
+          skills: [],
           evidence: draft.sourceUrl.trim()
             ? [
                 {
                   id: `demo-source-${crypto.randomUUID()}`,
-                  title: draft.sourceTitle.trim(),
+                  title: "Supporting work",
                   url: draft.sourceUrl.trim(),
                   kind: "Member source",
                 },
@@ -109,8 +121,6 @@ export default function JourneyWorkspace({
         title: "",
         description: "",
         date: "",
-        skills: "",
-        sourceTitle: "",
         sourceUrl: "",
       });
       setNotice(
@@ -120,9 +130,10 @@ export default function JourneyWorkspace({
       );
     } catch (cause) {
       setError(
-        cause instanceof Error
-          ? cause.message
-          : "We could not save your contribution. Your draft is still here.",
+        displayUiError(
+          cause,
+          "We could not save your contribution. Your draft is still here.",
+        ),
       );
     } finally {
       saving.current = false;
@@ -156,8 +167,9 @@ export default function JourneyWorkspace({
             <strong>Who can discover this?</strong>
             <p>
               Your profile and journey contributions help approved institutions
-              discover community members for opportunities. Private calls,
-              recordings, and internal information do not belong here.
+              discover community members for opportunities. Unpublished drafts
+              are visible only to you. Private calls, recordings, and internal
+              information do not belong here.
             </p>
           </div>
           <button
@@ -178,7 +190,8 @@ export default function JourneyWorkspace({
                 opportunityGoals: profile.goal,
               }}
               onSave={async (profileDraft) => {
-                if (onSaveProfile) setProfile(await onSaveProfile(profileDraft));
+                if (onSaveProfile)
+                  setProfile(await onSaveProfile(profileDraft));
                 else if (demo)
                   setProfile((current) => ({
                     ...current,
@@ -239,7 +252,7 @@ export default function JourneyWorkspace({
                     onChange={(event) =>
                       change("description", event.target.value)
                     }
-                    maxLength={4000}
+                    maxLength={6000}
                     minLength={20}
                     required
                     rows={4}
@@ -256,15 +269,6 @@ export default function JourneyWorkspace({
                       required
                     />
                   </label>
-                  <label className="discovery-field">
-                    Skills, separated by commas
-                    <input
-                      value={draft.skills}
-                      onChange={(event) => change("skills", event.target.value)}
-                      maxLength={300}
-                      placeholder="React, accessibility"
-                    />
-                  </label>
                 </div>
                 <div className="discovery-form-divider">
                   <h3>Give the story a source</h3>
@@ -273,17 +277,6 @@ export default function JourneyWorkspace({
                     can review. Only share links you have permission to share.
                   </p>
                 </div>
-                <label className="discovery-field">
-                  Source title
-                  <input
-                    value={draft.sourceTitle}
-                    onChange={(event) =>
-                      change("sourceTitle", event.target.value)
-                    }
-                    maxLength={200}
-                    placeholder="Project walkthrough"
-                  />
-                </label>
                 <label className="discovery-field">
                   Source link
                   <input
@@ -322,26 +315,14 @@ export default function JourneyWorkspace({
               <li key={claim.id}>
                 <time dateTime={claim.date}>{claim.date}</time>
                 <h3>{claim.title}</h3>
-                <p>{claim.description}</p>
-                <EvidenceLinks sources={claim.evidence} />
-                {claim.confirmation ? (
-                  <div className="discovery-confirmation">
-                    <CheckCircle size={20} aria-hidden="true" />
-                    <div>
-                      <strong>
-                        Checked by {claim.confirmation.mentorName}
-                      </strong>
-                      <p>{claim.confirmation.note}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="discovery-provenance">
-                    Member-reported ·{" "}
-                    {claim.evidence.length > 0
-                      ? "Sources attached"
-                      : "No sources attached yet"}
+                {claim.visibility === "private" && (
+                  <p className="discovery-notice">
+                    Unpublished draft · Only you can see this contribution.
                   </p>
                 )}
+                <p>{claim.description}</p>
+                <EvidenceLinks sources={claim.evidence} />
+                <ClaimConfirmations claim={claim} />
               </li>
             ))}
           </ol>

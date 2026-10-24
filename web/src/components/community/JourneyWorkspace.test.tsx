@@ -11,8 +11,6 @@ const draft: ClaimDraft = {
   title: "Library interface",
   description: "I implemented the library borrowing form and keyboard focus.",
   date: "2026-10-20",
-  skills: "React",
-  sourceTitle: "",
   sourceUrl: "",
 };
 describe("community contribution editor", () => {
@@ -39,8 +37,10 @@ describe("community contribution editor", () => {
     [{ description: "short" }, "contribution"],
     [{ date: "" }, "date"],
     // oxlint-disable-next-line no-script-url -- Negative test for rejected executable URLs.
-    [{ sourceUrl: "javascript:alert(1)" }, "http or https"],
-    [{ sourceUrl: "https://example.com" }, "title"],
+    [{ sourceUrl: "javascript:alert(1)" }, "HTTPS"],
+    [{ sourceUrl: "http://example.com" }, "HTTPS"],
+    [{ date: "2026-02-30" }, "date"],
+    [{ sourceUrl: "https://example.com/dashboard/secret" }, "private"],
   ] as const)("rejects incomplete/unsafe input %j", (change, expected) => {
     expect(validateClaimDraft({ ...draft, ...change })).toContain(expected);
   });
@@ -48,7 +48,6 @@ describe("community contribution editor", () => {
     expect(
       validateClaimDraft({
         ...draft,
-        sourceTitle: "Code",
         sourceUrl: "https://example.com/code",
       }),
     ).toBeNull();

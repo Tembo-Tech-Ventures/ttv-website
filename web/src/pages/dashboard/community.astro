@@ -1,0 +1,10 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import CommunityApp from "@/components/community/CommunityApp";
+// oxlint-disable-next-line import/no-unassigned-import -- Workspace stylesheet.
+import "@/styles/discovery.css";
+// Authentication is enforced by dashboard middleware; every data API checks access.
+---
+<BaseLayout title="Your community journey | TTV" noIndex>
+  <CommunityApp client:load view="journey" />
+</BaseLayout>

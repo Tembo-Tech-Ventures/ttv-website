@@ -14,6 +14,8 @@ export const demoProfiles: CommunityProfile[] = [
     claims: [
       {
         id: "demo-claim-1",
+        version: 1,
+        visibility: "institution",
         title: "Made a community library easier to use",
         date: "2026-10-18",
         description:
@@ -33,14 +35,22 @@ export const demoProfiles: CommunityProfile[] = [
             kind: "Code",
           },
         ],
-        confirmation: {
-          mentorName: "Jules Martin",
-          date: "2026-10-20",
-          note: "Reviewed the borrowing flow and watched Amara explain the keyboard focus changes. Confirmed her contribution to those components.",
-        },
+        confirmations: [
+          {
+            id: "demo-confirmation-1",
+            journeyVersion: 1,
+            method: "Live project walkthrough and code review",
+            mentorName: "Jules Martin",
+            date: "2026-10-20",
+            note: "Reviewed the borrowing flow and watched Amara explain the keyboard focus changes. Confirmed her contribution to those components.",
+          },
+        ],
       },
       {
         id: "demo-claim-2",
+        version: 1,
+        visibility: "institution",
+        confirmations: [],
         title: "Documented a reusable component system",
         date: "2026-09-30",
         description:
@@ -69,6 +79,9 @@ export const demoProfiles: CommunityProfile[] = [
     claims: [
       {
         id: "demo-claim-3",
+        version: 1,
+        visibility: "institution",
+        confirmations: [],
         title: "Built an equipment booking service",
         description:
           "Implemented availability checks and a booking interface for a community equipment library.",
@@ -97,6 +110,9 @@ export const demoProfiles: CommunityProfile[] = [
     claims: [
       {
         id: "demo-claim-4",
+        version: 1,
+        visibility: "institution",
+        confirmations: [],
         title: "Explored local transport data",
         description:
           "Cleaned a public dataset and made a visual explanation of commute patterns. Supporting sources are not attached yet.",

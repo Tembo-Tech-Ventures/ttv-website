@@ -6,11 +6,16 @@ import {
   ArrowRight,
   MagnifyingGlass,
   Sparkle,
-  CheckCircle,
   Link as LinkIcon,
 } from "@phosphor-icons/react";
 import DiscoveryShell from "./DiscoveryShell";
-import { evidenceHref, filterDemoProfiles } from "./types";
+import ClaimConfirmations from "./ClaimConfirmations";
+import { displayUiError } from "./ui-errors";
+import {
+  evidenceHref,
+  filterDemoProfiles,
+  currentConfirmations,
+} from "./types";
 import type {
   CommunityProfile,
   EvidenceAnswer,
@@ -22,8 +27,9 @@ interface Props {
   profiles: CommunityProfile[];
   demo?: boolean;
   onSearch?: (criteria: ScoutCriteria) => Promise<CommunityProfile[]>;
+  onOpenProfile?: (profileId: string) => Promise<CommunityProfile>;
   onAsk?: (
-    profileId: string,
+    profile: CommunityProfile,
     question: string,
     criteria: ScoutCriteria,
   ) => Promise<EvidenceAnswer>;
@@ -83,7 +89,7 @@ function ProfileEvidence({
     setAnswer(null);
     setAskedQuestion(question.trim());
     try {
-      if (onAsk) setAnswer(await onAsk(profile.id, question.trim(), criteria));
+      if (onAsk) setAnswer(await onAsk(profile, question.trim(), criteria));
       else if (demo)
         setAnswer({
           text: `Sample response: ${profile.name}'s profile contains ${profile.claims.length} member-reported entries and ${profile.claims.flatMap((claim) => claim.evidence).length} attached sources. Review the sources for their specific contribution. A source count does not establish quality, production scale, or experience beyond the documented work. Ask about those gaps directly.`,
@@ -97,9 +103,10 @@ function ProfileEvidence({
         );
     } catch (cause) {
       setError(
-        cause instanceof Error
-          ? cause.message
-          : "We could not answer that question. Please try again.",
+        displayUiError(
+          cause,
+          "We could not answer that question. Please try again.",
+        ),
       );
     } finally {
       setBusy(false);
@@ -160,22 +167,7 @@ function ProfileEvidence({
                   not a negative assessment.
                 </p>
               )}
-              {claim.confirmation ? (
-                <div className="discovery-confirmation">
-                  <CheckCircle size={19} aria-hidden="true" />
-                  <div>
-                    <strong>Checked by {claim.confirmation.mentorName}</strong>
-                    <p>{claim.confirmation.note}</p>
-                    <small>
-                      {claim.confirmation.date} · Claim-specific confirmation
-                    </small>
-                  </div>
-                </div>
-              ) : (
-                <p className="discovery-provenance">
-                  Member-reported · Not yet confirmed by a mentor
-                </p>
-              )}
+              <ClaimConfirmations claim={claim} />
             </li>
           ))}
         </ol>
@@ -241,6 +233,19 @@ function ProfileEvidence({
             </span>
             <h3>{askedQuestion}</h3>
             <p>{answer.text}</p>
+            {answer.limited && (
+              <p className="discovery-notice">
+                The available evidence or response was limited. Narrow your
+                question before drawing conclusions.
+              </p>
+            )}
+            {answer.references && answer.references.length > 0 && (
+              <ul aria-label="Cited community evidence">
+                {answer.references.map((reference) => (
+                  <li key={reference}>{reference}</li>
+                ))}
+              </ul>
+            )}
             <EvidenceLinks sources={answer.sources} />
           </output>
         )}
@@ -258,6 +263,7 @@ export default function ScoutWorkspace({
   demo = false,
   onSearch,
   onAsk,
+  onOpenProfile,
 }: Props) {
   const [criteria, setCriteria] = useState<ScoutCriteria>({
     context: "",
@@ -268,12 +274,40 @@ export default function ScoutWorkspace({
   const [selected, setSelected] = useState<CommunityProfile | null>(null);
   const [step, setStep] = useState<"criteria" | "results">("criteria");
   const [busy, setBusy] = useState(false);
+  const [opening, setOpening] = useState<string | null>(null);
+  const openingRef = useRef(false);
   const searching = useRef(false);
   const [error, setError] = useState("");
   const [appliedCriteria, setAppliedCriteria] = useState(criteria);
+  async function openProfile(profile: CommunityProfile) {
+    if (openingRef.current) return;
+    openingRef.current = true;
+    setOpening(profile.id);
+    setError("");
+    try {
+      setSelected(onOpenProfile ? await onOpenProfile(profile.id) : profile);
+      window.scrollTo({ top: 0 });
+    } catch (cause) {
+      setError(
+        displayUiError(
+          cause,
+          "The profile could not be loaded. Please try again.",
+        ),
+      );
+    } finally {
+      setOpening(null);
+      openingRef.current = false;
+    }
+  }
   async function search(event: FormEvent) {
     event.preventDefault();
     if (searching.current) return;
+    if (
+      criteria.skills.split(",").filter((skill) => skill.trim()).length > 10
+    ) {
+      setError("Explore up to 10 skills at a time.");
+      return;
+    }
     searching.current = true;
     setBusy(true);
     setError("");
@@ -288,9 +322,10 @@ export default function ScoutWorkspace({
       setStep("results");
     } catch (cause) {
       setError(
-        cause instanceof Error
-          ? cause.message
-          : "Search could not be completed. Please try again.",
+        displayUiError(
+          cause,
+          "Search could not be completed. Your criteria are still here; please try again.",
+        ),
       );
     } finally {
       setBusy(false);
@@ -436,6 +471,11 @@ export default function ScoutWorkspace({
             </section>
           ) : (
             <section aria-label="Search results">
+              {error && (
+                <p role="alert" className="discovery-error">
+                  {error}
+                </p>
+              )}
               <div className="discovery-results-bar">
                 <div>
                   <span className="discovery-eyebrow">Explore people</span>
@@ -492,29 +532,40 @@ export default function ScoutWorkspace({
                       ))}
                     </div>
                     <div className="discovery-person-evidence">
-                      <span>
-                        {
-                          profile.claims.flatMap((claim) => claim.evidence)
-                            .length
-                        }{" "}
-                        sources attached
-                      </span>
-                      <span>
-                        {
-                          profile.claims.filter((claim) => claim.confirmation)
-                            .length
-                        }{" "}
-                        mentor-confirmed entries
-                      </span>
+                      {profile.evidenceLoaded === false ? (
+                        <span>
+                          Open this profile to inspect its sources and
+                          confirmations.
+                        </span>
+                      ) : (
+                        <>
+                          <span>
+                            {
+                              profile.claims.flatMap((claim) => claim.evidence)
+                                .length
+                            }{" "}
+                            sources attached
+                          </span>
+                          <span>
+                            {
+                              profile.claims.filter(
+                                (claim) =>
+                                  currentConfirmations(claim).length > 0,
+                              ).length
+                            }{" "}
+                            mentor-confirmed entries
+                          </span>
+                        </>
+                      )}
                     </div>
                     <button
                       className="discovery-text-button"
-                      onClick={() => {
-                        setSelected(profile);
-                        window.scrollTo({ top: 0 });
-                      }}
+                      disabled={opening !== null}
+                      onClick={() => void openProfile(profile)}
                     >
-                      Explore {profile.name.split(" ")[0]}'s work
+                      {opening === profile.id
+                        ? "Opening profile…"
+                        : `Explore ${profile.name.split(" ")[0]}'s work`}
                       <ArrowUpRight size={19} aria-hidden="true" />
                     </button>
                   </article>

@@ -3,9 +3,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import ProfileEditor, {
   parseProfileSkills,
+  profileSaveError,
   validateCommunityProfile,
   type EditableCommunityProfile,
 } from "./ProfileEditor";
+
+import { UiApiError } from "../discovery/ui-errors";
 
 const initial: EditableCommunityProfile = {
   headline: "Community builder",
@@ -34,7 +37,7 @@ describe("ProfileEditor", () => {
     expect(html).toContain(initial.opportunityGoals);
     expect(html).toContain('maxLength="160"');
     expect(html).toContain('maxLength="4000"');
-    expect(html).toContain('maxLength="1000"');
+    expect(html).toContain('maxLength="2000"');
     expect(html).toContain("aria-labelledby=");
     expect(html).not.toContain("Profile saved.");
     expect(save).not.toHaveBeenCalled();
@@ -72,20 +75,41 @@ describe("profile draft validation", () => {
       validateCommunityProfile({
         headline: "a".repeat(160),
         bio: "a".repeat(4000),
-        skills: Array.from({ length: 20 }, () => "a".repeat(60)),
-        opportunityGoals: "a".repeat(1000),
+        skills: Array.from({ length: 30 }, () => "a".repeat(60)),
+        opportunityGoals: "a".repeat(2000),
       }),
     ).toBeNull();
   });
   it.each([
     [{ headline: "a".repeat(161) }, "160"],
     [{ bio: "a".repeat(4001) }, "4,000"],
-    [{ skills: Array.from({ length: 21 }, () => "TypeScript") }, "20 skills"],
+    [{ skills: Array.from({ length: 31 }, () => "TypeScript") }, "30 skills"],
     [{ skills: ["a".repeat(61)] }, "60 characters"],
-    [{ opportunityGoals: "a".repeat(1001) }, "1,000"],
+    [{ opportunityGoals: "a".repeat(2001) }, "2,000"],
   ])("rejects an oversized profile field", (fields, message) => {
     expect(validateCommunityProfile({ ...initial, ...fields })).toContain(
       message,
+    );
+  });
+});
+
+describe("profile save error boundary", () => {
+  it.each([
+    [401, "Your session has ended. Sign in again to continue."],
+    [403, "Your account does not have access to this action."],
+    [429, "Too many requests. Please wait a moment and try again."],
+    [503, "This service is unavailable right now. Please try again later."],
+  ])("preserves the safe message for status %s", (status, message) => {
+    expect(profileSaveError(new UiApiError(status))).toBe(message);
+  });
+  it.each([
+    new Error("private backend details"),
+    { status: 401, message: "private backend details" },
+    "private backend details",
+    null,
+  ])("hides unknown error details and explains draft recovery", (failure) => {
+    expect(profileSaveError(failure)).toBe(
+      "Your profile could not be saved. Your draft is still here; please try again.",
     );
   });
 });
