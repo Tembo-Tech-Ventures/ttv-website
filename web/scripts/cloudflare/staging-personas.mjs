@@ -1,0 +1,80 @@
+import { createHash, randomBytes } from "node:crypto";
+import { assertVerifiedStagingFixtureTarget } from "./staging-fixture-target.mjs";
+import { createStagingBrowserCookies } from "./staging-fixture-cookies.mjs";
+
+export const STAGING_PERSONA_ROLES = Object.freeze({
+  member: null, otherMember: null, mentor: "MENTOR", institution: "INSTITUTION", unapprovedInstitution: null, admin: "ADMIN",
+});
+const rows = result => (Array.isArray(result) ? result : [result]).flatMap(statement => statement?.results ?? []);
+
+/** Runner-only. Credentials never leave the callback; default cleanup deletes all fixture-owned records. */
+export async function withStagingPersonas({ target, signingSecret, run, audit = () => {}, now = new Date() }) {
+  assertVerifiedStagingFixtureTarget(target);
+  if (typeof run !== "function" || typeof signingSecret !== "string" || signingSecret.length < 32) throw new Error("A verification callback and staging signing configuration are required.");
+  const timestamp = Math.floor(now.getTime() / 1000);
+  if (!Number.isSafeInteger(timestamp) || Math.abs(Date.now() / 1000 - timestamp) > 60) throw new Error("Invalid fixture time.");
+  const runId = randomBytes(12).toString("hex");
+  const namespace = `ttv-staging-fixture-${runId}`;
+  const marker = `ttv-agent:synthetic-staging:${runId}`;
+  const execute = target.executeQuery;
+  const userIds = [];
+  const personas = {};
+  let failure;
+  try {
+    audit({ event: "fixture-run-started", runId, version: target.expectedVersion });
+    // Fail closed before identities are inserted if migrations have not landed.
+    await execute('SELECT "userId","sessionId","runId","persona","expiresAt" FROM "stagingFixtureIdentity" LIMIT 0');
+    const roles = {};
+    for (const role of ["ADMIN", "MENTOR", "INSTITUTION"]) {
+      const found = rows(await execute('SELECT "id" FROM "Roles" WHERE "name"=? LIMIT 1', [role]));
+      if (!found[0]?.id) throw new Error("Required role migration missing");
+      roles[role] = found[0].id;
+    }
+    for (const [persona, role] of Object.entries(STAGING_PERSONA_ROLES)) {
+      const userId = `${namespace}-${persona}`;
+      const sessionId = `${userId}-session`;
+      const expiresAt = timestamp + 3600;
+      userIds.push(userId);
+      await execute('INSERT INTO "user" ("id","name","email","emailVerified","createdAt","updatedAt") VALUES (?,?,?,1,?,?)',
+        [userId, `Fictional staging ${persona}`, `${userId}@invalid.ttv`, timestamp, timestamp]);
+      if (role) await execute('INSERT INTO "UserRoles" ("id","userId","roleId","createdAt","updatedAt") VALUES (?,?,?,?,?)',
+        [`${userId}-role`, userId, roles[role], timestamp, timestamp]);
+      const token = randomBytes(32).toString("hex");
+      await execute('INSERT INTO "session" ("id","expiresAt","token","userAgent","userId","createdAt","updatedAt") VALUES (?,?,?,?,?,?,?)',
+        [sessionId, expiresAt, token, marker, userId, timestamp, timestamp]);
+      await execute('INSERT INTO "stagingFixtureIdentity" ("userId","sessionId","runId","persona","expiresAt") VALUES (?,?,?,?,?)',
+        [userId, sessionId, runId, persona, expiresAt]);
+      const cookies = createStagingBrowserCookies({ baseUrl: target.baseUrl, secret: signingSecret, token, expiresAt });
+      let personalAccessToken;
+      if (["member", "institution", "unapprovedInstitution"].includes(persona)) {
+        personalAccessToken = `ttv_pat_${randomBytes(32).toString("hex")}`;
+      const scopes = ["community:read", ...(persona === "member" ? ["community:write"] : []), ...(["institution", "unapprovedInstitution"].includes(persona) ? ["institution:read"] : [])];
+        await execute('INSERT INTO "personal_access_token" ("id","userId","tokenHash","tokenPrefix","label","scopes","expiresAt","createdAt","updatedAt") VALUES (?,?,?,?,?,?,?,?,?)',
+          [`${userId}-pat`, userId, createHash("sha256").update(personalAccessToken).digest("hex"), personalAccessToken.slice(0, 16), "Synthetic staging fixture", JSON.stringify(scopes), expiresAt, timestamp, timestamp]);
+      }
+      personas[persona] = { userId, sessionId, runId, expiresAt, cookies, personalAccessToken };
+    }
+    await run(personas);
+  } catch {
+    failure = new Error("Staging persona setup or verification failed; inspect sanitized test evidence.");
+  } finally {
+    // Delete explicit IDs created by this run only, including interrupted setup.
+    // Attempt every cleanup phase even if a previous delete failed.
+    if (userIds.length > 0) {
+      const placeholders = userIds.map(() => "?").join(",");
+      const operations = [
+        ['DELETE FROM "stagingFixtureIdentity" WHERE "runId"=? AND "userId" IN (' + placeholders + ')', [runId, ...userIds]],
+        ['DELETE FROM "personal_access_token" WHERE "userId" IN (' + placeholders + ')', userIds],
+        ['DELETE FROM "session" WHERE "userId" IN (' + placeholders + ')', userIds],
+        ['DELETE FROM "UserRoles" WHERE "userId" IN (' + placeholders + ')', userIds],
+        ['DELETE FROM "user" WHERE "id" IN (' + placeholders + ')', userIds],
+      ];
+      for (const [sql, params] of operations) {
+        try { await execute(sql, params); }
+        catch { failure = new Error("Staging persona cleanup failed; credentials expire within one hour. Review this run's cleanup."); }
+      }
+    }
+  }
+  audit({ event: failure ? "fixture-run-failed" : "fixture-run-cleaned", runId, version: target.expectedVersion });
+  if (failure) throw failure;
+}

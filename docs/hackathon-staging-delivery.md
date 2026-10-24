@@ -53,3 +53,75 @@ Do not print secrets or copy them into workflow inputs, issues or screenshots.
 The preflight receives only a read-scoped GitHub token; Cloudflare secrets are
 scoped to the subsequent reusable staging job. Production workflow, rollback
 behavior and production credentials are unchanged.
+
+## Reusable synthetic staging verification
+
+The runner and manual verification workflow are implemented but **not live-validated**. Runtime
+fixture authorization and its registry migration must be integrated and tested
+before live provisioning. This is intended to support repeatable workflow-dispatch
+browser verification beyond the hackathon; arbitrary interactive local browser
+access is not delivered.
+
+`staging-fixture-target.mjs` reads the configured account, actual staging Worker
+bindings, exact D1 metadata and public deployment health. It requires the known
+staging D1 UUID, staging Worker origin and exact expected deployed commit. Only
+that verified target exposes a database executor, permanently bound to staging.
+No credentialed writes occur in preflight. The main integration branch and PM
+serialized slot rules still apply to verification and provisioning.
+
+`withStagingPersonas` requires that verified target, the same signing configuration
+used by the staging deployment and the migrated registry/ADMIN/MENTOR/INSTITUTION
+roles. Never read secrets back from Cloudflare or log the resolved signing config.
+The existing credentialed runner can resolve it through deployment helpers; no
+new public endpoint or shared secret is introduced. No reference roles or real
+user records are created or modified by the fixture helper.
+
+Each run creates six namespaced fictional identities: member, otherMember,
+mentor, institution, unapprovedInstitution and admin. Each has a registry entry
+bound to its user/session/run/persona and absolute one-hour expiry. Member and
+institution test requests use independently scoped, hashed PAT fixtures; admin
+receives no PAT. Cookies and PATs remain within the callback and browser memory:
+no workflow outputs, arguments, storageState, traces, HAR or credential artifacts.
+Only explicitly sanitized results and fictional screenshots may be uploaded.
+
+The pinned Better Auth implementation renews short database sessions by default.
+The runner supplies a signed dont-remember cookie to suppress routine renewal.
+This is NOT an authorization boundary: runtime must check the registry's absolute
+expiry and live session on every synthetic request, even when a cached cookie
+or renewed database expiry exists. Production must reject fixture identities
+regardless of flags. Prefixes and request User-Agent headers cannot authorize a
+fixture: authenticated session plus DB-backed run membership is required.
+
+Runtime exceptions, owned by Developer, must allow only fixed fixture roles and
+same-run synthetic targets. Credential minting and agent-access remain blocked.
+An admin fixture may test synthetic approvals, never grant privileges to a real
+user. Every invocation attempts registry/PAT/session/role/user cleanup, including
+partial setup and callback failures; deletion failures are reported without
+provider bodies or bound values. Default retention is zero. Any later evidence
+retention mode needs explicit labelling and scope.
+
+Tests apply actual existing application migrations, authenticate signed cookies
+through the real createAuth/Drizzle/BetterAuth stack, check seconds-to-Date
+conversion, expiry/revocation and delegated-session marking. The proposed new
+registry currently has a contract fixture in the tests until Developer's migration
+lands; this does not yet prove production isolation, runtime exceptions, or
+staging browser acceptance. GitHub OAuth and external MCP client compatibility
+also need their own evidence.
+
+After integration, reserve the same PM slot used for deployment and dispatch
+`Cloudflare Staging Synthetic Verification` on the integration branch with its
+exact `expected_sha`. The workflow performs credential-free GitHub preflight,
+then repeats the check and verifies the live Worker/D1/revision before fixtures.
+It uses the deployment concurrency group with cancellation disabled. It does
+not deploy. Only the fixed verification program runs: six authenticated browser
+identities, member/institution access denials, same-run synthetic approval and
+revocation, credential-mint denial, scoped PAT reads and MCP initialization.
+It does not invoke a model or certify complete product journeys. No arbitrary
+script, role, user ID or external URL is accepted as workflow input.
+
+The unapproved institutional PAT deliberately carries institution read scope
+without the matching role, testing that scope alone does not grant access.
+Audit output contains only random run ID, deployed revision and start/result
+event. Browser storage, trace, HAR and page content are never uploaded by this
+runner. Abrupt runner termination can prevent finally-cleanup; the runtime
+registry expiry remains mandatory, and failed runs require scoped cleanup review.
