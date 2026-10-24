@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { FIXTURE_ENVIRONMENT } from "./fixture-env";
-import { guardFeedbackBrowserContext, closeFeedbackBrowserContext, feedbackApiRequest } from "../scripts/cloudflare/feedback-browser-guard.mjs";
+import { guardFeedbackBrowserContext, closeFeedbackBrowserContext } from "../scripts/cloudflare/feedback-browser-guard.mjs";
 
 test("public navigation leads to community and preserves sign-in return paths", async ({ page, baseURL }) => {
   test.skip(baseURL === "http://127.0.0.1:4322", "Requires actual Astro routes, not the component harness.");
@@ -48,31 +48,25 @@ for (const [audience, headline, cta, destination] of [
   });
 }
 
-test("signed-in audience CTAs reach the actual workspace or its actual approval guidance", async ({ browser, baseURL }, testInfo) => {
+test("isolated preview ADMIN audience CTAs reach their actual workspaces", async ({ browser, baseURL }, testInfo) => {
   const token = process.env.PLAYWRIGHT_AGENT_TOKEN;
-  test.skip(!FIXTURE_ENVIRONMENT || !token, "Requires an isolated preview fixture token; all-role staging verification is separate.");
+  test.skip(!FIXTURE_ENVIRONMENT || !token, "Requires the isolated preview seeded ADMIN session; non-admin role verification is separate.");
   const context = await browser.newContext({ baseURL, extraHTTPHeaders: { Authorization: `Bearer ${token}` }, viewport: testInfo.project.use.viewport });
   try {
     await guardFeedbackBrowserContext(context, baseURL!);
-    const response = await feedbackApiRequest(context.request, baseURL!, "/api/community/access");
-    expect(response.status()).toBe(200);
-    const access = await response.json();
-    expect(typeof access.isAdmin).toBe("boolean");
-    expect(typeof access.isMentor).toBe("boolean");
-    expect(typeof access.isInstitution).toBe("boolean");
+    // agent-preview-auth.mjs seeds this Better Auth session with ADMIN.
+    // Community APIs require scoped PATs; this browser-only check must not use
+    // the session bearer as a PAT. PR191's cookie personas cover non-admin roles.
     const page = await context.newPage();
     for (const entry of [
-      { audience: "members", cta: "Open my community journey", destination: "/dashboard/community", allowed: true, heading: "Your work. Your story.", gate: "" },
-      { audience: "mentors", cta: "Continue to mentor review", destination: "/dashboard/mentorship", allowed: access.isAdmin || access.isMentor, heading: "Recognise the work. Name what you saw.", gate: "Mentor access needs approval." },
-      { audience: "institutions", cta: "Continue to institutional access", destination: "/dashboard/discover", allowed: access.isAdmin || access.isInstitution, heading: "Find the person. See the work.", gate: "Institutional access needs approval." },
+      { audience: "members", cta: "Open my community journey", destination: "/dashboard/community", heading: "Your work. Your story." },
+      { audience: "mentors", cta: "Continue to mentor review", destination: "/dashboard/mentorship", heading: "Recognise the work. Name what you saw." },
+      { audience: "institutions", cta: "Continue to institutional access", destination: "/dashboard/discover", heading: "Find the person. See the work." },
     ]) {
       await page.goto(`/community/${entry.audience}`);
       await page.getByRole("link", { name: entry.cta }).first().click();
       await expect(page).toHaveURL(new URL(entry.destination, baseURL!).href);
-      await expect(page.locator(".discovery-app").getByRole("heading", { level: 1 })).toHaveText(entry.allowed ? entry.heading : entry.gate);
-      if (!entry.allowed) {
-        await expect(page.getByRole("link", { name: "Go to your journey" })).toHaveAttribute("href", "/dashboard/community");
-      }
+      await expect(page.locator(".discovery-app").getByRole("heading", { level: 1 })).toHaveText(entry.heading);
     }
   } finally {
     await closeFeedbackBrowserContext(context);
