@@ -14,6 +14,17 @@ describe("staging credential audit", () => {
     expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([`https://api.cloudflare.com/client/v4${root}/verify`, `https://api.cloudflare.com/client/v4${root}/${id}`]);
     for (const [, options] of fetchImpl.mock.calls) { expect(options.method).toBe("GET"); expect(options.redirect).toBe("error"); expect(options.signal).toBeInstanceOf(globalThis.AbortSignal); expect(options).not.toHaveProperty("body"); }
   });
+  it("reports bootstrap permission names without policy identifiers", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(ok({ id, status: "active" })).mockResolvedValueOnce(ok({ id, status: "active", policies: [
+      { effect: "allow", resources: { private: "private" }, permission_groups: [{ id: "private-id", name: "Account API Tokens Write" }] },
+      { effect: "deny", permission_groups: [{ name: "Account API Tokens Read" }] },
+    ] }));
+    const report = await auditStagingCredential({ ...env, AUDIT_TOKEN_KIND: "account" }, { fetchImpl });
+    expect(report.permissions).toEqual(["allow:Account API Tokens Write", "deny:Account API Tokens Read"]);
+    expect(report.otherPermissionCount).toBe(0);
+    expect(JSON.stringify(report)).not.toContain("private");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
   it.each([{ CLOUDFLARE_ENVIRONMENT_NAME: "production" }, { CLOUDFLARE_ACCOUNT_ID: "wrong" }, { CLOUDFLARE_API_TOKEN: "" }, { AUDIT_TOKEN_KIND: "guess" }])("rejects invalid configuration", async patch => {
     const fetchImpl = vi.fn(); expect((await auditStagingCredential({ ...env, ...patch }, { fetchImpl })).stage).toBe("configuration"); expect(fetchImpl).not.toHaveBeenCalled();
   });

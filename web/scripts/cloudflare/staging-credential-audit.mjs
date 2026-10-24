@@ -1,7 +1,7 @@
 import { pathToFileURL } from "node:url";
 
 const ACCOUNT = "c25be21f175bf10728876d8ca26a9619";
-const PERMISSIONS = new Set(["AI Gateway Read", "AI Gateway Run", "AI Gateway Edit", "Workers AI Read", "Workers Scripts Read", "Workers Scripts Write", "Workers Scripts Edit", "API Tokens Read", "API Tokens Write", "API Tokens Edit"]);
+const PERMISSIONS = new Set(["AI Gateway Read", "AI Gateway Run", "AI Gateway Edit", "Workers AI Read", "Workers Scripts Read", "Workers Scripts Write", "Workers Scripts Edit", "Account API Tokens Read", "Account API Tokens Write", "API Tokens Read", "API Tokens Write", "API Tokens Edit"]);
 
 /** Read-only metadata audit. Never return provider text, identifiers or credentials. */
 export async function auditStagingCredential(env, { fetchImpl = fetch } = {}) {
