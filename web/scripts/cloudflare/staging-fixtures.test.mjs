@@ -17,6 +17,25 @@ function runner() {
   return { options, close, launch };
 }
 describe("restricted staging runner", () => {
+  it("keeps normal verification model-free and opts in only with readiness and a first attempt", async () => {
+    const { options } = runner(); await runStagingFixtures(options);
+    expect(options.withPersonas).toHaveBeenLastCalledWith(expect.objectContaining({ assessmentProbe: false }));
+    options.environment.STAGING_BROWSER_ASSESSMENT = "true";
+    options.environment.GITHUB_RUN_ATTEMPT = "1";
+    options.api.mockResolvedValue({ bindings: [{ name: "AI", type: "ai" }, { name: "AI_GATEWAY_NAME", type: "plain_text", text: "ttv-website-ai-staging" }] });
+    await runStagingFixtures(options);
+    expect(options.withPersonas).toHaveBeenLastCalledWith(expect.objectContaining({ assessmentProbe: true }));
+    expect(options.verifyPersonas).toHaveBeenLastCalledWith(expect.objectContaining({ browserAssessment: true }));
+  });
+  it("rejects reruns and missing native binding before browser or fixture writes", async () => {
+    const { options, launch } = runner();
+    options.environment.STAGING_BROWSER_ASSESSMENT = "true";
+    options.environment.GITHUB_RUN_ATTEMPT = "2";
+    await expect(runStagingFixtures(options)).rejects.toThrow("reruns");
+    options.environment.GITHUB_RUN_ATTEMPT = "1";
+    await expect(runStagingFixtures(options)).rejects.toThrow("binding readiness");
+    expect(launch).not.toHaveBeenCalled(); expect(options.withPersonas).not.toHaveBeenCalled();
+  });
   it("checks revision/target before provisioning and closes browser", async () => {
     const { options, close } = runner();
     await runStagingFixtures(options);
@@ -84,6 +103,7 @@ describe("restricted staging runner", () => {
     const paths = workflow.split("          path: |\n")[1].trim().split("\n").map(line => line.trim());
     expect(paths).toEqual([
       ...["desktop", "mobile"].flatMap(view => ["member", "mentor", "scout", "known-profile"].map(state => `web/test-results/staging-community/${view}-${state}.png`)),
+      "web/test-results/staging-community/desktop-assessment.png",
       "web/test-results/staging-community/manifest.json",
     ]);
     expect(workflow.indexOf("run: node scripts/cloudflare/staging-fixtures.mjs")).toBeLessThan(workflow.indexOf("uses: actions/upload-artifact@v4"));
@@ -148,6 +168,7 @@ describe("fixed browser verification", () => {
     await expect(verifyStagingPersonas(f)).rejects.toThrow("Synthetic staging verification failed.");
     expect(f.verifyJourney).toHaveBeenCalledWith({
       baseUrl: f.target.baseUrl,
+      browserAssessment: false,
       contextsByRole: { member: f.contexts[0], mentor: f.contexts[2], institution: f.contexts[3] },
       users: { member: { userId: "member" }, mentor: { userId: "mentor" }, institution: { userId: "institution" } },
       evidenceDirectory: "test-results/staging-community",

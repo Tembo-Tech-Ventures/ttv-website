@@ -18,6 +18,11 @@ on:
         required: true
         type: string
 
+      browser_assessment:
+        description: Opt in to ONE synthetic browser assessment during verify (fresh PM slot required)
+        required: false
+        type: boolean
+        default: false
       token_kind:
         description: Known credential owner kind, required only for credential-audit
         required: false
@@ -75,6 +80,7 @@ jobs:
     uses: ./.github/workflows/cloudflare-staging-fixtures.yml
     with:
       expected_sha: ${{ inputs.expected_sha }}
+      browser_assessment: ${{ inputs.browser_assessment }}
     secrets: inherit
 
   assess:
