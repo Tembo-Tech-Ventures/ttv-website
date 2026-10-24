@@ -38,7 +38,7 @@ not mean authenticated staging or production behavior has been verified.
 | Integrated source | Backend #182, public entry, visibility notices and assessment UI #185 are integrated at `144367fab48be597f00b64a50dd4fff748522f9d`. Marketing compared reviewed source revisions with the integrated copy. | Code inspection, not deployed behavior. |
 | Local component evidence | Committed desktop/mobile entry and assessment screenshots were inspected. They explicitly label component/mock/no-auth behavior and fictional identities. | No live authentication, persistence, inference or rating-quality acceptance. |
 | Prior staging evidence | PM last reported staging `947e98b978eeb7de7ffaa7a450343525efce1482` with health and basic synthetic role/privacy/PAT/MCP checks. | Earlier revision; does not verify the newly integrated UI or assessments. |
-| Integrated staging functional checks | PM confirmed run `40110466615` at `144367fab48be597f00b64a50dd4fff748522f9d`, `https://staging.tembotechventures.com`: synthetic browser actions/API readback on desktop/mobile and database/browser cleanup passed. Marketing inspected the sanitized manifest and matching verifier assertions. | Scout/known-profile screenshot evidence unresolved. Live model calls not tested. Passing functional checks do not establish visual or model-quality acceptance. |
+| Integrated staging functional checks | PM confirmed run `40110466615` at `144367fab48be597f00b64a50dd4fff748522f9d`, `https://staging.tembotechventures.com`: synthetic browser actions/API readback on desktop/mobile and database/browser cleanup passed. Marketing inspected the sanitized manifest and matching verifier assertions. | Architect reconciled the original artifact and individually inspected all eight stored screenshots; fictional content renders. Marketing independently viewed both known-profile images. Matching scout/direct-link images show the same selected detail state, not distinct intermediate-step proof. Live model calls not tested. |
 
 Only promote individual claims after their matching goal evidence arrives. A
 healthy endpoint or successful deployment does not establish those outcomes.
@@ -160,9 +160,13 @@ PM-confirmed functional verification at the exact deployed revision:
 - Profile/contribution save, API readback and reload; mentor confirmation with
   method/role/revision; institution skill search, authorized evidence retrieval,
   known-person lookup and direct-link assertions: functional checks passed.
-- Scout/known-profile screenshot evidence unresolved. Capture ordering and file
-  interpretation are under review; do not assign root cause or publish these
-  images as accepted visual evidence.
+- Scout/known-profile screenshots were reconciled against the original ZIP.
+  Architect withdrew the earlier blank-image finding after checking stored bytes
+  and viewing images individually; Marketing independently viewed the desktop
+  and mobile known-profile images. Identical scout/direct-link pairs show the
+  same selected detail state. Functional assertions establish intermediate steps;
+  the duplicate images are not separate visual proof of each step. No runtime
+  capture defect or rerun is established by the withdrawn report.
 - Public navigation → explanation → GitHub return route: code/isolated preview
   evidence exists; exact shared-staging goal acceptance not separately established
   by this authenticated fixture manifest.
@@ -209,9 +213,9 @@ specific organizer rubric, winning outcome, OpenAI inference or provider switch.
 
 | Script claim | Evidence / release condition |
 | --- | --- |
-| Save and reload profile/contribution | Staging run `40110466615`, artifact `12566246811`: Marketing privately inspected the sanitized manifest, exact deployed SHA `144367fab48be597f00b64a50dd4fff748522f9d`, synthetic=true, browser-actions-and-api-readback, desktop/mobile passed, database-and-browser cleanup passed. Corresponding verifier assertions check save, API readback and reload. PM confirmed the functional checks; visual and live-model acceptance remain separate. |
+| Save and reload profile/contribution | Staging run `40110466615`, artifact `12566246811`: Marketing privately inspected the sanitized manifest, exact deployed SHA `144367fab48be597f00b64a50dd4fff748522f9d`, synthetic=true, browser-actions-and-api-readback, desktop/mobile passed, database-and-browser cleanup passed. Corresponding verifier assertions check save, API readback and reload. PM confirmed the functional checks; stored-image reconciliation is recorded below, while live-model acceptance remains separate. |
 | Mentor note and institution sees contribution/provenance | Same run and inspected verifier assertions check mentor method/statement/role/revision, institution skill search and authorized profile evidence on both viewports. No claim of independent artifact verification. |
-| Known-person direct link | Functional assertions passed. Scout/known-profile screenshot evidence is unresolved while original files and capture ordering are reconciled; file-label interpretation and root cause are not settled. Do not use these captures as accepted visual evidence. |
+| Known-person direct link | Functional assertions passed. Original stored images render fictional content; the earlier blank-image report was withdrawn after ZIP/byte and individual-image inspection. Scout and direct-link images legitimately show the same selected profile; do not claim separate visual proof of every intermediate step. |
 | Institution-defined assessment criteria and 1–5 results | Implemented source only for this evidence package. Manifest explicitly says modelCalls=not-tested. No verified live inference, rating quality, latency or cost claim. The tested skill filters are not an assessment rubric. |
 | “Why should I interview this person?” | Narrative question, not a demonstrated model answer. Human judgment remains required. |
 | Codex contribution | Final presentation must identify actual inspected development work/commits; no quantified productivity claim or runtime inference claim follows from using Codex to build. |
