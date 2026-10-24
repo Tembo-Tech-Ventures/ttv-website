@@ -23,11 +23,11 @@ test("scout a person, inspect claims and sources, and explore evidence", async (
   await expect(
     page.getByRole("heading", { name: "1 builder to get to know" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Explore Amara's work" }).click();
+  await page.getByRole("button", { name: "Explore Amina's work" }).click();
   await expect(
-    page.getByRole("heading", { name: "Amara Okafor", exact: true }),
+    page.getByRole("heading", { name: "Amina Wanjiku", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("Checked by Jules Martin")).toBeVisible();
+  await expect(page.getByText("Checked by Grace Njeri")).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Library project walkthrough/ }),
   ).toHaveAttribute("href", "https://example.com/library-demo");
@@ -122,7 +122,7 @@ test("mentor confirms the reviewed claim with a personal note", async ({
   await page
     .getByLabel("What did you personally check?")
     .fill(
-      "I reviewed the borrowing flow and checked its keyboard navigation with Amara.",
+      "I reviewed the borrowing flow and checked its keyboard navigation with Amina.",
     );
   await page
     .getByLabel("How did you check it?")
@@ -353,5 +353,69 @@ test("mentor revision conflict preserves the review and requires a refresh (mock
   await expect(page.getByRole("alert")).toContainText("changed");
   await expect(page.getByLabel("What did you personally check?")).toHaveValue(
     "Reviewed the keyboard navigation and search flow.",
+  );
+});
+
+test("TTV palette keeps text and form controls readable across workspace surfaces", async ({
+  page,
+}) => {
+  await page.goto("/dev/community-ui");
+  await expect(page.locator(".discovery-app")).toHaveCSS(
+    "background-color",
+    "rgb(1, 61, 57)",
+  );
+  await expect(
+    page.getByRole("button", { name: "Discover people", exact: true }),
+  ).toHaveCSS("background-color", "rgb(242, 141, 104)");
+  for (const selector of [
+    ".discovery-page-heading h1",
+    ".discovery-page-heading > p",
+    ".discovery-editorial p",
+    ".discovery-field input",
+    ".discovery-button",
+  ]) {
+    const contrast = await page
+      .locator(selector)
+      .first()
+      .evaluate((element) => {
+        const rgb = (color: string) =>
+          color
+            .match(/[\d.]+/g)!
+            .slice(0, 3)
+            .map(Number);
+        const luminance = (color: string) =>
+          rgb(color)
+            .map((value) => {
+              const channel = value / 255;
+              return channel <= 0.04045
+                ? channel / 12.92
+                : ((channel + 0.055) / 1.055) ** 2.4;
+            })
+            .reduce(
+              (sum, value, index) =>
+                sum + value * [0.2126, 0.7152, 0.0722][index],
+              0,
+            );
+        let surface: Element | null = element;
+        while (
+          surface &&
+          getComputedStyle(surface).backgroundColor === "rgba(0, 0, 0, 0)"
+        )
+          surface = surface.parentElement;
+        const foreground = luminance(getComputedStyle(element).color);
+        const background = luminance(
+          getComputedStyle(surface!).backgroundColor,
+        );
+        return (
+          (Math.max(foreground, background) + 0.05) /
+          (Math.min(foreground, background) + 0.05)
+        );
+      });
+    expect(contrast, selector).toBeGreaterThanOrEqual(4.5);
+  }
+  await page.getByLabel("Skills to explore").focus();
+  await expect(page.getByLabel("Skills to explore")).toHaveCSS(
+    "outline-style",
+    "solid",
   );
 });

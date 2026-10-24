@@ -1,8 +1,13 @@
 .discovery-app {
-  --d-ink: #153e39;
-  --d-paper: #faf6ed;
-  --d-muted: #53645b;
-  --d-rule: #d4d9cb;
+  /* Share TTV's brand palette while preserving this workspace's layout. */
+  --d-ink: var(--color-ink-primary, #fff8f2);
+  --d-paper: var(--color-dark, #013d39);
+  --d-muted: #bed0ca;
+  --d-rule: #62847a;
+  --d-accent: var(--color-primary, #f28d68);
+  --d-surface: var(--color-surface, #1c4f4a);
+  --d-raised: var(--color-bg-raised, #063f3a);
+  color-scheme: dark;
   background: var(--d-paper);
   color: var(--d-ink);
   min-height: 100vh;
@@ -26,7 +31,7 @@
   opacity: 0.65;
 }
 .discovery-app :focus-visible {
-  outline: 3px solid #a84829;
+  outline: 3px solid var(--d-accent);
   outline-offset: 4px;
 }
 .discovery-app h1,
@@ -46,7 +51,7 @@
 }
 .discovery-app em {
   font-style: normal;
-  color: #8d422c;
+  color: var(--d-accent);
 }
 .discovery-app a {
   color: inherit;
@@ -69,7 +74,7 @@
   line-height: 1;
 }
 .discovery-brand span {
-  border-left: 1px solid #9da99d;
+  border-left: 1px solid var(--d-rule);
   padding-left: 13px;
   font-size: 13px;
   letter-spacing: 0.02em;
@@ -88,7 +93,7 @@
   border-bottom: 2px solid transparent;
 }
 .discovery-header nav a[aria-current="page"] {
-  border-color: #a74d31;
+  border-color: var(--d-accent);
   font-weight: 700;
 }
 .discovery-back {
@@ -97,7 +102,7 @@
 }
 .discovery-demo {
   padding: 10px 5%;
-  background: #eadfcb;
+  background: var(--d-surface);
   font-size: 12px;
   display: flex;
   gap: 16px;
@@ -168,9 +173,9 @@
   border-radius: 50%;
 }
 .discovery-steps li[aria-current="step"] span {
-  background: var(--d-ink);
-  color: #fff;
-  border-color: var(--d-ink);
+  background: var(--d-accent);
+  color: var(--d-paper);
+  border-color: var(--d-accent);
 }
 .discovery-criteria-grid {
   display: grid;
@@ -200,8 +205,8 @@
   width: 100%;
   min-width: 0;
   padding: 13px 15px;
-  border: 1px solid #a9b6a8;
-  background: #fffdf7;
+  border: 1px solid var(--d-rule);
+  background: var(--d-raised);
   color: var(--d-ink);
   border-radius: 5px;
   font-weight: 400;
@@ -210,7 +215,7 @@
 .discovery-field input::placeholder,
 .discovery-field textarea::placeholder,
 .discovery-chat-form textarea::placeholder {
-  color: #617165;
+  color: var(--d-muted);
 }
 .discovery-field small {
   font-size: 12px;
@@ -233,11 +238,12 @@
   text-decoration: none;
 }
 .discovery-button {
-  color: #fffaf1;
-  background: var(--d-ink);
+  color: var(--d-paper);
+  background: var(--d-accent);
+  border-color: var(--d-accent);
 }
 .discovery-button:hover {
-  background: #255b50;
+  background: #ffad8d;
 }
 .discovery-button-secondary {
   background: transparent;
@@ -247,8 +253,8 @@
   margin-top: 24px;
 }
 .discovery-editorial {
-  background: #e4e8d9;
-  border: 1px solid #d4d9c9;
+  background: var(--d-surface);
+  border: 1px solid var(--d-rule);
   padding: 34px;
   align-self: stretch;
   display: flex;
@@ -267,18 +273,18 @@
   line-height: 1.2;
 }
 .discovery-editorial h2 em {
-  color: #50654b;
+  color: var(--d-accent);
 }
 .discovery-editorial-rule {
   width: 60px;
   height: 4px;
-  background: #b46a48;
+  background: var(--d-accent);
   margin: 8px 0;
 }
 .discovery-editorial p {
   font-size: 14px;
   max-width: 290px;
-  color: #40583f;
+  color: var(--d-muted);
 }
 .discovery-editorial > .discovery-eyebrow {
   margin-top: auto;
@@ -302,7 +308,7 @@
 }
 .discovery-search-context {
   padding: 18px 22px;
-  background: #e8ecdf;
+  background: var(--d-surface);
   margin-bottom: 20px !important;
   font-size: 14px;
 }
@@ -323,7 +329,7 @@
 .discovery-person {
   border: 1px solid var(--d-rule);
   padding: 26px;
-  background: #fffcf5;
+  background: var(--d-raised);
   display: flex;
   flex-direction: column;
 }
@@ -342,21 +348,21 @@
   height: 64px;
   width: 64px;
   border-radius: 50%;
-  background: #dfe7d8;
+  background: var(--d-surface);
   display: grid;
   place-items: center;
   font-size: 21px;
   letter-spacing: -0.06em;
-  color: #3f5a42;
+  color: var(--d-ink);
   flex-shrink: 0;
 }
 .discovery-person:nth-child(2) .discovery-avatar {
-  background: #edd8c6;
-  color: #8b4a32;
+  background: var(--d-accent);
+  color: var(--d-paper);
 }
 .discovery-person:nth-child(3) .discovery-avatar {
-  background: #dddcd1;
-  color: #646344;
+  background: #bed0ca;
+  color: var(--d-paper);
 }
 .discovery-avatar-large {
   height: 88px;
@@ -444,7 +450,7 @@
   font-size: 16px;
 }
 .discovery-goal {
-  border-left: 3px solid #ae6745;
+  border-left: 3px solid var(--d-accent);
   padding: 5px 0 5px 18px;
   margin: 28px 0 42px;
 }
@@ -470,7 +476,7 @@
   list-style: none;
   margin: 30px 0 0;
   padding: 0 0 0 25px;
-  border-left: 1px solid #bbc8b5;
+  border-left: 1px solid var(--d-rule);
 }
 .discovery-timeline > li {
   position: relative;
@@ -484,7 +490,7 @@
   height: 11px;
   width: 11px;
   background: var(--d-paper);
-  border: 2px solid #809978;
+  border: 2px solid var(--d-accent);
   border-radius: 50%;
 }
 .discovery-timeline time {
@@ -498,7 +504,7 @@
 }
 .discovery-timeline > li > p {
   font-size: 14px;
-  color: #41574c;
+  color: var(--d-muted);
 }
 .discovery-sources {
   list-style: none;
@@ -516,7 +522,7 @@
   border: 1px solid var(--d-rule);
   text-decoration: none;
   font-size: 12px;
-  background: #fffcf6;
+  background: var(--d-raised);
 }
 .discovery-sources a > span {
   flex: 1;
@@ -527,13 +533,13 @@
   color: var(--d-muted);
 }
 .discovery-sources a:hover {
-  border-color: #69846a;
+  border-color: var(--d-accent);
 }
 .discovery-confirmation {
   display: flex;
   align-items: start;
   gap: 10px;
-  background: #e8ecdf;
+  background: var(--d-surface);
   padding: 16px;
   margin-top: 18px;
   font-size: 12px;
@@ -559,15 +565,15 @@
 }
 .discovery-empty-note {
   padding: 16px;
-  border: 1px dashed #b6c4ad;
+  border: 1px dashed var(--d-rule);
   font-size: 12px !important;
   margin-top: 14px !important;
 }
 .discovery-chat {
-  background: #e4e8d9;
+  background: var(--d-surface);
   padding: 28px;
   align-self: start;
-  border-top: 4px solid #789075;
+  border-top: 4px solid var(--d-accent);
 }
 .discovery-chat-title {
   display: flex;
@@ -595,7 +601,8 @@
   text-align: left;
   gap: 14px;
   background: transparent;
-  border: 1px solid #b3c0a8;
+  color: var(--d-ink);
+  border: 1px solid var(--d-rule);
   padding: 12px;
   font-size: 12px;
   border-radius: 4px;
@@ -615,13 +622,13 @@
 }
 .discovery-chat-note {
   font-size: 11px !important;
-  border-top: 1px solid #c3cdb8;
+  border-top: 1px solid var(--d-rule);
   padding-top: 18px;
   margin-bottom: 0 !important;
 }
 .discovery-answer {
   display: block;
-  border-top: 1px solid #b2c0a5;
+  border-top: 1px solid var(--d-rule);
   padding-top: 24px;
   margin-top: 24px;
   white-space: pre-wrap;
@@ -646,7 +653,7 @@
 .discovery-empty {
   text-align: center;
   padding: 60px 20px;
-  border: 1px dashed #a5b69b;
+  border: 1px dashed var(--d-rule);
   margin-top: 24px;
 }
 .discovery-empty h3 {
@@ -678,7 +685,7 @@
 }
 .discovery-visibility {
   padding: 18px 22px;
-  background: #e8ecdf;
+  background: var(--d-surface);
   font-size: 13px;
 }
 .discovery-visibility strong {
@@ -688,7 +695,7 @@
   margin-top: 7px;
 }
 .discovery-member-card {
-  background: #e4e8d9;
+  background: var(--d-surface);
   align-self: start;
   padding: 28px;
 }
@@ -709,7 +716,7 @@
 .discovery-panel {
   border: 1px solid var(--d-rule);
   padding: 28px;
-  background: #fffcf5;
+  background: var(--d-raised);
   margin: 24px 0;
 }
 .discovery-panel > p {
@@ -735,7 +742,7 @@
   display: block;
   font-size: 12px;
   padding: 12px;
-  background: #e8ecdf;
+  background: var(--d-surface);
   margin: 20px 0;
 }
 .discovery-panel legend {
@@ -779,18 +786,19 @@
 .discovery-notice {
   display: block;
   padding: 16px;
-  background: #e4ecd9;
+  background: var(--d-surface);
   font-size: 13px;
 }
 .discovery-demo-notice {
   padding: 12px;
-  background: #eadfcb;
+  background: var(--d-surface);
 }
 .discovery-skip {
   position: absolute;
   left: 20px;
   top: -100px;
-  background: white;
+  background: var(--d-accent);
+  color: var(--d-paper);
   padding: 15px;
   z-index: 100;
 }

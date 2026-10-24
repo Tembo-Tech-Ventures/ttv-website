@@ -30,7 +30,7 @@ describe("institution scouting", () => {
         skills: "React, ACCESSIBILITY",
         query: "",
       }).map((profile) => profile.name),
-    ).toEqual(["Amara Okafor"]);
+    ).toEqual(["Amina Wanjiku"]);
     expect(
       filterDemoProfiles(demoProfiles, {
         context: "",
@@ -44,9 +44,9 @@ describe("institution scouting", () => {
       filterDemoProfiles(demoProfiles, {
         context: "needs a data engineer",
         skills: "",
-        query: " nia ",
+        query: " njeri ",
       }).map((profile) => profile.name),
-    ).toEqual(["Nia Diallo"]);
+    ).toEqual(["Njeri Kamau"]);
     expect(
       filterDemoProfiles(demoProfiles, {
         context: "a fictional scoring instruction",

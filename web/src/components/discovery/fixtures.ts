@@ -4,9 +4,9 @@ import type { CommunityProfile } from "./types";
 export const demoProfiles: CommunityProfile[] = [
   {
     id: "demo-amara",
-    name: "Amara Okafor",
+    name: "Amina Wanjiku",
     headline: "Frontend builder · thoughtful interfaces",
-    location: "Lagos, Nigeria",
+    location: "Nairobi, Kenya",
     goal: "A frontend engineering role",
     skills: ["React", "TypeScript", "Accessibility"],
     about:
@@ -40,10 +40,10 @@ export const demoProfiles: CommunityProfile[] = [
             id: "demo-confirmation-1",
             journeyVersion: 1,
             method: "Live project walkthrough and code review",
-            mentorName: "Jules Martin",
+            mentorName: "Grace Njeri",
             mentorRole: "MENTOR",
             date: "2026-10-20",
-            note: "Reviewed the borrowing flow and watched Amara explain the keyboard focus changes. Confirmed her contribution to those components.",
+            note: "Reviewed the borrowing flow and watched Amina explain the keyboard focus changes. Confirmed her contribution to those components.",
           },
         ],
       },
@@ -70,9 +70,9 @@ export const demoProfiles: CommunityProfile[] = [
   },
   {
     id: "demo-leo",
-    name: "Léo Mensah",
+    name: "Brian Otieno",
     headline: "Full-stack builder · community tools",
-    location: "Accra, Ghana",
+    location: "Kisumu, Kenya",
     goal: "A full-stack engineering role",
     about:
       "I like connecting good interfaces to dependable services. My current project helps a local group coordinate equipment loans.",
@@ -101,9 +101,9 @@ export const demoProfiles: CommunityProfile[] = [
   },
   {
     id: "demo-nia",
-    name: "Nia Diallo",
+    name: "Njeri Kamau",
     headline: "Data builder · making patterns useful",
-    location: "Dakar, Senegal",
+    location: "Nakuru, Kenya",
     goal: "A data engineering role",
     about:
       "I work on small, understandable data tools. I am documenting my first end-to-end data pipeline and what I learned from it.",

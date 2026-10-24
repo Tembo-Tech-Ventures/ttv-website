@@ -22,7 +22,7 @@ describe("community contribution editor", () => {
     expect(html).toContain(
       "Private calls, recordings, and internal information do not belong here",
     );
-    expect(html).toContain("Checked by Jules Martin");
+    expect(html).toContain("Checked by Grace Njeri");
     expect(html).toContain("Member-reported");
   });
   it("supports a contribution before evidence or mentor confirmation exists", () => {
