@@ -74,6 +74,13 @@ cleanup may delete only objects whose ownership it independently established.
 An object arriving after the check must make bucket deletion fail, leaving the
 remaining resources intact.
 
+The [R2 list API](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/objects/methods/list/)
+marks pagination metadata optional. Teardown deliberately requires a successful
+response with an explicit boolean `is_truncated`, no continuation cursor and no
+delimited prefixes before treating an empty listing as complete. Missing metadata
+therefore blocks cleanup even if the bucket may be empty. Only the R2 bucket-not-found
+404 code `10006` is accepted as already absent; other failures preserve the stack.
+
 ## The production merge path
 
 Main is production. Merging a pull request starts the `Cloudflare Production`

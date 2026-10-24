@@ -19,6 +19,7 @@ const context = {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 describe("destroyEnvironment", () => {
@@ -203,5 +204,39 @@ describe("R2 preservation preflight", () => {
     dependencies.listObjectsPage = vi.fn();
     await expect(destroyEnvironment({ ...context, bucketName }, dependencies)).rejects.toThrow("Expected an exact");
     for (const fn of Object.values(dependencies)) expect(fn).not.toHaveBeenCalled();
+  });
+});
+
+describe("real R2 adapter teardown boundary", () => {
+  const mutators = ["deleteBucket", "deleteContainerApp", "removeQueueConsumer", "deleteWorker", "deleteQueue", "deleteVectorize", "deleteAiGateway", "deleteDatabase"];
+  function setup(payload, status = 200) {
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "fictional-account");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN", "fictional-test-token");
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status }));
+    vi.stubGlobal("fetch", fetcher);
+    return Object.fromEntries(mutators.map(name => [name, vi.fn().mockResolvedValue(true)]));
+  }
+  it.each([
+    undefined, {}, { is_truncated: "true" }, { is_truncated: true },
+    { is_truncated: false, cursor: "more" },
+    { is_truncated: false, cursor: 42 },
+    { is_truncated: false, delimited: ["hidden-prefix/"] },
+  ])("blocks every mutation on missing/malformed/truncated raw metadata %j", async result_info => {
+    const dependencies = setup({ success: true, result: [], result_info });
+    await expect(destroyEnvironment(context, dependencies)).rejects.toThrow("Failed to safely delete R2 bucket");
+    for (const fn of Object.values(dependencies)) expect(fn).not.toHaveBeenCalled();
+  });
+  it.each([401, 403, 500, 404])("does not treat HTTP %i as verified missing bucket", async status => {
+    const dependencies = setup({ success: false, errors: [{ code: 9999 }] }, status);
+    await expect(destroyEnvironment(context, dependencies)).rejects.toThrow("Failed to safely delete R2 bucket");
+    for (const fn of Object.values(dependencies)) expect(fn).not.toHaveBeenCalled();
+  });
+  it.each([
+    [200, { success: true, result: [], result_info: { is_truncated: false, cursor: "", delimited: [] } }],
+    [404, { success: false, errors: [{ code: 10006 }] }],
+  ])("permits verified empty or bucket-not-found response %i", async (status, payload) => {
+    const dependencies = setup(payload, status);
+    await expect(destroyEnvironment(context, dependencies)).resolves.toMatchObject({ bucketObjectsDeleted: 0 });
+    for (const fn of Object.values(dependencies)) expect(fn).toHaveBeenCalledTimes(1);
   });
 });

@@ -60,7 +60,7 @@ export async function ensureAgentR2BucketEmpty(
   { listObjectsPage = listR2BucketObjectsPage } = {}
 ) {
   ensureAgentBucketMatchesEnvironment(context);
-  const page = await listObjectsPage(context.bucketName);
+  const page = await listObjectsPage(context.bucketName, undefined, { requireCompleteMetadata: true });
   if (page === null) return;
   // Unknown or truncated listings are not proof of emptiness. Never log keys.
   if (!page || !Array.isArray(page.objects) ||
