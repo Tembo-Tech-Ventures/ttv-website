@@ -9,7 +9,7 @@ const displayNames = Object.freeze({ member: "Fictional Amina Wanjiku", otherMem
 const rows = result => (Array.isArray(result) ? result : [result]).flatMap(statement => statement?.results ?? []);
 
 /** Runner-only. Credentials never leave the callback; default cleanup deletes all fixture-owned records. */
-export async function withStagingPersonas({ target, signingSecret, run, audit = () => {}, now = new Date() }) {
+export async function withStagingPersonas({ target, signingSecret, run, audit = () => {}, now = new Date(), assessmentProbe = false }) {
   assertVerifiedStagingFixtureTarget(target);
   if (typeof run !== "function" || typeof signingSecret !== "string" || signingSecret.length < 32) throw new Error("A verification callback and staging signing configuration are required.");
   const timestamp = Math.floor(now.getTime() / 1000);
@@ -33,7 +33,7 @@ export async function withStagingPersonas({ target, signingSecret, run, audit = 
     }
     for (const [persona, role] of Object.entries(STAGING_PERSONA_ROLES)) {
       const userId = `${namespace}-${persona}`;
-      const sessionId = `${userId}-session`;
+      const sessionId = `${userId}${assessmentProbe === true && persona === "institution" ? "-assessment-session" : "-session"}`;
       const expiresAt = timestamp + 3600;
       userIds.push(userId);
       await execute('INSERT INTO "user" ("id","name","email","emailVerified","createdAt","updatedAt") VALUES (?,?,?,1,?,?)',

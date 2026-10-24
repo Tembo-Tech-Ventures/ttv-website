@@ -27,6 +27,18 @@ async function fixture() {
 }
 const count = (db, table) => db.prepare(`SELECT count(*) n FROM "${table}"`).get().n;
 describe("staging personas on application migrations", () => {
+  it.each([false,true])("dedicates only the assessment institution source session when probe=%s",async assessmentProbe=>{
+    const {db,options}=await fixture();
+    try {
+      await withStagingPersonas({...options,assessmentProbe,run:async personas=>{
+        for(const [role,p] of Object.entries(personas)) {
+          expect(p.sessionId).toBe(`${p.userId}${assessmentProbe&&role==="institution"?"-assessment-session":"-session"}`);
+          expect(db.prepare('SELECT sessionId FROM stagingFixtureIdentity WHERE userId=?').get(p.userId).sessionId).toBe(p.sessionId);
+        }
+      }});
+      expect(count(db,"session")).toBe(0);
+    } finally {db.close();}
+  });
   it("authenticates fixture cookies through real schema/Drizzle/BetterAuth with second timestamps", async () => {
     const { db, options } = await fixture();
     const d1 = { prepare(sql) {

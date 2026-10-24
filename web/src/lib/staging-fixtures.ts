@@ -6,6 +6,8 @@ export interface StagingFixtureIdentity {
   persona: StagingFixturePersona;
   userId: string;
   expiresAt: number;
+  /** Derived from the registered source session, never request headers. */
+  assessmentProbe?: true;
 }
 export class StagingFixtureAccessError extends Error {
   readonly status = 403;
@@ -50,7 +52,8 @@ function validateRow(row: IdentityRow | null, nowSeconds: number): StagingFixtur
   if (row.userId !== userId || row.sessionUserId !== userId || row.email !== `${userId}@invalid.ttv` || row.sessionUserAgent !== `${MARKER}${row.runId}`) return invalid();
   if (![row.expiresAt, row.sessionCreatedAt, row.sessionExpiresAt, nowSeconds].every(Number.isSafeInteger)) return invalid();
   if (row.sessionCreatedAt > nowSeconds || row.expiresAt <= nowSeconds || row.sessionExpiresAt <= nowSeconds || row.expiresAt > row.sessionCreatedAt + 3600) return invalid();
-  return { userId, runId: row.runId, persona, expiresAt: row.expiresAt };
+  return { userId, runId: row.runId, persona, expiresAt: row.expiresAt,
+    ...(persona === "institution" && row.sessionId === `${userId}-assessment-session` ? { assessmentProbe: true as const } : {}) };
 }
 /** Only pass server-authenticated locals. Prefixes identify candidates to deny, never grant. */
 export async function resolveStagingFixtureIdentity({ db, envName, user, session, isPat, now = new Date() }: ResolveOptions): Promise<StagingFixtureIdentity | null> {

@@ -19,6 +19,9 @@ const pr = {
 const respond = (body = pr) => vi.fn().mockResolvedValue({ ok: true, json: async () => body });
 
 describe("shared staging preflight", () => {
+  it.each(["deploy", "verify", "assess"])("validates the same exact revision for %s", async action => {
+    await expect(validateStagingRevision({ ...env, STAGING_ACTION: action }, { fetchImpl: respond() })).resolves.toMatchObject({ sha });
+  });
   it("accepts only the exact current integration PR head", async () => {
     const fetchImpl = respond();
     await expect(validateStagingRevision(env, { fetchImpl })).resolves.toEqual({

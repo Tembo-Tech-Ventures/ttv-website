@@ -10,10 +10,10 @@ function fixture() {
   const f = createSqliteD1(); fixtures.push(f);
   f.database.exec(MINIMAL_AUTH_SCHEMA + `CREATE TABLE session(id TEXT PRIMARY KEY,userId TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,userAgent TEXT,createdAt INTEGER,expiresAt INTEGER);`);
   f.database.exec(readMigration("0019_staging_fixture_identity.sql"));
-  function add(persona: StagingFixturePersona = "member", run = runId) {
+  function add(persona: StagingFixturePersona = "member", run = runId, probe = false) {
     const userId = `ttv-staging-fixture-${run}-${persona}`;
     const email = `${userId}@invalid.ttv`;
-    const sessionId = `session-${run}-${persona}`;
+    const sessionId = probe ? `${userId}-assessment-session` : `session-${run}-${persona}`;
     const marker = `ttv-agent:synthetic-staging:${run}`;
     f.database.prepare("INSERT INTO user(id,name,email) VALUES(?,?,?)").run(userId,persona,email);
     f.database.prepare("INSERT INTO session VALUES(?,?,?,?,?)").run(sessionId,userId,marker,seconds-30,seconds+3600);
@@ -23,6 +23,14 @@ function fixture() {
   return { ...f, add };
 }
 describe("synthetic staging live identity boundary", () => {
+  it("derives probe mode only from the registered dedicated institution source session", async () => {
+    const f=fixture(), ordinary=f.add("institution"), probe=f.add("institution","b".repeat(24),true), member=f.add("member",runId,true);
+    expect(await resolveStagingFixtureIdentity(ordinary)).not.toHaveProperty("assessmentProbe");
+    expect(await resolveStagingFixtureIdentity(probe)).toMatchObject({assessmentProbe:true});
+    expect(await resolveStagingFixtureIdentity({...probe,isPat:true,session:{id:"pat:1",userAgent:"ttv-pat:1"}})).toMatchObject({assessmentProbe:true});
+    expect(await resolveStagingFixtureIdentity(member)).not.toHaveProperty("assessmentProbe");
+    await expect(resolveStagingFixtureIdentity({...probe,envName:"production"})).rejects.toMatchObject({status:403});
+  });
   it("does not query the DB for ordinary real actors", async () => {
     const prepare = vi.fn();
     expect(await resolveStagingFixtureIdentity({ db:{prepare} as unknown as D1Database,envName:"production",user:{id:"real",email:"real@example.com"},session:{id:"browser",userAgent:"browser"},isPat:false,now })).toBeNull();
