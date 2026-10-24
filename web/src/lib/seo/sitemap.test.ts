@@ -33,8 +33,11 @@ describe("buildSitemapXml", () => {
     );
     expect(xml).toContain("<lastmod>2026-09-25T08:00:00.000Z</lastmod>");
     expect(xml).toContain("<loc>https://tembotechventures.com/community</loc>");
+    for (const audience of ["members", "mentors", "institutions"]) {
+      expect(xml).toContain(`<loc>https://tembotechventures.com/community/${audience}</loc>`);
+    }
     expect(xml).not.toContain("/dashboard/community");
-    expect((xml.match(/<url>/g) ?? [])).toHaveLength(7);
+    expect((xml.match(/<url>/g) ?? [])).toHaveLength(10);
   });
 
   it("handles a trailing slash on the site origin without doubling it", () => {

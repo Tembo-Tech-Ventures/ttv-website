@@ -20,6 +20,9 @@ describe("community entry points", () => {
     expect(html).toContain("does not guarantee a job");
     expect(html.match(/<h1/g)).toHaveLength(1);
     expect(html).not.toContain("/api/community/profiles");
+    for (const audience of ["members", "mentors", "institutions"]) {
+      expect(html).toContain(`href="/community/${audience}"`);
+    }
   });
   it("offers a direct journey link for signed-in members and a discoverable explainer", () => {
     const html = renderToStaticMarkup(<CommunityIntro isAuthenticated />);

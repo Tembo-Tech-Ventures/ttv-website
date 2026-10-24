@@ -32,6 +32,11 @@ export default function CommunityIntro({ isAuthenticated = false, full = false }
           </div>
         </div>
         {full && <>
+          <nav aria-label="Community participation" className="mt-10 flex flex-wrap gap-x-8 gap-y-4 border-t border-[color:var(--color-rule)] pt-6">
+            <a href="/community/members" className="font-semibold text-primary underline underline-offset-4">For members</a>
+            <a href="/community/mentors" className="font-semibold text-primary underline underline-offset-4">For mentors</a>
+            <a href="/community/institutions" className="font-semibold text-primary underline underline-offset-4">For institutions</a>
+          </nav>
           <ol className="mt-14 grid gap-px overflow-hidden rounded-xl border border-[color:var(--color-rule)] bg-[color:var(--color-rule)] md:grid-cols-3">
             {steps.map(([number, title, description]) => <li key={number} className="min-w-0 bg-dark p-7 sm:p-8">
               <span className="font-mono text-sm text-primary">{number}</span>

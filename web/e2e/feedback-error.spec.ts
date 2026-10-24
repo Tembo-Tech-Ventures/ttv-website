@@ -13,6 +13,12 @@ test("a rate-limited submission preserves the draft without claiming success or 
   await page.goto("/feedback.html");
   await page.getByRole("button", { name: "Feedback", exact: true }).click();
   const panel = page.getByTestId("feedback-panel");
+  // The fixture must load the actual utilities, not pass against an unstyled dialog.
+  await expect(panel).toHaveCSS("display", "flex");
+  await expect(panel).toHaveCSS("flex-direction", "column");
+  await expect(panel).toHaveCSS("overflow-y", "auto");
+  const bounds = await panel.boundingBox();
+  expect(bounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
   await panel.getByText("Idea", { exact: true }).click();
   await panel.getByLabel("Your feedback").fill(draft);
   await panel.getByRole("button", { name: "Send feedback" }).click();

@@ -8,6 +8,7 @@ export default defineConfig({
     "staging-community-journey.spec.mjs",
     "feedback-error.spec.ts",
     "community-entry.spec.ts",
+    "community-audience.spec.ts",
   ],
   fullyParallel: true,
   retries: 0,
