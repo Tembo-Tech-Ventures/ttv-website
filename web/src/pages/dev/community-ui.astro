@@ -1,0 +1,13 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import CommunityDemo from "@/components/community/CommunityDemo";
+// oxlint-disable-next-line import/no-unassigned-import -- Required page stylesheet.
+import "@/styles/discovery.css";
+
+if (!import.meta.env.DEV) return new Response("Not found", { status: 404 });
+const view = Astro.url.searchParams.get("view") ?? "scout";
+const fail = Astro.url.searchParams.get("fail") === "1";
+---
+<BaseLayout title="Community workspace demo | TTV" noIndex>
+  <CommunityDemo client:load view={view} fail={fail} />
+</BaseLayout>
