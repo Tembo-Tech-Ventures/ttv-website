@@ -3,27 +3,40 @@ name: Cloudflare Staging
 on:
   workflow_dispatch:
     inputs:
-      action:
-        description: Whether to deploy or destroy staging
+      expected_sha:
+        description: Exact current head SHA of integration PR 171 (reserve a PM deployment slot first)
         required: true
-        type: choice
-        options:
-          - deploy
-          - destroy
-      allow_protected_destroy:
-        description: Override protected environment guard during destroy
-        required: false
-        type: boolean
-        default: false
+        type: string
+
+# Covers preflight AND reusable deployment/verification. PM must still reserve
+# the channel slot: Actions concurrency is not a FIFO deployment queue.
+concurrency:
+  group: ttv-cloudflare-staging
+  cancel-in-progress: false
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Require the exact pushed integration PR revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
+          STAGING_INTEGRATION_PR: "171"
+        run: node web/scripts/cloudflare/staging-preflight.mjs
   staging:
-    concurrency:
-      group: ttv-cloudflare-staging
-      cancel-in-progress: true
+    needs: preflight
     uses: ./.github/workflows/cloudflare-environment.yml
     with:
-      action: ${{ inputs.action }}
+      action: deploy
       environment_name: staging
       github_environment: staging
       primary_domain: staging.tembotechventures.com
@@ -32,5 +45,4 @@ jobs:
       agent_auth_enabled: true
       workers_subdomain: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
       protected_environments: production,prod
-      allow_protected_destroy: ${{ inputs.allow_protected_destroy }}
     secrets: inherit
