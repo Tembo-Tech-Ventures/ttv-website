@@ -53,21 +53,26 @@ Codex use in development and product inference are separate claims.
 
 ## Route and placement inventory
 
-The homepage section and anchors below are proposed UI work, absent at this
-base. Designer should create and test the anchor before linking it. Keep the
+The public `/community` explanatory page and homepage section below are approved
+Designer work, absent at this audited base. Create and test destinations before
+linking them. The page explains the product; it is not a public member directory. Keep the
 existing cohort/application journey; add clear community entry points alongside it.
 
 | Surface | Placement and exact copy | Destination / behavior |
 | --- | --- | --- |
-| Public navigation, desktop and mobile | “Community” | `/#community`, once the section exists. Public explanation before sign-in. |
+| Public navigation, desktop and mobile | “Community” | `/community`, once the page exists. Public explanation before sign-in. |
 | Homepage community section | Eyebrow “TTV community”; heading “Let your work tell your story.”; positioning paragraph above | Proposed section `id="community"`. Include member and institutional explanations, not a hidden dashboard link alone. |
+| `/community` explanation | Heading “Your work. Your story.”; use the positioning paragraph and three-block explainer below. | Public explanation only; no member list or private profile indexing. |
+| `/community` member CTA | “Join the community” | `/auth/login?next=%2Fdashboard%2Fcommunity`, or `/dashboard/community` when signed in. Helper: “Sign in with GitHub. You do not need to be in a TTV cohort.” |
+| `/community` institutional CTA | “Continue to institutional access” | `/auth/login?next=%2Fdashboard%2Fdiscover`, or `/dashboard/discover` when signed in. Adjacent helper: “Institutional access requires administrator approval after sign-in.” |
+| Homepage explanatory CTA | “Explore the community” | `/community`. The internal homepage section may retain `id="community"`. |
 | Homepage primary community CTA | “Build your journey” | `/dashboard/community`; existing middleware returns anonymous visitors through GitHub login with the intended route. Explicit login equivalent: `/auth/login?next=%2Fdashboard%2Fcommunity`. |
 | Homepage institutional CTA | “Explore community profiles” | `/dashboard/discover`; adjacent helper: “Institutional access requires administrator approval after sign-in.” Unauthorized users see the approval state, not search results. |
-| Public footer | “Community” | `/#community`, same explanation and destination as navigation. |
+| Public footer | “Community” | `/community`, same explanation and destination as navigation. |
 | `/hire` | “Looking beyond a CV? Explore community profiles and the work behind them.” CTA “Explore community profiles” | `/dashboard/discover` with approval helper. Do not promise qualified candidates, matches or contact delivery. |
 | `/talent` | “Building your own story? Students and builders beyond our cohorts can create a community journey.” CTA “Build your journey” | `/dashboard/community`. Explain that community profiles and the public builders showcase are different surfaces; do not claim joining publishes a showcase profile. |
 | `/dashboard`, including noncohort state | “Your work belongs in the story. Add projects, contributions and supporting links to your community journey.” CTA “Build your journey” | `/dashboard/community`; visible without an accepted/completed cohort. Keep the existing next-step card. |
-| Dashboard navigation | “My journey” | `/dashboard/community`; role-aware “Discover people” and “Mentor review” only where access allows. Do not show institution tools as available to everyone. |
+| Dashboard navigation | “Community”; use “My journey” within the community workspace | `/dashboard/community`; role-aware “Discover people” and “Mentor review” only where access allows. Do not show institution tools as available to everyone. |
 | Existing profile/editing context | “Your community journey brings together the contributions behind your profile.” CTA “Open my journey” | `/dashboard/community`; distinguish public showcase eligibility. Designer to confirm actual existing profile route before placing. |
 | `/dashboard/community`, above contributions | “Record what you contributed, add a supporting link, and give others the context to understand your work.” | “Add a contribution” opens the working form. Avoid “Get verified” and “Invite a mentor.” |
 | Contribution form, immediately before save | “This contribution will be shared with approved institutions and available for mentor review. Add only information you intend to share.” | Save label “Share contribution” if Designer aligns it with actual publication behavior; otherwise retain “Save contribution” with this visible helper. |
@@ -105,7 +110,7 @@ outside scope.
 
 ## Items to resolve through PM
 
-1. **Approval next step:** approval exists but no institutional request UI was found. Current copy explains the requirement and links to the journey. PM should determine a real next step before adding any request/contact promise.
+1. **Approval next step:** approval exists but no institutional request UI was found. Current copy explains the requirement and links to the journey. Track a streamlined institutional request process as an unresolved enhancement. PM should determine a real next step before adding any request/contact promise; this is not a prerequisite for truthful copy.
 2. **Assessment release wording:** current base is literal coverage; owner-approved 1–5 semantics are a future gated claim until implementation and live evidence arrive.
 3. **Visibility wording:** profile discovery and institution-shared contributions are distinct from the public talent showcase. The current form publishes contributions directly; private draft UI is not advertised.
 
