@@ -28,6 +28,38 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("scoped unified tool transport", () => {
+  it("opts into a bounded timeout and no redirects while preserving existing callers", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => Response.json({choices:[{message:{content:"{}"},finish_reason:"stop"}]}));
+    vi.stubGlobal("fetch",fetchMock);
+    const env = makeEnv({AI_GATEWAY_ACCOUNT_ID:"account",AI_GATEWAY_NAME:"gateway",AI_GATEWAY_API_KEY:"fictional"});
+    await generateToolCompletion(env,messages,{requireUnifiedGateway:true,timeoutMs:20_000});
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({redirect:"error",signal:expect.any(AbortSignal)});
+    await generateToolCompletion(env,messages);
+    expect(fetchMock.mock.calls[1][1]).not.toHaveProperty("redirect");
+    expect(fetchMock.mock.calls[1][1]).not.toHaveProperty("signal");
+  });
+  it("refuses binding fallback for a caller requiring unified transport", async () => {
+    const env = makeEnv();
+    await expect(generateToolCompletion(env,messages,{requireUnifiedGateway:true,timeoutMs:20_000})).rejects.toThrow("configuration required");
+    expect(env.AI.run).not.toHaveBeenCalled();
+  });
+  it("aborts an unresponsive scoped request without retrying", async () => {
+    const fetchMock = vi.fn((_url,options) => new Promise((_resolve,reject) => {
+      options.signal.addEventListener("abort",() => reject(new DOMException("Scoped completion timed out","TimeoutError")),{once:true});
+    }));
+    vi.stubGlobal("fetch",fetchMock);
+    const env=makeEnv({AI_GATEWAY_ACCOUNT_ID:"account",AI_GATEWAY_NAME:"gateway",AI_GATEWAY_API_KEY:"fictional"});
+    await expect(generateToolCompletion(env,messages,{requireUnifiedGateway:true,timeoutMs:5})).rejects.toThrow("timed out");
+    expect(fetchMock).toHaveBeenCalledOnce(); expect(env.AI.run).not.toHaveBeenCalled();
+  });
+  it.each([0,-1,60001,1.5])("rejects invalid timeout %s before inference", async timeoutMs => {
+    const env=makeEnv();
+    await expect(generateToolCompletion(env,messages,{timeoutMs})).rejects.toThrow("Invalid completion timeout");
+    expect(env.AI.run).not.toHaveBeenCalled();
+  });
+});
+
 describe("resolveChatModel", () => {
   it("defaults to the GPT OSS reasoning model in unified-mode format", () => {
     expect(resolveChatModel(makeEnv())).toBe(DEFAULT_CHAT_MODEL);

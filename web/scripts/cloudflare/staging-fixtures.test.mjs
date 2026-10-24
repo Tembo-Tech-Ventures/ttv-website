@@ -11,6 +11,7 @@ function runner() {
     api: vi.fn(async () => ({ subdomain: "fixture" })), browserType: { launch },
     getBindings: vi.fn(() => [{ key: "BETTER_AUTH_SECRET", value: "fictional" }]),
     validateRevision: vi.fn(), verifyTarget: vi.fn(async () => ({ baseUrl: "https://staging.tembotechventures.com" })),
+    discardEvidence: vi.fn(), sealEvidence: vi.fn(),
     withPersonas: vi.fn(async ({ run }) => run({ fixture: true })), verifyPersonas: vi.fn(),
   };
   return { options, close, launch };
@@ -23,6 +24,21 @@ describe("restricted staging runner", () => {
     expect(options.verifyTarget).toHaveBeenCalledWith(expect.objectContaining({ baseUrl: "https://staging.tembotechventures.com" }));
     expect(options.verifyTarget.mock.invocationCallOrder[0]).toBeLessThan(options.withPersonas.mock.invocationCallOrder[0]);
     expect(close).toHaveBeenCalledOnce();
+  });
+  it("seals only after database lifecycle and browser cleanup finish", async () => {
+    const { options, close } = runner(); await runStagingFixtures(options);
+    expect(close.mock.invocationCallOrder[0]).toBeLessThan(options.sealEvidence.mock.invocationCallOrder[0]);
+    expect(options.withPersonas.mock.invocationCallOrder[0]).toBeLessThan(close.mock.invocationCallOrder[0]);
+    expect(options.sealEvidence).toHaveBeenCalledWith("sha");
+  });
+  it.each(["database", "browser", "seal"])("discards captures on %s failure", async stage => {
+    const { options, close } = runner(); const error = new Error("sensitive failure");
+    if (stage === "database") options.withPersonas.mockRejectedValue(error);
+    if (stage === "browser") close.mockRejectedValue(error);
+    if (stage === "seal") options.sealEvidence.mockRejectedValue(error);
+    await expect(runStagingFixtures(options)).rejects.toThrow("sensitive failure");
+    expect(options.discardEvidence).toHaveBeenCalledTimes(2);
+    if (stage !== "seal") expect(options.sealEvidence).not.toHaveBeenCalled();
   });
   it("stops before credentials/provisioning when revision is wrong", async () => {
     const { options, launch } = runner();
@@ -62,7 +78,15 @@ describe("restricted staging runner", () => {
     expect(workflow).toContain("needs: preflight");
     expect(workflow).toContain("environment: staging");
     expect(workflow.split("  verify:")[0]).not.toContain("secrets.");
-    expect(workflow).not.toContain("upload-artifact");
+    expect(workflow).toContain("uses: actions/upload-artifact@v4");
+    expect(workflow).toContain("if: ${{ success() }}");
+    expect(workflow).not.toContain("path: web/test-results/**");
+    const paths = workflow.split("          path: |\n")[1].trim().split("\n").map(line => line.trim());
+    expect(paths).toEqual([
+      ...["desktop", "mobile"].flatMap(view => ["member", "mentor", "scout", "known-profile"].map(state => `web/test-results/staging-community/${view}-${state}.png`)),
+      "web/test-results/staging-community/manifest.json",
+    ]);
+    expect(workflow.indexOf("run: node scripts/cloudflare/staging-fixtures.mjs")).toBeLessThan(workflow.indexOf("uses: actions/upload-artifact@v4"));
     expect(workflow).not.toContain("wrangler deploy");
     expect(workflow).not.toContain("STAGING_AGENT_TOKEN");
   });

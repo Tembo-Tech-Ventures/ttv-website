@@ -113,6 +113,13 @@ interface ToolCompletionOptions {
   maxTokens?: number;
   temperature?: number;
   tools?: ToolDefinition[];
+  /** Opt-in for scoped callers; existing recording-chat defaults are unchanged. */
+  requireUnifiedGateway?: boolean;
+  timeoutMs?: number;
+}
+
+function validateToolTimeout(timeoutMs?: number) {
+  if (timeoutMs !== undefined && (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000)) throw new Error("Invalid completion timeout.");
 }
 
 /**
@@ -129,6 +136,9 @@ export async function generateToolCompletion(
   const url = gatewayCompatUrl(env);
   const apiKey = env.AI_GATEWAY_API_KEY?.trim();
 
+  if (options.requireUnifiedGateway && (!url || !apiKey)) throw new Error("Unified AI Gateway configuration required.");
+  validateToolTimeout(options.timeoutMs);
+
   const body: Record<string, unknown> = {
     model,
     messages,
@@ -143,6 +153,8 @@ export async function generateToolCompletion(
   if (url && apiKey) {
     const response = await fetch(url, {
       method: "POST",
+      ...(options.requireUnifiedGateway ? { redirect: "error" as const } : {}),
+      ...(options.timeoutMs ? { signal: AbortSignal.timeout(options.timeoutMs) } : {}),
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",

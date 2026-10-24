@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { guardFeedbackBrowserContext } from "./feedback-browser-guard.mjs";
+import { guardFeedbackBrowserContext, feedbackApiRequest } from "./feedback-browser-guard.mjs";
 
 async function guardedRequest(url, status = 200, redirected = false, failure = false) {
   let handler;
@@ -42,5 +42,126 @@ describe("feedback bearer browser containment", () => {
     expect(route.fetch).toHaveBeenCalledWith({ maxRedirects: 0 });
     expect(route.fulfill).not.toHaveBeenCalled();
     expect(route.abort).toHaveBeenCalledOnce();
+  });
+});
+
+describe("direct feedback API credential containment", () => {
+  it("sanitizes a real Playwright transport failure without retaining its bearer or cause", async () => {
+    const { request } = await import("@playwright/test");
+    const marker = "fictional-review-bearer-marker";
+    const api = await request.newContext({ extraHTTPHeaders: { Authorization: `Bearer ${marker}` } });
+    try {
+      const error = await feedbackApiRequest(api, "http://127.0.0.1:1", "/unreachable").catch(value => value);
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toBe("Feedback API request failed safely.");
+      expect(`${error}\n${error.stack}\n${JSON.stringify(error)}`).not.toContain(marker);
+      expect(error.cause).toBeUndefined();
+    } finally { await api.dispose(); }
+  });
+  it.each(["https://foreign.example/path", "http://preview.example/path", "https://user:password@preview.example/path"])("rejects credential escape target %s before dispatch", async target => {
+    const api = { fetch: vi.fn() };
+    await expect(feedbackApiRequest(api, "https://preview.example", target)).rejects.toThrow("failed safely");
+    expect(api.fetch).not.toHaveBeenCalled();
+  });
+  it.each(["GET", "POST", "PATCH"])("preserves %s options but always disables redirects", async method => {
+    const response = { status: () => 201 };
+    const api = { fetch: vi.fn().mockResolvedValue(response) };
+    expect(await feedbackApiRequest(api, "https://preview.example", "/api/feedback", { method, data: { fictional: true }, maxRedirects: 20 })).toBe(response);
+    expect(api.fetch).toHaveBeenCalledWith("https://preview.example/api/feedback", { method, data: { fictional: true }, maxRedirects: 0 });
+  });
+  it.each([301, 302, 303, 307, 308])("rejects redirect response %s", async status => {
+    const api = { fetch: vi.fn().mockResolvedValue({ status: () => status }) };
+    await expect(feedbackApiRequest(api, "https://preview.example", "/api/feedback")).rejects.toThrow("failed safely");
+  });
+});
+
+// Route-level failures complement the real-browser persistence/redirect tests.
+describe("admin save receipt containment", () => {
+  async function scenario({ location = "/admin/feedback/fictional?saved=1", status = 303, navigation = true, redirected = false, failure = "", current = "https://preview.example/admin/feedback/fictional" } = {}) {
+    const { submitFeedbackAdminSave } = await import("./feedback-browser-guard.mjs");
+    const sensitive = new Error("fictional-secret-in-call-log");
+    let handler;
+    const route = {
+      request: () => ({ url: () => current, frame: () => ({ page: () => page }), method: () => "POST", isNavigationRequest: () => navigation, redirectedFrom: () => redirected ? {} : null }),
+      fetch: failure === "fetch" ? vi.fn().mockRejectedValue(sensitive) : vi.fn().mockResolvedValue({ status: () => status, headers: () => ({ location, "set-cookie": "must-not-copy" }) }),
+      fulfill: failure === "fulfill" ? vi.fn().mockRejectedValue(sensitive) : vi.fn(), abort: vi.fn(), fallback: vi.fn(),
+    };
+    const context = { route: vi.fn(async (_match, callback) => { handler = callback; }) };
+    const page = {
+      context: () => context,
+      url: () => current,
+      route: vi.fn(),
+      unroute: vi.fn(),
+      goto: failure === "goto" ? vi.fn().mockRejectedValue(sensitive) : vi.fn(),
+    };
+    await guardFeedbackBrowserContext(context, "https://preview.example");
+    const error = await submitFeedbackAdminSave(page, "https://preview.example", async () => {
+      if (failure === "submit") throw sensitive;
+      await handler(route);
+    }).catch(value => value);
+    expect(context.route).toHaveBeenCalledOnce();
+    expect(page.route).not.toHaveBeenCalled();
+    expect(page.unroute).not.toHaveBeenCalled();
+    if (failure === "fulfill") expect(route.abort).not.toHaveBeenCalled();
+    return { error, page, route };
+  }
+  it.each([302, 303])("accepts only a validated %s receipt without copying upstream data", async status => {
+    const { error, page, route } = await scenario({ status, current: "https://preview.example/admin/feedback/fictional?saved=1" });
+    expect(error).toBeUndefined();
+    expect(route.fetch).toHaveBeenCalledWith({ maxRedirects: 0 });
+    expect(route.fulfill).toHaveBeenCalledWith({ status: 200, contentType: "text/html", body: "<!doctype html><title>Save response</title>" });
+    expect(page.goto).toHaveBeenCalledWith("https://preview.example/admin/feedback/fictional?saved=1");
+  });
+  it.each([
+    "https://foreign.example/admin/feedback/fictional?saved=1",
+    "https://user:password@preview.example/admin/feedback/fictional?saved=1",
+    "/admin/feedback/other?saved=1", "/admin/feedback/fictional?saved=1&extra=1",
+    "/admin/feedback/fictional?saved=1&saved=1", "/admin/feedback/fictional?saved=1#fragment",
+    "http://[invalid", "",
+  ])("rejects unexpected receipt %s", async location => {
+    const { error, page } = await scenario({ location });
+    expect(error.message).toContain("failed safely");
+    expect(page.goto).not.toHaveBeenCalled();
+  });
+  it.each([{ navigation: false }, { redirected: true }])("rejects non-form/redirect-chain requests before fetch: %j", async options => {
+    const { error, route, page } = await scenario(options);
+    expect(error.message).toContain("failed safely");
+    expect(route.fetch).not.toHaveBeenCalled();
+    expect(page.goto).not.toHaveBeenCalled();
+  });
+  it.each(["fetch", "submit", "goto", "fulfill"])("sanitizes %s failure without changing interceptor ownership", async failure => {
+    const { error } = await scenario({ failure });
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain("failed safely");
+    expect(`${error}\n${error.stack}\n${JSON.stringify(error)}`).not.toContain("fictional-secret-in-call-log");
+    expect(error.cause).toBeUndefined();
+  });
+});
+
+describe("feedback browser cleanup ordering", () => {
+  it("closes pages while guarded, drains handlers, then disposes the context", async () => {
+    const { closeFeedbackBrowserContext } = await import("./feedback-browser-guard.mjs");
+    const order = [];
+    const context = {
+      pages: () => [{ close: async () => { order.push("page"); } }],
+      unrouteAll: vi.fn(async () => { order.push("drain"); }),
+      close: vi.fn(async () => { order.push("context"); }),
+    };
+    await closeFeedbackBrowserContext(context);
+    expect(order).toEqual(["page", "drain", "context"]);
+    expect(context.unrouteAll).toHaveBeenCalledWith({ behavior: "wait" });
+  });
+  it("reports a sanitized drain failure without pretending cleanup completed", async () => {
+    const { closeFeedbackBrowserContext } = await import("./feedback-browser-guard.mjs");
+    const context = {
+      pages: () => [],
+      unrouteAll: vi.fn().mockRejectedValue(new Error("fictional-secret-in-call-log")),
+      close: vi.fn(),
+    };
+    const error = await closeFeedbackBrowserContext(context).catch(value => value);
+    expect(error.message).toBe("Feedback browser cleanup failed safely.");
+    expect(error.cause).toBeUndefined();
+    expect(error.stack).not.toContain("fictional-secret-in-call-log");
+    expect(context.close).not.toHaveBeenCalled();
   });
 });

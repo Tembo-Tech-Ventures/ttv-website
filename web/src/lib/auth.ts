@@ -3,6 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { bearer } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/d1";
 import { isAgentAuthEnabled } from "./agent-auth";
+import { syntheticSessionHooks, syntheticSessionResponseHook } from "./synthetic-session-lifetime";
 import * as schema from "./db/schema";
 
 type AuthRuntimeEnv = Pick<
@@ -13,6 +14,7 @@ type AuthRuntimeEnv = Pick<
   | "GITHUB_CLIENT_ID"
   | "GITHUB_CLIENT_SECRET"
   | "AGENT_AUTH_ENABLED"
+  | "DEPLOYMENT_ENVIRONMENT"
 >;
 
 /**
@@ -35,6 +37,8 @@ export function createAuth(runtimeEnv: AuthRuntimeEnv) {
     basePath: "/api/auth",
     secret: runtimeEnv.BETTER_AUTH_SECRET,
     baseURL: runtimeEnv.BETTER_AUTH_URL,
+    databaseHooks: syntheticSessionHooks(runtimeEnv.DEPLOYMENT_ENVIRONMENT, isAgentAuthEnabled(runtimeEnv.AGENT_AUTH_ENABLED)),
+    hooks: syntheticSessionResponseHook(runtimeEnv.DEPLOYMENT_ENVIRONMENT, isAgentAuthEnabled(runtimeEnv.AGENT_AUTH_ENABLED)),
     session: {
       cookieCache: {
         enabled: true,

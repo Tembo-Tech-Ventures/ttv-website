@@ -32,6 +32,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       AGENT_PREVIEW_SECRET: ${{ secrets.AGENT_PREVIEW_SECRET }}
+      AGENT_PREVIEW_RUN_ID: github-${{ github.run_id }}-${{ github.run_attempt }}
       CLOUDFLARE_APP_NAME: ttv-website
       CLOUDFLARE_ENVIRONMENT_NAME: ${{ inputs.environment_name }}
       CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}

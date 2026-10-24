@@ -78,7 +78,7 @@ describe("community MCP boundary", () => {
     const own = await handleCommunityMcp(request("tools/call", { name: "assess_profile", arguments: { userId: "member", rubric } }), member, deps);
     const text = await own.text();
     expect(text).toContain("insufficient");
-    expect(text).toContain("not verification");
+    expect(text).toContain("not ability");
     expect(text).not.toContain("private-only-secret");
     expect(text).not.toContain("private-entry");
     vi.mocked(deps.getProfile).mockClear();

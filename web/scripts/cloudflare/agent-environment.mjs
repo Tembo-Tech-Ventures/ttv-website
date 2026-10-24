@@ -10,6 +10,7 @@ import {
   runWrangler,
 } from "./lib.mjs";
 import { runSmokeChecks } from "./smoke.mjs";
+import { requirePreviewRunId } from "./agent-preview-auth.mjs";
 
 export function prepareAgentEnvironment(environment = process.env) {
   const environmentName = deriveAgentEnvironmentName(environment);
@@ -77,6 +78,8 @@ export async function main(args = process.argv.slice(2)) {
       `Unknown action "${action}". Use context, deploy, tail, or destroy.`
     );
   }
+
+  requirePreviewRunId(getOptionalEnv("AGENT_PREVIEW_RUN_ID"));
 
   const workersSubdomain = await getWorkersSubdomain();
   const version = resolveAgentDeploymentVersion(
