@@ -32,9 +32,10 @@ an assessed rating. Profile text remains self-report and mentor statements retai
 their actor and role snapshot. Citation checks establish allowed source identity
 and version, not semantic truth of generated explanations.
 
-The isolated provider adapter uses the explicitly configured
+The isolated provider adapter and community chat share the explicit community model
 `workers-ai/@cf/google/gemma-4-26b-a4b-it` through the existing unified AI Gateway.
-Missing or mismatched configuration fails closed. Calls have a twenty-second
+This scoped choice leaves recording chat, global defaults and the original caller
+environment unchanged. Missing Gateway configuration fails closed. Calls have a twenty-second
 timeout, bounded context/output, no redirects, retries or direct-provider fallback.
 The prompt requests JSON; server validation is mandatory. Cloudflare's model page
 advertises `response_format`, but the general JSON-mode compatibility list does

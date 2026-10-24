@@ -11,9 +11,16 @@ describe("unified assessment provider", () => {
     const body = JSON.parse(options.body); expect(body).toMatchObject({ model: COMMUNITY_ASSESSMENT_MODEL, max_completion_tokens: 3000, temperature: 0 });
     expect(body).not.toHaveProperty("response_format"); expect(body).not.toHaveProperty("tools");
   });
-  it.each([undefined, { ...env, AI_GATEWAY_MODEL: "unreviewed" }, { ...env, AI_GATEWAY_API_KEY: "" }])("requires explicit reviewed configuration, no binding fallback", async config => {
+  it.each([undefined, { ...env, AI_GATEWAY_ACCOUNT_ID: "" }, { ...env, AI_GATEWAY_API_KEY: "" }])("requires explicit Gateway configuration, no binding fallback", async config => {
     const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
     await expect(createAssessmentProvider(config).complete([], {})).rejects.toThrow("configuration"); expect(fetch).not.toHaveBeenCalled();
+  });
+  it("pins community Gemma independently of the unrelated global model without mutating env", async () => {
+    const globalEnv = {...env,AI_GATEWAY_MODEL:"workers-ai/@cf/openai/gpt-oss-20b"} as Env;
+    const fetch = vi.fn().mockResolvedValue(Response.json({choices:[{message:{content:"{}"},finish_reason:"stop"}]})); vi.stubGlobal("fetch",fetch);
+    await createAssessmentProvider(globalEnv).complete([],{});
+    expect(JSON.parse(fetch.mock.calls[0][1].body).model).toBe(COMMUNITY_ASSESSMENT_MODEL);
+    expect(globalEnv.AI_GATEWAY_MODEL).toBe("workers-ai/@cf/openai/gpt-oss-20b");
   });
   it.each([{ refusal: "No" }, { content: "{}", refusal: "No" }])("does not treat refusal as assessment", async message => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ choices: [{ message, finish_reason: "stop" }] })));

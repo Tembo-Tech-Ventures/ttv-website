@@ -11,7 +11,7 @@ export function createAssessmentProvider(env?: Env): AssessmentProvider {
   return {
     model: COMMUNITY_ASSESSMENT_MODEL,
     async complete(messages) {
-      if (!env || env.AI_GATEWAY_MODEL?.trim() !== COMMUNITY_ASSESSMENT_MODEL) throw new Error("Assessment configuration unavailable.");
+      if (!env) throw new Error("Assessment configuration unavailable.");
       const url = gatewayCompatUrl(env);
       const key = env.AI_GATEWAY_API_KEY?.trim();
       if (!url || !key) throw new Error("Assessment configuration unavailable.");

@@ -5,6 +5,7 @@ import type { CommunityService } from "./service";
 import { journeyCitation, confirmationCitation, type EvidenceCitation, rubricInput } from "./assessment";
 
 import { assessCommunityProfile, type EvidenceSupportAssessment } from "./assessment-ai";
+import { COMMUNITY_ASSESSMENT_MODEL } from "./assessment-provider";
 
 export const communityChatInput = z.object({ message: z.string().trim().min(1).max(4000), profileId: z.string().trim().min(1).max(100).optional(), context: z.string().trim().max(2000).optional(), rubric: rubricInput.optional() }).strict();
 const toolCallsInput = z.array(z.object({ id: z.string().min(1).max(100), type: z.literal("function"), function: z.object({ name: z.string().max(100), arguments: z.string().max(4000) }) })).max(6);
@@ -105,7 +106,7 @@ function boundedToolOutput(output: unknown, candidates: Map<string, EvidenceCita
 }
 
 function requireGateway(env: Env) {
-  if (!env.AI_GATEWAY_MODEL?.trim() || !env.AI_GATEWAY_ACCOUNT_ID?.trim() || !env.AI_GATEWAY_NAME?.trim() || !env.AI_GATEWAY_API_KEY?.trim()) {
+  if (!env.AI_GATEWAY_ACCOUNT_ID?.trim() || !env.AI_GATEWAY_NAME?.trim() || !env.AI_GATEWAY_API_KEY?.trim()) {
     throw new CommunityError("Community chat requires an explicitly configured model and unified AI Gateway.", 503);
   }
 }
@@ -134,7 +135,7 @@ export async function runCommunityChat(env: Env, service: CommunityService, inpu
   }
   let calls = 0;
   for (let round = 0; round < 3; round++) {
-    const result = await generateToolCompletion(env, messages, { tools, maxTokens: 1200, temperature: 0 });
+    const result = await generateToolCompletion({ ...env, AI_GATEWAY_MODEL: COMMUNITY_ASSESSMENT_MODEL }, messages, { tools, maxTokens: 1200, temperature: 0, requireUnifiedGateway: true, timeoutMs: 20_000 });
     if (!toolCallsInput.safeParse(result.toolCalls).success) throw new CommunityError("The model returned invalid tool requests.", 502);
     if (result.toolCalls.length === 0) return { ...groundedAnswer(result.content, citations), assessments: [...assessments.values()] };
     if (round === 2 || result.toolCalls.length > 6 - calls) break;

@@ -6,7 +6,7 @@ import { handleCommunityMcp } from "./mcp";
 import { runCommunityChat } from "./chat";
 import type { CommunityService } from "./service";
 vi.mock("../ai/gateway", () => ({ generateToolCompletion: vi.fn() }));
-vi.mock("./assessment-provider", () => ({ createAssessmentProvider: vi.fn() }));
+vi.mock("./assessment-provider", () => ({ createAssessmentProvider: vi.fn(), COMMUNITY_ASSESSMENT_MODEL: "workers-ai/@cf/google/gemma-4-26b-a4b-it" }));
 const complete = vi.fn();
 const rubric = { id: "hiring", version: 1, criteria: [{ id: "ts", label: "TypeScript evidence", terms: ["TypeScript"] }] };
 const reference = { kind: "journey", id: "j", version: 3 };
