@@ -80,3 +80,30 @@ it.each(["unavailable", "invalid_output"] as const)(
     expect(html).not.toContain("/5");
   },
 );
+
+it("does not claim AI generation when empty evidence bypasses the model", () => {
+  const html = renderToStaticMarkup(
+    <AssessmentResults
+      assessment={{
+        ...assessment,
+        model: null,
+        criteria: [
+          {
+            criterionId: "empty",
+            label: "Accessible interfaces",
+            status: "insufficient",
+            rating: null,
+            explanation: "No published evidence is available.",
+            citations: [],
+          },
+        ],
+      }}
+      profile={profile}
+    />,
+  );
+  expect(html).toContain("Evidence availability");
+  expect(html).toContain("No AI assessment was run.");
+  expect(html).toContain("Insufficient evidence · Not scored");
+  expect(html).not.toContain("AI-generated");
+  expect(html).not.toContain("/5");
+});

@@ -40,7 +40,14 @@ export function AssessmentResults({
       className="discovery-assessment-results"
       aria-label="Evidence assessment results"
     >
-      <p className="discovery-eyebrow">AI-generated evidence support</p>
+      <p className="discovery-eyebrow">
+        {assessment.model
+          ? "AI-generated evidence support"
+          : "Evidence availability"}
+      </p>
+      {!assessment.model && (
+        <p>No published evidence was available. No AI assessment was run.</p>
+      )}
       <p className="discovery-muted">
         Criteria revision {assessment.rubric.version} · Profile revision{" "}
         {assessment.subject.profileVersion}
