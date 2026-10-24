@@ -46,6 +46,15 @@ export default function CommunityApp({ view }: { view: View }) {
         if (!active) return;
         setAccess(roleAccess);
         if (!canOpenWorkspace(view, roleAccess)) return;
+        if (view === "scout") {
+          const profileId = new URLSearchParams(window.location.search).get(
+            "profile",
+          );
+          if (profileId) {
+            const linkedProfile = await loadProfile(profileId);
+            if (active) setProfile(linkedProfile);
+          }
+        }
         if (view === "journey") {
           const ownProfile = await loadOwnProfile();
           if (active) setProfile(ownProfile);
@@ -99,6 +108,9 @@ export default function CommunityApp({ view }: { view: View }) {
           <p>
             <a href="/auth/login">Sign in again</a>
           </p>
+          <p>
+            <a href="/dashboard/discover">Start a new discovery</a>
+          </p>
         </section>
       </DiscoveryShell>
     );
@@ -125,6 +137,7 @@ export default function CommunityApp({ view }: { view: View }) {
     content = (
       <ScoutWorkspace
         profiles={[]}
+        initialProfile={profile}
         onSearch={searchProfiles}
         onOpenProfile={loadProfile}
         onAsk={askProfile}

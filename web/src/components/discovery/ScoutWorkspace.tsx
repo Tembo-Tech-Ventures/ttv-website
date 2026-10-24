@@ -25,6 +25,7 @@ import type {
 
 interface Props {
   profiles: CommunityProfile[];
+  initialProfile?: CommunityProfile | null;
   demo?: boolean;
   onSearch?: (criteria: ScoutCriteria) => Promise<CommunityProfile[]>;
   onOpenProfile?: (profileId: string) => Promise<CommunityProfile>;
@@ -258,8 +259,27 @@ function ProfileEvidence({
   );
 }
 
+function ProfileLink({
+  profileId,
+  demo,
+}: {
+  profileId: string;
+  demo: boolean;
+}) {
+  if (demo) return null;
+  return (
+    <p className="discovery-muted">
+      <a href={`/dashboard/discover?profile=${encodeURIComponent(profileId)}`}>
+        Open profile link
+      </a>
+      {" · Requires approved institutional access"}
+    </p>
+  );
+}
+
 export default function ScoutWorkspace({
   profiles,
+  initialProfile = null,
   demo = false,
   onSearch,
   onAsk,
@@ -270,8 +290,23 @@ export default function ScoutWorkspace({
     skills: "",
     query: "",
   });
+  const [lookup, setLookup] = useState(false);
+  const modeText = lookup
+    ? {
+        step: "Look up a person",
+        title: "Whose work would you like to explore?",
+        action: "Look up person",
+      }
+    : {
+        step: "Define what matters",
+        title: "Who would move your work forward?",
+        action: "Discover people",
+      };
+  const [lookupName, setLookupName] = useState("");
   const [results, setResults] = useState(profiles);
-  const [selected, setSelected] = useState<CommunityProfile | null>(null);
+  const [selected, setSelected] = useState<CommunityProfile | null>(
+    initialProfile,
+  );
   const [step, setStep] = useState<"criteria" | "results">("criteria");
   const [busy, setBusy] = useState(false);
   const [opening, setOpening] = useState<string | null>(null);
@@ -302,8 +337,13 @@ export default function ScoutWorkspace({
   async function search(event: FormEvent) {
     event.preventDefault();
     if (searching.current) return;
+    const searchCriteria = lookup
+      ? { context: "", skills: "", query: lookupName.trim() }
+      : criteria;
+    if (lookup && !searchCriteria.query) return;
     if (
-      criteria.skills.split(",").filter((skill) => skill.trim()).length > 10
+      searchCriteria.skills.split(",").filter((skill) => skill.trim()).length >
+      10
     ) {
       setError("Explore up to 10 skills at a time.");
       return;
@@ -312,13 +352,13 @@ export default function ScoutWorkspace({
     setBusy(true);
     setError("");
     try {
-      if (onSearch) setResults(await onSearch(criteria));
-      else if (demo) setResults(filterDemoProfiles(profiles, criteria));
+      if (onSearch) setResults(await onSearch(searchCriteria));
+      else if (demo) setResults(filterDemoProfiles(profiles, searchCriteria));
       else
         throw new Error(
           "Search is unavailable right now. Your criteria are saved in this form; please try again.",
         );
-      setAppliedCriteria({ ...criteria });
+      setAppliedCriteria({ ...searchCriteria });
       setStep("results");
     } catch (cause) {
       setError(
@@ -343,6 +383,7 @@ export default function ScoutWorkspace({
             <ArrowLeft size={18} aria-hidden="true" />
             Back to people
           </button>
+          <ProfileLink profileId={selected.id} demo={demo} />
           <ProfileEvidence
             key={selected.id}
             profile={selected}
@@ -372,9 +413,38 @@ export default function ScoutWorkspace({
               evidence.
             </p>
           </div>
+          <div className="discovery-actions">
+            <button
+              type="button"
+              className="discovery-text-button"
+              aria-pressed={!lookup}
+              disabled={busy || opening !== null}
+              onClick={() => {
+                setLookup(false);
+                setStep("criteria");
+                setError("");
+              }}
+            >
+              Scout by criteria
+            </button>
+            <button
+              type="button"
+              className="discovery-text-button"
+              aria-pressed={lookup}
+              disabled={busy || opening !== null}
+              onClick={() => {
+                setLookup(true);
+                setStep("criteria");
+                setError("");
+              }}
+            >
+              Find someone you know
+            </button>
+          </div>
           <ol className="discovery-steps" aria-label="Scouting steps">
             <li aria-current={step === "criteria" ? "step" : undefined}>
-              <span>01</span>Define what matters
+              <span>01</span>
+              {modeText.step}
             </li>
             <li aria-current={step === "results" ? "step" : undefined}>
               <span>02</span>Explore the evidence
@@ -386,49 +456,77 @@ export default function ScoutWorkspace({
                 <span className="discovery-eyebrow">
                   Your search, in your words
                 </span>
-                <h2>Who would move your work forward?</h2>
-                <label className="discovery-field">
-                  What are you working on?
-                  <textarea
-                    value={criteria.context}
-                    onChange={(event) =>
-                      setCriteria({ ...criteria, context: event.target.value })
-                    }
-                    maxLength={4000}
-                    rows={3}
-                    placeholder="We're building an accessible product and looking for a frontend engineer…"
-                  />
-                  <small>
-                    Describe the opportunity and what a good contribution looks
-                    like. Avoid confidential information.
-                  </small>
-                </label>
-                <label className="discovery-field">
-                  Skills to explore
-                  <input
-                    value={criteria.skills}
-                    onChange={(event) =>
-                      setCriteria({ ...criteria, skills: event.target.value })
-                    }
-                    maxLength={300}
-                    placeholder="React, TypeScript, accessibility"
-                  />
-                  <small>
-                    Separate skills with commas. Leave blank to explore
-                    everyone.
-                  </small>
-                </label>
-                <label className="discovery-field">
-                  Already have someone in mind?
-                  <input
-                    value={criteria.query}
-                    onChange={(event) =>
-                      setCriteria({ ...criteria, query: event.target.value })
-                    }
-                    maxLength={200}
-                    placeholder="Search a name or area of work"
-                  />
-                </label>
+                <h2>{modeText.title}</h2>
+                {lookup ? (
+                  <label className="discovery-field">
+                    Name to look up
+                    <input
+                      value={lookupName}
+                      onChange={(event) => setLookupName(event.target.value)}
+                      maxLength={200}
+                      required
+                      placeholder="Enter their name"
+                    />
+                    <small>
+                      Search without your scouting skills or opportunity
+                      criteria. Choose the right person from the results.
+                    </small>
+                  </label>
+                ) : (
+                  <>
+                    <label className="discovery-field">
+                      What are you working on?
+                      <textarea
+                        value={criteria.context}
+                        onChange={(event) =>
+                          setCriteria({
+                            ...criteria,
+                            context: event.target.value,
+                          })
+                        }
+                        maxLength={4000}
+                        rows={3}
+                        placeholder="We're building an accessible product and looking for a frontend engineer…"
+                      />
+                      <small>
+                        Describe the opportunity and what a good contribution
+                        looks like. Avoid confidential information.
+                      </small>
+                    </label>
+                    <label className="discovery-field">
+                      Skills to explore
+                      <input
+                        value={criteria.skills}
+                        onChange={(event) =>
+                          setCriteria({
+                            ...criteria,
+                            skills: event.target.value,
+                          })
+                        }
+                        maxLength={300}
+                        placeholder="React, TypeScript, accessibility"
+                      />
+                      <small>
+                        Separate skills with commas. Leave blank to explore
+                        everyone.
+                      </small>
+                    </label>
+                    <label className="discovery-field">
+                      Already have someone in mind?
+                      <input
+                        value={criteria.query}
+                        onChange={(event) =>
+                          setCriteria({
+                            ...criteria,
+                            query: event.target.value,
+                          })
+                        }
+                        maxLength={200}
+                        placeholder="Search a name or area of work"
+                      />
+                    </label>
+                  </>
+                )}
                 {demo && (
                   <p className="discovery-muted">
                     Demo search matches skills and names. Opportunity context is
@@ -442,7 +540,7 @@ export default function ScoutWorkspace({
                   </p>
                 )}
                 <button className="discovery-button" disabled={busy}>
-                  {busy ? "Finding people…" : "Discover people"}
+                  {busy ? "Finding people…" : modeText.action}
                   <ArrowRight size={18} aria-hidden="true" />
                 </button>
               </form>

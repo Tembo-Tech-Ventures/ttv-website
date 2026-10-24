@@ -274,6 +274,18 @@ test("institution search loads real component API contracts and recovers from ch
     });
   });
   await page.goto("/dev/community-ui?api=mock&view=scout");
+  await page.getByLabel("Skills to explore").fill("Rust");
+  await page.getByRole("button", { name: "Find someone you know" }).click();
+  await page.getByLabel("Name to look up").fill("Fictional");
+  await page
+    .getByRole("button", { name: "Look up person", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "1 builder to get to know" }),
+  ).toBeVisible();
+  expect(new URLSearchParams(search).get("skills") ?? "").toBe("");
+  expect(new URLSearchParams(search).get("query")).toBe("Fictional");
+  await page.getByRole("button", { name: "Scout by criteria" }).click();
   await page.getByLabel("Skills to explore").fill("React");
   await page
     .getByRole("button", { name: "Discover people", exact: true })
@@ -418,4 +430,93 @@ test("TTV palette keeps text and form controls readable across workspace surface
     "outline-style",
     "solid",
   );
+});
+
+test("known-person lookup ignores scouting filters and restores them on return", async ({
+  page,
+}) => {
+  await page.goto("/dev/community-ui");
+  await page.getByLabel("Skills to explore").fill("Rust");
+  await page
+    .getByLabel("What are you working on?")
+    .fill("A separate opportunity");
+  await page.getByRole("button", { name: "Find someone you know" }).click();
+  await page.getByLabel("Name to look up").fill("Amina");
+  await page
+    .getByRole("button", { name: "Look up person", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "1 builder to get to know" }),
+  ).toBeVisible();
+  await expect(page.getByText("Your opportunity", { exact: true })).toHaveCount(
+    0,
+  );
+  await page.getByRole("button", { name: "Explore Amina's work" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Amina Wanjiku", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Back to people" }).click();
+  await page.getByRole("button", { name: "Scout by criteria" }).click();
+  await expect(page.getByLabel("Skills to explore")).toHaveValue("Rust");
+  await expect(page.getByLabel("What are you working on?")).toHaveValue(
+    "A separate opportunity",
+  );
+});
+
+test("profile deep link checks access first and safely handles missing profiles", async ({
+  page,
+}) => {
+  let approved = false;
+  let missing = false;
+  let detailRequests = 0;
+  await page.route("**/api/community/**", async (route) => {
+    if (new URL(route.request().url()).pathname.endsWith("/access"))
+      return route.fulfill({
+        json: { isAdmin: false, isMentor: false, isInstitution: approved },
+      });
+    detailRequests++;
+    if (missing)
+      return route.fulfill({ status: 404, json: { error: "private detail" } });
+    return route.fulfill({
+      json: {
+        profile: {
+          userId: "synthetic-lookup",
+          name: "Fictional Njeri Kamau",
+          image: null,
+          headline: "Community tools",
+          bio: "A fictional test profile",
+          skills: [],
+          opportunityGoals: "Learning",
+          version: 1,
+          updatedAt: 123,
+        },
+        entries: [],
+      },
+    });
+  });
+  await page.goto(
+    "/dev/community-ui?api=mock&view=scout&profile=synthetic-lookup",
+  );
+  await expect(
+    page.getByRole("heading", { name: "Institutional access needs approval." }),
+  ).toBeVisible();
+  expect(detailRequests).toBe(0);
+  approved = true;
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Fictional Njeri Kamau", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Open profile link" }),
+  ).toHaveAttribute("href", "/dashboard/discover?profile=synthetic-lookup");
+  expect(detailRequests).toBe(1);
+  missing = true;
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "We could not open this workspace." }),
+  ).toBeVisible();
+  await expect(page.getByRole("alert")).not.toContainText("private detail");
+  await expect(
+    page.getByRole("link", { name: "Start a new discovery" }),
+  ).toHaveAttribute("href", "/dashboard/discover");
 });
