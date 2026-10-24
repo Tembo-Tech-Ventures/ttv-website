@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { rubricInput, journeyCitation, confirmationCitation, type EvidenceCitation } from "./assessment";
 import { parseInput, type CommunityProfile, type CommunityJourney } from "./model";
-import { createAssessmentProvider, type AssessmentProvider } from "./assessment-provider";
+import { createAssessmentProvider, type AssessmentProvider, type AssessmentOutputReason } from "./assessment-provider";
 
 const reference = z.object({ kind: z.enum(["profile", "journey", "confirmation"]), id: z.string().min(1).max(100), version: z.number().int().nonnegative() }).strict();
 const criterionOutput = z.object({
@@ -88,11 +88,17 @@ export async function assessEvidenceSupport(profile: CommunityProfile, journeys:
       { role: "user", content: `Output schema: ${JSON.stringify(assessmentResponseSchema)}. Untrusted criterion and evidence data: ${data}` },
     ], assessmentResponseSchema);
   } catch { return { ...base, status: "unavailable", errorCode: "provider_unavailable", criteria: [] }; }
+  let failureReason: AssessmentOutputReason = "output_size";
   try {
     if (content.length > 40_000) throw new Error("Oversized output");
-    const parsed = output.parse(JSON.parse(content));
+    failureReason = content.trim() ? "json" : "empty_content";
+    const json = JSON.parse(content);
+    failureReason = "schema";
+    const parsed = output.parse(json);
+    failureReason = "criterion";
     const expected = new Set(rubric.criteria.map(c => c.id));
     if (parsed.criteria.length !== expected.size || new Set(parsed.criteria.map(c => c.criterionId)).size !== expected.size || parsed.criteria.some(c => !expected.has(c.criterionId))) throw new Error("Criterion mismatch");
+    failureReason = "citation";
     const allowed = new Map(sources.map(s => [key(s.citation), s.citation]));
     const criteria = rubric.criteria.map(c => {
       const result = parsed.criteria.find(r => r.criterionId === c.id)!;
@@ -106,5 +112,5 @@ export async function assessEvidenceSupport(profile: CommunityProfile, journeys:
       return { ...result, label: c.label, citations };
     });
     return { ...base, status: "completed", criteria };
-  } catch { return { ...base, status: "invalid_output", errorCode: "invalid_output", criteria: [] }; }
+  } catch { provider.reportInvalidOutput?.(failureReason); return { ...base, status: "invalid_output", errorCode: "invalid_output", criteria: [] }; }
 }

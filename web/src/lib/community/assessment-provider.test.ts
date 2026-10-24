@@ -121,3 +121,23 @@ describe("server-owned synthetic assessment probe", () => {
     expect(claim).toHaveBeenCalledOnce(); expect(fetch).toHaveBeenCalledOnce();
   });
 });
+
+describe("sanitized synthetic output diagnostics", () => {
+  it.each([
+    [{ result: { response: "PRIVATE" } }, "response_shape"],
+    [{ choices: [] }, "response_shape"],
+    [{ choices: [{ message: { content: "PRIVATE", refusal: "PRIVATE" }, finish_reason: "stop" }] }, "refusal"],
+    [{ choices: [{ message: { content: "PRIVATE" }, finish_reason: "length" }] }, "finish_reason"],
+    [{ choices: [{ message: { content: " " }, finish_reason: "stop" }] }, "empty_content"],
+    [{ choices: [{ message: { content: {} }, finish_reason: "stop" }] }, "response_shape"],
+  ])("reports only the first bounded reason %s", async (payload, reason) => {
+    nativeRun = vi.fn().mockResolvedValue(Response.json(payload));
+    const reportInvalidOutput = vi.fn();
+    const provider = createAssessmentProvider(env, { syntheticProbe: { claim: vi.fn(), reportInvalidOutput } });
+    await provider.complete([], {});
+    provider.reportInvalidOutput?.("json");
+    expect(reportInvalidOutput).toHaveBeenCalledExactlyOnceWith(reason);
+    expect(JSON.stringify(reportInvalidOutput.mock.calls)).not.toContain("PRIVATE");
+    expect(nativeRun).toHaveBeenCalledOnce();
+  });
+});

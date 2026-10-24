@@ -3,7 +3,7 @@ import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
 import { CommunityError } from "./model";
 import { createCommunityService, type CommunityService } from "./service";
 import { assessCommunityProfile } from "./assessment-ai";
-import { createAssessmentProvider } from "./assessment-provider";
+import { createAssessmentProvider, type AssessmentOutputReason } from "./assessment-provider";
 import { stagingAssessmentProbe } from "./staging-assessment-probe";
 import { runCommunityChat } from "./chat";
 
@@ -87,8 +87,9 @@ async function dynamicRoute(ctx: RouteContext) {
   if (parts.length === 2 && ctx.request.method === "GET") return communityJson({profile: await ctx.service.getProfile(parts[1]),entries: await ctx.service.listJourney(parts[1])});
   if (parts.length === 3 && parts[2] === "assessment" && ctx.request.method === "POST") {
     const probe = stagingAssessmentProbe(ctx.db, ctx.env?.DEPLOYMENT_ENVIRONMENT, ctx.actor);
-    const measurement = { claimed: false, payloadBytes: 0, payloadCharacters: 0 };
+    const measurement: { claimed: boolean; payloadBytes: number; payloadCharacters: number; outputReason?: AssessmentOutputReason } = { claimed: false, payloadBytes: 0, payloadCharacters: 0 };
     const provider = createAssessmentProvider(ctx.env, probe ? { syntheticProbe: {
+      reportInvalidOutput: reason => { measurement.outputReason = reason; },
       claim: async (size: { payloadBytes: number; payloadCharacters: number }) => {
         await probe.claim();
         Object.assign(measurement, { claimed: true, payloadBytes: size.payloadBytes, payloadCharacters: size.payloadCharacters });

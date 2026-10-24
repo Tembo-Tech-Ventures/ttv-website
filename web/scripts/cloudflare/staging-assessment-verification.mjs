@@ -70,7 +70,7 @@ export async function verifyStagingAssessment({ target, personas, fetchImpl = fe
   const elapsedMs = now() - started;
   const assessment = result.data?.assessment;
   const probe = result.data?.probe;
-  progress({ stage, code: "assessment-response", claimed: probe?.claimed, payloadBytes: probe?.payloadBytes, payloadCharacters: probe?.payloadCharacters, assessmentStatus: assessment?.status, assessmentErrorCode: assessment?.errorCode });
+  progress({ stage, code: "assessment-response", claimed: probe?.claimed, outputReason: probe?.outputReason, payloadBytes: probe?.payloadBytes, payloadCharacters: probe?.payloadCharacters, assessmentStatus: assessment?.status, assessmentErrorCode: assessment?.errorCode });
   if (result.status !== 200 || assessment?.status !== "completed" || assessment.model !== MODEL ||
       assessment.subject?.userId !== member.userId || assessment.criteria?.length !== 1 ||
       probe?.claimed !== true || !Number.isInteger(probe.payloadBytes) || probe.payloadBytes < 1 || probe.payloadBytes > 8000 ||

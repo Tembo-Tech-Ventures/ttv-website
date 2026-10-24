@@ -83,8 +83,10 @@ describe("synthetic assessment durable claim", () => {
    const env={DEPLOYMENT_ENVIRONMENT:"staging",AI_GATEWAY_ACCOUNT_ID:"account",AI_GATEWAY_NAME:"gateway",AI:{run:inference}} as unknown as Env;
    const path=`profiles/${member.identity.userId}/assessment`;
    const response=await handleCommunityRequest(new Request(`https://ttv.test/api/community/${path}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:"test",version:1,criteria:[{id:"test",label:"Evidence",terms:["test"]}]})}),path,{id:institution.identity.userId,fixture:institution.identity,scopes:["institution:read"]},f.db,env);
-   const result=await response.json() as {assessment:{status:string};probe:{claimed:boolean}};expect(result.assessment.status).toBe(failure==="timeout"?"unavailable":"invalid_output");
+   const result=await response.json() as {assessment:{status:string};probe:{claimed:boolean;outputReason?:string}};expect(result.assessment.status).toBe(failure==="timeout"?"unavailable":"invalid_output");
    expect(result.probe.claimed).toBe(true);expect(inference).toHaveBeenCalledOnce();
+   expect(result.probe.outputReason).toBe(failure === "timeout" ? undefined : "json");
+   expect(result.assessment).not.toHaveProperty("outputReason");
    expect(JSON.stringify(result)).not.toContain("private provider failure");
    expect(f.database.prepare('SELECT id FROM session WHERE userId=?').get(institution.identity.userId)).toBeUndefined();
  });
