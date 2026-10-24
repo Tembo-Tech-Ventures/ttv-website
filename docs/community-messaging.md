@@ -110,6 +110,29 @@ without inventing employer-specific account types or guaranteeing an outcome.
 
 ## Acceptance and iterative review
 
+### Proposed concise-copy pass
+
+PM-relayed owner direction: clear user-facing language, fewer competing elements,
+no repeated explanatory blocks or decorative labels. Preserve the layout and TTV
+palette. These are proposed changes after the current staging capture, not claims
+about the audited `144367f` implementation. Designer owns runtime edits.
+
+| Priority / placement | Current wording or repetition | Proposed wording / treatment |
+| --- | --- | --- |
+| 1 · contribution save | Workspace sharing block plus full pre-save explanation | Keep one pre-save notice: “Shared with approved institutions and available for mentor review.” Keep the action explicit; do not imply private save. |
+| 1 · profile save | “Saving updates the community profile that approved institutions can discover. Only include information you want to share with them.” | “Approved institutions can discover this profile.” Keep beside save; do not repeat the same block above the editor. |
+| 1 · assessment | Long introductory explanation and repeated result disclaimer | Intro: “Choose criteria to assess the documented evidence.” Result note once: “Rates the evidence, not ability. Linked artifacts are not read.” Keep exact source scope and scale in expandable detail. |
+| 1 · assessment states | AI label, evidence-support label, rubric/profile labels and model text compete | Preserve “Evidence support”, source/revision access, AI-generated vs no-AI distinction, “Not scored” states and service failures. Remove decorative eyebrows before removing essential distinctions. |
+| 2 · public intro | Multiple membership explanations | “A community for TTV students and builders beyond our cohorts. Show your contributions, supporting work and mentor notes.” Use one clear member CTA; GitHub helper only for anonymous visitors. |
+| 2 · institutional entry | Approval described before and after CTA | “Explore the work behind a profile.” One adjacent helper: “Administrator approval required.” Keep the honest approval screen and journey fallback. |
+| 3 · repeated labels | Eyebrow + heading + legend repeat the same purpose | Keep the useful heading and accessible form labels; remove duplicate decorative text. Maintain source links and necessary permission guidance at the relevant action. |
+
+Source-scope detail to preserve: assessments use profile text and skills,
+published contribution text and current review notes; linked artifacts are not
+fetched. Concision must not turn an evidence-support rating into an ability
+rating or make a service failure look like missing evidence. Review actual
+desktop/mobile changes before accepting this proposed pass.
+
 - Designer reviews placement and implements runtime copy with meaningful automated tests; Marketing rechecks the actual diff against this matrix.
 - Desktop and mobile visitors can find the public explanation from navigation and footer, understand noncohort membership, and follow the member CTA through sign-in to the intended workspace.
 - A signed-in noncohort member can reach the journey without cohort application; privacy text appears before profile/contribution save. A reload demonstrates persistence before claiming it works.
