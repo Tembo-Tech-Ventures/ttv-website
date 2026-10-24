@@ -8,6 +8,11 @@ on:
         required: true
         type: string
 
+      browser_chat:
+        description: One synthetic desktop chat submission with tool and citation verification
+        required: false
+        type: boolean
+        default: false
       browser_assessment:
         description: One bounded desktop assessment after both viewport journeys
         required: false
@@ -32,6 +37,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_BROWSER_CHAT: ${{ inputs.browser_chat }}
           STAGING_BROWSER_ASSESSMENT: ${{ inputs.browser_assessment }}
           STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
           STAGING_INTEGRATION_PR: "171"
@@ -60,6 +66,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_BROWSER_CHAT: ${{ inputs.browser_chat }}
           STAGING_BROWSER_ASSESSMENT: ${{ inputs.browser_assessment }}
           STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
           STAGING_INTEGRATION_PR: "171"
@@ -88,5 +95,6 @@ jobs:
             web/test-results/staging-community/mobile-mentor.png
             web/test-results/staging-community/mobile-scout.png
             web/test-results/staging-community/mobile-known-profile.png
+            web/test-results/staging-community/desktop-chat.png
             web/test-results/staging-community/desktop-assessment.png
             web/test-results/staging-community/manifest.json
