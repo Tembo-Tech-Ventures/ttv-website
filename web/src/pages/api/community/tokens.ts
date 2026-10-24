@@ -27,7 +27,7 @@ async function readTokenBody(request: Request): Promise<Record<string, unknown> 
   for (const chunk of chunks) { buffer.set(chunk, offset); offset += chunk.byteLength; }
   try {
     const value: unknown = JSON.parse(new TextDecoder().decode(buffer));
-    const parsed = z.record(z.unknown()).safeParse(value);
+    const parsed = z.record(z.string(), z.unknown()).safeParse(value);
     if (!parsed.success) return json({ error: "Invalid input" }, 400);
     return parsed.data;
   } catch { return json({ error: "Invalid JSON" }, 400); }

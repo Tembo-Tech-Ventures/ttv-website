@@ -28,7 +28,7 @@ function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "Vary": "Cookie, Authorization, Origin" } });
 }
 const rpcSchema = z.object({ jsonrpc: z.literal("2.0"), method: z.string(), id: z.union([z.string(), z.number(), z.null()]).optional(), params: z.unknown().optional() });
-const callSchema = z.object({ name: z.enum(["get_own_profile", "update_own_profile", "search_profiles", "get_profile", "list_journey", "assess_profile"]), arguments: z.record(z.unknown()).default({}) });
+const callSchema = z.object({ name: z.enum(["get_own_profile", "update_own_profile", "search_profiles", "get_profile", "list_journey", "assess_profile"]), arguments: z.record(z.string(), z.unknown()).default({}) });
 const searchSchema = z.object({ skills:z.array(z.string().trim().min(1).max(60)).max(10).optional(), query: z.string().max(2000).optional(), limit: z.number().int().min(1).max(50).optional() }).strict();
 const targetSchema = z.object({ userId: z.string().min(1) }).strict();
 const assessmentSchema = z.object({ userId: z.string().min(1), rubric: rubricInput }).strict();
