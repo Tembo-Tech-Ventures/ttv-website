@@ -21,7 +21,7 @@ export async function runStagingAssessment({ environment = process.env, api = cf
       expectedVersion: environment.STAGING_EXPECTED_SHA, baseUrl: STAGING_FIXTURE_ORIGIN, api });
     const signingSecret = getBindings().find(binding => binding.key === "BETTER_AUTH_SECRET")?.value;
     let evidence;
-    await withPersonas({ target, signingSecret, audit: record => console.log(JSON.stringify(record)),
+    await withPersonas({ target, signingSecret, assessmentProbe: true, audit: record => console.log(JSON.stringify(record)),
       run: async personas => { evidence = await verifyAssessment({ target, personas }); } });
     // Only fixed sanitized metadata is returned; no response text, credentials or traces.
     await publish(evidence);

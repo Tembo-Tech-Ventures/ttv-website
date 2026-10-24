@@ -24,7 +24,10 @@ the current Gemma model, 20-second provider timeout, 3,000 output-token ceiling
 and no retries. Ordinary user requests retain their existing limits.
 
 The strict mode derives only from a server-resolved synthetic institution
-identity in `staging`, never a caller header. Immediately before inference,
+identity in `staging` whose registered source session has the exact dedicated
+`<userId>-assessment-session` ID. Only the assessment runner provisions this
+session form; ordinary synthetic browser fixtures remain unchanged. No caller
+header selects the mode. Immediately before inference,
 after normal evidence authorization and payload validation, it atomically
 deletes that fixture's registered source session. Only one concurrent request
 can consume it. The existing live fixture resolver then rejects browser and

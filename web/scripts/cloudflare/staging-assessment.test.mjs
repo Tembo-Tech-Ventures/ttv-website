@@ -16,6 +16,7 @@ describe("assessment runner lifecycle",()=>{
     expect(options.validateRevision.mock.invocationCallOrder[0]).toBeLessThan(options.verifyTarget.mock.invocationCallOrder[0]);
     expect(options.verifyTarget.mock.invocationCallOrder[0]).toBeLessThan(options.withPersonas.mock.invocationCallOrder[0]);
     expect(cleanup.mock.invocationCallOrder[0]).toBeLessThan(options.publish.mock.invocationCallOrder[0]);
+    expect(options.withPersonas).toHaveBeenCalledWith(expect.objectContaining({assessmentProbe:true}));
   });
   it.each(["2","3",undefined])("rejects workflow rerun %s without provisioning",async attempt=>{
     const {options}=runner();options.environment.GITHUB_RUN_ATTEMPT=attempt;
@@ -51,6 +52,7 @@ describe("assessment runner lifecycle",()=>{
 function client() {
   const runId="b".repeat(24);
   const personas=Object.fromEntries(["member","otherMember","institution","unapprovedInstitution"].map(role=>[role,{runId,userId:`ttv-staging-fixture-${runId}-${role}`,personalAccessToken:`fixture-${role}`} ]));
+  personas.institution.sessionId=`${personas.institution.userId}-assessment-session`;
   const criterion={criterionId:"typescript",status:"assessed",rating:3,explanation:"Untrusted text must not be published",citations:[{kind:"journey",id:"fixture-entry",version:1,userId:personas.member.userId,quote:"Private raw text"}]};
   const result={assessment:{status:"completed",model:"workers-ai/@cf/google/gemma-4-26b-a4b-it",subject:{userId:personas.member.userId},criteria:[criterion]},probe:{claimed:true,payloadBytes:4000,payloadCharacters:4000}};
   const fetchImpl=vi.fn(async(url,options)=>{
@@ -64,6 +66,10 @@ function client() {
   return {personas,result,fetchImpl,target:{baseUrl,expectedVersion}};
 }
 describe("fixed assessment HTTP program",()=>{
+  it("rejects an ordinary fixture source session before requests",async()=>{
+    const f=client();f.personas.institution.sessionId=`${f.personas.institution.userId}-session`;
+    await expect(verifyStagingAssessment(f)).rejects.toThrow("Synthetic assessment verification failed");expect(f.fetchImpl).not.toHaveBeenCalled();
+  });
   it("issues one evidence-bearing request and publishes only allowlisted fields",async()=>{
     const f=client();const result=await verifyStagingAssessment(f);
     expect(result).toMatchObject({assessmentRequests:1,providerAttemptClaimed:true,payloadBytes:4000,usage:"unavailable"});

@@ -10,6 +10,7 @@ export async function verifyStagingAssessment({ target, personas, fetchImpl = fe
   const { member, otherMember, institution, unapprovedInstitution } = personas;
   if (![member, otherMember, institution, unapprovedInstitution].every(p => p?.runId === member?.runId && /^[a-f0-9]{24}$/.test(p?.runId ?? "") && p.userId.startsWith(`ttv-staging-fixture-${p.runId}-`)) ||
       ![member,institution,unapprovedInstitution].every(p=>p.personalAccessToken)) fail();
+  if (institution.sessionId !== `${institution.userId}-assessment-session`) fail();
   async function request(persona, path, method = "GET", data) {
     const response = await fetchImpl(`${STAGING_FIXTURE_ORIGIN}/api/community/${path}`, {
       method, redirect: "error", signal: globalThis.AbortSignal.timeout(25000),
@@ -59,7 +60,7 @@ export async function verifyStagingAssessment({ target, personas, fetchImpl = fe
   const criterion = assessment.criteria[0];
   if (criterion.criterionId !== "typescript" || !["assessed", "insufficient", "uncertain", "contradictory"].includes(criterion.status) ||
       (criterion.status === "assessed" ? !Number.isInteger(criterion.rating) || criterion.rating < 1 || criterion.rating > 5 : criterion.rating !== null) || !Array.isArray(criterion.citations)) fail();
-  if (criterion.status === "insufficient" ? criterion.citations.length !== 0 : criterion.citations.length === 0) fail();
+  if (criterion.status === "insufficient" ? criterion.citations.length > 0 : criterion.citations.length === 0) fail();
   const citations = criterion.citations.map(c => {
     if (c.kind !== "journey" || c.id !== entry.id || c.version !== entry.version || c.userId !== member.userId) fail();
     return { kind: "journey", id: entry.id, version: entry.version };
