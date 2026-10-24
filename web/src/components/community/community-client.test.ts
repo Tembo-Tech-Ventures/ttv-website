@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { z as z4 } from "zod/v4";
 import {
   communityRequest,
   mapJourney,
@@ -87,6 +88,20 @@ describe("community API boundary", () => {
       }
     },
   );
+  it("accepts schema defaults and transforms through the structural parser contract", async () => {
+    respond({});
+    const schema = z
+      .object({ count: z.number().default(2) })
+      .transform((data) => ({ label: String(data.count) }));
+    expect(await communityRequest("profile", schema)).toEqual({ label: "2" });
+  });
+  it("accepts Zod 4 schema output through the same parser contract", async () => {
+    respond({});
+    const schema = z4
+      .object({ count: z4.number().default(3) })
+      .transform((data) => ({ label: String(data.count) }));
+    expect(await communityRequest("profile", schema)).toEqual({ label: "3" });
+  });
   it("does not expose transport failure details", async () => {
     vi.stubGlobal(
       "fetch",

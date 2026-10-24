@@ -103,7 +103,11 @@ export function mapProfile(
 
 export async function communityRequest<T>(
   path: string,
-  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+  schema: {
+    safeParse(
+      input: unknown,
+    ): { success: true; data: T } | { success: false; error: unknown };
+  },
   method = "GET",
   body?: unknown,
   fetcher: typeof fetch = fetch,
