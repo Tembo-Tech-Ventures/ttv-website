@@ -120,9 +120,18 @@ function browserFixture({ failOwn = false } = {}) {
     contexts.push(context);
     return context;
   }) };
-  return { browser, personas, contexts, verifyJourney: vi.fn(), target: { baseUrl: "https://staging.tembotechventures.com" } };
+  return { audienceEnabled: false, browser, personas, contexts, verifyJourney: vi.fn(), target: { baseUrl: "https://staging.tembotechventures.com" } };
 }
 describe("fixed browser verification", () => {
+  it.each([false,true])("audience wiring reuses guarded contexts and cleans on failure=%s", async fails => {
+    const f=browserFixture(),verifyAudience=vi.fn();if(fails)verifyAudience.mockRejectedValue(new Error("PRIVATE"));
+    const result=verifyStagingPersonas({...f,audienceEnabled:true,verifyAudience});
+    if(fails)await expect(result).rejects.toThrow("Synthetic staging verification failed");else await result;
+    expect(f.contexts).toHaveLength(10);expect(f.contexts[9].route).toHaveBeenCalledOnce();expect(f.contexts[9].addCookies).not.toHaveBeenCalled();
+    expect(verifyAudience).toHaveBeenCalledWith(expect.objectContaining({anonymousContext:f.contexts[9],contextsByRole:expect.objectContaining({member:f.contexts[0],mentor:f.contexts[2],institution:f.contexts[3]})}));
+    expect(f.contexts.every(c=>c.close.mock.calls.length===1)).toBe(true);
+    if(fails)expect(f.verifyJourney).not.toHaveBeenCalled();
+  });
   it("checks role-denied paths and closes all browser/PAT contexts", async () => {
     const f = browserFixture();
     await verifyStagingPersonas(f);
