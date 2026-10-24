@@ -2,11 +2,15 @@ import React from "react";
 import { CheckCircle, ClockCounterClockwise } from "@phosphor-icons/react";
 import type { JourneyClaim } from "./types";
 
-export default function ClaimConfirmations({ claim }: { claim: JourneyClaim }) {
+export default function ClaimConfirmations({
+  claim,
+}: {
+  claim: Pick<JourneyClaim, "version" | "confirmations">;
+}) {
   if (claim.confirmations.length === 0)
     return (
       <p className="discovery-provenance">
-        Member-reported · Not yet confirmed by a mentor
+        Member-reported · No confirmation recorded
       </p>
     );
   return (
@@ -25,6 +29,14 @@ export default function ClaimConfirmations({ claim }: { claim: JourneyClaim }) {
                 {current ? "Checked by" : "Previous revision checked by"}{" "}
                 {confirmation.mentorName}
               </strong>
+              <p>
+                Role when recorded:{" "}
+                {confirmation.mentorRole === "MENTOR"
+                  ? "Mentor"
+                  : confirmation.mentorRole === "ADMIN"
+                    ? "Administrator"
+                    : "Not recorded"}
+              </p>
               <p>{confirmation.note}</p>
               <p>How it was checked: {confirmation.method}</p>
               <small>

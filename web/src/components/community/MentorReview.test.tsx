@@ -46,6 +46,30 @@ describe("MentorReview", () => {
     expect(html).toMatch(/<textarea[^>]+required=""/);
     expect(html).toContain("aria-labelledby=");
   });
+  it("shows existing review history without presenting it as a new request", () => {
+    const html = render([
+      {
+        ...request,
+        confirmations: [
+          {
+            id: "review",
+            mentorName: "Reviewer",
+            mentorRole: "ADMIN",
+            note: "Checked the API tests",
+            method: "Code review",
+            date: "2026-10-24",
+            journeyVersion: 3,
+          },
+        ],
+      },
+    ]);
+    expect(html).toContain("Confirmation history");
+    expect(html).toContain("Administrator");
+    expect(html).toContain(
+      "Refreshing this list does not mean a new review was requested",
+    );
+    expect(html).not.toContain("Awaiting your review");
+  });
   it("marks demonstration actions clearly", () => {
     expect(render([request], true)).toContain("not real mentor confirmations");
     expect(render([request], true)).toContain("Save demo review");
@@ -64,7 +88,9 @@ describe("MentorReview", () => {
     },
   );
   it("provides empty states without implying a negative judgment", () => {
-    expect(render([])).toContain("No claims are awaiting review");
+    expect(render([])).toContain(
+      "No published contributions are available to review",
+    );
     expect(render([{ ...request, evidence: [] }])).toContain(
       "Missing evidence is not evidence against the member",
     );

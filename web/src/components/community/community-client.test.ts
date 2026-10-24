@@ -4,6 +4,7 @@ import { z as z4 } from "zod/v4";
 import {
   communityRequest,
   mapJourney,
+  loadMentorship,
   mapProfile,
   searchProfiles,
   saveContribution,
@@ -37,6 +38,7 @@ const entry = {
     {
       id: "confirmation",
       mentorName: "Mentor",
+      mentorRole: "MENTOR" as const,
       statement: "Reviewed the implementation",
       method: "Paired review",
       journeyVersion: 2,
@@ -140,6 +142,22 @@ describe("community API boundary", () => {
     expect(url.searchParams.get("skills")).toBe("React, TypeScript");
     expect(profiles[0].evidenceLoaded).toBe(false);
   });
+  it("preserves confirmation history and role snapshots in the mentor list", async () => {
+    respond({
+      entries: [
+        {
+          ...entry,
+          memberName: "Fictional Member",
+          confirmations: [{ ...entry.confirmations[0], mentorRole: "ADMIN" }],
+        },
+      ],
+    });
+    const requests = await loadMentorship();
+    expect(requests[0].confirmations?.[0]).toMatchObject({
+      mentorRole: "ADMIN",
+      journeyVersion: 2,
+    });
+  });
   it("publishes only supported contribution fields", async () => {
     const fetcher = respond({ entry });
     await saveContribution({
@@ -167,6 +185,32 @@ describe("community API boundary", () => {
       expectedRevision: 3,
     });
     expect(JSON.parse(fetcher.mock.calls[0][1].body).expectedRevision).toBe(3);
+  });
+  it("rejects a confirmation response for a different revision without retrying", async () => {
+    const fetcher = respond({
+      confirmation: { id: "confirmation", journeyVersion: 4 },
+    });
+    await expect(
+      confirmContribution("entry", {
+        decision: "confirmed",
+        note: "Reviewed implementation",
+        method: "Paired review",
+        expectedRevision: 3,
+      }),
+    ).rejects.toMatchObject({ status: 502 });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it("does not retry a stale confirmation automatically", async () => {
+    const fetcher = respond({}, 409);
+    await expect(
+      confirmContribution("entry", {
+        decision: "confirmed",
+        note: "Reviewed implementation",
+        method: "Paired review",
+        expectedRevision: 3,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
   it("uses structured profile chat scope and member-attached cited sources", async () => {
     const fetcher = respond({
@@ -254,9 +298,7 @@ describe("community API boundary", () => {
       "Question",
       { query: "", context: "", skills: "" },
     );
-    expect(answer.references).toEqual([
-      "Mentor confirmation of Library · Revision 3",
-    ]);
+    expect(answer.references).toEqual(["Confirmation of Library · Revision 3"]);
   });
   it("does not show an ungrounded answer as a supported personal claim", async () => {
     respond({

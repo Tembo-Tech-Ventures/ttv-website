@@ -20,6 +20,7 @@ export interface JourneyClaim {
 export interface ClaimConfirmation {
   id: string;
   mentorName: string;
+  mentorRole: "MENTOR" | "ADMIN" | "UNKNOWN";
   note: string;
   method: string;
   date: string;

@@ -1,4 +1,6 @@
 import React, { useId, useRef, useState } from "react";
+import ClaimConfirmations from "../discovery/ClaimConfirmations";
+import type { ClaimConfirmation } from "../discovery/types";
 import { UiApiError, displayUiError } from "../discovery/ui-errors";
 
 export interface MentorReviewRequest {
@@ -8,6 +10,8 @@ export interface MentorReviewRequest {
   claimTitle: string;
   claimDescription: string;
   evidence: { id: string; title: string; url: string }[];
+  confirmations?: ClaimConfirmation[];
+  // Form availability, not a claim that this contribution has never been reviewed.
   status: "pending" | "confirmed" | "declined";
 }
 
@@ -144,9 +148,20 @@ function ReviewRequest({
           the member.
         </p>
       )}
+      {(request.confirmations?.length ?? 0) > 0 && (
+        <section aria-label="Recorded confirmations">
+          <h4>Confirmation history</h4>
+          <ClaimConfirmations
+            claim={{
+              version: request.version,
+              confirmations: request.confirmations ?? [],
+            }}
+          />
+        </section>
+      )}
       <output>
         {status === "pending"
-          ? "Awaiting your review"
+          ? "You can add a confirmation after reviewing this revision."
           : status === "confirmed"
             ? `${demo ? "Demo: " : ""}Claim confirmed: ${request.claimTitle}`
             : `${demo ? "Demo: " : ""}Confirmation declined for this claim: ${request.claimTitle}`}
@@ -240,6 +255,11 @@ export default function MentorReview({
         reviewed. It is not an endorsement of the whole person. An assistant
         response does not confirm a claim.
       </p>
+      <p>
+        These are published contributions, including previously reviewed work.
+        Check the confirmation history before adding a statement. Refreshing
+        this list does not mean a new review was requested.
+      </p>
       {demo && (
         <p className="discovery-demo-notice">
           Demo data · Reviews here are demonstration actions, not real mentor
@@ -247,7 +267,7 @@ export default function MentorReview({
         </p>
       )}
       {requests.length === 0 ? (
-        <p>No claims are awaiting review.</p>
+        <p>No published contributions are available to review.</p>
       ) : (
         requests.map((request) => (
           <ReviewRequest

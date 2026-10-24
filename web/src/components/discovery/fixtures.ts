@@ -41,6 +41,7 @@ export const demoProfiles: CommunityProfile[] = [
             journeyVersion: 1,
             method: "Live project walkthrough and code review",
             mentorName: "Jules Martin",
+            mentorRole: "MENTOR",
             date: "2026-10-20",
             note: "Reviewed the borrowing flow and watched Amara explain the keyboard focus changes. Confirmed her contribution to those components.",
           },

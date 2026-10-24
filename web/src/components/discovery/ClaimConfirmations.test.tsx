@@ -15,6 +15,21 @@ describe("revision-specific evidence", () => {
     expect(html).toContain("Review needed for current revision 2");
     expect(html).not.toContain("Claim-specific confirmation");
   });
+  it.each(["ADMIN", "UNKNOWN"] as const)(
+    "preserves the recorded %s role instead of inventing mentor attribution",
+    (role) => {
+      const original = demoProfiles[0].claims[0];
+      const claim = {
+        ...original,
+        confirmations: [{ ...original.confirmations[0], mentorRole: role }],
+      };
+      const html = renderToStaticMarkup(<ClaimConfirmations claim={claim} />);
+      expect(html).toContain(
+        role === "ADMIN" ? "Administrator" : "Not recorded",
+      );
+      expect(html).not.toContain("Role when recorded: Mentor");
+    },
+  );
   it("labels unpublished draft entries distinctly from published contributions", () => {
     const profile = {
       ...demoProfiles[0],

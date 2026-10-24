@@ -25,6 +25,7 @@ const profileSchema = z.object({
 const confirmationSchema = z.object({
   id: z.string(),
   mentorName: z.string(),
+  mentorRole: z.enum(["MENTOR", "ADMIN", "UNKNOWN"]).default("UNKNOWN"),
   statement: z.string(),
   method: z.string(),
   journeyVersion: z.number().int(),
@@ -76,6 +77,7 @@ export function mapJourney(entry: EntryDto): JourneyClaim {
     confirmations: entry.confirmations.map((confirmation) => ({
       id: confirmation.id,
       mentorName: confirmation.mentorName,
+      mentorRole: confirmation.mentorRole,
       note: confirmation.statement,
       method: confirmation.method,
       date: new Date(confirmation.createdAt * 1000).toISOString().slice(0, 10),
@@ -202,6 +204,7 @@ export async function loadMentorship(): Promise<MentorReviewRequest[]> {
     claimTitle: entry.title,
     claimDescription: entry.description,
     evidence: mapJourney(entry).evidence,
+    confirmations: mapJourney(entry).confirmations,
     status: "pending",
   }));
 }
@@ -210,7 +213,7 @@ export async function confirmContribution(
   review: MentorReviewDecision,
 ): Promise<void> {
   if (review.decision !== "confirmed") throw new UiApiError(400);
-  await communityRequest(
+  const result = await communityRequest(
     `journey/${encodeURIComponent(id)}/confirmations`,
     z.object({
       confirmation: z.object({
@@ -225,6 +228,8 @@ export async function confirmContribution(
       expectedRevision: review.expectedRevision,
     },
   );
+  if (result.confirmation.journeyVersion !== review.expectedRevision)
+    throw new UiApiError(502);
 }
 
 const chatSchema = z.object({
@@ -280,7 +285,7 @@ export async function askProfile(
     );
     if (!claim) throw new UiApiError(502);
     references.push(
-      `${citation.kind === "confirmation" ? "Mentor confirmation of " : ""}${claim.title} · Revision ${claim.version}`,
+      `${citation.kind === "confirmation" ? "Confirmation of " : ""}${claim.title} · Revision ${claim.version}`,
     );
     for (const source of claim.evidence) sources.set(source.id, source);
   }

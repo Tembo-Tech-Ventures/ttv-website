@@ -553,7 +553,7 @@ export default function ScoutWorkspace({
                                   currentConfirmations(claim).length > 0,
                               ).length
                             }{" "}
-                            mentor-confirmed entries
+                            confirmed entries
                           </span>
                         </>
                       )}
