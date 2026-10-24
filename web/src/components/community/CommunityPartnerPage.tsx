@@ -42,7 +42,7 @@ const content = {
       { label: "Amina Wanjiku · fictional example", title: "Keep the evidence distinct", text: "Member claim: built the low-stock view.", detail: "Source: project code · example only. Mentor note: reviewed the view and threshold tests." },
       { label: "Your next question", title: "“Why should I interview this person?”", text: "Look at the contribution, its sources, and what remains unclear.", detail: "A human question to explore, not an automated recommendation." },
     ],
-    journey: "Find the person. Follow the evidence.", intro: "Hiring is one place to begin. Institutional access is a single, generic role for exploring community work.",
+    journey: "Find the person. Follow the evidence.", intro: "Start with hiring. Explore the work behind a profile and decide what to ask next.",
     steps: [
       { title: "Start with a name or skill.", text: "Search community profiles for a starting point. A listed skill is a claim to explore, not proof of ability." },
       { title: "Understand their part.", text: "Read the contribution, follow its sources, and inspect any mentor confirmation. Keep the member’s claim and the reviewer’s observation distinct." },
