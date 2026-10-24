@@ -27,7 +27,7 @@ describe("dashboard shell hydration", () => {
     expect(html).toMatch(/aria-expanded="false"/);
   });
 
-  it("renders only the server-derived links and always keeps logout", () => {
+  it("keeps community open to noncohort members while retaining cohort gates", () => {
     const html = renderToStaticMarkup(
       <DashboardShell
         currentPath="/dashboard"
@@ -41,6 +41,7 @@ describe("dashboard shell hydration", () => {
     expect(html).toContain('href="/dashboard/ask"');
     expect(html).toContain('href="/dashboard/profile"');
     expect(html).toContain('href="/auth/logout"');
+    expect(html).toContain('href="/dashboard/community"');
     expect(html).not.toContain('href="/dashboard/sessions"');
     expect(html).not.toContain('href="/dashboard/portfolio"');
     expect(html).not.toContain('href="/dashboard/writing"');

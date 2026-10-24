@@ -52,5 +52,6 @@ declare namespace App {
     user: AuthUser | null;
     personalAccessToken: import("@/lib/personal-access-tokens").PersonalAccessTokenSummary | null;
     isAdmin?: boolean;
+    stagingFixture?: import("@/lib/staging-fixtures").StagingFixtureIdentity | null;
   }
 }

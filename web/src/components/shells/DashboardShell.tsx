@@ -17,7 +17,7 @@ import type { IconType } from "react-icons";
 import type { StudentDashboardLinkId } from "@/lib/student/journey";
 
 export interface DashboardLink {
-  id: StudentDashboardLinkId;
+  id: StudentDashboardLinkId | "community";
   href: string;
   label: string;
   icon: IconType;
@@ -31,6 +31,7 @@ export interface DashboardLink {
  */
 export const DASHBOARD_LINKS: DashboardLink[] = [
   { id: "home", href: "/dashboard", label: "Home", icon: PiGaugeDuotone },
+  { id: "community", href: "/dashboard/community", label: "Community", icon: PiHandshakeDuotone },
   {
     id: "apply",
     href: "/dashboard/apply",
@@ -52,8 +53,9 @@ export function getDashboardLinks(
   visibleLinkIds: StudentDashboardLinkId[],
   unreadLeadCount = 0
 ): DashboardLink[] {
-  const visible = new Set<StudentDashboardLinkId>([
+  const visible = new Set<DashboardLink["id"]>([
     ...visibleLinkIds,
+    "community",
     "logout",
   ]);
   return DASHBOARD_LINKS.filter((link) => visible.has(link.id)).map((link) =>

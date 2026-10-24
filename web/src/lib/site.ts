@@ -26,6 +26,7 @@ export function formatCohortLocation(
 export const PUBLIC_NAV_LINKS = [
   { label: "How", href: "/#what-we-do" },
   { label: "Why", href: "/#why-tembo" },
+  { label: "Community", href: "/community" },
   { label: "Builders", href: "/talent" },
   { label: "Hire", href: "/hire" },
   { label: "Blog", href: "/blog" },
@@ -44,6 +45,7 @@ export const PUBLIC_FOOTER_GROUPS = [
   {
     heading: "Join",
     links: [
+      { label: "Community", href: "/community" },
       { label: "Sign in", href: "/auth/login" },
       { label: "Apply", href: "/dashboard/apply" },
     ],

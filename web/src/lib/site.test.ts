@@ -13,6 +13,7 @@ describe("public navigation", () => {
     expect(PUBLIC_NAV_LINKS).toEqual([
       { label: "How", href: "/#what-we-do" },
       { label: "Why", href: "/#why-tembo" },
+      { label: "Community", href: "/community" },
       { label: "Builders", href: "/talent" },
       { label: "Hire", href: "/hire" },
       { label: "Blog", href: "/blog" },

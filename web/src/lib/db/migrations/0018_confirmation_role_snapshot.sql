@@ -1,0 +1,1 @@
+ALTER TABLE `communityConfirmation` ADD `mentorRole` text DEFAULT 'UNKNOWN' NOT NULL;

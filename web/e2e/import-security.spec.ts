@@ -1,3 +1,4 @@
+import { feedbackApiRequest as safeApiRequest } from "../scripts/cloudflare/feedback-browser-guard.mjs";
 import { expect, test } from "@playwright/test";
 import { mkdirSync } from "fs";
 import { FIXTURE_ENVIRONMENT } from "./fixture-env";
@@ -57,6 +58,7 @@ test.describe("legacy import containment", () => {
 
   test("rejects foreign-origin and bearer import requests without data", async ({
     page,
+    baseURL,
   }) => {
     await page.goto("/admin/data-migration");
     const origin = new URL(page.url()).origin;
@@ -65,7 +67,7 @@ test.describe("legacy import containment", () => {
       exportedAt: "2026-08-01T12:00:00.000Z",
     };
 
-    const foreignOrigin = await page.request.post("/api/admin/import", {
+    const foreignOrigin = await safeApiRequest(page.request, baseURL!, "/api/admin/import", { method: "POST",
       headers: { Origin: "https://foreign.example" },
       data: nonImportPayload,
     });
@@ -74,7 +76,7 @@ test.describe("legacy import containment", () => {
       "same-origin admin request is required"
     );
 
-    const bearerSession = await page.request.post("/api/admin/import", {
+    const bearerSession = await safeApiRequest(page.request, baseURL!, "/api/admin/import", { method: "POST",
       headers: { Origin: origin },
       data: nonImportPayload,
     });

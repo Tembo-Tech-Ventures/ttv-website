@@ -1,13 +1,15 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreDependencies": [
-    "cloudflare"
+    "cloudflare",
+    "@astrojs/compiler"
   ],
   "entry": [
     "src/pages/**/*.{astro,ts}!",
     "scripts/**/*.mjs",
     "containers/**/*.js",
     "e2e/**/*.ts",
+    "e2e/component-preview/*.tsx",
     "*.config.{ts,mjs,js}"
   ]
 }
