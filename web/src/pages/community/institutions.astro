@@ -1,0 +1,9 @@
+---
+import PublicLayout from "@/layouts/PublicLayout.astro";
+import CommunityPartnerPage from "@/components/community/CommunityPartnerPage";
+// oxlint-disable-next-line import/no-unassigned-import -- Page-scoped CSS; no client hydration required.
+import "@/styles/community-audience.css";
+---
+<PublicLayout title="Community for institutions | Tembo Tech Ventures" description="Explore community profiles, documented contributions, and mentor context. Follow the evidence and decide what to ask next." canonical="/community/institutions">
+  <CommunityPartnerPage audience="institutions" isAuthenticated={Boolean(Astro.locals.user)} />
+</PublicLayout>

@@ -48,3 +48,51 @@ test("a narrow screen with enlarged text has no horizontal overflow", async ({ p
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+for (const [audience, headline, cta, destination] of [
+  ["mentors", "Make the contribution clearer.", "Continue to mentor review", "/dashboard/mentorship"],
+  ["institutions", "Look beyond the profile. Understand the work.", "Continue to institutional access", "/dashboard/discover"],
+]) {
+  test(`${audience} explains approval, supports keyboard disclosures and retains its CTA destination`, async ({ page }) => {
+    await page.goto(`/community-audience.html?audience=${audience}`);
+    await page.evaluate(() => document.fonts.ready);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(headline);
+    const link = page.getByRole("link", { name: cta }).first();
+    await expect(link).toHaveAttribute("href", `/auth/login?next=${encodeURIComponent(destination)}`);
+    await expect(page.locator(".audience-cta-note")).toContainText("administrator approval after sign-in");
+    await link.focus();
+    expect(await link.evaluate(el => getComputedStyle(el).outlineStyle)).toBe("solid");
+    await page.getByRole("link", { name: "See how it works" }).click();
+    await expect(page).toHaveURL(/#participation$/);
+    const question = page.locator("details").first();
+    await question.locator("summary").focus();
+    await page.keyboard.press("Enter");
+    await expect(question.locator("p")).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(question.locator("p")).toBeHidden();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `test-results/audience-${audience}-${test.info().project.name}.png`, fullPage: true, animations: "disabled" });
+    await page.goto(`/community-audience.html?audience=${audience}&signed-in`);
+    await expect(page.getByRole("link", { name: cta }).first()).toHaveAttribute("href", destination);
+    await expect(page.locator(".audience-cta-note")).toContainText("administrator approval");
+  });
+  test(`${audience} stays readable at 320px with enlarged text and reduced motion`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 320, height: 740 });
+    await page.goto(`/community-audience.html?audience=${audience}`);
+    await page.evaluate(() => document.fonts.ready);
+    await page.evaluate(() => {
+      const elements = [...document.querySelectorAll<HTMLElement>(".community-audience h1, .community-audience h2, .community-audience h3, .community-audience p, .community-audience a, .community-audience summary")];
+      const sizes = elements.map(el => Number.parseFloat(getComputedStyle(el).fontSize));
+      elements.forEach((el, i) => { el.style.fontSize = `${sizes[i] * 1.25}px`; });
+    });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const nodes = page.locator(".audience-evidence-path li");
+    await expect(nodes).toHaveCount(3);
+    for (const node of await nodes.all()) {
+      await expect(node).toBeVisible();
+      expect(await node.evaluate(el => getComputedStyle(el).animationName)).toBe("none");
+      expect(await node.evaluate(el => getComputedStyle(el).opacity)).toBe("1");
+    }
+  });
+}
