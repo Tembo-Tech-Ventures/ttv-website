@@ -15,7 +15,7 @@ export async function withStagingPersonas({ target, signingSecret, run, audit = 
   const timestamp = Math.floor(now.getTime() / 1000);
   if (!Number.isSafeInteger(timestamp) || Math.abs(Date.now() / 1000 - timestamp) > 60) throw new Error("Invalid fixture time.");
   if (retainedReadProbe && assessmentProbe) throw new Error("Select one probe.");
-  const cutoff = Date.parse("2026-10-25T23:00:00Z") / 1000;
+  const cutoff = Date.parse("2026-10-25T11:10:35Z") / 1000;
   if (retainedReadProbe && timestamp >= cutoff) throw new Error("Retained probe window closed.");
   const runId = randomBytes(12).toString("hex");
   const namespace = `ttv-staging-fixture-${runId}`;

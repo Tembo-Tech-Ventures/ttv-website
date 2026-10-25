@@ -1,7 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import ScoutWorkspace, { EvidenceLinks } from "./ScoutWorkspace";
+import ScoutWorkspace, { EvidenceLinks, EvidenceOrdering } from "./ScoutWorkspace";
 import { demoProfiles } from "./fixtures";
 import { evidenceHref, filterDemoProfiles } from "./types";
 
@@ -92,4 +92,10 @@ describe("institution scouting", () => {
     expect(html).toContain('rel="noopener noreferrer"');
     expect(html).toContain("Member demo");
   });
+});
+
+it("renders model evidence order independently from names and preserves missing-evidence limits",()=>{
+ const html=renderToStaticMarkup(<EvidenceOrdering enabled count={3} ordering={false} onOrder={()=>{}} order={{text:"Evidence comparison",evaluatedCandidates:3,profiles:[{userId:"b",name:"Fictional B",reason:"More published testing details",missingEvidence:["Production experience unknown"]},{userId:"a",name:"Fictional A",reason:"Implementation notes without tests",missingEvidence:["Testing details missing"]}]}}/>);
+ expect(html.indexOf('Fictional B')).toBeLessThan(html.indexOf('Fictional A'));
+ expect(html).toContain('Production experience unknown');expect(html).toContain('not a ranking of all members or ability');expect(html).toContain('/dashboard/discover?profile=b');
 });

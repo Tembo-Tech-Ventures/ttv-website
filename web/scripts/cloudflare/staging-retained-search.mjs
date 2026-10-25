@@ -3,6 +3,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { cfApi } from './lib.mjs';
 import { validateStagingRevision } from './staging-preflight.mjs';
 import { verifyStagingFixtureTarget, STAGING_FIXTURE_ORIGIN } from './staging-fixture-target.mjs';
+import { verifyRetainedBrowser } from './staging-retained-browser.mjs';
 import { withStagingPersonas } from './staging-personas.mjs';
 import { buildDemoDataset } from './staging-demo-data.mjs';
 const reportPath='test-results/staging-retained-search.json';
@@ -19,8 +20,9 @@ export function expectedMatches(profiles,{query='',skills=[],limit=50}) {
  .toSorted((a,b)=>a.name<b.name?-1:a.name>b.name?1:a.id<b.id?-1:a.id>b.id?1:0).slice(0,limit).map(p=>p.id);
 }
 function ensure(ok){if(!ok)throw new Error('Retained probe verification failed.');}
-export async function runRetainedSearch({environment=process.env,api=cfApi,fetchImpl=fetch,validateRevision=validateStagingRevision,verifyTarget=verifyStagingFixtureTarget,withPersonas=withStagingPersonas}={}) {
+export async function runRetainedSearch({environment=process.env,api=cfApi,fetchImpl=fetch,validateRevision=validateStagingRevision,verifyTarget=verifyStagingFixtureTarget,withPersonas=withStagingPersonas,verifyBrowser=verifyRetainedBrowser}={}) {
  await rm(reportPath,{force:true});
+ const query=environment.STAGING_RETAINED_QUERY||'Kotlin';ensure(['Kotlin','React','Python'].includes(query));
  ensure(environment.GITHUB_RUN_ATTEMPT==='1' && environment.STAGING_ACTION==='retained-read-probe');
  await validateRevision(environment);
  const target=await verifyTarget({environmentName:environment.CLOUDFLARE_ENVIRONMENT_NAME,accountId:environment.CLOUDFLARE_ACCOUNT_ID,expectedVersion:environment.STAGING_EXPECTED_SHA,baseUrl:STAGING_FIXTURE_ORIGIN,api,fetchImpl});
@@ -31,7 +33,8 @@ export async function runRetainedSearch({environment=process.env,api=cfApi,fetch
  ensure(profiles.length===150 && profiles.every(u=>ids.includes(u.id)&&u.email===`${u.id}@invalid.ttv`));
  const sources=resultRows(await target.executeQuery(`SELECT u.id,'profile' AS kind,p.version FROM user u JOIN communityProfile p ON p.userId=u.id WHERE u.id IN (${placeholders}) UNION ALL SELECT j.id,'journey' AS kind,j.version FROM communityJourney j WHERE j.userId IN (${placeholders}) AND j.visibility='institution' UNION ALL SELECT c.id,'confirmation' AS kind,c.journeyVersion AS version FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId WHERE j.userId IN (${placeholders}) AND c.mentorId IN (${placeholders}) AND j.visibility='institution' AND c.journeyVersion=j.version`,[idJson,idJson,idJson,idJson]));
  const sourceKeys=new Set(sources.map(s=>`${s.kind}:${s.id}:${s.version}`));
- const report={version:target.expectedVersion,fictional:true,directory:{population:profiles.length,eligible:profiles.filter(p=>!p.excluded).length,cases:[],pagination:'Limit/default20/max50 only; no cursor/offset or whole-directory pagination proof.'},chat:null,cleanup:'pending'};
+ let screenshots=[];
+ const report={query,version:target.expectedVersion,fictional:true,directory:{population:profiles.length,eligible:profiles.filter(p=>!p.excluded).length,cases:[],pagination:'Limit/default20/max50 only; no cursor/offset or whole-directory pagination proof.'},chat:null,cleanup:'pending'};
  await withPersonas({target,signingSecret:environment.BETTER_AUTH_SECRET,retainedReadProbe:true,audit:record=>console.log(JSON.stringify(record)),run:async personas=>{
   async function request(actor,path,method='GET',body){const start=globalThis.performance.now();const r=await fetchImpl(`${target.baseUrl}/api/community/${path}`,{method,headers:{Authorization:`Bearer ${actor.personalAccessToken}`,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),redirect:'error',signal:globalThis.AbortSignal.timeout(method==='POST'?75000:15000)});return {status:r.status,data:await r.json(),latencyMs:Math.round(globalThis.performance.now()-start)};}
   for(const test of [...RETAINED_CASES,{label:'default limit',query:'',skills:[],limit:20},{label:'limit1',query:'',skills:[],limit:1},{label:'limit2',query:'',skills:[],limit:2},{label:'max50',query:'',skills:[],limit:50}]){
@@ -44,11 +47,11 @@ export async function runRetainedSearch({environment=process.env,api=cfApi,fetch
   }
   const detailId=ids.find(id=>id.endsWith('member-noncohort'));const detail=await request(personas.institution,`profiles/${detailId}`);ensure(detail.status===200&&detail.data.profile.userId===detailId&&detail.data.entries.every(j=>j.visibility==='institution'&&j.confirmations.every(c=>ids.includes(c.mentorId))));
   report.directory.cases.push({label:'published detail only',status:detail.status,id:detailId,entries:detail.data.entries.length,latencyMs:detail.latencyMs});
-  const chat=await request(personas.institution,'chat','POST',{message:'Find fictional Kotlin/Android builders in this demo. Use search and published detail evidence, explain a small selection with citations and missing evidence. Do not rank ability or claim external links were visited.'});
-  ensure(chat.status===200&&chat.data.grounded===true&&chat.data.citations?.some(s=>s.kind==='journey')&&chat.data.retrievedSources?.some(s=>s.kind==='journey')&&chat.data.execution?.model==='@cf/zai-org/glm-5.3-flash'&&chat.data.execution.modelSteps<=3&&chat.data.execution.executedToolCalls<=6&&chat.data.execution.executedToolCalls>=2);
+  const chat=await verifyBrowser({target,actor:personas.institution,query});screenshots=chat.screenshots;
+  ensure(chat.status===200&&chat.data.grounded===true&&chat.data.orderedProfiles?.length>0&&chat.data.evaluatedCandidates<=10&&chat.data.citations?.some(s=>s.kind==='journey')&&chat.data.retrievedSources?.some(s=>s.kind==='journey')&&chat.data.execution?.model==='@cf/zai-org/glm-5.3-flash'&&chat.data.execution.modelSteps<=3&&chat.data.execution.executedToolCalls<=6&&chat.data.execution.executedToolCalls>=2);
   for(const s of [...chat.data.citations,...chat.data.retrievedSources])ensure(ids.includes(s.userId)&&sourceKeys.has(`${s.kind}:${s.id}:${s.version}`));
-  report.chat={status:chat.status,latencyMs:chat.latencyMs,execution:chat.data.execution,citations:chat.data.citations.map(({kind,id,userId,version})=>({kind,id,userId,version})),retrievedSources:chat.data.retrievedSources.map(({kind,id,userId,version})=>({kind,id,userId,version})),missingEvidenceLanguage:/missing|insufficient|unknown|not documented|no evidence/i.test(chat.data.answer),semanticReviewRequired:true,ranking:'Tool retrieval plus generated cited summary; no ability ranking quality claim.',toolNameTrace:'Existing response exposes counts, not actual tool names.'};
+  report.chat={status:chat.status,latencyMs:chat.latencyMs,execution:chat.data.execution,orderedProfiles:chat.data.orderedProfiles,evaluatedCandidates:chat.data.evaluatedCandidates,citations:chat.data.citations.map(({kind,id,userId,version})=>({kind,id,userId,version})),retrievedSources:chat.data.retrievedSources.map(({kind,id,userId,version})=>({kind,id,userId,version})),missingEvidenceLanguage:/missing|insufficient|unknown|not documented|no evidence/i.test(chat.data.answer),answer:chat.data.answer,semanticReviewRequired:true,ranking:'Tool retrieval plus generated cited summary; no ability ranking quality claim.',toolNameTrace:'Existing response exposes counts, not actual tool names.'};
  }});
- report.cleanup='verified';await mkdir('test-results',{recursive:true});await writeFile(reportPath,JSON.stringify(report,null,2)+'\n');return report;
+ report.cleanup='verified';await mkdir('test-results',{recursive:true});for(const shot of screenshots)await writeFile(`test-results/staging-retained-search-${shot.name}.png`,shot.buffer);await writeFile(reportPath,JSON.stringify(report,null,2)+'\n');return report;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){try{await runRetainedSearch();console.log('Retained directory/chat verification and disposable cleanup passed.');}catch{console.error('Retained probe failed; no evidence published. Inspect sanitized cleanup receipt.');process.exitCode=1;}}

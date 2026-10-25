@@ -126,7 +126,7 @@ function groundedContent(refs: Array<{kind:string;id:string;version:number}>) { 
 it("accepts exact delivered source references and separates unused retrieved evidence", async () => {
  complete.mockResolvedValueOnce({ content: null, toolCalls: [call("get_own_profile", {})], finishReason: null }).mockResolvedValueOnce(groundedContent([{kind:"journey",id:"j",version:3}]));
  const r = await runCommunityChat(env,service(),{message:"My evidence"});
- expect(r.grounded).toBe(true); expect(r.execution).toEqual({model: COMMUNITY_CHAT_MODEL,modelSteps:2,executedToolCalls:1}); expect(r.citations).toHaveLength(1); expect(r.citations[0]).toMatchObject({id:"j",version:3}); expect(r.retrievedSources).toHaveLength(2);
+ expect(r.grounded).toBe(true); expect(r.execution).toMatchObject({model: COMMUNITY_CHAT_MODEL,modelSteps:2,executedToolCalls:1}); expect(r.citations).toHaveLength(1); expect(r.citations[0]).toMatchObject({id:"j",version:3}); expect(r.retrievedSources).toHaveLength(2);
 });
 it.each([{kind:"journey",id:"invented",version:3},{kind:"journey",id:"j",version:999},{kind:"confirmation",id:"j",version:3}])("rejects hallucinated source identity or version %j", async ref => {
  complete.mockResolvedValueOnce({content:null,toolCalls:[call("get_own_profile",{})],finishReason:null}).mockResolvedValueOnce(groundedContent([ref]));
@@ -161,7 +161,7 @@ it("never executes more than six tools or tools after the final model step", asy
  const s = service();
  complete.mockResolvedValue({content:null,toolCalls:Array.from({length:6},(_,i)=>({...call("get_own_profile",{}),id:`tool-${i}`})),finishReason:null});
  const result=await runCommunityChat(env,s,{message:"continue"});
- expect(complete).toHaveBeenCalledTimes(3); expect(s.getOwnProfile).toHaveBeenCalledTimes(6); expect(result.execution).toEqual({model:COMMUNITY_CHAT_MODEL,modelSteps:3,executedToolCalls:6}); expect(result.limited).toBe(true);
+ expect(complete).toHaveBeenCalledTimes(3); expect(s.getOwnProfile).toHaveBeenCalledTimes(6); expect(result.execution).toMatchObject({model:COMMUNITY_CHAT_MODEL,modelSteps:3,executedToolCalls:6}); expect(result.limited).toBe(true);
 });
 it("sanitizes transport errors without application retry or evidence claims", async () => {
  complete.mockRejectedValue(new Error("PRIVATE credential/body"));
@@ -188,4 +188,22 @@ it("honors an already aborted Mastra run before inference", async () => {
   expect(result.execution.executedToolCalls).toBe(0);
   expect(complete).not.toHaveBeenCalled();
  } finally { timeout.mockRestore(); }
+});
+
+it("orders only searched candidates with published journey citations and exposes actual tool names",async()=>{
+ const s=service(true);vi.mocked(s.searchProfiles).mockResolvedValue([{userId:'b',name:'Fictional B',version:1},{userId:'a',name:'Fictional A',version:1}] as never);
+ vi.mocked(s.getProfile).mockImplementation(async(id)=>({userId:id,name:`Fictional ${id}`,version:1}) as never);
+ vi.mocked(s.listJourney).mockImplementation(async(id)=>[{id:`j-${id}`,userId:id,version:1,visibility:'institution',confirmations:[]}] as never);
+ complete.mockResolvedValueOnce({content:null,toolCalls:[call('search_profiles',{query:'Kotlin'})]}).mockResolvedValueOnce({content:null,toolCalls:[{...call('get_profile',{userId:'a'}),id:'a'},{...call('get_profile',{userId:'b'}),id:'b'}]}).mockResolvedValueOnce({content:JSON.stringify({answer:'A has more documented testing; experience remains unknown.',citations:[{kind:'journey',id:'j-a',version:1},{kind:'journey',id:'j-b',version:1}],orderedProfiles:[{userId:'a',reason:'Documented testing first',missingEvidence:['Production experience unknown']},{userId:'b',reason:'Less documented testing',missingEvidence:['Testing details unknown']}]})});
+ const result=await runCommunityChat(env,s,{message:'Compare Kotlin evidence',orderByEvidence:true});expect(result.grounded).toBe(true);expect(result.orderedProfiles.map(p=>p.userId)).toEqual(['a','b']);expect(result.evaluatedCandidates).toBe(2);expect(result.execution.toolNames).toEqual(['search_profiles','get_profile','get_profile']);
+});
+it("rejects ordering with a selected profile/rubric or noninstitutional role",async()=>{
+ await expect(runCommunityChat(env,service(),{message:'order',orderByEvidence:true})).rejects.toMatchObject({status:403});
+ await expect(runCommunityChat(env,service(true),{message:'order',profileId:'self',orderByEvidence:true})).rejects.toMatchObject({status:403});
+ expect(complete).not.toHaveBeenCalled();
+});
+it("rejects model ordering of unsearched or uncited profiles",async()=>{
+ const s=service(true);vi.mocked(s.searchProfiles).mockResolvedValue([{userId:'a',name:'Fictional A',version:1}] as never);
+ complete.mockResolvedValueOnce({content:null,toolCalls:[call('search_profiles',{query:'Kotlin'})]}).mockResolvedValueOnce({content:JSON.stringify({answer:'Unknown',citations:[{kind:'profile',id:'a',version:1}],orderedProfiles:[{userId:'real',reason:'Unsupported',missingEvidence:[]}]})});
+ const result=await runCommunityChat(env,s,{message:'Compare evidence',orderByEvidence:true});expect(result.grounded).toBe(false);expect(result.orderedProfiles).toEqual([]);
 });

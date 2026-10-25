@@ -1,5 +1,5 @@
-import { retainedProbeMarker, verifySameRunTarget, type StagingFixtureIdentity } from "../staging-fixtures";
-import { DEMO_CUTOFF, isDemoUser } from "../staging-demo-policy";
+import { retainedProbeMarker, RETAINED_READ_PROBE_CUTOFF, verifySameRunTarget, type StagingFixtureIdentity } from "../staging-fixtures";
+import { isDemoUser } from "../staging-demo-policy";
 import { CommunityError } from "./model";
 
 export function authorizeRetainedProbe(method: string, path: string, scopes: readonly string[] | null, body: unknown) {
@@ -19,6 +19,6 @@ export async function claimRetainedChat(db: D1Database, environment: string | un
       AND f.expiresAt=?7 AND f.expiresAt>unixepoch() AND f.expiresAt="session".expiresAt
       AND u.email=?8 AND EXISTS (SELECT 1 FROM UserRoles ur JOIN Roles r ON r.id=ur.roleId WHERE ur.userId=u.id AND r.name='INSTITUTION'))
     RETURNING id`).bind(retainedProbeMarker(fixture.runId,true),`${fixture.userId}-retained-read-probe-session`,fixture.userId,
-      retainedProbeMarker(fixture.runId),DEMO_CUTOFF,fixture.runId,fixture.expiresAt,`${fixture.userId}@invalid.ttv`).first();
+      retainedProbeMarker(fixture.runId),RETAINED_READ_PROBE_CUTOFF,fixture.runId,fixture.expiresAt,`${fixture.userId}@invalid.ttv`).first();
   if (!consumed) throw new CommunityError("Synthetic chat attempt already consumed.",403);
 }

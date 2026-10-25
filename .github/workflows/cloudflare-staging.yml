@@ -26,6 +26,12 @@ on:
         description: Pinned live revision for read-only diagnose-demo only
         required: false
         type: string
+      retained_query:
+        description: Fictional evidence-order scenario (deliberate controlled iteration)
+        required: false
+        type: choice
+        default: Kotlin
+        options: [Kotlin, React, Python]
       retained_read_probe_enabled:
         description: Temporary retained read probe flag (explicit owner approval required; return off after run)
         required: false
@@ -206,12 +212,14 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci --legacy-peer-deps
-      - name: One retained directory and chat probe (approval required)
+      - run: npx playwright install --with-deps chromium
+      - name: Retained directory and evidence-order browser verification
         env:
           GH_TOKEN: ${{ github.token }}
           STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
           STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
           STAGING_INTEGRATION_PR: "171"
+          STAGING_RETAINED_QUERY: ${{ inputs.retained_query }}
           STAGING_ACTION: retained-read-probe
           CLOUDFLARE_ENVIRONMENT_NAME: staging
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -222,6 +230,6 @@ jobs:
         if: ${{ success() }}
         with:
           name: retained-search-${{ inputs.expected_sha }}-${{ github.run_id }}
-          path: web/test-results/staging-retained-search.json
+          path: web/test-results/staging-retained-search*
           if-no-files-found: error
           retention-days: 7

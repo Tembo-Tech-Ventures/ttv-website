@@ -1097,3 +1097,6 @@
 .discovery-assessment-scale ol {
   padding-left: 22px;
 }
+
+/* Model explanations and cited IDs remain readable on narrow screens. */
+.discovery-answer { overflow-wrap: anywhere; }
