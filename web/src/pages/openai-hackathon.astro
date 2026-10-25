@@ -1,6 +1,9 @@
 ---
 import OrganizerPage from "@/components/hackathon/OrganizerPage";
+// This standalone static page owns its styles instead of using a session-aware layout.
+// oxlint-disable-next-line import/no-unassigned-import
 import "@/styles/global.css";
+// oxlint-disable-next-line import/no-unassigned-import
 import "@/styles/hackathon.css";
 // Read-only organizer overview: no session, database or model access.
 export const prerender = true;
