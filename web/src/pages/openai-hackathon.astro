@@ -5,8 +5,8 @@ import OrganizerPage from "@/components/hackathon/OrganizerPage";
 import "@/styles/global.css";
 // oxlint-disable-next-line import/no-unassigned-import
 import "@/styles/hackathon.css";
-// Read-only organizer overview: no session, database or model access.
-export const prerender = true;
+// Read-only content uses the site's existing server-rendered route mode.
+// This page performs no session, database or model calls.
 ---
 <!doctype html>
 <html lang="en">

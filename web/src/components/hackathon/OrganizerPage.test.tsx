@@ -20,7 +20,9 @@ describe("read-only organizer overview", () => {
       new URL("../../pages/openai-hackathon.astro", import.meta.url),
       "utf8",
     );
-    expect(route).toContain("export const prerender = true");
+    // Cloudflare's prerender worker cannot load this app's Container binding.
+    // Keep the existing SSR path without introducing page-level data access.
+    expect(route).not.toMatch(/export const prerender\s*=\s*true/);
     expect(route).not.toMatch(
       /Astro.locals|cloudflare:workers|client:|fetch\(/,
     );
