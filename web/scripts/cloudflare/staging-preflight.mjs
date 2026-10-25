@@ -8,6 +8,10 @@ export async function validateStagingRevision(env, { fetchImpl = fetch } = {}) {
   if (env.STAGING_EXPECTED_DEPLOYED_SHA && env.STAGING_ACTION !== "diagnose-demo") {
     throw new Error("A deployed revision override is only allowed for read-only diagnosis.");
   }
+  if (![undefined, "", "false", "true"].includes(env.STAGING_DEMO_IMAGES) ||
+      (env.STAGING_DEMO_IMAGES === "true" && env.STAGING_ACTION !== "seed-demo")) {
+    throw new Error("Demo images are only allowed for seed-demo.");
+  }
   const branch = env.STAGING_INTEGRATION_BRANCH;
   const sha = env.STAGING_EXPECTED_SHA;
   const repository = env.GITHUB_REPOSITORY;

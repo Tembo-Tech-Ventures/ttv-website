@@ -77,3 +77,10 @@ it("retains current executor revision checks with diagnostic deployed override",
   await expect(validateStagingRevision({...env,STAGING_ACTION:"diagnose-demo",STAGING_EXPECTED_DEPLOYED_SHA:"b".repeat(40)}, {fetchImpl:respond()})).resolves.toMatchObject({sha});
   await expect(validateStagingRevision({...env,STAGING_ACTION:"diagnose-demo",STAGING_EXPECTED_DEPLOYED_SHA:sha,GITHUB_SHA:"b".repeat(40)}, {fetchImpl:respond()})).rejects.toThrow("exact dispatched revision");
 });
+
+it.each(["deploy","verify","assess","diagnose-demo"])("rejects images for %s before network",async action=>{
+  const fetchImpl=respond();await expect(validateStagingRevision({...env,STAGING_ACTION:action,STAGING_DEMO_IMAGES:"true"},{fetchImpl})).rejects.toThrow("only allowed for seed-demo");expect(fetchImpl).not.toHaveBeenCalled();
+});
+it("allows image opt-in only with current seed revision",async()=>{
+  await expect(validateStagingRevision({...env,STAGING_ACTION:"seed-demo",STAGING_DEMO_IMAGES:"true"},{fetchImpl:respond()})).resolves.toMatchObject({sha});
+});
