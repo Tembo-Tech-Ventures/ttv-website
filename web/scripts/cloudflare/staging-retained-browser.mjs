@@ -25,7 +25,9 @@ export async function verifyRetainedBrowser({target,actor,query='Kotlin',browser
   context=await browser.newContext({viewport:{width:1440,height:1000},serviceWorkers:'block'});
   await context.route('**/*',retainedBrowserRoute(target,actor));
   const page=await context.newPage();let errors=0;page.on('pageerror',()=>{errors++;});
+  console.log(JSON.stringify({event:"retained-browser",stage:"navigate"}));
   await page.goto(`${target.baseUrl}/dashboard/discover`,{waitUntil:'networkidle',timeout:30000});
+  console.log(JSON.stringify({event:'retained-browser',stage:'criteria'}));
   await page.getByLabel('What are you working on?').fill(`Fictional demo opportunity: ${query} implementation and testing. Compare published work evidence; identify documentation gaps. This is not a real hiring decision.`);
   await page.getByLabel('Skills to explore',{exact:false}).fill(query);
   await page.getByLabel('Already have someone in mind?').fill(query);
@@ -33,6 +35,7 @@ export async function verifyRetainedBrowser({target,actor,query='Kotlin',browser
   const order=page.getByRole('button',{name:'Order by published evidence',exact:true});await order.waitFor({timeout:20000});
   const responsePromise=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/community/chat'&&r.request().method()==='POST',{timeout:75000});
   const start=globalThis.performance.now();await order.click();const response=await responsePromise;const data=await response.json();const latencyMs=Math.round(globalThis.performance.now()-start);
+  console.log(JSON.stringify({event:"retained-browser",stage:"chat-response",status:response.status(),grounded:data.grounded===true,modelSteps:data.execution?.modelSteps,toolCalls:data.execution?.executedToolCalls}));
   if(response.status()!==200||!data.grounded||!data.orderedProfiles?.length)throw new Error('Evidence order unavailable.');
   await page.getByText(/AI-generated evidence order/).waitFor({timeout:10000});
   const screenshots=[];

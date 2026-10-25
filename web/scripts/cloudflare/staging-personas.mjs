@@ -11,7 +11,7 @@ const rows = result => (Array.isArray(result) ? result : [result]).flatMap(state
 /** Runner-only. Credentials never leave the callback; default cleanup deletes all fixture-owned records. */
 export async function withStagingPersonas({ target, signingSecret, run, audit = () => {}, now = new Date(), assessmentProbe = false, retainedReadProbe = false }) {
   assertVerifiedStagingFixtureTarget(target);
-  if (typeof run !== "function" || typeof signingSecret !== "string" || signingSecret.length < 32) throw new Error("A verification callback and staging signing configuration are required.");
+  if (typeof run !== "function" || (!retainedReadProbe && (typeof signingSecret !== "string" || signingSecret.length < 32))) throw new Error("A verification callback and staging signing configuration are required.");
   const timestamp = Math.floor(now.getTime() / 1000);
   if (!Number.isSafeInteger(timestamp) || Math.abs(Date.now() / 1000 - timestamp) > 60) throw new Error("Invalid fixture time.");
   if (retainedReadProbe && assessmentProbe) throw new Error("Select one probe.");
