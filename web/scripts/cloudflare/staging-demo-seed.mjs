@@ -1,8 +1,24 @@
+import { readFile } from "node:fs/promises";
+import { buildDemoImageMapping, seedDemoImages } from "./staging-demo-images.mjs";
 import { pathToFileURL } from "node:url";
 import { buildDemoDataset } from "./staging-demo-data.mjs";
 import { cfApi } from "./lib.mjs";
 import { validateStagingRevision } from "./staging-preflight.mjs";
 import { verifyStagingFixtureTarget, STAGING_FIXTURE_ORIGIN, STAGING_FIXTURE_DATABASE_ID } from "./staging-fixture-target.mjs";
+
+// Asset checks are credential-free, same-origin, sequential and never retried.
+export async function verifyDemoImageAssets(manifest, { fetchImpl = fetch } = {}) {
+  const paths = [...new Set(buildDemoImageMapping(manifest).map(user => user.image))];
+  for (const path of paths) {
+    const response = await fetchImpl(new URL(path, STAGING_FIXTURE_ORIGIN), {
+      method: "HEAD", redirect: "error", signal: globalThis.AbortSignal.timeout(10_000),
+    });
+    if (response.status !== 200 || response.redirected ||
+        response.headers.get("content-type")?.split(";")[0].trim() !== "image/webp") {
+      throw new Error("Reviewed demo portrait assets are not deployed.");
+    }
+  }
+}
 
 // The reviewed seed module is delivered by PR210. This executor never creates
 // sessions or enables demo access, and retains the fictional data after success.
@@ -11,8 +27,13 @@ export async function runDemoSeed(env, {
   verify = verifyStagingFixtureTarget,
   seed = async target => (await import(new URL("./staging-demo-data.mjs", import.meta.url).href)).seedDemoData(target),
   api = cfApi,
+  loadImageManifest = async () => JSON.parse(await readFile(new URL("../../public/images/demo/manifest.json", import.meta.url), "utf8")),
+  verifyImages = verifyDemoImageAssets,
+  seedImages = seedDemoImages,
 } = {}) {
   if (env.STAGING_ACTION !== "seed-demo" || env.GITHUB_RUN_ATTEMPT !== "1" || env.STAGING_EXPECTED_DEPLOYED_SHA) throw new Error("One seed-demo dispatch is required.");
+  if (![undefined, "", "false", "true"].includes(env.STAGING_DEMO_IMAGES)) throw new Error("Invalid demo images option.");
+  const imagesEnabled = env.STAGING_DEMO_IMAGES === "true";
   let stage = "revision";
   let readsCompleted = 0;
   let writesAttempted = 0;
@@ -33,9 +54,19 @@ export async function runDemoSeed(env, {
     const { sha } = await validate(env);
     stage = "target-identity";
     const target = await verify({ environmentName: env.CLOUDFLARE_ENVIRONMENT_NAME, accountId: env.CLOUDFLARE_ACCOUNT_ID, expectedVersion: sha, baseUrl: STAGING_FIXTURE_ORIGIN, api: observedApi });
+    let manifest;
+    if (imagesEnabled) {
+      stage = "image-assets";
+      manifest = await loadImageManifest();
+      await verifyImages(manifest);
+    }
     stage = "seed-module";
     const result = await seed(target);
-    return { event: "retained-demo-seeded", version: sha, profiles: result.profiles, cohortMembers: result.cohortMembers, retained: true };
+    if (imagesEnabled) {
+      stage = "image-backfill";
+      await seedImages(target, manifest);
+    }
+    return { ...(imagesEnabled ? { images: "backfill-completed" } : {}), event: "retained-demo-seeded", version: sha, profiles: result.profiles, cohortMembers: result.cohortMembers, retained: true };
   } catch {
     // Never attach the upstream error: it may contain credentials or SQL values.
     const error = new Error("Retained demo seed failed.");
@@ -49,7 +80,7 @@ export async function runDemoSeed(env, {
 export const DIAGNOSTIC_DEPLOYED_SHA = "09f3360c6cfad601ec934230bda87b4239fb22d4";
 export async function runDemoDiagnostic(env, { validate = validateStagingRevision, verify = verifyStagingFixtureTarget, api = cfApi } = {}) {
   try {
-    if (env.STAGING_ACTION !== "diagnose-demo" || env.GITHUB_RUN_ATTEMPT !== "1" ||
+    if ((env.STAGING_DEMO_IMAGES && env.STAGING_DEMO_IMAGES !== "false") || env.STAGING_ACTION !== "diagnose-demo" || env.GITHUB_RUN_ATTEMPT !== "1" ||
         env.STAGING_EXPECTED_DEPLOYED_SHA !== DIAGNOSTIC_DEPLOYED_SHA) throw new Error();
     const { sha } = await validate(env);
     const target = await verify({ environmentName: env.CLOUDFLARE_ENVIRONMENT_NAME, accountId: env.CLOUDFLARE_ACCOUNT_ID,

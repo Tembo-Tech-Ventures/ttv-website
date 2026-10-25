@@ -25,6 +25,11 @@ on:
         description: Pinned live revision for read-only diagnose-demo only
         required: false
         type: string
+      demo_images:
+        description: Backfill empty fictional profile images during seed-demo only (reviewed assets must be deployed; owner approval required)
+        required: false
+        type: boolean
+        default: false
       demo_enabled:
         description: Enable retained demo browser access (owner approval required; default off)
         required: false
@@ -68,6 +73,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STAGING_ACTION: ${{ inputs.action }}
+          STAGING_DEMO_IMAGES: ${{ inputs.demo_images }}
           STAGING_EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
           STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
           STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
@@ -170,6 +176,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STAGING_ACTION: ${{ inputs.action }}
+          STAGING_DEMO_IMAGES: ${{ inputs.demo_images }}
           STAGING_EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
           STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
           STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp

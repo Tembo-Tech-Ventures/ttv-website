@@ -124,3 +124,53 @@ it("does not let a separate diagnostic SHA alter the mutating seed target",async
   const deps=setup();await expect(runDemoSeed({...env,STAGING_EXPECTED_DEPLOYED_SHA:DIAGNOSTIC_DEPLOYED_SHA},deps)).rejects.toThrow("One seed-demo dispatch is required.");
   expect(deps.verify).not.toHaveBeenCalled();
 });
+
+import { verifyDemoImageAssets } from "./staging-demo-seed.mjs";
+const imageManifest = {version:1,synthetic:true,portraits:Array.from({length:7},(_,i)=>({src:`/images/demo/portrait-${String(i+1).padStart(2,"0")}.webp`,provenance:"AI-generated",alt:"AI-generated fictional adult"}))};
+function imageSetup() {
+  return {...setup(),loadImageManifest:vi.fn().mockResolvedValue(imageManifest),verifyImages:vi.fn().mockResolvedValue(undefined),seedImages:vi.fn().mockResolvedValue(undefined)};
+}
+it.each([undefined,"false",""])("leaves images untouched when option is %s",async option=>{
+  const deps=imageSetup();await runDemoSeed({...env,STAGING_DEMO_IMAGES:option},deps);
+  expect(deps.loadImageManifest).not.toHaveBeenCalled();expect(deps.verifyImages).not.toHaveBeenCalled();expect(deps.seedImages).not.toHaveBeenCalled();
+});
+it("checks live assets before seed and backfills only after successful seed",async()=>{
+  const deps=imageSetup();
+  expect(await runDemoSeed({...env,STAGING_DEMO_IMAGES:"true"},deps)).toMatchObject({version:sha,images:"backfill-completed"});
+  const order=[deps.verify,deps.loadImageManifest,deps.verifyImages,deps.seed,deps.seedImages].map(fn=>fn.mock.invocationCallOrder[0]);
+  expect(order).toEqual(order.toSorted((a,b)=>a-b));
+  expect(deps.seedImages).toHaveBeenCalledWith(await deps.verify.mock.results[0].value,imageManifest);
+});
+it.each(["verify","loadImageManifest","verifyImages","seed"])("prevents image writes after %s fails",async stage=>{
+  const deps=imageSetup();deps[stage].mockRejectedValue(new Error("private details"));
+  const error=await runDemoSeed({...env,STAGING_DEMO_IMAGES:"true"},deps).catch(e=>e);
+  expect(deps.seedImages).not.toHaveBeenCalled();
+  if(stage!=="seed")expect(deps.seed).not.toHaveBeenCalled();
+  expect(JSON.stringify(error)).not.toContain("private");
+});
+it("redacts image helper failure and does not retry",async()=>{
+  const deps=imageSetup();deps.seedImages.mockRejectedValue(new Error("private record"));
+  const error=await runDemoSeed({...env,STAGING_DEMO_IMAGES:"true"},deps).catch(e=>e);
+  expect(error.diagnostic.stage).toBe("image-backfill");expect(deps.seedImages).toHaveBeenCalledTimes(1);expect(JSON.stringify(error)).not.toContain("private");
+});
+it.each(["TRUE","yes","1"])("rejects malformed image option %s",async option=>{
+  const deps=imageSetup();await expect(runDemoSeed({...env,STAGING_DEMO_IMAGES:option},deps)).rejects.toThrow("Invalid demo images");expect(deps.validate).not.toHaveBeenCalled();
+});
+it("rejects images in direct read-only diagnostic",async()=>{
+  const deps=setup();await expect(runDemoDiagnostic({...diagnosticEnv,STAGING_DEMO_IMAGES:"true"},deps)).rejects.toThrow("diagnostic failed");expect(deps.validate).not.toHaveBeenCalled();
+});
+it("checks exactly seven fixed-origin WebP assets without auth or redirects",async()=>{
+  const fetchImpl=vi.fn().mockImplementation(async()=>new Response(null,{status:200,headers:{"content-type":"image/webp"}}));
+  await verifyDemoImageAssets(imageManifest,{fetchImpl});expect(fetchImpl).toHaveBeenCalledTimes(7);
+  fetchImpl.mock.calls.forEach(([url,options],i)=>{
+    expect(url.href).toBe(`https://staging.tembotechventures.com/images/demo/portrait-0${i+1}.webp`);
+    expect(options).toMatchObject({method:"HEAD",redirect:"error"});expect(options.headers).toBeUndefined();expect(options.signal).toBeInstanceOf(globalThis.AbortSignal);
+  });
+});
+it.each([404,302,"html","network"])("fails closed on asset %s before any retries",async failure=>{
+  const fetchImpl=vi.fn().mockImplementation(async()=>{
+    if(failure==="network")throw new Error("network");
+    return new Response(null,{status:typeof failure==="number"?failure:200,headers:{"content-type":failure==="html"?"text/html":"image/webp"}});
+  });
+  await expect(verifyDemoImageAssets(imageManifest,{fetchImpl})).rejects.toThrow(/assets|network/);expect(fetchImpl).toHaveBeenCalledTimes(1);
+});
