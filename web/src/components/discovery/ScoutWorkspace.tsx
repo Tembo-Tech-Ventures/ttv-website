@@ -289,10 +289,11 @@ export function EvidenceOrdering({enabled,count,ordering,order,onOrder}:{enabled
                 <p>Compare a small retrieved shortlist using published project evidence. Missing evidence stays unknown; people make the hiring decision.</p>
                 <button type="button" className="discovery-button" disabled={ordering} onClick={onOrder}>{ordering ? "Comparing published evidence…" : "Order by published evidence"}</button>
                 {order && <div aria-live="polite">
-                  <p>AI-generated evidence order · {order.evaluatedCandidates} retrieved profiles considered. This is a subset, not a ranking of all members or ability.</p>
+                  <p>AI-generated evidence order · {order.evaluatedCandidates} profiles returned by search; detailed evidence was read for the listed shortlist. This is a subset, not a ranking of all members or ability.</p>
                   <ol>{order.profiles.map(p=><li key={p.userId}>
                     <h3><a href={`/dashboard/discover?profile=${encodeURIComponent(p.userId)}`}>{p.name}</a></h3>
                     <p>{p.reason}</p>
+                    <ul aria-label={`Cited contributions for ${p.name}`}>{(p.citations??[]).map(c=><li key={c.id}>{evidenceHref(c.url ?? "") ? <a href={evidenceHref(c.url ?? "")!} target="_blank" rel="noopener noreferrer">Published contribution · Revision {c.version}</a> : <span>Published contribution · Revision {c.version} · Source link unavailable</span>}</li>)}</ul>
                     <p>Missing evidence: {p.missingEvidence.length > 0 ? p.missingEvidence.join("; ") : "Review the cited work and discuss remaining questions."}</p>
                   </li>)}</ol>
                   <p>{order.text}</p>

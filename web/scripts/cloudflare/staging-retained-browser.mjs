@@ -1,16 +1,29 @@
 import { chromium } from '@playwright/test';
+import { DEMO_USER_IDS } from './staging-demo-data.mjs';
+const retainedIds=new Set(DEMO_USER_IDS);
+export function retainedBrowserRoute(target,actor) {
+ return async route=>{
+  const request=route.request(),url=new URL(request.url()),method=request.method(),path=url.pathname;
+  if(url.origin!==target.baseUrl)return route.abort();
+  const detail=path.startsWith('/api/community/profiles/')&&retainedIds.has(path.slice('/api/community/profiles/'.length));
+  const allowed=(method==='GET'&&(['/dashboard/discover','/api/community/access','/api/community/profiles'].includes(path)||detail))||(method==='POST'&&path==='/api/community/chat');
+  const headers=Object.fromEntries(Object.entries(request.headers()).filter(([name])=>!['authorization','cookie'].includes(name.toLowerCase())));
+  if(!allowed){
+   if(path.startsWith('/api/')||path.startsWith('/auth/')||path.startsWith('/dashboard'))return route.abort();
+   return route.continue({headers});
+  }
+  const response=await route.fetch({headers:{...headers,authorization:`Bearer ${actor.personalAccessToken}`},maxRedirects:0,maxRetries:0,timeout:method==='POST'?80000:15000});
+  try{if(response.status()>=300&&response.status()<400)return await route.abort();
+   return await route.fulfill({response});
+  }finally{await response.dispose();}
+ };
+}
 /** Real first-party UI/API only. Never attach PAT to assets, third parties or auth routes. */
 export async function verifyRetainedBrowser({target,actor,query='Kotlin',browserType=chromium}) {
  const browser=await browserType.launch({headless:true});let context;
  try{
   context=await browser.newContext({viewport:{width:1440,height:1000},serviceWorkers:'block'});
-  await context.route('**/*',async route=>{
-   const request=route.request(),url=new URL(request.url());
-   if(url.origin!==target.baseUrl)return route.abort();
-   const allowed=(url.pathname==='/dashboard/discover'&&request.method()==='GET')||url.pathname.startsWith('/api/community/');
-   if(!allowed && (url.pathname.startsWith('/api/')||url.pathname.startsWith('/auth/')))return route.abort();
-   return route.continue({headers:{...request.headers(),...(allowed?{authorization:`Bearer ${actor.personalAccessToken}`}:{})}});
-  });
+  await context.route('**/*',retainedBrowserRoute(target,actor));
   const page=await context.newPage();let errors=0;page.on('pageerror',()=>{errors++;});
   await page.goto(`${target.baseUrl}/dashboard/discover`,{waitUntil:'networkidle',timeout:30000});
   await page.getByLabel('What are you working on?').fill(`Fictional demo opportunity: ${query} implementation and testing. Compare published work evidence; identify documentation gaps. This is not a real hiring decision.`);

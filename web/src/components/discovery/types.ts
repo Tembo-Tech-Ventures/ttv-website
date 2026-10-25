@@ -99,5 +99,5 @@ export function filterDemoProfiles(
 export interface EvidenceOrder {
   text: string;
   evaluatedCandidates: number;
-  profiles: Array<{userId:string;name:string;reason:string;missingEvidence:string[]}>;
+  profiles: Array<{userId:string;name:string;reason:string;missingEvidence:string[];citations?:Array<{id:string;version:number;url:string|null}>}>;
 }
