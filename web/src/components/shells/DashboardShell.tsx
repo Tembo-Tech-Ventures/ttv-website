@@ -17,7 +17,7 @@ import type { IconType } from "react-icons";
 import type { StudentDashboardLinkId } from "@/lib/student/journey";
 
 export interface DashboardLink {
-  id: StudentDashboardLinkId | "community";
+  id: StudentDashboardLinkId | "community" | "discover";
   href: string;
   label: string;
   icon: IconType;
@@ -31,6 +31,7 @@ export interface DashboardLink {
  */
 export const DASHBOARD_LINKS: DashboardLink[] = [
   { id: "home", href: "/dashboard", label: "Home", icon: PiGaugeDuotone },
+  { id: "discover", href: "/dashboard/discover", label: "Discover", icon: PiSuitcaseSimpleDuotone },
   { id: "community", href: "/dashboard/community", label: "Community", icon: PiHandshakeDuotone },
   {
     id: "apply",
@@ -52,10 +53,12 @@ export const DASHBOARD_LINKS: DashboardLink[] = [
 export function getDashboardLinks(
   visibleLinkIds: StudentDashboardLinkId[],
   unreadLeadCount = 0,
-  demoSession = false
+  demoSession = false,
+  canDiscover = false
 ): DashboardLink[] {
   const visible = new Set<DashboardLink["id"]>([
     ...visibleLinkIds,
+    ...(canDiscover ? ["discover" as const] : []),
     "community",
     "logout",
   ]);
@@ -74,12 +77,14 @@ export default function DashboardShell({
   visibleLinkIds,
   unreadLeadCount = 0,
   demoSession = false,
+  canDiscover = false,
 }: {
   children: ReactNode;
   currentPath: string;
   visibleLinkIds: StudentDashboardLinkId[];
   unreadLeadCount?: number;
   demoSession?: boolean;
+  canDiscover?: boolean;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const hydrated = useSyncExternalStore(
@@ -87,7 +92,7 @@ export default function DashboardShell({
     () => true,
     () => false
   );
-  const links = getDashboardLinks(visibleLinkIds, unreadLeadCount, demoSession);
+  const links = getDashboardLinks(visibleLinkIds, unreadLeadCount, demoSession, canDiscover);
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-surface to-dark">

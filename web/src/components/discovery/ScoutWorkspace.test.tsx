@@ -1,7 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import ScoutWorkspace, { EvidenceLinks, EvidenceOrdering } from "./ScoutWorkspace";
+import ScoutWorkspace, { entryCountLabel, EvidenceLinks, EvidenceOrdering } from "./ScoutWorkspace";
 import { demoProfiles } from "./fixtures";
 import { evidenceHref, filterDemoProfiles } from "./types";
 
@@ -103,4 +103,21 @@ it("renders model evidence order independently from names and preserves missing-
 it("labels mentor-statement citations separately from published contributions",()=>{
  const html=renderToStaticMarkup(<EvidenceOrdering enabled count={1} ordering={false} onOrder={()=>{}} order={{text:"Published evidence",evaluatedCandidates:1,profiles:[{userId:"a",name:"Fictional A",reason:"Documented change",missingEvidence:[],citations:[{kind:"journey",id:"j",version:2,url:"https://example.com/change"},{kind:"confirmation",id:"c",version:2,url:null}]}]}}/>);
  expect(html).toContain("Published contribution · Revision 2");expect(html).toContain("Mentor statement · Revision 2");expect(html).toContain("Cited evidence for Fictional A");
+});
+
+it("explains opportunity text independently of directory retrieval", () => {
+  const html = renderToStaticMarkup(<ScoutWorkspace profiles={[]} />);
+  expect(html).toContain("This context informs evidence ordering, not directory skill matching.");
+});
+it("uses singular entry for one contribution", () => {
+  const profile = { ...demoProfiles[0], claims: demoProfiles[0].claims.slice(0, 1) };
+  const html = renderToStaticMarkup(<ScoutWorkspace profiles={[profile]} initialProfile={profile} />);
+  expect(html).toContain("1 entry");
+  expect(html).not.toContain("1 entries");
+});
+
+it("uses singular and plural confirmed contribution counts", () => {
+  expect(entryCountLabel(1, true)).toBe("1 confirmed entry");
+  expect(entryCountLabel(0, true)).toBe("0 confirmed entries");
+  expect(entryCountLabel(2)).toBe("2 entries");
 });

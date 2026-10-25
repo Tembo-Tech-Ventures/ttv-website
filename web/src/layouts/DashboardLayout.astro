@@ -1,4 +1,6 @@
 ---
+import { createCommunityService } from "@/lib/community/service";
+import { hasDiscoveryAccess } from "@/lib/dashboard-presentation";
 import BaseLayout from "./BaseLayout.astro";
 import DashboardShell from "@/components/shells/DashboardShell";
 import { drizzle } from "drizzle-orm/d1";
@@ -12,10 +14,12 @@ import {
 interface Props {
   title?: string;
   journey?: StudentJourney;
+  canDiscover?: boolean;
 }
 
 const { title = "Dashboard", journey: suppliedJourney } = Astro.props;
 const user = Astro.locals.user!;
+const canDiscover = Astro.props.canDiscover ?? hasDiscoveryAccess(await createCommunityService(env.DB, user.id, Astro.locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT).access());
 const journey =
   suppliedJourney ??
   (await getStudentJourney(drizzle(env.DB, { schema }), user.id));
@@ -24,6 +28,7 @@ const journey =
 <BaseLayout title={`${title} | TTV`}>
   <DashboardShell
     client:load
+    canDiscover={canDiscover}
     currentPath={Astro.url.pathname}
     visibleLinkIds={journey.visibleLinkIds}
     unreadLeadCount={journey.unreadLeadCount}

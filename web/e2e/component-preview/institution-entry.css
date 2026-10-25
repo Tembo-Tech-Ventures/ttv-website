@@ -1,0 +1,5 @@
+@import "../../src/styles/global.css";
+/* The Vite fixture root is outside src; include the actual component utilities. */
+@source "../../src/components/shells/DashboardShell.tsx";
+@source "../../src/components/common/Sidebar.tsx";
+@source "../../src/components/community/CommunityIntro.tsx";
