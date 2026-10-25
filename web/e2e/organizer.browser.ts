@@ -17,6 +17,17 @@ for (const width of [390, 1440]) {
       await link.click();
       await expect(page.locator(href!)).toBeVisible();
     }
+    for (const disclosure of await page.locator("details").all()) {
+      const summary = disclosure.locator("summary");
+      await summary.focus();
+      await page.keyboard.press("Enter");
+      await expect(disclosure).toHaveAttribute("open", "");
+      await page.keyboard.press("Space");
+      await expect(disclosure).not.toHaveAttribute("open", "");
+      await summary.click();
+      await expect(disclosure).toHaveAttribute("open", "");
+    }
+    await expect(page.locator("details")).toHaveCount(4);
     for (const image of await page.getByRole("img").all()) {
       await image.scrollIntoViewIfNeeded();
       await expect
@@ -31,6 +42,11 @@ for (const width of [390, 1440]) {
       ),
     ).toBe(true);
     await expect(page.locator("form,input,textarea")).toHaveCount(0);
+    await page
+      .locator("#journeys")
+      .screenshot({
+        path: `../docs/hackathon/organizer-2026-10-25/journeys-${width}.png`,
+      });
     await page.goto("/organizer.html");
     await page.keyboard.press("Tab");
     await expect(
@@ -43,13 +59,23 @@ for (const width of [390, 1440]) {
       path: `../docs/hackathon/organizer-2026-10-25/overview-${width}.png`,
       fullPage: true,
     });
-    await page.screenshot({path:`../docs/hackathon/organizer-2026-10-25/hero-${width}.png`});
-    await page.locator('#architecture').screenshot({path:`../docs/hackathon/organizer-2026-10-25/architecture-${width}.png`});
-    const region=page.getByRole('region', {name:'Web and MCP use shared authorized services, D1 and optional model routes'});
+    await page.screenshot({
+      path: `../docs/hackathon/organizer-2026-10-25/hero-${width}.png`,
+    });
+    await page
+      .locator("#architecture")
+      .screenshot({
+        path: `../docs/hackathon/organizer-2026-10-25/architecture-${width}.png`,
+      });
+    const region = page.getByRole("region", {
+      name: "Web and MCP use shared authorized services, D1 and optional model routes",
+    });
     await region.focus();
-    if(width === 390) {
-      await page.keyboard.press('ArrowRight');
-      await expect.poll(()=>region.evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);
+    if (width === 390) {
+      await page.keyboard.press("ArrowRight");
+      await expect
+        .poll(() => region.evaluate((el) => el.scrollLeft))
+        .toBeGreaterThan(0);
     }
     expect(errors).toEqual([]);
   });

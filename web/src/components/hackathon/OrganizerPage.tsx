@@ -120,6 +120,27 @@ export default function OrganizerPage() {
                   Publish contributions and sources. Keep drafts private. Update
                   the story as the work changes.
                 </p>
+                <details className="hack-reveal">
+                  <summary>See the member example</summary>
+                  <figure className="hack-screen">
+                    <a
+                      href="/hackathon/member-contribution.webp"
+                      aria-label="View full member example"
+                    >
+                      <img
+                        src="/hackathon/member-contribution.webp"
+                        width="1920"
+                        height="1080"
+                        loading="lazy"
+                        alt="Journey page for fictional David Wanjiku showing a saved contribution and member-attached source, with no confirmation recorded."
+                      />
+                    </a>
+                    <figcaption>
+                      A member’s contribution with its source, marked
+                      member-reported until someone checks it.
+                    </figcaption>
+                  </figure>
+                </details>
               </article>
               <article>
                 <span className="hack-number">02</span>
@@ -128,6 +149,27 @@ export default function OrganizerPage() {
                   Record what they checked on a specific contribution revision.
                   This does not certify every skill or claim.
                 </p>
+                <details className="hack-reveal">
+                  <summary>See the mentor example</summary>
+                  <figure className="hack-screen">
+                    <a
+                      href="/hackathon/mentor-confirmation.webp"
+                      aria-label="View full mentor example"
+                    >
+                      <img
+                        src="/hackathon/mentor-confirmation.webp"
+                        width="1920"
+                        height="1080"
+                        loading="lazy"
+                        alt="Confirmation history showing fictional mentor Amina Wanjiku’s statement and method, attached to claim revision 1."
+                      />
+                    </a>
+                    <figcaption>
+                      A mentor records what they personally checked, attached to
+                      that revision, not to the whole person.
+                    </figcaption>
+                  </figure>
+                </details>
               </article>
               <article>
                 <span className="hack-number">03</span>
@@ -136,8 +178,33 @@ export default function OrganizerPage() {
                   Find eligible members, inspect claims, sources and
                   confirmations, then ask evidence-grounded questions.
                 </p>
+                <details className="hack-reveal">
+                  <summary>See the institution example</summary>
+                  <figure className="hack-screen">
+                    <a
+                      href="/hackathon/institution-evidence.webp"
+                      aria-label="View full institution example"
+                    >
+                      <img
+                        src="/hackathon/institution-evidence.webp"
+                        width="1920"
+                        height="1080"
+                        loading="lazy"
+                        alt="Fictional David Wanjiku’s contribution, source and mentor confirmation. Optional assessment and chat tools are visible but not in use."
+                      />
+                    </a>
+                    <figcaption>
+                      An approved institution reads the claim, the source and
+                      the scoped confirmation; people decide.
+                    </figcaption>
+                  </figure>
+                </details>
               </article>
             </div>
+            <p className="hack-note">
+              Staging demo (build aab6b3e, 25 Oct 2026). Fictional personas and
+              data. Expand an example; select its image to view full size.
+            </p>
             <Diagram
               name="journeys"
               title="Member, mentor and institution journeys with admin role approval"
@@ -186,16 +253,19 @@ export default function OrganizerPage() {
               provenance. Private recordings are outside institutional
               discovery.
             </Diagram>
-            <p>
-              Directory search uses literal text matching and AND across exact
-              skill tags. Optional GLM comparison examines a bounded result set.
-              It is not semantic search or a ranking of all members.
-            </p>
-            <p>
-              Mastra chat uses GLM 5.3 Flash; evidence assessment uses Gemma 4.
-              Both use Cloudflare AI Gateway. Ratings describe evidence support.
-              Missing evidence stays unknown.
-            </p>
+            <details className="hack-reveal">
+              <summary>How search and optional AI differ</summary>
+              <p>
+                Directory search uses literal text matching and AND across exact
+                skill tags. Optional GLM comparison examines a bounded result
+                set. It is not semantic search or a ranking of all members.
+              </p>
+              <p>
+                Mastra chat uses GLM 5.3 Flash; evidence assessment uses Gemma
+                4. Both use Cloudflare AI Gateway. Ratings describe evidence
+                support. Missing evidence stays unknown.
+              </p>
+            </details>
           </section>
           <section id="team">
             <p className="hack-eyebrow">05 / Process</p>
@@ -228,19 +298,6 @@ export default function OrganizerPage() {
               desktop and mobile. These checks do not establish hiring outcomes
               or model quality.
             </p>
-            <figure className="hack-screen">
-              <img
-                src="/hackathon/discovery-desktop.png"
-                width="1440"
-                height="1220"
-                loading="lazy"
-                alt="Fictional local Discover interface showing the selected lookup mode and name search field."
-              />
-              <figcaption>
-                Local fictional UI capture, 25 October. Not live authentication
-                or a model evaluation.
-              </figcaption>
-            </figure>
             <p>
               Citation attribution and unsupported ordering failed during QA.
               Code fixes do not establish fresh model-quality validation. The

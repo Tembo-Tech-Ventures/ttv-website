@@ -385,3 +385,25 @@
   color: var(--hack-accent);
   text-underline-offset: 3px;
 }
+
+.hack-reveal {
+  border-top: 1px solid var(--color-rule);
+  margin-top: 20px;
+}
+.hack-reveal summary {
+  cursor: pointer;
+  color: var(--hack-accent);
+  padding: 16px 0;
+  min-height: 48px;
+}
+.hack-reveal summary:focus-visible {
+  outline: 2px solid var(--hack-accent);
+  outline-offset: 4px;
+}
+.hack-reveal[open] summary {
+  border-bottom: 1px solid var(--color-rule);
+  margin-bottom: 16px;
+}
+.hack-reveal .hack-screen {
+  margin: 16px 0 0;
+}
