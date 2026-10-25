@@ -148,11 +148,13 @@ describe("community API boundary", () => {
         {
           ...entry,
           memberName: "Fictional Member",
+          reviewedByCurrentMentor: true,
           confirmations: [{ ...entry.confirmations[0], mentorRole: "ADMIN" }],
         },
       ],
     });
     const requests = await loadMentorship();
+    expect(requests[0].status).toBe("confirmed");
     expect(requests[0].confirmations?.[0]).toMatchObject({
       mentorRole: "ADMIN",
       journeyVersion: 2,

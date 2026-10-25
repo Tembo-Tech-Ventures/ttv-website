@@ -116,7 +116,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
         FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=c.mentorId
         WHERE j.visibility='institution' AND j.userId<>?${scope.clause}${mentorScope.clause} ORDER BY c.createdAt DESC LIMIT 500`).bind(actorId,...scope.values,...mentorScope.values).all<CommunityConfirmation>();
       await Promise.all(results.map(row=>requireFixtureTarget(row.userId)));
-      return results.map(entry => ({...entry,confirmations:confirmations.filter(c=>c.journeyId===entry.id)}));
+      return results.map(entry => ({...entry,confirmations:confirmations.filter(c=>c.journeyId===entry.id),reviewedByCurrentMentor:confirmations.some(c=>c.journeyId===entry.id&&c.mentorId===actorId&&c.journeyVersion===entry.version)}));
     },
     async setAccess(input: unknown) {
       requireWritable();
@@ -188,8 +188,8 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       // Repeat visibility/ownership predicates in the write to avoid a check/write race.
       const writeScope = fixtureScope("userId");
       const result = await db.prepare(`INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journeyVersion,mentorRole)
-        SELECT ?,id,?,?,?,version,? FROM communityJourney WHERE id=? AND visibility='institution' AND userId<>? AND version=?${writeScope.clause}`)
-        .bind(confirmationId,actorId,p.statement,p.method,a.isMentor ? "MENTOR" : "ADMIN",id,actorId,entry.version,...writeScope.values).run();
+        SELECT ?,id,?,?,?,version,? FROM communityJourney WHERE id=? AND visibility='institution' AND userId<>? AND version=?${writeScope.clause} AND NOT EXISTS (SELECT 1 FROM communityConfirmation c WHERE c.journeyId=communityJourney.id AND c.mentorId=? AND c.journeyVersion=communityJourney.version)`)
+        .bind(confirmationId,actorId,p.statement,p.method,a.isMentor ? "MENTOR" : "ADMIN",id,actorId,entry.version,...writeScope.values,actorId).run();
       if (!result.meta.changes) throw new CommunityError("Contribution no longer available.", 409);
       return { id: confirmationId, journeyId: id, mentorId: actorId, ...p, journeyVersion: entry.version,mentorRole:a.isMentor ? "MENTOR" : "ADMIN" };
     },
