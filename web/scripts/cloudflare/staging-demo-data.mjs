@@ -70,12 +70,12 @@ export async function seedDemoData(target, audit = () => {}) {
   const execute = target.executeQuery;
   let category = "required-role-query";
   try {
-    const roles = rows(await execute('SELECT id,name FROM "Roles" WHERE name IN (?,?,?)', ["MENTOR", "INSTITUTION", "STUDENT"]));
+    const roles = rows(await execute('SELECT id,name FROM "Roles" WHERE name IN (?,?)', ["MENTOR", "INSTITUTION"]));
     category = "required-roles";
-    if (roles.length !== 3 || new Set(roles.map(role => role.name)).size !== 3) throw new Error();
+    if (roles.length !== 2 || new Set(roles.map(role => role.name)).size !== 2) throw new Error();
     const roleId = name => roles.find(role => role.name === name).id;
     records.UserRoles = records.user.flatMap(user => {
-      const role = user.id === DEMO_PERSONAS.mentor ? "MENTOR" : user.id === DEMO_PERSONAS.institution ? "INSTITUTION" : records.programApplication.some(application => application.userId === user.id) ? "STUDENT" : null;
+      const role = user.id === DEMO_PERSONAS.mentor ? "MENTOR" : user.id === DEMO_PERSONAS.institution ? "INSTITUTION" : null;
       return role ? [{ id: `${user.id}-role`, userId: user.id, roleId: roleId(role), ...timestamps }] : [];
     });
     category = "owned-record-preflight";

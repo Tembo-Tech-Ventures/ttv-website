@@ -73,6 +73,14 @@ async function readSwitchBody(request: Request) {
     return JSON.parse(text + decoder.decode());
   } finally { reader.releaseLock(); }
 }
+async function requireDemoMembership(db: D1Database, persona: string, userId: string) {
+    if (persona === 'member-cohort' || persona === 'member-noncohort') {
+      const membership = await db.prepare(`SELECT a.id FROM programApplication a JOIN program p ON p.id=a.programId
+        WHERE a.userId=? AND a.programId=? AND a.status='APPROVED' AND p.curriculumId=? AND p.applicationsOpen=0`)
+        .bind(userId, DEMO_PREFIX + 'program', DEMO_PREFIX + 'curriculum').first();
+      if (Boolean(membership) !== (persona === 'member-cohort')) throw new DemoAccessError(409);
+    }
+}
 export async function handleDemoAction(env: DemoEnvironment, request: Request, action: string, now = Math.floor(Date.now() / 1000)): Promise<Response> {
   try {
     requireEnabled(env, request, now);
@@ -99,6 +107,7 @@ export async function handleDemoAction(env: DemoEnvironment, request: Request, a
     if (!user || user.email !== chosen.userId + '@invalid.ttv') throw new DemoAccessError(409);
     const {results:roles} = await env.DB.prepare('SELECT r.name FROM Roles r JOIN UserRoles ur ON ur.roleId=r.id WHERE ur.userId=?').bind(chosen.userId).all<{name:string}>();
     if (roles.some(r=>r.name !== chosen.role) || (chosen.role && !roles.some(r=>r.name===chosen.role))) throw new DemoAccessError(409);
+    await requireDemoMembership(env.DB, persona, chosen.userId);
     const token = randomBytes(32).toString('hex'), id = crypto.randomUUID();
     const expiry = Math.min(now + 3600, operator.expiresAt);
     await env.DB.batch([
