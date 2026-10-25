@@ -35,16 +35,25 @@ export class FfmpegContainer extends Container<Env> {
   }
 
   private async fetchJsonWithShutdown(input: string, init?: RequestInit) {
-    await this.start();
+    let operationFailed = false;
     try {
+      await this.start();
       const response = await this.containerFetch(input, init);
       return {
         ok: response.ok,
         status: response.status,
         text: await response.text(),
       };
+    } catch (error) {
+      operationFailed = true;
+      throw error;
     } finally {
-      await this.destroy();
+      try {
+        await this.destroy();
+      } catch (error) {
+        // Preserve the original operation error if shutdown also fails.
+        if (!operationFailed) throw error;
+      }
     }
   }
 }
