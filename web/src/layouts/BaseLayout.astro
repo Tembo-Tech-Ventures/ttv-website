@@ -86,6 +86,6 @@ const activeDemoPersona = demoPersona(demo?.persona);
       <form method="post" action="/api/qa/logout"><button type="submit">Sign out of this QA persona</button></form>
     </aside>}
     <slot />
-    {signedIn && <FeedbackWidget client:idle />}
+    {signedIn && !Astro.locals.stagingQa && <FeedbackWidget client:idle />}
   </body>
 </html>

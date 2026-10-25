@@ -54,7 +54,8 @@ export function getDashboardLinks(
   visibleLinkIds: StudentDashboardLinkId[],
   unreadLeadCount = 0,
   demoSession = false,
-  canDiscover = false
+  canDiscover = false,
+  allowedHrefs?: readonly string[]
 ): DashboardLink[] {
   const visible = new Set<DashboardLink["id"]>([
     ...visibleLinkIds,
@@ -62,7 +63,7 @@ export function getDashboardLinks(
     "community",
     "logout",
   ]);
-  return DASHBOARD_LINKS.filter((link) => visible.has(link.id)).map((link) =>
+  return DASHBOARD_LINKS.filter((link) => visible.has(link.id) && (!allowedHrefs || allowedHrefs.includes(link.href))).map((link) =>
     link.id === "logout" && demoSession
       ? { ...link, href: "/demo", label: "Demo controls" }
       : link.id === "leads" && unreadLeadCount > 0
@@ -78,6 +79,7 @@ export default function DashboardShell({
   unreadLeadCount = 0,
   demoSession = false,
   canDiscover = false,
+  allowedHrefs,
 }: {
   children: ReactNode;
   currentPath: string;
@@ -85,6 +87,7 @@ export default function DashboardShell({
   unreadLeadCount?: number;
   demoSession?: boolean;
   canDiscover?: boolean;
+  allowedHrefs?: string[];
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const hydrated = useSyncExternalStore(
@@ -92,7 +95,7 @@ export default function DashboardShell({
     () => true,
     () => false
   );
-  const links = getDashboardLinks(visibleLinkIds, unreadLeadCount, demoSession, canDiscover);
+  const links = getDashboardLinks(visibleLinkIds, unreadLeadCount, demoSession, canDiscover, allowedHrefs);
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-surface to-dark">

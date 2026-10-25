@@ -27,3 +27,9 @@ describe("getDashboardGreetingName", () => {
     expect(getDashboardGreetingName("")).toBe("there");
   });
 });
+
+it("identifies fictional people without using Fictional as everyone's name", () => {
+  expect(getDashboardGreetingName("Fictional Amina Wanjiku")).toBe("Amina (fictional)");
+  expect(getFirstName("Fictional Brian Otieno")).toBe("Brian (fictional)");
+  expect(getFirstName("Fictional")).toBe("Fictional");
+});
