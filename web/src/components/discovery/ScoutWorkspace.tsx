@@ -293,7 +293,7 @@ export function EvidenceOrdering({enabled,count,ordering,order,onOrder}:{enabled
                   <ol>{order.profiles.map(p=><li key={p.userId}>
                     <h3><a href={`/dashboard/discover?profile=${encodeURIComponent(p.userId)}`}>{p.name}</a></h3>
                     <p>{p.reason}</p>
-                    <ul aria-label={`Cited contributions for ${p.name}`}>{(p.citations??[]).map(c=><li key={c.id}>{evidenceHref(c.url ?? "") ? <a href={evidenceHref(c.url ?? "")!} target="_blank" rel="noopener noreferrer">Published contribution · Revision {c.version}</a> : <span>Published contribution · Revision {c.version} · Source link unavailable</span>}</li>)}</ul>
+                    <ul aria-label={`Cited evidence for ${p.name}`}>{(p.citations??[]).map(c=><li key={c.id}>{evidenceHref(c.url ?? "") ? <a href={evidenceHref(c.url ?? "")!} target="_blank" rel="noopener noreferrer">{c.kind === "confirmation" ? "Mentor statement" : "Published contribution"} · Revision {c.version}</a> : <span>{c.kind === "confirmation" ? "Mentor statement" : "Published contribution"} · Revision {c.version} · Source link unavailable</span>}</li>)}</ul>
                     <p>Missing evidence: {p.missingEvidence.length > 0 ? p.missingEvidence.join("; ") : "Review the cited work and discuss remaining questions."}</p>
                   </li>)}</ol>
                   <p>{order.text}</p>
