@@ -8,6 +8,7 @@ import {
   mapProfile,
   searchProfiles,
   saveContribution,
+  updateContribution,
   confirmContribution,
   askProfile,
 } from "./community-client";
@@ -364,4 +365,13 @@ describe("chat request deadline", () => {
       expect(vi.getTimerCount()).toBe(0);
     },
   );
+});
+
+it('updates the loaded own revision without republishing private work or dropping historical confirmations',async()=>{
+ const current={...entry,visibility:'private' as const};const fetcher=vi.fn().mockResolvedValueOnce(Response.json({id:entry.id,updated:true})).mockResolvedValueOnce(Response.json({entries:[{...current,version:4,title:'Updated title'}]}));vi.stubGlobal('fetch',fetcher);
+ const saved=await updateContribution(mapJourney(current),{title:'Updated title',description:'Updated contribution details',date:'2026-10-20',sourceUrl:''});
+ expect(fetcher.mock.calls[0][0]).toBe('/api/community/journey/'+encodeURIComponent(entry.id));expect(fetcher.mock.calls[0][1].method).toBe('PUT');expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({visibility:'private',expectedRevision:3});expect(saved.version).toBe(4);expect(saved.confirmations[0].journeyVersion).toBe(2);
+});
+it('surfaces a stale-edit conflict before any refresh read',async()=>{
+ const fetcher=respond({},409);await expect(updateContribution(mapJourney(entry),{title:'Updated title',description:'Updated contribution details',date:'2026-10-20',sourceUrl:''})).rejects.toMatchObject({status:409});expect(fetcher).toHaveBeenCalledOnce();
 });

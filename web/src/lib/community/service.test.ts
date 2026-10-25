@@ -271,3 +271,12 @@ it('keeps already-reviewed status authoritative when the display history limit o
  for(let i=0;i<501;i++)insert.run('historical-'+i,item.id);
  const queue=await f.mentor.listMentorship();expect(queue[0].confirmations).toHaveLength(500);expect(queue[0].confirmations.some(c=>c.mentorId==='mentor')).toBe(false);expect(queue[0].reviewedByCurrentMentor).toBe(true);
 });
+
+it('edits an owned contribution once per loaded revision and preserves confirmation history',async()=>{
+ const f=fixture();await f.member.updateOwnProfile(profile);const item=await f.member.createJourney({...entry,visibility:'private'});
+ await f.member.setJourneyVisibility(item.id,{visibility:'institution'});await f.mentor.confirmJourney(item.id,{expectedRevision:2,statement:'Reviewed original contribution',method:'Source review'});
+ const next={...entry,title:'Updated documented tool',expectedRevision:2};
+ const results=await Promise.allSettled([f.member.updateJourney(item.id,next),f.member.updateJourney(item.id,next)]);expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);expect(results.find(r=>r.status==='rejected')).toMatchObject({reason:{status:409}});
+ const saved=(await f.member.listJourney())[0];expect(saved.version).toBe(3);expect(saved.confirmations).toHaveLength(1);expect(saved.confirmations[0].journeyVersion).toBe(2);
+ await expect(createCommunityService(f.db,'other').updateJourney(item.id,{...next,expectedRevision:3})).rejects.toMatchObject({status:409});expect((await f.member.listJourney())[0].version).toBe(3);
+});

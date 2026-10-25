@@ -27,6 +27,7 @@ export const journeyInput = z.object({
   // "private" is an unpublished draft, never an institutional discovery opt-out.
   visibility: z.enum(["institution", "private"]),
 }).strict();
+export const journeyUpdateInput = journeyInput.extend({ expectedRevision: z.number().int().positive().optional() });
 export const confirmationInput = z.object({
   expectedRevision: z.number().int().positive(),
   statement: z.string().trim().min(10).max(2000),

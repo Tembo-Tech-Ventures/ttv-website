@@ -59,3 +59,8 @@ describe("community contribution editor", () => {
     ).toBeNull();
   });
 });
+
+it('offers editing only through the own-journey update callback or explicit demo',()=>{
+ const profile=demoProfiles[0];expect(renderToStaticMarkup(<JourneyWorkspace profile={profile} onUpdate={async claim=>claim}/>)).toContain('Edit '+profile.claims[0].title);
+ expect(renderToStaticMarkup(<JourneyWorkspace profile={profile}/>)).not.toContain('Edit '+profile.claims[0].title);
+});

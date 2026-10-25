@@ -101,3 +101,12 @@ it('leaves no ledger-only row when the journey revision changes before the confi
  const batch=f.env.DB.batch.bind(f.env.DB);vi.spyOn(f.env.DB,'batch').mockImplementationOnce(async statements=>{f.sql.prepare('UPDATE communityJourney SET version=2 WHERE id=?').run(id);return batch(statements);});
  const result=await f.call('mentor',`journey/${id}/confirmations`,'POST',{expectedRevision:1,statement:'Fictional QA review',method:'Fictional walkthrough'});expect(result.status).toBe(409);expect(f.sql.prepare("SELECT COUNT(*) n FROM stagingQaResource WHERE kind='confirmation'").get()?.n).toBe(0);expect(f.sql.prepare('SELECT COUNT(*) n FROM communityConfirmation').get()?.n).toBe(0);
 });
+
+it('guards QA own-entry edits by loaded revision without widening ownership',async()=>{
+ const f=setup(),entry={title:`Fictional QA ${QA_RUN_ID}: Edit`,description:'Fictional work only',occurredAt:'2026-10-25',visibility:'private'};
+ const created=await f.call('member-cohort','journey','POST',entry),id=(await created.json() as {entry:{id:string}}).entry.id;
+ expect((await f.call('member-cohort','journey/'+id,'PUT',{...entry,description:'Updated fictional work',expectedRevision:1})).status).toBe(200);
+ expect((await f.call('member-cohort','journey/'+id,'PUT',{...entry,expectedRevision:1})).status).toBe(409);
+ expect((await f.call('member-noncohort','journey/'+id,'PUT',{...entry,expectedRevision:2})).status).toBe(403);
+ expect(f.sql.prepare('SELECT version,visibility FROM communityJourney WHERE id=?').get(id)).toMatchObject({version:2,visibility:'private'});
+});

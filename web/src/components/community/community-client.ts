@@ -179,6 +179,16 @@ export async function saveContribution(draft: ClaimDraft) {
   );
   return mapJourney(result.entry);
 }
+export async function updateContribution(claim: JourneyClaim, draft: ClaimDraft): Promise<JourneyClaim> {
+  await communityRequest(`journey/${encodeURIComponent(claim.id)}`,z.object({id:z.string(),updated:z.literal(true)}),"PUT",{
+    title:draft.title,description:draft.description,evidenceUrl:draft.sourceUrl.trim()||null,occurredAt:draft.date,
+    visibility:claim.visibility??"institution",expectedRevision:claim.version,
+  });
+  const current=await communityRequest("journey",z.object({entries:z.array(entrySchema)}));
+  const saved=current.entries.find(entry=>entry.id===claim.id);
+  if(!saved || saved.version<=claim.version)throw new UiApiError(502);
+  return mapJourney(saved);
+}
 export async function searchProfiles(criteria: ScoutCriteria) {
   // Both filters are evaluated by the service before its result limit.
   const query = new URLSearchParams({
