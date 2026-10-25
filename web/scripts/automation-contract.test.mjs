@@ -186,6 +186,7 @@ describe("GitHub delivery contracts", () => {
       environmentWorkflow.match(/CLOUDFLARE_ACTIVE_PR_ENVIRONMENTS:/g)
     ).toHaveLength(2);
     expect(previewWorkflow).toContain("pull-requests: read");
+    expect(previewWorkflow).toContain("GH_REPO: ${{ github.repository }}");
     expect(previewWorkflow).toContain(
       "gh pr list --state open --limit 1000"
     );

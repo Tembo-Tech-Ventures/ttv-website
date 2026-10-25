@@ -22,6 +22,7 @@ jobs:
       - id: active
         name: Protect open PR preview environments
         env:
+          GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
