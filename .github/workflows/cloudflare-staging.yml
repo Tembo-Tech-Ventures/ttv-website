@@ -32,8 +32,8 @@ on:
         description: Fictional evidence-order scenario (deliberate controlled iteration)
         required: false
         type: choice
-        default: Kotlin
-        options: [Kotlin, React, Python]
+        default: React
+        options: [React]
       retained_read_probe_enabled:
         description: Temporary retained read probe flag (explicit owner approval required; return off after run)
         required: false
