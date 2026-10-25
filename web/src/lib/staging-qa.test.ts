@@ -49,6 +49,12 @@ describe('retained QA authoritative access and ledger',()=>{
   await expect(authenticateQaCookie(f.env,f.request(p))).rejects.toThrow('QA access');
  });
  it('rejects forged cookie and canonical-origin mismatch',async()=>{const f=setup();await expect(authenticateQaCookie(f.env,new Request(DEMO_ORIGIN,{headers:{cookie:QA_COOKIE+'='+'a'.repeat(64)}}))).rejects.toThrow('QA access');await expect(authenticateQaCookie(f.env,new Request('https://example.com',{headers:{cookie:QA_COOKIE+'='+f.tokens.mentor}}))).rejects.toThrow('QA access');});
+ it('serves real community GET handlers for all four personas with staging context',async()=>{
+  const f=setup();for(const persona of Object.keys(DEMO_PERSONAS)as DemoPersona[]){
+   expect((await f.call(persona,'access')).status).toBe(200);expect((await f.call(persona,'profile')).status).toBe(200);expect((await f.call(persona,'journey')).status).toBe(200);
+  }
+  expect((await f.call('mentor','mentorship')).status).toBe(200);expect((await f.call('institution','profiles')).status).toBe(200);
+ });
  it('rejects duplicate, mixed bearer and digest-as-cookie credentials',async()=>{
   const f=setup();const token=f.tokens.mentor;
   for(const headers of ([{cookie:`${QA_COOKIE}=${token}; ${QA_COOKIE}=${token}`},{cookie:`${QA_COOKIE}=${token}`,authorization:'Bearer fictional-invalid'},{cookie:`${QA_COOKIE}=${qaHash(token)}`} ] as Record<string,string>[]))await expect(authenticateQaCookie(f.env,new Request(DEMO_ORIGIN,{headers}))).rejects.toThrow('QA access');
