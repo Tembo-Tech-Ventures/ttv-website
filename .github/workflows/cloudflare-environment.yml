@@ -57,6 +57,10 @@ on:
         required: false
         type: string
         default: ""
+      active_pr_environments:
+        required: false
+        type: string
+        default: ""
 
 jobs:
   cloudflare-with-environment:
@@ -93,6 +97,7 @@ jobs:
       CLOUDFLARE_PROTECTED_ENVIRONMENTS: ${{ inputs.protected_environments }}
       CLOUDFLARE_ALLOW_PROTECTED_DESTROY: ${{ inputs.allow_protected_destroy }}
       PLAYWRIGHT_AGENT_TOKEN: ${{ inputs.environment_name == 'staging' && secrets.STAGING_AGENT_TOKEN || '' }}
+      CLOUDFLARE_ACTIVE_PR_ENVIRONMENTS: ${{ inputs.active_pr_environments }}
     steps:
       - uses: actions/checkout@v5
 
@@ -249,6 +254,7 @@ jobs:
       CLOUDFLARE_PROTECTED_ENVIRONMENTS: ${{ inputs.protected_environments }}
       CLOUDFLARE_ALLOW_PROTECTED_DESTROY: ${{ inputs.allow_protected_destroy }}
       PLAYWRIGHT_AGENT_TOKEN: ${{ inputs.environment_name == 'staging' && secrets.STAGING_AGENT_TOKEN || '' }}
+      CLOUDFLARE_ACTIVE_PR_ENVIRONMENTS: ${{ inputs.active_pr_environments }}
     steps:
       - uses: actions/checkout@v5
 

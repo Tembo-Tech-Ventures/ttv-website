@@ -1,3 +1,5 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   deriveEnvironmentContext,
   ensureAiGateway,
@@ -9,6 +11,7 @@ import {
   getOptionalEnv,
   getSecretBindings,
   queryD1Database,
+  reclaimInactivePrPreviewAiGateways,
   resolveBetterAuthUrl,
   runNpm,
   runWrangler,
@@ -21,20 +24,92 @@ import {
   seedAgentPreviewAccess,
   seedAgentPreviewFixtures,
 } from "./agent-preview-auth.mjs";
+import { destroyEnvironment } from "./destroy.mjs";
 import { assertNoBlockingDuplicates } from "./migration-preflight.mjs";
 
-async function main() {
-  const context = deriveEnvironmentContext();
+export function parseActivePrPreviewEnvironments(value) {
+  return [
+    ...new Set(value.split(",").map((entry) => entry.trim()).filter(Boolean)),
+  ];
+}
+
+export async function reclaimClosedPrPreviewGateways(
+  context,
+  {
+    activeEnvironmentValue = getOptionalEnv(
+      "CLOUDFLARE_ACTIVE_PR_ENVIRONMENTS"
+    ),
+    reclaim = reclaimInactivePrPreviewAiGateways,
+  } = {}
+) {
+  if (!/^agent-pr-[1-9]\d*$/.test(context.environmentSlug)) return [];
+  if (!activeEnvironmentValue) {
+    throw new Error(
+      "GitHub PR previews require CLOUDFLARE_ACTIVE_PR_ENVIRONMENTS before gateway reclamation."
+    );
+  }
+
+  const activeEnvironmentNames =
+    parseActivePrPreviewEnvironments(activeEnvironmentValue);
+  if (!activeEnvironmentNames.includes(context.environmentSlug)) {
+    throw new Error(
+      `Active PR preview inventory does not include the current environment "${context.environmentSlug}".`
+    );
+  }
+
+  return reclaim({
+    appName: context.appName,
+    activeEnvironmentNames,
+  });
+}
+
+export async function runDeploymentWithAgentCleanup(
+  context,
+  deploy,
+  cleanup = destroyEnvironment
+) {
+  try {
+    return await deploy();
+  } catch (deploymentError) {
+    if (!isAgentEnvironmentName(context.environmentName)) {
+      throw deploymentError;
+    }
+
+    try {
+      await cleanup(context);
+    } catch (cleanupError) {
+      const deploymentMessage =
+        deploymentError instanceof Error
+          ? deploymentError.message
+          : String(deploymentError);
+      const cleanupMessage =
+        cleanupError instanceof Error
+          ? cleanupError.message
+          : String(cleanupError);
+      const combinedError = new AggregateError(
+        [deploymentError, cleanupError],
+        `Agent deployment failed: ${deploymentMessage}. Cleanup also failed: ${cleanupMessage}`,
+        { cause: deploymentError }
+      );
+      throw combinedError;
+    }
+    throw deploymentError;
+  }
+}
+
+async function deployEnvironment(context, reclaimedAiGateways) {
   const primaryDomain = getOptionalEnv("CLOUDFLARE_PRIMARY_DOMAIN");
   const redirectDomain = getOptionalEnv("CLOUDFLARE_REDIRECT_DOMAIN");
   const configuredBetterAuthUrl = getOptionalEnv("CLOUDFLARE_BETTER_AUTH_URL");
   const samAlertWebhookUrl = getOptionalEnv("SAM_ALERT_WEBHOOK_URL");
 
+  // Gateways are quota-bound. Provision one first so a quota error cannot
+  // strand newly-created D1, R2, Queue, or Vectorize resources.
+  await ensureAiGateway(context.aiGatewayName);
   const d1Database = await ensureD1Database(context.d1Name);
   await ensureR2Bucket(context.bucketName);
   await ensureQueue(context.queueName);
   await ensureVectorizeIndex(context.vectorizeIndexName);
-  await ensureAiGateway(context.aiGatewayName);
 
   const workersSubdomain = await ensureWorkersSubdomain();
   const betterAuthUrl = resolveBetterAuthUrl({
@@ -123,6 +198,7 @@ async function main() {
         queueName: context.queueName,
         vectorizeIndexName: context.vectorizeIndexName,
         aiGatewayName: context.aiGatewayName,
+        reclaimedAiGateways,
         betterAuthUrl,
         primaryDomain,
         redirectDomain,
@@ -136,7 +212,24 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+async function main() {
+  const context = deriveEnvironmentContext();
+  // The GitHub workflow supplies the authoritative open-PR inventory. Run
+  // this before provisioning so an inventory error cannot trigger rollback
+  // of an otherwise healthy current preview.
+  const reclaimedAiGateways = await reclaimClosedPrPreviewGateways(context);
+  return runDeploymentWithAgentCleanup(context, () =>
+    deployEnvironment(context, reclaimedAiGateways)
+  );
+}
+
+const isDirectRun =
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isDirectRun) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

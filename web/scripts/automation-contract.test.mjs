@@ -175,6 +175,35 @@ describe("GitHub delivery contracts", () => {
     expect(workflow).not.toContain("environment_name: staging");
   });
 
+  it("passes the protected open-PR inventory only from the PR preview workflow", async () => {
+    const [environmentWorkflow, previewWorkflow] = await Promise.all([
+      readRepositoryFile(".github/workflows/cloudflare-environment.yml"),
+      readRepositoryFile(".github/workflows/cloudflare-staging-pr.yml"),
+    ]);
+
+    expect(environmentWorkflow).toContain("active_pr_environments:");
+    expect(
+      environmentWorkflow.match(/CLOUDFLARE_ACTIVE_PR_ENVIRONMENTS:/g)
+    ).toHaveLength(2);
+    expect(previewWorkflow).toContain("pull-requests: read");
+    expect(previewWorkflow).toContain("GH_REPO: ${{ github.repository }}");
+    expect(previewWorkflow).toContain(
+      "gh pr list --state open --limit 1000"
+    );
+    expect(previewWorkflow).toContain(
+      "active_pr_environments: ${{ needs.active-previews.outputs.environments }}"
+    );
+  });
+
+  it("checks gateway quota before provisioning other preview resources", async () => {
+    const deploy = await readRepositoryFile(
+      "web/scripts/cloudflare/deploy.mjs"
+    );
+    expect(deploy.indexOf("ensureAiGateway(context.aiGatewayName)")).toBeLessThan(
+      deploy.indexOf("ensureD1Database(context.d1Name)")
+    );
+  });
+
   it("keeps preview identity secrets out of shared staging and production", async () => {
     const workflow = await readRepositoryFile(
       ".github/workflows/cloudflare-environment.yml"

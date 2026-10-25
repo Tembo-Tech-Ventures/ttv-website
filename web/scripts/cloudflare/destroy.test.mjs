@@ -59,6 +59,7 @@ describe("destroyEnvironment", () => {
       bucketDeleted: true,
     });
     expect(order).toEqual([
+      "gateway",
       "emptyBucket",
       "bucket",
       "containerApp",
@@ -66,12 +67,12 @@ describe("destroyEnvironment", () => {
       "worker",
       "queue",
       "vector",
-      "gateway",
       "database",
     ]);
   });
 
-  it("surfaces an R2 API error and leaves the rest of the environment intact", async () => {
+  it("releases the task gateway before surfacing an R2 API error", async () => {
+    const deleteAiGateway = vi.fn().mockResolvedValue(true);
     const deleteContainerApp = vi.fn();
     const deleteWorker = vi.fn();
     await expect(
@@ -83,12 +84,14 @@ describe("destroyEnvironment", () => {
               "GET /r2/buckets/example/objects failed: API unavailable"
             )
           ),
+        deleteAiGateway,
         deleteContainerApp,
         deleteWorker,
       })
     ).rejects.toThrow(
       'Failed to empty and delete R2 bucket "ttv-website-files-agent-123". Original error: GET /r2/buckets/example/objects failed: API unavailable'
     );
+    expect(deleteAiGateway).toHaveBeenCalledWith("gateway");
     expect(deleteContainerApp).not.toHaveBeenCalled();
     expect(deleteWorker).not.toHaveBeenCalled();
   });
@@ -97,6 +100,7 @@ describe("destroyEnvironment", () => {
     const deleteWorker = vi.fn();
     await expect(
       destroyEnvironment(context, {
+        deleteAiGateway: vi.fn().mockResolvedValue(true),
         emptyBucket: vi
           .fn()
           .mockResolvedValue({ bucketFound: true, objectsDeleted: 0 }),

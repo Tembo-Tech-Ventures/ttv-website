@@ -369,6 +369,60 @@ export async function ensureAiGateway(name) {
   });
 }
 
+export async function listAiGateways() {
+  const gateways = await cfApi("/ai-gateway/gateways?per_page=100");
+  if (!Array.isArray(gateways)) {
+    throw new TypeError(
+      `Expected AI Gateway list to be an array, got ${typeof gateways}`
+    );
+  }
+  return gateways;
+}
+
+export async function reclaimInactivePrPreviewAiGateways({
+  appName,
+  activeEnvironmentNames,
+  now = new Date(),
+  minimumAgeMs = 60 * 60 * 1_000,
+  listGateways = listAiGateways,
+  deleteGateway = deleteAiGatewayByName,
+}) {
+  const active = new Set();
+  for (const environmentName of activeEnvironmentNames) {
+    if (!/^agent-pr-[1-9]\d*$/.test(environmentName)) {
+      throw new Error(
+        `Refusing AI Gateway reclamation with invalid active preview environment "${environmentName}".`
+      );
+    }
+    active.add(environmentName);
+  }
+
+  if (!Number.isFinite(minimumAgeMs) || minimumAgeMs < 0) {
+    throw new Error("minimumAgeMs must be a non-negative finite number.");
+  }
+
+  const gatewayPrefix = `${normalizeSlug(appName)}-ai-`;
+  const cutoff = now.getTime() - minimumAgeMs;
+  const gateways = await listGateways();
+  const candidates = gateways.filter((gateway) => {
+    if (typeof gateway?.id !== "string") return false;
+    if (!gateway.id.startsWith(gatewayPrefix)) return false;
+
+    const environmentName = gateway.id.slice(gatewayPrefix.length);
+    if (!/^agent-pr-[1-9]\d*$/.test(environmentName)) return false;
+    if (active.has(environmentName)) return false;
+
+    const timestamp = new Date(gateway.modified_at ?? gateway.created_at);
+    return !Number.isNaN(timestamp.getTime()) && timestamp.getTime() <= cutoff;
+  });
+
+  const deleted = [];
+  for (const gateway of candidates) {
+    if (await deleteGateway(gateway.id)) deleted.push(gateway.id);
+  }
+  return deleted;
+}
+
 export async function deleteAiGatewayByName(name) {
   const deleted = await cfApi(
     `/ai-gateway/gateways/${encodeURIComponent(name)}`,
