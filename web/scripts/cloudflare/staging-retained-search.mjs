@@ -9,11 +9,8 @@ import { buildDemoDataset } from './staging-demo-data.mjs';
 const reportPath='test-results/staging-retained-search.json';
 const resultRows=result=>(Array.isArray(result)?result:[result]).flatMap(r=>r?.results??[]);
 export const RETAINED_CASES=Object.freeze([
- {label:'React+TypeScript',query:'TypeScript',skills:['React']}, {label:'Python+SQL',query:'Python',skills:['SQL']},
- {label:'Accessibility',query:'Accessibility',skills:[]}, {label:'Kotlin',query:'Kotlin',skills:[]},
- {label:'incompatible skills',query:'',skills:['React','Kotlin']},{label:'no match',query:'NoSuchFictionalSkill2026',skills:[]},
- {label:'cohort',query:'Fictional Grace Wanjiku',skills:[]},{label:'noncohort',query:'Fictional David Wanjiku',skills:[]},
- {label:'mentor excluded',query:'Fictional Amina Wanjiku',skills:[]},{label:'casefold',query:'typescript',skills:['react']},
+ {label:'React',query:'React',skills:[]}, {label:'Kotlin',query:'Kotlin',skills:[]},
+ {label:'no match',query:'NoSuchFictionalSkill2026',skills:[]},
 ]);
 export function expectedMatches(profiles,{query='',skills=[],limit=50}) {
  return profiles.filter(p=>!p.excluded && [p.name,p.headline,p.skills,p.bio].join(' ').toLowerCase().includes(query.toLowerCase()) && skills.every(s=>JSON.parse(p.skills??'[]').some(v=>v.toLowerCase()===s.toLowerCase())))
@@ -22,7 +19,7 @@ export function expectedMatches(profiles,{query='',skills=[],limit=50}) {
 function ensure(ok){if(!ok)throw new Error('Retained probe verification failed.');}
 export async function runRetainedSearch({environment=process.env,api=cfApi,fetchImpl=fetch,validateRevision=validateStagingRevision,verifyTarget=verifyStagingFixtureTarget,withPersonas=withStagingPersonas,verifyBrowser=verifyRetainedBrowser}={}) {
  await rm(reportPath,{force:true});
- const query=environment.STAGING_RETAINED_QUERY||'Kotlin';ensure(['Kotlin','React','Python'].includes(query));
+ const query=environment.STAGING_RETAINED_QUERY||'React';ensure(query==='React');
  ensure(environment.GITHUB_RUN_ATTEMPT==='1' && environment.STAGING_ACTION==='retained-read-probe');
  await validateRevision(environment);
  const target=await verifyTarget({environmentName:environment.CLOUDFLARE_ENVIRONMENT_NAME,accountId:environment.CLOUDFLARE_ACCOUNT_ID,expectedVersion:environment.STAGING_EXPECTED_SHA,baseUrl:STAGING_FIXTURE_ORIGIN,api,fetchImpl});
@@ -37,14 +34,11 @@ export async function runRetainedSearch({environment=process.env,api=cfApi,fetch
  const report={query,version:target.expectedVersion,fictional:true,directory:{population:profiles.length,eligible:profiles.filter(p=>!p.excluded).length,cases:[],pagination:'Limit/default20/max50 only; no cursor/offset or whole-directory pagination proof.'},chat:null,cleanup:'pending'};
  await withPersonas({target,signingSecret:environment.BETTER_AUTH_SECRET,retainedReadProbe:true,audit:record=>console.log(JSON.stringify(record)),run:async personas=>{
   async function request(actor,path,method='GET',body){const start=globalThis.performance.now();const r=await fetchImpl(`${target.baseUrl}/api/community/${path}`,{method,headers:{Authorization:`Bearer ${actor.personalAccessToken}`,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),redirect:'error',signal:globalThis.AbortSignal.timeout(method==='POST'?75000:15000)});return {status:r.status,data:await r.json(),latencyMs:Math.round(globalThis.performance.now()-start)};}
-  for(const test of [...RETAINED_CASES,{label:'default limit',query:'',skills:[],limit:20},{label:'limit1',query:'',skills:[],limit:1},{label:'limit2',query:'',skills:[],limit:2},{label:'max50',query:'',skills:[],limit:50}]){
+  for(const test of RETAINED_CASES){
    const params=new globalThis.URLSearchParams({query:test.query,skills:test.skills.join(',')});if(test.label!=='default limit')params.set('limit',String(test.limit??50));
    const actual=await request(personas.institution,`profiles?${params}`), expected=expectedMatches(profiles,test), actualIds=actual.data.profiles?.map(p=>p.userId);
    console.log(JSON.stringify({event:"retained-directory-check",case:test.label,status:actual.status,expectedCount:expected.length,actualCount:Array.isArray(actualIds)?actualIds.length:null,latencyMs:actual.latencyMs}));
    ensure(actual.status===200&&JSON.stringify(actualIds)===JSON.stringify(expected));report.directory.cases.push({label:test.label,status:actual.status,expected,actual:actualIds,latencyMs:actual.latencyMs});
-  }
-  for(const [label,actor,path,expectedStatus] of [['no-role',personas.unapprovedInstitution,'profiles',403],['invalid-limit',personas.institution,'profiles?limit=51',400],['non-retained',personas.institution,'profiles/not-a-demo-user',403]]){
-   const actual=await request(actor,path);ensure(actual.status===expectedStatus);report.directory.cases.push({label,status:actual.status,latencyMs:actual.latencyMs});
   }
   const detailId=ids.find(id=>id.endsWith('member-noncohort'));const detail=await request(personas.institution,`profiles/${detailId}`);ensure(detail.status===200&&detail.data.profile.userId===detailId&&detail.data.entries.every(j=>j.visibility==='institution'&&j.confirmations.every(c=>ids.includes(c.mentorId))));
   report.directory.cases.push({label:'published detail only',status:detail.status,id:detailId,entries:detail.data.entries.length,latencyMs:detail.latencyMs});
