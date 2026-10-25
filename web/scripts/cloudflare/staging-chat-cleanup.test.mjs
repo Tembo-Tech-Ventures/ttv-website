@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("./staging-fixture-target.mjs", () => ({ assertVerifiedStagingFixtureTarget: target => { if (!target.verified) throw new Error("Unverified target"); }, STAGING_FIXTURE_ORIGIN: "https://staging.tembotechventures.com", verifyStagingFixtureTarget: vi.fn() }));
 import { cleanupIncident, INCIDENT_USERS } from "./staging-chat-cleanup.mjs";
 function fixture() {
-  return { verified: true, expectedVersion: "1f7fa62fc6e00f3d69c7a9238b114c1be8a6add2", executeQuery: vi.fn(async sql => [{ results: sql.startsWith("SELECT id") ? INCIDENT_USERS.map(id => ({ id, email: `${id}@invalid.ttv` })) : sql.startsWith("SELECT") ? [{ remaining: 0 }] : [] }]) };
+  return { verified: true, expectedVersion: "c96608f0d0585478f8bf9881d741e3e56467cdb8", executeQuery: vi.fn(async sql => [{ results: sql.startsWith("SELECT id") ? INCIDENT_USERS.map(id => ({ id, email: `${id}@invalid.ttv` })) : sql.startsWith("SELECT") ? [{ remaining: 0 }] : [] }]) };
 }
 describe("fixed chat incident cleanup", () => {
   it("revokes credentials first, verifies cascaded data and never selects token material", async () => {
