@@ -6,7 +6,6 @@ import {
   deleteD1DatabaseByName,
   deleteQueueByName,
   deleteR2BucketByName,
-  deleteR2BucketObject,
   deleteVectorizeIndexByName,
   deleteWorkerScript,
   removeQueueWorkerConsumer,
@@ -16,20 +15,21 @@ import {
   writeGithubOutput,
 } from "./lib.mjs";
 
-const R2_DELETE_CONCURRENCY = 25;
-
 export function ensureEnvironmentCanBeDestroyed(environmentSlug) {
-  const protectedEnvironments = (
-    getOptionalEnv("CLOUDFLARE_PROTECTED_ENVIRONMENTS") ?? "production,prod"
-  )
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
+  const protectedEnvironments = new Set([
+    "production",
+    "prod",
+    "staging",
+    ...(getOptionalEnv("CLOUDFLARE_PROTECTED_ENVIRONMENTS") ?? "")
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  ]);
   const allowProtectedDestroy =
     getOptionalEnv("CLOUDFLARE_ALLOW_PROTECTED_DESTROY") === "true";
 
   if (
-    protectedEnvironments.includes(environmentSlug) &&
+    protectedEnvironments.has(environmentSlug) &&
     !allowProtectedDestroy
   ) {
     throw new Error(
@@ -38,14 +38,14 @@ export function ensureEnvironmentCanBeDestroyed(environmentSlug) {
   }
 }
 
-export function ensureAgentBucketCanBeEmptied(context) {
+export function ensureAgentBucketMatchesEnvironment(context) {
   const { appName, bucketName, environmentSlug } = context;
   const expectedPrefix = `${appName}-files-agent-`;
   const expectedBucketName = `${appName}-files-${environmentSlug}`.slice(0, 63);
 
   if (!environmentSlug.startsWith("agent-")) {
     throw new Error(
-      `Refusing to empty R2 bucket for non-agent environment "${environmentSlug}".`
+      `Refusing to inspect R2 bucket for non-agent environment "${environmentSlug}".`
     );
   }
   if (
@@ -53,66 +53,57 @@ export function ensureAgentBucketCanBeEmptied(context) {
     bucketName !== expectedBucketName
   ) {
     throw new Error(
-      `Refusing to empty R2 bucket "${bucketName}". Expected an exact "${expectedPrefix}" bucket for environment "${environmentSlug}".`
+      `Refusing to inspect R2 bucket "${bucketName}". Expected an exact "${expectedPrefix}" bucket for environment "${environmentSlug}".`
     );
   }
 }
 
-export async function emptyAgentR2Bucket(
+export async function ensureAgentR2BucketEmpty(
   context,
-  {
-    listObjectsPage = listR2BucketObjectsPage,
-    deleteObject = deleteR2BucketObject,
-  } = {}
+  { listObjectsPage = listR2BucketObjectsPage } = {}
 ) {
-  ensureAgentBucketCanBeEmptied(context);
+  ensureAgentBucketMatchesEnvironment(context);
 
   let cursor;
-  let objectsDeleted = 0;
   const seenCursors = new Set();
 
   do {
-    const page = await listObjectsPage(context.bucketName, cursor);
-    if (!page) {
-      return { bucketFound: false, objectsDeleted };
-    }
-
-    const keys = page.objects.map((object) => {
-      if (typeof object?.key !== "string") {
-        throw new TypeError(
-          `R2 object list for bucket "${context.bucketName}" contained an object without a string key.`
-        );
-      }
-      return object.key;
+    const page = await listObjectsPage(context.bucketName, cursor, {
+      requireCompleteMetadata: true,
     });
+    if (page === null) return;
 
-    for (let offset = 0; offset < keys.length; offset += R2_DELETE_CONCURRENCY) {
-      const results = await Promise.all(
-        keys
-          .slice(offset, offset + R2_DELETE_CONCURRENCY)
-          .map((key) => deleteObject(context.bucketName, key))
+    const hasNoDelimitedPrefixes =
+      page &&
+      (page.delimitedPrefixes === undefined ||
+        (Array.isArray(page.delimitedPrefixes) &&
+          page.delimitedPrefixes.length === 0));
+    const hasValidContinuation =
+      page?.isTruncated === false
+        ? page.cursor === undefined
+        : page?.isTruncated === true &&
+          typeof page.cursor === "string" &&
+          page.cursor.length > 0 &&
+          !seenCursors.has(page.cursor);
+
+    // Any object, prefix, incomplete page or malformed continuation is not
+    // proof of emptiness. Preserve the entire environment and never log keys.
+    if (
+      !page ||
+      !Array.isArray(page.objects) ||
+      page.objects.length > 0 ||
+      !hasNoDelimitedPrefixes ||
+      !hasValidContinuation
+    ) {
+      throw new Error(
+        `Refusing to destroy environment "${context.environmentSlug}": R2 bucket is nonempty or emptiness could not be verified. Preserve the environment for review.`
       );
-      objectsDeleted += results.filter(Boolean).length;
     }
 
-    if (!page.isTruncated) {
-      return { bucketFound: true, objectsDeleted };
-    }
-    if (!page.cursor) {
-      throw new Error(
-        `Cloudflare reported a truncated R2 object list for bucket "${context.bucketName}" without a cursor.`
-      );
-    }
-    if (seenCursors.has(page.cursor)) {
-      throw new Error(
-        `Cloudflare repeated R2 object-list cursor "${page.cursor}" for bucket "${context.bucketName}".`
-      );
-    }
+    if (!page.isTruncated) return;
     seenCursors.add(page.cursor);
     cursor = page.cursor;
   } while (cursor);
-
-  return { bucketFound: true, objectsDeleted };
 }
 
 export async function destroyEnvironment(
@@ -123,7 +114,7 @@ export async function destroyEnvironment(
     deleteDatabase = deleteD1DatabaseByName,
     deleteQueue = deleteQueueByName,
     removeQueueConsumer = removeQueueWorkerConsumer,
-    emptyBucket = emptyAgentR2Bucket,
+    listObjectsPage = listR2BucketObjectsPage,
     deleteBucket = deleteR2BucketByName,
     deleteVectorize = deleteVectorizeIndexByName,
     deleteWorker = deleteWorkerScript,
@@ -131,18 +122,17 @@ export async function destroyEnvironment(
 ) {
   ensureEnvironmentCanBeDestroyed(context.environmentSlug);
 
-  let bucketObjectsDeleted = 0;
+  const bucketObjectsDeleted = 0;
   let bucketDeleted = false;
   try {
     if (context.environmentSlug.startsWith("agent-")) {
-      const cleanup = await emptyBucket(context);
-      bucketObjectsDeleted = cleanup.objectsDeleted;
+      await ensureAgentR2BucketEmpty(context, { listObjectsPage });
     }
     bucketDeleted = await deleteBucket(context.bucketName);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `Failed to empty and delete R2 bucket "${context.bucketName}". Original error: ${message}`,
+      `Failed to safely delete R2 bucket "${context.bucketName}". Original error: ${message}`,
       { cause: error }
     );
   }

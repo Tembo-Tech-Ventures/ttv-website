@@ -130,7 +130,10 @@ function getRequiredEnvFrom(environment, name) {
   return value;
 }
 
-async function cfApiResponse(resourcePath, { method = "GET", body } = {}) {
+async function cfApiResponse(
+  resourcePath,
+  { method = "GET", body, notFoundCodes } = {}
+) {
   const accountId = getRequiredEnv("CLOUDFLARE_ACCOUNT_ID");
   const token = getRequiredEnv("CLOUDFLARE_API_TOKEN");
   const response = await fetch(
@@ -146,6 +149,17 @@ async function cfApiResponse(resourcePath, { method = "GET", body } = {}) {
   );
 
   if (response.status === 404) {
+    if (notFoundCodes) {
+      const missing = await response.json().catch(() => null);
+      if (
+        missing?.success !== false ||
+        !Array.isArray(missing.errors) ||
+        missing.errors.length === 0 ||
+        !missing.errors.every((error) => notFoundCodes.includes(error?.code))
+      ) {
+        throw new Error("R2 bucket absence could not be verified.");
+      }
+    }
     return null;
   }
 
@@ -170,12 +184,17 @@ export async function cfApi(resourcePath, options) {
   return payload?.result ?? null;
 }
 
-export async function listR2BucketObjectsPage(name, cursor) {
+export async function listR2BucketObjectsPage(
+  name,
+  cursor,
+  { requireCompleteMetadata = false } = {}
+) {
   const query = new URLSearchParams({ per_page: "1000" });
   if (cursor) query.set("cursor", cursor);
 
   const payload = await cfApiResponse(
-    `/r2/buckets/${encodeURIComponent(name)}/objects?${query.toString()}`
+    `/r2/buckets/${encodeURIComponent(name)}/objects?${query.toString()}`,
+    requireCompleteMetadata ? { notFoundCodes: [10006] } : undefined
   );
   if (!payload) return null;
   if (!Array.isArray(payload.result)) {
@@ -184,14 +203,70 @@ export async function listR2BucketObjectsPage(name, cursor) {
     );
   }
 
-  const nextCursor = payload.result_info?.cursor;
+  const resultInfo = payload.result_info;
+  const nextCursor = resultInfo?.cursor;
+  const hasCursor = typeof nextCursor === "string" && nextCursor.length > 0;
+
+  if (requireCompleteMetadata) {
+    const hasValidResultInfo =
+      resultInfo !== null &&
+      typeof resultInfo === "object" &&
+      !Array.isArray(resultInfo);
+    const hasValidCursor =
+      nextCursor === undefined || typeof nextCursor === "string";
+    const hasValidTruncation =
+      resultInfo?.is_truncated === undefined ||
+      typeof resultInfo.is_truncated === "boolean";
+    const hasValidCount =
+      resultInfo?.count === undefined ||
+      (Number.isInteger(resultInfo.count) && resultInfo.count >= 0);
+    const hasValidPageSize =
+      resultInfo?.per_page === undefined ||
+      (Number.isInteger(resultInfo.per_page) && resultInfo.per_page > 0);
+    const hasValidDelimitedPrefixes =
+      resultInfo?.delimited === undefined ||
+      (Array.isArray(resultInfo.delimited) &&
+        resultInfo.delimited.every((prefix) => typeof prefix === "string"));
+    const hasExplicitCursor =
+      hasValidResultInfo && Object.hasOwn(resultInfo, "cursor");
+    const hasStandardCursorMetadata =
+      resultInfo?.is_truncated === undefined &&
+      (hasExplicitCursor ||
+        resultInfo?.count !== undefined ||
+        resultInfo?.per_page !== undefined);
+    const hasSupportedPaginationShape =
+      typeof resultInfo?.is_truncated === "boolean" ||
+      hasStandardCursorMetadata;
+    const hasConsistentContinuation =
+      resultInfo?.is_truncated !== true || hasCursor;
+    const hasConsistentCompletion =
+      resultInfo?.is_truncated !== false || !hasCursor;
+
+    if (
+      payload.success !== true ||
+      !hasValidResultInfo ||
+      !hasValidCursor ||
+      !hasValidTruncation ||
+      !hasValidCount ||
+      !hasValidPageSize ||
+      !hasValidDelimitedPrefixes ||
+      !hasSupportedPaginationShape ||
+      !hasConsistentContinuation ||
+      !hasConsistentCompletion
+    ) {
+      throw new Error("R2 listing completion metadata could not be verified.");
+    }
+  }
+
   return {
     objects: payload.result,
-    cursor:
-      typeof nextCursor === "string" && nextCursor ? nextCursor : undefined,
+    cursor: hasCursor ? nextCursor : undefined,
     isTruncated:
-      payload.result_info?.is_truncated === true ||
-      (typeof nextCursor === "string" && nextCursor.length > 0),
+      resultInfo?.is_truncated === true ||
+      (resultInfo?.is_truncated === undefined && hasCursor),
+    delimitedPrefixes: Array.isArray(resultInfo?.delimited)
+      ? resultInfo.delimited
+      : [],
   };
 }
 
