@@ -15,11 +15,16 @@ on:
           - credential-audit
           - cleanup-chat-incident
           - seed-demo
+          - diagnose-demo
       expected_sha:
         description: Exact current head SHA of integration PR 171 (reserve a PM deployment slot first)
         required: true
         type: string
 
+      expected_deployed_sha:
+        description: Pinned live revision for read-only diagnose-demo only
+        required: false
+        type: string
       demo_enabled:
         description: Enable retained demo browser access (owner approval required; default off)
         required: false
@@ -63,6 +68,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STAGING_ACTION: ${{ inputs.action }}
+          STAGING_EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
           STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
           STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
           STAGING_INTEGRATION_PR: "171"
@@ -147,7 +153,7 @@ jobs:
         run: node web/scripts/cloudflare/staging-chat-cleanup.mjs
 
   seed-demo:
-    if: ${{ inputs.action == 'seed-demo' }}
+    if: ${{ inputs.action == 'seed-demo' || inputs.action == 'diagnose-demo' }}
     needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -160,10 +166,11 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - name: Seed retained fictional data without creating access credentials
+      - name: Seed or read-only diagnose retained fictional data
         env:
           GH_TOKEN: ${{ github.token }}
-          STAGING_ACTION: seed-demo
+          STAGING_ACTION: ${{ inputs.action }}
+          STAGING_EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
           STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
           STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
           STAGING_INTEGRATION_PR: "171"

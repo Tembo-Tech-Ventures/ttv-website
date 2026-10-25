@@ -191,3 +191,18 @@ app-push plus agent-pull rather than Cloudflare notifications.
   Wave 1 dispatched: error ledger and alert push (T1), pipeline rollback and
   notification (T2), blog reader with RSS, sitemap and sharing metadata (T3),
   public front door (T4).
+
+### Bounded retained-demo diagnosis (2026-10-25)
+
+The `Cloudflare Staging` action `diagnose-demo` runs only fixed aggregate SELECTs
+for required-role presence and retained demo keys. It uses the existing serialized
+staging job and credentials, without deployment, seeding or credential creation.
+`expected_sha` must still equal the current PR171 integration head and dispatched
+code revision. For this incident only, `expected_deployed_sha` must be
+`09f3360c6cfad601ec934230bda87b4239fb22d4`; the fixed staging Worker bindings,
+D1 identity and live health must independently match that revision. This separate
+identity is exclusive to read-only diagnosis; mutating actions retain their
+existing same-revision checks. Only attempt 1 is accepted. PM assigns the slot;
+output contains only the two revisions, role booleans and fixed-key counts.
+Counts describe current matching keys, not historical write attribution or
+validation of record ownership/content. Preserve retained records after inspection.
