@@ -19,7 +19,7 @@ const pr = {
 const respond = (body = pr) => vi.fn().mockResolvedValue({ ok: true, json: async () => body });
 
 describe("shared staging preflight", () => {
-  it.each(["deploy", "verify", "assess", "credential-audit", "seed-demo"])("validates the same exact revision for %s", async action => {
+  it.each(["deploy", "verify", "assess", "credential-audit", "seed-demo", "preview-container-state"])("validates the same exact revision for %s", async action => {
     await expect(validateStagingRevision({ ...env, STAGING_ACTION: action }, { fetchImpl: respond() })).resolves.toMatchObject({ sha });
   });
   it("accepts only the exact current integration PR head", async () => {
@@ -76,4 +76,9 @@ it.each(["deploy", "verify", "assess", "credential-audit", "cleanup-chat-inciden
 it("retains current executor revision checks with diagnostic deployed override",async()=>{
   await expect(validateStagingRevision({...env,STAGING_ACTION:"diagnose-demo",STAGING_EXPECTED_DEPLOYED_SHA:"b".repeat(40)}, {fetchImpl:respond()})).resolves.toMatchObject({sha});
   await expect(validateStagingRevision({...env,STAGING_ACTION:"diagnose-demo",STAGING_EXPECTED_DEPLOYED_SHA:sha,GITHUB_SHA:"b".repeat(40)}, {fetchImpl:respond()})).rejects.toThrow("exact dispatched revision");
+});
+
+it('wires the fixed PR220 state read through exact-head preflight and the existing staging credential boundary',async()=>{
+ const {readFile}=await import('node:fs/promises');const workflow=await readFile(new URL('../../../.github/workflows/cloudflare-staging.yml',import.meta.url),'utf8');const job=workflow.slice(workflow.indexOf('  preview-container-state:'));
+ expect(job).toContain('needs: preflight');expect(job).toContain('environment: staging');expect(job).toContain('STAGING_ACTION: preview-container-state');expect(job).toContain('node scripts/cloudflare/preview-container-state.mjs');expect(job).not.toMatch(/cf:deploy|cf:destroy|wrangler|health|schedule:|CLOUDFLARE_ENVIRONMENT_NAME: production/);
 });

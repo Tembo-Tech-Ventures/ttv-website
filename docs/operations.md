@@ -206,3 +206,16 @@ existing same-revision checks. Only attempt 1 is accepted. PM assigns the slot;
 output contains only the two revisions, role booleans and fixed-key counts.
 Counts describe current matching keys, not historical write attribution or
 validation of record ownership/content. Preserve retained records after inspection.
+
+
+### One-shot PR220 container-state diagnosis (2026-10-25)
+
+The `Cloudflare Staging` action `preview-container-state` is an explicitly
+assigned read-only diagnosis of the fixed `agent-pr-220` FFmpeg application.
+It uses the existing exact-current-PR171 preflight, serialized staging workflow
+and credential environment. Attempt 1 only; at most two bounded Cloudflare GETs,
+no retries, container health/start request, deployment, deletion or schedule.
+Pagination, denial or incomplete state is a telemetry gap, not proof that the
+container stopped. Output contains only the script's sanitized state receipt;
+no credentials or raw provider errors. This is a one-shot diagnostic, not a
+recurring monitor or a relaxation of R2 teardown guards.
