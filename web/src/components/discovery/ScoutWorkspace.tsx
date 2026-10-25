@@ -1,4 +1,6 @@
-import React, { useRef, useState } from "react";
+import { pushScoutLocation, readScoutLocation } from "./scout-history";
+import { getFirstName } from "@/lib/display-name";
+import React, { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
   ArrowLeft,
@@ -347,15 +349,66 @@ export default function ScoutWorkspace({
   const searching = useRef(false);
   const [error, setError] = useState("");
   const [appliedCriteria, setAppliedCriteria] = useState(criteria);
+  const navigationEpoch = useRef(0);
+  useEffect(() => {
+    let disposed = false;
+    async function restore() {
+      const epoch = ++navigationEpoch.current;
+      const location = readScoutLocation(new URL(window.location.href), window.history.state);
+      setCriteria(location.criteria);
+      setAppliedCriteria(location.criteria);
+      setLookup(location.lookup);
+      setLookupName(location.lookup ? location.criteria.query : "");
+      setStep(location.step);
+      setSelected(null);
+      setEvidenceOrder(null);
+      setError("");
+      setBusy(true);
+      setOpening(null);
+      openingRef.current = false;
+      setResults([]);
+      setOrdering(false);
+      orderingRef.current = false;
+      searching.current = false;
+      try {
+        if (location.step === "results") {
+          const restored = onSearch ? await onSearch(location.criteria) : filterDemoProfiles(profiles, location.criteria);
+          if (disposed || epoch !== navigationEpoch.current) return;
+          setResults(restored);
+        }
+        if (location.profileId) {
+          const restored = onOpenProfile ? await onOpenProfile(location.profileId) : profiles.find(profile => profile.id === location.profileId) ?? null;
+          if (disposed || epoch !== navigationEpoch.current) return;
+          setSelected(restored);
+        }
+      } catch (cause) {
+        if (!disposed && epoch === navigationEpoch.current) setError(displayUiError(cause, "This saved view could not be restored. Try your search again."));
+      } finally {
+        if (!disposed && epoch === navigationEpoch.current) setBusy(false);
+      }
+    }
+    // Preserve initial-profile embedding without a browser URL (e.g. component previews).
+    if (window.location.search.includes("scout=") || window.location.search.includes("profile=")) void restore();
+    window.addEventListener("popstate", restore);
+    return () => { disposed = true; window.removeEventListener("popstate", restore); };
+  }, [onSearch, onOpenProfile, profiles]);
+  function remember(nextStep: "criteria" | "results", profileId: string | null = null, submitted = appliedCriteria) {
+    pushScoutLocation({ criteria: submitted, step: nextStep, profileId, lookup });
+  }
   async function openProfile(profile: CommunityProfile) {
     if (openingRef.current) return;
+    const epoch = ++navigationEpoch.current;
     openingRef.current = true;
     setOpening(profile.id);
     setError("");
     try {
-      setSelected(onOpenProfile ? await onOpenProfile(profile.id) : profile);
+      const opened = onOpenProfile ? await onOpenProfile(profile.id) : profile;
+      if (epoch !== navigationEpoch.current) return;
+      setSelected(opened);
+      remember("results", profile.id);
       window.scrollTo({ top: 0 });
     } catch (cause) {
+      if (epoch !== navigationEpoch.current) return;
       setError(
         displayUiError(
           cause,
@@ -363,8 +416,7 @@ export default function ScoutWorkspace({
         ),
       );
     } finally {
-      setOpening(null);
-      openingRef.current = false;
+      if (epoch === navigationEpoch.current) { setOpening(null); openingRef.current = false; }
     }
   }
   async function search(event: FormEvent) {
@@ -382,11 +434,16 @@ export default function ScoutWorkspace({
       setError("Explore up to 10 skills at a time.");
       return;
     }
+    const epoch = ++navigationEpoch.current;
     searching.current = true;
     setBusy(true);
     setError("");
     try {
-      if (onSearch) setResults(await onSearch(searchCriteria));
+      if (onSearch) {
+        const found = await onSearch(searchCriteria);
+        if (epoch !== navigationEpoch.current) return;
+        setResults(found);
+      }
       else if (demo) setResults(filterDemoProfiles(profiles, searchCriteria));
       else
         throw new Error(
@@ -394,7 +451,9 @@ export default function ScoutWorkspace({
         );
       setAppliedCriteria({ ...searchCriteria });
       setStep("results");
+      remember("results", null, searchCriteria);
     } catch (cause) {
+      if (epoch !== navigationEpoch.current) return;
       setError(
         displayUiError(
           cause,
@@ -402,17 +461,17 @@ export default function ScoutWorkspace({
         ),
       );
     } finally {
-      setBusy(false);
-      searching.current = false;
+      if (epoch === navigationEpoch.current) { setBusy(false); searching.current = false; }
     }
   }
   const controlsDisabled = busy || ordering || opening !== null;
   async function orderEvidence() {
     if(!onOrder || orderingRef.current) return;
+    const epoch = navigationEpoch.current;
     orderingRef.current=true;setOrdering(true);setError("");setEvidenceOrder(null);
-    try {setEvidenceOrder(await onOrder(appliedCriteria));}
-    catch(cause){setError(displayUiError(cause,"Evidence ordering could not be completed. Review the published profiles or try a narrower opportunity."));}
-    finally{orderingRef.current=false;setOrdering(false);}
+    try { const order = await onOrder(appliedCriteria); if(epoch === navigationEpoch.current) setEvidenceOrder(order); }
+    catch(cause){if(epoch === navigationEpoch.current) setError(displayUiError(cause,"Evidence ordering could not be completed. Review the published profiles or try a narrower opportunity."));}
+    finally{if(epoch === navigationEpoch.current) { orderingRef.current=false;setOrdering(false); }}
   }
   return (
     <DiscoveryShell active="scout" demo={demo}>
@@ -420,7 +479,7 @@ export default function ScoutWorkspace({
         <>
           <button
             className="discovery-text-button discovery-return"
-            onClick={() => setSelected(null)}
+            onClick={() => { setSelected(null); remember(step); }}
           >
             <ArrowLeft size={18} aria-hidden="true" />
             Back to people
@@ -621,7 +680,7 @@ export default function ScoutWorkspace({
                 </div>
                 <button
                   className="discovery-button-secondary"
-                  onClick={() => setStep("criteria")}
+                  onClick={() => { setStep("criteria"); remember("criteria"); }}
                 >
                   <MagnifyingGlass size={17} aria-hidden="true" />
                   Edit criteria
@@ -634,7 +693,7 @@ export default function ScoutWorkspace({
               )}
               <p className="discovery-muted">
                 Explore source evidence and individual contributions. This list
-                is not an overall ranking of people. Directory results are alphabetical and show up to 50 matches; this is not a total count of eligible members. Refine your skills or name search to narrow the list.
+                is not an overall ranking of people. Up to 50 matching profiles, alphabetical; refine filters. This is not a total count of eligible members.
               </p>
               <div className="discovery-results">
                 {results.map((profile) => (
@@ -690,7 +749,7 @@ export default function ScoutWorkspace({
                     >
                       {opening === profile.id
                         ? "Opening profile…"
-                        : `Explore ${profile.name.split(" ")[0]}'s work`}
+                        : `Explore ${getFirstName(profile.name)}'s work`}
                       <ArrowUpRight size={19} aria-hidden="true" />
                     </button>
                   </article>

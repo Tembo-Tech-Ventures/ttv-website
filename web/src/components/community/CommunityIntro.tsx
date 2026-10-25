@@ -63,13 +63,13 @@ export default function CommunityIntro({ isAuthenticated = false, full = false }
   );
 }
 
-export function CommunityJourneyCard() {
+export function CommunityJourneyCard({ restrictedQa = false }: { restrictedQa?: boolean }) {
   return <section aria-labelledby="dashboard-community-title" className="rounded-xl border border-primary/30 bg-dark p-6 sm:p-8">
     <h2 id="dashboard-community-title" className="mt-3 text-2xl font-semibold text-ink-primary">Your work has a story.</h2>
     <p className="mt-3 leading-relaxed text-ink-secondary">Share your work and contributions. Open to every member, with or without a cohort.</p>
     <div className="mt-5 flex flex-wrap gap-x-6 gap-y-3">
       <a href="/dashboard/community" className="font-semibold text-primary underline underline-offset-4">Open my profile and journey</a>
-      <a href="/community" className="text-ink-secondary underline underline-offset-4">About the community</a>
+      <a href={restrictedQa ? "/community/members" : "/community"} className="text-ink-secondary underline underline-offset-4">About the community</a>
     </div>
   </section>;
 }
