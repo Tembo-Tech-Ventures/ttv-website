@@ -19,6 +19,7 @@ describe("community contribution editor", () => {
       <JourneyWorkspace profile={demoProfiles[0]} demo />,
     );
     expect(html).toContain("approved institutions");
+    expect(html).toContain("Private contributions remain visible only to you");
     expect(html).toContain("Mentors can review those shared contributions");
     expect(html).not.toContain("Unpublished drafts are visible only to you");
     expect(html).toContain(
