@@ -13,3 +13,12 @@ export function dashboardNextStep(memberStep: StudentNextStep, canDiscover: bool
     action: { href: "/dashboard/discover", label: "Discover builders" },
   } : memberStep;
 }
+
+export function restrictedQaNextStep(step: StudentNextStep, actionAllowed: boolean): StudentNextStep {
+  return actionAllowed ? step : {
+    title: "Explore your community journey",
+    description: "This temporary fictional QA session supports community activities. Cohort sessions and account tools are not available in this session.",
+    detail: "Use the QA sign-out control above when you finish.",
+    action: { href: "/dashboard/community", label: "Open my journey" },
+  };
+}

@@ -13,3 +13,15 @@ Commands from web:
 - `npm run typecheck:astro`
 
 Developer owns integration and serialized staging verification. No independent deployment or live persona mutation performed by this change. EvidenceOrdering citation changes are outside this patch.
+
+## Separate QA navigation and history follow-up
+
+Discover was already reachable via Dashboard → Community → shell navigation. The direct entry fixes discoverability and home guidance, not a wholly inaccessible route. Prior QA sessions were revoked; human `/demo` behavior was not reproduced and is not claimed defective.
+
+Restricted QA sessions now derive visible navigation and the primary next-step CTA from the existing QA path allowlist. Blocked links/feedback are hidden; the existing QA sign-out remains. Ordinary member and human-demo permissions are unchanged. Mobile community exposes the Dashboard backlink. Fictional names retain their marker while greetings/CTAs identify the person.
+
+Submitted discovery criteria and selected profile IDs support Back/Forward/refresh. Skills/query/profile IDs use query parameters; opportunity text is stored only in this tab's history state, not the URL. Loaded records, evidence, model answers and credentials are never saved. Refresh uses existing authorized read APIs again; errors leave the filters editable. Direct profile links remain authorization-gated. No pagination or API changes.
+
+Follow-up validation: 35 focused unit cases across the five affected suites (including the added CTA test rerun), six local Chromium cases including mobile navigation, restricted QA links, Back/Forward/refresh and failed-restoration recovery; focused lint and TypeScript pass; Astro check 0 errors, 0 warnings, 59 hints. Updated result screenshots are local fictional component evidence only. No live authenticated QA retest or deployment was performed.
+
+PR220 preview run40193866868: identity/public routes passed, browser201passed/170skipped/6notrun and one container-health failure; teardown skipped. This is not a green live preview. Workflow owner Developer received the blocker; artifact12599102753.

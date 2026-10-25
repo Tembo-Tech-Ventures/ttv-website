@@ -1,6 +1,7 @@
 ---
+import { qaPathAllowed } from "@/lib/staging-qa-policy";
 import { createCommunityService } from "@/lib/community/service";
-import { hasDiscoveryAccess, dashboardNextStep } from "@/lib/dashboard-presentation";
+import { hasDiscoveryAccess, dashboardNextStep, restrictedQaNextStep } from "@/lib/dashboard-presentation";
 import DashboardLayout from "@/layouts/DashboardLayout.astro";
 import Card from "@/components/common/Card.astro";
 import Button from "@/components/common/Button.astro";
@@ -14,7 +15,9 @@ import { getDashboardGreetingName } from "@/lib/display-name";
 const user = Astro.locals.user!;
 const journey = await getStudentJourney(drizzle(env.DB, { schema }), user.id);
 const canDiscover = hasDiscoveryAccess(await createCommunityService(env.DB, user.id, Astro.locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT).access());
-const nextStep = dashboardNextStep(journey.nextStep, canDiscover);
+const proposedStep = dashboardNextStep(journey.nextStep, canDiscover);
+const qa = Astro.locals.stagingQa;
+const nextStep = restrictedQaNextStep(proposedStep, !qa || qaPathAllowed(qa.persona, proposedStep.action.href, "GET"));
 const greetingName = getDashboardGreetingName(user.name);
 const hasVisitedDashboard =
   Astro.cookies.get("ttv-dashboard-visited")?.value === user.id;
@@ -65,6 +68,6 @@ Astro.cookies.set("ttv-dashboard-visited", user.id, {
         </div>
       </Card>
     </section>
-    <CommunityJourneyCard />
+    <CommunityJourneyCard restrictedQa={Boolean(qa)} />
   </div>
 </DashboardLayout>
