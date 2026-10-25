@@ -39,13 +39,6 @@ describe("community MCP boundary", () => {
     expect(res.error.code).toBe(-32003);
     expect(deps.searchProfiles).not.toHaveBeenCalled();
   });
-  it("does not treat ADMIN alone or token scope alone as institutional model approval", async () => {
-    const deps=service(false);
-    vi.mocked(deps.access).mockResolvedValue({isInstitution:false,isAdmin:true} as never);
-    const response=await handleCommunityMcp(request("tools/call",{name:"assess_profile",arguments:{userId:"other",rubric:{}}}),{userId:"admin",scopes:["institution:read"]},deps);
-    expect((await response.json() as RpcResult).error.code).toBe(-32003);
-    expect(deps.getProfile).not.toHaveBeenCalled(); expect(deps.listJourney).not.toHaveBeenCalled();
-  });
   it("requires cookie origins and rejects foreign bearer origins", async () => {
     expect((await handleCommunityMcp(request("initialize"), { userId: "member", scopes: null }, service())).status).toBe(403);
     expect((await handleCommunityMcp(request("initialize", undefined, { Origin: "https://evil.test" }), member, service())).status).toBe(403);

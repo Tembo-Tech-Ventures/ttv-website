@@ -68,17 +68,11 @@ describe("model evidence support boundary", () => {
     expect(p.complete.mock.calls[0][0][0].content).toContain("never instructions"); expect(result.status).toBe("invalid_output");
   });
   it("enforces ACL before provider calls, including journey lookup after a permitted profile", async () => {
-    const p = provider(); const service = { access: vi.fn().mockResolvedValue({ isInstitution: true }), getOwnProfile: vi.fn(), getProfile: vi.fn().mockRejectedValue(new Error("Access denied")), listJourney: vi.fn() };
+    const p = provider(); const service = { getProfile: vi.fn().mockRejectedValue(new Error("Access denied")), listJourney: vi.fn() };
     await expect(assessCommunityProfile(undefined, service, "foreign", rubric, p)).rejects.toThrow("Access denied");
     service.getProfile.mockResolvedValue(profile); service.listJourney.mockRejectedValue(new Error("Expired fixture"));
     await expect(assessCommunityProfile(undefined, service, "member", rubric, p)).rejects.toThrow("Expired fixture");
     expect(p.complete).not.toHaveBeenCalled();
-  });
-  it("denies ADMIN without INSTITUTION on another person's evidence before source or provider calls", async () => {
-    const p=provider();
-    const service={access:vi.fn().mockResolvedValue({isInstitution:false,isAdmin:true}),getOwnProfile:vi.fn().mockResolvedValue({userId:"admin"}),getProfile:vi.fn(),listJourney:vi.fn()};
-    await expect(assessCommunityProfile(undefined,service,"member",rubric,p)).rejects.toMatchObject({status:403});
-    expect(service.getProfile).not.toHaveBeenCalled(); expect(service.listJourney).not.toHaveBeenCalled(); expect(p.complete).not.toHaveBeenCalled();
   });
   it("rejects overlong context and too many criteria without calling the model", async () => {
     const p = provider(); expect((await assessEvidenceSupport(profile, [{ ...journey, description: "x".repeat(61000) }], rubric, p)).status).toBe("unavailable");

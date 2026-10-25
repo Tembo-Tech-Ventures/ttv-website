@@ -140,10 +140,9 @@ function requireGateway(env: Env) {
 
 export async function runCommunityChat(env: Env, service: CommunityService, input: unknown) {
   const { message, profileId, context, rubric, orderByEvidence } = parseInput(communityChatInput, input);
-  const access = await service.access();
-  if (!access.isInstitution) throw new CommunityError("Approved institutional access is required for community chat.", 403);
   requireGateway(env);
-  const institutional = access.isInstitution;
+  const access = await service.access();
+  const institutional = access.isInstitution || access.isAdmin;
   if (orderByEvidence && (!institutional || profileId || rubric)) throw new CommunityError("Evidence ordering requires institutional discovery without a selected profile or rubric.",403);
   const orderCandidates = orderByEvidence ? new Map<string,string>() : undefined;
   const toolNames: string[] = [];

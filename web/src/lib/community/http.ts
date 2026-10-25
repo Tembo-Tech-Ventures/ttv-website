@@ -58,10 +58,9 @@ const routes: Record<string, Handler> = {
   "POST chat": async ({service,body,env,actor,db}) => {
     // The first-party chat can perform multiple tools; require the matching delegated read scope.
     if (actor.scopes !== null && !actor.scopes.includes("community:read")) throw new CommunityError("Community read scope required.",403);
-    const access = await service.access();
-    if (!access.isInstitution) throw new CommunityError("Approved institutional access is required for community chat.",403);
     if (!env) throw new CommunityError("Chat is unavailable.",503);
-    if (actor.scopes !== null && !actor.scopes.includes("institution:read")) throw new CommunityError("Institution read scope required.",403);
+    const access = await service.access();
+    if ((access.isInstitution || access.isAdmin) && actor.scopes !== null && !actor.scopes.includes("institution:read")) throw new CommunityError("Institution read scope required.",403);
     if (actor.fixture?.retainedReadProbe) {
       parseInput(communityChatInput,body);
       await claimRetainedChat(db,env.DEPLOYMENT_ENVIRONMENT,actor.fixture);
