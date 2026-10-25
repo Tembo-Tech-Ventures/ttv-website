@@ -9,14 +9,17 @@ const displayNames = Object.freeze({ member: "Fictional Amina Wanjiku", otherMem
 const rows = result => (Array.isArray(result) ? result : [result]).flatMap(statement => statement?.results ?? []);
 
 /** Runner-only. Credentials never leave the callback; default cleanup deletes all fixture-owned records. */
-export async function withStagingPersonas({ target, signingSecret, run, audit = () => {}, now = new Date(), assessmentProbe = false }) {
+export async function withStagingPersonas({ target, signingSecret, run, audit = () => {}, now = new Date(), assessmentProbe = false, retainedReadProbe = false }) {
   assertVerifiedStagingFixtureTarget(target);
   if (typeof run !== "function" || typeof signingSecret !== "string" || signingSecret.length < 32) throw new Error("A verification callback and staging signing configuration are required.");
   const timestamp = Math.floor(now.getTime() / 1000);
   if (!Number.isSafeInteger(timestamp) || Math.abs(Date.now() / 1000 - timestamp) > 60) throw new Error("Invalid fixture time.");
+  if (retainedReadProbe && assessmentProbe) throw new Error("Select one probe.");
+  const cutoff = Date.parse("2026-10-25T23:00:00Z") / 1000;
+  if (retainedReadProbe && timestamp >= cutoff) throw new Error("Retained probe window closed.");
   const runId = randomBytes(12).toString("hex");
   const namespace = `ttv-staging-fixture-${runId}`;
-  const marker = `ttv-agent:synthetic-staging:${runId}`;
+  const marker = `ttv-agent:synthetic-staging:${runId}${retainedReadProbe ? ":retained-read:READY" : ""}`;
   const execute = target.executeQuery;
   const userIds = [];
   const personas = {};
@@ -29,15 +32,15 @@ export async function withStagingPersonas({ target, signingSecret, run, audit = 
     // Fail closed before identities are inserted if migrations have not landed.
     await execute('SELECT "userId","sessionId","runId","persona","expiresAt" FROM "stagingFixtureIdentity" LIMIT 0');
     const roles = {};
-    for (const role of ["ADMIN", "MENTOR", "INSTITUTION"]) {
+    for (const role of (retainedReadProbe ? ["INSTITUTION"] : ["ADMIN", "MENTOR", "INSTITUTION"])) {
       const found = rows(await execute('SELECT "id" FROM "Roles" WHERE "name"=? LIMIT 1', [role]));
       if (!found[0]?.id) throw new Error("Required role migration missing");
       roles[role] = found[0].id;
     }
-    for (const [persona, role] of Object.entries(STAGING_PERSONA_ROLES)) {
+    for (const [persona, role] of Object.entries(retainedReadProbe ? {institution:"INSTITUTION",unapprovedInstitution:null} : STAGING_PERSONA_ROLES)) {
       const userId = `${namespace}-${persona}`;
-      const sessionId = `${userId}${assessmentProbe === true && persona === "institution" ? "-assessment-session" : "-session"}`;
-      const expiresAt = timestamp + 3600;
+      const sessionId = retainedReadProbe ? `${userId}-retained-read-probe-session` : `${userId}${assessmentProbe === true && persona === "institution" ? "-assessment-session" : "-session"}`;
+      const expiresAt = retainedReadProbe ? Math.min(timestamp+900,cutoff) : timestamp + 3600;
       userIds.push(userId);
       await execute('INSERT INTO "user" ("id","name","email","emailVerified","createdAt","updatedAt") VALUES (?,?,?,1,?,?)',
         [userId, displayNames[persona], `${userId}@invalid.ttv`, timestamp, timestamp]);
@@ -48,7 +51,7 @@ export async function withStagingPersonas({ target, signingSecret, run, audit = 
         [sessionId, expiresAt, token, marker, userId, timestamp, timestamp]);
       await execute('INSERT INTO "stagingFixtureIdentity" ("userId","sessionId","runId","persona","expiresAt") VALUES (?,?,?,?,?)',
         [userId, sessionId, runId, persona, expiresAt]);
-      const cookies = createStagingBrowserCookies({ baseUrl: target.baseUrl, secret: signingSecret, token, expiresAt });
+      const cookies = retainedReadProbe ? [] : createStagingBrowserCookies({ baseUrl: target.baseUrl, secret: signingSecret, token, expiresAt });
       let personalAccessToken;
       if (["member", "institution", "unapprovedInstitution"].includes(persona)) {
         personalAccessToken = `ttv_pat_${randomBytes(32).toString("hex")}`;

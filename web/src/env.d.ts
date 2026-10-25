@@ -9,6 +9,7 @@ declare namespace Cloudflare {
     DEPLOYMENT_VERSION?: string;
     AGENT_AUTH_ENABLED?: string;
     STAGING_DEMO_ENABLED?: string;
+    STAGING_RETAINED_READ_PROBE_ENABLED?: string;
     SAM_ALERT_WEBHOOK_URL?: string;
     SAM_ALERT_WEBHOOK_TOKEN?: string;
   }

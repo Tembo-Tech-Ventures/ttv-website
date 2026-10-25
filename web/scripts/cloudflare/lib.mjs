@@ -566,6 +566,8 @@ export function createGeneratedWranglerConfig({
   const deployment = resolveDeploymentMetadata();
   const agentAuthEnabled =
     getOptionalEnv("CLOUDFLARE_AGENT_AUTH_ENABLED") === "true";
+  const retainedProbeEnabled = getOptionalEnv("CLOUDFLARE_STAGING_RETAINED_READ_PROBE_ENABLED") === "true";
+  if (retainedProbeEnabled && (deployment.environment !== "staging" || primaryDomain !== "staging.tembotechventures.com" || betterAuthUrl !== "https://staging.tembotechventures.com")) throw new Error("Retained probe requires canonical staging.");
   const demoEnabled = getOptionalEnv("CLOUDFLARE_STAGING_DEMO_ENABLED") === "true";
   if (demoEnabled && (deployment.environment !== "staging" || primaryDomain !== "staging.tembotechventures.com" || betterAuthUrl !== "https://staging.tembotechventures.com")) {
     throw new Error("Retained demo access is allowed only on the canonical staging deployment.");
@@ -616,6 +618,7 @@ export function createGeneratedWranglerConfig({
       ...(agentAuthEnabled
         ? { AGENT_AUTH_ENABLED: "true" }
         : {}),
+      ...(retainedProbeEnabled ? { STAGING_RETAINED_READ_PROBE_ENABLED: "true" } : {}),
       ...(demoEnabled ? { STAGING_DEMO_ENABLED: "true" } : {}),
       AI_GATEWAY_ACCOUNT_ID: getRequiredEnv("CLOUDFLARE_ACCOUNT_ID"),
       AI_GATEWAY_NAME: aiGatewayName,
