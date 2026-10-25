@@ -29,7 +29,8 @@ function setup(){
  const member=DEMO_PERSONAS['member-cohort'].userId;sql.prepare('INSERT INTO programApplication VALUES(?,?,?,?)').run(member+'-application',member,DEMO_PREFIX+'program','APPROVED');
  sql.prepare('INSERT INTO session VALUES(?,?,?,?,?,?,?)').run('human-parent','real-admin','never-used','human',now,now,now+3600);
  sql.prepare('INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES(?,?,?,?,?,?)').run('seed-journey',member,'Seed untouched','Existing fictional contribution','2026-10-24','institution');
- const db={prepare(query:string){let args:unknown[]=[];const s={bind(...v:unknown[]){args=v;return s;},async first(){return sql.prepare(query).get(...args as never[])??null;},async all(){return{results:sql.prepare(query).all(...args as never[])};},async run(){const r=sql.prepare(query).run(...args as never[]);return{success:true,meta:{changes:Number(r.changes)}};}};return s;},async batch(statements:{run:()=>Promise<unknown>}[]){sql.exec('BEGIN');try{const r=[];for(const s of statements)r.push(await s.run());sql.exec('COMMIT');return r;}catch(e){sql.exec('ROLLBACK');throw e;}}} as unknown as D1Database;
+ let batchTail:Promise<unknown>=Promise.resolve();
+ const db={prepare(query:string){let args:unknown[]=[];const s={bind(...v:unknown[]){args=v;return s;},async first(){return sql.prepare(query).get(...args as never[])??null;},async all(){return{results:sql.prepare(query).all(...args as never[])};},async run(){const r=sql.prepare(query).run(...args as never[]);return{success:true,meta:{changes:Number(r.changes)}};}};return s;},batch(statements:{run:()=>Promise<unknown>}[]){const result=batchTail.then(async()=>{sql.exec('BEGIN');try{const r=[];for(const s of statements)r.push(await s.run());sql.exec('COMMIT');return r;}catch(e){sql.exec('ROLLBACK');throw e;}});batchTail=result.catch(()=>undefined);return result;}} as unknown as D1Database;
  const env={DB:db,DEPLOYMENT_ENVIRONMENT:'staging',STAGING_DEMO_ENABLED:'true'};
  const request=(persona:DemoPersona,path='/dashboard/community',method='GET',data?:unknown)=>new Request(DEMO_ORIGIN+path,{method,headers:{cookie:QA_COOKIE+'='+tokens[persona],origin:DEMO_ORIGIN,'Content-Type':'application/json'},...(data?{body:JSON.stringify(data)}:{})});
  async function qa(persona:DemoPersona){return(await authenticateQaCookie(env,request(persona)))!.qa;}
@@ -69,7 +70,10 @@ describe('retained QA authoritative access and ledger',()=>{
   expect((await f.call('member-cohort','journey/'+id,'PUT',{...entry,description:'Fictional updated evidence'})).status).toBe(200);
   expect((await f.call('member-noncohort','journey/'+id,'DELETE')).status).toBe(403);
   const confirmed=await f.call('mentor',`journey/${id}/confirmations`,'POST',{expectedRevision:2,statement:'Fictional QA reviewed the described change',method:'Fictional walkthrough'});expect(confirmed.status).toBe(201);const confirmationId=(await confirmed.json() as {confirmation:{id:string}}).confirmation.id;
+  const retry=await f.call('mentor',`journey/${id}/confirmations`,'POST',{expectedRevision:2,statement:'Fictional QA retry',method:'Fictional walkthrough'});expect(retry.status).toBe(409);
+  expect(f.sql.prepare("SELECT COUNT(*) n FROM stagingQaResource WHERE kind='confirmation'").get()?.n).toBe(1);
   expect((await f.call('mentor','confirmations/'+confirmationId,'DELETE')).status).toBe(200);
+  expect((await f.call('mentor',`journey/${id}/confirmations`,'POST',{expectedRevision:2,statement:'Fictional QA after revoke',method:'Fictional walkthrough'})).status).toBe(201);
   for(const method of ['PUT','PATCH','DELETE'])expect((await f.call('member-cohort','journey/seed-journey',method,method==='PUT'?entry:{visibility:'private'})).status).toBe(403);
   expect((await f.call('mentor','journey/seed-journey/confirmations','POST',{expectedRevision:1,statement:'Fictional QA',method:'Fictional'})).status).toBe(403);
   expect((await f.call('institution','journey','POST',entry)).status).toBe(403);
@@ -80,4 +84,14 @@ describe('retained QA authoritative access and ledger',()=>{
  });
  it('rejects non-fictional titles, CSRF and revoked mutations with no new ledger entries',async()=>{const f=setup();const qa=await f.qa('member-cohort');const data={title:'Existing work',description:'Fictional',occurredAt:'2026-10-25',visibility:'institution'};expect((await f.call('member-cohort','journey','POST',data)).status).toBe(400);f.sql.prepare('UPDATE stagingQaRun SET revokedAt=?').run(f.now);expect((await handleQaCommunityRequest(f.request('member-cohort','/api/community/journey','POST',data),'journey',qa,f.env)).status).toBe(403);expect(f.sql.prepare('SELECT COUNT(*) n FROM stagingQaResource').get()?.n).toBe(0);});
  it.each(['/api/community/chat','/api/community/profile','/api/community/profiles/x/assessment','/api/auth/get-session','/api/auth/sign-out','/admin','/api/mcp','/demo','/api/demo/switch','/api/demo/logout','/api/community/tokens','/api/recordings','/dashboard/sessions'])('denies unrelated %s',path=>{for(const persona of Object.keys(DEMO_PERSONAS)as DemoPersona[])for(const method of ['GET','POST','PUT','DELETE'])if(!(path==='/api/community/profile'&&method==='GET'))expect(qaPathAllowed(persona,path,method)).toBe(false);});
+});
+
+it('serializes concurrent QA confirmations without duplicate corroboration or orphan ledger records',async()=>{
+ const f=setup();const created=await f.call('member-noncohort','journey','POST',{title:`Fictional QA ${QA_RUN_ID}: Concurrent review`,description:'Fictional work only',occurredAt:'2026-10-25',visibility:'institution'});
+ const id=(await created.json() as {entry:{id:string}}).entry.id;
+ // D1 batch executes each transaction serially. Exercise both requests against the same live revision.
+ const review={expectedRevision:1,statement:'Fictional QA reviewed change',method:'Fictional walkthrough'};
+ const results=await Promise.all([f.call('mentor',`journey/${id}/confirmations`,'POST',review),f.call('mentor',`journey/${id}/confirmations`,'POST',review)]);
+ expect(results.map(r=>r.status)).toEqual([201,409]);expect(f.sql.prepare('SELECT COUNT(*) n FROM communityConfirmation WHERE journeyId=?').get(id)?.n).toBe(1);
+ expect(f.sql.prepare("SELECT COUNT(*) n FROM stagingQaResource WHERE kind='confirmation'").get()?.n).toBe(1);
 });
