@@ -98,7 +98,7 @@ function groundedAnswer(content: string | null, sources: Map<string, EvidenceCit
     if (citations.some((source, i) => !source || source.version !== answer.citations[i].version)) return ungrounded(sources);
     const orderedProfiles = answer.orderedProfiles ?? [];
     if (orderCandidates && (orderedProfiles.length === 0 || new Set(orderedProfiles.map(p=>p.userId)).size !== orderedProfiles.length || orderedProfiles.some(p=>!orderCandidates.has(p.userId) || !citations.some(c=>c?.userId===p.userId && c.kind==='journey')))) return ungrounded(sources);
-    return { orderedProfiles:orderCandidates ? orderedProfiles.map(p=>({...p,name:orderCandidates.get(p.userId)!})) : [],evaluatedCandidates:orderCandidates?.size ?? 0, answer: answer.answer, citations: citations as EvidenceCitation[], retrievedSources: [...sources.values()], grounded: true, error: null, aiGenerated: true, limited: false };
+    return { orderedProfiles:orderCandidates ? orderedProfiles.map(p=>({...p,name:orderCandidates.get(p.userId)!,citations:citations.filter((c):c is EvidenceCitation=>Boolean(c && c.userId===p.userId && c.kind==="journey")).map(c=>({id:c.id,version:c.version,url:c.url??null}))})) : [],evaluatedCandidates:orderCandidates?.size ?? 0, answer: answer.answer, citations: citations as EvidenceCitation[], retrievedSources: [...sources.values()], grounded: true, error: null, aiGenerated: true, limited: false };
   } catch { return ungrounded(sources); }
 }
 
