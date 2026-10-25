@@ -1,4 +1,7 @@
 import type { APIRoute } from "astro";
+import { z } from "zod";
+import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
+import { readBoundedJson, RequestJsonError } from "@/lib/request-json";
 import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
@@ -7,6 +10,18 @@ import { getAccessibleProgramIds } from "@/lib/recordings/access";
 import { userHasAdminRole } from "@/lib/admin/roles";
 import { generateToolCompletion, type GatewayMessage } from "@/lib/ai/gateway";
 import { TOOL_DEFINITIONS, executeTool, type ToolContext, type TranscriptSource } from "@/lib/chat/tools";
+
+// Match ChatApp's eight-entry history while bounding decoded input before writes.
+const chatInput = z.object({
+  message: z.string().min(1).max(2000).refine(value => value.trim().length > 0),
+  sessionId: z.string().min(1).max(128).nullable().optional(),
+  conversationHistory: z.array(z.object({
+    role: z.enum(["user", "assistant"]),
+    content: z.string().max(8000),
+  })).max(8).default([]),
+}).strict().refine(value => new TextEncoder().encode(
+  value.message + value.conversationHistory.map(entry => entry.content).join("")
+).byteLength <= 24_000);
 
 const MAX_TOOL_ROUNDS = 3;
 const MAX_ANSWER_TOKENS = 1200;
@@ -60,21 +75,25 @@ function buildCitations(sources: TranscriptSource[]) {
   }));
 }
 
-export const POST: APIRoute = async ({ request, locals }) => {
+const handleChat: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { message, sessionId: requestedSessionId, conversationHistory = [] } = (await request.json()) as {
-    message?: string;
-    sessionId?: string | null;
-    conversationHistory?: Array<{ role: string; content: string }>;
-  };
-  if (!message || typeof message !== "string") {
-    return Response.json({ error: "message is required" }, { status: 400 });
+  if (!hasMatchingRequestOrigin(request)) {
+    return Response.json({ error: "A same-origin request is required." }, { status: 403 });
   }
-  if (message.length > 2000) {
-    return Response.json({ error: "message is too long" }, { status: 400 });
+  let input: z.infer<typeof chatInput>;
+  try {
+    const parsed = chatInput.safeParse(await readBoundedJson(request));
+    if (!parsed.success) return Response.json({ error: "Invalid chat request." }, { status: 400 });
+    input = parsed.data;
+  } catch (error) {
+    if (error instanceof RequestJsonError) {
+      return Response.json({ error: error.message }, { status: error.status });
+    }
+    return Response.json({ error: "Could not read chat request." }, { status: 400 });
   }
+  const { message, sessionId: requestedSessionId, conversationHistory } = input;
 
   const db = drizzle(env.DB, { schema });
   const sessionId = await ensureOwnedChatSession(
@@ -164,4 +183,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
   await touchChatSession(env.DB, user.id, sessionId);
 
   return Response.json({ sessionId, answer, citations });
+};
+
+export const POST: APIRoute = async (context) => {
+  try {
+    return await handleChat(context);
+  } catch {
+    return Response.json({ error: "The chat request could not be completed." }, { status: 500 });
+  }
 };
