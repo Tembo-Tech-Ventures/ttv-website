@@ -188,6 +188,27 @@ describe("community HTTP", () => {
     expect((await handleCommunityRequest(new Request(get.url,{method:"PUT",body:JSON.stringify(profile)}),"profile",{id:"member",scopes:null},db)).status).toBe(403);
     expect((await handleCommunityRequest(get,"profiles",{id:"institution",scopes:["community:read"]},db)).status).toBe(403);
   });
+  it("requires actual INSTITUTION on REST chat before inference and revalidates revoked approval", async () => {
+    const f=fixture();
+    f.sql.exec(`INSERT INTO Roles(id,name) VALUES ('admin','ADMIN'); INSERT INTO UserRoles VALUES ('admin-only','other','admin');`);
+    const run=vi.fn().mockImplementation(async () => Response.json({choices:[{message:{role:"assistant",content:"invalid"},finish_reason:"stop"}]}));
+    const env={AI_GATEWAY_NAME:"gateway",AI:{run}} as unknown as Env;
+    const request=()=>new Request("https://ttv.example/api/community/chat",{method:"POST",headers:{Origin:"https://ttv.example"},body:JSON.stringify({message:"Read evidence"})});
+    expect((await handleCommunityRequest(request(),"chat",null,f.db,env)).status).toBe(401);
+    for(const id of ["member","mentor","other"]) {
+      const before=f.sql.prepare("SELECT total_changes() AS count").get();
+      expect((await handleCommunityRequest(request(),"chat",{id,scopes:null},f.db,env)).status).toBe(403);
+      expect(f.sql.prepare("SELECT total_changes() AS count").get()).toEqual(before);
+    }
+    expect(run).not.toHaveBeenCalled();
+    expect((await handleCommunityRequest(request(),"chat",{id:"institution",scopes:["community:read"]},f.db,env)).status).toBe(403);
+    expect(run).not.toHaveBeenCalled();
+    expect((await handleCommunityRequest(request(),"chat",{id:"institution",scopes:null},f.db,env)).status).toBe(200);
+    expect(run).toHaveBeenCalledOnce();
+    f.sql.prepare("DELETE FROM UserRoles WHERE userId='institution'").run();
+    expect((await handleCommunityRequest(request(),"chat",{id:"institution",scopes:null},f.db,env)).status).toBe(403);
+    expect(run).toHaveBeenCalledOnce();
+  });
   it("supports actual writes and evidence reads", async () => {
     const {db} = fixture(); const put = new Request("https://ttv.example/api/community/profile",{method:"PUT",headers:{Origin:"https://ttv.example"},body:JSON.stringify(profile)});
     expect((await handleCommunityRequest(put,"profile",{id:"member",scopes:null},db)).status).toBe(200);
@@ -228,6 +249,9 @@ describe("community HTTP", () => {
     const request = () => new Request("https://ttv.example/api/community/profiles/member/assessment",{method:"POST",body:JSON.stringify(body)});
     const denied = await handleCommunityRequest(request(),"profiles/member/assessment",{id:"other",scopes:["institution:read"]},f.db);
     expect(denied.status).toBe(403); expect(complete).not.toHaveBeenCalled();
+    f.sql.exec(`INSERT INTO Roles(id,name) VALUES ('assessment-admin','ADMIN'); INSERT INTO UserRoles VALUES ('assessment-admin-only','other','assessment-admin');`);
+    expect((await handleCommunityRequest(request(),"profiles/member/assessment",{id:"other",scopes:["institution:read"]},f.db)).status).toBe(403);
+    expect(complete).not.toHaveBeenCalled();
     const response = await handleCommunityRequest(request(),"profiles/member/assessment",{id:"institution",scopes:["institution:read"]},f.db);
     expect(await response.json()).toMatchObject({assessment:{status:"completed",method:"model-evidence-support-v1",criteria:[{criterionId:"tool",label:"Tool evidence",rating:3,citations:[{id:contribution.id,userId:"member",quote:entry.description}]}]}});
     expect(JSON.stringify(complete.mock.calls)).not.toContain("private-only-secret");

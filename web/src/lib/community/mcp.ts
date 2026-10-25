@@ -5,7 +5,7 @@ import type { CommunityProfile, CommunityJourney } from "./model";
 import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
 
 export interface CommunityMcpService {
-  getOwnProfile(): Promise<unknown>;
+  getOwnProfile(): Promise<{ userId: string }>;
   updateOwnProfile(input: unknown): Promise<unknown>;
   searchProfiles(input: { query?: string; limit?: number; skills?: string[] }): Promise<unknown>;
   getProfile(userId: string): Promise<CommunityProfile>;

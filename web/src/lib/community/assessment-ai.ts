@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { rubricInput, journeyCitation, confirmationCitation, type EvidenceCitation } from "./assessment";
-import { parseInput, type CommunityProfile, type CommunityJourney } from "./model";
+import { CommunityError, parseInput, type CommunityProfile, type CommunityJourney } from "./model";
 import { createAssessmentProvider, type AssessmentProvider, type AssessmentOutputReason } from "./assessment-provider";
 
 const reference = z.object({ kind: z.enum(["profile", "journey", "confirmation"]), id: z.string().min(1).max(100), version: z.number().int().nonnegative() }).strict();
@@ -39,6 +39,8 @@ export interface EvidenceSupportAssessment {
   errorCode?: "provider_unavailable" | "invalid_output"; disclaimer: string; criteria: AssessmentCriterion[];
 }
 interface AssessmentService {
+  access(): Promise<{ isInstitution: boolean }>;
+  getOwnProfile(): Promise<{ userId: string }>;
   getProfile(userId: string): Promise<CommunityProfile>;
   listJourney(userId: string): Promise<CommunityJourney[]>;
 }
@@ -63,6 +65,9 @@ function evidence(profile: CommunityProfile, journeys: CommunityJourney[]) {
 export async function assessCommunityProfile(env: Env | undefined, service: AssessmentService, userId: string, input: unknown,
   provider: AssessmentProvider = createAssessmentProvider(env)): Promise<EvidenceSupportAssessment> {
   const rubric = parseInput(rubricInput, input);
+  if (!(await service.access()).isInstitution && (await service.getOwnProfile()).userId !== userId) {
+    throw new CommunityError("Approved institutional access is required for assessment of another person.", 403);
+  }
   const profile = await service.getProfile(userId);
   const journeys = await service.listJourney(userId);
   return assessEvidenceSupport(profile, journeys, rubric, provider);
