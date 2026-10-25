@@ -1,6 +1,6 @@
 import { DEMO_ORIGIN, DEMO_PERSONAS, demoPathAllowed, type DemoPersona } from './staging-demo-policy';
-import {QA_RUN_ID} from './staging-qa-config.mjs';
-export {QA_RUN_ID,QA_COOKIE,QA_MARKER,QA_KEY_PIN} from './staging-qa-config.mjs';
+import {QA_RUN_ID,QA_PERSONAS} from './staging-qa-config.mjs';
+export {QA_RUN_ID,QA_COOKIE,QA_MARKER,QA_KEY_PIN,QA_CUTOFF,QA_PERSONAS,QA_MAX_TTL_SECONDS} from './staging-qa-config.mjs';
 export const qaSessionId = (persona: DemoPersona) => `${DEMO_PERSONAS[persona].userId}-qa-${QA_RUN_ID}`;
 export interface QaIdentity { runId: string; persona: DemoPersona; userId: string; sessionId: string; issuedAt: number; expiresAt: number }
 function qaReadAllowed(persona:DemoPersona,path:string,method:string){
@@ -17,12 +17,12 @@ function qaReadAllowed(persona:DemoPersona,path:string,method:string){
   return false;
 }
 export function qaPathAllowed(persona:DemoPersona,path:string,method:string){
+ if(!QA_PERSONAS.includes(persona))return false;
  if(path==='/api/qa/logout')return method==='POST';
- if(/^\/api\/community\/confirmations\/[^/]+$/.test(path))return persona==='mentor'&&method==='DELETE';
  if(!demoPathAllowed(path,method))return false;
  if(['GET','HEAD'].includes(method))return qaReadAllowed(persona,path,method);
   if (persona === 'institution') return false;
   if (persona === 'mentor') return method === 'POST' && /^\/api\/community\/journey\/[^/]+\/confirmations$/.test(path);
-  return method === 'POST' && path === '/api/community/journey' || ['PUT','PATCH','DELETE'].includes(method) && /^\/api\/community\/journey\/[^/]+$/.test(path);
+  return method === 'POST' && path === '/api/community/journey' || method === 'PUT' && /^\/api\/community\/journey\/[^/]+$/.test(path);
 }
 export function qaOrigin(request: Request) { return new URL(request.url).origin === DEMO_ORIGIN; }
