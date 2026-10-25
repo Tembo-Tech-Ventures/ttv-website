@@ -136,6 +136,10 @@ jobs:
         continue-on-error: ${{ inputs.environment_name == 'production' }}
         run: npm run cf:smoke -- --base-url="${{ steps.deploy.outputs.better_auth_url }}" --expected-environment="${{ inputs.environment_name }}" --expected-version="$GITHUB_SHA"
 
+      - if: ${{ inputs.action == 'deploy' && inputs.environment_name == 'staging' }}
+        name: Verify live staging probe and human demo flags
+        run: node scripts/cloudflare/staging-probe-state.mjs
+
       - if: ${{ inputs.action == 'deploy' }}
         id: browser_install
         name: Install browser
@@ -294,6 +298,10 @@ jobs:
         name: Verify deployment identity and public routes
         continue-on-error: ${{ inputs.environment_name == 'production' }}
         run: npm run cf:smoke -- --base-url="${{ steps.deploy.outputs.better_auth_url }}" --expected-environment="${{ inputs.environment_name }}" --expected-version="$GITHUB_SHA"
+
+      - if: ${{ inputs.action == 'deploy' && inputs.environment_name == 'staging' }}
+        name: Verify live staging probe and human demo flags
+        run: node scripts/cloudflare/staging-probe-state.mjs
 
       - if: ${{ inputs.action == 'deploy' }}
         id: browser_install
