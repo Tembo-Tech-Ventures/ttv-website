@@ -1,0 +1,731 @@
+{
+  "query": "React",
+  "version": "6d6d706bcb0e69164a874e9e6169104a5c12977f",
+  "fictional": true,
+  "directory": {
+    "population": 150,
+    "eligible": 149,
+    "cases": [
+      {
+        "label": "React+TypeScript",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-058",
+          "ttv-staging-demo-v1-member-088",
+          "ttv-staging-demo-v1-member-118",
+          "ttv-staging-demo-v1-member-028",
+          "ttv-staging-demo-v1-institution",
+          "ttv-staging-demo-v1-member-138",
+          "ttv-staging-demo-v1-member-078",
+          "ttv-staging-demo-v1-member-048",
+          "ttv-staging-demo-v1-member-018",
+          "ttv-staging-demo-v1-member-108"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-058",
+          "ttv-staging-demo-v1-member-088",
+          "ttv-staging-demo-v1-member-118",
+          "ttv-staging-demo-v1-member-028",
+          "ttv-staging-demo-v1-institution",
+          "ttv-staging-demo-v1-member-138",
+          "ttv-staging-demo-v1-member-078",
+          "ttv-staging-demo-v1-member-048",
+          "ttv-staging-demo-v1-member-018",
+          "ttv-staging-demo-v1-member-108"
+        ],
+        "latencyMs": 1520
+      },
+      {
+        "label": "Python+SQL",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-059",
+          "ttv-staging-demo-v1-member-089",
+          "ttv-staging-demo-v1-member-119",
+          "ttv-staging-demo-v1-member-029",
+          "ttv-staging-demo-v1-member-cohort",
+          "ttv-staging-demo-v1-member-069",
+          "ttv-staging-demo-v1-member-099",
+          "ttv-staging-demo-v1-member-129",
+          "ttv-staging-demo-v1-member-039",
+          "ttv-staging-demo-v1-member-009",
+          "ttv-staging-demo-v1-member-139",
+          "ttv-staging-demo-v1-member-079",
+          "ttv-staging-demo-v1-member-049",
+          "ttv-staging-demo-v1-member-019",
+          "ttv-staging-demo-v1-member-109"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-059",
+          "ttv-staging-demo-v1-member-089",
+          "ttv-staging-demo-v1-member-119",
+          "ttv-staging-demo-v1-member-029",
+          "ttv-staging-demo-v1-member-cohort",
+          "ttv-staging-demo-v1-member-069",
+          "ttv-staging-demo-v1-member-099",
+          "ttv-staging-demo-v1-member-129",
+          "ttv-staging-demo-v1-member-039",
+          "ttv-staging-demo-v1-member-009",
+          "ttv-staging-demo-v1-member-139",
+          "ttv-staging-demo-v1-member-079",
+          "ttv-staging-demo-v1-member-049",
+          "ttv-staging-demo-v1-member-019",
+          "ttv-staging-demo-v1-member-109"
+        ],
+        "latencyMs": 602
+      },
+      {
+        "label": "Accessibility",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-143",
+          "ttv-staging-demo-v1-member-083",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-053",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-023",
+          "ttv-staging-demo-v1-member-113",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-058",
+          "ttv-staging-demo-v1-member-133",
+          "ttv-staging-demo-v1-member-073",
+          "ttv-staging-demo-v1-member-088",
+          "ttv-staging-demo-v1-member-118",
+          "ttv-staging-demo-v1-member-043",
+          "ttv-staging-demo-v1-member-028",
+          "ttv-staging-demo-v1-member-013",
+          "ttv-staging-demo-v1-member-103",
+          "ttv-staging-demo-v1-institution",
+          "ttv-staging-demo-v1-member-063",
+          "ttv-staging-demo-v1-member-138",
+          "ttv-staging-demo-v1-member-078",
+          "ttv-staging-demo-v1-member-093",
+          "ttv-staging-demo-v1-member-123",
+          "ttv-staging-demo-v1-member-048",
+          "ttv-staging-demo-v1-member-033",
+          "ttv-staging-demo-v1-member-018",
+          "ttv-staging-demo-v1-member-108",
+          "ttv-staging-demo-v1-member-003"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-143",
+          "ttv-staging-demo-v1-member-083",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-053",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-023",
+          "ttv-staging-demo-v1-member-113",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-058",
+          "ttv-staging-demo-v1-member-133",
+          "ttv-staging-demo-v1-member-073",
+          "ttv-staging-demo-v1-member-088",
+          "ttv-staging-demo-v1-member-118",
+          "ttv-staging-demo-v1-member-043",
+          "ttv-staging-demo-v1-member-028",
+          "ttv-staging-demo-v1-member-013",
+          "ttv-staging-demo-v1-member-103",
+          "ttv-staging-demo-v1-institution",
+          "ttv-staging-demo-v1-member-063",
+          "ttv-staging-demo-v1-member-138",
+          "ttv-staging-demo-v1-member-078",
+          "ttv-staging-demo-v1-member-093",
+          "ttv-staging-demo-v1-member-123",
+          "ttv-staging-demo-v1-member-048",
+          "ttv-staging-demo-v1-member-033",
+          "ttv-staging-demo-v1-member-018",
+          "ttv-staging-demo-v1-member-108",
+          "ttv-staging-demo-v1-member-003"
+        ],
+        "latencyMs": 757
+      },
+      {
+        "label": "Kotlin",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-070",
+          "ttv-staging-demo-v1-member-100",
+          "ttv-staging-demo-v1-member-130",
+          "ttv-staging-demo-v1-member-040",
+          "ttv-staging-demo-v1-member-010",
+          "ttv-staging-demo-v1-member-060",
+          "ttv-staging-demo-v1-member-090",
+          "ttv-staging-demo-v1-member-120",
+          "ttv-staging-demo-v1-member-030",
+          "ttv-staging-demo-v1-member-noncohort",
+          "ttv-staging-demo-v1-member-140",
+          "ttv-staging-demo-v1-member-080",
+          "ttv-staging-demo-v1-member-050",
+          "ttv-staging-demo-v1-member-020",
+          "ttv-staging-demo-v1-member-110"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-070",
+          "ttv-staging-demo-v1-member-100",
+          "ttv-staging-demo-v1-member-130",
+          "ttv-staging-demo-v1-member-040",
+          "ttv-staging-demo-v1-member-010",
+          "ttv-staging-demo-v1-member-060",
+          "ttv-staging-demo-v1-member-090",
+          "ttv-staging-demo-v1-member-120",
+          "ttv-staging-demo-v1-member-030",
+          "ttv-staging-demo-v1-member-noncohort",
+          "ttv-staging-demo-v1-member-140",
+          "ttv-staging-demo-v1-member-080",
+          "ttv-staging-demo-v1-member-050",
+          "ttv-staging-demo-v1-member-020",
+          "ttv-staging-demo-v1-member-110"
+        ],
+        "latencyMs": 607
+      },
+      {
+        "label": "incompatible skills",
+        "status": 200,
+        "expected": [],
+        "actual": [],
+        "latencyMs": 288
+      },
+      {
+        "label": "no match",
+        "status": 200,
+        "expected": [],
+        "actual": [],
+        "latencyMs": 536
+      },
+      {
+        "label": "cohort",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-cohort"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-cohort"
+        ],
+        "latencyMs": 473
+      },
+      {
+        "label": "noncohort",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-noncohort"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-noncohort"
+        ],
+        "latencyMs": 418
+      },
+      {
+        "label": "mentor excluded",
+        "status": 200,
+        "expected": [],
+        "actual": [],
+        "latencyMs": 286
+      },
+      {
+        "label": "casefold",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-058",
+          "ttv-staging-demo-v1-member-088",
+          "ttv-staging-demo-v1-member-118",
+          "ttv-staging-demo-v1-member-028",
+          "ttv-staging-demo-v1-institution",
+          "ttv-staging-demo-v1-member-138",
+          "ttv-staging-demo-v1-member-078",
+          "ttv-staging-demo-v1-member-048",
+          "ttv-staging-demo-v1-member-018",
+          "ttv-staging-demo-v1-member-108"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-058",
+          "ttv-staging-demo-v1-member-088",
+          "ttv-staging-demo-v1-member-118",
+          "ttv-staging-demo-v1-member-028",
+          "ttv-staging-demo-v1-institution",
+          "ttv-staging-demo-v1-member-138",
+          "ttv-staging-demo-v1-member-078",
+          "ttv-staging-demo-v1-member-048",
+          "ttv-staging-demo-v1-member-018",
+          "ttv-staging-demo-v1-member-108"
+        ],
+        "latencyMs": 549
+      },
+      {
+        "label": "default limit",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-143",
+          "ttv-staging-demo-v1-member-083",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-053",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-023",
+          "ttv-staging-demo-v1-member-113",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-057",
+          "ttv-staging-demo-v1-member-132",
+          "ttv-staging-demo-v1-member-072",
+          "ttv-staging-demo-v1-member-087",
+          "ttv-staging-demo-v1-member-117",
+          "ttv-staging-demo-v1-member-042",
+          "ttv-staging-demo-v1-member-027",
+          "ttv-staging-demo-v1-member-012",
+          "ttv-staging-demo-v1-member-102",
+          "ttv-staging-demo-v1-member-058"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-143",
+          "ttv-staging-demo-v1-member-083",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-053",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-023",
+          "ttv-staging-demo-v1-member-113",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-057",
+          "ttv-staging-demo-v1-member-132",
+          "ttv-staging-demo-v1-member-072",
+          "ttv-staging-demo-v1-member-087",
+          "ttv-staging-demo-v1-member-117",
+          "ttv-staging-demo-v1-member-042",
+          "ttv-staging-demo-v1-member-027",
+          "ttv-staging-demo-v1-member-012",
+          "ttv-staging-demo-v1-member-102",
+          "ttv-staging-demo-v1-member-058"
+        ],
+        "latencyMs": 640
+      },
+      {
+        "label": "limit1",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-068"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-068"
+        ],
+        "latencyMs": 409
+      },
+      {
+        "label": "limit2",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-143"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-143"
+        ],
+        "latencyMs": 425
+      },
+      {
+        "label": "max50",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-143",
+          "ttv-staging-demo-v1-member-083",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-053",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-023",
+          "ttv-staging-demo-v1-member-113",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-057",
+          "ttv-staging-demo-v1-member-132",
+          "ttv-staging-demo-v1-member-072",
+          "ttv-staging-demo-v1-member-087",
+          "ttv-staging-demo-v1-member-117",
+          "ttv-staging-demo-v1-member-042",
+          "ttv-staging-demo-v1-member-027",
+          "ttv-staging-demo-v1-member-012",
+          "ttv-staging-demo-v1-member-102",
+          "ttv-staging-demo-v1-member-058",
+          "ttv-staging-demo-v1-member-133",
+          "ttv-staging-demo-v1-member-073",
+          "ttv-staging-demo-v1-member-088",
+          "ttv-staging-demo-v1-member-118",
+          "ttv-staging-demo-v1-member-043",
+          "ttv-staging-demo-v1-member-028",
+          "ttv-staging-demo-v1-member-013",
+          "ttv-staging-demo-v1-member-103",
+          "ttv-staging-demo-v1-institution",
+          "ttv-staging-demo-v1-member-070",
+          "ttv-staging-demo-v1-member-145",
+          "ttv-staging-demo-v1-member-085",
+          "ttv-staging-demo-v1-member-100",
+          "ttv-staging-demo-v1-member-130",
+          "ttv-staging-demo-v1-member-055",
+          "ttv-staging-demo-v1-member-040",
+          "ttv-staging-demo-v1-member-025",
+          "ttv-staging-demo-v1-member-115",
+          "ttv-staging-demo-v1-member-010",
+          "ttv-staging-demo-v1-member-060",
+          "ttv-staging-demo-v1-member-135",
+          "ttv-staging-demo-v1-member-075",
+          "ttv-staging-demo-v1-member-090",
+          "ttv-staging-demo-v1-member-120",
+          "ttv-staging-demo-v1-member-045",
+          "ttv-staging-demo-v1-member-030",
+          "ttv-staging-demo-v1-member-015",
+          "ttv-staging-demo-v1-member-105",
+          "ttv-staging-demo-v1-member-noncohort",
+          "ttv-staging-demo-v1-member-061"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-143",
+          "ttv-staging-demo-v1-member-083",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-053",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-023",
+          "ttv-staging-demo-v1-member-113",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-057",
+          "ttv-staging-demo-v1-member-132",
+          "ttv-staging-demo-v1-member-072",
+          "ttv-staging-demo-v1-member-087",
+          "ttv-staging-demo-v1-member-117",
+          "ttv-staging-demo-v1-member-042",
+          "ttv-staging-demo-v1-member-027",
+          "ttv-staging-demo-v1-member-012",
+          "ttv-staging-demo-v1-member-102",
+          "ttv-staging-demo-v1-member-058",
+          "ttv-staging-demo-v1-member-133",
+          "ttv-staging-demo-v1-member-073",
+          "ttv-staging-demo-v1-member-088",
+          "ttv-staging-demo-v1-member-118",
+          "ttv-staging-demo-v1-member-043",
+          "ttv-staging-demo-v1-member-028",
+          "ttv-staging-demo-v1-member-013",
+          "ttv-staging-demo-v1-member-103",
+          "ttv-staging-demo-v1-institution",
+          "ttv-staging-demo-v1-member-070",
+          "ttv-staging-demo-v1-member-145",
+          "ttv-staging-demo-v1-member-085",
+          "ttv-staging-demo-v1-member-100",
+          "ttv-staging-demo-v1-member-130",
+          "ttv-staging-demo-v1-member-055",
+          "ttv-staging-demo-v1-member-040",
+          "ttv-staging-demo-v1-member-025",
+          "ttv-staging-demo-v1-member-115",
+          "ttv-staging-demo-v1-member-010",
+          "ttv-staging-demo-v1-member-060",
+          "ttv-staging-demo-v1-member-135",
+          "ttv-staging-demo-v1-member-075",
+          "ttv-staging-demo-v1-member-090",
+          "ttv-staging-demo-v1-member-120",
+          "ttv-staging-demo-v1-member-045",
+          "ttv-staging-demo-v1-member-030",
+          "ttv-staging-demo-v1-member-015",
+          "ttv-staging-demo-v1-member-105",
+          "ttv-staging-demo-v1-member-noncohort",
+          "ttv-staging-demo-v1-member-061"
+        ],
+        "latencyMs": 974
+      },
+      {
+        "label": "no-role",
+        "status": 403,
+        "latencyMs": 319
+      },
+      {
+        "label": "invalid-limit",
+        "status": 400,
+        "latencyMs": 266
+      },
+      {
+        "label": "non-retained",
+        "status": 403,
+        "latencyMs": 104
+      },
+      {
+        "label": "published detail only",
+        "status": 200,
+        "id": "ttv-staging-demo-v1-member-noncohort",
+        "entries": 1,
+        "latencyMs": 745
+      }
+    ],
+    "pagination": "Limit/default20/max50 only; no cursor/offset or whole-directory pagination proof."
+  },
+  "chat": {
+    "status": 200,
+    "latencyMs": 13247,
+    "execution": {
+      "model": "@cf/zai-org/glm-5.3-flash",
+      "modelSteps": 3,
+      "executedToolCalls": 4,
+      "toolNames": [
+        "search_profiles",
+        "get_profile",
+        "get_profile",
+        "get_profile"
+      ]
+    },
+    "orderedProfiles": [
+      {
+        "userId": "ttv-staging-demo-v1-member-068",
+        "reason": "Three documented iterations plus one mentor confirmation; most complete published trail among read candidates.",
+        "missingEvidence": [
+          "No testing evidence",
+          "Placeholder links unverified",
+          "No React-specific project detail"
+        ],
+        "name": "Fictional Achieng Achieng",
+        "citations": [
+          {
+            "id": "ttv-staging-demo-v1-member-068-journey-2",
+            "version": 1,
+            "url": "https://example.com/ttv-fictional-demo/71/2"
+          }
+        ]
+      },
+      {
+        "userId": "ttv-staging-demo-v1-member-098",
+        "reason": "Same three-iteration trail and mentor confirmation; equivalent documentation, no distinguishing published evidence.",
+        "missingEvidence": [
+          "No testing evidence",
+          "Placeholder links unverified",
+          "No React-specific project detail"
+        ],
+        "name": "Fictional Achieng Kiplagat",
+        "citations": [
+          {
+            "id": "ttv-staging-demo-v1-member-098-journey-2",
+            "version": 1,
+            "url": "https://example.com/ttv-fictional-demo/101/2"
+          }
+        ]
+      },
+      {
+        "userId": "ttv-staging-demo-v1-member-128",
+        "reason": "Identical published structure; no additional evidence to differentiate from the other two read candidates.",
+        "missingEvidence": [
+          "No testing evidence",
+          "Placeholder links unverified",
+          "No React-specific project detail"
+        ],
+        "name": "Fictional Achieng Mutua",
+        "citations": [
+          {
+            "id": "ttv-staging-demo-v1-member-128-journey-2",
+            "version": 1,
+            "url": "https://example.com/ttv-fictional-demo/131/2"
+          }
+        ]
+      }
+    ],
+    "evaluatedCandidates": 10,
+    "citations": [
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-068",
+        "userId": "ttv-staging-demo-v1-member-068",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-068-journey-2",
+        "userId": "ttv-staging-demo-v1-member-068",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-098",
+        "userId": "ttv-staging-demo-v1-member-098",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-098-journey-2",
+        "userId": "ttv-staging-demo-v1-member-098",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-128",
+        "userId": "ttv-staging-demo-v1-member-128",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-128-journey-2",
+        "userId": "ttv-staging-demo-v1-member-128",
+        "version": 1
+      }
+    ],
+    "retrievedSources": [
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-068",
+        "userId": "ttv-staging-demo-v1-member-068",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-098",
+        "userId": "ttv-staging-demo-v1-member-098",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-128",
+        "userId": "ttv-staging-demo-v1-member-128",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-038",
+        "userId": "ttv-staging-demo-v1-member-038",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-008",
+        "userId": "ttv-staging-demo-v1-member-008",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-058",
+        "userId": "ttv-staging-demo-v1-member-058",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-088",
+        "userId": "ttv-staging-demo-v1-member-088",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-118",
+        "userId": "ttv-staging-demo-v1-member-118",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-028",
+        "userId": "ttv-staging-demo-v1-member-028",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-institution",
+        "userId": "ttv-staging-demo-v1-institution",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-068-journey-3",
+        "userId": "ttv-staging-demo-v1-member-068",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-068-journey-2",
+        "userId": "ttv-staging-demo-v1-member-068",
+        "version": 1
+      },
+      {
+        "kind": "confirmation",
+        "id": "ttv-staging-demo-v1-member-068-journey-2-confirmation",
+        "userId": "ttv-staging-demo-v1-member-068",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-068-journey-1",
+        "userId": "ttv-staging-demo-v1-member-068",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-098-journey-3",
+        "userId": "ttv-staging-demo-v1-member-098",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-098-journey-2",
+        "userId": "ttv-staging-demo-v1-member-098",
+        "version": 1
+      },
+      {
+        "kind": "confirmation",
+        "id": "ttv-staging-demo-v1-member-098-journey-2-confirmation",
+        "userId": "ttv-staging-demo-v1-member-098",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-098-journey-1",
+        "userId": "ttv-staging-demo-v1-member-098",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-128-journey-3",
+        "userId": "ttv-staging-demo-v1-member-128",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-128-journey-2",
+        "userId": "ttv-staging-demo-v1-member-128",
+        "version": 1
+      },
+      {
+        "kind": "confirmation",
+        "id": "ttv-staging-demo-v1-member-128-journey-2-confirmation",
+        "userId": "ttv-staging-demo-v1-member-128",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-128-journey-1",
+        "userId": "ttv-staging-demo-v1-member-128",
+        "version": 1
+      }
+    ],
+    "missingEvidenceLanguage": false,
+    "answer": "Retrieved subset (10 profiles matched query 'React' + skill React); three read. All three are synthetic demo profiles with identical self-reported journeys: three iterations of an accessible library interface (keyboard navigation, focus states), one mentor confirmation each, placeholder evidence links. Ordered by documented evidence relevance only — not ability, not a ranking of all members. No hiring decision implied; all claims are self-reported and unverified.",
+    "semanticReviewRequired": true,
+    "ranking": "Tool retrieval plus generated cited summary; no ability ranking quality claim.",
+    "toolNameTrace": "Actual executed tool names are included in execution.toolNames."
+  },
+  "cleanup": "verified"
+}

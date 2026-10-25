@@ -1,0 +1,731 @@
+{
+  "query": "Kotlin",
+  "version": "fbfd2aaee643b7c6a2d73ae596043b76957971ee",
+  "fictional": true,
+  "directory": {
+    "population": 150,
+    "eligible": 149,
+    "cases": [
+      {
+        "label": "React+TypeScript",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-058",
+          "ttv-staging-demo-v1-member-088",
+          "ttv-staging-demo-v1-member-118",
+          "ttv-staging-demo-v1-member-028",
+          "ttv-staging-demo-v1-institution",
+          "ttv-staging-demo-v1-member-138",
+          "ttv-staging-demo-v1-member-078",
+          "ttv-staging-demo-v1-member-048",
+          "ttv-staging-demo-v1-member-018",
+          "ttv-staging-demo-v1-member-108"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-058",
+          "ttv-staging-demo-v1-member-088",
+          "ttv-staging-demo-v1-member-118",
+          "ttv-staging-demo-v1-member-028",
+          "ttv-staging-demo-v1-institution",
+          "ttv-staging-demo-v1-member-138",
+          "ttv-staging-demo-v1-member-078",
+          "ttv-staging-demo-v1-member-048",
+          "ttv-staging-demo-v1-member-018",
+          "ttv-staging-demo-v1-member-108"
+        ],
+        "latencyMs": 1312
+      },
+      {
+        "label": "Python+SQL",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-059",
+          "ttv-staging-demo-v1-member-089",
+          "ttv-staging-demo-v1-member-119",
+          "ttv-staging-demo-v1-member-029",
+          "ttv-staging-demo-v1-member-cohort",
+          "ttv-staging-demo-v1-member-069",
+          "ttv-staging-demo-v1-member-099",
+          "ttv-staging-demo-v1-member-129",
+          "ttv-staging-demo-v1-member-039",
+          "ttv-staging-demo-v1-member-009",
+          "ttv-staging-demo-v1-member-139",
+          "ttv-staging-demo-v1-member-079",
+          "ttv-staging-demo-v1-member-049",
+          "ttv-staging-demo-v1-member-019",
+          "ttv-staging-demo-v1-member-109"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-059",
+          "ttv-staging-demo-v1-member-089",
+          "ttv-staging-demo-v1-member-119",
+          "ttv-staging-demo-v1-member-029",
+          "ttv-staging-demo-v1-member-cohort",
+          "ttv-staging-demo-v1-member-069",
+          "ttv-staging-demo-v1-member-099",
+          "ttv-staging-demo-v1-member-129",
+          "ttv-staging-demo-v1-member-039",
+          "ttv-staging-demo-v1-member-009",
+          "ttv-staging-demo-v1-member-139",
+          "ttv-staging-demo-v1-member-079",
+          "ttv-staging-demo-v1-member-049",
+          "ttv-staging-demo-v1-member-019",
+          "ttv-staging-demo-v1-member-109"
+        ],
+        "latencyMs": 612
+      },
+      {
+        "label": "Accessibility",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-143",
+          "ttv-staging-demo-v1-member-083",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-053",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-023",
+          "ttv-staging-demo-v1-member-113",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-058",
+          "ttv-staging-demo-v1-member-133",
+          "ttv-staging-demo-v1-member-073",
+          "ttv-staging-demo-v1-member-088",
+          "ttv-staging-demo-v1-member-118",
+          "ttv-staging-demo-v1-member-043",
+          "ttv-staging-demo-v1-member-028",
+          "ttv-staging-demo-v1-member-013",
+          "ttv-staging-demo-v1-member-103",
+          "ttv-staging-demo-v1-institution",
+          "ttv-staging-demo-v1-member-063",
+          "ttv-staging-demo-v1-member-138",
+          "ttv-staging-demo-v1-member-078",
+          "ttv-staging-demo-v1-member-093",
+          "ttv-staging-demo-v1-member-123",
+          "ttv-staging-demo-v1-member-048",
+          "ttv-staging-demo-v1-member-033",
+          "ttv-staging-demo-v1-member-018",
+          "ttv-staging-demo-v1-member-108",
+          "ttv-staging-demo-v1-member-003"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-143",
+          "ttv-staging-demo-v1-member-083",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-053",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-023",
+          "ttv-staging-demo-v1-member-113",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-058",
+          "ttv-staging-demo-v1-member-133",
+          "ttv-staging-demo-v1-member-073",
+          "ttv-staging-demo-v1-member-088",
+          "ttv-staging-demo-v1-member-118",
+          "ttv-staging-demo-v1-member-043",
+          "ttv-staging-demo-v1-member-028",
+          "ttv-staging-demo-v1-member-013",
+          "ttv-staging-demo-v1-member-103",
+          "ttv-staging-demo-v1-institution",
+          "ttv-staging-demo-v1-member-063",
+          "ttv-staging-demo-v1-member-138",
+          "ttv-staging-demo-v1-member-078",
+          "ttv-staging-demo-v1-member-093",
+          "ttv-staging-demo-v1-member-123",
+          "ttv-staging-demo-v1-member-048",
+          "ttv-staging-demo-v1-member-033",
+          "ttv-staging-demo-v1-member-018",
+          "ttv-staging-demo-v1-member-108",
+          "ttv-staging-demo-v1-member-003"
+        ],
+        "latencyMs": 809
+      },
+      {
+        "label": "Kotlin",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-070",
+          "ttv-staging-demo-v1-member-100",
+          "ttv-staging-demo-v1-member-130",
+          "ttv-staging-demo-v1-member-040",
+          "ttv-staging-demo-v1-member-010",
+          "ttv-staging-demo-v1-member-060",
+          "ttv-staging-demo-v1-member-090",
+          "ttv-staging-demo-v1-member-120",
+          "ttv-staging-demo-v1-member-030",
+          "ttv-staging-demo-v1-member-noncohort",
+          "ttv-staging-demo-v1-member-140",
+          "ttv-staging-demo-v1-member-080",
+          "ttv-staging-demo-v1-member-050",
+          "ttv-staging-demo-v1-member-020",
+          "ttv-staging-demo-v1-member-110"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-070",
+          "ttv-staging-demo-v1-member-100",
+          "ttv-staging-demo-v1-member-130",
+          "ttv-staging-demo-v1-member-040",
+          "ttv-staging-demo-v1-member-010",
+          "ttv-staging-demo-v1-member-060",
+          "ttv-staging-demo-v1-member-090",
+          "ttv-staging-demo-v1-member-120",
+          "ttv-staging-demo-v1-member-030",
+          "ttv-staging-demo-v1-member-noncohort",
+          "ttv-staging-demo-v1-member-140",
+          "ttv-staging-demo-v1-member-080",
+          "ttv-staging-demo-v1-member-050",
+          "ttv-staging-demo-v1-member-020",
+          "ttv-staging-demo-v1-member-110"
+        ],
+        "latencyMs": 584
+      },
+      {
+        "label": "incompatible skills",
+        "status": 200,
+        "expected": [],
+        "actual": [],
+        "latencyMs": 291
+      },
+      {
+        "label": "no match",
+        "status": 200,
+        "expected": [],
+        "actual": [],
+        "latencyMs": 1036
+      },
+      {
+        "label": "cohort",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-cohort"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-cohort"
+        ],
+        "latencyMs": 431
+      },
+      {
+        "label": "noncohort",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-noncohort"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-noncohort"
+        ],
+        "latencyMs": 434
+      },
+      {
+        "label": "mentor excluded",
+        "status": 200,
+        "expected": [],
+        "actual": [],
+        "latencyMs": 289
+      },
+      {
+        "label": "casefold",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-058",
+          "ttv-staging-demo-v1-member-088",
+          "ttv-staging-demo-v1-member-118",
+          "ttv-staging-demo-v1-member-028",
+          "ttv-staging-demo-v1-institution",
+          "ttv-staging-demo-v1-member-138",
+          "ttv-staging-demo-v1-member-078",
+          "ttv-staging-demo-v1-member-048",
+          "ttv-staging-demo-v1-member-018",
+          "ttv-staging-demo-v1-member-108"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-058",
+          "ttv-staging-demo-v1-member-088",
+          "ttv-staging-demo-v1-member-118",
+          "ttv-staging-demo-v1-member-028",
+          "ttv-staging-demo-v1-institution",
+          "ttv-staging-demo-v1-member-138",
+          "ttv-staging-demo-v1-member-078",
+          "ttv-staging-demo-v1-member-048",
+          "ttv-staging-demo-v1-member-018",
+          "ttv-staging-demo-v1-member-108"
+        ],
+        "latencyMs": 629
+      },
+      {
+        "label": "default limit",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-143",
+          "ttv-staging-demo-v1-member-083",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-053",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-023",
+          "ttv-staging-demo-v1-member-113",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-057",
+          "ttv-staging-demo-v1-member-132",
+          "ttv-staging-demo-v1-member-072",
+          "ttv-staging-demo-v1-member-087",
+          "ttv-staging-demo-v1-member-117",
+          "ttv-staging-demo-v1-member-042",
+          "ttv-staging-demo-v1-member-027",
+          "ttv-staging-demo-v1-member-012",
+          "ttv-staging-demo-v1-member-102",
+          "ttv-staging-demo-v1-member-058"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-143",
+          "ttv-staging-demo-v1-member-083",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-053",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-023",
+          "ttv-staging-demo-v1-member-113",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-057",
+          "ttv-staging-demo-v1-member-132",
+          "ttv-staging-demo-v1-member-072",
+          "ttv-staging-demo-v1-member-087",
+          "ttv-staging-demo-v1-member-117",
+          "ttv-staging-demo-v1-member-042",
+          "ttv-staging-demo-v1-member-027",
+          "ttv-staging-demo-v1-member-012",
+          "ttv-staging-demo-v1-member-102",
+          "ttv-staging-demo-v1-member-058"
+        ],
+        "latencyMs": 589
+      },
+      {
+        "label": "limit1",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-068"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-068"
+        ],
+        "latencyMs": 458
+      },
+      {
+        "label": "limit2",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-143"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-143"
+        ],
+        "latencyMs": 442
+      },
+      {
+        "label": "max50",
+        "status": 200,
+        "expected": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-143",
+          "ttv-staging-demo-v1-member-083",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-053",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-023",
+          "ttv-staging-demo-v1-member-113",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-057",
+          "ttv-staging-demo-v1-member-132",
+          "ttv-staging-demo-v1-member-072",
+          "ttv-staging-demo-v1-member-087",
+          "ttv-staging-demo-v1-member-117",
+          "ttv-staging-demo-v1-member-042",
+          "ttv-staging-demo-v1-member-027",
+          "ttv-staging-demo-v1-member-012",
+          "ttv-staging-demo-v1-member-102",
+          "ttv-staging-demo-v1-member-058",
+          "ttv-staging-demo-v1-member-133",
+          "ttv-staging-demo-v1-member-073",
+          "ttv-staging-demo-v1-member-088",
+          "ttv-staging-demo-v1-member-118",
+          "ttv-staging-demo-v1-member-043",
+          "ttv-staging-demo-v1-member-028",
+          "ttv-staging-demo-v1-member-013",
+          "ttv-staging-demo-v1-member-103",
+          "ttv-staging-demo-v1-institution",
+          "ttv-staging-demo-v1-member-070",
+          "ttv-staging-demo-v1-member-145",
+          "ttv-staging-demo-v1-member-085",
+          "ttv-staging-demo-v1-member-100",
+          "ttv-staging-demo-v1-member-130",
+          "ttv-staging-demo-v1-member-055",
+          "ttv-staging-demo-v1-member-040",
+          "ttv-staging-demo-v1-member-025",
+          "ttv-staging-demo-v1-member-115",
+          "ttv-staging-demo-v1-member-010",
+          "ttv-staging-demo-v1-member-060",
+          "ttv-staging-demo-v1-member-135",
+          "ttv-staging-demo-v1-member-075",
+          "ttv-staging-demo-v1-member-090",
+          "ttv-staging-demo-v1-member-120",
+          "ttv-staging-demo-v1-member-045",
+          "ttv-staging-demo-v1-member-030",
+          "ttv-staging-demo-v1-member-015",
+          "ttv-staging-demo-v1-member-105",
+          "ttv-staging-demo-v1-member-noncohort",
+          "ttv-staging-demo-v1-member-061"
+        ],
+        "actual": [
+          "ttv-staging-demo-v1-member-068",
+          "ttv-staging-demo-v1-member-143",
+          "ttv-staging-demo-v1-member-083",
+          "ttv-staging-demo-v1-member-098",
+          "ttv-staging-demo-v1-member-128",
+          "ttv-staging-demo-v1-member-053",
+          "ttv-staging-demo-v1-member-038",
+          "ttv-staging-demo-v1-member-023",
+          "ttv-staging-demo-v1-member-113",
+          "ttv-staging-demo-v1-member-008",
+          "ttv-staging-demo-v1-member-057",
+          "ttv-staging-demo-v1-member-132",
+          "ttv-staging-demo-v1-member-072",
+          "ttv-staging-demo-v1-member-087",
+          "ttv-staging-demo-v1-member-117",
+          "ttv-staging-demo-v1-member-042",
+          "ttv-staging-demo-v1-member-027",
+          "ttv-staging-demo-v1-member-012",
+          "ttv-staging-demo-v1-member-102",
+          "ttv-staging-demo-v1-member-058",
+          "ttv-staging-demo-v1-member-133",
+          "ttv-staging-demo-v1-member-073",
+          "ttv-staging-demo-v1-member-088",
+          "ttv-staging-demo-v1-member-118",
+          "ttv-staging-demo-v1-member-043",
+          "ttv-staging-demo-v1-member-028",
+          "ttv-staging-demo-v1-member-013",
+          "ttv-staging-demo-v1-member-103",
+          "ttv-staging-demo-v1-institution",
+          "ttv-staging-demo-v1-member-070",
+          "ttv-staging-demo-v1-member-145",
+          "ttv-staging-demo-v1-member-085",
+          "ttv-staging-demo-v1-member-100",
+          "ttv-staging-demo-v1-member-130",
+          "ttv-staging-demo-v1-member-055",
+          "ttv-staging-demo-v1-member-040",
+          "ttv-staging-demo-v1-member-025",
+          "ttv-staging-demo-v1-member-115",
+          "ttv-staging-demo-v1-member-010",
+          "ttv-staging-demo-v1-member-060",
+          "ttv-staging-demo-v1-member-135",
+          "ttv-staging-demo-v1-member-075",
+          "ttv-staging-demo-v1-member-090",
+          "ttv-staging-demo-v1-member-120",
+          "ttv-staging-demo-v1-member-045",
+          "ttv-staging-demo-v1-member-030",
+          "ttv-staging-demo-v1-member-015",
+          "ttv-staging-demo-v1-member-105",
+          "ttv-staging-demo-v1-member-noncohort",
+          "ttv-staging-demo-v1-member-061"
+        ],
+        "latencyMs": 871
+      },
+      {
+        "label": "no-role",
+        "status": 403,
+        "latencyMs": 302
+      },
+      {
+        "label": "invalid-limit",
+        "status": 400,
+        "latencyMs": 229
+      },
+      {
+        "label": "non-retained",
+        "status": 403,
+        "latencyMs": 114
+      },
+      {
+        "label": "published detail only",
+        "status": 200,
+        "id": "ttv-staging-demo-v1-member-noncohort",
+        "entries": 1,
+        "latencyMs": 773
+      }
+    ],
+    "pagination": "Limit/default20/max50 only; no cursor/offset or whole-directory pagination proof."
+  },
+  "chat": {
+    "status": 200,
+    "latencyMs": 31961,
+    "execution": {
+      "model": "@cf/zai-org/glm-5.3-flash",
+      "modelSteps": 3,
+      "executedToolCalls": 4,
+      "toolNames": [
+        "search_profiles",
+        "get_profile",
+        "get_profile",
+        "get_profile"
+      ]
+    },
+    "orderedProfiles": [
+      {
+        "userId": "ttv-staging-demo-v1-member-070",
+        "reason": "Two dated, institution-visible self-reported journey entries on an Android study planner (offline task storage, input validation, documented follow-up change) matching the Kotlin implementation/testing focus; no confirmations yet.",
+        "missingEvidence": [
+          "No third-party confirmations",
+          "Placeholder evidence URLs not verifiable",
+          "No published test artifacts or code samples",
+          "Unknown depth/scope of described work"
+        ],
+        "name": "Fictional Chebet Achieng",
+        "citations": [
+          {
+            "id": "ttv-staging-demo-v1-member-070-journey-1",
+            "version": 1,
+            "url": "https://example.com/ttv-fictional-demo/73/1"
+          },
+          {
+            "id": "ttv-staging-demo-v1-member-070-journey-2",
+            "version": 1,
+            "url": "https://example.com/ttv-fictional-demo/73/2"
+          }
+        ]
+      },
+      {
+        "userId": "ttv-staging-demo-v1-member-100",
+        "reason": "Identical published evidence to member-070: two self-reported journey entries on offline task storage and input validation with a documented follow-up change; tied on documented relevance.",
+        "missingEvidence": [
+          "No third-party confirmations",
+          "Placeholder evidence URLs not verifiable",
+          "No published test artifacts or code samples",
+          "Unknown depth/scope of described work"
+        ],
+        "name": "Fictional Chebet Kiplagat",
+        "citations": [
+          {
+            "id": "ttv-staging-demo-v1-member-100-journey-1",
+            "version": 1,
+            "url": "https://example.com/ttv-fictional-demo/103/1"
+          },
+          {
+            "id": "ttv-staging-demo-v1-member-100-journey-2",
+            "version": 1,
+            "url": "https://example.com/ttv-fictional-demo/103/2"
+          }
+        ]
+      },
+      {
+        "userId": "ttv-staging-demo-v1-member-130",
+        "reason": "Identical published evidence to the other two read candidates: two self-reported journey entries on the same project areas; tied on documented relevance.",
+        "missingEvidence": [
+          "No third-party confirmations",
+          "Placeholder evidence URLs not verifiable",
+          "No published test artifacts or code samples",
+          "Unknown depth/scope of described work"
+        ],
+        "name": "Fictional Chebet Mutua",
+        "citations": [
+          {
+            "id": "ttv-staging-demo-v1-member-130-journey-1",
+            "version": 1,
+            "url": "https://example.com/ttv-fictional-demo/133/1"
+          },
+          {
+            "id": "ttv-staging-demo-v1-member-130-journey-2",
+            "version": 1,
+            "url": "https://example.com/ttv-fictional-demo/133/2"
+          }
+        ]
+      }
+    ],
+    "evaluatedCandidates": 10,
+    "citations": [
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-070",
+        "userId": "ttv-staging-demo-v1-member-070",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-070-journey-1",
+        "userId": "ttv-staging-demo-v1-member-070",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-070-journey-2",
+        "userId": "ttv-staging-demo-v1-member-070",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-100",
+        "userId": "ttv-staging-demo-v1-member-100",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-100-journey-1",
+        "userId": "ttv-staging-demo-v1-member-100",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-100-journey-2",
+        "userId": "ttv-staging-demo-v1-member-100",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-130",
+        "userId": "ttv-staging-demo-v1-member-130",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-130-journey-1",
+        "userId": "ttv-staging-demo-v1-member-130",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-130-journey-2",
+        "userId": "ttv-staging-demo-v1-member-130",
+        "version": 1
+      }
+    ],
+    "retrievedSources": [
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-070",
+        "userId": "ttv-staging-demo-v1-member-070",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-100",
+        "userId": "ttv-staging-demo-v1-member-100",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-130",
+        "userId": "ttv-staging-demo-v1-member-130",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-040",
+        "userId": "ttv-staging-demo-v1-member-040",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-010",
+        "userId": "ttv-staging-demo-v1-member-010",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-060",
+        "userId": "ttv-staging-demo-v1-member-060",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-090",
+        "userId": "ttv-staging-demo-v1-member-090",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-120",
+        "userId": "ttv-staging-demo-v1-member-120",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-030",
+        "userId": "ttv-staging-demo-v1-member-030",
+        "version": 1
+      },
+      {
+        "kind": "profile",
+        "id": "ttv-staging-demo-v1-member-noncohort",
+        "userId": "ttv-staging-demo-v1-member-noncohort",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-070-journey-2",
+        "userId": "ttv-staging-demo-v1-member-070",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-070-journey-1",
+        "userId": "ttv-staging-demo-v1-member-070",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-100-journey-2",
+        "userId": "ttv-staging-demo-v1-member-100",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-100-journey-1",
+        "userId": "ttv-staging-demo-v1-member-100",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-130-journey-2",
+        "userId": "ttv-staging-demo-v1-member-130",
+        "version": 1
+      },
+      {
+        "kind": "journey",
+        "id": "ttv-staging-demo-v1-member-130-journey-1",
+        "userId": "ttv-staging-demo-v1-member-130",
+        "version": 1
+      }
+    ],
+    "missingEvidenceLanguage": true,
+    "answer": "Retrieved subset (not a ranking of all members): search for query \"Kotlin\" with skills [\"Kotlin\"] returned 10 synthetic demo profiles; I read published details for 3. All three read profiles (Fictional Chebet Achieng, Kiplagat, Mutua) have identical published evidence: two self-reported journey entries (2026-10-19 and 2026-10-20) describing work on an Android study planner covering offline task storage and input validation, with a documented follow-up change in iteration 2. All entries are explicitly self-reported demonstrations, not externally verified, and supporting links are placeholders; none have confirmations. Order below reflects documented evidence relevance to the fictional Kotlin implementation/testing opportunity — the three are effectively tied, so ordering is nominal and should not be read as an ability rating or hiring decision. Comparative reasons: each has two dated, institution-visible journey entries matching the opportunity's Kotlin/Android/testing focus; no profile has third-party confirmation, so none can be distinguished on verified evidence. Documentation gaps: no confirmations, placeholder evidence URLs (not read), no published test artifacts or code samples, no verification of the 'Testing' skill, and unknown depth/scope of the described work.",
+    "semanticReviewRequired": true,
+    "ranking": "Tool retrieval plus generated cited summary; no ability ranking quality claim.",
+    "toolNameTrace": "Actual executed tool names are included in execution.toolNames."
+  },
+  "cleanup": "verified"
+}
