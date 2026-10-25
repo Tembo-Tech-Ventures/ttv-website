@@ -68,14 +68,17 @@ export async function seedDemoData(target, audit = () => {}) {
   assertVerifiedStagingFixtureTarget(target);
   const records = buildDemoDataset();
   const execute = target.executeQuery;
+  let category = "required-role-query";
   try {
-    const roles = rows(await execute('SELECT id,name FROM "Roles" WHERE name IN (?,?,?)', ["MENTOR", "INSTITUTION", "STUDENT"]));
-    if (roles.length !== 3 || new Set(roles.map(role => role.name)).size !== 3) throw new Error();
+    const roles = rows(await execute('SELECT id,name FROM "Roles" WHERE name IN (?,?)', ["MENTOR", "INSTITUTION"]));
+    category = "required-roles";
+    if (roles.length !== 2 || new Set(roles.map(role => role.name)).size !== 2) throw new Error();
     const roleId = name => roles.find(role => role.name === name).id;
     records.UserRoles = records.user.flatMap(user => {
-      const role = user.id === DEMO_PERSONAS.mentor ? "MENTOR" : user.id === DEMO_PERSONAS.institution ? "INSTITUTION" : records.programApplication.some(application => application.userId === user.id) ? "STUDENT" : null;
+      const role = user.id === DEMO_PERSONAS.mentor ? "MENTOR" : user.id === DEMO_PERSONAS.institution ? "INSTITUTION" : null;
       return role ? [{ id: `${user.id}-role`, userId: user.id, roleId: roleId(role), ...timestamps }] : [];
     });
+    category = "owned-record-preflight";
     // Check every fixed primary key and parent before ANY mutation.
     for (const [table, list] of Object.entries(records)) {
       const [key, owners] = descriptors[table];
@@ -91,6 +94,7 @@ export async function seedDemoData(target, audit = () => {}) {
       const assigned = rows(await execute(`SELECT ur.userId,r.name FROM "UserRoles" ur JOIN "Roles" r ON r.id=ur.roleId WHERE ur.userId IN (${placeholders(batch)})`, batch.map(user => user.id)));
       if (assigned.some(assignment => !records.UserRoles.some(role => role.userId === assignment.userId && role.roleId === roleId(assignment.name)))) throw new Error();
     }
+    category = "record-write";
     for (const [table, list] of Object.entries(records)) {
       if (list.length === 0) continue;
       const columns = Object.keys(list[0]);
@@ -98,6 +102,7 @@ export async function seedDemoData(target, audit = () => {}) {
         await execute(`INSERT INTO "${table}" (${columns.map(column => `"${column}"`).join(",")}) VALUES ${batch.map(() => `(${placeholders(columns)})`).join(",")} ON CONFLICT DO NOTHING`, batch.flatMap(record => columns.map(column => record[column])));
       }
     }
+    category = "record-verification";
     for (const [table, list] of Object.entries(records)) {
       const [key] = descriptors[table];
       for (const batch of chunks(list.map(record => record[key]), 40)) {
@@ -109,7 +114,9 @@ export async function seedDemoData(target, audit = () => {}) {
     audit({ event: "retained-demo-seed", status: "passed", ...receipt });
     return receipt;
   } catch {
-    audit({ event: "retained-demo-seed", status: "failed", namespace: DEMO_NAMESPACE });
-    throw new Error("Retained demo seed incomplete; inspect owned-record guards before retrying.");
+    audit({ event: "retained-demo-seed", status: "failed", namespace: DEMO_NAMESPACE, category });
+    const error = new Error("Retained demo seed incomplete; inspect owned-record guards before retrying.");
+    error.category = category;
+    throw error;
   }
 }

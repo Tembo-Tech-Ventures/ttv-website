@@ -13,14 +13,15 @@ const signed=(token:string)=>encodeURIComponent(token+'.'+createHmac('sha256',se
 function setup() {
   const sql=new DatabaseSync(':memory:');databases.push(sql);
   sql.exec(`CREATE TABLE user(id TEXT PRIMARY KEY,email TEXT);CREATE TABLE session(id TEXT PRIMARY KEY,userId TEXT,token TEXT,userAgent TEXT,createdAt INTEGER,updatedAt INTEGER,expiresAt INTEGER);
-    CREATE TABLE Roles(id TEXT PRIMARY KEY,name TEXT);CREATE TABLE UserRoles(id TEXT PRIMARY KEY,userId TEXT,roleId TEXT);
-    INSERT INTO Roles VALUES ('admin','ADMIN'),('mentor','MENTOR'),('institution','INSTITUTION'),('student','STUDENT');
+    CREATE TABLE program(id TEXT PRIMARY KEY,curriculumId TEXT,applicationsOpen INTEGER);CREATE TABLE programApplication(id TEXT PRIMARY KEY,userId TEXT,programId TEXT,status TEXT);CREATE TABLE Roles(id TEXT PRIMARY KEY,name TEXT);CREATE TABLE UserRoles(id TEXT PRIMARY KEY,userId TEXT,roleId TEXT);
+    INSERT INTO Roles VALUES ('admin','ADMIN'),('mentor','MENTOR'),('institution','INSTITUTION');
     INSERT INTO user VALUES('raph','raph@example.invalid');INSERT INTO UserRoles VALUES('a','raph','admin');`);
   sql.prepare('INSERT INTO session VALUES(?,?,?,?,?,?,?)').run('parent','raph','unit-parent-token','Browser',now,now,DEMO_CUTOFF);
   for (const p of Object.values(DEMO_PERSONAS)) {
     sql.prepare('INSERT INTO user VALUES(?,?)').run(p.userId,p.userId+'@invalid.ttv');
     if(p.role) sql.prepare('INSERT INTO UserRoles VALUES(?,?,?)').run(p.userId,p.userId,p.role.toLowerCase());
   }
+  sql.exec("INSERT INTO program VALUES('ttv-staging-demo-v1-program','ttv-staging-demo-v1-curriculum',0);INSERT INTO programApplication VALUES('demo-application','ttv-staging-demo-v1-member-cohort','ttv-staging-demo-v1-program','APPROVED');");
   const db={prepare(query:string) {
     let params:unknown[]=[];
     const stmt={bind(...values:unknown[]){params=values;return stmt;},async first(){return sql.prepare(query).get(...params as never[])??null;},async all(){return {results:sql.prepare(query).all(...params as never[])};},async run(){return {meta:{changes:sql.prepare(query).run(...params as never[]).changes}};}};return stmt;
@@ -89,4 +90,15 @@ describe('retained demo browser boundary',()=>{
     for (const path of ['/dashboard/apply', '/dashboard/sessions/real-recording']) expect(demoPathAllowed(path,'GET')).toBe(false);
     expect(demoPathAllowed('/dashboard/application/owned','POST')).toBe(false);
   });
+});
+
+it('uses approved owned program membership for no-role cohort and noncohort personas',async()=>{
+ const f=setup();
+ for(const persona of ['member-cohort','member-noncohort'])expect((await handleDemoAction(f.env,f.request(persona),'switch',now)).status).toBe(200);
+ f.sql.exec("UPDATE programApplication SET status='PENDING'");
+ expect((await handleDemoAction(f.env,f.request('member-cohort'),'switch',now)).status).toBe(409);
+ f.sql.exec("UPDATE programApplication SET status='APPROVED', programId='real-program'");
+ expect((await handleDemoAction(f.env,f.request('member-cohort'),'switch',now)).status).toBe(409);
+ f.sql.exec("UPDATE programApplication SET programId='ttv-staging-demo-v1-program',userId='ttv-staging-demo-v1-member-noncohort'");
+ expect((await handleDemoAction(f.env,f.request('member-noncohort'),'switch',now)).status).toBe(409);
 });

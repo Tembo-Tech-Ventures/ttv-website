@@ -6,11 +6,11 @@ import { verifyStagingFixtureTarget, STAGING_FIXTURE_DATABASE_ID as dbId } from 
 import { createCommunityService } from "../../src/lib/community/service";
 const databases=[];
 afterEach(()=>{for(const db of databases.splice(0))db.close();});
-async function fixture(){
+async function fixture(seedStudent = false){
  const db=new DatabaseSync(":memory:");databases.push(db);db.exec("PRAGMA foreign_keys=ON");
  const migrations=new URL("../../src/lib/db/migrations/",import.meta.url);
  for(const file of readdirSync(migrations).filter(n=>n.endsWith(".sql")).toSorted())db.exec(readFileSync(new URL(file,migrations),"utf8"));
- db.prepare('INSERT INTO Roles(id,name) VALUES(?,?) ON CONFLICT(name) DO NOTHING').run("demo-test-student","STUDENT");
+ if(seedStudent) db.prepare('INSERT INTO Roles(id,name) VALUES(?,?) ON CONFLICT(name) DO NOTHING').run("demo-test-student","STUDENT");
  let failAfter=null,writes=0;
  const queries=[];const api=async(path,options)=>{
  if(path==="")return{id:"a".repeat(32)};
@@ -44,7 +44,7 @@ it.each(["identity","journey","privilege","email"])("rejects %s collision before
  const before=count(f.db,"user");f.queries.length=0;await expect(seedDemoData(f.target)).rejects.toThrow("Retained demo seed incomplete");expect(count(f.db,"user")).toBe(before);expect(f.queries.every(sql=>sql.startsWith("SELECT"))).toBe(true);
 });
 it("requires verified staging and refuses missing global roles without writes",async()=>{
- await expect(seedDemoData({executeQuery:vi.fn()})).rejects.toThrow("verified staging");const f=await fixture();f.db.exec("DELETE FROM Roles WHERE name='STUDENT'");const audit=vi.fn();await expect(seedDemoData(f.target,audit)).rejects.toThrow("Retained demo seed incomplete");expect(count(f.db,"user")).toBe(0);expect(audit).toHaveBeenCalledWith(expect.objectContaining({status:"failed"}));
+ await expect(seedDemoData({executeQuery:vi.fn()})).rejects.toThrow("verified staging");const f=await fixture();f.db.exec("DELETE FROM Roles WHERE name='MENTOR'");const audit=vi.fn();await expect(seedDemoData(f.target,audit)).rejects.toThrow("Retained demo seed incomplete");expect(count(f.db,"user")).toBe(0);expect(audit).toHaveBeenCalledWith(expect.objectContaining({status:"failed"}));
 });
 
 it("reports partial failure without raw details and resumes missing rows without duplicates",async()=>{
@@ -54,4 +54,11 @@ it("reports partial failure without raw details and resumes missing rows without
  expect(JSON.stringify(audit.mock.calls)).not.toContain("PRIVATE");
  f.interruptAfter(null);expect((await seedDemoData(f.target)).profiles).toBe(150);
  const before=count(f.db,"communityJourney");await seedDemoData(f.target);expect(count(f.db,"communityJourney")).toBe(before);expect(count(f.db,"user")).toBe(150);
+});
+
+it("seeds migration-equivalent roles without creating a global student role",async()=>{
+ const f=await fixture(false);expect((await seedDemoData(f.target)).cohortMembers).toBe(74);
+ expect(f.db.prepare("SELECT id FROM Roles WHERE name='STUDENT'").get()).toBeUndefined();
+ expect(count(f.db,"UserRoles")).toBe(2);
+ expect(f.db.prepare('SELECT id FROM UserRoles WHERE userId=?').get(DEMO_PERSONAS.cohort)).toBeUndefined();
 });
