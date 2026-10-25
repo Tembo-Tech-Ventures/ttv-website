@@ -18,12 +18,14 @@ export default function ValueWord({ word, outlined = false }: { word: string; ou
       text.style.fontSize = `${current * available * 0.98 / measured}px`;
     }
     let lastWidth = container.clientWidth;
+    let frame = 0;
     const observer = new ResizeObserver(() => {
       // Font sizing also changes height. Ignore those notifications to avoid
       // fractional glyph rounding causing a resize/refit feedback loop.
       if (container.clientWidth === lastWidth) return;
       lastWidth = container.clientWidth;
-      fit();
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(fit);
     });
     observer.observe(container);
     void document.fonts.ready.then(fit);
@@ -31,6 +33,7 @@ export default function ValueWord({ word, outlined = false }: { word: string; ou
     fit();
     return () => {
       disposed = true;
+      cancelAnimationFrame(frame);
       observer.disconnect();
       document.fonts.removeEventListener("loadingdone", fit);
     };

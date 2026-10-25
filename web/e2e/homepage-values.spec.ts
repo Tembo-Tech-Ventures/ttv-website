@@ -61,6 +61,8 @@ test("keyboard navigation retains focus; reduced motion and enlarged text remain
 });
 
 test("fits again after viewport resize without layout oscillation", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/homepage-values.html");
   await page.evaluate(() => document.fonts.ready);
@@ -72,4 +74,5 @@ test("fits again after viewport resize without layout oscillation", async ({ pag
   // Playwright's clickability check also requires a stable bounding box.
   await next.click();
   await expect(page.locator(".values-carousel .value-word")).toHaveText("EQUITY");
+  expect(errors).toEqual([]);
 });
