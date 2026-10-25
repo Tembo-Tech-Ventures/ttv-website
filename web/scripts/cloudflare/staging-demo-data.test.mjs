@@ -6,11 +6,11 @@ import { verifyStagingFixtureTarget, STAGING_FIXTURE_DATABASE_ID as dbId } from 
 import { createCommunityService } from "../../src/lib/community/service";
 const databases=[];
 afterEach(()=>{for(const db of databases.splice(0))db.close();});
-async function fixture(){
+async function fixture(seedStudent = true){
  const db=new DatabaseSync(":memory:");databases.push(db);db.exec("PRAGMA foreign_keys=ON");
  const migrations=new URL("../../src/lib/db/migrations/",import.meta.url);
  for(const file of readdirSync(migrations).filter(n=>n.endsWith(".sql")).toSorted())db.exec(readFileSync(new URL(file,migrations),"utf8"));
- db.prepare('INSERT INTO Roles(id,name) VALUES(?,?) ON CONFLICT(name) DO NOTHING').run("demo-test-student","STUDENT");
+ if(seedStudent) db.prepare('INSERT INTO Roles(id,name) VALUES(?,?) ON CONFLICT(name) DO NOTHING').run("demo-test-student","STUDENT");
  let failAfter=null,writes=0;
  const queries=[];const api=async(path,options)=>{
  if(path==="")return{id:"a".repeat(32)};
@@ -54,4 +54,13 @@ it("reports partial failure without raw details and resumes missing rows without
  expect(JSON.stringify(audit.mock.calls)).not.toContain("PRIVATE");
  f.interruptAfter(null);expect((await seedDemoData(f.target)).profiles).toBe(150);
  const before=count(f.db,"communityJourney");await seedDemoData(f.target);expect(count(f.db,"communityJourney")).toBe(before);expect(count(f.db,"user")).toBe(150);
+});
+
+it("reports only a fixed prerequisite category with migration-equivalent roles",async()=>{
+ const f=await fixture(false),audit=vi.fn();f.queries.length=0;
+ const error=await seedDemoData(f.target,audit).catch(caught=>caught);
+ expect(error.category).toBe("required-roles");expect(error.message).toBe("Retained demo seed incomplete; inspect owned-record guards before retrying.");
+ expect(f.queries).toHaveLength(1);expect(f.queries[0].startsWith("SELECT")).toBe(true);expect(count(f.db,"user")).toBe(0);
+ expect(audit).toHaveBeenCalledWith({event:"retained-demo-seed",status:"failed",namespace:"ttv-staging-demo-v1",category:"required-roles"});
+ expect(JSON.stringify(error)).toBe('{"category":"required-roles"}');
 });
