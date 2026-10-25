@@ -12,7 +12,27 @@ on:
       - closed
 
 jobs:
+  active-previews:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      environments: ${{ steps.active.outputs.environments }}
+    steps:
+      - id: active
+        name: Protect open PR preview environments
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          active_previews="$(gh pr list --state open --limit 1000 --json number --jq 'map("agent-pr-" + (.number | tostring)) | join(",")')"
+          current_preview="agent-pr-${{ github.event.pull_request.number }}"
+          active_previews="${active_previews:+${active_previews},}${current_preview}"
+          echo "environments=${active_previews}" >> "${GITHUB_OUTPUT}"
+
   preview:
+    needs: active-previews
     concurrency:
       group: ttv-cloudflare-pr-${{ github.event.pull_request.number }}
       cancel-in-progress: true
@@ -24,4 +44,5 @@ jobs:
       agent_auth_enabled: true
       workers_subdomain: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
       protected_environments: production,prod,staging
+      active_pr_environments: ${{ needs.active-previews.outputs.environments }}
     secrets: inherit

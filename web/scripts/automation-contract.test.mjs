@@ -175,28 +175,23 @@ describe("GitHub delivery contracts", () => {
     expect(workflow).not.toContain("environment_name: staging");
   });
 
-  it("protects open PR gateways before reclaiming old closed-preview gateways", async () => {
-    const workflow = await readRepositoryFile(
-      ".github/workflows/cloudflare-environment.yml"
-    );
+  it("passes the protected open-PR inventory only from the PR preview workflow", async () => {
+    const [environmentWorkflow, previewWorkflow] = await Promise.all([
+      readRepositoryFile(".github/workflows/cloudflare-environment.yml"),
+      readRepositoryFile(".github/workflows/cloudflare-staging-pr.yml"),
+    ]);
 
+    expect(environmentWorkflow).toContain("active_pr_environments:");
     expect(
-      workflow.match(
-        /name: Protect open PR gateways before reclaiming closed previews/g
-      )
+      environmentWorkflow.match(/CLOUDFLARE_ACTIVE_PR_ENVIRONMENTS:/g)
     ).toHaveLength(2);
-    expect(workflow.match(/pull-requests: read/g)).toHaveLength(2);
-    expect(workflow.match(/gh pr list --state open --limit 1000/g)).toHaveLength(
-      2
+    expect(previewWorkflow).toContain("pull-requests: read");
+    expect(previewWorkflow).toContain(
+      "gh pr list --state open --limit 1000"
     );
-    expect(
-      workflow.match(/CLOUDFLARE_ACTIVE_PR_ENVIRONMENTS=/g)
-    ).toHaveLength(2);
-    expect(
-      workflow.match(
-        /startsWith\(inputs\.environment_name, 'agent-pr-'\)/g
-      )
-    ).toHaveLength(2);
+    expect(previewWorkflow).toContain(
+      "active_pr_environments: ${{ needs.active-previews.outputs.environments }}"
+    );
   });
 
   it("checks gateway quota before provisioning other preview resources", async () => {
