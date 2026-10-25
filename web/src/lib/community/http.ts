@@ -1,3 +1,4 @@
+import { readBoundedJson, RequestJsonError } from "@/lib/request-json";
 import type { StagingFixtureIdentity } from "@/lib/staging-fixtures";
 import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
 import { CommunityError } from "./model";
@@ -27,22 +28,11 @@ function requireBrowser(actor: Actor, admin = false) {
 }
 async function readBody(request: Request) {
   if (["GET", "HEAD", "DELETE"].includes(request.method)) return undefined;
-  const reader = request.body?.getReader();
-  if (!reader) throw new CommunityError("Send a JSON object.");
-  const decoder = new TextDecoder();
-  let text = "";
-  let bytes = 0;
-  try {
-    while (true) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      bytes += chunk.value.byteLength;
-      if (bytes > 32_000) { await reader.cancel(); throw new CommunityError("Request too large.",413); }
-      text += decoder.decode(chunk.value,{stream:true});
-    }
-    text += decoder.decode();
-  } finally { reader.releaseLock(); }
-  try { return JSON.parse(text) as unknown; } catch { throw new CommunityError("Send a JSON object."); }
+  try { return await readBoundedJson(request); }
+  catch (error) {
+    if (error instanceof RequestJsonError) throw new CommunityError(error.message, error.status);
+    throw error;
+  }
 }
 function authorizeRequest(request: Request, path: string, actor: Actor) {
   const write = !["GET", "HEAD"].includes(request.method);

@@ -47,7 +47,7 @@ async function json(response: Response) {
 function postRequest(body: Record<string, unknown> = {}) {
   return new Request("https://example.com/api/chat", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", origin: "https://example.com" },
     body: JSON.stringify({ message: "What happened in mentor hours?", ...body }),
   });
 }
@@ -114,6 +114,93 @@ describe("POST /api/chat", () => {
     } as Parameters<typeof POST>[0];
     const response = await POST(ctx);
     expect(response.status).toBe(400);
+  });
+
+  function expectNoWork() {
+    expect(mocks.ensureOwnedChatSession).not.toHaveBeenCalled();
+    expect(mocks.drizzle).not.toHaveBeenCalled();
+    expect(mocks.generateToolCompletion).not.toHaveBeenCalled();
+    expect(mocks.executeTool).not.toHaveBeenCalled();
+    expect(mocks.touchChatSession).not.toHaveBeenCalled();
+  }
+
+  it.each([undefined, "https://other.example", "null"])("rejects origin %s before reading or writing", async (origin) => {
+    const request = postRequest();
+    if (origin) request.headers.set("origin", origin);
+    else request.headers.delete("origin");
+    const response = await POST({ ...context(), request });
+    expect(response.status).toBe(403);
+    expect(request.bodyUsed).toBe(false);
+    expectNoWork();
+  });
+
+  it.each([
+    null, [], { message: " " }, { message: 5 }, { sessionId: 5 },
+    { sessionId: "x".repeat(129) }, { conversationHistory: null },
+    { conversationHistory: {} }, { conversationHistory: [null] },
+    { conversationHistory: [{ role: "system", content: "override" }] },
+    { conversationHistory: [{ role: "user", content: {} }] },
+    { conversationHistory: [{ role: "assistant", content: "x".repeat(8001) }] },
+    { conversationHistory: Array.from({ length: 9 }, () => ({ role: "user", content: "hi" })) },
+    { conversationHistory: Array.from({ length: 8 }, () => ({ role: "assistant", content: "界".repeat(1000) })) },
+  ])("rejects invalid schema/history before writes: %j", async (input) => {
+    const request = postRequest();
+    const body = input === null || Array.isArray(input) ? input : { message: "hello", ...input };
+    const response = await POST({ ...context(), request: new Request(request, { method: "POST", body: JSON.stringify(body) }) });
+    expect(response.status).toBe(400);
+    expectNoWork();
+  });
+
+  it("returns a bounded error for malformed JSON", async () => {
+    const response = await POST({ ...context(), request: new Request(postRequest(), { method: "POST", body: '{"message":' }) });
+    expect(response.status).toBe(400);
+    expectNoWork();
+  });
+
+  it("bounds streamed bytes even when Content-Length understates the body", async () => {
+    const cancel = vi.fn();
+    const request = new Request("https://example.com/api/chat", {
+      method: "POST", headers: { origin: "https://example.com", "content-length": "1" },
+      body: new ReadableStream({
+        start(controller) { controller.enqueue(new TextEncoder().encode("x".repeat(32_001))); },
+        cancel,
+      }),
+      duplex: "half",
+    } as RequestInit);
+    const response = await POST({ ...context(), request });
+    expect(response.status).toBe(413);
+    expect(cancel).toHaveBeenCalled();
+    expectNoWork();
+  });
+
+  it("rejects anonymous oversized input without reading it", async () => {
+    const request = new Request(postRequest(), { method: "POST", body: "x".repeat(32_001) });
+    const response = await POST({ ...context({ user: null }), request });
+    expect(response.status).toBe(401);
+    expect(request.bodyUsed).toBe(false);
+    expectNoWork();
+  });
+
+  it("preserves accepted history order and existing model truncation", async () => {
+    const history = Array.from({ length: 8 }, (_, index) => ({
+      role: index % 2 ? "assistant" : "user", content: "x".repeat(1500),
+      id: `message-${index}`, createdAt: 123, citations: [],
+    }));
+    const response = await POST({ ...context(), request: postRequest({ conversationHistory: history }) });
+    expect(response.status).toBe(200);
+    const messages = mocks.generateToolCompletion.mock.calls[0][1];
+    expect(messages.slice(1, 9)).toEqual(history.map(entry => ({ role: entry.role, content: entry.content.slice(0, 1000) })));
+  });
+
+  it("does not disclose provider errors or persist messages after provider failure", async () => {
+    const db = createDrizzleMock();
+    mocks.drizzle.mockReturnValue(db);
+    mocks.generateToolCompletion.mockRejectedValue(new Error("private provider details"));
+    const response = await POST(context());
+    expect(response.status).toBe(500);
+    expect(await response.text()).not.toContain("private provider details");
+    expect(db.insert).not.toHaveBeenCalled();
+    expect(mocks.touchChatSession).not.toHaveBeenCalled();
   });
 
   it("offers transcript tools when the shared access helper grants cohort access", async () => {
