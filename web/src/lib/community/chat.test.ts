@@ -130,7 +130,7 @@ it("accepts exact delivered source references and separates unused retrieved evi
 });
 it.each([{kind:"journey",id:"invented",version:3},{kind:"journey",id:"j",version:999},{kind:"confirmation",id:"j",version:3}])("rejects hallucinated source identity or version %j", async ref => {
  complete.mockResolvedValueOnce({content:null,toolCalls:[call("get_own_profile",{})],finishReason:null}).mockResolvedValueOnce(groundedContent([ref]));
- const r = await runCommunityChat(env,service(),{message:"evidence"}); expect(r.grounded).toBe(false); expect(r.citations).toEqual([]); expect(r.answer).not.toContain("Documented contribution");
+ const r = await runCommunityChat(env,service(),{message:"evidence"}); expect(r.grounded).toBe(false); expect(r.citations).toEqual([]); expect(r.answer).not.toContain("Documented contribution");expect(r.groundingFailure).toBe("invalid_citation");
 });
 it("does not ground a no-tool answer from invented references", async () => {
  complete.mockResolvedValueOnce(groundedContent([{kind:"profile",id:"self",version:2}]));
@@ -172,7 +172,7 @@ it("fails closed on completion-token exhaustion even with otherwise grounded JSO
  const run = vi.fn(async()=>Response.json({choices:[{message:{content:JSON.stringify({answer:"Must not publish truncated answer",citations:[{kind:"profile",id:"self",version:2}]})},finish_reason:"length"}]}));
  const s=service();vi.mocked(s.getProfile).mockResolvedValue({userId:"self",version:2} as never);
  const result=await runCommunityChat({...env,AI:{run}} as unknown as Env,s,{message:"hello",profileId:"self"});
- expect(result.grounded).toBe(false);expect(result.answer).not.toContain("truncated answer");expect(run).toHaveBeenCalledOnce();
+ expect(result.grounded).toBe(false);expect(result.answer).not.toContain("truncated answer");expect(result.groundingFailure).toBe("execution_limit");expect(run).toHaveBeenCalledOnce();
 });
 it("bounds raw provider output before SDK parsing and never retries it", async () => {
  let cancelled=false;
@@ -213,4 +213,11 @@ it("reports only a bounded validation code for malformed final JSON", async () =
  const result=await runCommunityChat(env,service(),{message:'hello'});
  expect(result.groundingFailure).toBe('invalid_json');expect(result.grounded).toBe(false);
  expect(JSON.stringify(result)).not.toContain('private malformed output');
+});
+
+it("classifies valid JSON with invalid answer structure without publishing it", async () => {
+ complete.mockResolvedValueOnce({...done,content:JSON.stringify({answer:'unsupported private claim',citations:[]})});
+ const result=await runCommunityChat(env,service(),{message:'hello'});
+ expect(result.groundingFailure).toBe('invalid_structure');expect(result.grounded).toBe(false);
+ expect(JSON.stringify(result)).not.toContain('unsupported private claim');
 });
