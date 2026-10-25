@@ -15,7 +15,7 @@ export async function assertHomepageValues(page: Page) {
       return [".value-word", ".value-commitment-copy"].every((selector) => {
         const child = el.querySelector(selector)!;
         const box = child.getBoundingClientRect();
-        return box.left >= bounds.left - 1 && box.right <= bounds.right + 1 && child.scrollWidth <= child.clientWidth + 1;
+        return box.width > 0 && box.height > 0 && box.left >= bounds.left - 1 && box.right <= bounds.right + 1 && child.scrollWidth <= child.clientWidth + 1;
       });
     }), { message: `${value.word} and commitment must fit the static row` }).toBe(true);
   }
@@ -37,7 +37,7 @@ export async function assertHomepageValues(page: Page) {
       const word = el.querySelector(".value-word")!.getBoundingClientRect();
       const container = el.querySelector(".value-word-container")!.getBoundingClientRect();
       const bubble = el.querySelector(".values-bubble")!.getBoundingClientRect();
-      return word.left >= container.left - 1 && word.right <= container.right + 1 && bubble.top >= word.bottom && bubble.right <= el.getBoundingClientRect().right + 1;
+      return word.width > 0 && word.height > 0 && word.left >= container.left - 1 && word.right <= container.right + 1 && bubble.top >= word.bottom && bubble.right <= el.getBoundingClientRect().right + 1;
     }), { message: `${value.word} must fit without bubble overlap` }).toBe(true);
     await next.click();
     await expect(next).toBeFocused();

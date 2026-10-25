@@ -22,6 +22,8 @@ describe("homepage value commitments", () => {
     expect(html).toContain('aria-label="Next value"');
     expect(html).toContain('aria-live="polite"');
     expect(html).toContain('aria-label="1 of 5"');
+    expect(html).toContain('role="group"');
+    expect(html).not.toContain("<fieldset");
     expect(html).toContain(VALUES[0].word);
     expect(html).toContain(VALUES[0].commitment);
     expect(html).not.toContain("Mentorship");

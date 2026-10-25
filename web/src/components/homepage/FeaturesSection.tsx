@@ -25,13 +25,15 @@ export default function FeaturesSection() {
         </h2>
         <section className="values-carousel" aria-roledescription="carousel" aria-label="Our values">
           <div id={`${id}-slide`} className="values-stage" aria-live="polite" aria-atomic="true">
-            <fieldset className="values-slide" aria-roledescription="slide" aria-label={`${active + 1} of ${VALUES.length}`}>
+            {/* A slide is a content group, not a form fieldset. */}
+            {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- APG carousel slide semantics; fieldset loses its dynamic word box in the deployed page. */}
+            <div role="group" className="values-slide" aria-roledescription="slide" aria-label={`${active + 1} of ${VALUES.length}`}>
               <ValueWord word={value.word} />
               <div className="values-bubble" key={value.word}>
                 <span className="values-bubble-label">Our commitment</span>
                 <p>{value.commitment}</p>
               </div>
-            </fieldset>
+            </div>
           </div>
           <div className="values-controls">
             <button type="button" onKeyDown={navigate} onClick={() => select(active - 1)} aria-controls={`${id}-slide`} aria-label="Previous value">← <span>Previous</span></button>
