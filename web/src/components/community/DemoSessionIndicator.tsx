@@ -29,7 +29,7 @@ export default function DemoSessionIndicator({ activePersona, displayName, expir
         </div>
         <div className="flex flex-wrap gap-3">
           {canSwitch && <button type="button" disabled={pending !== null} onClick={() => { if (!pending) onSwitch(); }} className="min-h-11 rounded-full border border-primary px-4 py-2 text-sm font-semibold text-primary focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary disabled:opacity-60">Switch role</button>}
-          <button type="button" disabled={pending !== null} onClick={() => { if (!pending) onLogout(); }} className="min-h-11 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-dark focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary disabled:opacity-60">Sign out</button>
+          <button type="button" disabled={pending !== null} onClick={() => { if (!pending) onLogout(); }} className="min-h-11 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-dark focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary disabled:opacity-60">Sign out of staging</button>
         </div>
       </div>
       <output aria-live="polite" className="mt-2 block text-sm text-ink-secondary">{pending === "logout" ? "Signing out…" : pending === "switch" ? "Opening role selection…" : ""}</output>

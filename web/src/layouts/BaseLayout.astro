@@ -1,6 +1,8 @@
 ---
 import "@/styles/global.css";
 import ClientErrorBuffer from "@/components/feedback/ClientErrorBuffer.astro";
+import DemoSessionControls from "@/components/community/DemoSessionControls";
+import { demoPersona } from "@/lib/staging-demo-policy";
 import FeedbackWidget from "@/components/feedback/FeedbackWidget";
 import {
   absoluteUrl,
@@ -33,6 +35,8 @@ const canonicalUrl = absoluteUrl(Astro.site, canonical ?? Astro.url.pathname);
 const ogImageUrl = absoluteUrl(Astro.site, ogImage ?? "/og-default.png");
 // Feedback is for people with an account; anonymous visitors never see it.
 const signedIn = Boolean(Astro.locals.user);
+const demo = Astro.locals.stagingDemo;
+const activeDemoPersona = demoPersona(demo?.persona);
 ---
 
 <!doctype html>
@@ -72,6 +76,11 @@ const signedIn = Boolean(Astro.locals.user);
     <slot name="head" />
   </head>
   <body class="bg-dark min-h-screen">
+    {demo && activeDemoPersona && Astro.locals.user && (
+      <div class="mx-auto w-full max-w-7xl px-4 py-3 sm:px-8">
+        <DemoSessionControls client:load activePersona={activeDemoPersona} displayName={Astro.locals.user.name} expiresAt={new Date(demo.expiresAt * 1000).toISOString()} />
+      </div>
+    )}
     <slot />
     {signedIn && <FeedbackWidget client:idle />}
   </body>
