@@ -1129,3 +1129,27 @@ export const stagingFixtureIdentity = sqliteTable("stagingFixtureIdentity", {
   persona: text("persona", {enum:["member","otherMember","mentor","institution","unapprovedInstitution","admin"]}).notNull(),
   expiresAt: integer("expiresAt").notNull(),
 }, table => [index("stagingFixtureIdentity_runId_idx").on(table.runId)]);
+
+// One approved retained-persona QA run; revocation tombstone prevents reissuance.
+export const stagingQaRun = sqliteTable("stagingQaRun", {
+  id: text("id").primaryKey(),
+  issuedAt: integer("issuedAt").notNull(),
+  expiresAt: integer("expiresAt").notNull(),
+  revokedAt: integer("revokedAt"),
+  version: text("version").notNull(),
+  keyFingerprint: text("keyFingerprint").notNull(),
+  seedDigest: text("seedDigest").notNull(),
+});
+export const stagingQaSession = sqliteTable("stagingQaSession", {
+  tokenHash: text("tokenHash").notNull().unique(),
+  sessionId: text("sessionId").primaryKey().references(() => session.id, {onDelete:"cascade"}),
+  runId: text("runId").notNull().references(() => stagingQaRun.id),
+  userId: text("userId").notNull().references(() => user.id),
+  persona: text("persona").notNull(),
+}, table => [uniqueIndex("stagingQaSession_run_user_idx").on(table.runId, table.userId)]);
+export const stagingQaResource = sqliteTable("stagingQaResource", {
+  id: text("id").primaryKey(),
+  runId: text("runId").notNull().references(() => stagingQaRun.id),
+  kind: text("kind", {enum:["journey","confirmation"]}).notNull(),
+  userId: text("userId").notNull().references(() => user.id),
+}, table => [index("stagingQaResource_run_idx").on(table.runId)]);

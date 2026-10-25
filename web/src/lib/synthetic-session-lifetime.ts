@@ -9,7 +9,7 @@ function isSynthetic(current: FixtureSession) {
   return (current.id === "ttv-agent-preview-session" && current.userId === "ttv-agent-preview-user" && marker === "ttv-agent:isolated-preview") ||
     (current.id.startsWith("ttv-fixture-session-journey-") && current.userId.startsWith("ttv-fixture-user-journey-") && marker === "ttv-agent:isolated-preview:persona") ||
     (current.userId.startsWith("ttv-feedback-run-") && current.id === `${current.userId}-session` && marker === "ttv-agent:isolated-feedback") ||
-    (current.userId.startsWith("ttv-staging-demo-v1-") && marker?.startsWith("ttv-agent:retained-demo:")) ||
+    (current.userId.startsWith("ttv-staging-demo-v1-") && (marker?.startsWith("ttv-agent:retained-demo:") || marker?.startsWith("ttv-agent:retained-qa:"))) ||
     (current.userId.startsWith("ttv-staging-fixture-") && marker?.startsWith("ttv-agent:synthetic-staging:"));
 }
 
@@ -26,6 +26,8 @@ export function syntheticSessionResponseHook(environment: string | undefined, en
     if (!returned || typeof returned !== "object" || !("session" in returned) || !returned.session) return;
     const result = ctx.context.session;
     if (!result || !isSynthetic(result.session)) return;
+    // QA uses its own authoritative registry/cookie path; never serve it through Better Auth cache/refresh.
+    if(result.session.userAgent?.startsWith('ttv-agent:retained-qa:')) {ctx.context.session=null;deleteSessionCookie(ctx);return ctx.json(null);}
     // Cookie caching must not keep an old run alive after revocation/rotation.
     let authoritative;
     try {
@@ -59,6 +61,7 @@ export function syntheticSessionHooks(environment: string | undefined, enabled: 
           const current = ctx?.context.session?.session;
           if (!current || !data.expiresAt) return { data };
           if (!isSynthetic(current)) return { data };
+          if(current.userAgent?.startsWith('ttv-agent:retained-qa:')) return false;
           const deadline = Math.min(new Date(current.expiresAt).getTime(), new Date(current.createdAt).getTime() + (current.userId.startsWith("ttv-staging-demo-v1-") ? 1 : 8) * 3600_000, new Date(data.expiresAt).getTime());
           if (!Number.isFinite(deadline) || deadline <= Date.now()) return false;
           return { data: { ...data, expiresAt: new Date(deadline) } };

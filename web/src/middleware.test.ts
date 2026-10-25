@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   authenticatePersonalAccessToken: vi.fn(),
   createAuth: vi.fn(),
+  authenticateQaCookie: vi.fn(),
+  logoutQa: vi.fn(),
   enforcePersonalAccessTokenMutationScope: vi.fn(),
   getSession: vi.fn(),
   hasPersonalAccessTokenAuthorization: vi.fn(),
@@ -25,6 +27,7 @@ vi.mock("cloudflare:workers", () => ({
   },
 }));
 vi.mock("@/lib/auth", () => ({ createAuth: mocks.createAuth }));
+vi.mock("@/lib/staging-qa-access", async importOriginal => ({...(await importOriginal<typeof import("@/lib/staging-qa-access")>()),authenticateQaCookie:mocks.authenticateQaCookie,logoutQa:mocks.logoutQa}));
 vi.mock("@/lib/observability/errors", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/observability/errors")>()),
   recordError: mocks.recordError,
@@ -402,4 +405,23 @@ it("allows only the retained probe GET discovery shell, never unrelated pages or
    expect(requireResponse(await onRequest(context as never,next)).status).toBe(status);
   }
  }finally{stagingEnv.STAGING_RETAINED_READ_PROBE_ENABLED=undefined;vi.useRealTimers();}
+});
+
+describe('dedicated QA middleware does not inherit normal authentication',()=>{
+ const qa={runId:'unit',persona:'member-cohort',userId:'ttv-staging-demo-v1-member-cohort',sessionId:'unit-qa',issuedAt:1,expiresAt:2};
+ function request(path:string,method='GET'){return new Request('https://staging.tembotechventures.com'+path,{method,headers:{cookie:'__Host-ttv-retained-qa=fictional-unit-only',origin:'https://staging.tembotechventures.com'}});}
+ it('sets constrained QA context and no-store without ordinary auth or demo parent',async()=>{
+  mocks.authenticateQaCookie.mockResolvedValue({qa,user:{...tokenAuth.user,id:qa.userId},session:tokenAuth.session});
+  const {context,next}=createContext(request('/dashboard/community'));const response=requireResponse(await onRequest(context as never,next));
+  expect(next).toHaveBeenCalledOnce();expect(mocks.createAuth).not.toHaveBeenCalled();expect(mocks.authenticatePersonalAccessToken).not.toHaveBeenCalled();
+  expect(context.locals).toMatchObject({stagingQa:qa,stagingDemo:null,personalAccessToken:null});expect(response.headers.get('cache-control')).toBe('no-store');
+ });
+ it.each(['/api/auth/get-session','/api/auth/sign-out','/api/demo/logout','/api/community/chat','/api/mcp','/admin'])('denies %s before any normal handler',async path=>{
+  mocks.authenticateQaCookie.mockResolvedValue({qa,user:tokenAuth.user,session:tokenAuth.session});const {context,next}=createContext(request(path,'POST'));
+  expect(requireResponse(await onRequest(context as never,next)).status).toBe(403);expect(next).not.toHaveBeenCalled();expect(mocks.createAuth).not.toHaveBeenCalled();
+ });
+ it('fails closed for invalid QA cookie rather than falling back to a human cookie',async()=>{
+  mocks.authenticateQaCookie.mockRejectedValue(new Error('unit denied'));const {context,next}=createContext(request('/dashboard'));
+  expect(requireResponse(await onRequest(context as never,next)).status).toBe(403);expect(next).not.toHaveBeenCalled();expect(mocks.getSession).not.toHaveBeenCalled();
+ });
 });

@@ -2,7 +2,7 @@ import { pathToFileURL } from "node:url";
 
 /** Fail closed before the staging job receives Cloudflare credentials. */
 export async function validateStagingRevision(env, { fetchImpl = fetch } = {}) {
-  if (env.STAGING_ACTION !== undefined && !["deploy", "verify", "assess", "credential-audit", "cleanup-chat-incident", "seed-demo", "diagnose-demo", "retained-read-probe"].includes(env.STAGING_ACTION)) {
+  if (env.STAGING_ACTION !== undefined && !["deploy", "verify", "assess", "credential-audit", "cleanup-chat-incident", "seed-demo", "diagnose-demo", "retained-read-probe", "persona-qa-issue", "persona-qa-cleanup"].includes(env.STAGING_ACTION)) {
     throw new Error("Staging action is unsupported.");
   }
   if (env.STAGING_EXPECTED_DEPLOYED_SHA && env.STAGING_ACTION !== "diagnose-demo") {

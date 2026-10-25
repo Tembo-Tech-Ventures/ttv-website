@@ -81,6 +81,10 @@ const activeDemoPersona = demoPersona(demo?.persona);
         <DemoSessionControls client:load activePersona={activeDemoPersona} displayName={Astro.locals.user.name} expiresAt={new Date(demo.expiresAt * 1000).toISOString()} />
       </div>
     )}
+    {Astro.locals.stagingQa && <aside class="px-4 py-3" aria-label="Temporary fictional persona QA">
+      <p>Temporary fictional persona QA · {Astro.locals.stagingQa.persona} · expires {new Date(Astro.locals.stagingQa.expiresAt*1000).toISOString()}</p>
+      <form method="post" action="/api/qa/logout"><button type="submit">Sign out of this QA persona</button></form>
+    </aside>}
     <slot />
     {signedIn && <FeedbackWidget client:idle />}
   </body>
