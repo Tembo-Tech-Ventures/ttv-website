@@ -508,7 +508,7 @@ export default function ScoutWorkspace({
               Find community builders through their work.
             </p>
           </div>
-          <div className="discovery-actions">
+          <fieldset className="discovery-actions discovery-modes" aria-label="Discovery mode">
             <button
               type="button"
               className="discovery-text-button"
@@ -535,7 +535,7 @@ export default function ScoutWorkspace({
             >
               Find someone you know
             </button>
-          </div>
+          </fieldset>
           <ol className="discovery-steps" aria-label="Scouting steps">
             <li aria-current={step === "criteria" ? "step" : undefined}>
               <span>01</span>
