@@ -3,7 +3,7 @@ import { assertVerifiedStagingFixtureTarget } from "./staging-fixture-target.mjs
 export const DEMO_NAMESPACE = "ttv-staging-demo-v1";
 export const DEMO_PERSONAS = Object.freeze({
   mentor: `${DEMO_NAMESPACE}-mentor`, institution: `${DEMO_NAMESPACE}-institution`,
-  cohort: `${DEMO_NAMESPACE}-cohort`, noncohort: `${DEMO_NAMESPACE}-noncohort`,
+  cohort: `${DEMO_NAMESPACE}-member-cohort`, noncohort: `${DEMO_NAMESPACE}-member-noncohort`,
 });
 export const DEMO_SEARCH_EXAMPLES = Object.freeze([
   { query: "TypeScript", skills: ["React"], context: "Inspect a documented accessible interface contribution; distinguish self-report and synthetic mentor context." },
@@ -102,7 +102,7 @@ export async function seedDemoData(target, audit = () => {}) {
         if (found.length !== 1 || found[0].remaining !== batch.length) throw new Error();
       }
     }
-    const receipt = { synthetic: true, namespace: DEMO_NAMESPACE, profiles: 150, cohortMembers: records.programApplication.length, journeys: records.communityJourney.length, confirmations: records.communityConfirmation.length, retained: true, modelCalls: 0 };
+    const receipt = { synthetic: true, namespace: DEMO_NAMESPACE, profiles: 150, selectorPersonas: 4, numberedMembers: 146, eligibleTalent: 149, cohortMembers: records.programApplication.length, journeys: records.communityJourney.length, confirmations: records.communityConfirmation.length, retained: true, modelCalls: 0 };
     audit({ event: "retained-demo-seed", status: "passed", ...receipt });
     return receipt;
   } catch {
