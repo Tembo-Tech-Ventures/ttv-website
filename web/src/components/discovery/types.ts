@@ -95,3 +95,9 @@ export function filterDemoProfiles(
           .includes(query)),
   );
 }
+
+export interface EvidenceOrder {
+  text: string;
+  evaluatedCandidates: number;
+  profiles: Array<{userId:string;name:string;reason:string;missingEvidence:string[]}>;
+}

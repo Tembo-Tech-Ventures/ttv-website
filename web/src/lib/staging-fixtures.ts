@@ -1,4 +1,4 @@
-import { DEMO_CUTOFF, DEMO_USER_IDS, isDemoUser } from "./staging-demo-policy";
+import { DEMO_USER_IDS, isDemoUser } from "./staging-demo-policy";
 /** Synthetic staging identities are a separate, expiring trust boundary. */
 export const STAGING_FIXTURE_PERSONAS = ["member", "otherMember", "mentor", "institution", "unapprovedInstitution", "admin"] as const;
 export type StagingFixturePersona = (typeof STAGING_FIXTURE_PERSONAS)[number];
@@ -29,6 +29,7 @@ interface ResolveOptions {
   retainedProbeEnabled?: string;
   now?: Date;
 }
+export const RETAINED_READ_PROBE_CUTOFF = Date.parse("2026-10-25T11:10:35Z") / 1000;
 const PREFIX = "ttv-staging-fixture-";
 const MARKER = "ttv-agent:synthetic-staging:";
 const RUN_PATTERN = /^[a-f0-9]{24}$/;
@@ -49,9 +50,9 @@ async function liveRow(db: D1Database, userId: string): Promise<IdentityRow | nu
 }
 export function retainedProbeMarker(runId: string, used = false) { return `${MARKER}${runId}:retained-read:${used ? "CHAT_USED" : "READY"}`; }
 function validateRetainedRow(row: IdentityRow, persona: string, nowSeconds: number, enabled: boolean) {
-  if (!enabled || !["institution", "unapprovedInstitution"].includes(persona) || nowSeconds >= DEMO_CUTOFF) return invalid();
+  if (!enabled || !["institution", "unapprovedInstitution"].includes(persona) || nowSeconds >= RETAINED_READ_PROBE_CUTOFF) return invalid();
   if (![retainedProbeMarker(row.runId), retainedProbeMarker(row.runId,true)].includes(row.sessionUserAgent ?? "")) return invalid();
-  if (row.expiresAt > Math.min(row.sessionCreatedAt+900,DEMO_CUTOFF) || row.sessionExpiresAt !== row.expiresAt) return invalid();
+  if (row.expiresAt > Math.min(row.sessionCreatedAt+900,RETAINED_READ_PROBE_CUTOFF) || row.sessionExpiresAt !== row.expiresAt) return invalid();
 }
 function validateRow(row: IdentityRow | null, nowSeconds: number, retainedEnabled = false): StagingFixtureIdentity {
   if (!row) return invalid();

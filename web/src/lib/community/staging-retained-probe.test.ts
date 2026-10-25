@@ -1,11 +1,12 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqliteD1, MINIMAL_AUTH_SCHEMA, readMigration } from "@/test/sqlite-d1";
 import { resolveStagingFixtureIdentity, retainedProbeMarker, verifyRetainedProbeTarget, type StagingFixturePersona } from "../staging-fixtures";
 import { DEMO_USER_IDS, DEMO_CUTOFF } from "../staging-demo-policy";
 import { createCommunityService } from "./service";
 import { authorizeRetainedProbe, claimRetainedChat } from "./staging-retained-probe";
 const databases: ReturnType<typeof createSqliteD1>[]=[];
-afterEach(()=>{for(const d of databases.splice(0)) d.database.close();});
+beforeEach(()=>{vi.useFakeTimers({toFake:["Date"]});vi.setSystemTime(new Date("2026-10-25T09:30:00Z"));});
+afterEach(()=>{vi.useRealTimers();for(const d of databases.splice(0)) d.database.close();});
 function fixture(persona: StagingFixturePersona = "institution") {
  const f=createSqliteD1(); databases.push(f); const sql=f.database;
  sql.exec(MINIMAL_AUTH_SCHEMA+`CREATE TABLE session(id TEXT PRIMARY KEY,userId TEXT,userAgent TEXT,createdAt INTEGER,expiresAt INTEGER);
@@ -15,6 +16,7 @@ function fixture(persona: StagingFixturePersona = "institution") {
  sql.prepare("INSERT INTO session VALUES(?,?,?,?,?)").run(`${id}-retained-read-probe-session`,id,retainedProbeMarker(runId),seconds-10,expiresAt);
  sql.prepare("INSERT INTO stagingFixtureIdentity VALUES(?,?,?,?,?)").run(id,`${id}-retained-read-probe-session`,runId,persona,expiresAt);
  if(persona==="institution") sql.prepare("INSERT INTO UserRoles VALUES('r',?,'i')").run(id);
+ f.database.function("unixepoch",()=>seconds);
  const args={db:f.db,envName:"staging",user:{id,email:`${id}@invalid.ttv`},session:{id:"pat:x",userAgent:"ttv-pat:x"},isPat:true,retainedProbeEnabled:"true",now};
  return {...f,args,id};
 }
