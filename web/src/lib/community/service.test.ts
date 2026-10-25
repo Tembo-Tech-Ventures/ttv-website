@@ -157,6 +157,23 @@ describe("community service real SQL boundaries", () => {
     expect(await f.member.listJourney()).toEqual([]);
     expect(f.sql.prepare("SELECT count(*) AS count FROM communityConfirmation").get()).toMatchObject({count:0});
   });
+  it("requires ADMIN for self-grants and preserves additive member roles", async () => {
+    const f = fixture();
+    for (const actor of ["member", "mentor", "institution"]) {
+      const service = createCommunityService(f.db, actor);
+      await expect(service.setAccess({ userId: actor, role: "INSTITUTION", granted: true })).rejects.toMatchObject({ status: 403 });
+    }
+    expect((await f.member.access()).isInstitution).toBe(false);
+    f.sql.exec(`INSERT INTO Roles(id,name) VALUES ('admin','ADMIN'),('student','STUDENT');
+      INSERT INTO UserRoles VALUES ('member-student','member','student'),('other-admin','other','admin');`);
+    const admin = createCommunityService(f.db, "other");
+    await admin.setAccess({ userId: "member", role: "INSTITUTION", granted: true });
+    expect(await f.member.access()).toMatchObject({ isInstitution: true, isAdmin: false });
+    expect(f.sql.prepare(`SELECT r.name FROM Roles r JOIN UserRoles ur ON ur.roleId=r.id WHERE ur.userId='member' ORDER BY r.name`).all()).toEqual([{ name: "INSTITUTION" }, { name: "STUDENT" }]);
+    await admin.setAccess({ userId: "member", role: "INSTITUTION", granted: false });
+    expect((await f.member.access()).isInstitution).toBe(false);
+    expect(f.sql.prepare(`SELECT r.name FROM Roles r JOIN UserRoles ur ON ur.roleId=r.id WHERE ur.userId='member'`).all()).toEqual([{ name: "STUDENT" }]);
+  });
   it("seeds roles idempotently without replacing existing grants", () => {
     const f = fixture(); const seed = migration.split(';').filter(s=>s.includes('INSERT INTO "Roles"')).join(';')+';';
     f.sql.exec(seed); f.sql.exec(seed);
