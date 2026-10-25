@@ -14,6 +14,7 @@ async function qaApi(path,{method='GET',body}={}){
  const payload=await response.json();ensure(response.ok&&payload.success!==false);return payload.result;
  }catch{throw new Error('Persona QA Cloudflare operation failed.');}
 }
+export const QA_ENCRYPTED_OUTPUT = new URL('../../test-results/persona-qa-encrypted.json',import.meta.url);
 export const QA_USERS=Object.freeze(Object.entries(DEMO_PERSONAS).map(([key,userId])=>({persona:key==='cohort'?'member-cohort':key==='noncohort'?'member-noncohort':key,userId,sessionId:`${userId}-qa-${QA_RUN_ID}`})));
 const rows=r=>(Array.isArray(r)?r:[r]).flatMap(s=>s?.results??[]);
 const ensure=ok=>{if(!ok)throw new Error('Persona QA operation failed.');};
@@ -103,7 +104,7 @@ export async function runPersonaQa(environment=process.env,{api=qaApi,verify=ver
  if(environment.STAGING_ACTION==='persona-qa-cleanup')return cleanupPersonaQa(target,r=>console.log(JSON.stringify(r)));
  const recipient=JSON.parse(await readFile(new URL('./staging-persona-qa-recipient.json',import.meta.url),'utf8'));ensure(recipient.fingerprint===QA_KEY_PIN&&recipient.taskId==='01M5SBGP36V9P11F1CBY18PVW9');
  const envelope=await issuePersonaQa(target,{pem:recipient.publicKeyPem,version:environment.STAGING_EXPECTED_SHA,audit:r=>console.log(JSON.stringify(r))});
- try{await mkdir('test-results',{recursive:true});await writeFile('test-results/persona-qa-encrypted.json',JSON.stringify(envelope)+'\n',{mode:0o600});}
+ try{await mkdir(new URL('.',QA_ENCRYPTED_OUTPUT),{recursive:true});await writeFile(QA_ENCRYPTED_OUTPUT,JSON.stringify(envelope)+'\n',{mode:0o600});}
  catch{await cleanupPersonaQa(target,r=>console.log(JSON.stringify(r)));throw new Error('Encrypted handoff publication failed.');}
  return{runId:envelope.runId,issuedAt:envelope.issuedAt,expiresAt:envelope.expiresAt};
 }
