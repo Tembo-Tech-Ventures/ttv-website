@@ -68,6 +68,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STAGING_ACTION: ${{ inputs.action }}
+          STAGING_EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
           STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
           STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
           STAGING_INTEGRATION_PR: "171"

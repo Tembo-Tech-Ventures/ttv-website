@@ -121,6 +121,6 @@ it.each(["revision","identity","query","shape"])("fails closed and redacts diagn
   if(["revision","identity"].includes(stage))expect(executeQuery).not.toHaveBeenCalled();
 });
 it("does not let a separate diagnostic SHA alter the mutating seed target",async()=>{
-  const deps=setup();await runDemoSeed({...env,STAGING_EXPECTED_DEPLOYED_SHA:DIAGNOSTIC_DEPLOYED_SHA},deps);
-  expect(deps.verify).toHaveBeenCalledWith(expect.objectContaining({expectedVersion:sha}));
+  const deps=setup();await expect(runDemoSeed({...env,STAGING_EXPECTED_DEPLOYED_SHA:DIAGNOSTIC_DEPLOYED_SHA},deps)).rejects.toThrow("One seed-demo dispatch is required.");
+  expect(deps.verify).not.toHaveBeenCalled();
 });

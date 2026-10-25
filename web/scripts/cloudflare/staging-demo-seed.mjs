@@ -12,7 +12,7 @@ export async function runDemoSeed(env, {
   seed = async target => (await import(new URL("./staging-demo-data.mjs", import.meta.url).href)).seedDemoData(target),
   api = cfApi,
 } = {}) {
-  if (env.STAGING_ACTION !== "seed-demo" || env.GITHUB_RUN_ATTEMPT !== "1") throw new Error("One seed-demo dispatch is required.");
+  if (env.STAGING_ACTION !== "seed-demo" || env.GITHUB_RUN_ATTEMPT !== "1" || env.STAGING_EXPECTED_DEPLOYED_SHA) throw new Error("One seed-demo dispatch is required.");
   let stage = "revision";
   let readsCompleted = 0;
   let writesAttempted = 0;
