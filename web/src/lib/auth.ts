@@ -14,6 +14,7 @@ type AuthRuntimeEnv = Pick<
   | "GITHUB_CLIENT_ID"
   | "GITHUB_CLIENT_SECRET"
   | "AGENT_AUTH_ENABLED"
+  | "STAGING_DEMO_ENABLED"
   | "DEPLOYMENT_ENVIRONMENT"
 >;
 
@@ -37,8 +38,8 @@ export function createAuth(runtimeEnv: AuthRuntimeEnv) {
     basePath: "/api/auth",
     secret: runtimeEnv.BETTER_AUTH_SECRET,
     baseURL: runtimeEnv.BETTER_AUTH_URL,
-    databaseHooks: syntheticSessionHooks(runtimeEnv.DEPLOYMENT_ENVIRONMENT, isAgentAuthEnabled(runtimeEnv.AGENT_AUTH_ENABLED)),
-    hooks: syntheticSessionResponseHook(runtimeEnv.DEPLOYMENT_ENVIRONMENT, isAgentAuthEnabled(runtimeEnv.AGENT_AUTH_ENABLED)),
+    databaseHooks: syntheticSessionHooks(runtimeEnv.DEPLOYMENT_ENVIRONMENT, isAgentAuthEnabled(runtimeEnv.AGENT_AUTH_ENABLED), runtimeEnv.STAGING_DEMO_ENABLED === "true"),
+    hooks: syntheticSessionResponseHook(runtimeEnv.DEPLOYMENT_ENVIRONMENT, isAgentAuthEnabled(runtimeEnv.AGENT_AUTH_ENABLED), runtimeEnv.STAGING_DEMO_ENABLED === "true"),
     session: {
       cookieCache: {
         enabled: true,

@@ -85,6 +85,19 @@ function createDatabase({
 }
 
 describe("recording access", () => {
+  it("restricts demo membership queries and rejects real programs before lookup", async () => {
+    const db = createDatabase({});
+    const userId = "ttv-staging-demo-v1-member-cohort";
+    await getAccessibleProgramIds(db, userId);
+    for (const query of [db.query.programApplication.findMany, db.query.programRole.findMany]) {
+      const where = vi.mocked(query).mock.calls[0][0]!.where as SQL;
+      expect(dialect.sqlToQuery(where).params).toContain("ttv-staging-demo-v1-program");
+    }
+    await expect(userCanAccessProgram(db, userId, "real-program")).resolves.toBe(false);
+    expect(db.query.programApplication.findFirst).not.toHaveBeenCalled();
+    expect(db.query.programRole.findFirst).not.toHaveBeenCalled();
+  });
+
   it("defines audit, approved, and completed as the only cohort-access statuses", () => {
     expect(COHORT_ACCESS_STATUSES).toEqual([
       "APPROVED",

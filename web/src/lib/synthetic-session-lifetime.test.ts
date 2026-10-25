@@ -7,7 +7,7 @@ import { deriveAgentPreviewToken } from "../../scripts/cloudflare/agent-preview-
 
 afterEach(() => { vi.useRealTimers(); });
 
-function fixture(identity: { id: string; userId: string; userAgent: string }, hours = 8, environment = "agent-test", enabled = true) {
+function fixture(identity: { id: string; userId: string; userAgent: string }, hours = 8, environment = "agent-test", enabled = true, demoEnabled = false) {
   vi.useFakeTimers({ toFake: ["Date"] });
   const now = new Date("2026-10-24T12:00:00Z");
   vi.setSystemTime(now);
@@ -20,8 +20,8 @@ function fixture(identity: { id: string; userId: string; userAgent: string }, ho
     database: memoryAdapter(data), baseURL: "http://localhost:4321",
     secret: "fictional-test-secret-at-least-thirty-two-characters",
     plugins: [bearer()], session: { cookieCache: { enabled: true, maxAge: 300 } },
-    databaseHooks: syntheticSessionHooks(environment, enabled),
-    hooks: syntheticSessionResponseHook(environment, enabled),
+    databaseHooks: syntheticSessionHooks(environment, enabled, demoEnabled),
+    hooks: syntheticSessionResponseHook(environment, enabled, demoEnabled),
   });
   return { auth, data, now, headers: new Headers({ authorization: "Bearer fictional-session-token" }) };
 }
@@ -65,6 +65,15 @@ describe("synthetic session absolute lifetime", () => {
   it.each(["production", "prod", "unknown", undefined])("does not install hooks in %s", environment => {
     expect(syntheticSessionHooks(environment, true)).toBeUndefined();
     expect(syntheticSessionResponseHook(environment, true)).toBeUndefined();
+  });
+  it("enforces the demo one-hour cap with agent auth disabled", async () => {
+    const identity = { id: "demo-session", userId: "ttv-staging-demo-v1-mentor", userAgent: "ttv-agent:retained-demo:parent" };
+    const { auth, now, headers } = fixture(identity, 24, "staging", false, true);
+    expect(await auth.api.getSession({ headers })).toMatchObject({ session: { expiresAt: new Date(+now + 3600_000) } });
+    vi.setSystemTime(+now + 3600_000 + 1);
+    expect(await auth.api.getSession({ headers })).toBeNull();
+    expect(syntheticSessionHooks("production", false, true)).toBeUndefined();
+    expect(syntheticSessionResponseHook("production", false, true)).toBeUndefined();
   });
   it("does not install hooks when agent auth is off", () => {
     expect(syntheticSessionHooks("staging", false)).toBeUndefined();

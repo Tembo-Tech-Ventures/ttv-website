@@ -29,6 +29,10 @@ on:
         required: false
         type: boolean
         default: false
+      staging_demo_enabled:
+        required: false
+        type: boolean
+        default: false
       workers_subdomain:
         required: false
         type: string
@@ -87,6 +91,7 @@ jobs:
       CLOUDFLARE_REDIRECT_DOMAIN: ${{ inputs.redirect_domain }}
       CLOUDFLARE_BETTER_AUTH_URL: ${{ inputs.better_auth_url }}
       CLOUDFLARE_AGENT_AUTH_ENABLED: ${{ inputs.agent_auth_enabled }}
+      CLOUDFLARE_STAGING_DEMO_ENABLED: ${{ inputs.staging_demo_enabled }}
       CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ inputs.workers_subdomain }}
       CLOUDFLARE_D1_JURISDICTION: ${{ inputs.d1_jurisdiction }}
       CLOUDFLARE_R2_JURISDICTION: ${{ inputs.r2_jurisdiction }}
@@ -244,6 +249,7 @@ jobs:
       CLOUDFLARE_REDIRECT_DOMAIN: ${{ inputs.redirect_domain }}
       CLOUDFLARE_BETTER_AUTH_URL: ${{ inputs.better_auth_url }}
       CLOUDFLARE_AGENT_AUTH_ENABLED: ${{ inputs.agent_auth_enabled }}
+      CLOUDFLARE_STAGING_DEMO_ENABLED: ${{ inputs.staging_demo_enabled }}
       CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ inputs.workers_subdomain }}
       CLOUDFLARE_D1_JURISDICTION: ${{ inputs.d1_jurisdiction }}
       CLOUDFLARE_R2_JURISDICTION: ${{ inputs.r2_jurisdiction }}
