@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { resolve, relative } from 'node:path';
+import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -50,4 +54,14 @@ describe('one-shot encrypted persona issuer and exact cleanup',()=>{
   await expect(issuePersonaQa(f.target,{pem,version:f.target.expectedVersion})).rejects.toThrow('no reissue permitted');expect(f.sql.prepare('SELECT COUNT(*) n FROM stagingQaSession').get().n).toBe(0);expect(f.sql.prepare('SELECT COUNT(*) n FROM session').get().n).toBe(1);expect(f.sql.prepare('SELECT revokedAt FROM stagingQaRun').get().revokedAt).toBe(f.now);
  });
  it('does not change the retained dataset while snapshotting it',async()=>{const f=fixture();const a=await qaSeedDigest(f.target),b=await qaSeedDigest(f.target);expect(a).toBe(b);});
+});
+
+it('writes to the workflow upload path regardless of repository-root or other cwd',()=>{
+ const root=fileURLToPath(new URL('../../../',import.meta.url)),moduleUrl=new URL('./staging-persona-qa.mjs',import.meta.url).href;
+ const workflow=readFileSync(new URL('../../../.github/workflows/cloudflare-staging.yml',import.meta.url),'utf8');const job=workflow.slice(workflow.indexOf('  persona-qa:'));
+ const upload=job.match(/path: (web\/test-results\/persona-qa-encrypted\.json)/)?.[1];expect(upload).toBeDefined();
+ for(const cwd of [root,tmpdir()]){
+  const result=execFileSync(process.execPath,['--input-type=module','-e',`import{fileURLToPath}from'node:url';import{QA_ENCRYPTED_OUTPUT}from ${JSON.stringify(moduleUrl)};process.stdout.write(fileURLToPath(QA_ENCRYPTED_OUTPUT));`],{cwd,encoding:'utf8'});
+  expect(result).toBe(resolve(root,upload));expect(relative(root,result)).toBe('web/test-results/persona-qa-encrypted.json');
+ }
 });
