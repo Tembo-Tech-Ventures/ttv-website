@@ -1,0 +1,82 @@
+[
+  {
+    "id": "portrait-01",
+    "tool": "Codex image_gen.imagegen",
+    "generatedOn": "2026-10-25",
+    "prompt": "Use case: photorealistic-natural. Create one square profile portrait for a clearly fictional demo community website, not a real person. Subject: fictional Kenyan adult woman software mentor, approximately 42, dark brown skin, short natural hair, understated dark teal blouse. Natural polished editorial photography, warm window light, honest skin texture, friendly composed expression, neutral softly blurred contemporary workspace. Consistent head-and-shoulders crop, face centered with generous headroom safe for circular avatar crop. No text, logos, badges, watermark, institution identity, or implied endorsement. Single person only. Save as project asset if tool supports file output.",
+    "sourceFile": "exec-5bf301b7-5693-4b02-a8b9-095a894a002c.png",
+    "processing": "ImageMagick: resize, strip metadata, WebP quality 78 and JPEG quality 80"
+  },
+  {
+    "id": "portrait-02",
+    "tool": "Codex image_gen.imagegen",
+    "generatedOn": "2026-10-25",
+    "prompt": "Use case: photorealistic-natural. One square profile portrait for a clearly fictional demo community website, not a real person. Subject: fictional Kenyan adult man engineering mentor, approximately 48, dark brown skin, close-cropped salt-and-pepper hair and short beard, simple warm gray shirt, relaxed confident expression. Natural polished editorial photography, soft window daylight, honest skin texture, subtle softly blurred modern Kenyan coworking workspace with no recognizable location. Head-and-shoulders framing, centered face, generous headroom and shoulder margin safe for circular avatar crop. No text, logo, badge, watermark, identifiable institution, or endorsement. Single person only.",
+    "sourceFile": "exec-4ef30951-04be-4511-9e6d-ec43dd601bc8.png",
+    "processing": "ImageMagick: resize, strip metadata, WebP quality 78 and JPEG quality 80"
+  },
+  {
+    "id": "portrait-03",
+    "tool": "Codex image_gen.imagegen",
+    "generatedOn": "2026-10-25",
+    "prompt": "Use case: photorealistic-natural. One square profile portrait for a clearly fictional demo community website, not a real person. Subject: fictional Kenyan adult woman community builder, approximately 27, medium brown skin, neat shoulder-length braids, soft terracotta top, thoughtful friendly expression. Natural polished editorial photography, soft window daylight, honest skin texture, subtle softly blurred modern Kenyan coworking workspace with no recognizable location. Head-and-shoulders framing, centered face, generous headroom and shoulder margin safe for circular avatar crop. No text, logo, badge, watermark, identifiable institution, or endorsement. Single person only.",
+    "sourceFile": "exec-efb64658-d2ba-43f9-818f-fd2fd271c5d5.png",
+    "processing": "ImageMagick: resize, strip metadata, WebP quality 78 and JPEG quality 80"
+  },
+  {
+    "id": "portrait-04",
+    "tool": "Codex image_gen.imagegen",
+    "generatedOn": "2026-10-25",
+    "prompt": "Use case: photorealistic-natural. One square profile portrait for a clearly fictional demo community website, not a real person. Subject: fictional Kenyan adult man university student, clearly age 24, deep brown skin, short natural hair, thin rectangular glasses, plain muted blue shirt, open friendly expression. Natural polished editorial photography, soft window daylight, honest skin texture, subtle softly blurred modern Kenyan coworking workspace with no recognizable location. Head-and-shoulders framing, centered face, generous headroom and shoulder margin safe for circular avatar crop. No text, logo, badge, watermark, identifiable institution, or endorsement. Single person only.",
+    "sourceFile": "exec-503f734e-4d5f-48ea-b8be-d851ca3915bd.png",
+    "processing": "ImageMagick: resize, strip metadata, WebP quality 78 and JPEG quality 80"
+  },
+  {
+    "id": "portrait-05",
+    "tool": "Codex image_gen.imagegen",
+    "generatedOn": "2026-10-25",
+    "prompt": "Use case: photorealistic-natural. One square profile portrait for a clearly fictional demo community website, not a real person. Subject: fictional Kenyan adult woman university student, clearly age 23, warm brown skin, simple cream hijab and plain deep teal top, relaxed friendly expression. Natural polished editorial photography, soft window daylight, honest skin texture, subtle softly blurred modern Kenyan coworking workspace with no recognizable location. Head-and-shoulders framing, centered face, generous headroom and shoulder margin safe for circular avatar crop. No text, logo, badge, watermark, identifiable institution, or endorsement. Single person only.",
+    "sourceFile": "exec-2d296fb4-5f20-44fc-b09f-7c1fbf4b86a3.png",
+    "processing": "ImageMagick: resize, strip metadata, WebP quality 78 and JPEG quality 80"
+  },
+  {
+    "id": "portrait-06",
+    "tool": "Codex image_gen.imagegen",
+    "generatedOn": "2026-10-25",
+    "prompt": "Use case: photorealistic-natural. One square profile portrait for a clearly fictional demo community website, not a real person. Subject: fictional Kenyan adult community builder, approximately 31, medium brown skin, androgynous presentation, closely cropped natural hair, plain olive overshirt, warm confident expression. Natural polished editorial photography, soft window daylight, honest skin texture, subtle softly blurred modern Kenyan coworking workspace with no recognizable location. Head-and-shoulders framing, centered face, generous headroom and shoulder margin safe for circular avatar crop. No text, logo, badge, watermark, identifiable institution, or endorsement. Single person only.",
+    "sourceFile": "exec-f627b3fa-4ff7-498d-a3ff-cb84e076a22f.png",
+    "processing": "ImageMagick: resize, strip metadata, WebP quality 78 and JPEG quality 80"
+  },
+  {
+    "id": "portrait-07",
+    "tool": "Codex image_gen.imagegen",
+    "generatedOn": "2026-10-25",
+    "prompt": "Use case: photorealistic-natural. One square head-and-shoulders portrait for a fictional Kenyan community demo, not a real person. Subject: fictional adult Kenyan man of South Asian heritage, age 35, warm medium brown skin, gently wavy short black hair, light beard, plain sand-colored shirt, relaxed thoughtful smile. Natural polished editorial photography, soft window light, honest skin texture, softly blurred contemporary workspace. Center face, generous headroom, circular-avatar-safe crop. No text, logos, badges, institution identity, or endorsement.",
+    "sourceFile": "exec-07229004-f483-45a8-bf13-15c5dc95e4a4.png",
+    "processing": "ImageMagick: resize, strip metadata, WebP quality 78 and JPEG quality 80"
+  },
+  {
+    "id": "context-01",
+    "tool": "Codex image_gen.imagegen",
+    "generatedOn": "2026-10-25",
+    "prompt": "Use case: photorealistic-natural. Create one landscape 3:2 editorial photograph for a fictional institutional demo. Three fictional Kenyan adult colleagues, varied genders, ages 28 to 50, seated around a table calmly discussing a prototype on an unbranded laptop in a bright modest contemporary studio. Natural polished photography, believable hands and devices, soft daylight, teal and terracotta accents, candid collaborative atmosphere. People and institution are entirely fictional; no identifiable real office, logos, text, affiliations, badges, or endorsement. Composition should remain useful cropped square; keep people central.",
+    "sourceFile": "exec-63259aac-6eaf-450c-928e-067e08737b14.png",
+    "processing": "ImageMagick: resize, strip metadata, WebP quality 78 and JPEG quality 80"
+  },
+  {
+    "id": "context-02",
+    "tool": "Codex image_gen.imagegen",
+    "generatedOn": "2026-10-25",
+    "prompt": "Use case: photorealistic-natural. Landscape 3:2 editorial interior photograph of an entirely fictional small Kenyan community learning studio. Bright accessible ground-floor room, timber desks, unbranded closed laptops, plants, large daylight windows, simple teal upholstery and warm terracotta accents, tidy but lived-in atmosphere, no people. Natural polished photography, believable materials and everyday scale. No text, signage, logos, recognizable real building, or implied affiliation. Useful as a fictional institution demo card background.",
+    "sourceFile": "exec-41f38f84-6b95-4774-8836-5f2292801c88.png",
+    "processing": "ImageMagick: resize, strip metadata, WebP quality 78 and JPEG quality 80"
+  },
+  {
+    "id": "context-03",
+    "tool": "Codex image_gen.imagegen",
+    "generatedOn": "2026-10-25",
+    "prompt": "Use case: photorealistic-natural. Landscape 3:2 editorial still-life brand-context photograph for an entirely fictional Kenyan design-and-technology studio. A worktable with a closed unbranded laptop, blank cream notebook, simple terracotta ceramic cup, small leafy plant, and abstract teal paper shapes arranged naturally. Soft side daylight, warm wood, polished but authentic material texture, calm creative atmosphere. No people, readable text, logos, real institution identity, or endorsement. Not a logo; reusable fictional institutional demo cover.",
+    "sourceFile": "exec-f058193b-bf98-4430-a7bf-bf1fc4f77560.png",
+    "processing": "ImageMagick: resize, strip metadata, WebP quality 78 and JPEG quality 80"
+  }
+]

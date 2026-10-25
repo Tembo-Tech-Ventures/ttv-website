@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "synthetic": true,
+  "disclosure": "AI-generated fictional demo imagery. Portraits may be reused across synthetic profiles; they do not identify real community members. No institutional affiliation, endorsement, or evidence is implied.",
+  "portraits": [
+    {
+      "id": "portrait-01",
+      "src": "/images/demo/portrait-01.webp",
+      "fallback": "/images/demo/portrait-01.jpg",
+      "width": 384,
+      "height": 384,
+      "bytes": 11612,
+      "fallbackBytes": 20494,
+      "alt": "AI-generated fictional demo image of a mentor in a teal blouse; not a real person or institution.",
+      "provenance": "AI-generated"
+    },
+    {
+      "id": "portrait-02",
+      "src": "/images/demo/portrait-02.webp",
+      "fallback": "/images/demo/portrait-02.jpg",
+      "width": 384,
+      "height": 384,
+      "bytes": 17100,
+      "fallbackBytes": 25357,
+      "alt": "AI-generated fictional demo image of a mentor in a gray shirt; not a real person or institution.",
+      "provenance": "AI-generated"
+    },
+    {
+      "id": "portrait-03",
+      "src": "/images/demo/portrait-03.webp",
+      "fallback": "/images/demo/portrait-03.jpg",
+      "width": 384,
+      "height": 384,
+      "bytes": 16124,
+      "fallbackBytes": 25073,
+      "alt": "AI-generated fictional demo image of a community builder in a terracotta top; not a real person or institution.",
+      "provenance": "AI-generated"
+    },
+    {
+      "id": "portrait-04",
+      "src": "/images/demo/portrait-04.webp",
+      "fallback": "/images/demo/portrait-04.jpg",
+      "width": 384,
+      "height": 384,
+      "bytes": 16924,
+      "fallbackBytes": 24854,
+      "alt": "AI-generated fictional demo image of an adult student wearing glasses; not a real person or institution.",
+      "provenance": "AI-generated"
+    },
+    {
+      "id": "portrait-05",
+      "src": "/images/demo/portrait-05.webp",
+      "fallback": "/images/demo/portrait-05.jpg",
+      "width": 384,
+      "height": 384,
+      "bytes": 12066,
+      "fallbackBytes": 21874,
+      "alt": "AI-generated fictional demo image of an adult student in a cream hijab; not a real person or institution.",
+      "provenance": "AI-generated"
+    },
+    {
+      "id": "portrait-06",
+      "src": "/images/demo/portrait-06.webp",
+      "fallback": "/images/demo/portrait-06.jpg",
+      "width": 384,
+      "height": 384,
+      "bytes": 15078,
+      "fallbackBytes": 24331,
+      "alt": "AI-generated fictional demo image of a community builder in an olive overshirt; not a real person or institution.",
+      "provenance": "AI-generated"
+    },
+    {
+      "id": "portrait-07",
+      "src": "/images/demo/portrait-07.webp",
+      "fallback": "/images/demo/portrait-07.jpg",
+      "width": 384,
+      "height": 384,
+      "bytes": 14098,
+      "fallbackBytes": 23750,
+      "alt": "AI-generated fictional demo image of a community builder in a sand-colored shirt; not a real person or institution.",
+      "provenance": "AI-generated"
+    }
+  ],
+  "contexts": [
+    {
+      "id": "context-01",
+      "src": "/images/demo/context-01.webp",
+      "fallback": "/images/demo/context-01.jpg",
+      "width": 768,
+      "height": 512,
+      "bytes": 47420,
+      "fallbackBytes": 69376,
+      "alt": "AI-generated fictional demo image of three adult colleagues discussing a laptop prototype; not a real person or institution.",
+      "provenance": "AI-generated"
+    },
+    {
+      "id": "context-02",
+      "src": "/images/demo/context-02.webp",
+      "fallback": "/images/demo/context-02.jpg",
+      "width": 768,
+      "height": 512,
+      "bytes": 78682,
+      "fallbackBytes": 98559,
+      "alt": "AI-generated fictional demo image of an empty community learning studio; not a real person or institution.",
+      "provenance": "AI-generated"
+    },
+    {
+      "id": "context-03",
+      "src": "/images/demo/context-03.webp",
+      "fallback": "/images/demo/context-03.jpg",
+      "width": 768,
+      "height": 512,
+      "bytes": 36034,
+      "fallbackBytes": 59216,
+      "alt": "AI-generated fictional demo image of a studio table with a notebook, laptop, cup, and plant; not a real person or institution.",
+      "provenance": "AI-generated"
+    }
+  ]
+}
