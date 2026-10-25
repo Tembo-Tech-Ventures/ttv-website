@@ -4,9 +4,9 @@ import { validateStagingRevision } from "./staging-preflight.mjs";
 import { verifyStagingFixtureTarget, assertVerifiedStagingFixtureTarget, STAGING_FIXTURE_ORIGIN } from "./staging-fixture-target.mjs";
 
 // Incident-specific containment. No caller-selected IDs, credentials or SQL.
-export const INCIDENT_RUN = "1d9a0fe7b3b4042a7c315c67";
-const deployedVersion = "1f7fa62fc6e00f3d69c7a9238b114c1be8a6add2";
-export const INCIDENT_USERS = Object.freeze(["member", "otherMember", "mentor", "institution", "unapprovedInstitution", "admin"].map(role => `ttv-staging-fixture-${INCIDENT_RUN}-${role}`));
+export const INCIDENT_RUN = "8a214212f2e59c76cbff4c33";
+const deployedVersion = "c96608f0d0585478f8bf9881d741e3e56467cdb8";
+export const INCIDENT_USERS = Object.freeze(["institution", "unapprovedInstitution"].map(role => `ttv-staging-fixture-${INCIDENT_RUN}-${role}`));
 const placeholders = INCIDENT_USERS.map(() => "?").join(",");
 const rows = result => (Array.isArray(result) ? result : [result]).flatMap(statement => statement?.results ?? []);
 

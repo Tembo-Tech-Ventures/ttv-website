@@ -24,10 +24,10 @@ export async function verifyRetainedBrowser({target,actor,query='Kotlin',browser
  try{
   context=await browser.newContext({viewport:{width:1440,height:1000},serviceWorkers:'block'});
   await context.route('**/*',retainedBrowserRoute(target,actor));
-  const page=await context.newPage();let errors=0;page.on('pageerror',()=>{errors++;});
+  const page=await context.newPage();page.setDefaultTimeout(10000);page.setDefaultNavigationTimeout(30000);let errors=0;page.on('pageerror',()=>{errors++;});page.on('response',r=>{const p=new URL(r.url()).pathname;if(p.startsWith('/api/community/'))console.log(JSON.stringify({event:'retained-browser-api',path:p,status:r.status()}));});
   console.log(JSON.stringify({event:"retained-browser",stage:"navigate"}));
   await page.goto(`${target.baseUrl}/dashboard/discover`,{waitUntil:'networkidle',timeout:30000});
-  console.log(JSON.stringify({event:'retained-browser',stage:'criteria'}));
+  console.log(JSON.stringify({event:'retained-browser',stage:'criteria',textareas:await page.locator('textarea').count(),inputs:await page.locator('input').count(),pageErrors:errors}));
   await page.getByLabel('What are you working on?').fill(`Fictional demo opportunity: ${query} implementation and testing. Compare published work evidence; identify documentation gaps. This is not a real hiring decision.`);
   await page.getByLabel('Skills to explore',{exact:false}).fill(query);
   await page.getByLabel('Already have someone in mind?').fill(query);
