@@ -17,6 +17,7 @@ import {
   saveContribution,
   confirmContribution,
   askProfile,
+  orderProfilesByEvidence,
   type CommunityAccess,
 } from "./community-client";
 
@@ -143,6 +144,7 @@ export default function CommunityApp({ view }: { view: View }) {
         onSearch={searchProfiles}
         onOpenProfile={loadProfile}
         onAsk={askProfile}
+        onOrder={orderProfilesByEvidence}
         onAssess={assessProfile}
       />
     );

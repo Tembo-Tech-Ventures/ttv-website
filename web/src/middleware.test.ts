@@ -387,3 +387,19 @@ describe("synthetic staging middleware boundary", () => {
     expect(requireResponse(await onRequest(context as never,next)).status).toBe(403);expect(next).not.toHaveBeenCalled();
   });
 });
+
+it("allows only the retained probe GET discovery shell, never unrelated pages or mutations",async()=>{
+ vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2026-10-25T09:30:00Z'));
+ const stagingEnv=env as unknown as {DEPLOYMENT_ENVIRONMENT?:string;STAGING_RETAINED_READ_PROBE_ENABLED?:string};
+ try{
+  stagingEnv.DEPLOYMENT_ENVIRONMENT='staging';stagingEnv.STAGING_RETAINED_READ_PROBE_ENABLED='true';
+  const runId='a'.repeat(24),userId=`ttv-staging-fixture-${runId}-institution`,now=Math.floor(Date.now()/1000),marker=`ttv-agent:synthetic-staging:${runId}:retained-read:READY`;
+  mocks.hasPersonalAccessTokenAuthorization.mockReturnValue(true);
+  mocks.authenticatePersonalAccessToken.mockResolvedValue({...tokenAuth,user:{...tokenAuth.user,id:userId,email:`${userId}@invalid.ttv`},token:{...tokenSummary,scopes:['community:read','institution:read']}});
+  mocks.roleFirst.mockResolvedValue({userId,sessionId:`${userId}-retained-read-probe-session`,runId,persona:'institution',expiresAt:now+800,email:`${userId}@invalid.ttv`,sessionUserId:userId,sessionUserAgent:marker,sessionCreatedAt:now-10,sessionExpiresAt:now+800});
+  for(const [method,path,status] of [['GET','/dashboard/discover',200],['POST','/dashboard/discover',403],['GET','/dashboard/community',403],['GET','/api/mcp',403],['GET','/admin/agent-access',403]] as const){
+   const {context,next}=createContext(new Request(`https://staging.tembotechventures.com${path}`,{method,headers:{Authorization:'Bearer fictional-test-only'}}));
+   expect(requireResponse(await onRequest(context as never,next)).status).toBe(status);
+  }
+ }finally{stagingEnv.STAGING_RETAINED_READ_PROBE_ENABLED=undefined;vi.useRealTimers();}
+});

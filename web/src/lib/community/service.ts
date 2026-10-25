@@ -1,5 +1,5 @@
 import { DEMO_PREFIX, DEMO_USER_IDS, isDemoUser } from "@/lib/staging-demo-policy";
-import { verifySameRunTarget, StagingFixtureAccessError, type StagingFixtureIdentity } from "@/lib/staging-fixtures";
+import { verifySameRunTarget, verifyRetainedProbeTarget, retainedProbeScope, StagingFixtureAccessError, type StagingFixtureIdentity } from "@/lib/staging-fixtures";
 import { createId } from "@paralleldrive/cuid2";
 import {
   CommunityError, profileInput, journeyInput, confirmationInput, searchInput, parseInput,
@@ -29,7 +29,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
   async function requireFixtureTarget(targetUserId: string) {
     if (demo && !isDemoUser(targetUserId)) throw new CommunityError("Demo records only.",403);
     if (!fixture) return;
-    try { await verifySameRunTarget({db,envName:environment,actor:fixture,targetUserId}); }
+    try { await (fixture.retainedReadProbe ? verifyRetainedProbeTarget : verifySameRunTarget)({db,envName:environment,actor:fixture,targetUserId}); }
     catch (error) {
       if (error instanceof StagingFixtureAccessError) throw new CommunityError(error.message,403);
       throw error;
@@ -37,12 +37,14 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
   }
   // The column expression is an internal constant, never request input.
   function fixtureScope(column: string) {
+    if (fixture?.retainedReadProbe) return retainedProbeScope(column);
     if (demo) return { clause: ` AND ${column} IN (SELECT value FROM json_each(?))`, values: [JSON.stringify(DEMO_USER_IDS)] };
     return fixture ? {
       clause:` AND EXISTS (SELECT 1 FROM stagingFixtureIdentity fixture_identity WHERE fixture_identity.userId=${column} AND fixture_identity.runId=? AND fixture_identity.expiresAt>unixepoch())`,
       values:[fixture.runId],
     } : {clause:"",values:[]};
   }
+  function requireWritable() { if (fixture?.retainedReadProbe) throw new CommunityError("Read-only synthetic probe.",403); }
   async function access() {
     await requireFixtureTarget(actorId);
     const { results } = await db.prepare(`SELECT r.name FROM "Roles" r JOIN "UserRoles" ur ON ur.roleId=r.id WHERE ur.userId=?`).bind(actorId).all<{ name: string }>();
@@ -78,6 +80,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
     access, getProfile, listJourney,
     getOwnProfile: () => getProfile(actorId),
     async updateOwnProfile(input: unknown) {
+      requireWritable();
       await requireFixtureTarget(actorId);
       const p = parseInput(profileInput, input);
       await db.prepare(`INSERT INTO communityProfile (userId,headline,bio,skills,opportunityGoals) VALUES (?,?,?,?,?)
@@ -116,6 +119,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       return results.map(entry => ({...entry,confirmations:confirmations.filter(c=>c.journeyId===entry.id)}));
     },
     async setAccess(input: unknown) {
+      requireWritable();
       if (demo) throw new CommunityError("Demo access cannot manage roles.",403);
       const a = await access();
       if (!a.isAdmin) throw new CommunityError("Admin access is required.", 403);
@@ -133,6 +137,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       return { userId: p.userId, role: p.role, granted: p.granted };
     },
     async createJourney(input: unknown) {
+      requireWritable();
       await requireFixtureTarget(actorId);
       const p = parseInput(journeyInput, input);
       const id = createId();
@@ -142,6 +147,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       return { id, ...p, userId: actorId, version: 1, createdAt: stored?.createdAt ?? null, confirmations: [] };
     },
     async updateJourney(id: string,input: unknown) {
+      requireWritable();
       await requireFixtureTarget(actorId);
       const p = parseInput(journeyInput,input);
       const result = await db.prepare(`UPDATE communityJourney SET title=?,description=?,evidenceUrl=?,occurredAt=?,visibility=?,version=version+1,updatedAt=unixepoch() WHERE id=? AND userId=?`)
@@ -150,6 +156,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       return {id,updated:true};
     },
     async setJourneyVisibility(id: string, input: unknown) {
+      requireWritable();
       await requireFixtureTarget(actorId);
       if (!input || typeof input !== "object" || Array.isArray(input)) throw new CommunityError("Send a visibility change.");
       const p = input as Record<string, unknown>;
@@ -160,12 +167,14 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       return {id,visibility:p.visibility};
     },
     async deleteJourney(id: string) {
+      requireWritable();
       await requireFixtureTarget(actorId);
       const result = await db.prepare(`DELETE FROM communityJourney WHERE id=? AND userId=?`).bind(id,actorId).run();
       if (!result.meta.changes) throw new CommunityError("Contribution not found.",404);
       return {deleted:true};
     },
     async confirmJourney(id: string, input: unknown) {
+      requireWritable();
       const a = await access();
       if (!a.isMentor && !a.isAdmin) throw new CommunityError("Mentor access is required.", 403);
       const p = parseInput(confirmationInput, input);

@@ -21,6 +21,7 @@ import {
 import type {
   CommunityProfile,
   EvidenceAnswer,
+  EvidenceOrder,
   EvidenceSource,
   ScoutCriteria,
 } from "./types";
@@ -30,6 +31,7 @@ interface Props {
   initialProfile?: CommunityProfile | null;
   demo?: boolean;
   onAssess?: AssessEvidence;
+  onOrder?: (criteria: ScoutCriteria) => Promise<EvidenceOrder>;
   onSearch?: (criteria: ScoutCriteria) => Promise<CommunityProfile[]>;
   onOpenProfile?: (profileId: string) => Promise<CommunityProfile>;
   onAsk?: (
@@ -280,11 +282,31 @@ function ProfileLink({
   );
 }
 
+export function EvidenceOrdering({enabled,count,ordering,order,onOrder}:{enabled:boolean;count:number;ordering:boolean;order:EvidenceOrder|null;onOrder:()=>void}) {
+  if(!enabled || count===0) return null;
+  return (<section className="discovery-answer" aria-label="Order by published evidence">
+                <h2>Which work fits your opportunity?</h2>
+                <p>Compare a small retrieved shortlist using published project evidence. Missing evidence stays unknown; people make the hiring decision.</p>
+                <button type="button" className="discovery-button" disabled={ordering} onClick={onOrder}>{ordering ? "Comparing published evidence…" : "Order by published evidence"}</button>
+                {order && <div aria-live="polite">
+                  <p>AI-generated evidence order · {order.evaluatedCandidates} profiles returned by search; detailed evidence was read for the listed shortlist. This is a subset, not a ranking of all members or ability.</p>
+                  <ol>{order.profiles.map(p=><li key={p.userId}>
+                    <h3><a href={`/dashboard/discover?profile=${encodeURIComponent(p.userId)}`}>{p.name}</a></h3>
+                    <p>{p.reason}</p>
+                    <ul aria-label={`Cited contributions for ${p.name}`}>{(p.citations??[]).map(c=><li key={c.id}>{evidenceHref(c.url ?? "") ? <a href={evidenceHref(c.url ?? "")!} target="_blank" rel="noopener noreferrer">Published contribution · Revision {c.version}</a> : <span>Published contribution · Revision {c.version} · Source link unavailable</span>}</li>)}</ul>
+                    <p>Missing evidence: {p.missingEvidence.length > 0 ? p.missingEvidence.join("; ") : "Review the cited work and discuss remaining questions."}</p>
+                  </li>)}</ol>
+                  <p>{order.text}</p>
+                </div>}
+              </section>);
+}
+
 export default function ScoutWorkspace({
   profiles,
   initialProfile = null,
   demo = false,
   onSearch,
+  onOrder,
   onAsk,
   onOpenProfile,
   onAssess,
@@ -294,6 +316,9 @@ export default function ScoutWorkspace({
     skills: "",
     query: "",
   });
+  const [evidenceOrder,setEvidenceOrder]=useState<EvidenceOrder|null>(null);
+  const [ordering,setOrdering]=useState(false);
+  const orderingRef=useRef(false);
   const [lookup, setLookup] = useState(false);
   const modeText = lookup
     ? {
@@ -340,7 +365,8 @@ export default function ScoutWorkspace({
   }
   async function search(event: FormEvent) {
     event.preventDefault();
-    if (searching.current) return;
+    if (searching.current || orderingRef.current) return;
+    setEvidenceOrder(null);
     const searchCriteria = lookup
       ? { context: "", skills: "", query: lookupName.trim() }
       : criteria;
@@ -375,6 +401,14 @@ export default function ScoutWorkspace({
       setBusy(false);
       searching.current = false;
     }
+  }
+  const controlsDisabled = busy || ordering || opening !== null;
+  async function orderEvidence() {
+    if(!onOrder || orderingRef.current) return;
+    orderingRef.current=true;setOrdering(true);setError("");setEvidenceOrder(null);
+    try {setEvidenceOrder(await onOrder(appliedCriteria));}
+    catch(cause){setError(displayUiError(cause,"Evidence ordering could not be completed. Review the published profiles or try a narrower opportunity."));}
+    finally{orderingRef.current=false;setOrdering(false);}
   }
   return (
     <DiscoveryShell active="scout" demo={demo}>
@@ -416,7 +450,7 @@ export default function ScoutWorkspace({
               type="button"
               className="discovery-text-button"
               aria-pressed={!lookup}
-              disabled={busy || opening !== null}
+              disabled={controlsDisabled}
               onClick={() => {
                 setLookup(false);
                 setStep("criteria");
@@ -429,7 +463,7 @@ export default function ScoutWorkspace({
               type="button"
               className="discovery-text-button"
               aria-pressed={lookup}
-              disabled={busy || opening !== null}
+              disabled={controlsDisabled}
               onClick={() => {
                 setLookup(true);
                 setStep("criteria");
@@ -563,6 +597,7 @@ export default function ScoutWorkspace({
             </section>
           ) : (
             <section aria-label="Search results">
+              <EvidenceOrdering enabled={Boolean(onOrder)} count={results.length} ordering={ordering} order={evidenceOrder} onOrder={orderEvidence} />
               {error && (
                 <p role="alert" className="discovery-error">
                   {error}

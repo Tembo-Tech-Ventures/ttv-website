@@ -107,14 +107,23 @@ async function enforceAdminGuards(
   return null;
 }
 
+function enforceCommunityDelegation(locals:App.Locals,request:Request,pathname:string):Response|null {
+  if(!locals.personalAccessToken || locals.personalAccessToken.scopes.includes("admin:read")) return null;
+  const api=pathname==="/api/community" || pathname.startsWith("/api/community/");
+  const probePage=locals.stagingFixture?.retainedReadProbe && request.method==="GET" && pathname==="/dashboard/discover";
+  if(pathname==="/api/mcp" || api || probePage) return null;
+  return new Response("Forbidden: community token cannot access this route.",{status:403,headers:{"Cache-Control":"no-store"}});
+}
+
 async function enforceStagingFixtureBoundary(locals: App.Locals, pathname: string): Promise<Response | null> {
   locals.stagingFixture = null;
   if (!locals.user) return null;
   try {
     locals.stagingFixture = await resolveStagingFixtureIdentity({
       db:env.DB,envName:env.DEPLOYMENT_ENVIRONMENT,user:locals.user,
-      session:locals.session ?? {id:""},isPat:Boolean(locals.personalAccessToken),
+      session:locals.session ?? {id:""},isPat:Boolean(locals.personalAccessToken),retainedProbeEnabled:env.STAGING_RETAINED_READ_PROBE_ENABLED,
     });
+    if (locals.stagingFixture?.retainedReadProbe && !["/dashboard/discover", "/api/community/access", "/api/community/profiles", "/api/community/chat"].includes(pathname) && !/^\/api\/community\/profiles\/[^/]+$/.test(pathname)) throw new StagingFixtureAccessError();
     if (locals.stagingFixture && !stagingFixturePathAllowed(pathname)) throw new StagingFixtureAccessError();
     return null;
   } catch (error) {
@@ -166,14 +175,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
     // Community delegation never inherits the owner's unrelated application access.
     // Use Astro's normalized route pathname, as with the admin origin guards.
-    if (locals.personalAccessToken && !locals.personalAccessToken.scopes.includes("admin:read")) {
-      const communityApi = url.pathname === "/api/community" || url.pathname.startsWith("/api/community/");
-      if (url.pathname !== "/api/mcp" && !communityApi) {
-        return new Response("Forbidden: community token cannot access this route.", {
-          status: 403, headers: { "Cache-Control": "no-store" },
-        });
-      }
-    }
+    const delegationFailure = enforceCommunityDelegation(locals,request,url.pathname);
+    if(delegationFailure) return delegationFailure;
 
     // Protect /dashboard/* routes — require authentication
     if (url.pathname.startsWith("/dashboard")) {

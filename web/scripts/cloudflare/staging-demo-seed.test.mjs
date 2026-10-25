@@ -27,7 +27,7 @@ describe("retained seed executor", () => {
   });
   it("keeps seed under the staging lock with no auth secrets or activation",()=>{
     const workflow=readFileSync(new URL("../../../.github/workflows/cloudflare-staging.yml",import.meta.url),"utf8");
-    const job=workflow.split("\n  seed-demo:\n")[1];
+    const job=workflow.split("\n  seed-demo:\n")[1].split(/\n {2}[a-z][\w-]*:\n/)[0];
     expect(workflow).toContain("group: ttv-cloudflare-staging\n  cancel-in-progress: false");
     expect(job).toContain("needs: preflight");expect(job).toContain("environment: staging");
     expect(job).not.toMatch(/BETTER_AUTH_SECRET|STAGING_AGENT_TOKEN|STAGING_DEMO_ENABLED|wrangler/);

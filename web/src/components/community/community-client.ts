@@ -299,3 +299,11 @@ export async function askProfile(
     limited: answer.limited,
   };
 }
+
+/** Model order is confined to profiles actually retrieved and cited by the server. */
+export async function orderProfilesByEvidence(criteria: ScoutCriteria) {
+  const schema=z.object({answer:z.string(),grounded:z.boolean(),evaluatedCandidates:z.number().int().min(0).max(10),orderedProfiles:z.array(z.object({userId:z.string(),name:z.string(),reason:z.string(),missingEvidence:z.array(z.string()),citations:z.array(z.object({id:z.string(),version:z.number().int(),url:z.string().nullable()})).default([])})).max(3)});
+  const response=await communityRequest("chat",schema,"POST",{orderByEvidence:true,message:`Find a small shortlist using query ${JSON.stringify(criteria.query)} and skills ${JSON.stringify(criteria.skills.split(',').map(s=>s.trim()).filter(Boolean))}. Compare published project evidence for the opportunity and order by evidence relevance, with comparative reasons and unknowns.`,context:criteria.context.slice(0,2000)});
+  if(!response.grounded || response.orderedProfiles.length === 0) throw new UiApiError(502);
+  return {text:response.answer,evaluatedCandidates:response.evaluatedCandidates,profiles:response.orderedProfiles};
+}
