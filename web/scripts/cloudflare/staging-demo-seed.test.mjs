@@ -89,3 +89,38 @@ it("uses the real cfApi and target adapter with Cloudflare response envelopes", 
     expect(queries).toEqual([{sql:"SELECT COUNT(*) AS total FROM user WHERE id=?",params:["fixture"]}]);
   } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
 });
+
+import { runDemoDiagnostic, DIAGNOSTIC_DEPLOYED_SHA } from "./staging-demo-seed.mjs";
+const diagnosticEnv = {...env, STAGING_ACTION:"diagnose-demo", STAGING_EXPECTED_DEPLOYED_SHA:DIAGNOSTIC_DEPLOYED_SHA};
+it("diagnoses separate exact live identity using only aggregate SELECTs", async () => {
+  const queries = [];
+  const executeQuery = vi.fn(async (sql,params) => {
+    queries.push({sql,params});
+    return [{success:true,results:[{total:sql.includes('"Roles"') ? Number(params[0] !== "STUDENT") : 0, privateData:"discard"}]}];
+  });
+  const deps = {validate:vi.fn().mockResolvedValue({sha}),verify:vi.fn().mockResolvedValue({executeQuery})};
+  const result = await runDemoDiagnostic(diagnosticEnv,deps);
+  expect(deps.verify).toHaveBeenCalledWith(expect.objectContaining({expectedVersion:DIAGNOSTIC_DEPLOYED_SHA}));
+  expect(result).toMatchObject({executorVersion:sha,deployedVersion:DIAGNOSTIC_DEPLOYED_SHA,requiredRoles:{MENTOR:true,INSTITUTION:true,STUDENT:false}});
+  expect(Object.values(result.ownedCounts).every(count=>count===0)).toBe(true);
+  expect(queries.every(({sql,params})=>sql.startsWith("SELECT COUNT(*) AS total FROM ") && params.length<=40)).toBe(true);
+  expect(JSON.stringify(result)).not.toMatch(/privateData|discard|invalid.ttv|member-/);
+});
+it.each([{STAGING_ACTION:"seed-demo"},{GITHUB_RUN_ATTEMPT:"2"},{STAGING_EXPECTED_DEPLOYED_SHA:sha}])("rejects diagnostic guard mismatch before access: %j",async overrides=>{
+  const deps=setup();
+  await expect(runDemoDiagnostic({...diagnosticEnv,...overrides},deps)).rejects.toThrow("Read-only retained demo diagnostic failed");
+  expect(deps.validate).not.toHaveBeenCalled();expect(deps.verify).not.toHaveBeenCalled();
+});
+it.each(["revision","identity","query","shape"])("fails closed and redacts diagnostic %s failure", async stage=>{
+  const executeQuery=vi.fn().mockResolvedValue([{results:[{total:"private"}]}]);
+  const deps={validate:vi.fn().mockResolvedValue({sha}),verify:vi.fn().mockResolvedValue({executeQuery})};
+  if(stage==="revision")deps.validate.mockRejectedValue(new Error("private"));
+  if(stage==="identity")deps.verify.mockRejectedValue(new Error("private"));
+  if(stage==="query")executeQuery.mockRejectedValue(new Error("private"));
+  await expect(runDemoDiagnostic(diagnosticEnv,deps)).rejects.toThrow("Read-only retained demo diagnostic failed; no record values emitted.");
+  if(["revision","identity"].includes(stage))expect(executeQuery).not.toHaveBeenCalled();
+});
+it("does not let a separate diagnostic SHA alter the mutating seed target",async()=>{
+  const deps=setup();await runDemoSeed({...env,STAGING_EXPECTED_DEPLOYED_SHA:DIAGNOSTIC_DEPLOYED_SHA},deps);
+  expect(deps.verify).toHaveBeenCalledWith(expect.objectContaining({expectedVersion:sha}));
+});
