@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: ".",
-  testMatch: "homepage-values.spec.ts",
+  testMatch: "homepage-values.browser.ts",
   retries: 0,
   use: { baseURL: "http://127.0.0.1:4322", browserName: "chromium" },
   webServer: {

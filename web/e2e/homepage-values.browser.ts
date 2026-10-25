@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { VALUES } from "../src/components/homepage/values";
+import { assertHomepageValues } from "./homepage-values-assertions";
 
 for (const width of [280, 390, 1440, 3440]) {
   test(`all words and descriptions fit at ${width}px`, async ({ page }) => {
@@ -76,3 +77,13 @@ test("fits again after viewport resize without layout oscillation", async ({ pag
   await expect(page.locator(".values-carousel .value-word")).toHaveText("EQUITY");
   expect(errors).toEqual([]);
 });
+
+// Rehearse the exact live-preview assertion against the real component fixture.
+for (const width of [390, 1440]) {
+  test(`live values assertions against component fixture at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto("/homepage-values.html");
+    await page.evaluate(() => document.fonts.ready);
+    await assertHomepageValues(page);
+  });
+}
