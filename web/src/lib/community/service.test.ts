@@ -217,3 +217,27 @@ describe("community HTTP", () => {
   });
 
 });
+
+describe('retained demo dataset isolation',()=>{
+  it('scopes institution lookup/tools and mentor writes to exact demo IDs',async()=>{
+    const f=fixture();
+    const prefix='ttv-staging-demo-v1-';
+    const member=prefix+'member-cohort',institution=prefix+'institution',mentor=prefix+'mentor';
+    for(const id of [member,institution,mentor,prefix+'unknown']) f.sql.prepare('INSERT INTO user VALUES(?,?,null)').run(id,id);
+    for(const [id,role] of [[institution,'INSTITUTION'],[mentor,'MENTOR']]) f.sql.prepare('INSERT INTO UserRoles VALUES(?,?,(SELECT id FROM Roles WHERE name=?))').run(id,id,role);
+    const demoMember=createCommunityService(f.db,member,null,'staging');
+    const demoInstitution=createCommunityService(f.db,institution,null,'staging');
+    const demoMentor=createCommunityService(f.db,mentor,null,'staging');
+    const realEntry=await f.member.createJourney(entry);
+    const demoEntry=await demoMember.createJourney(entry);
+    const results=await demoInstitution.searchProfiles({});
+    expect(results.map(p=>p.userId).toSorted()).toEqual([institution,member].toSorted());
+    await expect(demoInstitution.getProfile('member')).rejects.toMatchObject({status:403});
+    await expect(demoInstitution.listJourney('member')).rejects.toMatchObject({status:403});
+    expect((await demoMentor.listMentorship()).map(j=>j.id)).toEqual([demoEntry.id]);
+    await expect(demoMentor.confirmJourney(realEntry.id,{statement:'Observed work',method:'Review',expectedRevision:1})).rejects.toMatchObject({status:404});
+    await expect(demoInstitution.setAccess({userId:member,role:'MENTOR',granted:true})).rejects.toMatchObject({status:403});
+    expect(()=>createCommunityService(f.db,member,null,'production')).toThrow('Verified demo');
+    expect(()=>createCommunityService(f.db,prefix+'unknown',null,'staging')).toThrow('Verified demo');
+  });
+});
