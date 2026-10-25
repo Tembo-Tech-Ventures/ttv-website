@@ -6,8 +6,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildDemoDataset, DEMO_PERSONAS } from './staging-demo-data.mjs';
-import { QA_USERS, cleanupPersonaQa, issuePersonaQa, qaSeedDigest } from './staging-persona-qa.mjs';
-import { QA_RUN_ID } from '../../src/lib/staging-qa-config.mjs';
+import { QA_USERS, assertQaRecipient, cleanupPersonaQa, issuePersonaQa, qaSeedDigest } from './staging-persona-qa.mjs';
+import { QA_CUTOFF, QA_RUN_ID } from '../../src/lib/staging-qa-config.mjs';
 const dbs=[];afterEach(()=>{dbs.splice(0).forEach(db=>db.close());vi.useRealTimers();});
 const pem=JSON.parse(readFileSync(new URL('./staging-persona-qa-recipient.json',import.meta.url),'utf8')).publicKeyPem;
 function fixture(){
@@ -27,18 +27,18 @@ function fixture(){
  return{sql,target,now};
 }
 describe('one-shot encrypted persona issuer and exact cleanup',()=>{
- it('issues exactly four fixed contexts once and leaves only ciphertext outside the process',async()=>{
+ it('issues exactly three fixed contexts once and leaves only ciphertext outside the process',async()=>{
   const f=fixture(),audit=vi.fn();const envelope=await issuePersonaQa(f.target,{pem,version:f.target.expectedVersion,audit});
-  expect(QA_USERS.map(p=>p.persona).toSorted()).toEqual(['institution','member-cohort','member-noncohort','mentor']);
-  expect(envelope).toMatchObject({runId:QA_RUN_ID,issuedAt:f.now,expiresAt:f.now+3600});expect(Array.isArray(envelope.personas)).toBe(true);expect(JSON.stringify(envelope)).not.toContain('"value":');
-  expect(f.sql.prepare('SELECT COUNT(*) n FROM stagingQaSession').get().n).toBe(4);
+  expect(QA_USERS.map(p=>p.persona).toSorted()).toEqual(['institution','member-noncohort','mentor']);
+  expect(envelope).toMatchObject({runId:QA_RUN_ID,issuedAt:f.now,expiresAt:f.now+5*3600});expect(Array.isArray(envelope.personas)).toBe(true);expect(JSON.stringify(envelope)).not.toContain('"value":');
+  expect(f.sql.prepare('SELECT COUNT(*) n FROM stagingQaSession').get().n).toBe(3);
   const credentials=f.sql.prepare('SELECT q.tokenHash,s.token FROM stagingQaSession q JOIN session s ON s.id=q.sessionId').all();expect(credentials.every(r=>r.tokenHash!==r.token&&r.tokenHash.length===64)).toBe(true);
   for(const r of credentials){expect(JSON.stringify(envelope)).not.toContain(r.tokenHash);expect(JSON.stringify(audit.mock.calls)).not.toContain(r.tokenHash);}
-  await expect(issuePersonaQa(f.target,{pem,version:f.target.expectedVersion})).rejects.toThrow('operation failed');expect(f.sql.prepare('SELECT COUNT(*) n FROM stagingQaSession').get().n).toBe(4);
+  await expect(issuePersonaQa(f.target,{pem,version:f.target.expectedVersion})).rejects.toThrow('operation failed');expect(f.sql.prepare('SELECT COUNT(*) n FROM stagingQaSession').get().n).toBe(3);
   const receipt=await cleanupPersonaQa(f.target);expect(receipt).toMatchObject({revoked:true,sessionsRemaining:0,ledgerResourcesRemaining:0,humanSessionsUnchanged:true,seedUnchanged:true});expect(f.sql.prepare('SELECT id FROM session').get().id).toBe('human-parent');expect(f.sql.prepare('SELECT revokedAt FROM stagingQaRun').get().revokedAt).toBe(f.now);
  });
  it('cleans exact ledger-created rows and never restores over a human seed edit',async()=>{
-  const f=fixture();await issuePersonaQa(f.target,{pem,version:f.target.expectedVersion});const id=`ttv-qa-${QA_RUN_ID}-unit`,user=DEMO_PERSONAS.cohort;
+  const f=fixture();await issuePersonaQa(f.target,{pem,version:f.target.expectedVersion});const id=`ttv-qa-${QA_RUN_ID}-unit`,user=DEMO_PERSONAS.noncohort;
   f.sql.prepare('INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES(?,?,?,?,?,?)').run(id,user,'Fictional QA new','Fictional','2026-10-25','institution');
   f.sql.prepare('INSERT INTO stagingQaResource VALUES(?,?,?,?)').run(id,QA_RUN_ID,'journey',user);
   const seed=buildDemoDataset().communityJourney[0].id;f.sql.prepare('UPDATE communityJourney SET title=? WHERE id=?').run('Human fictional edit preserved',seed);
@@ -64,4 +64,20 @@ it('writes to the workflow upload path regardless of repository-root or other cw
   const result=execFileSync(process.execPath,['--input-type=module','-e',`import{fileURLToPath}from'node:url';import{QA_ENCRYPTED_OUTPUT}from ${JSON.stringify(moduleUrl)};process.stdout.write(fileURLToPath(QA_ENCRYPTED_OUTPUT));`],{cwd,encoding:'utf8'});
   expect(result).toBe(resolve(root,upload));expect(relative(root,result)).toBe('web/test-results/persona-qa-encrypted.json');
  }
+});
+
+it('caps a late issuance at the hard deadline and refuses issuance at the cutoff',async()=>{
+ const f=fixture();const e=await issuePersonaQa(f.target,{pem,version:f.target.expectedVersion,now:QA_CUTOFF-600});expect(e.expiresAt).toBe(QA_CUTOFF);
+ await cleanupPersonaQa(f.target);await expect(issuePersonaQa(f.target,{pem,version:f.target.expectedVersion,now:QA_CUTOFF})).rejects.toThrow('operation failed');
+});
+it('preserves a revoked previous-run tombstone during new issuance and exact cleanup',async()=>{
+ const f=fixture(),old='cd406a54df615a7be1327816';f.sql.prepare('INSERT INTO stagingQaRun VALUES(?,?,?,?,?,?,?)').run(old,f.now-7200,f.now-3600,f.now-3500,'a'.repeat(40),'old-pin','old-digest');
+ await issuePersonaQa(f.target,{pem,version:f.target.expectedVersion});await cleanupPersonaQa(f.target);
+ expect(f.sql.prepare('SELECT revokedAt FROM stagingQaRun WHERE id=?').get(old).revokedAt).toBe(f.now-3500);
+});
+
+it('pins the fresh public key to the original QA task and chat only',()=>{
+ const recipient=JSON.parse(readFileSync(new URL('./staging-persona-qa-recipient.json',import.meta.url),'utf8'));
+ expect(()=>assertQaRecipient(recipient)).not.toThrow();
+ for(const wrong of [{...recipient,taskId:'01M5SKHEKY5NG7V077PR569Q5A'},{...recipient,chatSessionId:'wrong-chat'},{...recipient,fingerprint:'efb21e08b36e16453a306e40ed72e2a0095cdeb38a25b65b9e999b6334e38119'}])expect(()=>assertQaRecipient(wrong)).toThrow('operation failed');
 });

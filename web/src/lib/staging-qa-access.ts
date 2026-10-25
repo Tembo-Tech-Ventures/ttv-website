@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { DEMO_CUTOFF, DEMO_ORIGIN, DEMO_PERSONAS, DEMO_PREFIX, demoEnabled, type DemoPersona } from './staging-demo-policy';
-import { QA_COOKIE, QA_KEY_PIN, QA_MARKER, QA_RUN_ID, qaSessionId, type QaIdentity } from './staging-qa-policy';
+import { DEMO_ORIGIN, DEMO_PERSONAS, DEMO_PREFIX, demoEnabled, type DemoPersona } from './staging-demo-policy';
+import { QA_COOKIE, QA_CUTOFF,QA_MAX_TTL_SECONDS, QA_PERSONAS, QA_KEY_PIN, QA_MARKER, QA_RUN_ID, qaSessionId, type QaIdentity } from './staging-qa-policy';
 export interface QaEnvironment {DB:D1Database;DEPLOYMENT_ENVIRONMENT?:string;STAGING_DEMO_ENABLED?:string}
 export class QaAccessError extends Error {readonly status=403;constructor(){super('Temporary persona QA access is unavailable or expired.');}}
 const deny=():never=>{throw new QaAccessError();};
@@ -9,12 +9,12 @@ export function qaCookie(value:string,expiresAt:number){return `${QA_COOKIE}=${v
 export const qaHash=(value:string)=>createHash('sha256').update(value).digest('hex');
 interface QaRow {runId:string;persona:DemoPersona;userId:string;sessionId:string;issuedAt:number;expiresAt:number;revokedAt:number|null;version:string;keyFingerprint:string;sessionCreatedAt:number;sessionExpiresAt:number;marker:string;tokenHash:string;name:string;email:string;emailVerified:number;image:string|null;userCreatedAt:number;userUpdatedAt:number}
 function assertQaRow(row:QaRow|null,now:number):asserts row is QaRow {
- if(!row||!Object.hasOwn(DEMO_PERSONAS,row.persona)||row.runId!==QA_RUN_ID||row.keyFingerprint!==QA_KEY_PIN||row.revokedAt!==null||!row.emailVerified)return deny();
+ if(!row||!QA_PERSONAS.includes(row.persona)||row.runId!==QA_RUN_ID||row.keyFingerprint!==QA_KEY_PIN||row.revokedAt!==null||!row.emailVerified)return deny();
  if(row.userId!==DEMO_PERSONAS[row.persona].userId||row.email!==row.userId+'@invalid.ttv'||row.sessionId!==qaSessionId(row.persona)||row.marker!==`${QA_MARKER}${QA_RUN_ID}:${row.persona}`||!/^[a-f0-9]{64}$/.test(row.tokenHash))return deny();
  assertQaTimes(row,now);
 }
 function assertQaTimes(row:QaRow,now:number){
- if(![row.issuedAt,row.expiresAt,row.sessionCreatedAt,row.sessionExpiresAt,now].every(Number.isSafeInteger)||row.issuedAt>now||row.expiresAt<=now||row.expiresAt>Math.min(row.issuedAt+3600,DEMO_CUTOFF)||row.sessionCreatedAt!==row.issuedAt||row.sessionExpiresAt!==row.expiresAt)return deny();
+ if(![row.issuedAt,row.expiresAt,row.sessionCreatedAt,row.sessionExpiresAt,now].every(Number.isSafeInteger)||row.issuedAt>now||row.expiresAt<=now||row.expiresAt>Math.min(row.issuedAt+QA_MAX_TTL_SECONDS,QA_CUTOFF)||row.sessionCreatedAt!==row.issuedAt||row.sessionExpiresAt!==row.expiresAt)return deny();
 }
 export async function validateQaIdentity(env:QaEnvironment,sessionId:string,now=Math.floor(Date.now()/1000)):Promise<QaRow>{
  try{

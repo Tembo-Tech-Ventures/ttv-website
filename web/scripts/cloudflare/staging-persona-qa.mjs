@@ -5,7 +5,7 @@ import { validateStagingRevision } from './staging-preflight.mjs';
 import { verifyStagingFixtureTarget, STAGING_FIXTURE_ORIGIN } from './staging-fixture-target.mjs';
 import { verifyProbeBindings } from './staging-probe-state.mjs';
 import { buildDemoDataset, DEMO_PERSONAS } from './staging-demo-data.mjs';
-import { QA_RUN_ID, QA_COOKIE, QA_MARKER, QA_KEY_PIN } from '../../src/lib/staging-qa-config.mjs';
+import { QA_CUTOFF,QA_MAX_TTL_SECONDS,QA_PERSONAS,QA_RUN_ID, QA_COOKIE, QA_MARKER, QA_KEY_PIN } from '../../src/lib/staging-qa-config.mjs';
 import { publicKeyFingerprint, sealQaHandoff } from './staging-persona-qa-envelope.mjs';
 async function boundedFetch(url,options={}){return fetch(url,{...options,signal:options.signal?globalThis.AbortSignal.any([options.signal,globalThis.AbortSignal.timeout(15000)]):globalThis.AbortSignal.timeout(15000)});}
 async function qaApi(path,{method='GET',body}={}){
@@ -15,7 +15,7 @@ async function qaApi(path,{method='GET',body}={}){
  }catch{throw new Error('Persona QA Cloudflare operation failed.');}
 }
 export const QA_ENCRYPTED_OUTPUT = new URL('../../test-results/persona-qa-encrypted.json',import.meta.url);
-export const QA_USERS=Object.freeze(Object.entries(DEMO_PERSONAS).map(([key,userId])=>({persona:key==='cohort'?'member-cohort':key==='noncohort'?'member-noncohort':key,userId,sessionId:`${userId}-qa-${QA_RUN_ID}`})));
+export const QA_USERS=Object.freeze(Object.entries(DEMO_PERSONAS).map(([key,userId])=>({persona:key==='cohort'?'member-cohort':key==='noncohort'?'member-noncohort':key,userId,sessionId:`${userId}-qa-${QA_RUN_ID}`})).filter(p=>QA_PERSONAS.includes(p.persona)));
 const rows=r=>(Array.isArray(r)?r:[r]).flatMap(s=>s?.results??[]);
 const ensure=ok=>{if(!ok)throw new Error('Persona QA operation failed.');};
 const query=(target,sql,params=[])=>target.executeQuery(sql,params).then(rows);
@@ -76,7 +76,7 @@ export async function cleanupPersonaQa(target,audit=()=>{}){
  ensure(humanSessionsUnchanged&&seedUnchanged);return receipt;
 }
 export async function issuePersonaQa(target,{pem,version,now=Math.floor(Date.now()/1000),audit=()=>{}}){
- ensure(publicKeyFingerprint(pem)===QA_KEY_PIN);const expiresAt=Math.min(now+3600,Date.parse('2026-10-25T23:00:00Z')/1000);ensure(expiresAt>now&&Number.isSafeInteger(now));
+ ensure(publicKeyFingerprint(pem)===QA_KEY_PIN);const expiresAt=Math.min(now+QA_MAX_TTL_SECONDS,QA_CUTOFF);ensure(expiresAt>now&&Number.isSafeInteger(now));
  await qaPersonaInvariants(target);const seedDigest=await qaSeedDigest(target);
  ensure(await count(target,'SELECT COUNT(*) n FROM stagingQaRun WHERE id=?',[QA_RUN_ID])===0);
  ensure(await count(target,'SELECT COUNT(*) n FROM session WHERE id IN (SELECT value FROM json_each(?))',[JSON.stringify(QA_USERS.map(p=>p.sessionId))])===0);
@@ -90,19 +90,20 @@ export async function issuePersonaQa(target,{pem,version,now=Math.floor(Date.now
    await target.executeQuery('INSERT INTO stagingQaSession(tokenHash,sessionId,runId,userId,persona) SELECT ?,?,?,?,? FROM stagingQaRun WHERE id=? AND revokedAt IS NULL AND expiresAt>unixepoch()',[digest(raw),sessionId,QA_RUN_ID,userId,persona,QA_RUN_ID]);
    personas[persona]=[{name:QA_COOKIE,value:raw,url:STAGING_FIXTURE_ORIGIN,httpOnly:true,secure:true,sameSite:'Lax',expires:expiresAt}];
   }
-  ensure(await count(target,'SELECT COUNT(*) n FROM stagingQaSession WHERE runId=?',[QA_RUN_ID])===4);
+  ensure(await count(target,'SELECT COUNT(*) n FROM stagingQaSession WHERE runId=?',[QA_RUN_ID])===QA_PERSONAS.length);
   const envelope=sealQaHandoff({personas},pem,{runId:QA_RUN_ID,issuedAt:now,expiresAt,version});
-  audit({event:'persona-qa-issued',runId:QA_RUN_ID,issuedAt:now,expiresAt,version,personas:4,keyFingerprint:QA_KEY_PIN});
+  audit({event:'persona-qa-issued',runId:QA_RUN_ID,issuedAt:now,expiresAt,version,personas:QA_PERSONAS.length,keyFingerprint:QA_KEY_PIN});
   return envelope;
  }catch{await cleanupPersonaQa(target,audit);throw new Error('Persona QA issuance failed; no reissue permitted.');}
  finally{for(const cookies of Object.values(personas))for(const cookie of cookies)cookie.value='';}
 }
+export function assertQaRecipient(recipient){ensure(recipient.fingerprint===QA_KEY_PIN&&publicKeyFingerprint(recipient.publicKeyPem)===QA_KEY_PIN&&recipient.taskId==='01M5SBGP36V9P11F1CBY18PVW9'&&recipient.chatSessionId==='7a3ea4b5-85bd-4e19-9c32-82057f54daa6');}
 export async function runPersonaQa(environment=process.env,{api=qaApi,verify=verifyStagingFixtureTarget,validate=validateStagingRevision}={}){
  ensure(environment.GITHUB_RUN_ATTEMPT==='1');ensure(['persona-qa-issue','persona-qa-cleanup'].includes(environment.STAGING_ACTION));await validate(environment,{fetchImpl:boundedFetch});
  const target=await verify({environmentName:environment.CLOUDFLARE_ENVIRONMENT_NAME,accountId:environment.CLOUDFLARE_ACCOUNT_ID,expectedVersion:environment.STAGING_EXPECTED_SHA,baseUrl:STAGING_FIXTURE_ORIGIN,api,fetchImpl:boundedFetch});
  verifyProbeBindings((await api('/workers/scripts/ttv-website-staging/settings'))?.bindings,{probeEnabled:false,demoEnabled:true});
  if(environment.STAGING_ACTION==='persona-qa-cleanup')return cleanupPersonaQa(target,r=>console.log(JSON.stringify(r)));
- const recipient=JSON.parse(await readFile(new URL('./staging-persona-qa-recipient.json',import.meta.url),'utf8'));ensure(recipient.fingerprint===QA_KEY_PIN&&recipient.taskId==='01M5SBGP36V9P11F1CBY18PVW9');
+ const recipient=JSON.parse(await readFile(new URL('./staging-persona-qa-recipient.json',import.meta.url),'utf8'));assertQaRecipient(recipient);
  const envelope=await issuePersonaQa(target,{pem:recipient.publicKeyPem,version:environment.STAGING_EXPECTED_SHA,audit:r=>console.log(JSON.stringify(r))});
  try{await mkdir(new URL('.',QA_ENCRYPTED_OUTPUT),{recursive:true});await writeFile(QA_ENCRYPTED_OUTPUT,JSON.stringify(envelope)+'\n',{mode:0o600});}
  catch{await cleanupPersonaQa(target,r=>console.log(JSON.stringify(r)));throw new Error('Encrypted handoff publication failed.');}
