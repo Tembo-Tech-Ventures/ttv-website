@@ -17,7 +17,7 @@ export async function inspectPreviewContainer({ env = process.env, fetchImpl = f
   const base = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/containers/applications`;
   async function read(url) {
     const response = await fetchImpl(url, {
-      method: 'GET', redirect: 'error', signal: AbortSignal.timeout(15000),
+      method: 'GET', redirect: 'error', signal: globalThis.AbortSignal.timeout(15000),
       headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}` },
     });
     if (!response.ok) throw new Error(`http-${response.status}`);
