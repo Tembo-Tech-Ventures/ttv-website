@@ -7,20 +7,38 @@ export async function verifyStagingPersonas({ browser, target, personas, verifyJ
   const contexts = [];
   const clients = {};
   const contextsByRole = {};
+  const pendingRoutes = new Set();
+  let routeFailed = false;
   // APIRequestContext follows redirects by default, including bearer headers.
   const noRedirectClient = request => ({
     get: (path, options = {}) => request.get(path, { ...options, maxRedirects: 0 }),
     post: (path, options = {}) => request.post(path, { ...options, maxRedirects: 0 }),
   });
   const guardContext = async context => {
-    await context.route("**/*", async route => {
-      const request = route.request();
-      if (new URL(request.url()).origin !== target.baseUrl || request.redirectedFrom()) return route.abort();
-      // Intercept the response as well: browser routing may only see the first
-      // URL of a redirect chain. Never hand a redirect back to the browser.
-      const response = await route.fetch({ maxRedirects: 0 });
-      if (response.status() >= 300 && response.status() < 400) return route.abort();
-      return route.fulfill({ response });
+    await context.route("**/*", route => {
+      // Playwright invokes handlers outside the verification call stack. Never
+      // reject here: its raw error can contain cookies and bypass fixture cleanup.
+      const handled = (async () => {
+        try {
+          const request = route.request();
+          const url = new URL(request.url());
+          if (url.origin !== target.baseUrl || request.redirectedFrom()) return await route.abort();
+          // Allow the bounded 60s chat operation to return before the browser's
+          // 70s response deadline. Ordinary requests keep their 30s bound.
+          const timeout = browserChat && url.pathname === "/api/community/chat" && request.method() === "POST" ? 65000 : 30000;
+          const response = await route.fetch({ maxRedirects: 0, maxRetries: 0, timeout });
+          if (response.status() >= 300 && response.status() < 400) return await route.abort();
+          await route.fulfill({ response });
+        } catch {
+          routeFailed = true;
+          // A closed page can reject abort too. Do not let that second error
+          // escape or retain the original exception/headers in diagnostics.
+          try { await route.abort(); } catch { /* already closed */ }
+        }
+      })();
+      pendingRoutes.add(handled);
+      void handled.then(() => pendingRoutes.delete(handled));
+      return handled;
     });
   };
   let failure;
@@ -85,7 +103,11 @@ export async function verifyStagingPersonas({ browser, target, personas, verifyJ
     failure = new Error("Synthetic staging verification failed.");
   } finally {
     const outcomes = await Promise.allSettled(contexts.map(context => context.close()));
+    // Closing contexts stops requests; drain their contained callbacks before
+    // returning to the database lifecycle's finally/credential revocation.
+    await Promise.all(pendingRoutes);
     if (outcomes.some(outcome => outcome.status === "rejected")) failure = new Error("Synthetic browser context cleanup failed.");
   }
+  if (routeFailed) failure = new Error("Synthetic staging browser request failed.");
   if (failure) throw failure;
 }

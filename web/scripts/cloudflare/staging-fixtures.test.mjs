@@ -207,13 +207,47 @@ describe("fixed browser verification", () => {
       await handler(route);
       expect(route.fulfill).toHaveBeenCalledTimes(allowed ? 1 : 0);
       expect(route.fetch).toHaveBeenCalledTimes(allowed ? 1 : 0);
-      if (allowed) expect(route.fetch).toHaveBeenCalledWith({ maxRedirects: 0 });
+      if (allowed) expect(route.fetch).toHaveBeenCalledWith({ maxRedirects: 0, maxRetries: 0, timeout: 30000 });
       expect(route.abort).toHaveBeenCalledTimes(allowed ? 0 : 1);
     }
     const redirect = { request: () => ({ url: () => f.target.baseUrl + "/dashboard/community", redirectedFrom: () => null }), abort: vi.fn(), fetch: vi.fn(async () => ({ status: () => 302 })), fulfill: vi.fn() };
     await handler(redirect);
     expect(redirect.abort).toHaveBeenCalledOnce();
     expect(redirect.fulfill).not.toHaveBeenCalled();
+  });
+  it.each(["fetch", "fulfill", "abort"])("contains private %s errors and fails verification after context cleanup", async stage => {
+    const f = browserFixture();
+    f.verifyJourney.mockImplementation(async () => {
+      const handler = f.contexts[3].route.mock.calls[0][1];
+      const route = {
+        request: () => ({ url: () => f.target.baseUrl + "/api/community/chat", method: () => "POST", redirectedFrom: () => null }),
+        fetch: vi.fn(async () => ({ status: () => stage === "abort" ? 302 : 200 })),
+        fulfill: vi.fn(), abort: vi.fn(),
+      };
+      route[stage].mockRejectedValue(new Error("PRIVATE cookie=session-secret"));
+      // Even abort failure while recovering from fetch/fulfill must be contained.
+      if (stage !== "abort") route.abort.mockRejectedValue(new Error("PRIVATE closed-context"));
+      await expect(handler(route)).resolves.toBeUndefined();
+      expect(route.fetch).toHaveBeenCalledWith({ maxRedirects: 0, maxRetries: 0, timeout: 65000 });
+    });
+    await expect(verifyStagingPersonas({ ...f, browserChat: true })).rejects.toThrow("Synthetic staging browser request failed.");
+    expect(f.contexts.every(context => context.close.mock.calls.length === 1)).toBe(true);
+  });
+  it("drains an in-flight route rejected during context close before returning", async () => {
+    const f = browserFixture(); let handlerDone = false;
+    f.verifyJourney.mockImplementation(async () => {
+      let rejectFetch;
+      const context = f.contexts[3];
+      context.close.mockImplementation(async () => rejectFetch(new Error("PRIVATE close")));
+      const handler = context.route.mock.calls[0][1];
+      void handler({
+        request: () => ({ url: () => f.target.baseUrl + "/api/community/chat", method: () => "POST", redirectedFrom: () => null }),
+        fetch: () => new Promise((resolve, reject) => { rejectFetch = reject; }),
+        abort: async () => { await new Promise(resolve => { globalThis.setTimeout(resolve, 5); }); handlerDone = true; },
+      });
+    });
+    await expect(verifyStagingPersonas({ ...f, browserChat: true })).rejects.toThrow("Synthetic staging browser request failed.");
+    expect(handlerDone).toBe(true);
   });
   it("fails closed and closes contexts on wrong identity/auth status", async () => {
     const f = browserFixture({ failOwn: true });
