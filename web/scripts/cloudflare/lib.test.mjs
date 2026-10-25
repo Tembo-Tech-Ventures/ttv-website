@@ -507,6 +507,7 @@ describe("environment cleanup", () => {
       objects: [{ key: "avatars/user one/photo.png" }],
       cursor: "next/page",
       isTruncated: true,
+      delimitedPrefixes: [],
     });
     expect(fetchMock.mock.calls[0][0]).toBe(
       "https://api.cloudflare.com/client/v4/accounts/acc-123/r2/buckets/ttv-files-agent-one/objects?per_page=1000&cursor=previous%2Fpage"

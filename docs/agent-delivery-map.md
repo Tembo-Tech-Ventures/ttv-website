@@ -66,6 +66,20 @@ stacks older than 72 hours when close-triggered or explicit teardown was missed.
 It queries open pull requests first and excludes their preview names
 automatically; manual cleanup runs remain dry-run-first.
 
+PR-close, explicit agent teardown and stale cleanup share a fail-closed R2
+preflight. A nonempty bucket, incomplete listing or failed emptiness check stops
+teardown before any resource deletion. Preserve that environment and report the
+blocker; do not purge objects or bypass the check. Existing per-run fixture
+cleanup may delete only objects whose ownership it independently established.
+An object arriving after the check makes bucket deletion fail, leaving the
+remaining resources intact.
+
+Cloudflare's R2 list endpoint has both object-specific truncation metadata and
+the standard cursor-pagination response shape. Teardown follows every valid
+cursor and accepts completion only from a successful response with a valid
+`result_info` object and no continuation. Missing, malformed or contradictory
+pagination metadata blocks cleanup even when the returned object page is empty.
+
 ## The production merge path
 
 Main is production. Merging a pull request starts the `Cloudflare Production`

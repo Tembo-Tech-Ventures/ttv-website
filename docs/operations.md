@@ -73,7 +73,8 @@ has to replay a long session.
 
 Repository-owned automation that needs no SAM agent: `ci.yml` on every PR and
 push; `cloudflare-staging-pr.yml` deploys `agent-pr-<n>` per PR and destroys
-it on close; `cloudflare-production.yml` on push to main;
+it on close only after R2 emptiness is verified (otherwise teardown preserves
+the isolated stack and fails); `cloudflare-production.yml` on push to main;
 `cloudflare-sweep.yml` deletes `agent-*` stacks older than 72 hours daily.
 
 ## Monitoring
