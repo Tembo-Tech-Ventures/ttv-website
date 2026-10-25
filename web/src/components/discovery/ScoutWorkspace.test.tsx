@@ -99,3 +99,8 @@ it("renders model evidence order independently from names and preserves missing-
  expect(html.indexOf('Fictional B')).toBeLessThan(html.indexOf('Fictional A'));
  expect(html).toContain('Production experience unknown');expect(html).toContain('not a ranking of all members or ability');expect(html).toContain('/dashboard/discover?profile=b');
 });
+
+it("labels mentor-statement citations separately from published contributions",()=>{
+ const html=renderToStaticMarkup(<EvidenceOrdering enabled count={1} ordering={false} onOrder={()=>{}} order={{text:"Published evidence",evaluatedCandidates:1,profiles:[{userId:"a",name:"Fictional A",reason:"Documented change",missingEvidence:[],citations:[{kind:"journey",id:"j",version:2,url:"https://example.com/change"},{kind:"confirmation",id:"c",version:2,url:null}]}]}}/>);
+ expect(html).toContain("Published contribution · Revision 2");expect(html).toContain("Mentor statement · Revision 2");expect(html).toContain("Cited evidence for Fictional A");
+});

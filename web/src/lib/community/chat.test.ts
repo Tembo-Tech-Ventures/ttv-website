@@ -193,7 +193,7 @@ it("honors an already aborted Mastra run before inference", async () => {
 it("orders only searched candidates with published journey citations and exposes actual tool names",async()=>{
  const s=service(true);vi.mocked(s.searchProfiles).mockResolvedValue([{userId:'b',name:'Fictional B',version:1},{userId:'a',name:'Fictional A',version:1}] as never);
  vi.mocked(s.getProfile).mockImplementation(async(id)=>({userId:id,name:`Fictional ${id}`,version:1}) as never);
- vi.mocked(s.listJourney).mockImplementation(async(id)=>[{id:`j-${id}`,userId:id,version:1,visibility:'institution',confirmations:[]}] as never);
+ vi.mocked(s.listJourney).mockImplementation(async(id)=>[{id:`j-${id}`,userId:id,version:1,visibility:'institution',title:id==='a'?'Testing work':'Other work',confirmations:[]}] as never);
  complete.mockResolvedValueOnce({content:null,toolCalls:[call('search_profiles',{query:'Kotlin'})]}).mockResolvedValueOnce({content:null,toolCalls:[{...call('get_profile',{userId:'a'}),id:'a'},{...call('get_profile',{userId:'b'}),id:'b'}]}).mockResolvedValueOnce({content:JSON.stringify({answer:'A has more documented testing; experience remains unknown.',citations:[{kind:'journey',id:'j-a',version:1},{kind:'journey',id:'j-b',version:1}],orderedProfiles:[{userId:'a',reason:'Documented testing first',missingEvidence:['Production experience unknown']},{userId:'b',reason:'Less documented testing',missingEvidence:['Testing details unknown']}]})});
  const result=await runCommunityChat(env,s,{message:'Compare Kotlin evidence',orderByEvidence:true});expect(result.grounded).toBe(true);expect(result.orderedProfiles.map(p=>p.userId)).toEqual(['a','b']);expect(result.evaluatedCandidates).toBe(2);expect(result.execution.toolNames).toEqual(['search_profiles','get_profile','get_profile']);
 });
@@ -220,4 +220,30 @@ it("classifies valid JSON with invalid answer structure without publishing it", 
  const result=await runCommunityChat(env,service(),{message:'hello'});
  expect(result.groundingFailure).toBe('invalid_structure');expect(result.grounded).toBe(false);
  expect(JSON.stringify(result)).not.toContain('unsupported private claim');
+});
+
+function orderFixture({completeSources=true,extra=0,tied=false,stale=false,foreign=false}={}) {
+ const s=service(true);const ids=['b','a'];
+ vi.mocked(s.searchProfiles).mockResolvedValue(ids.map(userId=>({userId,name:userId,version:1})) as never);
+ vi.mocked(s.getProfile).mockImplementation(async userId=>({userId,name:userId,version:1,bio:'Same bio',skills:['React']}) as never);
+ const entries=(userId:string)=>Array.from({length:3+extra},(_,i)=>({id:`${userId}-j${i}`,userId,version:1,visibility:'institution',title:tied?'Same change':userId,description:'Documented change',occurredAt:'2026-10-19',confirmations:i===0?[{id:`${userId}-c`,journeyVersion:1,mentorId:'mentor',mentorRole:'MENTOR',statement:'Described review',method:'walkthrough'}]:[]}));
+ vi.mocked(s.listJourney).mockImplementation(async id=>entries(id??"self") as never);
+ const refs=ids.flatMap(userId=>[...(completeSources?entries(userId):[entries(userId)[1]]).map(j=>({kind:'journey',id:j.id,version:1})),...(completeSources?[{kind:'confirmation',id:`${foreign?'other':userId}-c`,version:stale?0:1}]:[])]);
+ complete.mockResolvedValueOnce({content:null,toolCalls:[call('search_profiles',{query:'React'})]}).mockResolvedValueOnce({content:null,toolCalls:ids.map(id=>({...call('get_profile',{userId:id}),id}))}).mockResolvedValueOnce({content:JSON.stringify({answer:'A is most complete, with three iterations and mentor statements.',orderedProfiles:[{userId:'a',reason:'Most complete',missingEvidence:[]},{userId:'b',reason:'Less complete',missingEvidence:[]}],citations:refs})});
+ return runCommunityChat(env,s,{message:'Compare React evidence',orderByEvidence:true});
+}
+it('rejects the recorded React pattern: one journey cannot cover three iterations and confirmations',async()=>{
+ const r=await orderFixture({completeSources:false});expect(r.grounded).toBe(false);expect(r.groundingFailure).toBe('incomplete_evidence_coverage');expect(r.answer).not.toContain('most complete');
+});
+it('exposes complete confirmation and journey coverage without asserting semantic entailment',async()=>{
+ const r=await orderFixture();expect(r.grounded).toBe(true);expect(r.orderedProfiles[0].citations).toHaveLength(4);expect(r.orderedProfiles[0].citations.some(c=>c.kind==='confirmation')).toBe(true);
+});
+it.each([{stale:true},{foreign:true}])('rejects stale and wrong-owner confirmation references %j',async options=>{
+ const r=await orderFixture(options);expect(r.grounded).toBe(false);expect(r.groundingFailure).toBe('invalid_citation');
+});
+it('fails closed when complete evidence exceeds the existing thirty-reference output cap',async()=>{
+ const r=await orderFixture({extra:13});expect(r.grounded).toBe(false);expect(r.groundingFailure).toBe('invalid_structure');
+});
+it('uses neutral retrieved order for identical published evidence text and removes completeness claims',async()=>{
+ const r=await orderFixture({tied:true});expect(r.grounded).toBe(true);expect(r.orderedProfiles.map(p=>p.userId)).toEqual(['b','a']);expect(r.answer).toContain('tied');expect(r.answer).not.toContain('most complete');expect(r.orderedProfiles.every(p=>p.reason.includes('neutral retrieved order'))).toBe(true);
 });
