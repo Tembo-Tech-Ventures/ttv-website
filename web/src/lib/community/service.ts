@@ -109,14 +109,14 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       const a = await access();
       if (!a.isMentor && !a.isAdmin) throw new CommunityError("Mentor access is required.", 403);
       const scope = fixtureScope("j.userId");
-      const { results } = await db.prepare(`SELECT j.id,j.userId,u.name AS memberName,j.title,j.description,j.evidenceUrl,j.occurredAt,j.visibility,j.version,j.createdAt,j.updatedAt
-        FROM communityJourney j JOIN user u ON u.id=j.userId WHERE j.visibility='institution' AND j.userId<>?${scope.clause} ORDER BY j.createdAt DESC,j.id DESC LIMIT 50`).bind(actorId,...scope.values).all<Omit<CommunityJourney, "confirmations"> & { memberName: string }>();
+      const { results } = await db.prepare(`SELECT j.id,j.userId,u.name AS memberName,j.title,j.description,j.evidenceUrl,j.occurredAt,j.visibility,j.version,j.createdAt,j.updatedAt, EXISTS (SELECT 1 FROM communityConfirmation ownReview WHERE ownReview.journeyId=j.id AND ownReview.mentorId=? AND ownReview.journeyVersion=j.version) AS reviewedByCurrentMentor
+        FROM communityJourney j JOIN user u ON u.id=j.userId WHERE j.visibility='institution' AND j.userId<>?${scope.clause} ORDER BY j.createdAt DESC,j.id DESC LIMIT 50`).bind(actorId,actorId,...scope.values).all<Omit<CommunityJourney, "confirmations"> & { memberName: string; reviewedByCurrentMentor: number }>();
       const mentorScope = fixtureScope("c.mentorId");
       const {results: confirmations} = await db.prepare(`SELECT c.id,c.journeyId,c.mentorId,u.name AS mentorName,c.statement,c.method,c.journeyVersion,c.mentorRole,c.createdAt
         FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=c.mentorId
         WHERE j.visibility='institution' AND j.userId<>?${scope.clause}${mentorScope.clause} ORDER BY c.createdAt DESC LIMIT 500`).bind(actorId,...scope.values,...mentorScope.values).all<CommunityConfirmation>();
       await Promise.all(results.map(row=>requireFixtureTarget(row.userId)));
-      return results.map(entry => ({...entry,confirmations:confirmations.filter(c=>c.journeyId===entry.id)}));
+      return results.map(entry => ({...entry,confirmations:confirmations.filter(c=>c.journeyId===entry.id),reviewedByCurrentMentor:Boolean(entry.reviewedByCurrentMentor)}));
     },
     async setAccess(input: unknown) {
       requireWritable();
@@ -188,8 +188,8 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       // Repeat visibility/ownership predicates in the write to avoid a check/write race.
       const writeScope = fixtureScope("userId");
       const result = await db.prepare(`INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journeyVersion,mentorRole)
-        SELECT ?,id,?,?,?,version,? FROM communityJourney WHERE id=? AND visibility='institution' AND userId<>? AND version=?${writeScope.clause}`)
-        .bind(confirmationId,actorId,p.statement,p.method,a.isMentor ? "MENTOR" : "ADMIN",id,actorId,entry.version,...writeScope.values).run();
+        SELECT ?,id,?,?,?,version,? FROM communityJourney WHERE id=? AND visibility='institution' AND userId<>? AND version=?${writeScope.clause} AND NOT EXISTS (SELECT 1 FROM communityConfirmation c WHERE c.journeyId=communityJourney.id AND c.mentorId=? AND c.journeyVersion=communityJourney.version)`)
+        .bind(confirmationId,actorId,p.statement,p.method,a.isMentor ? "MENTOR" : "ADMIN",id,actorId,entry.version,...writeScope.values,actorId).run();
       if (!result.meta.changes) throw new CommunityError("Contribution no longer available.", 409);
       return { id: confirmationId, journeyId: id, mentorId: actorId, ...p, journeyVersion: entry.version,mentorRole:a.isMentor ? "MENTOR" : "ADMIN" };
     },

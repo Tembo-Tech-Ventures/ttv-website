@@ -196,7 +196,7 @@ export async function loadMentorship(): Promise<MentorReviewRequest[]> {
   const result = await communityRequest(
     "mentorship",
     z.object({
-      entries: z.array(entrySchema.extend({ memberName: z.string() })),
+      entries: z.array(entrySchema.extend({ memberName: z.string(), reviewedByCurrentMentor: z.boolean() })),
     }),
   );
   return result.entries.map((entry) => ({
@@ -207,7 +207,7 @@ export async function loadMentorship(): Promise<MentorReviewRequest[]> {
     claimDescription: entry.description,
     evidence: mapJourney(entry).evidence,
     confirmations: mapJourney(entry).confirmations,
-    status: "pending",
+    status: entry.reviewedByCurrentMentor ? "confirmed" : "pending",
   }));
 }
 export async function confirmContribution(

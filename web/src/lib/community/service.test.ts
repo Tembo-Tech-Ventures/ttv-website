@@ -247,3 +247,27 @@ describe('retained demo dataset isolation',()=>{
     expect(()=>createCommunityService(f.db,prefix+'unknown',null,'staging')).toThrow('Verified demo');
   });
 });
+
+
+it("atomically permits one confirmation per mentor and revision, preserving earlier revisions and other mentors",async()=>{
+ const f=fixture();await f.member.updateOwnProfile(profile);const item=await f.member.createJourney(entry);
+ const review={expectedRevision:1,statement:'Reviewed the described change',method:'Source review'};
+ const results=await Promise.allSettled([f.mentor.confirmJourney(item.id,review),f.mentor.confirmJourney(item.id,review)]);
+ expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);expect(results.find(r=>r.status==='rejected')).toMatchObject({reason:{status:409}});
+ await expect(f.mentor.confirmJourney(item.id,review)).rejects.toMatchObject({status:409});
+ expect((await f.mentor.listMentorship())[0].reviewedByCurrentMentor).toBe(true);
+ await f.member.updateJourney(item.id,{...entry,description:'Updated documented change'});
+ expect((await f.mentor.listMentorship())[0].reviewedByCurrentMentor).toBe(false);
+ await f.mentor.confirmJourney(item.id,{...review,expectedRevision:2});
+ f.sql.prepare("INSERT INTO UserRoles VALUES ('other-mentor','other',(SELECT id FROM Roles WHERE name='MENTOR'))").run();
+ const other=createCommunityService(f.db,'other');await other.confirmJourney(item.id,{...review,expectedRevision:2});
+ expect((await f.institution.listJourney('member'))[0].confirmations).toHaveLength(3);
+});
+
+it('keeps already-reviewed status authoritative when the display history limit omits that confirmation',async()=>{
+ const f=fixture();await f.member.updateOwnProfile(profile);const item=await f.member.createJourney(entry);await f.mentor.confirmJourney(item.id,{expectedRevision:1,statement:'Current review',method:'Review'});
+ f.sql.prepare("UPDATE communityConfirmation SET createdAt=1").run();
+ const insert=f.sql.prepare("INSERT INTO communityConfirmation(id,journeyId,mentorId,statement,method,journeyVersion,mentorRole,createdAt) VALUES(?,?,'other','Historical note','Review',0,'MENTOR',2)");
+ for(let i=0;i<501;i++)insert.run('historical-'+i,item.id);
+ const queue=await f.mentor.listMentorship();expect(queue[0].confirmations).toHaveLength(500);expect(queue[0].confirmations.some(c=>c.mentorId==='mentor')).toBe(false);expect(queue[0].reviewedByCurrentMentor).toBe(true);
+});
