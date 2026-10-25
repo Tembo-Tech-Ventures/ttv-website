@@ -55,6 +55,7 @@ declare namespace App {
     personalAccessToken: import("@/lib/personal-access-tokens").PersonalAccessTokenSummary | null;
     isAdmin?: boolean;
     stagingDemo?: {persona:string;expiresAt:number} | null;
+    stagingQa?: import("@/lib/staging-qa-policy").QaIdentity | null;
     stagingFixture?: import("@/lib/staging-fixtures").StagingFixtureIdentity | null;
   }
 }

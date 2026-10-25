@@ -17,6 +17,8 @@ on:
           - seed-demo
           - diagnose-demo
           - retained-read-probe
+          - persona-qa-issue
+          - persona-qa-cleanup
       expected_sha:
         description: Exact current head SHA of integration PR 171 (reserve a PM deployment slot first)
         required: true
@@ -232,3 +234,41 @@ jobs:
           path: web/test-results/staging-retained-search*
           if-no-files-found: error
           retention-days: 7
+
+  persona-qa:
+    if: ${{ inputs.action == 'persona-qa-issue' || inputs.action == 'persona-qa-cleanup' }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: staging
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      STAGING_ACTION: ${{ inputs.action }}
+      STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+      STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
+      STAGING_INTEGRATION_PR: "171"
+      CLOUDFLARE_ENVIRONMENT_NAME: staging
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: One controlled encrypted persona QA handoff or exact cleanup
+        run: node web/scripts/cloudflare/staging-persona-qa.mjs
+      - if: ${{ inputs.action == 'persona-qa-issue' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: persona-qa-encrypted-${{ github.run_id }}
+          path: web/test-results/persona-qa-encrypted.json
+          if-no-files-found: error
+          retention-days: 1
+      - if: ${{ failure() && inputs.action == 'persona-qa-issue' }}
+        name: Revoke QA if setup or encrypted handoff publication failed
+        env:
+          STAGING_ACTION: persona-qa-cleanup
+        run: node web/scripts/cloudflare/staging-persona-qa.mjs

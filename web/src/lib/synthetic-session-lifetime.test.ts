@@ -140,3 +140,9 @@ describe("synthetic session absolute lifetime", () => {
     expect(+data.session[0].expiresAt).toBe(+now + 7 * 24 * 3600_000);
   });
 });
+
+it("refuses retained QA sessions through ordinary Better Auth bearer/cache access", async () => {
+ const {auth}=fixture({id:'ttv-staging-demo-v1-mentor-qa-unit',userId:'ttv-staging-demo-v1-mentor',userAgent:'ttv-agent:retained-qa:unit:mentor'},1,'staging',false,true);
+ const response=await auth.handler(new Request('http://localhost:4321/api/auth/get-session',{headers:{authorization:'Bearer fictional-session-token'}}));
+ expect(response.status).toBeGreaterThanOrEqual(400);expect(await response.text()).not.toContain('fictional-session-token');
+});

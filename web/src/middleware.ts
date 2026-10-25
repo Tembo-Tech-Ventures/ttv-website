@@ -1,3 +1,5 @@
+import { authenticateQaCookie, hasQaCookie, logoutQa, QaAccessError } from "@/lib/staging-qa-access";
+import { qaPathAllowed } from "@/lib/staging-qa-policy";
 import { validateDemoSession, DemoAccessError, DEMO_OPERATOR_COOKIE } from "@/lib/staging-demo-access";
 import { demoPathAllowed } from "@/lib/staging-demo-policy";
 import { defineMiddleware } from "astro:middleware";
@@ -162,6 +164,17 @@ export const onRequest = defineMiddleware(async (context, next) => {
       return await next();
     }
 
+    if (hasQaCookie(request)) {
+      try {
+        const auth = await authenticateQaCookie(env, request);
+        if (!auth || !qaPathAllowed(auth.qa.persona,url.pathname,request.method)) throw new QaAccessError();
+        locals.user=auth.user;locals.session=auth.session;locals.personalAccessToken=null;locals.stagingQa=auth.qa;
+        locals.stagingDemo=null;locals.stagingFixture=null;
+        if(url.pathname==='/api/qa/logout') return await logoutQa(env,request,auth.qa);
+        const response=await next();response.headers.set('Cache-Control','no-store');response.headers.set('Vary','Cookie');
+        return response;
+      } catch { return new Response('Temporary persona QA access is unavailable or expired.',{status:403,headers:{'Cache-Control':'no-store'}}); }
+    }
     const authResult = await resolveAuthentication(env, request);
     locals.session = authResult.session;
     locals.user = authResult.user;
