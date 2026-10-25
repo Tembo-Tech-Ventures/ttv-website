@@ -11,9 +11,11 @@ import {
   ensureAiGateway,
   findD1DatabaseByName,
   getSecretBindings,
+  listAiGateways,
   listContainerApplications,
   listR2BucketObjectsPage,
   queryD1Database,
+  reclaimInactivePrPreviewAiGateways,
   removeQueueWorkerConsumer,
   resolveDeploymentMetadata,
 } from "./lib.mjs";
@@ -413,6 +415,82 @@ describe("ensureAiGateway", () => {
       id: "ttv-ai",
       collect_logs: true,
     });
+  });
+
+  it("lists account gateways with the maximum supported page size", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        success: true,
+        result: [{ id: "ttv-website-ai-agent-pr-72" }],
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listAiGateways()).resolves.toEqual([
+      { id: "ttv-website-ai-agent-pr-72" },
+    ]);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://api.cloudflare.com/client/v4/accounts/acc-123/ai-gateway/gateways?per_page=100"
+    );
+  });
+
+  it("reclaims only old closed-PR gateways for this application", async () => {
+    const deleteGateway = vi.fn().mockResolvedValue(true);
+    const listGateways = vi.fn().mockResolvedValue([
+      {
+        id: "ttv-website-ai-agent-pr-71",
+        modified_at: "2026-10-25T03:00:00.000Z",
+      },
+      {
+        id: "ttv-website-ai-agent-pr-72",
+        modified_at: "2026-10-25T03:00:00.000Z",
+      },
+      {
+        id: "ttv-website-ai-agent-pr-73",
+        modified_at: "2026-10-25T04:45:00.000Z",
+      },
+      {
+        id: "ttv-website-ai-agent-task",
+        modified_at: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "ttv-website-ai-staging",
+        modified_at: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "other-app-ai-agent-pr-4",
+        modified_at: "2026-01-01T00:00:00.000Z",
+      },
+      { id: "ttv-website-ai-agent-pr-74" },
+    ]);
+
+    await expect(
+      reclaimInactivePrPreviewAiGateways({
+        appName: "ttv-website",
+        activeEnvironmentNames: ["agent-pr-72"],
+        now: new Date("2026-10-25T05:00:00.000Z"),
+        listGateways,
+        deleteGateway,
+      })
+    ).resolves.toEqual(["ttv-website-ai-agent-pr-71"]);
+    expect(deleteGateway).toHaveBeenCalledTimes(1);
+    expect(deleteGateway).toHaveBeenCalledWith("ttv-website-ai-agent-pr-71");
+  });
+
+  it("refuses reclamation when the active PR inventory is malformed", async () => {
+    const listGateways = vi.fn();
+    const deleteGateway = vi.fn();
+
+    await expect(
+      reclaimInactivePrPreviewAiGateways({
+        appName: "ttv-website",
+        activeEnvironmentNames: ["production"],
+        listGateways,
+        deleteGateway,
+      })
+    ).rejects.toThrow('invalid active preview environment "production"');
+    expect(listGateways).not.toHaveBeenCalled();
+    expect(deleteGateway).not.toHaveBeenCalled();
   });
 });
 

@@ -131,6 +131,10 @@ export async function destroyEnvironment(
 ) {
   ensureEnvironmentCanBeDestroyed(context.environmentSlug);
 
+  // AI Gateway quotas are account-wide. Release this environment's exact
+  // gateway before any unrelated cleanup can fail closed and strand it.
+  const aiGatewayDeleted = await deleteAiGateway(context.aiGatewayName);
+
   let bucketObjectsDeleted = 0;
   let bucketDeleted = false;
   try {
@@ -164,7 +168,6 @@ export async function destroyEnvironment(
   const vectorizeIndexDeleted = await deleteVectorize(
     context.vectorizeIndexName
   );
-  const aiGatewayDeleted = await deleteAiGateway(context.aiGatewayName);
   const databaseDeleted = await deleteDatabase(context.d1Name);
 
   return {

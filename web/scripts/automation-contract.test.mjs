@@ -175,6 +175,39 @@ describe("GitHub delivery contracts", () => {
     expect(workflow).not.toContain("environment_name: staging");
   });
 
+  it("protects open PR gateways before reclaiming old closed-preview gateways", async () => {
+    const workflow = await readRepositoryFile(
+      ".github/workflows/cloudflare-environment.yml"
+    );
+
+    expect(
+      workflow.match(
+        /name: Protect open PR gateways before reclaiming closed previews/g
+      )
+    ).toHaveLength(2);
+    expect(workflow.match(/pull-requests: read/g)).toHaveLength(2);
+    expect(workflow.match(/gh pr list --state open --limit 1000/g)).toHaveLength(
+      2
+    );
+    expect(
+      workflow.match(/CLOUDFLARE_ACTIVE_PR_ENVIRONMENTS=/g)
+    ).toHaveLength(2);
+    expect(
+      workflow.match(
+        /startsWith\(inputs\.environment_name, 'agent-pr-'\)/g
+      )
+    ).toHaveLength(2);
+  });
+
+  it("checks gateway quota before provisioning other preview resources", async () => {
+    const deploy = await readRepositoryFile(
+      "web/scripts/cloudflare/deploy.mjs"
+    );
+    expect(deploy.indexOf("ensureAiGateway(context.aiGatewayName)")).toBeLessThan(
+      deploy.indexOf("ensureD1Database(context.d1Name)")
+    );
+  });
+
   it("keeps preview identity secrets out of shared staging and production", async () => {
     const workflow = await readRepositoryFile(
       ".github/workflows/cloudflare-environment.yml"

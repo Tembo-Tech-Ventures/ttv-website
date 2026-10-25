@@ -66,6 +66,7 @@ jobs:
     environment: ${{ inputs.github_environment }}
     permissions:
       contents: read
+      pull-requests: read
     defaults:
       run:
         working-directory: web
@@ -109,6 +110,18 @@ jobs:
       - if: ${{ inputs.action == 'deploy' }}
         name: Type check .astro files
         run: npm run typecheck:astro
+
+      - if: ${{ inputs.action == 'deploy' && startsWith(inputs.environment_name, 'agent-pr-') }}
+        name: Protect open PR gateways before reclaiming closed previews
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          active_previews="$(gh pr list --state open --limit 1000 --json number --jq 'map("agent-pr-" + (.number | tostring)) | join(",")')"
+          current_preview="${{ inputs.environment_name }}"
+          active_previews="${active_previews:+${active_previews},}${current_preview}"
+          echo "CLOUDFLARE_ACTIVE_PR_ENVIRONMENTS=${active_previews}" >> "${GITHUB_ENV}"
 
       - if: ${{ inputs.action == 'deploy' && inputs.environment_name == 'production' }}
         id: rollback_target
@@ -222,6 +235,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      pull-requests: read
     defaults:
       run:
         working-directory: web
@@ -265,6 +279,18 @@ jobs:
       - if: ${{ inputs.action == 'deploy' }}
         name: Type check .astro files
         run: npm run typecheck:astro
+
+      - if: ${{ inputs.action == 'deploy' && startsWith(inputs.environment_name, 'agent-pr-') }}
+        name: Protect open PR gateways before reclaiming closed previews
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          active_previews="$(gh pr list --state open --limit 1000 --json number --jq 'map("agent-pr-" + (.number | tostring)) | join(",")')"
+          current_preview="${{ inputs.environment_name }}"
+          active_previews="${active_previews:+${active_previews},}${current_preview}"
+          echo "CLOUDFLARE_ACTIVE_PR_ENVIRONMENTS=${active_previews}" >> "${GITHUB_ENV}"
 
       - if: ${{ inputs.action == 'deploy' && inputs.environment_name == 'production' }}
         id: rollback_target
