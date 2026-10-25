@@ -1,3 +1,9 @@
+import { createHash } from "node:crypto";
+import { rm, readFile } from "node:fs/promises";
+import { runRetainedSearch } from "./staging-retained-search.mjs";
+import { seedDemoData, DEMO_PERSONAS } from "./staging-demo-data.mjs";
+import { createSqliteD1 } from "../../src/test/sqlite-d1";
+import { handleCommunityRequest } from "../../src/lib/community/http";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
@@ -28,6 +34,44 @@ async function fixture() {
 }
 const count = (db, table) => db.prepare(`SELECT count(*) n FROM "${table}"`).get().n;
 describe("staging personas on application migrations", () => {
+  it("runner verifies real SQL/API directory, bounds one simulated chat, then cleans only disposable actors",async()=>{
+    const {db,options}=await fixture();await seedDemoData(options.target);
+    const d1=createSqliteD1(db).db;let modelRequests=0;
+    const environment={GITHUB_RUN_ATTEMPT:'1',STAGING_ACTION:'retained-read-probe',STAGING_EXPECTED_SHA:options.target.expectedVersion,BETTER_AUTH_SECRET:signingSecret};
+    const fetchImpl=async(url,init)=>{
+      const token=init.headers.Authorization.slice(7);
+      const row=db.prepare('SELECT userId FROM personal_access_token WHERE tokenHash=?').get(createHash('sha256').update(token).digest('hex'));
+      expect(row).toBeDefined();const user=db.prepare('SELECT id,email FROM user WHERE id=?').get(row.userId);
+      const identity=await resolveStagingFixtureIdentity({db:d1,envName:'staging',user,session:{id:'pat:test'},isPat:true,retainedProbeEnabled:'true'});
+      if(init.method==='POST'){
+        modelRequests++;const id=DEMO_PERSONAS.noncohort;
+        const citation={kind:'journey',id:`${id}-journey-1`,userId:id,version:1};
+        return Response.json({grounded:true,answer:'Missing evidence remains unknown.',citations:[citation],retrievedSources:[citation],execution:{model:'@cf/zai-org/glm-5.3-flash',modelSteps:2,executedToolCalls:2}});
+      }
+      return handleCommunityRequest(new globalThis.Request(url,init),new URL(url).pathname.slice('/api/community/'.length),{id:user.id,fixture:identity,scopes:['community:read','institution:read']},d1,{DEPLOYMENT_ENVIRONMENT:'staging'});
+    };
+    try{
+      const report=await runRetainedSearch({environment,api:async()=>({bindings:[{name:'STAGING_RETAINED_READ_PROBE_ENABLED',text:'true'},{name:'AI',type:'ai'},{name:'AI_GATEWAY_NAME',text:'ttv-website-ai-staging'}]}),validateRevision:vi.fn(),verifyTarget:async()=>options.target,fetchImpl});
+      expect(report.cleanup).toBe('verified');expect(report.directory.eligible).toBe(149);expect(modelRequests).toBe(1);
+      expect(count(db,'user')).toBe(150);for(const table of ['session','personal_access_token','stagingFixtureIdentity'])expect(count(db,table)).toBe(0);
+      const artifact=await readFile('test-results/staging-retained-search.json','utf8');expect(artifact).not.toContain('ttv_pat_');expect(artifact).not.toContain('Missing evidence remains unknown.');
+    }finally{db.close();await rm('test-results/staging-retained-search.json',{force:true});}
+  });
+  it("retained mode creates only two read-only actors capped15min and revokes them even after failure",async()=>{
+    const {db,options}=await fixture();const audit=vi.fn();
+    try {
+      await expect(withStagingPersonas({...options,retainedReadProbe:true,audit,run:async personas=>{
+        expect(Object.keys(personas)).toEqual(["institution","unapprovedInstitution"]);
+        const identities=db.prepare('SELECT * FROM stagingFixtureIdentity').all();expect(identities).toHaveLength(2);
+        for(const p of Object.values(personas)){expect(p.cookies).toEqual([]);expect(p.sessionId).toBe(`${p.userId}-retained-read-probe-session`);expect(p.expiresAt).toBeLessThanOrEqual(Math.min(Math.floor(Date.now()/1000)+900,Date.parse('2026-10-25T23:00:00Z')/1000));}
+        expect(db.prepare('SELECT r.name FROM UserRoles ur JOIN Roles r ON r.id=ur.roleId').all()).toEqual([{name:'INSTITUTION'}]);
+        for(const p of db.prepare('SELECT scopes FROM personal_access_token').all())expect(JSON.parse(p.scopes)).toEqual(['community:read','institution:read']);
+        throw new Error('PRIVATE test provider failure');
+      }})).rejects.toThrow('verification failed');
+      for(const table of ['session','personal_access_token','stagingFixtureIdentity','UserRoles','user'])expect(count(db,table)).toBe(0);
+      expect(JSON.stringify(audit.mock.calls)).not.toContain('PRIVATE');
+    }finally{db.close();}
+  });
   it("revokes actual fixture records when an asynchronous browser route fails", async () => {
     const { db, options } = await fixture(); const audit = vi.fn();
     let handler, routeContained = false; const close = vi.fn();

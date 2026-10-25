@@ -5,6 +5,9 @@ import { createCommunityService, type CommunityService } from "./service";
 import { assessCommunityProfile } from "./assessment-ai";
 import { createAssessmentProvider, type AssessmentOutputReason } from "./assessment-provider";
 import { stagingAssessmentProbe } from "./staging-assessment-probe";
+import { authorizeRetainedProbe, claimRetainedChat } from "./staging-retained-probe";
+import { communityChatInput } from "./chat";
+import { parseInput } from "./model";
 import { runCommunityChat } from "./chat";
 
 export function communityJson(body: unknown, status = 200) {
@@ -62,12 +65,16 @@ const routes: Record<string, Handler> = {
     const url = new URL(request.url);
     return communityJson({profiles: await service.searchProfiles({query: url.searchParams.get("query") ?? "",limit:Number(url.searchParams.get("limit") ?? 20),skills:(url.searchParams.get("skills") ?? "").split(",").map(s=>s.trim()).filter(Boolean)})});
   },
-  "POST chat": async ({service,body,env,actor}) => {
+  "POST chat": async ({service,body,env,actor,db}) => {
     // The first-party chat can perform multiple tools; require the matching delegated read scope.
     if (actor.scopes !== null && !actor.scopes.includes("community:read")) throw new CommunityError("Community read scope required.",403);
     if (!env) throw new CommunityError("Chat is unavailable.",503);
     const access = await service.access();
     if ((access.isInstitution || access.isAdmin) && actor.scopes !== null && !actor.scopes.includes("institution:read")) throw new CommunityError("Institution read scope required.",403);
+    if (actor.fixture?.retainedReadProbe) {
+      parseInput(communityChatInput,body);
+      await claimRetainedChat(db,env.DEPLOYMENT_ENVIRONMENT,actor.fixture);
+    }
     return communityJson(await runCommunityChat(env,service,body));
   },
 };
@@ -106,7 +113,9 @@ export async function handleCommunityRequest(request: Request, path: string, act
   if (request.headers.has("Authorization") && actor.scopes === null) return communityJson({error:"Scoped personal access token required."},401);
   try {
     authorizeRequest(request,path,actor);
-    const ctx = {request,path,actor,service:createCommunityService(db,actor.id,actor.fixture,env?.DEPLOYMENT_ENVIRONMENT),body:await readBody(request),db,env};
+    const body = await readBody(request);
+    if (actor.fixture?.retainedReadProbe) authorizeRetainedProbe(request.method,path,actor.scopes,body);
+    const ctx = {request,path,actor,service:createCommunityService(db,actor.id,actor.fixture,env?.DEPLOYMENT_ENVIRONMENT),body,db,env};
     const route = routes[`${request.method} ${path}`];
     return route ? await route(ctx) : await dynamicRoute(ctx);
   } catch (error) {

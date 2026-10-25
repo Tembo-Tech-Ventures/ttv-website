@@ -29,6 +29,10 @@ on:
         required: false
         type: boolean
         default: false
+      staging_retained_read_probe_enabled:
+        required: false
+        type: boolean
+        default: false
       staging_demo_enabled:
         required: false
         type: boolean
@@ -91,6 +95,7 @@ jobs:
       CLOUDFLARE_REDIRECT_DOMAIN: ${{ inputs.redirect_domain }}
       CLOUDFLARE_BETTER_AUTH_URL: ${{ inputs.better_auth_url }}
       CLOUDFLARE_AGENT_AUTH_ENABLED: ${{ inputs.agent_auth_enabled }}
+      CLOUDFLARE_STAGING_RETAINED_READ_PROBE_ENABLED: ${{ inputs.staging_retained_read_probe_enabled }}
       CLOUDFLARE_STAGING_DEMO_ENABLED: ${{ inputs.staging_demo_enabled }}
       CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ inputs.workers_subdomain }}
       CLOUDFLARE_D1_JURISDICTION: ${{ inputs.d1_jurisdiction }}
@@ -249,6 +254,7 @@ jobs:
       CLOUDFLARE_REDIRECT_DOMAIN: ${{ inputs.redirect_domain }}
       CLOUDFLARE_BETTER_AUTH_URL: ${{ inputs.better_auth_url }}
       CLOUDFLARE_AGENT_AUTH_ENABLED: ${{ inputs.agent_auth_enabled }}
+      CLOUDFLARE_STAGING_RETAINED_READ_PROBE_ENABLED: ${{ inputs.staging_retained_read_probe_enabled }}
       CLOUDFLARE_STAGING_DEMO_ENABLED: ${{ inputs.staging_demo_enabled }}
       CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ inputs.workers_subdomain }}
       CLOUDFLARE_D1_JURISDICTION: ${{ inputs.d1_jurisdiction }}

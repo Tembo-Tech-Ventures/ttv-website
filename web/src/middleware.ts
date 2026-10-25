@@ -113,8 +113,9 @@ async function enforceStagingFixtureBoundary(locals: App.Locals, pathname: strin
   try {
     locals.stagingFixture = await resolveStagingFixtureIdentity({
       db:env.DB,envName:env.DEPLOYMENT_ENVIRONMENT,user:locals.user,
-      session:locals.session ?? {id:""},isPat:Boolean(locals.personalAccessToken),
+      session:locals.session ?? {id:""},isPat:Boolean(locals.personalAccessToken),retainedProbeEnabled:env.STAGING_RETAINED_READ_PROBE_ENABLED,
     });
+    if (locals.stagingFixture?.retainedReadProbe && !["/api/community/access", "/api/community/profiles", "/api/community/chat"].includes(pathname) && !/^\/api\/community\/profiles\/[^/]+$/.test(pathname)) throw new StagingFixtureAccessError();
     if (locals.stagingFixture && !stagingFixturePathAllowed(pathname)) throw new StagingFixtureAccessError();
     return null;
   } catch (error) {
