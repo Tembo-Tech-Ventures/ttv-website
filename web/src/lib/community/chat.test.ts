@@ -205,5 +205,12 @@ it("rejects ordering with a selected profile/rubric or noninstitutional role",as
 it("rejects model ordering of unsearched or uncited profiles",async()=>{
  const s=service(true);vi.mocked(s.searchProfiles).mockResolvedValue([{userId:'a',name:'Fictional A',version:1}] as never);
  complete.mockResolvedValueOnce({content:null,toolCalls:[call('search_profiles',{query:'Kotlin'})]}).mockResolvedValueOnce({content:JSON.stringify({answer:'Unknown',citations:[{kind:'profile',id:'a',version:1}],orderedProfiles:[{userId:'real',reason:'Unsupported',missingEvidence:[]}]})});
- const result=await runCommunityChat(env,s,{message:'Compare evidence',orderByEvidence:true});expect(result.grounded).toBe(false);expect(result.orderedProfiles).toEqual([]);
+ const result=await runCommunityChat(env,s,{message:'Compare evidence',orderByEvidence:true});expect(result.grounded).toBe(false);expect(result.orderedProfiles).toEqual([]);expect(result.groundingFailure).toBe('invalid_order');
+});
+
+it("reports only a bounded validation code for malformed final JSON", async () => {
+ complete.mockResolvedValueOnce({...done,content:'private malformed output'});
+ const result=await runCommunityChat(env,service(),{message:'hello'});
+ expect(result.groundingFailure).toBe('invalid_json');expect(result.grounded).toBe(false);
+ expect(JSON.stringify(result)).not.toContain('private malformed output');
 });
