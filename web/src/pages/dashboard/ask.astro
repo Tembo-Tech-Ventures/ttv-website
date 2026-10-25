@@ -8,6 +8,8 @@
  * `ImmersiveLayout` and carries its own way back into the dashboard instead.
  * Auth is still enforced by middleware on `/dashboard/*`.
  */
+import { createCommunityService } from "@/lib/community/service";
+import { hasDiscoveryAccess } from "@/lib/dashboard-presentation";
 import ImmersiveLayout from "@/layouts/ImmersiveLayout.astro";
 import ChatApp from "@/components/chat/ChatApp";
 import { drizzle } from "drizzle-orm/d1";
@@ -16,12 +18,14 @@ import * as schema from "@/lib/db/schema";
 import { getStudentJourney } from "@/lib/student/journey";
 
 const user = Astro.locals.user!;
+const canDiscover = hasDiscoveryAccess(await createCommunityService(env.DB, user.id, Astro.locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT).access());
 const journey = await getStudentJourney(drizzle(env.DB, { schema }), user.id);
 ---
 
 <ImmersiveLayout title="Ask AI | Tembo Tech Ventures">
   <ChatApp
     client:load
+    canDiscover={canDiscover}
     visibleLinkIds={journey.visibleLinkIds}
     unreadLeadCount={journey.unreadLeadCount}
   />

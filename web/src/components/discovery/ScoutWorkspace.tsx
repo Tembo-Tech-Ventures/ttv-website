@@ -41,6 +41,10 @@ interface Props {
   ) => Promise<EvidenceAnswer>;
 }
 
+export function entryCountLabel(count: number, confirmed = false) {
+  return `${count} ${confirmed ? "confirmed " : ""}${count === 1 ? "entry" : "entries"}`;
+}
+
 export function EvidenceLinks({ sources }: { sources: EvidenceSource[] }) {
   return (
     <ul className="discovery-sources">
@@ -149,7 +153,7 @@ function ProfileEvidence({
         </div>
         <div className="discovery-section-heading">
           <h2>The work behind the profile</h2>
-          <span>{profile.claims.length} entries</span>
+          <span>{entryCountLabel(profile.claims.length)}</span>
         </div>
         <p className="discovery-muted">
           Member contributions and the sources behind them. Confirmations apply
@@ -521,7 +525,7 @@ export default function ScoutWorkspace({
                       />
                       <small>
                         Describe the opportunity and what a good contribution
-                        looks like. Avoid confidential information.
+                        looks like. This context informs evidence ordering, not directory skill matching. Avoid confidential information.
                       </small>
                     </label>
                     <label className="discovery-field">
@@ -630,15 +634,12 @@ export default function ScoutWorkspace({
               )}
               <p className="discovery-muted">
                 Explore source evidence and individual contributions. This list
-                is not an overall ranking of people.
+                is not an overall ranking of people. Directory results are alphabetical and show up to 50 matches; this is not a total count of eligible members. Refine your skills or name search to narrow the list.
               </p>
               <div className="discovery-results">
-                {results.map((profile, index) => (
+                {results.map((profile) => (
                   <article className="discovery-person" key={profile.id}>
                     <div className="discovery-person-top">
-                      <span className="discovery-person-index">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
                       <div className="discovery-avatar" aria-hidden="true">
                         {profile.name
                           .split(" ")
@@ -674,12 +675,10 @@ export default function ScoutWorkspace({
                           </span>
                           <span>
                             {
-                              profile.claims.filter(
-                                (claim) =>
-                                  currentConfirmations(claim).length > 0,
-                              ).length
-                            }{" "}
-                            confirmed entries
+                              entryCountLabel(profile.claims.filter(
+                                (claim) => currentConfirmations(claim).length > 0,
+                              ).length, true)
+                            }
                           </span>
                         </>
                       )}

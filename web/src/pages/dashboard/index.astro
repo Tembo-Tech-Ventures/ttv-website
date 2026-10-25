@@ -1,4 +1,6 @@
 ---
+import { createCommunityService } from "@/lib/community/service";
+import { hasDiscoveryAccess, dashboardNextStep } from "@/lib/dashboard-presentation";
 import DashboardLayout from "@/layouts/DashboardLayout.astro";
 import Card from "@/components/common/Card.astro";
 import Button from "@/components/common/Button.astro";
@@ -11,7 +13,8 @@ import { getDashboardGreetingName } from "@/lib/display-name";
 
 const user = Astro.locals.user!;
 const journey = await getStudentJourney(drizzle(env.DB, { schema }), user.id);
-const { nextStep } = journey;
+const canDiscover = hasDiscoveryAccess(await createCommunityService(env.DB, user.id, Astro.locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT).access());
+const nextStep = dashboardNextStep(journey.nextStep, canDiscover);
 const greetingName = getDashboardGreetingName(user.name);
 const hasVisitedDashboard =
   Astro.cookies.get("ttv-dashboard-visited")?.value === user.id;
@@ -25,7 +28,7 @@ Astro.cookies.set("ttv-dashboard-visited", user.id, {
 });
 ---
 
-<DashboardLayout title="Dashboard" journey={journey}>
+<DashboardLayout title="Dashboard" journey={journey} canDiscover={canDiscover}>
   <div class="mx-auto max-w-3xl space-y-6">
     {hasVisitedDashboard && (
       <header>
