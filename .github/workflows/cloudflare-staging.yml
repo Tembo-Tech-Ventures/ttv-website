@@ -19,6 +19,7 @@ on:
           - retained-read-probe
           - persona-qa-issue
           - persona-qa-cleanup
+          - preview-container-state
       expected_sha:
         description: Exact current head SHA of integration PR 171 (reserve a PM deployment slot first)
         required: true
@@ -272,3 +273,32 @@ jobs:
         env:
           STAGING_ACTION: persona-qa-cleanup
         run: node web/scripts/cloudflare/staging-persona-qa.mjs
+
+  preview-container-state:
+    if: ${{ inputs.action == 'preview-container-state' }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: staging
+    permissions:
+      contents: read
+      pull-requests: read
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Read exact PR220 container state without starting it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_ACTION: preview-container-state
+          STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
+          STAGING_INTEGRATION_PR: "171"
+          CLOUDFLARE_ENVIRONMENT_NAME: staging
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/cloudflare/preview-container-state.mjs
