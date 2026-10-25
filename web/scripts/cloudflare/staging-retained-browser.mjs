@@ -35,7 +35,7 @@ export async function verifyRetainedBrowser({target,actor,query='Kotlin',browser
   const order=page.getByRole('button',{name:'Order by published evidence',exact:true});await order.waitFor({timeout:20000});
   const responsePromise=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/community/chat'&&r.request().method()==='POST',{timeout:75000});
   const start=globalThis.performance.now();await order.click();const response=await responsePromise;const data=await response.json();const latencyMs=Math.round(globalThis.performance.now()-start);
-  console.log(JSON.stringify({event:"retained-browser",stage:"chat-response",status:response.status(),grounded:data.grounded===true,modelSteps:data.execution?.modelSteps,toolCalls:data.execution?.executedToolCalls}));
+  console.log(JSON.stringify({event:"retained-browser",stage:"chat-response",status:response.status(),grounded:data.grounded===true,groundingFailure:["execution_limit","invalid_structure","invalid_json","invalid_citation","invalid_order"].includes(data.groundingFailure)?data.groundingFailure:null,modelSteps:data.execution?.modelSteps,toolCalls:data.execution?.executedToolCalls}));
   if(response.status()!==200||!data.grounded||!data.orderedProfiles?.length)throw new Error('Evidence order unavailable.');
   await page.getByText(/AI-generated evidence order/).waitFor({timeout:10000});
   const screenshots=[];
