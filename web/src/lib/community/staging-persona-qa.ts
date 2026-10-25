@@ -67,7 +67,7 @@ export async function handleQaCommunityRequest(request:Request,path:string,qa:Qa
   const current=await validateQaIdentity(env,qa.sessionId);
   if(current.runId!==qa.runId||current.userId!==qa.userId||current.persona!==qa.persona||current.expiresAt!==qa.expiresAt)return fail();
   if(!qaPathAllowed(qa.persona,'/api/community/'+path,request.method))return fail();
-  if(request.method==='GET')return await safeRead(await handleCommunityRequest(request,path,{id:qa.userId,scopes:null,delegatedSession:true,demo:{persona:qa.persona}},env.DB),env);
+  if(request.method==='GET')return await safeRead(await handleCommunityRequest(request,path,{id:qa.userId,scopes:null,delegatedSession:true,demo:{persona:qa.persona}},env.DB,env as Env),env);
   if(request.headers.get('origin')!==DEMO_ORIGIN)return fail();
   const parts=path.split('/'),id=parts[1];
   if(path==='journey')return await createQaJourney(env,qa,request);
