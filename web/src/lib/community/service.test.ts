@@ -263,3 +263,11 @@ it("atomically permits one confirmation per mentor and revision, preserving earl
  const other=createCommunityService(f.db,'other');await other.confirmJourney(item.id,{...review,expectedRevision:2});
  expect((await f.institution.listJourney('member'))[0].confirmations).toHaveLength(3);
 });
+
+it('keeps already-reviewed status authoritative when the display history limit omits that confirmation',async()=>{
+ const f=fixture();await f.member.updateOwnProfile(profile);const item=await f.member.createJourney(entry);await f.mentor.confirmJourney(item.id,{expectedRevision:1,statement:'Current review',method:'Review'});
+ f.sql.prepare("UPDATE communityConfirmation SET createdAt=1").run();
+ const insert=f.sql.prepare("INSERT INTO communityConfirmation(id,journeyId,mentorId,statement,method,journeyVersion,mentorRole,createdAt) VALUES(?,?,'other','Historical note','Review',0,'MENTOR',2)");
+ for(let i=0;i<501;i++)insert.run('historical-'+i,item.id);
+ const queue=await f.mentor.listMentorship();expect(queue[0].confirmations).toHaveLength(500);expect(queue[0].confirmations.some(c=>c.mentorId==='mentor')).toBe(false);expect(queue[0].reviewedByCurrentMentor).toBe(true);
+});

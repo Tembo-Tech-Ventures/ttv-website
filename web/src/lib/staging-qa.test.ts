@@ -95,3 +95,9 @@ it('serializes concurrent QA confirmations without duplicate corroboration or or
  expect(results.map(r=>r.status)).toEqual([201,409]);expect(f.sql.prepare('SELECT COUNT(*) n FROM communityConfirmation WHERE journeyId=?').get(id)?.n).toBe(1);
  expect(f.sql.prepare("SELECT COUNT(*) n FROM stagingQaResource WHERE kind='confirmation'").get()?.n).toBe(1);
 });
+
+it('leaves no ledger-only row when the journey revision changes before the confirmation batch',async()=>{
+ const f=setup();const created=await f.call('member-cohort','journey','POST',{title:`Fictional QA ${QA_RUN_ID}: Race`,description:'Fictional work',occurredAt:'2026-10-25',visibility:'institution'});const id=(await created.json() as {entry:{id:string}}).entry.id;
+ const batch=f.env.DB.batch.bind(f.env.DB);vi.spyOn(f.env.DB,'batch').mockImplementationOnce(async statements=>{f.sql.prepare('UPDATE communityJourney SET version=2 WHERE id=?').run(id);return batch(statements);});
+ const result=await f.call('mentor',`journey/${id}/confirmations`,'POST',{expectedRevision:1,statement:'Fictional QA review',method:'Fictional walkthrough'});expect(result.status).toBe(409);expect(f.sql.prepare("SELECT COUNT(*) n FROM stagingQaResource WHERE kind='confirmation'").get()?.n).toBe(0);expect(f.sql.prepare('SELECT COUNT(*) n FROM communityConfirmation').get()?.n).toBe(0);
+});
