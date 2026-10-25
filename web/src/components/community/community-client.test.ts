@@ -324,3 +324,42 @@ describe("community API boundary", () => {
     expect(canOpenWorkspace("scout", { ...access, isAdmin: true })).toBe(true);
   });
 });
+
+
+describe("chat request deadline", () => {
+  it("allows a valid multi-step chat response after the ordinary request deadline", async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      signal = init?.signal ?? undefined;
+      return new Promise<Response>(resolve => { setTimeout(() => resolve(Response.json({
+        answer: "Published contribution", aiGenerated: true, grounded: true, limited: false,
+        citations: [{ kind: "journey", id: "entry", userId: "member", version: 3 }],
+      })), 60_000); });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const pending = askProfile(mapProfile(profile, [entry]), "Explain this work", { query: "", context: "", skills: "" });
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(35_000);
+    expect((await pending).text).toBe("Published contribution");
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it.each([["chat", "POST", 70_000], ["profile", "GET", 25_000], ["profile", "PUT", 25_000]])(
+    "still aborts %s %s at its bounded deadline without retry", async (path, method, deadline) => {
+      vi.useFakeTimers();
+      const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("Private transport details")), { once: true });
+      }));
+      const pending = communityRequest(path as string, z.object({ ok: z.boolean() }), method as string, undefined, fetcher);
+      const settled = pending.catch(error => error);
+      await vi.advanceTimersByTimeAsync((deadline as number) - 1);
+      expect(fetcher.mock.calls[0][1]?.signal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await settled).toEqual(new UiApiError(500));
+      expect(fetcher).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+});
