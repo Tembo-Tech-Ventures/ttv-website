@@ -230,6 +230,12 @@ describe('retained demo dataset isolation',()=>{
     const demoMentor=createCommunityService(f.db,mentor,null,'staging');
     const realEntry=await f.member.createJourney(entry);
     const demoEntry=await demoMember.createJourney(entry);
+    await f.mentor.confirmJourney(demoEntry.id,{statement:'Private real mentor statement',method:'Review',expectedRevision:1});
+    await demoMentor.confirmJourney(demoEntry.id,{statement:'Synthetic confirmation',method:'Review',expectedRevision:1});
+    for (const journeys of [await demoMember.listJourney(), await demoInstitution.listJourney(member), await demoMentor.listMentorship()]) {
+      expect(journeys[0].confirmations.map(c=>c.mentorId)).toEqual([mentor]);
+      expect(JSON.stringify(journeys)).not.toContain('Private real mentor statement');
+    }
     const results=await demoInstitution.searchProfiles({});
     expect(results.map(p=>p.userId).toSorted()).toEqual([institution,member].toSorted());
     await expect(demoInstitution.getProfile('member')).rejects.toMatchObject({status:403});

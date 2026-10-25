@@ -17,8 +17,8 @@ const applies = (environment: string | undefined, enabled: boolean) => enabled &
   (environment === "staging" || /^agent-[a-z0-9-]+$/.test(environment ?? ""));
 
 /** Also reject legacy extended sessions when no refresh would otherwise occur. */
-export function syntheticSessionResponseHook(environment: string | undefined, enabled: boolean): BetterAuthOptions["hooks"] {
-  if (!applies(environment, enabled)) return undefined;
+export function syntheticSessionResponseHook(environment: string | undefined, enabled: boolean, demoEnabled = false): BetterAuthOptions["hooks"] {
+  if (!applies(environment, enabled) && !(environment === "staging" && demoEnabled)) return undefined;
   return { after: createAuthMiddleware(async ctx => {
     if (ctx.path !== "/get-session") return;
     // Never turn a failed refresh/revocation race into a successful session.
@@ -50,8 +50,8 @@ export function syntheticSessionResponseHook(environment: string | undefined, en
 }
 
 /** Keep the fixture's original deadline; ordinary sessions retain normal refresh. */
-export function syntheticSessionHooks(environment: string | undefined, enabled: boolean): BetterAuthOptions["databaseHooks"] {
-  if (!applies(environment, enabled)) return undefined;
+export function syntheticSessionHooks(environment: string | undefined, enabled: boolean, demoEnabled = false): BetterAuthOptions["databaseHooks"] {
+  if (!applies(environment, enabled) && !(environment === "staging" && demoEnabled)) return undefined;
   return {
     session: {
       update: {
