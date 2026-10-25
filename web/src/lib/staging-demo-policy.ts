@@ -1,11 +1,12 @@
 /** Retained fictional records are distinct from disposable verification fixtures. */
 export const DEMO_PREFIX = 'ttv-staging-demo-v1-';
-export const DEMO_PERSONAS = {
+export const DEMO_PERSONAS = Object.freeze({
   'member-cohort': { userId: `${DEMO_PREFIX}member-cohort`, role: 'STUDENT', redirectTo: '/dashboard/community' },
   'member-noncohort': { userId: `${DEMO_PREFIX}member-noncohort`, role: null, redirectTo: '/dashboard/community' },
   mentor: { userId: `${DEMO_PREFIX}mentor`, role: 'MENTOR', redirectTo: '/dashboard/mentorship' },
   institution: { userId: `${DEMO_PREFIX}institution`, role: 'INSTITUTION', redirectTo: '/dashboard/discover' },
-} as const;
+} as const);
+for (const persona of Object.values(DEMO_PERSONAS)) Object.freeze(persona);
 export type DemoPersona = keyof typeof DEMO_PERSONAS;
 export const DEMO_USER_IDS = Object.freeze([
   ...Object.values(DEMO_PERSONAS).map(p => p.userId),

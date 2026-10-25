@@ -30,6 +30,10 @@ function setup() {
   return {sql,env,request};
 }
 describe('retained demo browser boundary',()=>{
+  it('keeps fixed persona identities immutable at runtime',()=>{
+    expect(Object.isFrozen(DEMO_PERSONAS)).toBe(true);
+    for(const persona of Object.values(DEMO_PERSONAS)) expect(Object.isFrozen(persona)).toBe(true);
+  });
   it('switches only fixed personas, revokes the previous session, and uses secure cookies',async()=>{
     const f=setup();const response=await handleDemoAction(f.env,f.request(),'switch',now);
     expect(response.status).toBe(200);expect(await response.json()).toEqual({redirectTo:'/dashboard/mentorship'});

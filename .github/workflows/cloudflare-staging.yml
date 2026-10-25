@@ -20,6 +20,11 @@ on:
         required: true
         type: string
 
+      demo_enabled:
+        description: Enable retained demo browser access (owner approval required; default off)
+        required: false
+        type: boolean
+        default: false
       browser_chat:
         description: One synthetic desktop chat submission with tool and citation verification
         required: false
@@ -74,6 +79,7 @@ jobs:
       redirect_domain: ${{ vars.STAGING_REDIRECT_DOMAIN }}
       better_auth_url: ${{ vars.STAGING_BETTER_AUTH_URL }}
       agent_auth_enabled: true
+      staging_demo_enabled: ${{ inputs.demo_enabled }}
       workers_subdomain: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
       protected_environments: production,prod
     secrets: inherit
