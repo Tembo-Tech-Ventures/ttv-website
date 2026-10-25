@@ -61,11 +61,14 @@ describe("staging personas on application migrations", () => {
       const artifact=await readFile('test-results/staging-retained-search.json','utf8');expect(artifact).not.toContain('ttv_pat_');expect(artifact).toContain('Missing evidence remains unknown.');
     }finally{vi.useRealTimers();db.close();await rm('test-results/staging-retained-search.json',{force:true});}
   });
+  it("ordinary cookie fixtures still require a signing secret before any writes",async()=>{
+    const {db,options}=await fixture();try{await expect(withStagingPersonas({...options,signingSecret:undefined,run:async()=>{}})).rejects.toThrow("signing configuration");expect(count(db,'user')).toBe(0);}finally{db.close();}
+  });
   it("retained mode creates only two read-only actors capped15min and revokes them even after failure",async()=>{
     vi.useFakeTimers({toFake:["Date"]});vi.setSystemTime(new Date("2026-10-25T09:30:00Z"));
     const {db,options}=await fixture();const audit=vi.fn();
     try {
-      await expect(withStagingPersonas({...options,retainedReadProbe:true,audit,run:async personas=>{
+      await expect(withStagingPersonas({...options,signingSecret:undefined,retainedReadProbe:true,audit,run:async personas=>{
         expect(Object.keys(personas)).toEqual(["institution","unapprovedInstitution"]);
         const identities=db.prepare('SELECT * FROM stagingFixtureIdentity').all();expect(identities).toHaveLength(2);
         for(const p of Object.values(personas)){expect(p.cookies).toEqual([]);expect(p.sessionId).toBe(`${p.userId}-retained-read-probe-session`);expect(p.expiresAt).toBeLessThanOrEqual(Math.min(Math.floor(Date.now()/1000)+900,Date.parse('2026-10-25T11:10:35Z')/1000));}

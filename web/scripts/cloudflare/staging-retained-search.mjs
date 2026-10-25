@@ -40,6 +40,7 @@ export async function runRetainedSearch({environment=process.env,api=cfApi,fetch
   for(const test of [...RETAINED_CASES,{label:'default limit',query:'',skills:[],limit:20},{label:'limit1',query:'',skills:[],limit:1},{label:'limit2',query:'',skills:[],limit:2},{label:'max50',query:'',skills:[],limit:50}]){
    const params=new globalThis.URLSearchParams({query:test.query,skills:test.skills.join(',')});if(test.label!=='default limit')params.set('limit',String(test.limit??50));
    const actual=await request(personas.institution,`profiles?${params}`), expected=expectedMatches(profiles,test), actualIds=actual.data.profiles?.map(p=>p.userId);
+   console.log(JSON.stringify({event:"retained-directory-check",case:test.label,status:actual.status,expectedCount:expected.length,actualCount:Array.isArray(actualIds)?actualIds.length:null,latencyMs:actual.latencyMs}));
    ensure(actual.status===200&&JSON.stringify(actualIds)===JSON.stringify(expected));report.directory.cases.push({label:test.label,status:actual.status,expected,actual:actualIds,latencyMs:actual.latencyMs});
   }
   for(const [label,actor,path,expectedStatus] of [['no-role',personas.unapprovedInstitution,'profiles',403],['invalid-limit',personas.institution,'profiles?limit=51',400],['non-retained',personas.institution,'profiles/not-a-demo-user',403]]){

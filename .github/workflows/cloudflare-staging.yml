@@ -224,7 +224,6 @@ jobs:
           CLOUDFLARE_ENVIRONMENT_NAME: staging
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
         run: node scripts/cloudflare/staging-retained-search.mjs
       - uses: actions/upload-artifact@v4
         if: ${{ success() }}
