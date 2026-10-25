@@ -408,7 +408,7 @@ it("allows only the retained probe GET discovery shell, never unrelated pages or
 });
 
 describe('dedicated QA middleware does not inherit normal authentication',()=>{
- const qa={runId:'unit',persona:'member-cohort',userId:'ttv-staging-demo-v1-member-cohort',sessionId:'unit-qa',issuedAt:1,expiresAt:2};
+ const qa={runId:'unit',persona:'member-noncohort',userId:'ttv-staging-demo-v1-member-noncohort',sessionId:'unit-qa',issuedAt:1,expiresAt:2};
  function request(path:string,method='GET'){return new Request('https://staging.tembotechventures.com'+path,{method,headers:{cookie:'__Host-ttv-retained-qa=fictional-unit-only',origin:'https://staging.tembotechventures.com'}});}
  it('sets constrained QA context and no-store without ordinary auth or demo parent',async()=>{
   mocks.authenticateQaCookie.mockResolvedValue({qa,user:{...tokenAuth.user,id:qa.userId},session:tokenAuth.session});
@@ -418,6 +418,11 @@ describe('dedicated QA middleware does not inherit normal authentication',()=>{
  });
  it.each(['/api/auth/get-session','/api/auth/sign-out','/api/demo/logout','/api/community/chat','/api/mcp','/admin'])('denies %s before any normal handler',async path=>{
   mocks.authenticateQaCookie.mockResolvedValue({qa,user:tokenAuth.user,session:tokenAuth.session});const {context,next}=createContext(request(path,'POST'));
+  expect(requireResponse(await onRequest(context as never,next)).status).toBe(403);expect(next).not.toHaveBeenCalled();expect(mocks.createAuth).not.toHaveBeenCalled();
+ });
+ it('denies the excluded cohort persona before invoking an ordinary handler',async()=>{
+  mocks.authenticateQaCookie.mockResolvedValue({qa:{...qa,persona:'member-cohort'},user:tokenAuth.user,session:tokenAuth.session});
+  const {context,next}=createContext(request('/dashboard/community'));
   expect(requireResponse(await onRequest(context as never,next)).status).toBe(403);expect(next).not.toHaveBeenCalled();expect(mocks.createAuth).not.toHaveBeenCalled();
  });
  it('fails closed for invalid QA cookie rather than falling back to a human cookie',async()=>{
