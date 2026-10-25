@@ -68,3 +68,13 @@ describe("dashboard shell hydration", () => {
     expect(html).toContain(">TTV Dashboard</span>");
   });
 });
+
+describe("demo dashboard navigation", () => {
+  it("replaces blocked auth logout with demo controls only for validated demo sessions", () => {
+    const normal = getDashboardLinks([...BASE_LINKS]);
+    const demo = getDashboardLinks([...BASE_LINKS], 0, true);
+    expect(normal.find(link => link.id === "logout")?.href).toBe("/auth/logout");
+    expect(demo.find(link => link.id === "logout")).toMatchObject({ href: "/demo", label: "Demo controls" });
+    expect(demo.some(link => link.href === "/auth/logout")).toBe(false);
+  });
+});

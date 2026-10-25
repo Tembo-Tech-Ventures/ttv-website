@@ -27,6 +27,7 @@ const journey =
     currentPath={Astro.url.pathname}
     visibleLinkIds={journey.visibleLinkIds}
     unreadLeadCount={journey.unreadLeadCount}
+    demoSession={Boolean(Astro.locals.stagingDemo)}
   >
     <slot />
   </DashboardShell>

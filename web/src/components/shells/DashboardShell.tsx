@@ -51,7 +51,8 @@ export const DASHBOARD_LINKS: DashboardLink[] = [
 
 export function getDashboardLinks(
   visibleLinkIds: StudentDashboardLinkId[],
-  unreadLeadCount = 0
+  unreadLeadCount = 0,
+  demoSession = false
 ): DashboardLink[] {
   const visible = new Set<DashboardLink["id"]>([
     ...visibleLinkIds,
@@ -59,7 +60,9 @@ export function getDashboardLinks(
     "logout",
   ]);
   return DASHBOARD_LINKS.filter((link) => visible.has(link.id)).map((link) =>
-    link.id === "leads" && unreadLeadCount > 0
+    link.id === "logout" && demoSession
+      ? { ...link, href: "/demo", label: "Demo controls" }
+      : link.id === "leads" && unreadLeadCount > 0
       ? { ...link, badge: unreadLeadCount }
       : link
   );
@@ -70,11 +73,13 @@ export default function DashboardShell({
   currentPath,
   visibleLinkIds,
   unreadLeadCount = 0,
+  demoSession = false,
 }: {
   children: ReactNode;
   currentPath: string;
   visibleLinkIds: StudentDashboardLinkId[];
   unreadLeadCount?: number;
+  demoSession?: boolean;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const hydrated = useSyncExternalStore(
@@ -82,7 +87,7 @@ export default function DashboardShell({
     () => true,
     () => false
   );
-  const links = getDashboardLinks(visibleLinkIds, unreadLeadCount);
+  const links = getDashboardLinks(visibleLinkIds, unreadLeadCount, demoSession);
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-surface to-dark">
