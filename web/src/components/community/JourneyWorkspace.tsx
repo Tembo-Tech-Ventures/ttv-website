@@ -6,7 +6,7 @@ import { EvidenceLinks } from "../discovery/ScoutWorkspace";
 
 import type { CommunityProfile, JourneyClaim } from "../discovery/types";
 import ClaimConfirmations from "../discovery/ClaimConfirmations";
-import { displayUiError } from "../discovery/ui-errors";
+import { UiApiError, displayUiError } from "../discovery/ui-errors";
 import ProfileEditor, { type EditableCommunityProfile } from "./ProfileEditor";
 
 export interface ClaimDraft {
@@ -50,11 +50,13 @@ export default function JourneyWorkspace({
   profile: initialProfile,
   demo = false,
   onSave,
+  onUpdate,
   onSaveProfile,
 }: {
   profile: CommunityProfile;
   demo?: boolean;
   onSave?: (draft: ClaimDraft) => Promise<JourneyClaim>;
+  onUpdate?: (claim: JourneyClaim, draft: ClaimDraft) => Promise<JourneyClaim>;
   onSaveProfile?: (
     draft: EditableCommunityProfile,
   ) => Promise<CommunityProfile>;
@@ -63,6 +65,7 @@ export default function JourneyWorkspace({
   const [claims, setClaims] = useState(initialProfile.claims);
   const [editingProfile, setEditingProfile] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [editingClaim,setEditingClaim]=useState<JourneyClaim|null>(null);
   const [draft, setDraft] = useState<ClaimDraft>({
     title: "",
     description: "",
@@ -89,7 +92,10 @@ export default function JourneyWorkspace({
     setNotice("");
     try {
       let claim: JourneyClaim;
-      if (onSave) claim = await onSave(draft);
+      if(editingClaim && onUpdate) claim=await onUpdate(editingClaim,draft);
+      else if(editingClaim && demo) claim={...editingClaim,title:draft.title.trim(),description:draft.description.trim(),date:draft.date,version:editingClaim.version+1,evidence:draft.sourceUrl.trim()?[{id:editingClaim.id,title:"Supporting work",url:draft.sourceUrl.trim(),kind:"Member source"}]:[]};
+      else if(editingClaim) throw new Error("Editing unavailable.");
+      else if (onSave) claim = await onSave(draft);
       else if (demo)
         claim = {
           id: `demo-${crypto.randomUUID()}`,
@@ -115,7 +121,8 @@ export default function JourneyWorkspace({
         throw new Error(
           "We could not save your entry right now. Your draft is still here; try again shortly.",
         );
-      setClaims((current) => [claim, ...current]);
+      setClaims((current) => editingClaim ? current.map(item=>item.id===claim.id?claim:item) : [claim, ...current]);
+      setEditingClaim(null);
       setEditing(false);
       setDraft({
         title: "",
@@ -126,11 +133,11 @@ export default function JourneyWorkspace({
       setNotice(
         demo
           ? "Demo entry added to this page. It will reset when you reload."
-          : "Your contribution has been saved.",
+          : editingClaim ? "Your contribution has been updated. Earlier mentor statements remain attached to their reviewed revision." : "Your contribution has been saved.",
       );
     } catch (cause) {
       setError(
-        displayUiError(
+        editingClaim && cause instanceof UiApiError && cause.status === 409 ? "This contribution changed since you opened it. Reload before editing; your draft is still here." : displayUiError(
           cause,
           "We could not save your contribution. Your draft is still here.",
         ),
@@ -203,9 +210,13 @@ export default function JourneyWorkspace({
             </div>
             <button
               className="discovery-button"
+              disabled={busy}
               onClick={() => {
+                setEditingClaim(null);
+                if(editingClaim)setDraft({title:"",description:"",date:"",sourceUrl:""});
                 setEditing(true);
                 setNotice("");
+                setError("");
               }}
             >
               <Plus size={18} aria-hidden="true" />
@@ -219,7 +230,8 @@ export default function JourneyWorkspace({
               onSubmit={save}
               aria-describedby="contribution-sharing"
             >
-              <h2>What did you contribute?</h2>
+              <h2>{editingClaim ? "Edit your contribution" : "What did you contribute?"}</h2>
+              {editingClaim && <p>Editing creates a new revision. Earlier mentor statements stay with the revision they reviewed.</p>}
               <p>
                 A project, a useful fix, a talk, or something you learned. Be
                 specific about your part.
@@ -288,12 +300,11 @@ export default function JourneyWorkspace({
                   </p>
                 )}
                 <p id="contribution-sharing" className="discovery-notice">
-                  Saving shares this contribution with approved institutions and
-                  makes it available for mentor review. This is not a private draft.
+                  {editingClaim?.visibility === "private" ? "Saving keeps this contribution private. Earlier mentor statements remain part of its revision history." : "Saving shares this contribution with approved institutions and makes it available for mentor review. This is not a private draft."}
                 </p>
                 <div className="discovery-actions">
                   <button className="discovery-button" disabled={busy}>
-                    {busy ? "Saving…" : "Save contribution"}
+                    {busy ? "Saving…" : editingClaim ? "Save changes" : "Save contribution"}
                     <ArrowRight size={18} aria-hidden="true" />
                   </button>
                   <button
@@ -301,7 +312,7 @@ export default function JourneyWorkspace({
                     className="discovery-text-button"
                     onClick={() => setEditing(false)}
                   >
-                    Keep draft and close
+                    Close editor
                   </button>
                 </div>
               </fieldset>
@@ -312,6 +323,9 @@ export default function JourneyWorkspace({
               <li key={claim.id}>
                 <time dateTime={claim.date}>{claim.date}</time>
                 <h3>{claim.title}</h3>
+                {(onUpdate || demo) && <button type="button" className="discovery-text-button" disabled={busy} onClick={()=>{
+                  setEditingClaim(claim);setDraft({title:claim.title,description:claim.description,date:claim.date,sourceUrl:claim.evidence[0]?.url??""});setEditing(true);setError("");setNotice("");
+                }}>Edit {claim.title}</button>}
                 {claim.visibility === "private" && (
                   <p className="discovery-notice">
                     Unpublished draft · Only you can see this contribution.

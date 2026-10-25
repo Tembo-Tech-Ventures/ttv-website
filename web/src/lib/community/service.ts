@@ -2,7 +2,7 @@ import { DEMO_PREFIX, DEMO_USER_IDS, isDemoUser } from "@/lib/staging-demo-polic
 import { verifySameRunTarget, verifyRetainedProbeTarget, retainedProbeScope, StagingFixtureAccessError, type StagingFixtureIdentity } from "@/lib/staging-fixtures";
 import { createId } from "@paralleldrive/cuid2";
 import {
-  CommunityError, profileInput, journeyInput, confirmationInput, searchInput, parseInput,
+  CommunityError, profileInput, journeyInput, journeyUpdateInput, confirmationInput, searchInput, parseInput,
   type CommunityProfile, type CommunityJourney, type CommunityConfirmation,
 } from "./model";
 
@@ -149,10 +149,10 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
     async updateJourney(id: string,input: unknown) {
       requireWritable();
       await requireFixtureTarget(actorId);
-      const p = parseInput(journeyInput,input);
-      const result = await db.prepare(`UPDATE communityJourney SET title=?,description=?,evidenceUrl=?,occurredAt=?,visibility=?,version=version+1,updatedAt=unixepoch() WHERE id=? AND userId=?`)
-        .bind(p.title,p.description,p.evidenceUrl ?? null,p.occurredAt,p.visibility,id,actorId).run();
-      if (!result.meta.changes) throw new CommunityError("Contribution not found.",404);
+      const p = parseInput(journeyUpdateInput,input);
+      const result = await db.prepare(`UPDATE communityJourney SET title=?,description=?,evidenceUrl=?,occurredAt=?,visibility=?,version=version+1,updatedAt=unixepoch() WHERE id=? AND userId=? AND (? IS NULL OR version=?)`)
+        .bind(p.title,p.description,p.evidenceUrl ?? null,p.occurredAt,p.visibility,id,actorId,p.expectedRevision??null,p.expectedRevision??null).run();
+      if (!result.meta.changes) throw new CommunityError(p.expectedRevision ? "Contribution changed or is no longer available. Reload before editing." : "Contribution not found.",p.expectedRevision?409:404);
       return {id,updated:true};
     },
     async setJourneyVisibility(id: string, input: unknown) {

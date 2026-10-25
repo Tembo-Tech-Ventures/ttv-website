@@ -15,6 +15,7 @@ import {
   loadProfile,
   saveProfile,
   saveContribution,
+  updateContribution,
   confirmContribution,
   askProfile,
   orderProfilesByEvidence,
@@ -153,6 +154,7 @@ export default function CommunityApp({ view }: { view: View }) {
       <JourneyWorkspace
         profile={profile}
         onSave={saveContribution}
+        onUpdate={updateContribution}
         onSaveProfile={saveProfile}
       />
     );

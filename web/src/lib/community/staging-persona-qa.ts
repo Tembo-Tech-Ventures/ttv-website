@@ -3,7 +3,7 @@ import { DEMO_ORIGIN, DEMO_PERSONAS, isDemoUser } from '../staging-demo-policy';
 import { validateQaIdentity, type QaEnvironment } from '../staging-qa-access';
 import { QA_MARKER, qaPathAllowed, type QaIdentity } from '../staging-qa-policy';
 import { communityJson, handleCommunityRequest } from './http';
-import { CommunityError, confirmationInput, journeyInput, parseInput } from './model';
+import { CommunityError, confirmationInput, journeyInput, journeyUpdateInput, parseInput } from './model';
 const members=[DEMO_PERSONAS['member-cohort'].userId,DEMO_PERSONAS['member-noncohort'].userId];
 const liveSql=`EXISTS (SELECT 1 FROM stagingQaSession q JOIN stagingQaRun r ON r.id=q.runId JOIN session s ON s.id=q.sessionId AND s.userId=q.userId
  WHERE q.runId=? AND q.sessionId=? AND q.userId=? AND r.revokedAt IS NULL AND r.issuedAt=s.createdAt AND r.expiresAt=s.expiresAt AND r.expiresAt>unixepoch() AND s.userAgent=?)`;
@@ -39,11 +39,11 @@ async function createQaJourney(env:QaEnvironment,qa:QaIdentity,request:Request){
 
 async function mutateQaJourney(env:QaEnvironment,qa:QaIdentity,request:Request,id:string){
  const db=env.DB;
-   await owned(env,qa,id);let statement:D1PreparedStatement;
-   if(request.method==='PUT'){const p=tagged(await body(request),qa);statement=db.prepare(`UPDATE communityJourney SET title=?,description=?,evidenceUrl=?,occurredAt=?,visibility=?,version=version+1,updatedAt=unixepoch() WHERE id=? AND userId=? AND ${liveSql}`).bind(p.title,p.description,p.evidenceUrl??null,p.occurredAt,p.visibility,id,qa.userId,...liveValues(qa));}
+   await owned(env,qa,id);let statement:D1PreparedStatement;let expectedRevision:number|undefined;
+   if(request.method==='PUT'){const p=parseInput(journeyUpdateInput,await body(request));if(!p.title.startsWith(`Fictional QA ${qa.runId}: `))throw new CommunityError('Use the fictional QA run label in the title.');expectedRevision=p.expectedRevision;statement=db.prepare(`UPDATE communityJourney SET title=?,description=?,evidenceUrl=?,occurredAt=?,visibility=?,version=version+1,updatedAt=unixepoch() WHERE id=? AND userId=? AND (? IS NULL OR version=?) AND ${liveSql}`).bind(p.title,p.description,p.evidenceUrl??null,p.occurredAt,p.visibility,id,qa.userId,p.expectedRevision??null,p.expectedRevision??null,...liveValues(qa));}
    else if(request.method==='PATCH'){const p=await body(request);if(!p||Object.keys(p).length!==1||!['private','institution'].includes(p.visibility))throw new CommunityError('Choose a visibility.');statement=db.prepare(`UPDATE communityJourney SET visibility=?,version=version+1,updatedAt=unixepoch() WHERE id=? AND userId=? AND ${liveSql}`).bind(p.visibility,id,qa.userId,...liveValues(qa));}
    else statement=db.prepare(`DELETE FROM communityJourney WHERE id=? AND userId=? AND ${liveSql}`).bind(id,qa.userId,...liveValues(qa));
-   const result=await statement.run();if(result.meta.changes!==1)return fail();return communityJson({id,updated:request.method!=='DELETE',deleted:request.method==='DELETE'});
+   const result=await statement.run();if(result.meta.changes!==1){if(expectedRevision!==undefined)throw new CommunityError('Contribution changed or is no longer available. Reload before editing.',409);return fail();}return communityJson({id,updated:request.method!=='DELETE',deleted:request.method==='DELETE'});
 }
 
 async function confirmQaJourney(env:QaEnvironment,qa:QaIdentity,request:Request,id:string){
