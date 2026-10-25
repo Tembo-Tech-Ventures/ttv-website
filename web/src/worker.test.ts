@@ -92,6 +92,40 @@ describe("Worker container exports", () => {
     expect(destroy).toHaveBeenCalledOnce();
   });
 
+  it.each([false, true])("attempts shutdown after startup failure (shutdown also fails: %s)", async (shutdownFails) => {
+    const container = new FfmpegContainer({} as never, {} as never);
+    const startupError = new Error("startup failed");
+    const start = vi.fn().mockRejectedValue(startupError);
+    const destroy = shutdownFails
+      ? vi.fn().mockRejectedValue(new Error("shutdown failed"))
+      : vi.fn().mockResolvedValue(undefined);
+    const containerFetch = vi.fn();
+    Object.defineProperties(container, {
+      start: { value: start },
+      destroy: { value: destroy },
+      containerFetch: { value: containerFetch },
+    });
+
+    await expect(container.checkHealth()).rejects.toBe(startupError);
+    expect(destroy).toHaveBeenCalledOnce();
+    expect(start).toHaveBeenCalledBefore(destroy);
+    expect(containerFetch).not.toHaveBeenCalled();
+  });
+
+  it("reports shutdown failure after a successful health request", async () => {
+    const container = new FfmpegContainer({} as never, {} as never);
+    const shutdownError = new Error("shutdown failed");
+    const destroy = vi.fn().mockRejectedValue(shutdownError);
+    Object.defineProperties(container, {
+      start: { value: vi.fn().mockResolvedValue(undefined) },
+      destroy: { value: destroy },
+      containerFetch: { value: vi.fn().mockResolvedValue(Response.json({ ok: true })) },
+    });
+
+    await expect(container.checkHealth()).rejects.toBe(shutdownError);
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
   it("routes process and segment RPC calls through containerFetch", async () => {
     const container = new FfmpegContainer({} as never, {} as never);
     const start = vi.fn().mockResolvedValue(undefined);
