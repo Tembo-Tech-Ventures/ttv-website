@@ -2,8 +2,8 @@ import { pathToFileURL } from "node:url";
 
 /** Fail closed before the staging job receives Cloudflare credentials. */
 export async function validateStagingRevision(env, { fetchImpl = fetch } = {}) {
-  if (env.STAGING_ACTION !== undefined && !["deploy", "verify", "assess", "credential-audit", "cleanup-chat-incident"].includes(env.STAGING_ACTION)) {
-    throw new Error("Staging action must be deploy, verify, assess or credential-audit.");
+  if (env.STAGING_ACTION !== undefined && !["deploy", "verify", "assess", "credential-audit", "cleanup-chat-incident", "seed-demo"].includes(env.STAGING_ACTION)) {
+    throw new Error("Staging action is unsupported.");
   }
   const branch = env.STAGING_INTEGRATION_BRANCH;
   const sha = env.STAGING_EXPECTED_SHA;
