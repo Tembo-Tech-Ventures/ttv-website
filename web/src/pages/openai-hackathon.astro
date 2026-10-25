@@ -1,0 +1,19 @@
+---
+import OrganizerPage from "@/components/hackathon/OrganizerPage";
+import "@/styles/global.css";
+import "@/styles/hackathon.css";
+// Read-only organizer overview: no session, database or model access.
+export const prerender = true;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="TTV's Codex Paris prototype: community contributions, specific mentor confirmations and institutional discovery." />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <title>Tembo: show what you can do | Codex Paris</title>
+  </head>
+  <body><OrganizerPage /></body>
+</html>

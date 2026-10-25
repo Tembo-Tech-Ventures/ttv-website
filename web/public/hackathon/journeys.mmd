@@ -1,0 +1,11 @@
+flowchart TB
+  accTitle: Three journeys and role approval
+  accDescr: An administrator grants mentor and institution roles. A member publishes a contribution and sources. A mentor checks a specific revision. An institution reads the claim, source and confirmation.
+  A[Admin role approval] --> M[Approved mentor]
+  A --> I[Approved institution]
+  U[Member] --> C[Contribution and source links]
+  C --> M
+  M --> V[Confirmation of a specific revision]
+  C --> I
+  V --> I
+  I --> Q[An informed conversation]
