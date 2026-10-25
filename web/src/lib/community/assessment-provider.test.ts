@@ -1,37 +1,39 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { COMMUNITY_ASSESSMENT_MODEL, createAssessmentProvider } from "./assessment-provider";
-const env = { AI_GATEWAY_MODEL: COMMUNITY_ASSESSMENT_MODEL, AI_GATEWAY_ACCOUNT_ID: "account", AI_GATEWAY_NAME: "gateway", AI_GATEWAY_API_KEY: "fictional" } as Env;
+let nativeRun = vi.fn();
+const env = { AI_GATEWAY_MODEL: COMMUNITY_ASSESSMENT_MODEL, AI_GATEWAY_ACCOUNT_ID: "account", AI_GATEWAY_NAME: "gateway", AI: { run: (...args: unknown[]) => nativeRun(...args) } } as Env;
 afterEach(() => vi.unstubAllGlobals());
-describe("unified assessment provider", () => {
-  it("uses only unified Gateway, exact reviewed model and bounded nonstreaming JSON prompt", async () => {
-    const fetch = vi.fn().mockResolvedValue(Response.json({ choices: [{ finish_reason: "stop", message: { content: '{"criteria":[]}' } }] })); vi.stubGlobal("fetch", fetch);
+describe("native Gateway assessment provider", () => {
+  it("uses the authenticated binding with an explicit Gateway and reviewed model", async () => {
+    const fetch = vi.fn().mockResolvedValue(Response.json({ choices: [{ finish_reason: "stop", message: { content: '{"criteria":[]}' } }] })); nativeRun = fetch;
     expect(await createAssessmentProvider(env).complete([{ role: "system", content: "JSON only" }], {})).toBe('{"criteria":[]}');
-    const [url, options] = fetch.mock.calls[0]; expect(url).toBe("https://gateway.ai.cloudflare.com/v1/account/gateway/compat/chat/completions");
-    expect(options.redirect).toBe("error"); expect(options.signal).toBeInstanceOf(AbortSignal);
-    const body = JSON.parse(options.body); expect(body).toMatchObject({ model: COMMUNITY_ASSESSMENT_MODEL, max_completion_tokens: 3000, temperature: 0 });
-    expect(body).not.toHaveProperty("response_format"); expect(body).not.toHaveProperty("tools");
+    const [model, body, options] = fetch.mock.calls[0]; expect(model).toBe("@cf/google/gemma-4-26b-a4b-it");
+    expect(options.returnRawResponse).toBe(true); expect(options.signal).toBeInstanceOf(AbortSignal);
+    expect(options.gateway).toMatchObject({id:"gateway",skipCache:true,collectLog:false,retries:{maxAttempts:1}});
+    expect(body).toMatchObject({ max_completion_tokens: 3000, temperature: 0 });
+    expect(body.response_format).toEqual({ type: "json_object" }); expect(body).not.toHaveProperty("tools");
   });
-  it.each([undefined, { ...env, AI_GATEWAY_ACCOUNT_ID: "" }, { ...env, AI_GATEWAY_API_KEY: "" }])("requires explicit Gateway configuration, no binding fallback", async config => {
-    const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
-    await expect(createAssessmentProvider(config).complete([], {})).rejects.toThrow("configuration"); expect(fetch).not.toHaveBeenCalled();
+  it.each([undefined, { ...env, AI_GATEWAY_NAME: "" }, { ...env, AI: undefined }, { ...env, AI_GATEWAY_NAME: "default" }])("requires explicit Gateway and binding configuration, no direct fallback", async config => {
+    const fetch = vi.fn(); nativeRun = fetch;
+    await expect(createAssessmentProvider(config as Env | undefined).complete([], {})).rejects.toThrow("configuration"); expect(fetch).not.toHaveBeenCalled();
   });
   it("pins community Gemma independently of the unrelated global model without mutating env", async () => {
     const globalEnv = {...env,AI_GATEWAY_MODEL:"workers-ai/@cf/openai/gpt-oss-20b"} as Env;
-    const fetch = vi.fn().mockResolvedValue(Response.json({choices:[{message:{content:"{}"},finish_reason:"stop"}]})); vi.stubGlobal("fetch",fetch);
+    const fetch = vi.fn().mockResolvedValue(Response.json({choices:[{message:{content:"{}"},finish_reason:"stop"}]})); nativeRun = fetch;
     await createAssessmentProvider(globalEnv).complete([],{});
-    expect(JSON.parse(fetch.mock.calls[0][1].body).model).toBe(COMMUNITY_ASSESSMENT_MODEL);
+    expect(fetch.mock.calls[0][0]).toBe("@cf/google/gemma-4-26b-a4b-it");
     expect(globalEnv.AI_GATEWAY_MODEL).toBe("workers-ai/@cf/openai/gpt-oss-20b");
   });
   it.each([{ refusal: "No" }, { content: "{}", refusal: "No" }])("does not treat refusal as assessment", async message => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ choices: [{ message, finish_reason: "stop" }] })));
+    nativeRun = vi.fn().mockResolvedValue(Response.json({ choices: [{ message, finish_reason: "stop" }] }));
     expect(await createAssessmentProvider(env).complete([], {})).toBe("");
   });
   it("rejects truncation and oversized output", async () => {
-    const fetch = vi.fn().mockResolvedValueOnce(Response.json({ choices: [{ message: { content: "{}" }, finish_reason: "length" }] })).mockResolvedValueOnce(new Response("x".repeat(64001))); vi.stubGlobal("fetch", fetch);
-    expect(await createAssessmentProvider(env).complete([], {})).toBe(""); expect(await createAssessmentProvider(env).complete([], {})).toBe("");
+    const fetch = vi.fn().mockResolvedValueOnce(Response.json({ choices: [{ message: { content: "{}" }, finish_reason: "length" }] })).mockResolvedValueOnce(new Response("x".repeat(64001))); nativeRun = fetch;
+    expect(await createAssessmentProvider(env).complete([], {})).toBe(""); await expect(createAssessmentProvider(env).complete([], {})).rejects.toThrow("unavailable");
   });
   it("does not retry failures or leak upstream error bodies", async () => {
-    const fetch = vi.fn().mockResolvedValue(new Response("private upstream error", { status: 503 })); vi.stubGlobal("fetch", fetch);
+    const fetch = vi.fn().mockResolvedValue(new Response("private upstream error", { status: 503 })); nativeRun = fetch;
     await expect(createAssessmentProvider(env).complete([], {})).rejects.toThrow("Assessment provider unavailable"); expect(fetch).toHaveBeenCalledOnce();
     fetch.mockRejectedValue(new DOMException("Timeout", "TimeoutError"));
     await expect(createAssessmentProvider(env).complete([], {})).rejects.toThrow("Assessment provider unavailable"); expect(fetch).toHaveBeenCalledTimes(2);
@@ -42,7 +44,7 @@ describe("server-owned synthetic assessment probe", () => {
   const messages = (content: string) => [{ role: "user" as const, content }];
   function setup() {
     const fetch = vi.fn().mockImplementation(async () => Response.json({ choices: [{ message: { content: "{}" }, finish_reason: "stop" }] }));
-    vi.stubGlobal("fetch", fetch);
+    nativeRun = fetch;
     const claim = vi.fn().mockResolvedValue(undefined);
     return { fetch, claim, provider: createAssessmentProvider(env, { syntheticProbe: { claim } }) };
   }
@@ -56,7 +58,7 @@ describe("server-owned synthetic assessment probe", () => {
   it("accepts exactly 8000 serialized units/bytes and rejects the next unit", async () => {
     const { fetch, claim } = setup();
     await createAssessmentProvider(env).complete(messages(""), {});
-    const overhead = fetch.mock.calls[0][1].body.length;
+    const overhead = JSON.stringify(fetch.mock.calls[0][1]).length;
     fetch.mockClear();
     const provider = createAssessmentProvider(env, { syntheticProbe: { claim } });
     await provider.complete(messages("x".repeat(8000 - overhead)), {});
@@ -117,5 +119,25 @@ describe("server-owned synthetic assessment probe", () => {
     expect(`${error}\n${error.stack}\n${JSON.stringify(error)}`).not.toContain(secret);
     await expect(provider.complete(messages("Synthetic evidence"), {})).rejects.toThrow("unavailable");
     expect(claim).toHaveBeenCalledOnce(); expect(fetch).toHaveBeenCalledOnce();
+  });
+});
+
+describe("sanitized synthetic output diagnostics", () => {
+  it.each([
+    [{ result: { response: "PRIVATE" } }, "response_shape"],
+    [{ choices: [] }, "response_shape"],
+    [{ choices: [{ message: { content: "PRIVATE", refusal: "PRIVATE" }, finish_reason: "stop" }] }, "refusal"],
+    [{ choices: [{ message: { content: "PRIVATE" }, finish_reason: "length" }] }, "finish_reason"],
+    [{ choices: [{ message: { content: " " }, finish_reason: "stop" }] }, "empty_content"],
+    [{ choices: [{ message: { content: {} }, finish_reason: "stop" }] }, "response_shape"],
+  ])("reports only the first bounded reason %s", async (payload, reason) => {
+    nativeRun = vi.fn().mockResolvedValue(Response.json(payload));
+    const reportInvalidOutput = vi.fn();
+    const provider = createAssessmentProvider(env, { syntheticProbe: { claim: vi.fn(), reportInvalidOutput } });
+    await provider.complete([], {});
+    provider.reportInvalidOutput?.("json");
+    expect(reportInvalidOutput).toHaveBeenCalledExactlyOnceWith(reason);
+    expect(JSON.stringify(reportInvalidOutput.mock.calls)).not.toContain("PRIVATE");
+    expect(nativeRun).toHaveBeenCalledOnce();
   });
 });

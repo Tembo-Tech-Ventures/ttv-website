@@ -37,7 +37,7 @@ runner checks that with a read, not a second assessment request. Other fixture
 sessions and real identities are untouched. Production rejects synthetic mode.
 
 The normal fixture lifecycle performs cleanup in `finally`, including failures.
-The only artifact is `test-results/staging-assessment/manifest.json`, published
+The success artifact is `test-results/staging-assessment/manifest.json`, published
 after successful cleanup. It contains fixed status/model/limits, measured
 serialized sizes and HTTP elapsed time, criterion status/rating and validated
 fictional citation IDs/versions. Model prose, raw responses, prompts, request
@@ -46,3 +46,32 @@ billing remain explicitly unavailable. A claimed provider attempt is not proof
 of provider billing or completed inference; success also requires a valid
 completed assessment response. Any failure requires cleanup review and PM
 authorization before another run.
+
+Failures publish a separate `failure.json` containing only fixed phase/error
+codes, a numeric HTTP status when available, the expected revision, and separate
+operation/cleanup outcomes. No raw exception, provider body, prompt, identity,
+header or credential is included. Cleanup checks residual counts for the exact
+provisioned IDs after attempting every deletion; a failed count query or nonzero
+count cannot be reported as successful cleanup. This audit also distinguishes a
+failed verification with successful cleanup from a cleanup failure.
+
+HTTP phases identify the last attempted operation; they do not prove that a
+provider was called. Failure manifests deliberately report provider invocation
+as unknown and billing as unavailable. A transport failure includes timeouts
+but does not guess their cause. A runner failure before fixture creation leaves
+cleanup marked not-started. Workflow installation/preflight failures may have no
+manifest. Read-only deployment binding presence and Gateway metadata can be
+correlated separately, without exposing values or making another inference call.
+
+Before fixture provisioning, the runner checks deployed binding metadata for the
+Gateway account/name and secret-key binding. Presence does not validate a token
+or prove provider readiness; missing metadata fails closed without a model call.
+The failure artifact may retain an allowlisted assessment status/error code,
+boolean claim and bounded payload-size integers from the fixed assessment
+response. A consumed claim does not establish inference completion or billing.
+
+Deployment supplies `AI_GATEWAY_API_KEY` from the optional GitHub staging secret
+`CLOUDFLARE_AI_GATEWAY_TOKEN`. Supplying it to the assessment workflow alone does
+not repair the deployed Worker. Missing credential provisioning requires the
+coordinator's secure configuration decision and a newly authorized integrated
+revision deployment; this runner never creates credentials or modifies settings.

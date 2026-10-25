@@ -17,6 +17,41 @@ function runner() {
   return { options, close, launch };
 }
 describe("restricted staging runner", () => {
+  it("keeps normal verification model-free and opts in only with readiness and a first attempt", async () => {
+    const { options } = runner(); await runStagingFixtures(options);
+    expect(options.withPersonas).toHaveBeenLastCalledWith(expect.objectContaining({ assessmentProbe: false }));
+    options.environment.STAGING_BROWSER_ASSESSMENT = "true";
+    options.environment.GITHUB_RUN_ATTEMPT = "1";
+    options.api.mockResolvedValue({ bindings: [{ name: "AI", type: "ai" }, { name: "AI_GATEWAY_NAME", type: "plain_text", text: "ttv-website-ai-staging" }] });
+    await runStagingFixtures(options);
+    expect(options.withPersonas).toHaveBeenLastCalledWith(expect.objectContaining({ assessmentProbe: true }));
+    expect(options.verifyPersonas).toHaveBeenLastCalledWith(expect.objectContaining({ browserAssessment: true }));
+  });
+  it("opts chat into ordinary sessions and rejects combined inference or reruns", async () => {
+    const { options, launch } = runner();
+    options.environment.STAGING_BROWSER_CHAT = "true";
+    options.environment.GITHUB_RUN_ATTEMPT = "2";
+    await expect(runStagingFixtures(options)).rejects.toThrow("reruns");
+    options.environment.GITHUB_RUN_ATTEMPT = "1";
+    options.environment.STAGING_BROWSER_ASSESSMENT = "true";
+    await expect(runStagingFixtures(options)).rejects.toThrow("only one");
+    expect(launch).not.toHaveBeenCalled();
+    options.environment.STAGING_BROWSER_ASSESSMENT = "false";
+    await expect(runStagingFixtures(options)).rejects.toThrow("binding readiness");
+    options.api.mockResolvedValue({ bindings: [{ name: "AI", type: "ai" }, { name: "AI_GATEWAY_NAME", type: "plain_text", text: "ttv-website-ai-staging" }] });
+    await runStagingFixtures(options);
+    expect(options.withPersonas).toHaveBeenLastCalledWith(expect.objectContaining({ assessmentProbe: false }));
+    expect(options.verifyPersonas).toHaveBeenLastCalledWith(expect.objectContaining({ browserChat: true, browserAssessment: false }));
+  });
+  it("rejects reruns and missing native binding before browser or fixture writes", async () => {
+    const { options, launch } = runner();
+    options.environment.STAGING_BROWSER_ASSESSMENT = "true";
+    options.environment.GITHUB_RUN_ATTEMPT = "2";
+    await expect(runStagingFixtures(options)).rejects.toThrow("reruns");
+    options.environment.GITHUB_RUN_ATTEMPT = "1";
+    await expect(runStagingFixtures(options)).rejects.toThrow("binding readiness");
+    expect(launch).not.toHaveBeenCalled(); expect(options.withPersonas).not.toHaveBeenCalled();
+  });
   it("checks revision/target before provisioning and closes browser", async () => {
     const { options, close } = runner();
     await runStagingFixtures(options);
@@ -84,6 +119,8 @@ describe("restricted staging runner", () => {
     const paths = workflow.split("          path: |\n")[1].trim().split("\n").map(line => line.trim());
     expect(paths).toEqual([
       ...["desktop", "mobile"].flatMap(view => ["member", "mentor", "scout", "known-profile"].map(state => `web/test-results/staging-community/${view}-${state}.png`)),
+      "web/test-results/staging-community/desktop-chat.png",
+      "web/test-results/staging-community/desktop-assessment.png",
       "web/test-results/staging-community/manifest.json",
     ]);
     expect(workflow.indexOf("run: node scripts/cloudflare/staging-fixtures.mjs")).toBeLessThan(workflow.indexOf("uses: actions/upload-artifact@v4"));
@@ -92,9 +129,9 @@ describe("restricted staging runner", () => {
   });
 });
 
-function browserFixture({ failOwn = false } = {}) {
+function browserFixture({ failOwn = false, sameRun = false } = {}) {
   const names = ["member", "otherMember", "mentor", "institution", "unapprovedInstitution", "admin"];
-  const personas = Object.fromEntries(names.map(name => [name, { userId: name, cookies: [{ name: "fixture", value: name }], personalAccessToken: name }]));
+  const personas = Object.fromEntries(names.map(name => [name, { userId: sameRun ? `ttv-staging-fixture-${"a".repeat(24)}-${name}` : name, cookies: [{ name: "fixture", value: name }], personalAccessToken: name }]));
   const contexts = [];
   let granted = false;
   const response = (status, data = {}) => ({ status: () => status, json: async () => data });
@@ -106,7 +143,7 @@ function browserFixture({ failOwn = false } = {}) {
       newPage: vi.fn(async () => ({ goto: async url => response(stagingFixturePathAllowed(new URL(url).pathname) ? 200 : 403), url: () => "https://staging.tembotechventures.com/dashboard/community", close: vi.fn() })),
       request: {
         get: vi.fn(async path => {
-          if (path === "/api/community/profile") return response(failOwn ? 401 : 200, { profile: { userId: name } });
+          if (path === "/api/community/profile") return response(failOwn ? 401 : 200, { profile: { userId: personas[name].userId } });
           if (path === "/api/community/tokens" || path === "/admin/agent-access") return response(403);
           if (path === "/api/community/mentorship") return response(200);
           return response(name === "institution" || (name === "unapprovedInstitution" && granted) ? 200 : 403);
@@ -120,9 +157,18 @@ function browserFixture({ failOwn = false } = {}) {
     contexts.push(context);
     return context;
   }) };
-  return { browser, personas, contexts, verifyJourney: vi.fn(), target: { baseUrl: "https://staging.tembotechventures.com" } };
+  return { audienceEnabled: false, browser, personas, contexts, verifyJourney: vi.fn(), target: { baseUrl: "https://staging.tembotechventures.com" } };
 }
 describe("fixed browser verification", () => {
+  it.each([false,true])("audience wiring reuses guarded contexts and cleans on failure=%s", async fails => {
+    const f=browserFixture({sameRun:true}),verifyAudience=vi.fn();if(fails)verifyAudience.mockRejectedValue(new Error("PRIVATE"));
+    const result=verifyStagingPersonas({...f,audienceEnabled:true,verifyAudience});
+    if(fails)await expect(result).rejects.toThrow("Synthetic staging verification failed");else await result;
+    expect(f.contexts).toHaveLength(10);expect(f.contexts[9].route).toHaveBeenCalledOnce();expect(f.contexts[9].addCookies).not.toHaveBeenCalled();
+    expect(verifyAudience).toHaveBeenCalledWith(expect.objectContaining({anonymousContext:f.contexts[9],contextsByRole:expect.objectContaining({member:f.contexts[0],mentor:f.contexts[2],institution:f.contexts[3],admin:f.contexts[5]}),users:Object.fromEntries(["member","mentor","institution","admin"].map(role=>[role,{userId:`ttv-staging-fixture-${"a".repeat(24)}-${role}`}]))}));
+    expect(f.contexts.every(c=>c.close.mock.calls.length===1)).toBe(true);
+    if(fails)expect(f.verifyJourney).not.toHaveBeenCalled();
+  });
   it("checks role-denied paths and closes all browser/PAT contexts", async () => {
     const f = browserFixture();
     await verifyStagingPersonas(f);
@@ -139,6 +185,8 @@ describe("fixed browser verification", () => {
     await expect(verifyStagingPersonas(f)).rejects.toThrow("Synthetic staging verification failed.");
     expect(f.verifyJourney).toHaveBeenCalledWith({
       baseUrl: f.target.baseUrl,
+      browserAssessment: false,
+      browserChat: false,
       contextsByRole: { member: f.contexts[0], mentor: f.contexts[2], institution: f.contexts[3] },
       users: { member: { userId: "member" }, mentor: { userId: "mentor" }, institution: { userId: "institution" } },
       evidenceDirectory: "test-results/staging-community",
@@ -159,13 +207,47 @@ describe("fixed browser verification", () => {
       await handler(route);
       expect(route.fulfill).toHaveBeenCalledTimes(allowed ? 1 : 0);
       expect(route.fetch).toHaveBeenCalledTimes(allowed ? 1 : 0);
-      if (allowed) expect(route.fetch).toHaveBeenCalledWith({ maxRedirects: 0 });
+      if (allowed) expect(route.fetch).toHaveBeenCalledWith({ maxRedirects: 0, maxRetries: 0, timeout: 30000 });
       expect(route.abort).toHaveBeenCalledTimes(allowed ? 0 : 1);
     }
     const redirect = { request: () => ({ url: () => f.target.baseUrl + "/dashboard/community", redirectedFrom: () => null }), abort: vi.fn(), fetch: vi.fn(async () => ({ status: () => 302 })), fulfill: vi.fn() };
     await handler(redirect);
     expect(redirect.abort).toHaveBeenCalledOnce();
     expect(redirect.fulfill).not.toHaveBeenCalled();
+  });
+  it.each(["fetch", "fulfill", "abort"])("contains private %s errors and fails verification after context cleanup", async stage => {
+    const f = browserFixture();
+    f.verifyJourney.mockImplementation(async () => {
+      const handler = f.contexts[3].route.mock.calls[0][1];
+      const route = {
+        request: () => ({ url: () => f.target.baseUrl + "/api/community/chat", method: () => "POST", redirectedFrom: () => null }),
+        fetch: vi.fn(async () => ({ status: () => stage === "abort" ? 302 : 200 })),
+        fulfill: vi.fn(), abort: vi.fn(),
+      };
+      route[stage].mockRejectedValue(new Error("PRIVATE cookie=session-secret"));
+      // Even abort failure while recovering from fetch/fulfill must be contained.
+      if (stage !== "abort") route.abort.mockRejectedValue(new Error("PRIVATE closed-context"));
+      await expect(handler(route)).resolves.toBeUndefined();
+      expect(route.fetch).toHaveBeenCalledWith({ maxRedirects: 0, maxRetries: 0, timeout: 65000 });
+    });
+    await expect(verifyStagingPersonas({ ...f, browserChat: true })).rejects.toThrow("Synthetic staging browser request failed.");
+    expect(f.contexts.every(context => context.close.mock.calls.length === 1)).toBe(true);
+  });
+  it("drains an in-flight route rejected during context close before returning", async () => {
+    const f = browserFixture(); let handlerDone = false;
+    f.verifyJourney.mockImplementation(async () => {
+      let rejectFetch;
+      const context = f.contexts[3];
+      context.close.mockImplementation(async () => rejectFetch(new Error("PRIVATE close")));
+      const handler = context.route.mock.calls[0][1];
+      void handler({
+        request: () => ({ url: () => f.target.baseUrl + "/api/community/chat", method: () => "POST", redirectedFrom: () => null }),
+        fetch: () => new Promise((resolve, reject) => { rejectFetch = reject; }),
+        abort: async () => { await new Promise(resolve => { globalThis.setTimeout(resolve, 5); }); handlerDone = true; },
+      });
+    });
+    await expect(verifyStagingPersonas({ ...f, browserChat: true })).rejects.toThrow("Synthetic staging browser request failed.");
+    expect(handlerDone).toBe(true);
   });
   it("fails closed and closes contexts on wrong identity/auth status", async () => {
     const f = browserFixture({ failOwn: true });

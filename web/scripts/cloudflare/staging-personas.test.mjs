@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import { verifyStagingPersonas } from "./staging-fixture-verification.mjs";
 import { withStagingPersonas } from "./staging-personas.mjs";
 import { verifyStagingFixtureTarget, STAGING_FIXTURE_DATABASE_ID as dbId } from "./staging-fixture-target.mjs";
 import { createAuth } from "../../src/lib/auth";
@@ -27,6 +28,54 @@ async function fixture() {
 }
 const count = (db, table) => db.prepare(`SELECT count(*) n FROM "${table}"`).get().n;
 describe("staging personas on application migrations", () => {
+  it("revokes actual fixture records when an asynchronous browser route fails", async () => {
+    const { db, options } = await fixture(); const audit = vi.fn();
+    let handler, routeContained = false; const close = vi.fn();
+    try {
+      await expect(withStagingPersonas({ ...options, audit, run: async personas => {
+        const browser = { newContext: async () => ({
+          route: async (pattern, callback) => { handler = callback; }, addCookies: async () => {}, close,
+          request: { get: async () => ({ status: () => 200, json: async () => ({ profile: { userId: personas.member.userId } }) }) },
+          newPage: async () => ({ goto: async () => {
+            await handler({ request: () => ({ url: () => options.target.baseUrl + "/api/community/chat", method: () => "POST", redirectedFrom: () => null }),
+              fetch: async () => { throw new Error("PRIVATE cookie=" + personas.member.cookies[0].value); },
+              abort: async () => { throw new Error("PRIVATE abort"); } });
+            routeContained = true;
+            throw new Error("Navigation aborted");
+          } }),
+        }) };
+        await verifyStagingPersonas({ browser, target: options.target, personas, browserChat: true, audienceEnabled: false });
+      } })).rejects.toThrow("verification failed");
+      expect(routeContained).toBe(true); expect(close).toHaveBeenCalledOnce();
+      for (const table of ["session", "personal_access_token", "stagingFixtureIdentity", "UserRoles", "user"]) expect(count(db, table)).toBe(0);
+      expect(audit).toHaveBeenCalledWith(expect.objectContaining({ event: "fixture-run-outcome", operationStatus: "failed", cleanupStatus: "passed" }));
+      expect(JSON.stringify(audit.mock.calls)).not.toContain("PRIVATE");
+    } finally { db.close(); }
+  });
+  it("reports failed verification separately from verified cleanup",async()=>{
+    const {db,options}=await fixture();const audit=vi.fn();
+    try {
+      await expect(withStagingPersonas({...options,audit,run:async()=>{throw new Error("PRIVATE");}})).rejects.toThrow("verification failed");
+      expect(audit).toHaveBeenCalledWith(expect.objectContaining({event:"fixture-run-outcome",operation:"verification",operationStatus:"failed",cleanupStatus:"passed"}));
+      expect(JSON.stringify(audit.mock.calls)).not.toContain("PRIVATE");
+    } finally {db.close();}
+  });
+  it.each(["residual","unreadable"])("fails cleanup verification when counts are %s",async reason=>{
+    const {db,api,options}=await fixture();const audit=vi.fn();
+    const original=api.getMockImplementation();
+    api.mockImplementation(async(path,args)=>{
+      if(args?.body.sql.startsWith('SELECT COUNT(*)')) {
+        if(reason==="unreadable")throw new Error("PRIVATE SQL binding");
+        return [{results:[{remaining:1}]}];
+      }
+      return original(path,args);
+    });
+    try {
+      await expect(withStagingPersonas({...options,audit,run:async()=>{}})).rejects.toThrow("cleanup failed");
+      expect(audit).toHaveBeenCalledWith(expect.objectContaining({event:"fixture-run-outcome",operationStatus:"passed",cleanupStatus:"failed"}));
+      expect(JSON.stringify(audit.mock.calls)).not.toContain("PRIVATE");
+    } finally {db.close();}
+  });
   it.each([false,true])("dedicates only the assessment institution source session when probe=%s",async assessmentProbe=>{
     const {db,options}=await fixture();
     try {
@@ -102,8 +151,8 @@ describe("staging personas on application migrations", () => {
         expect(pats.some(p => p.scopes.includes("admin:"))).toBe(false);
         return "not forwarded";
       } })).resolves.toBeUndefined();
-      expect(audit.mock.calls.map(([record]) => record.event)).toEqual(["fixture-run-started", "fixture-run-cleaned"]);
-      expect(audit.mock.calls.every(([record]) => Object.keys(record).toSorted().join(",") === "event,runId,version")).toBe(true);
+      expect(audit.mock.calls.map(([record]) => record.event)).toEqual(["fixture-run-started", "fixture-run-outcome", "fixture-run-cleaned"]);
+      expect(audit.mock.calls.filter(([record]) => record.event !== "fixture-run-outcome").every(([record]) => Object.keys(record).toSorted().join(",") === "event,runId,version")).toBe(true);
       for (const table of ["session", "stagingFixtureIdentity", "personal_access_token", "UserRoles", "user"]) expect(count(db, table)).toBe(0);
     } finally { db.close(); }
   });

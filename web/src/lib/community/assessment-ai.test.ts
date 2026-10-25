@@ -80,3 +80,22 @@ describe("model evidence support boundary", () => {
     expect(p.complete).not.toHaveBeenCalled();
   });
 });
+
+describe("assessment output validation diagnostics", () => {
+  it.each([
+    ["PRIVATE not JSON", "json"],
+    ["", "empty_content"],
+    ["x".repeat(40001), "output_size"],
+    [{ criteria: [{ ...criterion, rating: 99 }] }, "schema"],
+    [{ criteria: [{ ...criterion, criterionId: "private-foreign" }] }, "criterion"],
+    [{ criteria: [{ ...criterion, citations: [{ ...reference, id: "private-foreign" }] }] }, "citation"],
+  ])("remains fail-closed and reports only a reason", async (payload, reason) => {
+    const reportInvalidOutput = vi.fn();
+    const p = { ...provider(payload), reportInvalidOutput };
+    const result = await assessEvidenceSupport(profile, [journey], rubric, p);
+    expect(result).toMatchObject({ status: "invalid_output", criteria: [] });
+    expect(result).not.toHaveProperty("outputReason");
+    expect(reportInvalidOutput).toHaveBeenCalledExactlyOnceWith(reason);
+    expect(p.complete).toHaveBeenCalledOnce();
+  });
+});

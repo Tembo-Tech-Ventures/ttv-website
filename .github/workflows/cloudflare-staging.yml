@@ -12,10 +12,29 @@ on:
           - deploy
           - verify
           - assess
+          - credential-audit
+          - cleanup-chat-incident
       expected_sha:
         description: Exact current head SHA of integration PR 171 (reserve a PM deployment slot first)
         required: true
         type: string
+
+      browser_chat:
+        description: One synthetic desktop chat submission with tool and citation verification
+        required: false
+        type: boolean
+        default: false
+      browser_assessment:
+        description: Opt in to ONE synthetic browser assessment during verify (fresh PM slot required)
+        required: false
+        type: boolean
+        default: false
+      token_kind:
+        description: Known credential owner kind, required only for credential-audit
+        required: false
+        type: choice
+        default: unknown
+        options: [unknown, user, account]
 
 # Covers preflight AND reusable deployment/verification. PM must still reserve
 # the channel slot: Actions concurrency is not a FIFO deployment queue.
@@ -67,6 +86,8 @@ jobs:
     uses: ./.github/workflows/cloudflare-staging-fixtures.yml
     with:
       expected_sha: ${{ inputs.expected_sha }}
+      browser_chat: ${{ inputs.browser_chat }}
+      browser_assessment: ${{ inputs.browser_assessment }}
     secrets: inherit
 
   assess:
@@ -79,3 +100,41 @@ jobs:
     with:
       expected_sha: ${{ inputs.expected_sha }}
     secrets: inherit
+
+  credential-audit:
+    if: ${{ inputs.action == 'credential-audit' }}
+    needs: preflight
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/cloudflare-staging-credential-audit.yml
+    with:
+      expected_sha: ${{ inputs.expected_sha }}
+      token_kind: ${{ inputs.token_kind }}
+    secrets: inherit
+
+  cleanup-chat-incident:
+    if: ${{ inputs.action == 'cleanup-chat-incident' }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: staging
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Revoke and remove only the interrupted chat fixture run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_ACTION: cleanup-chat-incident
+          STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
+          STAGING_INTEGRATION_PR: "171"
+          CLOUDFLARE_ENVIRONMENT_NAME: staging
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node web/scripts/cloudflare/staging-chat-cleanup.mjs

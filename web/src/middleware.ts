@@ -1,3 +1,5 @@
+import { validateDemoSession, DemoAccessError, DEMO_OPERATOR_COOKIE } from "@/lib/staging-demo-access";
+import { demoPathAllowed } from "@/lib/staging-demo-policy";
 import { defineMiddleware } from "astro:middleware";
 import { env } from "cloudflare:workers";
 import { createAuth } from "@/lib/auth";
@@ -43,6 +45,7 @@ async function resolveAuthentication(authEnv: AuthEnv, request: Request) {
   const auth = createAuth(authEnv);
   const sessionData = await auth.api.getSession({
     headers: request.headers,
+    query: { disableCookieCache: request.headers.get("cookie")?.includes(DEMO_OPERATOR_COOKIE + "=") ?? false },
   });
   return {
     session: sessionData?.session ?? null,
@@ -120,6 +123,20 @@ async function enforceStagingFixtureBoundary(locals: App.Locals, pathname: strin
   }
 }
 
+async function enforceDemoBoundary(locals: App.Locals, request: Request, pathname: string) {
+  // These endpoints independently validate the operator, allowing recovery after a persona expires.
+  if (["/demo", "/api/demo/switch", "/api/demo/logout"].includes(pathname.replace(/\/$/, ""))) return null;
+  if (!locals.user) return null;
+  try {
+    locals.stagingDemo = await validateDemoSession(env, request, locals.user, locals.session ?? {id:""});
+    if (locals.stagingDemo && !demoPathAllowed(pathname, request.method)) throw new DemoAccessError();
+    return null;
+  } catch (error) {
+    if (!(error instanceof DemoAccessError)) throw error;
+    return new Response(error.message, {status:error.status,headers:{"Cache-Control":"no-store"}});
+  }
+}
+
 export const onRequest = defineMiddleware(async (context, next) => {
   const { locals, request, url, redirect } = context;
   const primaryDomain = env.PRIMARY_DOMAIN;
@@ -140,6 +157,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
     locals.session = authResult.session;
     locals.user = authResult.user;
     locals.personalAccessToken = authResult.personalAccessToken;
+
+    const demoFailure = await enforceDemoBoundary(locals,request,url.pathname);
+    if (demoFailure) return demoFailure;
 
     const fixtureFailure = await enforceStagingFixtureBoundary(locals,url.pathname);
     if (fixtureFailure) return fixtureFailure;

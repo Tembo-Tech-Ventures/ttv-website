@@ -21,6 +21,9 @@ export async function withStagingPersonas({ target, signingSecret, run, audit = 
   const userIds = [];
   const personas = {};
   let failure;
+  let operation = "setup";
+  let operationStatus = "failed";
+  let cleanupStatus = "not-needed";
   try {
     audit({ event: "fixture-run-started", runId, version: target.expectedVersion });
     // Fail closed before identities are inserted if migrations have not landed.
@@ -55,13 +58,16 @@ export async function withStagingPersonas({ target, signingSecret, run, audit = 
       }
       personas[persona] = { userId, sessionId, runId, expiresAt, cookies, personalAccessToken };
     }
+    operation = "verification";
     await run(personas);
+    operationStatus = "passed";
   } catch {
     failure = new Error("Staging persona setup or verification failed; inspect sanitized test evidence.");
   } finally {
     // Delete explicit IDs created by this run only, including interrupted setup.
     // Attempt every cleanup phase even if a previous delete failed.
     if (userIds.length > 0) {
+      cleanupStatus = "passed";
       const placeholders = userIds.map(() => "?").join(",");
       const operations = [
         ['DELETE FROM "stagingFixtureIdentity" WHERE "runId"=? AND "userId" IN (' + placeholders + ')', [runId, ...userIds]],
@@ -72,10 +78,25 @@ export async function withStagingPersonas({ target, signingSecret, run, audit = 
       ];
       for (const [sql, params] of operations) {
         try { await execute(sql, params); }
-        catch { failure = new Error("Staging persona cleanup failed; credentials expire within one hour. Review this run's cleanup."); }
+        catch { cleanupStatus = "failed"; failure = new Error("Staging persona cleanup failed; credentials expire within one hour. Review this run's cleanup."); }
+      }
+      // Verify only this run's explicit IDs; never select session/token values.
+      for (const table of ["stagingFixtureIdentity", "personal_access_token", "session", "UserRoles", "user"]) {
+        const column = table === "user" ? "id" : "userId";
+        try {
+          const remaining = rows(await execute(`SELECT COUNT(*) AS remaining FROM "${table}" WHERE "${column}" IN (${placeholders})`, userIds));
+          if (remaining.length !== 1 || remaining[0].remaining !== 0) {
+            cleanupStatus = "failed";
+            failure = new Error("Staging persona cleanup failed; credentials expire within one hour. Review this run's cleanup.");
+          }
+        } catch {
+          cleanupStatus = "failed";
+          failure = new Error("Staging persona cleanup failed; credentials expire within one hour. Review this run's cleanup.");
+        }
       }
     }
   }
+  audit({ event: "fixture-run-outcome", runId, version: target.expectedVersion, operation, operationStatus, cleanupStatus });
   audit({ event: failure ? "fixture-run-failed" : "fixture-run-cleaned", runId, version: target.expectedVersion });
   if (failure) throw failure;
 }

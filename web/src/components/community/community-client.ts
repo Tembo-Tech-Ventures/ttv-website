@@ -115,7 +115,9 @@ export async function communityRequest<T>(
   fetcher: typeof fetch = fetch,
 ): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25_000);
+  // Chat may use three bounded model steps (60s total); allow response overhead.
+  const timeoutMs = path === "chat" && method === "POST" ? 70_000 : 25_000;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetcher(`/api/community/${path}`, {
       method,
