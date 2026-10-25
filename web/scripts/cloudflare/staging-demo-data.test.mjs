@@ -32,7 +32,7 @@ it("seeds actual migrations idempotently, preserves edits/real records and mints
  expect(f.queries.every(sql=>! /\b(UPDATE|DELETE|REPLACE)\b/.test(sql))).toBe(true);
 });
 it("includes institutional and both cohort modes as talent but excludes mentor",async()=>{
- const f=await fixture();await seedDemoData(f.target);const service=createCommunityService(f.d1,DEMO_PERSONAS.institution);
+ const f=await fixture();await seedDemoData(f.target);const service=createCommunityService(f.d1,DEMO_PERSONAS.institution,undefined,"staging");
  for(const id of[DEMO_PERSONAS.institution,DEMO_PERSONAS.cohort,DEMO_PERSONAS.noncohort]){const name=f.db.prepare('SELECT name FROM user WHERE id=?').get(id).name;expect((await service.searchProfiles({query:name})).map(p=>p.userId)).toContain(id);}
  const name=f.db.prepare('SELECT name FROM user WHERE id=?').get(DEMO_PERSONAS.mentor).name;expect(await service.searchProfiles({query:name})).toEqual([]);expect(f.db.prepare('SELECT status FROM programApplication WHERE userId=?').get(DEMO_PERSONAS.cohort).status).toBe("APPROVED");expect(f.db.prepare('SELECT id FROM programApplication WHERE userId=?').get(DEMO_PERSONAS.noncohort)).toBeUndefined();
 });
