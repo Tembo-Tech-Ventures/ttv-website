@@ -1,3 +1,4 @@
+import { DEMO_PREFIX, DEMO_USER_IDS, isDemoUser } from "@/lib/staging-demo-policy";
 import { verifySameRunTarget, StagingFixtureAccessError, type StagingFixtureIdentity } from "@/lib/staging-fixtures";
 import { createId } from "@paralleldrive/cuid2";
 import {
@@ -23,7 +24,10 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
   if (!actorId) throw new CommunityError("Sign in to continue.", 401);
   if (!fixture && actorId.startsWith("ttv-staging-fixture-")) throw new CommunityError("Verified staging fixture context required.",403);
   if (fixture && fixture.userId !== actorId) throw new CommunityError("Synthetic staging identity mismatch.",403);
+  const demo = actorId.startsWith(DEMO_PREFIX);
+  if (demo && (environment !== "staging" || !isDemoUser(actorId))) throw new CommunityError("Verified demo identity required.",403);
   async function requireFixtureTarget(targetUserId: string) {
+    if (demo && !isDemoUser(targetUserId)) throw new CommunityError("Demo records only.",403);
     if (!fixture) return;
     try { await verifySameRunTarget({db,envName:environment,actor:fixture,targetUserId}); }
     catch (error) {
@@ -33,6 +37,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
   }
   // The column expression is an internal constant, never request input.
   function fixtureScope(column: string) {
+    if (demo) return { clause: ` AND ${column} IN (SELECT value FROM json_each(?))`, values: [JSON.stringify(DEMO_USER_IDS)] };
     return fixture ? {
       clause:` AND EXISTS (SELECT 1 FROM stagingFixtureIdentity fixture_identity WHERE fixture_identity.userId=${column} AND fixture_identity.runId=? AND fixture_identity.expiresAt>unixepoch())`,
       values:[fixture.runId],
@@ -63,9 +68,10 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
     const { results } = await db.prepare(`SELECT id,userId,title,description,evidenceUrl,occurredAt,visibility,version,createdAt,updatedAt FROM communityJourney
       WHERE userId=? AND (?=userId OR visibility='institution') ORDER BY occurredAt DESC,id DESC LIMIT 100`).bind(target, actorId).all<Omit<CommunityJourney, "confirmations">>();
     if (results.length === 0) return [];
+    const mentorScope = fixtureScope("c.mentorId");
     const { results: confirmations } = await db.prepare(`SELECT c.id,c.journeyId,c.mentorId,u.name AS mentorName,c.statement,c.method,c.journeyVersion,c.mentorRole,c.createdAt
       FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=c.mentorId
-      WHERE j.userId=? AND (?=j.userId OR j.visibility='institution') ORDER BY c.createdAt DESC LIMIT 500`).bind(target, actorId).all<CommunityConfirmation>();
+      WHERE j.userId=? AND (?=j.userId OR j.visibility='institution')${mentorScope.clause} ORDER BY c.createdAt DESC LIMIT 500`).bind(target, actorId,...mentorScope.values).all<CommunityConfirmation>();
     return results.map((entry) => ({ ...entry, confirmations: confirmations.filter((c) => c.journeyId === entry.id) }));
   }
   return {
@@ -102,13 +108,15 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       const scope = fixtureScope("j.userId");
       const { results } = await db.prepare(`SELECT j.id,j.userId,u.name AS memberName,j.title,j.description,j.evidenceUrl,j.occurredAt,j.visibility,j.version,j.createdAt,j.updatedAt
         FROM communityJourney j JOIN user u ON u.id=j.userId WHERE j.visibility='institution' AND j.userId<>?${scope.clause} ORDER BY j.createdAt DESC,j.id DESC LIMIT 50`).bind(actorId,...scope.values).all<Omit<CommunityJourney, "confirmations"> & { memberName: string }>();
+      const mentorScope = fixtureScope("c.mentorId");
       const {results: confirmations} = await db.prepare(`SELECT c.id,c.journeyId,c.mentorId,u.name AS mentorName,c.statement,c.method,c.journeyVersion,c.mentorRole,c.createdAt
         FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=c.mentorId
-        WHERE j.visibility='institution' AND j.userId<>?${scope.clause} ORDER BY c.createdAt DESC LIMIT 500`).bind(actorId,...scope.values).all<CommunityConfirmation>();
+        WHERE j.visibility='institution' AND j.userId<>?${scope.clause}${mentorScope.clause} ORDER BY c.createdAt DESC LIMIT 500`).bind(actorId,...scope.values,...mentorScope.values).all<CommunityConfirmation>();
       await Promise.all(results.map(row=>requireFixtureTarget(row.userId)));
       return results.map(entry => ({...entry,confirmations:confirmations.filter(c=>c.journeyId===entry.id)}));
     },
     async setAccess(input: unknown) {
+      if (demo) throw new CommunityError("Demo access cannot manage roles.",403);
       const a = await access();
       if (!a.isAdmin) throw new CommunityError("Admin access is required.", 403);
       if (!input || typeof input !== "object" || Array.isArray(input)) throw new CommunityError("Send an access change.");
@@ -169,9 +177,10 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       if (entry.userId === actorId) throw new CommunityError("You cannot confirm your own contribution.", 403);
       const confirmationId = createId();
       // Repeat visibility/ownership predicates in the write to avoid a check/write race.
+      const writeScope = fixtureScope("userId");
       const result = await db.prepare(`INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journeyVersion,mentorRole)
-        SELECT ?,id,?,?,?,version,? FROM communityJourney WHERE id=? AND visibility='institution' AND userId<>? AND version=?`)
-        .bind(confirmationId,actorId,p.statement,p.method,a.isMentor ? "MENTOR" : "ADMIN",id,actorId,entry.version).run();
+        SELECT ?,id,?,?,?,version,? FROM communityJourney WHERE id=? AND visibility='institution' AND userId<>? AND version=?${writeScope.clause}`)
+        .bind(confirmationId,actorId,p.statement,p.method,a.isMentor ? "MENTOR" : "ADMIN",id,actorId,entry.version,...writeScope.values).run();
       if (!result.meta.changes) throw new CommunityError("Contribution no longer available.", 409);
       return { id: confirmationId, journeyId: id, mentorId: actorId, ...p, journeyVersion: entry.version,mentorRole:a.isMentor ? "MENTOR" : "ADMIN" };
     },

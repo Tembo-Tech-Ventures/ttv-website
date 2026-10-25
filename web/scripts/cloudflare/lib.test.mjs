@@ -132,6 +132,21 @@ describe("resolveDeploymentMetadata", () => {
 });
 
 describe("createGeneratedWranglerConfig", () => {
+  it("enables retained demo only on explicit canonical staging configuration", () => {
+    const settings = {workerName:"ttv-staging",containerAppName:"container",d1Name:"db",d1Id:"id",bucketName:"bucket",queueName:"queue",vectorizeIndexName:"index",aiGatewayName:"gateway",primaryDomain:"staging.tembotechventures.com",betterAuthUrl:"https://staging.tembotechventures.com"};
+    expect(createGeneratedWranglerConfig(settings).vars).not.toHaveProperty("STAGING_DEMO_ENABLED");
+    vi.stubEnv("CLOUDFLARE_STAGING_DEMO_ENABLED","true");
+    expect(createGeneratedWranglerConfig(settings).vars.STAGING_DEMO_ENABLED).toBe("true");
+    expect(createGeneratedWranglerConfig(settings).vars).not.toHaveProperty("AGENT_AUTH_ENABLED");
+    for (const environment of ["production","prod","agent-preview"]) {
+      vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME",environment);
+      expect(()=>createGeneratedWranglerConfig(settings)).toThrow("canonical staging");
+    }
+    vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME","staging");
+    expect(()=>createGeneratedWranglerConfig({...settings,primaryDomain:"example.com"})).toThrow("canonical staging");
+    expect(()=>createGeneratedWranglerConfig({...settings,betterAuthUrl:"https://example.com"})).toThrow("canonical staging");
+  });
+
   it("includes deployment identity and every runtime binding", () => {
     vi.stubEnv("CLOUDFLARE_DEPLOYMENT_VERSION", "deadbeef");
     vi.stubEnv("CLOUDFLARE_AGENT_AUTH_ENABLED", "true");

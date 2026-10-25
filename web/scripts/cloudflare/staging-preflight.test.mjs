@@ -19,7 +19,7 @@ const pr = {
 const respond = (body = pr) => vi.fn().mockResolvedValue({ ok: true, json: async () => body });
 
 describe("shared staging preflight", () => {
-  it.each(["deploy", "verify", "assess", "credential-audit"])("validates the same exact revision for %s", async action => {
+  it.each(["deploy", "verify", "assess", "credential-audit", "seed-demo"])("validates the same exact revision for %s", async action => {
     await expect(validateStagingRevision({ ...env, STAGING_ACTION: action }, { fetchImpl: respond() })).resolves.toMatchObject({ sha });
   });
   it("accepts only the exact current integration PR head", async () => {
@@ -66,4 +66,14 @@ describe("shared staging preflight", () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: 403 });
     await expect(validateStagingRevision(env, { fetchImpl })).rejects.toThrow("HTTP 403");
   });
+});
+
+it.each(["deploy", "verify", "assess", "credential-audit", "cleanup-chat-incident", "seed-demo"])("rejects deployed revision override before API access for %s", async action => {
+  const fetchImpl = respond();
+  await expect(validateStagingRevision({...env, STAGING_ACTION:action, STAGING_EXPECTED_DEPLOYED_SHA:sha}, {fetchImpl})).rejects.toThrow("only allowed for read-only diagnosis");
+  expect(fetchImpl).not.toHaveBeenCalled();
+});
+it("retains current executor revision checks with diagnostic deployed override",async()=>{
+  await expect(validateStagingRevision({...env,STAGING_ACTION:"diagnose-demo",STAGING_EXPECTED_DEPLOYED_SHA:"b".repeat(40)}, {fetchImpl:respond()})).resolves.toMatchObject({sha});
+  await expect(validateStagingRevision({...env,STAGING_ACTION:"diagnose-demo",STAGING_EXPECTED_DEPLOYED_SHA:sha,GITHUB_SHA:"b".repeat(40)}, {fetchImpl:respond()})).rejects.toThrow("exact dispatched revision");
 });

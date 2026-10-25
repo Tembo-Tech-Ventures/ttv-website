@@ -566,6 +566,10 @@ export function createGeneratedWranglerConfig({
   const deployment = resolveDeploymentMetadata();
   const agentAuthEnabled =
     getOptionalEnv("CLOUDFLARE_AGENT_AUTH_ENABLED") === "true";
+  const demoEnabled = getOptionalEnv("CLOUDFLARE_STAGING_DEMO_ENABLED") === "true";
+  if (demoEnabled && (deployment.environment !== "staging" || primaryDomain !== "staging.tembotechventures.com" || betterAuthUrl !== "https://staging.tembotechventures.com")) {
+    throw new Error("Retained demo access is allowed only on the canonical staging deployment.");
+  }
   const workersDevEnabled = !primaryDomain && !redirectDomain;
   if (
     agentAuthEnabled &&
@@ -612,6 +616,7 @@ export function createGeneratedWranglerConfig({
       ...(agentAuthEnabled
         ? { AGENT_AUTH_ENABLED: "true" }
         : {}),
+      ...(demoEnabled ? { STAGING_DEMO_ENABLED: "true" } : {}),
       AI_GATEWAY_ACCOUNT_ID: getRequiredEnv("CLOUDFLARE_ACCOUNT_ID"),
       AI_GATEWAY_NAME: aiGatewayName,
       AI_GATEWAY_MODEL:

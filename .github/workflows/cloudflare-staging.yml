@@ -14,11 +14,22 @@ on:
           - assess
           - credential-audit
           - cleanup-chat-incident
+          - seed-demo
+          - diagnose-demo
       expected_sha:
         description: Exact current head SHA of integration PR 171 (reserve a PM deployment slot first)
         required: true
         type: string
 
+      expected_deployed_sha:
+        description: Pinned live revision for read-only diagnose-demo only
+        required: false
+        type: string
+      demo_enabled:
+        description: Enable retained demo browser access (owner approval required; default off)
+        required: false
+        type: boolean
+        default: false
       browser_chat:
         description: One synthetic desktop chat submission with tool and citation verification
         required: false
@@ -57,6 +68,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STAGING_ACTION: ${{ inputs.action }}
+          STAGING_EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
           STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
           STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
           STAGING_INTEGRATION_PR: "171"
@@ -73,6 +85,7 @@ jobs:
       redirect_domain: ${{ vars.STAGING_REDIRECT_DOMAIN }}
       better_auth_url: ${{ vars.STAGING_BETTER_AUTH_URL }}
       agent_auth_enabled: true
+      staging_demo_enabled: ${{ inputs.demo_enabled }}
       workers_subdomain: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
       protected_environments: production,prod
     secrets: inherit
@@ -138,3 +151,30 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: node web/scripts/cloudflare/staging-chat-cleanup.mjs
+
+  seed-demo:
+    if: ${{ inputs.action == 'seed-demo' || inputs.action == 'diagnose-demo' }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Seed or read-only diagnose retained fictional data
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_ACTION: ${{ inputs.action }}
+          STAGING_EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
+          STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
+          STAGING_INTEGRATION_PR: "171"
+          CLOUDFLARE_ENVIRONMENT_NAME: staging
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node web/scripts/cloudflare/staging-demo-seed.mjs

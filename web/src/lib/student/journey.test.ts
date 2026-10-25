@@ -1,3 +1,5 @@
+import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
+import type { SQL } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/lib/db/schema";
 import { getAccessibleProgramIds } from "@/lib/recordings/access";
@@ -230,6 +232,16 @@ describe("student journey", () => {
       expect(journey.visibleLinkIds).toEqual(testCase.expectedLinks);
     });
   }
+
+  it("scopes demo application and open-program reads to the fictional cohort", async () => {
+    const db = createDatabase({ openProgram: null });
+    await getStudentJourney(db, "ttv-staging-demo-v1-member-noncohort");
+    const dialect = new SQLiteSyncDialect();
+    for (const query of [db.query.programApplication.findMany, db.query.program.findFirst]) {
+      const where = vi.mocked(query).mock.calls[0][0]!.where as SQL;
+      expect(dialect.sqlToQuery(where).params).toContain("ttv-staging-demo-v1-program");
+    }
+  });
 
   it("uses the existing completion and recording-access helpers", async () => {
     const db = createDatabase({});
