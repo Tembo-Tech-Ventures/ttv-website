@@ -29,5 +29,6 @@ export function demoPathAllowed(path: string, method: string) {
   if (normalized === '/api/community/access') return method === 'GET';
   if (/^\/api\/community\/(profile|journey|profiles|mentorship|chat)(\/|$)/.test(normalized)) return true;
   if (!['GET', 'HEAD'].includes(method)) return false;
-  return ['', '/dashboard', '/dashboard/community', '/dashboard/mentorship', '/dashboard/discover', '/community/members', '/community/mentors', '/community/institutions'].includes(normalized) || normalized.startsWith('/_astro/');
+  if (/^\/dashboard\/application\/[^/]+$/.test(normalized)) return true;
+  return ['', '/dashboard/sessions', '/dashboard', '/dashboard/community', '/dashboard/mentorship', '/dashboard/discover', '/community/members', '/community/mentors', '/community/institutions'].includes(normalized) || normalized.startsWith('/_astro/');
 }

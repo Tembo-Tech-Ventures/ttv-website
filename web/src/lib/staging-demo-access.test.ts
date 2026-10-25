@@ -80,5 +80,9 @@ describe('retained demo browser boundary',()=>{
     for(const p of ['/api/admin/users','/admin/agent-access','/api/auth/get-session','/api/community/access','/api/community/tokens','/api/mcp','/api/recordings']) expect(demoPathAllowed(p,'POST')).toBe(false);
     expect(demoPathAllowed('/api/community/chat','POST')).toBe(true);
     expect(demoPathAllowed('/dashboard','GET')).toBe(true);
+    expect(demoPathAllowed('/dashboard/sessions','GET')).toBe(true);
+    expect(demoPathAllowed('/dashboard/application/owned','GET')).toBe(true);
+    for (const path of ['/dashboard/apply', '/dashboard/sessions/real-recording']) expect(demoPathAllowed(path,'GET')).toBe(false);
+    expect(demoPathAllowed('/dashboard/application/owned','POST')).toBe(false);
   });
 });
