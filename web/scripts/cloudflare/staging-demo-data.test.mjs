@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, readdirSync } from "node:fs";
 import { afterEach, expect, it, vi } from "vitest";
-import { buildDemoDataset, seedDemoData, DEMO_PERSONAS } from "./staging-demo-data.mjs";
+import { buildDemoDataset, seedDemoData, DEMO_PERSONAS, DEMO_USER_IDS } from "./staging-demo-data.mjs";
 import { verifyStagingFixtureTarget, STAGING_FIXTURE_DATABASE_ID as dbId } from "./staging-fixture-target.mjs";
 import { createCommunityService } from "../../src/lib/community/service";
 const databases=[];
@@ -23,7 +23,7 @@ async function fixture(){
 }
 const count=(db,table)=>db.prepare(`SELECT COUNT(*) n FROM "${table}"`).get().n;
 it("generates150 deterministic varied explicitly fictional profiles",()=>{
- const data=buildDemoDataset();expect(data).toEqual(buildDemoDataset());expect(data.user).toHaveLength(150);expect(new Set(data.user.map(u=>u.name)).size).toBe(150);expect(data.user.every(u=>u.name.startsWith("Fictional ")&&u.email===`${u.id}@invalid.ttv`)).toBe(true);expect(data.programApplication).toHaveLength(74);expect(new Set(data.communityProfile.map(p=>p.skills)).size).toBeGreaterThanOrEqual(10);expect(data.communityJourney.some(j=>j.visibility==="private")).toBe(true);expect(data.communityJourney.some(j=>j.evidenceUrl===null)).toBe(true);expect(data.communityConfirmation.every(c=>c.statement.startsWith("Synthetic")&&c.journeyVersion===1)).toBe(true);
+ const data=buildDemoDataset();expect(Object.isFrozen(DEMO_USER_IDS)).toBe(true);expect(data.user.map(u=>u.id)).toEqual(DEMO_USER_IDS);expect(new Set(DEMO_USER_IDS).size).toBe(150);expect(data).toEqual(buildDemoDataset());expect(data.user).toHaveLength(150);expect(new Set(data.user.map(u=>u.name)).size).toBe(150);expect(data.user.every(u=>u.name.startsWith("Fictional ")&&u.email===`${u.id}@invalid.ttv`)).toBe(true);expect(data.programApplication).toHaveLength(74);expect(new Set(data.communityProfile.map(p=>p.skills)).size).toBeGreaterThanOrEqual(10);expect(data.communityJourney.some(j=>j.visibility==="private")).toBe(true);expect(data.communityJourney.some(j=>j.evidenceUrl===null)).toBe(true);expect(data.communityConfirmation.every(c=>c.statement.startsWith("Synthetic")&&c.journeyVersion===1)).toBe(true);
 });
 it("seeds actual migrations idempotently, preserves edits/real records and mints no auth",async()=>{
  const f=await fixture();f.db.prepare('INSERT INTO user(id,name,email)VALUES(?,?,?)').run("real","Real","real@example.com");

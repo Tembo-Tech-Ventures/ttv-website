@@ -5,6 +5,10 @@ export const DEMO_PERSONAS = Object.freeze({
   mentor: `${DEMO_NAMESPACE}-mentor`, institution: `${DEMO_NAMESPACE}-institution`,
   cohort: `${DEMO_NAMESPACE}-member-cohort`, noncohort: `${DEMO_NAMESPACE}-member-noncohort`,
 });
+export const DEMO_USER_IDS = Object.freeze([
+  ...Object.values(DEMO_PERSONAS),
+  ...Array.from({ length: 146 }, (_, i) => `${DEMO_NAMESPACE}-member-${String(i + 1).padStart(3, "0")}`),
+]);
 export const DEMO_SEARCH_EXAMPLES = Object.freeze([
   { query: "TypeScript", skills: ["React"], context: "Inspect a documented accessible interface contribution; distinguish self-report and synthetic mentor context." },
   { query: "Python", skills: ["SQL"], context: "Explore data-cleaning work and ask about reproducibility and missing evidence." },
@@ -33,9 +37,8 @@ export function buildDemoDataset() {
   const records = { curriculum: [], program: [], user: [], communityProfile: [], programApplication: [], communityJourney: [], communityConfirmation: [] };
   records.curriculum.push({ id: `${DEMO_NAMESPACE}-curriculum`, title: "Fictional demo curriculum", description: "Synthetic staging material; no real cohort or teaching claim.", ...timestamps });
   records.program.push({ id: `${DEMO_NAMESPACE}-program`, name: "Fictional community demo cohort", description: "Synthetic staging cohort; no real enrolment or recordings.", curriculumId: `${DEMO_NAMESPACE}-curriculum`, applicationsOpen: 0, ...timestamps });
-  const personas = Object.values(DEMO_PERSONAS);
   for (let i = 0; i < 150; i++) {
-    const id = i < 4 ? personas[i] : `${DEMO_NAMESPACE}-member-${String(i - 3).padStart(3, "0")}`;
+    const id = DEMO_USER_IDS[i];
     const name = `Fictional ${firstNames[i % firstNames.length]} ${lastNames[Math.floor(i / firstNames.length)]}`;
     const [project, skills, contribution, goal] = tracks[(i + 9) % tracks.length];
     const cohort = i === 2 || (i >= 4 && i % 2 === 0);
