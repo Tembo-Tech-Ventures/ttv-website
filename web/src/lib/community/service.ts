@@ -105,6 +105,23 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       await Promise.all(results.map(row=>requireFixtureTarget(row.userId)));
       return results.map(profile);
     },
+    async discoveryEvidence() {
+      await requireInstitution();
+      const scope = fixtureScope("u.id");
+      const { results } = await db.prepare(`${PROFILE_SELECT}
+        WHERE NOT EXISTS (SELECT 1 FROM UserRoles ur JOIN Roles r ON r.id=ur.roleId WHERE ur.userId=u.id AND r.name IN ('MENTOR','ADMIN'))${scope.clause}
+        ORDER BY u.id LIMIT 501`).bind(...scope.values).all<ProfileRow>();
+      if (results.length > 500) throw new CommunityError("Discovery capacity reached. Please try again later.",503);
+      const ids = JSON.stringify(results.map(row => row.userId));
+      const { results: entries } = await db.prepare(`SELECT id,userId,title,description,evidenceUrl,occurredAt,visibility,version,createdAt,updatedAt
+        FROM communityJourney WHERE visibility='institution' AND userId IN (SELECT value FROM json_each(?)) ORDER BY id LIMIT 2001`).bind(ids).all<Omit<CommunityJourney,"confirmations">>();
+      const mentor = fixtureScope("c.mentorId");
+      const { results: confirmations } = await db.prepare(`SELECT c.id,c.journeyId,c.mentorId,u.name AS mentorName,c.statement,c.method,c.journeyVersion,c.mentorRole,c.createdAt
+        FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=c.mentorId
+        WHERE j.visibility='institution' AND c.journeyVersion=j.version AND j.userId IN (SELECT value FROM json_each(?))${mentor.clause} ORDER BY c.id LIMIT 4001`).bind(ids,...mentor.values).all<CommunityConfirmation>();
+      if (entries.length > 2000 || confirmations.length > 4000) throw new CommunityError("Discovery evidence capacity reached.",503);
+      return results.map(row => ({profile:profile(row),entries:entries.filter(e=>e.userId===row.userId).map(e=>({...e,confirmations:confirmations.filter(c=>c.journeyId===e.id)}))}));
+    },
     async listMentorship() {
       const a = await access();
       if (!a.isMentor && !a.isAdmin) throw new CommunityError("Mentor access is required.", 403);

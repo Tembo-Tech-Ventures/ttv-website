@@ -12,13 +12,13 @@ import {
   loadOwnProfile,
   loadMentorship,
   searchProfiles,
+  discoverPeople,
   loadProfile,
   saveProfile,
   saveContribution,
   updateContribution,
   confirmContribution,
   askProfile,
-  orderProfilesByEvidence,
   type CommunityAccess,
 } from "./community-client";
 
@@ -143,9 +143,9 @@ export default function CommunityApp({ view }: { view: View }) {
         profiles={[]}
         initialProfile={profile}
         onSearch={searchProfiles}
+        onDiscover={discoverPeople}
         onOpenProfile={loadProfile}
         onAsk={askProfile}
-        onOrder={orderProfilesByEvidence}
         onAssess={assessProfile}
       />
     );

@@ -43,6 +43,18 @@ describe("restricted staging runner", () => {
     expect(options.withPersonas).toHaveBeenLastCalledWith(expect.objectContaining({ assessmentProbe: false }));
     expect(options.verifyPersonas).toHaveBeenLastCalledWith(expect.objectContaining({ browserChat: true, browserAssessment: false }));
   });
+  it("opts discovery in with the same binding, first-attempt and cleanup controls",async()=>{
+    const {options,launch}=runner();options.environment.STAGING_BROWSER_DISCOVERY="true";
+    options.environment.GITHUB_RUN_ATTEMPT="2";
+    await expect(runStagingFixtures(options)).rejects.toThrow("reruns");expect(launch).not.toHaveBeenCalled();
+    options.environment.GITHUB_RUN_ATTEMPT="1";
+    await expect(runStagingFixtures(options)).rejects.toThrow("binding readiness");
+    options.api.mockResolvedValue({bindings:[{name:"AI",type:"ai"},{name:"AI_GATEWAY_NAME",type:"plain_text",text:"ttv-website-ai-staging"}]});
+    await runStagingFixtures(options);
+    expect(options.verifyPersonas).toHaveBeenCalledWith(expect.objectContaining({browserDiscovery:true}));
+    options.environment.STAGING_BROWSER_CHAT="true";
+    await expect(runStagingFixtures(options)).rejects.toThrow("only one");
+  });
   it("rejects reruns and missing native binding before browser or fixture writes", async () => {
     const { options, launch } = runner();
     options.environment.STAGING_BROWSER_ASSESSMENT = "true";

@@ -12,9 +12,9 @@ for (const width of [390, 1440]) {
     await expect(page.getByRole('link',{name:'Community',exact:true})).toBeVisible();
     await page.screenshot({path:`../docs/hackathon/institution-entry-2026-10-25/navigation-${width}.png`,fullPage:true, animations:'disabled'});
     await page.goto('/?view=scout');
-    await expect(page.getByText('This context informs evidence ordering, not directory skill matching.', {exact:false})).toBeVisible();
+    await expect(page.getByText('We use your full description to find and compare published evidence.', {exact:false})).toBeVisible();
     await page.getByRole('button',{name:'Discover people',exact:true}).click();
-    await expect(page.getByText('Up to 50 matching profiles, alphabetical; refine filters', {exact:false})).toBeVisible();
+    await expect(page.getByText('Up to 50 matching profiles, alphabetical.', {exact:false})).toBeVisible();
     await expect(page.locator('.discovery-person-index')).toHaveCount(0);
     await expect(page.getByText('1 confirmed entry', {exact:true})).toBeVisible();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth <= innerWidth)).toBe(true);

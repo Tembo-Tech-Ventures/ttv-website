@@ -45,6 +45,11 @@ on:
         required: false
         type: boolean
         default: false
+      browser_discovery:
+        description: Bounded synthetic Python and first-aid discovery verification
+        required: false
+        type: boolean
+        default: false
       browser_chat:
         description: One synthetic desktop chat submission with tool and citation verification
         required: false
@@ -115,6 +120,7 @@ jobs:
     uses: ./.github/workflows/cloudflare-staging-fixtures.yml
     with:
       expected_sha: ${{ inputs.expected_sha }}
+      browser_discovery: ${{ inputs.browser_discovery }}
       browser_chat: ${{ inputs.browser_chat }}
       browser_assessment: ${{ inputs.browser_assessment }}
     secrets: inherit

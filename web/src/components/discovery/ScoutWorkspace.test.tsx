@@ -105,9 +105,9 @@ it("labels mentor-statement citations separately from published contributions",(
  expect(html).toContain("Published contribution · Revision 2");expect(html).toContain("Mentor statement · Revision 2");expect(html).toContain("Cited evidence for Fictional A");
 });
 
-it("explains opportunity text independently of directory retrieval", () => {
+it("explains full-query evidence discovery", () => {
   const html = renderToStaticMarkup(<ScoutWorkspace profiles={[]} />);
-  expect(html).toContain("This context informs evidence ordering, not directory skill matching.");
+  expect(html).toContain("We use your full description to find and compare published evidence.");
 });
 it("uses singular entry for one contribution", () => {
   const profile = { ...demoProfiles[0], claims: demoProfiles[0].claims.slice(0, 1) };
