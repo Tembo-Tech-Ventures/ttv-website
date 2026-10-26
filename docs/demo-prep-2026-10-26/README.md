@@ -11,8 +11,9 @@ users, add a login provider, create admin credentials, or enable production.
    https://staging.tembotechventures.com/demo directly in that browser.
 3. Check the protected retained-dataset counts. Expected original seed:
    150 fictional people, 150 profiles, 272 contributions, 90 confirmations.
-   Contributions and confirmations may increase after a demonstration. These
-   are expected seed counts, not a claim that live data was inspected.
+   Counts cover the retained seed records; newly added demo entries may not be
+   included. Actual live counts and verification limits are recorded in
+   [live-verification.md](./live-verification.md).
 4. Choose **Cohort member** or **Community member** to show an own contribution
    at `/dashboard/community`. Prefer the non-cohort role to demonstrate that
    community membership is separate from cohort enrollment.

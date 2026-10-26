@@ -1,0 +1,27 @@
+{
+  "event": "retained-demo-diagnostic",
+  "executorVersion": "ee9b88e0947a05399feb134f3999ad60f198dccb",
+  "deployedVersion": "ee9b88e0947a05399feb134f3999ad60f198dccb",
+  "requiredRoles": {
+    "MENTOR": true,
+    "INSTITUTION": true,
+    "STUDENT": false
+  },
+  "ownedCounts": {
+    "curriculum": 1,
+    "program": 1,
+    "user": 150,
+    "communityProfile": 150,
+    "programApplication": 74,
+    "communityJourney": 272,
+    "communityConfirmation": 90,
+    "UserRoles": 2
+  },
+  "syntheticPeople": 150,
+  "personas": {
+    "member-cohort": true,
+    "member-noncohort": true,
+    "mentor": true,
+    "institution": true
+  }
+}

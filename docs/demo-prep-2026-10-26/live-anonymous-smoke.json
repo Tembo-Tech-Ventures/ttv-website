@@ -1,0 +1,61 @@
+{
+  "environment": "staging",
+  "version": "ee9b88e0947a05399feb134f3999ad60f198dccb",
+  "anonymousOnly": true,
+  "checks": [
+    {
+      "path": "/demo",
+      "foreignOrigin": false,
+      "status": 401,
+      "expected": 401,
+      "passed": true,
+      "noStore": true,
+      "controlsExposed": false
+    },
+    {
+      "path": "/api/demo/switch",
+      "foreignOrigin": false,
+      "status": 401,
+      "expected": 401,
+      "passed": true,
+      "noStore": true,
+      "controlsExposed": false
+    },
+    {
+      "path": "/api/demo/return",
+      "foreignOrigin": false,
+      "status": 401,
+      "expected": 401,
+      "passed": true,
+      "noStore": true,
+      "controlsExposed": false
+    },
+    {
+      "path": "/api/demo/switch",
+      "foreignOrigin": true,
+      "status": 403,
+      "expected": 403,
+      "passed": true,
+      "noStore": true,
+      "controlsExposed": false
+    },
+    {
+      "path": "/admin",
+      "foreignOrigin": false,
+      "status": 302,
+      "expected": 302,
+      "passed": true,
+      "noStore": false,
+      "controlsExposed": false
+    },
+    {
+      "path": "/dashboard/community",
+      "foreignOrigin": false,
+      "status": 302,
+      "expected": 302,
+      "passed": true,
+      "noStore": false,
+      "controlsExposed": false
+    }
+  ]
+}
