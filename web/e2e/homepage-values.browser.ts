@@ -185,3 +185,12 @@ test("mobile illustration precedes its audience links and headline has four deli
   const lines = await page.locator(".home-title-word").evaluateAll((elements) => elements.map((el) => el.getBoundingClientRect().top));
   expect(new Set(lines).size).toBe(4);
 });
+
+test("content already visible at startup never dims when the observer attaches", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1500 });
+  await page.goto("/homepage-values.html");
+  const intro = page.locator(".home-section-intro");
+  await expect(intro).toBeInViewport();
+  expect(await intro.evaluate((el) => el.getAnimations().length)).toBe(0);
+  expect(await intro.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
+});

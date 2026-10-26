@@ -52,7 +52,13 @@ export function initHomepageMotion(root: HTMLElement): () => void {
         }
       }
     }, { threshold: .05 });
-    root.querySelectorAll("[data-home-reveal]").forEach((element) => observer?.observe(element));
+    root.querySelectorAll("[data-home-reveal]").forEach((element) => {
+      // A deferred script may attach after first paint. Never dim content the
+      // visitor can already see; only stage entrances for off-screen content.
+      const bounds = element.getBoundingClientRect();
+      if (bounds.top < window.innerHeight && bounds.bottom > 0) return;
+      observer?.observe(element);
+    });
   };
   configure();
   reduced.addEventListener("change", configure);
