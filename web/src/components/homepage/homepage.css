@@ -4,7 +4,7 @@
 .home-hero { position: relative; padding-top: clamp(3rem, 7vw, 6.5rem); padding-bottom: clamp(4rem, 7vw, 6rem); }
 .home-wordmark { margin: 0; font-family: var(--font-heading); letter-spacing: -.025em; font-size: clamp(2.5rem, 7.4vw, 6.25rem); line-height: 1.13; }
 .home-wordmark-line { display: block; overflow: clip; padding-bottom: .05em; }
-.home-wordmark-line > span { display: block; }
+.home-wordmark-line > span { display: block; overflow-wrap: anywhere; }
 .home-wordmark-line + .home-wordmark-line { color: var(--color-primary); }
 .home-invitation { margin-top: 2rem; max-width: 36rem; }
 .home-description { max-width: 34rem; font-size: clamp(1rem, 1.5vw, 1.125rem); line-height: 1.75; color: var(--color-ink-secondary); }
@@ -23,6 +23,10 @@
 .home-explanation { margin-top: 1.5rem; max-width: 30rem; font-size: 1rem; line-height: 1.75; color: var(--color-ink-secondary); }
 .home-section-intro > a { margin-top: .65rem; }
 .home-story { display: grid; gap: 3rem; }
+.home-story-copy { display: contents; }
+.home-section-intro { grid-row: 1; }
+.home-evidence { grid-row: 2; }
+.home-pathways { grid-row: 3; }
 .home-pathways { margin-top: 2rem; }
 .home-pathway { position: relative; isolation: isolate; display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding-block: 1.25rem; border-top: 1px solid var(--color-rule); }
 .home-pathway::before { content: ""; position: absolute; z-index: -1; inset: 0 -.75rem; border-radius: .25rem; background: var(--color-primary); opacity: 0; transform: scaleY(.6); transform-origin: bottom; }
@@ -44,12 +48,13 @@
 .home-example-avatar { display: grid; flex-shrink: 0; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 50%; background: #ead9c7; font-size: .875rem; font-weight: 600; }
 .home-example-project { font-family: var(--font-heading); font-size: clamp(1.25rem, 2.4vw, 1.75rem); line-height: 1.25; letter-spacing: -.015em; margin-block: 2rem; }
 .home-evidence-thread { position: relative; padding-left: 1.5rem; }
-.home-evidence-thread::before { content: ""; position: absolute; left: .25rem; top: 1rem; bottom: 2.5rem; width: 1px; background: #b9c6bc; transform-origin: top; }
+.home-evidence-stem { position: absolute; left: -.5rem; top: 1.25rem; bottom: -2.25rem; width: 2px; background: #f28d68; transform-origin: top; }
+.home-evidence-item:last-child .home-evidence-stem { display: none; }
 .home-evidence-item { position: relative; padding: .85rem; margin-inline: -.85rem; border-radius: .25rem; }
 .home-evidence-item + .home-evidence-item { margin-top: 1rem; }
-.home-evidence-dot { position: absolute; left: -.75rem; top: 1rem; width: .5rem; height: .5rem; background: #f28d68; border-radius: 50%; box-shadow: 0 0 0 4px #f6eee5; }
+.home-evidence-dot { position: absolute; z-index: 1; left: -.75rem; top: 1rem; width: .5rem; height: .5rem; background: #f28d68; border-radius: 50%; box-shadow: 0 0 0 4px #f6eee5; }
 .home-evidence-label { font-size: .6875rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #4b625c; }
-.home-evidence-item > p + p { margin-top: .6rem; font-size: 1.0625rem; line-height: 1.55; }
+.home-evidence-content > p + p { margin-top: .6rem; font-size: 1.0625rem; line-height: 1.55; }
 .home-evidence-detail { display: block; margin-top: .6rem; font-size: .75rem; color: #4b625c; }
 .home-story[data-active-stage="contribution"] [data-evidence-stage="contribution"], .home-story[data-active-stage="mentor"] [data-evidence-stage="mentor"], .home-story[data-active-stage="question"] [data-evidence-stage="question"] { background: #f5d4bc; }
 .home-story[data-active-stage="contribution"] [data-evidence-stage="contribution"] .home-evidence-dot, .home-story[data-active-stage="mentor"] [data-evidence-stage="mentor"] .home-evidence-dot, .home-story[data-active-stage="question"] [data-evidence-stage="question"] .home-evidence-dot { background: #013d39; }
@@ -57,14 +62,19 @@
 .value-commitment-row { min-width: 0; }
 .value-word { font-family: var(--font-heading); font-size: 1.0625rem; letter-spacing: var(--tracking-subhead); color: var(--color-primary); overflow-wrap: anywhere; }
 .value-commitment-copy { margin-top: .85rem; line-height: 1.7; font-size: .9375rem; color: var(--color-ink-secondary); overflow-wrap: break-word; }
-.home-footer-lockup { container-type: inline-size; width: min(100%, 46rem); padding-block: 4rem 2rem; font-family: var(--font-heading); line-height: 1; letter-spacing: -.025em; }
+.home-footer-lockup { container-type: inline-size; width: min(100%, 32rem); padding-block: 4rem 2rem; font-family: var(--font-heading); line-height: 1; letter-spacing: -.025em; }
 .home-footer-lockup span { display: block; font-size: 19.1cqw; }
 .home-footer-lockup span + span { margin-top: .4rem; font-size: 8.1cqw; color: var(--color-primary); }
 @media (min-width: 640px) { .home-container { padding-inline: 1.5rem; } }
 @media (min-width: 1024px) {
   .home-container { padding-inline: 2rem; }
   .home-story { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 6.25%; }
-  .home-evidence { position: sticky; top: 7rem; }
+  .home-story { row-gap: 2rem; }
+  .home-section-intro { grid-column: 1; grid-row: 1; }
+  .home-pathways { grid-column: 1; grid-row: 2; margin-top: 0; }
+  .home-evidence { grid-column: 2; grid-row: 1 / span 2; }
+  #values { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 6.25%; }
+  .home-commitments { grid-template-columns: 1fr; margin-top: 0; gap: 2rem; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .home-wordmark-line > span { animation: home-typeset 950ms var(--home-ease) both; }
@@ -75,12 +85,15 @@
   .home-arrow, .home-button-arrow { transition: transform 450ms var(--home-ease); }
   .home-button, .home-text-link, .home-pathway, .home-pathway-copy, .home-pathway-link, .home-evidence-item, .home-evidence-dot { transition: color 300ms, background-color 350ms, border-color 300ms, text-decoration-color 300ms; }
   .home-pathway:is(:hover, :focus-visible) .home-arrow, .home-button:is(:hover, :focus-visible) .home-button-arrow { transform: rotate(45deg); }
-  @supports (animation-timeline: view()) {
-    .home-evidence { view-timeline-name: --home-evidence; }
-    .home-evidence-thread::before { animation: home-thread linear both; animation-timeline: --home-evidence; animation-range: entry 15% entry 85%; }
-  }
+
 }
 @keyframes home-typeset { from { transform: translateY(105%); } to { transform: translateY(0); } }
 @keyframes home-arrive { from { opacity: .3; transform: translateY(20px); } to { opacity: 1; transform: none; } }
 @keyframes home-rule { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-@keyframes home-thread { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+
+
+.home-motion-wait .home-wordmark-line > span, .home-motion-wait .home-invitation, .home-motion-wait .home-hero-line { animation-play-state: paused; }
+@media (max-width: 639px) {
+  .home-wordmark { font-size: clamp(2.75rem, 13.5vw, 3.3rem); }
+  .home-title-word { display: block; }
+}

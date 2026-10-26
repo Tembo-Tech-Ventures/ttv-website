@@ -29,22 +29,25 @@ export default function PathwaysSection() {
           <p className="home-example-project">A market inventory app.</p>
           <div className="home-evidence-thread">
             <div className="home-evidence-item" data-evidence-stage="contribution" data-home-reveal>
-              <span className="home-evidence-dot" aria-hidden="true" />
+              <span className="home-evidence-stem" aria-hidden="true" /><span className="home-evidence-dot" aria-hidden="true" />
+              <div className="home-evidence-content">
               <p className="home-evidence-label">The contribution</p>
               <p>“I built the stock-tracking API and wrote the tests for it.”</p>
-              <span className="home-evidence-detail">Amina’s project notes</span>
+              <span className="home-evidence-detail">Amina’s project notes</span></div>
             </div>
             <div className="home-evidence-item" data-evidence-stage="mentor" data-home-reveal>
-              <span className="home-evidence-dot" aria-hidden="true" />
+              <span className="home-evidence-stem" aria-hidden="true" /><span className="home-evidence-dot" aria-hidden="true" />
+              <div className="home-evidence-content">
               <p className="home-evidence-label">The mentor’s context</p>
-              <p>“I reviewed those changes with Amina. She can explain the trade-offs.”</p>
-              <span className="home-evidence-detail">Kamau Otieno · fictional mentor</span>
+              <p>“I reviewed those changes with Amina. She can explain the trade‑offs.”</p>
+              <span className="home-evidence-detail">Kamau Otieno · fictional mentor</span></div>
             </div>
             <div className="home-evidence-item" data-evidence-stage="question" data-home-reveal>
-              <span className="home-evidence-dot" aria-hidden="true" />
+              <span className="home-evidence-stem" aria-hidden="true" /><span className="home-evidence-dot" aria-hidden="true" />
+              <div className="home-evidence-content">
               <p className="home-evidence-label">A better first question</p>
               <p>“How did you decide what to test?”</p>
-              <span className="home-evidence-detail">An institution’s conversation starter</span>
+              <span className="home-evidence-detail">An institution’s conversation starter</span></div>
             </div>
           </div>
         </div>

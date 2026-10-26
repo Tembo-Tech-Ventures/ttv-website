@@ -56,6 +56,7 @@ test("signed-in visitors have one direct journey action", async ({ page }) => {
 
 test("content and navigation survive disabled JavaScript", async ({ page }) => {
   await page.goto("/homepage-values.html");
+  await expect(page.locator("html")).not.toHaveClass(/home-motion-wait/);
   const html = await page.content();
   const context = await page.context().browser()!.newContext({ javaScriptEnabled: false });
   const staticPage = await context.newPage();
@@ -109,22 +110,27 @@ test("scroll reveals run and live reduced-motion changes cancel movement", async
   await page.goto("/homepage-values.html");
   const row = page.locator("[data-evidence-stage=question]");
   await row.scrollIntoViewIfNeeded();
-  await expect.poll(() => row.evaluate((el) => el.getAnimations().some((animation) => animation.playState === "running"))).toBe(true);
+  await expect.poll(() => row.evaluate((el) => el.getAnimations({ subtree: true }).some((animation) => animation.playState === "running"))).toBe(true);
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await expect.poll(() => row.evaluate((el) => el.getAnimations().length)).toBe(0);
+  await expect.poll(() => row.evaluate((el) => el.getAnimations({ subtree: true }).length)).toBe(0);
   await expect(row).toBeVisible();
-  expect(await page.locator(".home-evidence-thread").evaluate((el) => getComputedStyle(el, "::before").animationName)).toBe("none");
+  expect(await page.locator(".home-evidence-thread").evaluate((el) => el.getAnimations({ subtree: true }).length)).toBe(0);
 });
 
-test("evidence connector draws over scrolling and settles at full length", async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+test("evidence segments draw once alongside their arriving context", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 700 });
   await page.goto("/homepage-values.html");
-  const top = await page.locator(".home-evidence").evaluate((el) => el.getBoundingClientRect().top + scrollY);
-  const scale = () => page.locator(".home-evidence-thread").evaluate((el) => new DOMMatrixReadOnly(getComputedStyle(el, "::before").transform).d);
-  await page.evaluate((y) => scrollTo(0, y), top - 850);
-  await expect.poll(scale).toBeLessThan(.2);
-  await page.evaluate((y) => scrollTo(0, y), top - 250);
-  await expect.poll(scale).toBeGreaterThan(.8);
+  const mentor = page.locator('[data-evidence-stage="mentor"]');
+  const stem = page.locator(".home-evidence-stem").first();
+  await mentor.scrollIntoViewIfNeeded();
+  await expect.poll(() => stem.evaluate((el) => el.getAnimations().some((animation) => animation.playState === "running"))).toBe(true);
+  const during = await stem.evaluate((el) => getComputedStyle(el).transform);
+  await expect.poll(() => stem.evaluate((el) => getComputedStyle(el).transform)).not.toBe(during);
+  await expect.poll(() => stem.evaluate((el) => el.getAnimations().length)).toBe(0);
+  expect(await stem.evaluate((el) => new DOMMatrixReadOnly(getComputedStyle(el).transform).d)).toBe(1);
+  await page.evaluate(() => scrollTo(0, 0));
+  await mentor.scrollIntoViewIfNeeded();
+  expect(await stem.evaluate((el) => el.getAnimations().length)).toBe(0);
 });
 
 test("unsupported intersection observer leaves all content and navigation usable", async ({ page }) => {
@@ -157,4 +163,25 @@ test("footer brand has balanced complete lines at desktop and mobile", async ({ 
       expect(await line.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     }
   }
+});
+
+test("200 percent mobile text does not clip masked headline words", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/homepage-values.html");
+  await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+  for (const line of await page.locator(".home-wordmark-line > span").all()) {
+    expect(await line.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  }
+  await assertHomepageValues(page);
+});
+
+test("mobile illustration precedes its audience links and headline has four deliberate lines", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/homepage-values.html");
+  const figure = (await page.locator(".home-evidence").boundingBox())!;
+  const pathways = (await page.locator(".home-pathways").boundingBox())!;
+  expect(figure.y + figure.height).toBeLessThan(pathways.y);
+  const lines = await page.locator(".home-title-word").evaluateAll((elements) => elements.map((el) => el.getBoundingClientRect().top));
+  expect(new Set(lines).size).toBe(4);
 });

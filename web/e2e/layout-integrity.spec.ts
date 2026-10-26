@@ -137,13 +137,13 @@ test.describe("layout integrity", () => {
     await expect(page.getByText(/terms of service/i)).toHaveCount(0);
   });
 
-  test("the hero wordmark is never cropped by its own box", async ({ page }) => {
+  test("the homepage headline is never cropped by its own box", async ({ page }) => {
     await page.goto("/");
     await page.evaluate(() => document.fonts.ready);
 
     // 18vw once outgrew the section's padding at 768 and below, and a 5rem
     // floor sheared the final O off on a 390px phone.
-    const wordmark = page.locator("h1.font-heading").first();
+    const wordmark = page.getByRole("heading", { level: 1, name: "Great builders. Already here." });
     const overflow = await wordmark.evaluate((el) => el.scrollWidth - el.clientWidth);
     expect(overflow).toBeLessThanOrEqual(TOLERANCE_PX);
   });
@@ -152,6 +152,24 @@ test.describe("layout integrity", () => {
     await page.goto("/");
     await page.evaluate(() => document.fonts.ready);
     await assertHomepageValues(page);
+  });
+
+  test("homepage evidence responds to focus and its fitted footer stays complete", async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate(() => document.fonts.ready);
+    const story = page.locator(".home-story");
+    await expect(story.getByText("Fictional illustration", { exact: true })).toBeVisible();
+    for (const stage of ["contribution", "mentor", "question"]) {
+      await page.locator(`[data-home-stage="${stage}"]`).focus();
+      await expect(story).toHaveAttribute("data-active-stage", stage);
+    }
+    const brand = page.locator("footer .home-footer-lockup span");
+    await expect(brand).toHaveText(["TEMBO", "TECH VENTURES"]);
+    for (const line of await brand.all()) {
+      expect(await line.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(TOLERANCE_PX);
+    }
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    expect(await page.locator(".home-wordmark-line > span").first().evaluate((el) => el.getAnimations().length)).toBe(0);
   });
 
   test("footer link columns survive the tablet breakpoint", async ({ page }) => {

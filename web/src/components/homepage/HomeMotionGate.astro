@@ -1,0 +1,21 @@
+<!-- Runs before body paint: a late module must never rewind the entrance. -->
+<script is:inline>
+  {
+    const root = document.documentElement;
+    root.classList.add("home-motion-wait");
+    const release = () => {
+      clearTimeout(timeout);
+      root.classList.remove("home-motion-wait");
+    };
+    const timeout = setTimeout(release, 500);
+    if (document.fonts) {
+      Promise.all([
+        document.fonts.load('900 1em Mattone'),
+        document.fonts.load('400 1em "Maven Pro"'),
+        document.fonts.load('600 1em "Maven Pro"'),
+      ]).then(release, release);
+    } else {
+      release();
+    }
+  }
+</script>

@@ -1,4 +1,5 @@
 ---
+import HomeMotionGate from "@/components/homepage/HomeMotionGate.astro";
 import headingFont from "@/assets/fonts/Mattone-Black.woff2?url";
 import PublicLayout from "@/layouts/PublicLayout.astro";
 import HomeIntroduction from "@/components/homepage/HomeIntroduction";
@@ -35,7 +36,10 @@ function formatDate(date: Date): string {
   description="Tembo Tech Ventures helps grow practical tech communities across Africa through cohorts, mentorship, and lasting professional relationships."
   canonical="/"
 >
-  <link slot="head" rel="preload" href={headingFont} as="font" type="font/woff2" crossorigin="anonymous" />
+  <Fragment slot="head">
+    <link rel="preload" href={headingFont} as="font" type="font/woff2" crossorigin="anonymous" />
+    <HomeMotionGate />
+  </Fragment>
   <HomeIntroduction isAuthenticated={Boolean(Astro.locals.user)} />
   <HumansSection />
   {latestPosts.length > 0 && (

@@ -4,8 +4,8 @@ export default function HeroSection({ isAuthenticated = false }: { isAuthenticat
   return (
     <section className="home-hero home-container" aria-labelledby="home-title">
       <h1 id="home-title" aria-label="Great builders. Already here." className="home-wordmark">
-        <span className="home-wordmark-line"><span>Great builders.</span></span>
-        <span className="home-wordmark-line"><span>Already here.</span></span>
+        <span className="home-wordmark-line"><span><span className="home-title-word">Great</span>{" "}<span className="home-title-word">builders.</span></span></span>
+        <span className="home-wordmark-line"><span><span className="home-title-word">Already</span>{" "}<span className="home-title-word">here.</span></span></span>
       </h1>
       <div className="home-invitation">
         <p className="home-description">A practical tech community for early builders across Africa. Learn with working engineers and make your work easier to see—with or without a cohort.</p>

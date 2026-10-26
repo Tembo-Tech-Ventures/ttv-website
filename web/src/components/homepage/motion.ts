@@ -5,22 +5,6 @@ export function initHomepageMotion(root: HTMLElement): () => void {
   const animations = new Set<Animation>();
   const listeners = new AbortController();
   let observer: IntersectionObserver | undefined;
-  let disposed = false;
-  // Hold only the decorative entrance, for at most 500ms. Content is ordinary
-  // server markup; failed fonts, disabled JS and reduced motion remain usable.
-  const entrance = reduced.matches ? [] : Array.from(root.querySelectorAll<HTMLElement>(".home-wordmark-line > span, .home-invitation, .home-hero-line")).flatMap((element) => element.getAnimations());
-  entrance.forEach((animation) => { animation.pause(); animation.currentTime = 0; });
-  let fontTimeout: ReturnType<typeof setTimeout> | undefined;
-  const fonts = document.fonts ? Promise.all([
-    document.fonts.load('900 1em Mattone'),
-    document.fonts.load('400 1em "Maven Pro"'),
-    document.fonts.load('600 1em "Maven Pro"'),
-  ]).catch(() => undefined) : Promise.resolve();
-  void Promise.race([fonts, new Promise<void>((resolve) => { fontTimeout = setTimeout(resolve, 500); })]).then(() => {
-    clearTimeout(fontTimeout);
-    if (!disposed && !reduced.matches) entrance.forEach((animation) => animation.play());
-    return undefined;
-  });
   let hoveredStage = "";
   let focusedStage = "";
   const highlight = () => {
@@ -45,12 +29,27 @@ export function initHomepageMotion(root: HTMLElement): () => void {
         if (!(entry.target instanceof HTMLElement) || !entry.target.animate) continue;
         const stage = entry.target.dataset.evidenceStage;
         const delay = stage === "mentor" ? 130 : stage === "question" ? 260 : 0;
-        const animation = entry.target.animate([
-          { opacity: .25, transform: "translateY(24px)" },
-          { opacity: 1, transform: "translateY(0)" },
-        ], { duration: 850, delay, fill: "backwards", easing: "cubic-bezier(.22, 1, .36, 1)" });
-        animations.add(animation);
-        animation.onfinish = () => animations.delete(animation);
+        const animate = (element: HTMLElement | null, keyframes: Keyframe[], duration: number, offset = 0) => {
+          if (!element?.animate) return;
+          const animation = element.animate(keyframes, { duration, delay: delay + offset, fill: "backwards", easing: "cubic-bezier(.22, 1, .36, 1)" });
+          animations.add(animation);
+          animation.onfinish = () => animations.delete(animation);
+        };
+        if (stage) {
+          animate(entry.target.querySelector(".home-evidence-content"), [
+            { opacity: .15, transform: "translateX(24px)" }, { opacity: 1, transform: "translateX(0)" },
+          ], 850);
+          animate(entry.target.querySelector(".home-evidence-dot"), [
+            { transform: "scale(0)" }, { transform: "scale(1)" },
+          ], 500, 100);
+          animate(entry.target.previousElementSibling?.querySelector<HTMLElement>(".home-evidence-stem") ?? null, [
+            { transform: "scaleY(0)" }, { transform: "scaleY(1)" },
+          ], 650);
+        } else {
+          animate(entry.target, [
+            { opacity: .25, transform: "translateY(24px)" }, { opacity: 1, transform: "translateY(0)" },
+          ], 850);
+        }
       }
     }, { threshold: .05 });
     root.querySelectorAll("[data-home-reveal]").forEach((element) => observer?.observe(element));
@@ -58,9 +57,6 @@ export function initHomepageMotion(root: HTMLElement): () => void {
   configure();
   reduced.addEventListener("change", configure);
   return () => {
-    disposed = true;
-    clearTimeout(fontTimeout);
-    entrance.forEach((animation) => animation.cancel());
     observer?.disconnect();
     animations.forEach((animation) => animation.cancel());
     reduced.removeEventListener("change", configure);
