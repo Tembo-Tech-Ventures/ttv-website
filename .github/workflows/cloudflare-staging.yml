@@ -21,9 +21,15 @@ on:
           - persona-qa-cleanup
           - preview-container-state
       expected_sha:
-        description: Exact current head SHA of integration PR 171 (reserve a PM deployment slot first)
+        description: Exact current head SHA of the authorized PR (coordinate the staging slot first)
         required: true
         type: string
+
+      deploy_pr:
+        description: Open same-repository PR to deploy (deploy action only; blank retains PR171)
+        required: false
+        type: string
+        default: ""
 
       expected_deployed_sha:
         description: Pinned live revision for read-only diagnose-demo only
@@ -90,6 +96,7 @@ jobs:
           STAGING_ACTION: ${{ inputs.action }}
           STAGING_EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
           STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_DEPLOY_PR: ${{ inputs.deploy_pr }}
           STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
           STAGING_INTEGRATION_PR: "171"
         run: node web/scripts/cloudflare/staging-preflight.mjs

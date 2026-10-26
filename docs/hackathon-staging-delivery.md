@@ -167,3 +167,23 @@ model calls were not tested. An artifact upload is not itself proof of the journ
 review the run's checks and cleanup receipt, then inspect the images before sharing
 accessible screenshot links in issue #170 with the exact revision and synthetic
 staging labels. Failed runs publish no screenshot artifacts.
+
+
+## Post-hackathon staging-only changes
+
+After PR171 merged, a separately owner-authorized change can use the same
+`Cloudflare Staging` workflow with `action=deploy`, `deploy_pr=<open PR number>`,
+and `expected_sha=<full current PR head>`, dispatched on that PR's exact branch.
+Coordinate the shared staging slot before dispatch. The PR must belong to this
+repository, target main, remain open, and match both the dispatched branch and
+SHA. A stale head, fork, tag, production branch, or closed PR fails before the
+credentialed job. The existing non-cancelling concurrency lock still applies.
+This does not authorize a production merge. Staging-only PRs must clearly state
+that a separate owner production release decision is outstanding.
+
+The override is deploy-only: fixture, assessment, seeding and diagnostic actions
+remain pinned to their historical integration scope. No credentials, retained
+data or security flags are changed by selecting a PR. Preserve existing staging
+feature inputs intentionally when deploying; never seed or delete data as part
+of a homepage verification. Verify the full deployed SHA, desktop/mobile public
+journeys and captured Worker logs before releasing the slot.

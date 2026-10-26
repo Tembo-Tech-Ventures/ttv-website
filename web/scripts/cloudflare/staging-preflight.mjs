@@ -8,10 +8,18 @@ export async function validateStagingRevision(env, { fetchImpl = fetch } = {}) {
   if (env.STAGING_EXPECTED_DEPLOYED_SHA && env.STAGING_ACTION !== "diagnose-demo") {
     throw new Error("A deployed revision override is only allowed for read-only diagnosis.");
   }
-  const branch = env.STAGING_INTEGRATION_BRANCH;
+  // Post-hackathon homepage delivery can name its own open PR. This changes
+  // only the candidate: GitHub must still attest its exact branch and SHA.
+  // Historical fixture/diagnostic actions retain their original pinned scope.
+  if (env.STAGING_DEPLOY_PR && env.STAGING_ACTION !== "deploy") {
+    throw new Error("A deploy PR override is only allowed for deployment.");
+  }
+  const branch = env.STAGING_DEPLOY_PR
+    ? env.GITHUB_REF?.replace(/^refs\/heads\//, "")
+    : env.STAGING_INTEGRATION_BRANCH;
   const sha = env.STAGING_EXPECTED_SHA;
   const repository = env.GITHUB_REPOSITORY;
-  const prNumber = env.STAGING_INTEGRATION_PR;
+  const prNumber = env.STAGING_DEPLOY_PR || env.STAGING_INTEGRATION_PR;
   if (!branch || ["main", "production", "prod"].includes(branch)) {
     throw new Error("A non-production integration branch must be configured.");
   }

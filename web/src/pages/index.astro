@@ -1,11 +1,6 @@
 ---
 import PublicLayout from "@/layouts/PublicLayout.astro";
-import HeroSection from "@/components/homepage/HeroSection";
-import CommunityIntro from "@/components/community/CommunityIntro";
-import ValueSection from "@/components/homepage/ValueSection";
-import FeaturesSection from "@/components/homepage/FeaturesSection";
-import Marquee from "@/components/homepage/Marquee.astro";
-import ValuesSection from "@/components/homepage/ValuesSection";
+import HomeIntroduction from "@/components/homepage/HomeIntroduction";
 import HumansSection from "@/components/homepage/HumansSection.astro";
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
@@ -39,12 +34,8 @@ function formatDate(date: Date): string {
   description="Tembo Tech Ventures helps grow practical tech communities across Africa through cohorts, mentorship, and lasting professional relationships."
   canonical="/"
 >
-  <HeroSection client:visible isAuthenticated={Boolean(Astro.locals.user)} />
-  <CommunityIntro isAuthenticated={Boolean(Astro.locals.user)} />
-  <ValueSection client:visible />
-  <FeaturesSection client:visible />
-  <Marquee />
-  <ValuesSection client:visible />
+  <HomeIntroduction isAuthenticated={Boolean(Astro.locals.user)} />
+  <HumansSection />
   {latestPosts.length > 0 && (
     <section
       aria-labelledby="latest-posts-heading"
@@ -53,12 +44,9 @@ function formatDate(date: Date): string {
       <div class="mx-auto max-w-7xl px-4 sm:px-8">
         <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p class="font-body text-xs font-semibold uppercase tracking-[0.4em] text-primary">
-              &sect; Field notes
-            </p>
             <h2
               id="latest-posts-heading"
-              class="font-heading tracking-heading mt-4 text-3xl text-ink-primary md:text-5xl"
+              class="font-heading tracking-heading text-3xl text-ink-primary md:text-5xl"
             >
               Latest posts
             </h2>
@@ -107,5 +95,4 @@ function formatDate(date: Date): string {
       </div>
     </section>
   )}
-  <HumansSection />
 </PublicLayout>

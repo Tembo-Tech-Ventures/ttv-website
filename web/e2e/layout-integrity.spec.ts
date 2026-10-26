@@ -148,7 +148,7 @@ test.describe("layout integrity", () => {
     expect(overflow).toBeLessThanOrEqual(TOLERANCE_PX);
   });
 
-  test("every values commitment and carousel word stays visible", async ({ page }) => {
+  test("homepage commitments appear once and audience routes stay visible", async ({ page }) => {
     await page.goto("/");
     await page.evaluate(() => document.fonts.ready);
     await assertHomepageValues(page);

@@ -24,6 +24,7 @@ describe("GitHub delivery contracts", () => {
     expect(workflow).toContain("needs: preflight");
     expect(workflow).toContain("node web/scripts/cloudflare/staging-preflight.mjs");
     expect(workflow).toContain("STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}");
+    expect(workflow).toContain("STAGING_DEPLOY_PR: ${{ inputs.deploy_pr }}");
     expect(workflow).toContain("STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp");
     expect(workflow).toContain('STAGING_INTEGRATION_PR: "171"');
     expect(workflow).toContain("action: deploy");
