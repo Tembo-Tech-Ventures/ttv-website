@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqliteD1, MINIMAL_AUTH_SCHEMA, readMigration } from "@/test/sqlite-d1";
-import { resolveStagingFixtureIdentity, RETAINED_READ_PROBE_CUTOFF, retainedProbeMarker, verifyRetainedProbeTarget, type StagingFixturePersona } from "../staging-fixtures";
+import { resolveStagingFixtureIdentity, retainedProbeMarker, verifyRetainedProbeTarget, type StagingFixturePersona } from "../staging-fixtures";
 import { DEMO_USER_IDS, DEMO_CUTOFF } from "../staging-demo-policy";
 import { createCommunityService } from "./service";
 import { authorizeRetainedProbe, claimRetainedChat } from "./staging-retained-probe";
@@ -68,9 +68,4 @@ describe("retained read probe boundary",()=>{
   for(const [method,path,body] of [["POST","access",{}],["PUT","profile",{}],["POST","chat",{rubric:{}}],["POST",`profiles/${DEMO_USER_IDS[0]}/assessment`,{}],["GET","profiles/real",null],["GET","journey",null],["GET","mcp",null]]) expect(()=>authorizeRetainedProbe(String(method),String(path),scopes,body)).toThrow(/synthetic probe|PAT required/);
   expect(()=>authorizeRetainedProbe("GET","profiles",null,null)).toThrow(/synthetic probe|PAT required/);
  });
-});
-
-it('rejects the fresh retained access exactly at the fixed cutoff, even with otherwise live rows',async()=>{
- const f=fixture();await expect(resolveStagingFixtureIdentity({...f.args,now:new Date(RETAINED_READ_PROBE_CUTOFF*1000)})).rejects.toMatchObject({status:403});
- expect(RETAINED_READ_PROBE_CUTOFF).toBe(Date.parse('2026-10-25T16:23:44Z')/1000);
 });

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { assertHomepageValues } from "./homepage-values-assertions";
 
 /**
  * Layout regressions that only a real browser can catch: content pushed out of
@@ -147,42 +148,10 @@ test.describe("layout integrity", () => {
     expect(overflow).toBeLessThanOrEqual(TOLERANCE_PX);
   });
 
-  test("every values commitment stays inside its row", async ({ page }) => {
+  test("every values commitment and carousel word stays visible", async ({ page }) => {
     await page.goto("/");
     await page.evaluate(() => document.fonts.ready);
-    await page.locator("#values").scrollIntoViewIfNeeded();
-
-    // The oversized word shares a grid row with this copy. When the word forced
-    // the 1fr column past its share, the row's overflow:hidden ate up to 411px
-    // of the commitment text at every desktop width.
-    const rows = page.locator("li[data-value-row]");
-    const count = await rows.count();
-    expect(count).toBeGreaterThan(0);
-
-    for (let i = 0; i < count; i += 1) {
-      const row = rows.nth(i);
-      const label = await row.locator("[data-value-word]").innerText();
-
-      // Each row reveals on its own ScrollTrigger and holds the pre-animation
-      // state until then, so bring this row into view before measuring it.
-      await row.scrollIntoViewIfNeeded();
-
-      // The copy animates in from x: 24, so poll rather than sampling once —
-      // a single read lands mid-tween and measures the entry offset, not the
-      // resting layout.
-      await expect
-        .poll(
-          () =>
-            row.evaluate((el) => {
-              const copy = el.querySelector("[data-value-commitment]");
-              return copy
-                ? copy.getBoundingClientRect().right - el.getBoundingClientRect().right
-                : Number.NaN;
-            }),
-          { message: `commitment copy for "${label}" overhangs its row` }
-        )
-        .toBeLessThanOrEqual(TOLERANCE_PX);
-    }
+    await assertHomepageValues(page);
   });
 
   test("footer link columns survive the tablet breakpoint", async ({ page }) => {

@@ -29,7 +29,7 @@ interface ResolveOptions {
   retainedProbeEnabled?: string;
   now?: Date;
 }
-export const RETAINED_READ_PROBE_CUTOFF = Date.parse("2026-10-25T16:23:44Z") / 1000;
+export const RETAINED_READ_PROBE_CUTOFF = Date.parse("2026-10-25T11:10:35Z") / 1000;
 const PREFIX = "ttv-staging-fixture-";
 const MARKER = "ttv-agent:synthetic-staging:";
 const RUN_PATTERN = /^[a-f0-9]{24}$/;

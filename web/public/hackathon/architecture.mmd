@@ -1,0 +1,15 @@
+flowchart TB
+  accTitle: Community application and model routes
+  accDescr: Astro and React web interfaces and authenticated MCP use shared access controlled community services and D1 records. Optional chat uses Mastra and GLM. Assessment uses Gemma. Both go through Cloudflare AI Gateway. OpenAI runtime evaluation is future work.
+  W[Astro and React on Cloudflare Workers] --> S[Authorized community API and services]
+  X[Authenticated MCP] --> S
+  S --> D[D1: profiles, entries, confirmations]
+  S --> L[Evidence source links]
+  S --> C[Mastra chat and bounded comparison]
+  S --> E[Evidence assessment]
+  C --> G[Cloudflare AI Gateway]
+  E --> G
+  G --> GL[GLM 5.3 Flash: chat]
+  G --> GE[Gemma 4: assessment]
+  F[Future: OpenAI runtime evaluation]
+  S -. future .-> F

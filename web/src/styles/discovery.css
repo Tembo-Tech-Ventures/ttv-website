@@ -416,6 +416,20 @@
   text-align: left;
   min-height: 40px;
 }
+/* Keep mode selection visible independently of hover and keyboard focus. */
+.discovery-modes {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+  margin: 0 0 20px;
+}
+.discovery-modes .discovery-text-button {
+  border-bottom: 2px solid transparent;
+  min-height: 44px;
+}
+.discovery-modes .discovery-text-button[aria-pressed="true"] {
+  border-bottom-color: var(--d-accent);
+}
 .discovery-person > .discovery-text-button {
   border-top: 1px solid var(--d-rule);
   padding-top: 18px;

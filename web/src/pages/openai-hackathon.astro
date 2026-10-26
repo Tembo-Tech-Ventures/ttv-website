@@ -1,0 +1,22 @@
+---
+import OrganizerPage from "@/components/hackathon/OrganizerPage";
+// This standalone static page owns its styles instead of using a session-aware layout.
+// oxlint-disable-next-line import/no-unassigned-import
+import "@/styles/global.css";
+// oxlint-disable-next-line import/no-unassigned-import
+import "@/styles/hackathon.css";
+// Read-only content uses the site's existing server-rendered route mode.
+// This page performs no session, database or model calls.
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="TTV's Codex Paris prototype: community contributions, specific mentor confirmations and institutional discovery." />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <title>Tembo: show what you can do | Codex Paris</title>
+  </head>
+  <body><OrganizerPage /></body>
+</html>
