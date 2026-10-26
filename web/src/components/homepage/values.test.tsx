@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import BuildersSection from "./BuildersSection";
 import HomeIntroduction from "./HomeIntroduction";
 import { VALUES } from "./values";
 
@@ -38,6 +39,8 @@ describe("simplified homepage", () => {
       expect(html.split(`href="/community/${audience}"`)).toHaveLength(2);
     }
     expect(html).toContain("Institutional access requires approval.");
+    expect(html).toContain("Mentor access requires approval.");
+    expect(html).not.toContain("invite mentors");
     expect(html).toContain("work you have actually checked");
     expect(html).toContain('aria-label="Find your place at Tembo"');
   });
@@ -55,7 +58,27 @@ describe("simplified homepage", () => {
     expect(route).not.toContain("&sect;");
     const humans = readFileSync(new URL("./HumansSection.astro", import.meta.url), "utf8");
     expect(humans).toContain('id="humans"');
-    expect(humans).toContain('aria-label={`Meet ${card.name}`}');
+    expect(humans).toContain("<BuildersSection profiles={profileCards}");
     expect(humans).not.toMatch(/profiles land|&sect;/);
+  });
+});
+
+
+describe("homepage builders", () => {
+  it("omits an empty builder section instead of promising future profiles", () => {
+    expect(renderToStaticMarkup(<BuildersSection profiles={[]} />)).toBe("");
+  });
+  it("renders eligible supplied profiles with named links and image or initials", () => {
+    const html = renderToStaticMarkup(<BuildersSection profiles={[
+      { handle: "fictional-amina", name: "Amina Example", image: null, initials: "AE", label: "Example cohort" },
+      { handle: "fictional-kamau", name: "Kamau Example", image: "/example.png", initials: "KE", label: "" },
+    ]} />);
+    expect(html).toContain("Meet the builders.");
+    expect(html).toContain('href="/talent/fictional-amina"');
+    expect(html).toContain('aria-label="Meet Amina Example"');
+    expect(html).toContain(">AE</span>");
+    expect(html).toContain('src="/example.png"');
+    expect(html).toContain('loading="lazy"');
+    expect(html).toContain('href="/talent"');
   });
 });

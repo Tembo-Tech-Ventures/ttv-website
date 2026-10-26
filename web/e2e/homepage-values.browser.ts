@@ -66,3 +66,15 @@ test("content and navigation survive disabled JavaScript", async ({ page }) => {
   await expect(staticPage.getByRole("heading", { name: "HONESTY", exact: true })).toBeVisible();
   await context.close();
 });
+
+test("section divider draws across a useful scroll distance", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/homepage-values.html");
+  const section = page.locator("#values");
+  const scale = () => section.evaluate((el) => new DOMMatrixReadOnly(getComputedStyle(el, "::before").transform).a);
+  const top = await section.evaluate((el) => el.getBoundingClientRect().top + scrollY);
+  await page.evaluate((y) => scrollTo(0, y), top - 850);
+  await expect.poll(scale).toBeLessThan(0.6);
+  await page.evaluate((y) => scrollTo(0, y), top - 450);
+  await expect.poll(scale).toBeGreaterThan(0.8);
+});

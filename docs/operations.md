@@ -221,3 +221,19 @@ Pagination, denial or incomplete state is a telemetry gap, not proof that the
 container stopped. Output contains only the script's sanitized state receipt;
 no credentials or raw provider errors. This is a one-shot diagnostic, not a
 recurring monitor or a relaxation of R2 teardown guards.
+
+### Post-PR171 staging-only delivery (2026-10-26)
+
+The homepage simplification is explicitly authorized for shared staging, without
+production merge. Since PR171 is merged, `Cloudflare Staging` accepts an optional
+`deploy_pr` for `action=deploy` on that PR's branch. Before releasing staging
+credentials, preflight verifies the current open same-repository PR targets main
+and its head equals both the exact dispatched branch and full `expected_sha`.
+Production branches, tags, stale/closed/foreign PRs and overrides for fixture or
+diagnostic actions are rejected. Blank input retains the historical PR171 pin.
+The staging domain, environment and non-cancelling concurrency group are unchanged.
+Coordinate the sole staging slot and reconcile current runs/head before dispatch;
+verify live identity, desktop/mobile journeys and logs afterwards. Preserve
+current authorized feature flags and retained data; this path does not authorize
+credential changes, demo expiry extensions or a production release. See
+[staging delivery](hackathon-staging-delivery.md#post-hackathon-staging-only-changes).

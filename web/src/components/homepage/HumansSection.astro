@@ -5,6 +5,7 @@ import { env } from "cloudflare:workers";
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { isValidCompletion } from "@/lib/talent/eligibility";
 import { getInitials } from "@/components/talent/directory-helpers";
+import BuildersSection from "./BuildersSection";
 import { formatCohortLocation } from "@/lib/site";
 import { resolvePublicProfileIdentity } from "@/lib/talent/public-identity";
 
@@ -52,55 +53,8 @@ const profileCards = publishedProfiles
   })
   .slice(0, 4);
 
-const hasProfiles = profileCards.length > 0;
 ---
 
-<section id="humans" aria-labelledby="humans-heading" class="relative px-4 py-16 sm:px-8 md:py-20 scroll-mt-28">
-  <div class="mx-auto max-w-7xl">
-    <div class="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-      <h2 id="humans-heading" class="font-heading tracking-heading text-3xl text-ink-primary md:text-5xl">Meet the builders.</h2>
-      <a href="/talent" class="inline-flex min-h-11 items-center font-body text-primary underline underline-offset-4">Explore the builder directory &rarr;</a>
-    </div>
-
-    {hasProfiles && (
-      <ul class="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-4">
-        {profileCards.map((card) => (
-          <li class="space-y-3">
-            <a href={`/talent/${card.handle}`} class="block" aria-label={`Meet ${card.name}`}>
-              <div
-                class="relative aspect-[4/5] overflow-hidden border border-[color:var(--color-rule)]"
-                style="background-color: var(--color-bg-raised);"
-              >
-                {card.image ? (
-                  <img
-                    src={card.image}
-                    alt=""
-                    class="h-full w-full object-cover"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div class="flex h-full w-full items-center justify-center">
-                    <span
-                      class="font-heading tracking-display text-primary"
-                      style="font-size: clamp(3rem, 7vw, 6rem);"
-                    >
-                      {card.initials}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </a>
-            <p class="font-body text-sm font-semibold text-ink-primary">
-              {card.name}
-            </p>
-            {card.label && (
-              <p class="font-body text-xs font-semibold uppercase tracking-[0.24em] text-ink-muted">
-                {card.label}
-              </p>
-            )}
-          </li>
-        ))}
-      </ul>
-    )}
-  </div>
-</section>
+<div id="humans" class="scroll-mt-28">
+  <BuildersSection profiles={profileCards} />
+</div>

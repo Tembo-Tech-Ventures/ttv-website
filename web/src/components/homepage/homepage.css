@@ -1,7 +1,7 @@
 .home-introduction { color: var(--color-ink-primary); }
 .home-container { width: min(100% - 2rem, 80rem); margin-inline: auto; }
 .home-hero { container-type: inline-size; padding-block: clamp(3rem, 7vw, 7rem) 4rem; }
-.home-wordmark { font-family: var(--font-heading); letter-spacing: var(--tracking-display); margin: 0; font-size: clamp(2rem, 14vw, 12rem); font-size: 15.5cqw; line-height: 1; }
+.home-wordmark { font-family: var(--font-heading); letter-spacing: var(--tracking-display); margin: 0; font-size: clamp(2rem, 14vw, 12rem); font-size: 19.3cqw; line-height: 1; }
 .home-signature { margin-top: 1rem; font-size: 0.8rem; letter-spacing: 0.3em; text-transform: uppercase; color: var(--color-primary); }
 .home-hero-bottom { display: grid; gap: 2rem; margin-top: clamp(2.5rem, 6vw, 5rem); }
 .home-lead { font-family: var(--font-heading); font-size: clamp(1.5rem, 3.4vw, 2.75rem); line-height: 1.2; letter-spacing: var(--tracking-heading); }
@@ -24,7 +24,6 @@
 .home-explanation a { margin-top: 1.25rem; font-size: 1rem; }
 .home-pathways { margin-top: 3rem; }
 .home-pathway { display: grid; gap: 0.75rem; padding: 1.75rem 0; border-top: 1px solid var(--color-rule); }
-.home-pathway:last-child { border-bottom: 1px solid var(--color-rule); }
 .home-audience { color: var(--color-primary); font-size: 0.875rem; }
 .home-pathway-body { display: block; min-width: 0; }
 .home-pathway-title { display: block; font-size: 1.375rem; font-weight: 600; }
@@ -58,7 +57,8 @@
   .home-button, .home-text-link, .home-pathway, .home-pathway-title { transition: color 180ms, background-color 180ms, border-color 180ms, text-decoration-color 180ms; }
   .home-pathway:hover .home-arrow, .home-pathway:focus-visible .home-arrow { transform: translate(3px, -3px); }
   @supports (animation-timeline: view()) {
-    .home-section::before { animation: home-rule linear both; animation-timeline: view(); animation-range: entry 0% entry 100%; }
+    .home-section { view-timeline-name: --home-section; view-timeline-axis: block; }
+    .home-section::before { animation: home-rule linear both; animation-timeline: --home-section; animation-range: entry 0% entry 100%; }
   }
 }
 @keyframes home-arrive { from { opacity: 0.8; transform: translateY(12px); } to { opacity: 1; transform: none; } }

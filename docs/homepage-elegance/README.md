@@ -38,3 +38,9 @@ Staging is the requested delivery target. Production merge requires a separate
 owner release decision. The staging dispatch now accepts an optional deploy-only
 PR number after PR171 merged, with exact open same-repository PR/branch/SHA checks
 unchanged; fixture/diagnostic actions retain their previous pinned scope.
+
+Opus's implementation review prompted explicit mentor approval wording, removal
+of implied mentor invitations, a named section scroll timeline (tested across a
+useful scroll distance), one divider between sections, and omission of an empty
+builder section. The final browser suite contains ten cases. GSAP was used only
+by the removed homepage components; package/lock changes remove only that entry.
