@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   authenticatePersonalAccessToken: vi.fn(),
   createAuth: vi.fn(),
+  authenticateQaCookie: vi.fn(),
+  logoutQa: vi.fn(),
   enforcePersonalAccessTokenMutationScope: vi.fn(),
   getSession: vi.fn(),
   hasPersonalAccessTokenAuthorization: vi.fn(),
@@ -25,6 +27,7 @@ vi.mock("cloudflare:workers", () => ({
   },
 }));
 vi.mock("@/lib/auth", () => ({ createAuth: mocks.createAuth }));
+vi.mock("@/lib/staging-qa-access", async importOriginal => ({...(await importOriginal<typeof import("@/lib/staging-qa-access")>()),authenticateQaCookie:mocks.authenticateQaCookie,logoutQa:mocks.logoutQa}));
 vi.mock("@/lib/observability/errors", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/observability/errors")>()),
   recordError: mocks.recordError,
@@ -38,6 +41,7 @@ vi.mock("@/lib/personal-access-tokens", () => ({
     mocks.hasPersonalAccessTokenAuthorization,
 }));
 
+import { env } from "cloudflare:workers";
 import { onRequest } from "./middleware";
 
 function createContext(request: Request) {
@@ -99,6 +103,7 @@ const tokenAuth = {
 };
 
 beforeEach(() => {
+  (env as {DEPLOYMENT_ENVIRONMENT?:string}).DEPLOYMENT_ENVIRONMENT = undefined;
   vi.clearAllMocks();
   mocks.hasPersonalAccessTokenAuthorization.mockReturnValue(false);
   mocks.authenticatePersonalAccessToken.mockResolvedValue(null);
@@ -128,6 +133,23 @@ describe("dashboard authentication", () => {
 });
 
 describe("personal access token middleware", () => {
+  it.each(["/dashboard", "/api/recordings/private", "/api/mcp/private", "/api/community-other", "/auth/get-session"])("restricts community PATs from unrelated route %s", async pathname => {
+    mocks.hasPersonalAccessTokenAuthorization.mockReturnValue(true);
+    mocks.authenticatePersonalAccessToken.mockResolvedValue({ ...tokenAuth, token: { ...tokenSummary, scopes: ["community:read"] } });
+    const { context, next } = createContext(new Request(`https://example.com${pathname}`));
+    const response = requireResponse(await onRequest(context as never, next));
+    expect(response.status).toBe(403);
+    expect(next).not.toHaveBeenCalled();
+  });
+  it.each(["/api/mcp", "/api/community/profile"])("allows scoped community API %s", async pathname => {
+    mocks.hasPersonalAccessTokenAuthorization.mockReturnValue(true);
+    mocks.authenticatePersonalAccessToken.mockResolvedValue({ ...tokenAuth, token: { ...tokenSummary, scopes: ["community:read"] } });
+    const { context, next } = createContext(new Request(`https://example.com${pathname}`));
+    const response = requireResponse(await onRequest(context as never, next));
+    expect(response.status).toBe(200);
+    expect(next).toHaveBeenCalledOnce();
+  });
+
   it("uses a valid PAT as the request identity and keeps its secret out of locals", async () => {
     mocks.hasPersonalAccessTokenAuthorization.mockReturnValue(true);
     mocks.authenticatePersonalAccessToken.mockResolvedValue(tokenAuth);
@@ -231,6 +253,15 @@ describe("personal access token middleware", () => {
     expect(next).toHaveBeenCalledOnce();
   });
 
+  it("rejects community-only PATs from admin reads even for a current admin", async () => {
+    mocks.hasPersonalAccessTokenAuthorization.mockReturnValue(true);
+    mocks.authenticatePersonalAccessToken.mockResolvedValue({ ...tokenAuth, token: { ...tokenAuth.token, scopes: ["community:read"] } });
+    const { context, next } = createContext(new Request("https://example.com/api/admin/recordings"));
+    const response = requireResponse(await onRequest(context as never, next));
+    expect(response.status).toBe(403);
+    expect(next).not.toHaveBeenCalled();
+  });
+
   it("returns the scope failure before the origin guard for a PAT mutation", async () => {
     mocks.hasPersonalAccessTokenAuthorization.mockReturnValue(true);
     mocks.authenticatePersonalAccessToken.mockResolvedValue(tokenAuth);
@@ -327,4 +358,75 @@ describe("request error capture", () => {
       }
     );
   });
+});
+
+describe("synthetic staging middleware boundary", () => {
+  const runId = "a".repeat(24);
+  const userId = `ttv-staging-fixture-${runId}-mentor`;
+  function setup() {
+    const now = Math.floor(Date.now()/1000);
+    (env as {DEPLOYMENT_ENVIRONMENT?:string}).DEPLOYMENT_ENVIRONMENT="staging";
+    const marker = `ttv-agent:synthetic-staging:${runId}`;
+    mocks.getSession.mockResolvedValue({user:{...tokenAuth.user,id:userId,email:`${userId}@invalid.ttv`},session:{...tokenAuth.session,id:"fixture-session",userAgent:marker}});
+    mocks.roleFirst.mockResolvedValue({userId,sessionId:"fixture-session",runId,persona:"mentor",expiresAt:now+1800,email:`${userId}@invalid.ttv`,sessionUserId:userId,sessionUserAgent:marker,sessionCreatedAt:now-10,sessionExpiresAt:now+7*86400});
+  }
+  it("passes a registered fixture only to the bounded community surface", async () => {
+    setup();const {context,next}=createContext(new Request("https://ttv.test/api/community/mentorship"));
+    const res=requireResponse(await onRequest(context as never,next));
+    expect(res.status).toBe(200);expect(context.locals).toMatchObject({stagingFixture:{runId,persona:"mentor"}});
+  });
+  it.each(["/admin/agent-access","/api/admin/users","/api/recordings/private","/dashboard/portfolio"])("blocks unrelated synthetic surface %s",async path=>{
+    setup();const {context,next}=createContext(new Request(`https://ttv.test${path}`));
+    expect(requireResponse(await onRequest(context as never,next)).status).toBe(403);expect(next).not.toHaveBeenCalled();
+  });
+  it("rejects fixture authentication in production before role checks",async()=>{
+    setup();(env as {DEPLOYMENT_ENVIRONMENT?:string}).DEPLOYMENT_ENVIRONMENT="production";
+    const {context,next}=createContext(new Request("https://ttv.test/api/community/profile"));
+    expect(requireResponse(await onRequest(context as never,next)).status).toBe(403);expect(next).not.toHaveBeenCalled();expect(mocks.roleFirst).not.toHaveBeenCalled();
+  });
+  it("rejects cached authentication after registry expiration",async()=>{
+    setup();const row=await mocks.roleFirst();mocks.roleFirst.mockResolvedValue({...row,expiresAt:Math.floor(Date.now()/1000)-1});
+    const {context,next}=createContext(new Request("https://ttv.test/api/community/profile"));
+    expect(requireResponse(await onRequest(context as never,next)).status).toBe(403);expect(next).not.toHaveBeenCalled();
+  });
+});
+
+it("allows only the retained probe GET discovery shell, never unrelated pages or mutations",async()=>{
+ vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2026-10-25T09:30:00Z'));
+ const stagingEnv=env as unknown as {DEPLOYMENT_ENVIRONMENT?:string;STAGING_RETAINED_READ_PROBE_ENABLED?:string};
+ try{
+  stagingEnv.DEPLOYMENT_ENVIRONMENT='staging';stagingEnv.STAGING_RETAINED_READ_PROBE_ENABLED='true';
+  const runId='a'.repeat(24),userId=`ttv-staging-fixture-${runId}-institution`,now=Math.floor(Date.now()/1000),marker=`ttv-agent:synthetic-staging:${runId}:retained-read:READY`;
+  mocks.hasPersonalAccessTokenAuthorization.mockReturnValue(true);
+  mocks.authenticatePersonalAccessToken.mockResolvedValue({...tokenAuth,user:{...tokenAuth.user,id:userId,email:`${userId}@invalid.ttv`},token:{...tokenSummary,scopes:['community:read','institution:read']}});
+  mocks.roleFirst.mockResolvedValue({userId,sessionId:`${userId}-retained-read-probe-session`,runId,persona:'institution',expiresAt:now+800,email:`${userId}@invalid.ttv`,sessionUserId:userId,sessionUserAgent:marker,sessionCreatedAt:now-10,sessionExpiresAt:now+800});
+  for(const [method,path,status] of [['GET','/dashboard/discover',200],['POST','/dashboard/discover',403],['GET','/dashboard/community',403],['GET','/api/mcp',403],['GET','/admin/agent-access',403]] as const){
+   const {context,next}=createContext(new Request(`https://staging.tembotechventures.com${path}`,{method,headers:{Authorization:'Bearer fictional-test-only'}}));
+   expect(requireResponse(await onRequest(context as never,next)).status).toBe(status);
+  }
+ }finally{stagingEnv.STAGING_RETAINED_READ_PROBE_ENABLED=undefined;vi.useRealTimers();}
+});
+
+describe('dedicated QA middleware does not inherit normal authentication',()=>{
+ const qa={runId:'unit',persona:'member-noncohort',userId:'ttv-staging-demo-v1-member-noncohort',sessionId:'unit-qa',issuedAt:1,expiresAt:2};
+ function request(path:string,method='GET'){return new Request('https://staging.tembotechventures.com'+path,{method,headers:{cookie:'__Host-ttv-retained-qa=fictional-unit-only',origin:'https://staging.tembotechventures.com'}});}
+ it('sets constrained QA context and no-store without ordinary auth or demo parent',async()=>{
+  mocks.authenticateQaCookie.mockResolvedValue({qa,user:{...tokenAuth.user,id:qa.userId},session:tokenAuth.session});
+  const {context,next}=createContext(request('/dashboard/community'));const response=requireResponse(await onRequest(context as never,next));
+  expect(next).toHaveBeenCalledOnce();expect(mocks.createAuth).not.toHaveBeenCalled();expect(mocks.authenticatePersonalAccessToken).not.toHaveBeenCalled();
+  expect(context.locals).toMatchObject({stagingQa:qa,stagingDemo:null,personalAccessToken:null});expect(response.headers.get('cache-control')).toBe('no-store');
+ });
+ it.each(['/api/auth/get-session','/api/auth/sign-out','/api/demo/logout','/api/community/chat','/api/mcp','/admin'])('denies %s before any normal handler',async path=>{
+  mocks.authenticateQaCookie.mockResolvedValue({qa,user:tokenAuth.user,session:tokenAuth.session});const {context,next}=createContext(request(path,'POST'));
+  expect(requireResponse(await onRequest(context as never,next)).status).toBe(403);expect(next).not.toHaveBeenCalled();expect(mocks.createAuth).not.toHaveBeenCalled();
+ });
+ it('denies the excluded cohort persona before invoking an ordinary handler',async()=>{
+  mocks.authenticateQaCookie.mockResolvedValue({qa:{...qa,persona:'member-cohort'},user:tokenAuth.user,session:tokenAuth.session});
+  const {context,next}=createContext(request('/dashboard/community'));
+  expect(requireResponse(await onRequest(context as never,next)).status).toBe(403);expect(next).not.toHaveBeenCalled();expect(mocks.createAuth).not.toHaveBeenCalled();
+ });
+ it('fails closed for invalid QA cookie rather than falling back to a human cookie',async()=>{
+  mocks.authenticateQaCookie.mockRejectedValue(new Error('unit denied'));const {context,next}=createContext(request('/dashboard'));
+  expect(requireResponse(await onRequest(context as never,next)).status).toBe(403);expect(next).not.toHaveBeenCalled();expect(mocks.getSession).not.toHaveBeenCalled();
+ });
 });

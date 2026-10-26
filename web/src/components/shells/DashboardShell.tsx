@@ -17,7 +17,7 @@ import type { IconType } from "react-icons";
 import type { StudentDashboardLinkId } from "@/lib/student/journey";
 
 export interface DashboardLink {
-  id: StudentDashboardLinkId;
+  id: StudentDashboardLinkId | "community" | "discover";
   href: string;
   label: string;
   icon: IconType;
@@ -31,6 +31,8 @@ export interface DashboardLink {
  */
 export const DASHBOARD_LINKS: DashboardLink[] = [
   { id: "home", href: "/dashboard", label: "Home", icon: PiGaugeDuotone },
+  { id: "discover", href: "/dashboard/discover", label: "Discover", icon: PiSuitcaseSimpleDuotone },
+  { id: "community", href: "/dashboard/community", label: "Community", icon: PiHandshakeDuotone },
   {
     id: "apply",
     href: "/dashboard/apply",
@@ -50,14 +52,21 @@ export const DASHBOARD_LINKS: DashboardLink[] = [
 
 export function getDashboardLinks(
   visibleLinkIds: StudentDashboardLinkId[],
-  unreadLeadCount = 0
+  unreadLeadCount = 0,
+  demoSession = false,
+  canDiscover = false,
+  allowedHrefs?: readonly string[]
 ): DashboardLink[] {
-  const visible = new Set<StudentDashboardLinkId>([
+  const visible = new Set<DashboardLink["id"]>([
     ...visibleLinkIds,
+    ...(canDiscover ? ["discover" as const] : []),
+    "community",
     "logout",
   ]);
-  return DASHBOARD_LINKS.filter((link) => visible.has(link.id)).map((link) =>
-    link.id === "leads" && unreadLeadCount > 0
+  return DASHBOARD_LINKS.filter((link) => visible.has(link.id) && (!allowedHrefs || allowedHrefs.includes(link.href))).map((link) =>
+    link.id === "logout" && demoSession
+      ? { ...link, href: "/demo", label: "Demo controls" }
+      : link.id === "leads" && unreadLeadCount > 0
       ? { ...link, badge: unreadLeadCount }
       : link
   );
@@ -68,11 +77,17 @@ export default function DashboardShell({
   currentPath,
   visibleLinkIds,
   unreadLeadCount = 0,
+  demoSession = false,
+  canDiscover = false,
+  allowedHrefs,
 }: {
   children: ReactNode;
   currentPath: string;
   visibleLinkIds: StudentDashboardLinkId[];
   unreadLeadCount?: number;
+  demoSession?: boolean;
+  canDiscover?: boolean;
+  allowedHrefs?: string[];
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const hydrated = useSyncExternalStore(
@@ -80,7 +95,7 @@ export default function DashboardShell({
     () => true,
     () => false
   );
-  const links = getDashboardLinks(visibleLinkIds, unreadLeadCount);
+  const links = getDashboardLinks(visibleLinkIds, unreadLeadCount, demoSession, canDiscover, allowedHrefs);
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-surface to-dark">

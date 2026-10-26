@@ -4,33 +4,307 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: Whether to deploy or destroy staging
+        description: Deploy, verify synthetic journeys, or run one bounded synthetic assessment (PM slot required)
         required: true
         type: choice
+        default: deploy
         options:
           - deploy
-          - destroy
-      allow_protected_destroy:
-        description: Override protected environment guard during destroy
+          - verify
+          - assess
+          - credential-audit
+          - cleanup-chat-incident
+          - seed-demo
+          - diagnose-demo
+          - retained-read-probe
+          - persona-qa-issue
+          - persona-qa-cleanup
+          - preview-container-state
+      expected_sha:
+        description: Exact current head SHA of integration PR 171 (reserve a PM deployment slot first)
+        required: true
+        type: string
+
+      expected_deployed_sha:
+        description: Pinned live revision for read-only diagnose-demo only
+        required: false
+        type: string
+      retained_query:
+        description: Fictional evidence-order scenario (deliberate controlled iteration)
+        required: false
+        type: choice
+        default: Kotlin
+        options: [Kotlin, React, Python]
+      retained_read_probe_enabled:
+        description: Temporary retained read probe flag (explicit owner approval required; return off after run)
         required: false
         type: boolean
         default: false
+      demo_enabled:
+        description: Enable retained demo browser access (owner approval required; default off)
+        required: false
+        type: boolean
+        default: false
+      browser_discovery:
+        description: Bounded synthetic Python and first-aid discovery verification
+        required: false
+        type: boolean
+        default: false
+      browser_chat:
+        description: One synthetic desktop chat submission with tool and citation verification
+        required: false
+        type: boolean
+        default: false
+      browser_assessment:
+        description: Opt in to ONE synthetic browser assessment during verify (fresh PM slot required)
+        required: false
+        type: boolean
+        default: false
+      token_kind:
+        description: Known credential owner kind, required only for credential-audit
+        required: false
+        type: choice
+        default: unknown
+        options: [unknown, user, account]
+
+# Covers preflight AND reusable deployment/verification. PM must still reserve
+# the channel slot: Actions concurrency is not a FIFO deployment queue.
+concurrency:
+  group: ttv-cloudflare-staging
+  cancel-in-progress: false
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Require the exact pushed integration PR revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_ACTION: ${{ inputs.action }}
+          STAGING_EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
+          STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
+          STAGING_INTEGRATION_PR: "171"
+        run: node web/scripts/cloudflare/staging-preflight.mjs
   staging:
-    concurrency:
-      group: ttv-cloudflare-staging
-      cancel-in-progress: true
+    if: ${{ inputs.action == 'deploy' }}
+    needs: preflight
     uses: ./.github/workflows/cloudflare-environment.yml
     with:
-      action: ${{ inputs.action }}
+      action: deploy
       environment_name: staging
       github_environment: staging
       primary_domain: staging.tembotechventures.com
       redirect_domain: ${{ vars.STAGING_REDIRECT_DOMAIN }}
       better_auth_url: ${{ vars.STAGING_BETTER_AUTH_URL }}
       agent_auth_enabled: true
+      staging_retained_read_probe_enabled: ${{ inputs.retained_read_probe_enabled }}
+      staging_demo_enabled: ${{ inputs.demo_enabled }}
       workers_subdomain: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
       protected_environments: production,prod
-      allow_protected_destroy: ${{ inputs.allow_protected_destroy }}
     secrets: inherit
+
+  verify:
+    if: ${{ inputs.action == 'verify' }}
+    needs: preflight
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/cloudflare-staging-fixtures.yml
+    with:
+      expected_sha: ${{ inputs.expected_sha }}
+      browser_discovery: ${{ inputs.browser_discovery }}
+      browser_chat: ${{ inputs.browser_chat }}
+      browser_assessment: ${{ inputs.browser_assessment }}
+    secrets: inherit
+
+  assess:
+    if: ${{ inputs.action == 'assess' }}
+    needs: preflight
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/cloudflare-staging-assessment.yml
+    with:
+      expected_sha: ${{ inputs.expected_sha }}
+    secrets: inherit
+
+  credential-audit:
+    if: ${{ inputs.action == 'credential-audit' }}
+    needs: preflight
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/cloudflare-staging-credential-audit.yml
+    with:
+      expected_sha: ${{ inputs.expected_sha }}
+      token_kind: ${{ inputs.token_kind }}
+    secrets: inherit
+
+  cleanup-chat-incident:
+    if: ${{ inputs.action == 'cleanup-chat-incident' }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: staging
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Revoke and remove only the interrupted chat fixture run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_ACTION: cleanup-chat-incident
+          STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
+          STAGING_INTEGRATION_PR: "171"
+          CLOUDFLARE_ENVIRONMENT_NAME: staging
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node web/scripts/cloudflare/staging-chat-cleanup.mjs
+
+  seed-demo:
+    if: ${{ inputs.action == 'seed-demo' || inputs.action == 'diagnose-demo' }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Seed or read-only diagnose retained fictional data
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_ACTION: ${{ inputs.action }}
+          STAGING_EXPECTED_DEPLOYED_SHA: ${{ inputs.expected_deployed_sha }}
+          STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
+          STAGING_INTEGRATION_PR: "171"
+          CLOUDFLARE_ENVIRONMENT_NAME: staging
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node web/scripts/cloudflare/staging-demo-seed.mjs
+
+  retained-read-probe:
+    if: ${{ inputs.action == 'retained-read-probe' }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    permissions:
+      contents: read
+      pull-requests: read
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --legacy-peer-deps
+      - run: npx playwright install --with-deps chromium
+      - name: Retained directory and evidence-order browser verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
+          STAGING_INTEGRATION_PR: "171"
+          STAGING_RETAINED_QUERY: ${{ inputs.retained_query }}
+          STAGING_ACTION: retained-read-probe
+          CLOUDFLARE_ENVIRONMENT_NAME: staging
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/cloudflare/staging-retained-search.mjs
+      - uses: actions/upload-artifact@v4
+        if: ${{ success() }}
+        with:
+          name: retained-search-${{ inputs.expected_sha }}-${{ github.run_id }}
+          path: web/test-results/staging-retained-search*
+          if-no-files-found: error
+          retention-days: 7
+
+  persona-qa:
+    if: ${{ inputs.action == 'persona-qa-issue' || inputs.action == 'persona-qa-cleanup' }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: staging
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      STAGING_ACTION: ${{ inputs.action }}
+      STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+      STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
+      STAGING_INTEGRATION_PR: "171"
+      CLOUDFLARE_ENVIRONMENT_NAME: staging
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: One controlled encrypted persona QA handoff or exact cleanup
+        run: node web/scripts/cloudflare/staging-persona-qa.mjs
+      - if: ${{ inputs.action == 'persona-qa-issue' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: persona-qa-encrypted-${{ github.run_id }}
+          path: web/test-results/persona-qa-encrypted.json
+          if-no-files-found: error
+          retention-days: 1
+      - if: ${{ failure() && inputs.action == 'persona-qa-issue' }}
+        name: Revoke QA if setup or encrypted handoff publication failed
+        env:
+          STAGING_ACTION: persona-qa-cleanup
+        run: node web/scripts/cloudflare/staging-persona-qa.mjs
+
+  preview-container-state:
+    if: ${{ inputs.action == 'preview-container-state' }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: staging
+    permissions:
+      contents: read
+      pull-requests: read
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Read exact PR220 container state without starting it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_ACTION: preview-container-state
+          STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
+          STAGING_INTEGRATION_PR: "171"
+          CLOUDFLARE_ENVIRONMENT_NAME: staging
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/cloudflare/preview-container-state.mjs

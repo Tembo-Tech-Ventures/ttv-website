@@ -1,4 +1,5 @@
 ---
+import { DEMO_PREFIX, isDemoUser } from "@/lib/staging-demo-policy";
 import DashboardLayout from "@/layouts/DashboardLayout.astro";
 import Badge from "@/components/common/Badge.astro";
 import Card from "@/components/common/Card.astro";
@@ -20,7 +21,8 @@ let error = "";
 const application = await db.query.programApplication.findFirst({
   where: and(
     eq(schema.programApplication.id, id!),
-    eq(schema.programApplication.userId, user.id)
+    eq(schema.programApplication.userId, user.id),
+    isDemoUser(user.id) ? eq(schema.programApplication.programId, DEMO_PREFIX + "program") : undefined
   ),
   with: { program: { with: { curriculum: true } } },
 });
@@ -44,7 +46,8 @@ if (Astro.request.method === "POST" && application.status === "PENDING") {
       .where(
         and(
           eq(schema.programApplication.id, id!),
-          eq(schema.programApplication.userId, user.id)
+          eq(schema.programApplication.userId, user.id),
+    isDemoUser(user.id) ? eq(schema.programApplication.programId, DEMO_PREFIX + "program") : undefined
         )
       );
 

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { createSqliteD1, MINIMAL_AUTH_SCHEMA, readMigration } from "@/test/sqlite-d1";
 import {
+  PERSONAL_ACCESS_TOKEN_EXPIRY_OPTIONS,
   PERSONAL_ACCESS_TOKEN_PREFIX,
   authenticatePersonalAccessToken,
   createPersonalAccessToken,
@@ -57,6 +59,22 @@ function deterministicCrypto(fill = 10) {
 }
 
 describe("personal access token input policy", () => {
+  it.each([24, 72, 168, 720, 1440, 2160, 4320, 8640])("accepts the %i-hour expiry option", (hours) => {
+    expect(parsePersonalAccessTokenDuration(String(hours))).toBe(hours);
+  });
+
+  it("offers the requested day and month choices without duplicate durations", () => {
+    expect(PERSONAL_ACCESS_TOKEN_EXPIRY_OPTIONS).toEqual([
+      { hours: 24, label: "1 day" }, { hours: 72, label: "3 days" },
+      { hours: 168, label: "7 days" }, { hours: 720, label: "30 days (1 month)" },
+      { hours: 1440, label: "2 months" }, { hours: 2160, label: "3 months" },
+      { hours: 4320, label: "6 months" }, { hours: 8640, label: "12 months" },
+    ]);
+  });
+
+  it.each([null, "", "0", "-24", "25", "72.5", "8641", "Infinity", "NaN"])("rejects unsupported expiry %s", (value) => {
+    expect(() => parsePersonalAccessTokenDuration(value)).toThrow("supported token duration");
+  });
   it("normalizes labels, durations, and fine-grained access", () => {
     expect(normalizePersonalAccessTokenLabel("  SAM   production  ")).toBe(
       "SAM production"
@@ -83,6 +101,32 @@ describe("personal access token input policy", () => {
 });
 
 describe("personal access token lifecycle", () => {
+  it.each(PERSONAL_ACCESS_TOKEN_EXPIRY_OPTIONS)("persists and enforces $label expiry", async ({ hours }) => {
+    const { db, database } = createSqliteD1();
+    try {
+      database.exec(MINIMAL_AUTH_SCHEMA);
+      database.exec(readMigration("0008_curvy_purifiers.sql"));
+      database.exec("INSERT INTO user(id,name,email) VALUES ('admin','Fictional Admin','admin@example.test')");
+      const created = await createPersonalAccessToken({ db, userId: "admin", label: "Expiry check",
+        durationHours: hours, scopes: ["admin:read"], now });
+      const expiry = now.getTime() + hours * 3_600_000;
+      expect(created.expiresAt.getTime()).toBe(expiry);
+      expect(database.prepare("SELECT expiresAt FROM personal_access_token").get()).toMatchObject({ expiresAt: expiry / 1000 });
+      const request = new Request("https://example.test/admin", { headers: { Authorization: `Bearer ${created.token}` } });
+      expect(await authenticatePersonalAccessToken(db, request, new Date(expiry - 1000))).not.toBeNull();
+      expect(await authenticatePersonalAccessToken(db, request, new Date(expiry))).toBeNull();
+      expect(await authenticatePersonalAccessToken(db, request, new Date(expiry + 1000))).toBeNull();
+      await revokePersonalAccessToken(db, "admin", created.id, now);
+      expect(await authenticatePersonalAccessToken(db, request, now)).toBeNull();
+    } finally { database.close(); }
+  });
+
+  it("rejects a duration beyond twelve months before touching the database", async () => {
+    const database = mockDatabase();
+    await expect(createPersonalAccessToken({ db: database.db, userId: "admin", label: "Invalid",
+      durationHours: 8641 as 8640, scopes: ["admin:read"], now })).rejects.toThrow("supported token duration");
+    expect(database.prepare).not.toHaveBeenCalled();
+  });
   it("stores only a token hash and returns the raw token once", async () => {
     const database = mockDatabase({ firstResults: [{ count: 0 }] });
     const cryptoImpl = deterministicCrypto();
@@ -337,4 +381,23 @@ describe("personal access token authentication", () => {
       )
     ).toBeNull();
   });
+});
+
+describe("community personal access token scopes", () => {
+  it("stores community scopes without granting admin access", async () => {
+    const { db, calls } = mockDatabase();
+    const result = await createPersonalAccessToken({ db, userId: "member", label: "Community agent", durationHours: 8, scopes: ["community:read", "community:write"], now, cryptoImpl: deterministicCrypto() });
+    expect(result.scopes).toEqual(["community:read", "community:write"]);
+    expect(personalAccessTokenCanWrite(result)).toBe(false);
+    expect(calls.some(call => call.values.includes('["community:read","community:write"]'))).toBe(true);
+  });
+  it("requires a base read scope", async () => {
+    const { db } = mockDatabase();
+    await expect(createPersonalAccessToken({ db, userId: "member", label: "Community agent", durationHours: 8, scopes: ["institution:read"], now, cryptoImpl: deterministicCrypto() })).rejects.toThrow("Every token must include");
+  });
+  it("refuses mixed admin and community scope grants", async () => {
+    const { db } = mockDatabase();
+    await expect(createPersonalAccessToken({ db, userId: "member", label: "Mixed agent", durationHours: 8, scopes: ["admin:read", "community:read"], now, cryptoImpl: deterministicCrypto() })).rejects.toThrow("cannot be combined");
+  });
+
 });

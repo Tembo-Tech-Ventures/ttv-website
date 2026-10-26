@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, staging]
   pull_request:
-    branches: [main, staging]
+    branches: [main, staging, sam/use-sam-mcp-tools-m8a3jp]
 
 jobs:
   lint:

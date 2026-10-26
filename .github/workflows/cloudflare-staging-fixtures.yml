@@ -1,0 +1,107 @@
+name: Cloudflare Staging Synthetic Verification
+
+on:
+  workflow_call:
+    inputs:
+      expected_sha:
+        description: Exact deployed integration PR 171 head (reserve PM verification slot first)
+        required: true
+        type: string
+
+      browser_discovery:
+        description: Bounded synthetic Python and first-aid discovery verification
+        required: false
+        type: boolean
+        default: false
+      browser_chat:
+        description: One synthetic desktop chat submission with tool and citation verification
+        required: false
+        type: boolean
+        default: false
+      browser_assessment:
+        description: One bounded desktop assessment after both viewport journeys
+        required: false
+        type: boolean
+        default: false
+
+# The registered caller holds the shared staging lock through this entire job.
+# Reusing that concurrency group here would deadlock the caller.
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Require the exact integration revision before credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_BROWSER_DISCOVERY: ${{ inputs.browser_discovery }}
+          STAGING_BROWSER_CHAT: ${{ inputs.browser_chat }}
+          STAGING_BROWSER_ASSESSMENT: ${{ inputs.browser_assessment }}
+          STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
+          STAGING_INTEGRATION_PR: "171"
+        run: node web/scripts/cloudflare/staging-preflight.mjs
+  verify:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    permissions:
+      contents: read
+      pull-requests: read
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --legacy-peer-deps
+      - run: npx playwright install --with-deps chromium
+      - name: Verify synthetic browser identities and scoped PATs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_BROWSER_DISCOVERY: ${{ inputs.browser_discovery }}
+          STAGING_BROWSER_CHAT: ${{ inputs.browser_chat }}
+          STAGING_BROWSER_ASSESSMENT: ${{ inputs.browser_assessment }}
+          STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
+          STAGING_INTEGRATION_PR: "171"
+          CLOUDFLARE_ENVIRONMENT_NAME: staging
+          CLOUDFLARE_APP_NAME: ttv-website
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          GITHUB_CLIENT_ID: ${{ secrets.GH_CLIENT_ID }}
+          GITHUB_CLIENT_SECRET: ${{ secrets.GH_CLIENT_SECRET }}
+          CREDENTIALS_ENCRYPTION_KEY: ${{ secrets.CREDENTIALS_ENCRYPTION_KEY }}
+        run: node scripts/cloudflare/staging-fixtures.mjs
+      - name: Publish synthetic journey evidence after verified cleanup
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-staging-${{ inputs.expected_sha }}-${{ github.run_id }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            web/test-results/staging-community/desktop-member.png
+            web/test-results/staging-community/desktop-mentor.png
+            web/test-results/staging-community/desktop-scout.png
+            web/test-results/staging-community/desktop-known-profile.png
+            web/test-results/staging-community/mobile-member.png
+            web/test-results/staging-community/mobile-mentor.png
+            web/test-results/staging-community/mobile-scout.png
+            web/test-results/staging-community/mobile-known-profile.png
+            web/test-results/staging-community/desktop-chat.png
+            web/test-results/staging-community/desktop-assessment.png
+            web/test-results/staging-community/manifest.json

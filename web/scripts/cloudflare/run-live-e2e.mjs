@@ -1,3 +1,4 @@
+import { withPreviewFeedbackWriter } from "./preview-feedback-fixture.mjs";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,7 +24,7 @@ export function resolvePlaywrightAgentToken(environment = process.env) {
     isAgentEnvironmentName(environmentName) &&
     previewSecret
   ) {
-    return deriveAgentPreviewToken(previewSecret, environmentName);
+    return deriveAgentPreviewToken(previewSecret, environmentName, environment.AGENT_PREVIEW_RUN_ID);
   }
 
   return undefined;
@@ -46,42 +47,52 @@ export function resolvePlaywrightPersonaTokens(environment = process.env) {
     PLAYWRIGHT_NEW_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
       previewSecret,
       environmentName,
-      "newStudent"
+      "newStudent",
+      environment.AGENT_PREVIEW_RUN_ID
     ),
     PLAYWRIGHT_ACCEPTED_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
       previewSecret,
       environmentName,
-      "acceptedStudent"
+      "acceptedStudent",
+      environment.AGENT_PREVIEW_RUN_ID
     ),
     PLAYWRIGHT_GRADUATE_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
       previewSecret,
       environmentName,
-      "graduateStudent"
+      "graduateStudent",
+      environment.AGENT_PREVIEW_RUN_ID
     ),
   };
 }
 
-export async function main(args = process.argv.slice(2)) {
-  const token = resolvePlaywrightAgentToken();
-  const personaTokens = resolvePlaywrightPersonaTokens();
+export async function main(args = process.argv.slice(2), { environment = process.env, spawnImpl = spawn, withFeedbackWriter = withPreviewFeedbackWriter } = {}) {
+  const token = resolvePlaywrightAgentToken(environment);
+  const personaTokens = resolvePlaywrightPersonaTokens(environment);
   const binary = process.platform === "win32" ? "npx.cmd" : "npx";
-  const child = spawn(binary, ["playwright", "test", ...args], {
-    cwd: path.resolve(fileURLToPath(new URL("../..", import.meta.url))),
-    env: {
-      ...process.env,
-      ...(token ? { PLAYWRIGHT_AGENT_TOKEN: token } : {}),
-      ...personaTokens,
-    },
-    stdio: "inherit",
-  });
-
-  return new Promise((resolve, reject) => {
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`Playwright exited with code ${code}.`));
+  const launch = async feedbackToken => {
+    const child = spawnImpl(binary, ["playwright", "test", ...args], {
+      cwd: path.resolve(fileURLToPath(new URL("../..", import.meta.url))),
+      env: {
+        ...environment,
+        PLAYWRIGHT_FEEDBACK_STUDENT_TOKEN: feedbackToken ?? "",
+        ...(token ? { PLAYWRIGHT_AGENT_TOKEN: token } : {}),
+        ...personaTokens,
+      },
+      stdio: "inherit",
     });
-  });
+
+    return new Promise((resolve, reject) => {
+      child.on("error", reject);
+      child.on("close", (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`Playwright exited with code ${code}.`));
+      });
+    });
+  };
+  if (!args.includes("--list") && isAgentEnvironmentName(environment.EXPECTED_DEPLOYMENT_ENVIRONMENT ?? "")) {
+    return withFeedbackWriter({ environment, run: launch });
+  }
+  return launch();
 }
 
 const isDirectRun =
@@ -89,8 +100,8 @@ const isDirectRun =
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isDirectRun) {
-  main().catch((error) => {
-    console.error(error instanceof Error ? error.message : error);
+  main().catch(() => {
+    console.error("Live browser verification failed; inspect test results and fixture cleanup status.");
     process.exitCode = 1;
   });
 }

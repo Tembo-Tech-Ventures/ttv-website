@@ -1,10 +1,27 @@
 import { requiresAdminMutationOrigin } from "@/lib/admin/mutation-security";
 
 export const PERSONAL_ACCESS_TOKEN_PREFIX = "ttv_pat_";
-export const PERSONAL_ACCESS_TOKEN_DURATIONS = [8, 24, 168, 720] as const;
+/** Month choices use fixed 30-day periods, independent of calendar and timezone. */
+export const PERSONAL_ACCESS_TOKEN_EXPIRY_OPTIONS = [
+  { hours: 24, label: "1 day" },
+  { hours: 72, label: "3 days" },
+  { hours: 168, label: "7 days" },
+  { hours: 720, label: "30 days (1 month)" },
+  { hours: 1440, label: "2 months" },
+  { hours: 2160, label: "3 months" },
+  { hours: 4320, label: "6 months" },
+  { hours: 8640, label: "12 months" },
+] as const;
+// Keep the existing eight-hour duration supported for community API clients.
+export const PERSONAL_ACCESS_TOKEN_DURATIONS = [
+  8, ...PERSONAL_ACCESS_TOKEN_EXPIRY_OPTIONS.map(({ hours }) => hours),
+] as const;
 export const PERSONAL_ACCESS_TOKEN_SCOPES = [
   "admin:read",
   "admin:write",
+  "community:read",
+  "community:write",
+  "institution:read",
 ] as const;
 export const MAX_ACTIVE_PERSONAL_ACCESS_TOKENS = 10;
 export const PERSONAL_ACCESS_TOKEN_WRITE_ERROR =
@@ -181,8 +198,12 @@ export async function createPersonalAccessToken({
     throw new Error("Choose a supported token duration.");
   }
   const validatedScopes = parseStoredScopes(JSON.stringify(scopes));
-  if (!validatedScopes || !validatedScopes.includes("admin:read")) {
-    throw new Error("Every token must include admin:read access.");
+  if (!validatedScopes || (!validatedScopes.includes("admin:read") && !validatedScopes.includes("community:read"))) {
+    throw new Error("Every token must include admin:read or community:read access.");
+  }
+
+  if (validatedScopes.some(scope => scope.startsWith("admin:")) && validatedScopes.some(scope => !scope.startsWith("admin:"))) {
+    throw new Error("Admin and community token scopes cannot be combined.");
   }
 
   const nowSeconds = Math.floor(now.getTime() / 1_000);

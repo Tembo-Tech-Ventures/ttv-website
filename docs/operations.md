@@ -73,7 +73,8 @@ has to replay a long session.
 
 Repository-owned automation that needs no SAM agent: `ci.yml` on every PR and
 push; `cloudflare-staging-pr.yml` deploys `agent-pr-<n>` per PR and destroys
-it on close; `cloudflare-production.yml` on push to main;
+it on close only when R2 is empty (otherwise teardown fails without deleting
+resources); `cloudflare-production.yml` on push to main;
 `cloudflare-sweep.yml` deletes `agent-*` stacks older than 72 hours daily.
 
 ## Monitoring
@@ -190,3 +191,33 @@ app-push plus agent-pull rather than Cloudflare notifications.
   Wave 1 dispatched: error ledger and alert push (T1), pipeline rollback and
   notification (T2), blog reader with RSS, sitemap and sharing metadata (T3),
   public front door (T4).
+
+### Bounded retained-demo diagnosis (2026-10-25)
+
+The `Cloudflare Staging` action `diagnose-demo` runs only fixed aggregate SELECTs
+for required-role presence and retained demo keys. It uses the existing serialized
+staging job and credentials, without deployment, seeding or credential creation.
+`expected_sha` must equal the current PR171 integration head and dispatched
+revision. For the explicitly resumed Oct26 demo preparation,
+`expected_deployed_sha` must equal that **same** exact revision; the historical
+Oct25 incident override is no longer accepted. Worker bindings, canonical staging
+origin, D1 identity and live health must independently match. Attempt 1 only.
+The script performs fixed aggregate SELECTs for retained keys, synthetic email
+provenance and the four fixed personas' exact roles/cohort membership. It emits
+counts and readiness booleans, never records, sessions or credentials. No seed,
+identity creation, cleanup or model invocation is performed. PM assigns the
+serialized slot after deployment. Preserve all retained and human records.
+
+
+
+### One-shot PR220 container-state diagnosis (2026-10-25)
+
+The `Cloudflare Staging` action `preview-container-state` is an explicitly
+assigned read-only diagnosis of the fixed `agent-pr-220` FFmpeg application.
+It uses the existing exact-current-PR171 preflight, serialized staging workflow
+and credential environment. Attempt 1 only; at most two bounded Cloudflare GETs,
+no retries, container health/start request, deployment, deletion or schedule.
+Pagination, denial or incomplete state is a telemetry gap, not proof that the
+container stopped. Output contains only the script's sanitized state receipt;
+no credentials or raw provider errors. This is a one-shot diagnostic, not a
+recurring monitor or a relaxation of R2 teardown guards.

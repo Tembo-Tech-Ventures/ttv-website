@@ -54,8 +54,16 @@ function deriveSecret(secret, environmentName, context) {
     .digest("hex");
 }
 
-export function deriveAgentPreviewToken(secret, environmentName) {
-  return deriveSecret(secret, environmentName, PREVIEW_TOKEN_CONTEXT);
+export function requirePreviewRunId(value) {
+  if (!/^(?:github-[1-9][0-9]*-[1-9][0-9]*|local-[a-f0-9]{32})$/.test(value ?? "")) {
+    throw new Error("AGENT_PREVIEW_RUN_ID must identify a GitHub run and attempt or a fresh local 128-bit nonce.");
+  }
+  return value;
+}
+
+export function deriveAgentPreviewToken(secret, environmentName, runId) {
+  assertPreviewSecret(secret);
+  return deriveSecret(secret, environmentName, `${PREVIEW_TOKEN_CONTEXT}:v2:${requirePreviewRunId(runId)}`);
 }
 
 export function deriveAgentPreviewAuthSecret(secret, environmentName) {
@@ -74,7 +82,8 @@ export function deriveAgentPreviewCredentialKey(secret, environmentName) {
 export function deriveAgentPreviewPersonaToken(
   secret,
   environmentName,
-  persona
+  persona,
+  runId
 ) {
   if (!Object.hasOwn(AGENT_PREVIEW_PERSONAS, persona)) {
     throw new Error(`Unknown agent preview persona "${persona}".`);
@@ -82,7 +91,7 @@ export function deriveAgentPreviewPersonaToken(
   return deriveSecret(
     secret,
     environmentName,
-    `${PREVIEW_PERSONA_TOKEN_CONTEXT}:${persona}`
+    `${PREVIEW_PERSONA_TOKEN_CONTEXT}:v2:${persona}:${requirePreviewRunId(runId)}`
   );
 }
 
@@ -95,6 +104,7 @@ export async function seedAgentPreviewAccess({
   databaseId,
   environmentName,
   previewSecret,
+  runId,
   executeQuery,
   now = new Date(),
 }) {
@@ -106,7 +116,7 @@ export async function seedAgentPreviewAccess({
 
   const createdAt = Math.floor(now.getTime() / 1_000);
   const expiresAt = createdAt + 8 * 60 * 60;
-  const token = deriveAgentPreviewToken(previewSecret, environmentName);
+  const token = deriveAgentPreviewToken(previewSecret, environmentName, runId);
 
   await executeQuery(
     databaseId,
@@ -172,6 +182,7 @@ export async function seedAgentPreviewAccess({
        "ipAddress" = NULL,
        "userAgent" = excluded."userAgent",
        "userId" = excluded."userId",
+       "createdAt" = excluded."createdAt",
        "updatedAt" = excluded."updatedAt"`,
     [
       AGENT_PREVIEW_SESSION_ID,
@@ -196,6 +207,7 @@ export async function seedAgentPreviewFixtures({
   executeQuery,
   environmentName,
   previewSecret,
+  runId,
   now = new Date(),
 }) {
   if (!databaseId) throw new Error("A D1 database ID is required.");
@@ -210,6 +222,11 @@ export async function seedAgentPreviewFixtures({
     throw new Error(
       "Preview fixture persona sessions require both environmentName and previewSecret."
     );
+  }
+  if (environmentName) {
+    assertAgentEnvironmentName(environmentName);
+    assertPreviewSecret(previewSecret);
+    requirePreviewRunId(runId);
   }
 
   // Reset the preview user's own profile so every deploy starts pristine:
@@ -553,6 +570,7 @@ export async function seedAgentPreviewFixtures({
            "ipAddress" = NULL,
            "userAgent" = excluded."userAgent",
            "userId" = excluded."userId",
+           "createdAt" = excluded."createdAt",
            "updatedAt" = excluded."updatedAt"`,
         [
           fixture.sessionId,
@@ -560,7 +578,8 @@ export async function seedAgentPreviewFixtures({
           deriveAgentPreviewPersonaToken(
             previewSecret,
             environmentName,
-            fixture.persona
+            fixture.persona,
+            runId
           ),
           `${AGENT_PREVIEW_SESSION_MARKER}:persona`,
           fixture.userId,

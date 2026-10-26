@@ -1,6 +1,7 @@
 ---
 import PublicLayout from "@/layouts/PublicLayout.astro";
 import HeroSection from "@/components/homepage/HeroSection";
+import CommunityIntro from "@/components/community/CommunityIntro";
 import ValueSection from "@/components/homepage/ValueSection";
 import FeaturesSection from "@/components/homepage/FeaturesSection";
 import Marquee from "@/components/homepage/Marquee.astro";
@@ -39,6 +40,7 @@ function formatDate(date: Date): string {
   canonical="/"
 >
   <HeroSection client:visible isAuthenticated={Boolean(Astro.locals.user)} />
+  <CommunityIntro isAuthenticated={Boolean(Astro.locals.user)} />
   <ValueSection client:visible />
   <FeaturesSection client:visible />
   <Marquee />

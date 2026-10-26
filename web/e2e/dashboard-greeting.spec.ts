@@ -1,3 +1,4 @@
+import { feedbackApiRequest as safeApiRequest } from "../scripts/cloudflare/feedback-browser-guard.mjs";
 import { expect, test } from "@playwright/test";
 import { mkdirSync } from "fs";
 
@@ -20,8 +21,8 @@ test.describe("authenticated dashboard greeting", () => {
     extraHTTPHeaders: token ? { Authorization: `Bearer ${token}` } : {},
   });
 
-  test("uses the user's first name only on a return visit", async ({ page }) => {
-    const sessionResponse = await page.request.get("/api/auth/get-session");
+  test("uses the user's first name only on a return visit", async ({ page, baseURL }) => {
+    const sessionResponse = await safeApiRequest(page.request, baseURL!, "/api/auth/get-session");
     expect(sessionResponse.ok()).toBe(true);
     const session = (await sessionResponse.json()) as BetterAuthSession | null;
     const fullName = session?.user?.name?.trim();

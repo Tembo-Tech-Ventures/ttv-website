@@ -8,6 +8,8 @@ declare namespace Cloudflare {
     DEPLOYMENT_ENVIRONMENT?: string;
     DEPLOYMENT_VERSION?: string;
     AGENT_AUTH_ENABLED?: string;
+    STAGING_DEMO_ENABLED?: string;
+    STAGING_RETAINED_READ_PROBE_ENABLED?: string;
     SAM_ALERT_WEBHOOK_URL?: string;
     SAM_ALERT_WEBHOOK_TOKEN?: string;
   }
@@ -52,5 +54,8 @@ declare namespace App {
     user: AuthUser | null;
     personalAccessToken: import("@/lib/personal-access-tokens").PersonalAccessTokenSummary | null;
     isAdmin?: boolean;
+    stagingDemo?: {persona:string;expiresAt:number} | null;
+    stagingQa?: import("@/lib/staging-qa-policy").QaIdentity | null;
+    stagingFixture?: import("@/lib/staging-fixtures").StagingFixtureIdentity | null;
   }
 }

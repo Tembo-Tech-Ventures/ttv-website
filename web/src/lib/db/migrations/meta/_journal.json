@@ -120,6 +120,34 @@
       "when": 1792593133267,
       "tag": "0016_feedback_themes",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1792836599925,
+      "tag": "0017_community_discovery",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1792837899273,
+      "tag": "0018_confirmation_role_snapshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1792839371456,
+      "tag": "0019_staging_fixture_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1792928285004,
+      "tag": "0020_retained_persona_qa",
+      "breakpoints": true
     }
   ]
 }

@@ -130,7 +130,7 @@ function getRequiredEnvFrom(environment, name) {
   return value;
 }
 
-async function cfApiResponse(resourcePath, { method = "GET", body } = {}) {
+async function cfApiResponse(resourcePath, { method = "GET", body, notFoundCodes } = {}) {
   const accountId = getRequiredEnv("CLOUDFLARE_ACCOUNT_ID");
   const token = getRequiredEnv("CLOUDFLARE_API_TOKEN");
   const response = await fetch(
@@ -146,6 +146,14 @@ async function cfApiResponse(resourcePath, { method = "GET", body } = {}) {
   );
 
   if (response.status === 404) {
+    if (notFoundCodes) {
+      const missing = await response.json().catch(() => null);
+      if (missing?.success !== false || !Array.isArray(missing.errors) ||
+          missing.errors.length === 0 ||
+          !missing.errors.every(error => notFoundCodes.includes(error.code))) {
+        throw new Error("R2 bucket absence could not be verified.");
+      }
+    }
     return null;
   }
 
@@ -170,12 +178,13 @@ export async function cfApi(resourcePath, options) {
   return payload?.result ?? null;
 }
 
-export async function listR2BucketObjectsPage(name, cursor) {
+export async function listR2BucketObjectsPage(name, cursor, { requireCompleteMetadata = false } = {}) {
   const query = new URLSearchParams({ per_page: "1000" });
   if (cursor) query.set("cursor", cursor);
 
   const payload = await cfApiResponse(
-    `/r2/buckets/${encodeURIComponent(name)}/objects?${query.toString()}`
+    `/r2/buckets/${encodeURIComponent(name)}/objects?${query.toString()}`,
+    requireCompleteMetadata ? { notFoundCodes: [10006] } : undefined
   );
   if (!payload) return null;
   if (!Array.isArray(payload.result)) {
@@ -184,6 +193,16 @@ export async function listR2BucketObjectsPage(name, cursor) {
     );
   }
 
+  if (requireCompleteMetadata) {
+    const info = payload.result_info;
+    if (payload.success !== true || !info ||
+        typeof info.is_truncated !== "boolean" ||
+        (info.cursor !== undefined && typeof info.cursor !== "string") ||
+        (info.delimited !== undefined &&
+          (!Array.isArray(info.delimited) || info.delimited.length > 0))) {
+      throw new Error("R2 listing completion metadata could not be verified.");
+    }
+  }
   const nextCursor = payload.result_info?.cursor;
   return {
     objects: payload.result,
@@ -547,6 +566,12 @@ export function createGeneratedWranglerConfig({
   const deployment = resolveDeploymentMetadata();
   const agentAuthEnabled =
     getOptionalEnv("CLOUDFLARE_AGENT_AUTH_ENABLED") === "true";
+  const retainedProbeEnabled = getOptionalEnv("CLOUDFLARE_STAGING_RETAINED_READ_PROBE_ENABLED") === "true";
+  if (retainedProbeEnabled && (deployment.environment !== "staging" || primaryDomain !== "staging.tembotechventures.com" || betterAuthUrl !== "https://staging.tembotechventures.com")) throw new Error("Retained probe requires canonical staging.");
+  const demoEnabled = getOptionalEnv("CLOUDFLARE_STAGING_DEMO_ENABLED") === "true";
+  if (demoEnabled && (deployment.environment !== "staging" || primaryDomain !== "staging.tembotechventures.com" || betterAuthUrl !== "https://staging.tembotechventures.com")) {
+    throw new Error("Retained demo access is allowed only on the canonical staging deployment.");
+  }
   const workersDevEnabled = !primaryDomain && !redirectDomain;
   if (
     agentAuthEnabled &&
@@ -593,6 +618,8 @@ export function createGeneratedWranglerConfig({
       ...(agentAuthEnabled
         ? { AGENT_AUTH_ENABLED: "true" }
         : {}),
+      ...(retainedProbeEnabled ? { STAGING_RETAINED_READ_PROBE_ENABLED: "true" } : {}),
+      ...(demoEnabled ? { STAGING_DEMO_ENABLED: "true" } : {}),
       AI_GATEWAY_ACCOUNT_ID: getRequiredEnv("CLOUDFLARE_ACCOUNT_ID"),
       AI_GATEWAY_NAME: aiGatewayName,
       AI_GATEWAY_MODEL:

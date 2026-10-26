@@ -27,7 +27,7 @@ describe("dashboard shell hydration", () => {
     expect(html).toMatch(/aria-expanded="false"/);
   });
 
-  it("renders only the server-derived links and always keeps logout", () => {
+  it("keeps community open to noncohort members while retaining cohort gates", () => {
     const html = renderToStaticMarkup(
       <DashboardShell
         currentPath="/dashboard"
@@ -41,6 +41,7 @@ describe("dashboard shell hydration", () => {
     expect(html).toContain('href="/dashboard/ask"');
     expect(html).toContain('href="/dashboard/profile"');
     expect(html).toContain('href="/auth/logout"');
+    expect(html).toContain('href="/dashboard/community"');
     expect(html).not.toContain('href="/dashboard/sessions"');
     expect(html).not.toContain('href="/dashboard/portfolio"');
     expect(html).not.toContain('href="/dashboard/writing"');
@@ -65,5 +66,15 @@ describe("dashboard shell hydration", () => {
 
     expect(html.match(/<h1/g)).toHaveLength(1);
     expect(html).toContain(">TTV Dashboard</span>");
+  });
+});
+
+describe("demo dashboard navigation", () => {
+  it("replaces blocked auth logout with demo controls only for validated demo sessions", () => {
+    const normal = getDashboardLinks([...BASE_LINKS]);
+    const demo = getDashboardLinks([...BASE_LINKS], 0, true);
+    expect(normal.find(link => link.id === "logout")?.href).toBe("/auth/logout");
+    expect(demo.find(link => link.id === "logout")).toMatchObject({ href: "/demo", label: "Demo controls" });
+    expect(demo.some(link => link.href === "/auth/logout")).toBe(false);
   });
 });

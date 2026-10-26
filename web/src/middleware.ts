@@ -1,6 +1,12 @@
+import { authenticateQaCookie, hasQaCookie, logoutQa, QaAccessError } from "@/lib/staging-qa-access";
+import { qaPathAllowed } from "@/lib/staging-qa-policy";
+import { validateDemoSession, DemoAccessError, DEMO_OPERATOR_COOKIE } from "@/lib/staging-demo-access";
+import { demoPathAllowed } from "@/lib/staging-demo-policy";
 import { defineMiddleware } from "astro:middleware";
 import { env } from "cloudflare:workers";
 import { createAuth } from "@/lib/auth";
+import { resolveStagingFixtureIdentity, StagingFixtureAccessError } from "@/lib/staging-fixtures";
+import { stagingFixturePathAllowed } from "@/lib/staging-fixture-policy";
 import { isAgentSession } from "@/lib/agent-auth";
 import { isHealthCheckPath } from "@/lib/health";
 import { enforceAdminMutationOrigin } from "@/lib/admin/mutation-security";
@@ -41,6 +47,7 @@ async function resolveAuthentication(authEnv: AuthEnv, request: Request) {
   const auth = createAuth(authEnv);
   const sessionData = await auth.api.getSession({
     headers: request.headers,
+    query: { disableCookieCache: request.headers.get("cookie")?.includes(DEMO_OPERATOR_COOKIE + "=") ?? false },
   });
   return {
     session: sessionData?.session ?? null,
@@ -64,6 +71,10 @@ async function enforceAdminGuards(
   }
 
   locals.isAdmin = true;
+
+  if (locals.personalAccessToken && !locals.personalAccessToken.scopes.includes("admin:read")) {
+    return new Response("Forbidden: admin:read scope required.", { status: 403 });
+  }
 
   if (
     (locals.personalAccessToken || isAgentSession(locals.session?.userAgent)) &&
@@ -98,6 +109,45 @@ async function enforceAdminGuards(
   return null;
 }
 
+function enforceCommunityDelegation(locals:App.Locals,request:Request,pathname:string):Response|null {
+  if(!locals.personalAccessToken || locals.personalAccessToken.scopes.includes("admin:read")) return null;
+  const api=pathname==="/api/community" || pathname.startsWith("/api/community/");
+  const probePage=locals.stagingFixture?.retainedReadProbe && request.method==="GET" && pathname==="/dashboard/discover";
+  if(pathname==="/api/mcp" || api || probePage) return null;
+  return new Response("Forbidden: community token cannot access this route.",{status:403,headers:{"Cache-Control":"no-store"}});
+}
+
+async function enforceStagingFixtureBoundary(locals: App.Locals, pathname: string): Promise<Response | null> {
+  locals.stagingFixture = null;
+  if (!locals.user) return null;
+  try {
+    locals.stagingFixture = await resolveStagingFixtureIdentity({
+      db:env.DB,envName:env.DEPLOYMENT_ENVIRONMENT,user:locals.user,
+      session:locals.session ?? {id:""},isPat:Boolean(locals.personalAccessToken),retainedProbeEnabled:env.STAGING_RETAINED_READ_PROBE_ENABLED,
+    });
+    if (locals.stagingFixture?.retainedReadProbe && !["/dashboard/discover", "/api/community/access", "/api/community/profiles", "/api/community/chat"].includes(pathname) && !/^\/api\/community\/profiles\/[^/]+$/.test(pathname)) throw new StagingFixtureAccessError();
+    if (locals.stagingFixture && !stagingFixturePathAllowed(pathname)) throw new StagingFixtureAccessError();
+    return null;
+  } catch (error) {
+    if (!(error instanceof StagingFixtureAccessError)) throw error;
+    return new Response(error.message,{status:403,headers:{"Cache-Control":"no-store"}});
+  }
+}
+
+async function enforceDemoBoundary(locals: App.Locals, request: Request, pathname: string) {
+  // These endpoints independently validate the operator, allowing recovery after a persona expires.
+  if (["/demo", "/api/demo/switch", "/api/demo/logout", "/api/demo/return"].includes(pathname.replace(/\/$/, ""))) return null;
+  if (!locals.user) return null;
+  try {
+    locals.stagingDemo = await validateDemoSession(env, request, locals.user, locals.session ?? {id:""});
+    if (locals.stagingDemo && !demoPathAllowed(pathname, request.method)) throw new DemoAccessError();
+    return null;
+  } catch (error) {
+    if (!(error instanceof DemoAccessError)) throw error;
+    return new Response(error.message, {status:error.status,headers:{"Cache-Control":"no-store"}});
+  }
+}
+
 export const onRequest = defineMiddleware(async (context, next) => {
   const { locals, request, url, redirect } = context;
   const primaryDomain = env.PRIMARY_DOMAIN;
@@ -114,10 +164,32 @@ export const onRequest = defineMiddleware(async (context, next) => {
       return await next();
     }
 
+    if (hasQaCookie(request)) {
+      try {
+        const auth = await authenticateQaCookie(env, request);
+        if (!auth || !qaPathAllowed(auth.qa.persona,url.pathname,request.method)) throw new QaAccessError();
+        locals.user=auth.user;locals.session=auth.session;locals.personalAccessToken=null;locals.stagingQa=auth.qa;
+        locals.stagingDemo=null;locals.stagingFixture=null;
+        if(url.pathname==='/api/qa/logout') return await logoutQa(env,request,auth.qa);
+        const response=await next();response.headers.set('Cache-Control','no-store');response.headers.set('Vary','Cookie');
+        return response;
+      } catch { return new Response('Temporary persona QA access is unavailable or expired.',{status:403,headers:{'Cache-Control':'no-store'}}); }
+    }
     const authResult = await resolveAuthentication(env, request);
     locals.session = authResult.session;
     locals.user = authResult.user;
     locals.personalAccessToken = authResult.personalAccessToken;
+
+    const demoFailure = await enforceDemoBoundary(locals,request,url.pathname);
+    if (demoFailure) return demoFailure;
+
+    const fixtureFailure = await enforceStagingFixtureBoundary(locals,url.pathname);
+    if (fixtureFailure) return fixtureFailure;
+
+    // Community delegation never inherits the owner's unrelated application access.
+    // Use Astro's normalized route pathname, as with the admin origin guards.
+    const delegationFailure = enforceCommunityDelegation(locals,request,url.pathname);
+    if(delegationFailure) return delegationFailure;
 
     // Protect /dashboard/* routes — require authentication
     if (url.pathname.startsWith("/dashboard")) {

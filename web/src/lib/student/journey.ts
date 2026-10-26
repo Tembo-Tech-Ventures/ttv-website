@@ -1,3 +1,4 @@
+import { DEMO_PREFIX, isDemoUser } from "@/lib/staging-demo-policy";
 import { and, asc, count, desc, eq } from "drizzle-orm";
 import { resolveGateState } from "@/components/hire/validation";
 import * as schema from "@/lib/db/schema";
@@ -307,7 +308,7 @@ export async function getStudentJourney(
   const [applications, accessibleProgramIds, profileEligible, profile, openProgram] =
     await Promise.all([
       db.query.programApplication.findMany({
-        where: eq(schema.programApplication.userId, userId),
+        where: and(eq(schema.programApplication.userId, userId), isDemoUser(userId) ? eq(schema.programApplication.programId, DEMO_PREFIX + "program") : undefined),
         with: { program: true },
         orderBy: [desc(schema.programApplication.updatedAt)],
       }),
@@ -318,7 +319,7 @@ export async function getStudentJourney(
         columns: { id: true, status: true },
       }),
       db.query.program.findFirst({
-        where: eq(schema.program.applicationsOpen, true),
+        where: and(eq(schema.program.applicationsOpen, true), isDemoUser(userId) ? eq(schema.program.id, DEMO_PREFIX + "program") : undefined),
         columns: { id: true, name: true, startDate: true, endDate: true },
         orderBy: [asc(schema.program.startDate)],
       }),

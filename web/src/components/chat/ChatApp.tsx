@@ -33,9 +33,10 @@ const DESKTOP_QUERY = "(min-width: 64rem)";
  */
 export function getAppNav(
   visibleLinkIds: StudentDashboardLinkId[],
-  unreadLeadCount = 0
+  unreadLeadCount = 0,
+  canDiscover = false
 ) {
-  return getDashboardLinks(visibleLinkIds, unreadLeadCount).filter(
+  return getDashboardLinks(visibleLinkIds, unreadLeadCount, false, canDiscover).filter(
     (link) => link.id !== "ask"
   );
 }
@@ -67,6 +68,7 @@ interface ChatAppProps {
   mockLoadMs?: number;
   visibleLinkIds?: StudentDashboardLinkId[];
   unreadLeadCount?: number;
+  canDiscover?: boolean;
 }
 
 /**
@@ -86,8 +88,9 @@ export default function ChatApp({
   mockTranscripts = NO_TRANSCRIPTS,
   mockLatencyMs = MOCK_LATENCY_MS,
   mockLoadMs = MOCK_LOAD_MS,
-  visibleLinkIds = DASHBOARD_LINKS.map((link) => link.id),
+  visibleLinkIds = DASHBOARD_LINKS.map((link) => link.id).filter((id) => id !== "community" && id !== "discover"),
   unreadLeadCount = 0,
+  canDiscover = false,
 }: ChatAppProps) {
   const [sessions, setSessions] = useState<ChatSession[]>(initialSessions);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(
@@ -116,7 +119,7 @@ export default function ChatApp({
    */
   const conversationEpochRef = useRef(0);
   const composerRef = useRef<ComposerHandle | null>(null);
-  const appNav = getAppNav(visibleLinkIds, unreadLeadCount);
+  const appNav = getAppNav(visibleLinkIds, unreadLeadCount, canDiscover);
 
   function beginNewTranscript() {
     conversationEpochRef.current += 1;

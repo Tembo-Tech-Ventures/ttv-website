@@ -37,10 +37,12 @@ const primaryLinks = [
 
 export function getAdminLinks(
   agentAuthEnabled: boolean,
-  dataMigrationEnabled = false
+  dataMigrationEnabled = false,
+  stagingDemoEnabled = false
 ) {
   return [
     ...primaryLinks,
+    ...(stagingDemoEnabled ? [{ href: "/demo", label: "Staging demo personas", icon: PiUsersDuotone }] : []),
     ...(dataMigrationEnabled
       ? [{ href: "/admin/data-migration", label: "Data Migration", icon: PiDatabaseDuotone }]
       : []),
@@ -56,11 +58,13 @@ export default function AdminShell({
   currentPath = "/admin",
   agentAuthEnabled = false,
   dataMigrationEnabled = false,
+  stagingDemoEnabled = false,
 }: {
   children: ReactNode;
   currentPath?: string;
   agentAuthEnabled?: boolean;
   dataMigrationEnabled?: boolean;
+  stagingDemoEnabled?: boolean;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const hydrated = useSyncExternalStore(
@@ -68,7 +72,7 @@ export default function AdminShell({
     () => true,
     () => false
   );
-  const links = getAdminLinks(agentAuthEnabled, dataMigrationEnabled);
+  const links = getAdminLinks(agentAuthEnabled, dataMigrationEnabled, stagingDemoEnabled);
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-surface to-dark">

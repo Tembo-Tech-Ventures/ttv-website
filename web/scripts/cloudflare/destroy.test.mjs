@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   destroyEnvironment,
-  emptyAgentR2Bucket,
+  ensureAgentR2BucketEmpty,
 } from "./destroy.mjs";
 
 const context = {
@@ -19,10 +19,11 @@ const context = {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 describe("destroyEnvironment", () => {
-  it("empties and deletes R2 before removing the rest of the environment", async () => {
+  it("checks and deletes empty R2 before removing the rest of the environment", async () => {
     const order = [];
     const operation = (name) =>
       vi.fn(async () => {
@@ -30,9 +31,9 @@ describe("destroyEnvironment", () => {
         return true;
       });
     const dependencies = {
-      emptyBucket: vi.fn(async () => {
-        order.push("emptyBucket");
-        return { bucketFound: true, objectsDeleted: 3 };
+      listObjectsPage: vi.fn(async () => {
+        order.push("listObjectsPage");
+        return { objects: [], isTruncated: false };
       }),
       deleteBucket: operation("bucket"),
       deleteContainerApp: operation("containerApp"),
@@ -55,11 +56,11 @@ describe("destroyEnvironment", () => {
       vectorizeIndexDeleted: true,
       aiGatewayDeleted: true,
       databaseDeleted: true,
-      bucketObjectsDeleted: 3,
+      bucketObjectsDeleted: 0,
       bucketDeleted: true,
     });
     expect(order).toEqual([
-      "emptyBucket",
+      "listObjectsPage",
       "bucket",
       "containerApp",
       "consumer",
@@ -76,7 +77,7 @@ describe("destroyEnvironment", () => {
     const deleteWorker = vi.fn();
     await expect(
       destroyEnvironment(context, {
-        emptyBucket: vi
+        listObjectsPage: vi
           .fn()
           .mockRejectedValue(
             new Error(
@@ -87,7 +88,7 @@ describe("destroyEnvironment", () => {
         deleteWorker,
       })
     ).rejects.toThrow(
-      'Failed to empty and delete R2 bucket "ttv-website-files-agent-123". Original error: GET /r2/buckets/example/objects failed: API unavailable'
+      'Failed to safely delete R2 bucket "ttv-website-files-agent-123". Original error: GET /r2/buckets/example/objects failed: API unavailable'
     );
     expect(deleteContainerApp).not.toHaveBeenCalled();
     expect(deleteWorker).not.toHaveBeenCalled();
@@ -97,9 +98,9 @@ describe("destroyEnvironment", () => {
     const deleteWorker = vi.fn();
     await expect(
       destroyEnvironment(context, {
-        emptyBucket: vi
+        listObjectsPage: vi
           .fn()
-          .mockResolvedValue({ bucketFound: true, objectsDeleted: 0 }),
+          .mockResolvedValue({ objects: [], isTruncated: false }),
         deleteBucket: vi.fn().mockResolvedValue(true),
         deleteContainerApp: vi.fn().mockResolvedValue(true),
         removeQueueConsumer: vi
@@ -128,7 +129,7 @@ describe("destroyEnvironment", () => {
 
     vi.stubEnv("CLOUDFLARE_ALLOW_PROTECTED_DESTROY", "true");
     const operation = vi.fn().mockResolvedValue(true);
-    const emptyBucket = vi.fn();
+    const listObjectsPage = vi.fn();
     await expect(
       destroyEnvironment(
         {
@@ -138,7 +139,7 @@ describe("destroyEnvironment", () => {
           environmentSlug: "production",
         },
         {
-          emptyBucket,
+          listObjectsPage,
           deleteBucket: operation,
           deleteContainerApp: operation,
           removeQueueConsumer: operation,
@@ -153,127 +154,89 @@ describe("destroyEnvironment", () => {
       environment: "production",
       bucketObjectsDeleted: 0,
     });
-    expect(emptyBucket).not.toHaveBeenCalled();
+    expect(listObjectsPage).not.toHaveBeenCalled();
   });
 });
 
-describe("emptyAgentR2Bucket", () => {
-  it("succeeds when the bucket is already empty", async () => {
-    const listObjectsPage = vi.fn().mockResolvedValue({
-      objects: [],
-      isTruncated: false,
-    });
-    const deleteObject = vi.fn();
-
-    await expect(
-      emptyAgentR2Bucket(context, { listObjectsPage, deleteObject })
-    ).resolves.toEqual({ bucketFound: true, objectsDeleted: 0 });
-    expect(listObjectsPage).toHaveBeenCalledWith(context.bucketName, undefined);
-    expect(deleteObject).not.toHaveBeenCalled();
+describe("R2 preservation preflight", () => {
+  const mutators = ["deleteBucket", "deleteContainerApp", "removeQueueConsumer", "deleteWorker", "deleteQueue", "deleteVectorize", "deleteAiGateway", "deleteDatabase"];
+  const mutations = () => Object.fromEntries(mutators.map(name => [name, vi.fn().mockResolvedValue(false)]));
+  it.each([
+    { objects: [{ key: "private-key-not-for-logs" }], isTruncated: false },
+    { objects: [], isTruncated: true, cursor: "more" },
+    { objects: [], isTruncated: true },
+    { objects: [] },
+    { objects: null, isTruncated: false },
+    undefined,
+  ])("preserves every resource for nonempty or uncertain listing %j", async page => {
+    const dependencies = mutations();
+    dependencies.listObjectsPage = vi.fn().mockResolvedValue(page);
+    await expect(destroyEnvironment(context, dependencies)).rejects.toThrow("Preserve the environment for review");
+    for (const name of mutators) expect(dependencies[name]).not.toHaveBeenCalled();
+    expect(dependencies.listObjectsPage).toHaveBeenCalledTimes(1);
   });
-
-  it("treats a missing bucket as already empty", async () => {
-    const deleteObject = vi.fn();
-    await expect(
-      emptyAgentR2Bucket(context, {
-        listObjectsPage: vi.fn().mockResolvedValue(null),
-        deleteObject,
-      })
-    ).resolves.toEqual({ bucketFound: false, objectsDeleted: 0 });
-    expect(deleteObject).not.toHaveBeenCalled();
+  it("does not reveal object keys in the refusal", async () => {
+    await expect(ensureAgentR2BucketEmpty(context, {
+      listObjectsPage: vi.fn().mockResolvedValue({ objects: [{ key: "private-key-not-for-logs" }], isTruncated: false }),
+    })).rejects.not.toThrow("private-key-not-for-logs");
   });
-
-  it("lists and deletes objects across several cursor pages", async () => {
-    const listObjectsPage = vi
-      .fn()
-      .mockResolvedValueOnce({
-        objects: [{ key: "avatars/one.png" }, { key: "avatars/two.png" }],
-        cursor: "page-2",
-        isTruncated: true,
-      })
-      .mockResolvedValueOnce({
-        objects: [{ key: "recordings/three.mp4" }],
-        cursor: "page-3",
-        isTruncated: true,
-      })
-      .mockResolvedValueOnce({
-        objects: [{ key: "four.txt" }],
-        isTruncated: false,
-      });
-    const deleteObject = vi.fn().mockResolvedValue(true);
-
-    await expect(
-      emptyAgentR2Bucket(context, { listObjectsPage, deleteObject })
-    ).resolves.toEqual({ bucketFound: true, objectsDeleted: 4 });
-    expect(listObjectsPage.mock.calls).toEqual([
-      [context.bucketName, undefined],
-      [context.bucketName, "page-2"],
-      [context.bucketName, "page-3"],
-    ]);
-    expect(deleteObject.mock.calls).toEqual([
-      [context.bucketName, "avatars/one.png"],
-      [context.bucketName, "avatars/two.png"],
-      [context.bucketName, "recordings/three.mp4"],
-      [context.bucketName, "four.txt"],
-    ]);
+  it("allows idempotent teardown after the bucket is already absent", async () => {
+    const dependencies = mutations();
+    dependencies.listObjectsPage = vi.fn().mockResolvedValue(null);
+    await expect(destroyEnvironment(context, dependencies)).resolves.toMatchObject({ bucketObjectsDeleted: 0, bucketDeleted: false });
+    for (const name of mutators) expect(dependencies[name]).toHaveBeenCalledTimes(1);
   });
-
-  it.each(["production", "prod", "staging"])(
-    "refuses to empty the %s environment even when protected deletion is overridden",
-    async (environmentSlug) => {
-      vi.stubEnv("CLOUDFLARE_ALLOW_PROTECTED_DESTROY", "true");
-      const listObjectsPage = vi.fn();
-
-      await expect(
-        emptyAgentR2Bucket(
-          {
-            ...context,
-            environmentName: environmentSlug,
-            environmentSlug,
-            bucketName: `ttv-website-files-${environmentSlug}`,
-          },
-          { listObjectsPage }
-        )
-      ).rejects.toThrow(
-        `Refusing to empty R2 bucket for non-agent environment "${environmentSlug}"`
-      );
-      expect(listObjectsPage).not.toHaveBeenCalled();
-    }
-  );
-
-  it("refuses an agent environment whose bucket lacks the exact agent prefix", async () => {
+  it("stops further deletion if an object arrives after the empty check", async () => {
+    const dependencies = mutations();
+    dependencies.listObjectsPage = vi.fn().mockResolvedValue({ objects: [], isTruncated: false });
+    dependencies.deleteBucket.mockRejectedValue(new Error("Bucket is not empty"));
+    await expect(destroyEnvironment(context, dependencies)).rejects.toThrow("Bucket is not empty");
+    for (const name of mutators.filter(operationName => operationName !== "deleteBucket")) expect(dependencies[name]).not.toHaveBeenCalled();
+  });
+  it.each(["production", "prod", "staging"])("refuses agent preflight for %s even with override", async environmentSlug => {
+    vi.stubEnv("CLOUDFLARE_ALLOW_PROTECTED_DESTROY", "true");
     const listObjectsPage = vi.fn();
-    await expect(
-      emptyAgentR2Bucket(
-        { ...context, bucketName: "ttv-website-files-production" },
-        { listObjectsPage }
-      )
-    ).rejects.toThrow(
-      'Refusing to empty R2 bucket "ttv-website-files-production"'
-    );
+    await expect(ensureAgentR2BucketEmpty({ ...context, environmentSlug }, { listObjectsPage })).rejects.toThrow("non-agent environment");
     expect(listObjectsPage).not.toHaveBeenCalled();
   });
+  it.each(["ttv-website-files-production", "ttv-website-files-agent-other"])("rejects mismatched bucket %s before mutation", async bucketName => {
+    const dependencies = mutations();
+    dependencies.listObjectsPage = vi.fn();
+    await expect(destroyEnvironment({ ...context, bucketName }, dependencies)).rejects.toThrow("Expected an exact");
+    for (const fn of Object.values(dependencies)) expect(fn).not.toHaveBeenCalled();
+  });
+});
 
-  it("rejects malformed or cyclic pagination instead of looping", async () => {
-    await expect(
-      emptyAgentR2Bucket(context, {
-        listObjectsPage: vi.fn().mockResolvedValue({
-          objects: [{ key: "one" }],
-          isTruncated: true,
-        }),
-        deleteObject: vi.fn().mockResolvedValue(true),
-      })
-    ).rejects.toThrow("without a cursor");
-
-    await expect(
-      emptyAgentR2Bucket(context, {
-        listObjectsPage: vi.fn().mockResolvedValue({
-          objects: [],
-          cursor: "same-cursor",
-          isTruncated: true,
-        }),
-        deleteObject: vi.fn(),
-      })
-    ).rejects.toThrow('repeated R2 object-list cursor "same-cursor"');
+describe("real R2 adapter teardown boundary", () => {
+  const mutators = ["deleteBucket", "deleteContainerApp", "removeQueueConsumer", "deleteWorker", "deleteQueue", "deleteVectorize", "deleteAiGateway", "deleteDatabase"];
+  function setup(payload, status = 200) {
+    vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "fictional-account");
+    vi.stubEnv("CLOUDFLARE_API_TOKEN", "fictional-test-token");
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status }));
+    vi.stubGlobal("fetch", fetcher);
+    return Object.fromEntries(mutators.map(name => [name, vi.fn().mockResolvedValue(true)]));
+  }
+  it.each([
+    undefined, {}, { is_truncated: "true" }, { is_truncated: true },
+    { is_truncated: false, cursor: "more" },
+    { is_truncated: false, cursor: 42 },
+    { is_truncated: false, delimited: ["hidden-prefix/"] },
+  ])("blocks every mutation on missing/malformed/truncated raw metadata %j", async result_info => {
+    const dependencies = setup({ success: true, result: [], result_info });
+    await expect(destroyEnvironment(context, dependencies)).rejects.toThrow("Failed to safely delete R2 bucket");
+    for (const fn of Object.values(dependencies)) expect(fn).not.toHaveBeenCalled();
+  });
+  it.each([401, 403, 500, 404])("does not treat HTTP %i as verified missing bucket", async status => {
+    const dependencies = setup({ success: false, errors: [{ code: 9999 }] }, status);
+    await expect(destroyEnvironment(context, dependencies)).rejects.toThrow("Failed to safely delete R2 bucket");
+    for (const fn of Object.values(dependencies)) expect(fn).not.toHaveBeenCalled();
+  });
+  it.each([
+    [200, { success: true, result: [], result_info: { is_truncated: false, cursor: "", delimited: [] } }],
+    [404, { success: false, errors: [{ code: 10006 }] }],
+  ])("permits verified empty or bucket-not-found response %i", async (status, payload) => {
+    const dependencies = setup(payload, status);
+    await expect(destroyEnvironment(context, dependencies)).resolves.toMatchObject({ bucketObjectsDeleted: 0 });
+    for (const fn of Object.values(dependencies)) expect(fn).toHaveBeenCalledTimes(1);
   });
 });

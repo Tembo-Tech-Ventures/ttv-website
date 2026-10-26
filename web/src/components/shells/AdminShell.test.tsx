@@ -97,3 +97,8 @@ describe("admin shell hydration", () => {
     expect(html).toMatch(/aria-expanded="false"/);
   });
 });
+
+it("exposes staging demo personas only with the server-computed staging gate", () => {
+  expect(getAdminLinks(false,false).some(link=>link.href==="/demo")).toBe(false);
+  expect(getAdminLinks(false,false,true)).toContainEqual(expect.objectContaining({href:"/demo",label:"Staging demo personas"}));
+});
