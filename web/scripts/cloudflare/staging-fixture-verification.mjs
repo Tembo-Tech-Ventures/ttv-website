@@ -3,7 +3,7 @@ import { audienceRoutesPresent, verifyAudienceAccess } from "./staging-audience-
 import { COMMUNITY_EVIDENCE_DIRECTORY, verifyStagingCommunityJourney } from "./staging-community-journey.mjs";
 
 /** Fixed verification program. Do not accept arbitrary scripts, roles or target IDs from workflow input. */
-export async function verifyStagingPersonas({ browser, target, personas, verifyJourney = verifyStagingCommunityJourney, verifyAudience = verifyAudienceAccess, audienceEnabled = audienceRoutesPresent(), browserAssessment = false, browserChat = false, browserDiscovery = false }) {
+export async function verifyStagingPersonas({ browser, target, personas, verifyJourney = verifyStagingCommunityJourney, verifyAudience = verifyAudienceAccess, audienceEnabled = audienceRoutesPresent(), browserAssessment = false, browserChat = false, browserDiscovery = false, verifyDiscovery = verifyBrowserDiscovery }) {
   if (browserAssessment && personas.institution?.sessionId !== `${personas.institution?.userId}-assessment-session`) throw new Error("Bounded assessment session required.");
   const contexts = [];
   const clients = {};
@@ -43,6 +43,7 @@ export async function verifyStagingPersonas({ browser, target, personas, verifyJ
     });
   };
   let failure;
+  let stage="identities";
   const requireStatus = (response, status) => {
     if (response.status() !== status) throw new Error("Synthetic staging verification failed.");
   };
@@ -63,6 +64,7 @@ export async function verifyStagingPersonas({ browser, target, personas, verifyJ
       await page.close();
       requireStatus(await clients[name].get("/api/community/tokens"), 403);
     }
+    stage="authorization";
     const profilePath = `/api/community/profiles/${personas.otherMember.userId}`;
     requireStatus(await clients.member.get(profilePath), 403);
     requireStatus(await clients.unapprovedInstitution.get(profilePath), 403);
@@ -85,6 +87,8 @@ export async function verifyStagingPersonas({ browser, target, personas, verifyJ
       const initialized = await initialize.json();
       if (initialized.error || !initialized.result?.protocolVersion) throw new Error("Synthetic MCP initialization failed.");
     }
+    if (browserDiscovery) {stage="discovery";await verifyDiscovery({target,contextsByRole,personas});}
+    stage="audience";
     if (audienceEnabled) {
       const anonymousContext = await browser.newContext({ baseURL: target.baseUrl, serviceWorkers: "block" });
       contexts.push(anonymousContext);
@@ -92,6 +96,7 @@ export async function verifyStagingPersonas({ browser, target, personas, verifyJ
       await verifyAudience({ baseUrl: target.baseUrl, contextsByRole, anonymousContext,
         users: Object.fromEntries(["member", "mentor", "institution", "admin"].map(role => [role, { userId: personas[role].userId }])) });
     }
+    stage="community-journey";
     await verifyJourney({
       baseUrl: target.baseUrl,
       contextsByRole: Object.fromEntries(["member", "mentor", "institution"].map(role => [role, contextsByRole[role]])),
@@ -100,8 +105,8 @@ export async function verifyStagingPersonas({ browser, target, personas, verifyJ
       browserAssessment,
       browserChat,
     });
-    if (browserDiscovery) await verifyBrowserDiscovery({target,contextsByRole,personas});
   } catch {
+    console.log(JSON.stringify({event:"synthetic-verification-failed",stage}));
     failure = new Error("Synthetic staging verification failed.");
   } finally {
     const outcomes = await Promise.allSettled(contexts.map(context => context.close()));
