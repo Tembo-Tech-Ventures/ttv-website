@@ -197,15 +197,17 @@ app-push plus agent-pull rather than Cloudflare notifications.
 The `Cloudflare Staging` action `diagnose-demo` runs only fixed aggregate SELECTs
 for required-role presence and retained demo keys. It uses the existing serialized
 staging job and credentials, without deployment, seeding or credential creation.
-`expected_sha` must still equal the current PR171 integration head and dispatched
-code revision. For this incident only, `expected_deployed_sha` must be
-`09f3360c6cfad601ec934230bda87b4239fb22d4`; the fixed staging Worker bindings,
-D1 identity and live health must independently match that revision. This separate
-identity is exclusive to read-only diagnosis; mutating actions retain their
-existing same-revision checks. Only attempt 1 is accepted. PM assigns the slot;
-output contains only the two revisions, role booleans and fixed-key counts.
-Counts describe current matching keys, not historical write attribution or
-validation of record ownership/content. Preserve retained records after inspection.
+`expected_sha` must equal the current PR171 integration head and dispatched
+revision. For the explicitly resumed Oct26 demo preparation,
+`expected_deployed_sha` must equal that **same** exact revision; the historical
+Oct25 incident override is no longer accepted. Worker bindings, canonical staging
+origin, D1 identity and live health must independently match. Attempt 1 only.
+The script performs fixed aggregate SELECTs for retained keys, synthetic email
+provenance and the four fixed personas' exact roles/cohort membership. It emits
+counts and readiness booleans, never records, sessions or credentials. No seed,
+identity creation, cleanup or model invocation is performed. PM assigns the
+serialized slot after deployment. Preserve all retained and human records.
+
 
 
 ### One-shot PR220 container-state diagnosis (2026-10-25)

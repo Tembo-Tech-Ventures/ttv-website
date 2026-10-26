@@ -45,15 +45,15 @@ export async function runDemoSeed(env, {
   }
 }
 
-// Bounded incident diagnostic: code identity and live target identity are distinct.
-export const DIAGNOSTIC_DEPLOYED_SHA = "09f3360c6cfad601ec934230bda87b4239fb22d4";
+// Read-only demo readiness: require the exact current integration revision live.
 export async function runDemoDiagnostic(env, { validate = validateStagingRevision, verify = verifyStagingFixtureTarget, api = cfApi } = {}) {
   try {
     if (env.STAGING_ACTION !== "diagnose-demo" || env.GITHUB_RUN_ATTEMPT !== "1" ||
-        env.STAGING_EXPECTED_DEPLOYED_SHA !== DIAGNOSTIC_DEPLOYED_SHA) throw new Error();
+        !/^([a-f0-9]{40})$/.test(env.STAGING_EXPECTED_SHA ?? "") ||
+        env.STAGING_EXPECTED_DEPLOYED_SHA !== env.STAGING_EXPECTED_SHA) throw new Error();
     const { sha } = await validate(env);
     const target = await verify({ environmentName: env.CLOUDFLARE_ENVIRONMENT_NAME, accountId: env.CLOUDFLARE_ACCOUNT_ID,
-      expectedVersion: DIAGNOSTIC_DEPLOYED_SHA, baseUrl: STAGING_FIXTURE_ORIGIN, api });
+      expectedVersion: sha, baseUrl: STAGING_FIXTURE_ORIGIN, api });
     const aggregate = async (sql, params) => {
       const result = await target.executeQuery(sql, params);
       const envelopes = Array.isArray(result) ? result : [result];
@@ -79,7 +79,22 @@ export async function runDemoDiagnostic(env, { validate = validateStagingRevisio
       }
       ownedCounts[table] = total;
     }
-    return { event: "retained-demo-diagnostic", executorVersion: sha, deployedVersion: DIAGNOSTIC_DEPLOYED_SHA, requiredRoles, ownedCounts };
+    const prefix="ttv-staging-demo-v1-";
+    const personas={};
+    for(const [persona,role] of [["member-cohort",null],["member-noncohort",null],["mentor","MENTOR"],["institution","INSTITUTION"]]) {
+      const id=prefix+persona;
+      const user=await aggregate('SELECT COUNT(*) AS total FROM user WHERE id=? AND email=?',[id,id+'@invalid.ttv']);
+      const roles=await aggregate('SELECT COUNT(*) AS total FROM UserRoles WHERE userId=?',[id]);
+      const matching=role ? await aggregate('SELECT COUNT(*) AS total FROM UserRoles ur JOIN Roles r ON r.id=ur.roleId WHERE ur.userId=? AND r.name=?',[id,role]) : 0;
+      const membership=persona.startsWith('member-') ? await aggregate("SELECT COUNT(*) AS total FROM programApplication a JOIN program p ON p.id=a.programId WHERE a.userId=? AND a.programId=? AND a.status='APPROVED' AND p.curriculumId=? AND p.applicationsOpen=0",[id,prefix+'program',prefix+'curriculum']) : 0;
+      personas[persona]=user===1 && roles===(role?1:0) && matching===(role?1:0) && membership===(persona==='member-cohort'?1:0);
+    }
+    let syntheticPeople=0;
+    for(let start=0;start<records.user.length;start+=40) {
+      const ids=records.user.slice(start,start+40).map(u=>u.id);
+      syntheticPeople+=await aggregate(`SELECT COUNT(*) AS total FROM user WHERE id IN (${ids.map(()=>'?').join(',')}) AND email=id||'@invalid.ttv'`,ids);
+    }
+    return { event: "retained-demo-diagnostic", executorVersion: sha, deployedVersion: sha, requiredRoles, ownedCounts, syntheticPeople, personas };
   } catch {
     throw new Error("Read-only retained demo diagnostic failed; no record values emitted.");
   }
