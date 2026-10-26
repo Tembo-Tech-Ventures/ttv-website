@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getCookies } from 'better-auth/cookies';
-import { DEMO_CUTOFF, DEMO_ORIGIN, DEMO_PERSONAS, DEMO_PREFIX, DEMO_SESSION_MARKER, demoEnabled, demoPersona, isDemoUser } from './staging-demo-policy';
+import { DEMO_CUTOFF, DEMO_ORIGIN, DEMO_PERSONAS, DEMO_USER_IDS, DEMO_PREFIX, DEMO_SESSION_MARKER, demoEnabled, demoPersona, isDemoUser } from './staging-demo-policy';
 
 export const DEMO_OPERATOR_COOKIE = '__Host-ttv-demo-operator';
 export class DemoAccessError extends Error {
@@ -88,11 +88,26 @@ export async function handleDemoAction(env: DemoEnvironment, request: Request, a
     const operator = await demoOperator(env, request, now);
     const headers = new Headers({'Cache-Control':'no-store','Content-Type':'application/json'});
     const marker = DEMO_SESSION_MARKER + operator.session.id;
+    const audit = (event: string, persona?: string, expiresAt?: number) => env.DB.prepare(
+      'INSERT INTO credentialAuditLog (id,provider,action,outcome,actorUserId,createdAt) VALUES (?,?,?,?,?,?)'
+    ).bind(crypto.randomUUID(), 'staging-demo', event === 'switch' ? 'set' : 'remove',
+      JSON.stringify({event, ...(persona ? {persona} : {}), parentSessionId:operator.session.id, ...(expiresAt ? {expiresAt} : {})}), operator.session.userId, now);
+    if (action === 'return') {
+      // Restore the existing live browser session; never mint a new admin session.
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM session WHERE userAgent=?').bind(marker),
+        audit('return'),
+      ]);
+      for (const name of [DEMO_OPERATOR_COOKIE, ...Object.values(cookies).map(c=>c.name)]) headers.append('Set-Cookie',cookie(name,'',0));
+      headers.append('Set-Cookie',cookie(cookies.sessionToken.name,operator.cookieValue,operator.session.expiresAt));
+      return new Response(JSON.stringify({redirectTo:'/admin'}),{headers});
+    }
     if (action === 'logout') {
       // Full logout revokes the source browser session and all demo sessions it controls.
       await env.DB.batch([
         env.DB.prepare('DELETE FROM session WHERE userAgent=?').bind(marker),
         env.DB.prepare('DELETE FROM session WHERE id=?').bind(operator.session.id),
+        audit('logout'),
       ]);
       for (const name of [DEMO_OPERATOR_COOKIE, ...Object.values(cookies).map(c=>c.name)]) headers.append('Set-Cookie',cookie(name,'',0));
       return new Response(JSON.stringify({redirectTo:'/demo'}),{headers});
@@ -113,6 +128,7 @@ export async function handleDemoAction(env: DemoEnvironment, request: Request, a
     await env.DB.batch([
       env.DB.prepare('DELETE FROM session WHERE userAgent=?').bind(marker),
       env.DB.prepare('INSERT INTO session (id,userId,token,userAgent,createdAt,updatedAt,expiresAt) VALUES (?,?,?,?,?,?,?)').bind(id,chosen.userId,token,marker,now,now,expiry),
+      audit('switch', persona, expiry),
     ]);
     headers.append('Set-Cookie',cookie(DEMO_OPERATOR_COOKIE,operator.cookieValue,operator.expiresAt));
     headers.append('Set-Cookie',cookie(cookies.sessionToken.name,token + '.' + signature(token,env.BETTER_AUTH_SECRET),expiry));
@@ -130,4 +146,23 @@ function demoErrorResponse(error: unknown, request: Request, action: string) {
       for (const name of [DEMO_OPERATOR_COOKIE, ...Object.values(cookies).map(c=>c.name)]) headers.append('Set-Cookie',cookie(name,'',0));
     }
     return new Response(JSON.stringify({error:'Demo access is unavailable or expired.'}), {status:error instanceof DemoAccessError?error.status:403,headers});
+}
+
+/** Read-only counts of the fixed retained fictional identities, never human records. */
+export async function demoDatasetStatus(env: DemoEnvironment, request: Request, now = Math.floor(Date.now()/1000)) {
+  await demoOperator(env, request, now);
+  const ids=JSON.stringify(DEMO_USER_IDS);
+  const owned="u.id IN (SELECT value FROM json_each(?)) AND u.email=u.id||'@invalid.ttv'";
+  const count=async(sql:string,params:unknown[])=>{
+    const row=await env.DB.prepare(sql).bind(...params).first<{total:number}>();
+    if(!row || !Number.isSafeInteger(row.total) || row.total<0) throw new DemoAccessError(503);
+    return row.total;
+  };
+  const [people,profiles,contributions,confirmations]=await Promise.all([
+    count(`SELECT count(*) total FROM user u WHERE ${owned}`,[ids]),
+    count(`SELECT count(*) total FROM communityProfile p JOIN user u ON u.id=p.userId WHERE ${owned}`,[ids]),
+    count(`SELECT count(*) total FROM communityJourney j JOIN user u ON u.id=j.userId WHERE ${owned} AND j.id LIKE ?`,[ids,DEMO_PREFIX+'%']),
+    count(`SELECT count(*) total FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=j.userId WHERE ${owned} AND j.id LIKE ? AND c.id LIKE ?`,[ids,DEMO_PREFIX+'%',DEMO_PREFIX+'%']),
+  ]);
+  return {people,profiles,contributions,confirmations};
 }

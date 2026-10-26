@@ -136,7 +136,7 @@ async function enforceStagingFixtureBoundary(locals: App.Locals, pathname: strin
 
 async function enforceDemoBoundary(locals: App.Locals, request: Request, pathname: string) {
   // These endpoints independently validate the operator, allowing recovery after a persona expires.
-  if (["/demo", "/api/demo/switch", "/api/demo/logout"].includes(pathname.replace(/\/$/, ""))) return null;
+  if (["/demo", "/api/demo/switch", "/api/demo/logout", "/api/demo/return"].includes(pathname.replace(/\/$/, ""))) return null;
   if (!locals.user) return null;
   try {
     locals.stagingDemo = await validateDemoSession(env, request, locals.user, locals.session ?? {id:""});

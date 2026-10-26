@@ -24,7 +24,7 @@ export default function DemoSessionIndicator({ activePersona, displayName, expir
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0 break-words">
           <p className="font-semibold">{displayName} · {role?.label}</p>
-          <p className="mt-1 text-sm text-ink-secondary">Fictional demo profile</p>
+          <p className="mt-1 text-sm text-ink-secondary">Staging impersonation · Fictional demo profile</p>
           {expiryIso && <p className="mt-1 text-xs text-ink-muted">Session ends <time dateTime={expiryIso}>{expiryIso.slice(0, 16).replace("T", " ")} UTC</time></p>}
         </div>
         <div className="flex flex-wrap gap-3">

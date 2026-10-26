@@ -90,9 +90,9 @@ it("uses the real cfApi and target adapter with Cloudflare response envelopes", 
   } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
 });
 
-import { runDemoDiagnostic, DIAGNOSTIC_DEPLOYED_SHA } from "./staging-demo-seed.mjs";
-const diagnosticEnv = {...env, STAGING_ACTION:"diagnose-demo", STAGING_EXPECTED_DEPLOYED_SHA:DIAGNOSTIC_DEPLOYED_SHA};
-it("diagnoses separate exact live identity using only aggregate SELECTs", async () => {
+import { runDemoDiagnostic } from "./staging-demo-seed.mjs";
+const diagnosticEnv = {...env, STAGING_ACTION:"diagnose-demo", STAGING_EXPECTED_SHA:sha, STAGING_EXPECTED_DEPLOYED_SHA:sha};
+it("diagnoses the exact current live identity using only aggregate SELECTs", async () => {
   const queries = [];
   const executeQuery = vi.fn(async (sql,params) => {
     queries.push({sql,params});
@@ -100,13 +100,14 @@ it("diagnoses separate exact live identity using only aggregate SELECTs", async 
   });
   const deps = {validate:vi.fn().mockResolvedValue({sha}),verify:vi.fn().mockResolvedValue({executeQuery})};
   const result = await runDemoDiagnostic(diagnosticEnv,deps);
-  expect(deps.verify).toHaveBeenCalledWith(expect.objectContaining({expectedVersion:DIAGNOSTIC_DEPLOYED_SHA}));
-  expect(result).toMatchObject({executorVersion:sha,deployedVersion:DIAGNOSTIC_DEPLOYED_SHA,requiredRoles:{MENTOR:true,INSTITUTION:true,STUDENT:false}});
+  expect(deps.verify).toHaveBeenCalledWith(expect.objectContaining({expectedVersion:sha}));
+  expect(result).toMatchObject({executorVersion:sha,deployedVersion:sha,requiredRoles:{MENTOR:true,INSTITUTION:true,STUDENT:false}});
   expect(Object.values(result.ownedCounts).every(count=>count===0)).toBe(true);
   expect(queries.every(({sql,params})=>sql.startsWith("SELECT COUNT(*) AS total FROM ") && params.length<=40)).toBe(true);
-  expect(JSON.stringify(result)).not.toMatch(/privateData|discard|invalid.ttv|member-/);
+  expect(JSON.stringify(result)).not.toMatch(/privateData|discard|invalid.ttv|ttv-staging-demo-v1/);
+  expect(result).toMatchObject({syntheticPeople:0,personas:{"member-cohort":false,"member-noncohort":false,mentor:false,institution:false}});
 });
-it.each([{STAGING_ACTION:"seed-demo"},{GITHUB_RUN_ATTEMPT:"2"},{STAGING_EXPECTED_DEPLOYED_SHA:sha}])("rejects diagnostic guard mismatch before access: %j",async overrides=>{
+it.each([{STAGING_ACTION:"seed-demo"},{GITHUB_RUN_ATTEMPT:"2"},{STAGING_EXPECTED_DEPLOYED_SHA:"b".repeat(40)}])("rejects diagnostic guard mismatch before access: %j",async overrides=>{
   const deps=setup();
   await expect(runDemoDiagnostic({...diagnosticEnv,...overrides},deps)).rejects.toThrow("Read-only retained demo diagnostic failed");
   expect(deps.validate).not.toHaveBeenCalled();expect(deps.verify).not.toHaveBeenCalled();
@@ -121,6 +122,14 @@ it.each(["revision","identity","query","shape"])("fails closed and redacts diagn
   if(["revision","identity"].includes(stage))expect(executeQuery).not.toHaveBeenCalled();
 });
 it("does not let a separate diagnostic SHA alter the mutating seed target",async()=>{
-  const deps=setup();await expect(runDemoSeed({...env,STAGING_EXPECTED_DEPLOYED_SHA:DIAGNOSTIC_DEPLOYED_SHA},deps)).rejects.toThrow("One seed-demo dispatch is required.");
+  const deps=setup();await expect(runDemoSeed({...env,STAGING_EXPECTED_DEPLOYED_SHA:sha},deps)).rejects.toThrow("One seed-demo dispatch is required.");
   expect(deps.verify).not.toHaveBeenCalled();
+});
+
+it("reports ready personas only after provenance, exact role and cohort membership checks",async()=>{
+ const executeQuery=vi.fn(async(sql,params)=>[{results:[{total:sql.includes('FROM UserRoles WHERE') ? Number(params[0].endsWith('mentor')||params[0].endsWith('institution')) : sql.includes('FROM programApplication a') ? Number(params[0].endsWith('member-cohort')) : 1}]}]);
+ const deps={validate:vi.fn().mockResolvedValue({sha}),verify:vi.fn().mockResolvedValue({executeQuery})};
+ const result=await runDemoDiagnostic(diagnosticEnv,deps);
+ expect(result.personas).toEqual({"member-cohort":true,"member-noncohort":true,mentor:true,institution:true});
+ expect(executeQuery.mock.calls.every(([sql])=>sql.startsWith('SELECT COUNT(*) AS total FROM '))).toBe(true);
 });

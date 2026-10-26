@@ -2,6 +2,7 @@
 import BaseLayout from "./BaseLayout.astro";
 import AdminShell from "@/components/shells/AdminShell";
 import { env } from "cloudflare:workers";
+import { demoEnabled } from "@/lib/staging-demo-policy";
 import { isAgentAuthEnabled } from "@/lib/agent-auth";
 import { isLegacyImportEnabled } from "@/lib/admin/import";
 
@@ -22,6 +23,7 @@ if (!Astro.locals.isAdmin) {
     client:load
     currentPath={Astro.url.pathname}
     agentAuthEnabled={isAgentAuthEnabled(env.AGENT_AUTH_ENABLED)}
+    stagingDemoEnabled={demoEnabled(env.DEPLOYMENT_ENVIRONMENT, env.STAGING_DEMO_ENABLED, Astro.url.origin)}
     dataMigrationEnabled={isLegacyImportEnabled(env.DEPLOYMENT_ENVIRONMENT)}
   >
     <slot />
