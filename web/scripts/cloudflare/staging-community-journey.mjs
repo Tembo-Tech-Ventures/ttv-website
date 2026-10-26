@@ -213,6 +213,7 @@ export async function verifyStagingCommunityJourney({ baseUrl, contextsByRole, u
       await capture(lastInstitution, lastInstitution.locator(".discovery-app"), evidenceDirectory, ASSESSMENT_EVIDENCE_FILE);
     }
   } catch {
+    console.log(JSON.stringify({event:"synthetic-journey-failed",stage}));
     failure = true;
   } finally {
     const closed = await Promise.allSettled(pages.map(page => page.close()));

@@ -13,6 +13,7 @@ export function assertDiscoveryResult(data,id) {
 /** Same-run synthetic data only; all writes cascade away with the existing persona lifecycle. */
 export async function verifyBrowserDiscovery({target,contextsByRole,personas}) {
  assertJourneyScope({baseUrl:target.baseUrl,contextsByRole,users:personas});
+ console.log(JSON.stringify({event:"discovery-live-started"}));
  const member=contextsByRole.member.request;
  const options={headers:{Origin:target.baseUrl},maxRedirects:0};
  const saved=await member.put('/api/community/profile',{...options,data:{headline:'Python developer',bio:'I build Python data-analysis tools.',skills:['Python'],opportunityGoals:'Field data work'}});assert.equal(saved.status(),200);
@@ -24,7 +25,9 @@ export async function verifyBrowserDiscovery({target,contextsByRole,personas}) {
   await page.getByLabel('Skills to explore').fill(DISCOVERY_QUERY.skills);
   const responsePromise=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/community/profiles/discover',{timeout:75000});
   const started=Date.now();await page.getByRole('button',{name:'Discover people',exact:true}).click();
-  const response=await responsePromise;assert.equal(response.status(),200);const data=await response.json();assertDiscoveryResult(data,personas.member.userId);
+  const response=await responsePromise;console.log(JSON.stringify({event:"discovery-live-response",status:response.status(),latencyMs:Date.now()-started}));assert.equal(response.status(),200);const data=await response.json();
+  console.log(JSON.stringify({event:"discovery-live-assessment",evaluated:data.evaluated,firstIsExpected:data.profiles?.[0]?.profile?.userId===personas.member.userId,matches:data.profiles?.[0]?.matches?.map(m=>({python:/python/i.test(m.criterion.text),firstAid:/first[ -]?aid/i.test(m.criterion.text),status:m.status}))}));
+  assertDiscoveryResult(data,personas.member.userId);
   for(const width of [1440,390]) {
    await page.setViewportSize({width,height:1000});
    await expect(page.locator('.discovery-person').first().getByText(/first[ -]?aid/i)).toBeVisible();

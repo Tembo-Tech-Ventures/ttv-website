@@ -268,3 +268,15 @@ describe("fixed browser verification", () => {
     expect(f.contexts[0].request.post).not.toHaveBeenCalled();
   });
 });
+
+it("reports a fixed discovery failure stage and still closes every context",async()=>{
+ const f=browserFixture(),verifyDiscovery=vi.fn(async()=>{throw new Error("private provider response");});
+ const log=vi.spyOn(console,"log").mockImplementation(()=>{});
+ try {
+  await expect(verifyStagingPersonas({...f,browserDiscovery:true,verifyDiscovery})).rejects.toThrow("Synthetic staging verification failed");
+  expect(verifyDiscovery).toHaveBeenCalledOnce();
+  expect(f.contexts.every(c=>c.close.mock.calls.length===1)).toBe(true);
+  expect(log).toHaveBeenCalledWith(JSON.stringify({event:"synthetic-verification-failed",stage:"discovery"}));
+  expect(log.mock.calls.flat().join(" ")).not.toContain("private provider");
+ } finally {log.mockRestore();}
+});
