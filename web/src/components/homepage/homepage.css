@@ -1,65 +1,86 @@
-.home-introduction { color: var(--color-ink-primary); }
-.home-container { width: min(100% - 2rem, 80rem); margin-inline: auto; }
-.home-hero { container-type: inline-size; padding-block: clamp(3rem, 7vw, 7rem) 4rem; }
-.home-wordmark { font-family: var(--font-heading); letter-spacing: var(--tracking-display); margin: 0; font-size: clamp(2rem, 14vw, 12rem); font-size: 19.3cqw; line-height: 1; }
-.home-signature { margin-top: 1rem; font-size: 0.8rem; letter-spacing: 0.3em; text-transform: uppercase; color: var(--color-primary); }
-.home-hero-bottom { display: grid; gap: 2rem; margin-top: clamp(2.5rem, 6vw, 5rem); }
-.home-lead { font-family: var(--font-heading); font-size: clamp(1.5rem, 3.4vw, 2.75rem); line-height: 1.2; letter-spacing: var(--tracking-heading); }
-.home-invitation { max-width: 35rem; }
-.home-invitation > p:first-child, .home-explanation { font-size: 1.125rem; line-height: 1.65; color: var(--color-ink-secondary); }
-.home-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.5rem; margin-top: 1.5rem; }
-.home-button { display: inline-flex; align-items: center; justify-content: space-between; gap: 1.25rem; min-height: 48px; padding: 0.85rem 1.5rem; border-radius: 999px; background: var(--color-primary); color: var(--color-dark); font-weight: 600; }
-.home-button:hover { background: var(--color-ink-primary); }
-.home-caption { margin-top: 1rem; color: var(--color-ink-muted); font-size: 0.875rem; }
-.home-text-link { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 44px; color: var(--color-primary); text-decoration: underline; text-underline-offset: 0.3em; text-decoration-color: transparent; }
+.home-introduction { --home-ease: cubic-bezier(.22, 1, .36, 1); color: var(--color-ink-primary); }
+/* The same inner edges as PublicLayout's navigation, at every breakpoint. */
+.home-container { box-sizing: border-box; width: 100%; max-width: 80rem; padding-inline: 1rem; margin-inline: auto; }
+.home-hero { position: relative; padding-top: clamp(3rem, 7vw, 6.5rem); padding-bottom: clamp(4rem, 7vw, 6rem); }
+.home-wordmark { margin: 0; font-family: var(--font-heading); letter-spacing: -.025em; font-size: clamp(2.5rem, 7.4vw, 6.25rem); line-height: 1.13; }
+.home-wordmark-line { display: block; overflow: clip; padding-bottom: .05em; }
+.home-wordmark-line > span { display: block; }
+.home-wordmark-line + .home-wordmark-line { color: var(--color-primary); }
+.home-invitation { margin-top: 2rem; max-width: 36rem; }
+.home-description { max-width: 34rem; font-size: clamp(1rem, 1.5vw, 1.125rem); line-height: 1.75; color: var(--color-ink-secondary); }
+.home-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.5rem; margin-top: 1.75rem; }
+.home-button { display: inline-flex; align-items: center; justify-content: space-between; gap: 1.25rem; min-height: 52px; padding: .5rem .5rem .5rem 1.25rem; border-radius: 999px; background: var(--color-primary); color: var(--color-dark); font-size: .9375rem; font-weight: 600; }
+.home-button-arrow { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: 50%; background: var(--color-dark); color: var(--color-primary); font-size: 1.35rem; }
+.home-button:hover, .home-button:focus-visible { background: var(--color-ink-primary); }
+.home-text-link { display: inline-flex; align-items: center; gap: .7rem; min-height: 44px; font-size: .9375rem; color: var(--color-primary); text-decoration: underline; text-underline-offset: .35em; text-decoration-color: transparent; }
 .home-text-link:hover { text-decoration-color: currentColor; }
 .home-introduction a:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 6px; }
-.home-section { position: relative; padding-block: clamp(3.5rem, 7vw, 6rem); }
-.home-section::before { content: ""; position: absolute; inset: 0 0 auto; height: 1px; background: var(--color-rule); transform-origin: left; }
+.home-hero-line { height: 1px; background: var(--color-rule); margin-top: clamp(4rem, 7vw, 6rem); transform-origin: left; }
+.home-section { padding-block: clamp(2rem, 5vw, 4rem) clamp(4rem, 8vw, 7rem); }
 .home-section, .home-commitments-heading { scroll-margin-top: 7rem; }
-.home-section-intro { display: grid; gap: 2rem; }
-.home-heading { font-family: var(--font-heading); font-size: clamp(1.65rem, 4.6vw, 3.75rem); line-height: 1.15; letter-spacing: var(--tracking-heading); overflow-wrap: anywhere; }
+.home-heading { font-family: var(--font-heading); font-size: clamp(1.75rem, 3.5vw, 2.75rem); line-height: 1.18; letter-spacing: var(--tracking-heading); overflow-wrap: anywhere; }
 .home-heading span { color: var(--color-primary); }
-.home-explanation p + p { margin-top: 1rem; }
-.home-explanation a { margin-top: 1.25rem; font-size: 1rem; }
-.home-pathways { margin-top: 3rem; }
-.home-pathway { display: grid; gap: 0.75rem; padding: 1.75rem 0; border-top: 1px solid var(--color-rule); }
-.home-audience { color: var(--color-primary); font-size: 0.875rem; }
-.home-pathway-body { display: block; min-width: 0; }
-.home-pathway-title { display: block; font-size: 1.375rem; font-weight: 600; }
-.home-pathway-copy { display: block; margin-top: 0.5rem; max-width: 36rem; color: var(--color-ink-secondary); line-height: 1.6; }
-.home-pathway-link { display: inline-flex; align-items: center; gap: 1.5rem; color: var(--color-primary); font-size: 0.875rem; }
+.home-explanation { margin-top: 1.5rem; max-width: 30rem; font-size: 1rem; line-height: 1.75; color: var(--color-ink-secondary); }
+.home-section-intro > a { margin-top: .65rem; }
+.home-story { display: grid; gap: 3rem; }
+.home-pathways { margin-top: 2rem; }
+.home-pathway { position: relative; isolation: isolate; display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding-block: 1.25rem; border-top: 1px solid var(--color-rule); }
+.home-pathway::before { content: ""; position: absolute; z-index: -1; inset: 0 -.75rem; border-radius: .25rem; background: var(--color-primary); opacity: 0; transform: scaleY(.6); transform-origin: bottom; }
+.home-audience { display: block; font-size: 1.125rem; font-weight: 600; }
+.home-pathway-body { min-width: 0; }
+.home-pathway-copy { display: block; margin-top: .3rem; max-width: 23rem; font-size: .9375rem; color: var(--color-ink-secondary); line-height: 1.6; }
+.home-pathway-link { flex-shrink: 0; display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border: 1px solid var(--color-rule); border-radius: 50%; color: var(--color-primary); }
 .home-arrow { display: inline-block; font-size: 1.5rem; }
-.home-pathway:hover, .home-pathway:focus-visible { border-top-color: var(--color-primary); }
-.home-pathway:hover .home-pathway-title, .home-pathway:focus-visible .home-pathway-title { color: var(--color-primary); }
-.home-commitments { margin-top: 2.5rem; }
-.value-commitment-row { display: grid; min-width: 0; gap: 0.75rem; padding-block: 1.5rem; border-top: 1px solid var(--color-rule); }
-.value-word { min-width: 0; font-family: var(--font-heading); font-size: clamp(1rem, 3.5vw, 2.125rem); letter-spacing: var(--tracking-subhead); color: var(--color-primary); overflow-wrap: anywhere; }
-.value-commitment-copy { max-width: 36rem; line-height: 1.7; color: var(--color-ink-secondary); }
-@media (min-width: 640px) {
-  .home-container { width: min(100% - 4rem, 80rem); }
-  .home-pathway { grid-template-columns: 7rem minmax(0, 1fr); gap: 0.75rem 1.5rem; }
-  .home-pathway-link { grid-column: 2; }
+.home-pathway:is(:hover, :focus-visible)::before { opacity: 1; transform: scaleY(1); }
+.home-pathway:is(:hover, :focus-visible), .home-pathway:is(:hover, :focus-visible) .home-pathway-copy { color: var(--color-dark); }
+.home-pathway:is(:hover, :focus-visible) .home-pathway-link { border-color: var(--color-dark); color: var(--color-dark); }
+.home-evidence { align-self: start; min-width: 0; }
+.home-evidence figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; margin-bottom: 1rem; font-size: .875rem; }
+.home-evidence figcaption span { color: var(--color-ink-muted); font-size: .75rem; }
+.home-evidence-paper { padding: clamp(1.25rem, 3vw, 2.5rem); background: #f6eee5; color: #013d39; border-radius: .5rem; }
+.home-example-person { display: flex; align-items: center; gap: .85rem; }
+.home-example-person p { font-weight: 600; }
+.home-example-person div > span { display: block; margin-top: .2rem; font-size: .75rem; color: #4b625c; }
+.home-example-avatar { display: grid; flex-shrink: 0; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 50%; background: #ead9c7; font-size: .875rem; font-weight: 600; }
+.home-example-project { font-family: var(--font-heading); font-size: clamp(1.25rem, 2.4vw, 1.75rem); line-height: 1.25; letter-spacing: -.015em; margin-block: 2rem; }
+.home-evidence-thread { position: relative; padding-left: 1.5rem; }
+.home-evidence-thread::before { content: ""; position: absolute; left: .25rem; top: 1rem; bottom: 2.5rem; width: 1px; background: #b9c6bc; transform-origin: top; }
+.home-evidence-item { position: relative; padding: .85rem; margin-inline: -.85rem; border-radius: .25rem; }
+.home-evidence-item + .home-evidence-item { margin-top: 1rem; }
+.home-evidence-dot { position: absolute; left: -.75rem; top: 1rem; width: .5rem; height: .5rem; background: #f28d68; border-radius: 50%; box-shadow: 0 0 0 4px #f6eee5; }
+.home-evidence-label { font-size: .6875rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #4b625c; }
+.home-evidence-item > p + p { margin-top: .6rem; font-size: 1.0625rem; line-height: 1.55; }
+.home-evidence-detail { display: block; margin-top: .6rem; font-size: .75rem; color: #4b625c; }
+.home-story[data-active-stage="contribution"] [data-evidence-stage="contribution"], .home-story[data-active-stage="mentor"] [data-evidence-stage="mentor"], .home-story[data-active-stage="question"] [data-evidence-stage="question"] { background: #f5d4bc; }
+.home-story[data-active-stage="contribution"] [data-evidence-stage="contribution"] .home-evidence-dot, .home-story[data-active-stage="mentor"] [data-evidence-stage="mentor"] .home-evidence-dot, .home-story[data-active-stage="question"] [data-evidence-stage="question"] .home-evidence-dot { background: #013d39; }
+.home-commitments { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 2.5rem; margin-top: 2.5rem; }
+.value-commitment-row { min-width: 0; }
+.value-word { font-family: var(--font-heading); font-size: 1.0625rem; letter-spacing: var(--tracking-subhead); color: var(--color-primary); overflow-wrap: anywhere; }
+.value-commitment-copy { margin-top: .85rem; line-height: 1.7; font-size: .9375rem; color: var(--color-ink-secondary); overflow-wrap: break-word; }
+.home-footer-lockup { container-type: inline-size; width: min(100%, 46rem); padding-block: 4rem 2rem; font-family: var(--font-heading); line-height: 1; letter-spacing: -.025em; }
+.home-footer-lockup span { display: block; font-size: 19.1cqw; }
+.home-footer-lockup span + span { margin-top: .4rem; font-size: 8.1cqw; color: var(--color-primary); }
+@media (min-width: 640px) { .home-container { padding-inline: 1.5rem; } }
+@media (min-width: 1024px) {
+  .home-container { padding-inline: 2rem; }
+  .home-story { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 6.25%; }
+  .home-evidence { position: sticky; top: 7rem; }
 }
-@media (min-width: 960px) {
-  .home-hero-bottom, .home-section-intro, .value-commitment-row { grid-template-columns: 1fr 1fr; gap: 3rem; }
-  .home-hero { padding-bottom: 5rem; }
-  .home-pathways { margin-top: 4rem; }
-  .home-pathway { grid-template-columns: 9rem minmax(0, 1fr) auto; align-items: baseline; gap: 2rem; }
-  .home-pathway-link { grid-column: auto; }
-}
-/* Progressive enhancement: no hidden content, scroll listeners, or JS bundle.
-   Browsers without scroll timelines simply keep the rules fully drawn. */
 @media (prefers-reduced-motion: no-preference) {
-  .home-wordmark { animation: home-arrive 650ms ease-out both; }
-  .home-hero-bottom { animation: home-arrive 650ms 100ms ease-out both; }
-  .home-arrow { transition: transform 180ms ease-out; }
-  .home-button, .home-text-link, .home-pathway, .home-pathway-title { transition: color 180ms, background-color 180ms, border-color 180ms, text-decoration-color 180ms; }
-  .home-pathway:hover .home-arrow, .home-pathway:focus-visible .home-arrow { transform: translate(3px, -3px); }
+  .home-wordmark-line > span { animation: home-typeset 950ms var(--home-ease) both; }
+  .home-wordmark-line + .home-wordmark-line > span { animation-delay: 100ms; }
+  .home-invitation { animation: home-arrive 1000ms 220ms var(--home-ease) both; }
+  .home-hero-line { animation: home-rule 1200ms 200ms var(--home-ease) both; }
+  .home-pathway::before { transition: opacity 350ms, transform 550ms var(--home-ease); }
+  .home-arrow, .home-button-arrow { transition: transform 450ms var(--home-ease); }
+  .home-button, .home-text-link, .home-pathway, .home-pathway-copy, .home-pathway-link, .home-evidence-item, .home-evidence-dot { transition: color 300ms, background-color 350ms, border-color 300ms, text-decoration-color 300ms; }
+  .home-pathway:is(:hover, :focus-visible) .home-arrow, .home-button:is(:hover, :focus-visible) .home-button-arrow { transform: rotate(45deg); }
   @supports (animation-timeline: view()) {
-    .home-section { view-timeline-name: --home-section; view-timeline-axis: block; }
-    .home-section::before { animation: home-rule linear both; animation-timeline: --home-section; animation-range: entry 0% entry 100%; }
+    .home-evidence { view-timeline-name: --home-evidence; }
+    .home-evidence-thread::before { animation: home-thread linear both; animation-timeline: --home-evidence; animation-range: entry 15% entry 85%; }
   }
 }
-@keyframes home-arrive { from { opacity: 0.8; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-@keyframes home-rule { from { transform: scaleX(0.35); } to { transform: scaleX(1); } }
+@keyframes home-typeset { from { transform: translateY(105%); } to { transform: translateY(0); } }
+@keyframes home-arrive { from { opacity: .3; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+@keyframes home-rule { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes home-thread { from { transform: scaleY(0); } to { transform: scaleY(1); } }

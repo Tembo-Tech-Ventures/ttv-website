@@ -1,4 +1,5 @@
 ---
+import HomeBrand from "@/components/homepage/HomeBrand";
 import BaseLayout from "./BaseLayout.astro";
 import Grain from "@/components/common/Grain.astro";
 import type { SeoProps } from "@/lib/seo";
@@ -18,6 +19,7 @@ type Props = SeoProps;
 
 const seo = Astro.props;
 const isAuthenticated = Boolean(Astro.locals.user);
+const isHomepage = Astro.url.pathname === "/";
 
 ---
 
@@ -191,15 +193,15 @@ const isAuthenticated = Boolean(Astro.locals.user);
         </div>
       </div>
 
-      {/* Oversized TEMBO signature — PROPOSAL §7. */}
-      <div aria-hidden="true" class="mt-10 select-none overflow-hidden text-center leading-[0.85]">
-        <span
-          class="font-heading tracking-display block translate-y-[18%] whitespace-nowrap text-transparent"
-          style="font-size: clamp(6rem, 24vw, 22rem); -webkit-text-stroke: 1px var(--color-primary);"
-        >
-          TEMBO
-        </span>
-      </div>
+      {isHomepage ? (
+        <div class="home-container" aria-hidden="true">
+          <HomeBrand />
+        </div>
+      ) : (
+        <div aria-hidden="true" class="mt-10 select-none overflow-hidden text-center leading-[0.85]">
+          <span class="font-heading tracking-display block translate-y-[18%] whitespace-nowrap text-transparent" style="font-size: clamp(6rem, 24vw, 22rem); -webkit-text-stroke: 1px var(--color-primary);">TEMBO</span>
+        </div>
+      )}
     </footer>
   </div>
 </BaseLayout>

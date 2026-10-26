@@ -8,7 +8,7 @@ for (const width of [320, 390, 768, 1440, 2560]) {
     await page.evaluate(() => document.fonts.ready);
     await assertHomepageValues(page);
     const wordmark = page.locator("h1");
-    await expect(wordmark).toHaveText("TEMBO");
+    await expect(wordmark).toHaveAccessibleName("Great builders. Already here.");
     expect(await wordmark.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
     for (const link of await page.locator(".home-pathway").all()) {
       expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -29,7 +29,7 @@ test("keyboard focus and contextual link motion work without hydration", async (
   const member = page.locator('a[href="/community/members"]');
   await member.focus();
   expect(await member.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe("solid");
-  await expect.poll(() => member.locator(".home-arrow").evaluate((el) => getComputedStyle(el).transform)).toBe("matrix(1, 0, 0, 1, 3, -3)");
+  await expect.poll(() => member.locator(".home-arrow").evaluate((el) => getComputedStyle(el).transform)).toBe("matrix(0.707107, 0.707107, -0.707107, 0.707107, 0, 0)");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/community\/members$/);
 });
@@ -67,14 +67,94 @@ test("content and navigation survive disabled JavaScript", async ({ page }) => {
   await context.close();
 });
 
-test("section divider draws across a useful scroll distance", async ({ page }) => {
+test("hero type settles and stays within its container", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/homepage-values.html");
+  const line = page.locator(".home-wordmark-line > span").first();
+  await expect.poll(() => line.evaluate((el) => el.getAnimations().some((animation) => animation.playState === "running"))).toBe(true);
+  const during = await line.evaluate((el) => getComputedStyle(el).transform);
+  await expect.poll(() => line.evaluate((el) => getComputedStyle(el).transform)).not.toBe(during);
+  await expect.poll(() => line.evaluate((el) => el.getAnimations().every((animation) => animation.playState === "finished"))).toBe(true);
+  expect(await line.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+});
+
+test("mobile action precedes the illustration and remains in the first viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/homepage-values.html");
+  const action = (await page.getByRole("link", { name: "Join the community" }).boundingBox())!;
+  expect(action.y + action.height).toBeLessThan(700);
+  expect((await page.locator(".home-evidence").boundingBox())!.y).toBeGreaterThan(action.y);
+});
+
+test("audience hover and keyboard focus highlight the corresponding fictional evidence", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/homepage-values.html");
+  const story = page.locator(".home-story");
+  for (const stage of ["contribution", "mentor", "question"]) {
+    const link = page.locator(`[data-home-stage="${stage}"]`);
+    await link.hover();
+    await expect(story).toHaveAttribute("data-active-stage", stage);
+    await expect.poll(() => page.locator(`[data-evidence-stage="${stage}"]`).evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(245, 212, 188)");
+    await page.mouse.move(0, 0);
+    await expect(story).toHaveAttribute("data-active-stage", "");
+    await link.focus();
+    await expect(story).toHaveAttribute("data-active-stage", stage);
+    await page.getByRole("link", { name: "How it works", exact: true }).focus();
+  }
+  await expect(page.getByText("Fictional illustration", { exact: true })).toBeVisible();
+});
+
+test("scroll reveals run and live reduced-motion changes cancel movement", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 700 });
+  await page.goto("/homepage-values.html");
+  const row = page.locator("[data-evidence-stage=question]");
+  await row.scrollIntoViewIfNeeded();
+  await expect.poll(() => row.evaluate((el) => el.getAnimations().some((animation) => animation.playState === "running"))).toBe(true);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect.poll(() => row.evaluate((el) => el.getAnimations().length)).toBe(0);
+  await expect(row).toBeVisible();
+  expect(await page.locator(".home-evidence-thread").evaluate((el) => getComputedStyle(el, "::before").animationName)).toBe("none");
+});
+
+test("evidence connector draws over scrolling and settles at full length", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/homepage-values.html");
-  const section = page.locator("#values");
-  const scale = () => section.evaluate((el) => new DOMMatrixReadOnly(getComputedStyle(el, "::before").transform).a);
-  const top = await section.evaluate((el) => el.getBoundingClientRect().top + scrollY);
+  const top = await page.locator(".home-evidence").evaluate((el) => el.getBoundingClientRect().top + scrollY);
+  const scale = () => page.locator(".home-evidence-thread").evaluate((el) => new DOMMatrixReadOnly(getComputedStyle(el, "::before").transform).d);
   await page.evaluate((y) => scrollTo(0, y), top - 850);
-  await expect.poll(scale).toBeLessThan(0.6);
-  await page.evaluate((y) => scrollTo(0, y), top - 450);
-  await expect.poll(scale).toBeGreaterThan(0.8);
+  await expect.poll(scale).toBeLessThan(.2);
+  await page.evaluate((y) => scrollTo(0, y), top - 250);
+  await expect.poll(scale).toBeGreaterThan(.8);
+});
+
+test("unsupported intersection observer leaves all content and navigation usable", async ({ page }) => {
+  await page.addInitScript(() => { Reflect.deleteProperty(window, "IntersectionObserver"); });
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/homepage-values.html");
+  await assertHomepageValues(page);
+  expect(errors).toEqual([]);
+});
+
+test("unresponsive font loading cannot leave the entrance paused", async ({ page }) => {
+  await page.addInitScript(() => { document.fonts.load = () => new Promise(() => {}); });
+  await page.goto("/homepage-values.html");
+  const line = page.locator(".home-wordmark-line > span").first();
+  await expect.poll(() => line.evaluate((el) => el.getAnimations().every((animation) => animation.playState === "finished")), { timeout: 2500 }).toBe(true);
+  await expect(page.getByRole("link", { name: "Join the community" })).toBeVisible();
+});
+
+test("footer brand has balanced complete lines at desktop and mobile", async ({ page }) => {
+  for (const width of [320, 390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/homepage-values.html");
+    await page.evaluate(() => document.fonts.ready);
+    const lines = page.locator(".home-footer-lockup span");
+    await expect(lines).toHaveText(["TEMBO", "TECH VENTURES"]);
+    const sizes = await lines.evaluateAll((elements) => elements.map((el) => parseFloat(getComputedStyle(el).fontSize)));
+    expect(sizes[0] / sizes[1]).toBeLessThan(3);
+    for (const line of await lines.all()) {
+      expect(await line.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    }
+  }
 });

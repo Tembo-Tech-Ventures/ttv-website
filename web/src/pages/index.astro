@@ -1,4 +1,5 @@
 ---
+import headingFont from "@/assets/fonts/Mattone-Black.woff2?url";
 import PublicLayout from "@/layouts/PublicLayout.astro";
 import HomeIntroduction from "@/components/homepage/HomeIntroduction";
 import HumansSection from "@/components/homepage/HumansSection.astro";
@@ -34,6 +35,7 @@ function formatDate(date: Date): string {
   description="Tembo Tech Ventures helps grow practical tech communities across Africa through cohorts, mentorship, and lasting professional relationships."
   canonical="/"
 >
+  <link slot="head" rel="preload" href={headingFont} as="font" type="font/woff2" crossorigin="anonymous" />
   <HomeIntroduction isAuthenticated={Boolean(Astro.locals.user)} />
   <HumansSection />
   {latestPosts.length > 0 && (
@@ -96,3 +98,9 @@ function formatDate(date: Date): string {
     </section>
   )}
 </PublicLayout>
+
+<script>
+  import { initHomepageMotion } from "@/components/homepage/motion";
+  const homepage = document.querySelector<HTMLElement>(".home-introduction");
+  if (homepage) initHomepageMotion(homepage);
+</script>

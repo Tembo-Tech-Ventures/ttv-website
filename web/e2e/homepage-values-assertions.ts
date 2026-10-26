@@ -4,7 +4,7 @@ import { VALUES } from "../src/components/homepage/values";
 /** The same assertions run against server markup locally and the deployed homepage. */
 export async function assertHomepageValues(page: Page) {
   const intro = page.locator(".home-introduction");
-  await expect(intro.getByRole("heading", { level: 1 })).toHaveAccessibleName("Tembo Tech Ventures");
+  await expect(intro.getByRole("heading", { level: 1 })).toHaveAccessibleName("Great builders. Already here.");
   await expect(intro.getByRole("region", { name: "Our values" })).toHaveCount(0);
   await expect(intro).not.toContainText("§");
   const rows = intro.locator(".value-commitment-row");

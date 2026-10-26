@@ -24,7 +24,7 @@ describe("simplified homepage", () => {
     const html = render();
     expect(html).toContain('href="/auth/login?next=%2Fdashboard%2Fcommunity"');
     expect(html.split("Join the community")).toHaveLength(2);
-    expect(html).toContain("Open with or without a cohort.");
+    expect(html).toContain("with or without a cohort.");
     expect(html).toContain('href="/community"');
   });
   it("takes signed-in members straight to their journey", () => {
@@ -44,17 +44,26 @@ describe("simplified homepage", () => {
     expect(html).toContain("work you have actually checked");
     expect(html).toContain('aria-label="Find your place at Tembo"');
   });
-  it("keeps existing incoming fragment links and a complete h1 accessible name", () => {
+  it("labels the example as fictional and connects distinct evidence stages", () => {
+    const html = render();
+    expect(html).toContain("Fictional illustration");
+    expect(html).toContain("fictional mentor");
+    expect(html.match(/data-evidence-stage=/g)).toHaveLength(3);
+    expect(html).not.toContain('tabindex="0"');
+    expect(html.match(/data-home-reveal/g)).toHaveLength(8);
+  });
+  it("keeps existing incoming fragment links and a clear h1 accessible name", () => {
     const html = render();
     for (const id of ["what-we-do", "why-tembo", "values"]) expect(html).toContain(`id="${id}"`);
     expect(html.match(/<h1\b/g)).toHaveLength(1);
-    expect(html).toContain('aria-label="Tembo Tech Ventures"');
+    expect(html).toContain('aria-label="Great builders. Already here."');
   });
   it("composes the real homepage without reintroducing legacy repeated sections or hydration", () => {
     const route = readFileSync(new URL("../../pages/index.astro", import.meta.url), "utf8");
     expect(route.match(/<HomeIntroduction\b/g)).toHaveLength(1);
     expect(route).not.toMatch(/CommunityIntro|FeaturesSection|ValuesSection|Marquee|ValueSection|client:/);
     expect(route).toContain("latestPosts.length > 0");
+    expect(route).toContain("initHomepageMotion(homepage)");
     expect(route).not.toContain("&sect;");
     const humans = readFileSync(new URL("./HumansSection.astro", import.meta.url), "utf8");
     expect(humans).toContain('id="humans"');
