@@ -34,6 +34,7 @@ interface Props {
   demo?: boolean;
   onAssess?: AssessEvidence;
   onOrder?: (criteria: ScoutCriteria) => Promise<EvidenceOrder>;
+  onDiscover?: (criteria: ScoutCriteria) => Promise<CommunityProfile[]>;
   onSearch?: (criteria: ScoutCriteria) => Promise<CommunityProfile[]>;
   onOpenProfile?: (profileId: string) => Promise<CommunityProfile>;
   onAsk?: (
@@ -307,11 +308,24 @@ export function EvidenceOrdering({enabled,count,ordering,order,onOrder}:{enabled
               </section>);
 }
 
+export function EvidenceMatches({profile}:{profile:CommunityProfile}) {
+  if(!profile.matches)return null;
+  return <ul aria-label={`Evidence match for ${profile.name}`}>
+    {profile.matches.map(match=><li key={`${match.criterion.importance}:${match.criterion.text}`}><strong>{match.criterion.text}</strong> ({match.criterion.importance}): {({supported:"Supported by published evidence",partial:"Related evidence",unknown:"No published evidence found",contradicted:"Evidence says not met"})[match.status]}</li>)}
+  </ul>;
+}
+function SearchExplanation({ai,lookup,profiles}:{ai:boolean;lookup:boolean;profiles:CommunityProfile[]}) {
+  if(!ai || lookup)return <>Up to 50 matching profiles, alphabetical. Open a profile to explore its evidence.</>;
+  const counts=profiles[0]?.discovery;
+  return <>AI compares published evidence against your criteria. {counts && `${counts.evaluated} candidates assessed from ${counts.searched} eligible profiles.`} This shortlist is not exhaustive. Missing evidence stays unknown; people make the hiring decision.</>;
+}
+
 export default function ScoutWorkspace({
   profiles,
   initialProfile = null,
   demo = false,
   onSearch,
+  onDiscover,
   onOrder,
   onAsk,
   onOpenProfile,
@@ -372,7 +386,8 @@ export default function ScoutWorkspace({
       searching.current = false;
       try {
         if (location.step === "results") {
-          const restored = onSearch ? await onSearch(location.criteria) : filterDemoProfiles(profiles, location.criteria);
+          const searcher = !location.lookup && onDiscover ? onDiscover : onSearch;
+          const restored = searcher ? await searcher(location.criteria) : filterDemoProfiles(profiles, location.criteria);
           if (disposed || epoch !== navigationEpoch.current) return;
           setResults(restored);
         }
@@ -391,7 +406,7 @@ export default function ScoutWorkspace({
     if (window.location.search.includes("scout=") || window.location.search.includes("profile=")) void restore();
     window.addEventListener("popstate", restore);
     return () => { disposed = true; window.removeEventListener("popstate", restore); };
-  }, [onSearch, onOpenProfile, profiles]);
+  }, [onSearch, onDiscover, onOpenProfile, profiles]);
   function remember(nextStep: "criteria" | "results", profileId: string | null = null, submitted = appliedCriteria) {
     pushScoutLocation({ criteria: submitted, step: nextStep, profileId, lookup });
   }
@@ -439,8 +454,9 @@ export default function ScoutWorkspace({
     setBusy(true);
     setError("");
     try {
-      if (onSearch) {
-        const found = await onSearch(searchCriteria);
+      const searcher = !lookup && onDiscover ? onDiscover : onSearch;
+      if (searcher) {
+        const found = await searcher(searchCriteria);
         if (epoch !== navigationEpoch.current) return;
         setResults(found);
       }
@@ -584,7 +600,7 @@ export default function ScoutWorkspace({
                       />
                       <small>
                         Describe the opportunity and what a good contribution
-                        looks like. This context informs evidence ordering, not directory skill matching. Avoid confidential information.
+                        looks like. We use your full description to find and compare published evidence. Avoid confidential information.
                       </small>
                     </label>
                     <label className="discovery-field">
@@ -601,8 +617,7 @@ export default function ScoutWorkspace({
                         placeholder="React, TypeScript, accessibility"
                       />
                       <small>
-                        Separate skills with commas. Leave blank to explore
-                        everyone.
+                        Separate skills with commas. These supplement your full description.
                       </small>
                     </label>
                     <label className="discovery-field">
@@ -692,8 +707,7 @@ export default function ScoutWorkspace({
                 </p>
               )}
               <p className="discovery-muted">
-                Explore source evidence and individual contributions. This list
-                is not an overall ranking of people. Up to 50 matching profiles, alphabetical; refine filters. This is not a total count of eligible members.
+                <SearchExplanation ai={Boolean(onDiscover)} lookup={lookup} profiles={results} />
               </p>
               <div className="discovery-results">
                 {results.map((profile) => (
@@ -717,6 +731,7 @@ export default function ScoutWorkspace({
                         <span key={skill}>{skill}</span>
                       ))}
                     </div>
+                    <EvidenceMatches profile={profile} />
                     <div className="discovery-person-evidence">
                       {profile.evidenceLoaded === false ? (
                         <span>

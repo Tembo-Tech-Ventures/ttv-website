@@ -10,9 +10,13 @@ export function requireCommunityGateway(env?: Env): asserts env is Env & { AI_GA
 
 /** Explicit authenticated binding route; never direct inference, HTTP fallback or application retry. */
 export async function runCommunityModel(env: Env, inputs: Record<string, unknown>): Promise<unknown> {
+  return runDiscoveryModel(env, COMMUNITY_NATIVE_MODEL, inputs, 64_000);
+}
+
+export async function runDiscoveryModel(env: Env, model: string, inputs: Record<string, unknown>, maxBytes = 1_000_000): Promise<unknown> {
   requireCommunityGateway(env);
   try {
-    const response = await env.AI.run(COMMUNITY_NATIVE_MODEL as Parameters<typeof env.AI.run>[0], inputs, {
+    const response = await env.AI.run(model as Parameters<typeof env.AI.run>[0], inputs, {
       returnRawResponse: true,
       signal: AbortSignal.timeout(20_000),
       gateway: { id: env.AI_GATEWAY_NAME.trim(), skipCache: true, collectLog: false,
@@ -28,7 +32,7 @@ export async function runCommunityModel(env: Env, inputs: Record<string, unknown
         const chunk = await reader.read();
         if (chunk.done) break;
         bytes += chunk.value.byteLength;
-        if (bytes > 64_000) { await reader.cancel(); throw new Error(); }
+        if (bytes > maxBytes) { await reader.cancel(); throw new Error(); }
         text += decoder.decode(chunk.value, { stream: true });
       }
       text += decoder.decode();

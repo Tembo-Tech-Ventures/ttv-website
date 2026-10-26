@@ -1,3 +1,4 @@
+import { matchSchema } from "@/lib/community/discovery-contract";
 import { z } from "zod";
 import type {
   CommunityProfile,
@@ -116,7 +117,7 @@ export async function communityRequest<T>(
 ): Promise<T> {
   const controller = new AbortController();
   // Chat may use three bounded model steps (60s total); allow response overhead.
-  const timeoutMs = path === "chat" && method === "POST" ? 70_000 : 25_000;
+  const timeoutMs = (path === "chat" || path === "profiles/discover") && method === "POST" ? 70_000 : 25_000;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetcher(`/api/community/${path}`, {
@@ -188,6 +189,10 @@ export async function updateContribution(claim: JourneyClaim, draft: ClaimDraft)
   const saved=current.entries.find(entry=>entry.id===claim.id);
   if(!saved || saved.version<=claim.version)throw new UiApiError(502);
   return mapJourney(saved);
+}
+export async function discoverPeople(criteria: ScoutCriteria) {
+  const result = await communityRequest("profiles/discover", z.object({profiles:z.array(z.object({profile:profileSchema,matches:z.array(matchSchema)})),evaluated:z.number(),searched:z.number()}),"POST",criteria);
+  return result.profiles.map(item=>({...mapProfile(item.profile),matches:item.matches,discovery:{evaluated:result.evaluated,searched:result.searched}}));
 }
 export async function searchProfiles(criteria: ScoutCriteria) {
   // Both filters are evaluated by the service before its result limit.

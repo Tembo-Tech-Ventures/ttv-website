@@ -297,3 +297,27 @@ it('edits an owned contribution once per loaded revision and preserves confirmat
  const saved=(await f.member.listJourney())[0];expect(saved.version).toBe(3);expect(saved.confirmations).toHaveLength(1);expect(saved.confirmations[0].journeyVersion).toBe(2);
  await expect(createCommunityService(f.db,'other').updateJourney(item.id,{...next,expectedRevision:3})).rejects.toMatchObject({status:409});expect((await f.member.listJourney())[0].version).toBe(3);
 });
+
+describe("discovery corpus authorization",()=>{
+  it("includes published courses, excludes private journeys and superseded confirmations",async()=>{
+    const f=fixture();const course=await f.member.createJourney({...entry,title:"First Aid Course"});
+    await f.member.createJourney({...entry,visibility:"private",title:"Secret"});
+    await f.institution.createJourney({...entry,visibility:"private",title:"Institution private"});
+    await f.mentor.confirmJourney(course.id,{statement:"Reviewed the completed training",method:"Discussion",expectedRevision:1});
+    let corpus=await f.institution.discoveryEvidence();
+    expect(corpus.map(p=>p.profile.userId)).not.toContain("mentor");
+    expect(corpus.flatMap(p=>p.entries).map(e=>e.title)).toEqual(["First Aid Course"]);
+    expect(corpus.flatMap(p=>p.entries)[0].confirmations).toHaveLength(1);
+    await f.member.updateJourney(course.id,{...entry,title:"Updated training",expectedRevision:1});
+    corpus=await f.institution.discoveryEvidence();expect(corpus.flatMap(p=>p.entries)[0].confirmations).toEqual([]);
+    await expect(f.member.discoveryEvidence()).rejects.toMatchObject({status:403});
+    f.sql.exec("DELETE FROM UserRoles WHERE userId='institution'");
+    await expect(f.institution.discoveryEvidence()).rejects.toMatchObject({status:403});
+  });
+  it("protects the POST discovery endpoint before inference",async()=>{
+    const f=fixture();
+    const req=()=>new Request("https://ttv.test/api/community/profiles/discover",{method:"POST",headers:{Origin:"https://ttv.test","Content-Type":"application/json"},body:JSON.stringify({context:"Python",skills:"",query:""})});
+    expect((await handleCommunityRequest(req(),"profiles/discover",{id:"institution",scopes:["community:read"]},f.db)).status).toBe(403);
+    expect((await handleCommunityRequest(req(),"profiles/discover",null,f.db)).status).toBe(401);
+  });
+});

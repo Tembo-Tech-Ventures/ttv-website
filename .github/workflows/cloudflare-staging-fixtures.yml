@@ -8,6 +8,11 @@ on:
         required: true
         type: string
 
+      browser_discovery:
+        description: Bounded synthetic Python and first-aid discovery verification
+        required: false
+        type: boolean
+        default: false
       browser_chat:
         description: One synthetic desktop chat submission with tool and citation verification
         required: false
@@ -37,6 +42,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_BROWSER_DISCOVERY: ${{ inputs.browser_discovery }}
           STAGING_BROWSER_CHAT: ${{ inputs.browser_chat }}
           STAGING_BROWSER_ASSESSMENT: ${{ inputs.browser_assessment }}
           STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp
@@ -66,6 +72,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STAGING_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          STAGING_BROWSER_DISCOVERY: ${{ inputs.browser_discovery }}
           STAGING_BROWSER_CHAT: ${{ inputs.browser_chat }}
           STAGING_BROWSER_ASSESSMENT: ${{ inputs.browser_assessment }}
           STAGING_INTEGRATION_BRANCH: sam/use-sam-mcp-tools-m8a3jp

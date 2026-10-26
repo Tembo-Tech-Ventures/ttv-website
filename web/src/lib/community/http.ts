@@ -7,6 +7,7 @@ import { assessCommunityProfile } from "./assessment-ai";
 import { createAssessmentProvider, type AssessmentOutputReason } from "./assessment-provider";
 import { stagingAssessmentProbe } from "./staging-assessment-probe";
 import { authorizeRetainedProbe, claimRetainedChat } from "./staging-retained-probe";
+import { discoverProfiles, discoveryDependencies } from "./discovery";
 import { communityChatInput } from "./chat";
 import { parseInput } from "./model";
 import { runCommunityChat } from "./chat";
@@ -51,6 +52,10 @@ const routes: Record<string, Handler> = {
   "GET mentorship": async ({service,actor}) => { requireBrowser(actor); return communityJson({entries: await service.listMentorship()}); },
   "GET journey": async ({service}) => communityJson({entries: await service.listJourney()}),
   "POST journey": async ({service,body}) => communityJson({entry: await service.createJourney(body)},201),
+  "POST profiles/discover": async ({service,body,env,actor}) => {
+    if (!env) throw new CommunityError("Discovery is unavailable.",503);
+    return communityJson(await discoverProfiles(service,body,discoveryDependencies(env,actor.id)));
+  },
   "GET profiles": async ({service,request}) => {
     const url = new URL(request.url);
     return communityJson({profiles: await service.searchProfiles({query: url.searchParams.get("query") ?? "",limit:Number(url.searchParams.get("limit") ?? 20),skills:(url.searchParams.get("skills") ?? "").split(",").map(s=>s.trim()).filter(Boolean)})});

@@ -7,6 +7,7 @@ import {
   loadMentorship,
   mapProfile,
   searchProfiles,
+  discoverPeople,
   saveContribution,
   updateContribution,
   confirmContribution,
@@ -374,4 +375,14 @@ it('updates the loaded own revision without republishing private work or droppin
 });
 it('surfaces a stale-edit conflict before any refresh read',async()=>{
  const fetcher=respond({},409);await expect(updateContribution(mapJourney(entry),{title:'Updated title',description:'Updated contribution details',date:'2026-10-20',sourceUrl:''})).rejects.toMatchObject({status:409});expect(fetcher).toHaveBeenCalledOnce();
+});
+
+it("submits the complete opportunity to AI discovery and preserves evidence statuses",async()=>{
+  const criteria={context:"Elephant field projects need Python and should have first-aid training.",skills:"python, first-aid",query:""};
+  const fetcher=respond({profiles:[{profile,matches:[{criterion:{text:"first-aid training",importance:"requested"},status:"supported"}]}],evaluated:20,searched:149});
+  const result=await discoverPeople(criteria);
+  expect(fetcher.mock.calls[0][0]).toBe("/api/community/profiles/discover");
+  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual(criteria);
+  expect(result[0].matches[0].status).toBe("supported");
+  expect(result[0].discovery).toEqual({evaluated:20,searched:149});
 });

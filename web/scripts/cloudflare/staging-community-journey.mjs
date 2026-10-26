@@ -155,9 +155,9 @@ export async function verifyStagingCommunityJourney({ baseUrl, contextsByRole, u
       await capture(mentor, review, evidenceDirectory, `${viewport}-mentor.png`);
       stage = `${viewport}-scout`;
       await navigate(institution, "/dashboard/discover");
-      await institution.getByLabel("Skills to explore").fill("React, Accessibility");
-      await institution.getByLabel("Already have someone in mind?").fill(memberName);
-      await institution.getByRole("button", { name: "Discover people", exact: true }).click();
+      await institution.getByRole("button", { name: "Find someone you know", exact: true }).click();
+      await institution.getByLabel("Name to look up").fill(memberName);
+      await institution.getByRole("button", { name: "Look up person", exact: true }).click();
       await expect(institution.getByRole("heading", { name: "1 builder to get to know", exact: true })).toBeVisible();
       const result = institution.locator(".discovery-person").filter({ has: institution.getByRole("heading", { name: memberName, exact: true }) });
       await result.getByRole("button").click();
@@ -185,8 +185,9 @@ export async function verifyStagingCommunityJourney({ baseUrl, contextsByRole, u
       await expect(claim.getByText(statement, { exact: true })).toBeVisible();
       // Establish a no-match filter, then demonstrate the direct link is independent.
       await navigate(institution, "/dashboard/discover");
-      await institution.getByLabel("Skills to explore").fill("NonexistentSyntheticSkill");
-      await institution.getByRole("button", { name: "Discover people", exact: true }).click();
+      await institution.getByRole("button", { name: "Find someone you know", exact: true }).click();
+      await institution.getByLabel("Name to look up").fill("NonexistentSyntheticPerson");
+      await institution.getByRole("button", { name: "Look up person", exact: true }).click();
       await expect(institution.getByText("No profiles match those filters yet.", { exact: true })).toBeVisible();
       await navigate(institution, `/dashboard/discover?profile=${encodeURIComponent(memberId)}`);
       await expect(institution.getByRole("heading", { name: memberName, exact: true })).toBeVisible();

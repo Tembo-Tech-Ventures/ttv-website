@@ -1,8 +1,9 @@
+import { verifyBrowserDiscovery } from "./staging-browser-discovery.mjs";
 import { audienceRoutesPresent, verifyAudienceAccess } from "./staging-audience-verification.mjs";
 import { COMMUNITY_EVIDENCE_DIRECTORY, verifyStagingCommunityJourney } from "./staging-community-journey.mjs";
 
 /** Fixed verification program. Do not accept arbitrary scripts, roles or target IDs from workflow input. */
-export async function verifyStagingPersonas({ browser, target, personas, verifyJourney = verifyStagingCommunityJourney, verifyAudience = verifyAudienceAccess, audienceEnabled = audienceRoutesPresent(), browserAssessment = false, browserChat = false }) {
+export async function verifyStagingPersonas({ browser, target, personas, verifyJourney = verifyStagingCommunityJourney, verifyAudience = verifyAudienceAccess, audienceEnabled = audienceRoutesPresent(), browserAssessment = false, browserChat = false, browserDiscovery = false }) {
   if (browserAssessment && personas.institution?.sessionId !== `${personas.institution?.userId}-assessment-session`) throw new Error("Bounded assessment session required.");
   const contexts = [];
   const clients = {};
@@ -25,7 +26,7 @@ export async function verifyStagingPersonas({ browser, target, personas, verifyJ
           if (url.origin !== target.baseUrl || request.redirectedFrom()) return await route.abort();
           // Allow the bounded 60s chat operation to return before the browser's
           // 70s response deadline. Ordinary requests keep their 30s bound.
-          const timeout = browserChat && url.pathname === "/api/community/chat" && request.method() === "POST" ? 65000 : 30000;
+          const timeout = browserDiscovery && url.pathname === "/api/community/profiles/discover" && request.method() === "POST" ? 75000 : browserChat && url.pathname === "/api/community/chat" && request.method() === "POST" ? 65000 : 30000;
           const response = await route.fetch({ maxRedirects: 0, maxRetries: 0, timeout });
           if (response.status() >= 300 && response.status() < 400) return await route.abort();
           await route.fulfill({ response });
@@ -99,6 +100,7 @@ export async function verifyStagingPersonas({ browser, target, personas, verifyJ
       browserAssessment,
       browserChat,
     });
+    if (browserDiscovery) await verifyBrowserDiscovery({target,contextsByRole,personas});
   } catch {
     failure = new Error("Synthetic staging verification failed.");
   } finally {

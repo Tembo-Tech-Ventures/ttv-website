@@ -34,6 +34,8 @@ export function currentConfirmations(claim: JourneyClaim): ClaimConfirmation[] {
 }
 
 export interface CommunityProfile {
+  matches?: import("@/lib/community/discovery-contract").DiscoveryMatch[];
+  discovery?: {evaluated:number;searched:number};
   id: string;
   version?: number;
   name: string;
