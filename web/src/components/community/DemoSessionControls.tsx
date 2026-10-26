@@ -1,3 +1,4 @@
+import DemoReturnButton from "./DemoReturnButton";
 import React, { useEffect, useRef, useState } from "react";
 import DemoSessionIndicator from "./DemoSessionIndicator";
 import type { DemoPersona } from "./DemoRoleChooser";
@@ -48,6 +49,7 @@ export default function DemoSessionControls(props: { activePersona: DemoPersona;
   }
   return <>
     <DemoSessionIndicator {...props} canSwitch pending={pending} error={error} onSwitch={() => setConfirmation("switch")} onLogout={() => setConfirmation("logout")} />
+    <DemoReturnButton />
     {confirmation && <section aria-label="Confirm leaving this workspace" className="mt-3 rounded-xl border border-primary bg-dark p-4 text-ink-primary">
       <p role="alert">{confirmation === "logout" ? "Sign out of staging and end the original admin session?" : "Return to demo role selection?"} Unsaved changes on this page will be lost.</p>
       <div className="mt-3 flex flex-wrap gap-3">

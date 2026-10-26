@@ -42,3 +42,10 @@ describe("demo action requests", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+it("returns only to the fixed admin destination after a server-authorized return", async () => {
+  const fetchMock=vi.fn().mockResolvedValue(Response.json({redirectTo:"/admin"}));
+  vi.stubGlobal("fetch",fetchMock);
+  expect(await requestDemoAction("admin")).toBe("/admin");
+  expect(fetchMock).toHaveBeenCalledWith("/api/demo/return",expect.objectContaining({method:"POST",credentials:"same-origin",body:"{}"}));
+});

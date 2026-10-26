@@ -14,16 +14,16 @@ export class DemoRequestError extends Error {
 }
 
 /** Fixed same-origin endpoints only; the server authorizes the operator. */
-export async function requestDemoAction(persona: DemoPersona | null): Promise<string> {
+export async function requestDemoAction(persona: DemoPersona | "admin" | null): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 25_000);
   try {
-    const response = await fetch(persona === null ? "/api/demo/logout" : "/api/demo/switch", {
+    const response = await fetch(persona === "admin" ? "/api/demo/return" : persona === null ? "/api/demo/logout" : "/api/demo/switch", {
       method: "POST",
       credentials: "same-origin",
       redirect: "error",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(persona === null ? {} : { persona }),
+      body: JSON.stringify(persona === null || persona === "admin" ? {} : { persona }),
       signal: controller.signal,
     });
     if (!response.ok) {
@@ -31,7 +31,7 @@ export async function requestDemoAction(persona: DemoPersona | null): Promise<st
     }
     if (persona === null) return "/demo";
     const data: unknown = await response.json();
-    const expected = destinations[persona];
+    const expected = persona === "admin" ? "/admin" : destinations[persona];
     if (!data || typeof data !== "object" || !("redirectTo" in data) || data.redirectTo !== expected) {
       throw new DemoRequestError("failed");
     }

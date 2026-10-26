@@ -2,14 +2,16 @@
 import { env } from "cloudflare:workers";
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import DemoAccessApp from "@/components/community/DemoAccessApp";
-import { demoOperator, DemoAccessError } from "@/lib/staging-demo-access";
+import { demoOperator, demoDatasetStatus, DemoAccessError } from "@/lib/staging-demo-access";
 
 Astro.response.headers.set("Cache-Control", "no-store");
 let expiresAt: string | null = null;
+let dataset: Awaited<ReturnType<typeof demoDatasetStatus>> | null = null;
 try {
   // This page deliberately supports recovery from an expired persona. The
   // independent operator gate must succeed before any controls are rendered.
   const operator = await demoOperator(env, Astro.request);
+  dataset = await demoDatasetStatus(env, Astro.request);
   expiresAt = new Date(operator.expiresAt * 1000).toISOString();
   // Never serialize operator.session or operator.cookieValue into the island.
 } catch (error) {
@@ -19,6 +21,7 @@ try {
 <BaseLayout title="Demo access | TTV" noIndex>
   <main class="min-h-screen bg-dark text-ink-primary">
     {expiresAt ? (
+      <p class="mx-auto max-w-3xl px-4 pt-8 text-ink-secondary">Retained fictional dataset: {dataset?.people} people · {dataset?.profiles} profiles · {dataset?.contributions} contributions · {dataset?.confirmations} mentor confirmations.</p>
       <DemoAccessApp client:load activePersona={null} displayName="Demo operator" expiresAt={expiresAt} canSwitch={true} />
     ) : (
       <section class="mx-auto max-w-2xl px-4 py-16 sm:px-8">

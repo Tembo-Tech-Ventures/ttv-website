@@ -1,3 +1,4 @@
+import DemoReturnButton from "./DemoReturnButton";
 import React, { useRef, useState } from "react";
 import DemoRoleChooser, { type DemoPersona, type DemoAccessError } from "./DemoRoleChooser";
 import DemoSessionIndicator from "./DemoSessionIndicator";
@@ -41,6 +42,7 @@ export default function DemoAccessApp(props: DemoAccessAppProps) {
       <div className="mx-auto max-w-3xl px-4 pb-10 sm:px-8">
         {props.activePersona ? <DemoSessionIndicator {...props} activePersona={props.activePersona} canSwitch={false} error={logoutError} pending={pending === "logout" ? "logout" : pending ? "switch" : null} onSwitch={() => {}} onLogout={() => { void act(null); }} /> : <button type="button" disabled={pending !== null} onClick={() => { void act(null); }} className="min-h-11 rounded-full border border-primary px-5 py-2 font-semibold text-primary disabled:opacity-60">{pending === "logout" ? "Signing out…" : "Sign out of staging"}</button>}
         {logoutError && !props.activePersona && <p role="alert" className="mt-3 text-sm">We could not sign you out. Please try again.</p>}
+        <DemoReturnButton />
         <p className="mt-3 text-sm text-ink-muted">Sign out ends this demo and the original admin session. To try another role, choose it above.</p>
       </div>
     </>

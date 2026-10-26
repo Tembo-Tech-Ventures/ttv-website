@@ -14,7 +14,7 @@ export const DEMO_USER_IDS = Object.freeze([
 ]);
 const members = new Set(DEMO_USER_IDS);
 export const DEMO_SESSION_MARKER = 'ttv-agent:retained-demo:';
-export const DEMO_CUTOFF = Date.parse('2026-10-25T23:00:00Z') / 1000;
+export const DEMO_CUTOFF = Date.parse('2026-10-26T23:00:00Z') / 1000;
 export const DEMO_ORIGIN = 'https://staging.tembotechventures.com';
 export function isDemoUser(id: string) { return members.has(id); }
 export function demoPersona(value: unknown): DemoPersona | null {
@@ -26,7 +26,7 @@ export function demoEnabled(environment: string | undefined, enabled: string | u
 /** Explicit routes only. Cohort extensions require reviewing their resource ownership. */
 export function demoPathAllowed(path: string, method: string) {
   const normalized = path.replace(/\/$/, '');
-  if (['/demo', '/api/demo/switch', '/api/demo/logout'].includes(normalized)) return true;
+  if (['/demo', '/api/demo/switch', '/api/demo/logout', '/api/demo/return'].includes(normalized)) return true;
   if (normalized === '/api/community/access') return method === 'GET';
   if (/^\/api\/community\/(profile|journey|profiles|mentorship|chat)(\/|$)/.test(normalized)) return true;
   if (!['GET', 'HEAD'].includes(method)) return false;
