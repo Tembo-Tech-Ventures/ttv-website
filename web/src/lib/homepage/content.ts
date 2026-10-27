@@ -46,7 +46,9 @@ export const SKILLS_MAP = {
   title: "Every skill opens onto the next.",
   summary:
     "A cohort is a path through a map of skills, walked with other builders and the engineers alongside them. The map keeps going after the cohort ends.",
-  caption: "Illustration built from skills on our builders' published profiles.",
+  caption: "An illustration, drawn from the skills on our builders' published profiles.",
+  /** Shown when no profiles are published, so the caption never claims data it lacks. */
+  emptyCaption: "An illustration of how skills connect.",
 } as const;
 
 export const BUILDERS = {
