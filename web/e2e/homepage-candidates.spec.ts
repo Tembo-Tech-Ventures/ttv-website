@@ -63,11 +63,18 @@ for (const path of CANDIDATES) {
       expect(missed, "never reached by Tab").toEqual([]);
     });
 
-    test("every section anchor lands on its heading, even jumping back up", async ({ page }) => {
+    test("every section anchor lands on its heading, jumping down or back up", async ({ page }) => {
       await page.goto(path);
       await page.evaluate(() => document.fonts.ready);
-      for (const id of [...SECTION_ORDER].toReversed()) {
-        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      const jumps = [
+        ...SECTION_ORDER.slice(1).map((id) => ({ id, from: "top" })),
+        ...[...SECTION_ORDER].toReversed().map((id) => ({ id, from: "bottom" })),
+      ];
+      for (const { id, from } of jumps) {
+        await page.evaluate((start) => {
+          window.history.replaceState(null, "", window.location.pathname);
+          window.scrollTo(0, start === "top" ? 0 : document.documentElement.scrollHeight);
+        }, from);
         await page.waitForTimeout(400);
         await page.evaluate((target) => { window.location.hash = target; }, id);
         await page.waitForTimeout(900);
@@ -79,7 +86,7 @@ for (const path of CANDIDATES) {
           const hit = document.elementFromPoint(Math.min(box.left + 8, window.innerWidth - 1), box.top + box.height / 2);
           return hit && (heading.contains(hit) || hit.contains(heading)) ? "ok" : `heading covered by <${hit?.tagName.toLowerCase()}>`;
         }, id);
-        expect(landing, `#${id}`).toBe("ok");
+        expect(landing, `#${id} from the ${from}`).toBe("ok");
       }
     });
 
