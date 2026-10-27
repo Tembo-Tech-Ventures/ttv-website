@@ -105,7 +105,8 @@ const widest = Math.max(...words.map((word) => word.width));
   .hc-principle__text {
     font-family: var(--font-heading);
     font-size: 100px;
-    letter-spacing: -2px;
+    /* -0.02em: the -2 units at this 100-unit size the viewBox widths were measured at. */
+    letter-spacing: var(--tracking-display);
     fill: transparent;
     stroke: var(--hc-peach);
     stroke-width: 1.75px;

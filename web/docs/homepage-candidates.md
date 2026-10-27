@@ -99,3 +99,46 @@ npx playwright test e2e/homepage-candidates.spec.ts --project=chromium --project
 The audit writes viewport frames, motion frames taken 90 ms after each scroll,
 and a contact sheet per viewport. Look at them: a passing audit is not a
 beautiful page.
+
+## How they were made, and where they ended up
+
+Each candidate was built by its own agent and then put through two rounds of
+independent critique and a release check. A fresh critic each round worked
+through the page as the four personas and as an Awwwards juror, from
+screenshots, motion frames and real interaction (hover, focus, Tab, touch).
+Every round's critique is a file in the lab output (`.homepage-lab/<v>/critique-r<n>/`,
+not committed); the findings that became shared rules are now tests in
+`e2e/homepage-candidates.spec.ts`.
+
+Juror scores (Design / Usability / Creativity / Content, out of 10):
+
+| Candidate | Round 1 | Round 2 | Release check | Personas at release (student / mentor / partner / client) |
+|-----------|---------|---------|---------------|-----------------------------------------------------------|
+| A | 7 / 7 / 6 / 7 | 7 / 8 / 7 / 8 | 8 / 8 / 8 / 8 | 9 / 7 / 8 / 7 |
+| B | 7 / 6 / 7 / 7 | 8 / 6 / 8 / 8 | 8 / 8 / 8 / 9 | 8.5 / 8 / 8.5 / 8 |
+| C | 7 / 4 / 8 / 7 | 7 / 8 / 8 / 8 | 8 / 8 / 8 / 8 | 8 / 7 / 8 / 8 |
+
+The mentor scores are held back by the same gap in every candidate: the page
+does not say how much time mentoring asks for. That is the owner's to state;
+no candidate invents it.
+
+Rules the critiques turned into tests, which bind whichever candidate wins:
+
+- every word fully readable at some point while scrolling, at four widths,
+  with and without reduced motion;
+- every link and button reachable by Tab from the top of the page (reveal
+  animations must not park content at `visibility: hidden`);
+- every section anchor lands with its heading visible and uncovered, jumping
+  down from the top or back up from the bottom (sticky and scroll-linked
+  layouts get this wrong silently).
+
+## Promoting the chosen candidate
+
+1. Move its components to `src/components/homepage/` and render them from
+   `src/pages/index.astro` (keep `loadHomepageBuildersSafely`).
+2. Delete the other two candidates, `src/pages/preview/home/`, and the old
+   homepage components they replace.
+3. Point `PUBLIC_NAV_LINKS` and the footer at the new section ids
+   (`#cohorts`, `#builders`, `#community`, `#hire`, `#principles`), and update
+   `e2e/layout-integrity.spec.ts`, which still expects `/#what-we-do`.
+4. Retarget `e2e/homepage-candidates.spec.ts` at `/`.

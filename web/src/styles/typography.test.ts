@@ -79,7 +79,8 @@ describe("display headings", () => {
     const offenders: string[] = [];
 
     for (const file of files) {
-      const source = readFileSync(file, "utf8");
+      // Style and script bodies are not markup; CSS is checked rule by rule below.
+      const source = readFileSync(file, "utf8").replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/g, "");
       for (let i = source.indexOf("font-heading"); i !== -1; i = source.indexOf("font-heading", i + 1)) {
         const tag = enclosingTag(source, i);
         if (/letter-spacing|letterSpacing/.test(tag)) {
@@ -91,4 +92,43 @@ describe("display headings", () => {
     // Hand-tuned tracking is what made the last font swap a thirty-file change.
     expect(offenders).toEqual([]);
   });
+
+  it("use the tracking tokens in any CSS rule that sets the display face", async () => {
+    const files = await markupFiles(SRC);
+    const sheets = await cssFiles(SRC);
+    const offenders: string[] = [];
+    for (const file of [...files, ...sheets]) {
+      const source = readFileSync(file, "utf8");
+      const styles = file.endsWith(".css")
+        ? source
+        : [...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((match) => match[1]).join("\n");
+      for (const rule of displayRules(styles)) {
+        const spacing = /letter-spacing:\s*([^;]+)/.exec(rule.body);
+        if (spacing && !/^var\(--tracking-(display|heading|subhead)\)$/.test(spacing[1].trim())) {
+          offenders.push(`${file.slice(SRC.length + 1)}: ${rule.selector} { letter-spacing: ${spacing[1].trim()} }`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
 });
+
+async function cssFiles(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const found = await Promise.all(
+    entries.map(async (entry) => {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) return cssFiles(path);
+      return entry.name.endsWith(".css") && path !== GLOBAL_CSS ? [path] : [];
+    })
+  );
+  return found.flat();
+}
+
+/** Innermost CSS rules whose declarations set the display font family. */
+function displayRules(styles: string): Array<{ selector: string; body: string }> {
+  const stripped = styles.replace(/\/\*[\s\S]*?\*\//g, "");
+  return [...stripped.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .map((match) => ({ selector: match[1].trim().replace(/\s+/g, " "), body: match[2] }))
+    .filter((rule) => /font-family:\s*var\(--font-heading\)/.test(rule.body));
+}

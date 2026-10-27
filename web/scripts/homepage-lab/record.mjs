@@ -217,8 +217,14 @@ async function recordSegment(segment, index) {
       }
       pointer = goal;
     },
-    async click(selector) {
-      await t.moveTo(selector, 700);
+    /** A point inside an element, as fractions of its box, in page coordinates. */
+    async point(selector, fx = 0.5, fy = 0.5) {
+      const rect = await box(selector);
+      return { x: rect.x - offset.x + rect.width * fx, y: rect.y - offset.y + rect.height * fy };
+    },
+    /** Clicks an element, or a point from `point()`, with the visible pointer. */
+    async click(target) {
+      await t.moveTo(target, 700);
       await page.mouse.down();
       await page.waitForTimeout(120);
       await page.mouse.up();

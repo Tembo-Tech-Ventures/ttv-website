@@ -36,12 +36,17 @@ export default {
           personas: [juror("tactile, and it means something"), partner("from a cohort to its people in one click")],
         });
         await t.moveTo("[data-hb-deck-stage]", 1000);
-        for (const [dx, dy] of [[-90, -60], [80, -30], [60, 70], [-70, 50]]) {
-          const stage = await t.frame.locator("[data-hb-deck-stage]").first().boundingBox();
-          await t.moveTo({ x: stage.x + stage.width / 2 + dx - 0, y: stage.y + stage.height / 2 + dy }, 600);
+        for (const [fx, fy] of [[0.3, 0.3], [0.7, 0.35], [0.65, 0.7], [0.35, 0.65], [0.5, 0.5]]) {
+          await t.moveTo(await t.point("[data-hb-deck-stage]", fx, fy), 650);
         }
-        await t.click('[data-cohort="02"] [data-hb-deck-button]');
+        await t.pause(600);
+        // Each card's visible strip is its top edge; the rest sits under the cards in front.
+        await t.click(await t.point('[data-cohort="02"] [data-hb-deck-button]', 0.4, 0.04));
+        await t.pause(2400);
+        await t.click(await t.point('[data-cohort="01"] [data-hb-deck-button]', 0.4, 0.04));
         await t.pause(2200);
+        await t.click(await t.point('[data-cohort="04"] [data-hb-deck-button]', 0.4, 0.04));
+        await t.pause(1600);
         await t.caption({
           chapter: "2 · Builders",
           title: "The signature move: sheets that tip back.",
