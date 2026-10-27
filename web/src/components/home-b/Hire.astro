@@ -12,7 +12,12 @@ interface Props {
 }
 
 const { builders } = Astro.props;
+// The kinds of work the summary invites, as the brief you would start from.
+const PROPOSALS = ["A project", "A role", "A piece of work"] as const;
 const faces = builders.slice(0, 4);
+const firstNames = faces.map((builder) => builder.name.split(" ")[0]);
+const more = builders.length - faces.length;
+const namesLine = firstNames.length > 0 ? `${firstNames.join(", ")}${more > 0 ? ` and ${more} more` : ""}` : null;
 ---
 
 <div class="hb-hire">
@@ -25,7 +30,7 @@ const faces = builders.slice(0, 4);
     <div class="hb-hslot hb-hslot--primary" data-hb-hire-card>
     <a class="hb-hcard hb-hcard--primary" href={HIRE.primary.href}>
       <span class="hb-hcard__brief" aria-hidden="true">
-        <span style="--w:70%" /><span style="--w:92%" /><span style="--w:84%" /><span style="--w:48%" />
+        {PROPOSALS.map((kind) => <span>{kind}</span>)}
       </span>
       <span class="hb-hcard__label">{HIRE.primary.label}</span>
       <span class="hb-hcard__arrow" aria-hidden="true">
@@ -40,6 +45,7 @@ const faces = builders.slice(0, 4);
           ? faces.map((builder) => <span class="font-heading">{builder.initials}</span>)
           : [0, 1, 2].map(() => <span />)}
       </span>
+      {namesLine && <span class="hb-hcard__names">{namesLine}</span>}
       <span class="hb-hcard__label">{HIRE.secondary.label}</span>
       <span class="hb-hcard__arrow" aria-hidden="true">
         <svg viewBox="0 0 20 20" width="20" height="20"><path d="M4 10h11m-4.5-4.5L15 10l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
@@ -128,6 +134,7 @@ const faces = builders.slice(0, 4);
   }
 
   .hb-hcard--secondary {
+    grid-template-rows: auto auto 1fr;
     width: 82%;
     margin-left: auto;
     background: #fff8f2;
@@ -168,31 +175,24 @@ const faces = builders.slice(0, 4);
   }
 
   .hb-hcard__brief {
-    display: grid;
-    gap: 0.5rem;
-    width: min(60%, 13rem);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
     margin-bottom: 1.75rem;
-    padding: 0.9rem;
-    border-radius: 0.6rem;
-    background: rgb(255 248 242 / 0.07);
-    border: 1px dashed rgb(242 141 104 / 0.55);
+    padding-right: 3.5rem;
   }
 
   .hb-hcard__brief span {
-    display: block;
-    width: var(--w);
-    height: 0.4rem;
+    padding: 0.3rem 0.75rem;
     border-radius: 999px;
-    background: rgb(255 248 242 / 0.3);
-  }
-
-  .hb-hcard__brief span:first-child {
-    background: var(--color-primary);
+    border: 1px dashed rgb(242 141 104 / 0.7);
+    font-size: 0.875rem;
+    color: var(--color-ink-primary);
   }
 
   .hb-hcard__faces {
     display: flex;
-    margin-bottom: 1.75rem;
+    margin-bottom: 1.5rem;
   }
 
   .hb-hcard__faces span {
@@ -204,7 +204,7 @@ const faces = builders.slice(0, 4);
     border: 2px solid #fff8f2;
     background: var(--color-primary);
     color: var(--color-dark);
-    font-size: 0.8rem;
+    font-size: 0.72rem;
     transition: translate 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
@@ -214,7 +214,14 @@ const faces = builders.slice(0, 4);
   }
 
   .hb-hcard__faces span + span {
-    margin-left: -0.6rem;
+    margin-left: -0.3rem;
+  }
+
+  .hb-hcard__names {
+    margin: -1rem 0 1.25rem;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    color: #24413d;
   }
 
   /* Part on hover or focus; the one you are on comes forward. */

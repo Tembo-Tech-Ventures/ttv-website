@@ -58,3 +58,25 @@
   outline-offset: 4px;
   border-radius: 0.25rem;
 }
+
+/*
+ * Flow measurement (scripts/navigate.ts): for one synchronous layout read the
+ * stack is switched off, so an element's position in the document can be
+ * measured where it sits rather than where a stuck sheet draws it.
+ */
+.hb-flow .hb-sheet,
+.hb-flow .hb-bstack--file > li,
+.hb-flow [data-hb-values] > li {
+  position: static !important;
+}
+
+.hb-flow .hb-sheet,
+.hb-flow .hb-bc,
+.hb-flow .hb-value__inner {
+  transform: none !important;
+}
+
+/* Sections receive focus only as anchor targets; the heading is the cue. */
+.hb-sheet:focus {
+  outline: none;
+}

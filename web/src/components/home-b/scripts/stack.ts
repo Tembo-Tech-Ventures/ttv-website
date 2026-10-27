@@ -5,7 +5,7 @@ import { clamp01, navHeight, type Scene } from "./scenes";
  * as a fraction of the viewport. The next sheet's edge and title are rising
  * while this one settles back, so the stack costs no extra scroll at all.
  */
-const LEAD = 0.36;
+export const LEAD = 0.36;
 
 /**
  * The page-level stack. Each sheet but the last sticks once its bottom edge is

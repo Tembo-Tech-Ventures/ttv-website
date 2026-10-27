@@ -2,6 +2,7 @@
 import type { HomepageBuilder } from "@/lib/homepage/builders";
 import { BUILDERS } from "@/lib/homepage/content";
 import BuilderCard from "./BuilderCard.astro";
+import { cohortNumberOf } from "./cohorts";
 
 /**
  * Published builders as a card file across the full width. From four
@@ -42,6 +43,7 @@ const lastOnPhone = Math.min(total, PHONE_LIMIT) - 1;
           { "hb-bstack__item--extra": index >= PHONE_LIMIT, "hb-bstack__item--phone-last": index === lastOnPhone },
         ]}
         style={`--i:${index}`}
+        data-hb-cohort={cohortNumberOf(builder) ?? undefined}
       >
         <BuilderCard builder={builder} />
       </li>

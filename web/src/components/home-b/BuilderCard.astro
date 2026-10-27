@@ -1,6 +1,7 @@
 ---
 import type { HomepageBuilder } from "@/lib/homepage/builders";
 import { COHORT } from "@/lib/homepage/content";
+import { cohortNumberOf } from "./cohorts";
 
 /**
  * One card in the builders' card file. The top strip (monogram, name, cohort)
@@ -13,8 +14,7 @@ interface Props {
 }
 
 const { builder } = Astro.props;
-const meta = [builder.cohort, builder.country].filter(Boolean).join(" · ");
-const cohortNumber = builder.cohort?.match(/\d+/)?.[0]?.padStart(2, "0") ?? null;
+const cohortNumber = cohortNumberOf(builder);
 const cohortIndex = COHORT.timeline.findIndex((cohort) => cohort.number === cohortNumber);
 const cohortRunning = cohortIndex >= 0 && COHORT.timeline[cohortIndex].running;
 ---
@@ -30,7 +30,12 @@ const cohortRunning = cohortIndex >= 0 && COHORT.timeline[cohortIndex].running;
     </span>
     <span class="hb-bc__who">
       <span class="hb-bc__name">{builder.name}</span>
-      {meta && <span class="hb-bc__meta">{meta}</span>}
+      {(builder.cohort || builder.country) && (
+        <span class="hb-bc__meta">
+          {builder.cohort}
+          {builder.country && <span class="hb-bc__country">{builder.cohort ? ` · ${builder.country}` : builder.country}</span>}
+        </span>
+      )}
     </span>
     {cohortNumber && cohortIndex >= 0 && (
       <span
@@ -43,6 +48,7 @@ const cohortRunning = cohortIndex >= 0 && COHORT.timeline[cohortIndex].running;
     )}
   </span>
   <span class="hb-bc__body">
+    {builder.country && <span class="hb-bc__meta hb-bc__country-body">{builder.country}</span>}
     {builder.headline && <span class="hb-bc__headline">{builder.headline}</span>}
     {builder.project && (
       <span class="hb-bc__project">
@@ -70,7 +76,7 @@ const cohortRunning = cohortIndex >= 0 && COHORT.timeline[cohortIndex].running;
     position: relative;
     display: grid;
     gap: 1rem;
-    padding: 0.5rem clamp(1rem, 2.5vw, 1.5rem) clamp(1.1rem, 2.5vw, 1.5rem);
+    padding: 0.8rem clamp(1rem, 2.5vw, 1.5rem) clamp(1.1rem, 2.5vw, 1.5rem);
     border-radius: 1.25rem;
     background: linear-gradient(180deg, #155e56, #0f514a 70%);
     border: 1px solid rgb(255 248 242 / 0.13);
@@ -87,9 +93,13 @@ const cohortRunning = cohortIndex >= 0 && COHORT.timeline[cohortIndex].running;
       border-color 320ms ease;
   }
 
+  /* Focus does not lift: a stuck card would slide under the nav. */
+  .hb-bc:hover {
+    translate: 0 -0.5rem;
+  }
+
   .hb-bc:hover,
   .hb-bc:focus-visible {
-    translate: 0 -0.5rem;
     border-color: rgb(242 141 104 / 0.6);
     box-shadow:
       0 1px 0 rgb(255 248 242 / 0.12) inset,
@@ -136,18 +146,33 @@ const cohortRunning = cohortIndex >= 0 && COHORT.timeline[cohortIndex].running;
     object-fit: cover;
   }
 
+  /* One line, so the strip a covered card leaves reads "Name  Cohort 01". */
   .hb-bc__who {
     display: flex;
-    flex-direction: column;
+    align-items: baseline;
+    gap: 0.35rem 0.6rem;
     min-width: 0;
     flex: 1;
+    white-space: nowrap;
   }
 
-  @media (min-width: 40rem) {
-    .hb-bc__who {
-      flex-direction: row;
-      align-items: baseline;
-      gap: 0.85rem;
+  .hb-bc__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .hb-bc__country-body {
+    display: none;
+  }
+
+  @media (max-width: 39.99rem) {
+    .hb-bc__country {
+      display: none;
+    }
+
+    .hb-bc__country-body {
+      display: block;
+      margin-top: -0.5rem;
     }
   }
 
@@ -158,6 +183,7 @@ const cohortRunning = cohortIndex >= 0 && COHORT.timeline[cohortIndex].running;
   }
 
   .hb-bc__meta {
+    flex: none;
     font-size: 0.875rem;
     line-height: 1.4;
     color: var(--color-ink-secondary);

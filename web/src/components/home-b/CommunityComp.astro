@@ -15,10 +15,29 @@ interface Props {
 }
 
 const { path, builders } = Astro.props;
-const featured = builders.find((builder) => builder.project) ?? builders[0] ?? null;
-const reviewed = builders.filter((builder) => builder.project)[1] ?? featured;
-const results = builders.slice(0, 3);
-const filters = [...new Set(builders.flatMap((builder) => builder.skills))].slice(0, 3);
+const withProjects = builders.filter((builder) => builder.project);
+const featured = withProjects[0] ?? builders[0] ?? null;
+const reviewed = withProjects[1] ?? featured;
+const firstName = (name: string) => name.split(" ")[0];
+
+/**
+ * The reviewed project's README, from its published profile: title, its own
+ * description (the line the note is pinned to), language and who built it.
+ */
+const readme = reviewed?.project
+  ? [
+      { text: `# ${reviewed.project.name}`, marked: false },
+      ...(reviewed.project.description ? [{ text: reviewed.project.description, marked: true }] : []),
+      ...(reviewed.project.language ? [{ text: `Built with ${reviewed.project.language}`, marked: false }] : []),
+      { text: [reviewed.name, reviewed.cohort].filter(Boolean).join(" · "), marked: false },
+    ]
+  : [];
+
+/** Three profiles, each matched by its own first skill, so filters and hits agree. */
+const results = builders.filter((builder) => builder.skills.length > 0).slice(0, 3);
+const filters = [...new Set(results.map((builder) => builder.skills[0]))];
+const hit = results[1] ?? results[0] ?? null;
+
 const captions = {
   builder: featured ? "From a published builder profile" : "A builder profile",
   mentor: "How a mentor note looks (illustration)",
@@ -34,31 +53,27 @@ const captions = {
           <span class="hb-comp__who">
             <span class="hb-comp__mono font-heading">{featured?.initials ?? ""}</span>
             <span class="hb-comp__id">
-              {featured ? <span class="hb-comp__name">{featured.name}</span> : <span class="hb-bar" style="--w:70%" />}
-              {featured?.cohort ? <span class="hb-comp__small">{featured.cohort}</span> : <span class="hb-bar" style="--w:45%" />}
+              <span class="hb-comp__name">{featured?.name ?? ""}</span>
+              {featured?.cohort && <span class="hb-comp__small">{featured.cohort}</span>}
             </span>
           </span>
-          <span class="hb-chips">
-            {featured && featured.skills.length > 0
-              ? featured.skills.map((skill) => <span class="hb-chip">{skill}</span>)
-              : [0, 1, 2].map(() => <span class="hb-chip hb-chip--blank" />)}
-          </span>
+          {featured?.headline && <span class="hb-comp__headline">{featured.headline}</span>}
         </span>
         <span class="hb-piece hb-card hb-comp__work" data-hb-piece>
           <span class="hb-comp__repo">
             <svg viewBox="0 0 16 16" width="13" height="13"><path d="M3 2.5h7.5L13 5v8.5H3z M10.5 2.5V5H13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" /></svg>
             {featured?.project?.name ?? ""}
+            {featured?.project?.language && <span class="hb-comp__small">{featured.project.language}</span>}
           </span>
-          {featured?.project?.description ? (
-            <span class="hb-comp__desc">{featured.project.description}</span>
-          ) : (
-            <span class="hb-bars"><span class="hb-bar" style="--w:90%" /><span class="hb-bar" style="--w:70%" /></span>
+          {featured?.project?.description && <span class="hb-comp__desc">{featured.project.description}</span>}
+          {featured && featured.skills.length > 0 && (
+            <span class="hb-comp__part">
+              <span class="hb-comp__part-label">Your part</span>
+              <span class="hb-chips hb-chips--tight">
+                {featured.skills.slice(0, 2).map((skill) => <span class="hb-chip hb-chip--peach">{skill}</span>)}
+              </span>
+            </span>
           )}
-          <span class="hb-comp__part">
-            <span class="hb-comp__part-label">Your part</span>
-            <span class="hb-bar hb-bar--peach" style="--w:85%" />
-            <span class="hb-bar hb-bar--peach" style="--w:55%" />
-          </span>
         </span>
         <span class="hb-piece hb-comp__tick" data-hb-piece />
       </>
@@ -68,19 +83,23 @@ const captions = {
         <span class="hb-piece hb-card hb-comp__code" data-hb-piece>
           <span class="hb-comp__repo">
             <svg viewBox="0 0 16 16" width="13" height="13"><path d="M3 2.5h7.5L13 5v8.5H3z M10.5 2.5V5H13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" /></svg>
-            {reviewed?.project?.name ?? ""}
-            {reviewed?.project?.language && <span class="hb-comp__small">{reviewed.project.language}</span>}
+            README.md
+            {reviewed?.project && <span class="hb-comp__small">{reviewed.project.name}</span>}
           </span>
           <span class="hb-code">
-            <span style="--w:40%;--c:#f28d68" /><span style="--w:72%;--i:1" /><span style="--w:58%;--i:1" /><span style="--w:66%;--i:2;--c:#ffd166" /><span style="--w:48%;--i:2" />
-            <span class="hb-code__mark"><span style="--w:62%;--i:2" /><span style="--w:44%;--i:2" /></span>
-            <span style="--w:30%;--i:1" /><span style="--w:54%;--i:1;--c:#f28d68" /><span style="--w:20%" />
+            {readme.map((line, index) => (
+              <span class:list={["hb-code__line", { "is-marked": line.marked }]}>
+                <span class="hb-code__no">{index + 1}</span>{line.text}
+              </span>
+            ))}
           </span>
         </span>
         <span class="hb-piece hb-comp__note" data-hb-piece>
           <span class="hb-comp__pin" />
-          <span class="hb-comp__note-label">Mentor note</span>
-          <span class="hb-bars"><span class="hb-bar hb-bar--ink" style="--w:92%" /><span class="hb-bar hb-bar--ink" style="--w:80%" /><span class="hb-bar hb-bar--ink" style="--w:50%" /></span>
+          <span class="hb-comp__note-label">
+            {reviewed?.project ? `Mentor note on ${firstName(reviewed.name)}'s ${reviewed.project.name}` : "Mentor note"}
+          </span>
+          <span class="hb-comp__field-empty">Your context</span>
         </span>
       </>
     )}
@@ -90,15 +109,19 @@ const captions = {
         <span class="hb-piece hb-card hb-comp__search" data-hb-piece>
           <span class="hb-comp__field">
             <svg viewBox="0 0 16 16" width="14" height="14"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" /><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
-            {filters.length > 0 ? filters.map((skill) => <span class="hb-chip hb-chip--filter">{skill}</span>) : <span class="hb-comp__caret" />}
+            {filters.map((skill) => (
+              <span class:list={["hb-chip hb-chip--filter", { "is-hit": skill === hit?.skills[0] }]}>{skill}</span>
+            ))}
+            {filters.length === 0 && <span class="hb-comp__caret" />}
           </span>
-          {(results.length > 0 ? results : [null, null, null]).map((builder, row) => (
-            <span class:list={["hb-comp__result", { "is-hit": row === 1 }]}>
-              <span class="hb-comp__mono hb-comp__mono--sm font-heading">{builder?.initials ?? ""}</span>
+          {results.map((builder) => (
+            <span class:list={["hb-comp__result", { "is-hit": builder === hit }]}>
+              <span class="hb-comp__mono hb-comp__mono--sm font-heading">{builder.initials}</span>
               <span class="hb-comp__id">
-                {builder ? <span class="hb-comp__name">{builder.name}</span> : <span class="hb-bar" style="--w:60%" />}
-                {builder?.headline ? <span class="hb-comp__small hb-comp__clip">{builder.headline}</span> : <span class="hb-bar" style="--w:80%" />}
+                <span class="hb-comp__name">{builder.name}</span>
+                {builder.headline && <span class="hb-comp__small hb-comp__clip">{builder.headline}</span>}
               </span>
+              <span class="hb-chip hb-chip--match">{builder.skills[0]}</span>
             </span>
           ))}
         </span>
@@ -113,7 +136,13 @@ const captions = {
     margin: 0;
     width: 100%;
     max-width: 36rem;
-    justify-self: center;
+    justify-self: start;
+  }
+
+  @media (min-width: 56rem) {
+    .hb-comp {
+      justify-self: center;
+    }
   }
 
   .hb-comp__stage {
@@ -128,11 +157,20 @@ const captions = {
     font-size: clamp(0.7rem, 2.6cqi, 0.9rem);
   }
 
+  .hb-comp--mentor .hb-comp__stage {
+    aspect-ratio: 6 / 3.4;
+  }
+
   .hb-comp__caption {
     margin-top: 0.75rem;
     font-size: 0.875rem;
     color: var(--color-ink-secondary);
-    text-align: center;
+  }
+
+  @media (min-width: 56rem) {
+    .hb-comp__caption {
+      text-align: center;
+    }
   }
 
   .hb-piece {
@@ -150,27 +188,6 @@ const captions = {
     color: var(--color-ink-primary);
   }
 
-  .hb-bars {
-    display: grid;
-    gap: 0.5em;
-  }
-
-  .hb-bar {
-    display: block;
-    width: var(--w, 80%);
-    height: 0.5em;
-    border-radius: 999px;
-    background: rgb(255 248 242 / 0.22);
-  }
-
-  .hb-bar--peach {
-    background: rgb(242 141 104 / 0.75);
-  }
-
-  .hb-bar--ink {
-    background: rgb(1 61 57 / 0.35);
-  }
-
   .hb-chips {
     display: flex;
     flex-wrap: wrap;
@@ -184,11 +201,6 @@ const captions = {
     border: 1px solid rgb(255 248 242 / 0.3);
     font-size: 0.85em;
     white-space: nowrap;
-  }
-
-  .hb-chip--blank {
-    width: 3em;
-    height: 1.2em;
   }
 
   .hb-chip--filter {
@@ -240,7 +252,39 @@ const captions = {
 
   .hb-comp__small {
     font-size: 0.85em;
-    color: rgb(255 248 242 / 0.75);
+    color: rgb(255 248 242 / 0.85);
+  }
+
+  .hb-comp__headline {
+    display: block;
+    margin-top: 0.8em;
+    line-height: 1.4;
+    color: var(--color-ink-primary);
+  }
+
+  .hb-chips--tight {
+    margin-top: 0.1em;
+  }
+
+  .hb-chip--peach {
+    border-color: rgb(242 141 104 / 0.8);
+    background: rgb(242 141 104 / 0.18);
+  }
+
+  .hb-chip--filter.is-hit {
+    background: #ffd166;
+    color: var(--color-dark);
+  }
+
+  .hb-chip--match {
+    flex: none;
+    margin-left: auto;
+    font-size: 0.75em;
+  }
+
+  .is-hit .hb-chip--match {
+    border-color: #ffd166;
+    color: #ffd166;
   }
 
   .hb-comp__clip {
@@ -297,9 +341,9 @@ const captions = {
   }
 
   .hb-comp__part-label {
-    font-size: 0.8em;
+    font-size: 0.85em;
     font-weight: 600;
-    color: #ffc2a8;
+    color: var(--color-ink-primary);
   }
 
   .hb-comp__tick {
@@ -325,40 +369,47 @@ const captions = {
   .hb-comp__code {
     left: 6%;
     top: 9%;
-    width: 64%;
+    width: 66%;
     background: #0c3f3a;
   }
 
   .hb-code {
     display: grid;
-    gap: 0.65em;
-    padding-top: 0.4em;
+    gap: 0.35em;
+    padding-top: 0.2em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85em;
+    line-height: 1.5;
+    color: rgb(255 248 242 / 0.82);
   }
 
-  .hb-code > span:not(.hb-code__mark),
-  .hb-code__mark > span {
-    display: block;
-    width: var(--w);
-    height: 0.5em;
-    margin-left: calc(var(--i, 0) * 1.1em);
-    border-radius: 999px;
-    background: var(--c, rgb(255 248 242 / 0.25));
+  .hb-code__line {
+    display: flex;
+    padding: 0.25em 0.4em;
+    border-radius: 0.4em;
   }
 
-  /* The lines the note is pinned to. */
-  .hb-code__mark {
-    display: grid;
-    gap: 0.65em;
-    margin: -0.1em -0.5em;
-    padding: 0.5em;
-    border-radius: 0.5em;
-    border: 1.5px solid var(--color-primary);
-    background: rgb(242 141 104 / 0.1);
+  .hb-code__line:first-child {
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  /* The line the note is pinned to. */
+  .hb-code__line.is-marked {
+    outline: 1.5px solid var(--color-primary);
+    background: rgb(242 141 104 / 0.12);
+    color: var(--color-ink-primary);
+  }
+
+  .hb-code__no {
+    flex: none;
+    width: 1.6em;
+    color: rgb(255 248 242 / 0.45);
   }
 
   .hb-comp__note {
-    right: 6%;
-    top: 30%;
+    right: 5%;
+    top: 45%;
     width: 38%;
     box-sizing: border-box;
     padding: 1.4em 1em 1.1em;
@@ -371,9 +422,20 @@ const captions = {
 
   .hb-comp__note-label {
     display: block;
-    margin-bottom: 0.6em;
+    margin-bottom: 0.7em;
     font-size: 0.85em;
     font-weight: 700;
+    line-height: 1.35;
+  }
+
+  .hb-comp__field-empty {
+    display: block;
+    padding: 0.9em 0.7em;
+    border-radius: 0.5em;
+    border: 1.5px dashed rgb(1 61 57 / 0.55);
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--color-dark);
   }
 
   .hb-comp__pin {
@@ -458,6 +520,10 @@ const captions = {
 
   /* Phones: taller stage, wider pieces, so the real names stay legible. */
   @media (max-width: 30rem) {
+    .hb-comp--mentor .hb-comp__stage {
+      aspect-ratio: 1 / 0.86;
+    }
+
     .hb-comp__stage {
       aspect-ratio: 1 / 0.92;
       font-size: 0.75rem;
@@ -485,8 +551,9 @@ const captions = {
     }
 
     .hb-comp__note {
-      width: 48%;
-      top: 40%;
+      width: 52%;
+      top: auto;
+      bottom: 6%;
     }
 
     .hb-comp__search {

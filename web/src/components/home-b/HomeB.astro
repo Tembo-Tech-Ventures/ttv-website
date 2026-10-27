@@ -24,7 +24,7 @@ const { builders, isAuthenticated } = Astro.props;
 
 <div class="hb" data-hb-root>
   <Sheet id="cohorts" tone="base" labelledby="hb-cohorts-title" layer={1}>
-    <Cohort />
+    <Cohort builders={builders} />
   </Sheet>
   <Sheet id="builders" tone="raised" labelledby="hb-builders-title" layer={2}>
     <Builders builders={builders} />

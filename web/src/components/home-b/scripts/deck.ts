@@ -7,7 +7,7 @@ interface Deck {
   stage: HTMLElement;
   deck: HTMLElement;
   cards: HTMLElement[];
-  buttons: HTMLButtonElement[];
+  buttons: HTMLElement[];
   /** Back-to-front slot of each card, by DOM index. */
   slots: number[];
 }
@@ -22,7 +22,7 @@ function findDeck(root: HTMLElement): Deck | null {
   const deck = stage?.querySelector<HTMLElement>("[data-hb-deck]");
   if (!stage || !deck) return null;
   const cards = [...deck.querySelectorAll<HTMLElement>("[data-hb-deck-card]")];
-  const buttons = cards.map((card) => card.querySelector<HTMLButtonElement>("[data-hb-deck-button]")!);
+  const buttons = cards.map((card) => card.querySelector<HTMLElement>("[data-hb-deck-button]")!);
   const slots = cards.map((card) => Number(card.style.getPropertyValue("--slot")) || 0);
   const found = { stage, deck, cards, buttons, slots };
   decks.set(root, found);
@@ -30,31 +30,67 @@ function findDeck(root: HTMLElement): Deck | null {
 }
 
 /**
- * Pressing a card brings it to the top of the deck (the others close up
- * behind it). Works with or without motion; with motion the CSS pose
- * transition carries the card across.
+ * Turns the deck cards into toggle buttons (only now that JS can honour them)
+ * and brings the pressed card to the top, the others closing up behind it.
+ * The card on top shows its cohort's published builders, and the hero's
+ * "Meet the builders" link then leads to that cohort's first card. Works with
+ * or without motion; with motion the CSS pose transition carries the card.
  */
 export function initDeckSelect(root: HTMLElement): (() => void) | null {
   const found = findDeck(root);
   if (!found) return null;
-  const { cards, buttons, slots } = found;
+  const { deck, cards, buttons, slots } = found;
   const top = cards.length - 1;
-  const onClick = (event: Event) => {
-    const chosen = buttons.indexOf(event.currentTarget as HTMLButtonElement);
+
+  const sync = () => {
+    cards.forEach((card, index) => {
+      const onTop = slots[index] === top;
+      card.style.setProperty("--slot", String(slots[index]));
+      card.classList.toggle("is-top", onTop);
+      buttons[index].setAttribute("aria-pressed", String(onTop));
+    });
+    const chosen = cards[slots.indexOf(top)];
+    if (chosen && !chosen.classList.contains("hb-cc--running")) root.dataset.hbCohort = chosen.dataset.cohort;
+    else delete root.dataset.hbCohort;
+  };
+
+  const choose = (chosen: number) => {
     if (chosen < 0 || slots[chosen] === top) return;
     const from = slots[chosen];
     slots.forEach((slot, index) => {
       if (index === chosen) slots[index] = top;
       else if (slot > from) slots[index] = slot - 1;
     });
-    cards.forEach((card, index) => {
-      card.style.setProperty("--slot", String(slots[index]));
-      buttons[index].setAttribute("aria-pressed", String(index === chosen));
-    });
+    sync();
     root.dispatchEvent(new CustomEvent("hb:deck"));
   };
-  buttons.forEach((button) => button.addEventListener("click", onClick));
-  return () => buttons.forEach((button) => button.removeEventListener("click", onClick));
+
+  const onClick = (event: Event) => choose(buttons.indexOf(event.currentTarget as HTMLElement));
+  const onKey = (event: KeyboardEvent) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    choose(buttons.indexOf(event.currentTarget as HTMLElement));
+  };
+
+  deck.classList.add("hb-deck--live");
+  buttons.forEach((button) => {
+    button.setAttribute("role", "button");
+    button.tabIndex = 0;
+    button.addEventListener("click", onClick);
+    button.addEventListener("keydown", onKey);
+  });
+  sync();
+
+  return () => {
+    deck.classList.remove("hb-deck--live");
+    buttons.forEach((button) => {
+      button.removeAttribute("role");
+      button.removeAttribute("tabindex");
+      button.removeAttribute("aria-pressed");
+      button.removeEventListener("click", onClick);
+      button.removeEventListener("keydown", onKey);
+    });
+  };
 }
 
 /**
@@ -77,9 +113,11 @@ export function deckMotion(root: HTMLElement, finePointer: boolean): { scene: Sc
   let narrow = false;
 
   const render = () => {
-    const spread = (narrow ? 3 : 14) * fan + (narrow ? 6 : 26) * state.part;
-    const turn = (narrow ? 1.2 : 2.6) * fan + (narrow ? 1.6 : 3.2) * state.part;
-    const lift = 16 * fan + (narrow ? 10 : 22) * state.part;
+    // Phones: a gentle fan only. Parting would push the outer cards past the gutter.
+    const spread = narrow ? 3 * fan : 14 * fan + 26 * state.part;
+    const turn = narrow ? 1.2 * fan : 2.6 * fan + 3.2 * state.part;
+    // On phones the deck sits under the eligibility line: never lift it over that.
+    const lift = narrow ? 0 : 16 * fan + 22 * state.part;
     cards.forEach((_, index) => {
       const slot = slots[index] ?? index;
       setters[index].x((slot - last / 2) * spread);

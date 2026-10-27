@@ -5,7 +5,8 @@ import { rhythmScene } from "./hero";
 import { hireScene } from "./hire";
 import { fitPrinciples } from "./principles";
 import { navHeight, runScenes, type Scene } from "./scenes";
-import { cardStackScene, sheetScene } from "./stack";
+import { initNavigation } from "./navigate";
+import { LEAD, cardStackScene, sheetScene } from "./stack";
 
 const MOTION = "(prefers-reduced-motion: no-preference)";
 const FINE_POINTER = "(hover: hover) and (pointer: fine)";
@@ -26,7 +27,7 @@ function start(root: HTMLElement) {
     const scenes = [
       sheetScene(root),
       builders
-        ? cardStackScene(builders, { recede: ".hb-bc", scale: 0.025, dim: 0.3, file: { min: 46, narrowMin: 40, max: 58 } })
+        ? cardStackScene(builders, { recede: ".hb-bc", scale: 0.025, dim: 0.3, file: { min: 56, narrowMin: 54, max: 66 } })
         : null,
       values ? cardStackScene(values, { recede: ".hb-value__inner", scale: 0.04 }) : null,
       deck?.scene ?? null,
@@ -34,7 +35,9 @@ function start(root: HTMLElement) {
       hireScene(root),
     ].filter((scene): scene is Scene => scene !== null);
     const stopScenes = runScenes(scenes, root);
+    const stopNavigation = initNavigation(root, () => Math.round(window.innerHeight * LEAD));
     return () => {
+      stopNavigation();
       stopScenes();
       deck?.stop();
     };

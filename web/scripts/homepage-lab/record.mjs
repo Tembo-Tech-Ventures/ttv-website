@@ -236,6 +236,20 @@ async function recordSegment(segment, index) {
         await page.waitForTimeout(gap);
       }
     },
+    /** Reloads the candidate so its intro plays again on camera. */
+    async reload() {
+      await frame.goto(url, { waitUntil: "load" });
+      await frame.evaluate(() => document.fonts.ready);
+    },
+    /** Swipes a horizontal track by a distance, smoothly, with a touch ripple. */
+    async swipe(selector, dx, ms = 700) {
+      const rect = await box(selector);
+      const x = rect.x - offset.x + rect.width * 0.7;
+      const y = rect.y - offset.y + rect.height / 2;
+      await frame.evaluate((point) => window.labRipple?.(point.x, point.y), { x, y });
+      await frame.locator(selector).first().evaluate((el, distance) => el.scrollBy({ left: distance, behavior: "smooth" }), dx);
+      await page.waitForTimeout(ms);
+    },
     /** Smoothly scrolls the page by wheel, like a person with a trackpad. */
     async scrollBy(dy, ms = 1600) {
       const steps = Math.max(10, Math.round(ms / 24));
