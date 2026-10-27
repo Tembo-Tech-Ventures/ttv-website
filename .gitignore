@@ -16,3 +16,4 @@ web/.cloudflare/
 # Astro's generated types, written at the repo root when a tool is run from
 # there rather than from web/.
 .astro/
+.homepage-lab/

@@ -1,0 +1,357 @@
+---
+import type { HomepageBuilder } from "@/lib/homepage/builders";
+import { HIRE } from "@/lib/homepage/content";
+
+/**
+ * Two overlapping cards on the one warm sheet in the stack, the same kind of
+ * card as the hero deck. They part and the one you point at (or focus) lifts;
+ * on scroll they arrive more tightly overlapped and settle apart (`hire.ts`).
+ */
+interface Props {
+  builders: HomepageBuilder[];
+}
+
+const { builders } = Astro.props;
+// The kinds of work the summary invites, as the brief you would start from.
+const PROPOSALS = ["A project", "A role", "A piece of work"] as const;
+const faces = builders.slice(0, 4);
+const firstNames = faces.map((builder) => builder.name.split(" ")[0]);
+const more = builders.length - faces.length;
+const namesLine = firstNames.length > 0 ? `${firstNames.join(", ")}${more > 0 ? ` and ${more} more` : ""}` : null;
+---
+
+<div class="hp-hire">
+  <div class="hp-hire__copy">
+    <h2 id="hp-hire-title" class="hp-h2 font-heading tracking-heading">{HIRE.title}</h2>
+    <p class="hp-hire__summary">{HIRE.summary}</p>
+  </div>
+
+  <div class="hp-hire__pair" data-hp-hire>
+    <div class="hp-hslot hp-hslot--primary" data-hp-hire-card>
+    <a class="hp-hcard hp-hcard--primary" href={HIRE.primary.href}>
+      <span class="hp-hcard__knot" aria-hidden="true" data-hp-knot></span>
+      <span class="hp-hcard__brief" aria-hidden="true">
+        {PROPOSALS.map((kind) => <span>{kind}</span>)}
+      </span>
+      <span class="hp-hcard__label">{HIRE.primary.label}</span>
+      <span class="hp-hcard__arrow" aria-hidden="true">
+        <svg viewBox="0 0 20 20" width="20" height="20"><path d="M4 10h11m-4.5-4.5L15 10l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      </span>
+    </a>
+    </div>
+    <div class="hp-hslot hp-hslot--secondary" data-hp-hire-card>
+    <a class="hp-hcard hp-hcard--secondary" href={HIRE.secondary.href}>
+      <span class="hp-hcard__faces" aria-hidden="true">
+        {faces.length > 0
+          ? faces.map((builder) => <span class="font-heading">{builder.initials}</span>)
+          : [0, 1, 2].map(() => <span />)}
+      </span>
+      {namesLine && <span class="hp-hcard__names">{namesLine}</span>}
+      <span class="hp-hcard__label">{HIRE.secondary.label}</span>
+      <span class="hp-hcard__arrow" aria-hidden="true">
+        <svg viewBox="0 0 20 20" width="20" height="20"><path d="M4 10h11m-4.5-4.5L15 10l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      </span>
+    </a>
+    </div>
+  </div>
+</div>
+
+<style>
+  .hp-hire {
+    display: grid;
+    gap: clamp(2.5rem, 6vw, 4rem);
+    align-items: center;
+  }
+
+  @media (min-width: 64rem) {
+    .hp-hire {
+      grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+      column-gap: clamp(3rem, 6vw, 6rem);
+    }
+  }
+
+  .hp-hire :global(.hp-h2) {
+    color: var(--color-dark);
+  }
+
+  .hp-hire__summary {
+    margin: 1.25rem 0 0;
+    max-width: 30rem;
+    font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.2rem);
+    line-height: 1.6;
+    color: #01302c;
+  }
+
+  /* ---------- The overlapping pair ---------- */
+  .hp-hire__pair {
+    --overlap: clamp(2.5rem, 7vw, 4.5rem);
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    padding-block: 0.5rem 1rem;
+  }
+
+  .hp-hcard {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    align-content: start;
+    min-height: 13.5rem;
+    padding: clamp(1.4rem, 3vw, 2rem);
+    border-radius: 1.5rem;
+    text-decoration: none;
+    box-shadow: 0 28px 50px -28px rgb(1 30 28 / 0.75);
+    transition:
+      translate 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      rotate 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      scale 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 420ms ease;
+  }
+
+  /* GSAP moves the slots on scroll; the cards inside keep their CSS pose and hover. */
+  .hp-hslot {
+    position: relative;
+  }
+
+  .hp-hslot--primary {
+    z-index: 1;
+  }
+
+  .hp-hslot--secondary {
+    z-index: 2;
+    margin-top: calc(-1 * var(--overlap));
+  }
+
+  .hp-hslot:has(.hp-hcard:hover, .hp-hcard:focus-visible) {
+    z-index: 3;
+  }
+
+  .hp-hcard--primary {
+    width: 88%;
+    padding-bottom: calc(clamp(1.4rem, 3vw, 2rem) + var(--overlap));
+    background: var(--color-dark);
+    color: var(--color-ink-primary);
+    rotate: -2deg;
+  }
+
+  .hp-hcard--secondary {
+    grid-template-rows: auto auto 1fr;
+    width: 82%;
+    margin-left: auto;
+    background: #fff8f2;
+    color: var(--color-dark);
+    rotate: 2deg;
+  }
+
+  /* Where the skills map's thread ties off (wide screens, scripts/thread.ts):
+   * on the card's top edge, so it moves with the card. */
+  .hp-hcard__knot {
+    position: absolute;
+    top: -6.5px;
+    right: 64px;
+    z-index: 2;
+    display: none;
+    width: 13px;
+    height: 13px;
+    margin-right: -6.5px;
+    box-sizing: border-box;
+    border-radius: 50%;
+    border: 3px solid #fff8f2;
+    background: var(--color-dark);
+  }
+
+  @media (min-width: 88rem) {
+    .hp-hcard__knot {
+      display: block;
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.hp-hcard__knot.is-tied) {
+      animation: hp-tie 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .hp-hcard--primary:has(:global(.hp-hcard__knot.is-tied)) .hp-hcard__arrow {
+      animation: hp-nudge 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+  }
+
+  @keyframes hp-tie {
+    40% {
+      box-shadow: 0 0 0 8px rgb(1 61 57 / 0.25);
+      scale: 1.25;
+    }
+  }
+
+  @keyframes hp-nudge {
+    40% {
+      translate: 5px 0;
+    }
+  }
+
+  .hp-hcard__label {
+    align-self: end;
+    font-size: clamp(1.4rem, 1.1rem + 1.1vw, 2rem);
+    font-weight: 700;
+    line-height: 1.15;
+  }
+
+
+  .hp-hcard__arrow {
+    position: absolute;
+    right: clamp(1.4rem, 3vw, 2rem);
+    bottom: clamp(1.4rem, 3vw, 2rem);
+    display: grid;
+    place-items: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    transition: translate 320ms cubic-bezier(0.2, 0.8, 0.2, 1), rotate 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .hp-hcard--primary .hp-hcard__arrow {
+    top: clamp(1.4rem, 3vw, 2rem);
+    bottom: auto;
+    background: var(--color-primary);
+    color: var(--color-dark);
+  }
+
+  .hp-hcard--secondary .hp-hcard__arrow {
+    background: var(--color-dark);
+    color: var(--color-ink-primary);
+  }
+
+  .hp-hcard__brief {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-bottom: 1.75rem;
+    padding-right: 3.5rem;
+  }
+
+  .hp-hcard__brief span {
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    border: 1px dashed rgb(242 141 104 / 0.7);
+    font-size: 0.875rem;
+    color: var(--color-ink-primary);
+  }
+
+  .hp-hcard__faces {
+    display: flex;
+    margin-bottom: 1.5rem;
+  }
+
+  .hp-hcard__faces span {
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 0.8rem;
+    border: 2px solid #fff8f2;
+    background: var(--color-primary);
+    color: var(--color-dark);
+    font-size: 0.72rem;
+    transition: translate 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .hp-hcard__faces span:nth-child(even) {
+    background: var(--color-teal);
+    color: var(--color-ink-primary);
+  }
+
+  .hp-hcard__faces span + span {
+    margin-left: -0.3rem;
+  }
+
+  .hp-hcard__names {
+    margin: -1rem 0 1.25rem;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    color: #24413d;
+  }
+
+  /* Part on hover or focus; the one you are on comes forward. */
+  .hp-hire__pair:hover .hp-hcard--primary,
+  .hp-hire__pair:focus-within .hp-hcard--primary {
+    translate: -0.75rem -0.6rem;
+    rotate: -4deg;
+  }
+
+  .hp-hire__pair:hover .hp-hcard--secondary,
+  .hp-hire__pair:focus-within .hp-hcard--secondary {
+    translate: 0.75rem 0.9rem;
+    rotate: 3.5deg;
+  }
+
+  .hp-hcard:hover,
+  .hp-hcard:focus-visible {
+    scale: 1.02;
+    box-shadow: 0 40px 70px -30px rgb(1 30 28 / 0.85);
+  }
+
+  .hp-hcard:hover .hp-hcard__arrow,
+  .hp-hcard:focus-visible .hp-hcard__arrow {
+    translate: 4px 0;
+    rotate: -45deg;
+  }
+
+  .hp-hcard:hover .hp-hcard__faces span + span,
+  .hp-hcard:focus-visible .hp-hcard__faces span + span {
+    translate: 0.35rem 0;
+  }
+
+  .hp-hcard:hover .hp-hcard__faces span + span + span,
+  .hp-hcard:focus-visible .hp-hcard__faces span + span + span {
+    translate: 0.7rem 0;
+  }
+
+  .hp-hcard:hover .hp-hcard__faces span + span + span + span,
+  .hp-hcard:focus-visible .hp-hcard__faces span + span + span + span {
+    translate: 1.05rem 0;
+  }
+
+  .hp-hcard:focus-visible {
+    outline: 3px solid var(--color-dark);
+    outline-offset: 4px;
+  }
+
+  /* Below 64rem the pair spans the column: keep rotated, lifted and focused
+   * corners well inside the gutter (no sideways moves, gentler tilts). */
+  @media (max-width: 63.99rem) {
+    .hp-hcard--primary {
+      width: 92%;
+      rotate: -1deg;
+    }
+
+    .hp-hcard--secondary {
+      width: 92%;
+      rotate: 1deg;
+    }
+
+    .hp-hcard:hover,
+    .hp-hcard:focus-visible {
+      scale: 1.01;
+    }
+
+    .hp-hire__pair:hover .hp-hcard--primary,
+    .hp-hire__pair:focus-within .hp-hcard--primary {
+      translate: 0 -0.4rem;
+      rotate: -1.5deg;
+    }
+
+    .hp-hire__pair:hover .hp-hcard--secondary,
+    .hp-hire__pair:focus-within .hp-hcard--secondary {
+      translate: 0 0.5rem;
+      rotate: 1.5deg;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hp-hcard,
+    .hp-hcard__arrow,
+    .hp-hcard__faces span {
+      transition: none;
+    }
+  }
+</style>

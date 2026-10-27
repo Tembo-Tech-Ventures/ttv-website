@@ -1,0 +1,57 @@
+---
+import type { HomepageBuilder } from "@/lib/homepage/builders";
+import Sheet from "./Sheet.astro";
+import Cohort from "./Cohort.astro";
+import SkillsMap from "./SkillsMap.astro";
+import Builders from "./Builders.astro";
+import Community from "./Community.astro";
+import Hire from "./Hire.astro";
+import Principles from "./Principles.astro";
+// oxlint-disable-next-line import/no-unassigned-import -- The homepage's prefixed shared pieces.
+import "./homepage.css";
+
+/**
+ * The homepage: a stack of sheets that tip back as the next slides over them,
+ * a network language (builders as dots, mentors as rings, partners as
+ * diamonds), and a 42-style skills map in the opening section. The server
+ * markup is the finished composition; `scripts/homepage.ts` adds the stacking,
+ * deck, tabs and arrival motion when the visitor allows motion. The design
+ * history is in docs/homepage.md.
+ */
+interface Props {
+  builders: HomepageBuilder[];
+  isAuthenticated: boolean;
+}
+
+const { builders, isAuthenticated } = Astro.props;
+---
+
+<div class="hp" data-hp-root>
+  <!-- Two layers, one section: the map slides over the hero like every other sheet. -->
+  <section id="cohorts" class="hp-group" aria-labelledby="hp-cohorts-title">
+    <Sheet tone="base" layer={1}>
+      <Cohort builders={builders} />
+    </Sheet>
+    <Sheet tone="map" layer={2}>
+      <SkillsMap builders={builders} />
+    </Sheet>
+  </section>
+  <Sheet id="builders" tone="raised" labelledby="hp-builders-title" layer={3}>
+    <Builders builders={builders} />
+  </Sheet>
+  <Sheet id="community" tone="lift" labelledby="hp-community-title" layer={4}>
+    <Community isAuthenticated={isAuthenticated} builders={builders} />
+  </Sheet>
+  <Sheet id="hire" tone="peach" labelledby="hp-hire-title" layer={5} fill>
+    <Hire builders={builders} />
+  </Sheet>
+  <Sheet id="principles" tone="deep" labelledby="hp-principles-title" layer={6} last>
+    <Principles />
+  </Sheet>
+</div>
+
+<script>
+  import { initHomepage } from "./scripts/homepage";
+
+  initHomepage();
+</script>

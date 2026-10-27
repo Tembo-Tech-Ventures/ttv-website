@@ -294,14 +294,14 @@ test.describe.serial("talent platform integration journey", () => {
     });
   });
 
-  test("homepage humans section links to published builders", async ({
+  test("homepage builders section links to published builders", async ({
     page,
   }) => {
     await page.goto("/");
-    const humansLink = page.locator('#humans a[href^="/talent/"]').first();
-    await expect(humansLink).toBeVisible();
+    const builderLink = page.locator('#builders a[href^="/talent/"]').first();
+    await expect(builderLink).toBeVisible();
     await page.screenshot({
-      path: evidence("integration-12-homepage-humans"),
+      path: evidence("integration-12-homepage-builders"),
       fullPage: true,
     });
   });

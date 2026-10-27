@@ -11,8 +11,8 @@ import {
 describe("public navigation", () => {
   it("keeps the public front-door links in the intended order", () => {
     expect(PUBLIC_NAV_LINKS).toEqual([
-      { label: "How", href: "/#what-we-do" },
-      { label: "Why", href: "/#why-tembo" },
+      { label: "How", href: "/#cohorts" },
+      { label: "Why", href: "/#principles" },
       { label: "Community", href: "/community" },
       { label: "Builders", href: "/talent" },
       { label: "Hire", href: "/hire" },
