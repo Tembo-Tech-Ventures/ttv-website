@@ -26,12 +26,19 @@ export const COHORT = {
     { title: "Stay in touch", copy: "The cohort ends. The community does not. Some alumni come back as mentors." },
   ],
   apply: { label: "Apply for a cohort", href: "/dashboard/apply" },
+  /** Cohorts 01 to the current one; only the current cohort is running. */
+  timeline: Array.from({ length: Number(SITE_FACTS.currentCohortNumber) }, (_, index) => {
+    const number = String(index + 1).padStart(2, "0");
+    const running = number === SITE_FACTS.currentCohortNumber;
+    return { number, label: `Cohort ${number}`, status: running ? "Running now" : "Complete", running };
+  }),
 } as const;
 
 export const BUILDERS = {
   title: "Meet the builders.",
   summary: "Cohort graduates who chose to publish their profile, and the work they put their names to.",
   all: { label: "See every builder", href: "/talent" },
+  empty: "Graduates publish their profiles when they finish a cohort. The first ones will appear here.",
 } as const;
 
 export interface CommunityPath {
@@ -73,6 +80,7 @@ export const COMMUNITY = {
       cta: "Partner with us",
     },
   ] satisfies readonly CommunityPath[],
+  joinLabel: "Join the community",
   join: (isAuthenticated: boolean) => communityEntryHref(isAuthenticated),
 } as const;
 
@@ -90,4 +98,4 @@ export const PRINCIPLES = {
 } as const;
 
 /** The homepage's sections, top to bottom. Candidates must keep this order. */
-export const SECTION_ORDER = ["cohort", "builders", "community", "hire", "principles"] as const;
+export const SECTION_ORDER = ["cohorts", "builders", "community", "hire", "principles"] as const;

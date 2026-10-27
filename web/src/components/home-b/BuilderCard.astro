@@ -1,0 +1,252 @@
+---
+import type { HomepageBuilder } from "@/lib/homepage/builders";
+
+interface Props {
+  builder: HomepageBuilder;
+  index: number;
+  total: number;
+}
+
+const { builder, index, total } = Astro.props;
+const meta = [builder.cohort, builder.country].filter(Boolean).join(" · ");
+const pad = (value: number) => String(value).padStart(2, "0");
+---
+
+<a class="hb-bc" href={builder.href}>
+  <span class="hb-bc__mono" aria-hidden="true">
+    {builder.image ? (
+      <img src={builder.image} alt="" width="160" height="160" loading="lazy" decoding="async" />
+    ) : (
+      <span class="font-heading tracking-display">{builder.initials}</span>
+    )}
+  </span>
+  <span class="hb-bc__main">
+    <span class="hb-bc__top">
+      <span class="hb-bc__who">
+        <span class="hb-bc__name">{builder.name}</span>
+        {meta && <span class="hb-bc__meta">{meta}</span>}
+      </span>
+      {total > 1 && (
+        <span class="hb-bc__count" aria-hidden="true">
+          {pad(index + 1)}<span>/{pad(total)}</span>
+        </span>
+      )}
+    </span>
+    {builder.headline && <span class="hb-bc__headline">{builder.headline}</span>}
+    {builder.project && (
+      <span class="hb-bc__project">
+        <span class="hb-bc__repo">
+          <svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14"><path d="M3 2.5h7.5L13 5v8.5H3z M10.5 2.5V5H13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" /></svg>
+          {builder.project.name}
+        </span>
+        {builder.project.description && <span class="hb-bc__desc">{builder.project.description}</span>}
+        {builder.project.language && (
+          <span class="hb-bc__lang"><span class="hb-bc__dot" aria-hidden="true" />{builder.project.language}</span>
+        )}
+      </span>
+    )}
+    {builder.skills.length > 0 && (
+      <span class="hb-bc__skills">
+        {builder.skills.map((skill) => <span class="hb-bc__skill">{skill}</span>)}
+      </span>
+    )}
+  </span>
+  <span class="hb-bc__dim" aria-hidden="true" data-hb-dim></span>
+</a>
+
+<style>
+  .hb-bc {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: clamp(1rem, 2.5vw, 1.75rem);
+    padding: clamp(1.25rem, 2.5vw, 1.75rem);
+    border-radius: 1.5rem;
+    background: linear-gradient(180deg, #145c54, #0f514a);
+    border: 1px solid rgb(255 248 242 / 0.12);
+    box-shadow:
+      0 1px 0 rgb(255 248 242 / 0.1) inset,
+      0 -14px 34px -22px rgb(0 0 0 / 0.6),
+      0 24px 46px -30px rgb(0 0 0 / 0.75);
+    color: var(--color-ink-primary);
+    text-decoration: none;
+    transform-origin: 50% 0%;
+    transition:
+      translate 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 320ms ease,
+      border-color 320ms ease;
+  }
+
+  .hb-bc:hover,
+  .hb-bc:focus-visible {
+    translate: 0 -6px;
+    border-color: rgb(242 141 104 / 0.6);
+    box-shadow:
+      0 1px 0 rgb(255 248 242 / 0.12) inset,
+      0 -14px 34px -22px rgb(0 0 0 / 0.6),
+      0 34px 60px -28px rgb(0 0 0 / 0.85);
+  }
+
+  .hb-bc:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 4px;
+  }
+
+  .hb-bc__mono {
+    display: grid;
+    place-items: center;
+    width: clamp(4rem, 9vw, 6.5rem);
+    aspect-ratio: 1;
+    border-radius: 1.1rem;
+    background: var(--color-primary);
+    color: var(--color-dark);
+    overflow: hidden;
+    font-size: clamp(1.35rem, 3vw, 2.1rem);
+    line-height: 1;
+    transition: rotate 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .hb-bc:hover .hb-bc__mono,
+  .hb-bc:focus-visible .hb-bc__mono {
+    rotate: -4deg;
+  }
+
+  .hb-bc__mono img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .hb-bc__main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    min-width: 0;
+  }
+
+  .hb-bc__top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .hb-bc__who {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+  }
+
+  .hb-bc__name {
+    font-size: clamp(1.15rem, 1rem + 0.6vw, 1.45rem);
+    font-weight: 700;
+    line-height: 1.25;
+  }
+
+  .hb-bc__meta {
+    font-size: 0.9rem;
+    color: var(--color-ink-secondary);
+  }
+
+  .hb-bc__count {
+    flex: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-primary);
+  }
+
+  .hb-bc__count span {
+    color: var(--color-ink-secondary);
+  }
+
+  .hb-bc__headline {
+    font-size: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+    line-height: 1.5;
+    color: var(--color-ink-primary);
+  }
+
+  .hb-bc__project {
+    display: grid;
+    gap: 0.3rem;
+    padding: 0.85rem 1rem;
+    border-radius: 0.9rem;
+    background: rgb(1 46 43 / 0.55);
+    border: 1px solid rgb(255 248 242 / 0.08);
+  }
+
+  .hb-bc__repo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.875rem;
+    color: var(--color-primary);
+    overflow-wrap: anywhere;
+  }
+
+  .hb-bc__desc {
+    font-size: 0.925rem;
+    line-height: 1.5;
+    color: var(--color-ink-secondary);
+  }
+
+  .hb-bc__lang {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8125rem;
+    color: var(--color-ink-secondary);
+  }
+
+  .hb-bc__dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: #ffd166;
+  }
+
+  .hb-bc__skills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .hb-bc__skill {
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid rgb(255 248 242 / 0.2);
+    font-size: 0.8125rem;
+    color: var(--color-ink-primary);
+  }
+
+  .hb-bc__dim {
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: #00110f;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  @media (max-width: 30rem) {
+    .hb-bc {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .hb-bc__mono {
+      position: absolute;
+      top: 1.25rem;
+      left: 1.25rem;
+      width: 3.25rem;
+      font-size: 1.15rem;
+      border-radius: 0.8rem;
+    }
+
+    .hb-bc__top {
+      min-height: 3.25rem;
+      padding-left: 4.25rem;
+    }
+  }
+</style>

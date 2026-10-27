@@ -27,8 +27,13 @@ describe("homepage content", () => {
     for (const path of gated) expect(path.detail).toMatch(/approved/);
   });
 
+  it("lists every cohort up to the running one", () => {
+    expect(COHORT.timeline.map((cohort) => cohort.number)).toEqual(["01", "02", "03", "04"]);
+    expect(COHORT.timeline.filter((cohort) => cohort.running).map((cohort) => cohort.label)).toEqual(["Cohort 04"]);
+  });
+
   it("puts cohorts first and principles last", () => {
-    expect(SECTION_ORDER[0]).toBe("cohort");
+    expect(SECTION_ORDER[0]).toBe("cohorts");
     expect(SECTION_ORDER.at(-1)).toBe("principles");
     expect(COHORT.apply.href).toBe("/dashboard/apply");
     expect(HIRE.primary.href).toBe("/hire");

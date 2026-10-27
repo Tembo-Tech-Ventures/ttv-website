@@ -1,0 +1,106 @@
+---
+/**
+ * One sheet in candidate B's stack. Every major section is a sheet with
+ * rounded top corners that slides over the one before it. Without JS (or with
+ * reduced motion) sheets simply sit in flow with their corners overlapping;
+ * `stack.ts` adds `hb-stacked` to the root, measures each sheet and makes it
+ * stick by its bottom edge so the next one can slide over it.
+ */
+interface Props {
+  id: string;
+  tone: "base" | "raised" | "lift" | "peach" | "deep";
+  labelledby: string;
+  layer: number;
+}
+
+const { id, tone, labelledby, layer } = Astro.props;
+---
+
+<section
+  id={id}
+  class:list={["hb-sheet", `hb-sheet--${tone}`]}
+  style={`--hb-layer:${layer}`}
+  aria-labelledby={labelledby}
+  data-hb-sheet
+>
+  <div class="hb-sheet__body">
+    <slot />
+  </div>
+  <div class="hb-sheet__dim" aria-hidden="true" data-hb-dim></div>
+</section>
+
+<style>
+  .hb-sheet {
+    --hb-radius: clamp(1.5rem, 3vw, 2.75rem);
+    position: relative;
+    z-index: var(--hb-layer);
+    border-radius: var(--hb-radius) var(--hb-radius) 0 0;
+    background: var(--hb-surface);
+    color: var(--hb-text, #fff8f2);
+    box-shadow:
+      0 -1px 0 var(--hb-edge),
+      0 -28px 60px -24px rgb(0 0 0 / 0.5);
+    padding-block: clamp(4rem, 8vw, 7.5rem) clamp(5rem, 9vw, 8rem);
+    transform-origin: 50% var(--hb-origin, 50%);
+  }
+
+  .hb-sheet + .hb-sheet {
+    margin-top: calc(-1 * var(--hb-radius));
+  }
+
+  .hb-sheet__body {
+    position: relative;
+    margin-inline: auto;
+    max-width: 80rem;
+    padding-inline: clamp(1.25rem, 4vw, 3rem);
+  }
+
+  .hb-sheet__dim {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: #00110f;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .hb-sheet--base {
+    --hb-surface:
+      radial-gradient(900px 520px at 8% 0%, rgb(242 141 104 / 0.13), transparent 62%),
+      radial-gradient(700px 600px at 100% 40%, rgb(44 105 100 / 0.35), transparent 70%),
+      #023f3a;
+    --hb-edge: rgb(255 248 242 / 0.08);
+    margin-top: clamp(0.5rem, 1.5vw, 1rem);
+  }
+
+  .hb-sheet--raised {
+    --hb-surface: #0a4842;
+    --hb-edge: rgb(255 248 242 / 0.1);
+  }
+
+  .hb-sheet--lift {
+    --hb-surface: #10524b;
+    --hb-edge: rgb(255 248 242 / 0.12);
+  }
+
+  .hb-sheet--peach {
+    --hb-surface: #f28d68;
+    --hb-text: #013d39;
+    --hb-edge: rgb(255 248 242 / 0.35);
+  }
+
+  .hb-sheet--deep {
+    --hb-surface: #012e2b;
+    --hb-edge: rgb(242 141 104 / 0.28);
+  }
+
+  :global(.hb-stacked) .hb-sheet:not(:last-of-type) {
+    position: sticky;
+    top: var(--hb-stick, auto);
+  }
+
+  /* A pause between sheets: the one below settles back before the next arrives. */
+  :global(.hb-stacked) .hb-sheet + .hb-sheet {
+    margin-top: var(--hb-hold, 0px);
+  }
+</style>

@@ -1,0 +1,113 @@
+---
+import { PRINCIPLES } from "@/lib/homepage/content";
+
+/**
+ * The five principles as a last stack. Words are outlined Mattone sized so
+ * the longest fits its row (from measured advance widths, then refined by
+ * `principles.ts` once the font loads); all five share one size so no word
+ * shouts over another. With motion, each row sticks and the next slides over
+ * it, and a word fills with peach as it lands. Reduced motion is a static list.
+ */
+const LONGEST_ADVANCE_EM = 9.29; // PHILOSOPHY in Mattone at -0.02em tracking
+const fit = (0.97 / LONGEST_ADVANCE_EM).toFixed(4);
+---
+
+<h2 id="hb-principles-title" class="hb-h2 font-heading tracking-heading">{PRINCIPLES.title}</h2>
+
+<ol class="hb-values" style={`--hb-fit:${fit}`} data-hb-values>
+  {PRINCIPLES.values.map((value, index) => (
+    <li class="hb-value" style={`--i:${index}`} data-hb-value>
+      <div class="hb-value__inner">
+        <p class="hb-value__word font-heading tracking-display" data-hb-word>{value.word}</p>
+        <p class="hb-value__commitment">{value.commitment}</p>
+      </div>
+      <span class="hb-value__dim" aria-hidden="true" data-hb-dim></span>
+    </li>
+  ))}
+</ol>
+
+<style>
+  .hb-values {
+    margin: clamp(2rem, 5vw, 3.5rem) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .hb-value {
+    position: relative;
+    border-top: 1px solid rgb(242 141 104 / 0.28);
+  }
+
+  .hb-value__inner {
+    container-type: inline-size;
+    padding-block: clamp(1.25rem, 3vw, 2.25rem);
+  }
+
+  .hb-value__word {
+    display: inline-block;
+    margin: 0;
+    font-size: calc(var(--hb-fit) * 100cqi);
+    line-height: 1.12;
+    white-space: nowrap;
+    color: transparent;
+    -webkit-text-stroke: 1.5px var(--color-primary);
+    background: linear-gradient(90deg, var(--color-primary) 50%, transparent 50%) 100% 0 / 200% 100% no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+
+  .hb-value__commitment {
+    max-width: 34rem;
+    /* Equal rows, so a covered row never peeks out below the one on top. */
+    min-height: calc(3 * 1.55em);
+    margin: clamp(0.75rem, 2vw, 1.25rem) 0 0;
+    font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.25rem);
+    line-height: 1.55;
+    color: var(--color-ink-primary);
+  }
+
+  @media (min-width: 48rem) {
+    .hb-value__commitment {
+      margin-left: auto;
+      min-height: calc(2 * 1.55em);
+    }
+  }
+
+  .hb-value__dim {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: #00110f;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .hb-value {
+      position: sticky;
+      top: calc(var(--hb-nav, 4.6rem) + 0.75rem + var(--i) * 0.7rem);
+      margin-bottom: 28vh;
+      border-radius: 1.25rem 1.25rem 0 0;
+      background: #012e2b;
+      box-shadow: 0 -18px 30px -24px rgb(0 0 0 / 0.7);
+    }
+
+    .hb-value:last-child {
+      margin-bottom: 0;
+    }
+
+    @media (max-width: 47.99rem) {
+      .hb-value {
+        margin-bottom: 18vh;
+      }
+    }
+
+    .hb-value__word {
+      transition: background-position 1s cubic-bezier(0.65, 0, 0.2, 1);
+    }
+
+    .hb-value.is-landed .hb-value__word {
+      background-position: 0 0;
+    }
+  }
+</style>
