@@ -1,8 +1,9 @@
 import { gsap } from "gsap";
+import { initBuilderKin } from "./builders";
 import { initCommunityTabs } from "./community";
 import { deckMotion, initDeckSelect } from "./deck";
-import { rhythmScene } from "./hero";
 import { hireScene } from "./hire";
+import { initSkillsMap, mapScene } from "./map";
 import { fitPrinciples } from "./principles";
 import { navHeight, runScenes, type Scene } from "./scenes";
 import { initNavigation } from "./navigate";
@@ -16,6 +17,8 @@ function start(root: HTMLElement) {
   fitPrinciples(root);
   initDeckSelect(root);
   initCommunityTabs(root, () => window.matchMedia(MOTION).matches);
+  initSkillsMap(root);
+  initBuilderKin(root);
   // Runs with or without motion: it also carries the deck's cohort jump.
   initNavigation(root, () => Math.round(window.innerHeight * LEAD), () => window.matchMedia(MOTION).matches);
 
@@ -33,7 +36,7 @@ function start(root: HTMLElement) {
         : null,
       values ? cardStackScene(values, { recede: ".hd-value__inner", scale: 0.04 }) : null,
       deck?.scene ?? null,
-      rhythmScene(root),
+      mapScene(root),
       hireScene(root),
     ].filter((scene): scene is Scene => scene !== null);
     const stopScenes = runScenes(scenes, root);

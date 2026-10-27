@@ -1,13 +1,18 @@
 ---
 import type { HomepageBuilder } from "@/lib/homepage/builders";
 import { COHORT } from "@/lib/homepage/content";
+import { profileTags, signature, skillKey } from "@/lib/homepage/skills-map";
 import { cohortNumberOf } from "./cohorts";
 
 /**
  * One card in the builders' card file. The top strip (monogram, name, cohort)
  * is what stays visible once later cards cover this one, so the covered
  * cards read as an index of everyone you have passed. The small numbered tab
- * at the strip's end is the builder's cohort card from the hero deck.
+ * at the strip's end is the builder's cohort card from the hero deck; beside
+ * it, the builder's skills as a tiny constellation (the skills map's
+ * language): each skill sits at the same clock position on every card, so
+ * shared skills line up down the index. Pointing at or focusing a card lights
+ * the builders who share a skill with it (`scripts/builders.ts`).
  */
 interface Props {
   builder: HomepageBuilder;
@@ -17,6 +22,8 @@ const { builder } = Astro.props;
 const cohortNumber = cohortNumberOf(builder);
 const cohortIndex = COHORT.timeline.findIndex((cohort) => cohort.number === cohortNumber);
 const cohortRunning = cohortIndex >= 0 && COHORT.timeline[cohortIndex].running;
+const tags = profileTags(builder);
+const sig = signature(tags.map((tag) => tag.key));
 ---
 
 <a class="hd-bc" href={builder.href}>
@@ -37,6 +44,13 @@ const cohortRunning = cohortIndex >= 0 && COHORT.timeline[cohortIndex].running;
         </span>
       )}
     </span>
+    {sig.nodes.length > 0 && (
+      <svg class="hd-bc__sig" viewBox="0 0 28 28" width="34" height="34" aria-hidden="true" focusable="false">
+        <circle class="hd-bc__orbit" cx={sig.centre} cy={sig.centre} r={sig.orbit} />
+        {sig.arcs.map((d) => <path class="hd-bc__arc" d={d} />)}
+        {sig.nodes.map((node) => <circle class="hd-bc__node" cx={node.x} cy={node.y} r="2.4" data-tag={node.key} />)}
+      </svg>
+    )}
     {cohortNumber && cohortIndex >= 0 && (
       <span
         class:list={["hd-bc__tab font-heading", { "hd-bc__tab--running": cohortRunning }]}
@@ -48,7 +62,9 @@ const cohortRunning = cohortIndex >= 0 && COHORT.timeline[cohortIndex].running;
     )}
   </span>
   <span class="hd-bc__body">
-    {builder.country && <span class="hd-bc__meta hd-bc__country-body">{builder.country}</span>}
+    {(builder.cohort || builder.country) && (
+      <span class="hd-bc__meta hd-bc__country-body">{[builder.cohort, builder.country].filter(Boolean).join(" · ")}</span>
+    )}
     {builder.headline && <span class="hd-bc__headline">{builder.headline}</span>}
     {builder.project && (
       <span class="hd-bc__project">
@@ -58,13 +74,13 @@ const cohortRunning = cohortIndex >= 0 && COHORT.timeline[cohortIndex].running;
         </span>
         {builder.project.description && <span class="hd-bc__desc">{builder.project.description}</span>}
         {builder.project.language && (
-          <span class="hd-bc__lang"><span class="hd-bc__dot" aria-hidden="true" />{builder.project.language}</span>
+          <span class="hd-bc__lang" data-tag={skillKey(builder.project.language)}><span class="hd-bc__dot" aria-hidden="true" />{builder.project.language}</span>
         )}
       </span>
     )}
     {builder.skills.length > 0 && (
       <span class="hd-bc__skills">
-        {builder.skills.map((skill) => <span class="hd-bc__skill">{skill}</span>)}
+        {builder.skills.map((skill) => <span class="hd-bc__skill" data-tag={skillKey(skill)}>{skill}</span>)}
       </span>
     )}
   </span>
@@ -75,6 +91,7 @@ const cohortRunning = cohortIndex >= 0 && COHORT.timeline[cohortIndex].running;
   .hd-bc {
     position: relative;
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 1rem;
     padding: 0.8rem clamp(1rem, 2.5vw, 1.5rem) clamp(1.1rem, 2.5vw, 1.5rem);
     border-radius: 1.25rem;
@@ -165,8 +182,9 @@ const cohortRunning = cohortIndex >= 0 && COHORT.timeline[cohortIndex].running;
     display: none;
   }
 
+  /* Phones: the strip is the name and the cohort tab; cohort and country move to the body. */
   @media (max-width: 39.99rem) {
-    .hd-bc__country {
+    .hd-bc__who .hd-bc__meta {
       display: none;
     }
 
@@ -289,6 +307,76 @@ const cohortRunning = cohortIndex >= 0 && COHORT.timeline[cohortIndex].running;
     border: 1px solid rgb(255 248 242 / 0.22);
     font-size: 0.8125rem;
     color: var(--color-ink-primary);
+    transition: border-color 260ms ease, background-color 260ms ease;
+  }
+
+  /* ---------- Skill signature and shared skills ---------- */
+  .hd-bc__sig {
+    flex: none;
+    overflow: visible;
+  }
+
+  /* Phones keep the strip to name, cohort and tab; there is no hover to light kin. */
+  @media (max-width: 39.99rem) {
+    .hd-bc__sig {
+      display: none;
+    }
+  }
+
+  .hd-bc__orbit {
+    fill: none;
+    stroke: rgb(127 188 178 / 0.45);
+    stroke-width: 1;
+    stroke-dasharray: 1.5 2;
+  }
+
+  .hd-bc__arc {
+    fill: none;
+    stroke: rgb(242 141 104 / 0.6);
+    stroke-width: 1.2;
+  }
+
+  .hd-bc__node {
+    fill: #fff8f2;
+    stroke: #0f514a;
+    stroke-width: 1;
+    transition: fill 260ms ease, r 260ms ease;
+  }
+
+  /* The card you are on, and every builder who shares a skill with it. */
+  :global(.has-kin) .hd-bc__node.is-shared {
+    fill: var(--color-primary);
+    r: 3.4;
+  }
+
+  /* A covered strip that shares a skill comes out of the shade. */
+  :global(.is-kin) > .hd-bc > .hd-bc__dim {
+    opacity: 0 !important;
+  }
+
+  .hd-bc__skill.is-shared {
+    border-color: var(--color-primary);
+    background: rgb(242 141 104 / 0.16);
+  }
+
+  :global(.is-kin) > .hd-bc {
+    border-color: rgb(242 141 104 / 0.7);
+  }
+
+  :global(.is-kin) > .hd-bc .hd-bc__name {
+    text-decoration: underline;
+    text-decoration-color: var(--color-primary);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.25em;
+  }
+
+  .hd-bc__lang.is-shared {
+    color: var(--color-ink-primary);
+  }
+
+  .hd-bc__lang.is-shared .hd-bc__dot {
+    background: var(--color-primary);
+    box-shadow: 0 0 0 3px rgb(242 141 104 / 0.25);
   }
 
   .hd-bc__dim {
@@ -303,7 +391,9 @@ const cohortRunning = cohortIndex >= 0 && COHORT.timeline[cohortIndex].running;
   @media (prefers-reduced-motion: reduce) {
     .hd-bc,
     .hd-bc__mono,
-    .hd-bc__tab {
+    .hd-bc__tab,
+    .hd-bc__node,
+    .hd-bc__skill {
       transition: none;
     }
   }

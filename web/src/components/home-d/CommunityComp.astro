@@ -141,7 +141,19 @@ const captions = {
       </>
     )}
   </div>
-  <figcaption class="hd-comp__caption">{captions[path]}</figcaption>
+  <figcaption class="hd-comp__caption">
+    <svg class="hd-plug" viewBox="0 0 64 22" width="64" height="22" aria-hidden="true" focusable="false">
+      <path class="hd-plug__line" d="M6 15L18 7L30 15" />
+      <path class={`hd-plug__line hd-plug__line--${path}`} d={path === "builder" ? "M30 15L44 9" : path === "mentor" ? "M18 7L46 11M30 15L46 11" : "M6 15L48 13M30 15L48 13"} />
+      <circle class="hd-plug__dot" cx="6" cy="15" r="3.4" />
+      <circle class="hd-plug__dot" cx="18" cy="7" r="3.4" />
+      <circle class="hd-plug__dot" cx="30" cy="15" r="3.4" />
+      {path === "builder" && <circle class="hd-plug__dot hd-plug__dot--new" cx="46" cy="9" r="4.2" />}
+      {path === "mentor" && <circle class="hd-plug__ring" cx="48" cy="11" r="5" />}
+      {path === "partner" && <path class="hd-plug__diamond" d="M51 7.5L56.5 13L51 18.5L45.5 13Z" />}
+    </svg>
+    <span>{captions[path]}</span>
+  </figcaption>
 </figure>
 )}
 
@@ -213,6 +225,9 @@ const captions = {
   }
 
   .hd-comp__caption {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
     margin-top: 0.75rem;
     font-size: 0.875rem;
     color: var(--color-ink-secondary);
@@ -220,8 +235,50 @@ const captions = {
 
   @media (min-width: 56rem) {
     .hd-comp__caption {
+      justify-content: center;
       text-align: center;
     }
+  }
+
+  /* Where this role plugs into the network, in the skills map's shapes. */
+  .hd-plug {
+    flex: none;
+    overflow: visible;
+  }
+
+  .hd-plug__line {
+    fill: none;
+    stroke: rgb(127 188 178 / 0.5);
+    stroke-width: 1.2;
+  }
+
+  .hd-plug__line--builder,
+  .hd-plug__line--partner {
+    stroke: rgb(242 141 104 / 0.8);
+    stroke-dasharray: 2 2.5;
+  }
+
+  .hd-plug__line--mentor {
+    stroke: #7fbcb2;
+  }
+
+  .hd-plug__dot {
+    fill: var(--color-primary);
+  }
+
+  .hd-plug__dot--new {
+    stroke: var(--color-ink-primary);
+    stroke-width: 1.5;
+  }
+
+  .hd-plug__ring {
+    fill: #023834;
+    stroke: #7fbcb2;
+    stroke-width: 2;
+  }
+
+  .hd-plug__diamond {
+    fill: var(--color-ink-primary);
   }
 
   .hd-piece {

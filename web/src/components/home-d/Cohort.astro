@@ -2,6 +2,7 @@
 import type { HomepageBuilder } from "@/lib/homepage/builders";
 import { COHORT } from "@/lib/homepage/content";
 import { cohortNumberOf } from "./cohorts";
+import SkillsMap from "./SkillsMap.astro";
 
 /**
  * The opening sheet: what a cohort is, who can apply and how, beside a deck
@@ -10,7 +11,8 @@ import { cohortNumberOf } from "./cohorts";
  * same kind of card. Each card carries that cohort's published builders. With
  * JS the cards become buttons that bring a cohort to the top (and point the
  * "Meet the builders" link at it); pointing at or focusing the deck parts it
- * (`deck.ts`). The rhythm cards underneath deal themselves out into a row.
+ * (`deck.ts`). Below the facts, the skills map walks through a cohort's
+ * three steps (`SkillsMap.astro`).
  */
 interface Props {
   builders: HomepageBuilder[];
@@ -46,6 +48,28 @@ const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) 
   </div>
 
   <div class="hd-deck-stage" data-hd-deck-stage>
+    <svg class="hd-deck-net" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
+      {[
+        { rx: 92, ry: 70 },
+        { rx: 150, ry: 116 },
+        { rx: 196, ry: 156 },
+      ].map((ring, index) => (
+        <ellipse class="hd-deck-net__ring" cx="200" cy="214" rx={ring.rx} ry={ring.ry} pathLength="1" style={`--k:${index}`} />
+      ))}
+      <ellipse class="hd-deck-net__cohort" cx="200" cy="214" rx="173" ry="136" pathLength="1" />
+      {[
+        [62, 120],
+        [338, 104],
+        [374, 250],
+        [30, 292],
+        [118, 356],
+        [300, 352],
+        [214, 58],
+        [8, 196],
+      ].map(([cx, cy], index) => (
+        <circle class="hd-deck-net__dust" cx={cx} cy={cy} r={index % 3 === 0 ? 3 : 2.2} style={`--k:${index}`} />
+      ))}
+    </svg>
     <ol class="hd-deck" style={`--n:${cohorts.length}`} data-hd-deck aria-label="Our cohorts so far">
       {cohorts.map((cohort, index) => (
         <li
@@ -95,17 +119,7 @@ const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) 
 </div>
 
 
-<ol class="hd-rhythm" data-hd-rhythm>
-  {COHORT.rhythm.map((step, index) => (
-    <li class="hd-rhythm__card" style={`--k:${index}`} data-hd-rhythm-card>
-      <span class="hd-rhythm__shape" aria-hidden="true">
-        {Array.from({ length: index + 1 }, () => <span />)}
-      </span>
-      <h3 class="hd-rhythm__title">{step.title}</h3>
-      <p class="hd-rhythm__copy">{step.copy}</p>
-    </li>
-  ))}
-</ol>
+<SkillsMap builders={builders} />
 
 <style>
   /* ---------- Split hero ---------- */
@@ -262,8 +276,46 @@ const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) 
     perspective: 1100px;
   }
 
+  /* The skills map's rings, faint behind the deck: the cohort at the centre. */
+  .hd-deck-net {
+    position: absolute;
+    inset: -8% 0;
+    width: 100%;
+    height: 116%;
+    overflow: visible;
+    pointer-events: none;
+  }
+
+  @media (min-width: 64rem) {
+    .hd-deck-net {
+      inset: -24% -16%;
+      width: 132%;
+      height: 148%;
+    }
+  }
+
+  .hd-deck-net__ring {
+    fill: none;
+    stroke: rgb(127 188 178 / 0.3);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .hd-deck-net__cohort {
+    fill: none;
+    stroke: rgb(242 141 104 / 0.4);
+    stroke-width: 1.25;
+    stroke-dasharray: 0.006 0.014;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .hd-deck-net__dust {
+    fill: rgb(127 188 178 / 0.45);
+  }
+
   .hd-deck {
     position: relative;
+    z-index: 1;
     width: min(100% - 4rem, 24rem);
     height: calc(var(--card-h) + (var(--n) - 1) * var(--peek));
     margin: 0;
@@ -510,6 +562,21 @@ const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) 
       }
     }
 
+    .hd-deck-net__ring {
+      stroke-dasharray: 1 1;
+      animation: hd-draw 1.8s cubic-bezier(0.65, 0, 0.35, 1) backwards;
+      animation-delay: calc(200ms + var(--k) * 180ms);
+    }
+
+    .hd-deck-net__cohort,
+    .hd-deck-net__dust {
+      animation: hd-fade 900ms ease 1.1s backwards;
+    }
+
+    .hd-deck-net__dust {
+      animation-delay: calc(900ms + var(--k) * 70ms);
+    }
+
     .hd-cc__pulse::after {
       content: "";
       position: absolute;
@@ -536,6 +603,18 @@ const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) 
 
     .hd-hero__eligibility {
       animation-delay: 260ms;
+    }
+  }
+
+  @keyframes hd-draw {
+    from {
+      stroke-dashoffset: 1;
+    }
+  }
+
+  @keyframes hd-fade {
+    from {
+      opacity: 0;
     }
   }
 
@@ -604,69 +683,6 @@ const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) 
     max-width: 16rem;
     font-size: clamp(0.8125rem, 0.75rem + 0.3vw, 1rem);
     line-height: 1.45;
-    color: var(--color-ink-secondary);
-  }
-
-  /* ---------- Rhythm ---------- */
-  .hd-rhythm {
-    display: grid;
-    gap: 1rem;
-    margin: clamp(2.5rem, 5vw, 3.5rem) 0 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  @media (min-width: 48rem) {
-    .hd-rhythm {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 1.25rem;
-    }
-  }
-
-  .hd-rhythm__card {
-    position: relative;
-    z-index: calc(1 + var(--k));
-    padding: clamp(1.4rem, 2.5vw, 1.9rem);
-    border-radius: 1.25rem;
-    background: #0b4a44;
-    border: 1px solid rgb(255 248 242 / 0.1);
-    box-shadow: 0 22px 40px -26px rgb(0 0 0 / 0.75);
-  }
-
-  .hd-rhythm__shape {
-    display: flex;
-    height: 1.75rem;
-    margin-bottom: 1.25rem;
-  }
-
-  .hd-rhythm__shape span {
-    width: 1.35rem;
-    height: 1.75rem;
-    border-radius: 0.35rem;
-    border: 1.5px solid var(--color-primary);
-    background: #0b4a44;
-  }
-
-  .hd-rhythm__shape span + span {
-    margin-left: -0.8rem;
-    translate: 0 -0.2rem;
-  }
-
-  .hd-rhythm__shape span:last-child {
-    background: var(--color-primary);
-  }
-
-  .hd-rhythm__title {
-    margin: 0;
-    font-size: clamp(1.125rem, 1rem + 0.4vw, 1.3rem);
-    line-height: 1.3;
-    color: var(--color-ink-primary);
-  }
-
-  .hd-rhythm__copy {
-    margin: 0.6rem 0 0;
-    font-size: 1rem;
-    line-height: 1.6;
     color: var(--color-ink-secondary);
   }
 </style>

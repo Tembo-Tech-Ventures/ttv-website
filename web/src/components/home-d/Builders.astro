@@ -2,6 +2,7 @@
 import type { HomepageBuilder } from "@/lib/homepage/builders";
 import { BUILDERS } from "@/lib/homepage/content";
 import BuilderCard from "./BuilderCard.astro";
+import { profileTags } from "@/lib/homepage/skills-map";
 import { cohortNumberOf } from "./cohorts";
 
 /**
@@ -44,6 +45,7 @@ const lastOnPhone = Math.min(total, PHONE_LIMIT) - 1;
         ]}
         style={`--i:${index}`}
         data-hd-cohort={cohortNumberOf(builder) ?? undefined}
+        data-hd-tags={profileTags(builder).map((tag) => tag.key).join(" ")}
       >
         <BuilderCard builder={builder} />
       </li>
