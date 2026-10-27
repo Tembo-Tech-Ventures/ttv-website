@@ -1,0 +1,12 @@
+---
+import type { HomepageBuilder } from "@/lib/homepage/builders";
+
+interface Props {
+  builders: HomepageBuilder[];
+  isAuthenticated: boolean;
+}
+
+const { builders } = Astro.props;
+---
+
+<section id="cohorts"><h1>Candidate A placeholder · {builders.length} builders</h1></section>

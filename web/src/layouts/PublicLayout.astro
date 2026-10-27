@@ -191,11 +191,16 @@ const isAuthenticated = Boolean(Astro.locals.user);
         </div>
       </div>
 
-      {/* Oversized TEMBO signature — PROPOSAL §7. */}
-      <div aria-hidden="true" class="mt-10 select-none overflow-hidden text-center leading-[0.85]">
+      {/*
+        Oversized TEMBO signature — PROPOSAL §7. Mattone sets "TEMBO" about
+        5em wide, so 24vw ran a fifth past the viewport and sheared the O off at
+        every width; 19vw keeps the whole outline on screen. It no longer drops
+        below the fold either: cropped outline type read as a mistake.
+      */}
+      <div aria-hidden="true" class="mt-10 select-none overflow-hidden pb-6 text-center leading-[0.85]">
         <span
-          class="font-heading tracking-display block translate-y-[18%] whitespace-nowrap text-transparent"
-          style="font-size: clamp(6rem, 24vw, 22rem); -webkit-text-stroke: 1px var(--color-primary);"
+          class="font-heading tracking-display block whitespace-nowrap text-transparent"
+          style="font-size: clamp(3.5rem, 19vw, 22rem); -webkit-text-stroke: 1px var(--color-primary);"
         >
           TEMBO
         </span>
