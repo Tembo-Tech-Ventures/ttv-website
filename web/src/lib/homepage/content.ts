@@ -26,6 +26,9 @@ export const COHORT = {
     { title: "Stay in touch", copy: "The cohort ends. The community does not. Some alumni come back as mentors." },
   ],
   apply: { label: "Apply for a cohort", href: "/dashboard/apply" },
+  /** Who can apply, short enough to sit beside the apply button. */
+  eligibility: "No degree required.",
+  secondary: { label: "Meet the builders", href: "#builders" },
   /** Cohorts 01 to the current one; only the current cohort is running. */
   timeline: Array.from({ length: Number(SITE_FACTS.currentCohortNumber) }, (_, index) => {
     const number = String(index + 1).padStart(2, "0");
