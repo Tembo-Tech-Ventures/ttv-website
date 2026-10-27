@@ -1,8 +1,10 @@
 ---
 import PublicLayout from "@/layouts/PublicLayout.astro";
-import CommunityIntro from "@/components/community/CommunityIntro";
+import CommunityLanding from "@/components/community/CommunityLanding";
+// oxlint-disable-next-line import/no-unassigned-import -- Public community page styles.
+import "@/styles/community-audience.css";
 ---
 
 <PublicLayout title="Community | Tembo Tech Ventures" description="A community for TTV students and builders beyond our cohorts. Share contributions, connect work to evidence, and explore opportunities through informed conversations." canonical="/community">
-  <CommunityIntro full isAuthenticated={Boolean(Astro.locals.user)} />
+  <CommunityLanding isAuthenticated={Boolean(Astro.locals.user)} />
 </PublicLayout>

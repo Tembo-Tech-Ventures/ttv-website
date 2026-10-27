@@ -12,9 +12,9 @@ function ContributionTrail() {
     <figcaption id="trail-caption">An example of work with context <span>Fictional illustration</span></figcaption>
     <div className="audience-person"><span className="audience-avatar" aria-hidden="true">AW</span><div><strong>Amina Wanjiku</strong><span>Community member · fictional example</span></div></div>
     <ol className="audience-evidence-path">
-      <li><span className="audience-node" aria-hidden="true">01</span><div><span className="audience-card-label">The project</span><h3>A clearer way to track stock.</h3><p>A small inventory app for a fictional shop.</p></div></li>
-      <li><span className="audience-node" aria-hidden="true">02</span><div><span className="audience-card-label">Amina’s contribution</span><p className="audience-example-claim">“I built the low-stock view and wrote tests for the alert threshold.”</p><span className="audience-source"><span aria-hidden="true">↗</span> Project source · example only</span></div></li>
-      <li className="audience-mentor-note"><span className="audience-node" aria-hidden="true">03</span><div><span className="audience-card-label">A mentor can add context</span><p>“I reviewed the low-stock view and its tests.”</p><small>Confirms the contribution reviewed, not the whole person.</small></div></li>
+      <li><span className="audience-node" aria-hidden="true">●</span><div><span className="audience-card-label">The project</span><h3>A clearer way to track stock.</h3><p>A small inventory app for a fictional shop.</p></div></li>
+      <li><span className="audience-node" aria-hidden="true">●</span><div><span className="audience-card-label">Amina’s contribution</span><p className="audience-example-claim">“I built the low-stock view and wrote tests for the alert threshold.”</p><span className="audience-source"><span aria-hidden="true">↗</span> Project source · example only</span></div></li>
+      <li className="audience-mentor-note"><span className="audience-node" aria-hidden="true">○</span><div><span className="audience-card-label">A mentor can add context</span><p>“I reviewed the low-stock view and its tests.”</p><small>Confirms the contribution reviewed, not the whole person.</small></div></li>
     </ol>
     <p className="audience-trail-foot">The work. Your part. Something to talk about.</p>
   </figure>;
@@ -23,7 +23,7 @@ function ContributionTrail() {
 export default function CommunityAudiencePage({ isAuthenticated = false }: { isAuthenticated?: boolean }) {
   const href = communityEntryHref(isAuthenticated);
   const cta = isAuthenticated ? "Open my community journey" : "Build your community profile";
-  return <article className="community-audience">
+  return <article className="community-audience audience-members">
     <div className="audience-container">
       <nav className="audience-breadcrumb" aria-label="Breadcrumb"><a href="/community">← Community</a><span aria-current="page">For members</span></nav>
       <section className="audience-hero" aria-labelledby="audience-title">

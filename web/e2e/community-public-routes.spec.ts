@@ -9,7 +9,7 @@ test("public navigation leads to community and preserves sign-in return paths", 
   await expect(navigation).toHaveCount(1);
   await navigation.click();
   await expect(page).toHaveURL(/\/community$/);
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("People, with the work");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Good work.");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole("link", { name: "Join the community" }).click();
   await expect(page).toHaveURL(/\/auth\/login\?next=%2Fdashboard%2Fcommunity$/);

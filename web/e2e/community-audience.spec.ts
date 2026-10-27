@@ -140,3 +140,37 @@ test("workspace heading assertions preserve rendered sentence breaks", async ({ 
     await expect(heading).not.toHaveText(`${first} ${second}`, { useInnerText: true });
   }
 });
+
+for (const audience of ["community", "members", "mentors", "institutions"]) {
+  test(`${audience} redesigned sheets keep every line readable and motion optional`, async ({ page }) => {
+    const { installTextTracker, walkAndSample, textReport } = await import("./text-integrity");
+    await page.goto(`/community-audience.html?audience=${audience}`);
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(1000);
+    await installTextTracker(page, "main");
+    await walkAndSample(page);
+    const report = await textReport(page);
+    expect(report.issues.filter(issue => !issue.decorative)).toEqual([]);
+    expect(report.maxHorizontalOverflow).toBeLessThanOrEqual(1);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const animated = await page.locator("main *").evaluateAll(elements => elements.filter(el => getComputedStyle(el).animationName !== "none").length);
+    expect(animated).toBe(0);
+  });
+}
+
+test("community map leads to all personas, lifts cards on focus, and preserves signed-in entry", async ({ page }) => {
+  await page.goto("/community-audience.html?audience=community");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Good work.Better together.");
+  for (const persona of ["members", "mentors", "institutions"]) {
+    const link = page.getByRole("link", { name: `For ${persona}`, exact: true });
+    await expect(link).toHaveAttribute("href", `/community/${persona}`);
+    await link.focus();
+    await expect(link).toBeFocused();
+    expect(await link.evaluate(el => getComputedStyle(el).outlineStyle)).toBe("solid");
+  }
+  await page.goto("/community-audience.html?audience=community&signed-in");
+  await expect(page.getByRole("link", { name: "Open my community journey" })).toHaveAttribute("href", "/dashboard/community");
+  await expect(page.getByRole("link", { name: "Continue to institutional access" })).toHaveAttribute("href", "/dashboard/discover");
+  await page.setViewportSize({ width: 320, height: 740 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

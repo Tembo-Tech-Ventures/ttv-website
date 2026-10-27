@@ -82,3 +82,40 @@ it('wires the fixed PR220 state read through exact-head preflight and the existi
  const {readFile}=await import('node:fs/promises');const workflow=await readFile(new URL('../../../.github/workflows/cloudflare-staging.yml',import.meta.url),'utf8');const job=workflow.slice(workflow.indexOf('  preview-container-state:'));
  expect(job).toContain('needs: preflight');expect(job).toContain('environment: staging');expect(job).toContain('STAGING_ACTION: preview-container-state');expect(job).toContain('node scripts/cloudflare/preview-container-state.mjs');expect(job).not.toMatch(/cf:deploy|cf:destroy|wrangler|health|schedule:|CLOUDFLARE_ENVIRONMENT_NAME: production/);
 });
+
+
+describe("post-hackathon exact-PR deployment", () => {
+  const branch = "sam/homepage-simplification";
+  const deployEnv = { ...env, STAGING_ACTION: "deploy", STAGING_DEPLOY_PR: "240", GITHUB_REF: `refs/heads/${branch}` };
+  const candidate = { ...pr, head: { ...pr.head, ref: branch } };
+  it("verifies the explicitly selected PR and dispatched branch against GitHub", async () => {
+    const fetchImpl = respond(candidate);
+    await expect(validateStagingRevision(deployEnv, { fetchImpl })).resolves.toEqual({ branch, sha, prNumber: "240" });
+    expect(fetchImpl).toHaveBeenCalledWith("https://api.github.com/repos/owner/repo/pulls/240", expect.any(Object));
+  });
+  it.each(["verify", "assess", "seed-demo", "diagnose-demo", "credential-audit", "persona-qa-issue"])("does not extend the override to %s", async action => {
+    const fetchImpl = respond(candidate);
+    await expect(validateStagingRevision({ ...deployEnv, STAGING_ACTION: action }, { fetchImpl })).rejects.toThrow("only allowed for deployment");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+  it.each([
+    { GITHUB_REF: "refs/heads/main" },
+    { GITHUB_REF: "refs/heads/production" },
+    { GITHUB_REF: "refs/tags/release" },
+    { STAGING_DEPLOY_PR: "../secrets" },
+    { GITHUB_SHA: "b".repeat(40) },
+  ])("rejects unsafe dispatch with an override: %j", async change => {
+    const fetchImpl = respond(candidate);
+    await expect(validateStagingRevision({ ...deployEnv, ...change }, { fetchImpl })).rejects.toThrow(/configured|Dispatch|Expected SHA|required/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+  it.each([
+    { ...candidate, state: "closed", merged: true },
+    { ...candidate, head: { ...candidate.head, sha: "b".repeat(40) } },
+    { ...candidate, head: { ...candidate.head, ref: "some-other-branch" } },
+    { ...candidate, head: { ...candidate.head, repo: { full_name: "fork/repo" } } },
+    { ...candidate, base: { ref: "staging" } },
+  ])("still refuses closed, stale, mismatched and foreign PRs", async body => {
+    await expect(validateStagingRevision(deployEnv, { fetchImpl: respond(body) })).rejects.toThrow("current head");
+  });
+});
