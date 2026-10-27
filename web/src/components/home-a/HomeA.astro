@@ -1,12 +1,49 @@
 ---
 import type { HomepageBuilder } from "@/lib/homepage/builders";
+import BuildersSection from "./BuildersSection.astro";
+import CohortSection from "./CohortSection.astro";
+import CommunitySection from "./CommunitySection.astro";
+import HireSection from "./HireSection.astro";
+import PrinciplesSection from "./PrinciplesSection.astro";
+// oxlint-disable-next-line import/no-unassigned-import -- Candidate A's prefixed primitives.
+import "./home-a.css";
 
+/**
+ * Candidate A — "Kinetic editorial: type is the image".
+ *
+ * The server render is the finished page. motion/index.ts only adds motion,
+ * and only when the visitor has not asked for reduced motion.
+ */
 interface Props {
   builders: HomepageBuilder[];
   isAuthenticated: boolean;
 }
 
-const { builders } = Astro.props;
+const { builders, isAuthenticated } = Astro.props;
 ---
 
-<section id="cohorts"><h1>Candidate A placeholder · {builders.length} builders</h1></section>
+<!--
+  Pose the hero for its intro before first paint, but only when motion is
+  allowed. If the motion module never arrives, the pose is dropped after 2.5s
+  so the page can never stay hidden.
+-->
+<script is:inline>
+  if (matchMedia("(prefers-reduced-motion: no-preference)").matches) {
+    document.documentElement.classList.add("ha-intro");
+    setTimeout(() => document.documentElement.classList.remove("ha-intro"), 2500);
+  }
+</script>
+
+<div class="ha-root" data-ha-root>
+  <CohortSection />
+  <BuildersSection builders={builders} />
+  <CommunitySection isAuthenticated={isAuthenticated} />
+  <HireSection builders={builders} />
+  <PrinciplesSection />
+</div>
+
+<script>
+  import { initHomeA } from "./motion/index";
+
+  initHomeA();
+</script>

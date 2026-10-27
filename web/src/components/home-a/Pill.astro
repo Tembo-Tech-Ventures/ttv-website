@@ -1,0 +1,17 @@
+---
+import Arrow from "./Arrow.astro";
+
+/** Primary action. Magnetic on fine pointers (see motion/pointer.ts). */
+interface Props {
+  href: string;
+  label: string;
+  tone?: "peach" | "dark";
+}
+
+const { href, label, tone = "peach" } = Astro.props;
+---
+
+<a href={href} class:list={["ha-pill", tone === "dark" && "ha-pill--dark"]} data-ha-magnetic>
+  <span>{label}</span>
+  <span class="ha-pill-icon"><Arrow /><Arrow /></span>
+</a>

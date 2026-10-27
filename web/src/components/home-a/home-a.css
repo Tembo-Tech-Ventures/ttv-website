@@ -1,0 +1,198 @@
+/*
+ * Candidate A shared primitives. Every selector is prefixed `ha-` so nothing
+ * here can reach the nav, footer or the other candidates. Section-specific
+ * styling lives in each section's scoped <style>.
+ */
+
+.ha-root {
+  --ha-peach: var(--color-primary);
+  --ha-dark: var(--color-dark);
+  --ha-deep: #012a28;
+  --ha-teal: var(--color-teal);
+  --ha-ink: var(--color-ink-primary);
+  --ha-ink-2: rgba(255, 248, 242, 0.78);
+  --ha-ink-3: rgba(255, 248, 242, 0.66);
+  --ha-rule: rgba(242, 141, 104, 0.24);
+  --ha-gutter: 1rem;
+  --ha-gap: clamp(1rem, 1.6vw, 2rem);
+  --ha-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ha-section: clamp(4.5rem, 8vw, 7.5rem);
+  overflow-x: clip;
+}
+
+@media (min-width: 640px) {
+  .ha-root { --ha-gutter: 1.5rem; }
+}
+
+@media (min-width: 1024px) {
+  .ha-root { --ha-gutter: 2rem; }
+}
+
+/* Same measure as the nav, so the page and the logo share a left edge. */
+.ha-wrap {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 80rem;
+  margin-inline: auto;
+  padding-inline: var(--ha-gutter);
+}
+
+.ha-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--ha-gap);
+}
+
+.ha-section {
+  position: relative;
+  padding-block: var(--ha-section);
+}
+
+/* Display headings. Sizes come in two steps only, so no word ever looks giant beside a tiny one. */
+.ha-h1,
+.ha-h2 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 900;
+  color: var(--ha-ink);
+  text-wrap: balance;
+}
+
+.ha-h1 {
+  font-size: clamp(2.05rem, 0.9rem + 4.7vw, 5.4rem);
+  line-height: 1.04;
+  letter-spacing: var(--tracking-display);
+}
+
+.ha-h2 {
+  font-size: clamp(1.85rem, 1.05rem + 3vw, 4rem);
+  line-height: 1.06;
+  letter-spacing: var(--tracking-heading);
+}
+
+.ha-lead {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: clamp(1.0625rem, 0.98rem + 0.32vw, 1.3125rem);
+  line-height: 1.6;
+  color: var(--ha-ink-2);
+  text-wrap: pretty;
+}
+
+.ha-accent { color: var(--ha-peach); }
+
+/* Words rendered by Words.astro. Masks only clip while a reveal is running. */
+.ha-w { display: inline-block; vertical-align: top; }
+.ha-wi { display: inline-block; }
+.ha-masking .ha-w { overflow: clip; padding-block: 0.08em; margin-block: -0.08em; }
+
+/* Primary action: a peach pill whose arrow slides through on hover. */
+.ha-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-height: 3.25rem;
+  padding: 0.5rem 0.5rem 0.5rem 1.6rem;
+  border-radius: 999px;
+  background: var(--ha-peach);
+  color: var(--ha-dark);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  transition: background-color 300ms var(--ha-ease), color 300ms var(--ha-ease);
+}
+
+.ha-pill-icon {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--ha-dark);
+  color: var(--ha-peach);
+  flex: none;
+}
+
+.ha-pill-icon svg { width: 1rem; height: 1rem; transition: transform 450ms var(--ha-ease); }
+.ha-pill-icon svg + svg { position: absolute; transform: translateX(-160%); }
+.ha-pill:hover .ha-pill-icon svg:first-child,
+.ha-pill:focus-visible .ha-pill-icon svg:first-child { transform: translateX(160%); }
+.ha-pill:hover .ha-pill-icon svg + svg,
+.ha-pill:focus-visible .ha-pill-icon svg + svg { transform: translateX(0); }
+.ha-pill:hover { background: var(--ha-ink); }
+
+.ha-pill--dark { background: var(--ha-dark); color: var(--ha-ink); }
+.ha-pill--dark .ha-pill-icon { background: var(--ha-peach); color: var(--ha-dark); }
+.ha-pill--dark:hover { background: var(--ha-deep); color: var(--ha-peach); }
+
+/* Quiet text action: an underline that wipes away and redraws on hover. */
+.ha-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  color: var(--ha-ink);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ha-link-text {
+  background: linear-gradient(currentColor, currentColor) no-repeat 100% 100% / 100% 1px;
+  padding-bottom: 0.2rem;
+  transition: background-size 450ms var(--ha-ease);
+}
+
+.ha-link:hover .ha-link-text,
+.ha-link:focus-visible .ha-link-text {
+  background-position: 0 100%;
+  animation: ha-underline 650ms var(--ha-ease);
+}
+
+.ha-link svg { width: 1rem; height: 1rem; transition: transform 400ms var(--ha-ease); }
+.ha-link:hover svg,
+.ha-link:focus-visible svg { transform: translateX(0.3rem); }
+
+@keyframes ha-underline {
+  0% { background-size: 100% 1px; background-position: 100% 100%; }
+  45% { background-size: 0% 1px; background-position: 100% 100%; }
+  46% { background-size: 0% 1px; background-position: 0 100%; }
+  100% { background-size: 100% 1px; background-position: 0 100%; }
+}
+
+/* One focus treatment everywhere: a peach ring with air around it. */
+.ha-root a:focus-visible,
+.ha-root button:focus-visible {
+  outline: 2px solid var(--ha-peach);
+  outline-offset: 4px;
+}
+
+.ha-rule { border: 0; border-top: 1px solid var(--ha-rule); margin: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ha-pill,
+  .ha-pill-icon svg,
+  .ha-link svg,
+  .ha-link-text { transition: none; animation: none !important; }
+}
+
+/* Lets the outline-to-fill wipes transition on hover and focus. */
+@property --ha-fill {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
+/*
+ * The hero's starting pose, applied before first paint by HomeA's inline
+ * script and only when motion is allowed. motion/hero.ts takes it from here.
+ */
+.ha-intro [data-ha-hero] .ha-h1 .ha-w { overflow: clip; padding-block: 0.08em; margin-block: -0.08em; }
+.ha-intro [data-ha-hero] .ha-h1 .ha-wi { transform: translateY(120%); }
+.ha-intro [data-ha-hero] [data-ha-rise] { opacity: 0; transform: translateY(1.5rem); }
