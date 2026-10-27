@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { installTextTracker, sampleText, textReport } from "../../e2e/text-integrity.ts";
+import { installTextTracker, sampleText, sweepHorizontalScrollers, textReport } from "../../e2e/text-integrity.ts";
 import { VIEWPORTS, gotoReady, openLab } from "./lab.mjs";
 
 const { values } = parseArgs({
@@ -64,6 +64,7 @@ for (const name of values.viewports.split(",")) {
       }
       await page.waitForTimeout(settleMs);
       await sampleText(page);
+      await sweepHorizontalScrollers(page);
       const after = await page.evaluate(() => window.scrollY);
       still = Math.abs(after - before) < 2 ? still + 1 : 0;
       if (still === 0) await shot(`s${step}`);

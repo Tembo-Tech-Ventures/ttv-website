@@ -174,6 +174,43 @@ export async function sampleText(page: Page): Promise<void> {
   });
 }
 
+/**
+ * Swipes every horizontally scrollable track currently on screen from start to
+ * end, sampling as it goes, so items that only arrive by swiping are counted.
+ */
+export async function sweepHorizontalScrollers(page: Page, settleMs = 250): Promise<void> {
+  const count = await page.evaluate(() => {
+    let index = 0;
+    for (const el of document.querySelectorAll<HTMLElement>("main *")) {
+      el.removeAttribute("data-ttv-sweep");
+      const style = getComputedStyle(el);
+      if (!/(auto|scroll)/.test(style.overflowX) || el.scrollWidth <= el.clientWidth + 2) continue;
+      const box = el.getBoundingClientRect();
+      if (box.bottom <= 0 || box.top >= window.innerHeight) continue;
+      el.setAttribute("data-ttv-sweep", String(index));
+      index += 1;
+    }
+    return index;
+  });
+  for (let index = 0; index < count; index += 1) {
+    for (let guard = 0; guard < 40; guard += 1) {
+      const moved = await page.evaluate((i) => {
+        const el = document.querySelector<HTMLElement>(`[data-ttv-sweep="${i}"]`);
+        if (!el) return false;
+        const before = el.scrollLeft;
+        el.scrollTo({ left: before + el.clientWidth * 0.6, behavior: "instant" });
+        return el.scrollLeft > before + 1;
+      }, index);
+      await page.waitForTimeout(settleMs);
+      await sampleText(page);
+      if (!moved) break;
+    }
+    await page.evaluate((i) => {
+      document.querySelector<HTMLElement>(`[data-ttv-sweep="${i}"]`)?.scrollTo({ left: 0, behavior: "instant" });
+    }, index);
+  }
+}
+
 /** Scrolls top to bottom like a visitor, sampling after each step settles. */
 export async function walkAndSample(
   page: Page,
@@ -190,6 +227,7 @@ export async function walkAndSample(
     await page.mouse.wheel(0, Math.round(viewport.height * stepRatio));
     await page.waitForTimeout(settleMs);
     await sampleText(page);
+    await sweepHorizontalScrollers(page);
     if (onStep) await onStep(index);
     const after = await page.evaluate(() => window.scrollY);
     still = Math.abs(after - before) < 2 ? still + 1 : 0;
