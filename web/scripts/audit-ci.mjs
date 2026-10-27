@@ -4,8 +4,9 @@ import { execFileSync } from "node:child_process";
  * CI security audit with an explicit, expiring exception list.
  *
  * Fails on any high/critical advisory that is not allowlisted below. The
- * allowlist exists solely for advisories whose only fix is the Astro 6→7
- * major upgrade; their attack surfaces (View
+ * allowlist exists for advisories whose only fix is a breaking upgrade tracked
+ * separately (Astro 6→7, better-auth 1.6→1.7), each with the reason its attack
+ * surface is not exercised here. For Astro those are View
  * Transition directives, spread attribute names, Sharp asset pipeline) are
  * not exercised by this codebase. The Cloudflare adapter is explicitly pinned
  * to its Cloudflare Images binding, and the app does not use `astro:assets`.
@@ -37,6 +38,19 @@ export const ALLOWLISTED_ADVISORIES = new Set([
   // range. TTV does not use astro:assets, and the adapter routes runtime image
   // processing through the Cloudflare Images binding. Remove with Astro 7.
   "GHSA-wq5f-xc86-pv6w",
+  // better-auth advisories fixed only in 1.7.7+. 1.7 is a breaking upgrade for
+  // TTV (accounts are re-keyed by OAuth issuer and need a schema migration and
+  // backfill), tracked as its own task. None of them reaches TTV's setup, and
+  // src/lib/auth-advisories.test.ts fails if that ever changes:
+  // - device login approval: needs the deviceAuthorization() plugin;
+  "GHSA-q84f-53jg-9ppm",
+  // - OAuth Proxy sign-in as another user: needs the oauthProxy() plugin;
+  "GHSA-r4xp-prcw-77qf",
+  // - OAuth state used as a Magic Link token: needs the magicLink() plugin;
+  "GHSA-965c-763c-88jm",
+  // - concurrent requests exceeding rate limits: needs rate-limit records in
+  //   PostgreSQL. TTV keeps the in-memory default on SQLite (D1).
+  "GHSA-44jh-23m7-hpcf",
 ]);
 
 const FAILING_SEVERITIES = new Set(["high", "critical"]);
