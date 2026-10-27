@@ -11,11 +11,11 @@ const profileSource = readFileSync(
 );
 
 describe("public page overload wiring", () => {
-  it("keeps the homepage available with an empty optional-post fallback", () => {
-    expect(homepageSource).toContain("loadPublicPageData({");
-    expect(homepageSource).toContain("fallback: []");
+  it("keeps the homepage available with an empty builder showcase fallback", () => {
+    // The overload fallback itself is exercised in lib/homepage/builders.test.ts.
+    expect(homepageSource).toContain("loadHomepageBuildersSafely({");
     expect(homepageSource).toContain('route: "/"');
-    expect(homepageSource).toContain("const latestPosts = latestPostsRead.data");
+    expect(homepageSource).not.toContain("db.query");
   });
 
   it("distinguishes a temporarily unavailable profile from an unpublished one", () => {

@@ -1,0 +1,150 @@
+---
+/**
+ * One sheet in the homepage's stack. Every major section is a sheet (the
+ * opening section is two: the hero, then the skills map sliding over it) with
+ * rounded top corners that slides over the one before it. Without JS (or with
+ * reduced motion) sheets simply sit in flow with their corners overlapping;
+ * `stack.ts` adds `hp-stacked` to the root, measures each sheet and makes it
+ * stick while the next sheet's edge and title are already on screen, so the
+ * next one slides over it with no extra scroll.
+ */
+interface Props {
+  /** Section id; omitted for a sheet that is one layer of a larger section. */
+  id?: string;
+  tone: "base" | "map" | "raised" | "lift" | "peach" | "deep";
+  labelledby?: string;
+  layer: number;
+  /** Own the whole screen (below the nav) while held, so nothing shows underneath. */
+  fill?: boolean;
+  /** The last sheet: it never sticks, the page ends on it. */
+  last?: boolean;
+}
+
+const { id, tone, labelledby, layer, fill = false, last = false } = Astro.props;
+// A sheet that is a layer of a section is a plain container; the section is its parent.
+const Tag = id ? "section" : "div";
+---
+
+<Tag
+  id={id}
+  class:list={["hp-sheet", `hp-sheet--${tone}`, { "hp-sheet--fill": fill, "hp-sheet--last": last }]}
+  style={`--hp-layer:${layer}`}
+  aria-labelledby={labelledby}
+  data-hp-sheet
+>
+  <div class="hp-sheet__body">
+    <slot />
+  </div>
+  <div class="hp-sheet__dim" aria-hidden="true" data-hp-dim></div>
+</Tag>
+
+<style>
+  .hp-sheet {
+    --hp-radius: clamp(1.5rem, 3vw, 2.75rem);
+    position: relative;
+    z-index: var(--hp-layer);
+    border-radius: var(--hp-radius) var(--hp-radius) 0 0;
+    background: var(--hp-surface);
+    color: var(--hp-text, #fff8f2);
+    box-shadow:
+      0 -1px 0 var(--hp-edge),
+      0 -28px 60px -24px rgb(0 0 0 / 0.5);
+    padding-block: clamp(4rem, 8vw, 7.5rem) clamp(5rem, 9vw, 8rem);
+    transform-origin: 50% var(--hp-origin, 50%);
+    scroll-margin-top: var(--hp-nav, 4.5rem);
+  }
+
+  .hp-sheet--fill {
+    display: grid;
+    align-content: center;
+    min-height: calc(100svh - var(--hp-nav, 4.5rem));
+    box-sizing: border-box;
+  }
+
+  .hp-sheet--fill > .hp-sheet__body {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .hp-sheet + .hp-sheet,
+  :global(.hp-group) + .hp-sheet {
+    margin-top: calc(-1 * var(--hp-radius));
+  }
+
+  /* Same container as the nav (max-w-7xl, px-4 / sm:px-6 / lg:px-8), so
+   * content edges line up with the logo and the Apply button. */
+  .hp-sheet__body {
+    position: relative;
+    box-sizing: border-box;
+    margin-inline: auto;
+    max-width: 80rem;
+    padding-inline: 1rem;
+  }
+
+  @media (min-width: 40rem) {
+    .hp-sheet__body {
+      padding-inline: 1.5rem;
+    }
+  }
+
+  @media (min-width: 64rem) {
+    .hp-sheet__body {
+      padding-inline: 2rem;
+    }
+  }
+
+  .hp-sheet__dim {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: #00110f;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .hp-sheet--base {
+    --hp-surface:
+      radial-gradient(900px 520px at 8% 0%, rgb(242 141 104 / 0.13), transparent 62%),
+      radial-gradient(700px 600px at 100% 40%, rgb(44 105 100 / 0.35), transparent 70%),
+      #023f3a;
+    --hp-edge: rgb(255 248 242 / 0.08);
+    margin-top: clamp(0.5rem, 1.5vw, 1rem);
+  }
+
+  /* The skills map: its own layer inside the opening section. */
+  .hp-sheet--map {
+    --hp-surface:
+      radial-gradient(760px 560px at 78% 42%, rgb(127 188 178 / 0.09), transparent 70%),
+      radial-gradient(600px 420px at 0% 0%, rgb(242 141 104 / 0.07), transparent 65%),
+      #05433e;
+    --hp-edge: rgb(255 248 242 / 0.1);
+  }
+
+  .hp-sheet--raised {
+    --hp-surface: #0a4842;
+    --hp-edge: rgb(255 248 242 / 0.1);
+  }
+
+  .hp-sheet--lift {
+    --hp-surface: #10524b;
+    --hp-edge: rgb(255 248 242 / 0.12);
+  }
+
+  .hp-sheet--peach {
+    --hp-surface: #f28d68;
+    --hp-text: #013d39;
+    --hp-edge: rgb(255 248 242 / 0.35);
+  }
+
+  .hp-sheet--deep {
+    padding-bottom: clamp(3rem, 6vw, 5rem);
+    --hp-surface: #012e2b;
+    --hp-edge: rgb(242 141 104 / 0.28);
+  }
+
+  :global(.hp-stacked) .hp-sheet:not(.hp-sheet--last) {
+    position: sticky;
+    top: var(--hp-stick, auto);
+  }
+
+</style>

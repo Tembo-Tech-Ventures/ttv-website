@@ -5,16 +5,15 @@ import { SITE_FACTS } from "@/lib/site";
 /**
  * Everything the homepage says, in the order it says it.
  *
- * The three homepage design candidates share this module so they differ only
- * in composition and motion, never in claims. Every statement here must stay
- * true of the product today: no placements, outcomes or features that do not
- * exist. Keep copy in community voice, not rescue voice.
+ * Every statement here must stay true of the product today: no placements,
+ * outcomes or features that do not exist. Keep copy in community voice, not
+ * rescue voice.
  */
 
 export const COHORT = {
   title: "Cohorts where builders learn by shipping real software.",
   summary:
-    "Small groups work side by side for a few months, with working engineers in the room. The curriculum is scaffolding. The work, and the people you build it with, are what stay.",
+    "An African tech community, starting in East Africa and Nigeria. Small groups work side by side for a few months, with working engineers in the room. The work, and the people you build it with, are what stay.",
   facts: [
     { value: SITE_FACTS.approximateStudentCount, label: "builders through our cohorts" },
     { value: SITE_FACTS.currentCohortNumber, label: "cohorts, one running now" },
@@ -38,7 +37,7 @@ export const COHORT = {
 } as const;
 
 /**
- * The skills-map picture (candidate D). An illustration of how skills connect,
+ * The skills-map picture. An illustration of how skills connect,
  * drawn from skills on published profiles. TTV does not yet track anyone's
  * progress through a map, so nothing here may say or imply that it does.
  */
@@ -114,5 +113,5 @@ export const PRINCIPLES = {
   values: VALUES,
 } as const;
 
-/** The homepage's sections, top to bottom. Candidates must keep this order. */
+/** The homepage's sections, top to bottom, as the owner set them. */
 export const SECTION_ORDER = ["cohorts", "builders", "community", "hire", "principles"] as const;

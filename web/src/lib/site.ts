@@ -24,8 +24,8 @@ export function formatCohortLocation(
 }
 
 export const PUBLIC_NAV_LINKS = [
-  { label: "How", href: "/#what-we-do" },
-  { label: "Why", href: "/#why-tembo" },
+  { label: "How", href: "/#cohorts" },
+  { label: "Why", href: "/#principles" },
   { label: "Community", href: "/community" },
   { label: "Builders", href: "/talent" },
   { label: "Hire", href: "/hire" },
@@ -36,10 +36,8 @@ export const PUBLIC_FOOTER_GROUPS = [
   {
     heading: "The work",
     links: [
-      { label: "How", href: "/#what-we-do" },
-      { label: "Why", href: "/#why-tembo" },
-      { label: "Values", href: "/#values" },
-      { label: SITE_FACTS.currentCohort, href: "/#humans" },
+      { label: "How", href: "/#cohorts" },
+      { label: "Why", href: "/#principles" },
     ],
   },
   {

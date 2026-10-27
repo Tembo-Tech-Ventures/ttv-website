@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Records a narrated MP4 walkthrough of a homepage candidate.
+// Records a narrated MP4 walkthrough of the homepage (or any page).
 //
-//   node scripts/homepage-lab/record.mjs scripts/homepage-lab/tours/a.mjs ../.homepage-lab/videos/a.mp4
+//   node scripts/homepage-lab/record.mjs scripts/homepage-lab/tours/homepage.mjs ../.homepage-lab/videos/homepage.mp4
 //
-// The candidate runs inside an iframe on a 1920×1080 "stage" whose side panel
+// The page runs inside an iframe on a 1920×1080 "stage" whose side panel
 // carries the narration, so captions never cover the design. Frames come from
 // the Chrome DevTools screencast (sharper than Playwright's built-in video) and
 // are retimed into a constant 30 fps H.264 file. Each tour segment runs in its
@@ -82,7 +82,7 @@ iframe { display: block; width: ${frame.width}px; height: ${frame.height}px; bor
 </body></html>`;
 }
 
-/** Visible pointer and tap ripples inside the candidate page. */
+/** Visible pointer and tap ripples inside the recorded page. */
 function cursorScript() {
   if (window.top === window) return;
   const install = () => {
@@ -246,7 +246,7 @@ async function recordSegment(segment, index) {
         await page.waitForTimeout(gap);
       }
     },
-    /** Reloads the candidate so its intro plays again on camera. */
+    /** Reloads the page so its intro plays again on camera. */
     async reload() {
       await frame.goto(url, { waitUntil: "load" });
       await frame.evaluate(() => document.fonts.ready);

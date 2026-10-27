@@ -1,5 +1,4 @@
 import { expect, test } from "@playwright/test";
-import { assertHomepageValues } from "./homepage-values-assertions";
 
 /**
  * Layout regressions that only a real browser can catch: content pushed out of
@@ -13,8 +12,8 @@ import { assertHomepageValues } from "./homepage-values-assertions";
 const TOLERANCE_PX = 1;
 
 const expectedPublicLinks = [
-  { label: "How", href: "/#what-we-do" },
-  { label: "Why", href: "/#why-tembo" },
+  { label: "How", href: "/#cohorts" },
+  { label: "Why", href: "/#principles" },
   { label: "Builders", href: "/talent" },
   { label: "Hire", href: "/hire" },
   { label: "Blog", href: "/blog" },
@@ -75,7 +74,7 @@ test.describe("layout integrity", () => {
 
     await expect(opener).toHaveAttribute("aria-expanded", "false");
     await expect(menu).toBeHidden();
-    await expect(page).toHaveURL(/\/#what-we-do$/);
+    await expect(page).toHaveURL(/\/#cohorts$/);
   });
 
   test("the public 404 keeps the site navigation and a 404 status", async ({
@@ -137,21 +136,16 @@ test.describe("layout integrity", () => {
     await expect(page.getByText(/terms of service/i)).toHaveCount(0);
   });
 
-  test("the hero wordmark is never cropped by its own box", async ({ page }) => {
+  test("the homepage headline is never cropped by its own box", async ({ page }) => {
     await page.goto("/");
     await page.evaluate(() => document.fonts.ready);
 
-    // 18vw once outgrew the section's padding at 768 and below, and a 5rem
-    // floor sheared the final O off on a 390px phone.
-    const wordmark = page.locator("h1.font-heading").first();
-    const overflow = await wordmark.evaluate((el) => el.scrollWidth - el.clientWidth);
+    // An earlier oversized wordmark outgrew the section's padding at 768 and
+    // below and sheared its final letter off on a 390px phone. The homepage's
+    // full readability contract lives in homepage.spec.ts.
+    const headline = page.locator("main h1").first();
+    const overflow = await headline.evaluate((el) => el.scrollWidth - el.clientWidth);
     expect(overflow).toBeLessThanOrEqual(TOLERANCE_PX);
-  });
-
-  test("every values commitment and carousel word stays visible", async ({ page }) => {
-    await page.goto("/");
-    await page.evaluate(() => document.fonts.ready);
-    await assertHomepageValues(page);
   });
 
   test("footer link columns survive the tablet breakpoint", async ({ page }) => {

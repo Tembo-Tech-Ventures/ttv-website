@@ -58,7 +58,7 @@ ttv-website/
 │   │   ├── components/           # Reusable components
 │   │   │   ├── auth/             # Auth components (GitHubSignInButton)
 │   │   │   ├── common/           # Shared UI (Card, Badge, Sidebar, Grain)
-│   │   │   ├── homepage/         # Homepage sections (Hero, Features, Values, etc.)
+│   │   │   ├── homepage/         # Homepage sheets, skills map and motion (see web/docs/homepage.md)
 │   │   │   └── shells/           # Layout shells (AdminShell, DashboardShell)
 │   │   ├── lib/                  # Core libraries
 │   │   │   ├── auth.ts           # better-auth server config
@@ -91,7 +91,7 @@ Astro uses file-based routing in `src/pages/`. Layouts provide shared UI shells.
 ```
 BaseLayout (HTML shell, global CSS, meta tags)
 ├── PublicLayout  → Nav bar, footer, grain overlay, gradient background
-│   └── index.astro  →  /  (animated hero, features, values, cohort)
+│   └── index.astro  →  /  (cohorts and skills map, builders, community, hire, principles)
 ├── AdminLayout   → AdminShell (React island with sidebar)
 │   └── admin/*  (users, applications, programs, data-migration)
 ├── DashboardLayout → DashboardShell (React island with sidebar)
@@ -105,7 +105,7 @@ BaseLayout (HTML shell, global CSS, meta tags)
 
 | Path | Purpose | Auth |
 |------|---------|------|
-| `/` | Public homepage with animated sections | None |
+| `/` | Public homepage: cohorts, skills map, builders, community, hire, principles | None |
 | `/blog` | Blog placeholder | None |
 | `/auth/login` | GitHub OAuth sign-in | None |
 | `/auth/logout` | Sign out | Session |
@@ -196,7 +196,7 @@ GitHub OAuth via **better-auth**:
 - **Color tokens**: `--color-primary` (#F28D68), `--color-dark` (#013D39), `--color-teal` (#2C6964), `--color-bg-raised`, `--color-ink-primary`, `--color-ink-secondary`, `--color-ink-muted`, `--color-rule`
 - **Typography**: Mattone Black (Collletttivo, OFL 1.1, self-hosted) for h1/h2, Maven Pro for body and h3-h6
 - **Display tracking**: three named theme tokens (`--tracking-display`, `--tracking-heading`, `--tracking-subhead`) instead of per-element `letter-spacing`, so the display face can be swapped without retuning every heading
-- **Animations**: GSAP ScrollTrigger on homepage sections, CSS-only marquee, reveal utility class
+- **Animations**: GSAP ScrollTrigger on the homepage's stacked sheets and skills map (see `web/docs/homepage.md`), reveal utility class
 - **Grain overlay**: SVG noise texture via `Grain.astro` component
 
 ## Deployment

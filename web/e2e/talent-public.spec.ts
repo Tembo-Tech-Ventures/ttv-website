@@ -195,27 +195,27 @@ test.describe("contact form submissions", () => {
   });
 });
 
-test.describe("homepage humans section", () => {
+test.describe("homepage builders section", () => {
   test.skip(!FIXTURE_ENVIRONMENT, "Requires seeded fixtures (agent-* environments only).");
-  test("HumansSection shows amina as a solid card", async ({ page }) => {
+  test("shows only published graduates, each linking to their profile", async ({ page }) => {
     await page.goto("/");
-    const section = page.locator("#humans");
-    await expect(section.getByText("Amina Fixture")).toBeVisible();
+    const section = page.locator("#builders");
+    await expect(section.getByText("Amina Fixture").first()).toBeVisible();
     const aminaLink = section.locator('a[href="/talent/amina-preview"]');
     await expect(aminaLink).toBeVisible();
     await expect(
       section.getByText("Invalid Completion Fixture")
     ).toHaveCount(0);
     await expect(section.getByText("Profile coming")).toHaveCount(0);
-    const cards = section.locator("ul > li");
+    const cards = section.locator("ol > li");
     const cardCount = await cards.count();
     expect(cardCount).toBeGreaterThan(0);
-    expect(cardCount).toBeLessThanOrEqual(4);
+    expect(cardCount).toBeLessThanOrEqual(8);
     await expect(
-      section.locator('ul > li > a[href^="/talent/"]')
+      section.locator('ol > li > a[href^="/talent/"]')
     ).toHaveCount(cardCount);
     await page.screenshot({
-      path: evidence("homepage-humans"),
+      path: evidence("homepage-builders"),
       fullPage: true,
     });
   });

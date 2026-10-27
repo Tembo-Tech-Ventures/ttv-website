@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { toHomepageBuilder, type BuilderProfileRow } from "./builders";
+import { describe, expect, it, vi } from "vitest";
+import { loadHomepageBuildersSafely, toHomepageBuilder, type BuilderProfileRow } from "./builders";
+
+const recordErrorInBackground = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/observability/errors", () => ({ recordErrorInBackground }));
 
 const completed = { status: "COMPLETED", completedAt: new Date("2025-02-01"), program: { name: "Cohort 02" } };
 
@@ -51,5 +54,34 @@ describe("toHomepageBuilder", () => {
       profile({ headline: "   ", country: null, skills: null, highlights: [], user: { programApplications: [{ ...completed, program: null }] } }),
     );
     expect(card).toMatchObject({ headline: null, country: null, skills: [], project: null, cohort: null });
+  });
+});
+
+describe("loadHomepageBuildersSafely", () => {
+  function d1Failing(message: string): D1Database {
+    return {
+      prepare() {
+        throw new Error("Failed query", { cause: new Error(message) });
+      },
+    } as unknown as D1Database;
+  }
+
+  it("keeps the homepage up with no showcase when D1 is overloaded", async () => {
+    const builders = await loadHomepageBuildersSafely({
+      d1: d1Failing("D1_ERROR: D1 DB is overloaded. Requests queued for too long."),
+      route: "/",
+    });
+    expect(builders).toEqual([]);
+    expect(recordErrorInBackground).toHaveBeenCalledWith(
+      undefined,
+      expect.anything(),
+      expect.objectContaining({ route: "/" }),
+    );
+  });
+
+  it("lets any other database failure reach the error boundary", async () => {
+    await expect(
+      loadHomepageBuildersSafely({ d1: d1Failing("no such table: studentProfile"), route: "/" }),
+    ).rejects.toThrow("Failed query");
   });
 });

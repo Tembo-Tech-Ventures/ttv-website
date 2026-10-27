@@ -1,5 +1,5 @@
-// Shared browser helpers for designing, auditing and recording homepage
-// candidates against the local dev server. Not part of the Worker bundle.
+// Shared browser helpers for designing, auditing and recording the homepage
+// against the local dev server. Not part of the Worker bundle.
 import { Buffer } from "node:buffer";
 import { setTimeout as sleep } from "node:timers/promises";
 import { chromium } from "@playwright/test";

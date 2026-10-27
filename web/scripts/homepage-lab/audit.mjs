@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Walks a homepage candidate like a visitor at several viewports, saving
+// Walks a page like a visitor at several viewports, saving
 // viewport frames (including short motion bursts right after each scroll) and
 // a contact sheet, and reports any text that is never fully readable.
 //
-//   node scripts/homepage-lab/audit.mjs --path /preview/home/a --out ../.homepage-lab/a/r1
+//   node scripts/homepage-lab/audit.mjs --path / --out ../.homepage-lab/check
 //   options: --viewports phone,laptop  --reduced  --no-frames  --settle 450
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";

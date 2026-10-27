@@ -27,6 +27,10 @@ describe("homepage content", () => {
     for (const path of gated) expect(path.detail).toMatch(/approved/);
   });
 
+  it("introduces TTV as an African community and says where it starts", () => {
+    expect(COHORT.summary).toMatch(/^An African tech community, starting in East Africa and Nigeria\./);
+  });
+
   it("lists every cohort up to the running one", () => {
     expect(COHORT.timeline.map((cohort) => cohort.number)).toEqual(["01", "02", "03", "04"]);
     expect(COHORT.timeline.filter((cohort) => cohort.running).map((cohort) => cohort.label)).toEqual(["Cohort 04"]);
