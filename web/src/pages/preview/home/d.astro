@@ -1,0 +1,21 @@
+---
+import PublicLayout from "@/layouts/PublicLayout.astro";
+import HomeD from "@/components/home-d/HomeD.astro";
+import { env } from "cloudflare:workers";
+import { loadHomepageBuildersSafely } from "@/lib/homepage/builders";
+
+const builders = await loadHomepageBuildersSafely({
+  d1: env.DB,
+  route: "/preview/home/d",
+  version: env.DEPLOYMENT_VERSION,
+  waitUntil: Astro.locals.cfContext,
+});
+---
+
+<PublicLayout
+  title="Homepage candidate D"
+  description="Tembo Tech Ventures runs cohorts where early builders across Africa learn by shipping real software, and a community anyone can join."
+  noIndex
+>
+  <HomeD builders={builders} isAuthenticated={Boolean(Astro.locals.user)} />
+</PublicLayout>

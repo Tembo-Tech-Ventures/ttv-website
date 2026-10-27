@@ -1,0 +1,304 @@
+---
+import type { HomepageBuilder } from "@/lib/homepage/builders";
+import { HIRE } from "@/lib/homepage/content";
+
+/**
+ * Two overlapping cards on the one warm sheet in the stack, the same kind of
+ * card as the hero deck. They part and the one you point at (or focus) lifts;
+ * on scroll they arrive more tightly overlapped and settle apart (`hire.ts`).
+ */
+interface Props {
+  builders: HomepageBuilder[];
+}
+
+const { builders } = Astro.props;
+// The kinds of work the summary invites, as the brief you would start from.
+const PROPOSALS = ["A project", "A role", "A piece of work"] as const;
+const faces = builders.slice(0, 4);
+const firstNames = faces.map((builder) => builder.name.split(" ")[0]);
+const more = builders.length - faces.length;
+const namesLine = firstNames.length > 0 ? `${firstNames.join(", ")}${more > 0 ? ` and ${more} more` : ""}` : null;
+---
+
+<div class="hd-hire">
+  <div class="hd-hire__copy">
+    <h2 id="hd-hire-title" class="hd-h2 font-heading tracking-heading">{HIRE.title}</h2>
+    <p class="hd-hire__summary">{HIRE.summary}</p>
+  </div>
+
+  <div class="hd-hire__pair" data-hd-hire>
+    <div class="hd-hslot hd-hslot--primary" data-hd-hire-card>
+    <a class="hd-hcard hd-hcard--primary" href={HIRE.primary.href}>
+      <span class="hd-hcard__brief" aria-hidden="true">
+        {PROPOSALS.map((kind) => <span>{kind}</span>)}
+      </span>
+      <span class="hd-hcard__label">{HIRE.primary.label}</span>
+      <span class="hd-hcard__arrow" aria-hidden="true">
+        <svg viewBox="0 0 20 20" width="20" height="20"><path d="M4 10h11m-4.5-4.5L15 10l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      </span>
+    </a>
+    </div>
+    <div class="hd-hslot hd-hslot--secondary" data-hd-hire-card>
+    <a class="hd-hcard hd-hcard--secondary" href={HIRE.secondary.href}>
+      <span class="hd-hcard__faces" aria-hidden="true">
+        {faces.length > 0
+          ? faces.map((builder) => <span class="font-heading">{builder.initials}</span>)
+          : [0, 1, 2].map(() => <span />)}
+      </span>
+      {namesLine && <span class="hd-hcard__names">{namesLine}</span>}
+      <span class="hd-hcard__label">{HIRE.secondary.label}</span>
+      <span class="hd-hcard__arrow" aria-hidden="true">
+        <svg viewBox="0 0 20 20" width="20" height="20"><path d="M4 10h11m-4.5-4.5L15 10l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      </span>
+    </a>
+    </div>
+  </div>
+</div>
+
+<style>
+  .hd-hire {
+    display: grid;
+    gap: clamp(2.5rem, 6vw, 4rem);
+    align-items: center;
+  }
+
+  @media (min-width: 64rem) {
+    .hd-hire {
+      grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+      column-gap: clamp(3rem, 6vw, 6rem);
+    }
+  }
+
+  .hd-hire :global(.hd-h2) {
+    color: var(--color-dark);
+  }
+
+  .hd-hire__summary {
+    margin: 1.25rem 0 0;
+    max-width: 30rem;
+    font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.2rem);
+    line-height: 1.6;
+    color: #01302c;
+  }
+
+  /* ---------- The overlapping pair ---------- */
+  .hd-hire__pair {
+    --overlap: clamp(2.5rem, 7vw, 4.5rem);
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    padding-block: 0.5rem 1rem;
+  }
+
+  .hd-hcard {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    align-content: start;
+    min-height: 13.5rem;
+    padding: clamp(1.4rem, 3vw, 2rem);
+    border-radius: 1.5rem;
+    text-decoration: none;
+    box-shadow: 0 28px 50px -28px rgb(1 30 28 / 0.75);
+    transition:
+      translate 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      rotate 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      scale 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 420ms ease;
+  }
+
+  /* GSAP moves the slots on scroll; the cards inside keep their CSS pose and hover. */
+  .hd-hslot {
+    position: relative;
+  }
+
+  .hd-hslot--primary {
+    z-index: 1;
+  }
+
+  .hd-hslot--secondary {
+    z-index: 2;
+    margin-top: calc(-1 * var(--overlap));
+  }
+
+  .hd-hslot:has(.hd-hcard:hover, .hd-hcard:focus-visible) {
+    z-index: 3;
+  }
+
+  .hd-hcard--primary {
+    width: 88%;
+    padding-bottom: calc(clamp(1.4rem, 3vw, 2rem) + var(--overlap));
+    background: var(--color-dark);
+    color: var(--color-ink-primary);
+    rotate: -2deg;
+  }
+
+  .hd-hcard--secondary {
+    grid-template-rows: auto auto 1fr;
+    width: 82%;
+    margin-left: auto;
+    background: #fff8f2;
+    color: var(--color-dark);
+    rotate: 2deg;
+  }
+
+  .hd-hcard__label {
+    align-self: end;
+    font-size: clamp(1.4rem, 1.1rem + 1.1vw, 2rem);
+    font-weight: 700;
+    line-height: 1.15;
+  }
+
+
+  .hd-hcard__arrow {
+    position: absolute;
+    right: clamp(1.4rem, 3vw, 2rem);
+    bottom: clamp(1.4rem, 3vw, 2rem);
+    display: grid;
+    place-items: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    transition: translate 320ms cubic-bezier(0.2, 0.8, 0.2, 1), rotate 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .hd-hcard--primary .hd-hcard__arrow {
+    top: clamp(1.4rem, 3vw, 2rem);
+    bottom: auto;
+    background: var(--color-primary);
+    color: var(--color-dark);
+  }
+
+  .hd-hcard--secondary .hd-hcard__arrow {
+    background: var(--color-dark);
+    color: var(--color-ink-primary);
+  }
+
+  .hd-hcard__brief {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-bottom: 1.75rem;
+    padding-right: 3.5rem;
+  }
+
+  .hd-hcard__brief span {
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    border: 1px dashed rgb(242 141 104 / 0.7);
+    font-size: 0.875rem;
+    color: var(--color-ink-primary);
+  }
+
+  .hd-hcard__faces {
+    display: flex;
+    margin-bottom: 1.5rem;
+  }
+
+  .hd-hcard__faces span {
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 0.8rem;
+    border: 2px solid #fff8f2;
+    background: var(--color-primary);
+    color: var(--color-dark);
+    font-size: 0.72rem;
+    transition: translate 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .hd-hcard__faces span:nth-child(even) {
+    background: var(--color-teal);
+    color: var(--color-ink-primary);
+  }
+
+  .hd-hcard__faces span + span {
+    margin-left: -0.3rem;
+  }
+
+  .hd-hcard__names {
+    margin: -1rem 0 1.25rem;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    color: #24413d;
+  }
+
+  /* Part on hover or focus; the one you are on comes forward. */
+  .hd-hire__pair:hover .hd-hcard--primary,
+  .hd-hire__pair:focus-within .hd-hcard--primary {
+    translate: -0.75rem -0.6rem;
+    rotate: -4deg;
+  }
+
+  .hd-hire__pair:hover .hd-hcard--secondary,
+  .hd-hire__pair:focus-within .hd-hcard--secondary {
+    translate: 0.75rem 0.9rem;
+    rotate: 3.5deg;
+  }
+
+  .hd-hcard:hover,
+  .hd-hcard:focus-visible {
+    scale: 1.02;
+    box-shadow: 0 40px 70px -30px rgb(1 30 28 / 0.85);
+  }
+
+  .hd-hcard:hover .hd-hcard__arrow,
+  .hd-hcard:focus-visible .hd-hcard__arrow {
+    translate: 4px 0;
+    rotate: -45deg;
+  }
+
+  .hd-hcard:hover .hd-hcard__faces span + span,
+  .hd-hcard:focus-visible .hd-hcard__faces span + span {
+    translate: 0.35rem 0;
+  }
+
+  .hd-hcard:hover .hd-hcard__faces span + span + span,
+  .hd-hcard:focus-visible .hd-hcard__faces span + span + span {
+    translate: 0.7rem 0;
+  }
+
+  .hd-hcard:hover .hd-hcard__faces span + span + span + span,
+  .hd-hcard:focus-visible .hd-hcard__faces span + span + span + span {
+    translate: 1.05rem 0;
+  }
+
+  .hd-hcard:focus-visible {
+    outline: 3px solid var(--color-dark);
+    outline-offset: 4px;
+  }
+
+  /* Keep the rotated corners inside the phone gutter. */
+  @media (max-width: 30rem) {
+    .hd-hcard--primary {
+      width: 92%;
+      rotate: -1deg;
+    }
+
+    .hd-hcard--secondary {
+      width: 92%;
+      rotate: 1deg;
+    }
+
+    .hd-hire__pair:hover .hd-hcard--primary,
+    .hd-hire__pair:focus-within .hd-hcard--primary {
+      translate: 0 -0.4rem;
+      rotate: -2deg;
+    }
+
+    .hd-hire__pair:hover .hd-hcard--secondary,
+    .hd-hire__pair:focus-within .hd-hcard--secondary {
+      translate: 0 0.5rem;
+      rotate: 2deg;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hd-hcard,
+    .hd-hcard__arrow,
+    .hd-hcard__faces span {
+      transition: none;
+    }
+  }
+</style>

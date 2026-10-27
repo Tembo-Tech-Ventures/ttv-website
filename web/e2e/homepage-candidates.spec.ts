@@ -10,7 +10,7 @@ import { installTextTracker, textReport, walkAndSample } from "./text-integrity"
  * and without reduced motion. Static content only, so it runs against local
  * dev servers and deployed previews alike.
  */
-const CANDIDATES = ["/preview/home/a", "/preview/home/b", "/preview/home/c"];
+const CANDIDATES = ["/preview/home/a", "/preview/home/b", "/preview/home/c", "/preview/home/d"];
 
 for (const path of CANDIDATES) {
   test.describe(path, () => {

@@ -37,6 +37,18 @@ export const COHORT = {
   }),
 } as const;
 
+/**
+ * The skills-map picture (candidate D). An illustration of how skills connect,
+ * drawn from skills on published profiles. TTV does not yet track anyone's
+ * progress through a map, so nothing here may say or imply that it does.
+ */
+export const SKILLS_MAP = {
+  title: "Every skill opens onto the next.",
+  summary:
+    "A cohort is a path through a map of skills, walked with other builders and the engineers alongside them. The map keeps going after the cohort ends.",
+  caption: "Illustration built from skills on our builders' published profiles.",
+} as const;
+
 export const BUILDERS = {
   title: "Meet the builders.",
   summary: "Cohort graduates who chose to publish their profile, and the work they put their names to.",
