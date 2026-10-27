@@ -22,6 +22,14 @@
   --hc-pad: clamp(1.25rem, 4vw, 2.5rem);
   --hc-max: 80rem;
   --hc-section: clamp(5.5rem, 10vw, 8.5rem);
+  /*
+   * One grid. Every two-column section uses these two tokens, so each second
+   * column starts on the same line at every width (x 752 at 1440, 992 at 1920).
+   */
+  --hc-gutter: clamp(3rem, 5vw, 4rem);
+  --hc-split: minmax(0, 1fr) minmax(0, 1fr);
+  /* Section jumps land with the heading clear of the sticky header. */
+  --hc-anchor: calc(var(--hc-nav) + 1rem);
   --hc-ease: cubic-bezier(0.22, 1, 0.36, 1);
   /* The h1 is the loudest type on the page; other display sizes key off it. */
   --hc-h1-size: clamp(1.75rem, 0.75rem + 3.7vw, 3.75rem);
@@ -43,7 +51,15 @@
 .hc-section {
   position: relative;
   padding-block: var(--hc-section) 0;
-  scroll-margin-top: var(--hc-nav);
+}
+
+.hc [id] {
+  scroll-margin-top: var(--hc-anchor);
+}
+
+/* A section's heading sits one section-gap below its top: land on the heading. */
+.hc .hc-section[id] {
+  scroll-margin-top: calc(var(--hc-anchor) - var(--hc-section));
 }
 
 /* ---------------------------------------------------------------- type */

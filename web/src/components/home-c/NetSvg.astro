@@ -12,9 +12,11 @@ interface Props {
   opacity?: Record<string, number>;
   /** Hook for scripts. */
   name?: string;
+  /** preserveAspectRatio; the default centres the drawing. */
+  align?: string;
 }
 
-const { net, class: className = "", opacity = {}, name } = Astro.props;
+const { net, class: className = "", opacity = {}, name, align } = Astro.props;
 const at = new Map<string, NetNode>(net.nodes.map((node) => [node.id, node]));
 const diamond = (r: number) => `M0 ${-r}L${r} 0L0 ${r}L${-r} 0Z`;
 const view = net.view ?? { x: 0, y: 0, w: net.width, h: net.height };
@@ -23,6 +25,7 @@ const view = net.view ?? { x: 0, y: 0, w: net.width, h: net.height };
 <svg
   class:list={["hc-net", className]}
   viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
+  preserveAspectRatio={align}
   aria-hidden="true"
   focusable="false"
   data-hc-net={name}

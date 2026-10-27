@@ -29,13 +29,20 @@ const threads = convergence();
 
 <style>
   .hc-hire {
-    padding-top: clamp(3rem, 6vw, 5rem);
+    --hc-hire-top: clamp(3rem, 6vw, 5rem);
+    --hc-converge: clamp(6rem, 15vw, 13rem);
+    padding-top: var(--hc-hire-top);
+  }
+
+  /* Jumping to #hire lands on the panel, the threads' knot just under the header. */
+  :global(.hc) .hc-hire[id] {
+    scroll-margin-top: calc(var(--hc-anchor) - var(--hc-hire-top) - var(--hc-converge) + 1rem);
   }
 
   .hc-converge {
     display: block;
     width: 100%;
-    height: clamp(6rem, 15vw, 13rem);
+    height: var(--hc-converge);
     overflow: visible;
   }
 
@@ -111,8 +118,9 @@ const threads = convergence();
 
   @media (min-width: 1024px) {
     .hc-hire__panel {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      column-gap: 4rem;
+      /* Same gutter and symmetric padding: the body starts on the page's line. */
+      grid-template-columns: var(--hc-split);
+      column-gap: var(--hc-gutter);
       align-items: end;
     }
   }

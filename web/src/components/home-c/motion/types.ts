@@ -6,4 +6,6 @@ export interface Conditions {
   wide: boolean;
   /** A mouse or trackpad: hover effects and pointer attraction. */
   fine: boolean;
+  /** Phone layouts (max-width: 639px). */
+  narrow: boolean;
 }

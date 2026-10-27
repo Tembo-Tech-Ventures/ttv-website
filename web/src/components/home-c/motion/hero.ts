@@ -100,12 +100,12 @@ export function setupHero(root: HTMLElement, c: Conditions): () => void {
 
   const onMove = (event: PointerEvent) => {
     if (event.pointerType !== "mouse") return;
-    const box = svg.getBoundingClientRect();
-    const view = svg.viewBox.baseVal;
-    // preserveAspectRatio "meet": one scale, centred.
-    const scale = Math.min(box.width / view.width, box.height / view.height);
-    pointer.x = (event.clientX - box.left - (box.width - view.width * scale) / 2) / scale;
-    pointer.y = (event.clientY - box.top - (box.height - view.height * scale) / 2) / scale;
+    // Screen to viewBox units, whatever the alignment and scale.
+    const matrix = svg.getScreenCTM();
+    if (!matrix) return;
+    const at = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
+    pointer.x = at.x;
+    pointer.y = at.y;
     pointer.active = true;
     wake();
   };

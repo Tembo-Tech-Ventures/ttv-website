@@ -28,8 +28,47 @@ export function setupCommunity(root: HTMLElement, c: Conditions): () => void {
   const svg = frame?.querySelector<SVGSVGElement>("svg");
   if (!section || !frame || !svg) return () => {};
   const cards = [...section.querySelectorAll<HTMLElement>("[data-hc-role]")];
-  const toggles = cards.map((card) => card.querySelector<HTMLButtonElement>("[data-hc-role-toggle]"));
+  const toggles = [...frame.querySelectorAll<HTMLButtonElement>("[data-hc-role-toggle]")];
   const net = new LiveNet(svg);
+  const fullView = { ...net.view };
+
+  /*
+   * Phones: the band is small, so the camera moves in on the lit role, the
+   * same way the rhythm camera frames each step.
+   */
+  const viewFor = (role: Role) => {
+    if (role === "all") return fullView;
+    const ids = new Set(net.nodes.filter((node) => node.kind === role).map((node) => node.id));
+    for (const edge of net.edges) {
+      if (edge.kind !== EDGE_FOR[role]) continue;
+      ids.add(edge.a.id);
+      ids.add(edge.b.id);
+    }
+    const nodes = net.nodes.filter((node) => ids.has(node.id));
+    if (nodes.length === 0) return fullView;
+    let minX = Math.min(...nodes.map((n) => n.x)) - 14;
+    let maxX = Math.max(...nodes.map((n) => n.x)) + 14;
+    let minY = Math.min(...nodes.map((n) => n.y)) - 14;
+    let maxY = Math.max(...nodes.map((n) => n.y)) + 14;
+    const box = svg.getBoundingClientRect();
+    const aspect = box.width && box.height ? box.width / box.height : 1;
+    const grow = (maxX - minX) / (maxY - minY) > aspect ? ((maxX - minX) / aspect - (maxY - minY)) / 2 : 0;
+    const widen = (maxX - minX) / (maxY - minY) < aspect ? ((maxY - minY) * aspect - (maxX - minX)) / 2 : 0;
+    minY -= grow;
+    maxY += grow;
+    minX -= widen;
+    maxX += widen;
+    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+  };
+  const frameRole = (role: Role) => {
+    if (!c.narrow) return;
+    const view = viewFor(role);
+    if (c.motion) gsap.to(net.view, { ...view, duration: 0.6, ease: "power3.inOut", overwrite: true, onUpdate: () => net.render() });
+    else {
+      Object.assign(net.view, view);
+      net.render();
+    }
+  };
   const listeners: Array<[EventTarget, string, EventListener]> = [];
   const on = (target: EventTarget, type: string, fn: EventListener) => {
     target.addEventListener(type, fn);
@@ -47,6 +86,7 @@ export function setupCommunity(root: HTMLElement, c: Conditions): () => void {
     current = role;
     frame.dataset.role = role;
     cards.forEach((card) => card.classList.toggle("is-lit", card.dataset.role === role));
+    frameRole(role);
     if (!c.motion || role === "all") return;
     const lines = net.edges.filter((edge) => edge.kind === EDGE_FOR[role]).map((edge) => edge.el);
     gsap.fromTo(lines, { drawSVG: "0%" }, { drawSVG: "100%", duration: 0.7, ease: "power2.out", stagger: 0.025, clearProps: "strokeDasharray,strokeDashoffset" });
@@ -88,11 +128,10 @@ export function setupCommunity(root: HTMLElement, c: Conditions): () => void {
 
   /* ------------------------------------------------------- toggles */
   const syncToggles = () => {
-    toggles.forEach((toggle, i) => toggle?.setAttribute("aria-pressed", String(pinned === cards[i].dataset.role)));
+    toggles.forEach((toggle) => toggle.setAttribute("aria-pressed", String(pinned === toggle.dataset.role)));
   };
-  toggles.forEach((toggle, i) => {
-    if (!toggle) return;
-    const role = (cards[i].dataset.role ?? "all") as Role;
+  toggles.forEach((toggle) => {
+    const role = (toggle.dataset.role ?? "all") as Role;
     on(toggle, "click", () => {
       interact();
       pinned = pinned === role ? null : role;
@@ -170,6 +209,8 @@ export function setupCommunity(root: HTMLElement, c: Conditions): () => void {
     net.render();
     pinned = null;
     syncToggles();
+    Object.assign(net.view, fullView);
+    net.render();
     current = "all";
     frame.dataset.role = "all";
     cards.forEach((card) => card.classList.remove("is-lit"));

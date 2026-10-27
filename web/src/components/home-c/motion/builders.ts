@@ -70,12 +70,15 @@ export function setupBuilders(root: HTMLElement, c: Conditions): () => void {
       start: "top 92%",
       once: true,
       onEnter: (batch) => {
-        gsap.to(batch, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out", stagger: 0.08, overwrite: true, clearProps: "opacity,transform" });
+        // One timeline per batch: cards rise, then each signature draws itself.
+        const timeline = gsap.timeline();
+        timeline.to(batch, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out", stagger: 0.08, clearProps: "opacity,transform" }, 0);
         batch.forEach((el, i) => {
-          const delay = 0.25 + i * 0.08;
-          gsap.to(el.querySelectorAll(".hc-sig__spoke"), { drawSVG: "100%", duration: 0.6, ease: "power2.out", stagger: 0.08, delay });
-          gsap.to(el.querySelectorAll(".hc-sig__node"), { scale: 1, duration: 0.5, ease: "back.out(2.5)", stagger: 0.08, delay: delay + 0.35 });
-          gsap.to(el.querySelectorAll(".hc-sig__arc"), { drawSVG: "100%", duration: 0.7, ease: "power2.inOut", stagger: 0.1, delay: delay + 0.5 });
+          const at = 0.25 + i * 0.08;
+          timeline
+            .to(el.querySelectorAll(".hc-sig__spoke"), { drawSVG: "100%", duration: 0.6, ease: "power2.out", stagger: 0.08 }, at)
+            .to(el.querySelectorAll(".hc-sig__node"), { scale: 1, duration: 0.5, ease: "back.out(2.5)", stagger: 0.08 }, at + 0.35)
+            .to(el.querySelectorAll(".hc-sig__arc"), { drawSVG: "100%", duration: 0.7, ease: "power2.inOut", stagger: 0.1 }, at + 0.5);
         });
       },
     });
@@ -164,6 +167,38 @@ export function setupBuilders(root: HTMLElement, c: Conditions): () => void {
     if (!grid.querySelector(".is-linked")) section.classList.remove("has-focus");
   };
 
+  /* ------------------------------------------------- phone rail */
+  const status = section.querySelector<HTMLElement>("[data-hc-status]");
+  const dots = [...section.querySelectorAll<HTMLElement>("[data-hc-rail-dots] span")];
+  const isRail = () => getComputedStyle(grid).overflowX !== "visible";
+  const railItems = () => [...grid.children].filter((el): el is HTMLElement => el instanceof HTMLElement);
+  let dotFrame = 0;
+  const syncDots = () => {
+    cancelAnimationFrame(dotFrame);
+    dotFrame = requestAnimationFrame(() => {
+      if (dots.length === 0 || !isRail()) return;
+      const left = grid.scrollLeft + Number.parseFloat(getComputedStyle(grid).paddingLeft);
+      const items = railItems();
+      let current = 0;
+      items.forEach((item, i) => {
+        if (Math.abs(item.offsetLeft - left) < Math.abs(items[current].offsetLeft - left)) current = i;
+      });
+      dots.forEach((dot, i) => dot.classList.toggle("is-on", i === current));
+    });
+  };
+  on(grid, "scroll", syncDots);
+  syncDots();
+
+  /** On the rail, bring the next builder who holds the tag into view. */
+  const scrollToHolder = (from: HTMLElement, tag: string) => {
+    if (!isRail()) return;
+    const holders = cards.filter((card) => card.tags.has(tag));
+    const at = holders.findIndex((card) => card.el === from);
+    const next = holders[(at + 1) % holders.length];
+    if (!next || next.el === from) return;
+    grid.scrollTo({ left: next.el.offsetLeft - Number.parseFloat(getComputedStyle(grid).paddingLeft), behavior: c.motion ? "smooth" : "auto" });
+  };
+
   const highlightTag = (tag: string) => {
     clearMarks();
     const box = grid.getBoundingClientRect();
@@ -223,8 +258,16 @@ export function setupBuilders(root: HTMLElement, c: Conditions): () => void {
       const tag = chip.dataset.tag ?? "";
       pinned = pinned === tag ? null : tag;
       syncChips();
-      if (pinned) highlightTag(pinned);
-      else clearMarks();
+      if (pinned) {
+        highlightTag(pinned);
+        const count = cards.filter((card) => card.tags.has(tag)).length;
+        if (status) status.textContent = `${chip.textContent?.trim()}: ${count === 1 ? "1 builder" : `${count} builders`}`;
+        const card = chip.closest<HTMLElement>("[data-hc-card]");
+        if (card) scrollToHolder(card, tag);
+      } else {
+        clearMarks();
+        if (status) status.textContent = "";
+      }
     });
   });
 
@@ -247,6 +290,7 @@ export function setupBuilders(root: HTMLElement, c: Conditions): () => void {
     pinned = null;
     syncChips();
     clearMarks();
+    if (status) status.textContent = "";
   });
 
   let resizeFrame = 0;
@@ -262,8 +306,10 @@ export function setupBuilders(root: HTMLElement, c: Conditions): () => void {
   return () => {
     for (const [target, type, fn] of listeners) target.removeEventListener(type, fn);
     cancelAnimationFrame(resizeFrame);
+    cancelAnimationFrame(dotFrame);
     pinned = null;
     syncChips();
     clearMarks();
+    if (status) status.textContent = "";
   };
 }

@@ -1,5 +1,5 @@
 ---
-import { COHORT } from "@/lib/homepage/content";
+import { COHORT, COMMUNITY } from "@/lib/homepage/content";
 import { heroNetwork } from "./graph";
 import NetSvg from "./NetSvg.astro";
 import Pill from "./Pill.astro";
@@ -13,8 +13,19 @@ const glyphs = ["builder", "live", "partner"] as const;
 
 <div class="hc-hero hc-wrap" data-hc-hero>
   <div class="hc-hero__net">
-    <NetSvg net={square} name="hero" class="hc-hero__svg hc-hero__svg--square" />
+    <NetSvg net={square} name="hero" class="hc-hero__svg hc-hero__svg--square" align="xMinYMid meet" />
     <NetSvg net={wide} name="hero" class="hc-hero__svg hc-hero__svg--wide" />
+    <!-- A key at first sight: the same shapes the whole page uses. -->
+    <ul class="hc-hero__legend" role="list">
+      {
+        COMMUNITY.paths.map((path) => (
+          <li>
+            <span class={`hc-hero__key hc-hero__key--${path.id}`} aria-hidden="true" />
+            {path.role}
+          </li>
+        ))
+      }
+    </ul>
   </div>
 
   <div class="hc-hero__copy">
@@ -77,6 +88,44 @@ const glyphs = ["builder", "live", "partner"] as const;
     .hc-hero__net :global(.hc-hero__svg--wide .hc-label--quiet) {
       font-size: 21px;
     }
+  }
+
+  .hc-hero__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1.25rem;
+    margin: 0.5rem 0 0;
+    padding: 0 calc(var(--hc-pad) * 0.5);
+    list-style: none;
+    color: var(--hc-ink-2);
+    font-size: 0.8125rem;
+  }
+
+  .hc-hero__legend li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .hc-hero__key {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background: var(--hc-peach);
+  }
+
+  .hc-hero__key--mentor {
+    background: transparent;
+    border: 2px solid var(--hc-teal-l);
+    box-sizing: border-box;
+    width: 0.7rem;
+    height: 0.7rem;
+  }
+
+  .hc-hero__key--partner {
+    border-radius: 1px;
+    background: var(--hc-ink);
+    transform: rotate(45deg) scale(0.9);
   }
 
   .hc-hero__copy {
@@ -197,15 +246,19 @@ const glyphs = ["builder", "live", "partner"] as const;
 
   @media (min-width: 1024px) {
     .hc-hero {
-      --hc-hero-gap: clamp(2rem, 4vw, 4.5rem);
-      grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
+      grid-template-columns: var(--hc-split);
       grid-template-areas: "copy net" "facts facts";
-      column-gap: var(--hc-hero-gap);
+      column-gap: var(--hc-gutter);
       align-items: center;
       min-height: calc(100svh - var(--hc-nav));
       align-content: center;
       padding-block: 2rem 2.5rem;
       box-sizing: border-box;
+    }
+
+    /* The h1 may use the gutter; the network starts exactly on the column line. */
+    .hc-hero__copy {
+      margin-right: calc(var(--hc-gutter) * -0.75);
     }
 
     .hc-hero__net {
@@ -215,7 +268,6 @@ const glyphs = ["builder", "live", "partner"] as const;
     .hc-hero__net :global(.hc-hero__svg--square) {
       display: block;
       max-height: calc(100svh - var(--hc-nav) - 15rem);
-      margin-inline: auto;
     }
 
     .hc-hero__net :global(.hc-hero__svg--wide) {
@@ -224,8 +276,8 @@ const glyphs = ["builder", "live", "partner"] as const;
 
     /* Line the third fact up under the network column. */
     .hc-facts {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) calc((100% - var(--hc-hero-gap)) * 0.44);
-      column-gap: var(--hc-hero-gap);
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) calc((100% - var(--hc-gutter)) / 2);
+      column-gap: var(--hc-gutter);
       margin-top: clamp(2rem, 4vh, 3.5rem);
     }
   }

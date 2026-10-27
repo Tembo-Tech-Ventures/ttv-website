@@ -19,7 +19,8 @@ const count = builders.length;
 const remainder = (columns: number) => (count === 0 ? columns : (columns - (count % columns)) % columns);
 const spanLg = remainder(4);
 const spanMd = remainder(2);
-const showSm = count <= 1;
+// On phones the closing tile ends the rail, so it is always there.
+const showSm = true;
 // A loose, still-forming constellation for the closing tile: dashed links and
 // open rings, waiting for the next profiles.
 const ghostRings = [
@@ -47,7 +48,8 @@ const ghostPath = `M${ghostRings.map((ring) => `${ring.x} ${ring.y}`).join(" L")
       </div>
     </header>
 
-    <div class="hc-builders__grid" data-count={count}>
+    <p class="hc-builders__status" aria-live="polite" data-hc-status></p>
+    <div class="hc-builders__grid" data-count={count} data-hc-rail>
       <svg class="hc-threads" aria-hidden="true" focusable="false" data-hc-threads></svg>
       {builders.map((builder) => <BuilderCard builder={builder} />)}
       {
@@ -67,6 +69,14 @@ const ghostPath = `M${ghostRings.map((ring) => `${ring.x} ${ring.y}`).join(" L")
         )
       }
     </div>
+    {
+      count > 1 && (
+        <div class="hc-rail-dots" aria-hidden="true" data-hc-rail-dots>
+          {builders.map(() => <span />)}
+          <span />
+        </div>
+      )
+    }
   </div>
 </section>
 
@@ -155,6 +165,74 @@ const ghostPath = `M${ghostRings.map((ring) => `${ring.x} ${ring.y}`).join(" L")
     stroke-width: 1.25;
   }
 
+  .hc-builders__status {
+    min-height: 0;
+    margin: 0;
+    color: var(--hc-peach);
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+
+  .hc-builders__status:not(:empty) {
+    margin-bottom: 1rem;
+  }
+
+  .hc-rail-dots {
+    display: none;
+  }
+
+  /*
+   * Phones: one swipeable rail instead of eight stacked cards. The next card
+   * peeks in from the right; dots show where you are.
+   */
+  @media (max-width: 639px) {
+    .hc-builders__grid {
+      grid-template-columns: none;
+      grid-auto-flow: column;
+      grid-auto-columns: 84%;
+      gap: 0.75rem;
+      margin-inline: calc(var(--hc-pad) * -1);
+      padding: 0.25rem var(--hc-pad) 0.75rem;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scroll-snap-type: x mandatory;
+      scroll-padding-inline: var(--hc-pad);
+      scrollbar-width: none;
+    }
+
+    .hc-builders__grid::-webkit-scrollbar {
+      display: none;
+    }
+
+    .hc-builders__grid > :global(*) {
+      scroll-snap-align: start;
+    }
+
+    .hc-threads {
+      display: none;
+    }
+
+    .hc-rail-dots {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .hc-rail-dots span {
+      width: 0.45rem;
+      height: 0.45rem;
+      border-radius: 50%;
+      border: 1px solid rgba(242, 141, 104, 0.6);
+      transition: background-color 250ms ease, transform 250ms ease;
+    }
+
+    .hc-rail-dots :global(span.is-on) {
+      background: var(--hc-peach);
+      transform: scale(1.25);
+    }
+  }
+
   @media (min-width: 640px) {
     .hc-builders__grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -172,14 +250,13 @@ const ghostPath = `M${ghostRings.map((ring) => `${ring.x} ${ring.y}`).join(" L")
 
   @media (min-width: 1024px) {
     .hc-builders__head {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-columns: var(--hc-split);
       align-items: end;
-      column-gap: 4rem;
+      column-gap: var(--hc-gutter);
     }
 
     .hc-builders__intro {
-      justify-self: end;
-      max-width: 30rem;
+      max-width: 32rem;
     }
 
     .hc-builders__grid {

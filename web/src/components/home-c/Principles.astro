@@ -65,23 +65,26 @@ const widest = Math.max(...words.map((word) => word.width));
     list-style: none;
     margin: 0;
     padding: 0;
-    border-bottom: 1px solid var(--hc-rule);
+    border-block: 1px solid var(--hc-rule);
   }
 
   .hc-principle {
     display: grid;
-    gap: 0.9rem;
-    padding-block: clamp(1.25rem, 3vw, 2rem);
-    border-top: 1px solid var(--hc-rule);
+    gap: 0.75rem;
+    padding-block: clamp(1.5rem, 4vw, 3rem);
   }
 
   /*
-   * Every word shares one scale: the widest (PHILOSOPHY, 9.42 em with its
-   * padding) is sized so its font stays just under the h1's, at every width.
+   * The finale, and the one sanctioned exception to "the h1 is the loudest
+   * type": the h1 rules above the fold; here the five values close the page at
+   * full content width, paired with the footer's outlined wordmark. Every word
+   * shares one scale, set so the widest (PHILOSOPHY) fills the column exactly
+   * (about 127 px type at 1440, 37 px at 390). The viewBoxes come from measured
+   * advance widths, so no word is ever cropped or stretched.
    */
   .hc-principle__word {
     margin: 0;
-    width: min(100%, calc(var(--hc-h1-size) * 0.92 * 9.42));
+    width: 100%;
   }
 
   .hc-principle__ink {
@@ -105,13 +108,15 @@ const widest = Math.max(...words.map((word) => word.width));
     letter-spacing: -2px;
     fill: transparent;
     stroke: var(--hc-peach);
-    stroke-width: 1.3px;
+    stroke-width: 1.75px;
     stroke-linejoin: round;
     vector-effect: non-scaling-stroke;
     transition: fill 450ms ease;
   }
 
-  .hc-principle:hover .hc-principle__text {
+  /* One word at a time takes the solid fill: the one being read (or hovered). */
+  .hc-principle:hover .hc-principle__text,
+  :global(.hc-principle.is-current) .hc-principle__text {
     fill: var(--hc-peach);
   }
 
@@ -138,17 +143,16 @@ const widest = Math.max(...words.map((word) => word.width));
 
   .hc-principle__commitment {
     margin: 0;
-    max-width: 30rem;
-    font-size: clamp(1.0625rem, 0.98rem + 0.35vw, 1.25rem);
-    line-height: 1.55;
+    max-width: 34rem;
+    font-size: clamp(1.125rem, 0.95rem + 0.8vw, 1.6rem);
+    line-height: 1.45;
     color: var(--hc-ink);
+    text-wrap: pretty;
   }
 
-  @media (min-width: 1024px) {
-    .hc-principle {
-      grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
-      column-gap: clamp(2rem, 4vw, 4rem);
-      align-items: center;
+  @media (prefers-reduced-motion: reduce) {
+    .hc-principle__text {
+      transition: none;
     }
   }
 </style>

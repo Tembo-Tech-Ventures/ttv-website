@@ -26,6 +26,7 @@ export function initHomeC() {
       motion: "(prefers-reduced-motion: no-preference)",
       wide: "(min-width: 1024px)",
       fine: "(hover: hover) and (pointer: fine)",
+      narrow: "(max-width: 639px)",
     },
     (context) => {
       const conditions = context.conditions as unknown as Conditions;

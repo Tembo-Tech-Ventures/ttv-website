@@ -101,10 +101,20 @@ const meta = formatCohortLocation(builder.cohort, builder.country);
     border-color: rgba(242, 141, 104, 0.45);
   }
 
-  /* Unrelated cards step back without dropping their text below 4.5:1. */
+  /* Unrelated cards step back through their frame and signature only; their
+     text keeps full contrast. */
   :global(.hc-builders.has-focus) .hc-card:not(.is-source):not(.is-linked) {
-    opacity: 0.8;
-    filter: saturate(0.4);
+    border-color: transparent;
+    background: rgba(1, 42, 40, 0.5);
+  }
+
+  :global(.hc-builders.has-focus) .hc-card:not(.is-source):not(.is-linked) .hc-sig {
+    opacity: 0.35;
+    filter: saturate(0.3);
+  }
+
+  .hc-sig {
+    transition: opacity 350ms ease, filter 350ms ease;
   }
 
   .hc-card__head {

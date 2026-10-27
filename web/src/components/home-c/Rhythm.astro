@@ -129,8 +129,8 @@ const model = {
   @media (min-width: 1024px) {
     .hc-rhythm {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      column-gap: clamp(3rem, 6vw, 6rem);
+      grid-template-columns: var(--hc-split);
+      column-gap: var(--hc-gutter);
     }
 
     /* Top-aligned, so the panel and the first step arrive together and the
