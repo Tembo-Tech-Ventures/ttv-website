@@ -37,6 +37,11 @@ export function createSqliteD1(database = new DatabaseSync(":memory:")) {
           meta: {},
         };
       },
+      async raw() {
+        const query = database.prepare(sql);
+        query.setReturnArrays(true);
+        return query.all(...this.params);
+      },
       async run() {
         const result = database.prepare(sql).run(...this.params);
         return {

@@ -3,10 +3,9 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * scripts/audit-ci.mjs allowlists four better-auth advisories (fixed only in
- * the breaking 1.7 line) because each needs a feature TTV does not use. These
- * checks keep that true: enabling any of those features fails here first, and
- * the advisory must then be fixed by upgrading rather than allowlisted.
+ * Keep TTV's deliberately small auth surface explicit after the 1.7 upgrade.
+ * The four former audit exceptions are fixed and no longer allowlisted;
+ * adding a provider/plugin or database rate limiting still needs review.
  */
 const SRC = resolve(__dirname, "..");
 const AFFECTED_PLUGINS = ["deviceAuthorization", "oauthProxy", "magicLink"];
@@ -19,7 +18,7 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
-describe("better-auth features behind allowlisted advisories", () => {
+describe("better-auth reviewed feature surface", () => {
   const auth = readFileSync(join(SRC, "lib/auth.ts"), "utf8");
 
   it("enables only the bearer plugin", () => {
