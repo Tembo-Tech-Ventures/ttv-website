@@ -375,7 +375,7 @@ const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) 
     translate:
       calc((var(--slot) - (var(--n) - 1) / 2) * var(--x-step))
       0
-      calc(var(--slot) * var(--depth) + var(--lift-z, 0px));
+      calc(var(--slot) * var(--depth));
     rotate: calc((var(--slot) - (var(--n) - 1) * 0.7) * var(--step-deg));
     transform-origin: 50% 140%;
   }
@@ -390,16 +390,8 @@ const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) 
     outline-offset: 4px;
   }
 
-  /* A focused card comes forward and lifts like a hovered one, so its whole
-   * ring shows above the cards that would otherwise cover it. The deck is a
-   * 3D context (z-index is ignored there), so it comes forward in depth. */
-  .hd-cc:has(.hd-cc__pose:focus-visible) {
-    z-index: calc(var(--n) + 1);
-  }
-
-  .hd-cc__pose:focus-visible {
-    --lift-z: calc(var(--n) * var(--depth) + 40px);
-  }
+  /* Focusing a card brings it to the top (deck.ts), so it is frontmost; it
+   * also lifts like a hovered one. */
 
   .hd-cc__pose:focus-visible .hd-cc__inner {
     translate: 0 -0.6rem;

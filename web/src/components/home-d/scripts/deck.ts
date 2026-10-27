@@ -31,7 +31,8 @@ function findDeck(root: HTMLElement): Deck | null {
 
 /**
  * Turns the deck cards into toggle buttons (only now that JS can honour them)
- * and brings the pressed card to the top, the others closing up behind it.
+ * and brings the pressed (or focused) card to the top, the others closing up
+ * behind it.
  * The card on top shows its cohort's published builders, and the hero's
  * "Meet the builders" link then leads to that cohort's first card. Works with
  * or without motion; with motion the CSS pose transition carries the card.
@@ -66,6 +67,9 @@ export function initDeckSelect(root: HTMLElement): (() => void) | null {
   };
 
   const onClick = (event: Event) => choose(buttons.indexOf(event.currentTarget as HTMLElement));
+  // Focus selects, like the community tabs: a focused card comes to the top
+  // whole (its people and number showing), never as a blank slab in front.
+  const onFocus = (event: FocusEvent) => choose(buttons.indexOf(event.currentTarget as HTMLElement));
   const onKey = (event: KeyboardEvent) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
@@ -77,6 +81,7 @@ export function initDeckSelect(root: HTMLElement): (() => void) | null {
     button.setAttribute("role", "button");
     button.tabIndex = 0;
     button.addEventListener("click", onClick);
+    button.addEventListener("focus", onFocus);
     button.addEventListener("keydown", onKey);
   });
   sync();
@@ -88,6 +93,7 @@ export function initDeckSelect(root: HTMLElement): (() => void) | null {
       button.removeAttribute("tabindex");
       button.removeAttribute("aria-pressed");
       button.removeEventListener("click", onClick);
+      button.removeEventListener("focus", onFocus);
       button.removeEventListener("keydown", onKey);
     });
   };

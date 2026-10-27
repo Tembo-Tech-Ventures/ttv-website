@@ -91,39 +91,104 @@ export function initSkillsMap(root: HTMLElement): () => void {
       for (const pill of box.querySelectorAll(".is-active, .is-near")) pill.classList.remove("is-active", "is-near");
       for (const line of lines) line.classList.remove("is-lit");
       tip.hidden = true;
+      box.querySelector("[data-hd-leader]")?.classList.remove("is-shown");
     };
 
+    const leader = stage?.querySelector<SVGSVGElement>("[data-hd-leader]") ?? null;
+    const leaderLine = leader?.querySelector<SVGLineElement>("line") ?? null;
+
     /**
-     * Beside the node away from the centre, then above, below, and on the
-     * inner side: the first spot where the tip covers no other skill, the
-     * hub or the walking group. Failing all four, the one covering least.
+     * Where the tip goes, in the stage's px: beside the node away from the
+     * centre, above, below, on the inner side, then the four diagonals (and
+     * the same eight a little further out). The first spot that touches no
+     * other skill, the hub or the walking group wins. If all of them do, the
+     * tip docks at a clear spot on the map's edge (whose leader crosses no
+     * label, if any does not), with a thin leader line to its node. A spot that
+     * covers anything is never used.
      */
     const place = (pill: HTMLElement) => {
+      if (!stage) return;
       const node = pill.closest<HTMLElement>("[data-hd-node]")!;
-      const outward = node.dataset.side === "right" ? 1 : -1;
+      const frame = stage.getBoundingClientRect();
+      const W = frame.width;
+      const H = frame.height;
+      const cx = (Number.parseFloat(node.style.left) / 100) * W;
+      const cy = (Number.parseFloat(node.style.top) / 100) * H;
+      const out = node.dataset.side === "right" ? 1 : -1;
       const half = pill.offsetWidth / 2;
-      const rise = pill.offsetHeight / 2 + 10;
-      const spots = [
-        { dx: outward * (half + 12), shift: outward > 0 ? "0 -50%" : "-100% -50%" },
-        { dx: 0, shift: `-50% calc(-100% - ${rise}px)` },
-        { dx: 0, shift: `-50% ${rise}px` },
-        { dx: -outward * (half + 12), shift: outward > 0 ? "-100% -50%" : "0 -50%" },
-      ];
-      const blockers = [...others.filter((other) => other !== pill), ...fixed].map((el) => el.getBoundingClientRect());
-      const covered = (rect: DOMRect) =>
-        blockers.reduce((sum, b) => sum + Math.max(0, Math.min(rect.right, b.right) - Math.max(rect.left, b.left)) * Math.max(0, Math.min(rect.bottom, b.bottom) - Math.max(rect.top, b.top)), 0);
-      let best = { index: 0, area: Infinity };
-      for (const [index, spot] of spots.entries()) {
-        tip.style.left = `calc(${node.style.left} + ${spot.dx}px)`;
-        tip.style.top = node.style.top;
-        tip.style.translate = spot.shift;
-        const area = covered(tip.getBoundingClientRect());
-        if (area < best.area) best = { index, area };
-        if (area === 0) return;
+      const ph = pill.offsetHeight / 2;
+      const tw = tip.offsetWidth;
+      const th = tip.offsetHeight;
+      // Two rings of eight spots: close to the node first, then a little further out.
+      const spots = [10, 34].flatMap((g) => {
+        const side = (dir: number) => (dir > 0 ? cx + half + g + 2 : cx - half - g - 2 - tw);
+        const above = cy - ph - g - th;
+        const below = cy + ph + g;
+        return [
+          { x: side(out), y: cy - th / 2 },
+          { x: cx - tw / 2, y: above },
+          { x: cx - tw / 2, y: below },
+          { x: side(-out), y: cy - th / 2 },
+          { x: out > 0 ? cx : cx - tw, y: above },
+          { x: out > 0 ? cx : cx - tw, y: below },
+          { x: out > 0 ? cx - tw : cx, y: above },
+          { x: out > 0 ? cx - tw : cx, y: below },
+        ];
+      });
+      const blockers = [...others.filter((other) => other !== pill), ...fixed].map((el) => {
+        const r = el.getBoundingClientRect();
+        return { x: r.left - frame.left - 4, y: r.top - frame.top - 4, w: r.width + 8, h: r.height + 8 };
+      });
+      const self = { x: cx - half - 4, y: cy - ph - 4, w: half * 2 + 8, h: ph * 2 + 8 };
+      const hits = (spot: { x: number; y: number }, also: Array<typeof self> = []) =>
+        [...blockers, ...also].some((b) => spot.x < b.x + b.w && spot.x + tw > b.x && spot.y < b.y + b.h && spot.y + th > b.y);
+      const inside = (spot: { x: number; y: number }) => spot.x >= -24 && spot.x + tw <= W + 24 && spot.y >= -24;
+      let spot = spots.find((candidate) => inside(candidate) && !hits(candidate));
+      let docked = false;
+      if (!spot) {
+        const clampX = (x: number) => Math.max(8, Math.min(W - tw - 8, x));
+        const clampY = (y: number) => Math.max(8, Math.min(H - th - 8, y));
+        // The map's corners, its edges in line with the node, and just under the map.
+        const corners = [
+          { x: 8, y: 8 },
+          { x: W - tw - 8, y: 8 },
+          { x: 8, y: H - th - 8 },
+          { x: W - tw - 8, y: H - th - 8 },
+          { x: clampX(cx - tw / 2), y: H - th - 8 },
+          { x: clampX(cx - tw / 2), y: 8 },
+          { x: out > 0 ? W - tw - 8 : 8, y: clampY(cy - th / 2) },
+          { x: clampX(cx - tw / 2), y: H + 12 },
+        ]
+          .filter((corner) => !hits(corner, [self]))
+          // A leader that crosses no label first, then the nearest.
+          .map((corner) => {
+            // The leader runs to the tip's nearest point, as drawn below.
+            const tx = Math.min(Math.max(cx, corner.x), corner.x + tw);
+            const ty = Math.min(Math.max(cy, corner.y), corner.y + th);
+            return { corner, crosses: blockers.filter((b) => crossesBox(cx, cy, tx, ty, b)).length };
+          })
+          .toSorted((p, q) => p.crosses - q.crosses || Math.hypot(p.corner.x - cx, p.corner.y - cy) - Math.hypot(q.corner.x - cx, q.corner.y - cy))
+          .map(({ corner }) => corner);
+        spot = corners[0] ?? { x: Math.max(0, Math.min(W - tw, cx - tw / 2)), y: H + 12 };
+        docked = true;
       }
-      const spot = spots[best.index];
-      tip.style.left = `calc(${node.style.left} + ${spot.dx}px)`;
-      tip.style.translate = spot.shift;
+      tip.style.left = `${spot.x.toFixed(1)}px`;
+      tip.style.top = `${spot.y.toFixed(1)}px`;
+      tip.style.translate = "0 0";
+      if (leader && leaderLine) {
+        leader.classList.toggle("is-shown", docked);
+        if (docked) {
+          leader.setAttribute("viewBox", `0 0 ${W.toFixed(0)} ${H.toFixed(0)}`);
+          // From the node's edge to the nearest point of the docked tip.
+          const tx = Math.min(Math.max(cx, spot.x), spot.x + tw);
+          const ty = Math.min(Math.max(cy, spot.y), spot.y + th);
+          const angle = Math.atan2(ty - cy, tx - cx);
+          leaderLine.setAttribute("x1", (cx + Math.cos(angle) * (half + 2) * 0.9).toFixed(1));
+          leaderLine.setAttribute("y1", (cy + Math.sin(angle) * (ph + 2)).toFixed(1));
+          leaderLine.setAttribute("x2", tx.toFixed(1));
+          leaderLine.setAttribute("y2", ty.toFixed(1));
+        }
+      }
     };
 
     const show = (pill: HTMLElement) => {
@@ -247,6 +312,7 @@ export function initSkillsMap(root: HTMLElement): () => void {
     if (!rest) return;
     const open = button.getAttribute("aria-expanded") !== "true";
     button.setAttribute("aria-expanded", String(open));
+    button.textContent = open ? "Show fewer" : (button.dataset.closed ?? button.textContent);
     rest.hidden = !open;
   };
   for (const button of toggles) {
@@ -266,6 +332,17 @@ export function initSkillsMap(root: HTMLElement): () => void {
     map.classList.remove("hd-map--live", "hd-map--onscreen");
     for (const cleanup of cleanups) cleanup();
   };
+}
+
+/** Whether the segment (x1,y1)-(x2,y2) passes through a box (sampled finely enough for labels). */
+function crossesBox(x1: number, y1: number, x2: number, y2: number, b: { x: number; y: number; w: number; h: number }): boolean {
+  const steps = Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 4);
+  for (let i = 1; i < steps; i += 1) {
+    const x = x1 + ((x2 - x1) * i) / steps;
+    const y = y1 + ((y2 - y1) * i) / steps;
+    if (x > b.x && x < b.x + b.w && y > b.y && y < b.y + b.h) return true;
+  }
+  return false;
 }
 
 /** Layout offset of `el` inside `ancestor`, ignoring transforms (sheets tip and scale). */

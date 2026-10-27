@@ -32,7 +32,6 @@ interface Segment {
   box: HTMLElement;
   pieces: Piece[];
   stations: Station[];
-  walk: HTMLElement;
   from: number;
   to: number;
   knot: HTMLElement | null;
@@ -44,7 +43,9 @@ interface Segment {
  * every later sheet until it ties off on the "Propose a project" card. The
  * map's walking group (four builders, two engineers) steps off the map onto
  * it and rides its head, stepping into a small station level with each
- * section's heading. Each sheet draws its own stretch, so the thread tips with
+ * section's heading. There is only ever one group: it rides a stretch once
+ * 64px of it has drawn, hides while a covering sheet's edge passes, and hops
+ * across to the next stretch. Each sheet draws its own stretch, so the thread tips with
  * its sheet; a receding sheet's stretch fades as the next one covers it, so
  * the seams never jog.
  *
@@ -106,15 +107,17 @@ export function initThread(root: HTMLElement): { scene: Scene; stop: () => void 
     return { el, y: Math.round(y) };
   };
 
-  /** The group that rides the head: the map's walking group, smaller. */
-  const walker = (box: HTMLElement) => {
-    const el = document.createElement("span");
-    el.className = "hd-thread__walk";
-    el.innerHTML =
-      '<svg viewBox="-20 -14 40 28" width="34" height="24"><circle class="hd-walk__mentor" cx="-12" cy="2" r="5"/><circle class="hd-walk__mentor" cx="12" cy="-3" r="5"/><circle class="hd-walk__dot" cx="-4" cy="-5" r="3.6"/><circle class="hd-walk__dot" cx="4" cy="5" r="3.6"/><circle class="hd-walk__dot" cx="-4" cy="6" r="3.6"/><circle class="hd-walk__dot" cx="4" cy="-5" r="3.6"/></svg>';
-    box.appendChild(el);
-    return el;
-  };
+  /**
+   * The group that rides the head: one for the whole page, so there is never
+   * more than one. It is placed in screen space over the active stretch and
+   * hops (220ms) from one sheet's stretch to the next.
+   */
+  const group = document.createElement("span");
+  group.className = "hd-thread__walk";
+  group.setAttribute("aria-hidden", "true");
+  group.innerHTML =
+    '<svg viewBox="-20 -14 40 28" width="44" height="31"><circle class="hd-walk__mentor" cx="-12" cy="2" r="5"/><circle class="hd-walk__mentor" cx="12" cy="-3" r="5"/><circle class="hd-walk__dot" cx="-4" cy="-5" r="3.6"/><circle class="hd-walk__dot" cx="4" cy="5" r="3.6"/><circle class="hd-walk__dot" cx="-4" cy="6" r="3.6"/><circle class="hd-walk__dot" cx="4" cy="-5" r="3.6"/></svg>';
+  root.appendChild(group);
 
   const build = () => {
     clear();
@@ -172,9 +175,8 @@ export function initThread(root: HTMLElement): { scene: Scene; stop: () => void 
         const y = offsetWithin(heading, sheet) + heading.offsetHeight / 2;
         if (y > from && y < to) stations.push(station(box, x, y));
       }
-      const walk = walker(box);
       const index = sheets.indexOf(sheet);
-      segments.push({ sheet, next: sheets[index + 1] ?? null, box, pieces, stations, walk, from, to, knot });
+      segments.push({ sheet, next: sheets[index + 1] ?? null, box, pieces, stations, from, to, knot });
     }
   };
 
@@ -214,6 +216,10 @@ export function initThread(root: HTMLElement): { scene: Scene; stop: () => void 
     return { x: point.x, y: point.y };
   };
 
+  const sheetBox = new Map<Segment, { left: number; top: number; nextTop: number }>();
+  let lastActive: Segment | null = null;
+  let hop = 0;
+
   const scene: Scene = {
     read() {
       const vh = window.innerHeight;
@@ -222,12 +228,16 @@ export function initThread(root: HTMLElement): { scene: Scene; stop: () => void 
       const line = Math.max(vh * 0.62, nav);
       const stick = vh - Math.round(vh * LEAD);
       for (const segment of segments) {
-        const head = line - segment.sheet.getBoundingClientRect().top;
+        // A fully covered sheet (opacity 0, see stack.ts) cannot show anything: skip its reads.
+        if (segment.sheet.style.opacity === "0" && state.has(segment)) continue;
+        const box = segment.sheet.getBoundingClientRect();
         const nextTop = segment.next ? segment.next.getBoundingClientRect().top : vh;
-        state.set(segment, { head, cover: clamp01((stick - nextTop) / Math.max(1, stick - nav)) });
+        sheetBox.set(segment, { left: box.left, top: box.top, nextTop });
+        state.set(segment, { head: line - box.top, cover: clamp01((stick - nextTop) / Math.max(1, stick - nav)) });
       }
     },
     write() {
+      let active: { segment: Segment; x: number; y: number; atStation: boolean } | null = null;
       for (const segment of segments) {
         toggle(segment.box, "is-live", true);
         const { head, cover } = state.get(segment) ?? { head: 0, cover: 0 };
@@ -235,24 +245,49 @@ export function initThread(root: HTMLElement): { scene: Scene; stop: () => void 
         put(segment.box, "opacity", (1 - clamp01(cover * 4)).toFixed(3));
         let at: { x: number; y: number } | null = null;
         for (const piece of segment.pieces) at = draw(piece, head) ?? at;
-        const atStation = at !== null && segment.stations.some((s) => Math.abs(s.y - at!.y) < AT_STATION);
         for (const s of segment.stations) toggle(s.el, "is-on", head >= s.y - 2);
-        const showWalk = at !== null && !atStation && cover < 0.25;
-        if (showWalk && at) put(segment.walk, "transform", `translate(${at.x.toFixed(1)}px, ${at.y.toFixed(1)}px)`);
-        toggle(segment.walk, "is-on", showWalk);
         if (segment.knot) toggle(segment.knot, "is-tied", head >= segment.to - 1);
+        // The group only rides a stretch once at least 64px of it has drawn.
+        if (at && head - segment.from >= FADE) {
+          // At a station, or arriving at the knot on the card, it steps in (hides) rather than sitting on it.
+          const atStation = segment.stations.some((s) => Math.abs(s.y - at!.y) < AT_STATION) || (segment.knot !== null && head > segment.to - 50);
+          active = { segment, x: at.x, y: at.y, atStation };
+        }
       }
+
+      let visible = false;
+      if (active) {
+        const box = sheetBox.get(active.segment);
+        if (box) {
+          const x = box.left + active.x;
+          const y = box.top + active.y;
+          // Hidden while the next sheet's edge passes over it, and while it steps into a station.
+          visible = !active.atStation && box.nextTop > y + 16;
+          if (active.segment !== lastActive && lastActive !== null) {
+            group.classList.add("is-hop");
+            window.clearTimeout(hop);
+            hop = window.setTimeout(() => group.classList.remove("is-hop"), 240);
+          }
+          lastActive = active.segment;
+          put(group, "transform", `translate(${(Math.round(x * 2) / 2).toFixed(1)}px, ${(Math.round(y * 2) / 2).toFixed(1)}px)`);
+          toggle(group, "is-on-peach", active.segment.sheet === hireSheet);
+        }
+      }
+      toggle(group, "is-on", visible);
+
       // The map's own group steps off the map once the thread has it.
       const mapSegment = segments.find((segment) => segment.sheet === mapSheet);
-      const off = mapSegment ? (state.get(mapSegment)?.head ?? 0) > mapSegment.from + 12 : false;
+      const off = mapSegment ? (state.get(mapSegment)?.head ?? 0) - mapSegment.from >= FADE : false;
       if (mapWalk) toggle(mapWalk, "is-gone", off);
     },
     destroy() {
+      window.clearTimeout(hop);
+      lastActive = null;
+      group.classList.remove("is-on", "is-hop", "is-on-peach");
       if (mapWalk) mapWalk.classList.remove("is-gone");
       for (const segment of segments) {
         segment.box.classList.remove("is-live");
         segment.box.style.opacity = "";
-        segment.walk.classList.remove("is-on");
         if (segment.knot) segment.knot.classList.remove("is-tied");
         for (const piece of segment.pieces) {
           if (piece.ink) {
@@ -271,6 +306,7 @@ export function initThread(root: HTMLElement): { scene: Scene; stop: () => void 
       observer.disconnect();
       wide.removeEventListener("change", build);
       clear();
+      group.remove();
     },
   };
 }

@@ -129,15 +129,24 @@
   stroke-linecap: round;
 }
 
+/* One group for the page, placed in screen space by thread.ts (wide screens only). */
 .hd-thread__walk {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
-  width: 34px;
-  height: 24px;
-  margin: -12px 0 0 -17px;
+  z-index: 8;
+  width: 44px;
+  height: 31px;
+  margin: -15.5px 0 0 -22px;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 160ms ease;
+}
+
+.hd-thread__walk.is-hop {
+  transition:
+    opacity 160ms ease,
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .hd-thread__walk svg {
@@ -149,14 +158,26 @@
   opacity: 1;
 }
 
-.hd-thread--on-peach .hd-walk__dot {
+/* Engineers read clearly on the teal sheets: a lighter, firmer ring. */
+.hd-thread__walk .hd-walk__mentor {
+  stroke: #9fd3ca;
+  stroke-width: 1.5;
+}
+
+.hd-thread__walk.is-on-peach .hd-walk__dot {
   stroke: var(--color-primary);
   fill: var(--color-dark);
 }
 
-.hd-thread--on-peach .hd-walk__mentor {
+.hd-thread__walk.is-on-peach .hd-walk__mentor {
   fill: var(--color-primary);
   stroke: var(--color-dark);
+}
+
+@media (max-width: 87.99rem) {
+  .hd-thread__walk {
+    display: none;
+  }
 }
 
 .hd-thread__station {
