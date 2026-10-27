@@ -39,14 +39,14 @@ INSERT INTO programApplication (id, programId, userId, status, application, comp
   ('fixture-app-8', 'fixture-program-03', 'fixture-user-8', 'COMPLETED', '{}', 1738368000);
 
 INSERT INTO studentProfile (id, userId, handle, status, headline, country, skills, openToFreelance, openToRoles, publishedAt, publicName) VALUES
-  ('fixture-profile-1', 'fixture-user-1', 'fixture-wanjiru', 'PUBLISHED', 'Backend developer building payment reconciliation tools', 'Kenya', 'TypeScript,PostgreSQL,Node.js', 1, 1, 1738454400, 'Wanjiru Kamau'),
-  ('fixture-profile-2', 'fixture-user-2', 'fixture-brian', 'PUBLISHED', 'Mobile developer shipping offline-first Android apps', 'Kenya', 'Kotlin,Android,SQLite', 1, 0, 1738368000, 'Brian Otieno'),
-  ('fixture-profile-3', 'fixture-user-3', 'fixture-achieng', 'PUBLISHED', 'Frontend engineer who cares about accessible forms', 'Kenya', 'React,Accessibility,CSS', 0, 1, 1738281600, 'Achieng Atieno'),
-  ('fixture-profile-4', 'fixture-user-4', 'fixture-kiprop', 'PUBLISHED', 'Data tinkerer mapping rainfall against harvest records', 'Kenya', 'Python,Pandas,Data viz', 1, 1, 1738195200, 'Kiprop Cheruiyot'),
-  ('fixture-profile-5', 'fixture-user-5', 'fixture-nyambura', 'PUBLISHED', 'Full-stack builder turning spreadsheets into small apps', 'Kenya', 'Astro,SQLite,Tailwind', 1, 0, 1738108800, 'Nyambura Mwangi'),
-  ('fixture-profile-6', 'fixture-user-6', 'fixture-mutua', 'PUBLISHED', 'DevOps-curious developer automating school timetables', 'Kenya', 'Go,Docker,GitHub Actions', 0, 1, 1738022400, 'Mutua Musyoka'),
-  ('fixture-profile-7', 'fixture-user-7', 'fixture-akinyi', 'PUBLISHED', 'Product-minded developer building a clinic queue SMS tool', 'Kenya', 'Twilio,Node.js,UX research', 1, 1, 1737936000, 'Akinyi Ochieng'),
-  ('fixture-profile-8', 'fixture-user-8', 'fixture-baraka', 'PUBLISHED', 'Junior developer learning in public with weekly write-ups', 'Kenya', 'JavaScript,Git,Writing', 0, 1, 1737849600, 'Baraka Njoroge');
+  ('fixture-profile-1', 'fixture-user-1', 'fixture-wanjiru', 'PUBLISHED', 'Backend developer building payment reconciliation tools', 'Kenya', '["TypeScript","PostgreSQL","Node.js"]', 1, 1, 1738454400, 'Wanjiru Kamau'),
+  ('fixture-profile-2', 'fixture-user-2', 'fixture-brian', 'PUBLISHED', 'Mobile developer shipping offline-first Android apps', 'Kenya', '["Kotlin","Android","SQLite"]', 1, 0, 1738368000, 'Brian Otieno'),
+  ('fixture-profile-3', 'fixture-user-3', 'fixture-achieng', 'PUBLISHED', 'Frontend engineer who cares about accessible forms', 'Kenya', '["React","Accessibility","CSS"]', 0, 1, 1738281600, 'Achieng Atieno'),
+  ('fixture-profile-4', 'fixture-user-4', 'fixture-kiprop', 'PUBLISHED', 'Data tinkerer mapping rainfall against harvest records', 'Kenya', '["Python","Pandas","Data viz"]', 1, 1, 1738195200, 'Kiprop Cheruiyot'),
+  ('fixture-profile-5', 'fixture-user-5', 'fixture-nyambura', 'PUBLISHED', 'Full-stack builder turning spreadsheets into small apps', 'Kenya', '["Astro","SQLite","Tailwind"]', 1, 0, 1738108800, 'Nyambura Mwangi'),
+  ('fixture-profile-6', 'fixture-user-6', 'fixture-mutua', 'PUBLISHED', 'DevOps-curious developer automating school timetables', 'Kenya', '["Go","Docker","GitHub Actions"]', 0, 1, 1738022400, 'Mutua Musyoka'),
+  ('fixture-profile-7', 'fixture-user-7', 'fixture-akinyi', 'PUBLISHED', 'Product-minded developer building a clinic queue SMS tool', 'Kenya', '["Twilio","Node.js","UX research"]', 1, 1, 1737936000, 'Akinyi Ochieng'),
+  ('fixture-profile-8', 'fixture-user-8', 'fixture-baraka', 'PUBLISHED', 'Junior developer learning in public with weekly write-ups', 'Kenya', '["JavaScript","Git","Writing"]', 0, 1, 1737849600, 'Baraka Njoroge');
 
 INSERT INTO profileHighlight (id, profileId, repoFullName, repoUrl, description, language, stars, sortOrder, snapshotAt, blurb) VALUES
   ('fixture-hl-1', 'fixture-profile-1', 'fixture/chama-ledger', 'https://example.invalid/chama-ledger', 'Shared savings ledger for a chama, with M-Pesa statement import.', 'TypeScript', 14, 0, 1738454400, 'Wrote the statement parser and its tests.'),
