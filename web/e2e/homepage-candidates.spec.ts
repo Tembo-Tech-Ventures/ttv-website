@@ -33,6 +33,36 @@ for (const path of CANDIDATES) {
       await expect(page.locator("main h1")).toHaveCount(1);
     });
 
+    test("keyboard users can reach every link and button without scrolling first", async ({ page }) => {
+      await page.goto(path);
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(1200);
+      // Reveal animations that park content at visibility:hidden make it
+      // unfocusable, so Tab would jump from the hero straight to the footer.
+      const expected = await page.evaluate(() => {
+        const selector = "a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex='-1'])";
+        return [...document.querySelectorAll<HTMLElement>(`main :is(${selector})`)]
+          .filter((el) => el.getAttribute("tabindex") !== "-1" && el.checkVisibility() && !el.closest("[inert], [aria-hidden='true']"))
+          .map((el, index) => {
+            el.dataset.tabProbe = String(index);
+            return `${el.tagName.toLowerCase()} "${(el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 40)}"`;
+          });
+      });
+      expect(expected.length).toBeGreaterThan(5);
+      const reached = new Set<string>();
+      for (let presses = 0; presses < expected.length + 40; presses += 1) {
+        await page.keyboard.press("Tab");
+        const probe = await page.evaluate(() => {
+          const active = document.activeElement as HTMLElement | null;
+          return { probe: active?.dataset.tabProbe ?? null, inFooter: Boolean(active?.closest("footer")) };
+        });
+        if (probe.probe !== null) reached.add(probe.probe);
+        if (probe.inFooter) break;
+      }
+      const missed = expected.filter((_, index) => !reached.has(String(index)));
+      expect(missed, "never reached by Tab").toEqual([]);
+    });
+
     for (const reducedMotion of ["no-preference", "reduce"] as const) {
       test(`every word is readable while scrolling (motion: ${reducedMotion})`, async ({ page }) => {
         const errors: string[] = [];
