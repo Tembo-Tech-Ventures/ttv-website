@@ -90,10 +90,11 @@
 
 /*
  * The margin thread (scripts/thread.ts): the skills map's path, carried on
- * down the right margin of every later sheet on wide screens.
+ * down the right margin of every later sheet on wide screens, with the map's
+ * walking group at its head.
  */
 .hd-thread {
-  --thread: rgb(242 141 104 / 0.6);
+  --thread: rgb(242 141 104 / 0.65);
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -103,16 +104,17 @@
   --thread: rgb(1 61 57 / 0.55);
 }
 
+/* A strip slid down inside a clipping box; its last 64px fade out, so the head is soft. */
 .hd-thread__run {
   position: absolute;
   width: 1.5px;
-  border-radius: 1px;
-  background: var(--thread);
-  transform-origin: 50% 0;
+  overflow: hidden;
 }
 
-.hd-thread.is-live .hd-thread__run {
-  will-change: transform;
+.hd-thread__ink {
+  position: absolute;
+  inset: 0 0 auto;
+  background: linear-gradient(var(--thread) calc(100% - 64px), transparent);
 }
 
 .hd-thread__curve {
@@ -125,25 +127,57 @@
   stroke: var(--thread);
   stroke-width: 1.5;
   stroke-linecap: round;
-  stroke-dasharray: 1 1;
 }
 
-.hd-thread__station,
-.hd-thread__knot {
+.hd-thread__walk {
   position: absolute;
-  width: 9px;
-  height: 9px;
-  margin: -4.5px 0 0 -4.5px;
+  top: 0;
+  left: 0;
+  width: 34px;
+  height: 24px;
+  margin: -12px 0 0 -17px;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.hd-thread__walk svg {
+  display: block;
+  overflow: visible;
+}
+
+.hd-thread__walk.is-on {
+  opacity: 1;
+}
+
+.hd-thread--on-peach .hd-walk__dot {
+  stroke: var(--color-primary);
+  fill: var(--color-dark);
+}
+
+.hd-thread--on-peach .hd-walk__mentor {
+  fill: var(--color-primary);
+  stroke: var(--color-dark);
+}
+
+.hd-thread__station {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
   box-sizing: border-box;
   border-radius: 50%;
   border: 2px solid #013d39;
   background: var(--color-primary);
-  transition: background-color 300ms ease;
+  transition: background-color 300ms ease, box-shadow 300ms ease;
 }
 
 .hd-thread.is-live .hd-thread__station:not(.is-on) {
   border-color: rgb(242 141 104 / 0.7);
   background: #013d39;
+}
+
+.hd-thread.is-live .hd-thread__station.is-on {
+  box-shadow: 0 0 0 4px rgb(242 141 104 / 0.18);
 }
 
 .hd-thread--on-peach .hd-thread__station {
@@ -154,12 +188,4 @@
 .hd-thread--on-peach.is-live .hd-thread__station:not(.is-on) {
   border-color: rgb(1 61 57 / 0.7);
   background: var(--color-primary);
-}
-
-.hd-thread__knot {
-  width: 13px;
-  height: 13px;
-  margin: -6.5px 0 0 -6.5px;
-  border: 3px solid #fff8f2;
-  background: #013d39;
 }

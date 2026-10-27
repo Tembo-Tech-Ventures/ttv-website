@@ -44,11 +44,12 @@ const sig = signature(tags.map((tag) => tag.key));
         </span>
       )}
     </span>
+    <span class="hd-bc__shared" aria-hidden="true" data-hd-shared></span>
     {sig.nodes.length > 0 && (
-      <svg class="hd-bc__sig" viewBox="0 0 28 28" width="40" height="40" aria-hidden="true" focusable="false">
+      <svg class="hd-bc__sig" viewBox="0 0 28 28" width="44" height="44" aria-hidden="true" focusable="false">
         <circle class="hd-bc__orbit" cx={sig.centre} cy={sig.centre} r={sig.orbit} />
         {sig.arcs.map((d) => <path class="hd-bc__arc" d={d} />)}
-        {sig.nodes.map((node) => <circle class="hd-bc__node" cx={node.x} cy={node.y} r="2.6" data-tag={node.key} />)}
+        {sig.nodes.map((node) => <circle class="hd-bc__node" cx={node.x} cy={node.y} r="2.8" data-tag={node.key} />)}
       </svg>
     )}
     {cohortNumber && cohortIndex >= 0 && (
@@ -347,6 +348,29 @@ const sig = signature(tags.map((tag) => tag.key));
   :global(.has-kin) .hd-bc__node.is-shared {
     fill: var(--color-primary);
     r: 3.3;
+  }
+
+  /* The skill(s) a lit strip shares with the card you are on, named in peach. */
+  .hd-bc__shared {
+    display: none;
+    flex: none;
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    background: var(--color-primary);
+    color: var(--color-dark);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .hd-bc__shared:not(:empty) {
+    display: inline-block;
+  }
+
+  @media (max-width: 39.99rem) {
+    .hd-bc__shared {
+      display: none !important;
+    }
   }
 
   /* A covered strip that shares a skill comes out of the shade. */

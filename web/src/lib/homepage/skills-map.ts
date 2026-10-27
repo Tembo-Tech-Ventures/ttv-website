@@ -826,6 +826,8 @@ export interface ColumnBand {
   skills: ColumnSkill[];
   /** Skills on this ring left out of the row. */
   more: number;
+  /** Those skills, in order, for a "+N more" control to reveal. */
+  rest: Array<MapSkill & { state: NodeState }>;
   /** Where the "+N more" chip starts (left edge, vertical centre), when `more` > 0. */
   moreAt: Point | null;
   /**
@@ -924,9 +926,10 @@ export function columnLayout(graph: SkillsGraph, options: ColumnOptions = {}): C
       y += rowHeight;
     }
     const more = others.length - row.length;
+    const rest = others.slice(row.length).map((skill) => ({ ...skill, state: states[skill.key] }));
     const moreAt = more > 0 ? placeMore(row, skills.find((skill) => skill.station), { start: branchStart, y, width, gap }) : null;
     if (row.length === 0 && more > 0) y += rowHeight;
-    bands.push({ ring, height: Math.round(y - rowHeight / 2 + 4), skills, more, moreAt, lines });
+    bands.push({ ring, height: Math.round(y - rowHeight / 2 + 4), skills, more, rest, moreAt, lines });
   }
   return bands;
 }

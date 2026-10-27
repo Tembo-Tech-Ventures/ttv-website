@@ -453,8 +453,12 @@ describe("columnLayout", () => {
       const row = band.skills.filter((skill) => !skill.station);
       expect(row.length).toBeLessThanOrEqual(3);
       expect(new Set(row.map((skill) => skill.y)).size).toBeLessThanOrEqual(1);
-      const onRing = graph.skills.filter((skill) => skill.ring === band.ring).length;
-      expect(band.skills.length + band.more).toBe(onRing);
+      const onRing = graph.skills.filter((skill) => skill.ring === band.ring);
+      expect(band.skills.length + band.more).toBe(onRing.length);
+      // Every skill on the ring is either shown or listed in `rest`, once.
+      const shown = [...band.skills, ...band.rest].map((skill) => skill.key).toSorted();
+      expect(shown).toEqual(onRing.map((skill) => skill.key).toSorted());
+      expect(band.rest).toHaveLength(band.more);
     }
   });
 

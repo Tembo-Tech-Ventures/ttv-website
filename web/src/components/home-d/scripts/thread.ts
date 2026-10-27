@@ -1,38 +1,57 @@
 import { clamp01, navHeight, type Scene } from "./scenes";
+import { LEAD } from "./stack";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const WIDE = "(min-width: 80rem)";
+/** From here the margin beside the content is at least ~64px. */
+const WIDE = "(min-width: 88rem)";
+/** Length of the soft head, px. */
+const FADE = 64;
+/** How close (px) the group must be to a station to step into it. */
+const AT_STATION = 18;
 
 interface Piece {
-  /** A straight vertical run (scaled, so it costs no repaint) or a short curve (drawn by dash). */
-  el: HTMLElement | SVGPathElement;
   kind: "run" | "curve";
+  /** Run: the clipping box and the strip slid inside it. Curve: the path. */
+  el: HTMLElement | SVGPathElement;
+  ink?: HTMLElement;
+  length: number;
   /** Sheet-relative y span this piece draws over as the head passes. */
   from: number;
   to: number;
+  x: number;
+}
+
+interface Station {
+  el: HTMLElement;
+  y: number;
 }
 
 interface Segment {
   sheet: HTMLElement;
+  next: HTMLElement | null;
   box: HTMLElement;
   pieces: Piece[];
-  stations: Array<{ el: HTMLElement; y: number }>;
+  stations: Station[];
+  walk: HTMLElement;
+  from: number;
+  to: number;
+  knot: HTMLElement | null;
 }
 
 /**
- * "The map keeps going": on wide screens the skills map's peach tail leaves
- * the map and runs down the page's right margin, one thread through every
- * sheet after it, with a small station level with each section's heading,
- * until it ties off in a knot above "Propose a project". Each sheet draws its
- * own stretch (so the thread survives the stacking: it tips and dims with
- * its sheet), starting where the previous one ended.
+ * "The map keeps going": on wide screens the skills map's path leaves the
+ * map and carries on down the right margin, just outside the content, through
+ * every later sheet until it ties off on the "Propose a project" card. The
+ * map's walking group (four builders, two engineers) steps off the map onto
+ * it and rides its head, stepping into a small station level with each
+ * section's heading. Each sheet draws its own stretch, so the thread tips with
+ * its sheet; a receding sheet's stretch fades as the next one covers it, so
+ * the seams never jog.
  *
- * Straight runs are 1.5px boxes scaled from the top, so drawing them while
- * scrolling is compositor work only; the two short curves (out of the map,
- * into the knot) are small SVGs drawn by dash offset. Geometry is rebuilt on
- * resize. Without motion the thread is drawn whole; with motion `scene` draws
- * its head along the same reading line as the phone trunk. Decorative and
- * aria-hidden; nothing here is text.
+ * Straight runs are a strip slid inside a clipping box (the head fades out
+ * over 64px) and the two short curves are small SVGs drawn by dash, so
+ * drawing costs no repaint of anything large. Without motion the thread is
+ * drawn whole and the group stays on the map. Decorative and aria-hidden.
  */
 export function initThread(root: HTMLElement): { scene: Scene; stop: () => void } | null {
   const sheets = [...root.querySelectorAll<HTMLElement>("[data-hd-sheet]")];
@@ -40,6 +59,7 @@ export function initThread(root: HTMLElement): { scene: Scene; stop: () => void 
   const hireSheet = sheets.find((sheet) => sheet.querySelector("[data-hd-hire]"));
   if (!mapSheet || !hireSheet) return null;
   const run = sheets.slice(sheets.indexOf(mapSheet), sheets.indexOf(hireSheet) + 1);
+  const mapWalk = mapSheet.querySelector<SVGGElement>("[data-hd-walk]");
   const wide = window.matchMedia(WIDE);
   let segments: Segment[] = [];
 
@@ -49,14 +69,19 @@ export function initThread(root: HTMLElement): { scene: Scene; stop: () => void 
   };
 
   const runPiece = (box: HTMLElement, x: number, from: number, to: number): Piece => {
+    const height = Math.max(0, to - from);
     const el = document.createElement("span");
     el.className = "hd-thread__run";
-    el.style.cssText = `left:${x - 0.75}px;top:${from}px;height:${Math.max(0, to - from)}px`;
+    el.style.cssText = `left:${x - 0.75}px;top:${from}px;height:${height}px`;
+    const ink = document.createElement("span");
+    ink.className = "hd-thread__ink";
+    ink.style.height = `${height + FADE}px`;
+    el.appendChild(ink);
     box.appendChild(el);
-    return { el, kind: "run", from, to };
+    return { kind: "run", el, ink, length: height, from, to, x };
   };
 
-  /** A curve in its own small SVG; `d` uses sheet coordinates. */
+  /** A curve in its own small SVG; `d` is in sheet coordinates. */
   const curvePiece = (box: HTMLElement, d: string, bounds: { x: number; y: number; w: number; h: number }, from: number, to: number): Piece => {
     const svg = document.createElementNS(SVG_NS, "svg");
     svg.setAttribute("class", "hd-thread__curve");
@@ -66,18 +91,29 @@ export function initThread(root: HTMLElement): { scene: Scene; stop: () => void 
     svg.style.cssText = `left:${bounds.x}px;top:${bounds.y}px`;
     const path = document.createElementNS(SVG_NS, "path");
     path.setAttribute("d", d);
-    path.setAttribute("pathLength", "1");
     svg.appendChild(path);
     box.appendChild(svg);
-    return { el: path, kind: "curve", from, to };
+    const length = path.getTotalLength();
+    path.style.strokeDasharray = `${length} ${length}`;
+    return { kind: "curve", el: path, length, from, to, x: 0 };
   };
 
-  const dot = (box: HTMLElement, x: number, y: number, kind: "station" | "knot") => {
+  const station = (box: HTMLElement, x: number, y: number): Station => {
     const el = document.createElement("span");
-    el.className = `hd-thread__${kind}`;
+    el.className = "hd-thread__station";
     el.style.cssText = `left:${x}px;top:${Math.round(y)}px`;
     box.appendChild(el);
     return { el, y: Math.round(y) };
+  };
+
+  /** The group that rides the head: the map's walking group, smaller. */
+  const walker = (box: HTMLElement) => {
+    const el = document.createElement("span");
+    el.className = "hd-thread__walk";
+    el.innerHTML =
+      '<svg viewBox="-20 -14 40 28" width="34" height="24"><circle class="hd-walk__mentor" cx="-12" cy="2" r="5"/><circle class="hd-walk__mentor" cx="12" cy="-3" r="5"/><circle class="hd-walk__dot" cx="-4" cy="-5" r="3.6"/><circle class="hd-walk__dot" cx="4" cy="5" r="3.6"/><circle class="hd-walk__dot" cx="-4" cy="6" r="3.6"/><circle class="hd-walk__dot" cx="4" cy="-5" r="3.6"/></svg>';
+    box.appendChild(el);
+    return el;
   };
 
   const build = () => {
@@ -86,43 +122,59 @@ export function initThread(root: HTMLElement): { scene: Scene; stop: () => void 
     for (const sheet of run) {
       const width = sheet.offsetWidth;
       const height = sheet.offsetHeight;
-      // Halfway into the margin beside the content (max-w 80rem, 2rem padding), at least 16px in.
-      const x = Math.round(width / 2 + 608 + Math.max(16, (width / 2 - 608) / 2));
+      // Just outside the content (max-w 80rem with 2rem padding): close enough to belong to it.
+      const x = Math.round(width / 2 + 608 + Math.min(48, Math.max(20, window.innerWidth * 0.025)));
+      // Below the sheet's rounded corner, so the line never leaves the sheet.
+      const top = Math.ceil(Number.parseFloat(getComputedStyle(sheet).borderTopRightRadius) || 0);
       const heading = sheet.querySelector<HTMLElement>("h2");
       const box = document.createElement("div");
       box.className = `hd-thread${sheet === hireSheet ? " hd-thread--on-peach" : ""}`;
       box.setAttribute("aria-hidden", "true");
+      // In the document first: curve lengths are measured as they are built.
+      sheet.insertBefore(box, sheet.firstChild);
       const pieces: Piece[] = [];
-      const stations: Segment["stations"] = [];
-      let end = height;
+      const stations: Station[] = [];
+      let from = top;
+      let to = height;
+      let knot: HTMLElement | null = null;
 
       if (sheet === mapSheet) {
         const start = tailEnd(sheet);
-        if (!start) continue;
+        if (!start) {
+          box.remove();
+          continue;
+        }
         // Out of the map to the margin, then straight down.
         const bend = start.y + 90;
         const d = `M${start.x} ${start.y} C${x} ${start.y} ${x} ${start.y} ${x} ${bend}`;
+        from = start.y;
         pieces.push(curvePiece(box, d, { x: start.x - 4, y: start.y - 4, w: x - start.x + 8, h: bend - start.y + 8 }, start.y, bend));
         pieces.push(runPiece(box, x, bend, height));
       } else if (sheet === hireSheet) {
         const card = sheet.querySelector<HTMLElement>(".hd-hcard--primary");
-        if (!card) continue;
-        const top = offsetWithin(card, sheet) - 18;
-        const knotX = offsetLeftWithin(card, sheet) + card.offsetWidth - 64;
-        end = top;
-        pieces.push(runPiece(box, x, 0, top - 70));
-        const d = `M${x} ${top - 70} C${x} ${top} ${x} ${top} ${knotX} ${top}`;
-        pieces.push(curvePiece(box, d, { x: knotX - 4, y: top - 74, w: x - knotX + 8, h: 78 }, top - 70, top));
-        stations.push(dot(box, knotX, top, "knot"));
+        knot = card?.querySelector<HTMLElement>("[data-hd-knot]") ?? null;
+        if (!card || !knot) {
+          box.remove();
+          continue;
+        }
+        // The knot sits on the card's top edge, 64px from its right; the card is turned -2deg.
+        const along = card.offsetWidth / 2 - 64;
+        const knotX = Math.round(offsetLeftWithin(card, sheet) + card.offsetWidth - 64);
+        const knotY = Math.round(offsetWithin(card, sheet) - along * Math.sin((2 * Math.PI) / 180));
+        to = knotY;
+        pieces.push(runPiece(box, x, top, knotY - 70));
+        const d = `M${x} ${knotY - 70} C${x} ${knotY} ${x} ${knotY} ${knotX} ${knotY}`;
+        pieces.push(curvePiece(box, d, { x: knotX - 4, y: knotY - 74, w: x - knotX + 8, h: 78 }, knotY - 70, knotY));
       } else {
-        pieces.push(runPiece(box, x, 0, height));
+        pieces.push(runPiece(box, x, top, height));
       }
       if (heading && sheet !== mapSheet) {
         const y = offsetWithin(heading, sheet) + heading.offsetHeight / 2;
-        if (y < end) stations.unshift(dot(box, x, y, "station"));
+        if (y > from && y < to) stations.push(station(box, x, y));
       }
-      sheet.insertBefore(box, sheet.firstChild);
-      segments.push({ sheet, box, pieces, stations });
+      const walk = walker(box);
+      const index = sheets.indexOf(sheet);
+      segments.push({ sheet, next: sheets[index + 1] ?? null, box, pieces, stations, walk, from, to, knot });
     }
   };
 
@@ -132,41 +184,83 @@ export function initThread(root: HTMLElement): { scene: Scene; stop: () => void 
   void document.fonts.ready.then(build);
   build();
 
-  const heads = new Map<Segment, number>();
-  const drawnOf = new Map<Piece, string>();
+  const state = new Map<Segment, { head: number; cover: number }>();
+  const written = new WeakMap<Element, Record<string, string>>();
+  /** Write a style value only when it changes (unchanged writes still invalidate style). */
+  const put = (el: HTMLElement | SVGElement, prop: "transform" | "opacity" | "strokeDashoffset" | "willChange", value: string) => {
+    const cache = written.get(el) ?? {};
+    if (cache[prop] === value) return;
+    cache[prop] = value;
+    written.set(el, cache);
+    el.style[prop] = value;
+  };
+  const toggle = (el: Element, name: string, on: boolean) => {
+    if (el.classList.contains(name) !== on) el.classList.toggle(name, on);
+  };
+
+  /** Draws one piece as far as the head; returns where the head is, if it is on this piece. */
+  const draw = (piece: Piece, head: number): { x: number; y: number } | null => {
+    const drawn = clamp01((head - piece.from) / Math.max(1, piece.to - piece.from));
+    const active = drawn > 0 && drawn < 1;
+    if (piece.kind === "run" && piece.ink) {
+      put(piece.ink, "transform", `translateY(${((drawn - 1) * (piece.length + FADE)).toFixed(1)}px)`);
+      put(piece.ink, "willChange", active ? "transform" : "");
+      return active ? { x: piece.x, y: piece.from + drawn * piece.length - FADE * 0.35 } : null;
+    }
+    const path = piece.el as SVGPathElement;
+    put(path, "strokeDashoffset", ((1 - drawn) * piece.length).toFixed(1));
+    if (!active) return null;
+    const point = path.getPointAtLength(drawn * piece.length);
+    return { x: point.x, y: point.y };
+  };
+
   const scene: Scene = {
     read() {
-      // The head follows the reading line, never above the nav.
-      const line = Math.max(window.innerHeight * 0.62, navHeight());
-      for (const segment of segments) heads.set(segment, line - segment.sheet.getBoundingClientRect().top);
+      const vh = window.innerHeight;
+      const nav = navHeight();
+      // The head follows the same reading line as the phone trunk.
+      const line = Math.max(vh * 0.62, nav);
+      const stick = vh - Math.round(vh * LEAD);
+      for (const segment of segments) {
+        const head = line - segment.sheet.getBoundingClientRect().top;
+        const nextTop = segment.next ? segment.next.getBoundingClientRect().top : vh;
+        state.set(segment, { head, cover: clamp01((stick - nextTop) / Math.max(1, stick - nav)) });
+      }
     },
     write() {
       for (const segment of segments) {
-        // Class writes only on change: even a no-op classList write can invalidate style.
-        if (!segment.box.classList.contains("is-live")) segment.box.classList.add("is-live");
-        const head = heads.get(segment) ?? 0;
-        for (const piece of segment.pieces) {
-          const drawn = clamp01((head - piece.from) / Math.max(1, piece.to - piece.from)).toFixed(3);
-          if (drawnOf.get(piece) === drawn) continue;
-          drawnOf.set(piece, drawn);
-          if (piece.kind === "run") (piece.el as HTMLElement).style.transform = `scaleY(${drawn})`;
-          else piece.el.style.strokeDashoffset = (1 - Number(drawn)).toFixed(3);
-        }
-        for (const station of segment.stations) {
-          const on = head >= station.y - 2;
-          if (station.el.classList.contains("is-on") !== on) station.el.classList.toggle("is-on", on);
-        }
+        toggle(segment.box, "is-live", true);
+        const { head, cover } = state.get(segment) ?? { head: 0, cover: 0 };
+        // As the next sheet covers this one and it tips back, its stretch fades out.
+        put(segment.box, "opacity", (1 - clamp01(cover * 4)).toFixed(3));
+        let at: { x: number; y: number } | null = null;
+        for (const piece of segment.pieces) at = draw(piece, head) ?? at;
+        const atStation = at !== null && segment.stations.some((s) => Math.abs(s.y - at!.y) < AT_STATION);
+        for (const s of segment.stations) toggle(s.el, "is-on", head >= s.y - 2);
+        const showWalk = at !== null && !atStation && cover < 0.25;
+        if (showWalk && at) put(segment.walk, "transform", `translate(${at.x.toFixed(1)}px, ${at.y.toFixed(1)}px)`);
+        toggle(segment.walk, "is-on", showWalk);
+        if (segment.knot) toggle(segment.knot, "is-tied", head >= segment.to - 1);
       }
+      // The map's own group steps off the map once the thread has it.
+      const mapSegment = segments.find((segment) => segment.sheet === mapSheet);
+      const off = mapSegment ? (state.get(mapSegment)?.head ?? 0) > mapSegment.from + 12 : false;
+      if (mapWalk) toggle(mapWalk, "is-gone", off);
     },
     destroy() {
-      drawnOf.clear();
+      if (mapWalk) mapWalk.classList.remove("is-gone");
       for (const segment of segments) {
         segment.box.classList.remove("is-live");
+        segment.box.style.opacity = "";
+        segment.walk.classList.remove("is-on");
+        if (segment.knot) segment.knot.classList.remove("is-tied");
         for (const piece of segment.pieces) {
-          if (piece.kind === "run") (piece.el as HTMLElement).style.transform = "";
-          else piece.el.style.strokeDashoffset = "";
+          if (piece.ink) {
+            piece.ink.style.transform = "";
+            piece.ink.style.willChange = "";
+          } else piece.el.style.strokeDashoffset = "";
         }
-        for (const station of segment.stations) station.el.classList.remove("is-on");
+        for (const s of segment.stations) s.el.classList.remove("is-on");
       }
     },
   };

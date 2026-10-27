@@ -29,6 +29,7 @@ const namesLine = firstNames.length > 0 ? `${firstNames.join(", ")}${more > 0 ? 
   <div class="hd-hire__pair" data-hd-hire>
     <div class="hd-hslot hd-hslot--primary" data-hd-hire-card>
     <a class="hd-hcard hd-hcard--primary" href={HIRE.primary.href}>
+      <span class="hd-hcard__knot" aria-hidden="true" data-hd-knot></span>
       <span class="hd-hcard__brief" aria-hidden="true">
         {PROPOSALS.map((kind) => <span>{kind}</span>)}
       </span>
@@ -140,6 +141,52 @@ const namesLine = firstNames.length > 0 ? `${firstNames.join(", ")}${more > 0 ? 
     background: #fff8f2;
     color: var(--color-dark);
     rotate: 2deg;
+  }
+
+  /* Where the skills map's thread ties off (wide screens, scripts/thread.ts):
+   * on the card's top edge, so it moves with the card. */
+  .hd-hcard__knot {
+    position: absolute;
+    top: -6.5px;
+    right: 64px;
+    z-index: 2;
+    display: none;
+    width: 13px;
+    height: 13px;
+    margin-right: -6.5px;
+    box-sizing: border-box;
+    border-radius: 50%;
+    border: 3px solid #fff8f2;
+    background: var(--color-dark);
+  }
+
+  @media (min-width: 88rem) {
+    .hd-hcard__knot {
+      display: block;
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.hd-hcard__knot.is-tied) {
+      animation: hd-tie 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .hd-hcard--primary:has(:global(.hd-hcard__knot.is-tied)) .hd-hcard__arrow {
+      animation: hd-nudge 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+  }
+
+  @keyframes hd-tie {
+    40% {
+      box-shadow: 0 0 0 8px rgb(1 61 57 / 0.25);
+      scale: 1.25;
+    }
+  }
+
+  @keyframes hd-nudge {
+    40% {
+      translate: 5px 0;
+    }
   }
 
   .hd-hcard__label {

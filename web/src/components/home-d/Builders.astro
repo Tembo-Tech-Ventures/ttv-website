@@ -125,7 +125,7 @@ const lastOnPhone = Math.min(total, PHONE_LIMIT) - 1;
     }
   }
 
-  /* The card file. --hd-strip and --hd-gap come from stack.ts, sized to the screen. */
+  /* The card file. --hd-strip and each card's --hd-gap-own come from stack.ts, sized to the screen. */
   @media (prefers-reduced-motion: no-preference) {
     .hd-bstack--file {
       gap: 0;
@@ -134,7 +134,7 @@ const lastOnPhone = Math.min(total, PHONE_LIMIT) - 1;
     .hd-bstack--file .hd-bstack__item {
       position: sticky;
       top: calc(var(--hd-nav, 4.5rem) + 1rem + var(--i) * var(--hd-strip, 2.75rem));
-      margin-bottom: var(--hd-gap, 1rem);
+      margin-bottom: var(--hd-gap-own, 1rem);
     }
 
     .hd-bstack--file .hd-bstack__item:last-child {

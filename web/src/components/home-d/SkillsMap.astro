@@ -155,26 +155,10 @@ const GROUP = [
       const band = bands.find((candidate) => candidate.ring === index);
       return (
         <li class:list={["hd-way__step is-reached", { "hd-way__step--last": index === COHORT.rhythm.length - 1 }]} data-hd-step>
-          {index === 0 && hasSkills && (
-            <div class="hd-way__start" aria-hidden="true">
-              <span class="hd-way__hub">
-                <svg viewBox="-20 -20 40 40" width="40" height="40">
-                  {GROUP.map(([x, y]) => <circle class="hd-walk__dot" cx={x * 0.85} cy={y * 0.85} r="3.6" />)}
-                </svg>
-              </span>
-            </div>
-          )}
           <div class="hd-way__text">
             <span class="hd-way__mark" aria-hidden="true" data-hd-mark>
               <svg viewBox="0 0 32 32" width="32" height="32">
-                {index === 0 && (
-                  <>
-                    <path class="hd-g__line" d="M10 20L16 10L22 20Z" />
-                    <circle class="hd-g__dot" cx="16" cy="10" r="3.2" />
-                    <circle class="hd-g__dot" cx="10" cy="20" r="3.2" />
-                    <circle class="hd-g__dot" cx="22" cy="20" r="3.2" />
-                  </>
-                )}
+                {index === 0 && GROUP.map(([x, y]) => <circle class="hd-g__dot" cx={16 + x * 0.9} cy={16 + y * 0.9} r="3.1" />)}
                 {index === 1 && (
                   <>
                     <path class="hd-g__line" d="M9 19L16 11M16 11L23 19M9 19H23" />
@@ -229,16 +213,43 @@ const GROUP = [
                       </span>
                     ))}
                     {band.moreAt && band.moreAt.y === row[0].y && (
-                      <span class="hd-band__item hd-band__more" role="listitem">+{band.more} more</span>
+                      <span class="hd-band__item" role="listitem">
+                        <button
+                          type="button"
+                          class="hd-band__more"
+                          aria-expanded="true"
+                          aria-controls={`hd-band-rest-${index}`}
+                          data-hd-more
+                        >
+                          +{band.more} more
+                        </button>
+                      </span>
                     )}
                   </div>
                 ))}
               </div>
-              <div class="hd-tip" hidden aria-hidden="true" data-hd-tip>
-                <strong data-hd-tip-label></strong>
-                <span data-hd-tip-detail></span>
-              </div>
             </div>
+          )}
+          {band && band.rest.length > 0 && (
+            <ul class="hd-band__rest" id={`hd-band-rest-${index}`} aria-label={`More skills along "${step.title}"`} data-hd-skills data-hd-rest>
+              {band.rest.map((skill) => (
+                <li class="hd-band__node" data-hd-node>
+                  <span
+                    class={`hd-sk hd-sk--ring${skill.ring} is-${skill.state}`}
+                    data-hd-skill={skill.key}
+                    data-near={neighbours(skill.key)}
+                    data-detail={plural(skill.count)}
+                  >
+                    {skill.label}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {band && (
+            <p class="hd-band__detail" hidden aria-hidden="true" data-hd-detail>
+              <strong data-hd-tip-label></strong> · <span data-hd-tip-detail></span>
+            </p>
           )}
         </li>
       );
@@ -465,6 +476,15 @@ const GROUP = [
     stroke-width: 1.75;
   }
 
+  /* Once the margin thread has the group (wide screens), it leaves the map. */
+  .hd-walk {
+    transition: opacity 300ms ease;
+  }
+
+  .hd-walk.is-gone {
+    opacity: 0;
+  }
+
   .hd-walk__mentors,
   .hd-walk__alum {
     opacity: 0;
@@ -639,19 +659,11 @@ const GROUP = [
     display: none;
   }
 
-  /* Radial map: beside the node, away from the centre. */
-  .hd-tip[data-side="left"] {
-    translate: -100% -50%;
-  }
-
   .hd-tip strong {
     font-weight: 700;
   }
 
-  /* Phone rows: below the tapped pill's row. */
-  .hd-band .hd-tip {
-    translate: 0 1.5rem;
-  }
+
 
   /* ---------- The steps ---------- */
   /* The trunk sits where the phone path's stations are drawn (x 20 of 358). */
@@ -795,39 +807,69 @@ const GROUP = [
   }
 
   /* ---------- Phones: the path through the map ---------- */
-  .hd-way__start {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 0.9rem;
-    margin-left: calc(var(--trunk) - 1.25rem);
-    min-height: 3rem;
-    margin-bottom: 0.25rem;
-  }
-
-  .hd-way__hub {
-    position: relative;
-    z-index: 1;
-    display: grid;
-    place-items: center;
-    width: 2.5rem;
-    height: 2.5rem;
-    box-sizing: border-box;
-    border-radius: 50%;
-    border: 1.5px solid var(--color-primary);
-    background: #013d39;
-  }
-
+  /* "+N more" is a real control: it reveals the rest of the ring below the row. */
   .hd-band__more {
+    position: relative;
+    display: inline-flex;
     align-items: center;
+    gap: 0.35rem;
     min-height: 1.95rem;
     padding: 0 0.7rem;
     border-radius: 999px;
-    border: 1px dashed rgb(255 248 242 / 0.28);
+    border: 1px dashed rgb(255 248 242 / 0.4);
+    background: var(--map-bg);
+    color: var(--color-ink-primary);
+    font: inherit;
     font-size: 0.8125rem;
     font-weight: 600;
-    color: var(--color-ink-secondary);
     white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .hd-band__more::before {
+    content: "";
+    position: absolute;
+    inset: -0.45rem -0.2rem;
+  }
+
+  .hd-band__more[aria-expanded="true"] {
+    border-style: solid;
+    border-color: var(--color-primary);
+  }
+
+  .hd-band__more:focus-visible {
+    outline: 2px solid var(--color-ink-primary);
+    outline-offset: 3px;
+  }
+
+  .hd-band__rest {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 0.625rem;
+    margin: -0.25rem 0 0;
+    padding: 0 0 0 calc(var(--trunk) + 40px);
+    list-style: none;
+  }
+
+  .hd-band__rest[hidden] {
+    display: none;
+  }
+
+  /* The details of a tapped skill, read in place, under its row. */
+  .hd-band__detail {
+    margin: -0.25rem 0 0;
+    padding-left: calc(var(--trunk) + 40px);
+    font-size: 0.875rem;
+    line-height: 1.4;
+    color: var(--color-ink-primary);
+  }
+
+  .hd-band__detail[hidden] {
+    display: none;
+  }
+
+  .hd-band__detail strong {
+    color: var(--color-primary);
   }
 
   /* Shown 1:1 from 390px phones up, so the trunk lines up with the steps. */
@@ -865,16 +907,17 @@ const GROUP = [
   }
 
   @media (max-width: 47.99rem) {
-    .hd-band .hd-tip {
-      max-width: calc(100vw - 2rem);
+    .hd-way__step {
+      gap: 0.75rem;
     }
   }
 
   /* Tablets: the steps sit in a row under the map, no trunk. */
   @media (min-width: 48rem) {
     .hd-band,
-    .hd-way__start {
-      display: none;
+    .hd-band__rest,
+    .hd-band__detail {
+      display: none !important;
     }
   }
 

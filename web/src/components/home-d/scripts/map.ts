@@ -71,21 +71,59 @@ export function initSkillsMap(root: HTMLElement): () => void {
   let unpin: (() => void) | null = null;
 
   for (const list of map.querySelectorAll<HTMLElement>("[data-hd-skills]")) {
-    const box = list.parentElement!;
-    const tip = box.querySelector<HTMLElement>(":scope > [data-hd-tip]");
+    const stage = list.closest<HTMLElement>("[data-hd-map-stage]");
+    const step = list.closest<HTMLElement>("[data-hd-step]");
+    // The radial map has a floating tip; a phone band shows the details in a line under it.
+    const box = stage ?? step;
+    const tip = stage ? stage.querySelector<HTMLElement>(":scope > [data-hd-tip]") : step?.querySelector<HTMLElement>("[data-hd-detail]");
     const pills = [...list.querySelectorAll<HTMLElement>("[data-hd-skill]")];
-    if (!tip || pills.length === 0) continue;
+    if (!box || !tip || pills.length === 0) continue;
     const label = tip.querySelector<HTMLElement>("[data-hd-tip-label]")!;
     const detail = tip.querySelector<HTMLElement>("[data-hd-tip-detail]")!;
     const lines = [...box.querySelectorAll<SVGElement>("line[data-a]")];
-    const radial = box.hasAttribute("data-hd-map-stage");
+    const others = stage ? [...stage.querySelectorAll<HTMLElement>("[data-hd-skill]")] : [];
+    // The tip may not cover other skills, the hub (the cohort) or the walking group.
+    const fixed = stage ? [...stage.querySelectorAll<SVGGraphicsElement>("[data-hd-walk], .hd-map__hub")] : [];
     let current = 0;
 
     const clear = () => {
       box.classList.remove("has-active");
-      for (const pill of pills) pill.classList.remove("is-active", "is-near");
+      for (const pill of box.querySelectorAll(".is-active, .is-near")) pill.classList.remove("is-active", "is-near");
       for (const line of lines) line.classList.remove("is-lit");
       tip.hidden = true;
+    };
+
+    /**
+     * Beside the node away from the centre, then above, below, and on the
+     * inner side: the first spot where the tip covers no other skill, the
+     * hub or the walking group. Failing all four, the one covering least.
+     */
+    const place = (pill: HTMLElement) => {
+      const node = pill.closest<HTMLElement>("[data-hd-node]")!;
+      const outward = node.dataset.side === "right" ? 1 : -1;
+      const half = pill.offsetWidth / 2;
+      const rise = pill.offsetHeight / 2 + 10;
+      const spots = [
+        { dx: outward * (half + 12), shift: outward > 0 ? "0 -50%" : "-100% -50%" },
+        { dx: 0, shift: `-50% calc(-100% - ${rise}px)` },
+        { dx: 0, shift: `-50% ${rise}px` },
+        { dx: -outward * (half + 12), shift: outward > 0 ? "-100% -50%" : "0 -50%" },
+      ];
+      const blockers = [...others.filter((other) => other !== pill), ...fixed].map((el) => el.getBoundingClientRect());
+      const covered = (rect: DOMRect) =>
+        blockers.reduce((sum, b) => sum + Math.max(0, Math.min(rect.right, b.right) - Math.max(rect.left, b.left)) * Math.max(0, Math.min(rect.bottom, b.bottom) - Math.max(rect.top, b.top)), 0);
+      let best = { index: 0, area: Infinity };
+      for (const [index, spot] of spots.entries()) {
+        tip.style.left = `calc(${node.style.left} + ${spot.dx}px)`;
+        tip.style.top = node.style.top;
+        tip.style.translate = spot.shift;
+        const area = covered(tip.getBoundingClientRect());
+        if (area < best.area) best = { index, area };
+        if (area === 0) return;
+      }
+      const spot = spots[best.index];
+      tip.style.left = `calc(${node.style.left} + ${spot.dx}px)`;
+      tip.style.translate = spot.shift;
     };
 
     const show = (pill: HTMLElement) => {
@@ -94,23 +132,12 @@ export function initSkillsMap(root: HTMLElement): () => void {
       const near = new Set((pill.dataset.near ?? "").split(" "));
       box.classList.add("has-active");
       pill.classList.add("is-active");
-      for (const other of pills) if (near.has(other.dataset.hdSkill ?? "")) other.classList.add("is-near");
+      for (const other of box.querySelectorAll<HTMLElement>("[data-hd-skill]")) if (near.has(other.dataset.hdSkill ?? "")) other.classList.add("is-near");
       for (const line of lines) if (line.dataset.a === key || line.dataset.b === key) line.classList.add("is-lit");
       label.textContent = pill.textContent?.trim() ?? "";
       detail.textContent = pill.dataset.detail ?? "";
-      // Radial map: beside the node, on the side away from the centre, so the
-      // tip never covers the hub. Phone rows: below the tapped pill's row.
-      const node = pill.closest<HTMLElement>("[data-hd-node]")!;
-      tip.style.top = node.style.top;
-      if (radial) {
-        const right = node.dataset.side === "right";
-        const half = pill.offsetWidth / 2 + 12;
-        tip.style.left = `calc(${node.style.left} ${right ? "+" : "-"} ${half}px)`;
-        tip.dataset.side = right ? "right" : "left";
-      } else {
-        tip.style.left = `calc(${node.style.left} + ${(pill.parentElement as HTMLElement).offsetLeft}px)`;
-      }
       tip.hidden = false;
+      if (stage) place(pill);
     };
 
     const hide = (pill: HTMLElement) => {
@@ -211,11 +238,29 @@ export function initSkillsMap(root: HTMLElement): () => void {
   };
   document.addEventListener("pointerdown", onOutside);
   map.classList.add("hd-map--live");
+
+  // "+N more" reveals the rest of a phone band's ring (shown whole without JS).
+  const toggles = [...map.querySelectorAll<HTMLButtonElement>("[data-hd-more]")];
+  const onToggle = (event: Event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    const rest = document.getElementById(button.getAttribute("aria-controls") ?? "");
+    if (!rest) return;
+    const open = button.getAttribute("aria-expanded") !== "true";
+    button.setAttribute("aria-expanded", String(open));
+    rest.hidden = !open;
+  };
+  for (const button of toggles) {
+    const rest = document.getElementById(button.getAttribute("aria-controls") ?? "");
+    if (rest) rest.hidden = true;
+    button.setAttribute("aria-expanded", "false");
+    button.addEventListener("click", onToggle);
+  }
   // The hub's halo only animates while the map is on screen.
   const onscreen = new IntersectionObserver(([entry]) => map.classList.toggle("hd-map--onscreen", entry.isIntersecting));
   onscreen.observe(map);
 
   return () => {
+    for (const button of toggles) button.removeEventListener("click", onToggle);
     onscreen.disconnect();
     document.removeEventListener("pointerdown", onOutside);
     map.classList.remove("hd-map--live", "hd-map--onscreen");

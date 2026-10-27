@@ -115,9 +115,18 @@ export function cardStackScene(
     const room = vh * 0.54 - first - tallest + 24;
     const min = list.offsetWidth >= 640 ? file.min : file.narrowMin;
     const strip = Math.min(file.max, Math.max(min, room / (count - 2)));
-    const gap = Math.max(16, (count - 2) * strip - room + 16);
     list.style.setProperty("--hd-strip", `${Math.round(strip)}px`);
-    list.style.setProperty("--hd-gap", `${Math.round(gap)}px`);
+    // Each card gets only the gap it needs: from arriving whole at the bottom
+    // of the screen until the next card reaches it, a card must stay readable
+    // for ~46% of a screen. Cards that stick high have that already (16px);
+    // only the deep ones, which stick low, need more. No dead band of empty
+    // sheet between the early cards.
+    shown.forEach((item, index) => {
+      if (index === count - 1) return;
+      const stickTop = first + index * strip;
+      const gap = Math.max(16, item.offsetHeight + stickTop - vh * 0.54 + 24);
+      item.style.setProperty("--hd-gap-own", `${Math.round(gap)}px`);
+    });
   }
 
   return {
@@ -154,8 +163,8 @@ export function cardStackScene(
     },
     destroy() {
       list.style.removeProperty("--hd-strip");
-      list.style.removeProperty("--hd-gap");
       items.forEach((item, index) => {
+        item.style.removeProperty("--hd-gap-own");
         item.classList.remove("is-landed");
         targets[index].style.transform = "";
         const dim = dims[index];
