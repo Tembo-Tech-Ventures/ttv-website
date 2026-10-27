@@ -63,6 +63,26 @@ for (const path of CANDIDATES) {
       expect(missed, "never reached by Tab").toEqual([]);
     });
 
+    test("every section anchor lands on its heading, even jumping back up", async ({ page }) => {
+      await page.goto(path);
+      await page.evaluate(() => document.fonts.ready);
+      for (const id of [...SECTION_ORDER].toReversed()) {
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        await page.waitForTimeout(400);
+        await page.evaluate((target) => { window.location.hash = target; }, id);
+        await page.waitForTimeout(900);
+        const landing = await page.evaluate((target) => {
+          const heading = document.querySelector(`main #${target}`)?.querySelector("h1, h2");
+          if (!heading) return "no heading";
+          const box = heading.getBoundingClientRect();
+          if (box.top < 0 || box.top > window.innerHeight * 0.6) return `heading at ${Math.round(box.top)}px`;
+          const hit = document.elementFromPoint(Math.min(box.left + 8, window.innerWidth - 1), box.top + box.height / 2);
+          return hit && (heading.contains(hit) || hit.contains(heading)) ? "ok" : `heading covered by <${hit?.tagName.toLowerCase()}>`;
+        }, id);
+        expect(landing, `#${id}`).toBe("ok");
+      }
+    });
+
     for (const reducedMotion of ["no-preference", "reduce"] as const) {
       test(`every word is readable while scrolling (motion: ${reducedMotion})`, async ({ page }) => {
         const errors: string[] = [];
