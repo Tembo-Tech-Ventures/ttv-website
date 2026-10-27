@@ -296,3 +296,61 @@ Keep the concise member-opportunity story and the earlier pre-existing-versus-ha
 **Separate browser milestone:** [run 40135318592](https://github.com/Tembo-Tech-Ventures/ttv-website/actions/runs/40135318592) completed successfully at the same `8a68c107` revision. Marketing privately inspected artifact `12576748090`'s manifest: synthetic=true, staging, exact deployed SHA, status=passed, browser-actions-and-api-readback, desktop/mobile completed, database-and-browser cleanup passed. Its modelCalls field explicitly says not-tested. This supports the synthetic member → mentor → institution browser/API journey separately from assessment HTTP run `40135089431`; it does not establish browser-driven AI assessment. Visual evidence correction: PM reports Architect re-inspected the original files and confirmed all eight images render usable UI. Both known-profile images are byte-identical to their valid scout counterparts; the earlier blank-image report came from batched display and is withdrawn. Duplicates are not independent visual evidence of intermediate steps. Marketing inspected the manifest; original-file verification is attributed to Architect. No raw logs, screenshots or credentials are republished by this update.
 
 Remaining presentation gaps: inspect the actual sanitized assessment result/citation before showing it; do not imply browser-driven AI, general model quality or job outcomes. Keep final walkthrough pinned to its tested revision and identify actual Codex development contributions from inspected work. No repeat model call or broader verification is needed for this documentation update.
+
+## Presentation first draft — 25 October 2026
+
+Internal review draft; no external publication or submission. Prepared against integration source `04ee64e`. The verified `8a68c107` assessment and browser receipts above are historical evidence for that revision, not proof of the newer runtime. The later verified chat milestone below supersedes PM's earlier timeout checkpoint only for its exact revision and tested desktop path.
+
+### Three-minute story and demo script
+
+**0:00–0:25 — The member's problem**
+
+“Work is easier to understand when you can see someone's contribution, the evidence behind it, and what another person actually checked. TTV's community brings those pieces together. We'll use a fictional Kenyan member, Amina Wanjiku, to show the journey.”
+
+Do not open with national unemployment statistics or imply every member lacks a network. The Kenya desk research above informed the design; Amina is an illustration, not a research participant or a real student's story.
+
+**0:25–1:05 — Amina's contribution**
+
+“Community participation is open beyond TTV cohorts. Amina describes the keyboard navigation she contributed to a community library project, explains her own role and adds a supporting source. She can also describe what she wants to explore next. Approved institutions can discover saved community profiles; shared contributions are available for mentor review.”
+
+Show the member journey and a saved contribution. Use the keyboard-navigation community-library fixture matching the verified chat, including its mobile and desktop contribution entries. The separate low-stock inventory illustration belongs to audience-page examples; do not mix its project, source links or revisions into this walkthrough. Show the actual save/reload only on a tested revision; otherwise use a clearly labelled recorded synthetic walkthrough.
+
+**1:05–1:40 — Grace's scoped observation**
+
+“Grace Njeri, our fictional mentor, records what she checked and how. Her note belongs to this contribution and the revision she reviewed. It does not certify Amina as a person or endorse every skill on her profile.”
+
+Show the work, review method and contribution revision. Do not imply mentors are automatically assigned or that signing in grants mentor access. Mentor tools require administrator approval.
+
+**1:40–2:20 — An institution's next question**
+
+“An approved institutional reviewer finds Amina's profile, reads her contribution and distinguishes her account from Grace's observation. The question is: ‘Why should I interview this person?’ The evidence helps the reviewer decide what to ask next. The decision remains theirs.”
+
+Show skill/name discovery and evidence context. Institutional access is administrator-approved; private cohort recordings and internal records are outside discovery. Do not imply discovery sends a message, books an interview or guarantees an introduction.
+
+**2:20–2:40 — Evidence chat, demonstrated on desktop**
+
+“We asked why this fictional person might be worth interviewing for keyboard-navigation work. The assistant retrieved the documented profile and cited the contributions and mentor notes. It also identified what remains unknown: the sources are placeholders, the mentor account is synthetic, and testing depth and real-world outcomes are not established. Those gaps become interview questions, not an ability rating.”
+
+Show the inspected recorded desktop result at `18a72b27`, or a separately authorized and verified current walkthrough. Do not imply mobile chat was demonstrated. The older Gemma TypeScript 1/5 assessment at `8a68c107` is a separate historical criterion-support result, not this GLM chat response; omit it from the short narrative to avoid mixing criteria and fixtures.
+
+**2:40–3:00 — What we built and why it matters**
+
+“TTV already supported cohort learning and public builder profiles. This hackathon adds an open community journey, contribution-scoped mentor confirmations, institutional evidence discovery, and dedicated pages explaining how members, mentors and institutions participate. The aim is a clearer conversation about work. Participation does not promise a job or placement.”
+
+### Build attribution and evidence boundaries
+
+Codex is the development collaborator, not a claim about the inference provider. A concrete development example is the audience-page copy and review iteration: `db130d6` replaces implementation jargon with plain institutional copy, alongside a regression assertion and refreshed fictional screenshots. The inspected `f00c644` change implements request-local Mastra community chat using Cloudflare's AI binding and GLM model identifier; this source inspection alone is not evidence of successful deployed chat; the separate exact-revision receipt below supplies the bounded desktop evidence. PM should attribute these to the actual contributing sessions/commits in the final presentation rather than inventing a productivity statistic or crediting all pre-existing TTV work to this hackathon.
+
+### Presenter handoff: only missing evidence
+
+- PM/Architect: keep the final walkthrough pinned to the verified revision or supply a new exact-revision receipt if it changes. Do not generalize desktop chat success to mobile chat or assessment.
+- Presenter: choose one prepared fictional contribution and use its exact sources/revision consistently. Inspect any assessment result and citation before displaying it; no raw logs, credentials or private student data.
+- PM: confirm final pre-existing-versus-added scope and actual Codex attribution against the demonstrated revision. Existing verified member/mentor/institution journey can anchor the story; optional chat must not hold the presentation hostage.
+
+No new research, schedule, outreach, model call or deployment is required to review this draft.
+
+### Verified desktop chat update — 25 October 2026
+
+[Run 40168962068](https://github.com/Tembo-Tech-Ventures/ttv-website/actions/runs/40168962068) succeeded at `18a72b27e0670d6c24301180fddefb26958208a7`; [sealed artifact 12589441694](https://github.com/Tembo-Tech-Ventures/ttv-website/actions/runs/40168962068/artifacts/12589441694). Marketing privately inspected its sanitized manifest and desktop-chat image individually. Manifest: synthetic staging, exact deployed SHA, desktop/mobile core browser-actions-and-api-readback passed, database-and-browser cleanup passed; one bounded **desktop** chat with `@cf/zai-org/glm-5.3-flash`, two model steps, one executed tool call and five citations. PM separately reports independent fixture cleanup passed.
+
+The rendered interview rationale cites fictional Amina Wanjiku's mobile/desktop keyboard-navigation contributions and fictional Grace Njeri's scoped confirmations. It explicitly identifies synthetic evidence, placeholder sources and unknown testing depth/outcomes; it does not rate ability. Citation labels identify profile, contribution and confirmation revisions. This is one observed successful response, not a quality evaluation or reliability guarantee. Mobile chat and assessment were not tested in this run; latency and spend are unavailable. Earlier Gemma assessment evidence remains separate. No raw response, screenshot, private data or credentials are republished here.
