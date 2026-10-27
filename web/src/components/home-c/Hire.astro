@@ -1,0 +1,119 @@
+---
+import { HIRE } from "@/lib/homepage/content";
+import { convergence } from "./graph";
+import Pill from "./Pill.astro";
+import TextLink from "./TextLink.astro";
+import Words from "./Words.astro";
+
+const threads = convergence();
+---
+
+<section id="hire" class="hc-section hc-hire" aria-labelledby="hc-hire-title" data-hc-hire>
+  <div class="hc-wrap">
+    <svg class="hc-converge" viewBox="0 0 1200 240" preserveAspectRatio="none" aria-hidden="true" focusable="false" data-hc-converge>
+      {threads.map((thread) => <path class={`hc-converge__line hc-converge__line--${thread.tone}`} d={thread.d} />)}
+    </svg>
+    <div class="hc-hire__panel" data-hc-hire-panel>
+      <span class="hc-hire__knot" aria-hidden="true"></span>
+      <h2 id="hc-hire-title" class="hc-h2 hc-hire__title" data-hc-words><Words text={HIRE.title} /></h2>
+      <div class="hc-hire__body">
+        <p class="hc-hire__summary" data-hc-reveal>{HIRE.summary}</p>
+        <div class="hc-hire__actions" data-hc-reveal>
+          <Pill href={HIRE.primary.href} tone="dark" magnetic>{HIRE.primary.label}</Pill>
+          <TextLink href={HIRE.secondary.href} class="hc-hire__secondary">{HIRE.secondary.label}</TextLink>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .hc-hire {
+    padding-top: clamp(3rem, 6vw, 5rem);
+  }
+
+  .hc-converge {
+    display: block;
+    width: 100%;
+    height: clamp(6rem, 15vw, 13rem);
+    overflow: visible;
+  }
+
+  .hc-converge__line {
+    fill: none;
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+    stroke-linecap: round;
+  }
+
+  .hc-converge__line--peach { stroke: rgba(242, 141, 104, 0.7); }
+  .hc-converge__line--teal { stroke: rgba(127, 188, 178, 0.6); }
+  .hc-converge__line--ink { stroke: rgba(255, 248, 242, 0.35); }
+
+  .hc-hire__panel {
+    position: relative;
+    display: grid;
+    gap: 1.5rem;
+    padding: clamp(2rem, 6vw, 4.5rem) clamp(1.5rem, 5vw, 4.5rem);
+    border-radius: clamp(1.25rem, 3vw, 2rem);
+    background:
+      radial-gradient(90% 120% at 100% 0%, rgba(255, 248, 242, 0.22), transparent 60%),
+      var(--hc-peach);
+    color: var(--hc-dark);
+  }
+
+  .hc-hire__knot {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 50%;
+    background: var(--hc-dark);
+    box-shadow: 0 0 0 4px var(--hc-peach), 0 0 0 5px rgba(1, 61, 57, 0.4);
+    transform: translate(-50%, -50%);
+  }
+
+  .hc-hire__title {
+    color: var(--hc-dark);
+    font-size: clamp(1.9rem, 0.9rem + 3.6vw, 4rem);
+  }
+
+  .hc-hire__body {
+    display: grid;
+    gap: 1.75rem;
+    align-content: end;
+  }
+
+  .hc-hire__summary {
+    margin: 0;
+    max-width: 34rem;
+    font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.25rem);
+    line-height: 1.6;
+    color: var(--hc-dark);
+  }
+
+  .hc-hire__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1.75rem;
+  }
+
+  .hc-hire__panel :global(.hc-hire__secondary),
+  .hc-hire__panel :global(.hc-hire__secondary svg) {
+    color: var(--hc-dark);
+  }
+
+  .hc-hire__panel :global(:focus-visible) {
+    outline-color: var(--hc-dark);
+  }
+
+  @media (min-width: 1024px) {
+    .hc-hire__panel {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      column-gap: 4rem;
+      align-items: end;
+    }
+  }
+</style>

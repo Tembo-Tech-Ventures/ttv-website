@@ -1,0 +1,185 @@
+---
+import { BUILDERS, COHORT } from "@/lib/homepage/content";
+import { heroNetwork } from "./graph";
+import NetSvg from "./NetSvg.astro";
+import Pill from "./Pill.astro";
+import TextLink from "./TextLink.astro";
+import Words from "./Words.astro";
+
+const square = heroNetwork("square", COHORT.timeline);
+const wide = heroNetwork("wide", COHORT.timeline);
+const glyphs = ["builder", "live", "partner"] as const;
+---
+
+<div class="hc-hero hc-wrap" data-hc-hero>
+  <div class="hc-hero__net" data-hc-intro>
+    <NetSvg net={square} name="hero" class="hc-hero__svg hc-hero__svg--square" />
+    <NetSvg net={wide} name="hero" class="hc-hero__svg hc-hero__svg--wide" />
+  </div>
+
+  <div class="hc-hero__copy">
+    <h1 id="hc-cohorts-title" class="hc-h1" data-hc-intro data-hc-words>
+      <Words text={COHORT.title} accent="real software" />
+    </h1>
+    <p class="hc-lede hc-hero__summary" data-hc-intro>{COHORT.summary}</p>
+    <div class="hc-hero__actions" data-hc-intro>
+      <Pill href={COHORT.apply.href} magnetic>{COHORT.apply.label}</Pill>
+      <TextLink href="#builders">{BUILDERS.title.replace(/\.$/, "")}</TextLink>
+    </div>
+  </div>
+
+  <ul class="hc-facts" role="list">
+    {
+      COHORT.facts.map((fact, i) => (
+        <li class="hc-fact" data-hc-intro>
+          <span class="hc-fact__value">{fact.value}</span>
+          <span class="hc-fact__label">
+            <span class={`hc-fact__glyph hc-fact__glyph--${glyphs[i]}`} aria-hidden="true" />
+            {fact.label}
+          </span>
+        </li>
+      ))
+    }
+  </ul>
+</div>
+
+<style>
+  .hc-hero {
+    display: grid;
+    grid-template-areas: "net" "copy" "facts";
+    padding-top: clamp(1.25rem, 4vw, 2.5rem);
+  }
+
+  .hc-hero__net {
+    grid-area: net;
+    margin-inline: calc(var(--hc-pad) * -0.5);
+    margin-bottom: clamp(1.25rem, 4vw, 2.5rem);
+  }
+
+  .hc-hero__net :global(.hc-hero__svg--square) {
+    display: none;
+  }
+
+  .hc-hero__copy {
+    grid-area: copy;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(1.25rem, 2.4vw, 1.75rem);
+  }
+
+  .hc-hero__summary {
+    max-width: 34rem;
+  }
+
+  .hc-hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1.75rem;
+    margin-top: 0.25rem;
+  }
+
+  .hc-facts {
+    grid-area: facts;
+    list-style: none;
+    margin: clamp(2.5rem, 6vw, 4rem) 0 0;
+    padding: 0;
+    display: grid;
+    border-top: 1px solid var(--hc-rule);
+  }
+
+  .hc-fact {
+    display: grid;
+    grid-template-columns: 4.75rem minmax(0, 1fr);
+    align-items: baseline;
+    gap: 1rem;
+    padding-block: 1rem;
+    border-bottom: 1px solid var(--hc-rule-t);
+  }
+
+  .hc-fact__value {
+    font-family: var(--font-heading);
+    font-size: 1.75rem;
+    letter-spacing: var(--tracking-heading);
+    color: var(--hc-peach);
+    line-height: 1;
+  }
+
+  .hc-fact__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--hc-ink-2);
+    font-size: 0.975rem;
+    line-height: 1.4;
+  }
+
+  .hc-fact__glyph {
+    flex: none;
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: var(--hc-peach);
+  }
+
+  .hc-fact__glyph--live {
+    background: transparent;
+    border: 1.5px solid var(--hc-peach);
+    box-shadow: 0 0 0 3px rgba(242, 141, 104, 0.18);
+  }
+
+  .hc-fact__glyph--partner {
+    border-radius: 1px;
+    background: var(--hc-ink);
+    transform: rotate(45deg) scale(0.9);
+  }
+
+  @media (min-width: 640px) {
+    .hc-facts {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 2rem;
+    }
+
+    .hc-fact {
+      grid-template-columns: 1fr;
+      gap: 0.85rem;
+      padding-block: 1.75rem 0;
+      border-bottom: 0;
+    }
+
+    .hc-fact__value {
+      font-size: clamp(2rem, 1.2rem + 1.8vw, 2.75rem);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .hc-hero {
+      grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
+      grid-template-areas: "copy net" "facts facts";
+      column-gap: clamp(2rem, 4vw, 4.5rem);
+      align-items: center;
+      min-height: calc(100svh - var(--hc-nav));
+      align-content: center;
+      padding-block: 2rem 2.5rem;
+      box-sizing: border-box;
+    }
+
+    .hc-hero__net {
+      margin: 0 calc(var(--hc-pad) * -0.6) 0 0;
+    }
+
+    .hc-hero__net :global(.hc-hero__svg--square) {
+      display: block;
+      max-height: calc(100svh - var(--hc-nav) - 15rem);
+      margin-inline: auto;
+    }
+
+    .hc-hero__net :global(.hc-hero__svg--wide) {
+      display: none;
+    }
+
+    .hc-facts {
+      margin-top: clamp(2rem, 4vh, 3.5rem);
+    }
+  }
+</style>

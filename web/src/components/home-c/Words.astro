@@ -1,0 +1,28 @@
+---
+import { words } from "./text";
+
+/**
+ * A heading's words, each in its own mask, rendered on the server so motion
+ * never has to replace text nodes. The mask only clips while a reveal runs.
+ */
+interface Props {
+  text: string;
+  accent?: string;
+}
+
+const { text, accent } = Astro.props;
+const list = words(text, accent);
+---
+
+{
+  list.map((word, i) => (
+    <>
+      <span class="hc-wm">
+        <span class="hc-w">
+          {word.map((segment) => (segment.accent ? <span class="hc-accent">{segment.text}</span> : segment.text))}
+        </span>
+      </span>
+      {i < list.length - 1 ? " " : ""}
+    </>
+  ))
+}

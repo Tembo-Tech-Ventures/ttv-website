@@ -1,0 +1,132 @@
+---
+import { PRINCIPLES } from "@/lib/homepage/content";
+import Words from "./Words.astro";
+
+/*
+ * Mattone advance widths at font-size 100 and letter-spacing -0.02em, measured
+ * in Chromium. Every word gets its own viewBox from these, and all words share
+ * one scale, so none is ever cropped or stretched. Unknown words fall back to
+ * a generous estimate (Mattone capitals run just under 1em each).
+ */
+const ADVANCE: Record<string, number> = {
+  COMMUNITY: 878,
+  PHILOSOPHY: 930,
+  EQUITY: 533,
+  CONTINUITY: 882,
+  HONESTY: 693,
+};
+const PAD = 6;
+const TOP = 84; // cap height is 78 units
+const BOTTOM = 24; // the tail of Q in EQUITY descends 20 units
+const words = PRINCIPLES.values.map((value) => {
+  const advance = ADVANCE[value.word] ?? Math.ceil(value.word.length * 100);
+  return { ...value, width: advance + PAD * 2 };
+});
+const widest = Math.max(...words.map((word) => word.width));
+---
+
+<section id="principles" class="hc-section hc-principles" aria-labelledby="hc-principles-title" data-hc-principles>
+  <div class="hc-wrap">
+    <h2 id="hc-principles-title" class="hc-h2 hc-principles__title" data-hc-words><Words text={PRINCIPLES.title} /></h2>
+    <ol class="hc-principles__list" role="list">
+      {
+        words.map((value) => (
+          <li class="hc-principle" data-hc-principle>
+            <h3 class="hc-principle__word" style={`--hc-word-share:${((value.width / widest) * 100).toFixed(3)}%`}>
+              <svg
+                class="hc-principle__svg"
+                viewBox={`${-PAD} ${-TOP} ${value.width} ${TOP + BOTTOM}`}
+                focusable="false"
+              >
+                <text class="hc-principle__text" x="0" y="0">
+                  {value.word}
+                </text>
+              </svg>
+            </h3>
+            <p class="hc-principle__commitment" data-hc-commitment>
+              {value.commitment}
+            </p>
+          </li>
+        ))
+      }
+    </ol>
+  </div>
+</section>
+
+<style>
+  .hc-principles__title {
+    margin-bottom: clamp(2rem, 5vw, 3.5rem);
+  }
+
+  .hc-principles__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-bottom: 1px solid var(--hc-rule);
+  }
+
+  .hc-principle {
+    display: grid;
+    gap: 0.9rem;
+    padding-block: clamp(1.25rem, 3vw, 2rem);
+    border-top: 1px solid var(--hc-rule);
+  }
+
+  .hc-principle__word {
+    margin: 0;
+    width: 100%;
+    container-type: inline-size;
+  }
+
+  .hc-principle__svg {
+    display: block;
+    width: var(--hc-word-share);
+    height: auto;
+    /* The text box Chromium reports is taller than the glyphs; the viewBox is
+       sized to the glyphs, so let the box breathe rather than clip it. */
+    overflow: visible;
+  }
+
+  .hc-principle__text {
+    font-family: var(--font-heading);
+    font-size: 100px;
+    letter-spacing: -2px;
+    fill: rgba(242, 141, 104, 0.12);
+    stroke: var(--hc-peach);
+    stroke-width: 3.2px;
+    stroke-linejoin: round;
+    paint-order: stroke;
+    transition: fill 500ms ease;
+  }
+
+  .hc-principle:hover .hc-principle__text {
+    fill: rgba(242, 141, 104, 0.85);
+  }
+
+  .hc-principle__commitment {
+    margin: 0;
+    max-width: 30rem;
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    color: var(--hc-ink);
+  }
+
+  @media (min-width: 640px) {
+    .hc-principle__text {
+      stroke-width: 1.7px;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .hc-principle {
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+      column-gap: clamp(2rem, 4vw, 4rem);
+      align-items: end;
+    }
+
+    .hc-principle__commitment {
+      padding-bottom: 0.35rem;
+      font-size: 1.125rem;
+    }
+  }
+</style>

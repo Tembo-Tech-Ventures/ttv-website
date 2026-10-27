@@ -1,12 +1,55 @@
 ---
 import type { HomepageBuilder } from "@/lib/homepage/builders";
+import Builders from "./Builders.astro";
+import Community from "./Community.astro";
+import Hero from "./Hero.astro";
+import Hire from "./Hire.astro";
+import Principles from "./Principles.astro";
+import Rhythm from "./Rhythm.astro";
 
+/**
+ * Homepage candidate C — "Constellation": the community as a living network.
+ *
+ * The server renders the finished composition. `motion/index.ts` layers motion
+ * on top only when the visitor allows it, and every interaction has a keyboard
+ * and touch path.
+ */
 interface Props {
   builders: HomepageBuilder[];
   isAuthenticated: boolean;
 }
 
-const { builders } = Astro.props;
+const { builders, isAuthenticated } = Astro.props;
 ---
 
-<section id="cohorts"><h1>Candidate C placeholder · {builders.length} builders</h1></section>
+<!--
+  Pre-hide the hero only when motion is allowed, before it paints, so the intro
+  never flashes. The timeout is a failsafe if the module never arrives.
+-->
+<script is:inline>
+  if (window.matchMedia("(prefers-reduced-motion: no-preference)").matches) {
+    document.documentElement.classList.add("hc-intro");
+    window.setTimeout(() => document.documentElement.classList.remove("hc-intro"), 2600);
+  }
+</script>
+
+<div class="hc" data-hc-root>
+  <section id="cohorts" class="hc-cohorts" aria-labelledby="hc-cohorts-title">
+    <Hero />
+    <Rhythm />
+  </section>
+  <Builders builders={builders} />
+  <Community isAuthenticated={isAuthenticated} />
+  <Hire />
+  <Principles />
+</div>
+
+<style is:global>
+  @import "./home-c.css";
+</style>
+
+<script>
+  import { initHomeC } from "./motion";
+
+  initHomeC();
+</script>
