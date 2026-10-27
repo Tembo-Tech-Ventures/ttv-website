@@ -208,12 +208,16 @@ async function recordSegment(segment, index) {
     async moveTo(target, ms = 900) {
       const rect = typeof target === "string" ? await box(target) : null;
       const goal = rect ? { x: rect.x - offset.x + rect.width / 2, y: rect.y - offset.y + rect.height / 2 } : target;
-      const steps = Math.max(8, Math.round(ms / 16));
+      // Paced by the clock, not by a fixed step count: each input event waits
+      // for the page to handle it, and on a heavy page in a GPU-less container
+      // that can take 100 ms+, which stretched a 1 s move to 7 s.
       const start = pointer;
-      for (let i = 1; i <= steps; i += 1) {
-        const k = ease(i / steps);
-        await page.mouse.move(offset.x + start.x + (goal.x - start.x) * k, offset.y + start.y + (goal.y - start.y) * k);
-        await page.waitForTimeout(12);
+      const began = Date.now();
+      for (let k = 0; k < 1; ) {
+        k = Math.min(1, (Date.now() - began) / ms);
+        const e = ease(k);
+        await page.mouse.move(offset.x + start.x + (goal.x - start.x) * e, offset.y + start.y + (goal.y - start.y) * e);
+        await page.waitForTimeout(8);
       }
       pointer = goal;
     },
@@ -258,14 +262,17 @@ async function recordSegment(segment, index) {
     },
     /** Smoothly scrolls the page by wheel, like a person with a trackpad. */
     async scrollBy(dy, ms = 1600) {
-      const steps = Math.max(10, Math.round(ms / 24));
       await page.mouse.move(offset.x + pointer.x, offset.y + pointer.y);
+      // Clock-paced like moveTo: slow input handling yields fewer, larger
+      // wheel steps rather than a longer scroll.
+      const began = Date.now();
       let done = 0;
-      for (let i = 1; i <= steps; i += 1) {
-        const next = Math.round(dy * ease(i / steps));
-        await page.mouse.wheel(0, next - done);
+      for (let k = 0; k < 1; ) {
+        k = Math.min(1, (Date.now() - began) / ms);
+        const next = Math.round(dy * ease(k));
+        if (next !== done) await page.mouse.wheel(0, next - done);
         done = next;
-        await page.waitForTimeout(16);
+        await page.waitForTimeout(8);
       }
     },
     async scrollTo(target, ms = 1800, offsetPx = 0) {
@@ -278,7 +285,7 @@ async function recordSegment(segment, index) {
     },
   };
 
-  await cdp.send("Page.startScreencast", { format: "jpeg", quality: 90, maxWidth: STAGE.width, maxHeight: STAGE.height, everyNthFrame: 1 });
+  await cdp.send("Page.startScreencast", { format: "jpeg", quality: Number(process.env.HOMEPAGE_LAB_JPEG_QUALITY ?? 90), maxWidth: STAGE.width, maxHeight: STAGE.height, everyNthFrame: 1 });
   await page.waitForTimeout(300);
   await segment.run(t);
   await page.waitForTimeout(600);

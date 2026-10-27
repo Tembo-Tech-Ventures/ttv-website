@@ -70,10 +70,10 @@ export default {
           why: ["Fictional local fixtures here; production shows real graduates."],
           personas: [partner("real work, and how builders relate to each other")],
         });
-        await t.scrollTo("#builders", 2600, 0);
-        for (let i = 0; i < 6; i += 1) {
-          await t.scrollBy(320, 1300);
-          await t.pause(400);
+        await t.scrollTo("#builders", 2400, 0);
+        for (let i = 0; i < 4; i += 1) {
+          await t.scrollBy(420, 1200);
+          await t.pause(300);
         }
         await t.moveTo("#builders .hd-bstack > li >> nth=6", 900);
         await t.pause(2200);
@@ -109,10 +109,10 @@ export default {
           why: ["One size for all five, measured from the font: never cropped.", "A browser test fails the build if any word is unreadable at any width."],
           personas: [student("EQUITY: no degree required"), juror("the closing beat")],
         });
-        await t.scrollTo("#principles", 2600, 0);
-        for (let i = 0; i < 7; i += 1) {
-          await t.scrollBy(280, 1300);
-          await t.pause(600);
+        await t.scrollTo("#principles", 2400, 0);
+        for (let i = 0; i < 5; i += 1) {
+          await t.scrollBy(380, 1200);
+          await t.pause(500);
         }
         await t.pause(800);
       },

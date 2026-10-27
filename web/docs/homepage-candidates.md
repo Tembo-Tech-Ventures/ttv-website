@@ -1,6 +1,6 @@
 # Homepage candidates (October 2026)
 
-Three complete homepage designs, built side by side so the owner can pick one.
+Four complete homepage designs, built side by side so the owner can pick one.
 Each lives at its own preview route and shares the same content, data and
 quality bar; they differ only in composition, interaction and motion.
 
@@ -9,8 +9,15 @@ quality bar; they differ only in composition, interaction and motion.
 | A | `/preview/home/a` | Kinetic editorial: type is the image |
 | B | `/preview/home/b` | Layers: the page as a stack of sheets |
 | C | `/preview/home/c` | Constellation: the community as a living network |
+| D | `/preview/home/d` | Layers, mapped: B with C's network language and a skills map |
 
-When one is chosen it replaces `src/pages/index.astro`, the other two and their
+Candidate D came after the owner named B his favourite and asked for B with
+some of C's network metaphors and a first picture of a skills map students move
+through, in the spirit of École 42's progression graph. The map is drawn from
+skills on published profiles and labelled as an illustration: TTV does not
+track anyone's progress through it, and the copy must never suggest it does.
+
+When one is chosen it replaces `src/pages/index.astro`, the others and their
 components are deleted, and the public nav anchors are pointed at its sections.
 
 ## What the page must say, in this order
@@ -117,6 +124,7 @@ Juror scores (Design / Usability / Creativity / Content, out of 10):
 | A | 7 / 7 / 6 / 7 | 7 / 8 / 7 / 8 | 8 / 8 / 8 / 8 | 9 / 7 / 8 / 7 |
 | B | 7 / 6 / 7 / 7 | 8 / 6 / 8 / 8 | 8 / 8 / 8 / 9 | 8.5 / 8 / 8.5 / 8 |
 | C | 7 / 4 / 8 / 7 | 7 / 8 / 8 / 8 | 8 / 8 / 8 / 8 | 8 / 7 / 8 / 8 |
+| D | 8 / 7 / 9 / 8 | 8 / 8 / 9 / 9 | 8 / 8 / 9 / 9 | 8.5 / 8 / 8.5 / 8.5 |
 
 The mentor scores are held back by the same gap in every candidate: the page
 does not say how much time mentoring asks for. That is the owner's to state;
@@ -136,7 +144,7 @@ Rules the critiques turned into tests, which bind whichever candidate wins:
 
 1. Move its components to `src/components/homepage/` and render them from
    `src/pages/index.astro` (keep `loadHomepageBuildersSafely`).
-2. Delete the other two candidates, `src/pages/preview/home/`, and the old
+2. Delete the other candidates, `src/pages/preview/home/`, and the old
    homepage components they replace.
 3. Point `PUBLIC_NAV_LINKS` and the footer at the new section ids
    (`#cohorts`, `#builders`, `#community`, `#hire`, `#principles`), and update
