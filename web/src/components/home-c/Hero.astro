@@ -1,5 +1,5 @@
 ---
-import { BUILDERS, COHORT } from "@/lib/homepage/content";
+import { COHORT } from "@/lib/homepage/content";
 import { heroNetwork } from "./graph";
 import NetSvg from "./NetSvg.astro";
 import Pill from "./Pill.astro";
@@ -12,26 +12,33 @@ const glyphs = ["builder", "live", "partner"] as const;
 ---
 
 <div class="hc-hero hc-wrap" data-hc-hero>
-  <div class="hc-hero__net" data-hc-intro>
+  <div class="hc-hero__net">
     <NetSvg net={square} name="hero" class="hc-hero__svg hc-hero__svg--square" />
     <NetSvg net={wide} name="hero" class="hc-hero__svg hc-hero__svg--wide" />
   </div>
 
   <div class="hc-hero__copy">
-    <h1 id="hc-cohorts-title" class="hc-h1" data-hc-intro data-hc-words>
+    <!-- The words rise in CSS at first paint: the hero never waits for JS. -->
+    <h1 id="hc-cohorts-title" class="hc-h1 hc-rise-load">
       <Words text={COHORT.title} accent="real software" />
     </h1>
-    <p class="hc-lede hc-hero__summary" data-hc-intro>{COHORT.summary}</p>
-    <div class="hc-hero__actions" data-hc-intro>
-      <Pill href={COHORT.apply.href} magnetic>{COHORT.apply.label}</Pill>
-      <TextLink href="#builders">{BUILDERS.title.replace(/\.$/, "")}</TextLink>
+    <p class="hc-lede hc-hero__summary hc-fade-load" style="--hc-fade-delay: 0.28s">{COHORT.summary}</p>
+    <div class="hc-hero__cta hc-fade-load" style="--hc-fade-delay: 0.36s">
+      <div class="hc-hero__actions">
+        <Pill href={COHORT.apply.href} magnetic>{COHORT.apply.label}</Pill>
+        <TextLink href={COHORT.secondary.href}>{COHORT.secondary.label}</TextLink>
+      </div>
+      <p class="hc-hero__eligibility">
+        <span class="hc-hero__eligibility-glyph" aria-hidden="true"></span>
+        {COHORT.eligibility}
+      </p>
     </div>
   </div>
 
   <ul class="hc-facts" role="list">
     {
       COHORT.facts.map((fact, i) => (
-        <li class="hc-fact" data-hc-intro>
+        <li class="hc-fact hc-fade-load" style={`--hc-fade-delay: ${0.46 + i * 0.07}s`}>
           <span class="hc-fact__value">{fact.value}</span>
           <span class="hc-fact__label">
             <span class={`hc-fact__glyph hc-fact__glyph--${glyphs[i]}`} aria-hidden="true" />
@@ -60,6 +67,18 @@ const glyphs = ["builder", "live", "partner"] as const;
     display: none;
   }
 
+  /* Labels in the phone band are set in viewBox units: big enough to read
+     (about 14 px numbers, 12 px status) once the band is scaled down. */
+  @media (max-width: 639px) {
+    .hc-hero__net :global(.hc-hero__svg--wide .hc-label) {
+      font-size: 25px;
+    }
+
+    .hc-hero__net :global(.hc-hero__svg--wide .hc-label--quiet) {
+      font-size: 21px;
+    }
+  }
+
   .hc-hero__copy {
     grid-area: copy;
     display: flex;
@@ -71,12 +90,37 @@ const glyphs = ["builder", "live", "partner"] as const;
     max-width: 34rem;
   }
 
+  .hc-hero__cta {
+    display: grid;
+    justify-items: start;
+    gap: 0.9rem;
+    margin-top: 0.25rem;
+  }
+
   .hc-hero__actions {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 0.75rem 1.75rem;
-    margin-top: 0.25rem;
+  }
+
+  .hc-hero__eligibility {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0;
+    padding-left: 0.35rem;
+    color: var(--hc-ink);
+    font-size: 1rem;
+    font-weight: 500;
+  }
+
+  .hc-hero__eligibility-glyph {
+    flex: none;
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: var(--hc-peach);
   }
 
   .hc-facts {
@@ -122,10 +166,9 @@ const glyphs = ["builder", "live", "partner"] as const;
     background: var(--hc-peach);
   }
 
+  /* The same live mark as cohort 04 in the network: a peach dot with a halo. */
   .hc-fact__glyph--live {
-    background: transparent;
-    border: 1.5px solid var(--hc-peach);
-    box-shadow: 0 0 0 3px rgba(242, 141, 104, 0.18);
+    box-shadow: 0 0 0 3px var(--hc-dark), 0 0 0 4px rgba(242, 141, 104, 0.7);
   }
 
   .hc-fact__glyph--partner {
@@ -154,9 +197,10 @@ const glyphs = ["builder", "live", "partner"] as const;
 
   @media (min-width: 1024px) {
     .hc-hero {
+      --hc-hero-gap: clamp(2rem, 4vw, 4.5rem);
       grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
       grid-template-areas: "copy net" "facts facts";
-      column-gap: clamp(2rem, 4vw, 4.5rem);
+      column-gap: var(--hc-hero-gap);
       align-items: center;
       min-height: calc(100svh - var(--hc-nav));
       align-content: center;
@@ -178,7 +222,10 @@ const glyphs = ["builder", "live", "partner"] as const;
       display: none;
     }
 
+    /* Line the third fact up under the network column. */
     .hc-facts {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) calc((100% - var(--hc-hero-gap)) * 0.44);
+      column-gap: var(--hc-hero-gap);
       margin-top: clamp(2rem, 4vh, 3.5rem);
     }
   }

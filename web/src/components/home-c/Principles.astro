@@ -32,16 +32,19 @@ const widest = Math.max(...words.map((word) => word.width));
       {
         words.map((value) => (
           <li class="hc-principle" data-hc-principle>
-            <h3 class="hc-principle__word" style={`--hc-word-share:${((value.width / widest) * 100).toFixed(3)}%`}>
-              <svg
-                class="hc-principle__svg"
-                viewBox={`${-PAD} ${-TOP} ${value.width} ${TOP + BOTTOM}`}
-                focusable="false"
-              >
-                <text class="hc-principle__text" x="0" y="0">
-                  {value.word}
-                </text>
-              </svg>
+            <h3 class="hc-principle__word">
+              <span class="hc-principle__ink" style={`--hc-word-share:${((value.width / widest) * 100).toFixed(3)}%`}>
+                <svg
+                  class="hc-principle__svg"
+                  viewBox={`${-PAD} ${-TOP} ${value.width} ${TOP + BOTTOM}`}
+                  focusable="false"
+                >
+                  <text class="hc-principle__text" x="0" y="0">
+                    {value.word}
+                  </text>
+                </svg>
+                <span class="hc-principle__caret" aria-hidden="true"></span>
+              </span>
             </h3>
             <p class="hc-principle__commitment" data-hc-commitment>
               {value.commitment}
@@ -72,18 +75,27 @@ const widest = Math.max(...words.map((word) => word.width));
     border-top: 1px solid var(--hc-rule);
   }
 
+  /*
+   * Every word shares one scale: the widest (PHILOSOPHY, 9.42 em with its
+   * padding) is sized so its font stays just under the h1's, at every width.
+   */
   .hc-principle__word {
     margin: 0;
-    width: 100%;
-    container-type: inline-size;
+    width: min(100%, calc(var(--hc-h1-size) * 0.92 * 9.42));
+  }
+
+  .hc-principle__ink {
+    position: relative;
+    display: block;
+    width: var(--hc-word-share);
   }
 
   .hc-principle__svg {
     display: block;
-    width: var(--hc-word-share);
+    width: 100%;
     height: auto;
-    /* The text box Chromium reports is taller than the glyphs; the viewBox is
-       sized to the glyphs, so let the box breathe rather than clip it. */
+    /* Chromium's text box is taller than the glyphs; the viewBox is sized to
+       the glyphs, so let the box breathe rather than clip it. */
     overflow: visible;
   }
 
@@ -91,42 +103,52 @@ const widest = Math.max(...words.map((word) => word.width));
     font-family: var(--font-heading);
     font-size: 100px;
     letter-spacing: -2px;
-    fill: rgba(242, 141, 104, 0.12);
+    fill: transparent;
     stroke: var(--hc-peach);
-    stroke-width: 3.2px;
+    stroke-width: 1.3px;
     stroke-linejoin: round;
-    paint-order: stroke;
-    transition: fill 500ms ease;
+    vector-effect: non-scaling-stroke;
+    transition: fill 450ms ease;
   }
 
   .hc-principle:hover .hc-principle__text {
-    fill: rgba(242, 141, 104, 0.85);
+    fill: var(--hc-peach);
+  }
+
+  /* The wipe (motion only): the finished outline is uncovered left to right,
+     led by a caret, so no frame ever shows a fragment of a letter. */
+  .hc-principle__caret {
+    display: none;
+  }
+
+  :global(.hc-wiping) .hc-principle__svg {
+    clip-path: inset(-30% var(--hc-wipe, 0%) -40% -4%);
+  }
+
+  :global(.hc-caret-on) .hc-principle__caret {
+    display: block;
+    position: absolute;
+    top: -12%;
+    bottom: -18%;
+    left: calc(100% - var(--hc-wipe, 0%));
+    width: 2px;
+    background: var(--hc-peach);
+    opacity: var(--hc-caret, 1);
   }
 
   .hc-principle__commitment {
     margin: 0;
     max-width: 30rem;
-    font-size: 1.0625rem;
-    line-height: 1.6;
+    font-size: clamp(1.0625rem, 0.98rem + 0.35vw, 1.25rem);
+    line-height: 1.55;
     color: var(--hc-ink);
-  }
-
-  @media (min-width: 640px) {
-    .hc-principle__text {
-      stroke-width: 1.7px;
-    }
   }
 
   @media (min-width: 1024px) {
     .hc-principle {
-      grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
       column-gap: clamp(2rem, 4vw, 4rem);
-      align-items: end;
-    }
-
-    .hc-principle__commitment {
-      padding-bottom: 0.35rem;
-      font-size: 1.125rem;
+      align-items: center;
     }
   }
 </style>

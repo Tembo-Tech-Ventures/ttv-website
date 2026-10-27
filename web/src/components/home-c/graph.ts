@@ -41,6 +41,16 @@ export interface NetLabel {
   text: string;
   anchor: "start" | "middle" | "end";
   tone: "strong" | "quiet" | "live";
+  /** Staged networks only: the first step at which the label shows. */
+  from?: number;
+}
+
+/** A camera framing: the part of the network's space a viewBox shows. */
+export interface View {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 export interface NetRing {
@@ -59,6 +69,8 @@ export interface Net {
   edges: NetEdge[];
   labels: NetLabel[];
   rings: NetRing[];
+  /** Optional camera; without it the viewBox is 0 0 width height. */
+  view?: View;
 }
 
 export interface NodeState {
@@ -73,6 +85,8 @@ export interface StagedNet extends Net {
   /** Per edge id, visibility (0 or 1) per story step. */
   edgeStates: Record<string, number[]>;
   ringStates: Array<Array<{ r: number; gap: number }>>;
+  /** The camera for each step: close on the ring first, pulling back as it grows. */
+  views: View[];
 }
 
 type Point = { x: number; y: number };
@@ -157,7 +171,7 @@ function withOrder(net: Net, centre: Point): Net {
 /** Shrink the viewBox to what is drawn, so the picture uses all its space. */
 function fitToContent(net: Net, pad: number): Net {
   const xs = [...net.nodes.map((n) => n.x - n.r * 2.4), ...net.nodes.map((n) => n.x + n.r * 2.4), ...net.labels.map((l) => l.x - 40), ...net.labels.map((l) => l.x + 40)];
-  const ys = [...net.nodes.map((n) => n.y - n.r * 2.4), ...net.nodes.map((n) => n.y + n.r * 2.4), ...net.labels.map((l) => l.y - 16), ...net.labels.map((l) => l.y + 6)];
+  const ys = [...net.nodes.map((n) => n.y - n.r * 2.4), ...net.nodes.map((n) => n.y + n.r * 2.4), ...net.labels.map((l) => l.y - 16), ...net.labels.map((l) => l.y + (l.tone === "quiet" ? 30 : 6))];
   const minX = Math.min(...xs) - pad;
   const minY = Math.min(...ys) - pad;
   const shift = <T extends { x: number; y: number }>(p: T) => ({ ...p, x: round(p.x - minX), y: round(p.y - minY) });
@@ -229,7 +243,7 @@ export function heroNetwork(layout: "square" | "wide", cohorts: readonly CohortM
       ? { x: c.x + ((c.x - centre.x) / away) * (clusterRadius + 30), y: c.y + ((c.y - centre.y) / away) * (clusterRadius + 30) + 5 }
       : { x: c.x, y: c.y + (index % 2 === 0 ? clusterRadius + 34 : -clusterRadius - 22) };
     labels.push({ x: round(outward.x), y: round(outward.y), text: cohort.number, anchor: "middle", tone: live ? "live" : "strong" });
-    if (live) labels.push({ x: round(outward.x), y: round(outward.y + 19), text: cohort.status.toLowerCase(), anchor: "middle", tone: "quiet" });
+    if (live) labels.push({ x: round(outward.x), y: round(outward.y), text: cohort.status.toLowerCase(), anchor: "middle", tone: "quiet" });
   });
 
   const at = (id: string) => nodes.find((n) => n.id === id)!;
@@ -285,7 +299,7 @@ export function heroNetwork(layout: "square" | "wide", cohorts: readonly CohortM
  *   1 Engineers alongside  mentors step in among them
  *   2 Stay in touch        the ring opens into the wider community
  */
-export function rhythmNetwork(): StagedNet {
+export function rhythmNetwork(cohorts: readonly CohortMark[]): StagedNet {
   const rand = seeded(904);
   const width = 640;
   const height = 480;
@@ -346,19 +360,23 @@ export function rhythmNetwork(): StagedNet {
 
   // The wider network: earlier cohorts, other mentors, partners.
   const outer: Array<{ id: string; kind: NodeKind; at: Point; r: number }> = [];
-  const groups = [
-    { deg: -150, kind: "builder" as const },
-    { deg: -20, kind: "builder" as const },
-    { deg: 140, kind: "builder" as const },
-  ];
-  groups.forEach((group, g) => {
-    const centre = polar(group.deg, 212, 1.28, 0.9);
+  // Earlier cohorts sit around the running one, as in the hero, seen from inside.
+  const current = cohorts.find((cohort) => cohort.running) ?? cohorts.at(-1);
+  const earlier = cohorts.filter((cohort) => cohort !== current);
+  const groupAngles = [-150, -20, 140, 75, -95];
+  const labels: NetLabel[] = [];
+  if (current) labels.push({ x: c.x, y: 52, text: current.number, anchor: "middle", tone: "live", from: 0 });
+  if (current) labels.push({ x: c.x, y: 52, text: current.status.toLowerCase(), anchor: "middle", tone: "quiet", from: 0 });
+  earlier.slice(0, groupAngles.length).forEach((cohort, g) => {
+    const deg = groupAngles[g];
+    const centre = polar(deg, 212, 1.28, 0.9);
+    labels.push({ x: round(centre.x), y: round(centre.y + (Math.sin(rad(deg)) < 0 ? -36 : 50)), text: cohort.number, anchor: "middle", tone: "strong", from: 2 });
     scatter(rand, centre, 3, 26, 18).forEach((p, i) => {
       outer.push({ id: `o${g}-${i}`, kind: "builder", at: p, r: 4.2 });
     });
   });
   outer.push({ id: "op0", kind: "partner", at: polar(62, 200, 1.42, 0.98), r: 8 });
-  outer.push({ id: "op1", kind: "partner", at: polar(-92, 202, 1, 0.98), r: 8 });
+  outer.push({ id: "op1", kind: "partner", at: polar(-60, 206, 1.05, 0.98), r: 8 });
   outer.push({ id: "om0", kind: "mentor", at: polar(30, 214, 1.38, 0.92), r: 8 });
   outer.push({ id: "om1", kind: "mentor", at: polar(178, 214, 1.34, 0.9), r: 8 });
 
@@ -393,8 +411,35 @@ export function rhythmNetwork(): StagedNet {
   const rings: NetRing[] = [{ cx: c.x, cy: c.y, r: 160, gap: 0.26, tone: "peach" }];
   const ringStates = [[{ r: 156, gap: 0 }, { r: 166, gap: 0 }, { r: 186, gap: 0.26 }]];
 
-  const net = withOrder({ width, height, nodes, edges, labels: [], rings }, c);
-  return { ...net, nodeStates, edgeStates, ringStates };
+  const views = [0, 1, 2].map((step) => {
+    const points: Point[] = [];
+    for (const node of nodes) {
+      const state = nodeStates[node.id][step];
+      if (state.o > 0) points.push({ x: state.x - node.r, y: state.y - node.r }, { x: state.x + node.r, y: state.y + node.r });
+    }
+    const ring = ringStates[0][step];
+    points.push({ x: c.x - ring.r, y: c.y - ring.r }, { x: c.x + ring.r, y: c.y + ring.r });
+    for (const label of labels) {
+      if ((label.from ?? 0) <= step) points.push({ x: label.x - 30, y: label.y - 18 }, { x: label.x + 30, y: label.y + 22 });
+    }
+    return frame(points, 4 / 3, 22);
+  });
+
+  const net = withOrder({ width, height, nodes, edges, labels, rings }, c);
+  return { ...net, nodeStates, edgeStates, ringStates, views, view: views[2] };
+}
+
+/** The smallest view of a given aspect ratio that holds every point, centred. */
+function frame(points: Point[], aspect: number, pad: number): View {
+  const minX = Math.min(...points.map((p) => p.x)) - pad;
+  const maxX = Math.max(...points.map((p) => p.x)) + pad;
+  const minY = Math.min(...points.map((p) => p.y)) - pad;
+  const maxY = Math.max(...points.map((p) => p.y)) + pad;
+  let w = maxX - minX;
+  let h = maxY - minY;
+  if (w / h > aspect) h = w / aspect;
+  else w = h * aspect;
+  return { x: round((minX + maxX) / 2 - w / 2), y: round((minY + maxY) / 2 - h / 2), w: round(w), h: round(h) };
 }
 
 /** The staged network flattened to one step, for static rendering. */
@@ -407,7 +452,8 @@ export function atStep(net: StagedNet, step: number): Net & { opacity: Record<st
   });
   const edges = net.edges.filter((edge) => net.edgeStates[edge.id][step] === 1);
   const rings = net.rings.map((ring, i) => ({ ...ring, ...net.ringStates[i][step] }));
-  return { ...net, nodes, edges, rings, opacity };
+  const labels = net.labels.filter((label) => (label.from ?? 0) <= step);
+  return { ...net, nodes, edges, rings, labels, opacity, view: net.views[step] };
 }
 
 /* ------------------------------------------------------------- community */

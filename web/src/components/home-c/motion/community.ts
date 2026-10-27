@@ -11,17 +11,24 @@ const EDGE_FOR: Record<Exclude<Role, "all">, string> = {
   partner: "partner",
 };
 
+/** How long each role is shown on the one introductory pass. */
+const CYCLE_MS = 4000;
+
 /**
- * Community: each role lights up where it plugs into the network. Hover or
- * focus picks a role; otherwise, with motion allowed, the roles take turns
- * while the section is on screen.
+ * Community: each role lights up where it plugs into the network.
+ *  - Every role heading is a toggle button that pins its role (touch, keyboard, mouse).
+ *  - Mouse hover and keyboard focus preview a role while nothing is pinned.
+ *  - On touch screens the card in the reading zone lights its role.
+ *  - With a mouse and motion allowed, the roles take one 4 s turn each when the
+ *    section arrives, then rest; any interaction stops that for good.
  */
 export function setupCommunity(root: HTMLElement, c: Conditions): () => void {
   const section = root.querySelector<HTMLElement>("[data-hc-community]");
   const frame = section?.querySelector<HTMLElement>("[data-hc-community-net]");
   const svg = frame?.querySelector<SVGSVGElement>("svg");
   if (!section || !frame || !svg) return () => {};
-  const roles = [...section.querySelectorAll<HTMLElement>("[data-hc-role]")];
+  const cards = [...section.querySelectorAll<HTMLElement>("[data-hc-role]")];
+  const toggles = cards.map((card) => card.querySelector<HTMLButtonElement>("[data-hc-role-toggle]"));
   const net = new LiveNet(svg);
   const listeners: Array<[EventTarget, string, EventListener]> = [];
   const on = (target: EventTarget, type: string, fn: EventListener) => {
@@ -30,34 +37,82 @@ export function setupCommunity(root: HTMLElement, c: Conditions): () => void {
   };
 
   let current: Role = "all";
-  let held: Role | null = null;
+  let pinned: Role | null = null;
+  let preview: Role | null = null;
+  let inView: Role | null = null;
+  let touched = false;
 
-  const setRole = (role: Role) => {
+  const draw = (role: Role) => {
     if (role === current) return;
     current = role;
     frame.dataset.role = role;
-    roles.forEach((card) => card.classList.toggle("is-lit", card.dataset.role === role));
+    cards.forEach((card) => card.classList.toggle("is-lit", card.dataset.role === role));
     if (!c.motion || role === "all") return;
     const lines = net.edges.filter((edge) => edge.kind === EDGE_FOR[role]).map((edge) => edge.el);
-    gsap.fromTo(
-      lines,
-      { drawSVG: "0%" },
-      { drawSVG: "100%", duration: 0.7, ease: "power2.out", stagger: 0.025, clearProps: "strokeDasharray,strokeDashoffset" },
-    );
+    gsap.fromTo(lines, { drawSVG: "0%" }, { drawSVG: "100%", duration: 0.7, ease: "power2.out", stagger: 0.025, clearProps: "strokeDasharray,strokeDashoffset" });
     const nodes = net.nodes.filter((node) => node.kind === role);
     gsap.fromTo(nodes, { s: 0.35 }, { s: 1, duration: 0.6, ease: "back.out(3)", stagger: 0.03, onUpdate: () => net.render() });
   };
+  const sync = (cycleRole: Role | null = null) => draw(pinned ?? preview ?? inView ?? cycleRole ?? "all");
 
-  for (const card of roles) {
+  /* -------------------------------------------- one introductory pass */
+  let timer = 0;
+  const stopCycle = () => {
+    window.clearTimeout(timer);
+    timer = 0;
+  };
+  const interact = () => {
+    touched = true;
+    stopCycle();
+  };
+  let stopVisible = () => {};
+  if (c.motion && c.fine) {
+    const order: Role[] = ["builder", "mentor", "partner"];
+    const run = (index: number) => {
+      if (touched) return;
+      sync(order[index] ?? null);
+      if (index < order.length) timer = window.setTimeout(() => run(index + 1), CYCLE_MS);
+      else timer = 0;
+    };
+    stopVisible = whileVisible(
+      frame,
+      () => {
+        if (!touched && !timer) timer = window.setTimeout(() => run(0), 700);
+      },
+      () => {
+        stopCycle();
+        sync();
+      },
+    );
+  }
+
+  /* ------------------------------------------------------- toggles */
+  const syncToggles = () => {
+    toggles.forEach((toggle, i) => toggle?.setAttribute("aria-pressed", String(pinned === cards[i].dataset.role)));
+  };
+  toggles.forEach((toggle, i) => {
+    if (!toggle) return;
+    const role = (cards[i].dataset.role ?? "all") as Role;
+    on(toggle, "click", () => {
+      interact();
+      pinned = pinned === role ? null : role;
+      syncToggles();
+      sync();
+    });
+  });
+
+  /* ------------------------------------------- hover and focus preview */
+  cards.forEach((card) => {
     const role = (card.dataset.role ?? "all") as Role;
     const enter = () => {
-      held = role;
-      setRole(role);
+      interact();
+      preview = role;
+      sync();
     };
     const leave = () => {
-      if (held !== role) return;
-      held = null;
-      if (!c.motion) setRole("all");
+      if (preview !== role) return;
+      preview = null;
+      sync();
     };
     if (c.fine) {
       on(card, "pointerenter", enter);
@@ -68,38 +123,34 @@ export function setupCommunity(root: HTMLElement, c: Conditions): () => void {
       const next = (event as FocusEvent).relatedTarget as Node | null;
       if (!(next && card.contains(next))) leave();
     });
+  });
+
+  /* ------------------------------------- touch: the card being read */
+  let observer: IntersectionObserver | null = null;
+  if (!c.fine) {
+    observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const role = ((entry.target as HTMLElement).dataset.role ?? null) as Role | null;
+          if (entry.isIntersecting) inView = role;
+          else if (inView === role) inView = null;
+        }
+        sync();
+      },
+      // The reading zone sits below the sticky diagram band on phones.
+      { rootMargin: "-55% 0px -30% 0px" },
+    );
+    cards.forEach((card) => observer?.observe(card));
   }
 
-  let stopCycle = () => {};
+  /* ---------------------------------------------------- arrival draw */
   if (c.motion) {
-    const order: Role[] = ["builder", "mentor", "partner", "all"];
-    let index = -1;
-    let timer = 0;
-    const step = () => {
-      if (!held) {
-        index = (index + 1) % order.length;
-        setRole(order[index]);
-      }
-      timer = window.setTimeout(step, order[index] === "all" ? 1800 : 2600);
-    };
-    stopCycle = whileVisible(
-      frame,
-      () => {
-        timer = window.setTimeout(step, 900);
-      },
-      () => {
-        window.clearTimeout(timer);
-        if (!held) setRole("all");
-      },
-    );
-
-    // The network itself arrives drawn from the centre.
     for (const node of net.nodes) node.s = 0;
     for (const edge of net.edges) edge.p = 0;
     net.render();
     ScrollTrigger.create({
       trigger: frame,
-      start: "top 80%",
+      start: "top 85%",
       once: true,
       onEnter: () => {
         gsap.timeline({ onUpdate: () => net.render() })
@@ -111,12 +162,16 @@ export function setupCommunity(root: HTMLElement, c: Conditions): () => void {
 
   return () => {
     for (const [target, type, fn] of listeners) target.removeEventListener(type, fn);
+    stopVisible();
     stopCycle();
+    observer?.disconnect();
     for (const node of net.nodes) node.s = 1;
     for (const edge of net.edges) edge.p = 1;
     net.render();
+    pinned = null;
+    syncToggles();
     current = "all";
     frame.dataset.role = "all";
-    roles.forEach((card) => card.classList.remove("is-lit"));
+    cards.forEach((card) => card.classList.remove("is-lit"));
   };
 }

@@ -8,12 +8,13 @@ import NetSvg from "./NetSvg.astro";
  * diagram is sticky and morphs as each step passes; on narrow screens every
  * step carries its own frame of the same diagram.
  */
-const net = rhythmNetwork();
+const net = rhythmNetwork(COHORT.timeline);
 const finalStep = atStep(net, 2);
 const model = {
   nodeStates: net.nodeStates,
   edgeStates: net.edgeStates,
   ringStates: net.ringStates,
+  views: net.views,
 };
 ---
 
@@ -30,20 +31,20 @@ const model = {
         const frame = atStep(net, i);
         return (
           <li class="hc-step" data-hc-step={i}>
-            <div class="hc-step__figure" aria-hidden="true">
-              <NetSvg net={frame} opacity={frame.opacity} name={`rhythm-${i}`} class="hc-step__svg" />
-            </div>
             <div class="hc-step__text">
               <span class="hc-step__node" aria-hidden="true" />
               <h3 class="hc-step__title">{step.title}</h3>
               <p class="hc-step__copy">{step.copy}</p>
+            </div>
+            <div class="hc-step__figure" aria-hidden="true">
+              <NetSvg net={frame} opacity={frame.opacity} name={`rhythm-${i}`} class="hc-step__svg" />
             </div>
           </li>
         );
       })
     }
   </ol>
-  <script type="application/json" data-hc-rhythm-model set:html={JSON.stringify(model)} />
+  <script is:inline type="application/json" data-hc-rhythm-model set:html={JSON.stringify(model)} />
 </div>
 
 <style>
@@ -61,7 +62,7 @@ const model = {
     margin: 0;
     padding: 0;
     display: grid;
-    gap: clamp(2.5rem, 7vw, 4rem);
+    gap: clamp(3.5rem, 9vw, 4.5rem);
   }
 
   .hc-step__figure {
@@ -70,12 +71,23 @@ const model = {
     background:
       radial-gradient(70% 70% at 50% 50%, rgba(242, 141, 104, 0.07), transparent 70%),
       var(--hc-panel);
-    padding: 0.75rem;
-    margin-bottom: 1.5rem;
+    padding: 0.5rem;
+    margin-top: 1.25rem;
   }
 
   .hc-step__text {
     position: relative;
+  }
+
+  /* Step frames are scaled down on phones: keep their labels readable. */
+  @media (max-width: 639px) {
+    .hc-step__figure :global(.hc-label) {
+      font-size: 22px;
+    }
+
+    .hc-step__figure :global(.hc-label--quiet) {
+      font-size: 17px;
+    }
   }
 
   .hc-step__node {
@@ -110,23 +122,25 @@ const model = {
     }
 
     .hc-step__figure {
-      margin-bottom: 0;
+      margin-top: 0;
     }
   }
 
   @media (min-width: 1024px) {
     .hc-rhythm {
       display: grid;
-      grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       column-gap: clamp(3rem, 6vw, 6rem);
     }
 
+    /* Top-aligned, so the panel and the first step arrive together and the
+       panel never waits half a screen below its text. */
+    /* Only as tall as the panel, so it stays pinned until the last step has
+       been read; top-aligned, so panel and first step arrive together. */
     .hc-rhythm__stage {
-      display: flex;
-      align-items: center;
+      display: block;
       position: sticky;
-      top: var(--hc-nav);
-      height: calc(100svh - var(--hc-nav));
+      top: calc(var(--hc-nav) + 1.5rem);
       align-self: start;
     }
 
@@ -137,12 +151,12 @@ const model = {
       background:
         radial-gradient(60% 60% at 50% 50%, rgba(242, 141, 104, 0.08), transparent 70%),
         var(--hc-panel);
-      padding: clamp(1rem, 2vw, 2rem);
+      padding: clamp(0.5rem, 1vw, 1rem);
       box-sizing: border-box;
     }
 
     .hc-rhythm__frame :global(.hc-rhythm__svg) {
-      max-height: calc(100svh - var(--hc-nav) - 8rem);
+      max-height: calc(100svh - var(--hc-nav) - 6rem);
       margin-inline: auto;
     }
 
@@ -150,7 +164,7 @@ const model = {
       position: relative;
       gap: 0;
       border-left: 1px solid var(--hc-rule);
-      padding-block: 10svh 14svh;
+      padding-block: 6svh 8svh;
     }
 
     /* The rail fills as the story advances (set by the scroll scrub). */
@@ -167,7 +181,7 @@ const model = {
     }
 
     .hc-step {
-      min-height: 62svh;
+      min-height: 42svh;
       display: flex;
       align-items: center;
     }
@@ -203,7 +217,7 @@ const model = {
     }
 
     :global(.hc-motion) .hc-step:not(.is-active) .hc-step__copy {
-      color: rgba(255, 248, 242, 0.5);
+      color: rgba(255, 248, 242, 0.6);
     }
 
     .hc-step.is-active .hc-step__node {

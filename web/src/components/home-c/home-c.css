@@ -21,8 +21,10 @@
   --hc-nav: 4.5rem;
   --hc-pad: clamp(1.25rem, 4vw, 2.5rem);
   --hc-max: 80rem;
-  --hc-section: clamp(6rem, 12vw, 10rem);
+  --hc-section: clamp(5.5rem, 10vw, 8.5rem);
   --hc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* The h1 is the loudest type on the page; other display sizes key off it. */
+  --hc-h1-size: clamp(1.75rem, 0.75rem + 3.7vw, 3.75rem);
 
   position: relative;
   overflow-x: clip;
@@ -56,7 +58,7 @@
 }
 
 .hc-h1 {
-  font-size: clamp(1.75rem, 0.75rem + 3.7vw, 3.75rem);
+  font-size: var(--hc-h1-size);
   line-height: 1.08;
 }
 
@@ -269,8 +271,9 @@
     animation: hc-halo 2.6s var(--hc-ease) infinite;
   }
 
-  .hc-motion .hc-n--builder .hc-n__body,
-  .hc-motion .hc-n--mentor .hc-n__body {
+  /* Breathing is the hero's alone: elsewhere the network rests. */
+  .hc-motion .hc-hero__net .hc-n--builder .hc-n__body,
+  .hc-motion .hc-hero__net .hc-n--mentor .hc-n__body {
     animation: hc-breathe 4.8s ease-in-out infinite;
     animation-delay: calc(var(--hc-i, 0) * -0.7s);
   }
@@ -292,24 +295,60 @@
   50% { transform: scale(1.18); }
 }
 
-/* Intro pre-hide: only set when JS runs and motion is allowed (see HomeC). */
-.hc-intro [data-hc-intro] {
+/* Intro pre-hide for the hero network only, set when JS runs and motion is
+   allowed (see HomeC). Text never waits for JS. */
+.hc-intro .hc-hero__net {
   opacity: 0;
 }
 
-/* Word masks for heading reveals (see Words.astro). Clipping applies only
-   while a reveal runs, so settled text is never cropped. */
+/* ---------------------------------------------------------- word rise */
+
+/* Each word sits in its own mask (Words.astro). The mask clips only while a
+   rise is running, so settled text is never cropped. */
 .hc-wm {
   display: inline-block;
   vertical-align: top;
 }
 
-.hc-revealing .hc-wm {
-  overflow: hidden;
-  padding-bottom: 0.14em;
-  margin-bottom: -0.14em;
-}
-
 .hc-w {
   display: inline-block;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hc-rise-load .hc-wm,
+  .hc-rise .hc-wm {
+    animation: hc-mask 0.55s linear backwards;
+    animation-delay: calc(var(--i, 0) * 30ms + var(--hc-rise-delay, 0ms));
+  }
+
+  .hc-rise-load .hc-w,
+  .hc-rise .hc-w {
+    animation: hc-rise 0.65s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 30ms + var(--hc-rise-delay, 0ms));
+  }
+
+  .hc-await .hc-wm {
+    clip-path: inset(-0.25em -0.3em -0.2em -0.3em);
+  }
+
+  .hc-await .hc-w {
+    transform: translateY(118%);
+  }
+
+  .hc-fade-load {
+    animation: hc-fade-up 0.8s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    animation-delay: var(--hc-fade-delay, 0.3s);
+  }
+}
+
+@keyframes hc-mask {
+  from, to { clip-path: inset(-0.25em -0.3em -0.2em -0.3em); }
+}
+
+@keyframes hc-rise {
+  from { transform: translateY(118%); }
+}
+
+@keyframes hc-fade-up {
+  from { opacity: 0; transform: translateY(18px); }
 }

@@ -16,6 +16,10 @@ export interface LiveNode {
   o: number;
   order: number;
   seed: number;
+  /** 0..1, how close the pointer is (hero only). */
+  glow: number;
+  /** Last values written, so unchanged nodes cost nothing. */
+  written: { transform: string; opacity: string };
 }
 
 export interface LiveEdge {
@@ -28,6 +32,7 @@ export interface LiveEdge {
   p: number;
   o: number;
   order: number;
+  written: { x1: string; y1: string; x2: string; y2: string; opacity: string; width: string };
 }
 
 export interface LiveRing {
@@ -51,10 +56,16 @@ export class LiveNet {
   readonly nodes: LiveNode[] = [];
   readonly edges: LiveEdge[] = [];
   readonly rings: LiveRing[] = [];
+  /** The camera: written to the viewBox when it moves. */
+  readonly view: { x: number; y: number; w: number; h: number };
+  private writtenView = "";
   private byId = new Map<string, LiveNode>();
 
   constructor(svg: SVGSVGElement) {
     this.svg = svg;
+    const box = svg.viewBox.baseVal;
+    this.view = { x: box.x, y: box.y, w: box.width, h: box.height };
+    this.writtenView = svg.getAttribute("viewBox") ?? "";
     svg.querySelectorAll<SVGGElement>("[data-n]").forEach((el, index) => {
       const { x, y } = translateOf(el);
       const node: LiveNode = {
@@ -69,6 +80,8 @@ export class LiveNet {
         o: num(el.getAttribute("opacity"), 1),
         order: num(el.dataset.order),
         seed: index * 1.7,
+        glow: 0,
+        written: { transform: "", opacity: "" },
       };
       el.style.setProperty("--hc-i", String(index % 7));
       this.nodes.push(node);
@@ -78,7 +91,7 @@ export class LiveNet {
       const a = this.byId.get(el.dataset.a ?? "");
       const b = this.byId.get(el.dataset.b ?? "");
       if (!a || !b) return;
-      this.edges.push({ id: el.dataset.e ?? "", kind: el.classList[1]?.replace("hc-e--", "") ?? "", el, a, b, p: 1, o: 1, order: num(el.dataset.order) });
+      this.edges.push({ id: el.dataset.e ?? "", kind: el.classList[1]?.replace("hc-e--", "") ?? "", el, a, b, p: 1, o: 1, order: num(el.dataset.order), written: { x1: "", y1: "", x2: "", y2: "", opacity: "", width: "" } });
     });
     svg.querySelectorAll<SVGCircleElement>("[data-ring]").forEach((el) => {
       const dash = (el.getAttribute("stroke-dasharray") ?? "100 0").split(/\s+/).map((part) => num(part));
@@ -90,30 +103,54 @@ export class LiveNet {
     return this.byId.get(id);
   }
 
+  /**
+   * Write the model back to the SVG. Values are rounded to a tenth of a unit
+   * and only written when they change, so a resting network costs nothing.
+   */
   render() {
     for (const node of this.nodes) {
-      const x = node.x + node.dx;
-      const y = node.y + node.dy;
-      node.el.setAttribute("transform", node.s === 1 ? `translate(${x.toFixed(2)} ${y.toFixed(2)})` : `translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${Math.max(node.s, 0.001).toFixed(3)})`);
-      node.el.setAttribute("opacity", node.o.toFixed(3));
+      const x = (node.x + node.dx).toFixed(1);
+      const y = (node.y + node.dy).toFixed(1);
+      const s = Math.max(node.s, 0.001);
+      const transform = Math.abs(s - 1) < 0.005 ? `translate(${x} ${y})` : `translate(${x} ${y}) scale(${s.toFixed(3)})`;
+      const opacity = node.o.toFixed(2);
+      set(node.el, "transform", transform, node.written, "transform");
+      set(node.el, "opacity", opacity, node.written, "opacity");
     }
     for (const edge of this.edges) {
       const ax = edge.a.x + edge.a.dx;
       const ay = edge.a.y + edge.a.dy;
       const bx = edge.b.x + edge.b.dx;
       const by = edge.b.y + edge.b.dy;
-      edge.el.setAttribute("x1", ax.toFixed(2));
-      edge.el.setAttribute("y1", ay.toFixed(2));
-      edge.el.setAttribute("x2", (ax + (bx - ax) * edge.p).toFixed(2));
-      edge.el.setAttribute("y2", (ay + (by - ay) * edge.p).toFixed(2));
+      const w = edge.written;
+      set(edge.el, "x1", ax.toFixed(1), w, "x1");
+      set(edge.el, "y1", ay.toFixed(1), w, "y1");
+      set(edge.el, "x2", (ax + (bx - ax) * edge.p).toFixed(1), w, "x2");
+      set(edge.el, "y2", (ay + (by - ay) * edge.p).toFixed(1), w, "y2");
       // An edge is only as visible as the fainter of its two ends.
-      edge.el.setAttribute("opacity", (edge.o * Math.min(edge.a.o, edge.b.o, 1) * (edge.p > 0.001 ? 1 : 0)).toFixed(3));
+      set(edge.el, "opacity", (edge.o * Math.min(edge.a.o, edge.b.o, 1) * (edge.p > 0.001 ? 1 : 0)).toFixed(2), w, "opacity");
+      const glow = Math.max(edge.a.glow, edge.b.glow);
+      set(edge.el, "stroke-width", glow > 0.02 ? (1 + glow * 1.6).toFixed(2) : "", w, "width");
+    }
+    const view = `${this.view.x.toFixed(1)} ${this.view.y.toFixed(1)} ${this.view.w.toFixed(1)} ${this.view.h.toFixed(1)}`;
+    if (view !== this.writtenView) {
+      this.writtenView = view;
+      this.svg.setAttribute("viewBox", view);
     }
     for (const ring of this.rings) {
-      ring.el.setAttribute("r", ring.r.toFixed(2));
+      ring.el.setAttribute("r", ring.r.toFixed(1));
       ring.el.setAttribute("stroke-dasharray", `${(100 - ring.gap * 100).toFixed(2)} ${(ring.gap * 100).toFixed(2)}`);
     }
   }
+}
+
+function set<K extends string>(el: SVGElement, attr: string, value: string, cache: Record<K, string>, key: K) {
+  if (cache[key] === value) return;
+  cache[key] = value;
+  // Stroke width is set in CSS, which outranks presentation attributes.
+  if (attr === "stroke-width") el.style.setProperty(attr, value);
+  else if (value === "") el.removeAttribute(attr);
+  else el.setAttribute(attr, value);
 }
 
 /** Runs `fn` on every frame only while `el` is on screen and the tab is visible. */

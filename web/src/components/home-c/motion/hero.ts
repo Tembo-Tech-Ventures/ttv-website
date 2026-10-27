@@ -1,20 +1,15 @@
 import { gsap } from "gsap";
 import { LiveNet, whileVisible } from "./net";
-import { riseWords } from "./reveal";
 import type { Conditions } from "./types";
 
-const fontsReady = () =>
-  Promise.race([
-    document.fonts.ready,
-    new Promise<void>((resolve) => {
-      window.setTimeout(resolve, 250);
-    }),
-  ]);
+/** Stop drifting after this long without the pointer moving; scrolling or touching wakes it. */
+const IDLE_MS = 10_000;
 
 /**
- * Hero: the four cohorts draw themselves in, then keep breathing. Fine
- * pointers pull nearby nodes gently towards the cursor; touch screens get a
- * slow autonomous drift instead.
+ * Hero network: the four cohorts draw themselves in, then keep breathing. The
+ * hero text never waits for this module (its rise is pure CSS). Fine pointers
+ * pull nearby nodes towards the cursor and brighten their links; touch
+ * screens get a slow autonomous drift at half the frame rate.
  */
 export function setupHero(root: HTMLElement, c: Conditions): () => void {
   const html = document.documentElement;
@@ -26,67 +21,80 @@ export function setupHero(root: HTMLElement, c: Conditions): () => void {
   }
 
   const net = new LiveNet(svg);
-  let disposed = false;
-  const timeline = gsap.timeline({ paused: true, onUpdate: () => net.render() });
+  const timeline = gsap.timeline({ onUpdate: () => net.render() });
 
   if (html.classList.contains("hc-intro")) {
     for (const node of net.nodes) node.s = 0;
     for (const edge of net.edges) edge.p = 0;
     net.render();
-    const fades = hero.querySelectorAll(".hc-hero__summary, .hc-hero__actions, .hc-fact");
-    gsap.set(fades, { autoAlpha: 0, y: 18 });
-    const h1 = hero.querySelector<HTMLElement>("h1");
-
-    const start = () => {
-      if (disposed) return;
-      if (h1) {
-        h1.classList.add("hc-revealing");
-        gsap.set(h1.querySelectorAll(".hc-w"), { yPercent: 118 });
-      }
-      html.classList.remove("hc-intro");
-      if (h1) timeline.add(riseWords(h1), 0);
-      timeline
-        .to(fades, { autoAlpha: 1, y: 0, duration: 0.55, ease: "power3.out", stagger: 0.05, clearProps: "opacity,visibility,transform" }, 0.22)
-        .to(net.nodes, { s: 1, duration: 0.45, ease: "back.out(2.2)", stagger: (_i: number, node: { order: number }) => node.order * 0.4 }, 0.05)
-        .to(net.edges, { p: 1, duration: 0.45, ease: "power2.out", stagger: (_i: number, edge: { order: number }) => 0.08 + edge.order * 0.4 }, 0.05);
-      timeline.play();
-    };
-    void fontsReady().then(start, start);
+    html.classList.remove("hc-intro");
+    timeline
+      .to(net.nodes, { s: 1, duration: 0.45, ease: "back.out(2.2)", stagger: (_i: number, node: { order: number }) => node.order * 0.4 }, 0.05)
+      .to(net.edges, { p: 1, duration: 0.45, ease: "power2.out", stagger: (_i: number, edge: { order: number }) => 0.08 + edge.order * 0.4 }, 0.05);
   }
 
   // Ambient drift and pointer attraction share one ticker.
   const pointer = { x: 0, y: 0, active: false };
   const amplitude = c.fine ? 2.5 : 5;
-  const radius = 130;
+  const radius = 190;
+  let frame = 0;
+  let lastActivity = performance.now();
+  let running = false;
   const tick = (time: number) => {
+    frame += 1;
+    if (!c.fine && frame % 2 === 1) return;
+    if (performance.now() - lastActivity > IDLE_MS && !pointer.active) {
+      stop();
+      return;
+    }
     for (const node of net.nodes) {
       let tx = Math.sin(time * 0.45 + node.seed) * amplitude;
       let ty = Math.cos(time * 0.38 + node.seed * 1.3) * amplitude;
+      let near = 0;
       if (pointer.active) {
         const ddx = pointer.x - node.x;
         const ddy = pointer.y - node.y;
         const d = Math.hypot(ddx, ddy);
         if (d < radius) {
-          const pull = (1 - d / radius) ** 2 * 0.38;
-          tx += ddx * pull;
-          ty += ddy * pull;
+          near = (1 - d / radius) ** 2;
+          tx += ddx * near * 0.7;
+          ty += ddy * near * 0.7;
         }
       }
-      node.dx += (tx - node.dx) * 0.08;
-      node.dy += (ty - node.dy) * 0.08;
+      node.dx += (tx - node.dx) * 0.1;
+      node.dy += (ty - node.dy) * 0.1;
+      node.glow += (near - node.glow) * 0.12;
+      node.s = 1 + node.glow * 0.6;
     }
     net.render();
   };
+  const start = () => {
+    if (running) return;
+    running = true;
+    svg.classList.remove("hc-paused");
+    gsap.ticker.add(tick);
+  };
+  const stop = () => {
+    if (!running) return;
+    running = false;
+    svg.classList.add("hc-paused");
+    gsap.ticker.remove(tick);
+  };
+  const wake = () => {
+    lastActivity = performance.now();
+    if (visible) start();
+  };
 
+  let visible = false;
   const stopVisible = whileVisible(
     svg,
     () => {
-      svg.classList.remove("hc-paused");
-      gsap.ticker.add(tick);
+      visible = true;
+      wake();
     },
     () => {
-      svg.classList.add("hc-paused");
-      gsap.ticker.remove(tick);
+      visible = false;
+      stop();
     },
   );
 
@@ -96,11 +104,10 @@ export function setupHero(root: HTMLElement, c: Conditions): () => void {
     const view = svg.viewBox.baseVal;
     // preserveAspectRatio "meet": one scale, centred.
     const scale = Math.min(box.width / view.width, box.height / view.height);
-    const offsetX = (box.width - view.width * scale) / 2;
-    const offsetY = (box.height - view.height * scale) / 2;
-    pointer.x = (event.clientX - box.left - offsetX) / scale;
-    pointer.y = (event.clientY - box.top - offsetY) / scale;
+    pointer.x = (event.clientX - box.left - (box.width - view.width * scale) / 2) / scale;
+    pointer.y = (event.clientY - box.top - (box.height - view.height * scale) / 2) / scale;
     pointer.active = true;
+    wake();
   };
   const onLeave = () => {
     pointer.active = false;
@@ -109,14 +116,17 @@ export function setupHero(root: HTMLElement, c: Conditions): () => void {
     hero.addEventListener("pointermove", onMove);
     hero.addEventListener("pointerleave", onLeave);
   }
+  window.addEventListener("scroll", wake, { passive: true });
+  window.addEventListener("touchstart", wake, { passive: true });
 
   return () => {
-    disposed = true;
     stopVisible();
+    stop();
     timeline.kill();
-    hero.querySelector("h1")?.classList.remove("hc-revealing");
     hero.removeEventListener("pointermove", onMove);
     hero.removeEventListener("pointerleave", onLeave);
+    window.removeEventListener("scroll", wake);
+    window.removeEventListener("touchstart", wake);
     html.classList.remove("hc-intro");
   };
 }

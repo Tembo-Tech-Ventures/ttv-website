@@ -23,13 +23,14 @@ const { builders, isAuthenticated } = Astro.props;
 ---
 
 <!--
-  Pre-hide the hero only when motion is allowed, before it paints, so the intro
-  never flashes. The timeout is a failsafe if the module never arrives.
+  Pre-hide the hero network (never the text) only when motion is allowed,
+  before it paints, so its draw-in never flashes. The timeout is a failsafe if
+  the module is slow to arrive.
 -->
 <script is:inline>
   if (window.matchMedia("(prefers-reduced-motion: no-preference)").matches) {
     document.documentElement.classList.add("hc-intro");
-    window.setTimeout(() => document.documentElement.classList.remove("hc-intro"), 2600);
+    window.setTimeout(() => document.documentElement.classList.remove("hc-intro"), 1200);
   }
 </script>
 

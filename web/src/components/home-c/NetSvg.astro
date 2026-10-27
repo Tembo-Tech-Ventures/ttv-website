@@ -17,11 +17,12 @@ interface Props {
 const { net, class: className = "", opacity = {}, name } = Astro.props;
 const at = new Map<string, NetNode>(net.nodes.map((node) => [node.id, node]));
 const diamond = (r: number) => `M0 ${-r}L${r} 0L0 ${r}L${-r} 0Z`;
+const view = net.view ?? { x: 0, y: 0, w: net.width, h: net.height };
 ---
 
 <svg
   class:list={["hc-net", className]}
-  viewBox={`0 0 ${net.width} ${net.height}`}
+  viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
   aria-hidden="true"
   focusable="false"
   data-hc-net={name}
@@ -92,7 +93,14 @@ const diamond = (r: number) => `M0 ${-r}L${r} 0L0 ${r}L${-r} 0Z`;
   </g>
   {
     net.labels.map((label) => (
-      <text class={`hc-label hc-label--${label.tone}`} x={label.x} y={label.y} text-anchor={label.anchor}>
+      <text
+        class={`hc-label hc-label--${label.tone}`}
+        data-from={label.from}
+        x={label.x}
+        y={label.y}
+        dy={label.tone === "quiet" ? "1.35em" : undefined}
+        text-anchor={label.anchor}
+      >
         {label.text}
       </text>
     ))

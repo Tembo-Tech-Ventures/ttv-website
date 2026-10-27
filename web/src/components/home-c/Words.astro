@@ -3,7 +3,9 @@ import { words } from "./text";
 
 /**
  * A heading's words, each in its own mask, rendered on the server so motion
- * never has to replace text nodes. The mask only clips while a reveal runs.
+ * never has to replace text nodes. The rise is a CSS animation (see
+ * home-c.css): `.hc-rise-load` plays at first paint without JS, `.hc-await` →
+ * `.hc-rise` is toggled on scroll. Masks only clip while a rise runs.
  */
 interface Props {
   text: string;
@@ -17,7 +19,7 @@ const list = words(text, accent);
 {
   list.map((word, i) => (
     <>
-      <span class="hc-wm">
+      <span class="hc-wm" style={`--i:${i}`}>
         <span class="hc-w">
           {word.map((segment) => (segment.accent ? <span class="hc-accent">{segment.text}</span> : segment.text))}
         </span>

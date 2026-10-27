@@ -24,55 +24,107 @@ const net = communityNetwork();
       </div>
     </div>
 
-    <div class="hc-community__stage">
-      <div class="hc-community__frame" data-role="all" data-hc-community-net>
-        <NetSvg net={net} name="community" class="hc-community__svg" />
+    <div class="hc-community__body">
+      <div class="hc-community__stage">
+        <div class="hc-community__frame" data-role="all" data-hc-community-net>
+          <NetSvg net={net} name="community" class="hc-community__svg" />
+          <ul class="hc-legend" role="list">
+            {
+              COMMUNITY.paths.map((path) => (
+                <li class="hc-legend__item">
+                  <span class={`hc-role__glyph hc-role__glyph--${path.id}`} aria-hidden="true" />
+                  {path.role}
+                </li>
+              ))
+            }
+          </ul>
+        </div>
       </div>
-    </div>
 
-    <ul class="hc-roles" role="list">
-      {
-        COMMUNITY.paths.map((path) => (
-          <li class="hc-role" data-role={path.id} data-hc-role data-hc-reveal>
-            <div class="hc-role__head">
-              <span class={`hc-role__glyph hc-role__glyph--${path.id}`} aria-hidden="true" />
-              <h3 class="hc-role__name">{path.role}</h3>
-            </div>
-            <p class="hc-role__promise">{path.promise}</p>
-            <p class="hc-role__detail">{path.detail}</p>
-            <TextLink href={path.href}>{path.cta}</TextLink>
-          </li>
-        ))
-      }
-    </ul>
+      <ul class="hc-roles" role="list">
+        {
+          COMMUNITY.paths.map((path) => (
+            <li class="hc-role" data-role={path.id} data-hc-role data-hc-reveal>
+              <h3 class="hc-role__name">
+                <button type="button" class="hc-role__toggle" aria-pressed="false" data-hc-role-toggle>
+                  <span class={`hc-role__glyph hc-role__glyph--${path.id}`} aria-hidden="true" />
+                  <span>{path.role}</span>
+                </button>
+              </h3>
+              <p class="hc-role__promise">{path.promise}</p>
+              <p class="hc-role__detail">{path.detail}</p>
+              <TextLink href={path.href}>{path.cta}</TextLink>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
   </div>
 </section>
 
 <style>
   .hc-community__grid {
     display: grid;
-    grid-template-areas: "intro" "stage" "roles";
     gap: clamp(2rem, 5vw, 3rem);
   }
 
   .hc-community__intro {
-    grid-area: intro;
     display: grid;
     justify-items: start;
     gap: 1.25rem;
   }
 
+  /* Phones: the diagram is a sticky band the role cards scroll under, so the
+     lit role is always in view beside its card. */
   .hc-community__stage {
-    grid-area: stage;
+    position: sticky;
+    top: var(--hc-nav);
+    z-index: 3;
+    height: 13.75rem;
+    margin-inline: calc(var(--hc-pad) * -1);
+    padding: 0.5rem var(--hc-pad) 1.5rem;
+    background: var(--hc-dark);
+    mask-image: linear-gradient(180deg, #000 82%, transparent);
+    box-sizing: border-box;
   }
 
   .hc-community__frame {
-    max-width: 34rem;
-    margin-inline: auto;
+    height: 100%;
+  }
+
+  .hc-community__frame :global(.hc-community__svg) {
+    height: 100%;
+  }
+
+  .hc-legend {
+    display: none;
+    list-style: none;
+    margin: 1rem 0 0;
+    padding: 0;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem 1.5rem;
+    color: var(--hc-ink-2);
+    font-size: 0.9rem;
+  }
+
+  .hc-legend__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+  }
+
+  .hc-legend .hc-role__glyph {
+    width: 0.7rem;
+    height: 0.7rem;
+  }
+
+  .hc-legend .hc-role__glyph--partner {
+    width: 0.6rem;
+    height: 0.6rem;
   }
 
   .hc-roles {
-    grid-area: roles;
     list-style: none;
     margin: 0;
     padding: 0;
@@ -98,12 +150,6 @@ const net = communityNetwork();
   .hc-role.is-lit {
     border-color: rgba(242, 141, 104, 0.6);
     background: rgba(6, 63, 58, 0.85);
-  }
-
-  .hc-role__head {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
   }
 
   .hc-role__glyph {
@@ -141,6 +187,31 @@ const net = communityNetwork();
     margin: 0;
     font-size: 1.25rem;
     line-height: 1.3;
+  }
+
+  .hc-role__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 2.75rem;
+    margin: -0.4rem -0.6rem;
+    padding: 0.4rem 0.9rem 0.4rem 0.6rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--hc-ink);
+    font: inherit;
+    cursor: pointer;
+    transition: border-color 300ms ease, background-color 300ms ease;
+  }
+
+  .hc-role__toggle:hover {
+    border-color: var(--hc-rule);
+  }
+
+  .hc-role__toggle[aria-pressed="true"] {
+    border-color: rgba(242, 141, 104, 0.6);
+    background: rgba(242, 141, 104, 0.12);
   }
 
   .hc-role__promise {
@@ -186,9 +257,38 @@ const net = communityNetwork();
     opacity: 0.6;
   }
 
-  @media (min-width: 640px) and (max-width: 1023px) {
-    .hc-roles {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Tablets and up: the diagram sits beside the cards and stays put. */
+  @media (min-width: 640px) {
+    .hc-community__body {
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+      gap: 2rem;
+      align-items: start;
+    }
+
+    .hc-community__stage {
+      position: relative;
+      top: auto;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background: none;
+      mask-image: none;
+    }
+
+    .hc-community__frame {
+      position: sticky;
+      top: calc(var(--hc-nav) + 1.5rem);
+      height: auto;
+    }
+
+    .hc-community__frame :global(.hc-community__svg) {
+      height: auto;
+      max-height: calc(100svh - var(--hc-nav) - 7rem);
+    }
+
+    .hc-legend {
+      display: flex;
     }
   }
 
@@ -201,19 +301,24 @@ const net = communityNetwork();
       row-gap: 2.5rem;
     }
 
+    .hc-community__body {
+      display: contents;
+    }
+
+    .hc-community__intro {
+      grid-area: intro;
+    }
+
     .hc-community__stage {
-      position: relative;
+      grid-area: stage;
+    }
+
+    .hc-roles {
+      grid-area: roles;
     }
 
     .hc-community__frame {
-      position: sticky;
       top: calc(var(--hc-nav) + 2rem);
-      max-width: none;
-      width: 100%;
-    }
-
-    .hc-community__frame :global(.hc-community__svg) {
-      max-height: calc(100svh - var(--hc-nav) - 4rem);
     }
   }
 </style>

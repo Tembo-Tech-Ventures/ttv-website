@@ -61,7 +61,7 @@ export function setupBuilders(root: HTMLElement, c: Conditions): () => void {
   /* ---------------------------------------------------------- entrance */
   if (c.motion && cards.length > 0) {
     const els = cards.map((card) => card.el);
-    gsap.set(els, { autoAlpha: 0, y: 40 });
+    gsap.set(els, { opacity: 0, y: 40 });
     els.forEach((el) => {
       gsap.set(el.querySelectorAll(".hc-sig__spoke, .hc-sig__arc"), { drawSVG: "0%" });
       gsap.set(el.querySelectorAll(".hc-sig__node"), { scale: 0, transformOrigin: "50% 50%" });
@@ -70,7 +70,7 @@ export function setupBuilders(root: HTMLElement, c: Conditions): () => void {
       start: "top 92%",
       once: true,
       onEnter: (batch) => {
-        gsap.to(batch, { autoAlpha: 1, y: 0, duration: 0.8, ease: "power3.out", stagger: 0.08, overwrite: true, clearProps: "opacity,visibility,transform" });
+        gsap.to(batch, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out", stagger: 0.08, overwrite: true, clearProps: "opacity,transform" });
         batch.forEach((el, i) => {
           const delay = 0.25 + i * 0.08;
           gsap.to(el.querySelectorAll(".hc-sig__spoke"), { drawSVG: "100%", duration: 0.6, ease: "power2.out", stagger: 0.08, delay });
@@ -226,6 +226,20 @@ export function setupBuilders(root: HTMLElement, c: Conditions): () => void {
       if (pinned) highlightTag(pinned);
       else clearMarks();
     });
+  });
+
+  // Each card's chips are one Tab stop; arrows move between them.
+  on(grid, "keydown", (event) => {
+    const key = (event as KeyboardEvent).key;
+    const chip = (event.target as HTMLElement).closest<HTMLButtonElement>(".hc-chip");
+    if (!chip || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(key)) return;
+    const chips = [...(chip.closest(".hc-chips")?.querySelectorAll<HTMLButtonElement>(".hc-chip") ?? [])];
+    const at = chips.indexOf(chip);
+    const next =
+      key === "Home" ? 0 : key === "End" ? chips.length - 1 : (at + (key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1) + chips.length) % chips.length;
+    event.preventDefault();
+    chips.forEach((other, i) => other.setAttribute("tabindex", i === next ? "0" : "-1"));
+    chips[next]?.focus();
   });
 
   on(section, "keydown", (event) => {

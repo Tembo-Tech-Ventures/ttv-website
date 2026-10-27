@@ -3,13 +3,23 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { LiveNet } from "./net";
 import type { Conditions } from "./types";
 
+interface View {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 interface Model {
   nodeStates: Record<string, Array<{ x: number; y: number; o: number }>>;
   edgeStates: Record<string, number[]>;
   ringStates: Array<Array<{ r: number; gap: number }>>;
+  views: View[];
 }
 
-/** Put a live network straight into one step's state. */
+const labelsOf = (net: LiveNet) => [...net.svg.querySelectorAll<SVGTextElement>("text[data-from]")];
+
+/** Put a live network straight into one step's state, camera included. */
 function applyStep(net: LiveNet, model: Model, step: number) {
   for (const node of net.nodes) {
     const state = model.nodeStates[node.id]?.[step];
@@ -21,13 +31,16 @@ function applyStep(net: LiveNet, model: Model, step: number) {
   }
   for (const edge of net.edges) edge.p = model.edgeStates[edge.id]?.[step] ?? 0;
   net.rings.forEach((ring, i) => Object.assign(ring, model.ringStates[i]?.[step] ?? {}));
+  Object.assign(net.view, model.views[step]);
+  for (const label of labelsOf(net)) label.style.opacity = Number(label.dataset.from) <= step ? "" : "0";
   net.render();
 }
 
 /**
- * The cohort rhythm. Wide screens scrub one sticky network through three
- * states as the steps pass. Reduced motion swaps states with a crossfade.
- * Narrow screens draw each step's own frame as it arrives.
+ * The cohort rhythm, seen from inside the running cohort. Wide screens scrub
+ * one sticky network through three states while a camera starts close on the
+ * ring and pulls back as mentors and the wider network arrive. Reduced motion
+ * swaps states with a crossfade. Narrow screens draw each step's own frame.
  */
 export function setupRhythm(root: HTMLElement, c: Conditions): () => void {
   const section = root.querySelector<HTMLElement>("[data-hc-rhythm]");
@@ -55,8 +68,8 @@ export function setupRhythm(root: HTMLElement, c: Conditions): () => void {
     steps.forEach((step, index) => {
       ScrollTrigger.create({
         trigger: step,
-        start: "top 58%",
-        end: "bottom 58%",
+        start: "top 60%",
+        end: "bottom 60%",
         toggleClass: "is-active",
         onToggle: (self) => {
           if (self.isActive) show(index);
@@ -72,12 +85,12 @@ export function setupRhythm(root: HTMLElement, c: Conditions): () => void {
 
     ScrollTrigger.create({
       trigger: list,
-      start: "top 50%",
-      end: "bottom 50%",
+      start: "top 55%",
+      end: "bottom 60%",
       onUpdate: (self) => list.style.setProperty("--hc-progress", self.progress.toFixed(4)),
     });
 
-    // Start from nothing: the first step builds the ring.
+    // Start from nothing, already framed on the ring: the first step builds it.
     applyStep(net, model, 0);
     for (const node of net.nodes) node.s = 0;
     for (const edge of net.edges) edge.p = 0;
@@ -87,21 +100,21 @@ export function setupRhythm(root: HTMLElement, c: Conditions): () => void {
     const staged = net.nodes.filter((node) => model.nodeStates[node.id]);
     const arriving = (step: number) =>
       net.edges.filter((edge) => model.edgeStates[edge.id]?.[step] === 1 && (step === 0 || model.edgeStates[edge.id]?.[step - 1] === 0));
+    const builders = staged.filter((node) => model.nodeStates[node.id][0].o > 0);
 
     const timeline = gsap.timeline({
       defaults: { ease: "power2.inOut" },
       onUpdate: () => net.render(),
-      scrollTrigger: { trigger: list, start: "top 60%", end: "bottom 70%", scrub: 0.8 },
+      scrollTrigger: { trigger: list, start: "top 75%", end: "bottom 65%", scrub: 0.7 },
     });
-
-    const builders = net.nodes.filter((node) => model.nodeStates[node.id][0].o > 0);
     timeline
-      .to(builders, { s: 1, duration: 0.45, ease: "back.out(2)", stagger: 0.06 }, 0)
-      .to(arriving(0), { p: 1, duration: 0.5, stagger: 0.04 }, 0.2)
-      .to(net.rings, { gap: 0, duration: 0.9 }, 0.1);
+      .to(builders, { s: 1, duration: 0.4, ease: "back.out(2)", stagger: 0.05 }, 0)
+      .to(arriving(0), { p: 1, duration: 0.45, stagger: 0.035 }, 0.15)
+      .to(net.rings, { gap: 0, duration: 0.8 }, 0.05);
 
     ([1, 2] as const).forEach((step) => {
-      const at = step === 1 ? 1.3 : 2.9;
+      const at = step === 1 ? 1.2 : 2.6;
+      timeline.to(net.view, { ...model.views[step], duration: 1 }, at);
       for (const node of staged) {
         const state = model.nodeStates[node.id][step];
         timeline.to(node, { x: state.x, y: state.y, o: state.o, s: 1, duration: 0.9 }, at + node.order * 0.1);
@@ -110,12 +123,15 @@ export function setupRhythm(root: HTMLElement, c: Conditions): () => void {
       net.rings.forEach((ring, i) => {
         timeline.to(ring, { ...model.ringStates[i][step], duration: 0.9 }, at);
       });
+      const labels = labelsOf(net).filter((label) => Number(label.dataset.from) === step);
+      timeline.fromTo(labels, { opacity: 0 }, { opacity: 1, duration: 0.4, immediateRender: false }, at + 0.6);
     });
-    timeline.to({}, { duration: 0.7 }, 3.9);
+    timeline.to({}, { duration: 0.5 }, 3.6);
 
     return () => {
       list.style.removeProperty("--hc-progress");
       applyStep(net, model, 2);
+      for (const label of labelsOf(net)) label.style.opacity = "";
     };
   }
 
@@ -132,7 +148,7 @@ export function setupRhythm(root: HTMLElement, c: Conditions): () => void {
     net.render();
     ScrollTrigger.create({
       trigger: net.svg,
-      start: "top 82%",
+      start: "top 85%",
       once: true,
       onEnter: () => {
         gsap.timeline({ onUpdate: () => net.render() })

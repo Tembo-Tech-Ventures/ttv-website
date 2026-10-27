@@ -60,9 +60,9 @@ const meta = formatCohortLocation(builder.cohort, builder.country);
   {
     builder.skills.length > 0 && (
       <ul class="hc-chips" role="list">
-        {builder.skills.map((skill) => (
+        {builder.skills.map((skill, i) => (
           <li>
-            <button type="button" class="hc-chip" data-tag={tagKey(skill)} aria-pressed="false">
+            <button type="button" class="hc-chip" data-tag={tagKey(skill)} aria-pressed="false" tabindex={i === 0 ? 0 : -1}>
               {skill}
             </button>
           </li>
@@ -101,8 +101,10 @@ const meta = formatCohortLocation(builder.cohort, builder.country);
     border-color: rgba(242, 141, 104, 0.45);
   }
 
+  /* Unrelated cards step back without dropping their text below 4.5:1. */
   :global(.hc-builders.has-focus) .hc-card:not(.is-source):not(.is-linked) {
-    opacity: 0.62;
+    opacity: 0.8;
+    filter: saturate(0.4);
   }
 
   .hc-card__head {
@@ -290,6 +292,13 @@ const meta = formatCohortLocation(builder.cohort, builder.country);
       background-color 250ms ease,
       color 250ms ease,
       border-color 250ms ease;
+  }
+
+  /* 32 px to look at, 44 px to hit. */
+  .hc-chip::after {
+    content: "";
+    position: absolute;
+    inset: -6px -2px;
   }
 
   .hc-chip:hover {
