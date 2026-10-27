@@ -18,14 +18,17 @@ export function setupPrinciples(root: HTMLElement, c: Conditions): () => void {
     triggers.push(
       ScrollTrigger.create({
         trigger: row,
-        start: "top 58%",
-        end: "bottom 42%",
+        // Rows are contiguous, so a zero-height line makes exactly one current.
+        start: "top 50%",
+        end: "bottom 50%",
         toggleClass: "is-current",
       }),
     );
   });
 
   if (c.motion) {
+    // Rows that arrive together cascade 120 ms apart, top to bottom.
+    let next = 0;
     rows.forEach((row) => {
       const ink = row.querySelector<HTMLElement>(".hc-principle__ink");
       const commitment = row.querySelector<HTMLElement>("[data-hc-commitment]");
@@ -39,14 +42,17 @@ export function setupPrinciples(root: HTMLElement, c: Conditions): () => void {
           start: "top 90%",
           once: true,
           onEnter: () => {
+            const now = gsap.ticker.time;
+            const delay = Math.max(0, next - now);
+            next = now + delay + 0.12;
             // The clip goes the moment the outline is whole; the caret fades after.
-            gsap.timeline({ onComplete: () => row.classList.remove("hc-caret-on") })
+            gsap.timeline({ delay, onComplete: () => row.classList.remove("hc-caret-on") })
               .add(() => row.classList.add("hc-caret-on"))
               .set(ink, { "--hc-caret": 1 })
-              .to(ink, { "--hc-wipe": "0%", duration: 0.55, ease: "power3.inOut" })
+              .to(ink, { "--hc-wipe": "0%", duration: 0.5, ease: "power3.inOut" })
               .add(() => row.classList.remove("hc-wiping"))
               .to(ink, { "--hc-caret": 0, duration: 0.25 });
-            if (commitment) gsap.to(commitment, { opacity: 1, y: 0, duration: 0.6, delay: 0.25, ease: "power3.out", clearProps: "opacity,transform" });
+            if (commitment) gsap.to(commitment, { opacity: 1, y: 0, duration: 0.6, delay: delay + 0.25, ease: "power3.out", clearProps: "opacity,transform" });
           },
         }),
       );

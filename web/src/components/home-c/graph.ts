@@ -462,7 +462,7 @@ export function atStep(net: StagedNet, step: number): Net & { opacity: Record<st
  * The open community around the cohorts: builders, mentors and partners each
  * plug in differently. Highlighting a role lights its nodes and edges.
  */
-export function communityNetwork(): Net {
+export function communityNetwork(layout: "square" | "wide" = "square"): Net {
   const rand = seeded(7331);
   const width = 560;
   const height = 560;
@@ -520,6 +520,16 @@ export function communityNetwork(): Net {
       edges.push({ id: `pe${i}-${j}`, a: id, b: target, kind: "partner", order: 0 });
     });
   });
+
+  // Phones show the network in a wide band: stretch the community around the
+  // cohorts (never the cohorts' own ring) to about 2.1:1 so it fills the band.
+  if (layout === "wide") {
+    for (const node of nodes) {
+      if (node.id.startsWith("k")) continue;
+      node.x = c.x + (node.x - c.x) * 1.85;
+      node.y = c.y + (node.y - c.y) * 0.86;
+    }
+  }
 
   const rings: NetRing[] = [{ cx: c.x, cy: c.y, r: 62, gap: 0, tone: "peach" }];
   return fitToContent(withOrder({ width, height, nodes, edges, labels: [], rings }, c), 6);

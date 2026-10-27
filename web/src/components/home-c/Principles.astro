@@ -114,10 +114,17 @@ const widest = Math.max(...words.map((word) => word.width));
     transition: fill 450ms ease;
   }
 
-  /* One word at a time takes the solid fill: the one being read (or hovered). */
+  /*
+   * Exactly one word is solid at a time: the one crossing the middle of the
+   * screen. Hovering another row moves that single fill rather than adding one.
+   */
   .hc-principle:hover .hc-principle__text,
   :global(.hc-principle.is-current) .hc-principle__text {
     fill: var(--hc-peach);
+  }
+
+  .hc-principles__list:hover .hc-principle:not(:hover) .hc-principle__text {
+    fill: transparent;
   }
 
   /* The wipe (motion only): the finished outline is uncovered left to right,

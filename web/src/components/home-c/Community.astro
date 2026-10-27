@@ -11,7 +11,8 @@ interface Props {
 }
 
 const { isAuthenticated } = Astro.props;
-const net = communityNetwork();
+const net = communityNetwork("square");
+const wideNet = communityNetwork("wide");
 ---
 
 <section id="community" class="hc-section hc-community" aria-labelledby="hc-community-title" data-hc-community>
@@ -28,7 +29,8 @@ const net = communityNetwork();
       <div class="hc-community__stage">
         <div class="hc-community__frame" data-role="all" data-hc-community-net>
           <div class="hc-community__art">
-            <NetSvg net={net} name="community" class="hc-community__svg" />
+            <NetSvg net={net} name="community" class="hc-community__svg hc-community__svg--square" />
+            <NetSvg net={wideNet} name="community" class="hc-community__svg hc-community__svg--wide" />
           </div>
           <!-- The legend is the control: each shape's pill pins its role. -->
           <div class="hc-legend">
@@ -85,7 +87,8 @@ const net = communityNetwork();
     margin-inline: calc(var(--hc-pad) * -1);
     padding: 0.5rem var(--hc-pad) 1.5rem;
     background: var(--hc-dark);
-    mask-image: linear-gradient(180deg, #000 82%, transparent);
+    /* Fade only below the pills, so nothing shows through between them. */
+    mask-image: linear-gradient(180deg, #000 calc(100% - 1.25rem), transparent);
     box-sizing: border-box;
   }
 
@@ -102,6 +105,20 @@ const net = communityNetwork();
 
   .hc-community__frame :global(.hc-community__svg) {
     height: 100%;
+  }
+
+  .hc-community__frame :global(.hc-community__svg--square) {
+    display: none;
+  }
+
+  /* The band's camera moves in: keep the drawing inside the band. */
+  .hc-community__frame :global(.hc-community__svg--wide) {
+    overflow: hidden;
+  }
+
+  .hc-legend__pill.is-lit {
+    border-color: rgba(242, 141, 104, 0.6);
+    background: rgba(242, 141, 104, 0.1);
   }
 
   .hc-legend {
@@ -263,6 +280,15 @@ const net = communityNetwork();
   }
 
   /* Tablets and up: the diagram sits beside the cards and stays put. */
+  /* Tablets: a tidy left-aligned column of pills under the drawing. */
+  @media (min-width: 640px) and (max-width: 1023px) {
+    .hc-legend {
+      display: grid;
+      justify-items: start;
+      justify-content: start;
+    }
+  }
+
   @media (min-width: 640px) {
     .hc-community__body {
       display: grid;
@@ -290,6 +316,14 @@ const net = communityNetwork();
     .hc-community__frame :global(.hc-community__svg) {
       height: auto;
       max-height: calc(100svh - var(--hc-nav) - 8rem);
+    }
+
+    .hc-community__frame :global(.hc-community__svg--square) {
+      display: block;
+    }
+
+    .hc-community__frame :global(.hc-community__svg--wide) {
+      display: none;
     }
 
     .hc-legend {

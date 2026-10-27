@@ -25,7 +25,7 @@ const CYCLE_MS = 4000;
 export function setupCommunity(root: HTMLElement, c: Conditions): () => void {
   const section = root.querySelector<HTMLElement>("[data-hc-community]");
   const frame = section?.querySelector<HTMLElement>("[data-hc-community-net]");
-  const svg = frame?.querySelector<SVGSVGElement>("svg");
+  const svg = frame?.querySelector<SVGSVGElement>(c.narrow ? ".hc-community__svg--wide" : ".hc-community__svg--square");
   if (!section || !frame || !svg) return () => {};
   const cards = [...section.querySelectorAll<HTMLElement>("[data-hc-role]")];
   const toggles = [...frame.querySelectorAll<HTMLButtonElement>("[data-hc-role-toggle]")];
@@ -38,27 +38,29 @@ export function setupCommunity(root: HTMLElement, c: Conditions): () => void {
    */
   const viewFor = (role: Role) => {
     if (role === "all") return fullView;
-    const ids = new Set(net.nodes.filter((node) => node.kind === role).map((node) => node.id));
-    for (const edge of net.edges) {
-      if (edge.kind !== EDGE_FOR[role]) continue;
-      ids.add(edge.a.id);
-      ids.add(edge.b.id);
-    }
-    const nodes = net.nodes.filter((node) => ids.has(node.id));
+    const nodes = net.nodes.filter((node) => node.kind === role);
     if (nodes.length === 0) return fullView;
-    let minX = Math.min(...nodes.map((n) => n.x)) - 14;
-    let maxX = Math.max(...nodes.map((n) => n.x)) + 14;
-    let minY = Math.min(...nodes.map((n) => n.y)) - 14;
-    let maxY = Math.max(...nodes.map((n) => n.y)) + 14;
-    const box = svg.getBoundingClientRect();
-    const aspect = box.width && box.height ? box.width / box.height : 1;
-    const grow = (maxX - minX) / (maxY - minY) > aspect ? ((maxX - minX) / aspect - (maxY - minY)) / 2 : 0;
-    const widen = (maxX - minX) / (maxY - minY) < aspect ? ((maxY - minY) * aspect - (maxX - minX)) / 2 : 0;
-    minY -= grow;
-    maxY += grow;
-    minX -= widen;
-    maxX += widen;
-    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+    // Move in at least 1.6x. Where the role is spread out (partners sit on the
+    // rim), frame the window that holds the most of it; neighbours may crop.
+    const spanX = Math.max(...nodes.map((n) => n.x)) - Math.min(...nodes.map((n) => n.x)) + 60;
+    const spanY = Math.max(...nodes.map((n) => n.y)) - Math.min(...nodes.map((n) => n.y)) + 60;
+    const zoom = Math.max(1.6, Math.min(fullView.w / spanX, fullView.h / spanY));
+    const w = fullView.w / zoom;
+    const h = fullView.h / zoom;
+    const place = (cx: number, cy: number) => ({
+      x: Math.min(Math.max(cx - w / 2, fullView.x), fullView.x + fullView.w - w),
+      y: Math.min(Math.max(cy - h / 2, fullView.y), fullView.y + fullView.h - h),
+      w,
+      h,
+    });
+    const inside = (view: { x: number; y: number }, n: { x: number; y: number }) =>
+      n.x > view.x + 10 && n.x < view.x + w - 10 && n.y > view.y + 10 && n.y < view.y + h - 10;
+    const mid = { x: fullView.x + fullView.w / 2, y: fullView.y + fullView.h / 2 };
+    const candidates = [
+      place(nodes.reduce((s, n) => s + n.x, 0) / nodes.length, nodes.reduce((s, n) => s + n.y, 0) / nodes.length),
+      ...nodes.map((n) => place((n.x + mid.x) / 2, (n.y + mid.y) / 2)),
+    ];
+    return candidates.reduce((best, view) => (nodes.filter((n) => inside(view, n)).length > nodes.filter((n) => inside(best, n)).length ? view : best));
   };
   const frameRole = (role: Role) => {
     if (!c.narrow) return;
@@ -86,6 +88,7 @@ export function setupCommunity(root: HTMLElement, c: Conditions): () => void {
     current = role;
     frame.dataset.role = role;
     cards.forEach((card) => card.classList.toggle("is-lit", card.dataset.role === role));
+    toggles.forEach((toggle) => toggle.classList.toggle("is-lit", toggle.dataset.role === role));
     frameRole(role);
     if (!c.motion || role === "all") return;
     const lines = net.edges.filter((edge) => edge.kind === EDGE_FOR[role]).map((edge) => edge.el);
@@ -138,6 +141,23 @@ export function setupCommunity(root: HTMLElement, c: Conditions): () => void {
       syncToggles();
       sync();
     });
+    // Focusing (or hovering) a pill previews its role and ends the intro pass.
+    const enter = () => {
+      interact();
+      preview = role;
+      sync();
+    };
+    const leave = () => {
+      if (preview !== role) return;
+      preview = null;
+      sync();
+    };
+    on(toggle, "focusin", enter);
+    on(toggle, "focusout", leave);
+    if (c.fine) {
+      on(toggle, "pointerenter", enter);
+      on(toggle, "pointerleave", leave);
+    }
   });
 
   /* ------------------------------------------- hover and focus preview */
@@ -166,7 +186,14 @@ export function setupCommunity(root: HTMLElement, c: Conditions): () => void {
 
   /* ------------------------------------- touch: the card being read */
   let observer: IntersectionObserver | null = null;
-  if (!c.fine) {
+  const stage = section.querySelector<HTMLElement>(".hc-community__stage");
+  const watchReading = () => {
+    observer?.disconnect();
+    // The reading line: a 152 px zone just under the sticky band on phones,
+    // the middle of the screen elsewhere.
+    const bandBottom = c.narrow && stage ? Number.parseFloat(getComputedStyle(stage).top) + stage.offsetHeight : window.innerHeight * 0.45;
+    const top = Math.round(bandBottom + 8);
+    const bottom = Math.max(0, Math.round(window.innerHeight - bandBottom - 160));
     observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -176,10 +203,13 @@ export function setupCommunity(root: HTMLElement, c: Conditions): () => void {
         }
         sync();
       },
-      // The reading zone sits below the sticky diagram band on phones.
-      { rootMargin: "-55% 0px -30% 0px" },
+      { rootMargin: `-${top}px 0px -${bottom}px 0px` },
     );
     cards.forEach((card) => observer?.observe(card));
+  };
+  if (!c.fine) {
+    watchReading();
+    on(window, "resize", watchReading);
   }
 
   /* ---------------------------------------------------- arrival draw */
@@ -214,5 +244,6 @@ export function setupCommunity(root: HTMLElement, c: Conditions): () => void {
     current = "all";
     frame.dataset.role = "all";
     cards.forEach((card) => card.classList.remove("is-lit"));
+    toggles.forEach((toggle) => toggle.classList.remove("is-lit"));
   };
 }
