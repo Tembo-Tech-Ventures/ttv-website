@@ -41,7 +41,7 @@ const skills = [
     {
       skills.length > 0 && (
         <div class="marquee" aria-hidden="true">
-          <div class="marquee-track">
+          <div class="marquee-track" data-ha-loop>
             {[0, 1].map(() => (
               <span class="marquee-run">
                 {skills.map((skill) => (

@@ -4,16 +4,18 @@ import { DESKTOP, MOTION, all } from "./shared";
 /**
  * The builder gallery. Everywhere it is a native swipe track whose progress
  * meter and step buttons follow the scroll position. On large screens with
- * motion allowed the stage (track and meter only) is pinned instead, vertical
- * scroll drives the track, and the heading slides away as the cards take over.
+ * motion allowed it is pinned instead and vertical scroll drives the track:
+ * the heading and cards together when the window is tall enough (the heading
+ * slides away as the gallery ends), otherwise the stage alone.
  */
 export function initBuilders(root: HTMLElement, media: gsap.MatchMedia): void {
   const section = root.querySelector<HTMLElement>("[data-ha-builders]");
   const head = section?.querySelector<HTMLElement>("[data-ha-head]");
+  const frame = section?.querySelector<HTMLElement>("[data-ha-frame]");
   const pin = section?.querySelector<HTMLElement>("[data-ha-pin]");
   const viewport = section?.querySelector<HTMLElement>("[data-ha-viewport]");
   const track = section?.querySelector<HTMLElement>("[data-ha-track]");
-  if (!section || !head || !pin || !viewport || !track) return;
+  if (!section || !head || !frame || !pin || !viewport || !track) return;
 
   const slides = all(track, ".slide");
   const bar = section.querySelector<HTMLElement>("[data-ha-bar]");
@@ -27,11 +29,12 @@ export function initBuilders(root: HTMLElement, media: gsap.MatchMedia): void {
     rights = slides.map((slide) => slide.offsetLeft + slide.offsetWidth);
   };
 
-  // The counter reads "how many builders you have seen": cards fully in view.
-  const setProgress = (progress: number, scrolled: number, visible: number) => {
-    const seen = rights.filter((right) => right <= scrolled + visible + 4).length;
-    if (bar) bar.style.transform = `scaleX(${Math.max(Math.min(1, Math.max(0, progress)), 0.06)})`;
-    if (indexNode instanceof Text) indexNode.data = String(Math.max(1, seen)).padStart(2, "0");
+  // The counter and the bar say the same thing: how many builders you have
+  // seen, counting up to the right-most card fully in view.
+  const setProgress = (scrolled: number, visible: number) => {
+    const seen = Math.max(1, rights.filter((right) => right <= scrolled + visible + 4).length);
+    if (bar) bar.style.transform = `scaleX(${seen / slides.length})`;
+    if (indexNode instanceof Text) indexNode.data = String(seen).padStart(2, "0");
   };
 
   // Native track: meter and buttons follow scrollLeft.
@@ -39,7 +42,7 @@ export function initBuilders(root: HTMLElement, media: gsap.MatchMedia): void {
   const onTrackScroll = () => {
     if (section.classList.contains("is-pinned")) return;
     const max = nativeMax();
-    setProgress(max > 0 ? track.scrollLeft / max : 0, track.scrollLeft, track.clientWidth);
+    setProgress(track.scrollLeft, track.clientWidth);
     const [previous, next] = steps;
     if (previous) previous.disabled = track.scrollLeft <= 2;
     if (next) next.disabled = track.scrollLeft >= max - 2;
@@ -62,13 +65,16 @@ export function initBuilders(root: HTMLElement, media: gsap.MatchMedia): void {
     });
   }
 
-  // Only the stage is pinned, so it fits 1366x768 and real 1440x900 windows.
   media.add(`${DESKTOP} and (min-height: 600px) and ${MOTION}`, () => {
     const navHeight = () => document.querySelector<HTMLElement>("body header")?.offsetHeight ?? 0;
     section.classList.add("is-pinned");
     cacheEdges();
     const distance = () => track.offsetWidth - viewport.clientWidth;
-    if (distance() <= 0 || pin.offsetHeight > window.innerHeight - navHeight() - 16) {
+    const free = window.innerHeight - navHeight();
+    // Heading and cards together when they fit; the stage alone on short windows.
+    const withHead = frame.offsetHeight + 32 <= free;
+    const target = withHead ? frame : pin;
+    if (distance() <= 0 || pin.offsetHeight > free - 16) {
       section.classList.remove("is-pinned");
       measure();
       return undefined;
@@ -77,13 +83,12 @@ export function initBuilders(root: HTMLElement, media: gsap.MatchMedia): void {
     track.scrollLeft = 0;
 
     const timeline = gsap.timeline({
-      onUpdate(this: gsap.core.Timeline) {
-        const travelled = distance() * this.progress();
-        setProgress(this.progress(), travelled, viewport.clientWidth);
+      onUpdate() {
+        setProgress(-Number(gsap.getProperty(track, "x")), viewport.clientWidth);
       },
       scrollTrigger: {
-        trigger: pin,
-        // Centre the stage in the space under the nav.
+        trigger: target,
+        // Centre the pinned block in the space under the nav.
         start: () => `center ${navHeight() + (window.innerHeight - navHeight()) / 2}`,
         end: () => `+=${distance()}`,
         pin: true,
@@ -93,8 +98,8 @@ export function initBuilders(root: HTMLElement, media: gsap.MatchMedia): void {
       },
     });
     timeline.to(track, { x: () => -distance(), ease: "none", duration: 1 }, 0);
-    // The heading drifts left and recedes as the cards take the frame.
-    timeline.to(head, { xPercent: -8, opacity: 0.35, ease: "power1.in", duration: 0.3 }, 0);
+    // As the gallery reaches its end tile, the heading drifts left and recedes.
+    if (withHead) timeline.to(head, { xPercent: -6, opacity: 0.4, ease: "power1.in", duration: 0.2 }, 0.8);
 
     // Tabbing to an off-screen card scrolls the page to the point where it is in view.
     const onFocus = (event: FocusEvent) => {
@@ -107,7 +112,7 @@ export function initBuilders(root: HTMLElement, media: gsap.MatchMedia): void {
       window.scrollTo({ top: trigger.start + progress * (trigger.end - trigger.start), behavior: "instant" });
     };
     track.addEventListener("focusin", onFocus);
-    setProgress(0, 0, viewport.clientWidth);
+    setProgress(0, viewport.clientWidth);
 
     return () => {
       track.removeEventListener("focusin", onFocus);

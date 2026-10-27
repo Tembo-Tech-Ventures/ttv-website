@@ -1,5 +1,6 @@
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { initAmbient } from "./ambient";
 import { initBuilders } from "./builders";
 import { countHeroFacts, initCohortMotion } from "./cohort";
 import { initPointer } from "./pointer";
@@ -12,6 +13,8 @@ export function initHomeA(): void {
   const root = document.querySelector<HTMLElement>("[data-ha-root]");
   if (!root) return;
   gsap.registerPlugin(ScrollTrigger);
+
+  initAmbient(root);
 
   // The hero intro itself is pure CSS (home-a.css); script only counts the first fact.
   countHeroFacts(root);

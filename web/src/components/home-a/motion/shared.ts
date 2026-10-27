@@ -37,7 +37,8 @@ export function countUp(element: HTMLElement, delay = 0): void {
   if (!match) return;
   const [, prefix, digits, suffix] = match;
   const target = Number(digits);
-  const counter = { value: 0 };
+  // Start at 70% of the real value, so no early frame reads as a false fact.
+  const counter = { value: Math.round(target * 0.7) };
   const render = () => {
     node.data = `${prefix}${String(Math.round(counter.value)).padStart(digits.length, "0")}${suffix}`;
   };

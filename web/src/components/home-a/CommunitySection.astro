@@ -33,7 +33,7 @@ const { isAuthenticated } = Astro.props;
         COMMUNITY.paths.map((path) => (
           <li class="item">
             <span class="item-rule" aria-hidden="true" data-ha-rule />
-            <a class="path ha-grid" href={path.href}>
+            <a class="path ha-grid" href={path.href} data-ha-press>
               <span class="wipe" aria-hidden="true" />
               <h3 class="role">{path.role}</h3>
               <span class="copy">
@@ -211,12 +211,14 @@ const { isAuthenticated } = Astro.props;
 
   .path:hover .wipe,
   .path:focus-visible .wipe,
-  .path:active .wipe {
+  .path:active .wipe,
+  .path.is-pressed .wipe {
     transform: scaleY(1);
   }
 
-  /* Touch has no hover: answer the tap itself, quickly. */
-  .path:active .wipe {
+  /* Touch has no hover: answer the press itself, quickly (see motion/ambient.ts). */
+  .path:active .wipe,
+  .path.is-pressed .wipe {
     transition-duration: 200ms;
   }
 
@@ -236,17 +238,23 @@ const { isAuthenticated } = Astro.props;
   .path:active .role,
   .path:active .promise,
   .path:active .cta,
-  .path:active .detail {
+  .path:active .detail,
+  .path.is-pressed .role,
+  .path.is-pressed .promise,
+  .path.is-pressed .cta,
+  .path.is-pressed .detail {
     color: var(--ha-dark);
   }
 
   .path:hover .detail::before,
-  .path:focus-visible .detail::before {
+  .path:focus-visible .detail::before,
+  .path.is-pressed .detail::before {
     background: var(--ha-dark);
   }
 
   .path:hover .cta-icon :global(svg),
-  .path:focus-visible .cta-icon :global(svg) {
+  .path:focus-visible .cta-icon :global(svg),
+  .path.is-pressed .cta-icon :global(svg) {
     transform: rotate(0deg);
   }
 

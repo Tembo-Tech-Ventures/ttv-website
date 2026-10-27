@@ -41,7 +41,10 @@ export function initCohortMotion(root: HTMLElement, media: gsap.MatchMedia): voi
     const shear = gsap.timeline({
       scrollTrigger: { trigger: hero, start: "top top", end: "bottom top", scrub: 0.4, invalidateOnRefresh: true },
     });
-    byLine(all(title, ".ha-w")).forEach((line, index) => {
+    // Group by the inner word spans (their masks' positions), then move the masks:
+    // the CSS intro owns the inner spans' transforms.
+    const lines = byLine(all(title, ".ha-wi")).map((line) => line.map((word) => word.parentElement ?? word));
+    lines.forEach((line, index) => {
       shear.to(line, { x: () => (index % 2 === 0 ? -1 : 1) * window.innerWidth * 0.06, ease: "none" }, 0);
     });
   });
@@ -61,29 +64,42 @@ export function initCohortMotion(root: HTMLElement, media: gsap.MatchMedia): voi
       const to = offsetWithin(slot, section);
       return { x: to.x - from.x, y: to.y - from.y, scale: slot.offsetHeight / liveNum.offsetHeight };
     };
+    let landed = false;
+    let drain = 0;
+    const land = (progress: number) => {
+      const now = progress >= 0.96;
+      if (now === landed) return;
+      landed = now;
+      window.clearTimeout(drain);
+      slot.classList.toggle("is-landed", now);
+      if (now) drain = window.setTimeout(() => slot.classList.remove("is-landed"), 420);
+    };
     gsap.set(lineRules, { scaleX: 0 });
     // Completed numerals start empty while the strip assembles (see CohortSection's CSS).
     strip.classList.add("is-assembling");
     gsap.set(slot, { opacity: 0 });
     const travel = gsap.timeline({
       defaults: { ease: "none" },
+      onUpdate(this: gsap.core.Timeline) {
+        land(this.progress());
+      },
       scrollTrigger: {
         trigger: hero,
         start: () => `top ${navHeight()}`,
         endTrigger: strip,
-        end: "top 55%",
+        end: "top 40%",
         scrub: 0.6,
         invalidateOnRefresh: true,
       },
     });
-    // It shrinks early, sinks to a faint ghost while it passes behind the
-    // facts (never over readable text), and comes back to full strength to land.
+    // It shrinks early, dims a little only while it passes behind the facts,
+    // and lands at full strength with a fill that drains away again.
     travel
-      .to(liveTag, { opacity: 0, y: -16, duration: 0.15 }, 0)
+      .to(liveTag, { opacity: 0, y: 16, duration: 0.15 }, 0)
       .to(liveNum, { x: () => delta().x, y: () => delta().y, ease: "power1.inOut", duration: 1 }, 0)
-      .to(liveNum, { scale: () => delta().scale, ease: "power2.out", duration: 0.4 }, 0)
-      .to(liveNum, { opacity: 0.1, duration: 0.12 }, 0.1)
-      .to(liveNum, { opacity: 1, duration: 0.14 }, 0.74)
+      .to(liveNum, { scale: () => delta().scale, ease: "power2.out", duration: 0.45 }, 0)
+      .to(liveNum, { opacity: 0.28, duration: 0.08 }, 0.3)
+      .to(liveNum, { opacity: 1, duration: 0.07 }, 0.55)
       .to(slot, { opacity: 1, duration: 0.04 }, 0.96)
       .to(liveNum, { opacity: 0, duration: 0.04 }, 0.96)
       .to(lineRules, { scaleX: 1, stagger: 0.12, duration: 0.3 }, 0.4)
@@ -93,7 +109,11 @@ export function initCohortMotion(root: HTMLElement, media: gsap.MatchMedia): voi
         { "--ha-fill": "100%", stagger: 0.12, duration: 0.3, immediateRender: false },
         0.45,
       );
-    return () => strip.classList.remove("is-assembling");
+    return () => {
+      window.clearTimeout(drain);
+      slot.classList.remove("is-landed");
+      strip.classList.remove("is-assembling");
+    };
   });
 
   media.add(`(max-width: 1023.98px) and ${MOTION}`, () => {

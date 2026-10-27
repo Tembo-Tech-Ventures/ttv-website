@@ -22,14 +22,16 @@ const running = COHORT.timeline.find((cohort) => cohort.running) ?? COHORT.timel
       {
         running && (
           <div class="live" aria-hidden="true" data-ha-live>
-            <span class="live-tag" data-ha-live-tag>
-              <span class="live-scan" />
+            <span class="live-num" data-ha-live-num>{running.number}</span>
+            <span class="live-caption" data-ha-live-tag>
+              <span class="live-scan" data-ha-loop>
+                <span class="glint" />
+              </span>
               <span class="live-label">
-                <span class="pulse" />
-                {running.label} · {running.status}
+                <span class="pulse" data-ha-loop />
+                {running.status}
               </span>
             </span>
-            <span class="live-num" data-ha-live-num>{running.number}</span>
           </div>
         )
       }
@@ -40,9 +42,9 @@ const running = COHORT.timeline.find((cohort) => cohort.running) ?? COHORT.timel
         <p class="ha-lead lead">{COHORT.summary}</p>
         <div class="actions">
           <Pill href={COHORT.apply.href} label={COHORT.apply.label} />
+          <p class="eligibility">{COHORT.eligibility}</p>
           <TextLink href={COHORT.secondary.href} label={COHORT.secondary.label} />
         </div>
-        <p class="eligibility">{COHORT.eligibility}</p>
       </div>
 
       <ul class="facts ha-hero-rise" style="--r: 1">
@@ -63,12 +65,14 @@ const running = COHORT.timeline.find((cohort) => cohort.running) ?? COHORT.timel
       {
         COHORT.timeline.map((cohort) => (
           <li class:list={["cohort", cohort.running ? "is-live" : "is-done"]}>
-            <span class="cohort-line" aria-hidden="true" />
+            <span class="cohort-line" aria-hidden="true" data-ha-loop={cohort.running ? "" : undefined}>
+              {cohort.running && <span class="glint" />}
+            </span>
             <span class="cohort-num" data-ha-slot={cohort.running ? "" : undefined}>
               {cohort.number}
             </span>
             <span class="cohort-state">
-              {cohort.running && <span class="pulse" aria-hidden="true" />}
+              {cohort.running && <span class="pulse" aria-hidden="true" data-ha-loop />}
               {cohort.status}
             </span>
           </li>
@@ -138,7 +142,7 @@ const running = COHORT.timeline.find((cohort) => cohort.running) ?? COHORT.timel
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    margin: 1.1rem 0 0;
+    margin: 0;
     font-family: var(--font-body);
     font-size: 1rem;
     font-weight: 600;
@@ -209,11 +213,29 @@ const running = COHORT.timeline.find((cohort) => cohort.running) ?? COHORT.timel
     display: none;
   }
 
-  /* Large screens: the headline keeps to eight columns, the numeral to the last four. */
+  /*
+   * Large screens: the headline keeps to eight columns, the numeral to the last
+   * four. Size and spacing also answer to the window's height, so Apply and the
+   * eligibility line are on the first screen of a real laptop browser window.
+   * The 82px cap keeps the headline on four lines at every width.
+   */
   @media (min-width: 1024px) {
+    .cohorts {
+      padding-top: clamp(1.5rem, 5svh, 6.5rem);
+    }
+
+    .hero {
+      row-gap: clamp(1.5rem, 4svh, 4rem);
+    }
+
     .title {
       grid-column: 1 / span 8;
       max-width: none;
+      font-size: min(5.125rem, 0.9rem + 4.7vw, 10.5svh);
+    }
+
+    .actions {
+      margin-top: clamp(1.25rem, 3svh, 2rem);
     }
 
     .live {
@@ -221,35 +243,42 @@ const running = COHORT.timeline.find((cohort) => cohort.running) ?? COHORT.timel
       z-index: 0;
       grid-row: 1;
       grid-column: 9 / -1;
-      align-self: end;
+      align-self: start;
       justify-self: end;
       display: flex;
       flex-direction: column;
       align-items: flex-end;
-      gap: 0.6rem;
-      margin-bottom: -0.35rem;
+      gap: 0.85rem;
+      margin-top: 0.4rem;
       pointer-events: none;
       user-select: none;
     }
   }
 
-  .live-tag {
-    position: relative;
+  /* A caption under the numeral, in the strip's own numeral-then-state order. */
+  .live-caption {
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
+    align-items: flex-start;
     gap: 0.75rem;
     width: 100%;
   }
 
   .live-scan {
+    position: relative;
     width: 100%;
     height: 2px;
+    overflow: hidden;
     background: var(--ha-rule);
-    background-image: linear-gradient(90deg, transparent, var(--ha-peach) 40%, transparent 80%);
-    background-repeat: no-repeat;
-    background-size: 45% 100%;
-    animation: ha-scan 2.6s var(--ha-ease) infinite;
+  }
+
+  /* The moving highlight is a transformed child, so it never repaints. */
+  .glint {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 45%;
+    background: linear-gradient(90deg, transparent, var(--ha-peach) 45%, transparent);
+    animation: ha-glint 2.6s var(--ha-ease) infinite;
   }
 
   .live-label {
@@ -265,7 +294,7 @@ const running = COHORT.timeline.find((cohort) => cohort.running) ?? COHORT.timel
   .live-num {
     display: block;
     font-family: var(--font-heading);
-    font-size: clamp(8rem, 13vw, 14rem);
+    font-size: clamp(8rem, 12.5vw, 12rem);
     line-height: 1;
     letter-spacing: var(--tracking-display);
     color: transparent;
@@ -309,9 +338,8 @@ const running = COHORT.timeline.find((cohort) => cohort.running) ?? COHORT.timel
   }
 
   .is-live .cohort-line {
-    background: linear-gradient(90deg, transparent, var(--ha-peach) 40%, transparent 80%) no-repeat;
-    background-size: 60% 100%;
-    animation: ha-scan 2.6s var(--ha-ease) infinite;
+    overflow: hidden;
+    background: transparent;
   }
 
   .cohort-num {
@@ -373,6 +401,12 @@ const running = COHORT.timeline.find((cohort) => cohort.running) ?? COHORT.timel
     animation: ha-pulse 1.8s ease-out infinite;
   }
 
+  /* The beat when the travelling 04 lands: a fill that drains away again. */
+  .cohort-num.is-landed {
+    --ha-fill: 100%;
+    transition-duration: 380ms;
+  }
+
   @media (hover: hover) and (pointer: fine) {
     .is-live:hover .cohort-num {
       --ha-fill: 100%;
@@ -384,9 +418,9 @@ const running = COHORT.timeline.find((cohort) => cohort.running) ?? COHORT.timel
     to { transform: scale(3.2); opacity: 0; }
   }
 
-  @keyframes ha-scan {
-    from { background-position: -80% 0; }
-    to { background-position: 220% 0; }
+  @keyframes ha-glint {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(320%); }
   }
 
   /* The rhythm: three columns on one rule, with a peach line drawn by scroll. */
@@ -445,19 +479,17 @@ const running = COHORT.timeline.find((cohort) => cohort.running) ?? COHORT.timel
 
   @media (prefers-reduced-motion: reduce) {
     .pulse::after,
-    .is-live .cohort-line,
-    .live-scan {
+    .glint {
       animation: none;
+    }
+
+    .glint {
+      display: none;
     }
 
     .is-live .cohort-line {
       background: var(--ha-peach);
-      background-size: 100% 100%;
       opacity: 0.5;
-    }
-
-    .live-scan {
-      background-image: none;
     }
 
     .cohort-num {

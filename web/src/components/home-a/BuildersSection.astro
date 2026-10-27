@@ -21,8 +21,8 @@ const total = String(builders.length).padStart(2, "0");
 // With one to three builders the row sits on the 12-column grid, and the
 // closing tile takes whatever columns the cards leave.
 const few = builders.length > 0 && builders.length <= 3;
-const span = builders.length === 3 ? 3 : 4;
-const endSpan = Math.min(4, 12 - span * builders.length);
+const span = { 1: 6, 2: 4, 3: 3 }[builders.length] ?? 4;
+const endSpan = 12 - span * builders.length;
 ---
 
 <section
@@ -31,64 +31,65 @@ const endSpan = Math.min(4, 12 - span * builders.length);
   data-ha-builders
   style={few ? `--span: ${span}; --end-span: ${endSpan}` : undefined}
 >
-  <div class="ha-wrap">
-    <div class="head ha-grid" data-ha-head>
-      <h2 class="ha-h2 title" data-ha-reveal="words"><Words text={BUILDERS.title} /></h2>
-      <div class="aside" data-ha-reveal="rise">
-        <p class="ha-lead">{BUILDERS.summary}</p>
-        <TextLink href={BUILDERS.all.href} label={BUILDERS.all.label} class="all" />
+  <div class="frame" data-ha-frame>
+    <div class="ha-wrap">
+      <div class="head ha-grid" data-ha-head>
+        <h2 class="ha-h2 title" data-ha-reveal="words"><Words text={BUILDERS.title} /></h2>
+        <div class="aside" data-ha-reveal="rise">
+          <p class="ha-lead">{BUILDERS.summary}</p>
+          <TextLink href={BUILDERS.all.href} label={BUILDERS.all.label} class="all" />
+        </div>
       </div>
     </div>
-  </div>
 
-  <div class="stage" data-ha-pin>
-
-    {
-      builders.length > 0 ? (
-        <>
-          <div class="viewport" data-ha-viewport>
-            <ul class="track" data-ha-track>
-              {builders.map((builder) => (
-                <li class="slide">
-                  <BuilderCard builder={builder} />
+    <div class="stage" data-ha-pin>
+      {
+        builders.length > 0 ? (
+          <>
+            <div class="viewport" data-ha-viewport>
+              <ul class="track" data-ha-track>
+                {builders.map((builder) => (
+                  <li class="slide">
+                    <BuilderCard builder={builder} />
+                  </li>
+                ))}
+                <li class="end-slide">
+                  <a class="end" href={BUILDERS.all.href}>
+                    <span class="end-label">{BUILDERS.all.label}</span>
+                    <span class="end-icon">
+                      <Arrow />
+                    </span>
+                  </a>
                 </li>
-              ))}
-              <li class="end-slide">
-                <a class="end" href={BUILDERS.all.href}>
-                  <span class="end-label">{BUILDERS.all.label}</span>
-                  <span class="end-icon">
-                    <Arrow />
-                  </span>
-                </a>
-              </li>
-            </ul>
-          </div>
+              </ul>
+            </div>
 
-          <div class="ha-wrap controls" data-ha-controls>
-            <div class="meter" aria-hidden="true">
-              <span class="bar">
-                <span class="bar-fill" data-ha-bar />
-              </span>
-              <span class="count">
-                <span data-ha-index>01</span> / {total}
-              </span>
+            <div class="ha-wrap controls" data-ha-controls>
+              <div class="meter" aria-hidden="true">
+                <span class="bar">
+                  <span class="bar-fill" data-ha-bar />
+                </span>
+                <span class="count">
+                  <span data-ha-index>01</span> / {total}
+                </span>
+              </div>
+              <div class="steps">
+                <button type="button" class="step" data-ha-step="-1" aria-label="Previous builders">
+                  <Arrow class="flip" />
+                </button>
+                <button type="button" class="step" data-ha-step="1" aria-label="Next builders">
+                  <Arrow />
+                </button>
+              </div>
             </div>
-            <div class="steps">
-              <button type="button" class="step" data-ha-step="-1" aria-label="Previous builders">
-                <Arrow class="flip" />
-              </button>
-              <button type="button" class="step" data-ha-step="1" aria-label="Next builders">
-                <Arrow />
-              </button>
-            </div>
+          </>
+        ) : (
+          <div class="ha-wrap">
+            <p class="empty">{BUILDERS.empty}</p>
           </div>
-        </>
-      ) : (
-        <div class="ha-wrap">
-          <p class="empty">{BUILDERS.empty}</p>
-        </div>
-      )
-    }
+        )
+      }
+    </div>
   </div>
 
   <div class="cursor" aria-hidden="true" data-ha-cursor>View</div>
@@ -269,6 +270,7 @@ const endSpan = Math.min(4, 12 - span * builders.length);
     background: var(--ha-peach);
     transform: scaleX(0.15);
     transform-origin: left center;
+    transition: transform 450ms var(--ha-ease);
   }
 
   .count {

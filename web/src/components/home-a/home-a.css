@@ -227,3 +227,11 @@
   from { opacity: 0; transform: translateY(1.5rem); }
   to { opacity: 1; transform: none; }
 }
+
+/* Infinite loops (scan glints, pulses, the marquee) stop while off screen. */
+.ha-offscreen,
+.ha-offscreen *,
+.ha-offscreen::after,
+.ha-offscreen *::after {
+  animation-play-state: paused !important;
+}
