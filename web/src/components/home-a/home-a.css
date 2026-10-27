@@ -48,6 +48,13 @@
   padding-block: var(--ha-section);
 }
 
+/* Phones: a jump to a section lands with air between the nav and its heading. */
+@media (max-width: 1023.98px) {
+  .ha-root > section[id] {
+    scroll-margin-top: 1.5rem;
+  }
+}
+
 /* Display headings. Sizes come in two steps only, so no word ever looks giant beside a tiny one. */
 .ha-h1,
 .ha-h2 {

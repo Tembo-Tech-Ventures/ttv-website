@@ -77,7 +77,12 @@ export function initCohortMotion(root: HTMLElement, media: gsap.MatchMedia): voi
     gsap.set(lineRules, { scaleX: 0 });
     // Completed numerals start empty while the strip assembles (see CohortSection's CSS).
     strip.classList.add("is-assembling");
-    gsap.set(slot, { opacity: 0 });
+    // The slot keeps a faint outline, so the travelling numeral docks into its own place.
+    gsap.set(slot, { opacity: 0.12 });
+    // On tall screens the strip is already on the first screen: it assembles once,
+    // just after the headline intro, instead of sitting hollow until a scroll.
+    const assembleOnScroll = window.scrollY > 0 || strip.getBoundingClientRect().top >= window.innerHeight;
+    const assemble = assembleOnScroll ? null : gsap.timeline({ delay: 1.3 });
     const travel = gsap.timeline({
       defaults: { ease: "none" },
       onUpdate(this: gsap.core.Timeline) {
@@ -101,13 +106,19 @@ export function initCohortMotion(root: HTMLElement, media: gsap.MatchMedia): voi
       .to(liveNum, { opacity: 0.28, duration: 0.08 }, 0.3)
       .to(liveNum, { opacity: 1, duration: 0.07 }, 0.55)
       .to(slot, { opacity: 1, duration: 0.04 }, 0.96)
-      .to(liveNum, { opacity: 0, duration: 0.04 }, 0.96)
-      .to(lineRules, { scaleX: 1, stagger: 0.12, duration: 0.3 }, 0.4)
+      .to(liveNum, { opacity: 0, duration: 0.04 }, 0.96);
+    // 01 to 03 fill in sequence: with the scroll as the 04 travels, or once on arrival.
+    const fills = assemble ?? travel;
+    const at = assemble ? [0, 0.25] : [0.4, 0.45];
+    const duration = assemble ? 0.9 : 0.3;
+    const stagger = assemble ? 0.18 : 0.12;
+    fills
+      .to(lineRules, { scaleX: 1, stagger, duration, ease: assemble ? "power3.inOut" : "none" }, at[0])
       .fromTo(
         doneNumerals,
         { "--ha-fill": "0%" },
-        { "--ha-fill": "100%", stagger: 0.12, duration: 0.3, immediateRender: false },
-        0.45,
+        { "--ha-fill": "100%", stagger, duration, ease: assemble ? "power2.inOut" : "none", immediateRender: false },
+        at[1],
       );
     return () => {
       window.clearTimeout(drain);

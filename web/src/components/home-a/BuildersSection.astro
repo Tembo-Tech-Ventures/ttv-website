@@ -368,13 +368,14 @@ const endSpan = 12 - span * builders.length;
     z-index: 40;
     display: grid;
     place-items: center;
-    width: 5.5rem;
-    height: 5.5rem;
-    margin: -2.75rem 0 0 -2.75rem;
+    /* Trails below-right of the pointer and inverts what it passes over, so it never hides text. */
+    width: 4.5rem;
+    height: 4.5rem;
+    margin: 0.75rem 0 0 0.75rem;
     border-radius: 50%;
     background: var(--ha-ink);
     color: var(--ha-dark);
-    box-shadow: 0 0.75rem 2rem rgba(1, 26, 24, 0.35);
+    mix-blend-mode: difference;
     font-family: var(--font-body);
     font-size: 0.9375rem;
     font-weight: 700;

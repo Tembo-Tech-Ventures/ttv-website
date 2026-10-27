@@ -5,17 +5,16 @@ import { DESKTOP, MOTION, all } from "./shared";
  * The builder gallery. Everywhere it is a native swipe track whose progress
  * meter and step buttons follow the scroll position. On large screens with
  * motion allowed it is pinned instead and vertical scroll drives the track:
- * the heading and cards together when the window is tall enough (the heading
- * slides away as the gallery ends), otherwise the stage alone.
+ * the heading and cards together when the window is tall enough, otherwise
+ * the stage alone.
  */
 export function initBuilders(root: HTMLElement, media: gsap.MatchMedia): void {
   const section = root.querySelector<HTMLElement>("[data-ha-builders]");
-  const head = section?.querySelector<HTMLElement>("[data-ha-head]");
   const frame = section?.querySelector<HTMLElement>("[data-ha-frame]");
   const pin = section?.querySelector<HTMLElement>("[data-ha-pin]");
   const viewport = section?.querySelector<HTMLElement>("[data-ha-viewport]");
   const track = section?.querySelector<HTMLElement>("[data-ha-track]");
-  if (!section || !head || !frame || !pin || !viewport || !track) return;
+  if (!section || !frame || !pin || !viewport || !track) return;
 
   const slides = all(track, ".slide");
   const bar = section.querySelector<HTMLElement>("[data-ha-bar]");
@@ -98,8 +97,6 @@ export function initBuilders(root: HTMLElement, media: gsap.MatchMedia): void {
       },
     });
     timeline.to(track, { x: () => -distance(), ease: "none", duration: 1 }, 0);
-    // As the gallery reaches its end tile, the heading drifts left and recedes.
-    if (withHead) timeline.to(head, { xPercent: -6, opacity: 0.4, ease: "power1.in", duration: 0.2 }, 0.8);
 
     // Tabbing to an off-screen card scrolls the page to the point where it is in view.
     const onFocus = (event: FocusEvent) => {
