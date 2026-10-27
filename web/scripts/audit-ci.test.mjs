@@ -49,6 +49,14 @@ describe("evaluateAudit", () => {
     expect(result.allowed).toHaveLength(1);
   });
 
+  it("allows the reviewed better-auth advisories that need unused plugins", () => {
+    const via = ["GHSA-q84f-53jg-9ppm", "GHSA-r4xp-prcw-77qf", "GHSA-965c-763c-88jm"].map((id) => ({
+      url: `https://github.com/advisories/${id}`,
+      severity: "critical",
+    }));
+    expect(evaluateAudit({ vulnerabilities: { "better-auth": { severity: "critical", via } } }).ok).toBe(true);
+  });
+
   it("allows the reviewed Astro 6 image-pipeline advisories", () => {
     const result = evaluateAudit({
       vulnerabilities: {
