@@ -16,6 +16,8 @@ function start(root: HTMLElement) {
   fitPrinciples(root);
   initDeckSelect(root);
   initCommunityTabs(root, () => window.matchMedia(MOTION).matches);
+  // Runs with or without motion: it also carries the deck's cohort jump.
+  initNavigation(root, () => Math.round(window.innerHeight * LEAD), () => window.matchMedia(MOTION).matches);
 
   const mm = gsap.matchMedia();
   mm.add({ motion: MOTION, fine: FINE_POINTER }, (context) => {
@@ -35,9 +37,7 @@ function start(root: HTMLElement) {
       hireScene(root),
     ].filter((scene): scene is Scene => scene !== null);
     const stopScenes = runScenes(scenes, root);
-    const stopNavigation = initNavigation(root, () => Math.round(window.innerHeight * LEAD));
     return () => {
-      stopNavigation();
       stopScenes();
       deck?.stop();
     };

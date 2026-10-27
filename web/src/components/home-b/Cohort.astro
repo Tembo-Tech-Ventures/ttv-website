@@ -83,16 +83,17 @@ const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) 
       ))}
     </ol>
   </div>
+
+  <ul class="hb-facts">
+    {COHORT.facts.map((fact) => (
+      <li class="hb-fact">
+        <span class="hb-fact__value font-heading tracking-subhead">{fact.value}</span>
+        <span class="hb-fact__label">{fact.label}</span>
+      </li>
+    ))}
+  </ul>
 </div>
 
-<ul class="hb-facts">
-  {COHORT.facts.map((fact) => (
-    <li class="hb-fact">
-      <span class="hb-fact__value font-heading tracking-subhead">{fact.value}</span>
-      <span class="hb-fact__label">{fact.label}</span>
-    </li>
-  ))}
-</ul>
 
 <ol class="hb-rhythm" data-hb-rhythm>
   {COHORT.rhythm.map((step, index) => (
@@ -108,16 +109,37 @@ const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) 
 
 <style>
   /* ---------- Split hero ---------- */
+  /*
+   * Phones: copy, deck, facts in one column. Tablets: copy across the top,
+   * then the deck with the facts stacked in the column beside it. Desktop:
+   * copy beside the deck, facts in a row underneath.
+   */
   .hb-hero {
     display: grid;
     gap: clamp(2.5rem, 6vw, 4rem);
     align-items: center;
   }
 
+  @media (min-width: 40rem) and (max-width: 63.99rem) {
+    .hb-hero {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      align-items: start;
+      column-gap: 2rem;
+    }
+
+    .hb-hero__copy {
+      grid-column: 1 / -1;
+    }
+  }
+
   @media (min-width: 64rem) {
     .hb-hero {
       grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
       gap: clamp(3rem, 5vw, 5rem);
+    }
+
+    .hb-facts {
+      grid-column: 1 / -1;
     }
   }
 
@@ -225,11 +247,13 @@ const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) 
   }
 
   /* ---------- The cohort deck ---------- */
+  /* Below 64rem the deck is inset and rotates gently, so no card's swing
+   * (or the scroll fan) reaches past the gutter. */
   .hb-deck-stage {
     --peek: 2.6rem;
     --card-h: 13rem;
     --depth: 12px;
-    --step-deg: 2.2deg;
+    --step-deg: 2deg;
     --x-step: 0.3rem;
     position: relative;
     display: flex;
@@ -238,44 +262,47 @@ const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) 
     perspective: 1100px;
   }
 
-  /* One left axis with the copy until the hero splits into two columns. */
-  @media (min-width: 40rem) and (max-width: 63.99rem) {
-    .hb-deck-stage {
-      justify-content: flex-start;
-      padding-left: 1.5rem;
-    }
-  }
-
-  @media (min-width: 64rem) {
-    .hb-deck-stage {
-      margin-top: 0;
-    }
-  }
-
-  @media (min-width: 40rem) {
-    .hb-deck-stage {
-      --depth: 22px;
-      --step-deg: 3.4deg;
-      --x-step: 0.7rem;
-      --peek: 3.5rem;
-      --card-h: 17rem;
-    }
-  }
-
-  @media (min-width: 64rem) {
-    .hb-deck-stage {
-      --card-h: 19rem;
-    }
-  }
-
   .hb-deck {
     position: relative;
-    width: min(100% - 3rem, 22rem);
+    width: min(100% - 4rem, 24rem);
     height: calc(var(--card-h) + (var(--n) - 1) * var(--peek));
     margin: 0;
     padding: 0;
     list-style: none;
     transform-style: preserve-3d;
+  }
+
+  @media (min-width: 40rem) {
+    .hb-deck-stage {
+      --depth: 22px;
+      --x-step: 0.5rem;
+      --peek: 3.5rem;
+      --card-h: 17rem;
+      justify-content: flex-start;
+    }
+
+    .hb-deck-stage {
+      --step-deg: 1.6deg;
+    }
+
+    .hb-deck {
+      margin-left: 2.5rem;
+    }
+  }
+
+  @media (min-width: 64rem) {
+    .hb-deck-stage {
+      --step-deg: 3.4deg;
+      --x-step: 0.7rem;
+      --card-h: 19rem;
+      justify-content: center;
+      margin-top: 0;
+    }
+
+    .hb-deck {
+      width: min(100% - 3rem, 22rem);
+      margin-left: 0;
+    }
   }
 
   /* GSAP owns each card's transform (scroll fan, hover parting); the resting
@@ -435,15 +462,20 @@ const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) 
     -webkit-text-stroke: 0;
   }
 
+  /* Tick rule under the status pill, clear of the big numeral. */
   .hb-cc__rule {
     position: absolute;
+    top: 3.4rem;
     right: 1.25rem;
-    bottom: 1.25rem;
-    width: 34%;
+    width: 24%;
     height: 0.6rem;
     border-radius: 999px;
     background: repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 7px);
     opacity: 0.35;
+  }
+
+  .hb-cc:not(.is-top) .hb-cc__rule {
+    display: none;
   }
 
   @media (prefers-reduced-motion: no-preference) {
@@ -537,10 +569,22 @@ const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) 
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1rem;
-    margin: clamp(3rem, 7vw, 5rem) 0 0;
+    margin: 0;
     padding: clamp(1.25rem, 2.5vw, 1.75rem) 0 0;
     list-style: none;
     border-top: 1px solid rgb(255 248 242 / 0.14);
+  }
+
+  /* Tablets: the facts fill the column beside the deck, top-aligned with it. */
+  @media (min-width: 40rem) and (max-width: 63.99rem) {
+    .hb-facts {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 1.75rem;
+      margin-top: 1.5rem;
+      padding: 0.25rem 0 0.25rem 1.5rem;
+      border-top: 0;
+      border-left: 1px solid rgb(255 248 242 / 0.14);
+    }
   }
 
   .hb-fact {

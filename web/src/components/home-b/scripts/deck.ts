@@ -113,9 +113,10 @@ export function deckMotion(root: HTMLElement, finePointer: boolean): { scene: Sc
   let narrow = false;
 
   const render = () => {
-    // Phones: a gentle fan only. Parting would push the outer cards past the gutter.
-    const spread = narrow ? 3 * fan : 14 * fan + 26 * state.part;
-    const turn = narrow ? 1.2 * fan : 2.6 * fan + 3.2 * state.part;
+    // Below 1024px the deck stays as dealt: fanning or parting would push the
+    // outer cards past the gutter.
+    const spread = narrow ? 0 : 14 * fan + 26 * state.part;
+    const turn = narrow ? 0 : 2.6 * fan + 3.2 * state.part;
     // On phones the deck sits under the eligibility line: never lift it over that.
     const lift = narrow ? 0 : 16 * fan + 22 * state.part;
     cards.forEach((_, index) => {
@@ -163,7 +164,7 @@ export function deckMotion(root: HTMLElement, finePointer: boolean): { scene: Sc
 
   const scene: Scene = {
     measure() {
-      narrow = deck.offsetWidth < 400;
+      narrow = deck.offsetWidth < 400 || window.innerWidth < 1024;
     },
     read() {
       fan = easeOut(clamp01(window.scrollY / (window.innerHeight * 0.75)));

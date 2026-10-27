@@ -24,7 +24,7 @@ interface FlowBox {
   height: number;
 }
 
-export function initNavigation(root: HTMLElement, lead: () => number): () => void {
+export function initNavigation(root: HTMLElement, lead: () => number, motionAllowed: () => boolean): () => void {
   const sheets = [...root.querySelectorAll<HTMLElement>("[data-hb-sheet]")];
   // Set while we move focus ourselves, so our own focus does not re-route.
   let routing = false;
@@ -62,7 +62,7 @@ export function initNavigation(root: HTMLElement, lead: () => number): () => voi
   }
 
   function bringIntoView(target: HTMLElement, smooth: boolean) {
-    window.scrollTo({ top: scrollTopFor(target), behavior: smooth ? "smooth" : "instant" });
+    window.scrollTo({ top: scrollTopFor(target), behavior: smooth && motionAllowed() ? "smooth" : "instant" });
   }
 
   function targetFor(hash: string): HTMLElement | null {

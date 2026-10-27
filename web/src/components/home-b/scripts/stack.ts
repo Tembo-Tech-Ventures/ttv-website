@@ -50,6 +50,9 @@ export function sheetScene(root: HTMLElement): Scene {
         sheet.style.willChange = p > 0 && p < 1 ? "transform" : "";
         const dim = dims[index];
         if (dim) dim.style.opacity = (0.62 * p).toFixed(3);
+        // Fully covered: stop painting it. Opacity, not visibility, so its links
+        // stay focusable and navigate.ts can bring them back into view.
+        sheet.style.opacity = p >= 1 ? "0" : "";
       }
     },
     destroy() {
@@ -59,6 +62,7 @@ export function sheetScene(root: HTMLElement): Scene {
         sheet.style.removeProperty("--hb-origin");
         sheet.style.transform = "";
         sheet.style.willChange = "";
+        sheet.style.opacity = "";
         const dim = dims[index];
         if (dim) dim.style.opacity = "";
       });

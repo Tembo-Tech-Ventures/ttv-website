@@ -1,6 +1,6 @@
 ---
 import type { HomepageBuilder } from "@/lib/homepage/builders";
-import type { CommunityPath } from "@/lib/homepage/content";
+import { BUILDERS, type CommunityPath } from "@/lib/homepage/content";
 
 /**
  * The small layered picture beside each community path, built from real
@@ -39,12 +39,25 @@ const filters = [...new Set(results.map((builder) => builder.skills[0]))];
 const hit = results[1] ?? results[0] ?? null;
 
 const captions = {
-  builder: featured ? "From a published builder profile" : "A builder profile",
+  builder: "From a published builder profile",
   mentor: "How a mentor note looks (illustration)",
   partner: "Searching published profiles (illustration)",
 } as const;
 ---
 
+{builders.length === 0 ? (
+  <figure class="hb-comp hb-comp--empty">
+    <div class="hb-comp__stage" aria-hidden="true" data-hb-comp>
+      {[0, 1, 2].map((index) => (
+        <span class="hb-piece hb-comp__blank" style={`--i:${index}`} data-hb-piece>
+          <span class="hb-comp__blank-mono" />
+          <span class="hb-comp__blank-lines"><span /><span /></span>
+        </span>
+      ))}
+    </div>
+    <figcaption class="hb-comp__caption">{BUILDERS.empty}</figcaption>
+  </figure>
+) : (
 <figure class={`hb-comp hb-comp--${path}`}>
   <div class="hb-comp__stage" aria-hidden="true" data-hb-comp>
     {path === "builder" && (
@@ -130,6 +143,7 @@ const captions = {
   </div>
   <figcaption class="hb-comp__caption">{captions[path]}</figcaption>
 </figure>
+)}
 
 <style>
   .hb-comp {
@@ -157,8 +171,45 @@ const captions = {
     font-size: clamp(0.7rem, 2.6cqi, 0.9rem);
   }
 
-  .hb-comp--mentor .hb-comp__stage {
-    aspect-ratio: 6 / 3.4;
+  /* No published profiles yet: an empty file, like the builders section's. */
+  .hb-piece.hb-comp__blank {
+    left: calc(10% + var(--i) * 4%);
+    right: calc(14% - var(--i) * 4%);
+    top: calc(14% + var(--i) * 18%);
+    display: flex;
+    gap: 1em;
+    padding: 1em 1.2em;
+    border-radius: 1em;
+    background: color-mix(in srgb, #0f514a, #2c6964 calc(var(--i) * 25%));
+    border: 1px solid rgb(255 248 242 / 0.12);
+    box-shadow: 0 -10px 24px -16px rgb(0 0 0 / 0.65);
+  }
+
+  .hb-comp__blank-mono {
+    flex: none;
+    width: 2.6em;
+    height: 2.6em;
+    border-radius: 0.7em;
+    border: 1.5px dashed rgb(242 141 104 / 0.7);
+  }
+
+  .hb-comp__blank-lines {
+    display: grid;
+    align-content: start;
+    gap: 0.6em;
+    flex: 1;
+    padding-top: 0.4em;
+  }
+
+  .hb-comp__blank-lines span {
+    height: 0.55em;
+    width: 45%;
+    border-radius: 999px;
+    background: rgb(255 248 242 / 0.14);
+  }
+
+  .hb-comp__blank-lines span + span {
+    width: 70%;
   }
 
   .hb-comp__caption {
@@ -368,7 +419,7 @@ const captions = {
   /* Mentor */
   .hb-comp__code {
     left: 6%;
-    top: 9%;
+    top: 14%;
     width: 66%;
     background: #0c3f3a;
   }
@@ -409,7 +460,7 @@ const captions = {
 
   .hb-comp__note {
     right: 5%;
-    top: 45%;
+    top: 50%;
     width: 38%;
     box-sizing: border-box;
     padding: 1.4em 1em 1.1em;
@@ -520,9 +571,6 @@ const captions = {
 
   /* Phones: taller stage, wider pieces, so the real names stay legible. */
   @media (max-width: 30rem) {
-    .hb-comp--mentor .hb-comp__stage {
-      aspect-ratio: 1 / 0.86;
-    }
 
     .hb-comp__stage {
       aspect-ratio: 1 / 0.92;

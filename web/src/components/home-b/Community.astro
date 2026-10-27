@@ -74,7 +74,7 @@ const paths = COMMUNITY.paths;
             <svg aria-hidden="true" viewBox="0 0 20 20" width="18" height="18"><path d="M4 10h11m-4.5-4.5L15 10l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </a>
         </div>
-        {builders.length > 0 && <CommunityComp path={path.id} builders={builders} />}
+        <CommunityComp path={path.id} builders={builders} />
       </div>
     ))}
   </div>
@@ -84,6 +84,8 @@ const paths = COMMUNITY.paths;
   <style is:inline>
     .hb-seg { display: none !important; }
     .hb-panel[hidden] { display: grid !important; }
+    .hb-panel { grid-area: auto !important; }
+    .hb-panel + .hb-panel { margin-top: 3rem; }
   </style>
 </noscript>
 
@@ -198,8 +200,15 @@ const paths = COMMUNITY.paths;
   }
 
   /* ---------- Panels ---------- */
+  /* All panels share one grid cell; community.ts reserves the tallest one's
+   * height, so switching tabs never moves the page below. */
   .hb-panels {
+    display: grid;
     margin-top: clamp(1.75rem, 3.5vw, 2.5rem);
+  }
+
+  .hb-panel {
+    grid-area: 1 / 1;
   }
 
   .hb-panel {
@@ -208,13 +217,14 @@ const paths = COMMUNITY.paths;
     align-items: center;
   }
 
-  .hb-panel + .hb-panel {
-    margin-top: 3rem;
-  }
-
   @media (min-width: 56rem) {
     .hb-panel {
       grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+      align-items: start;
+    }
+
+    .hb-panel__copy {
+      padding-top: clamp(1rem, 3vw, 2.5rem);
     }
   }
 

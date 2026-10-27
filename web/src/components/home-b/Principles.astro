@@ -49,6 +49,9 @@ const fit = (0.97 / LONGEST_ADVANCE_EM).toFixed(4);
     font-size: calc(var(--hb-fit) * 100cqi);
     line-height: 1.12;
     white-space: nowrap;
+    /* Room for descenders (EQUITY's Q tail) inside the box the fill paints. */
+    padding-bottom: 0.14em;
+    margin-bottom: -0.14em;
     color: transparent;
     -webkit-text-stroke: 1.5px var(--color-primary);
     background: linear-gradient(90deg, var(--color-primary) 50%, transparent 50%) 100% 0 / 200% 100% no-repeat;

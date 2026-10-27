@@ -11,6 +11,33 @@ export function initCommunityTabs(root: HTMLElement, motionAllowed: () => boolea
   const tabs = [...container.querySelectorAll<HTMLButtonElement>("[data-hb-tab]")];
   const panels = [...container.querySelectorAll<HTMLElement>("[data-hb-panel]")];
   const tablist = container.querySelector<HTMLElement>("[data-hb-tablist]");
+  const panelsBox = panels[0]?.parentElement ?? null;
+
+  // Reserve the tallest panel's height (all panels share one grid cell), read
+  // in one synchronous pass with the hidden ones laid out invisibly.
+  const reserve = () => {
+    if (!panelsBox) return;
+    panelsBox.style.minHeight = "";
+    const hidden = panels.filter((panel) => panel.hidden);
+    for (const panel of hidden) {
+      panel.hidden = false;
+      panel.style.visibility = "hidden";
+    }
+    const tallest = panelsBox.offsetHeight;
+    for (const panel of hidden) {
+      panel.hidden = true;
+      panel.style.visibility = "";
+    }
+    panelsBox.style.minHeight = `${tallest}px`;
+  };
+  let lastWidth = 0;
+  const sizer = new ResizeObserver(() => {
+    if (!panelsBox || panelsBox.offsetWidth === lastWidth) return;
+    lastWidth = panelsBox.offsetWidth;
+    reserve();
+  });
+  if (panelsBox) sizer.observe(panelsBox);
+  void document.fonts.ready.then(reserve);
   let current = Math.max(0, tabs.findIndex((tab) => tab.getAttribute("aria-selected") === "true"));
   let assembled = false;
 
@@ -92,6 +119,8 @@ export function initCommunityTabs(root: HTMLElement, motionAllowed: () => boolea
   if (firstComposition) observer.observe(firstComposition);
 
   return () => {
+    sizer.disconnect();
+    if (panelsBox) panelsBox.style.minHeight = "";
     observer.disconnect();
     if (firstPieces) gsap.set(firstPieces, { clearProps: "opacity" });
     tabs.forEach((tab) => {
