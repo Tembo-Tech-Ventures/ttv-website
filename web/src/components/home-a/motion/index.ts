@@ -1,7 +1,7 @@
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { initBuilders } from "./builders";
-import { playHeroIntro } from "./hero";
+import { countHeroFacts, initCohortMotion } from "./cohort";
 import { initPointer } from "./pointer";
 import { initPrinciples } from "./principles";
 import { initReveals } from "./reveals";
@@ -13,10 +13,12 @@ export function initHomeA(): void {
   if (!root) return;
   gsap.registerPlugin(ScrollTrigger);
 
-  void playHeroIntro(root);
+  // The hero intro itself is pure CSS (home-a.css); script only counts the first fact.
+  countHeroFacts(root);
 
   const media = gsap.matchMedia();
-  // The pin is created first so every trigger below it accounts for its spacer.
+  // Triggers are created in page order, so those below the pin account for its spacer.
+  initCohortMotion(root, media);
   initBuilders(root, media);
   media.add(MOTION, () => {
     initReveals(root);

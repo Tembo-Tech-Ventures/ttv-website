@@ -3,10 +3,12 @@ import { PRINCIPLES } from "@/lib/homepage/content";
 import Words from "./Words.astro";
 
 /**
- * #principles: five words in outlined Mattone, each sized to the full content
- * width from its measured advance (em at -0.02em tracking), so the server
- * render already fits and nothing crops before script runs. With motion
- * allowed, each word fills with peach as it crosses the middle of the screen.
+ * #principles: five words in Mattone at one shared size, set by the longest
+ * word's measured advance (em at -0.02em tracking) so it spans the measure and
+ * the rest sit left-aligned at the same cap height. The server render already
+ * fits, so nothing crops before script runs. The finished state is filled;
+ * with motion allowed each word starts as an outline and fills as it crosses
+ * the middle of the screen.
  */
 const ADVANCE_EM: Record<string, number> = {
   COMMUNITY: 8.77,
@@ -16,23 +18,21 @@ const ADVANCE_EM: Record<string, number> = {
   HONESTY: 6.92,
 };
 
-const values = PRINCIPLES.values.map((value) => ({
-  ...value,
-  // Unknown words fall back to a generous per-letter estimate, so they shrink rather than crop.
-  advance: ADVANCE_EM[value.word] ?? value.word.length * 1.05,
-}));
+// Unknown words fall back to a generous per-letter estimate, so they shrink rather than crop.
+const longest = Math.max(...PRINCIPLES.values.map((value) => ADVANCE_EM[value.word] ?? value.word.length * 1.05));
+const values = PRINCIPLES.values;
 ---
 
 <section id="principles" class="ha-section principles">
   <div class="ha-wrap">
     <h2 class="ha-h2 title" data-ha-reveal="words"><Words text={PRINCIPLES.title} /></h2>
 
-    <dl class="values">
+    <dl class="values" style={`--advance: ${longest}`}>
       {
         values.map((value) => (
           <div class="value" data-ha-value>
             <dt class="word-box">
-              <span class="word" style={`--advance: ${value.advance}`} data-ha-word>
+              <span class="word" data-ha-word>
                 {value.word}
               </span>
             </dt>
@@ -73,9 +73,9 @@ const values = PRINCIPLES.values.map((value) => ({
     container-type: inline-size;
   }
 
-  /* Size from the measured advance, with 2% to spare for the stroke. */
+  /* One size for all five, from the longest advance, with 2% to spare for the stroke. */
   .word {
-    --ha-fill: 0%;
+    --ha-fill: 100%;
     display: block;
     width: max-content;
     font-family: var(--font-heading);
@@ -103,6 +103,7 @@ const values = PRINCIPLES.values.map((value) => ({
   @media (min-width: 768px) {
     .commitment {
       grid-column: 7 / -1;
+      max-width: 34rem;
     }
   }
 </style>

@@ -10,7 +10,6 @@ import { all, byLine } from "./shared";
 export function initReveals(root: HTMLElement): void {
   revealHeadings(root);
   revealRises(root);
-  revealStrip(root);
   revealRhythm(root);
   revealPaths(root);
   revealBand(root);
@@ -55,23 +54,6 @@ function revealRises(root: HTMLElement): void {
   }
 }
 
-/** Completed cohorts draw their rule and fill their numeral, one after another. */
-function revealStrip(root: HTMLElement): void {
-  const strip = root.querySelector<HTMLElement>("[data-ha-strip]");
-  if (!strip) return;
-  const lines = all(strip, ".is-done .cohort-line");
-  const numerals = all(strip, ".is-done .cohort-num");
-  const timeline = gsap.timeline({ scrollTrigger: { trigger: strip, start: "top 82%", once: true } });
-  timeline
-    .from(lines, { scaleX: 0, duration: 0.9, ease: "power3.inOut", stagger: 0.18 }, 0)
-    .fromTo(
-      numerals,
-      { "--ha-fill": "0%" },
-      { "--ha-fill": "100%", duration: 0.9, ease: "power2.inOut", stagger: 0.18 },
-      0.25,
-    );
-}
-
 /** The peach line across the rhythm row is drawn by the scroll itself. */
 function revealRhythm(root: HTMLElement): void {
   const rhythm = root.querySelector<HTMLElement>("[data-ha-rhythm]");
@@ -107,17 +89,27 @@ function revealPaths(root: HTMLElement): void {
     );
 }
 
-/** The hire band opens from an inset card to the full bleed as it arrives. */
+/**
+ * The hire band is a sheet: it slides up faster than the page and opens from
+ * an inset card to the full bleed, while the community rows above it recede.
+ */
 function revealBand(root: HTMLElement): void {
+  const hire = root.querySelector<HTMLElement>("[data-ha-hire]");
   const band = root.querySelector<HTMLElement>("[data-ha-band]");
-  if (!band) return;
-  gsap.fromTo(
-    band,
-    { clipPath: "inset(0% 4% 0% 4% round 2.5rem)" },
-    {
-      clipPath: "inset(0% 0% 0% 0% round 0rem)",
-      ease: "none",
-      scrollTrigger: { trigger: band, start: "top 96%", end: "top 30%", scrub: 0.4 },
-    },
-  );
+  const community = root.querySelector<HTMLElement>("#community");
+  const communityWrap = community?.querySelector<HTMLElement>(".ha-wrap");
+  if (!hire || !band || !community || !communityWrap) return;
+  // Triggered by the section above, because the sheet itself moves.
+  const scrollTrigger = {
+    trigger: community,
+    start: "bottom bottom",
+    end: "bottom 30%",
+    scrub: 0.5,
+    invalidateOnRefresh: true,
+  };
+  gsap
+    .timeline({ defaults: { ease: "none" }, scrollTrigger })
+    .fromTo(hire, { y: () => window.innerHeight * 0.16 }, { y: 0, ease: "power1.out" }, 0)
+    .fromTo(band, { clipPath: "inset(0% 4% 0% 4% round 2.5rem)" }, { clipPath: "inset(0% 0% 0% 0% round 0rem)" }, 0)
+    .to(communityWrap, { y: () => window.innerHeight * -0.05 }, 0);
 }

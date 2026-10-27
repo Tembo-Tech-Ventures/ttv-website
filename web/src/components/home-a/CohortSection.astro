@@ -1,35 +1,57 @@
 ---
-import { BUILDERS, COHORT } from "@/lib/homepage/content";
+import { COHORT } from "@/lib/homepage/content";
 import Pill from "./Pill.astro";
 import TextLink from "./TextLink.astro";
 import Words from "./Words.astro";
 
 /**
- * #cohorts: the hero and the programme. The title, summary and apply action
- * come first so a phone visitor knows what a cohort is before scrolling; the
- * cohort strip and the weekly rhythm follow as the evidence.
+ * #cohorts: the hero and the programme. The title, summary, apply action and
+ * eligibility come first so a phone visitor knows what a cohort is, and that
+ * they can join without a degree, before scrolling.
+ *
+ * On large screens the running cohort's numeral sits behind the headline as
+ * the hero's image. It is decorative (the facts and the strip say the same in
+ * text); motion/cohort.ts carries it down into its slot in the cohort strip.
  */
-const meetLabel = BUILDERS.title.replace(/\.$/, "");
+const running = COHORT.timeline.find((cohort) => cohort.running) ?? COHORT.timeline.at(-1);
 ---
 
 <section id="cohorts" class="cohorts" data-ha-hero>
   <div class="ha-wrap">
-    <div class="hero ha-grid">
-      <h1 class="ha-h1 title"><Words text={COHORT.title} accent={2} /></h1>
+    <div class="hero ha-grid" data-ha-hero-grid>
+      {
+        running && (
+          <div class="live" aria-hidden="true" data-ha-live>
+            <span class="live-tag" data-ha-live-tag>
+              <span class="live-scan" />
+              <span class="live-label">
+                <span class="pulse" />
+                {running.label} · {running.status}
+              </span>
+            </span>
+            <span class="live-num" data-ha-live-num>{running.number}</span>
+          </div>
+        )
+      }
 
-      <div class="intro" data-ha-rise>
+      <h1 class="ha-h1 title ha-hero-title"><Words text={COHORT.title} accent={2} /></h1>
+
+      <div class="intro ha-hero-rise" style="--r: 0">
         <p class="ha-lead lead">{COHORT.summary}</p>
         <div class="actions">
           <Pill href={COHORT.apply.href} label={COHORT.apply.label} />
-          <TextLink href="#builders" label={meetLabel} />
+          <TextLink href={COHORT.secondary.href} label={COHORT.secondary.label} />
         </div>
+        <p class="eligibility">{COHORT.eligibility}</p>
       </div>
 
-      <ul class="facts" data-ha-rise>
+      <ul class="facts ha-hero-rise" style="--r: 1">
         {
-          COHORT.facts.map((fact) => (
+          COHORT.facts.map((fact, index) => (
             <li class="fact">
-              <span class="fact-value" data-ha-count>{fact.value}</span>
+              <span class="fact-value" data-ha-count={index === 0 ? "" : undefined}>
+                {fact.value}
+              </span>
               <span class="fact-label">{fact.label}</span>
             </li>
           ))
@@ -42,7 +64,9 @@ const meetLabel = BUILDERS.title.replace(/\.$/, "");
         COHORT.timeline.map((cohort) => (
           <li class:list={["cohort", cohort.running ? "is-live" : "is-done"]}>
             <span class="cohort-line" aria-hidden="true" />
-            <span class="cohort-num">{cohort.number}</span>
+            <span class="cohort-num" data-ha-slot={cohort.running ? "" : undefined}>
+              {cohort.number}
+            </span>
             <span class="cohort-state">
               {cohort.running && <span class="pulse" aria-hidden="true" />}
               {cohort.status}
@@ -75,18 +99,26 @@ const meetLabel = BUILDERS.title.replace(/\.$/, "");
     padding-bottom: var(--ha-section);
   }
 
+  /* The hero ends where its content ends: one fixed gap, no stretched band. */
   .hero {
-    row-gap: clamp(2.25rem, 5vw, 4.5rem);
-    align-items: end;
+    position: relative;
+    row-gap: clamp(2.25rem, 5vh, 4rem);
+    align-items: start;
   }
 
   .title {
+    position: relative;
+    z-index: 1;
+    grid-row: 1;
     grid-column: 1 / -1;
     max-width: 17ch;
   }
 
+  /* Above the travelling numeral, which only ever passes behind them. */
   .intro,
   .facts {
+    position: relative;
+    z-index: 1;
     grid-column: 1 / -1;
   }
 
@@ -100,6 +132,26 @@ const meetLabel = BUILDERS.title.replace(/\.$/, "");
     align-items: center;
     gap: 1rem 1.75rem;
     margin-top: 2rem;
+  }
+
+  .eligibility {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 1.1rem 0 0;
+    font-family: var(--font-body);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--ha-ink);
+  }
+
+  .eligibility::before {
+    content: "";
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: var(--ha-peach);
+    flex: none;
   }
 
   .facts {
@@ -137,13 +189,14 @@ const meetLabel = BUILDERS.title.replace(/\.$/, "");
     color: var(--ha-ink-2);
   }
 
-  @media (min-width: 900px) {
+  /* One right-hand column start for the whole page: column 7. */
+  @media (min-width: 768px) {
     .intro {
       grid-column: 1 / span 6;
     }
 
     .facts {
-      grid-column: 8 / -1;
+      grid-column: 7 / -1;
     }
 
     .fact {
@@ -151,11 +204,73 @@ const meetLabel = BUILDERS.title.replace(/\.$/, "");
     }
   }
 
+  /* The running cohort's numeral, layered behind the headline. */
+  .live {
+    display: none;
+  }
+
+  /* Large screens: the headline keeps to eight columns, the numeral to the last four. */
   @media (min-width: 1024px) {
-    .hero {
-      min-height: calc(100svh - 4.5rem - clamp(2.75rem, 7vw, 6.5rem) - 3.5rem);
-      align-content: space-between;
+    .title {
+      grid-column: 1 / span 8;
+      max-width: none;
     }
+
+    .live {
+      position: relative;
+      z-index: 0;
+      grid-row: 1;
+      grid-column: 9 / -1;
+      align-self: end;
+      justify-self: end;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0.6rem;
+      margin-bottom: -0.35rem;
+      pointer-events: none;
+      user-select: none;
+    }
+  }
+
+  .live-tag {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.75rem;
+    width: 100%;
+  }
+
+  .live-scan {
+    width: 100%;
+    height: 2px;
+    background: var(--ha-rule);
+    background-image: linear-gradient(90deg, transparent, var(--ha-peach) 40%, transparent 80%);
+    background-repeat: no-repeat;
+    background-size: 45% 100%;
+    animation: ha-scan 2.6s var(--ha-ease) infinite;
+  }
+
+  .live-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-family: var(--font-body);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--ha-peach);
+  }
+
+  .live-num {
+    display: block;
+    font-family: var(--font-heading);
+    font-size: clamp(8rem, 13vw, 14rem);
+    line-height: 1;
+    letter-spacing: var(--tracking-display);
+    color: transparent;
+    -webkit-text-stroke: max(1px, 0.012em) var(--ha-peach);
+    transform-origin: 0 0;
   }
 
   /* The cohort strip: four numerals on a shared rule. Complete ones are filled. */
@@ -163,7 +278,7 @@ const meetLabel = BUILDERS.title.replace(/\.$/, "");
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 2.5rem var(--ha-gap);
-    margin: clamp(4.5rem, 9vw, 8rem) 0 0;
+    margin: clamp(4rem, 8vw, 7rem) 0 0;
     padding: 0;
     list-style: none;
   }
@@ -202,12 +317,13 @@ const meetLabel = BUILDERS.title.replace(/\.$/, "");
   .cohort-num {
     --ha-fill: 0%;
     display: block;
+    width: max-content;
     font-family: var(--font-heading);
     font-size: clamp(3.75rem, 1rem + 7.2vw, 8.25rem);
     line-height: 1;
     letter-spacing: var(--tracking-display);
     color: transparent;
-    -webkit-text-stroke: max(1px, 0.014em) var(--ha-peach);
+    -webkit-text-stroke: max(1px, 0.012em) var(--ha-peach);
     background: linear-gradient(var(--ha-peach), var(--ha-peach)) no-repeat 0 0 / var(--ha-fill) 100%;
     -webkit-background-clip: text;
     background-clip: text;
@@ -218,6 +334,11 @@ const meetLabel = BUILDERS.title.replace(/\.$/, "");
   .is-done .cohort-num {
     --ha-fill: 100%;
     transition: none;
+  }
+
+  /* While motion assembles the strip, completed numerals start empty; the fill tween takes over. */
+  .strip.is-assembling .is-done .cohort-num {
+    --ha-fill: 0%;
   }
 
   .cohort-state {
@@ -324,7 +445,8 @@ const meetLabel = BUILDERS.title.replace(/\.$/, "");
 
   @media (prefers-reduced-motion: reduce) {
     .pulse::after,
-    .is-live .cohort-line {
+    .is-live .cohort-line,
+    .live-scan {
       animation: none;
     }
 
@@ -332,6 +454,10 @@ const meetLabel = BUILDERS.title.replace(/\.$/, "");
       background: var(--ha-peach);
       background-size: 100% 100%;
       opacity: 0.5;
+    }
+
+    .live-scan {
+      background-image: none;
     }
 
     .cohort-num {

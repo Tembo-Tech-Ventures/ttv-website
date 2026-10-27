@@ -11,7 +11,8 @@ import "./home-a.css";
 /**
  * Candidate A — "Kinetic editorial: type is the image".
  *
- * The server render is the finished page. motion/index.ts only adds motion,
+ * The server render is the finished page. The hero intro is pure CSS, so it
+ * never waits on the network; motion/index.ts adds scroll-driven motion on top,
  * and only when the visitor has not asked for reduced motion.
  */
 interface Props {
@@ -21,18 +22,6 @@ interface Props {
 
 const { builders, isAuthenticated } = Astro.props;
 ---
-
-<!--
-  Pose the hero for its intro before first paint, but only when motion is
-  allowed. If the motion module never arrives, the pose is dropped after 2.5s
-  so the page can never stay hidden.
--->
-<script is:inline>
-  if (matchMedia("(prefers-reduced-motion: no-preference)").matches) {
-    document.documentElement.classList.add("ha-intro");
-    setTimeout(() => document.documentElement.classList.remove("ha-intro"), 2500);
-  }
-</script>
 
 <div class="ha-root" data-ha-root>
   <CohortSection />

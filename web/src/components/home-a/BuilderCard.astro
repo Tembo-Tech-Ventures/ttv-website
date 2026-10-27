@@ -1,6 +1,5 @@
 ---
 import type { HomepageBuilder } from "@/lib/homepage/builders";
-import { formatCohortLocation } from "@/lib/site";
 
 /**
  * One builder. The whole card is a single link to the profile. The monogram is
@@ -12,21 +11,30 @@ interface Props {
 }
 
 const { builder } = Astro.props;
-const where = formatCohortLocation(builder.cohort, builder.country);
+// Cohort and country on two short lines, so the label never crowds the monogram.
+const where = [builder.cohort, builder.country].filter(Boolean);
 ---
 
 <a class="card" href={builder.href} data-ha-card>
   <div class="art">
     {
       builder.image ? (
-        <img class="avatar" src={builder.image} alt="" width="96" height="96" loading="lazy" decoding="async" />
+        <img class="avatar" src={builder.image} alt="" width="72" height="72" loading="lazy" decoding="async" />
       ) : (
         <span class="mono" aria-hidden="true">
           {builder.initials}
         </span>
       )
     }
-    {where && <span class="where">{where}</span>}
+    {
+      where.length > 0 && (
+        <span class="where">
+          {where.map((part) => (
+            <span>{part}</span>
+          ))}
+        </span>
+      )
+    }
   </div>
 
   <div class="body">
@@ -35,11 +43,13 @@ const where = formatCohortLocation(builder.cohort, builder.country);
 
     {
       builder.project && (
-        <p class="project">
-          <span class="project-label">Project</span>
-          <span class="project-name">{builder.project.name}</span>
-          {builder.project.language && <span class="project-lang">{builder.project.language}</span>}
-        </p>
+        <div class="project">
+          <p class="project-title">
+            <span class="project-name">{builder.project.name}</span>
+            {builder.project.language && <span class="project-lang">{builder.project.language}</span>}
+          </p>
+          {builder.project.description && <p class="project-description">{builder.project.description}</p>}
+        </div>
       )
     }
 
@@ -76,19 +86,23 @@ const where = formatCohortLocation(builder.cohort, builder.country);
     background: rgba(1, 42, 40, 0.9);
   }
 
+  /* A compact art band: monogram bottom-left, cohort on the same line at right. */
   .art {
-    position: relative;
     display: flex;
     align-items: flex-end;
-    min-height: clamp(10.5rem, 30vw, 13.5rem);
-    padding: 1.25rem 1.5rem 1.1rem;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: clamp(6.5rem, 16vw, 8.5rem);
+    box-sizing: border-box;
+    padding: 1rem 1.5rem 1rem;
     border-bottom: 1px solid var(--ha-rule);
   }
 
   .mono {
     --ha-fill: 0%;
     font-family: var(--font-heading);
-    font-size: clamp(4.25rem, 3rem + 4vw, 6.25rem);
+    font-size: clamp(3rem, 2.3rem + 2vw, 4rem);
+    white-space: nowrap;
     line-height: 0.9;
     letter-spacing: var(--tracking-display);
     color: transparent;
@@ -106,8 +120,8 @@ const where = formatCohortLocation(builder.cohort, builder.country);
   }
 
   .avatar {
-    width: 6rem;
-    height: 6rem;
+    width: 4.5rem;
+    height: 4.5rem;
     border-radius: 50%;
     object-fit: cover;
     outline: 1px solid var(--ha-peach);
@@ -122,9 +136,13 @@ const where = formatCohortLocation(builder.cohort, builder.country);
   }
 
   .where {
-    position: absolute;
-    top: 1.25rem;
-    right: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex: none;
+    padding-bottom: 0.3rem;
+    line-height: 1.35;
+    text-align: right;
     font-family: var(--font-body);
     font-size: 0.875rem;
     font-weight: 600;
@@ -148,7 +166,9 @@ const where = formatCohortLocation(builder.cohort, builder.country);
     color: var(--ha-ink);
   }
 
+  /* Two lines reserved, so the project rule lines up across a row of cards. */
   .headline {
+    min-height: 3em;
     margin: 0;
     font-family: var(--font-body);
     font-size: 1rem;
@@ -157,41 +177,46 @@ const where = formatCohortLocation(builder.cohort, builder.country);
   }
 
   .project {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.35rem 0.6rem;
-    margin: auto 0 0;
+    margin: 0;
     padding-top: 0.9rem;
     border-top: 1px solid var(--ha-rule);
     font-family: var(--font-body);
-    font-size: 0.9375rem;
   }
 
-  .project-label {
-    color: var(--ha-ink-3);
+  .project-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.25rem 0.75rem;
+    margin: 0;
   }
 
   .project-name {
+    font-size: 1rem;
     font-weight: 700;
     color: var(--ha-peach);
   }
 
   .project-lang {
+    font-size: 0.8125rem;
+    font-weight: 600;
     color: var(--ha-ink-2);
   }
 
-  .project-lang::before {
-    content: "·";
-    margin-right: 0.6rem;
-    color: var(--ha-ink-3);
+  .project-description {
+    margin: 0.4rem 0 0;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    color: var(--ha-ink-2);
   }
 
   .skills {
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
-    margin: 0;
+    margin: auto 0 0;
+    padding-top: 0.25rem;
     padding: 0;
     list-style: none;
   }

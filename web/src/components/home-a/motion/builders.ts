@@ -4,26 +4,33 @@ import { DESKTOP, MOTION, all } from "./shared";
 /**
  * The builder gallery. Everywhere it is a native swipe track whose progress
  * meter and step buttons follow the scroll position. On large screens with
- * motion allowed it is pinned instead, and vertical scroll drives the track.
+ * motion allowed the stage (track and meter only) is pinned instead, vertical
+ * scroll drives the track, and the heading slides away as the cards take over.
  */
 export function initBuilders(root: HTMLElement, media: gsap.MatchMedia): void {
   const section = root.querySelector<HTMLElement>("[data-ha-builders]");
+  const head = section?.querySelector<HTMLElement>("[data-ha-head]");
   const pin = section?.querySelector<HTMLElement>("[data-ha-pin]");
   const viewport = section?.querySelector<HTMLElement>("[data-ha-viewport]");
   const track = section?.querySelector<HTMLElement>("[data-ha-track]");
-  if (!section || !pin || !viewport || !track) return;
+  if (!section || !head || !pin || !viewport || !track) return;
 
   const slides = all(track, ".slide");
   const bar = section.querySelector<HTMLElement>("[data-ha-bar]");
   const indexNode = section.querySelector<HTMLElement>("[data-ha-index]")?.firstChild;
   const steps = all<HTMLButtonElement>(section, "[data-ha-step]");
 
-  // The counter reads "how many builders you have seen": the last card fully in view.
-  const setProgress = (progress: number) => {
-    const clamped = Math.min(1, Math.max(0, progress));
-    const right = viewport.getBoundingClientRect().right + 4;
-    const seen = slides.filter((slide) => slide.getBoundingClientRect().right <= right).length;
-    if (bar) bar.style.transform = `scaleX(${Math.max(clamped, 0.06)})`;
+  // Right edges of each card within the track, measured once per layout
+  // rather than on every scrubbed frame.
+  let rights: number[] = [];
+  const cacheEdges = () => {
+    rights = slides.map((slide) => slide.offsetLeft + slide.offsetWidth);
+  };
+
+  // The counter reads "how many builders you have seen": cards fully in view.
+  const setProgress = (progress: number, scrolled: number, visible: number) => {
+    const seen = rights.filter((right) => right <= scrolled + visible + 4).length;
+    if (bar) bar.style.transform = `scaleX(${Math.max(Math.min(1, Math.max(0, progress)), 0.06)})`;
     if (indexNode instanceof Text) indexNode.data = String(Math.max(1, seen)).padStart(2, "0");
   };
 
@@ -32,12 +39,13 @@ export function initBuilders(root: HTMLElement, media: gsap.MatchMedia): void {
   const onTrackScroll = () => {
     if (section.classList.contains("is-pinned")) return;
     const max = nativeMax();
-    setProgress(max > 0 ? track.scrollLeft / max : 0);
+    setProgress(max > 0 ? track.scrollLeft / max : 0, track.scrollLeft, track.clientWidth);
     const [previous, next] = steps;
     if (previous) previous.disabled = track.scrollLeft <= 2;
     if (next) next.disabled = track.scrollLeft >= max - 2;
   };
   const measure = () => {
+    cacheEdges();
     if (section.classList.contains("is-pinned")) return;
     section.classList.toggle("has-overflow", nativeMax() > 2);
     onTrackScroll();
@@ -54,11 +62,11 @@ export function initBuilders(root: HTMLElement, media: gsap.MatchMedia): void {
     });
   }
 
-  // Short screens keep the native track: a pinned block taller than the space
-  // under the nav would hide the bottom of every card for the whole pin.
-  media.add(`${DESKTOP} and (min-height: 700px) and ${MOTION}`, () => {
+  // Only the stage is pinned, so it fits 1366x768 and real 1440x900 windows.
+  media.add(`${DESKTOP} and (min-height: 600px) and ${MOTION}`, () => {
     const navHeight = () => document.querySelector<HTMLElement>("body header")?.offsetHeight ?? 0;
     section.classList.add("is-pinned");
+    cacheEdges();
     const distance = () => track.offsetWidth - viewport.clientWidth;
     if (distance() <= 0 || pin.offsetHeight > window.innerHeight - navHeight() - 16) {
       section.classList.remove("is-pinned");
@@ -68,31 +76,30 @@ export function initBuilders(root: HTMLElement, media: gsap.MatchMedia): void {
     section.classList.add("has-overflow");
     track.scrollLeft = 0;
 
-    const tween = gsap.to(track, {
-      x: () => -distance(),
-      ease: "none",
-      // Per scrubbed frame, so the meter follows the cards rather than the scrollbar.
-      onUpdate(this: gsap.core.Tween) {
-        setProgress(this.progress());
+    const timeline = gsap.timeline({
+      onUpdate(this: gsap.core.Timeline) {
+        const travelled = distance() * this.progress();
+        setProgress(this.progress(), travelled, viewport.clientWidth);
       },
       scrollTrigger: {
         trigger: pin,
-        // Centre the pinned block in the space under the nav when it fits; otherwise sit just below it.
-        start: () => {
-          const free = window.innerHeight - navHeight();
-          return pin.offsetHeight < free - 32 ? `center ${navHeight() + free / 2}` : `top ${navHeight() + 16}`;
-        },
+        // Centre the stage in the space under the nav.
+        start: () => `center ${navHeight() + (window.innerHeight - navHeight()) / 2}`,
         end: () => `+=${distance()}`,
         pin: true,
         scrub: 0.6,
         invalidateOnRefresh: true,
+        onRefresh: cacheEdges,
       },
     });
+    timeline.to(track, { x: () => -distance(), ease: "none", duration: 1 }, 0);
+    // The heading drifts left and recedes as the cards take the frame.
+    timeline.to(head, { xPercent: -8, opacity: 0.35, ease: "power1.in", duration: 0.3 }, 0);
 
     // Tabbing to an off-screen card scrolls the page to the point where it is in view.
     const onFocus = (event: FocusEvent) => {
-      const slide = (event.target as HTMLElement).closest<HTMLElement>(".slide");
-      const trigger = tween.scrollTrigger;
+      const slide = (event.target as HTMLElement).closest<HTMLElement>(".slide, .end-slide");
+      const trigger = timeline.scrollTrigger;
       if (!slide || !trigger) return;
       viewport.scrollLeft = 0;
       const offset = slide.offsetLeft - (slides[0]?.offsetLeft ?? 0);
@@ -100,7 +107,7 @@ export function initBuilders(root: HTMLElement, media: gsap.MatchMedia): void {
       window.scrollTo({ top: trigger.start + progress * (trigger.end - trigger.start), behavior: "instant" });
     };
     track.addEventListener("focusin", onFocus);
-    setProgress(0);
+    setProgress(0, 0, viewport.clientWidth);
 
     return () => {
       track.removeEventListener("focusin", onFocus);

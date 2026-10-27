@@ -2,9 +2,10 @@ import { gsap } from "gsap";
 import { all } from "./shared";
 
 /**
- * Each principle fills from outline to solid peach as it crosses the middle
- * of the screen, scrubbed to the scroll, and its commitment slides in beside
- * it. Reversible: scrolling back empties the word again.
+ * Each principle starts as an outline and fills to solid peach as it crosses
+ * the middle of the screen, scrubbed to the scroll; its commitment slides in
+ * early and stays legible throughout. Reversible. The server-rendered (and
+ * reduced-motion) state is the finished, filled one.
  */
 export function initPrinciples(root: HTMLElement): void {
   for (const value of all(root, "[data-ha-value]")) {
@@ -16,9 +17,8 @@ export function initPrinciples(root: HTMLElement): void {
       .fromTo(word, { "--ha-fill": "0%" }, { "--ha-fill": "100%", ease: "none", duration: 1 }, 0)
       .fromTo(
         commitment,
-        // A short slide on phones, where the copy already spans the full width.
-        { x: () => Math.min(56, window.innerWidth * 0.06), opacity: 0.15 },
-        { x: 0, opacity: 1, ease: "power2.out", duration: 0.45 },
+        { x: 24, opacity: 0.55 },
+        { x: 0, opacity: 1, ease: "power2.out", duration: 0.25 },
         0,
       );
   }

@@ -6,7 +6,8 @@ import TextLink from "./TextLink.astro";
 import Words from "./Words.astro";
 
 /**
- * #hire: the one inverted band on the page. A slow outlined marquee of the
+ * #hire: the one inverted band on the page, set as a sheet that slides up
+ * over the end of the community section. A slow outlined marquee of the
  * builders' own skills runs beneath the copy; it is decorative and hidden from
  * assistive technology, and omitted when no builder has listed a skill.
  */
@@ -22,11 +23,11 @@ const skills = [
 ].slice(0, 16);
 ---
 
-<section id="hire" class="hire">
+<section id="hire" class="hire" data-ha-hire>
   <div class="band" data-ha-band>
     <div class="ha-wrap">
       <div class="content ha-grid">
-        <h2 class="ha-h2 title" data-ha-reveal="words"><Words text={HIRE.title} /></h2>
+        <h2 class="ha-h2 title"><Words text={HIRE.title} /></h2>
         <div class="aside" data-ha-reveal="rise">
           <p class="ha-lead lead">{HIRE.summary}</p>
           <div class="actions">
@@ -56,9 +57,24 @@ const skills = [
 </section>
 
 <style>
+  /* Overlaps the community section's bottom padding (never its content). */
   .hire {
     position: relative;
-    padding-block: clamp(1rem, 3vw, 2.5rem);
+    z-index: 2;
+    margin-top: calc(var(--ha-section) * -0.5);
+    padding-block: 0 clamp(1rem, 3vw, 2.5rem);
+  }
+
+  /* A soft shadow cast up onto the section the sheet slides over. */
+  .hire::before {
+    content: "";
+    position: absolute;
+    top: -3.5rem;
+    left: 0;
+    right: 0;
+    height: 3.5rem;
+    background: linear-gradient(to top, rgba(0, 20, 18, 0.45), transparent);
+    pointer-events: none;
   }
 
   .band {
@@ -104,7 +120,7 @@ const skills = [
     outline-color: var(--ha-dark);
   }
 
-  @media (min-width: 900px) {
+  @media (min-width: 768px) {
     .title {
       grid-column: 1 / span 6;
       align-self: start;

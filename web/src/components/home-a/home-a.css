@@ -190,9 +190,40 @@
 }
 
 /*
- * The hero's starting pose, applied before first paint by HomeA's inline
- * script and only when motion is allowed. motion/hero.ts takes it from here.
+ * The hero intro is pure CSS, so first paint never waits on the script bundle:
+ * each word rises from behind its own clip as soon as the page paints, staggered
+ * by its server-set index, and the deck and facts follow. Done in about 1.2s.
+ * The clip is released (clip-path: none) on the last frame so nothing is
+ * cropped afterwards. Reduced motion gets the finished composition untouched.
  */
-.ha-intro [data-ha-hero] .ha-h1 .ha-w { overflow: clip; padding-block: 0.08em; margin-block: -0.08em; }
-.ha-intro [data-ha-hero] .ha-h1 .ha-wi { transform: translateY(120%); }
-.ha-intro [data-ha-hero] [data-ha-rise] { opacity: 0; transform: translateY(1.5rem); }
+@media (prefers-reduced-motion: no-preference) {
+  .ha-hero-title .ha-w {
+    animation: ha-mask 800ms linear both;
+    animation-delay: calc(80ms + var(--i, 0) * 40ms);
+  }
+
+  .ha-hero-title .ha-wi {
+    animation: ha-word-in 800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: calc(80ms + var(--i, 0) * 40ms);
+  }
+
+  .ha-hero-rise {
+    animation: ha-fade-up 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(420ms + var(--r, 0) * 110ms);
+  }
+}
+
+@keyframes ha-word-in {
+  from { transform: translateY(115%); }
+  to { transform: none; }
+}
+
+@keyframes ha-mask {
+  0%, 99% { clip-path: inset(-0.4em -0.3em -0.12em -0.3em); }
+  100% { clip-path: none; }
+}
+
+@keyframes ha-fade-up {
+  from { opacity: 0; transform: translateY(1.5rem); }
+  to { opacity: 1; transform: none; }
+}

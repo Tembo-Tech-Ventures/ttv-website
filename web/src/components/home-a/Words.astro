@@ -3,6 +3,7 @@
  * Renders a line of display copy as one span per word, so a reveal can slide
  * each word up from behind its own mask without replacing any text node. The
  * server output is the finished composition; motion only adds a starting pose.
+ * Each word carries its index as `--i`, so a pure-CSS intro can stagger it.
  */
 interface Props {
   text: string;
@@ -20,7 +21,9 @@ const accentFrom = words.length - accent;
 {
   words.map((word, index) => (
     <>
-      <span class:list={["ha-w", index >= accentFrom && "ha-accent"]}><span class="ha-wi">{word}</span></span>
+      <span class:list={["ha-w", index >= accentFrom && "ha-accent"]} style={`--i: ${index}`}>
+        <span class="ha-wi">{word}</span>
+      </span>
       {index < words.length - 1 && (sentences && /[.?!]$/.test(word) ? <br /> : " ")}
     </>
   ))

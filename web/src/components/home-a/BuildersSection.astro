@@ -9,7 +9,8 @@ import Words from "./Words.astro";
 /**
  * #builders: a horizontal gallery. Without script it is a native swipe track
  * with scroll snap at every width. On large screens with motion allowed,
- * motion/builders.ts pins it and lets vertical scroll drive the track.
+ * motion/builders.ts pins the stage (track and meter, not the heading) and
+ * lets vertical scroll drive the track, while the heading slides away.
  */
 interface Props {
   builders: HomepageBuilder[];
@@ -21,7 +22,7 @@ const total = String(builders.length).padStart(2, "0");
 // closing tile takes whatever columns the cards leave.
 const few = builders.length > 0 && builders.length <= 3;
 const span = builders.length === 3 ? 3 : 4;
-const endSpan = 12 - span * builders.length;
+const endSpan = Math.min(4, 12 - span * builders.length);
 ---
 
 <section
@@ -30,16 +31,17 @@ const endSpan = 12 - span * builders.length;
   data-ha-builders
   style={few ? `--span: ${span}; --end-span: ${endSpan}` : undefined}
 >
-  <div class="pin" data-ha-pin>
-    <div class="ha-wrap">
-      <div class="head ha-grid">
-        <h2 class="ha-h2 title" data-ha-reveal="words"><Words text={BUILDERS.title} /></h2>
-        <div class="aside" data-ha-reveal="rise">
-          <p class="ha-lead">{BUILDERS.summary}</p>
-          <TextLink href={BUILDERS.all.href} label={BUILDERS.all.label} class="all" />
-        </div>
+  <div class="ha-wrap">
+    <div class="head ha-grid" data-ha-head>
+      <h2 class="ha-h2 title" data-ha-reveal="words"><Words text={BUILDERS.title} /></h2>
+      <div class="aside" data-ha-reveal="rise">
+        <p class="ha-lead">{BUILDERS.summary}</p>
+        <TextLink href={BUILDERS.all.href} label={BUILDERS.all.label} class="all" />
       </div>
     </div>
+  </div>
+
+  <div class="stage" data-ha-pin>
 
     {
       builders.length > 0 ? (
@@ -112,22 +114,23 @@ const endSpan = 12 - span * builders.length;
     margin-top: 1rem;
   }
 
-  @media (min-width: 900px) {
+  @media (min-width: 768px) {
     .title {
       grid-column: 1 / span 6;
     }
 
     .aside {
-      grid-column: 8 / -1;
+      grid-column: 7 / -1;
     }
   }
 
-  .viewport {
-    margin-top: clamp(2.5rem, 5vw, 4rem);
+  .stage {
+    padding-top: clamp(2.5rem, 5vw, 4rem);
   }
 
   /* Native swipe track. The side padding lines the first card up with the grid. */
   .track {
+    position: relative;
     --edge: max(var(--ha-gutter), calc((100% - 80rem) / 2 + var(--ha-gutter)));
     display: flex;
     gap: var(--ha-gap);
@@ -334,7 +337,7 @@ const endSpan = 12 - span * builders.length;
 
   .builders.is-pinned .slide,
   .builders.is-pinned .end-slide {
-    flex-basis: clamp(22.5rem, 26vw, 26rem);
+    flex-basis: clamp(21rem, 24vw, 24rem);
   }
 
   .builders.is-pinned .steps {
@@ -342,7 +345,7 @@ const endSpan = 12 - span * builders.length;
   }
 
   .empty {
-    margin: clamp(2.5rem, 5vw, 4rem) 0 0;
+    margin: 0;
     padding: clamp(2rem, 4vw, 3rem) 0;
     border-block: 1px solid var(--ha-rule);
     max-width: none;
