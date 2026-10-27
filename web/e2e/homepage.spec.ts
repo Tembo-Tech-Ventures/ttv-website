@@ -33,6 +33,14 @@ test.describe("homepage", () => {
     await expect(page.locator("main h1")).toHaveCount(1);
   });
 
+  test("shows skills as plain names, not stored JSON", async ({ page }) => {
+    // Profiles store skills as a JSON array; reading them as comma-separated
+    // text once put labels like ["TypeScript" on the live map.
+    await page.goto(path);
+    const labels = await page.locator("main [data-hp-skill], main .hp-chip").allTextContents();
+    expect(labels.filter((label) => /[[\]"]/.test(label))).toEqual([]);
+  });
+
   test("keyboard users can reach every link and button without scrolling first", async ({ page }) => {
     await page.goto(path);
     await page.evaluate(() => document.fonts.ready);

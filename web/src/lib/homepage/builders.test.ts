@@ -11,7 +11,7 @@ function profile(overrides: Partial<BuilderProfileRow> = {}): BuilderProfileRow 
     handle: "fixture-wanjiru",
     headline: "  Backend developer  ",
     country: "Kenya",
-    skills: "TypeScript, PostgreSQL ,, Node.js, Go",
+    skills: JSON.stringify(["TypeScript", " PostgreSQL ", "", "Node.js", "Go"]),
     publicName: "Wanjiru Kamau",
     publicAvatarUrl: null,
     highlights: [{ repoFullName: "fixture/chama-ledger", description: "Shared savings ledger.", language: "TypeScript" }],
@@ -47,6 +47,11 @@ describe("toHomepageBuilder", () => {
     const card = toHomepageBuilder(profile({ publicName: null, publicAvatarUrl: "/api/avatar/a.webp" }));
     expect(card?.name).toBe("TTV Builder");
     expect(card?.image).toBe("/api/avatar/a.webp");
+  });
+
+  it("reads skills the way profiles store them, as a JSON array", () => {
+    expect(toHomepageBuilder(profile({ skills: '["Next.js","React"]' }))?.skills).toEqual(["Next.js", "React"]);
+    expect(toHomepageBuilder(profile({ skills: "not json" }))?.skills).toEqual([]);
   });
 
   it("tolerates missing optional fields", () => {

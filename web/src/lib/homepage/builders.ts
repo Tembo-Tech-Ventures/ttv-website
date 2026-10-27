@@ -5,6 +5,7 @@ import type { Database } from "@/lib/db/schema";
 import { getInitials } from "@/components/talent/directory-helpers";
 import { loadPublicPageData } from "@/lib/public-page-data";
 import { isValidCompletion, type CompletionState } from "@/lib/talent/eligibility";
+import { parseSkillsJson } from "@/lib/talent/profile";
 import { resolvePublicProfileIdentity, type PublicIdentitySnapshot } from "@/lib/talent/public-identity";
 
 /** What a homepage builder showcase needs to know about one public profile. */
@@ -49,8 +50,8 @@ export function toHomepageBuilder(profile: BuilderProfileRow): HomepageBuilder |
     headline: profile.headline?.trim() || null,
     cohort: completion.program?.name ?? null,
     country: profile.country?.trim() || null,
-    skills: (profile.skills ?? "")
-      .split(",")
+    // Stored by serializeSkills as a JSON array, the same as the talent pages read.
+    skills: parseSkillsJson(profile.skills)
       .map((skill) => skill.trim())
       .filter(Boolean)
       .slice(0, MAX_SKILLS),
