@@ -346,13 +346,14 @@ export function adjacency(graph: Pick<SkillsGraph, "links">): Map<string, Set<st
   return near;
 }
 
-export type NodeState = "done" | "reachable" | "later";
-
 /**
- * 42's three node states, relative to how far the walk has got: skills it has
- * passed are done, skills linked to the centre or to a done skill are
+ * How a node is drawn as the walk passes, after 42's three states but with
+ * nothing marked as completed by anyone: skills the drawn path has passed
+ * are lit (on the path), skills linked to the centre or to a lit skill are
  * reachable, everything else is for later.
  */
+export type NodeState = "lit" | "reachable" | "later";
+
 export function nodeStates(
   keys: readonly string[],
   near: Map<string, Set<string>>,
@@ -361,8 +362,8 @@ export function nodeStates(
   const states: Record<string, NodeState> = {};
   const from = [CENTRE, ...visited];
   for (const key of keys) {
-    if (visited.has(key)) states[key] = "done";
-    else if (from.some((done) => near.get(done)?.has(key))) states[key] = "reachable";
+    if (visited.has(key)) states[key] = "lit";
+    else if (from.some((lit) => near.get(lit)?.has(key))) states[key] = "reachable";
     else states[key] = "later";
   }
   return states;
@@ -414,7 +415,7 @@ export function pointAlong(points: readonly Point[], fractions: readonly number[
  * `t`: beside the path rather than on it (so it never sits on a label), and
  * never on the centre.
  */
-export function walkerAt(points: readonly Point[], fractions: readonly number[], t: number, centre: Point & { r: number }, beside = 24): Point {
+export function walkerAt(points: readonly Point[], fractions: readonly number[], t: number, centre: Point & { r: number }, beside = 30): Point {
   const head = pointAlong(points, fractions, t);
   if (points.length < 2) return head;
   let i = 1;
@@ -651,10 +652,11 @@ function placeRadial(graph: SkillsGraph, options: RadialOptions, turn: number): 
 
   // The route: centre, the walked skills, then on past the outer ring.
   const walked = graph.path.filter((key) => byKey.has(key));
-  const points: Point[] = [{ x: centre.x, y: centre.y }, ...walked.map((key) => ({ x: byKey.get(key)!.x, y: byKey.get(key)!.y }))];
-  const lastAngle = walked.length > 0 ? angles.get(walked.at(-1)!)! : turn;
-  const beyond = at(centre, { rx: rings[2].rx * 1.2, ry: rings[2].ry * 1.2 }, lastAngle + 0.12);
-  points.push({ x: round(Math.min(width - edge, Math.max(edge, beyond.x))), y: round(Math.min(height - edge, Math.max(edge, beyond.y))) });
+  const points: Point[] = [
+    { x: centre.x, y: centre.y },
+    ...walked.map((key) => ({ x: byKey.get(key)!.x, y: byKey.get(key)!.y })),
+    tailEnd(centre, rings, walked.length > 0 ? byKey.get(walked.at(-1)!)! : null, turn, width, height),
+  ];
   const fractions = pathFractions(points);
   walked.forEach((key, index) => {
     byKey.get(key)!.at = round(fractions[index + 1] * 1000) / 1000;
@@ -707,6 +709,30 @@ function placeRadial(graph: SkillsGraph, options: RadialOptions, turn: number): 
     dust: dust(centre, rings, placed, turn),
   };
   return { map, angles };
+}
+
+/** Space between the last label's edge and the end of the path, viewBox units. */
+export const TAIL_CLEARANCE = 56;
+
+/**
+ * Where the path ends: on past the last walked label, outward from the
+ * centre, far enough that the walking group resting there never touches it,
+ * and never off the drawing.
+ */
+function tailEnd(centre: Point, rings: [Ellipse, Ellipse, Ellipse], last: PlacedSkill | null, turn: number, width: number, height: number): Point {
+  const edge = 8;
+  const clampPoint = (p: Point) => ({
+    x: round(Math.min(width - edge, Math.max(edge, p.x))),
+    y: round(Math.min(height - edge, Math.max(edge, p.y))),
+  });
+  if (!last) return clampPoint(at(centre, { rx: rings[2].rx * 1.2, ry: rings[2].ry * 1.2 }, turn));
+  const dx = last.x - centre.x;
+  const dy = last.y - centre.y;
+  const length = Math.hypot(dx, dy) || 1;
+  // Along the outward ray, the label's own half-extent plus the clearance.
+  const half = Math.abs(dx / length) * (last.w / 2) + Math.abs(dy / length) * (last.h / 2);
+  const reach = half + TAIL_CLEARANCE;
+  return clampPoint({ x: last.x + (dx / length) * reach, y: last.y + (dy / length) * reach });
 }
 
 /**
@@ -777,10 +803,11 @@ function dust(centre: Point, rings: [Ellipse, Ellipse, Ellipse], placed: PlacedS
 /* --------------------------------------------------------------- column */
 
 /**
- * The phone version: the walk becomes a vertical line (the trunk), with the
- * walked skills as stations on it and the rest of each ring branching off to
- * the right in short chains. One band per ring, each laid out in its own CSS
- * px coordinates (trunk at `trunk`), shown at 1:1 on a 358px column.
+ * The phone version: the walk becomes a vertical line (the trunk). Each ring
+ * is one band: a station on the trunk (the last skill the walk passes on that
+ * ring) and one short row of skills branching off it, the rest counted in a
+ * "+N more" chip, so the whole path stays about a screen long. Bands are laid
+ * out in CSS px (trunk at `trunk`) and shown 1:1 on a 358px column.
  */
 export interface ColumnSkill extends MapSkill {
   /** Left edge and vertical centre of the label pill. */
@@ -795,11 +822,16 @@ export interface ColumnSkill extends MapSkill {
 export interface ColumnBand {
   ring: Ring;
   height: number;
+  /** The station first (when the walk passes this ring), then the branch row left to right. */
   skills: ColumnSkill[];
+  /** Skills on this ring left out of the row. */
+  more: number;
+  /** Where the "+N more" chip starts (left edge, vertical centre), when `more` > 0. */
+  moreAt: Point | null;
   /**
-   * Branch lines from a station on the trunk to the first pill in a row
-   * ("branch"), then pill to pill along the row ("chain"; the page may draw
-   * these as ticks between pills laid out at their real widths).
+   * The branch line from the station on the trunk to the first pill in the
+   * row ("branch"), then pill to pill along the row ("chain"; the page may
+   * draw these as ticks between pills laid out at their real widths).
    */
   lines: Array<{ x1: number; y1: number; x2: number; y2: number; a: string; b: string; kind: "branch" | "chain" }>;
 }
@@ -808,18 +840,48 @@ export interface ColumnOptions {
   width?: number;
   trunk?: number;
   rowHeight?: number;
-  /** Most skills per band, stations included (phones keep it short). */
-  caps?: readonly [number, number, number];
+  /** Most pills in a branch row. */
+  perRow?: number;
   metrics?: LabelMetrics;
 }
 
 export const COLUMN_LABELS: LabelMetrics = { ...LABELS, minScale: 1 };
 
+/** Room the "+N more" chip needs at the end of a row, CSS px. */
+const MORE_WIDTH = 84;
+
+/** As many skills as fit one row (at most `perRow`), leaving room for "+N more" when some are left out. */
+function packRow(
+  others: MapSkill[],
+  spot: { start: number; y: number; width: number; gap: number; perRow: number; metrics: LabelMetrics; states: Record<string, NodeState> },
+): ColumnSkill[] {
+  const row: ColumnSkill[] = [];
+  let x = spot.start;
+  for (const [index, skill] of others.entries()) {
+    if (row.length >= spot.perRow) break;
+    const size = pillSize(skill.label, spot.metrics);
+    const left = others.length - index - 1;
+    if (x + size.w + (left > 0 ? spot.gap + MORE_WIDTH : 0) > spot.width) break;
+    row.push({ ...skill, x, y: spot.y, w: size.w, h: size.h, station: false, state: spot.states[skill.key] });
+    x += size.w + spot.gap;
+  }
+  return row;
+}
+
+/** "+N more" ends the branch row, or the station's row when the branch row is full. */
+function placeMore(row: ColumnSkill[], station: ColumnSkill | undefined, spot: { start: number; y: number; width: number; gap: number }): Point {
+  const last = row.at(-1);
+  const rowEnd = last ? last.x + last.w + spot.gap : spot.start;
+  if (!last || rowEnd + MORE_WIDTH <= spot.width) return { x: rowEnd, y: last ? last.y : spot.y };
+  if (station) return { x: station.x + station.w + spot.gap, y: station.y };
+  return { x: spot.start, y: spot.y };
+}
+
 export function columnLayout(graph: SkillsGraph, options: ColumnOptions = {}): ColumnBand[] {
   const width = options.width ?? 358;
   const trunk = options.trunk ?? 20;
   const rowHeight = options.rowHeight ?? 46;
-  const caps = options.caps ?? [5, 6, 6];
+  const perRow = options.perRow ?? 3;
   const metrics = options.metrics ?? COLUMN_LABELS;
   const gap = 10;
   const branchStart = trunk + 40;
@@ -830,58 +892,41 @@ export function columnLayout(graph: SkillsGraph, options: ColumnOptions = {}): C
     near,
     new Set(graph.path),
   );
+  const rank: Record<NodeState, number> = { lit: 0, reachable: 1, later: 2 };
   const bands: ColumnBand[] = [];
 
   for (const ring of [0, 1, 2] as const) {
     const onRing = graph.skills.filter((skill) => skill.ring === ring).toSorted((a, b) => a.order - b.order);
     if (onRing.length === 0) continue;
-    const stations = graph.path.flatMap((key) => onRing.filter((skill) => skill.key === key));
-    const others = onRing.filter((skill) => !graph.path.includes(skill.key)).slice(0, Math.max(0, caps[ring] - stations.length));
+    const station = graph.path.toReversed().map((key) => onRing.find((skill) => skill.key === key)).find(Boolean) ?? null;
+    // Lit skills first, then those linked to the station, then the rest.
+    const linked = (skill: MapSkill) => (station && near.get(station.key)?.has(skill.key) ? 0 : 1);
+    const others = onRing
+      .filter((skill) => skill !== station)
+      .toSorted((a, b) => rank[states[a.key]] - rank[states[b.key]] || linked(a) - linked(b) || b.count - a.count || a.order - b.order);
+
     const skills: ColumnSkill[] = [];
     const lines: ColumnBand["lines"] = [];
     let y = rowHeight / 2 + 4;
-    // Each branch hangs off the station it shares a parent (or a link) with.
-    const owner = (skill: MapSkill) =>
-      stations.find((station) => near.get(station.key)?.has(skill.key)) ??
-      stations.find((station) => station.parent === skill.parent) ??
-      stations[0];
-    const groups = stations.length > 0 ? stations.map((station) => ({ station, branch: others.filter((skill) => owner(skill) === station) })) : [{ station: null, branch: others }];
-
-    for (const { station, branch } of groups) {
-      if (station) {
-        const size = pillSize(station.label, metrics);
-        skills.push({ ...station, x: stationStart, y, w: size.w, h: size.h, station: true, state: states[station.key] });
-        y += rowHeight;
-      }
-      let row: ColumnSkill[] = [];
-      const flush = () => {
-        if (row.length === 0) return;
-        const from = station ? { x: trunk, y: skills.find((s) => s.key === station.key)!.y, key: station.key } : null;
-        if (from) lines.push({ x1: from.x, y1: from.y, x2: row[0].x, y2: row[0].y, a: from.key, b: row[0].key, kind: "branch" });
-        for (let i = 1; i < row.length; i += 1) {
-          lines.push({ x1: row[i - 1].x + row[i - 1].w, y1: row[i].y, x2: row[i].x, y2: row[i].y, a: row[i - 1].key, b: row[i].key, kind: "chain" });
-        }
-        row = [];
-        y += rowHeight;
-      };
-      // Rows alternate a small indent, so the chains read as branches, not a table.
-      let rows = 0;
-      let x = branchStart;
-      for (const skill of branch) {
-        const size = pillSize(skill.label, metrics);
-        if (row.length > 0 && x + size.w > width) {
-          flush();
-          rows += 1;
-          x = branchStart + (rows % 2) * 16;
-        }
-        const placed: ColumnSkill = { ...skill, x, y, w: size.w, h: size.h, station: false, state: states[skill.key] };
-        row.push(placed);
-        skills.push(placed);
-        x += size.w + gap;
-      }
-      flush();
+    if (station) {
+      const size = pillSize(station.label, metrics);
+      skills.push({ ...station, x: stationStart, y, w: size.w, h: size.h, station: true, state: states[station.key] });
+      y += rowHeight;
     }
-    bands.push({ ring, height: Math.round(y - rowHeight / 2 + 4), skills, lines });
+    const row = packRow(others, { start: branchStart, y, width, gap, perRow, metrics, states });
+    if (row.length > 0) {
+      const from = skills[0];
+      lines.push({ x1: trunk, y1: from ? from.y : y, x2: row[0].x, y2: y, a: from ? from.key : CENTRE, b: row[0].key, kind: "branch" });
+      for (let i = 1; i < row.length; i += 1) {
+        lines.push({ x1: row[i - 1].x + row[i - 1].w, y1: y, x2: row[i].x, y2: y, a: row[i - 1].key, b: row[i].key, kind: "chain" });
+      }
+      skills.push(...row);
+      y += rowHeight;
+    }
+    const more = others.length - row.length;
+    const moreAt = more > 0 ? placeMore(row, skills.find((skill) => skill.station), { start: branchStart, y, width, gap }) : null;
+    if (row.length === 0 && more > 0) y += rowHeight;
+    bands.push({ ring, height: Math.round(y - rowHeight / 2 + 4), skills, more, moreAt, lines });
   }
   return bands;
 }

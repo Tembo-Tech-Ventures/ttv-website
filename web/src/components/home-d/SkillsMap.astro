@@ -5,18 +5,22 @@ import { CENTRE, COLUMN_LABELS, adjacency, buildSkillsGraph, columnLayout, radia
 
 /**
  * The skills map: a 42-style radial picture of the skills on published
- * profiles, with the cohort at the centre. The three steps of a cohort
- * (`COHORT.rhythm`) are waypoints on it: as they scroll past, a peach path
- * lights node by node outward, a small group of builders walks it, engineers
- * (teal rings) join them, and the path carries on past the cohort's ring.
+ * profiles, around a cohort. The three steps of a cohort (`COHORT.rhythm`)
+ * are waypoints on it: as the map's sheet arrives, a peach path lights node
+ * by node outward, a small group of builders walks it, engineers (teal
+ * rings) join them, and the path carries on past the cohort's ring.
  *
- * It is an illustration, never a progress tracker: the caption says so, and
- * with no published profiles it draws only an unlabelled structure.
+ * It is an illustration, never a syllabus or a progress tracker: the centre
+ * is "a cohort" (a group, no number), lit skills are only "on the path" (no
+ * skill is drawn as completed by anyone), and the caption saying so is read
+ * before the picture. With no published profiles it draws only an
+ * unlabelled structure.
  *
- * Wide screens: steps beside a sticky map. Tablets: the map, then the steps
- * in a row. Phones: the map becomes a vertical path (the trunk) through the
- * steps, with each ring's skills branching off it. The finished picture is
- * the server markup; `scripts/map.ts` adds the walk and the node details.
+ * Wide screens: intro and steps beside the map. Tablets: the map, then the
+ * steps in a row. Phones: the map becomes a vertical path (the trunk) through
+ * the steps, each ring a station with a short row of skills off it. The
+ * finished picture is the server markup; `scripts/map.ts` adds the walk and
+ * the node details.
  */
 interface Props {
   builders: HomepageBuilder[];
@@ -28,7 +32,6 @@ const map = radialLayout(graph);
 const bands = columnLayout(graph, { metrics: { ...COLUMN_LABELS, minScale: 0.9 } });
 const near = adjacency({ links: map.links });
 const hasSkills = map.skills.length > 0;
-const running = COHORT.timeline.find((cohort) => cohort.running) ?? COHORT.timeline.at(-1);
 const W = map.width;
 const H = map.height;
 const pct = (value: number, of: number) => `${((value / of) * 100).toFixed(3)}%`;
@@ -46,34 +49,39 @@ const neighbours = (key: string) => [...(near.get(key) ?? [])].filter((other) =>
 const rowsOf = <T extends { x: number; y: number }>(skills: T[]) =>
   [...Map.groupBy(skills, (skill) => skill.y).values()].map((row) => row.toSorted((a, b) => a.x - b.x));
 const plural = (count: number) => `On ${count} published ${count === 1 ? "profile" : "profiles"}`;
+/** Four dots in a loose square: a cohort, as a group (the walkers' formation). */
+const GROUP = [
+  [-6, -6],
+  [6, -6],
+  [-6, 6],
+  [6, 6],
+] as const;
 ---
 
 <div class:list={["hd-map", { "hd-map--empty": !hasSkills }]} data-hd-map>
   <div class="hd-map__intro">
     <h2 class="hd-h2 font-heading tracking-heading">{SKILLS_MAP.title}</h2>
     <p class="hd-lede">{SKILLS_MAP.summary}</p>
+    <p class="hd-map__caption">
+      <span class="hd-map__caption-mark" aria-hidden="true"></span>
+      {hasSkills ? SKILLS_MAP.caption : SKILLS_MAP.emptyCaption}
+    </p>
   </div>
 
-  <figure class="hd-map__figure" data-hd-map-figure>
+  <div class="hd-map__figure" data-hd-map-figure>
     <div class="hd-map__stage" style={`aspect-ratio:${W}/${H}`} data-hd-map-stage>
       <svg class="hd-map__svg" viewBox={`0 0 ${W} ${H}`} aria-hidden="true" focusable="false">
         <defs>
           <linearGradient id="hd-map-tail" gradientUnits="userSpaceOnUse" x1={lastSkill.x} y1={lastSkill.y} x2={end.x} y2={end.y}>
             <stop offset="0" stop-color="#f28d68" />
-            <stop offset="1" stop-color="#f28d68" stop-opacity="0" />
+            <stop offset="1" stop-color="#f28d68" stop-opacity="0.15" />
           </linearGradient>
         </defs>
         <g class="hd-map__rings">
-          {map.rings.map((ring, index) => (
-            <ellipse class="hd-map__ring" cx={map.centre.x} cy={map.centre.y} rx={ring.rx} ry={ring.ry} style={`--k:${index}`} pathLength="1" />
+          {map.rings.map((ring) => (
+            <ellipse class="hd-map__ring" cx={map.centre.x} cy={map.centre.y} rx={ring.rx} ry={ring.ry} />
           ))}
-          <ellipse
-            class="hd-map__cohort-ring"
-            cx={map.centre.x}
-            cy={map.centre.y}
-            rx={map.cohortRing.rx}
-            ry={map.cohortRing.ry}
-          />
+          <ellipse class="hd-map__cohort-ring" cx={map.centre.x} cy={map.centre.y} rx={map.cohortRing.rx} ry={map.cohortRing.ry} />
         </g>
         <g class="hd-map__dust">
           {map.dust.map((dot) => <circle cx={dot.x} cy={dot.y} r={dot.r} />)}
@@ -95,39 +103,37 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
         <polyline class="hd-map__lit" points={mainPoints} pathLength="1" data-hd-lit />
         <line class="hd-map__tail" x1={lastSkill.x} y1={lastSkill.y} x2={end.x} y2={end.y} pathLength="1" stroke="url(#hd-map-tail)" data-hd-tail />
         <g class="hd-map__centre" transform={`translate(${map.centre.x} ${map.centre.y})`}>
-          <circle class="hd-map__halo" r={map.centre.r} />
           <circle class="hd-map__hub" r={map.centre.r} />
+          {hasSkills && GROUP.map(([x, y]) => <circle class="hd-map__seat" cx={x * 1.6} cy={y * 1.6} r="6" />)}
         </g>
         <g class="hd-walk is-joined is-home" transform={`translate(${resting.x.toFixed(1)} ${resting.y.toFixed(1)})`} data-hd-walk>
-          <g class="hd-walk__mentors">
-            <circle class="hd-walk__mentor" cx="-17" cy="3" r="6.5" />
-            <circle class="hd-walk__mentor" cx="16" cy="-5" r="6.5" />
+          <g class="hd-walk__group">
+            <g class="hd-walk__mentors">
+              <circle class="hd-walk__mentor" cx="-17" cy="3" r="6.5" />
+              <circle class="hd-walk__mentor" cx="16" cy="-5" r="6.5" />
+            </g>
+            {GROUP.map(([x, y]) => <circle class="hd-walk__dot" cx={x} cy={y} r="4.6" />)}
+            <circle class="hd-walk__alum" cx="6" cy="6" r="8.5" />
           </g>
-          <circle class="hd-walk__dot" cx="-6" cy="-7" r="4.6" />
-          <circle class="hd-walk__dot" cx="6" cy="6" r="4.6" />
-          <circle class="hd-walk__dot" cx="-5" cy="8" r="4.6" />
-          <circle class="hd-walk__dot" cx="5" cy="-6" r="4.6" />
-          <circle class="hd-walk__alum" cx="6" cy="6" r="8.5" />
         </g>
       </svg>
 
-      {hasSkills && running && (
-        <p class="hd-map__label" style={`left:${pct(map.centre.x, W)};top:${pct(map.centre.y, H)}`}>
-          <span>Cohort</span>
-          <span class="hd-map__label-no font-heading tracking-display">{running.number}</span>
-        </p>
-      )}
+      {/* HTML, not SVG: its pulse is compositor-only, so it costs nothing per frame. */}
+      <span
+        class="hd-map__halo"
+        style={`left:${pct(map.centre.x, W)};top:${pct(map.centre.y, H)};width:${pct(map.centre.r * 2, W)}`}
+        aria-hidden="true"
+      ></span>
 
       {hasSkills && (
         <ul class="hd-map__skills" aria-label="Skills on the map, from the centre out" data-hd-skills>
           {map.skills.map((skill) => (
-            <li class="hd-map__node" style={`left:${pct(skill.x, W)};top:${pct(skill.y, H)}`} data-hd-node>
+            <li class="hd-map__node" style={`left:${pct(skill.x, W)};top:${pct(skill.y, H)}`} data-hd-node data-side={skill.x >= map.centre.x ? "right" : "left"}>
               <span
                 class={`hd-sk hd-sk--ring${skill.ring} is-${skill.state}`}
                 data-hd-skill={skill.key}
                 data-at={skill.at ?? undefined}
                 data-near={neighbours(skill.key)}
-                data-count={skill.count}
                 data-detail={plural(skill.count)}
               >
                 {skill.label}
@@ -141,8 +147,7 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
         <span data-hd-tip-detail></span>
       </div>
     </div>
-    {hasSkills && <figcaption class="hd-map__caption">{SKILLS_MAP.caption}</figcaption>}
-  </figure>
+  </div>
 
   <ol class="hd-way" data-hd-way>
     <li class="hd-way__lit" aria-hidden="true" data-hd-way-lit></li>
@@ -150,18 +155,12 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
       const band = bands.find((candidate) => candidate.ring === index);
       return (
         <li class:list={["hd-way__step is-reached", { "hd-way__step--last": index === COHORT.rhythm.length - 1 }]} data-hd-step>
-          {index === 0 && hasSkills && running && (
+          {index === 0 && hasSkills && (
             <div class="hd-way__start" aria-hidden="true">
               <span class="hd-way__hub">
                 <svg viewBox="-20 -20 40 40" width="40" height="40">
-                  <circle class="hd-walk__dot" cx="-5" cy="-6" r="3.6" />
-                  <circle class="hd-walk__dot" cx="5" cy="5" r="3.6" />
-                  <circle class="hd-walk__dot" cx="-5" cy="6" r="3.6" />
-                  <circle class="hd-walk__dot" cx="5" cy="-5" r="3.6" />
+                  {GROUP.map(([x, y]) => <circle class="hd-walk__dot" cx={x * 0.85} cy={y * 0.85} r="3.6" />)}
                 </svg>
-              </span>
-              <span class="hd-way__hub-label">
-                Cohort <span class="font-heading tracking-display">{running.number}</span>
               </span>
             </div>
           )}
@@ -209,7 +208,7 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
                 {band.skills
                   .filter((skill) => skill.station)
                   .map((skill) => (
-                    <circle class="hd-band__station is-done" cx="20" cy={skill.y} r="6" data-station={skill.key} />
+                    <circle class="hd-band__station is-lit" cx="20" cy={skill.y} r="6" data-station={skill.key} />
                   ))}
               </svg>
               {/* Rows sit at their computed start; pills in a row take their real widths. */}
@@ -222,7 +221,6 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
                           class:list={[`hd-sk hd-sk--ring${skill.ring} is-${skill.state}`, { "hd-sk--station": skill.station }]}
                           data-hd-skill={skill.key}
                           data-near={neighbours(skill.key)}
-                          data-count={skill.count}
                           data-detail={plural(skill.count)}
                           data-station={skill.station ? "" : undefined}
                         >
@@ -230,6 +228,9 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
                         </span>
                       </span>
                     ))}
+                    {band.moreAt && band.moreAt.y === row[0].y && (
+                      <span class="hd-band__item hd-band__more" role="listitem">+{band.more} more</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -246,10 +247,7 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
       <svg viewBox="-20 -14 40 28" width="40" height="28">
         <circle class="hd-walk__mentor" cx="-12" cy="2" r="5" />
         <circle class="hd-walk__mentor" cx="12" cy="-3" r="5" />
-        <circle class="hd-walk__dot" cx="-4" cy="-5" r="3.6" />
-        <circle class="hd-walk__dot" cx="4" cy="5" r="3.6" />
-        <circle class="hd-walk__dot" cx="-4" cy="6" r="3.6" />
-        <circle class="hd-walk__dot" cx="4" cy="-5" r="3.6" />
+        {GROUP.map(([x, y]) => <circle class="hd-walk__dot" cx={x * 0.7} cy={y * 0.85} r="3.6" />)}
       </svg>
     </li>
   </ol>
@@ -267,16 +265,35 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
     --map-bg: #023b37;
     display: grid;
     gap: clamp(2rem, 4vw, 3rem);
-    margin-top: clamp(4.5rem, 9vw, 8rem);
   }
 
   .hd-map__intro :global(.hd-h2) {
     max-width: 16ch;
   }
 
+  /* Read before the picture: it is an illustration, nobody's record. */
+  .hd-map__caption {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    max-width: 34rem;
+    margin: 1rem 0 0;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    color: var(--color-ink-secondary);
+  }
+
+  .hd-map__caption-mark {
+    flex: none;
+    width: 1.1rem;
+    height: 0;
+    margin-top: 0.7em;
+    border-top: 1.5px dashed rgb(242 141 104 / 0.8);
+  }
+
   .hd-map__figure {
+    display: none;
     margin: 0;
-    order: 3;
   }
 
   .hd-map__stage {
@@ -287,7 +304,7 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
 
   @media (min-width: 48rem) {
     .hd-map__figure {
-      order: 0;
+      display: block;
     }
 
     .hd-map__stage {
@@ -296,16 +313,14 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
       max-width: 50rem;
       margin-inline: auto;
     }
-
-    .hd-map__caption {
-      text-align: center;
-    }
   }
 
+  /* Wide: intro and steps in a narrow column, the map given most of the row. */
   @media (min-width: 80rem) {
     .hd-map {
-      grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-      column-gap: 4rem;
+      grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+      column-gap: 3.5rem;
+      row-gap: 2.25rem;
       align-items: start;
     }
 
@@ -322,25 +337,8 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
     .hd-map__figure {
       grid-column: 2;
       grid-row: 1 / span 2;
+      align-self: center;
     }
-
-
-  }
-
-  /* The map stays put while the three steps scroll past it (with reduced
-   * motion too: nothing moves, the finished map simply stays in view). */
-  @media (min-width: 80rem) {
-    .hd-map__figure {
-      position: sticky;
-      top: calc(var(--hd-nav, 4.5rem) + max(1rem, (100svh - var(--hd-nav, 4.5rem) - 34rem) / 2));
-    }
-  }
-
-  .hd-map__caption {
-    margin-top: 0.75rem;
-    font-size: 0.875rem;
-    line-height: 1.5;
-    color: var(--color-ink-secondary);
   }
 
   /* ---------- The drawing ---------- */
@@ -428,13 +426,14 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
   }
 
   .hd-map__halo {
-    fill: rgb(242 141 104 / 0.08);
-    stroke: rgb(242 141 104 / 0.6);
-    stroke-width: 1;
-    vector-effect: non-scaling-stroke;
-    transform-box: fill-box;
-    transform-origin: center;
+    position: absolute;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    border: 1px solid rgb(242 141 104 / 0.6);
+    background: rgb(242 141 104 / 0.08);
+    translate: -50% -50%;
     opacity: 0;
+    pointer-events: none;
   }
 
   .hd-map--empty .hd-map__hub {
@@ -486,23 +485,13 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
     opacity: 1;
   }
 
-  .hd-map__label {
-    position: absolute;
-    display: grid;
-    justify-items: center;
-    margin: 0;
-    translate: -50% -50%;
-    font-size: 0.75rem;
-    font-weight: 600;
-    line-height: 1.1;
-    color: var(--color-ink-primary);
-    pointer-events: none;
+  .hd-map__seat {
+    fill: rgb(242 141 104 / 0.35);
   }
 
-  .hd-map__label-no {
-    font-size: clamp(1.1rem, 3.2cqi, 1.6rem);
-    line-height: 1.15;
-    color: var(--color-primary);
+  /* The walking group, a little larger than its formation's units. */
+  .hd-walk__group {
+    transform: scale(1.35);
   }
 
   /* ---------- Skill nodes (shared by the map and the phone path) ---------- */
@@ -570,11 +559,13 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
     font-size: 0.8125rem;
   }
 
-  .hd-sk.is-done {
+  /* On the path: outlined and lit in peach, never filled as if completed. */
+  .hd-sk.is-lit {
     border-color: var(--color-primary);
-    background: var(--color-primary);
-    color: var(--color-dark);
-    box-shadow: 0 6px 18px -8px rgb(242 141 104 / 0.8);
+    background: #1e4a40;
+    box-shadow:
+      0 0 0 3px rgb(242 141 104 / 0.14),
+      0 6px 18px -10px rgb(242 141 104 / 0.7);
   }
 
   .hd-sk.is-later {
@@ -603,11 +594,13 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
     border-color: var(--color-ink-primary);
   }
 
-  .hd-sk.is-active.is-done {
-    border-color: var(--color-ink-primary);
+  /* Pointed at or focused: always reads as live, whatever its state. */
+  .hd-sk.is-active {
+    border-style: solid;
+    color: var(--color-ink-primary);
   }
 
-  .hd-sk.is-near:not(.is-done) {
+  .hd-sk.is-near:not(.is-lit) {
     border-style: solid;
     border-color: var(--color-primary);
     color: var(--color-ink-primary);
@@ -635,7 +628,7 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
     background: var(--color-ink-primary);
     color: var(--color-dark);
     box-shadow: 0 16px 30px -14px rgb(0 0 0 / 0.75);
-    translate: -50% calc(-100% - 1.6rem);
+    translate: 0 -50%;
     pointer-events: none;
     font-size: 0.875rem;
     line-height: 1.35;
@@ -646,20 +639,18 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
     display: none;
   }
 
-  .hd-tip.is-below {
-    translate: -50% 1.6rem;
+  /* Radial map: beside the node, away from the centre. */
+  .hd-tip[data-side="left"] {
+    translate: -100% -50%;
   }
 
   .hd-tip strong {
     font-weight: 700;
   }
 
+  /* Phone rows: below the tapped pill's row. */
   .hd-band .hd-tip {
-    translate: 0 calc(-100% - 1.4rem);
-  }
-
-  .hd-band .hd-tip.is-below {
-    translate: 0 1.4rem;
+    translate: 0 1.5rem;
   }
 
   /* ---------- The steps ---------- */
@@ -676,13 +667,23 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
   .hd-way__step {
     position: relative;
     display: grid;
-    gap: 1.25rem;
-    padding-bottom: 2.25rem;
+    gap: 1rem;
+    padding-bottom: 1.25rem;
+  }
+
+  @media (min-width: 80rem) {
+    .hd-way__step {
+      padding-bottom: 1.75rem;
+    }
   }
 
   .hd-way__text {
     position: relative;
     padding-left: 3.5rem;
+  }
+
+  .hd-way__mark,
+  .hd-way__title {
     transition: opacity 400ms ease;
   }
 
@@ -771,6 +772,18 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
   }
 
   .hd-way__walk {
+    transition: opacity 150ms ease;
+  }
+
+  .hd-way__walk.is-hidden {
+    opacity: 0;
+  }
+
+  .hd-way__mark.is-arrived {
+    animation: hd-arrive 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .hd-way__walk {
     position: absolute;
     left: calc(var(--trunk) - 20px);
     top: 0;
@@ -805,14 +818,16 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
     background: #013d39;
   }
 
-  .hd-way__hub-label {
-    font-size: 0.9375rem;
+  .hd-band__more {
+    align-items: center;
+    min-height: 1.95rem;
+    padding: 0 0.7rem;
+    border-radius: 999px;
+    border: 1px dashed rgb(255 248 242 / 0.28);
+    font-size: 0.8125rem;
     font-weight: 600;
-    color: var(--color-ink-primary);
-  }
-
-  .hd-way__hub-label span {
-    color: var(--color-primary);
+    color: var(--color-ink-secondary);
+    white-space: nowrap;
   }
 
   /* Shown 1:1 from 390px phones up, so the trunk lines up with the steps. */
@@ -838,7 +853,7 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
     transition: fill 300ms ease;
   }
 
-  .hd-band__station.is-done {
+  .hd-band__station.is-lit {
     fill: var(--color-primary);
   }
 
@@ -884,40 +899,40 @@ const plural = (count: number) => `On ${count} published ${count === 1 ? "profil
   }
 
   /* Wide: each step holds the reading line long enough for the map to answer. */
-  @media (min-width: 80rem) {
-    .hd-way__step {
-      min-height: 34svh;
-    }
 
-    .hd-way__step--last {
-      min-height: 26svh;
-    }
-  }
 
   @media (prefers-reduced-motion: no-preference) {
-    .hd-map__halo {
+    /* Only while the map is on screen: an SVG animation repaints every frame. */
+    :global(.hd-map--onscreen) .hd-map__halo {
       animation: hd-halo 2.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
     }
 
-    :global(.hd-map--walking) .hd-way__walk {
-      display: block;
-    }
-
-    :global(.hd-map--walking) .hd-way__step.is-ahead .hd-way__text {
-      opacity: 0.45;
-    }
-
-    @media (min-width: 48rem) and (max-width: 79.99rem) {
+    /* The trunk's own walking group: phones only (wider, the map has the group). */
+    @media (max-width: 47.99rem) {
       :global(.hd-map--walking) .hd-way__walk {
-        display: none;
+        display: block;
       }
     }
+
+    /* Steps still ahead dim their mark and title only; the copy stays legible. */
+    :global(.hd-map--walking) .hd-way__step.is-ahead :is(.hd-way__mark, .hd-way__title) {
+      opacity: 0.55;
+    }
+
+
   }
 
   @media (prefers-reduced-motion: reduce) {
     .hd-sk,
     .hd-ln {
       transition: none;
+    }
+  }
+
+  @keyframes hd-arrive {
+    40% {
+      box-shadow: 0 0 0 9px rgb(242 141 104 / 0.22);
+      scale: 1.08;
     }
   }
 

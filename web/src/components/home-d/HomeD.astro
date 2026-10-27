@@ -2,6 +2,7 @@
 import type { HomepageBuilder } from "@/lib/homepage/builders";
 import Sheet from "./Sheet.astro";
 import Cohort from "./Cohort.astro";
+import SkillsMap from "./SkillsMap.astro";
 import Builders from "./Builders.astro";
 import Community from "./Community.astro";
 import Hire from "./Hire.astro";
@@ -24,19 +25,25 @@ const { builders, isAuthenticated } = Astro.props;
 ---
 
 <div class="hd" data-hd-root>
-  <Sheet id="cohorts" tone="base" labelledby="hd-cohorts-title" layer={1}>
-    <Cohort builders={builders} />
-  </Sheet>
-  <Sheet id="builders" tone="raised" labelledby="hd-builders-title" layer={2}>
+  <!-- Two layers, one section: the map slides over the hero like every other sheet. -->
+  <section id="cohorts" class="hd-group" aria-labelledby="hd-cohorts-title">
+    <Sheet tone="base" layer={1}>
+      <Cohort builders={builders} />
+    </Sheet>
+    <Sheet tone="map" layer={2}>
+      <SkillsMap builders={builders} />
+    </Sheet>
+  </section>
+  <Sheet id="builders" tone="raised" labelledby="hd-builders-title" layer={3}>
     <Builders builders={builders} />
   </Sheet>
-  <Sheet id="community" tone="lift" labelledby="hd-community-title" layer={3}>
+  <Sheet id="community" tone="lift" labelledby="hd-community-title" layer={4}>
     <Community isAuthenticated={isAuthenticated} builders={builders} />
   </Sheet>
-  <Sheet id="hire" tone="peach" labelledby="hd-hire-title" layer={4} fill>
+  <Sheet id="hire" tone="peach" labelledby="hd-hire-title" layer={5} fill>
     <Hire builders={builders} />
   </Sheet>
-  <Sheet id="principles" tone="deep" labelledby="hd-principles-title" layer={5}>
+  <Sheet id="principles" tone="deep" labelledby="hd-principles-title" layer={6} last>
     <Principles />
   </Sheet>
 </div>

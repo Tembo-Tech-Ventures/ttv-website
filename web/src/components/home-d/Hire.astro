@@ -17,12 +17,6 @@ const PROPOSALS = ["A project", "A role", "A piece of work"] as const;
 const faces = builders.slice(0, 4);
 const firstNames = faces.map((builder) => builder.name.split(" ")[0]);
 const more = builders.length - faces.length;
-// Threads from the network above, gathering into one knot over the pair (wide screens only).
-const THREADS = Array.from({ length: 9 }, (_, i) => {
-  const x = 6 + i * 11 + (i % 2 ? 2 : -2);
-  const bend = 30 + (i % 3) * 14;
-  return { d: `M${x} 0 C${x} ${bend} 50 ${100 - bend} 50 100`, tone: i % 3 === 1 ? "ink" : "dark" };
-});
 const namesLine = firstNames.length > 0 ? `${firstNames.join(", ")}${more > 0 ? ` and ${more} more` : ""}` : null;
 ---
 
@@ -33,12 +27,6 @@ const namesLine = firstNames.length > 0 ? `${firstNames.join(", ")}${more > 0 ? 
   </div>
 
   <div class="hd-hire__pair" data-hd-hire>
-    <svg class="hd-hire__threads" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-      {THREADS.map((thread) => (
-        <path class={`hd-thread hd-thread--${thread.tone}`} d={thread.d} pathLength="1" data-hd-thread />
-      ))}
-    </svg>
-    <span class="hd-hire__knot" aria-hidden="true" data-hd-knot></span>
     <div class="hd-hslot hd-hslot--primary" data-hd-hire-card>
     <a class="hd-hcard hd-hcard--primary" href={HIRE.primary.href}>
       <span class="hd-hcard__brief" aria-hidden="true">
@@ -100,58 +88,6 @@ const namesLine = firstNames.length > 0 ? `${firstNames.join(", ")}${more > 0 ? 
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     padding-block: 0.5rem 1rem;
-  }
-
-  /* The network's threads, gathering into the pair from the sheet's top edge. */
-  .hd-hire__threads,
-  .hd-hire__knot {
-    position: absolute;
-    display: none;
-    pointer-events: none;
-  }
-
-  .hd-hire__threads {
-    left: 8%;
-    right: 20%;
-    bottom: calc(100% - 0.25rem);
-    width: 72%;
-    height: clamp(4rem, 8vw, 6.5rem);
-    overflow: visible;
-  }
-
-  /* Where the threads meet, just above the cards. */
-  .hd-hire__knot {
-    left: 44%;
-    bottom: calc(100% - 0.25rem);
-    width: 0.9rem;
-    height: 0.9rem;
-    margin: 0 0 -0.45rem -0.45rem;
-    border-radius: 50%;
-    background: var(--color-dark);
-    box-shadow: 0 0 0 3px rgb(255 248 242 / 0.7);
-  }
-
-  @media (min-width: 64rem) {
-    .hd-hire__threads,
-    .hd-hire__knot {
-      display: block;
-    }
-  }
-
-  .hd-thread {
-    fill: none;
-    stroke-width: 1.25;
-    stroke-linecap: round;
-    stroke-dasharray: 1 1;
-    vector-effect: non-scaling-stroke;
-  }
-
-  .hd-thread--dark {
-    stroke: rgb(1 61 57 / 0.42);
-  }
-
-  .hd-thread--ink {
-    stroke: rgb(255 248 242 / 0.6);
   }
 
   .hd-hcard {
@@ -333,8 +269,9 @@ const namesLine = firstNames.length > 0 ? `${firstNames.join(", ")}${more > 0 ? 
     outline-offset: 4px;
   }
 
-  /* Keep the rotated corners inside the phone gutter. */
-  @media (max-width: 30rem) {
+  /* Below 64rem the pair spans the column: keep rotated, lifted and focused
+   * corners well inside the gutter (no sideways moves, gentler tilts). */
+  @media (max-width: 63.99rem) {
     .hd-hcard--primary {
       width: 92%;
       rotate: -1deg;
@@ -345,16 +282,21 @@ const namesLine = firstNames.length > 0 ? `${firstNames.join(", ")}${more > 0 ? 
       rotate: 1deg;
     }
 
+    .hd-hcard:hover,
+    .hd-hcard:focus-visible {
+      scale: 1.01;
+    }
+
     .hd-hire__pair:hover .hd-hcard--primary,
     .hd-hire__pair:focus-within .hd-hcard--primary {
       translate: 0 -0.4rem;
-      rotate: -2deg;
+      rotate: -1.5deg;
     }
 
     .hd-hire__pair:hover .hd-hcard--secondary,
     .hd-hire__pair:focus-within .hd-hcard--secondary {
       translate: 0 0.5rem;
-      rotate: 2deg;
+      rotate: 1.5deg;
     }
   }
 

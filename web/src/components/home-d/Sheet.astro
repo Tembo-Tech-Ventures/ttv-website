@@ -1,6 +1,7 @@
 ---
 /**
- * One sheet in candidate D's stack. Every major section is a sheet with
+ * One sheet in candidate D's stack. Every major section is a sheet (the
+ * opening section is two: the hero, then the skills map sliding over it) with
  * rounded top corners that slides over the one before it. Without JS (or with
  * reduced motion) sheets simply sit in flow with their corners overlapping;
  * `stack.ts` adds `hd-stacked` to the root, measures each sheet and makes it
@@ -8,20 +9,25 @@
  * next one slides over it with no extra scroll.
  */
 interface Props {
-  id: string;
-  tone: "base" | "raised" | "lift" | "peach" | "deep";
-  labelledby: string;
+  /** Section id; omitted for a sheet that is one layer of a larger section. */
+  id?: string;
+  tone: "base" | "map" | "raised" | "lift" | "peach" | "deep";
+  labelledby?: string;
   layer: number;
   /** Own the whole screen (below the nav) while held, so nothing shows underneath. */
   fill?: boolean;
+  /** The last sheet: it never sticks, the page ends on it. */
+  last?: boolean;
 }
 
-const { id, tone, labelledby, layer, fill = false } = Astro.props;
+const { id, tone, labelledby, layer, fill = false, last = false } = Astro.props;
+// A sheet that is a layer of a section is a plain container; the section is its parent.
+const Tag = id ? "section" : "div";
 ---
 
-<section
+<Tag
   id={id}
-  class:list={["hd-sheet", `hd-sheet--${tone}`, { "hd-sheet--fill": fill }]}
+  class:list={["hd-sheet", `hd-sheet--${tone}`, { "hd-sheet--fill": fill, "hd-sheet--last": last }]}
   style={`--hd-layer:${layer}`}
   aria-labelledby={labelledby}
   data-hd-sheet
@@ -30,7 +36,7 @@ const { id, tone, labelledby, layer, fill = false } = Astro.props;
     <slot />
   </div>
   <div class="hd-sheet__dim" aria-hidden="true" data-hd-dim></div>
-</section>
+</Tag>
 
 <style>
   .hd-sheet {
@@ -60,7 +66,8 @@ const { id, tone, labelledby, layer, fill = false } = Astro.props;
     box-sizing: border-box;
   }
 
-  .hd-sheet + .hd-sheet {
+  .hd-sheet + .hd-sheet,
+  :global(.hd-group) + .hd-sheet {
     margin-top: calc(-1 * var(--hd-radius));
   }
 
@@ -104,6 +111,15 @@ const { id, tone, labelledby, layer, fill = false } = Astro.props;
     margin-top: clamp(0.5rem, 1.5vw, 1rem);
   }
 
+  /* The skills map: its own layer inside the opening section. */
+  .hd-sheet--map {
+    --hd-surface:
+      radial-gradient(760px 560px at 78% 42%, rgb(127 188 178 / 0.09), transparent 70%),
+      radial-gradient(600px 420px at 0% 0%, rgb(242 141 104 / 0.07), transparent 65%),
+      #05433e;
+    --hd-edge: rgb(255 248 242 / 0.1);
+  }
+
   .hd-sheet--raised {
     --hd-surface: #0a4842;
     --hd-edge: rgb(255 248 242 / 0.1);
@@ -126,7 +142,7 @@ const { id, tone, labelledby, layer, fill = false } = Astro.props;
     --hd-edge: rgb(242 141 104 / 0.28);
   }
 
-  :global(.hd-stacked) .hd-sheet:not(:last-of-type) {
+  :global(.hd-stacked) .hd-sheet:not(.hd-sheet--last) {
     position: sticky;
     top: var(--hd-stick, auto);
   }

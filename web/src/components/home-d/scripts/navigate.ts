@@ -69,7 +69,10 @@ export function initNavigation(root: HTMLElement, lead: () => number, motionAllo
     if (!hash || hash === "#") return null;
     const id = decodeURIComponent(hash.slice(1));
     const element = document.getElementById(id);
-    return element && root.contains(element) ? element : null;
+    if (!element || !root.contains(element)) return null;
+    // A section made of several sheets has no box of its own: land on its first sheet.
+    if (getComputedStyle(element).display === "contents") return element.firstElementChild as HTMLElement | null;
+    return element;
   }
 
   /** The "Meet the builders" link can go straight to the cohort picked in the hero deck. */

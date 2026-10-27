@@ -3,7 +3,7 @@ import { clamp01, navHeight, type Scene } from "./scenes";
 
 const FINE_POINTER = "(hover: hover) and (pointer: fine)";
 
-type State = "done" | "reachable" | "later";
+type State = "lit" | "reachable" | "later";
 
 interface Pill {
   el: HTMLElement;
@@ -19,7 +19,7 @@ interface Pill {
 }
 
 function stateOf(el: HTMLElement): State {
-  if (el.classList.contains("is-done")) return "done";
+  if (el.classList.contains("is-lit")) return "lit";
   return el.classList.contains("is-reachable") ? "reachable" : "later";
 }
 
@@ -45,10 +45,10 @@ function setState(pill: Pill, state: State) {
   pill.state = state;
 }
 
-/** 42's states as far as the walk has got: walked skills done, their neighbours (and the inner ring) reachable. */
+/** 42's states as far as the walk has got: walked skills lit, their neighbours (and the inner ring) reachable. */
 function applyWalk(pills: Pill[], visited: Set<string>) {
   for (const pill of pills) {
-    if (visited.has(pill.key)) setState(pill, "done");
+    if (visited.has(pill.key)) setState(pill, "lit");
     else if (pill.inner || pill.near.some((key) => visited.has(key))) setState(pill, "reachable");
     else setState(pill, "later");
   }
@@ -98,12 +98,18 @@ export function initSkillsMap(root: HTMLElement): () => void {
       for (const line of lines) if (line.dataset.a === key || line.dataset.b === key) line.classList.add("is-lit");
       label.textContent = pill.textContent?.trim() ?? "";
       detail.textContent = pill.dataset.detail ?? "";
-      // Radial nodes are centred on their point; phone rows start at theirs.
+      // Radial map: beside the node, on the side away from the centre, so the
+      // tip never covers the hub. Phone rows: below the tapped pill's row.
       const node = pill.closest<HTMLElement>("[data-hd-node]")!;
-      const along = radial ? 0 : (pill.parentElement as HTMLElement).offsetLeft;
-      tip.style.left = along ? `calc(${node.style.left} + ${along}px)` : node.style.left;
       tip.style.top = node.style.top;
-      tip.classList.toggle("is-below", Number.parseFloat(node.style.top) < (radial ? 22 : 40));
+      if (radial) {
+        const right = node.dataset.side === "right";
+        const half = pill.offsetWidth / 2 + 12;
+        tip.style.left = `calc(${node.style.left} ${right ? "+" : "-"} ${half}px)`;
+        tip.dataset.side = right ? "right" : "left";
+      } else {
+        tip.style.left = `calc(${node.style.left} + ${(pill.parentElement as HTMLElement).offsetLeft}px)`;
+      }
       tip.hidden = false;
     };
 
@@ -205,10 +211,14 @@ export function initSkillsMap(root: HTMLElement): () => void {
   };
   document.addEventListener("pointerdown", onOutside);
   map.classList.add("hd-map--live");
+  // The hub's halo only animates while the map is on screen.
+  const onscreen = new IntersectionObserver(([entry]) => map.classList.toggle("hd-map--onscreen", entry.isIntersecting));
+  onscreen.observe(map);
 
   return () => {
+    onscreen.disconnect();
     document.removeEventListener("pointerdown", onOutside);
-    map.classList.remove("hd-map--live");
+    map.classList.remove("hd-map--live", "hd-map--onscreen");
     for (const cleanup of cleanups) cleanup();
   };
 }
@@ -236,20 +246,23 @@ function parsePoints(value: string | null): Point[] {
 }
 
 /**
- * The walk, scroll-linked (motion only). A reading line sits at 62% of the
- * screen: each step's mark crossing it starts that step's stage, and the map
- * answers. On the radial map the peach path draws outward through the
- * skills, the small group of builders walks its head, the engineers join
- * during the second step, and in the third the path leaves the cohort's ring.
- * On phones the trunk lights down the page and its stations fill as it
- * passes. Tablets, whose map is above the steps, play the walk as the map
- * crosses the screen.
+ * The walk, scroll-linked (motion only).
+ *
+ * Wide screens and tablets play it as the map's sheet arrives: from the map
+ * being a fifth on screen to it sitting under the nav, the peach path draws
+ * outward through the skills, the small group of builders walks its head,
+ * the engineers join during the second step, and in the third the path
+ * leaves the cohort's ring. The steps light in time with it.
+ *
+ * Phones read it down the page: a reading line at 62% of the screen lights
+ * the trunk, its stations fill as it passes, and the walking group steps
+ * into each step's mark (hidden there, the mark pulses) rather than sitting
+ * on it.
  */
 export function mapScene(root: HTMLElement): Scene | null {
   const map = root.querySelector<HTMLElement>("[data-hd-map]");
   const way = map?.querySelector<HTMLElement>("[data-hd-way]");
   if (!map || !way) return null;
-  const figure = map.querySelector<HTMLElement>("[data-hd-map-figure]")!;
   const stage = map.querySelector<HTMLElement>("[data-hd-map-stage]")!;
   const lit = stage.querySelector<SVGPolylineElement>("[data-hd-lit]");
   const tail = stage.querySelector<SVGLineElement>("[data-hd-tail]");
@@ -275,7 +288,7 @@ export function mapScene(root: HTMLElement): Scene | null {
   const w2 = Math.max(w1, atOf("hd-sk--ring1") ?? (w1 + 1) / 2);
   const waypoints: [number, number, number] = [w1, w2, 1];
 
-  let mode: "wide" | "tablet" | "column" = "column";
+  let radial = true;
   let vh = window.innerHeight;
   let markOffsets: number[] = [];
   let stationOffsets: number[] = [];
@@ -284,11 +297,12 @@ export function mapScene(root: HTMLElement): Scene | null {
   let stage3 = 0;
   let litY = 0;
   let lastWrite = "";
+  const arrived = marks.map(() => false);
 
   return {
     measure() {
       vh = window.innerHeight;
-      mode = stage.offsetWidth === 0 ? "column" : getComputedStyle(figure).position === "sticky" ? "wide" : "tablet";
+      radial = stage.offsetWidth > 0;
       markOffsets = marks.map((mark) => offsetWithin(mark, way) + mark.offsetHeight / 2);
       stationOffsets = stationPills.map((pill) => offsetWithin(pill.el, way) + pill.el.offsetHeight / 2);
       wayHeight = way.offsetHeight;
@@ -300,10 +314,10 @@ export function mapScene(root: HTMLElement): Scene | null {
       const line = vh * 0.62;
       const wayTop = way.getBoundingClientRect().top;
       litY = Math.min(wayHeight, Math.max(0, line - wayTop));
-      if (mode === "tablet") {
+      if (radial) {
         const top = stage.getBoundingClientRect().top;
-        const start = vh * 0.82;
-        const end = Math.max(navHeight() + 16, (vh - stageHeight) / 2);
+        const start = vh - stageHeight * 0.2;
+        const end = Math.max(navHeight() + 24, (vh - stageHeight) / 2 - vh * 0.08);
         stage3 = 3 * clamp01((start - top) / Math.max(1, start - end));
       } else {
         stage3 = markOffsets.reduce((sum, offset) => sum + clamp01((line - (wayTop + offset)) / (vh * 0.3)), 0);
@@ -311,7 +325,7 @@ export function mapScene(root: HTMLElement): Scene | null {
     },
     write() {
       const s = stage3;
-      const key = `${s.toFixed(3)}|${Math.round(litY)}|${mode}`;
+      const key = `${s.toFixed(3)}|${Math.round(litY)}|${radial}`;
       if (key === lastWrite) return;
       lastWrite = key;
 
@@ -321,7 +335,7 @@ export function mapScene(root: HTMLElement): Scene | null {
         step.classList.toggle("is-ahead", !reached);
       });
 
-      if (mode !== "column") {
+      if (radial) {
         const drawn = drawnAt(s, waypoints);
         const main = lastSkill > 0 ? clamp01(drawn / lastSkill) : 1;
         const beyond = lastSkill < 1 ? clamp01((drawn - lastSkill) / (1 - lastSkill)) : 0;
@@ -334,21 +348,35 @@ export function mapScene(root: HTMLElement): Scene | null {
           walk.classList.toggle("is-home", s >= 2.85);
         }
         applyWalk(radialPills, new Set(walked.filter((pill) => (pill.at ?? 2) <= drawn + 0.002).map((pill) => pill.key)));
+        // The trunk beside the steps lights in step with the map.
+        if (wayLit) wayLit.style.transform = `scaleY(${(s / 3).toFixed(4)})`;
+        return;
       }
 
-      if (mode !== "tablet") {
-        if (wayLit) wayLit.style.transform = `scaleY(${(wayHeight > 0 ? litY / wayHeight : 1).toFixed(4)})`;
-        if (wayWalk) {
-          wayWalk.style.transform = `translateY(${Math.max(16, litY).toFixed(1)}px)`;
-          wayWalk.classList.toggle("is-joined", s >= 1.3);
-        }
+      if (wayLit) wayLit.style.transform = `scaleY(${(wayHeight > 0 ? litY / wayHeight : 1).toFixed(4)})`;
+      if (wayWalk) {
+        wayWalk.style.transform = `translateY(${Math.max(16, litY).toFixed(1)}px)`;
+        wayWalk.classList.toggle("is-joined", s >= 1.3);
+        // Into the mark (or past a station), not on top of it.
+        const atMark = markOffsets.findIndex((offset) => Math.abs(offset - litY) < 30);
+        const atStation = stationOffsets.some((offset) => Math.abs(offset - litY) < 18);
+        wayWalk.classList.toggle("is-hidden", atMark >= 0 || atStation);
+        marks.forEach((mark, index) => {
+          const here = index === atMark;
+          if (here && !arrived[index]) mark.classList.add("is-arrived");
+          if (!here && Math.abs(markOffsets[index] - litY) > 60) mark.classList.remove("is-arrived");
+          arrived[index] = here || (arrived[index] && Math.abs(markOffsets[index] - litY) <= 60);
+        });
       }
-
-      if (mode === "column") {
-        const visited = new Set(stationPills.filter((_, index) => stationOffsets[index] <= litY).map((pill) => pill.key));
-        applyWalk(columnPills, visited);
-        for (const circle of stations) circle.classList.toggle("is-done", visited.has(circle.dataset.station ?? ""));
+      const visited = new Set(stationPills.filter((_, index) => stationOffsets[index] <= litY).map((pill) => pill.key));
+      // Lit skills in a row light with their station.
+      for (const pill of columnPills) if (pill.final === "lit" && !pill.station) {
+        const band = pill.el.closest("[data-hd-band]");
+        const own = stationPills.find((station) => station.el.closest("[data-hd-band]") === band);
+        if (own && visited.has(own.key)) visited.add(pill.key);
       }
+      applyWalk(columnPills, visited);
+      for (const circle of stations) circle.classList.toggle("is-lit", visited.has(circle.dataset.station ?? ""));
     },
     destroy() {
       map.classList.remove("hd-map--walking");
@@ -356,6 +384,7 @@ export function mapScene(root: HTMLElement): Scene | null {
         step.classList.add("is-reached");
         step.classList.remove("is-ahead");
       }
+      for (const mark of marks) mark.classList.remove("is-arrived");
       if (lit) lit.style.strokeDashoffset = "";
       if (tail) tail.style.strokeDashoffset = "";
       if (walk) {
@@ -364,9 +393,12 @@ export function mapScene(root: HTMLElement): Scene | null {
         walk.classList.add("is-joined", "is-home");
       }
       for (const pill of [...radialPills, ...columnPills]) setState(pill, pill.final);
-      for (const circle of stations) circle.classList.add("is-done");
+      for (const circle of stations) circle.classList.add("is-lit");
       if (wayLit) wayLit.style.transform = "";
-      if (wayWalk) wayWalk.style.transform = "";
+      if (wayWalk) {
+        wayWalk.style.transform = "";
+        wayWalk.classList.remove("is-hidden");
+      }
     },
   };
 }

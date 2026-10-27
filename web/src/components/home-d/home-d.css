@@ -10,6 +10,12 @@
   padding-bottom: 1px;
 }
 
+/* The opening section holds two sheets; it adds no box of its own, so both
+ * stick and stack exactly like the other sections' sheets. */
+.hd-group {
+  display: contents;
+}
+
 .hd-h2 {
   margin: 0;
   max-width: 18ch;
@@ -33,7 +39,8 @@
   align-items: center;
   gap: 0.5rem;
   min-height: 2.75rem;
-  color: var(--color-primary);
+  /* A lighter peach: 4.5:1 or better on the raised and lift sheets too. */
+  color: #ffa07f;
   font-weight: 600;
   font-size: 1rem;
   text-decoration: none;
@@ -50,7 +57,7 @@
 }
 
 .hd-arrow-link:hover {
-  color: #ffb08f;
+  color: #ffbfa3;
 }
 
 .hd-arrow-link:focus-visible {
@@ -66,8 +73,7 @@
  */
 .hd-flow .hd-sheet,
 .hd-flow .hd-bstack--file > li,
-.hd-flow [data-hd-values] > li,
-.hd-flow [data-hd-map-figure] {
+.hd-flow [data-hd-values] > li {
   position: static !important;
 }
 
@@ -80,4 +86,80 @@
 /* Sections receive focus only as anchor targets; the heading is the cue. */
 .hd-sheet:focus {
   outline: none;
+}
+
+/*
+ * The margin thread (scripts/thread.ts): the skills map's path, carried on
+ * down the right margin of every later sheet on wide screens.
+ */
+.hd-thread {
+  --thread: rgb(242 141 104 / 0.6);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hd-thread--on-peach {
+  --thread: rgb(1 61 57 / 0.55);
+}
+
+.hd-thread__run {
+  position: absolute;
+  width: 1.5px;
+  border-radius: 1px;
+  background: var(--thread);
+  transform-origin: 50% 0;
+}
+
+.hd-thread.is-live .hd-thread__run {
+  will-change: transform;
+}
+
+.hd-thread__curve {
+  position: absolute;
+  overflow: visible;
+}
+
+.hd-thread__curve path {
+  fill: none;
+  stroke: var(--thread);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: 1 1;
+}
+
+.hd-thread__station,
+.hd-thread__knot {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid #013d39;
+  background: var(--color-primary);
+  transition: background-color 300ms ease;
+}
+
+.hd-thread.is-live .hd-thread__station:not(.is-on) {
+  border-color: rgb(242 141 104 / 0.7);
+  background: #013d39;
+}
+
+.hd-thread--on-peach .hd-thread__station {
+  border-color: var(--color-primary);
+  background: #013d39;
+}
+
+.hd-thread--on-peach.is-live .hd-thread__station:not(.is-on) {
+  border-color: rgb(1 61 57 / 0.7);
+  background: var(--color-primary);
+}
+
+.hd-thread__knot {
+  width: 13px;
+  height: 13px;
+  margin: -6.5px 0 0 -6.5px;
+  border: 3px solid #fff8f2;
+  background: #013d39;
 }

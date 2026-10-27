@@ -246,17 +246,17 @@ describe("buildSkillsGraph", () => {
 });
 
 describe("nodeStates", () => {
-  it("marks walked skills done, their neighbours reachable and the rest for later", () => {
+  it("lights walked skills, marks their neighbours reachable and the rest for later", () => {
     const graph = buildSkillsGraph(FIXTURE);
     const near = adjacency(graph);
     const keys = keysOf(graph.skills);
     const none = nodeStates(keys, near, new Set());
     for (const skill of graph.skills) expect(none[skill.key]).toBe(skill.ring === 0 ? "reachable" : "later");
     const all = nodeStates(keys, near, new Set(graph.path));
-    for (const key of graph.path) expect(all[key]).toBe("done");
+    for (const key of graph.path) expect(all[key]).toBe("lit");
     for (const key of keys) {
       if (all[key] !== "reachable") continue;
-      expect([CENTRE, ...graph.path].some((done) => near.get(done)?.has(key))).toBe(true);
+      expect([CENTRE, ...graph.path].some((lit) => near.get(lit)?.has(key))).toBe(true);
     }
     expect(Object.values(all)).toContain("later");
   });
@@ -362,11 +362,11 @@ describe("radialLayout", () => {
     it("finishes with the walked skills done", () => {
       for (const skill of map.skills) {
         if (map.path.points.some((point) => point.x === skill.x && point.y === skill.y)) {
-          expect(skill.state).toBe("done");
+          expect(skill.state).toBe("lit");
           expect(skill.at).toBeGreaterThan(0);
         } else {
           expect(skill.at).toBeNull();
-          expect(skill.state).not.toBe("done");
+          expect(skill.state).not.toBe("lit");
         }
       }
     });
@@ -435,28 +435,65 @@ describe("columnLayout", () => {
     });
   }
 
-  it("puts the walked skills on the trunk as stations, in walk order", () => {
+  it("gives each ring one station on the trunk: the last skill the walk passes there", () => {
     const graph = buildSkillsGraph(FIXTURE);
     const bands = columnLayout(graph);
-    const stations = bands.flatMap((band) => band.skills.filter((skill) => skill.station));
-    expect(keysOf(stations)).toEqual(graph.path);
-    for (const station of stations) expect(station.state).toBe("done");
+    const ringOf = new Map(graph.skills.map((skill) => [skill.key, skill.ring]));
+    for (const band of bands) {
+      const stations = band.skills.filter((skill) => skill.station);
+      expect(stations).toHaveLength(1);
+      expect(stations[0].key).toBe(graph.path.findLast((key) => ringOf.get(key) === band.ring));
+      expect(stations[0].state).toBe("lit");
+    }
   });
 
-  it("keeps each band short on phones", () => {
-    const bands = columnLayout(buildSkillsGraph(CROWDED), { caps: [4, 5, 5] });
-    bands.forEach((band, ring) => expect(band.skills.length).toBeLessThanOrEqual([4, 5, 5][ring]));
-  });
-
-  it("connects each branch row back to a station", () => {
+  it("keeps each band to one short row and counts the rest", () => {
     const graph = buildSkillsGraph(FIXTURE);
     for (const band of columnLayout(graph)) {
-      const stations = new Set(keysOf(band.skills.filter((skill) => skill.station)));
-      const loose = band.skills.filter((skill) => !skill.station && !band.lines.some((line) => line.b === skill.key));
-      expect(loose.map((skill) => skill.label)).toEqual([]);
-      for (const line of band.lines.filter((l) => l.kind === "branch")) {
+      const row = band.skills.filter((skill) => !skill.station);
+      expect(row.length).toBeLessThanOrEqual(3);
+      expect(new Set(row.map((skill) => skill.y)).size).toBeLessThanOrEqual(1);
+      const onRing = graph.skills.filter((skill) => skill.ring === band.ring).length;
+      expect(band.skills.length + band.more).toBe(onRing);
+    }
+  });
+
+  it("fits the \"+N more\" chip on the column", () => {
+    for (const profiles of [FIXTURE, CROWDED]) {
+      for (const band of columnLayout(buildSkillsGraph(profiles))) {
+        if (band.more === 0) expect(band.moreAt).toBeNull();
+        else {
+          expect(band.moreAt!.x + 84).toBeLessThanOrEqual(358);
+          expect(band.moreAt!.y).toBeLessThanOrEqual(band.height);
+        }
+      }
+    }
+  });
+
+  it("puts lit skills first in the row", () => {
+    const graph = buildSkillsGraph(FIXTURE);
+    const inner = columnLayout(graph).find((band) => band.ring === 0)!;
+    // Two skills are walked on the inner ring: one is the station, the other leads the row.
+    expect(inner.skills.find((skill) => !skill.station)?.state).toBe("lit");
+  });
+
+  it("stays about a screen long on phones", () => {
+    for (const profiles of [FIXTURE, CROWDED]) {
+      const total = columnLayout(buildSkillsGraph(profiles)).reduce((sum, band) => sum + band.height, 0);
+      // Three bands of two 46px rows each, plus a little padding.
+      expect(total).toBeLessThanOrEqual(3 * (2 * 46 + 12));
+    }
+  });
+
+  it("connects the row back to its station, pill to pill", () => {
+    const graph = buildSkillsGraph(FIXTURE);
+    for (const band of columnLayout(graph)) {
+      const station = band.skills.find((skill) => skill.station);
+      const branch = band.lines.filter((line) => line.kind === "branch");
+      expect(branch).toHaveLength(band.skills.length > 1 ? 1 : 0);
+      for (const line of branch) {
         expect(line.x1).toBe(20);
-        expect(stations.has(line.a)).toBe(true);
+        expect(line.a).toBe(station?.key);
       }
       for (const line of band.lines.filter((l) => l.kind === "chain")) expect(line.y1).toBe(line.y2);
     }

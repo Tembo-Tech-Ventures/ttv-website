@@ -45,10 +45,10 @@ const sig = signature(tags.map((tag) => tag.key));
       )}
     </span>
     {sig.nodes.length > 0 && (
-      <svg class="hd-bc__sig" viewBox="0 0 28 28" width="34" height="34" aria-hidden="true" focusable="false">
+      <svg class="hd-bc__sig" viewBox="0 0 28 28" width="40" height="40" aria-hidden="true" focusable="false">
         <circle class="hd-bc__orbit" cx={sig.centre} cy={sig.centre} r={sig.orbit} />
         {sig.arcs.map((d) => <path class="hd-bc__arc" d={d} />)}
-        {sig.nodes.map((node) => <circle class="hd-bc__node" cx={node.x} cy={node.y} r="2.4" data-tag={node.key} />)}
+        {sig.nodes.map((node) => <circle class="hd-bc__node" cx={node.x} cy={node.y} r="2.6" data-tag={node.key} />)}
       </svg>
     )}
     {cohortNumber && cohortIndex >= 0 && (
@@ -340,13 +340,13 @@ const sig = signature(tags.map((tag) => tag.key));
     fill: #fff8f2;
     stroke: #0f514a;
     stroke-width: 1;
-    transition: fill 260ms ease, r 260ms ease;
+    transition: fill 260ms ease;
   }
 
   /* The card you are on, and every builder who shares a skill with it. */
   :global(.has-kin) .hd-bc__node.is-shared {
     fill: var(--color-primary);
-    r: 3.4;
+    r: 3.3;
   }
 
   /* A covered strip that shares a skill comes out of the shade. */

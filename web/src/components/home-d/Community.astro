@@ -221,10 +221,14 @@ const paths = COMMUNITY.paths;
     border-color: var(--color-dark);
   }
 
-  @media (max-width: 30rem) {
-    .hd-seg__glyph {
-      display: block;
-      margin: 0 auto 0.3rem;
+  /* Wide enough for every label on one line from 48rem. */
+  @media (min-width: 48rem) {
+    .hd-seg {
+      width: min(100%, 42rem);
+    }
+
+    .hd-seg__tab {
+      white-space: nowrap;
     }
   }
 

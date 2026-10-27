@@ -2,7 +2,6 @@
 import type { HomepageBuilder } from "@/lib/homepage/builders";
 import { COHORT } from "@/lib/homepage/content";
 import { cohortNumberOf } from "./cohorts";
-import SkillsMap from "./SkillsMap.astro";
 
 /**
  * The opening sheet: what a cohort is, who can apply and how, beside a deck
@@ -11,8 +10,7 @@ import SkillsMap from "./SkillsMap.astro";
  * same kind of card. Each card carries that cohort's published builders. With
  * JS the cards become buttons that bring a cohort to the top (and point the
  * "Meet the builders" link at it); pointing at or focusing the deck parts it
- * (`deck.ts`). Below the facts, the skills map walks through a cohort's
- * three steps (`SkillsMap.astro`).
+ * (`deck.ts`). The skills map is the next layer of this section (`HomeD.astro`).
  */
 interface Props {
   builders: HomepageBuilder[];
@@ -118,8 +116,6 @@ const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) 
   </ul>
 </div>
 
-
-<SkillsMap builders={builders} />
 
 <style>
   /* ---------- Split hero ---------- */
@@ -303,7 +299,7 @@ const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) 
 
   .hd-deck-net__cohort {
     fill: none;
-    stroke: rgb(242 141 104 / 0.4);
+    stroke: rgb(242 141 104 / 0.6);
     stroke-width: 1.25;
     stroke-dasharray: 0.006 0.014;
     vector-effect: non-scaling-stroke;
@@ -392,6 +388,16 @@ const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) 
   .hd-cc__pose:focus-visible {
     outline: 2px solid var(--color-ink-primary);
     outline-offset: 4px;
+  }
+
+  /* A focused card comes forward and lifts like a hovered one, so its whole
+   * ring shows above the cards that would otherwise cover it. */
+  .hd-cc:has(.hd-cc__pose:focus-visible) {
+    z-index: calc(var(--n) + 1);
+  }
+
+  .hd-cc__pose:focus-visible .hd-cc__inner {
+    translate: 0 -0.6rem;
   }
 
   .hd-cc__inner {

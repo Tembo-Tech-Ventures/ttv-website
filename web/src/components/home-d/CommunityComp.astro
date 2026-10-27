@@ -628,6 +628,15 @@ const captions = {
 
   /* Phones: taller stage, wider pieces, so the real names stay legible. */
   @media (max-width: 30rem) {
+    /* Small print never below 12px. */
+    .hd-comp__small,
+    .hd-chip,
+    .hd-comp__part-label,
+    .hd-code,
+    .hd-comp__note-label,
+    .hd-comp__field-empty {
+      font-size: max(0.75rem, 0.85em);
+    }
 
     .hd-comp__stage {
       aspect-ratio: 1 / 0.92;
