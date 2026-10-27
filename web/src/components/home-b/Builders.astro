@@ -4,11 +4,12 @@ import { BUILDERS } from "@/lib/homepage/content";
 import BuilderCard from "./BuilderCard.astro";
 
 /**
- * Published builders as a physical stack. From four profiles up, each card
- * sticks near the top and the next slides over it, leaving the edge of the
- * stack visible; `stack.ts` lets the covered card settle back. One to three
- * profiles sit as a short layered column, and none shows an empty deck.
- * Phones get the five most recent, then a link to the rest.
+ * Published builders as a card file across the full width. From four
+ * profiles up (with motion), each card sticks a strip lower than the one
+ * before, so covered cards keep their name showing: the stack becomes an index
+ * of everyone you have passed. `stack.ts` sizes the strips to the screen. One
+ * to three profiles sit as a plain list; none shows the shared empty line over
+ * an empty file. Phones and tablets get the five most recent, then a link.
  */
 interface Props {
   builders: HomepageBuilder[];
@@ -19,128 +20,99 @@ const PHONE_LIMIT = 5;
 const total = builders.length;
 const stacked = total >= 4;
 const lastOnPhone = Math.min(total, PHONE_LIMIT) - 1;
-const pad = (value: number) => String(value).padStart(2, "0");
 ---
 
-<div class:list={["hb-builders", { "hb-builders--empty": total === 0 }]}>
-  <div class="hb-builders__intro">
-    <h2 id="hb-builders-title" class="hb-h2 font-heading tracking-heading">{BUILDERS.title}</h2>
-    <p class="hb-lede">{BUILDERS.summary}</p>
-    <a class="hb-arrow-link hb-builders__all hb-builders__all--intro" href={BUILDERS.all.href}>
+<div class="hb-builders__intro">
+  <h2 id="hb-builders-title" class="hb-h2 font-heading tracking-heading">{BUILDERS.title}</h2>
+  <div class="hb-builders__aside">
+    <p class="hb-lede">{total > 0 ? BUILDERS.summary : BUILDERS.empty}</p>
+    <a class:list={["hb-arrow-link hb-builders__all", { "hb-builders__all--wide-only": total > PHONE_LIMIT }]} href={BUILDERS.all.href}>
       {BUILDERS.all.label}
       <svg aria-hidden="true" viewBox="0 0 20 20" width="18" height="18"><path d="M4 10h11m-4.5-4.5L15 10l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
     </a>
-    {stacked && (
-      <div class="hb-brail" aria-hidden="true" data-hb-rail>
-        <span class="hb-brail__edges">
-          {builders.map((builder, index) => (
-            <span class:list={["hb-brail__edge", { "is-current": index === 0 }]} data-hb-rail-edge>
-              <span class="hb-brail__mono font-heading">{builder.initials}</span>
-            </span>
-          ))}
-        </span>
-        <span class="hb-brail__count font-heading tracking-subhead">
-          <span data-hb-rail-current>01</span><span class="hb-brail__total">/{pad(total)}</span>
-        </span>
-      </div>
-    )}
   </div>
-
-  {total > 0 ? (
-    <ol class:list={["hb-bstack", { "hb-bstack--sticky": stacked, "hb-bstack--few": !stacked }]} data-hb-stack={stacked ? "" : undefined}>
-      {builders.map((builder, index) => (
-        <li
-          class:list={[
-            "hb-bstack__item",
-            { "hb-bstack__item--extra": index >= PHONE_LIMIT, "hb-bstack__item--phone-last": index === lastOnPhone },
-          ]}
-          style={`--i:${index}`}
-          data-hb-stack-item
-        >
-          <BuilderCard builder={builder} index={index} total={total} />
-        </li>
-      ))}
-    </ol>
-  ) : (
-    <div class="hb-bempty" aria-hidden="true">
-      {[0, 1, 2].map((index) => (
-        <span class="hb-bempty__sheet" style={`--i:${index}`}>
-          <span class="hb-bempty__mono" />
-          <span class="hb-bempty__lines"><span /><span /><span /></span>
-        </span>
-      ))}
-    </div>
-  )}
-
-  {total > 0 && (
-    <a class="hb-arrow-link hb-builders__all hb-builders__all--end" href={BUILDERS.all.href}>
-      {BUILDERS.all.label}
-      <svg aria-hidden="true" viewBox="0 0 20 20" width="18" height="18"><path d="M4 10h11m-4.5-4.5L15 10l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
-    </a>
-  )}
 </div>
 
+{total > 0 ? (
+  <ol class:list={["hb-bstack", { "hb-bstack--file": stacked }]} data-hb-stack={stacked ? "" : undefined}>
+    {builders.map((builder, index) => (
+      <li
+        class:list={[
+          "hb-bstack__item",
+          { "hb-bstack__item--extra": index >= PHONE_LIMIT, "hb-bstack__item--phone-last": index === lastOnPhone },
+        ]}
+        style={`--i:${index}`}
+      >
+        <BuilderCard builder={builder} />
+      </li>
+    ))}
+  </ol>
+) : (
+  <div class="hb-bempty" aria-hidden="true">
+    {[0, 1, 2].map((index) => (
+      <span class="hb-bempty__sheet" style={`--i:${index}`}>
+        <span class="hb-bempty__mono" />
+        <span class="hb-bempty__lines"><span /><span /></span>
+      </span>
+    ))}
+  </div>
+)}
+
+{total > PHONE_LIMIT && (
+  <a class="hb-arrow-link hb-builders__all hb-builders__all--end" href={BUILDERS.all.href}>
+    {BUILDERS.all.label}
+    <svg aria-hidden="true" viewBox="0 0 20 20" width="18" height="18"><path d="M4 10h11m-4.5-4.5L15 10l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+  </a>
+)}
+
 <style>
-  .hb-builders {
-    display: grid;
-    gap: clamp(2rem, 5vw, 3rem);
-  }
-
-  @media (min-width: 64rem) {
-    .hb-builders {
-      grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-      column-gap: clamp(3rem, 6vw, 6rem);
-      align-items: start;
-    }
-
-    .hb-builders__intro {
-      position: sticky;
-      top: calc(var(--hb-nav, 4.6rem) + 2.5rem);
-      grid-row: span 2;
-    }
-  }
-
   .hb-builders__intro {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .hb-builders__all--intro {
-    margin-top: 1.75rem;
-  }
-
-  .hb-builders__all--end {
-    justify-self: start;
-  }
-
-  /* Phones and tablets: one link, after the stack. */
-  @media (max-width: 63.99rem) {
-    .hb-builders__all--intro {
-      display: none;
-    }
-
-    .hb-builders--empty .hb-builders__all--intro {
-      display: inline-flex;
-    }
+    display: grid;
+    gap: 1rem 4rem;
+    margin-bottom: clamp(2rem, 4vw, 3rem);
   }
 
   @media (min-width: 64rem) {
-    .hb-builders__all--end {
+    .hb-builders__intro {
+      grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+      align-items: end;
+    }
+  }
+
+  .hb-builders__aside {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.75rem 2rem;
+  }
+
+  .hb-builders__aside :global(.hb-lede) {
+    margin: 0;
+  }
+
+  /* With more than five, phones and tablets get the link after the stack instead. */
+  .hb-builders__all--end {
+    display: none;
+    margin-top: 1.5rem;
+  }
+
+  @media (max-width: 63.99rem) {
+    .hb-builders__all--wide-only {
       display: none;
+    }
+
+    .hb-builders__all--end {
+      display: inline-flex;
     }
   }
 
   .hb-bstack {
     display: grid;
-    gap: 1.25rem;
+    gap: 1rem;
     margin: 0;
     padding: 0;
     list-style: none;
-  }
-
-  .hb-bstack--few .hb-bstack__item:nth-child(even) {
-    margin-left: clamp(0rem, 4vw, 3rem);
   }
 
   @media (max-width: 63.99rem) {
@@ -149,156 +121,81 @@ const pad = (value: number) => String(value).padStart(2, "0");
     }
   }
 
+  /* The card file. --hb-strip and --hb-gap come from stack.ts, sized to the screen. */
   @media (prefers-reduced-motion: no-preference) {
-    .hb-bstack--sticky {
+    .hb-bstack--file {
       gap: 0;
     }
 
-    .hb-bstack--sticky .hb-bstack__item {
+    .hb-bstack--file .hb-bstack__item {
       position: sticky;
-      top: calc(var(--hb-nav, 4.6rem) + 1.25rem + var(--i) * 0.8rem);
-      margin-bottom: 32vh;
+      top: calc(var(--hb-nav, 4.5rem) + 1rem + var(--i) * var(--hb-strip, 2.75rem));
+      margin-bottom: var(--hb-gap, 1rem);
     }
 
-    .hb-bstack--sticky .hb-bstack__item:last-child {
+    .hb-bstack--file .hb-bstack__item:last-child {
       margin-bottom: 0;
     }
 
     @media (max-width: 63.99rem) {
-      .hb-bstack--sticky .hb-bstack__item {
-        top: calc(var(--hb-nav, 4.6rem) + 0.75rem + var(--i) * 0.6rem);
-        margin-bottom: 26vh;
+      .hb-bstack--file .hb-bstack__item {
+        top: calc(var(--hb-nav, 4.5rem) + 0.75rem + var(--i) * var(--hb-strip, 2.5rem));
       }
 
-      .hb-bstack--sticky .hb-bstack__item--phone-last {
+      .hb-bstack--file .hb-bstack__item--phone-last {
         margin-bottom: 0;
       }
     }
   }
 
-  /* Desktop only: the edge of the deck, with the card on top marked. */
-  .hb-brail {
-    display: none;
-  }
-
-  @media (min-width: 64rem) and (prefers-reduced-motion: no-preference) {
-    .hb-brail {
-      display: flex;
-      align-items: flex-end;
-      gap: 1.5rem;
-      margin-top: clamp(2.5rem, 6vh, 4rem);
-    }
-  }
-
-  .hb-brail__edges {
-    display: flex;
-    align-items: flex-end;
-  }
-
-  .hb-brail__edge {
-    display: grid;
-    place-items: center start;
-    padding-left: 0.3rem;
-    width: 2.8rem;
-    height: 3.4rem;
-    border-radius: 0.6rem;
-    background: #145c54;
-    border: 1px solid rgb(255 248 242 / 0.14);
-    box-shadow: -6px 0 14px -8px rgb(0 0 0 / 0.7);
-    transition:
-      translate 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
-      background-color 300ms ease,
-      color 300ms ease;
-    color: transparent;
-  }
-
-  .hb-brail__edge + .hb-brail__edge {
-    margin-left: -1.05rem;
-  }
-
-  .hb-brail__edge.is-done {
-    background: #0d4a44;
-  }
-
-  .hb-brail__edge.is-current {
-    z-index: 1;
-    place-items: center;
-    padding-left: 0;
-    translate: 0 -0.75rem;
-    background: var(--color-primary);
-    color: var(--color-dark);
-    border-color: transparent;
-  }
-
-  .hb-brail__mono {
-    font-size: 0.7rem;
-    line-height: 1;
-  }
-
-  .hb-brail__count {
-    font-size: 2rem;
-    line-height: 1;
-    color: var(--color-primary);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .hb-brail__total {
-    font-size: 0.55em;
-    color: rgb(255 248 242 / 0.55);
-  }
-
-  /* No published profiles yet: a quiet, empty deck rather than a hole. */
+  /* No published profiles yet: an empty file beside the shared line. */
   .hb-bempty {
     position: relative;
-    height: clamp(14rem, 30vw, 19rem);
+    height: 12rem;
+    max-width: 48rem;
   }
 
   .hb-bempty__sheet {
     position: absolute;
-    inset-inline: calc(var(--i) * 1.5rem) calc((2 - var(--i)) * 1.5rem);
-    top: calc(var(--i) * 2.25rem);
+    inset-inline: calc(var(--i) * 1rem);
+    top: calc(var(--i) * 2.75rem);
     display: flex;
-    gap: 1.25rem;
-    padding: 1.5rem;
-    height: 11rem;
-    border-radius: 1.5rem;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 0.75rem 1.25rem;
+    height: 6.5rem;
+    border-radius: 1.25rem;
     background: color-mix(in srgb, #0f514a, #2c6964 calc(var(--i) * 25%));
     border: 1px solid rgb(255 248 242 / 0.12);
-    box-shadow: 0 24px 46px -30px rgb(0 0 0 / 0.75);
-    rotate: calc((var(--i) - 1) * 1.5deg);
+    box-shadow: 0 -10px 24px -16px rgb(0 0 0 / 0.65);
   }
 
   .hb-bempty__mono {
     flex: none;
-    width: 4.5rem;
-    height: 4.5rem;
-    border-radius: 1rem;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 0.7rem;
     border: 1.5px dashed rgb(242 141 104 / 0.7);
   }
 
   .hb-bempty__lines {
     display: grid;
-    align-content: start;
-    gap: 0.7rem;
+    gap: 0.6rem;
     flex: 1;
-    padding-top: 0.4rem;
+    padding-top: 0.5rem;
   }
 
   .hb-bempty__lines span {
-    height: 0.6rem;
+    height: 0.55rem;
     border-radius: 999px;
     background: rgb(255 248 242 / 0.14);
   }
 
   .hb-bempty__lines span:nth-child(1) {
-    width: 55%;
+    width: 40%;
   }
 
   .hb-bempty__lines span:nth-child(2) {
-    width: 80%;
-  }
-
-  .hb-bempty__lines span:nth-child(3) {
-    width: 40%;
+    width: 65%;
   }
 </style>

@@ -23,16 +23,16 @@ const { builders, isAuthenticated } = Astro.props;
 ---
 
 <div class="hb" data-hb-root>
-  <Sheet id="cohort" tone="base" labelledby="hb-cohorts-title" layer={1}>
+  <Sheet id="cohorts" tone="base" labelledby="hb-cohorts-title" layer={1}>
     <Cohort />
   </Sheet>
   <Sheet id="builders" tone="raised" labelledby="hb-builders-title" layer={2}>
     <Builders builders={builders} />
   </Sheet>
   <Sheet id="community" tone="lift" labelledby="hb-community-title" layer={3}>
-    <Community isAuthenticated={isAuthenticated} />
+    <Community isAuthenticated={isAuthenticated} builders={builders} />
   </Sheet>
-  <Sheet id="hire" tone="peach" labelledby="hb-hire-title" layer={4}>
+  <Sheet id="hire" tone="peach" labelledby="hb-hire-title" layer={4} fill>
     <Hire builders={builders} />
   </Sheet>
   <Sheet id="principles" tone="deep" labelledby="hb-principles-title" layer={5}>

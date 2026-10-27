@@ -1,37 +1,48 @@
 ---
 import type { HomepageBuilder } from "@/lib/homepage/builders";
+import { COHORT } from "@/lib/homepage/content";
 
+/**
+ * One card in the builders' card file. The top strip (monogram, name, cohort)
+ * is what stays visible once later cards cover this one, so the covered
+ * cards read as an index of everyone you have passed. The small numbered tab
+ * at the strip's end is the builder's cohort card from the hero deck.
+ */
 interface Props {
   builder: HomepageBuilder;
-  index: number;
-  total: number;
 }
 
-const { builder, index, total } = Astro.props;
+const { builder } = Astro.props;
 const meta = [builder.cohort, builder.country].filter(Boolean).join(" · ");
-const pad = (value: number) => String(value).padStart(2, "0");
+const cohortNumber = builder.cohort?.match(/\d+/)?.[0]?.padStart(2, "0") ?? null;
+const cohortIndex = COHORT.timeline.findIndex((cohort) => cohort.number === cohortNumber);
+const cohortRunning = cohortIndex >= 0 && COHORT.timeline[cohortIndex].running;
 ---
 
 <a class="hb-bc" href={builder.href}>
-  <span class="hb-bc__mono" aria-hidden="true">
-    {builder.image ? (
-      <img src={builder.image} alt="" width="160" height="160" loading="lazy" decoding="async" />
-    ) : (
-      <span class="font-heading tracking-display">{builder.initials}</span>
-    )}
-  </span>
-  <span class="hb-bc__main">
-    <span class="hb-bc__top">
-      <span class="hb-bc__who">
-        <span class="hb-bc__name">{builder.name}</span>
-        {meta && <span class="hb-bc__meta">{meta}</span>}
-      </span>
-      {total > 1 && (
-        <span class="hb-bc__count" aria-hidden="true">
-          {pad(index + 1)}<span>/{pad(total)}</span>
-        </span>
+  <span class="hb-bc__strip">
+    <span class="hb-bc__mono" aria-hidden="true">
+      {builder.image ? (
+        <img src={builder.image} alt="" width="96" height="96" loading="lazy" decoding="async" />
+      ) : (
+        <span class="font-heading tracking-display">{builder.initials}</span>
       )}
     </span>
+    <span class="hb-bc__who">
+      <span class="hb-bc__name">{builder.name}</span>
+      {meta && <span class="hb-bc__meta">{meta}</span>}
+    </span>
+    {cohortNumber && cohortIndex >= 0 && (
+      <span
+        class:list={["hb-bc__tab font-heading", { "hb-bc__tab--running": cohortRunning }]}
+        style={`--k:${cohortIndex}`}
+        aria-hidden="true"
+      >
+        {cohortNumber}
+      </span>
+    )}
+  </span>
+  <span class="hb-bc__body">
     {builder.headline && <span class="hb-bc__headline">{builder.headline}</span>}
     {builder.project && (
       <span class="hb-bc__project">
@@ -58,15 +69,14 @@ const pad = (value: number) => String(value).padStart(2, "0");
   .hb-bc {
     position: relative;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: clamp(1rem, 2.5vw, 1.75rem);
-    padding: clamp(1.25rem, 2.5vw, 1.75rem);
-    border-radius: 1.5rem;
-    background: linear-gradient(180deg, #145c54, #0f514a);
-    border: 1px solid rgb(255 248 242 / 0.12);
+    gap: 1rem;
+    padding: 0.5rem clamp(1rem, 2.5vw, 1.5rem) clamp(1.1rem, 2.5vw, 1.5rem);
+    border-radius: 1.25rem;
+    background: linear-gradient(180deg, #155e56, #0f514a 70%);
+    border: 1px solid rgb(255 248 242 / 0.13);
     box-shadow:
       0 1px 0 rgb(255 248 242 / 0.1) inset,
-      0 -14px 34px -22px rgb(0 0 0 / 0.6),
+      0 -10px 24px -16px rgb(0 0 0 / 0.65),
       0 24px 46px -30px rgb(0 0 0 / 0.75);
     color: var(--color-ink-primary);
     text-decoration: none;
@@ -79,36 +89,45 @@ const pad = (value: number) => String(value).padStart(2, "0");
 
   .hb-bc:hover,
   .hb-bc:focus-visible {
-    translate: 0 -6px;
+    translate: 0 -0.5rem;
     border-color: rgb(242 141 104 / 0.6);
     box-shadow:
       0 1px 0 rgb(255 248 242 / 0.12) inset,
-      0 -14px 34px -22px rgb(0 0 0 / 0.6),
+      0 -14px 30px -16px rgb(0 0 0 / 0.7),
       0 34px 60px -28px rgb(0 0 0 / 0.85);
   }
 
   .hb-bc:focus-visible {
     outline: 2px solid var(--color-primary);
-    outline-offset: 4px;
+    outline-offset: 3px;
+  }
+
+  /* ---------- The strip that stays visible in the file ---------- */
+  .hb-bc__strip {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    min-height: 2.6rem;
   }
 
   .hb-bc__mono {
+    flex: none;
     display: grid;
     place-items: center;
-    width: clamp(4rem, 9vw, 6.5rem);
-    aspect-ratio: 1;
-    border-radius: 1.1rem;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 0.7rem;
     background: var(--color-primary);
     color: var(--color-dark);
     overflow: hidden;
-    font-size: clamp(1.35rem, 3vw, 2.1rem);
+    font-size: 0.95rem;
     line-height: 1;
     transition: rotate 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
   .hb-bc:hover .hb-bc__mono,
   .hb-bc:focus-visible .hb-bc__mono {
-    rotate: -4deg;
+    rotate: -6deg;
   }
 
   .hb-bc__mono img {
@@ -117,61 +136,85 @@ const pad = (value: number) => String(value).padStart(2, "0");
     object-fit: cover;
   }
 
-  .hb-bc__main {
-    display: flex;
-    flex-direction: column;
-    gap: 0.9rem;
-    min-width: 0;
-  }
-
-  .hb-bc__top {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-  }
-
   .hb-bc__who {
     display: flex;
     flex-direction: column;
-    gap: 0.2rem;
     min-width: 0;
+    flex: 1;
+  }
+
+  @media (min-width: 40rem) {
+    .hb-bc__who {
+      flex-direction: row;
+      align-items: baseline;
+      gap: 0.85rem;
+    }
   }
 
   .hb-bc__name {
-    font-size: clamp(1.15rem, 1rem + 0.6vw, 1.45rem);
+    font-size: clamp(1.05rem, 0.95rem + 0.45vw, 1.3rem);
     font-weight: 700;
-    line-height: 1.25;
+    line-height: 1.3;
   }
 
   .hb-bc__meta {
-    font-size: 0.9rem;
+    font-size: 0.875rem;
+    line-height: 1.4;
     color: var(--color-ink-secondary);
   }
 
-  .hb-bc__count {
+  /* The builder's cohort card from the hero deck, in its deck colour. */
+  .hb-bc__tab {
     flex: none;
-    font-size: 0.9rem;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    color: var(--color-primary);
+    display: grid;
+    place-items: center;
+    width: 2.1rem;
+    height: 1.6rem;
+    border-radius: 0.4rem;
+    background: color-mix(in srgb, #0d4f48, #2c6964 calc(var(--k) * 22%));
+    border: 1px solid rgb(255 248 242 / 0.25);
+    color: var(--color-ink-primary);
+    font-size: 0.7rem;
+    rotate: calc((var(--k) - 1.5) * 3deg);
+    transition: rotate 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
-  .hb-bc__count span {
-    color: var(--color-ink-secondary);
+  .hb-bc__tab--running {
+    background: var(--color-primary);
+    color: var(--color-dark);
+  }
+
+  .hb-bc:hover .hb-bc__tab,
+  .hb-bc:focus-visible .hb-bc__tab {
+    rotate: 0deg;
+  }
+
+  /* ---------- Body ---------- */
+  .hb-bc__body {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  @media (min-width: 64rem) {
+    .hb-bc__body {
+      grid-template-columns: minmax(0, 5fr) minmax(0, 4fr) minmax(0, 3fr);
+      gap: 2rem;
+      align-items: start;
+      padding-left: 3.45rem;
+    }
   }
 
   .hb-bc__headline {
-    font-size: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
-    line-height: 1.5;
+    font-size: clamp(1rem, 0.95rem + 0.3vw, 1.2rem);
+    line-height: 1.45;
     color: var(--color-ink-primary);
   }
 
   .hb-bc__project {
     display: grid;
     gap: 0.3rem;
-    padding: 0.85rem 1rem;
-    border-radius: 0.9rem;
+    padding: 0.75rem 0.9rem;
+    border-radius: 0.8rem;
     background: rgb(1 46 43 / 0.55);
     border: 1px solid rgb(255 248 242 / 0.08);
   }
@@ -187,7 +230,7 @@ const pad = (value: number) => String(value).padStart(2, "0");
   }
 
   .hb-bc__desc {
-    font-size: 0.925rem;
+    font-size: 0.9rem;
     line-height: 1.5;
     color: var(--color-ink-secondary);
   }
@@ -210,13 +253,14 @@ const pad = (value: number) => String(value).padStart(2, "0");
   .hb-bc__skills {
     display: flex;
     flex-wrap: wrap;
+    align-content: start;
     gap: 0.4rem;
   }
 
   .hb-bc__skill {
     padding: 0.2rem 0.65rem;
     border-radius: 999px;
-    border: 1px solid rgb(255 248 242 / 0.2);
+    border: 1px solid rgb(255 248 242 / 0.22);
     font-size: 0.8125rem;
     color: var(--color-ink-primary);
   }
@@ -230,23 +274,11 @@ const pad = (value: number) => String(value).padStart(2, "0");
     pointer-events: none;
   }
 
-  @media (max-width: 30rem) {
-    .hb-bc {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .hb-bc__mono {
-      position: absolute;
-      top: 1.25rem;
-      left: 1.25rem;
-      width: 3.25rem;
-      font-size: 1.15rem;
-      border-radius: 0.8rem;
-    }
-
-    .hb-bc__top {
-      min-height: 3.25rem;
-      padding-left: 4.25rem;
+  @media (prefers-reduced-motion: reduce) {
+    .hb-bc,
+    .hb-bc__mono,
+    .hb-bc__tab {
+      transition: none;
     }
   }
 </style>

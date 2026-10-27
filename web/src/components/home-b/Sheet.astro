@@ -4,21 +4,24 @@
  * rounded top corners that slides over the one before it. Without JS (or with
  * reduced motion) sheets simply sit in flow with their corners overlapping;
  * `stack.ts` adds `hb-stacked` to the root, measures each sheet and makes it
- * stick by its bottom edge so the next one can slide over it.
+ * stick while the next sheet's edge and title are already on screen, so the
+ * next one slides over it with no extra scroll.
  */
 interface Props {
   id: string;
   tone: "base" | "raised" | "lift" | "peach" | "deep";
   labelledby: string;
   layer: number;
+  /** Own the whole screen (below the nav) while held, so nothing shows underneath. */
+  fill?: boolean;
 }
 
-const { id, tone, labelledby, layer } = Astro.props;
+const { id, tone, labelledby, layer, fill = false } = Astro.props;
 ---
 
 <section
   id={id}
-  class:list={["hb-sheet", `hb-sheet--${tone}`]}
+  class:list={["hb-sheet", `hb-sheet--${tone}`, { "hb-sheet--fill": fill }]}
   style={`--hb-layer:${layer}`}
   aria-labelledby={labelledby}
   data-hb-sheet
@@ -42,17 +45,45 @@ const { id, tone, labelledby, layer } = Astro.props;
       0 -28px 60px -24px rgb(0 0 0 / 0.5);
     padding-block: clamp(4rem, 8vw, 7.5rem) clamp(5rem, 9vw, 8rem);
     transform-origin: 50% var(--hb-origin, 50%);
+    scroll-margin-top: var(--hb-nav, 4.5rem);
+  }
+
+  .hb-sheet--fill {
+    display: grid;
+    align-content: center;
+    min-height: calc(100svh - var(--hb-nav, 4.5rem));
+    box-sizing: border-box;
+  }
+
+  .hb-sheet--fill > .hb-sheet__body {
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .hb-sheet + .hb-sheet {
     margin-top: calc(-1 * var(--hb-radius));
   }
 
+  /* Same container as the nav (max-w-7xl, px-4 / sm:px-6 / lg:px-8), so
+   * content edges line up with the logo and the Apply button. */
   .hb-sheet__body {
     position: relative;
+    box-sizing: border-box;
     margin-inline: auto;
     max-width: 80rem;
-    padding-inline: clamp(1.25rem, 4vw, 3rem);
+    padding-inline: 1rem;
+  }
+
+  @media (min-width: 40rem) {
+    .hb-sheet__body {
+      padding-inline: 1.5rem;
+    }
+  }
+
+  @media (min-width: 64rem) {
+    .hb-sheet__body {
+      padding-inline: 2rem;
+    }
   }
 
   .hb-sheet__dim {
@@ -99,8 +130,4 @@ const { id, tone, labelledby, layer } = Astro.props;
     top: var(--hb-stick, auto);
   }
 
-  /* A pause between sheets: the one below settles back before the next arrives. */
-  :global(.hb-stacked) .hb-sheet + .hb-sheet {
-    margin-top: var(--hb-hold, 0px);
-  }
 </style>

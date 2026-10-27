@@ -66,9 +66,11 @@ const fit = (0.97 / LONGEST_ADVANCE_EM).toFixed(4);
     color: var(--color-ink-primary);
   }
 
+  /* One shared left edge for all five commitments. */
   @media (min-width: 48rem) {
     .hb-value__commitment {
-      margin-left: auto;
+      margin-left: calc(7 / 12 * 100%);
+      max-width: none;
       min-height: calc(2 * 1.55em);
     }
   }
@@ -86,10 +88,11 @@ const fit = (0.97 / LONGEST_ADVANCE_EM).toFixed(4);
     .hb-value {
       position: sticky;
       top: calc(var(--hb-nav, 4.6rem) + 0.75rem + var(--i) * 0.7rem);
-      margin-bottom: 28vh;
+      margin-bottom: 10vh;
+      padding-inline: clamp(1rem, 2.5vw, 1.75rem);
       border-radius: 1.25rem 1.25rem 0 0;
-      background: #012e2b;
-      box-shadow: 0 -18px 30px -24px rgb(0 0 0 / 0.7);
+      background: #023834;
+      box-shadow: 0 -18px 30px -24px rgb(0 0 0 / 0.75);
     }
 
     .hb-value:last-child {
@@ -98,7 +101,7 @@ const fit = (0.97 / LONGEST_ADVANCE_EM).toFixed(4);
 
     @media (max-width: 47.99rem) {
       .hb-value {
-        margin-bottom: 18vh;
+        margin-bottom: 8vh;
       }
     }
 

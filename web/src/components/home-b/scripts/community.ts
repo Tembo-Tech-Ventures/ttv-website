@@ -1,19 +1,16 @@
 import { gsap } from "gsap";
-import { Flip } from "gsap/Flip";
-
-gsap.registerPlugin(Flip);
 
 /**
  * ARIA tabs (automatic activation, roving tabindex, arrows/Home/End) for the
- * three ways into the community. With motion allowed the indicator pill slides
- * between tabs with Flip, and the panel's composition assembles piece by piece.
+ * three ways into the community. The indicator pill slides by CSS (it follows
+ * `--sel`); with motion allowed the panel's picture assembles piece by piece.
  */
 export function initCommunityTabs(root: HTMLElement, motionAllowed: () => boolean): () => void {
   const container = root.querySelector<HTMLElement>("[data-hb-tabs]");
   if (!container) return () => {};
   const tabs = [...container.querySelectorAll<HTMLButtonElement>("[data-hb-tab]")];
   const panels = [...container.querySelectorAll<HTMLElement>("[data-hb-panel]")];
-  const pill = container.querySelector<HTMLElement>("[data-hb-pill]");
+  const tablist = container.querySelector<HTMLElement>("[data-hb-tablist]");
   let current = Math.max(0, tabs.findIndex((tab) => tab.getAttribute("aria-selected") === "true"));
   let assembled = false;
 
@@ -53,11 +50,7 @@ export function initCommunityTabs(root: HTMLElement, motionAllowed: () => boolea
     panels.forEach((panel, i) => {
       panel.hidden = i !== index;
     });
-    if (pill) {
-      const state = motionAllowed() ? Flip.getState(pill) : null;
-      tabs[index].insertBefore(pill, tabs[index].firstChild);
-      if (state) Flip.from(state, { duration: 0.55, ease: "power3.inOut" });
-    }
+    tablist?.style.setProperty("--sel", String(index));
     if (focus) tabs[index].focus();
     if (previous !== index) assemble(panels[index], true);
   }

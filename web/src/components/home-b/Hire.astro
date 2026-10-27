@@ -3,9 +3,9 @@ import type { HomepageBuilder } from "@/lib/homepage/builders";
 import { HIRE } from "@/lib/homepage/content";
 
 /**
- * Two overlapping cards on the one warm sheet in the stack. They part and the
- * one you point at (or focus) lifts; on scroll they arrive more tightly
- * overlapped and settle apart (`hire.ts`).
+ * Two overlapping cards on the one warm sheet in the stack, the same kind of
+ * card as the hero deck. They part and the one you point at (or focus) lifts;
+ * on scroll they arrive more tightly overlapped and settle apart (`hire.ts`).
  */
 interface Props {
   builders: HomepageBuilder[];
@@ -28,7 +28,6 @@ const faces = builders.slice(0, 4);
         <span style="--w:70%" /><span style="--w:92%" /><span style="--w:84%" /><span style="--w:48%" />
       </span>
       <span class="hb-hcard__label">{HIRE.primary.label}</span>
-      <span class="hb-hcard__path" aria-hidden="true">{HIRE.primary.href}</span>
       <span class="hb-hcard__arrow" aria-hidden="true">
         <svg viewBox="0 0 20 20" width="20" height="20"><path d="M4 10h11m-4.5-4.5L15 10l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
       </span>
@@ -42,7 +41,6 @@ const faces = builders.slice(0, 4);
           : [0, 1, 2].map(() => <span />)}
       </span>
       <span class="hb-hcard__label">{HIRE.secondary.label}</span>
-      <span class="hb-hcard__path" aria-hidden="true">{HIRE.secondary.href}</span>
       <span class="hb-hcard__arrow" aria-hidden="true">
         <svg viewBox="0 0 20 20" width="20" height="20"><path d="M4 10h11m-4.5-4.5L15 10l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
       </span>
@@ -89,7 +87,7 @@ const faces = builders.slice(0, 4);
   .hb-hcard {
     position: relative;
     display: grid;
-    grid-template-rows: auto 1fr auto;
+    grid-template-rows: auto 1fr;
     align-content: start;
     min-height: 13.5rem;
     padding: clamp(1.4rem, 3vw, 2rem);
@@ -144,12 +142,6 @@ const faces = builders.slice(0, 4);
     line-height: 1.15;
   }
 
-  .hb-hcard__path {
-    margin-top: 0.4rem;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.875rem;
-    opacity: 0.75;
-  }
 
   .hb-hcard__arrow {
     position: absolute;
@@ -268,6 +260,31 @@ const faces = builders.slice(0, 4);
   .hb-hcard:focus-visible {
     outline: 3px solid var(--color-dark);
     outline-offset: 4px;
+  }
+
+  /* Keep the rotated corners inside the phone gutter. */
+  @media (max-width: 30rem) {
+    .hb-hcard--primary {
+      width: 92%;
+      rotate: -1deg;
+    }
+
+    .hb-hcard--secondary {
+      width: 92%;
+      rotate: 1deg;
+    }
+
+    .hb-hire__pair:hover .hb-hcard--primary,
+    .hb-hire__pair:focus-within .hb-hcard--primary {
+      translate: 0 -0.4rem;
+      rotate: -2deg;
+    }
+
+    .hb-hire__pair:hover .hb-hcard--secondary,
+    .hb-hire__pair:focus-within .hb-hcard--secondary {
+      translate: 0 0.5rem;
+      rotate: 2deg;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {

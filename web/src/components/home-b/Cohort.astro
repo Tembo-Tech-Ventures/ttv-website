@@ -1,21 +1,20 @@
 ---
-import { COHORT, COMMUNITY } from "@/lib/homepage/content";
-import { SITE_FACTS } from "@/lib/site";
+import { COHORT } from "@/lib/homepage/content";
 
 /**
- * The opening sheet: what a cohort is and how to apply, beside a deck of the
- * cohorts so far with the running one on top. The rhythm cards underneath
- * arrive stacked and deal themselves out into a row (see `rhythm.ts`).
+ * The opening sheet: what a cohort is, who can apply and how, beside a deck
+ * of the cohorts so far with the running one on top. The deck is the page's
+ * motif: builders below carry their cohort's card, and the hire pair is the
+ * same kind of card. Each deck card is a button that brings it to the top;
+ * pointing at or focusing the deck parts it (`deck.ts`). The rhythm cards
+ * underneath arrive stacked and deal themselves out into a row.
  */
-const current = Number(SITE_FACTS.currentCohortNumber);
-const cohorts = Array.from({ length: current }, (_, index) => {
-  const number = String(index + 1).padStart(2, "0");
-  return { number, running: index + 1 === current };
-});
+const cohorts = COHORT.timeline;
+// Resting order, back to front: completed cohorts in order, the running one on top.
+const order = [...cohorts.keys()].toSorted((a, b) => Number(cohorts[a].running) - Number(cohorts[b].running) || a - b);
 ---
 
-{/* The section is #cohort (SECTION_ORDER); #cohorts also resolves, as the brief names it. */}
-<div class="hb-hero" id="cohorts">
+<div class="hb-hero">
   <div class="hb-hero__copy">
     <h1 id="hb-cohorts-title" class="hb-hero__title font-heading tracking-heading">{COHORT.title}</h1>
     <p class="hb-hero__summary">{COHORT.summary}</p>
@@ -24,8 +23,14 @@ const cohorts = Array.from({ length: current }, (_, index) => {
         <span>{COHORT.apply.label}</span>
         <svg aria-hidden="true" viewBox="0 0 20 20" width="18" height="18"><path d="M4 10h11m-4.5-4.5L15 10l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
       </a>
-      <a class="hb-quiet" href="#community">{COMMUNITY.title}</a>
+      <a class="hb-quiet" href={COHORT.secondary.href}>{COHORT.secondary.label}</a>
     </div>
+    <p class="hb-hero__eligibility">
+      <span class="hb-check" aria-hidden="true">
+        <svg viewBox="0 0 16 16" width="14" height="14"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      </span>
+      {COHORT.eligibility}
+    </p>
   </div>
 
   <div class="hb-deck-stage" data-hb-deck-stage>
@@ -33,24 +38,22 @@ const cohorts = Array.from({ length: current }, (_, index) => {
       {cohorts.map((cohort, index) => (
         <li
           class:list={["hb-cc", { "hb-cc--running": cohort.running }]}
-          style={`--k:${index};--n:${cohorts.length}`}
+          style={`--k:${index};--slot:${order.indexOf(index)}`}
           data-hb-deck-card
         >
-          <div class="hb-cc__pose">
-          <div class="hb-cc__inner">
-            <p class="hb-cc__head">
-              <span class="hb-cc__name">Cohort {cohort.number}</span>
-              <span class="hb-cc__status">
-                {cohort.running && <span class="hb-cc__pulse" aria-hidden="true" />}
-                {cohort.running ? "Running now" : "Complete"}
+          <button type="button" class="hb-cc__pose" aria-pressed={cohort.running ? "true" : "false"} data-hb-deck-button>
+            <span class="hb-cc__inner">
+              <span class="hb-cc__head">
+                <span class="hb-cc__name">{cohort.label}</span>
+                <span class="hb-cc__status">
+                  {cohort.running && <span class="hb-cc__pulse" aria-hidden="true" />}
+                  {cohort.status}
+                </span>
               </span>
-            </p>
-            {cohort.running && (
               <span class="hb-cc__numeral font-heading tracking-display" aria-hidden="true">{cohort.number}</span>
-            )}
-            <span class="hb-cc__rule" aria-hidden="true" />
-          </div>
-          </div>
+              <span class="hb-cc__rule" aria-hidden="true" />
+            </span>
+          </button>
         </li>
       ))}
     </ol>
@@ -114,8 +117,29 @@ const cohorts = Array.from({ length: current }, (_, index) => {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 1rem 1.75rem;
+    gap: 0.75rem 1.75rem;
     margin-top: clamp(1.75rem, 3vw, 2.25rem);
+  }
+
+  .hb-hero__eligibility {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 1.1rem 0 0;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--color-ink-primary);
+  }
+
+  .hb-check {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    background: rgb(242 141 104 / 0.2);
+    color: var(--color-primary);
   }
 
   .hb-pill {
@@ -150,8 +174,11 @@ const cohorts = Array.from({ length: current }, (_, index) => {
   }
 
   .hb-quiet {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
     color: var(--color-ink-primary);
-    font-size: 0.975rem;
+    font-size: 1rem;
     font-weight: 500;
     text-decoration: underline;
     text-decoration-color: rgb(242 141 104 / 0.55);
@@ -176,28 +203,20 @@ const cohorts = Array.from({ length: current }, (_, index) => {
   .hb-deck-stage {
     --peek: 2.6rem;
     --card-h: 11.5rem;
+    --depth: 12px;
+    --step-deg: 2.2deg;
+    --x-step: 0.3rem;
     position: relative;
     display: flex;
     justify-content: center;
-    --depth: 12px;
-    --step-deg: 2.2deg;
     perspective: 1100px;
-  }
-
-  .hb-deck {
-    position: relative;
-    width: min(100% - 2.5rem, 22rem);
-    height: calc(var(--card-h) + (var(--n, 4) - 1) * var(--peek));
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    transform-style: preserve-3d;
   }
 
   @media (min-width: 40rem) {
     .hb-deck-stage {
       --depth: 22px;
       --step-deg: 3.4deg;
+      --x-step: 0.7rem;
       --peek: 3.5rem;
       --card-h: 17rem;
     }
@@ -209,27 +228,58 @@ const cohorts = Array.from({ length: current }, (_, index) => {
     }
   }
 
+  .hb-deck {
+    position: relative;
+    width: min(100% - 2.5rem, 22rem);
+    height: calc(var(--card-h) + (var(--n) - 1) * var(--peek));
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    transform-style: preserve-3d;
+  }
+
+  /* GSAP owns each card's transform (scroll fan, hover parting); the resting
+   * pose for its slot sits one level in, on the button. */
+  /* Each card's box starts at its own slot, so a card never sits over the
+   * visible strip of the cards behind it. */
   .hb-cc {
-    --angle: calc((var(--k) - (var(--n) - 1) * 0.7) * var(--step-deg, 3.4deg));
     position: absolute;
     inset-inline: 0;
-    top: calc(var(--k) * var(--peek));
+    top: calc(var(--slot) * var(--peek));
+    z-index: calc(var(--slot) + 1);
     height: var(--card-h);
     transform-origin: 50% 140%;
     transform-style: preserve-3d;
   }
 
-  /* Resting fan. GSAP owns the card's transform (scroll fan), so the pose sits
-   * one level in, where GSAP's reset of the CSS rotate/translate can't reach. */
   .hb-cc__pose {
+    display: block;
+    width: 100%;
     height: 100%;
-    translate: calc((var(--k) - (var(--n) - 1) / 2) * 0.7rem) 0 calc(var(--k) * var(--depth, 22px));
-    rotate: var(--angle);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 1.25rem;
+    translate:
+      calc((var(--slot) - (var(--n) - 1) / 2) * var(--x-step))
+      0
+      calc(var(--slot) * var(--depth));
+    rotate: calc((var(--slot) - (var(--n) - 1) * 0.7) * var(--step-deg));
     transform-origin: 50% 140%;
+  }
+
+  .hb-cc__pose:focus-visible {
+    outline: 2px solid var(--color-ink-primary);
+    outline-offset: 4px;
   }
 
   .hb-cc__inner {
     position: relative;
+    display: block;
     height: 100%;
     box-sizing: border-box;
     padding: 0.95rem 1.25rem;
@@ -254,7 +304,6 @@ const cohorts = Array.from({ length: current }, (_, index) => {
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    margin: 0;
     font-size: 0.875rem;
     line-height: 1.5rem;
     font-weight: 600;
@@ -272,8 +321,8 @@ const cohorts = Array.from({ length: current }, (_, index) => {
     border-radius: 999px;
     font-size: 0.8125rem;
     font-weight: 500;
-    color: rgb(255 248 242 / 0.82);
-    background: rgb(0 0 0 / 0.16);
+    color: rgb(255 248 242 / 0.85);
+    background: rgb(0 0 0 / 0.18);
   }
 
   .hb-cc--running .hb-cc__status {
@@ -290,13 +339,24 @@ const cohorts = Array.from({ length: current }, (_, index) => {
     background: #ffd166;
   }
 
+  /* Every card carries its number; only the card on top shows it whole. */
   .hb-cc__numeral {
     position: absolute;
     left: 1.1rem;
     bottom: 0.4rem;
     font-size: clamp(5.5rem, 14vw, 8.5rem);
     line-height: 1;
+    color: transparent;
+    -webkit-text-stroke: 1.5px var(--color-primary);
+  }
+
+  .hb-cc__pose[aria-pressed="false"] .hb-cc__numeral {
+    opacity: 0;
+  }
+
+  .hb-cc--running .hb-cc__numeral {
     color: var(--color-dark);
+    -webkit-text-stroke: 0;
   }
 
   .hb-cc__rule {
@@ -311,9 +371,31 @@ const cohorts = Array.from({ length: current }, (_, index) => {
   }
 
   @media (prefers-reduced-motion: no-preference) {
+    .hb-cc {
+      transition: top 620ms cubic-bezier(0.3, 0.9, 0.25, 1);
+    }
+
+    .hb-cc__pose {
+      transition:
+        translate 620ms cubic-bezier(0.3, 0.9, 0.25, 1),
+        rotate 620ms cubic-bezier(0.3, 0.9, 0.25, 1);
+    }
+
+    .hb-cc__numeral {
+      transition: opacity 400ms ease 200ms;
+    }
+
     .hb-cc__inner {
       animation: hb-deal 760ms cubic-bezier(0.18, 0.9, 0.24, 1.08) backwards;
       animation-delay: calc(120ms + var(--k) * 110ms);
+      transition: translate 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    /* A card lifts out of the deck under the pointer. */
+    @media (hover: hover) and (pointer: fine) {
+      .hb-cc__pose:hover .hb-cc__inner {
+        translate: 0 -0.6rem;
+      }
     }
 
     .hb-cc__pulse::after {
@@ -327,7 +409,8 @@ const cohorts = Array.from({ length: current }, (_, index) => {
 
     .hb-hero__title,
     .hb-hero__summary,
-    .hb-hero__actions {
+    .hb-hero__actions,
+    .hb-hero__eligibility {
       animation: hb-rise 760ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
     }
 
@@ -337,6 +420,10 @@ const cohorts = Array.from({ length: current }, (_, index) => {
 
     .hb-hero__actions {
       animation-delay: 180ms;
+    }
+
+    .hb-hero__eligibility {
+      animation-delay: 260ms;
     }
   }
 
