@@ -1,4 +1,5 @@
 ---
+import CommunityMotion from "@/components/community/CommunityMotion.astro";
 import PublicLayout from "@/layouts/PublicLayout.astro";
 import CommunityAudiencePage from "@/components/community/CommunityAudiencePage";
 // oxlint-disable-next-line import/no-unassigned-import -- Page-scoped CSS; no client hydration required.
@@ -6,4 +7,5 @@ import "@/styles/community-audience.css";
 ---
 <PublicLayout title="Community for members | Tembo Tech Ventures" description="Give your work a story. Build a community profile around your contributions, supporting evidence, and opportunity goals. Open within and beyond TTV cohorts." canonical="/community/members">
   <CommunityAudiencePage isAuthenticated={Boolean(Astro.locals.user)} />
+  <CommunityMotion />
 </PublicLayout>

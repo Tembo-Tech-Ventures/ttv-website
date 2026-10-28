@@ -1,4 +1,5 @@
 import React from "react";
+import CommunitySheet from "./CommunitySheet";
 import { communityEntryHref } from "../../lib/community-entry";
 
 const paths = [
@@ -9,23 +10,29 @@ const paths = [
 
 /** Server-rendered navigation: the map is an illustration, never a people directory. */
 export default function CommunityLanding({ isAuthenticated = false }: { isAuthenticated?: boolean }) {
-  return <article className="community-audience community-landing">
-    <div className="audience-container">
-      <section className="community-opening" aria-labelledby="community-title">
-        <h1 id="community-title">Good work.<br /><em>Better together.</em></h1>
-        <div className="community-opening-bottom"><p className="audience-lead">An African tech community, starting in East Africa and Nigeria. A place for builders, mentors, and institutions to connect through the work.</p><div><a className="audience-button" href={communityEntryHref(isAuthenticated)}>{isAuthenticated ? "Open my community journey" : "Join the community"}<span aria-hidden="true">↗</span></a><p className="audience-cta-note">You do not need to join or complete a cohort.{!isAuthenticated && " Continue with GitHub to join or sign in."}</p></div></div>
-      </section>
-      <div className="community-map" aria-hidden="true">
-        <svg viewBox="0 0 1100 260" fill="none"><path d="M40 200H220L365 70H570L725 200H1060M220 200H530L690 65H920M365 70L530 200M725 200L920 65" /><circle cx="220" cy="200" r="13"/><circle cx="365" cy="70" r="13"/><circle cx="530" cy="200" r="13"/><circle cx="570" cy="70" r="21" className="map-mentor"/><circle cx="690" cy="65" r="21" className="map-mentor"/><path className="map-partner" d="m725 180 20 20-20 20-20-20ZM920 45l20 20-20 20-20-20Z"/><circle className="map-pulse" cx="365" cy="70" r="28"/></svg>
-        <span className="map-word map-word-build">Build.</span><span className="map-word map-word-share">Share.</span><span className="map-word map-word-connect">Connect.</span>
-      </div>
-      <section className="community-paths" aria-labelledby="paths-title">
+  return <article className="community-audience hp community-landing" data-community-root>
+      <CommunitySheet tone="base" layer={1} className="community-opening" labelledby="community-title">
+        <div className="community-opening-copy">
+          <h1 id="community-title">Good work.<br /><em>Better together.</em></h1>
+          <p className="audience-lead">An African tech community, starting in East Africa and Nigeria. A place for builders, mentors, and institutions to connect through the work.</p>
+          <a className="audience-button" href={communityEntryHref(isAuthenticated)}>{isAuthenticated ? "Open my community journey" : "Join the community"}<span aria-hidden="true">→</span></a>
+          <p className="audience-cta-note">You do not need to join or complete a cohort.{!isAuthenticated && " Continue with GitHub to join or sign in."}</p>
+          <a className="audience-text-link" href="#your-place">Find your place <span aria-hidden="true">↓</span></a>
+        </div>
+        <figure className="community-deck">
+          <svg className="community-deck-network" aria-hidden="true" viewBox="0 0 500 500" fill="none"><ellipse cx="250" cy="250" rx="235" ry="165"/><ellipse cx="250" cy="250" rx="180" ry="230"/><path d="M40 300 165 80 380 140 440 350 200 430Z"/><circle cx="165" cy="80" r="7"/><circle cx="440" cy="350" r="9"/></svg>
+          <div className="community-deck-card deck-build"><span>Builders</span><strong>Make something.</strong><span className="deck-glyph" aria-hidden="true">●</span></div>
+          <div className="community-deck-card deck-review"><span>Mentors</span><strong>Add perspective.</strong><span className="deck-glyph" aria-hidden="true">○</span></div>
+          <div className="community-deck-card deck-connect"><span>Institutions</span><strong>See the work.</strong><span className="deck-glyph" aria-hidden="true">◇</span></div>
+          <figcaption>Different perspectives. Connected through the work.</figcaption>
+        </figure>
+      </CommunitySheet>
+      <CommunitySheet className="community-paths" labelledby="paths-title" tone="raised" layer={2} id="your-place">
         <div className="audience-section-intro"><h2 id="paths-title">Find your place.<br /><em>Bring your perspective.</em></h2><p>Different starting points. One shared belief: the work tells a richer story when we understand it together.</p></div>
         <nav aria-label="Community participation" className="community-path-grid">{paths.map(path => <a className={`community-path path-${path.slug}`} href={`/community/${path.slug}`} key={path.slug} aria-label={path.label}><span className="path-symbol" aria-hidden="true">{path.shape}</span><span className="path-label">{path.label}</span><h3>{path.title}</h3><p>{path.text}</p><span className="path-foot">{path.detail}<span aria-hidden="true">↗</span></span></a>)}</nav>
-      </section>
-      <section className="community-common" aria-labelledby="common-title"><h2 id="common-title">The work is<br /><em>the starting point.</em></h2><ol><li><h3>Show what you made.</h3><p>A project, a contribution, a source. Explain your part and what you want to explore next.</p></li><li><h3>Add another perspective.</h3><p>Mentors can confirm the specific work they checked. Their notes stay with the contribution, not a blanket endorsement of a person.</p></li><li><h3>Ask a better question.</h3><p>Approved institutions can explore documented work. Evidence gives people a place to start a conversation.</p></li></ol></section>
-      <section className="audience-context" aria-labelledby="visibility-title"><div><h2 id="visibility-title">Shared work.<br /><em>Clear boundaries.</em></h2><p>Your community profile and contributions are available to approved institutions. Mentors can review shared contributions.</p></div><div className="audience-context-notes"><div><h3>Your private learning stays private.</h3><p>Cohort recordings and internal records are not part of institutional discovery.</p></div><div><h3>A starting point, not a promise.</h3><p>Participation does not guarantee a job, placement, or introduction. People decide what happens next.</p></div></div></section>
-      <section id="institutions" className="audience-close" aria-labelledby="community-institution-heading"><span className="audience-close-mark" aria-hidden="true">◇</span><div><h2 id="community-institution-heading">People behind the profiles.<br />Evidence behind the work.</h2><a className="audience-button" href={communityEntryHref(isAuthenticated, true)}>Continue to institutional access <span aria-hidden="true">↗</span></a><p>Institutional access requires administrator approval after sign-in.</p></div></section>
-    </div>
+      </CommunitySheet>
+      <CommunitySheet className="community-common" labelledby="common-title" tone="map" layer={3}><h2 id="common-title">The work is<br /><em>the starting point.</em></h2><ol><li><h3>Show what you made.</h3><p>A project, a contribution, a source. Explain your part and what you want to explore next.</p></li><li><h3>Add another perspective.</h3><p>Mentors can confirm the specific work they checked. Their notes stay with the contribution, not a blanket endorsement of a person.</p></li><li><h3>Ask a better question.</h3><p>Approved institutions can explore documented work. Evidence gives people a place to start a conversation.</p></li></ol></CommunitySheet>
+      <CommunitySheet className="audience-context" labelledby="visibility-title" tone="lift" layer={4}><div><h2 id="visibility-title">Shared work.<br /><em>Clear boundaries.</em></h2><p>Your community profile and contributions are available to approved institutions. Mentors can review shared contributions.</p></div><div className="audience-context-notes"><div><h3>Your private learning stays private.</h3><p>Cohort recordings and internal records are not part of institutional discovery.</p></div><div><h3>A starting point, not a promise.</h3><p>Participation does not guarantee a job, placement, or introduction. People decide what happens next.</p></div></div></CommunitySheet>
+      <CommunitySheet id="institutions" className="audience-close" labelledby="community-institution-heading" tone="peach" layer={5} last><span className="audience-close-mark" aria-hidden="true">◇</span><div><h2 id="community-institution-heading">Bring your work.<br />Find your people.</h2><a className="audience-button" href={communityEntryHref(isAuthenticated)}>Start your community journey <span aria-hidden="true">→</span></a><br /><a className="audience-text-link" href={communityEntryHref(isAuthenticated, true)}>Continue to institutional access <span aria-hidden="true">↗</span></a><p>Institutional access requires administrator approval after sign-in.</p></div></CommunitySheet>
   </article>;
 }

@@ -174,3 +174,44 @@ test("community map leads to all personas, lifts cards on focus, and preserves s
   await page.setViewportSize({ width: 320, height: 740 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+for (const audience of ["community", "members", "mentors", "institutions"]) {
+  test(`${audience} uses the homepage sheet stack without trapping anchors or keyboard focus`, async ({ page }) => {
+    await page.goto(`/community-audience.html?audience=${audience}`);
+    const root = page.locator("[data-community-root]");
+    await expect(root).toHaveClass(/hp-stacked/);
+    await expect(root.locator("[data-hp-sheet]")).toHaveCount(5);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect(root).not.toHaveClass(/hp-stacked/);
+    const geometry = await root.locator("[data-hp-sheet]").evaluateAll(sheets => sheets.map(el => ({
+      width: el.getBoundingClientRect().width,
+      radius: Number.parseFloat(getComputedStyle(el).borderTopLeftRadius),
+      transform: getComputedStyle(el).transform,
+      opacity: getComputedStyle(el).opacity,
+    })));
+    for (const sheet of geometry) {
+      expect(sheet.width).toBeCloseTo(page.viewportSize()!.width, 0);
+      expect(sheet.radius).toBeGreaterThanOrEqual(24);
+      expect(sheet.transform).toBe("none");
+      expect(sheet.opacity).toBe("1");
+    }
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await expect(root).toHaveClass(/hp-stacked/);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const firstAction = root.locator(".audience-button").first();
+    await firstAction.focus();
+    await expect.poll(() => firstAction.evaluate(el => {
+      const box = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return box.top >= 0 && box.bottom <= innerHeight && !!hit && el.contains(hit);
+    })).toBe(true);
+    const link = root.locator('a[href^="#"]').first();
+    await link.click();
+    const hash = await link.getAttribute("href");
+    const heading = page.locator(`${hash} h2`).first();
+    await expect.poll(() => heading.evaluate(el => {
+      const box = el.getBoundingClientRect();
+      return box.top >= 0 && box.bottom <= innerHeight;
+    })).toBe(true);
+  });
+}

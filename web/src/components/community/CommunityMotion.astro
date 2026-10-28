@@ -1,0 +1,8 @@
+<script>
+  import { initCommunityMotion } from "./community-motion";
+  const root = document.querySelector<HTMLElement>("[data-community-root]");
+  if (root) {
+    const stop = initCommunityMotion(root);
+    window.addEventListener("pagehide", stop, { once: true });
+  }
+</script>
