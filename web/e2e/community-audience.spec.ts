@@ -179,7 +179,7 @@ for (const audience of ["community", "members", "mentors", "institutions"]) {
   test(`${audience} keeps layered surfaces without trapping anchors or keyboard focus`, async ({ page }) => {
     await page.goto(`/community-audience.html?audience=${audience}`);
     const root = page.locator("[data-community-root]");
-    await expect(root).not.toHaveClass(/hp-stacked/);
+    await expect(root).toHaveClass(/hp-stacked/);
     await expect(root.locator("[data-hp-sheet]")).toHaveCount(5);
     await page.emulateMedia({ reducedMotion: "reduce" });
     await expect(root).not.toHaveClass(/hp-stacked/);
@@ -196,7 +196,7 @@ for (const audience of ["community", "members", "mentors", "institutions"]) {
       expect(sheet.opacity).toBe("1");
     }
     await page.emulateMedia({ reducedMotion: "no-preference" });
-    await expect(root).not.toHaveClass(/hp-stacked/);
+    await expect(root).toHaveClass(/hp-stacked/);
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     const firstAction = root.locator(".audience-button").first();
     await firstAction.focus();
@@ -229,6 +229,8 @@ for (const audience of ["community", "members", "mentors", "institutions"]) {
     }));
     const total = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
     const positions = Array.from({ length: Math.ceil(total / 160) + 1 }, (_, i) => Math.min(i * 160, total));
+    await expect(page.locator("[data-community-root]")).toHaveClass(/hp-stacked/);
+    let sawSlide = false;
     let previous = await measure();
     let previousY = 0;
     for (const y of [...positions, ...positions.toReversed()]) {
@@ -238,16 +240,20 @@ for (const audience of ["community", "members", "mentors", "institutions"]) {
       const current = await measure();
       for (let i = 0; i < current.length; i++) {
         const sheet = current[i];
-        expect(sheet.top - previous[i].top).toBeCloseTo(previousY - actualY, 0);
+        const movement = sheet.top - previous[i].top;
+        const scroll = previousY - actualY;
+        expect(movement).toBeGreaterThanOrEqual(Math.min(0, scroll) - 1);
+        expect(movement).toBeLessThanOrEqual(Math.max(0, scroll) + 1);
+        if (Math.abs(movement) < 1 && scroll < -20 && current[i + 1] && current[i + 1].top < previous[i + 1].top - 20) sawSlide = true;
         expect(sheet.left).toBeCloseTo(0, 0);
         expect(sheet.width).toBeCloseTo(page.viewportSize()!.width, 0);
         expect(sheet.opacity).toBe("1");
         expect(sheet.transform).toBe("none");
-        if (current[i + 1]) expect(sheet.contentBottom + 20).toBeLessThan(current[i + 1].top);
       }
       previous = current;
       previousY = actualY;
     }
+    expect(sawSlide, "the next sheet visibly slides over a stationary previous sheet").toBe(true);
   });
 }
 
@@ -317,5 +323,88 @@ test("breadcrumb and hero content share a gutter through tablet breakpoints", as
     const breadcrumb = (await page.locator(".audience-breadcrumb a").boundingBox())!;
     const heading = (await page.locator("h1").boundingBox())!;
     expect(breadcrumb.x).toBeCloseTo(heading.x, 0);
+  }
+});
+
+for (const audience of ["members", "mentors", "institutions"]) {
+  test(`${audience} keeps decorative layers outside the foreground panel and ends its connector at the final node`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto(`/community-audience.html?audience=${audience}`);
+    await page.evaluate(() => document.fonts.ready);
+    for (const width of [320, 390, 768, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const figure = page.locator(".audience-trail");
+      const containment = await figure.evaluate(el => {
+        const box = el.getBoundingClientRect();
+        return {
+          decorations: ["::before", "::after"].map(pseudo => {
+            const s = getComputedStyle(el, pseudo);
+            return { bottom: parseFloat(s.top) + parseFloat(s.height), left: parseFloat(s.left), right: parseFloat(s.right), transform: s.transform };
+          }),
+          contents: [...el.children].map(child => {
+            const b = child.getBoundingClientRect();
+            return { left: b.left - box.left, right: box.right - b.right, top: b.top - box.top, bottom: box.bottom - b.bottom };
+          }),
+        };
+      });
+      for (const back of containment.decorations) {
+        expect(back.bottom).toBeLessThanOrEqual(0);
+        expect(back.left).toBeGreaterThan(0);
+        expect(back.right).toBeGreaterThan(0);
+        expect(back.transform).toBe("none");
+      }
+      for (const child of containment.contents) {
+        expect(Math.min(child.left, child.right, child.top, child.bottom)).toBeGreaterThanOrEqual(15);
+      }
+      const segments = await page.locator(".audience-evidence-path li").evaluateAll(items => items.map((item, i) => {
+        const s = getComputedStyle(item, "::before");
+        const node = item.querySelector(".audience-node")!.getBoundingClientRect();
+        const next = items[i + 1]?.querySelector(".audience-node")?.getBoundingClientRect();
+        const start = item.getBoundingClientRect().top + parseFloat(s.top);
+        return { content: s.content, start, expectedStart: node.top + node.height / 2, end: start + parseFloat(s.height), expectedEnd: next ? next.top + next.height / 2 : null };
+      }));
+      for (const segment of segments.slice(0, -1)) {
+        expect(segment.start).toBeCloseTo(segment.expectedStart, 0);
+        expect(segment.end).toBeCloseTo(segment.expectedEnd!, 0);
+      }
+      expect(segments.at(-1)!.content).toBe("none");
+    }
+  });
+}
+
+test("community timeline connects each dot to the next without a dangling final rule", async ({ page }) => {
+  await page.goto("/community-audience.html?audience=community");
+  const items = page.locator(".community-common li");
+  for (const [i, item] of (await items.all()).entries()) {
+    const line = await item.evaluate(el => {
+      const style = getComputedStyle(el, "::after");
+      return { content: style.content, height: parseFloat(style.height), itemHeight: el.getBoundingClientRect().height };
+    });
+    if (i === 2) expect(line.content).toBe("none");
+    else expect(line.height).toBeCloseTo(line.itemHeight, 0);
+  }
+});
+
+test("diagram marker shapes are centered independently of font baselines", async ({ page }) => {
+  for (const audience of ["community", "members", "mentors", "institutions"]) {
+    await page.goto(`/community-audience.html?audience=${audience}`);
+    const markers = await page.locator(".audience-node, .path-symbol, .deck-glyph").evaluateAll(nodes => nodes.map(node => {
+      const s = getComputedStyle(node);
+      const shape = getComputedStyle(node, node.matches(".audience-node") ? "::after" : "::before");
+      return { position: shape.position, translate: shape.translate, left: parseFloat(shape.left), top: parseFloat(shape.top), parentWidth: node.clientWidth, parentHeight: node.clientHeight, fontSize: s.fontSize, display: s.display, align: s.alignItems, justify: s.justifyItems, width: parseFloat(shape.width), height: parseFloat(shape.height), content: shape.content };
+    }));
+    for (const marker of markers) {
+      expect(marker.position).toBe("absolute");
+      expect(marker.translate).toBe("-50% -50%");
+      expect(marker.left).toBeCloseTo(marker.parentWidth / 2, 0);
+      expect(marker.top).toBeCloseTo(marker.parentHeight / 2, 0);
+      expect(marker.fontSize).toBe("0px");
+      expect(marker.display).toBe("grid");
+      expect(marker.align).toBe("center");
+      expect(marker.justify).toBe("center");
+      expect(marker.width).toBe(marker.height);
+      expect(marker.width).toBeGreaterThan(0);
+      expect(marker.content).not.toBe("none");
+    }
   }
 });
