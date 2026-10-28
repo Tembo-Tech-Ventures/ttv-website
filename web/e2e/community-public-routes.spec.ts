@@ -9,7 +9,7 @@ test("public navigation leads to community and preserves sign-in return paths", 
   await expect(navigation).toHaveCount(1);
   await navigation.click();
   await expect(page).toHaveURL(/\/community$/);
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("People, with the work");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Good work.");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole("link", { name: "Join the community" }).click();
   await expect(page).toHaveURL(/\/auth\/login\?next=%2Fdashboard%2Fcommunity$/);
@@ -51,3 +51,37 @@ for (const [audience, headline, cta, destination] of [
 // authenticated acceptance result. Real success/role assertions belong to the
 // protected cookie-persona staging matrix, including ADMIN.
 test.skip("authenticated audience workspaces: unsupported with preview bearer; cookie staging acceptance required", () => {});
+
+test("community navigation and disclosures still work after browser Back", async ({ page, baseURL }) => {
+  test.skip(baseURL === "http://127.0.0.1:4322", "Requires actual Astro documents and their page lifecycle.");
+  await page.goto("/community/members");
+  await page.getByRole("link", { name: "Build your community profile" }).first().click();
+  await expect(page).toHaveURL(/\/auth\/login/);
+  await page.goBack();
+  await page.getByRole("link", { name: "See how it works" }).click();
+  await expect(page).toHaveURL(/#your-first-contribution$/);
+  await expect.poll(() => page.locator("#journey-title").evaluate(el => {
+    const box = el.getBoundingClientRect();
+    const nav = document.querySelector("header")!.getBoundingClientRect().bottom;
+    return box.top >= nav && box.bottom < innerHeight;
+  })).toBe(true);
+  // A heading can enter the viewport before the smooth anchor scroll ends.
+  // Finish that interaction before deliberately scrolling to the FAQ.
+  await page.evaluate(() => new Promise<void>(resolve => {
+    let previous = scrollY;
+    let still = 0;
+    const sample = () => {
+      still = Math.abs(scrollY - previous) < 0.5 ? still + 1 : 0;
+      previous = scrollY;
+      if (still >= 4) resolve();
+      else requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  }));
+  const summary = page.locator("summary").first();
+  await summary.evaluate(el => scrollTo({ top: scrollY + el.getBoundingClientRect().top - 220, behavior: "instant" }));
+  const before = (await summary.boundingBox())!;
+  await summary.click();
+  await expect(summary.locator("..")).toHaveAttribute("open", "");
+  expect((await summary.boundingBox())!.y).toBeCloseTo(before.y, 0);
+});

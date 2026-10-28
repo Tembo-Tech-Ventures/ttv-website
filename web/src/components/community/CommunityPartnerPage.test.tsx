@@ -26,6 +26,8 @@ describe("community partner audience pages", () => {
   });
   it("ties mentor confirmation to the reviewed work, revision and method", () => {
     const html = renderToStaticMarkup(<CommunityPartnerPage audience="mentors" />);
+    expect(html).toContain("How much time should I set aside?");
+    expect(html).toContain("agree its scope and timing with the team");
     expect(html).toContain("What I checked");
     expect(html).toContain("How I checked:");
     expect(html).toContain("revision 1");

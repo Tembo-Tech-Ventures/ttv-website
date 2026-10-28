@@ -1,4 +1,5 @@
 import React from "react";
+import CommunitySheet from "./CommunitySheet";
 
 export type CommunityPartner = "mentors" | "institutions";
 
@@ -26,6 +27,7 @@ const content = {
       { title: "Respect what is shared.", text: "Review shared contributions and sources you are allowed to access. Do not copy private cohort recordings, internal records, or confidential information into a note." },
     ],
     questions: [
+      { title: "How much time should I set aside?", text: "Before taking on a review, agree its scope and timing with the team. Start with work you can give careful, specific attention to." },
       { title: "Can I start reviewing as soon as I sign in?", text: "Review tools require mentor access granted by an administrator. Signing in does not grant that access. If it is missing, the mentor page explains the requirement and offers a return to your community journey." },
       { title: "Does my note certify the member?", text: "No. A mentor confirmation records the specific contribution and revision reviewed. It does not certify the whole person or guarantee a job, placement, or introduction." },
     ],
@@ -64,17 +66,15 @@ const content = {
 export default function CommunityPartnerPage({ audience, isAuthenticated = false }: { audience: CommunityPartner; isAuthenticated?: boolean }) {
   const page = content[audience];
   const href = isAuthenticated ? page.destination : `/auth/login?next=${encodeURIComponent(page.destination)}`;
-  return <article className="community-audience">
-    <div className="audience-container">
-      <nav className="audience-breadcrumb" aria-label="Breadcrumb"><a href="/community">← Community</a><span aria-current="page">{page.label}</span></nav>
-      <section className="audience-hero" aria-labelledby="audience-title">
+  return <article className={`community-audience hp audience-${audience}`} data-community-root>
+      <nav className="audience-breadcrumb audience-container" aria-label="Breadcrumb"><a href="/community">← Community</a><span aria-current="page">{page.label}</span></nav>
+      <CommunitySheet className="audience-hero" labelledby="audience-title" tone="base" layer={1}>
         <div className="audience-hero-copy"><h1 id="audience-title">{page.title} <em>{page.emphasis}</em></h1><p className="audience-lead">{page.lead}</p><a className="audience-button" href={href}>{page.cta}<span aria-hidden="true">↗</span></a><p className="audience-cta-note">{page.approval}{!isAuthenticated && " Continue with GitHub to sign in."}</p><a className="audience-text-link" href="#participation">See how it works <span aria-hidden="true">↓</span></a></div>
-        <figure className="audience-trail" aria-labelledby="trail-caption"><figcaption id="trail-caption">{page.caption}<span>Fictional illustration</span></figcaption><ol className="audience-evidence-path">{page.nodes.map((node, i) => <li key={node.label} className={i === 2 ? "audience-mentor-note" : undefined}><span className="audience-node" aria-hidden="true">0{i + 1}</span><div><span className="audience-card-label">{node.label}</span><h3>{node.title}</h3><p>{node.text}</p>{"detail" in node && <small>{node.detail}</small>}</div></li>)}</ol><p className="audience-trail-foot">{page.foot}</p></figure>
-      </section>
-      <section className="audience-journey" id="participation" aria-labelledby="journey-title"><div className="audience-section-intro"><h2 id="journey-title">{page.journey}</h2><p>{page.intro}</p></div><ol className="audience-steps">{page.steps.map((step, i) => <li key={step.title}><span aria-hidden="true">0{i + 1}</span><h3>{step.title}</h3><p>{step.text}</p></li>)}</ol></section>
-      <section className="audience-context" aria-labelledby="context-title"><div><h2 id="context-title">{page.context}</h2><p>{page.contextIntro}</p></div><div className="audience-context-notes">{page.notes.map(note => <div key={note.title}><h3>{note.title}</h3><p>{note.text}</p></div>)}</div></section>
-      <section className="audience-questions" aria-labelledby="questions-title"><h2 id="questions-title">Before you begin.</h2><div>{page.questions.map(question => <details key={question.title}><summary>{question.title}</summary><p>{question.text}</p></details>)}</div></section>
-      <section className="audience-close" aria-labelledby="close-title"><span className="audience-close-mark" aria-hidden="true">↗</span><div><h2 id="close-title">{page.close}</h2><a className="audience-button" href={href}>{page.cta}<span aria-hidden="true">↗</span></a><p>{page.closeNote}</p></div></section>
-    </div>
+        <figure className="audience-trail" aria-labelledby="trail-caption"><figcaption id="trail-caption">{page.caption}<span>Fictional illustration</span></figcaption><ol className="audience-evidence-path">{page.nodes.map((node, i) => <li key={node.label} className={i === 2 ? "audience-mentor-note" : undefined}><span className="audience-node" aria-hidden="true">{audience === "mentors" ? "○" : "◇"}</span><div><span className="audience-card-label">{node.label}</span><h3>{node.title}</h3><p>{node.text}</p>{"detail" in node && <small>{node.detail}</small>}</div></li>)}</ol><p className="audience-trail-foot">{page.foot}</p></figure>
+      </CommunitySheet>
+      <CommunitySheet className="audience-journey" id="participation" labelledby="journey-title" tone="raised" layer={2}><div className="audience-section-intro"><h2 id="journey-title">{page.journey}</h2><p>{page.intro}</p></div><ol className="audience-steps">{page.steps.map((step, i) => <li key={step.title}><span aria-hidden="true">0{i + 1}</span><h3>{step.title}</h3><p>{step.text}</p></li>)}</ol></CommunitySheet>
+      <CommunitySheet className="audience-context" labelledby="context-title" tone="lift" layer={3}><div><h2 id="context-title">{page.context}</h2><p>{page.contextIntro}</p></div><div className="audience-context-notes">{page.notes.map(note => <div key={note.title}><h3>{note.title}</h3><p>{note.text}</p></div>)}</div></CommunitySheet>
+      <CommunitySheet className="audience-questions" labelledby="questions-title" tone="deep" layer={4}><h2 id="questions-title">Before you begin.</h2><div>{page.questions.map(question => <details key={question.title}><summary>{question.title}</summary><p>{question.text}</p></details>)}</div></CommunitySheet>
+      <CommunitySheet className="audience-close" labelledby="close-title" tone="peach" layer={5} last><span className="audience-close-mark" aria-hidden="true">↗</span><div><h2 id="close-title">{page.close}</h2><a className="audience-button" href={href}>{page.cta}<span aria-hidden="true">↗</span></a><p>{page.closeNote}</p></div></CommunitySheet>
   </article>;
 }
