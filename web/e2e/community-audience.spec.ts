@@ -176,10 +176,10 @@ test("community map leads to all personas, lifts cards on focus, and preserves s
 });
 
 for (const audience of ["community", "members", "mentors", "institutions"]) {
-  test(`${audience} uses the homepage sheet stack without trapping anchors or keyboard focus`, async ({ page }) => {
+  test(`${audience} keeps layered surfaces without trapping anchors or keyboard focus`, async ({ page }) => {
     await page.goto(`/community-audience.html?audience=${audience}`);
     const root = page.locator("[data-community-root]");
-    await expect(root).toHaveClass(/hp-stacked/);
+    await expect(root).not.toHaveClass(/hp-stacked/);
     await expect(root.locator("[data-hp-sheet]")).toHaveCount(5);
     await page.emulateMedia({ reducedMotion: "reduce" });
     await expect(root).not.toHaveClass(/hp-stacked/);
@@ -196,7 +196,7 @@ for (const audience of ["community", "members", "mentors", "institutions"]) {
       expect(sheet.opacity).toBe("1");
     }
     await page.emulateMedia({ reducedMotion: "no-preference" });
-    await expect(root).toHaveClass(/hp-stacked/);
+    await expect(root).not.toHaveClass(/hp-stacked/);
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     const firstAction = root.locator(".audience-button").first();
     await firstAction.focus();
@@ -215,3 +215,107 @@ for (const audience of ["community", "members", "mentors", "institutions"]) {
     })).toBe(true);
   });
 }
+
+for (const audience of ["community", "members", "mentors", "institutions"]) {
+  test(`${audience} scrolls in order with stable alignment and opaque reading surfaces in both directions`, async ({ page }) => {
+    await page.goto(`/community-audience.html?audience=${audience}`);
+    await page.evaluate(() => document.fonts.ready);
+    const surfaces = page.locator("[data-hp-sheet]");
+    const measure = () => surfaces.evaluateAll(sheets => sheets.map(el => {
+      const box = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      const body = el.querySelector(".hp-sheet__body")!.getBoundingClientRect();
+      return { top: box.top, left: box.left, width: box.width, opacity: style.opacity, transform: style.transform, contentBottom: body.bottom };
+    }));
+    const total = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+    const positions = Array.from({ length: Math.ceil(total / 160) + 1 }, (_, i) => Math.min(i * 160, total));
+    let previous = await measure();
+    let previousY = 0;
+    for (const y of [...positions, ...positions.toReversed()]) {
+      await page.evaluate(position => scrollTo({ top: position, behavior: "instant" }), y);
+      await page.waitForTimeout(20);
+      const actualY = await page.evaluate(() => scrollY);
+      const current = await measure();
+      for (let i = 0; i < current.length; i++) {
+        const sheet = current[i];
+        expect(sheet.top - previous[i].top).toBeCloseTo(previousY - actualY, 0);
+        expect(sheet.left).toBeCloseTo(0, 0);
+        expect(sheet.width).toBeCloseTo(page.viewportSize()!.width, 0);
+        expect(sheet.opacity).toBe("1");
+        expect(sheet.transform).toBe("none");
+        if (current[i + 1]) expect(sheet.contentBottom + 20).toBeLessThan(current[i + 1].top);
+      }
+      previous = current;
+      previousY = actualY;
+    }
+  });
+}
+
+for (const audience of ["members", "mentors", "institutions"]) {
+  test(`${audience} expands answers in place and pushes the closing section down`, async ({ page }) => {
+    await page.goto(`/community-audience.html?audience=${audience}`);
+    const details = page.locator("details").first();
+    const summary = details.locator("summary");
+    await summary.evaluate(el => scrollTo(0, el.getBoundingClientRect().top + scrollY - 220));
+    const before = (await summary.boundingBox())!;
+    const close = page.locator(".hp-sheet--last");
+    const closingBefore = (await close.boundingBox())!;
+    await summary.click();
+    await expect(details).toHaveAttribute("open", "");
+    const after = (await summary.boundingBox())!;
+    expect(after.y).toBeCloseTo(before.y, 0);
+    expect(after.x).toBeCloseTo(before.x, 0);
+    const answerHeight = (await details.locator("p").boundingBox())!.height;
+    expect((await close.boundingBox())!.y - closingBefore.y).toBeGreaterThanOrEqual(answerHeight);
+    expect(await details.evaluate(el => getComputedStyle(el.closest("[data-hp-sheet]")!).opacity)).toBe("1");
+    await summary.click();
+    expect((await summary.boundingBox())!.y).toBeCloseTo(before.y, 0);
+  });
+}
+
+test("interactive cards stay upright on hover and still touch no neighbours", async ({ page, isMobile }) => {
+  await page.goto("/community-audience.html?audience=community");
+  const cards = page.locator(".community-path");
+  for (const card of await cards.all()) {
+    await card.scrollIntoViewIfNeeded();
+    if (!isMobile) await card.hover();
+    else await card.focus();
+    await page.waitForTimeout(250);
+    const matrix = await card.evaluate(el => {
+      const m = new DOMMatrixReadOnly(getComputedStyle(el).transform);
+      return { a: m.a, b: m.b, c: m.c, d: m.d };
+    });
+    expect(matrix).toEqual({ a: 1, b: 0, c: 0, d: 1 });
+    const boxes = await cards.evaluateAll(els => els.map(el => {
+      const b = el.getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom };
+    }));
+    for (let i = 0; i < boxes.length - 1; i++) {
+      const a = boxes[i], b = boxes[i + 1];
+      expect(a.right < b.left || a.bottom < b.top).toBe(true);
+    }
+  }
+});
+
+test("illustrations arrive when reached and do not replay when scrolling back", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 600 });
+  await page.goto("/community-audience.html?audience=community");
+  await page.evaluate(() => document.fonts.ready);
+  const firstCard = page.locator(".community-deck-card").first();
+  await expect(firstCard).not.toHaveClass(/is-arriving/);
+  await firstCard.scrollIntoViewIfNeeded();
+  await expect(firstCard).toHaveClass(/is-arriving/);
+  await page.waitForTimeout(800);
+  expect(await firstCard.evaluate(el => getComputedStyle(el).opacity)).toBe("1");
+  await page.evaluate(() => scrollTo(0, 0));
+  await firstCard.scrollIntoViewIfNeeded();
+  expect(await firstCard.evaluate(el => el.getAnimations().filter(a => a.playState === "running").length)).toBe(0);
+});
+
+test("breadcrumb and hero content share a gutter through tablet breakpoints", async ({ page }) => {
+  for (const width of [390, 650, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const breadcrumb = (await page.locator(".audience-breadcrumb a").boundingBox())!;
+    const heading = (await page.locator("h1").boundingBox())!;
+    expect(breadcrumb.x).toBeCloseTo(heading.x, 0);
+  }
+});

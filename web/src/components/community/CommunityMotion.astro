@@ -3,6 +3,7 @@
   const root = document.querySelector<HTMLElement>("[data-community-root]");
   if (root) {
     const stop = initCommunityMotion(root);
-    window.addEventListener("pagehide", stop, { once: true });
+    // A bfcache return restores the same document and still needs its handlers.
+    window.addEventListener("pagehide", event => { if (!event.persisted) stop(); });
   }
 </script>
