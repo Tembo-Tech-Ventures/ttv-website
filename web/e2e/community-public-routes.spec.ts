@@ -65,6 +65,19 @@ test("community navigation and disclosures still work after browser Back", async
     const nav = document.querySelector("header")!.getBoundingClientRect().bottom;
     return box.top >= nav && box.bottom < innerHeight;
   })).toBe(true);
+  // A heading can enter the viewport before the smooth anchor scroll ends.
+  // Finish that interaction before deliberately scrolling to the FAQ.
+  await page.evaluate(() => new Promise<void>(resolve => {
+    let previous = scrollY;
+    let still = 0;
+    const sample = () => {
+      still = Math.abs(scrollY - previous) < 0.5 ? still + 1 : 0;
+      previous = scrollY;
+      if (still >= 4) resolve();
+      else requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  }));
   const summary = page.locator("summary").first();
   await summary.evaluate(el => scrollTo({ top: scrollY + el.getBoundingClientRect().top - 220, behavior: "instant" }));
   const before = (await summary.boundingBox())!;
