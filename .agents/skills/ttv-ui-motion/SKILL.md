@@ -83,7 +83,9 @@ focus behavior, cleanup, and performance across responsive layouts.
 
 ## Review with two separate judgments
 
-**Creative review:** watch the recording at normal speed first. Describe what
+**Creative review:** watch the recording at normal speed first when playback is
+available. With frame-only tools, sample the actual video at a known cadence and
+state the limit on judging continuous rhythm. Describe what
 the eye follows and what the gesture feels like. Inspect selected frames around
 takeoff, maximum separation, overlap/contact, and resolution. Transient smear
 can be intentional; accidental border intersections and confused ownership

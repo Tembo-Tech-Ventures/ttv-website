@@ -6,6 +6,7 @@
     window.setTimeout(() => {
       if (!document.documentElement.hasAttribute("data-community-motion")) return;
       document.documentElement.removeAttribute("data-community-motion");
+      document.documentElement.setAttribute("data-community-motion-fallback", "");
       document.querySelectorAll("[data-card-stack].is-pending").forEach(card => card.classList.remove("is-pending"));
     }, 4000);
   }

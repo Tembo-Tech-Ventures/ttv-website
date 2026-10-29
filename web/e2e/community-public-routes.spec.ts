@@ -106,3 +106,22 @@ test("persona cards wait for enhancement without flashing and recover if its mod
     await page.unrouteAll({ behavior: "wait" });
   }
 });
+
+test("late font readiness cannot hide a file already revealed by the fallback", async ({ page, baseURL }) => {
+  test.skip(baseURL === "http://127.0.0.1:4322", "Requires the actual early Astro readiness script.");
+  await page.addInitScript(() => {
+    let release!: () => void;
+    const ready = new Promise<void>(resolve => { release = resolve; });
+    Object.defineProperty(document.fonts, "ready", { get: () => ready });
+    (window as unknown as { releaseMotionFonts: () => void }).releaseMotionFonts = release;
+  });
+  await page.goto("/community/members");
+  const stack = page.locator("[data-card-stack]");
+  await expect(page.locator("html")).toHaveAttribute("data-community-motion-fallback", "", { timeout: 6000 });
+  expect(await stack.locator("figure").evaluate(el => getComputedStyle(el).opacity)).toBe("1");
+  await page.evaluate(() => (window as unknown as { releaseMotionFonts: () => void }).releaseMotionFonts());
+  await expect(stack).toHaveClass(/is-settled/);
+  await expect(stack).not.toHaveClass(/is-arriving|is-pending/);
+  expect(await stack.evaluate(el => el.getAnimations({ subtree: true }).length)).toBe(0);
+  expect(await stack.locator("figure").evaluate(el => getComputedStyle(el).opacity)).toBe("1");
+});

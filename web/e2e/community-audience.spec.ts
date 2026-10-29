@@ -407,25 +407,28 @@ test("diagram marker shapes are centered independently of font baselines", async
 });
 
 for (const audience of ["members", "mentors", "institutions"]) {
-  test(`${audience} lands back to front and sharpens with optional motion`, async ({ page }) => {
+  test(`${audience} assembles one file with distinct depth poses and optional motion`, async ({ page }) => {
     await page.goto(`/community-audience.html?audience=${audience}`);
     const stack = page.locator("[data-card-stack]");
     await stack.scrollIntoViewIfNeeded();
     await expect(stack).toHaveClass(/is-arriving/);
     const timing = await stack.evaluate(el => [...el.children].map(child => {
-      const animation = child.getAnimations().find(a => a instanceof CSSAnimation && a.animationName === "audience-land")!;
+      const animation = child.getAnimations().find(a => a instanceof CSSAnimation && a.animationName.startsWith("audience-file-"))!;
       animation.pause();
-      animation.currentTime = 270;
-      return { delay: animation.effect!.getTiming().delay, opacity: Number(getComputedStyle(child).opacity) };
+      animation.currentTime = 170;
+      return { delay: Number(animation.effect!.getTiming().delay), opacity: Number(getComputedStyle(child).opacity), pose: getComputedStyle(child).transform, name: (animation as CSSAnimation).animationName };
     }));
-    expect(timing.map(t => t.delay)).toEqual([0, 160, 320]);
+    expect(timing[0].delay).toBeLessThan(timing[1].delay);
+    expect(timing[1].delay).toBeLessThan(timing[2].delay);
+    expect(new Set(timing.map(t => t.name)).size).toBe(3);
+    expect(new Set(timing.map(t => t.pose)).size).toBe(3);
     expect(timing[0].opacity).toBeGreaterThan(timing[1].opacity);
     expect(timing[1].opacity).toBeGreaterThan(timing[2].opacity);
     expect(timing[2].opacity).toBe(0);
     await stack.evaluate(el => [...el.children].forEach(child => child.getAnimations().forEach(a => a.finish())));
     for (const layer of await stack.locator(":scope > *").all()) {
       expect(await layer.evaluate(el => getComputedStyle(el).opacity)).toBe("1");
-      expect(await layer.evaluate(el => getComputedStyle(el).filter)).toBe("blur(0px)");
+      expect(["none", "blur(0px)"]).toContain(await layer.evaluate(el => getComputedStyle(el).filter));
     }
     await page.emulateMedia({ reducedMotion: "reduce" });
     await expect(stack).not.toHaveClass(/is-pending/);
@@ -436,3 +439,21 @@ for (const audience of ["members", "mentors", "institutions"]) {
     expect(await stack.locator("figure").evaluate(el => getComputedStyle(el).opacity)).toBe("1");
   });
 }
+
+
+test("a fast scroll settles the file, and motion preference changes never replay it", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/community-audience.html?audience=members");
+  const stack = page.locator("[data-card-stack]");
+  await stack.scrollIntoViewIfNeeded();
+  await expect(stack).toHaveClass(/is-arriving/);
+  await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+  await expect(stack).toHaveClass(/is-settled/);
+  await stack.scrollIntoViewIfNeeded();
+  expect(await stack.evaluate(el => el.getAnimations({ subtree: true }).filter(a => a.playState === "running").length)).toBe(0);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await expect(stack).not.toHaveClass(/is-pending|is-arriving/);
+  await expect(stack).toHaveClass(/is-settled/);
+  expect(await stack.evaluate(el => el.getAnimations({ subtree: true }).length)).toBe(0);
+});

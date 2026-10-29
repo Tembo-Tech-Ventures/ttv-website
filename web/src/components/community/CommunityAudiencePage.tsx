@@ -10,7 +10,7 @@ const steps = [
 ];
 
 function ContributionTrail() {
-  return <CommunityTrail>
+  return <CommunityTrail story="members">
     <figcaption id="trail-caption">An example of work with context <span>Fictional illustration</span></figcaption>
     <div className="audience-person"><span className="audience-avatar" aria-hidden="true">AW</span><div><strong>Amina Wanjiku</strong><span>Community member · fictional example</span></div></div>
     <ol className="audience-evidence-path">
