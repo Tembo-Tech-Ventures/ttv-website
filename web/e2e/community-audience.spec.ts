@@ -327,35 +327,32 @@ test("breadcrumb and hero content share a gutter through tablet breakpoints", as
 });
 
 for (const audience of ["members", "mentors", "institutions"]) {
-  test(`${audience} keeps decorative layers outside the foreground panel and ends its connector at the final node`, async ({ page }) => {
+  test(`${audience} keeps complete matching cards behind the foreground panel and ends its connector at the final node`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(`/community-audience.html?audience=${audience}`);
     await page.evaluate(() => document.fonts.ready);
     for (const width of [320, 390, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       const figure = page.locator(".audience-trail");
-      const containment = await figure.evaluate(el => {
+      const cards = await page.locator("[data-card-stack]").evaluate(el => [...el.children].map(child => {
+        const box = child.getBoundingClientRect();
+        return { width: box.width, height: box.height, left: box.left, top: box.top, radius: getComputedStyle(child).borderTopLeftRadius };
+      }));
+      for (const [index, card] of cards.entries()) {
+        expect(card.width).toBeCloseTo(cards[2].width, 0);
+        expect(card.height).toBeCloseTo(cards[2].height, 0);
+        expect(card.left).toBeCloseTo(cards[2].left, 0);
+        expect(card.top).toBeCloseTo(cards[2].top - (2 - index) * 12, 0);
+        expect(card.radius).toBe("22px");
+      }
+      const contents = await figure.evaluate(el => {
         const box = el.getBoundingClientRect();
-        return {
-          decorations: ["::before", "::after"].map(pseudo => {
-            const s = getComputedStyle(el, pseudo);
-            return { bottom: parseFloat(s.top) + parseFloat(s.height), left: parseFloat(s.left), right: parseFloat(s.right), transform: s.transform };
-          }),
-          contents: [...el.children].map(child => {
-            const b = child.getBoundingClientRect();
-            return { left: b.left - box.left, right: box.right - b.right, top: b.top - box.top, bottom: box.bottom - b.bottom };
-          }),
-        };
+        return [...el.children].map(child => {
+          const b = child.getBoundingClientRect();
+          return Math.min(b.left - box.left, box.right - b.right, b.top - box.top, box.bottom - b.bottom);
+        });
       });
-      for (const back of containment.decorations) {
-        expect(back.bottom).toBeLessThanOrEqual(0);
-        expect(back.left).toBeGreaterThan(0);
-        expect(back.right).toBeGreaterThan(0);
-        expect(back.transform).toBe("none");
-      }
-      for (const child of containment.contents) {
-        expect(Math.min(child.left, child.right, child.top, child.bottom)).toBeGreaterThanOrEqual(15);
-      }
+      for (const inset of contents) expect(inset).toBeGreaterThanOrEqual(15);
       const segments = await page.locator(".audience-evidence-path li").evaluateAll(items => items.map((item, i) => {
         const s = getComputedStyle(item, "::before");
         const node = item.querySelector(".audience-node")!.getBoundingClientRect();
@@ -407,4 +404,56 @@ test("diagram marker shapes are centered independently of font baselines", async
       expect(marker.content).not.toBe("none");
     }
   }
+});
+
+for (const audience of ["members", "mentors", "institutions"]) {
+  test(`${audience} assembles one file with distinct depth poses and optional motion`, async ({ page }) => {
+    await page.goto(`/community-audience.html?audience=${audience}`);
+    const stack = page.locator("[data-card-stack]");
+    await stack.scrollIntoViewIfNeeded();
+    await expect(stack).toHaveClass(/is-arriving/);
+    const timing = await stack.evaluate(el => [...el.children].map(child => {
+      const animation = child.getAnimations().find(a => a instanceof CSSAnimation && a.animationName.startsWith("audience-file-"))!;
+      animation.pause();
+      animation.currentTime = 170;
+      return { delay: Number(animation.effect!.getTiming().delay), opacity: Number(getComputedStyle(child).opacity), pose: getComputedStyle(child).transform, name: (animation as CSSAnimation).animationName };
+    }));
+    expect(timing[0].delay).toBeLessThan(timing[1].delay);
+    expect(timing[1].delay).toBeLessThan(timing[2].delay);
+    expect(new Set(timing.map(t => t.name)).size).toBe(3);
+    expect(new Set(timing.map(t => t.pose)).size).toBe(3);
+    expect(timing[0].opacity).toBeGreaterThan(timing[1].opacity);
+    expect(timing[1].opacity).toBeGreaterThan(timing[2].opacity);
+    expect(timing[2].opacity).toBe(0);
+    await stack.evaluate(el => [...el.children].forEach(child => child.getAnimations().forEach(a => a.finish())));
+    for (const layer of await stack.locator(":scope > *").all()) {
+      expect(await layer.evaluate(el => getComputedStyle(el).opacity)).toBe("1");
+      expect(["none", "blur(0px)"]).toContain(await layer.evaluate(el => getComputedStyle(el).filter));
+    }
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect(stack).not.toHaveClass(/is-pending/);
+    expect(await stack.evaluate(el => el.getAnimations({ subtree: true }).length)).toBe(0);
+    expect(await stack.locator("figure").evaluate(el => getComputedStyle(el).opacity)).toBe("1");
+    // Unenhanced server markup must stay visible if motion initialization fails.
+    await stack.evaluate(el => el.classList.remove("is-arriving", "is-pending"));
+    expect(await stack.locator("figure").evaluate(el => getComputedStyle(el).opacity)).toBe("1");
+  });
+}
+
+
+test("a fast scroll settles the file, and motion preference changes never replay it", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/community-audience.html?audience=members");
+  const stack = page.locator("[data-card-stack]");
+  await stack.scrollIntoViewIfNeeded();
+  await expect(stack).toHaveClass(/is-arriving/);
+  await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+  await expect(stack).toHaveClass(/is-settled/);
+  await stack.scrollIntoViewIfNeeded();
+  expect(await stack.evaluate(el => el.getAnimations({ subtree: true }).filter(a => a.playState === "running").length)).toBe(0);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await expect(stack).not.toHaveClass(/is-pending|is-arriving/);
+  await expect(stack).toHaveClass(/is-settled/);
+  expect(await stack.evaluate(el => el.getAnimations({ subtree: true }).length)).toBe(0);
 });

@@ -6,6 +6,6 @@ import CommunityPartnerPage from "@/components/community/CommunityPartnerPage";
 import "@/styles/community-audience.css";
 ---
 <PublicLayout title="Community for mentors | Tembo Tech Ventures" description="Help make a contribution clearer. Review specific work, record how you checked it, and keep mentor confirmation in scope." canonical="/community/mentors">
-  <CommunityPartnerPage audience="mentors" isAuthenticated={Boolean(Astro.locals.user)} />
   <CommunityMotion />
+  <CommunityPartnerPage audience="mentors" isAuthenticated={Boolean(Astro.locals.user)} />
 </PublicLayout>

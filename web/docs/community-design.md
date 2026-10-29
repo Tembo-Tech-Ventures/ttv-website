@@ -20,13 +20,15 @@ dimming their contents. FAQ sections stay in document flow so disclosure
 expansion does not move the tapped control. Sticky offsets follow content and
 viewport size, preserving enough reading space before the next sheet arrives.
 
-Persona illustrations use shallow stacked edges above an upright foreground
-card. Decorative borders never cross the avatar, text or caption. Diagram
+Persona illustrations use three full, equally sized rounded cards. The rear
+surfaces carry quiet dot/ring/diamond motifs behind the foreground file. Decorative borders never cross the avatar, text or caption. Diagram
 connectors stop at the final node, and dots, rings and diamonds use centered
 CSS shapes instead of baseline-dependent text glyphs.
 
-Illustration cards settle into place once they enter the viewport, after fonts
-load. They stay opaque throughout and do not replay on reverse scrolling.
+Illustration cards assemble from depth once they enter the viewport, with an
+overlapping rear-to-front sequence and a short connector handoff. They do not
+replay on reverse scrolling. Font readiness has a bounded visible fallback;
+interrupted entrances settle immediately. See `community-card-motion.md`.
 Clickable cards use an upright lift on fine-pointer hover; touch and keyboard
 focus do not tilt the layout. Reduced motion disables animation and transitions.
 

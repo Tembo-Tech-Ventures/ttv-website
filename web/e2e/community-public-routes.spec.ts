@@ -85,3 +85,43 @@ test("community navigation and disclosures still work after browser Back", async
   await expect(summary.locator("..")).toHaveAttribute("open", "");
   expect((await summary.boundingBox())!.y).toBeCloseTo(before.y, 0);
 });
+
+
+test("persona cards wait for enhancement without flashing and recover if its module fails", async ({ page, baseURL }) => {
+  test.skip(baseURL === "http://127.0.0.1:4322", "Requires the real server-rendered Astro document.");
+  // Delay all module scripts while the parser and CSS render the actual SSR cards.
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/*.js", async route => { await gate; await route.abort(); });
+  try {
+    await page.goto("/community/members", { waitUntil: "commit" });
+    await expect(page.locator("html")).toHaveAttribute("data-community-motion", "");
+    const front = page.locator("[data-card-stack] figure");
+    await expect.poll(() => front.evaluate(el => getComputedStyle(el).opacity)).toBe("0");
+    // The inline failsafe restores SSR content even when enhancement never loads.
+    await expect.poll(() => front.evaluate(el => getComputedStyle(el).opacity), { timeout: 6000 }).toBe("1");
+    await expect(page.locator("html")).not.toHaveAttribute("data-community-motion");
+  } finally {
+    release();
+    await page.unrouteAll({ behavior: "wait" });
+  }
+});
+
+test("late font readiness cannot hide a file already revealed by the fallback", async ({ page, baseURL }) => {
+  test.skip(baseURL === "http://127.0.0.1:4322", "Requires the actual early Astro readiness script.");
+  await page.addInitScript(() => {
+    let release!: () => void;
+    const ready = new Promise<void>(resolve => { release = resolve; });
+    Object.defineProperty(document.fonts, "ready", { get: () => ready });
+    (window as unknown as { releaseMotionFonts: () => void }).releaseMotionFonts = release;
+  });
+  await page.goto("/community/members");
+  const stack = page.locator("[data-card-stack]");
+  await expect(page.locator("html")).toHaveAttribute("data-community-motion-fallback", "", { timeout: 6000 });
+  expect(await stack.locator("figure").evaluate(el => getComputedStyle(el).opacity)).toBe("1");
+  await page.evaluate(() => (window as unknown as { releaseMotionFonts: () => void }).releaseMotionFonts());
+  await expect(stack).toHaveClass(/is-settled/);
+  await expect(stack).not.toHaveClass(/is-arriving|is-pending/);
+  expect(await stack.evaluate(el => el.getAnimations({ subtree: true }).length)).toBe(0);
+  expect(await stack.locator("figure").evaluate(el => getComputedStyle(el).opacity)).toBe("1");
+});

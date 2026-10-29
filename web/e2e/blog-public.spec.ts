@@ -102,14 +102,17 @@ test.describe("public blog reader", () => {
     await page.screenshot({ path: evidence("blog-post"), fullPage: true });
   });
 
-  test("homepage shows the latest-posts strip when public posts exist", async ({
+  test("homepage footer leads visitors to published writing", async ({
     page,
   }) => {
     await page.goto("/");
-    const section = page.getByRole("region", { name: "Latest posts" });
-    await expect(section).toBeVisible();
+    // The approved homepage replaced the latest-posts strip; writing remains
+    // discoverable through the shared footer on desktop and mobile.
+    const writing = page.getByRole("contentinfo").locator('a[href="/blog"]');
+    await writing.click();
+    await expect(page).toHaveURL(/\/blog$/);
     await expect(
-      section.getByRole("link", {
+      page.getByRole("link", {
         name: "Building resilient interfaces from field conversations",
       })
     ).toHaveAttribute("href", READER_PATH);

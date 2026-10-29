@@ -1,5 +1,6 @@
 import React from "react";
 import CommunitySheet from "./CommunitySheet";
+import CommunityTrail from "./CommunityTrail";
 import { communityEntryHref } from "../../lib/community-entry";
 
 const steps = [
@@ -9,7 +10,7 @@ const steps = [
 ];
 
 function ContributionTrail() {
-  return <figure className="audience-trail" aria-labelledby="trail-caption">
+  return <CommunityTrail story="members">
     <figcaption id="trail-caption">An example of work with context <span>Fictional illustration</span></figcaption>
     <div className="audience-person"><span className="audience-avatar" aria-hidden="true">AW</span><div><strong>Amina Wanjiku</strong><span>Community member · fictional example</span></div></div>
     <ol className="audience-evidence-path">
@@ -18,7 +19,7 @@ function ContributionTrail() {
       <li className="audience-mentor-note"><span className="audience-node" aria-hidden="true">○</span><div><span className="audience-card-label">A mentor can add context</span><p>“I reviewed the low-stock view and its tests.”</p><small>Confirms the contribution reviewed, not the whole person.</small></div></li>
     </ol>
     <p className="audience-trail-foot">The work. Your part. Something to talk about.</p>
-  </figure>;
+  </CommunityTrail>;
 }
 
 export default function CommunityAudiencePage({ isAuthenticated = false }: { isAuthenticated?: boolean }) {
