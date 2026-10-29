@@ -1,0 +1,4 @@
+interface:
+  display_name: "TTV UI & Motion"
+  short_description: "Design expressive UI and motion in the TTV voice"
+  default_prompt: "Use $ttv-ui-motion to design and critique this interface and its animation."
