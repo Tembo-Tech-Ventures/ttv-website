@@ -7,22 +7,30 @@ export function initCommunityMotion(root: HTMLElement): () => void {
   const sheets = [...root.querySelectorAll<HTMLElement>("[data-hp-sheet]")];
   const lead = () => Math.round(window.innerHeight * 0.32);
   const cards = [...root.querySelectorAll<HTMLElement>(".community-deck-card, .audience-evidence-path > li")];
+  const stacks = [...root.querySelectorAll<HTMLElement>("[data-card-stack]")];
   let observer: IntersectionObserver | undefined;
   let disposed = false;
+  // Hide only enhanced stacks while font metrics settle; server HTML stays visible.
+  stacks.forEach(stack => stack.classList.toggle("is-pending", media.matches));
   const syncMotion = () => {
     observer?.disconnect();
     root.classList.toggle("hp-stacked", media.matches);
     syncLayout();
     cards.forEach(card => card.classList.remove("is-arriving"));
+    stacks.forEach(stack => {
+      stack.classList.remove("is-arriving");
+      stack.classList.toggle("is-pending", media.matches);
+    });
     if (!media.matches) return;
     observer = new IntersectionObserver(entries => {
       for (const entry of entries) {
         if (!entry.isIntersecting) continue;
+        entry.target.classList.remove("is-pending");
         entry.target.classList.add("is-arriving");
         observer?.unobserve(entry.target);
       }
     }, { threshold: 0.25, rootMargin: "0px 0px -8% 0px" });
-    cards.forEach(card => observer?.observe(card));
+    [...cards, ...stacks].forEach(card => observer?.observe(card));
   };
   // Observe the bar, not an expanded mobile menu: opening navigation must not
   // change the page's anchor offset or rearrange its content.
@@ -58,5 +66,6 @@ export function initCommunityMotion(root: HTMLElement): () => void {
     stopNavigation();
     media.removeEventListener("change", syncMotion);
     cards.forEach(card => card.classList.remove("is-arriving"));
+    stacks.forEach(stack => stack.classList.remove("is-pending", "is-arriving"));
   };
 }

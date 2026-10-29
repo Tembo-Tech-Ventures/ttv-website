@@ -1,5 +1,6 @@
 import React from "react";
 import CommunitySheet from "./CommunitySheet";
+import CommunityTrail from "./CommunityTrail";
 
 export type CommunityPartner = "mentors" | "institutions";
 
@@ -70,7 +71,7 @@ export default function CommunityPartnerPage({ audience, isAuthenticated = false
       <nav className="audience-breadcrumb audience-container" aria-label="Breadcrumb"><a href="/community">← Community</a><span aria-current="page">{page.label}</span></nav>
       <CommunitySheet className="audience-hero" labelledby="audience-title" tone="base" layer={1}>
         <div className="audience-hero-copy"><h1 id="audience-title">{page.title} <em>{page.emphasis}</em></h1><p className="audience-lead">{page.lead}</p><a className="audience-button" href={href}>{page.cta}<span aria-hidden="true">↗</span></a><p className="audience-cta-note">{page.approval}{!isAuthenticated && " Continue with GitHub to sign in."}</p><a className="audience-text-link" href="#participation">See how it works <span aria-hidden="true">↓</span></a></div>
-        <figure className="audience-trail" aria-labelledby="trail-caption"><figcaption id="trail-caption">{page.caption}<span>Fictional illustration</span></figcaption><ol className="audience-evidence-path">{page.nodes.map((node, i) => <li key={node.label} className={i === 2 ? "audience-mentor-note" : undefined}><span className="audience-node" aria-hidden="true">{audience === "mentors" ? "○" : "◇"}</span><div><span className="audience-card-label">{node.label}</span><h3>{node.title}</h3><p>{node.text}</p>{"detail" in node && <small>{node.detail}</small>}</div></li>)}</ol><p className="audience-trail-foot">{page.foot}</p></figure>
+        <CommunityTrail><figcaption id="trail-caption">{page.caption}<span>Fictional illustration</span></figcaption><ol className="audience-evidence-path">{page.nodes.map((node, i) => <li key={node.label} className={i === 2 ? "audience-mentor-note" : undefined}><span className="audience-node" aria-hidden="true">{audience === "mentors" ? "○" : "◇"}</span><div><span className="audience-card-label">{node.label}</span><h3>{node.title}</h3><p>{node.text}</p>{"detail" in node && <small>{node.detail}</small>}</div></li>)}</ol><p className="audience-trail-foot">{page.foot}</p></CommunityTrail>
       </CommunitySheet>
       <CommunitySheet className="audience-journey" id="participation" labelledby="journey-title" tone="raised" layer={2}><div className="audience-section-intro"><h2 id="journey-title">{page.journey}</h2><p>{page.intro}</p></div><ol className="audience-steps">{page.steps.map((step, i) => <li key={step.title}><span aria-hidden="true">0{i + 1}</span><h3>{step.title}</h3><p>{step.text}</p></li>)}</ol></CommunitySheet>
       <CommunitySheet className="audience-context" labelledby="context-title" tone="lift" layer={3}><div><h2 id="context-title">{page.context}</h2><p>{page.contextIntro}</p></div><div className="audience-context-notes">{page.notes.map(note => <div key={note.title}><h3>{note.title}</h3><p>{note.text}</p></div>)}</div></CommunitySheet>
