@@ -123,6 +123,7 @@
 .community-common h3 { font-size: 1.4rem; margin: 0 0 14px; }
 
 @media (prefers-reduced-motion: no-preference) {
+  [data-community-motion] .audience-stack:not(.is-arriving) > *,
   .audience-stack.is-pending > * { opacity: 0; }
   .audience-stack.is-arriving > * { animation: audience-land 820ms cubic-bezier(.16,1,.3,1) both; }
   .audience-stack.is-arriving > .audience-stack__card--middle { animation-delay: 160ms; }

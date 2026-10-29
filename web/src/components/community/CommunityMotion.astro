@@ -1,3 +1,15 @@
+<!-- Runs before the server-rendered cards can paint; the module enhances them later. -->
+<script is:inline>
+  if (window.matchMedia("(prefers-reduced-motion: no-preference)").matches && "IntersectionObserver" in window) {
+    document.documentElement.setAttribute("data-community-motion", "");
+    // A failed module/font request must never leave the reading surface hidden.
+    window.setTimeout(() => {
+      if (!document.documentElement.hasAttribute("data-community-motion")) return;
+      document.documentElement.removeAttribute("data-community-motion");
+      document.querySelectorAll("[data-card-stack].is-pending").forEach(card => card.classList.remove("is-pending"));
+    }, 4000);
+  }
+</script>
 <script>
   import { initCommunityMotion } from "./community-motion";
   const root = document.querySelector<HTMLElement>("[data-community-root]");

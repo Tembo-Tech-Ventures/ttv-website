@@ -21,6 +21,7 @@ export function initCommunityMotion(root: HTMLElement): () => void {
       stack.classList.remove("is-arriving");
       stack.classList.toggle("is-pending", media.matches);
     });
+    document.documentElement.removeAttribute("data-community-motion");
     if (!media.matches) return;
     observer = new IntersectionObserver(entries => {
       for (const entry of entries) {
@@ -62,6 +63,7 @@ export function initCommunityMotion(root: HTMLElement): () => void {
     resize.disconnect();
     window.removeEventListener("resize", syncLayout);
     root.classList.remove("hp-stacked");
+    document.documentElement.removeAttribute("data-community-motion");
     sheets.forEach(sheet => sheet.style.removeProperty("--hp-stick"));
     stopNavigation();
     media.removeEventListener("change", syncMotion);
