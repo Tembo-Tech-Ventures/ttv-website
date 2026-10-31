@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { assertAtomicMutationApplied, type AtomicMutationStatement } from "@/lib/admin/program-application";
+import { assertAtomicMutationApplied, type ProgramApplicationStatus, type AtomicMutationStatement } from "@/lib/admin/program-application";
 import { applicationStatusAttention, visitorMessageAttention, type AttentionProducerContext } from "./producers";
 
 /** Called only after the existing admin guard and transition planner succeed. */
@@ -7,12 +7,13 @@ export async function applyApplicationMutationWithAttention(context: AttentionPr
   statement: AtomicMutationStatement;
   applicationIds: readonly string[];
   actorId: string;
+  status: ProgramApplicationStatus;
   staleCode: "STALE_TRANSITION" | "STALE_BULK_SELECTION";
   staleMessage: string;
 }) {
   const result = await context.db.prepare(input.statement.sql).bind(...input.statement.params).run();
   assertAtomicMutationApplied({ ...input, actualChanges: result.meta.changes });
-  for (const id of input.applicationIds) await applicationStatusAttention(context, id, input.actorId);
+  await applicationStatusAttention(context, input.applicationIds, input.actorId, input.status);
 }
 
 /** The public page supplies its loaded profile after form validation and spam guards. */

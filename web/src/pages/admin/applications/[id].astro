@@ -51,6 +51,7 @@ if (Astro.request.method === "POST") {
       statement,
       applicationIds: [id],
       actorId: Astro.locals.user!.id,
+      status: transition.status,
       staleCode: "STALE_TRANSITION",
       staleMessage:
         "This application changed while you were updating it. Refresh the page before trying again.",

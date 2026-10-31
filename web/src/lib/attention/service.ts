@@ -60,7 +60,7 @@ export async function listAttention(db: Database, userId: string, query: Attenti
 
 export async function markAttentionRead(db: Database, userId: string, input: MarkAttentionRead, capabilities: PlatformCapabilities) {
   const now = Date.now();
-  await db.update(attentionItem).set({ readAt: now }).where(and(
+  await db.update(attentionItem).set({ readAt: sql`max(${now}, ${attentionItem.createdAt})` }).where(and(
     eq(attentionItem.userId, userId), isNull(attentionItem.readAt), attentionAccess(db, userId, capabilities),
     "ids" in input ? sql`${attentionItem.id} IN (SELECT value FROM json_each(${JSON.stringify(input.ids)}))`
       : lte(attentionItem.createdAt, Math.min(input.through, now - 1)),

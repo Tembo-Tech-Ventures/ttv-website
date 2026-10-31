@@ -281,6 +281,7 @@ if (Astro.request.method === "POST") {
         statement,
         applicationIds: plan.applicationIds,
         actorId: Astro.locals.user!.id,
+        status: plan.status,
         staleCode: "STALE_BULK_SELECTION",
         staleMessage:
           "The roster changed while this bulk action was running. No applications were updated; refresh the roster and select the rows again.",

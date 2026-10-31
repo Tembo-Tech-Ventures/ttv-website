@@ -22,13 +22,21 @@ Existing post-commit producers cover application status changes (including bulk
 admin changes), completed recording processing, mentor contribution confirmation,
 and profile visitor messages. Recipients come from persisted domain records;
 administrative actors come from authenticated callsites and are verified against
-database roles. Visitor names, email, message text, recording titles, and mentor
-statements are not copied into attention. Replay keys use the source record and
-event kind (plus application status, whose existing state machine is acyclic).
+database roles, but admissions decision makers are never included in the item.
+Visitor names, email, message text, recording titles, and mentor statements are not copied into attention. Replay keys use the source record and
+event kind (plus the committed application plan status, whose existing state
+machine is acyclic).
+If another transition supersedes that status before the adapter reads it, the
+stale event is omitted rather than attributed to the newer decision. Direct
+admin enrollment creates an application rather than transitioning one; it is not
+wired to attention. This is an explicit coverage gap alongside opportunity matches.
 
 Persistence follows the **recipient's** effective `spaces` flag. OFF writes no
 attention, STAFF requires recipient ADMIN authority, and flag failures fail
-closed. There is no backfill. Notification failure does not roll back or fail a
+closed. Audience resolution happens once per producer or bulk operation; OFF
+returns before domain reads. Enabled recipients use one set-based insert, with
+STAFF eligibility checked against recipient database roles. There is no backfill.
+Notification failure does not roll back or fail a
 successful primary operation; a generic log records failure without private
 details. This is best-effort delivery, not a durable transactional outbox.
 

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { attentionDatabase, allSpaces } from "./test-support";
 import { getAttentionCount } from "./count";
 import { ATTENTION_PAGE_SIZE, AttentionCursorError, listAttention, markAttentionRead } from "./service";
+import { applicationStatusAttention } from "./producers";
 import { Cursor } from "@/lib/platform/contracts";
 
 afterEach(() => vi.useRealTimers());
@@ -121,4 +122,38 @@ describe("attention storage", () => {
       expect((await markAttentionRead(s.db, userId, { through: Number.MAX_SAFE_INTEGER }, allSpaces)).count).toBe(1);
     } finally { s.database.close(); }
   });
+});
+
+it("keeps the admissions decision maker private in listed accepted and rejected events", async () => {
+  vi.useFakeTimers(); vi.setSystemTime(5000);
+  const s = attentionDatabase({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
+  try {
+    s.database.exec("UPDATE feature_flag SET audience='ALL' WHERE key='spaces'; INSERT INTO UserRoles(id,userId,roleId) SELECT 'admin','synthetic-otieno',id FROM Roles WHERE name='ADMIN'");
+    const context = { db: s.db.$client, env: { DEPLOYMENT_ENVIRONMENT: "production" } };
+    await applicationStatusAttention(context, ["application-0"], "synthetic-otieno", "APPROVED");
+    s.database.exec("UPDATE programApplication SET status='REJECTED'");
+    await applicationStatusAttention(context, ["application-0"], "synthetic-otieno", "REJECTED");
+    vi.setSystemTime(6000);
+    const page = await listAttention(s.db, userId, {}, allSpaces);
+    expect(page.items).toHaveLength(2);
+    expect(page.items.map(item => item.actor)).toEqual([null, null]);
+    expect(JSON.stringify(page)).not.toContain("Otieno");
+  } finally { s.database.close(); }
+});
+
+it("marks mixed clock-skewed IDs without failing the batch or changing earlier read timestamps", async () => {
+  vi.useFakeTimers(); vi.setSystemTime(5000);
+  const s = attentionDatabase();
+  try {
+    s.seed("normal"); s.seed("future", { createdAt: 10000 });
+    s.seed("foreign-future", { userId: "synthetic-otieno", createdAt: 10000 });
+    const input = { ids: ["normal", "future", "foreign-future"] };
+    expect((await markAttentionRead(s.db, userId, input, allSpaces)).count).toBe(0);
+    expect(s.database.prepare("SELECT id,readAt FROM attention_item ORDER BY id").all()).toEqual([
+      { id: "foreign-future", readAt: null }, { id: "future", readAt: 10000 }, { id: "normal", readAt: 5000 },
+    ]);
+    vi.setSystemTime(12000);
+    expect((await markAttentionRead(s.db, userId, input, allSpaces)).count).toBe(0);
+    expect(s.database.prepare("SELECT readAt FROM attention_item WHERE id='future'").get()).toEqual({ readAt: 10000 });
+  } finally { s.database.close(); }
 });
