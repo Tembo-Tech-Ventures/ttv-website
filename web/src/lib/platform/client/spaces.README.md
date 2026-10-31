@@ -28,9 +28,10 @@ here; pass the already parsed space value.
 
 `ttv-last-space` holds a **plain SpaceId string**, without JSON or URL decoding.
 On the server, `readLastSpaceCookie` takes a complete Cookie header and rejects
-ambiguous duplicate names. A server using `Astro.cookies` can instead validate
-the preference value with `SpaceId.safeParse` and use the parsed enum as
-`lastSpace`. Cookie attributes: `Path=/dashboard; SameSite=Lax; Max-Age=31536000`,
+ambiguous duplicate names. Use this helper on both server and client so duplicate
+cookies receive the same treatment during SSR and hydration; reading just one
+value through `Astro.cookies.get` would lose that ambiguity check.
+Cookie attributes: `Path=/dashboard; SameSite=Lax; Max-Age=31536000`,
 plus `Secure` on HTTPS; no `HttpOnly`. This is a client-readable preference.
 
 B-1.1 and B-1.2 own server integration: select and redirect using this helper on

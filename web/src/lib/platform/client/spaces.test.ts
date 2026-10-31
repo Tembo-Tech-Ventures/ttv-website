@@ -147,16 +147,14 @@ describe("spaces controller", () => {
   });
 });
 
-it("accepts only a parsed lastSpace in island options, never a request Cookie header", () => {
+it("type-rejects request Cookie headers in island options and accepts only a parsed lastSpace", () => {
   expectTypeOf<Extract<"cookieHeader", keyof SpacesOptions>>().toEqualTypeOf<never>();
   expectTypeOf<SpacesOptions["lastSpace"]>().toEqualTypeOf<Me["spaces"][number] | null | undefined>();
-  const controller = createSpacesController({ me: meByPersona.lucy,
+  createSpacesController({ me: meByPersona.lucy,
     // @ts-expect-error Raw request Cookie headers must never be passed as island props.
     cookieHeader: "synthetic-private-cookie=never-serialize",
     lastSpace: "profile",
   });
-  expect(controller.getState().selectedSpace).toBe("profile");
-  expect(JSON.stringify(controller.getServerSnapshot())).not.toContain("synthetic-private-cookie");
 });
 
 it("does not make a fallback sticky when a user gains a higher-ordered space", () => {
@@ -171,6 +169,14 @@ it("does not make a fallback sticky when a user gains a higher-ordered space", (
   expect(ports.writeCookie).not.toHaveBeenCalled();
   expect(controller.switchSpace("profile")).toBe(true);
   expect(ports.readCookie()).toBe("ttv-last-space=profile");
+});
+
+it.each(["", "ttv-last-space=profile"])("does not persist an unauthorized explicit URL (cookie: %j)", cookie => {
+  const ports = cookies(cookie);
+  const controller = createSpacesController({ me: meByPersona.lucy, explicitSpace: "admin", browser: ports });
+  controller.hydratePreference();
+  expect(controller.getState().selectedSpace).toBe(cookie ? "profile" : "community");
+  expect(ports.writeCookie).not.toHaveBeenCalled();
 });
 
 it("reads the production module without importing synthetic fixtures", async () => {
