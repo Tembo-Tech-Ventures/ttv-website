@@ -32,7 +32,9 @@ const expectedBadges: Record<string, RoleBadge[]> = {
 function setup(fixture: Partial<CapabilityCase> = {}, userId?: string) {
   const result = createCapabilityDatabase(fixture, userId);
   databases.push(result.database);
-  result.database.exec(readMigration("0021_feature_flags.sql"));
+  for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql"]) {
+    result.database.exec(readMigration(migration));
+  }
   result.database.exec("UPDATE feature_flag SET audience='ALL' WHERE key='spaces'");
   const user: AuthUser | null = result.user ? {
     id: result.user.id, name: "Wanjiku Njeri", image: "https://example.test/avatar.png",
@@ -50,6 +52,22 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function seedAttention(database: ReturnType<typeof createCapabilityDatabase>["database"]) {
+  database.exec(`INSERT INTO studentProfile(id,userId,handle) VALUES
+    ('own-profile','synthetic-wanjiku','synthetic-wanjiku'),('other-profile','synthetic-otieno','synthetic-otieno');
+    INSERT INTO profileContact(id,profileId,fromName,fromEmail,message) VALUES
+    ('own-contact','own-profile','Visitor','visitor@example.test','Hello'),
+    ('other-contact','other-profile','Visitor','visitor@example.test','Hello');
+    INSERT INTO recording(id,programId,title) VALUES ('recording-a','cohort-a','Synthetic A'),('recording-b','cohort-b','Synthetic B');
+    INSERT INTO attention_item(id,userId,eventKey,kind,space,category,subjectKind,subjectId,subjectHref,subjectLabel,summary,createdAt,readAt) VALUES
+    ('own','synthetic-wanjiku','own','visitor_message','profile','updates','visitorMessage','own-contact','/dashboard/leads','Message','New message',1000,NULL),
+    ('read','synthetic-wanjiku','read','visitor_message','profile','updates','visitorMessage','own-contact','/dashboard/leads','Message','New message',1000,2000),
+    ('foreign','synthetic-otieno','foreign','visitor_message','profile','updates','visitorMessage','other-contact','/dashboard/leads','Message','New message',1000,NULL),
+    ('wrong-source','synthetic-wanjiku','wrong-source','visitor_message','profile','updates','visitorMessage','other-contact','/dashboard/leads','Message','New message',1000,NULL),
+    ('a','synthetic-wanjiku','a','recording_ready','cohort','updates','recording','recording-a','/dashboard/sessions/recording-a','Recording','Ready',1000,NULL),
+    ('b','synthetic-wanjiku','b','recording_ready','cohort','updates','recording','recording-b','/dashboard/sessions/recording-b','Recording','Ready',1000,NULL)`);
+}
+
 async function request(context: Parameters<typeof GET>[0]) {
   const response = await GET(context);
   if (!(response instanceof Response)) throw new Error("Expected a response");
@@ -59,7 +77,8 @@ async function request(context: Parameters<typeof GET>[0]) {
 
 describe("real /me and Astro context adapters", () => {
   it.each(CAPABILITY_ROLE_MATRIX)("$name", async fixture => {
-    const { context, queries } = setup(fixture);
+    const { context, queries, database } = setup(fixture);
+    seedAttention(database);
     const { response, body } = await request(context);
     if (fixture.signedIn === false) {
       expect(response.status).toBe(404);
@@ -72,7 +91,9 @@ describe("real /me and Astro context adapters", () => {
     expect(response.status).toBe(200);
     const parsed = ROUTES.getMe.response.parse(body);
     expect(parsed).toEqual(body);
-    expect(body).toMatchObject({ spaces, capabilities, unreadCounts: zeroCounts,
+    expect(body).toMatchObject({ spaces, capabilities, unreadCounts: { ...zeroCounts,
+      profile: 1, cohort: capabilities.isAdmin ? 2 : capabilities.cohortIds.length,
+    },
       flags: { spaces: true, channels: false, tembo_channels: false, mentor_requests: false },
       temboUsage: { used: 0, limit: 10 },
       user: { id: context.locals.user!.id, name: "Wanjiku Njeri", avatarUrl: "https://example.test/avatar.png" },
@@ -81,14 +102,14 @@ describe("real /me and Astro context adapters", () => {
     expect(parsed.user.roleBadges).toEqual(expectedBadges[fixture.name]);
     expect(Object.keys(parsed.capabilities).toSorted()).toEqual(Object.keys(capabilities).toSorted());
     expect(parsed.spaces).toEqual(SPACE_ORDER.filter(space => spaces.includes(space)));
-    expect(queries).toHaveBeenCalledTimes(4); // one flag read, three capability reads
+    expect(queries).toHaveBeenCalledTimes(5); // one flag, three capability, one attention count read
     const fetch = vi.fn(() => { throw new Error("No self-fetch allowed"); });
     vi.stubGlobal("fetch", fetch);
     const page = await getSpaceContext(context);
     expect(Me.parse(page)).toEqual(body);
     expect(JSON.parse(JSON.stringify(page))).toEqual(body);
     expect(fetch).not.toHaveBeenCalled();
-    expect(queries).toHaveBeenCalledTimes(7); // same locals retain the flag cache
+    expect(queries).toHaveBeenCalledTimes(9); // same locals retain the flag cache
   });
 
   it.each(["OFF", "STAFF"])("keeps %s dark for non-admins before any feature read", async audience => {
@@ -129,7 +150,7 @@ describe("real /me and Astro context adapters", () => {
     expect(denial).toBeNull();
     expect(me.flags).toEqual(flags);
     expect(flags).toEqual(Object.fromEntries(FlagKey.options.map(key => [key, true])));
-    expect(queries).toHaveBeenCalledTimes(isAdmin === undefined ? 5 : 4);
+    expect(queries).toHaveBeenCalledTimes(isAdmin === undefined ? 6 : 5);
     expect(queries.mock.calls.filter(([sql]) => sql.includes("FROM feature_flag"))).toHaveLength(1);
   });
 
@@ -183,7 +204,7 @@ describe("real /me and Astro context adapters", () => {
     expect(me.user.avatarUrl).toBeNull();
   });
 
-  it.each(["feature_flag", "UserRoles", "programApplication", "programRole"])("fails closed on %s database failure", async table => {
+  it.each(["feature_flag", "UserRoles", "programApplication", "programRole", "attention_item"])("fails closed on %s database failure", async table => {
     const { database, context } = setup({ globalRoles: ["ADMIN"] });
     database.exec(`DROP TABLE ${table}`);
     const { response, body } = await request(context);
@@ -212,4 +233,29 @@ describe("real /me and Astro context adapters", () => {
     expect(JSON.stringify(me)).not.toContain(context.locals.user!.email);
     expect(await getSpaceContext(context)).toEqual(me);
   });
+});
+
+
+it("refreshes /me counts after cohort revocation, source ownership changes and read state", async () => {
+  const { database, context } = setup({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
+  seedAttention(database);
+  expect(Me.parse((await request(context)).body).unreadCounts).toEqual({ ...zeroCounts, profile: 1, cohort: 1 });
+  database.exec("DELETE FROM programApplication");
+  expect((await getSpaceContext({ locals: { ...context.locals } })).unreadCounts).toEqual({ ...zeroCounts, profile: 1 });
+  database.exec("UPDATE profileContact SET profileId='other-profile' WHERE id='own-contact'");
+  expect(Me.parse((await request(context)).body).unreadCounts).toEqual(zeroCounts);
+  database.exec("UPDATE profileContact SET profileId='own-profile' WHERE id='own-contact'; UPDATE attention_item SET readAt=2000 WHERE id='own'");
+  expect((await getSpaceContext({ locals: { ...context.locals } })).unreadCounts).toEqual(zeroCounts);
+});
+
+it.each(["OFF", "ALL"])("does not expose counts to PAT page-context callers when %s", async audience => {
+  const { database, context, queries } = setup();
+  context.locals.personalAccessToken = {
+    id: "synthetic-pat", label: "Synthetic", tokenPrefix: "ttv_pat_test", scopes: ["admin:read"],
+    expiresAt: new Date(100000), createdAt: new Date(0), lastUsedAt: null, revokedAt: null,
+  };
+  database.prepare("UPDATE feature_flag SET audience=? WHERE key='spaces'").run(audience);
+  database.exec("DROP TABLE attention_item");
+  await expect(getSpaceContext(context)).rejects.toMatchObject({ status: audience === "OFF" ? 404 : 403 });
+  expect(queries).toHaveBeenCalledOnce(); // flag only; no capabilities/count lookup
 });

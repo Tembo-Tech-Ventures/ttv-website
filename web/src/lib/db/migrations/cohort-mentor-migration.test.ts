@@ -129,7 +129,7 @@ describe("0022 cohort mentor migration", () => {
     const after = readJson("./meta/0022_snapshot.json");
     const journal = readJson("./meta/_journal.json");
     expect(after.prevId).toBe(before.id);
-    expect(journal.entries.at(-1)).toMatchObject({ idx: 22, tag: "0022_cohort_mentor_access" });
+    expect(journal.entries.find((entry: { idx: number }) => entry.idx === 22)).toMatchObject({ idx: 22, tag: "0022_cohort_mentor_access" });
     const { programRole: oldRole, programApplication: oldApplication, ...oldTables } = before.tables;
     const { programRole: newRole, programApplication: newApplication, ...newTables } = after.tables;
     expect(newTables).toEqual(oldTables);

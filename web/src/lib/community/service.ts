@@ -1,6 +1,7 @@
 import { DEMO_PREFIX, DEMO_USER_IDS, isDemoUser } from "@/lib/staging-demo-policy";
 import { verifySameRunTarget, verifyRetainedProbeTarget, retainedProbeScope, StagingFixtureAccessError, type StagingFixtureIdentity } from "@/lib/staging-fixtures";
 import { createId } from "@paralleldrive/cuid2";
+import { workConfirmedAttention } from "@/lib/attention/producers";
 import {
   CommunityError, profileInput, journeyInput, journeyUpdateInput, confirmationInput, searchInput, parseInput,
   type CommunityProfile, type CommunityJourney, type CommunityConfirmation,
@@ -20,7 +21,7 @@ function profile(row: ProfileRow): CommunityProfile {
 const PROFILE_SELECT = `SELECT u.id AS userId,u.name,u.image,p.headline,p.bio,p.skills,p.opportunityGoals,p.version,p.updatedAt
   FROM user u LEFT JOIN communityProfile p ON p.userId=u.id`;
 
-export function createCommunityService(db: D1Database, actorId: string, fixture?: StagingFixtureIdentity | null, environment?: string) {
+export function createCommunityService(db: D1Database, actorId: string, fixture?: StagingFixtureIdentity | null, environment?: string, flagsOverride?: string) {
   if (!actorId) throw new CommunityError("Sign in to continue.", 401);
   if (!fixture && actorId.startsWith("ttv-staging-fixture-")) throw new CommunityError("Verified staging fixture context required.",403);
   if (fixture && fixture.userId !== actorId) throw new CommunityError("Synthetic staging identity mismatch.",403);
@@ -208,6 +209,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
         SELECT ?,id,?,?,?,version,? FROM communityJourney WHERE id=? AND visibility='institution' AND userId<>? AND version=?${writeScope.clause} AND NOT EXISTS (SELECT 1 FROM communityConfirmation c WHERE c.journeyId=communityJourney.id AND c.mentorId=? AND c.journeyVersion=communityJourney.version)`)
         .bind(confirmationId,actorId,p.statement,p.method,a.isMentor ? "MENTOR" : "ADMIN",id,actorId,entry.version,...writeScope.values,actorId).run();
       if (!result.meta.changes) throw new CommunityError("Contribution no longer available.", 409);
+      await workConfirmedAttention({ db, env: { DEPLOYMENT_ENVIRONMENT: environment, PLATFORM_FLAGS_OVERRIDE: flagsOverride } }, confirmationId);
       return { id: confirmationId, journeyId: id, mentorId: actorId, ...p, journeyVersion: entry.version,mentorRole:a.isMentor ? "MENTOR" : "ADMIN" };
     },
   };

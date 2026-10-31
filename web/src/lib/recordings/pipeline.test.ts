@@ -8,7 +8,10 @@ const mocks = vi.hoisted(() => ({
   transcribeAudioChunks: vi.fn(),
   embedAndIndexRecording: vi.fn(),
   recordError: vi.fn().mockResolvedValue(null),
+  recordingReadyAttention: vi.fn().mockResolvedValue(undefined),
 }));
+
+vi.mock("@/lib/attention/producers", () => ({ recordingReadyAttention: mocks.recordingReadyAttention }));
 
 vi.mock("drizzle-orm/d1", () => ({ drizzle: mocks.drizzle }));
 vi.mock("@/lib/recordings/google-drive", () => ({
@@ -210,6 +213,8 @@ describe("recording processing pipeline", () => {
       "embedding",
       "complete",
     ]);
+    expect(mocks.recordingReadyAttention).toHaveBeenCalledWith({ db: env.DB, env }, "recording1");
+    expect(recording.processingStatus).toBe("complete");
     const containerRequest = containerFetch.mock.calls[0][1] as RequestInit;
     expect(env.FFMPEG_CONTAINER.getByName).toHaveBeenCalledWith("recording1");
     expect(JSON.parse(String(containerRequest.body))).toMatchObject({
@@ -280,6 +285,7 @@ describe("recording processing pipeline", () => {
       processingStatus: "failed",
       processingError: "Recording recording1 does not have a video source",
     });
+    expect(mocks.recordingReadyAttention).not.toHaveBeenCalled();
     expect(mocks.recordError).toHaveBeenCalledWith(env.DB, {
       source: "pipeline",
       route: "/recordings/:id/pipeline",

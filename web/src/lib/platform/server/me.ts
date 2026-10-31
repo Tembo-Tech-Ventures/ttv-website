@@ -1,4 +1,5 @@
 import { drizzle } from "drizzle-orm/d1";
+import { getAttentionCount } from "@/lib/attention/count";
 import * as schema from "@/lib/db/schema";
 import { Me, WebLink, type RoleBadge } from "../contracts";
 import { capabilitiesFor } from "./capabilities";
@@ -9,7 +10,7 @@ import { TEMBO_DAILY_LIMIT } from "./me-config";
 export interface MeContext {
   db: D1Database;
   env: FlagContext["env"];
-  locals: Pick<App.Locals, "user" | "isAdmin">;
+  locals: Pick<App.Locals, "user" | "isAdmin" | "personalAccessToken">;
 }
 
 /** Shared API/page loader. Denials throw a no-store Response; DB errors propagate. */
@@ -21,7 +22,12 @@ export async function getMe({ db, env, locals }: MeContext): Promise<Me> {
   const denial = await requireFlag(flagContext, "spaces");
   if (denial) throw denial;
 
-  const { spaces, ...capabilities } = await capabilitiesFor(drizzle(db, { schema }), user);
+  if (locals.personalAccessToken) throw platformError("forbidden", "Not permitted.", 403);
+
+  const database = drizzle(db, { schema });
+  const canonical = await capabilitiesFor(database, user);
+  const { spaces, ...capabilities } = canonical;
+  const attention = await getAttentionCount(database, user.id, canonical);
   // Only display roles established by the canonical capability lookup. Cohort
   // status/labels need richer display metadata; never infer them from cohortIds.
   const roleBadges: RoleBadge[] = [];
@@ -43,9 +49,7 @@ export async function getMe({ db, env, locals }: MeContext): Promise<Me> {
     capabilities,
     spaces,
     flags: await getFlags(flagContext),
-    // Until B-1.3 supplies the read-only attention ledger helper, all six
-    // attention counts are zero. These are never channel unread counts.
-    unreadCounts: { cohort: 0, community: 0, mentoring: 0, discover: 0, admin: 0, profile: 0 },
+    unreadCounts: attention.unreadCounts,
     // Channel Tembo accounting arrives in Phase 3; not private-chat usage.
     temboUsage: { used: 0, limit: TEMBO_DAILY_LIMIT },
   });

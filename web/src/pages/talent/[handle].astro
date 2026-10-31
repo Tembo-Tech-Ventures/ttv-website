@@ -3,6 +3,7 @@ import PublicLayout from "@/layouts/PublicLayout.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
+import { saveVisitorMessageWithAttention } from "@/lib/attention/mutations";
 import { eq, and, asc } from "drizzle-orm";
 import { getCompletedCohorts } from "@/lib/talent/eligibility";
 import { parseSkillsJson, parseTopicsJson } from "@/lib/talent/profile";
@@ -135,7 +136,7 @@ if (Astro.request.method === "POST" && profile) {
     } else if (guard.silent) {
       formState = "success";
     } else {
-      await db.insert(schema.profileContact).values({
+      await saveVisitorMessageWithAttention({ db: env.DB, env }, {
         profileId: profile.id,
         fromName: parsed.data.fromName,
         fromEmail: parsed.data.fromEmail,
