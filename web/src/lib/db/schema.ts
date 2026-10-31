@@ -415,7 +415,7 @@ export const recording = sqliteTable("recording", {
   transcriptText: text("transcriptText"),
   transcriptVtt: text("transcriptVtt"),
   ...timestamps,
-});
+}, (table) => [index("recording_program_idx").on(table.programId)]);
 
 export const recordingRelations = relations(recording, ({ one, many }) => ({
   program: one(program, {
@@ -556,7 +556,7 @@ export const transcriptSegment = sqliteTable("transcript_segment", {
   createdAt: integer("createdAt", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
-});
+}, (table) => [index("transcript_segment_recording_time_idx").on(table.recordingId, table.startTime, table.id)]);
 
 export const transcriptSegmentRelations = relations(
   transcriptSegment,

@@ -32,7 +32,7 @@ describe("GET /api/search", () => {
       expect(result.projects).toHaveLength(fixture.expected.isInstitution || fixture.expected.isAdmin ? 1 : 0);
       expect(result.people.map(p => p.person.id)).toEqual(["synthetic-otieno"]);
       expect(result.messages).toEqual([]);
-      const retrieval = s.queries.filter(q => q.sql.includes("FROM transcript_segment"));
+      const retrieval = s.queries.filter(q => q.sql.includes("CROSS JOIN transcript_segment"));
       expect(retrieval).toHaveLength(fixture.expected.cohortIds.length > 0 ? 1 : 0);
       if (retrieval.length > 0) expect(retrieval[0]?.values[0]).toBe(JSON.stringify(fixture.expected.cohortIds));
     } else expect(s.queries).toEqual([]);
@@ -101,7 +101,7 @@ describe("GET /api/search", () => {
   it.each(["flags", "capabilities", "people", "projects", "transcripts"])("fails closed without raw errors or partial results on %s failure", async stage => {
     const s = setup({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
     const realPrepare = s.db.prepare.bind(s.db);
-    const needle = { flags: "feature_flag", capabilities: "UserRoles", people: "FROM studentProfile", projects: "FROM communityJourney", transcripts: "FROM transcript_segment" }[stage]!;
+    const needle = { flags: "feature_flag", capabilities: "UserRoles", people: "FROM studentProfile", projects: "FROM communityJourney", transcripts: "CROSS JOIN transcript_segment" }[stage]!;
     vi.spyOn(s.db, "prepare").mockImplementation(sql => { if (sql.includes(needle)) throw new Error("SQL secret operational data"); return realPrepare(sql); });
     const env = environment(s); if (stage === "flags") env.PLATFORM_FLAGS_OVERRIDE = "";
     const response = await searchRequest(context(), env);

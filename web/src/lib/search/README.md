@@ -9,7 +9,8 @@ sessions remain denied. Middleware keeps its existing session restrictions.
 The required scope is one of `all`, `cohort`, `community`, `messages`, `people`,
 `projects`, `sessionMoments`. `q` is nonblank, at most 500 characters. Unknown or
 duplicate parameters are rejected. The response echoes the validated query
-unchanged, while matching trims it and uses SQLite's literal case folding.
+unchanged, while matching trims it and applies SQLite's ASCII-only case folding
+to both the query and source. Non-ASCII letters match their exact case.
 SQL wildcard characters are literal. This is substring search, not semantic
 matching, token expansion or ranking.
 
@@ -37,8 +38,9 @@ People require a published `studentProfile` and a completed application with
 snapshots are searched or emitted; private authentication names, emails and
 moderation fields are excluded. Project results use current `communityJourney`
 revisions with `institution` visibility, and additionally require a publicly
-eligible owner profile. Only the owner or canonical institution/admin can read
-them. `institution` does not mean community-public. Private projects never
+eligible owner profile. Mentor/admin owners are excluded, matching the existing
+institutional discovery eligibility. Only the owner or canonical institution/admin
+can read them. `institution` does not mean community-public. Private projects never
 appear, even for their owner. The `PRIVATE` visibility kind carries the explicit
 label “Shared with approved institutions”; no institution enum is added.
 
@@ -49,15 +51,21 @@ project anchor is invented. Session quotes come from `transcript_segment` joined
 to complete recordings in the authorized cohort, labeled “Only you and your
 cohort”. Neither Vectorize metadata nor any model output supplies a citation.
 
-The wire contract has no paging fields. V1 therefore returns at most 10 results
-per group from a deterministic window of 500 authorized candidates, ordered by
-source ID, with at most 4,000 searchable characters per text field and 500 in
-each excerpt. Results outside that window are not exhaustive; callers should
-narrow to a cohort where applicable. Search performs three capability reads and
-at most three bounded source queries. It is request driven, not polled. Source
-queries authorize before materializing content or matching. Candidate limits
-bound text matching/materialization, not all SQLite authorization/join work.
-There are no new indexes, migrations, dependencies, caches or runtime resources.
+The wire contract has no paging fields. V1 therefore returns at most 10 matches
+per group in deterministic order, with at most 500 characters in each excerpt.
+Matching applies to the full authorized source before the result limit: late
+segments in long recordings and profiles/projects beyond the first 500 records
+remain searchable. Display fallback names and JSON skill punctuation are not
+search evidence. Search performs three capability reads and at most three
+source queries. It is request driven, not polled. Transcript retrieval drives
+the segment lookup from authorized complete recordings, never a sample of the
+global segment table. Query work scales with authorized source text; the result
+cap bounds response size rather than pretending to cap all database work.
+Migration `0024_search_source_indexes` adds `recording(programId)` and
+`transcript_segment(recordingId,startTime,id)` indexes. Query-plan tests assert
+both lookups and reject a global segment scan. The migration is idempotent and
+does not rebuild tables or alter data.
+There are no new dependencies, inference calls, caches or runtime resources.
 
 This task forbids new inference. The existing semantic transcript tool embeds
 the query and searches Vectorize globally before filtering; v1 deliberately

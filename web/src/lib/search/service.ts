@@ -6,8 +6,6 @@ import { DEMO_USER_IDS, isDemoUser } from "@/lib/staging-demo-policy";
 import { resolvePublicProfileIdentity } from "@/lib/talent/public-identity";
 
 export const SEARCH_RESULT_LIMIT = 10;
-export const SEARCH_CANDIDATE_LIMIT = 500;
-const TEXT_LIMIT = 4000;
 
 export class SearchScopeError extends Error {}
 
@@ -29,7 +27,8 @@ function person(row: PublicPersonRow): PersonSummary {
 /**
  * One canonical access lookup per search, before retrieving any content.
  * No AI/Vectorize binding is accepted: v1 performs literal text search over
- * bounded authorized source windows, not the chat tool's global vector query.
+ * authorized sources, not the chat tool's global vector query. Limits apply
+ * after matching, so a large cohort does not silently lose searchable content.
  */
 export async function searchPlatform(d1: D1Database, userId: string, input: SearchQuery): Promise<SearchResults> {
   if (!userId) throw new SearchScopeError("Authentication required.");
@@ -42,7 +41,7 @@ export async function searchPlatform(d1: D1Database, userId: string, input: Sear
     throw new SearchScopeError("Cohort is not available.");
   }
   const results: SearchResults = { query, messages: [], people: [], projects: [], sessionMoments: [] };
-  const term = query.q.trim().toLowerCase();
+  const term = query.q.trim();
   const demo = isDemoUser(userId);
   // Demo identities may never use their global roles to discover real records.
   const publicScope = demo ? ` AND p.userId IN (SELECT value FROM json_each(?))` : "";
@@ -51,15 +50,12 @@ export async function searchPlatform(d1: D1Database, userId: string, input: Sear
   const includePublic = !query.programId && ["all", "community"].includes(query.scope);
 
   if (includePublic || query.scope === "people") {
-    const { results: rows } = await d1.prepare(`WITH candidates AS MATERIALIZED (
-      SELECT ${publicColumns},substr(coalesce(p.bio,''),1,${TEXT_LIMIT}) AS bio,
-        substr(coalesce(p.headline,''),1,${TEXT_LIMIT}) AS headline,
-        substr(coalesce(p.skills,''),1,${TEXT_LIMIT}) AS skills
+    const { results: rows } = await d1.prepare(`SELECT ${publicColumns},substr(coalesce(p.bio,''),1,500) AS bio
       FROM studentProfile p WHERE ${PUBLIC_PROFILE}${publicScope}
-      ORDER BY p.userId LIMIT ${SEARCH_CANDIDATE_LIMIT}
-    ) SELECT userId,handle,publicName,publicAvatarUrl,substr(bio,1,500) AS bio FROM candidates
-      WHERE instr(lower(coalesce(publicName,'TTV Builder') || ' ' || headline || ' ' || bio || ' ' || skills),?)>0
-      ORDER BY userId LIMIT ${SEARCH_RESULT_LIMIT}`).bind(...publicValues, term)
+      AND (instr(lower(coalesce(p.publicName,'') || ' ' || coalesce(p.headline,'') || ' ' || coalesce(p.bio,'')),lower(?))>0
+        OR EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(p.skills) THEN p.skills ELSE '[]' END) skill
+          WHERE skill.type='text' AND instr(lower(skill.value),lower(?))>0))
+      ORDER BY p.userId LIMIT ${SEARCH_RESULT_LIMIT}`).bind(...publicValues, term, term)
       .all<PublicPersonRow & { bio: string }>();
     results.people = rows.map(row => ({ person: person(row), bio: row.bio,
       href: `/talent/${encodeURIComponent(row.handle)}`, visibility: { kind: "PUBLIC", label: "Public profile" } }));
@@ -68,16 +64,16 @@ export async function searchPlatform(d1: D1Database, userId: string, input: Sear
   if (includePublic || query.scope === "projects") {
     // Institution-shared journeys are NOT community-public. Even privileged
     // callers receive no private journeys or unpublished profile identities.
-    const { results: rows } = await d1.prepare(`WITH candidates AS MATERIALIZED (
+    const { results: rows } = await d1.prepare(`
       SELECT ${publicColumns},j.id,j.version,substr(j.title,1,500) AS title,
-        substr(j.description,1,${TEXT_LIMIT}) AS description
+        substr(j.description,1,500) AS summary
       FROM communityJourney j JOIN studentProfile p ON p.userId=j.userId
       WHERE ${PUBLIC_PROFILE}${publicScope} AND j.visibility='institution'
         AND (j.userId=? OR ?=1)
-      ORDER BY j.id LIMIT ${SEARCH_CANDIDATE_LIMIT}
-    ) SELECT userId,handle,publicName,publicAvatarUrl,id,version,title,substr(description,1,500) AS summary
-      FROM candidates WHERE instr(lower(title || ' ' || description),?)>0
-      ORDER BY id LIMIT ${SEARCH_RESULT_LIMIT}`).bind(...publicValues, userId, Number(caps.isInstitution || caps.isAdmin), term)
+        AND NOT EXISTS (SELECT 1 FROM UserRoles ur JOIN Roles role ON role.id=ur.roleId
+          WHERE ur.userId=j.userId AND role.name IN ('MENTOR','ADMIN'))
+        AND instr(lower(j.title || ' ' || j.description),lower(?))>0
+      ORDER BY j.id LIMIT ${SEARCH_RESULT_LIMIT}`).bind(...publicValues, userId, Number(caps.isInstitution || caps.isAdmin), term)
       .all<PublicPersonRow & { id: string; version: number; title: string; summary: string }>();
     results.projects = rows.map(row => ({ journeyId: row.id, version: row.version, title: row.title,
       summary: row.summary, owner: person(row),
@@ -87,17 +83,17 @@ export async function searchPlatform(d1: D1Database, userId: string, input: Sear
 
   if (["all", "cohort", "sessionMoments"].includes(query.scope) && caps.cohortIds.length > 0) {
     const programIds = query.programId ? [query.programId] : caps.cohortIds;
-    const { results: rows } = await d1.prepare(`WITH candidates AS MATERIALIZED (
-      SELECT s.id,r.id AS recordingId,r.programId,substr(r.title,1,500) AS title,s.startTime,
-        substr(s.text,1,${TEXT_LIMIT}) AS text
-      FROM transcript_segment s JOIN recording r ON r.id=s.recordingId
-      WHERE r.programId IN (SELECT value FROM json_each(?)) AND r.processingStatus='complete'
-        AND s.startTime>=0 AND length(trim(s.text))>0
-      ORDER BY s.id LIMIT ${SEARCH_CANDIDATE_LIMIT}
-    ) SELECT recordingId,programId,title,startTime,
-        substr(text,max(1,instr(lower(text),?)-100),500) AS quote
-      FROM candidates WHERE instr(lower(text),?)>0
-      ORDER BY recordingId,startTime,id LIMIT ${SEARCH_RESULT_LIMIT}`)
+    // Drive the segment index from authorized recordings, never scan the
+    // global segment table in random CUID order. No transcriptText prefilter:
+    // that denormalized column may be absent/stale while segments are valid.
+    const { results: rows } = await d1.prepare(`WITH authorized_recordings AS MATERIALIZED (
+      SELECT id,programId,title FROM recording
+      WHERE programId IN (SELECT value FROM json_each(?)) AND processingStatus='complete'
+    ) SELECT r.id AS recordingId,r.programId,substr(r.title,1,500) AS title,s.startTime,
+        substr(s.text,max(1,instr(lower(s.text),lower(?))-100),500) AS quote
+      FROM authorized_recordings r CROSS JOIN transcript_segment s
+      WHERE s.recordingId=r.id AND s.startTime>=0 AND instr(lower(s.text),lower(?))>0
+      ORDER BY r.id,s.startTime,s.id LIMIT ${SEARCH_RESULT_LIMIT}`)
       .bind(JSON.stringify(programIds), term, term)
       .all<{ recordingId: string; programId: string; title: string; startTime: number; quote: string }>();
     results.sessionMoments = rows.map(row => ({ recordingId: row.recordingId, programId: row.programId,

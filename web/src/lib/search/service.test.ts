@@ -1,7 +1,8 @@
+import type { SQLInputValue } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { CAPABILITY_ROLE_MATRIX } from "@/lib/platform/server/capabilities.fixtures";
 import { DEMO_PREFIX } from "@/lib/staging-demo-policy";
-import { searchPlatform, SEARCH_CANDIDATE_LIMIT, SEARCH_RESULT_LIMIT } from "./service";
+import { searchPlatform, SEARCH_RESULT_LIMIT } from "./service";
 import { searchDatabase } from "./test-support";
 
 const databases: ReturnType<typeof searchDatabase>[] = [];
@@ -25,7 +26,7 @@ describe("authorized source retrieval", () => {
     const retrieved = JSON.stringify(s.retrieved);
     expect(retrieved).not.toMatch(/secret project|secret staff|secret admissions|Private auth name|pending secret|unscoped secret/);
     if (!fixture.expected.cohortIds.includes("cohort-b")) expect(retrieved).not.toContain("Webhook cohort B secret");
-    const transcript = s.queries.find(q => q.sql.includes("FROM transcript_segment"));
+    const transcript = s.queries.find(q => q.sql.includes("CROSS JOIN transcript_segment"));
     if (fixture.expected.cohortIds.length > 0) expect(transcript?.values[0]).toBe(JSON.stringify(fixture.expected.cohortIds));
     else expect(transcript).toBeUndefined();
     expect(s.queries).toHaveLength(fixture.expected.cohortIds.length > 0 ? 6 : 5);
@@ -45,7 +46,7 @@ describe("authorized source retrieval", () => {
       const result = await searchPlatform(s.db, s.actor, { q, scope: "all" });
       expect(result.people).toEqual([]); expect(result.projects).toEqual([]); expect(result.sessionMoments).toEqual([]);
     }
-    expect(s.queries.filter(q => q.sql.includes("WITH candidates")).map(q => q.sql).join("\n")).not.toMatch(/feedback|moderation|application\)|u\.name|u\.email|transcriptText|processingError/);
+    expect(s.queries.filter(q => q.sql.includes("studentProfile")).map(q => q.sql).join("\n")).not.toMatch(/feedback|moderation|application\)|u\.name|u\.email|transcriptText|processingError/);
   });
 
   it("revocations take effect on the next request, including unpublished source profiles", async () => {
@@ -91,18 +92,64 @@ describe("authorized source retrieval", () => {
     }
   });
 
-  it("caps candidate text, result counts and work independently of corpus size", async () => {
+  it("finds late matches in a long session and caps results after matching", async () => {
     const s = setup({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
     const insert = s.database.prepare("INSERT INTO transcript_segment(id,recordingId,startTime,endTime,text) VALUES (?,'recording-a',?,?,'Webhook synthetic bounded evidence')");
-    for (let i = 0; i < SEARCH_CANDIDATE_LIMIT + 1; i++) insert.run(`a-${String(i).padStart(4, "0")}`, i, i + 1);
+    for (let i = 0; i < 900; i++) insert.run(`a-${String(i).padStart(4, "0")}`, i, i + 1);
     const result = await searchPlatform(s.db, s.actor, { q: "Webhook", scope: "sessionMoments" });
     expect(result.sessionMoments).toHaveLength(SEARCH_RESULT_LIMIT);
     expect(s.queries).toHaveLength(4);
-    expect(s.queries[3]?.sql).toContain(`LIMIT ${SEARCH_CANDIDATE_LIMIT}`);
-    expect(s.queries[3]?.sql).toContain("substr(s.text,1,4000)");
     expect(result.sessionMoments.every(m => m.quote.length <= 500)).toBe(true);
-    // A match outside the bounded window is deliberately not retrieved.
-    s.database.exec("UPDATE transcript_segment SET text='Unique beyond window' WHERE id='segment-a'");
-    expect((await searchPlatform(s.db, s.actor, { q: "Unique beyond window", scope: "sessionMoments" })).sessionMoments).toEqual([]);
+    const retrieval = s.queries[3]!;
+    const plan = s.database.prepare("EXPLAIN QUERY PLAN " + retrieval.sql).all(...retrieval.values as SQLInputValue[]).map(r => r.detail).join("\n");
+    expect(plan).toContain("SEARCH recording USING INDEX recording_program_idx (programId=?)");
+    expect(plan).toContain("SEARCH s USING INDEX transcript_segment_recording_time_idx (recordingId=?");
+    expect(plan).not.toMatch(/SCAN s\b|SCAN transcript_segment\b/);
+    s.database.exec("UPDATE transcript_segment SET text='Unique late evidence' WHERE id='a-0700'");
+    expect((await searchPlatform(s.db, s.actor, { q: "Unique late evidence", scope: "sessionMoments" })).sessionMoments)
+      .toEqual([expect.objectContaining({ startSeconds: 700, quote: "Unique late evidence" })]);
+    s.database.prepare("UPDATE transcript_segment SET text=? WHERE id='a-0700'").run("x".repeat(4500) + " Final evidence");
+    expect((await searchPlatform(s.db, s.actor, { q: "Final evidence", scope: "sessionMoments" })).sessionMoments[0]?.quote).toContain("Final evidence");
+  });
+
+  it("keeps display fallback names out of retrieval and matches only skill values", async () => {
+    const s = setup();
+    s.database.exec(`UPDATE studentProfile SET publicName=NULL,bio='Unrelated',skills='["TypeScript","SQL"]'`);
+    for (const q of ["builder", "ttv", '"', "[", ","]) expect((await searchPlatform(s.db, s.actor, { q, scope: "people" })).people).toEqual([]);
+    expect((await searchPlatform(s.db, s.actor, { q: "TypeScript", scope: "people" })).people[0]?.person.name).toBe("TTV Builder");
+    s.database.exec("UPDATE studentProfile SET skills='malformed JSON'");
+    expect((await searchPlatform(s.db, s.actor, { q: "malformed", scope: "people" })).people).toEqual([]);
+  });
+
+  it.each(["MENTOR", "ADMIN"])("excludes %s project owners as institutional discovery does", async role => {
+    const s = setup({ globalRoles: ["INSTITUTION"] });
+    s.database.prepare("INSERT OR IGNORE INTO Roles(id,name) VALUES (?,?)").run(role, role);
+    s.database.prepare("INSERT INTO UserRoles(id,userId,roleId) SELECT 'owner-role','synthetic-otieno',id FROM Roles WHERE name=?").run(role);
+    expect((await searchPlatform(s.db, s.actor, { q: "Webhook", scope: "projects" })).projects).toEqual([]);
+    expect(s.retrieved).toEqual([]);
+  });
+
+  it("folds query and source with the same SQLite ASCII rules", async () => {
+    const s = setup();
+    s.database.exec("UPDATE studentProfile SET publicName='Émile',bio='SQL'");
+    expect((await searchPlatform(s.db, s.actor, { q: "É", scope: "people" })).people).toHaveLength(1);
+    expect((await searchPlatform(s.db, s.actor, { q: "sql", scope: "people" })).people).toHaveLength(1);
+  });
+
+  it("finds people and projects beyond 500 eligible rows instead of sampling IDs", async () => {
+    const s = setup({ globalRoles: ["INSTITUTION"] });
+    const user = s.database.prepare("INSERT INTO user(id,name,email) VALUES (?,'Synthetic',?)");
+    const profile = s.database.prepare("INSERT INTO studentProfile(id,userId,handle,status,publicName,bio) VALUES (?,?,?,'PUBLISHED','Synthetic','Ordinary work')");
+    const completion = s.database.prepare("INSERT INTO programApplication(id,userId,programId,status,completedAt,application) VALUES (?,?,'cohort-a','COMPLETED',1,'{}')");
+    const project = s.database.prepare("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES (?,?,'Ordinary project','Evidence','2026-10-31','institution')");
+    for (let i = 0; i < 600; i++) {
+      const id = `candidate-${String(i).padStart(4, "0")}`;
+      user.run(id, id + "@example.test"); profile.run(id, id, id); completion.run(id, id); project.run(id, id);
+    }
+    s.database.prepare("UPDATE studentProfile SET bio=? WHERE id='candidate-0599'").run("x".repeat(4500) + " Rare evidence");
+    s.database.prepare("UPDATE communityJourney SET description=? WHERE id='candidate-0599'").run("x".repeat(4500) + " Rare evidence");
+    const result = await searchPlatform(s.db, s.actor, { q: "Rare evidence", scope: "all" });
+    expect(result.people.map(p => p.person.id)).toEqual(["candidate-0599"]);
+    expect(result.projects.map(p => p.journeyId)).toEqual(["candidate-0599"]);
   });
 });
