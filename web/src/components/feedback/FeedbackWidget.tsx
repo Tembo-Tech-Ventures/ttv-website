@@ -111,6 +111,12 @@ export default function FeedbackWidget({
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
+  /*
+   * Where focus was when a request made before hydration was replayed. The
+   * dialog restores focus from a history it only starts keeping once this
+   * module loads, so for a replayed open it has nothing to return to.
+   */
+  const replayReturnRef = useRef<HTMLElement | null>(null);
   // The launcher is server-rendered; until hydration a click would do nothing.
   const hydrated = useSyncExternalStore(
     () => () => {},
@@ -135,7 +141,10 @@ export default function FeedbackWidget({
     window.addEventListener(OPEN_FEEDBACK_EVENT, show);
     document.addEventListener("click", onClick);
     // A menu may have asked for the form before this island hydrated.
-    if (takeFeedbackRequest()) setOpen(true);
+    if (takeFeedbackRequest()) {
+      replayReturnRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setOpen(true);
+    }
     return () => {
       window.removeEventListener(OPEN_FEEDBACK_EVENT, show);
       document.removeEventListener("click", onClick);
@@ -272,6 +281,15 @@ export default function FeedbackWidget({
     setOpen(false);
     setMarkupId(null);
     setSent(false);
+    const target = replayReturnRef.current;
+    replayReturnRef.current = null;
+    if (target) {
+      // After the 200ms leave transition, only if focus fell to the page.
+      window.setTimeout(() => {
+        const active = document.activeElement;
+        if (target.isConnected && (!active || active === document.body)) target.focus();
+      }, 300);
+    }
   }
 
   return (

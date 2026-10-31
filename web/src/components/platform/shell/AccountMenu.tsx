@@ -116,6 +116,9 @@ export default function AccountMenu({ person, account }: { person: PersonSummary
                 type="button"
                 className={ITEM}
                 onClick={() => {
+                  // Hand focus to the avatar before this button disappears, so the
+                  // form returns it there when it closes, even if it opens later.
+                  ref.current?.querySelector("summary")?.focus();
                   if (ref.current) ref.current.open = false;
                   openFeedbackWidget();
                 }}

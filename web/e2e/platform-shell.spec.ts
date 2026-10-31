@@ -523,6 +523,36 @@ test.describe("the spaces shell harness", () => {
     await expect(page.getByRole("dialog")).toContainText(/feedback/i);
   });
 
+  test("returns keyboard focus to the avatar when the feedback form closes, however late it loaded", async ({ page }) => {
+    for (const delayed of [false, true]) {
+      let release: () => void = () => {};
+      if (delayed) {
+        const held = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        await page.route(/\/FeedbackWidget\.tsx/, async (route) => {
+          await held;
+          await route.continue();
+        });
+      }
+      await routeFonts(page);
+      await page.goto(harness("wanjiku", "community"), { waitUntil: delayed ? "domcontentloaded" : "load" });
+      await expect(page.locator(".spaces-shell[data-hydrated]")).toHaveCount(1);
+      const { summary, panel } = accountMenu(page);
+      await summary.focus();
+      await page.keyboard.press("Enter");
+      await panel.getByRole("button", { name: "Feedback" }).focus();
+      await page.keyboard.press("Enter");
+      release();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog).toContainText(/feedback/i);
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+      await expect(summary, delayed ? "after a delayed widget" : "after a ready widget").toBeFocused();
+      await page.unrouteAll({ behavior: "ignoreErrors" });
+    }
+  });
+
   test("shows no role chips for a person without role badges", async ({ page }) => {
     await open(page, harness("unbadged", "cohort"));
     await expect(page.locator("[data-role-badge]")).toHaveCount(0);

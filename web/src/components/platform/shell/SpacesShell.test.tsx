@@ -241,6 +241,8 @@ describe("SpacesShell account menu", () => {
     await act(async () => q<HTMLButtonElement>(".spaces-account__panel button").click());
     expect(opened).toHaveBeenCalledTimes(1);
     expect(details.open).toBe(false);
+    // Focus waits on the avatar, so the form can return it there.
+    expect(document.activeElement).toBe(q("details.spaces-account > summary"));
     window.removeEventListener(OPEN_FEEDBACK_EVENT, opened);
   });
 
