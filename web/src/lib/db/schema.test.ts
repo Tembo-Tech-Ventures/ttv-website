@@ -58,7 +58,7 @@ describe("Database Schema", () => {
 
   it("programRole has correct name enum values", () => {
     const nameCol = schema.programRole.name;
-    expect(nameCol.enumValues).toEqual(["INSTRUCTOR", "TA"]);
+    expect(nameCol.enumValues).toEqual(["INSTRUCTOR", "TA", "MENTOR"]);
   });
 
   it("program applications are closed by default", () => {

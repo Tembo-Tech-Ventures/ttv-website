@@ -55,9 +55,8 @@ export async function capabilitiesFor(
   // A cohort invitation does not confer the global community mentor role.
   const isMentor = roles.has("MENTOR");
   const isInstitution = roles.has("INSTITUTION");
-  const mentorRole: string = "MENTOR";
   const mentorCohortIds = [...new Set(assignments
-    .filter(({ name }) => name === mentorRole)
+    .filter(({ name }) => name === "MENTOR")
     .map(({ programId }) => programId))].toSorted();
   const cohortIds = [...new Set([
     ...applications.flatMap(({ programId, status }) => programId && cohortStatuses.has(status) ? [programId] : []),

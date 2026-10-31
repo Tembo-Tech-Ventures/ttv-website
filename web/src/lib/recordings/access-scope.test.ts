@@ -45,7 +45,7 @@ describe("recording scope through canonical capabilities", () => {
   });
 
   it("ignores applications without a program and unknown legacy assignment names", async () => {
-    const { db, database, user } = setup({ applications: [{ programId: null, status: "APPROVED" }] });
+    const { db, database, user } = setup({ legacySchema: true, applications: [{ programId: null, status: "APPROVED" }] });
     database.exec(`INSERT INTO programRole (id,userId,programId,name) VALUES ('unknown','synthetic-wanjiku','cohort-a','LEGACY')`);
     await expect(getAccessibleProgramIds(db, user!.id)).resolves.toEqual([]);
   });

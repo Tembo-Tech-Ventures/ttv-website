@@ -3,10 +3,11 @@ import * as schema from "@/lib/db/schema";
 import { createSqliteD1, readMigration } from "@/test/sqlite-d1";
 import type { CapabilityCase } from "./capabilities.fixtures";
 
-export function createCapabilityDatabase(fixture: Partial<CapabilityCase> = {}, userId = "synthetic-wanjiku") {
+export function createCapabilityDatabase(fixture: Partial<CapabilityCase> & { legacySchema?: boolean } = {}, userId = "synthetic-wanjiku") {
   const { database, db: d1 } = createSqliteD1();
   database.exec(readMigration("0000_greedy_carnage.sql"));
   database.exec(readMigration("0005_brief_spiral.sql"));
+  if (!fixture.legacySchema) database.exec(readMigration("0022_cohort_mentor_access.sql"));
   database.exec(`INSERT INTO curriculum (id,title,description) VALUES ('curriculum','Synthetic curriculum','Test');
     INSERT INTO program (id,name,description,curriculumId) VALUES ('cohort-a','Synthetic cohort A','Test','curriculum'),('cohort-b','Synthetic cohort B','Test','curriculum');`);
   for (const id of [userId, "synthetic-otieno"]) {
