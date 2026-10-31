@@ -1,3 +1,5 @@
+import { legacySpacePath } from "./platform/server/space-routes";
+
 /** Retained fictional records are distinct from disposable verification fixtures. */
 export const DEMO_PREFIX = 'ttv-staging-demo-v1-';
 export const DEMO_PERSONAS = Object.freeze({
@@ -25,7 +27,7 @@ export function demoEnabled(environment: string | undefined, enabled: string | u
 }
 /** Explicit routes only. Cohort extensions require reviewing their resource ownership. */
 export function demoPathAllowed(path: string, method: string) {
-  const normalized = path.replace(/\/$/, '');
+  const normalized = legacySpacePath(path);
   if (['/demo', '/api/demo/switch', '/api/demo/logout', '/api/demo/return'].includes(normalized)) return true;
   if (normalized === '/api/community/access') return method === 'GET';
   if (/^\/api\/community\/(profile|journey|profiles|mentorship|chat)(\/|$)/.test(normalized)) return true;

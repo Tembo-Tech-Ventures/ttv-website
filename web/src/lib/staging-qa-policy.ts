@@ -1,5 +1,6 @@
 import { DEMO_ORIGIN, DEMO_PERSONAS, demoPathAllowed, type DemoPersona } from './staging-demo-policy';
 import {QA_RUN_ID,QA_PERSONAS} from './staging-qa-config.mjs';
+import { legacySpacePath } from './platform/server/space-routes';
 export {QA_RUN_ID,QA_COOKIE,QA_MARKER,QA_KEY_PIN,QA_CUTOFF,QA_PERSONAS,QA_MAX_TTL_SECONDS} from './staging-qa-config.mjs';
 export const qaSessionId = (persona: DemoPersona) => `${DEMO_PERSONAS[persona].userId}-qa-${QA_RUN_ID}`;
 export interface QaIdentity { runId: string; persona: DemoPersona; userId: string; sessionId: string; issuedAt: number; expiresAt: number }
@@ -17,6 +18,7 @@ function qaReadAllowed(persona:DemoPersona,path:string,method:string){
   return false;
 }
 export function qaPathAllowed(persona:DemoPersona,path:string,method:string){
+ path=legacySpacePath(path);
  if(!QA_PERSONAS.includes(persona))return false;
  if(path==='/api/qa/logout')return method==='POST';
  if(!demoPathAllowed(path,method))return false;

@@ -109,7 +109,7 @@ describe("real /me and Astro context adapters", () => {
     expect(Me.parse(page)).toEqual(body);
     expect(JSON.parse(JSON.stringify(page))).toEqual(body);
     expect(fetch).not.toHaveBeenCalled();
-    expect(queries).toHaveBeenCalledTimes(9); // same locals retain the flag cache
+    expect(queries).toHaveBeenCalledTimes(5); // middleware/page/API share the same request context
   });
 
   it.each(["OFF", "STAFF"])("keeps %s dark for non-admins before any feature read", async audience => {
@@ -243,7 +243,9 @@ it("refreshes /me counts after cohort revocation, source ownership changes and r
   database.exec("DELETE FROM programApplication");
   expect((await getSpaceContext({ locals: { ...context.locals } })).unreadCounts).toEqual({ ...zeroCounts, profile: 1 });
   database.exec("UPDATE profileContact SET profileId='other-profile' WHERE id='own-contact'");
-  expect(Me.parse((await request(context)).body).unreadCounts).toEqual(zeroCounts);
+  // A new HTTP request has fresh locals; within one request the middleware and
+  // layout deliberately share the same authorized snapshot.
+  expect(Me.parse((await request({ ...context, locals: { ...context.locals } })).body).unreadCounts).toEqual(zeroCounts);
   database.exec("UPDATE profileContact SET profileId='own-profile' WHERE id='own-contact'; UPDATE attention_item SET readAt=2000 WHERE id='own'");
   expect((await getSpaceContext({ locals: { ...context.locals } })).unreadCounts).toEqual(zeroCounts);
 });
