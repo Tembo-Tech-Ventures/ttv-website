@@ -27,14 +27,24 @@ URL: that decision belongs to server route guards. No path parsing/encoding occu
 here; pass the already parsed space value.
 
 `ttv-last-space` holds a **plain SpaceId string**, without JSON or URL decoding.
-`readLastSpaceCookie` takes a complete Cookie header and rejects ambiguous duplicate
-names. A server using `Astro.cookies` can instead supply its raw cookie value as
+On the server, `readLastSpaceCookie` takes a complete Cookie header and rejects
+ambiguous duplicate names. A server using `Astro.cookies` can instead validate
+the preference value with `SpaceId.safeParse` and use the parsed enum as
 `lastSpace`. Cookie attributes: `Path=/dashboard; SameSite=Lax; Max-Age=31536000`,
 plus `Secure` on HTTPS; no `HttpOnly`. This is a client-readable preference.
 
 B-1.1 and B-1.2 own server integration: select and redirect using this helper on
-the server, even when JavaScript is absent. They should pass that same context,
-explicit space and cookie header to the island for matching SSR/hydration data.
+the server, even when JavaScript is absent. Pass only the context, explicit space
+and **parsed `lastSpace` enum** to the island for matching SSR/hydration data.
+Never pass the request Cookie header into island props: Astro serializes those
+props into HTML, which would expose HttpOnly authentication cookies.
+
+```ts
+// Server frontmatter only; the raw header stays on the server.
+const lastSpace = readLastSpaceCookie(Astro.request.headers.get("cookie"));
+const selectedSpace = selectDefaultSpace(me.spaces, {explicitSpace, lastSpace});
+// Island props: {me, explicitSpace, lastSpace}, never the Cookie header.
+```
 
 ## Controller and React hook
 
@@ -44,10 +54,9 @@ import { createSpacesController } from "@/lib/platform/client/spaces";
 import { useSpaces } from "@/lib/platform/client/hooks/spaces";
 
 const [controller] = useState(() => createSpacesController({
-  me, explicitSpace, cookieHeader, // serializable server-provided data
+  me, explicitSpace, lastSpace, // lastSpace is SpaceId | null, never a Cookie header
 }));
 const shell = useSpaces(controller);
-// Fixture mode: createSpacesController({mock: "joseph", explicitSpace: "discover"})
 // On switch, navigate using the UI/server route map only if this returns true:
 shell.switchSpace("community");
 // After a fresh validated /me response or logout:
@@ -61,17 +70,32 @@ and returns `SpacesState` plus `switchSpace`, `dispatchDrawer`, `handleDrawerKey
 `preferenceStatus` (`idle | saved | unavailable`).
 
 Construction and SSR have no cookie effects. After hydration the hook reads the
-browser cookie and persists the authorized selection. A successful switch closes
-the drawer and saves the preference. Storage errors or silently refused writes
-leave in-memory switching usable and set `unavailable`. Mock mode uses existing
-synthetic fixtures and never reads or writes cookies. `browser?: SpacesBrowser`
-injects cookie/protocol ports for tests. No network/retry lifecycle is needed:
+browser cookie. Only an authorized explicit URL visit or a successful switch
+saves the preference; a first-ordered fallback does not create a sticky cookie.
+A successful switch also closes the drawer. Storage errors or silently refused
+writes leave in-memory switching usable and set `unavailable`.
+`browser?: SpacesBrowser | null` injects cookie/protocol ports for tests; null
+disables cookie effects. No network/retry lifecycle is needed:
 the server owns `Me`, and callers apply fresh payloads with `setContext`.
 
-`setContext` revalidates the entire DTO and immediately reselects using the fresh
-membership, closing the drawer. Null or malformed context clears stale authority;
+Construction uses safe schema parsing: malformed initial `Me` disables the shell
+instead of throwing during SSR. `setContext` revalidates the entire DTO and
+immediately reselects using the fresh membership, closing the drawer. Null or
+malformed context clears stale authority;
 malformed input returns false. It performs no persistence. `getServerSnapshot`
 always retains the original immutable hydration snapshot; `getState` is live.
+
+Fixture harnesses import `createMockSpacesController` from `spaces.mock.ts`:
+`createMockSpacesController("joseph", {explicitSpace: "discover"})`. It uses the
+shared synthetic fixtures with persistence disabled. Keep this module out of
+production island imports; the production controller has no fixture imports.
+The same `useSpaces(controller)` hook works with either controller.
+
+A live harness outside `/dashboard` cannot read the Path=/dashboard cookie back,
+so explicit-visit/switch persistence reports `unavailable` there even after a
+successful browser write. Use fixture mode for such harnesses. Ambiguous
+duplicate-path/domain cookies are ignored; this library does not delete cookies
+with other scopes.
 
 ## Drawer keyboard integration
 

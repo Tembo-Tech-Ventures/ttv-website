@@ -1,5 +1,4 @@
 import { Me, SpaceId } from "../contracts";
-import { meByPersona } from "../fixtures";
 import { createStore } from "./store";
 import { CLOSED_DRAWER, spacesDrawerReducer, type SpacesDrawerAction, type SpacesDrawerState } from "./spaces-drawer";
 import { readLastSpaceCookie, selectDefaultSpace, serializeLastSpaceCookie } from "./spaces-selection";
@@ -32,19 +31,21 @@ function browser(): SpacesBrowser {
 }
 
 export type SpacesOptions = {
+  me: Me | null;
   explicitSpace?: unknown;
-  cookieHeader?: string | null;
-  browser?: SpacesBrowser;
-} & ({ me: Me | null; mock?: never } | { mock: keyof typeof meByPersona; me?: never });
+  /** Only this parsed enum may be serialized into island props; never the request Cookie header. */
+  lastSpace?: SpaceId | null;
+  /** Null disables persistence (for fixture harnesses); undefined uses lazy browser ports. */
+  browser?: SpacesBrowser | null;
+};
 
 /** One controller per island/request. No network calls, navigation, global listeners or server writes. */
 export function createSpacesController(options: SpacesOptions) {
-  const isMock = options.mock !== undefined;
-  const initialMe = isMock ? meByPersona[options.mock!] : options.me;
-  let me = initialMe === null || initialMe === undefined ? null : Me.parse(initialMe);
+  const initial = Me.safeParse(options.me);
+  let me = initial.success ? initial.data : null;
   let explicitSpace = options.explicitSpace;
-  let lastSpace: unknown = readLastSpaceCookie(options.cookieHeader);
-  const ports = options.browser ?? browser();
+  let lastSpace: unknown = options.lastSpace;
+  const ports = options.browser === undefined ? browser() : options.browser;
 
   function context(): Pick<SpacesState, "me" | "enabled" | "spaces" | "selectedSpace"> {
     const enabled = me?.flags.spaces === true;
@@ -55,7 +56,7 @@ export function createSpacesController(options: SpacesOptions) {
 
   function persist() {
     const state = store.getState();
-    if (isMock || !state.enabled || !state.selectedSpace) return;
+    if (!ports || !state.enabled || !state.selectedSpace) return;
     let preferenceStatus: SpacesState["preferenceStatus"];
     try {
       ports.writeCookie(serializeLastSpaceCookie(state.selectedSpace, ports.isHTTPS()));
@@ -68,11 +69,14 @@ export function createSpacesController(options: SpacesOptions) {
   const actions = {
     /** Call on the browser after hydration; the server already supplied the no-JS default. */
     hydratePreference() {
-      if (isMock || !store.getState().enabled) return;
+      if (!ports || !store.getState().enabled) return;
+      let preferenceStatus = store.getState().preferenceStatus;
       try { lastSpace = readLastSpaceCookie(ports.readCookie()); }
-      catch { lastSpace = null; }
-      store.setState(previous => ({ ...previous, ...context() }));
-      persist();
+      catch { lastSpace = null; preferenceStatus = "unavailable"; }
+      store.setState(previous => ({ ...previous, ...context(), preferenceStatus }));
+      // A server fallback is not a user choice. Save only an authorized explicit visit.
+      const explicit = SpaceId.safeParse(explicitSpace);
+      if (explicit.success && store.getState().spaces.includes(explicit.data)) persist();
     },
     /** Apply a newly validated /me payload. Null/invalid data revokes shell access immediately. */
     setContext(value: Me | null, urlSpace: unknown = explicitSpace): boolean {

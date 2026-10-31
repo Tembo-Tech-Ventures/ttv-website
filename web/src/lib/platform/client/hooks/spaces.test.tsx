@@ -5,6 +5,7 @@ import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { meByPersona } from "../../fixtures";
 import { createSpacesController, type SpacesController } from "../spaces";
+import { createMockSpacesController } from "../spaces.mock";
 import { useSpaces } from "./spaces";
 
 let root: Root;
@@ -41,8 +42,8 @@ it("hydrates a server default without mismatch, then applies the cookie and obse
 });
 
 it("offers fixture mock mode, replaces controllers and unsubscribes on unmount", async () => {
-  const first = createSpacesController({ mock: "wanjiku" });
-  const second = createSpacesController({ mock: "lucy" });
+  const first = createMockSpacesController("wanjiku");
+  const second = createMockSpacesController("lucy");
   const stop = vi.fn(); const subscribe = first.subscribe;
   vi.spyOn(first, "subscribe").mockImplementation(listener => {
     const unsubscribe = subscribe(listener); return () => { stop(); unsubscribe(); };
@@ -59,7 +60,7 @@ it("offers fixture mock mode, replaces controllers and unsubscribes on unmount",
 
 it("supports a stable per-island controller in the hook's usage pattern", async () => {
   function MockView() {
-    const [controller] = useState(() => createSpacesController({ mock: "david" }));
+    const [controller] = useState(() => createMockSpacesController("david"));
     const { selectedSpace, switchSpace } = useSpaces(controller);
     return <button onClick={() => switchSpace("mentoring")}>{selectedSpace}</button>;
   }
