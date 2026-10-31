@@ -29,10 +29,10 @@ export function demoEnabled(environment: string | undefined, enabled: string | u
 /**
  * Phase 1 spaces read surfaces for restricted staging identities, as exact
  * allowlist (legacy) paths. Flags, capabilities and handlers still decide access.
+ * Search is absent: its handler refuses fixture and QA identities (no fixture scope).
  */
 export const SPACES_READ_PATHS: ReadonlySet<string> = new Set([
-  ROUTES.getMe.path, ROUTES.listAttention.path, ROUTES.countAttention.path, ROUTES.search.path,
-  "/dashboard/attention",
+  ROUTES.getMe.path, ROUTES.listAttention.path, ROUTES.countAttention.path, "/dashboard/attention",
 ]);
 /** The signed-in Apply form. GET only: no QA ledger covers a submitted application. */
 export const SPACES_APPLY_PATH = legacySpacePath(`${SPACE_PATHS.cohort}/apply`);

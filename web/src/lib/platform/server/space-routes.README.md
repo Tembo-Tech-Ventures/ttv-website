@@ -81,7 +81,7 @@ Phase 1 surfaces as exact paths, after `legacySpacePath`. Flags, capabilities an
 handlers still decide what each caller sees.
 
 - GET/HEAD for every identity: `/api/platform/me`, `/api/attention`,
-  `/api/attention/count`, `/api/search` and `/dashboard/attention`.
+  `/api/attention/count` and `/dashboard/attention`.
 - GET/HEAD Apply form (`/dashboard/cohort/apply`, alias `/dashboard/apply`): demo,
   fixtures, and only the `member-noncohort` QA persona.
 - Fixtures also get GET/HEAD `/dashboard`, the cohort home and the spaces entry, and
@@ -90,7 +90,12 @@ handlers still decide what each caller sees.
 - Space homes keep their existing per-persona QA gates.
 
 QA-1 limits: submitting an application stays denied for every identity, because
-no QA ledger or cleanup covers it. Demo and QA personas can't mark attention read,
+no QA ledger or cleanup covers it. Search is not allowlisted: its handler refuses
+fixture and QA identities because search has no fixture scope (B-1.4), so QA-1
+can't exercise search with them; the overlay shows "That search isn't open to
+you." On the dashboard home (OFF, or the cohort home for a fixture with cohort
+access), the next-step link is filtered for QA but not for fixtures, so it can
+point at a page that returns 403. Demo and QA personas can't mark attention read,
 because their retained rows have no reset path. This change opens none of
 profile and account (`/dashboard/me`, `/dashboard/account`), Ask, sessions,
 channels, mentoring requests and availability, admin, PAT, MCP, recordings, chat

@@ -384,7 +384,7 @@ describe("synthetic staging middleware boundary", () => {
     setup();const {context,next}=createContext(new Request(`https://ttv.test${path}`));
     expect(requireResponse(await onRequest(context as never,next)).status).toBe(403);expect(next).not.toHaveBeenCalled();
   });
-  const fixtureSpaces=[["GET","/api/platform/me",200],["GET","/api/attention",200],["GET","/api/attention/count",200],["GET","/api/search",200],["POST","/api/attention/read",200],
+  const fixtureSpaces=[["GET","/api/platform/me",200],["GET","/api/attention",200],["GET","/api/attention/count",200],["POST","/api/attention/read",200],["GET","/api/search",403],
     ["GET","/api/attention/read",403],["POST","/api/search",403],["POST","/dashboard/apply",403],["POST","/dashboard/cohort/apply",403],["GET","/api/attention-x",403],["GET","/api/search/x",403]] as const;
   it.each(fixtureSpaces)("bounds fixture spaces surfaces: %s %s",async(method,path,status)=>{
     setup();const {context,next}=createContext(new Request(`https://ttv.test${path}`,{method}));
@@ -440,7 +440,7 @@ describe('dedicated QA middleware does not inherit normal authentication',()=>{
   mocks.authenticateQaCookie.mockResolvedValue({qa,user:tokenAuth.user,session:tokenAuth.session});const {context,next}=createContext(request(path,'POST'));
   expect(requireResponse(await onRequest(context as never,next)).status).toBe(403);expect(next).not.toHaveBeenCalled();expect(mocks.createAuth).not.toHaveBeenCalled();
  });
- const qaSpaces=[['member-noncohort','GET','/dashboard/apply',true],['member-noncohort','GET','/api/attention',true],['mentor','GET','/api/search',true],['institution','GET','/api/platform/me',true],
+ const qaSpaces=[['member-noncohort','GET','/dashboard/apply',true],['member-noncohort','GET','/api/attention',true],['mentor','GET','/api/attention/count',true],['mentor','GET','/api/search',false],['institution','GET','/api/platform/me',true],
   ['mentor','GET','/dashboard/apply',false],['institution','GET','/dashboard/apply',false],['member-noncohort','POST','/dashboard/apply',false],['member-noncohort','POST','/api/attention/read',false]] as const;
  it.each(qaSpaces)('bounds QA %s spaces surfaces: %s %s',async(persona,method,path,allowed)=>{
   mocks.authenticateQaCookie.mockResolvedValue({qa:{...qa,persona},user:{...tokenAuth.user,id:qa.userId},session:tokenAuth.session});

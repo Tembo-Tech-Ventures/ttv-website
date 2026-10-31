@@ -30,8 +30,6 @@ const SURFACES: [string, Identity[], Identity[]][] = [
   [ROUTES.listAttention.path, ALL, []],
   [`${ROUTES.listAttention.path}/`, ALL, []],
   [ROUTES.countAttention.path, ALL, []],
-  [ROUTES.search.path, ALL, []],
-  [`${ROUTES.search.path}/`, ALL, []],
   [ATTENTION_PAGE_HREF, ALL, []],
   // Own rows only. Fixture cleanup deletes the user and cascades; retained personas have no ledger.
   [SPACES_MARK_READ_PATH, [], ["fixture"]],
@@ -52,7 +50,8 @@ const SURFACES: [string, Identity[], Identity[]][] = [
 const DENIED = [
   "/api/attention-x", "/api/attentionx", "/api/attention/x", "/api/attention/read/x", "/api/attention/count/x",
   "/api/attention/../admin/users", "/api/attention/%2e%2e/admin", "/api/attention/count%2f..%2fread",
-  "/api/search-x", "/api/search/x", "/api/search/../admin", "/api/search/..%2fadmin", "/API/search", "//api/search",
+  // Search stays closed: its handler refuses fixture and QA identities (B-1.4).
+  ROUTES.search.path, `${ROUTES.search.path}/`, "/api/search-x", "/api/search/x", "/api/search/../admin", "/api/search/..%2fadmin", "/API/search", "//api/search",
   "/api/platform", "/api/platform/me/x", "/api/platform/me-x", "/api/platform/flags",
   "/dashboard/attention/x", "/dashboard/attention-x", "/dashboard/attention/../../admin",
   "/dashboard/cohort/apply/x", "/dashboard/cohort/apply/../../admin", "/dashboard/apply/x", "/dashboard/applyx", "/dashboard/cohort/applyx",
@@ -92,11 +91,11 @@ describe("restricted staging identities reach only the Phase 1 spaces surfaces",
   });
 
   it("derives the surfaces from the canonical route constants", () => {
-    expect([...SPACES_READ_PATHS].toSorted()).toEqual(["/api/attention", "/api/attention/count", "/api/platform/me", "/api/search", "/dashboard/attention"]);
+    expect([...SPACES_READ_PATHS].toSorted()).toEqual(["/api/attention", "/api/attention/count", "/api/platform/me", "/dashboard/attention"]);
     expect(SPACES_APPLY_PATH).toBe("/dashboard/apply");
     expect(SPACES_MARK_READ_PATH).toBe(ROUTES.markAttentionRead.path);
     expect(ROUTES.markAttentionRead.method).toBe("POST");
-    for (const route of [ROUTES.getMe, ROUTES.listAttention, ROUTES.countAttention, ROUTES.search]) expect(route.method).toBe("GET");
+    for (const route of [ROUTES.getMe, ROUTES.listAttention, ROUTES.countAttention]) expect(route.method).toBe("GET");
   });
 
   it("never lets the cohort persona open Apply through QA", () => {
