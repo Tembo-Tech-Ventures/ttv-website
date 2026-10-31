@@ -37,9 +37,12 @@ remains possible before cohort membership, as does signed-in Ask AI at
 grant cohort membership, recording access or AI retrieval scope. Existing API
 and data permissions remain authoritative (coordinator decision, 2026-10-31).
 Admin mentor review retains its existing page permission without adding mentoring
-membership or persisting a mentoring cookie. The authenticated retained discovery
-PAT probe bypasses the browser-only Me loader only after the existing middleware
-has validated its identity, expiry, environment and exact GET allowlist.
+membership or persisting a mentoring cookie. PAT callers retain the unchanged
+legacy handlers, with no migration redirect or preference cookie. This runs only
+after the existing middleware authentication, delegation and fixture boundaries:
+community PATs remain restricted, and the retained discovery probe still needs
+its validated identity, expiry, environment and exact GET allowlist. New canonical
+routes remain closed to PATs because Me is intentionally browser-session only.
 
 Successful canonical visits save the plain validated SpaceId as `ttv-last-space`
 using the shared cookie serializer, so selection works without JavaScript.

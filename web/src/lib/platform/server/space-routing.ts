@@ -66,13 +66,13 @@ async function serveSpacePage(context: APIContext, next: MiddlewareNext, me: Me,
 /** Boundary checks must precede this helper, including in the QA authentication branch. */
 export async function routeSpaceRequest(context: APIContext, next: MiddlewareNext): Promise<Response> {
   const { request, url } = context;
-  // The middleware already verified this bounded PAT probe and its allowlist.
-  // Me deliberately rejects PATs; the existing discovery page keeps its own auth.
-  if (context.locals.personalAccessToken && context.locals.stagingFixture?.retainedReadProbe
-      && request.method === "GET" && url.pathname === SPACE_PATHS.discover) return next();
   const path = normalizeSpacePath(url.pathname);
   const canonical = canonicalSpacePath(path);
   const newPath = isNewSpacePath(path);
+  // Me is browser-only. Preserve existing PAT page verification after the
+  // middleware's authentication, delegation and fixture allowlists have run.
+  // Never redirect a PAT into a canonical route it cannot access.
+  if (context.locals.personalAccessToken && !newPath) return next();
   if (path !== "/dashboard" && !canonical && !newPath && path !== SPACE_PATHS.community && path !== SPACE_PATHS.discover) {
     return next();
   }

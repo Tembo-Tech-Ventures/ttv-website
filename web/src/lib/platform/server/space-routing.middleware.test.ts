@@ -4,6 +4,7 @@ import { readMigration } from "@/test/sqlite-d1";
 import { DEMO_PERSONAS } from "@/lib/staging-demo-policy";
 import { createPersonalAccessToken } from "@/lib/personal-access-tokens";
 import { createCapabilityDatabase } from "./capabilities.test-support";
+import { SPACE_REDIRECTS } from "./space-routes";
 
 const mocks = vi.hoisted(() => ({
   env: {} as Record<string, unknown>, getSession: vi.fn(), hasQaCookie: vi.fn(), authenticateQaCookie: vi.fn(),
@@ -113,6 +114,33 @@ describe("space routes through authentication middleware", () => {
       expect(response.status).toBe(403);
       expect(next).not.toHaveBeenCalled();
     }
+  });
+
+  it.each(["ALL", "OFF"])("preserves admin PAT legacy page verification when spaces is %s", async audience => {
+    fixture.database.exec(readMigration("0008_curvy_purifiers.sql"));
+    fixture.database.exec("DELETE FROM UserRoles; DELETE FROM programRole; INSERT INTO Roles (id,name) VALUES ('ADMIN','ADMIN')");
+    fixture.database.prepare("INSERT INTO UserRoles (id,userId,roleId) VALUES (?,?,?)").run("admin-pat-role", user.id, "ADMIN");
+    fixture.database.prepare("INSERT INTO programApplication (id,userId,programId,status,application) VALUES (?,?,?,?,?)")
+      .run("admin-application", user.id, "cohort-a", "APPROVED", "{}");
+    fixture.database.prepare("UPDATE feature_flag SET audience=? WHERE key='spaces'").run(audience);
+    const credential = await createPersonalAccessToken({ db: fixture.db.$client, userId: user.id, label: "Synthetic page verification", durationHours: 8, scopes: ["admin:read"] });
+    const paths = ["/dashboard", "/dashboard/community", "/dashboard/discover", "/dashboard/feedback", ...SPACE_REDIRECTS.map(([path]) => path.replace(":id", "synthetic-id"))];
+    for (const path of paths) {
+      for (const method of ["GET", "HEAD", "POST"]) {
+        const { response, next, ctx } = await request(path, "ttv-last-space=profile", `Bearer ${credential.token}`, method);
+        expect(response.status).toBe(200);
+        expect(response.headers.has("Location")).toBe(false);
+        expect(response.headers.has("Set-Cookie")).toBe(false);
+        expect(next).toHaveBeenCalledExactlyOnceWith();
+        expect(ctx.locals.personalAccessToken?.scopes).toEqual(["admin:read"]);
+      }
+    }
+    for (const path of ["/dashboard/cohort", "/dashboard/me", "/dashboard/account", "/dashboard/mentoring"]) {
+      const { response, next } = await request(path, "", `Bearer ${credential.token}`);
+      expect(response.status).toBe(audience === "ALL" ? 403 : 404);
+      expect(next).not.toHaveBeenCalled();
+    }
+    expect(mocks.getSession).not.toHaveBeenCalled();
   });
 
   it.each(["mentor", "institution", "member-noncohort"] as const)("applies space guards in the separate QA branch: %s", async persona => {

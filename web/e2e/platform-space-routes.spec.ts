@@ -10,11 +10,23 @@ const entries: Record<string, string> = {
 
 test.describe("space routes without JavaScript", () => {
   const token = process.env.PLAYWRIGHT_AGENT_TOKEN;
+  const isPat = Boolean(token?.startsWith("ttv_pat_"));
   test.skip(!token, "An authenticated delivery identity is required.");
   test.use({ javaScriptEnabled: false, extraHTTPHeaders: token ? { Authorization: `Bearer ${token}` } : {} });
 
   test("legacy links redirect only when enabled and resolve to existing pages", async ({ request, page, baseURL }) => {
     const meResponse = await spaceRouteRequest(request, baseURL!, "/api/platform/me");
+    if (meResponse.status() === 403 && isPat) {
+      // Me/canonical pages are browser-session only; PAT verification stays legacy.
+      for (const path of ["/dashboard", "/dashboard/profile", "/dashboard/ask"]) {
+        const response = await spaceRouteRequest(request, baseURL!, path);
+        expect(response.status()).toBe(200);
+        expect(response.headers().location).toBeUndefined();
+        expect(response.headers()["set-cookie"]).toBeUndefined();
+      }
+      expect((await spaceRouteRequest(request, baseURL!, "/dashboard/account")).status()).toBe(403);
+      return;
+    }
     if (meResponse.status() === 404) {
       expect((await spaceRouteRequest(request, baseURL!, "/dashboard/profile")).status()).toBe(200);
       expect((await spaceRouteRequest(request, baseURL!, "/dashboard/account")).status()).toBe(404);
@@ -51,6 +63,7 @@ test.describe("space routes without JavaScript", () => {
   test("server preference and explicit URLs work without hydration", async ({ page, request, context, baseURL }) => {
     const meResponse = await spaceRouteRequest(request, baseURL!, "/api/platform/me");
     test.skip(meResponse.status() === 404, "Spaces is OFF for this caller.");
+    test.skip(meResponse.status() === 403 && isPat, "Canonical preference selection requires a browser session; PAT legacy verification is covered above.");
     expect(meResponse.status()).toBe(200);
     const me = await meResponse.json() as { spaces: string[] };
     await page.goto("/dashboard/community");
@@ -72,6 +85,7 @@ test.describe("space routes without JavaScript", () => {
     test.skip(!FIXTURE_ENVIRONMENT, "Form checks run only against isolated synthetic previews.");
     const meResponse = await spaceRouteRequest(request, baseURL!, "/api/platform/me");
     test.skip(meResponse.status() === 404, "Spaces is OFF for this caller.");
+    test.skip(meResponse.status() === 403 && isPat, "Canonical forms require a browser session; PAT legacy verification is covered above.");
     expect(meResponse.status()).toBe(200);
     const response = await spaceRouteRequest(request, baseURL!, "/dashboard/account", {
       method: "POST", form: { action: "avatar" }, headers: { Origin: new URL(baseURL!).origin },
