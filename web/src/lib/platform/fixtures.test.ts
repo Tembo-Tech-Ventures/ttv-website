@@ -12,6 +12,7 @@ const schemas = {
   meByPersona: z.record(z.string(), C.Me), channels: z.record(z.string(), C.Channel), channelList: C.ChannelList,
   projects: z.record(z.string(), C.ProjectEmbed), sessionClip: C.SessionClipEmbed, messages: z.record(z.string(), C.Message),
   communityMessages: C.MessageList, communityThread: C.MessageList, cohortMessages: C.MessageList, cohortThread: C.MessageList,
+  hiddenMessageDelta: C.MessageList,
   attention: C.AttentionList, attentionCount: C.AttentionCount, searchResults: C.SearchResults, mentors: C.MentorDirectory,
   pendingMentorRequest: C.MentorRequest, acceptedMentorRequest: C.MentorRequest, brianMentorRequest: C.MentorRequest,
   availability: C.MentorAvailability, moderationQueue: C.ModerationQueue,
@@ -19,6 +20,14 @@ const schemas = {
 } satisfies Record<keyof typeof F, z.ZodType>;
 
 describe("synthetic fixtures", () => {
+  it("removes a hidden message from reader caches without sending its content", () => {
+    const delta = C.MessageList.parse(F.hiddenMessageDelta);
+    expect(delta.removedIds).toEqual([F.messages.hidden.id]);
+    expect(delta.items).toEqual([]);
+    expect(JSON.stringify(delta)).not.toContain(F.messages.hidden.body);
+    expect(delta.sinceCursor).not.toBe(F.communityMessages.sinceCursor);
+  });
+
   it.each(Object.keys(schemas) as (keyof typeof F)[])("parses and JSON round-trips %s without dropping fields", (key) => {
     const value = fixtures[key];
     expect(schemas[key].parse(JSON.parse(JSON.stringify(value)))).toEqual(value);

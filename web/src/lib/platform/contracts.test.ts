@@ -104,6 +104,19 @@ describe("route registry", () => {
 });
 
 describe("wire invariants", () => {
+  it.each(["ttv-fixture-user-student", "legacy:user_123", "r28UuFKu6PFZ3xRViqtOgjuVO3OsVcwC", "x".repeat(255)])(
+    "preserves opaque ids across request and response boundaries: %s", (id) => {
+      expect(C.Id.parse(id)).toBe(id);
+      expect(C.IdParams.parse({ id })).toEqual({ id });
+      expect(C.MessageListQuery.parse({ thread: id })).toEqual({ thread: id });
+      expect(C.PersonSummary.parse({ ...F.people.wanjiku, id }).id).toBe(id);
+      expect(C.Flag.parse({ ...F.flagsAdmin.flags[0], updatedBy: id }).updatedBy).toBe(id);
+      expect(C.PostMessage.parse({ ...post, parentId: id }).parentId).toBe(id);
+      expect(C.CreateMentorRequest.parse({ ...routeExamples.createMentorRequest.body, mentorId: id }).mentorId).toBe(id);
+      expect(C.RedirectMentorRequest.parse({ mentorId: id, note: "Synthetic referral" }).mentorId).toBe(id);
+    },
+  );
+
   it("fixes the space, flag and reaction vocabulary", () => {
     expect(C.SpaceId.options).toEqual(["cohort", "community", "mentoring", "discover", "admin", "profile"]);
     expect(C.FlagKey.options).toEqual(["spaces", "channels", "tembo_channels", "mentor_requests"]);
@@ -135,7 +148,9 @@ describe("wire invariants", () => {
     ["negative reaction count", C.Reaction, { kind: "thanks", count: -1, mine: false }],
     ["ambiguous cursors", C.MessageListQuery, { before: "older", since: "newer" }],
     ["empty cursor", C.MessageListQuery, { since: "" }],
-    ["invalid thread id", C.MessageListQuery, { thread: "not-an-id" }],
+    ["empty thread id", C.MessageListQuery, { thread: "" }],
+    ["returned and removed message", C.MessageList, { ...F.communityMessages, removedIds: [F.messages.projectPost.id] }],
+    ["content in removal tombstone", C.MessageList, { ...F.hiddenMessageDelta, removedIds: [F.messages.hidden] }],
     ["empty report", C.ReportMessage, { reason: " " }],
     ["unknown moderation action", C.ModerationAction, { action: "ban", reason: "report" }],
     ["missing moderation reason", C.ModerationAction, { action: "hide" }],
@@ -144,7 +159,9 @@ describe("wire invariants", () => {
     ["empty query", C.SearchQuery, { q: " ", scope: "all" }],
     ["unknown search scope", C.SearchQuery, { q: "retry", scope: "staff_notes" }],
     ["missing visibility", C.SearchSessionMoment, { ...F.searchResults.sessionMoments[0], visibility: undefined }],
-    ["invalid id", C.Id, "user-123"],
+    ["empty id", C.Id, ""],
+    ["oversize id", C.Id, "x".repeat(256)],
+    ["numeric id", C.Id, 123],
     ["date object", C.Timestamp, new Date(F.FIXTURE_NOW)],
     ["ISO timestamp", C.Timestamp, "2026-11-03T07:00:00Z"],
     ["fractional timestamp", C.Timestamp, 1.5],

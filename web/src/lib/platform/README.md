@@ -13,7 +13,10 @@ new screen or test.
 
 ## Wire rules
 
-- Resource ids are CUID2 strings; timestamps are nonnegative integer **epoch
+- Resource ids are opaque strings of 1–255 characters. Better Auth, imported
+  records and synthetic staging records may use different formats; format never
+  grants access. New database rows still use the existing `cuid()` helper.
+  Timestamps are nonnegative integer **epoch
   milliseconds**, never `Date`, ISO strings or database seconds. Nullable means
   explicitly absent; optional request fields may be omitted. Enums use `z.enum`.
 - `SPACE_ORDER` is fixed; `/me` spaces are an ordered subset. Role badges are
@@ -22,12 +25,20 @@ new screen or test.
   are computed for the caller. The server's eventual `capabilitiesFor()` remains
   responsible for authorization; schema validation alone never grants access.
 - Queries are typed values before URL encoding (including the mentor directory
-  boolean). Future edge adapters must decode query strings before validation.
-  Cursors are opaque server tokens, never sortable CUID2 ids. Message `before`
+  boolean). Future edge adapters must decode query strings before validation:
+  accept exactly `true`/`false` for booleans and reject other strings. Never use
+  `z.coerce.boolean()`, which would turn the string `false` into `true`.
+  Cursors are opaque server tokens, never sortable resource ids. Message `before`
   and `since` are exclusive; `thread` is a parent message id. Lists are ordered
   oldest-first within a page. `beforeCursor: null` means no older page;
   `sinceCursor` is the next polling checkpoint, including on empty pages. It
-  must account for edits/deletions as well as new messages. Attention uses
+  must account for edits/deletions and visibility removals as well as new messages.
+  `removedIds` is always present (empty for ordinary pages). Polling consumers
+  must evict these ids from cached lists/threads; the delta includes no removed
+  content, and cannot also return the same id in `items`. Servers emit removal
+  ids only for messages the caller could previously read, never leak hidden ids
+  to new readers, and require a fresh authorized snapshot if the cursor expires.
+  Attention uses
   newest-first pages and `nextCursor: null` at the end.
 - Message bodies are Markdown source. Posts require nonblank text (up to 10,000
   characters), `clientNonce`, explicit `parentId` (`null` for a root), and
@@ -43,6 +54,10 @@ new screen or test.
   content for other readers, and must visibility-check every embed/citation.
 - Tembo asks refer to an existing asking message. Mention and explicit asks must
   converge on one invocation per asking message, without spending quota twice.
+  The handler must verify that `messageId` belongs to the route's channel `:id`,
+  is readable by the caller, and for explicit asks belongs to the caller.
+  Reject mismatches before retrieval or quota spending; never trust either id
+  to establish the other's scope. Later handler tests must cover each mismatch.
   Pending responses identify that message; answers are `TEMBO` messages in its
   thread. Tembo has a null user id, an AI badge and explicit channel scope.
   Citations identify sources. When no sources support an answer, a refusal may

@@ -228,19 +228,24 @@ export const messages = {
 };
 export const communityMessages: MessageList = {
   items: [messages.projectPost, messages.firstPr, messages.mentorOffer], beforeCursor: "synthetic-community-before",
-  sinceCursor: "synthetic-community-since", thread: null,
+  sinceCursor: "synthetic-community-since", thread: null, removedIds: [],
 };
 export const communityThread: MessageList = {
   items: [messages.mentorReply, messages.authorReply, messages.kevinReply, messages.communityAsk, messages.communityAnswer],
-  beforeCursor: null, sinceCursor: "synthetic-community-thread-since", thread: communityParent,
+  beforeCursor: null, sinceCursor: "synthetic-community-thread-since", thread: communityParent, removedIds: [],
 };
 export const cohortMessages: MessageList = {
   items: [messages.recordingPost, messages.duplicateQuestion, messages.cohortAsk, messages.sessionTime, messages.sessionTimeReply, messages.mention],
-  beforeCursor: null, sinceCursor: "synthetic-cohort-since", thread: null,
+  beforeCursor: null, sinceCursor: "synthetic-cohort-since", thread: null, removedIds: [],
 };
 export const cohortThread: MessageList = {
   items: [messages.cohortAnswer, messages.faithReply, messages.kevinThanks],
-  beforeCursor: null, sinceCursor: "synthetic-cohort-thread-since", thread: cohortParent,
+  beforeCursor: null, sinceCursor: "synthetic-cohort-thread-since", thread: cohortParent, removedIds: [],
+};
+/** Ordinary-reader delta after moderation hides a previously cached message. */
+export const hiddenMessageDelta: MessageList = {
+  items: [], removedIds: [messages.hidden.id], beforeCursor: null,
+  sinceCursor: "synthetic-community-after-hide", thread: null,
 };
 
 export const attention: AttentionList = {

@@ -12,13 +12,14 @@ export interface RouteDef<P = unknown, Q = unknown, B = unknown, R = unknown> {
 }
 export const defineRoute = <P, Q, B, R>(r: RouteDef<P, Q, B, R>) => r;
 
-export const Id = z.cuid2();
+/** Existing auth, imported and synthetic ids are opaque; format grants no access. */
+export const Id = z.string().min(1).max(255);
 export type Id = z.infer<typeof Id>;
 export const Timestamp = z.int().nonnegative().max(8_640_000_000_000_000);
 export type Timestamp = z.infer<typeof Timestamp>;
 export const Count = z.int().nonnegative();
 export type Count = z.infer<typeof Count>;
-/** Opaque server token. CUID2 ids are not chronological cursors. */
+/** Opaque server token. Resource ids are not chronological cursors. */
 export const Cursor = z.string().min(1).max(2048);
 export type Cursor = z.infer<typeof Cursor>;
 export const ClientNonce = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/);
@@ -234,7 +235,10 @@ export const MessageListQuery = z.strictObject({ before: Cursor.optional(), sinc
 export type MessageListQuery = z.infer<typeof MessageListQuery>;
 export const MessageList = z.object({
   items: z.array(Message), beforeCursor: Cursor.nullable(), sinceCursor: Cursor, thread: Id.nullable(),
-});
+  // Polling tombstones remove cached messages without exposing hidden content.
+  removedIds: z.array(Id),
+}).refine((page) => !page.items.some((item) => page.removedIds.includes(item.id)),
+  "A page cannot both return and remove a message");
 export type MessageList = z.infer<typeof MessageList>;
 export const PostMessage = z.strictObject({
   body: MarkdownBody, clientNonce: ClientNonce, parentId: Id.nullable(), embeds: z.array(EmbedRef).max(5),
