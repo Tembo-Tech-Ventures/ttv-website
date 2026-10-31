@@ -313,10 +313,13 @@ test.describe("the overlays harness", () => {
       await open(page, harness({ scenario: "arrivals" }));
       const said = await recordAnnouncements(page);
       await expect(bell(page)).toHaveAccessibleName("Attention, 4 waiting");
-      // Focus refreshes counts at once, as returning to the tab does.
-      await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-      await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-      await expect(bell(page)).toHaveAccessibleName("Attention, 5 waiting", { timeout: 10_000 });
+      // Focus refreshes counts at once, as returning to the tab does. The first
+      // focus may land before polling has started, or two may merge into one
+      // count, so keep returning to the tab until the arrival has been counted.
+      await expect(async () => {
+        await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+        await expect(bell(page)).toHaveAccessibleName("Attention, 5 waiting", { timeout: 1_000 });
+      }).toPass({ timeout: 15_000 });
       await page.waitForTimeout(1_500);
       expect((await said()).filter((text) => text === "1 new attention item")).toHaveLength(1);
       // One live region pair per overlay: never two voices for one event.
