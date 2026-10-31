@@ -10,6 +10,7 @@ export { default as Pill } from "./Pill";
 export { default as RoleBadge } from "./RoleBadge";
 export { default as Sheet } from "./Sheet";
 export { default as SpaceFile, type SpaceTabItem } from "./SpaceFile";
+export { default as SpaceGlyph } from "./SpaceGlyph";
 export { SPACES, type Space } from "./spaces";
 export { default as TemboMark } from "./TemboMark";
 export { default as TextReaction, REACTIONS } from "./TextReaction";
