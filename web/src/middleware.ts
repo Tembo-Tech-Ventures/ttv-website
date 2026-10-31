@@ -119,7 +119,7 @@ function enforceCommunityDelegation(locals:App.Locals,request:Request,pathname:s
   return new Response("Forbidden: community token cannot access this route.",{status:403,headers:{"Cache-Control":"no-store"}});
 }
 
-async function enforceStagingFixtureBoundary(locals: App.Locals, pathname: string): Promise<Response | null> {
+async function enforceStagingFixtureBoundary(locals: App.Locals, pathname: string, method: string): Promise<Response | null> {
   locals.stagingFixture = null;
   if (!locals.user) return null;
   try {
@@ -128,7 +128,7 @@ async function enforceStagingFixtureBoundary(locals: App.Locals, pathname: strin
       session:locals.session ?? {id:""},isPat:Boolean(locals.personalAccessToken),retainedProbeEnabled:env.STAGING_RETAINED_READ_PROBE_ENABLED,
     });
     if (locals.stagingFixture?.retainedReadProbe && !["/dashboard/discover", "/api/community/access", "/api/community/profiles", "/api/community/chat"].includes(pathname) && !/^\/api\/community\/profiles\/[^/]+$/.test(pathname)) throw new StagingFixtureAccessError();
-    if (locals.stagingFixture && !stagingFixturePathAllowed(pathname)) throw new StagingFixtureAccessError();
+    if (locals.stagingFixture && !stagingFixturePathAllowed(pathname, method)) throw new StagingFixtureAccessError();
     return null;
   } catch (error) {
     if (!(error instanceof StagingFixtureAccessError)) throw error;
@@ -190,7 +190,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const demoFailure = await enforceDemoBoundary(locals,request,url.pathname);
     if (demoFailure) return platformFlagsAdminDenial(demoFailure, url.pathname);
 
-    const fixtureFailure = await enforceStagingFixtureBoundary(locals,url.pathname);
+    const fixtureFailure = await enforceStagingFixtureBoundary(locals,url.pathname,request.method);
     if (fixtureFailure) return platformFlagsAdminDenial(fixtureFailure, url.pathname);
 
     // Community delegation never inherits the owner's unrelated application access.
