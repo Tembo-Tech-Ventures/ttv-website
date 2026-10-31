@@ -400,13 +400,13 @@ test.describe("the overlays harness", () => {
       await open(page, harness());
       await openSearch(page);
       await box(page).fill("retry webhook");
-      await page.route("**/dashboard/ask", (route) => route.fulfill({ status: 200, body: "ask" }));
+      await page.route("**/dashboard/cohort/ask", (route) => route.fulfill({ status: 200, body: "ask" }));
       const posts: string[] = [];
       page.on("request", (request) => {
         if (request.method() !== "GET") posts.push(request.url());
       });
       await search(page).getByRole("button", { name: /Ask Tembo about “retry webhook”/ }).click();
-      await expect(page).toHaveURL(/\/dashboard\/ask#ask-tembo=retry%20webhook$/);
+      await expect(page).toHaveURL(/\/dashboard\/cohort\/ask#ask-tembo=retry%20webhook$/);
       expect(posts).toEqual([]);
 
       await open(page, harness({ persona: "lucy" }));

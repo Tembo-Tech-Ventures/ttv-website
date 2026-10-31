@@ -7,11 +7,10 @@
  * is sent until the person sends it, nothing is stored, and no channel
  * endpoint is involved.
  *
- * `/dashboard/ask` is the Ask route today; with the spaces routes (B-1.2) it
- * redirects to `/dashboard/cohort/ask`, and browsers carry the fragment across
- * the redirect.
+ * Search exists only while the spaces flag is on, so it links straight to the
+ * canonical Ask route (B-1.2); the server still decides who may open it.
  */
-export const ASK_TEMBO_PATH = "/dashboard/ask";
+export const ASK_TEMBO_PATH = "/dashboard/cohort/ask";
 /** The search query's own limit (SearchQuery.q), restated so the chat bundle does not pull in the contracts. */
 const MAX_DRAFT = 500;
 const FRAGMENT = "#ask-tembo=";

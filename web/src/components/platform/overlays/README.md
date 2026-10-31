@@ -50,7 +50,7 @@ mounts `<PlatformOverlays attention={false} />` and handles the bell itself.
   with channels), keeps the server's visibility labels, and remembers a query
   only when one of its results is opened. Recent searches use a per-person
   localStorage key; other people's keys are dropped when search mounts.
-- Ask Tembo (cohort members only) opens `/dashboard/ask#ask-tembo=<words>`: the
+- Ask Tembo (cohort members only) opens `/dashboard/cohort/ask#ask-tembo=<words>`: the
   fragment never reaches the server, the Ask composer takes it once, fills the
   box unsent and strips it from the address. No channel endpoint is involved.
 

@@ -100,12 +100,12 @@ describe("recent searches", () => {
 describe("Ask Tembo hand-off", () => {
   it("carries the words in the fragment, which never reaches the server", () => {
     const href = askTemboHref("retry webhook & 50%");
-    expect(href).toBe("/dashboard/ask#ask-tembo=retry%20webhook%20%26%2050%25");
+    expect(href).toBe("/dashboard/cohort/ask#ask-tembo=retry%20webhook%20%26%2050%25");
     expect(new URL(href, "https://example.test").search).toBe("");
   });
 
   it("is taken once: read, then removed from the address", () => {
-    history.replaceState(null, "", "/dashboard/ask?x=1#ask-tembo=retry%20webhook");
+    history.replaceState(null, "", "/dashboard/cohort/ask?x=1#ask-tembo=retry%20webhook");
     expect(takeAskTemboDraft()).toBe("retry webhook");
     expect(location.hash).toBe("");
     expect(location.search).toBe("?x=1");
