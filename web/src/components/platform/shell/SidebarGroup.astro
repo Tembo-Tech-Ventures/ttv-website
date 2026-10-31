@@ -1,0 +1,19 @@
+---
+/**
+ * A labelled list of sidebar links, such as a space's channels. Without a
+ * label it is the space's main list. Put `SidebarLink`s inside.
+ */
+interface Props {
+  label?: string;
+}
+
+const { label } = Astro.props;
+const id = label ? `sidebar-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}` : undefined;
+---
+
+<div class="flex flex-col gap-1">
+  {label && <p id={id} class="px-2.5 pb-1 text-[0.8125rem] font-semibold text-ink-muted">{label}</p>}
+  <ul class="m-0 flex list-none flex-col gap-0.5 p-0" aria-labelledby={id}>
+    <slot />
+  </ul>
+</div>

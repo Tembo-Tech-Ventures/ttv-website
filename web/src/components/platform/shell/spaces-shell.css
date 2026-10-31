@@ -1,0 +1,550 @@
+/*
+ * The spaces shell: an app frame exactly one viewport tall. The space tabs
+ * stand on the active space's sheet (SpaceFile); inside the sheet the space's
+ * sidebar and the page scroll independently, so the tabs and tools never move.
+ *
+ * Wide screens (64rem and up) show the TEMBO mark, the tabs and the tools in
+ * one row, with the sidebar as a column of the sheet. Below that, the row
+ * becomes a phone top bar (menu, page name, tools), the spaces move to a
+ * bottom bar, and the sidebar becomes a drawer over the sheet.
+ */
+
+.spaces-shell {
+  --shell-gutter: 1rem;
+  --sidebar-width: 17.5rem;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100svh;
+  height: 100dvh;
+  padding-top: 0.75rem;
+  overflow: hidden;
+  background-color: var(--color-ground);
+}
+
+/*
+ * SpaceFile is normally its own size container, for its tab thresholds. Here
+ * the shell is the whole viewport, so the thresholds below are viewport media
+ * queries, and the file must not be a container: layout containment would
+ * make it the containing block of the phone drawer, which is fixed to the
+ * viewport.
+ */
+.spaces-shell .space-file {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-inline: var(--shell-gutter);
+  container-type: normal;
+}
+
+.spaces-shell .space-file > .platform-sheet {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.spaces-shell__body {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.spaces-shell[data-sidebar] .spaces-shell__body {
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+}
+
+.spaces-shell__main {
+  min-width: 0;
+  min-height: 0;
+  padding: 2.25rem clamp(1.5rem, 3vw, 3rem) 4rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Inset, so the ring is not cut off by the sheet's edges. */
+.spaces-shell__main:focus-visible {
+  outline-offset: -3px;
+}
+
+.spaces-shell__sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-height: 0;
+  padding: 1.75rem 0.875rem 1rem;
+  border-right: 1px solid var(--color-hairline);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.spaces-shell__sidebar:focus {
+  outline: none;
+}
+
+.spaces-shell__sidebar-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+.spaces-shell__person {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 0.625rem 0;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.spaces-shell__skip {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 70;
+  padding: 0.625rem 1rem;
+  border-radius: 0.75rem;
+  background-color: var(--color-primary);
+  color: var(--color-dark);
+  font-weight: 700;
+  transform: translateY(-200%);
+}
+
+.spaces-shell__skip:focus-visible {
+  transform: none;
+}
+
+/* The TEMBO mark, as the public site sets it. */
+.spaces-shell__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-inline-end: 0.75rem;
+  border-radius: 0.5rem;
+  white-space: nowrap;
+}
+
+.spaces-shell__compact-start {
+  display: none;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.spaces-shell__heading {
+  min-width: 0;
+  color: var(--color-ink-primary);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+/* Symmetric, so that without its words the trigger is a square like the bell. */
+.spaces-search {
+  min-width: 2.5rem;
+  justify-content: center;
+  padding-inline: 0.6875rem;
+}
+
+@media (pointer: coarse) {
+  .spaces-search {
+    min-width: 2.75rem;
+  }
+}
+
+.spaces-search__words {
+  display: inline-flex;
+  align-items: center;
+  gap: 2.5rem;
+}
+
+/* The account disclosure: the avatar, and a panel that drops below it. */
+.spaces-account {
+  position: relative;
+}
+
+.spaces-account__trigger {
+  list-style: none;
+}
+
+.spaces-account__trigger::-webkit-details-marker {
+  display: none;
+}
+
+.spaces-account[open] > .spaces-account__trigger {
+  outline: 2px solid rgb(255 248 242 / 0.4);
+  outline-offset: 2px;
+}
+
+.spaces-account__panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 30;
+  background-color: color-mix(in srgb, var(--color-sheet-community) 70%, var(--color-ground));
+}
+
+/*
+ * The wide row never wraps. As tabs are added it gives way in three steps,
+ * least useful first: the "Tech · Ventures" line, then the search words (the
+ * magnifier stays, named "Search everything"), then the inactive tabs' words
+ * (their markers stay, and the words stay in the accessibility tree).
+ *
+ * The thresholds are sums of worst cases: tabs carrying two-digit counts
+ * (168px each), the full mark (230px) and full tools (345px), plus the row's
+ * insets and gaps (132px). Nothing may need more room than these at 64rem,
+ * where the phone frame takes over; e2e/platform-shell.spec.ts sweeps them.
+ * If the strip still does not fit, it scrolls inside its own bounds.
+ */
+@media (min-width: 64rem) {
+  /* The sheet owns its rounded corners: the sidebar and page never paint or hit past them. */
+  .spaces-shell .space-file > .platform-sheet {
+    overflow: clip;
+  }
+
+  .spaces-shell .space-file__row {
+    flex-wrap: nowrap;
+  }
+
+  .spaces-shell .space-file__nav {
+    flex: 0 1 auto;
+  }
+}
+
+@media (max-width: 67.3rem) {
+  .spaces-shell .space-file[data-tabs="2"] .spaces-shell__tagline {
+    display: none;
+  }
+}
+
+@media (max-width: 78.2rem) {
+  .spaces-shell .space-file[data-tabs="3"] .spaces-shell__tagline {
+    display: none;
+  }
+}
+
+@media (max-width: 68.8rem) {
+  .spaces-shell .space-file[data-tabs="3"] .spaces-search__words {
+    display: none;
+  }
+}
+
+@media (max-width: 89rem) {
+  .spaces-shell .space-file[data-tabs="4"] .spaces-shell__tagline {
+    display: none;
+  }
+}
+
+@media (max-width: 79.7rem) {
+  .spaces-shell .space-file[data-tabs="4"] .spaces-search__words {
+    display: none;
+  }
+}
+
+@media (max-width: 66.3rem) {
+  .spaces-shell .space-file[data-tabs="4"] .space-tab:not([data-active]) .space-tab__link {
+    justify-content: center;
+    min-width: 2.75rem;
+    padding-inline: 0.625rem;
+  }
+
+  .spaces-shell .space-file[data-tabs="4"] .space-tab:not([data-active]) .space-tab__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 100rem) {
+  .spaces-shell .space-file[data-tabs="5"] .spaces-shell__tagline {
+    display: none;
+  }
+}
+
+@media (max-width: 90.6rem) {
+  .spaces-shell .space-file[data-tabs="5"] .spaces-search__words {
+    display: none;
+  }
+}
+
+@media (max-width: 77.2rem) {
+  .spaces-shell .space-file[data-tabs="5"] .space-tab:not([data-active]) .space-tab__link {
+    justify-content: center;
+    min-width: 2.75rem;
+    padding-inline: 0.625rem;
+  }
+
+  .spaces-shell .space-file[data-tabs="5"] .space-tab:not([data-active]) .space-tab__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 110.8rem) {
+  .spaces-shell .space-file[data-tabs="6"] .spaces-shell__tagline {
+    display: none;
+  }
+}
+
+@media (max-width: 101.5rem) {
+  .spaces-shell .space-file[data-tabs="6"] .spaces-search__words {
+    display: none;
+  }
+}
+
+@media (max-width: 88rem) {
+  .spaces-shell .space-file[data-tabs="6"] .space-tab:not([data-active]) .space-tab__link {
+    justify-content: center;
+    min-width: 2.75rem;
+    padding-inline: 0.625rem;
+  }
+
+  .spaces-shell .space-file[data-tabs="6"] .space-tab:not([data-active]) .space-tab__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* ---- The phone bottom bar ---- */
+
+.spaces-bottom {
+  position: relative;
+  z-index: 10;
+  padding-bottom: env(safe-area-inset-bottom);
+  border-top: 1px solid var(--color-hairline);
+  background-color: var(--color-ground);
+}
+
+.spaces-bottom__list {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  margin: 0;
+  padding: 0.25rem 0.25rem 0;
+  list-style: none;
+}
+
+.spaces-bottom__link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3125rem;
+  min-height: 3.75rem;
+  padding: 0.5rem 0.125rem 0.625rem;
+  border-radius: 0.875rem;
+  color: var(--color-ink-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.spaces-bottom__link[aria-current="page"] {
+  color: var(--color-ink-primary);
+}
+
+.spaces-bottom__glyph {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 3.25rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  transition: background-color 150ms ease;
+}
+
+.spaces-bottom__link[aria-current="page"] .spaces-bottom__glyph {
+  background-color: rgb(255 248 242 / 0.1);
+}
+
+.spaces-bottom__badge {
+  position: absolute;
+  top: -0.3125rem;
+  right: 0.125rem;
+  display: flex;
+}
+
+.spaces-bottom__label {
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+/*
+ * Five or six spaces on the narrowest phones: the words get smaller, and with
+ * six only the current space keeps its word on screen (the others keep theirs
+ * for screen readers). The current word may run wider than its cell, over the
+ * neighbours' empty label space, so it sits above them.
+ */
+@media (max-width: 23.75rem) {
+  .spaces-bottom[data-count="5"] .spaces-bottom__link,
+  .spaces-bottom[data-count="6"] .spaces-bottom__link {
+    font-size: 0.6875rem;
+  }
+
+  .spaces-bottom[data-count="6"] .spaces-bottom__link:not([aria-current="page"]) .spaces-bottom__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .spaces-bottom[data-count="6"] .spaces-bottom__link[aria-current="page"] {
+    position: relative;
+    z-index: 1;
+  }
+
+  .spaces-bottom[data-count="6"] .spaces-bottom__label {
+    max-width: none;
+  }
+
+  .spaces-bottom__glyph {
+    width: 2.75rem;
+  }
+}
+
+/* ---- The phone drawer ---- */
+
+.spaces-shell__close,
+.spaces-shell__scrim {
+  display: none;
+}
+
+/* ---- Below 64rem: the phone and tablet frame ---- */
+
+@media (max-width: 63.999rem) {
+  .spaces-shell {
+    --shell-gutter: 0px;
+    padding-top: 0.5rem;
+  }
+
+  .spaces-shell .space-file__row {
+    --sheet-radius: 1rem;
+    flex-wrap: nowrap;
+    padding-block-end: 0.625rem;
+  }
+
+  .spaces-shell .space-file__nav,
+  .spaces-shell__brand {
+    display: none;
+  }
+
+  .spaces-shell .space-file__start {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .spaces-shell .space-file__end {
+    gap: 0.375rem;
+  }
+
+  .spaces-shell__compact-start {
+    display: flex;
+  }
+
+  .spaces-search {
+    padding-inline: 0;
+  }
+
+  .spaces-search__words {
+    display: none;
+  }
+
+  .spaces-shell[data-sidebar] .spaces-shell__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .spaces-shell__main {
+    padding: 1.5rem 1.25rem 2.5rem;
+  }
+
+  .spaces-shell__sidebar {
+    position: fixed;
+    inset-block: 0;
+    left: 0;
+    z-index: 2;
+    width: min(20rem, calc(100vw - 3.5rem));
+    padding-top: 1.25rem;
+    border-right: 0;
+    border-radius: 0 1.5rem 1.5rem 0;
+    /* A drawer is its own surface; in the sheet the sidebar is the sheet itself. */
+    background-color: var(--sheet);
+    box-shadow: 30px 0 60px -20px rgb(0 0 0 / 0.7);
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition:
+      transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      visibility 0s linear 220ms;
+  }
+
+  .spaces-shell__close {
+    display: inline-grid;
+    align-self: flex-end;
+    margin-bottom: -1rem;
+  }
+
+  .spaces-shell__scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    display: block;
+    background-color: rgb(1 20 18 / 0.6);
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity 220ms ease,
+      visibility 0s linear 220ms;
+  }
+
+  /*
+   * Open with the drawer's state, or by its link until JavaScript has run.
+   * Once hydrated the state alone decides (a leftover #space-sidebar must not
+   * pin the drawer open); the shell adopts that fragment as state on hydration.
+   */
+  .spaces-shell[data-drawer="open"] .spaces-shell__sidebar,
+  .spaces-shell:not([data-hydrated]) .spaces-shell__sidebar:target {
+    transform: none;
+    visibility: visible;
+    transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .spaces-shell[data-drawer="open"] .spaces-shell__scrim,
+  .spaces-shell:not([data-hydrated]) .space-file:has(.spaces-shell__sidebar:target) .spaces-shell__scrim {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 220ms ease;
+  }
+
+  /* The drawer and its scrim lie over the bottom bar too. */
+  .spaces-shell[data-drawer="open"] .space-file,
+  .spaces-shell:not([data-hydrated]) .space-file:has(.spaces-shell__sidebar:target) {
+    z-index: 20;
+  }
+}
+
+@media (min-width: 64rem) {
+  .spaces-bottom {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spaces-shell__sidebar,
+  .spaces-shell__scrim,
+  .spaces-bottom__glyph {
+    transition: none !important;
+  }
+}

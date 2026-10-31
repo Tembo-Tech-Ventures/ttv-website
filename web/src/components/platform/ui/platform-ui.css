@@ -93,6 +93,13 @@
   scrollbar-width: none;
 }
 
+.space-file__start {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  align-self: center;
+}
+
 .space-file__end {
   display: flex;
   align-items: center;

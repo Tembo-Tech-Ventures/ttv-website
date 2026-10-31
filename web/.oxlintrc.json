@@ -81,13 +81,17 @@
       }
     },
     {
-      "files": ["src/layouts/BaseLayout.astro", "src/layouts/ImmersiveLayout.astro"],
+      "files": ["src/layouts/BaseLayout.astro", "src/layouts/ImmersiveLayout.astro", "src/layouts/SpacesLayout.astro"],
       "rules": {
         "import/no-unassigned-import": "off"
       }
     },
     {
-      "files": ["src/components/platform/ui/Sheet.tsx", "src/components/platform/ui/SpaceFile.tsx"],
+      "files": [
+        "src/components/platform/ui/Sheet.tsx",
+        "src/components/platform/ui/SpaceFile.tsx",
+        "src/components/platform/shell/SpacesShell.tsx"
+      ],
       "rules": {
         "import/no-unassigned-import": "off"
       }

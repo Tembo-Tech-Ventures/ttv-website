@@ -1,0 +1,170 @@
+---
+/**
+ * The spaces shell, for pages that belong to a space (Cohort, Community,
+ * Mentoring, Discover, Admin, Profile).
+ *
+ * The page resolves its context first and hands it in:
+ *
+ *   const me = await getSpaceContext(Astro);          // 404 on flag_off
+ *   if (!canRenderSpace(me, "community")) return notFound;
+ *   <SpacesLayout me={me} space="community" title="What's new">
+ *     <Fragment slot="sidebar">…SidebarHeader, SidebarGroup, SidebarLink…</Fragment>
+ *     …the page, with its one Mattone h1…
+ *   </SpacesLayout>
+ *
+ * It refuses to render a space the person cannot open, or any space while the
+ * `spaces` flag is off for them, so a page that forgets its guard fails loudly
+ * instead of showing a shell that does not exist yet.
+ *
+ * Only the `Me` contract and the parsed `ttv-last-space` value reach the
+ * island. The Cookie header, the session and auth objects never do: Astro
+ * serialises island props into the HTML.
+ *
+ * Like ImmersiveLayout, the document itself never scrolls: the frame is one
+ * viewport tall and the sidebar and page scroll inside the sheet.
+ */
+import "@/styles/global.css";
+import type { Me, SpaceId } from "@/lib/platform/contracts";
+import { readLastSpaceCookie } from "@/lib/platform/client/spaces-selection";
+import ClientErrorBuffer from "@/components/feedback/ClientErrorBuffer.astro";
+import FeedbackWidget from "@/components/feedback/FeedbackWidget";
+import SpacesShell from "@/components/platform/shell/SpacesShell";
+import { canRenderSpace } from "@/components/platform/shell/access";
+import type { ShellAccount } from "@/components/platform/shell/AccountMenu";
+import type { ShellOverlay } from "@/components/platform/shell/overlays";
+import { SIGN_OUT_HREF, SPACE_LABEL } from "@/components/platform/shell/space-routes";
+import { pageTitle } from "@/lib/seo";
+
+interface Props {
+  me: Me;
+  space: SpaceId;
+  /** The page's own name, for the tab title and the phone's top bar. */
+  title: string;
+  /** Overlay islands the page mounts in the `overlays` slot; their triggers appear in the top bar. */
+  overlays?: readonly ShellOverlay[];
+  /** Fixture harnesses only: they live outside the preference cookie's path and have no session. */
+  harness?: { account: ShellAccount; spaceHrefs: Readonly<Record<SpaceId, string>> };
+}
+
+const { me, space, title, overlays = [], harness } = Astro.props;
+
+if (!canRenderSpace(me, space)) {
+  throw new Error(`SpacesLayout: the ${space} space is not open to this person. Check canRenderSpace before rendering.`);
+}
+
+const signedIn = Boolean(Astro.locals.user);
+const qa = Astro.locals.stagingQa;
+const demo = Astro.locals.stagingDemo;
+const account: ShellAccount = harness?.account ?? {
+  signOut: qa
+    ? { kind: "form", action: "/api/qa/logout", label: "Sign out of this QA persona" }
+    : demo
+      ? { kind: "link", href: "/demo", label: "Demo controls" }
+      : { kind: "link", href: SIGN_OUT_HREF, label: "Sign out" },
+  feedback: signedIn && !qa,
+};
+// Parsed here, on the server: the island gets a SpaceId or null, never the header.
+const lastSpace = readLastSpaceCookie(Astro.request.headers.get("cookie"));
+---
+
+<!doctype html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <title>{pageTitle(title === SPACE_LABEL[space] ? title : `${title} · ${SPACE_LABEL[space]}`)}</title>
+    {signedIn && <ClientErrorBuffer />}
+  </head>
+  <body class="h-full overflow-hidden overscroll-none bg-ground">
+    <SpacesShell
+      client:load
+      me={me}
+      space={space}
+      lastSpace={lastSpace}
+      heading={title}
+      account={account}
+      overlays={overlays}
+      persistPreference={!harness}
+      spaceHrefs={harness?.spaceHrefs}
+    >
+      {Astro.slots.has("sidebar") && <slot name="sidebar" slot="sidebar" />}
+      <slot />
+    </SpacesShell>
+    <slot name="overlays" />
+    {
+      /* No floating button: it would sit on the bottom bar. The account menu opens the form. */
+      account.feedback && <FeedbackWidget client:idle showLauncher={false} />
+    }
+  </body>
+</html>
+
+<style is:global>
+  /*
+   * Switching spaces: the card file. The tab row stays put as the anchor while
+   * the chosen space's sheet rises into place over the one you left, the way
+   * the homepage's sheets slide over each other. Quick, under 300ms, because
+   * it is navigation. Only between two spaces pages (both must opt in), and
+   * with reduced motion there is no transition at all: a plain cut.
+   */
+  @media (prefers-reduced-motion: no-preference) {
+    @view-transition {
+      navigation: auto;
+    }
+  }
+
+  .spaces-shell .space-file > .platform-sheet {
+    view-transition-name: spaces-sheet;
+  }
+
+  .spaces-bottom {
+    view-transition-name: spaces-bottom;
+  }
+
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+
+  /*
+   * The tab row is not named: it stays in the root, which does not animate, so
+   * it simply shows the new state at once, the steady anchor of the gesture.
+   * (Naming it would also make it a stacking context under the sheet.)
+   */
+  ::view-transition-group(spaces-bottom) {
+    animation-duration: 160ms;
+  }
+
+  ::view-transition-old(spaces-bottom),
+  ::view-transition-new(spaces-bottom) {
+    animation-duration: 160ms;
+  }
+
+  ::view-transition-group(spaces-sheet) {
+    animation: none;
+  }
+
+  /* The sheet you leave stays where it is and dims as it falls behind. */
+  ::view-transition-old(spaces-sheet) {
+    animation: 250ms cubic-bezier(0.3, 0, 0.2, 1) both spaces-sheet-recede;
+  }
+
+  /* The chosen sheet is opaque paper, not a fade: it rises over the old one,
+     its lit top edge and shadow leading, and settles under its tab. */
+  ::view-transition-new(spaces-sheet) {
+    animation: 250ms cubic-bezier(0.16, 0.9, 0.3, 1) both spaces-sheet-arrive;
+  }
+
+  @keyframes spaces-sheet-recede {
+    to {
+      filter: brightness(0.62);
+    }
+  }
+
+  @keyframes spaces-sheet-arrive {
+    from {
+      transform: translateY(4.5rem);
+    }
+  }
+</style>

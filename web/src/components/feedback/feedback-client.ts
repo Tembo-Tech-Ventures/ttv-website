@@ -33,9 +33,25 @@ export interface ClientError {
   at?: string;
 }
 
-/** Lets any island (the Ask AI nav, for one) open the widget. */
+const PENDING_FEEDBACK_KEY = "__ttvFeedbackRequested";
+
+/**
+ * Lets any island (the Ask AI nav, for one) open the widget. The widget
+ * hydrates on its own schedule (`client:idle`), so a request can arrive before
+ * it listens: the request is also left on `window`, and the widget takes it
+ * when it mounts. Opening is idempotent, so a request seen twice is harmless.
+ */
 export function openFeedbackWidget(): void {
+  (window as unknown as Record<string, unknown>)[PENDING_FEEDBACK_KEY] = true;
   window.dispatchEvent(new CustomEvent(OPEN_FEEDBACK_EVENT));
+}
+
+/** For the widget: whether someone asked for it and has not been answered yet. Clears the request. */
+export function takeFeedbackRequest(): boolean {
+  const store = window as unknown as Record<string, unknown>;
+  const requested = store[PENDING_FEEDBACK_KEY] === true;
+  delete store[PENDING_FEEDBACK_KEY];
+  return requested;
 }
 
 export function readClientErrors(): ClientError[] {

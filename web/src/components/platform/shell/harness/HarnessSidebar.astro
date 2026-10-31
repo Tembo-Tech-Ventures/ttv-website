@@ -1,0 +1,146 @@
+---
+/**
+ * Harness only: each space's sidebar as PLAN.md §4 describes it, built from
+ * the sidebar kit. The links stay on this page; U-1.2 wires the real ones.
+ */
+import type { SpaceId } from "@/lib/platform/contracts";
+import {
+  PiBriefcase,
+  PiCertificate,
+  PiChatsCircle,
+  PiCompass,
+  PiEnvelopeSimple,
+  PiFolder,
+  PiGear,
+  PiHash,
+  PiHouse,
+  PiIdentificationCard,
+  PiLockSimple,
+  PiNotePencil,
+  PiShieldCheck,
+  PiSparkle,
+  PiSquaresFour,
+  PiUsersThree,
+  PiVideoCamera,
+} from "react-icons/pi";
+import SidebarGroup from "../SidebarGroup.astro";
+import SidebarHeader from "../SidebarHeader.astro";
+import SidebarLink from "../SidebarLink.astro";
+
+interface Props {
+  space: SpaceId;
+  /** Slot controls focus must skip: hidden by visibility, disabled, or in a disabled fieldset. */
+  hiddenControls?: boolean;
+}
+
+const { space, hiddenControls = false } = Astro.props;
+---
+
+{
+  hiddenControls && (
+    <div data-hidden-controls>
+      <a href="#hidden" style="visibility: hidden">
+        Hidden link
+      </a>
+      <button type="button" disabled>
+        Disabled button
+      </button>
+      <select disabled aria-label="Disabled select">
+        <option>Disabled select</option>
+      </select>
+      <fieldset disabled class="m-0 border-0 p-0">
+        <legend class="sr-only">Disabled group</legend>
+        <input aria-label="Input in a disabled group" />
+      </fieldset>
+    </div>
+  )
+}
+
+{
+  space === "cohort" && (
+    <>
+      <SidebarHeader title="Cohort 04" description="TypeScript backends · week 9 of 12" />
+      <SidebarGroup>
+        <SidebarLink href="#overview" label="Overview" icon={PiSquaresFour} current />
+        <SidebarLink href="#sessions" label="Sessions" icon={PiVideoCamera} note="1 new" />
+        <SidebarLink href="#ask" label="Ask Tembo" icon={PiSparkle} />
+        <SidebarLink href="#classmates" label="Classmates" icon={PiUsersThree} />
+      </SidebarGroup>
+      <SidebarGroup label="Channels">
+        <SidebarLink href="#cohort-04" label="cohort-04" icon={PiLockSimple} />
+        <SidebarLink href="#c04-help" label="c04-help" icon={PiLockSimple} count={2} />
+        <SidebarLink href="#c04-announcements" label="c04-announcements" icon={PiLockSimple} />
+      </SidebarGroup>
+    </>
+  )
+}
+{
+  space === "community" && (
+    <>
+      <SidebarHeader title="Community" description="Builders, alumni and mentors across every cohort." />
+      <SidebarGroup>
+        <SidebarLink href="#new" label="What's new" icon={PiHouse} current />
+        <SidebarLink href="#mentors" label="Mentors" icon={PiCompass} />
+        <SidebarLink href="#people" label="People" icon={PiUsersThree} />
+        <SidebarLink href="#projects" label="Projects" icon={PiFolder} />
+      </SidebarGroup>
+      <SidebarGroup label="Channels">
+        <SidebarLink href="#introductions" label="introductions" icon={PiHash} />
+        <SidebarLink href="#show-your-work" label="show-your-work" icon={PiHash} />
+        <SidebarLink href="#help" label="help" icon={PiHash} count={3} />
+        <SidebarLink href="#opportunities" label="opportunities" icon={PiHash} />
+      </SidebarGroup>
+    </>
+  )
+}
+{
+  space === "mentoring" && (
+    <>
+      <SidebarHeader title="Mentoring" description="Requests, confirmations and your availability." />
+      <SidebarGroup>
+        <SidebarLink href="#requests" label="Requests" icon={PiChatsCircle} count={2} current />
+        <SidebarLink href="#confirm" label="Confirm work" icon={PiShieldCheck} />
+        <SidebarLink href="#availability" label="Availability" icon={PiGear} />
+      </SidebarGroup>
+    </>
+  )
+}
+{
+  space === "discover" && (
+    <>
+      <SidebarHeader title="Discover" description="Find builders whose documented work fits what you need." />
+      <SidebarGroup>
+        <SidebarLink href="#search" label="Scout" icon={PiCompass} current />
+        <SidebarLink href="#shortlist" label="Explore evidence" icon={PiFolder} />
+      </SidebarGroup>
+    </>
+  )
+}
+{
+  space === "admin" && (
+    <>
+      <SidebarHeader title="Admin" description="Moderation, invitations and the programme tools." />
+      <SidebarGroup>
+        <SidebarLink href="#moderation" label="Moderation" icon={PiShieldCheck} count={3} current />
+        <SidebarLink href="#members" label="Members and roles" icon={PiUsersThree} />
+        <SidebarLink href="#programs" label="Programmes" icon={PiSquaresFour} />
+      </SidebarGroup>
+    </>
+  )
+}
+{
+  space === "profile" && (
+    <>
+      <SidebarHeader title="Profile" description="Your public story and what it brings in." />
+      <SidebarGroup>
+        <SidebarLink href="#overview" label="Overview" icon={PiSquaresFour} current />
+        <SidebarLink href="#public" label="Public profile" icon={PiIdentificationCard} />
+        <SidebarLink href="#projects" label="Projects" icon={PiFolder} note="3" />
+        <SidebarLink href="#writing" label="Writing" icon={PiNotePencil} />
+        <SidebarLink href="#opportunities" label="Opportunities" icon={PiBriefcase} count={2} />
+        <SidebarLink href="#visitors" label="Visitor messages" icon={PiEnvelopeSimple} count={1} />
+        <SidebarLink href="#certificates" label="Certificates" icon={PiCertificate} />
+      </SidebarGroup>
+    </>
+  )
+}

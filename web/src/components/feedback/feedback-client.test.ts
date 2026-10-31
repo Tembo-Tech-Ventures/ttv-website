@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CAPTURE_IGNORE_ATTRIBUTE,
+  OPEN_FEEDBACK_EVENT,
+  openFeedbackWidget,
+  takeFeedbackRequest,
   buildFeedbackFormData,
   formatBytes,
   includeInCapture,
@@ -63,5 +66,33 @@ describe("formatBytes", () => {
     expect(formatBytes(200)).toBe("1 KB");
     expect(formatBytes(48_000)).toBe("47 KB");
     expect(formatBytes(2.5 * 1024 * 1024)).toBe("2.5 MB");
+  });
+});
+
+describe("openFeedbackWidget", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function stubWindow() {
+    const target = new EventTarget();
+    const win = Object.assign(target, { CustomEvent }) as unknown as Window;
+    vi.stubGlobal("window", win);
+    return win;
+  }
+
+  it("asks a widget that is listening, and leaves the request for one that is not yet", () => {
+    const win = stubWindow();
+    const heard: Event[] = [];
+    win.addEventListener(OPEN_FEEDBACK_EVENT, (event) => heard.push(event));
+
+    openFeedbackWidget();
+    expect(heard).toHaveLength(1);
+    // A widget that hydrates later still finds the request, once.
+    expect(takeFeedbackRequest()).toBe(true);
+    expect(takeFeedbackRequest()).toBe(false);
+  });
+
+  it("reports no request when nobody asked", () => {
+    stubWindow();
+    expect(takeFeedbackRequest()).toBe(false);
   });
 });
