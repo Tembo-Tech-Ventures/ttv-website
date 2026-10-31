@@ -15,6 +15,10 @@ const adminToken = process.env.PLAYWRIGHT_AGENT_TOKEN;
 // Bearer headers must never be retained in Playwright request traces.
 test.use({ trace: "off" });
 
+// The widget is on every page. Start on one no flag redirects: the guard
+// aborts every 3xx, and /dashboard selects a space when spaces is ON.
+const START_PAGE = "/dashboard/feedback";
+
 async function contextFor(browser: Browser, token: string, baseURL: string | undefined) {
   if (!baseURL) throw new Error("Feedback verification requires an explicit base URL.");
   const context = await browser.newContext({
@@ -47,8 +51,8 @@ test.describe("student feedback loop", () => {
     // ── Student sends feedback with a captured, marked-up screenshot ──
     const student = await contextFor(browser, studentToken!, baseURL);
     const page = await student.newPage();
-    await page.goto("/dashboard");
-    await page.getByRole("button", { name: "Feedback" }).click();
+    await page.goto(START_PAGE);
+    await page.getByRole("button", { name: "Feedback", exact: true }).click();
     const panel = page.getByTestId("feedback-panel");
     await expect(panel).toBeVisible();
 
@@ -121,8 +125,8 @@ test.describe("student feedback loop", () => {
 
     const student = await contextFor(browser, studentToken!, baseURL);
     const page = await student.newPage();
-    await page.goto("/dashboard");
-    await page.getByRole("button", { name: "Feedback" }).click();
+    await page.goto(START_PAGE);
+    await page.getByRole("button", { name: "Feedback", exact: true }).click();
     const panel = page.getByTestId("feedback-panel");
     await panel.getByText("Idea").click();
     await panel.getByLabel("Your feedback").fill(note);

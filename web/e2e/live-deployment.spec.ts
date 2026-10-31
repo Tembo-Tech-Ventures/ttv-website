@@ -59,7 +59,7 @@ test.describe("authenticated delivery agent", () => {
 
   test("can inspect authenticated and admin surfaces", async ({ page }) => {
     await page.goto("/dashboard");
-    await expect(page).toHaveURL(/\/dashboard\/?$/);
+    await expect(page).toHaveURL(/\/dashboard(?:\/cohort)?\/?$/);
 
     await page.goto("/admin");
     await expect(page).toHaveURL(/\/admin\/?$/);

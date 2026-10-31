@@ -12,6 +12,7 @@ import { isHealthCheckPath } from "@/lib/health";
 import { enforceAdminMutationOrigin } from "@/lib/admin/mutation-security";
 import { userHasAdminRole } from "@/lib/admin/roles";
 import { platformFlagsAdminDenial } from "@/lib/platform/server/http";
+import { routeSpaceRequest } from "@/lib/platform/server/space-routing";
 import {
   collapseRoutePattern,
   recordErrorInBackground,
@@ -172,7 +173,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         locals.user=auth.user;locals.session=auth.session;locals.personalAccessToken=null;locals.stagingQa=auth.qa;
         locals.stagingDemo=null;locals.stagingFixture=null;
         if(url.pathname==='/api/qa/logout') return await logoutQa(env,request,auth.qa);
-        const response=await next();response.headers.set('Cache-Control','no-store');response.headers.set('Vary','Cookie');
+        const response=await routeSpaceRequest(context, next);response.headers.set('Cache-Control','no-store');response.headers.set('Vary','Cookie');
         return response;
       } catch {
         return platformFlagsAdminDenial(
@@ -214,7 +215,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
       if (guardResponse) return platformFlagsAdminDenial(guardResponse, url.pathname);
     }
 
-    const response = await next();
+    const response = await routeSpaceRequest(context, next);
     if (response.status === 500) {
       recordErrorInBackground(locals.cfContext, env.DB, {
         source: "request",

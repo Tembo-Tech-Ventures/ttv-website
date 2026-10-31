@@ -1,20 +1,13 @@
 import type { SpaceId } from "@/lib/platform/contracts";
+import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
 
 /**
  * Where each space starts, and the account destinations in the avatar menu.
  *
- * The paths are the canonical ones from PLAN.md §4 ("Proposed routes"). Route
- * moves and redirects belong to B-1.2; this map is the one place the shell
- * reads them from, so switching it to B-1.2's helper is a one-line change.
+ * Space homes are B-1.2's canonical SPACE_PATHS, the routes the server
+ * redirects and guards. That module is a pure path map, safe in islands.
  */
-export const SPACE_HOME: Readonly<Record<SpaceId, string>> = {
-  cohort: "/dashboard/cohort",
-  community: "/dashboard/community",
-  mentoring: "/dashboard/mentoring",
-  discover: "/dashboard/discover",
-  admin: "/admin",
-  profile: "/dashboard/me",
-};
+export const SPACE_HOME: Readonly<Record<SpaceId, string>> = SPACE_PATHS;
 
 export const SPACE_LABEL: Readonly<Record<SpaceId, string>> = {
   cohort: "Cohort",

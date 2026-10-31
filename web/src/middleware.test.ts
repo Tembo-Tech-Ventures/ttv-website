@@ -27,6 +27,11 @@ vi.mock("cloudflare:workers", () => ({
   },
 }));
 vi.mock("@/lib/auth", () => ({ createAuth: mocks.createAuth }));
+// These legacy middleware cases run with spaces OFF. The real flag/capability
+// integration is exercised in platform/server/space-routing.middleware.test.ts.
+vi.mock("@/lib/platform/server/space-context", () => ({
+  getSpaceContext: async () => { throw new Response("Not found.", { status: 404 }); },
+}));
 vi.mock("@/lib/staging-qa-access", async importOriginal => ({...(await importOriginal<typeof import("@/lib/staging-qa-access")>()),authenticateQaCookie:mocks.authenticateQaCookie,logoutQa:mocks.logoutQa}));
 vi.mock("@/lib/observability/errors", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/observability/errors")>()),

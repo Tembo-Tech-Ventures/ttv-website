@@ -42,8 +42,8 @@ if (!canRenderSpace(me, "community")) return new Response(null, { status: 404 })
   the account menu is a native `details` disclosure (Account and Sign out work;
   Feedback appears once hydrated). On hydration the shell adopts an open
   fragment as drawer state and drops it, so every way of closing works.
-- Tabs link to `SPACE_HOME` in `space-routes.ts`, the paths B-1.2 serves. When
-  B-1.2's `SPACE_PATHS` lands, import it there.
+- Tabs link to `SPACE_HOME` in `space-routes.ts`, which is B-1.2's canonical
+  `SPACE_PATHS` (`@/lib/platform/server/space-routes`, a pure path map).
 
 ## Overlay triggers (U-1.3)
 

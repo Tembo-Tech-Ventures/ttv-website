@@ -17,7 +17,7 @@ test.describe("authenticated portfolio editor", () => {
     page,
   }, testInfo) => {
     await page.goto("/dashboard/portfolio");
-    await expect(page).toHaveURL(/\/dashboard\/portfolio/);
+    await expect(page).toHaveURL(/\/dashboard\/(?:me\/)?portfolio/);
 
     await expect(
       page.getByRole("heading", { name: /portfolio/i }),
@@ -186,7 +186,7 @@ test.describe("authenticated portfolio editor", () => {
 
   test("leads page renders", async ({ page }, testInfo) => {
     await page.goto("/dashboard/leads");
-    await expect(page).toHaveURL(/\/dashboard\/leads/);
+    await expect(page).toHaveURL(/\/dashboard\/(?:me\/)?leads/);
 
     await expect(
       page.getByRole("heading", { name: "Leads", exact: true }),
