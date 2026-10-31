@@ -87,8 +87,8 @@ test.describe("preview mentor persona in a browser", () => {
       const environmentName = process.env.EXPECTED_DEPLOYMENT_ENVIRONMENT!;
       await signIn(context, baseURL!, { key: "mentor", token: token!, secret: deriveAgentPreviewAuthSecret(previewSecret!, environmentName) });
       // The cookie session itself is valid, so the refusal below is not an auth failure.
-      expect((await context.request.get("/api/platform/me", { maxRedirects: 0 })).status()).toBe(200);
-      const review = await context.request.get("/api/community/mentorship", { maxRedirects: 0 });
+      expect((await spaceRouteRequest(context.request, baseURL!, "/api/platform/me")).status()).toBe(200);
+      const review = await spaceRouteRequest(context.request, baseURL!, "/api/community/mentorship");
       expect(review.status()).toBe(403);
       expect(await review.json()).toEqual({ error: "Use a browser session to manage access or review mentorship." });
     } finally {
