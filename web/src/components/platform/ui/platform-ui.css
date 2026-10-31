@@ -46,8 +46,21 @@
  *   lit edge rather than sitting on it.
  * - Stacking is local to `.space-file` (`isolation`): inactive tabs paint
  *   under the sheet, the active tab and its fillets over it.
- * - The row is inset by the sheet's corner radius plus a fillet, so a fillet
- *   always lands on the flat edge, never on the curve of the corner.
+ * - The tabs are inset by the sheet's corner radius (the row's padding) plus a
+ *   fillet (the strip's padding), so a fillet always lands on the flat edge,
+ *   never on the curve of the corner.
+ *
+ * And nothing in the row may ever cover anything else, at any width, with any
+ * number of spaces:
+ *
+ * - The row wraps in reverse. The tab strip comes first, so it keeps the bottom
+ *   line on the sheet; the moment the tools do not fit beside it at the strip's
+ *   natural width, they move to a line of their own above. No breakpoint to
+ *   guess: flexbox breaks lines on the strip's unshrunk width.
+ * - Narrower still, inactive tabs shrink to their marker (thresholds below,
+ *   sized from measured tabs carrying counts).
+ * - Last, the strip itself scrolls sideways inside its own bounds rather than
+ *   spill past the sheet, and starts scrolled to the active tab.
  */
 .space-file {
   --fillet: 0.875rem;
@@ -64,21 +77,28 @@
 .space-file__row {
   --sheet-radius: 1.75rem;
   display: flex;
-  align-items: flex-end;
-  gap: 1rem;
+  flex-wrap: wrap-reverse;
+  /* In a reversed wrap the cross start is the bottom: tabs stand on the sheet. */
+  align-items: flex-start;
+  gap: 0.5rem 1rem;
   margin-bottom: calc(-1 * var(--tuck));
-  padding-inline: calc(var(--sheet-radius) + var(--fillet));
+  padding-inline: var(--sheet-radius);
 }
 
-.space-file__start,
+.space-file__nav {
+  min-width: 0;
+  padding-inline: var(--fillet);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
 .space-file__end {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-shrink: 0;
   align-self: center;
-}
-
-.space-file__end {
   margin-inline-start: auto;
 }
 
@@ -86,7 +106,7 @@
   display: flex;
   align-items: flex-end;
   gap: 0.375rem;
-  min-width: 0;
+  width: max-content;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -96,6 +116,12 @@
   position: relative;
   z-index: 0;
   display: flex;
+}
+
+/* Where the strip has to scroll, it opens on the space you are in. */
+.space-tab[data-active] {
+  z-index: 2;
+  scroll-initial-target: nearest;
 }
 
 .space-tab__link {
@@ -127,10 +153,6 @@
 .space-tab__link:focus-visible {
   outline: 2px solid var(--color-peach-ink);
   outline-offset: -4px;
-}
-
-.space-tab[data-active] {
-  z-index: 2;
 }
 
 .space-tab[data-active] .space-tab__link {
@@ -182,26 +204,101 @@
 }
 
 /*
- * Narrow rows keep every space one tap away by letting inactive tabs shrink to
- * their marker. The label stays in the accessibility tree; only the active
- * tab, which names where you are, keeps its word on screen.
+ * Inactive tabs shrink to their marker once a row of full tabs, each carrying
+ * a count, would no longer fit. The thresholds are the measured widths of the
+ * longest labels with counts (130 to 168px a tab), plus gaps and insets, with a
+ * little room to spare; e2e/platform-ui.spec.ts sweeps them. The label stays in the accessibility tree; only the
+ * active tab, which names where you are, keeps its word on screen.
  */
+@container (max-width: 27rem) {
+  .space-file[data-tabs="2"] .space-tab:not([data-active]) .space-tab__link {
+    justify-content: center;
+    min-width: 2.75rem;
+    padding-inline: 0.625rem;
+  }
+
+  .space-file[data-tabs="2"] .space-tab:not([data-active]) .space-tab__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@container (max-width: 36rem) {
+  .space-file[data-tabs="3"] .space-tab:not([data-active]) .space-tab__link {
+    justify-content: center;
+    min-width: 2.75rem;
+    padding-inline: 0.625rem;
+  }
+
+  .space-file[data-tabs="3"] .space-tab:not([data-active]) .space-tab__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@container (max-width: 45rem) {
+  .space-file[data-tabs="4"] .space-tab:not([data-active]) .space-tab__link {
+    justify-content: center;
+    min-width: 2.75rem;
+    padding-inline: 0.625rem;
+  }
+
+  .space-file[data-tabs="4"] .space-tab:not([data-active]) .space-tab__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@container (max-width: 54rem) {
+  .space-file[data-tabs="5"] .space-tab:not([data-active]) .space-tab__link {
+    justify-content: center;
+    min-width: 2.75rem;
+    padding-inline: 0.625rem;
+  }
+
+  .space-file[data-tabs="5"] .space-tab:not([data-active]) .space-tab__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@container (max-width: 62rem) {
+  .space-file[data-tabs="6"] .space-tab:not([data-active]) .space-tab__link {
+    justify-content: center;
+    min-width: 2.75rem;
+    padding-inline: 0.625rem;
+  }
+
+  .space-file[data-tabs="6"] .space-tab:not([data-active]) .space-tab__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
 @container (max-width: 34rem) {
   .space-file__row {
     --sheet-radius: 1.25rem;
     --fillet: 0.625rem;
-    flex-wrap: wrap;
-    gap: 0.75rem 0.5rem;
-  }
-
-  /* The tabs get the whole width; anything else in the row moves above them. */
-  .space-file__start,
-  .space-file__end {
-    order: -1;
-  }
-
-  .space-file__nav {
-    flex-basis: 100%;
   }
 
   .space-file > .platform-sheet {
@@ -214,21 +311,6 @@
 
   .space-tab__link {
     padding-inline: 0.75rem;
-  }
-
-  .space-tab:not([data-active]) .space-tab__link {
-    justify-content: center;
-    min-width: 2.75rem;
-    padding-inline: 0.625rem;
-  }
-
-  .space-tab:not([data-active]) .space-tab__label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
   }
 }
 

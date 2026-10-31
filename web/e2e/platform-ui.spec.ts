@@ -13,7 +13,8 @@ import { expect, test, type Page, type TestInfo } from "@playwright/test";
  */
 const HARNESS = "/dev/platform-ui";
 const EVIDENCE_DIR = "test-results/evidence/platform-ui";
-const PERSONAS = ["student", "mentor", "staff"] as const;
+const PERSONAS = ["student", "mentor", "staff", "every"] as const;
+const SWEEP = [320, 390, 600, 640, 768, 820, 1024, 1440];
 
 /*
  * axe-core without a dependency: one pinned release, fetched and checked
@@ -58,6 +59,7 @@ test.describe("the primitives harness", () => {
       student: { tabs: ["Cohort", "Community", "Profile"], active: "Cohort" },
       mentor: { tabs: ["Community", "Mentoring", "Profile"], active: "Mentoring" },
       staff: { tabs: ["Cohort", "Community", "Mentoring", "Admin", "Profile"], active: "Admin" },
+      every: { tabs: ["Cohort", "Community", "Mentoring", "Discover", "Admin", "Profile"], active: "Discover" },
     };
     for (const persona of PERSONAS) {
       const nav = page.locator(`[data-persona=${persona}]`).getByRole("navigation", { name: "Spaces" });
@@ -139,10 +141,18 @@ test.describe("the primitives harness", () => {
             clipped: label.getBoundingClientRect().width > 1 && label.scrollWidth > label.clientWidth + 0.5,
           };
         });
-        return { sheet: { top: sheet.top, left: sheet.left, right: sheet.right }, radius, fillet, tabs };
+        const strip = root.querySelector(".space-file__nav")!;
+        const nav = rect(strip);
+        return {
+          sheet: { top: sheet.top, left: sheet.left, right: sheet.right },
+          nav: { left: nav.left, right: nav.right, scrolls: strip.scrollWidth > strip.clientWidth + 1 },
+          radius,
+          fillet,
+          tabs,
+        };
       });
 
-      const { sheet, radius, fillet, tabs } = geometry;
+      const { sheet, nav, radius, fillet, tabs } = geometry;
       const active = tabs.find((tab) => tab.active)!;
       // Sunk into the sheet by a hair, never floating above it or lost in it.
       for (const tab of tabs) {
@@ -151,9 +161,80 @@ test.describe("the primitives harness", () => {
         expect(tab.clipped, `${persona}: a tab label is clipped`).toBe(false);
         if (!tab.active) expect(active.top, `${persona}: active tab is raised`).toBeLessThan(tab.top);
       }
-      // Fillets land on the flat edge, clear of the sheet's rounded corners.
-      expect(tabs[0].left - fillet).toBeGreaterThanOrEqual(sheet.left + radius - 0.5);
-      expect(tabs.at(-1)!.right + fillet).toBeLessThanOrEqual(sheet.right - radius + 0.5);
+      // Fillets land on the flat edge, clear of the sheet's rounded corners:
+      // the strip stays inside the corners and the active tab's fillets inside
+      // the strip. A strip that does not scroll also shows its first and last
+      // tabs whole.
+      expect(nav.left, persona).toBeGreaterThanOrEqual(sheet.left + radius - 0.5);
+      expect(nav.right, persona).toBeLessThanOrEqual(sheet.right - radius + 0.5);
+      expect(active.left - fillet, persona).toBeGreaterThanOrEqual(nav.left - 0.5);
+      expect(active.right + fillet, persona).toBeLessThanOrEqual(nav.right + 0.5);
+      if (!nav.scrolls) {
+        expect(tabs[0].left - fillet, persona).toBeGreaterThanOrEqual(sheet.left + radius - 0.5);
+        expect(tabs.at(-1)!.right + fillet, persona).toBeLessThanOrEqual(sheet.right - radius + 0.5);
+      }
+    }
+  });
+
+  test("keeps every tab and tool contained and clickable at every width", async ({ page }, testInfo) => {
+    test.skip(isMobile(testInfo), "The sweep sets its own viewport sizes.");
+    for (const width of SWEEP) {
+      await page.setViewportSize({ width, height: 900 });
+      await open(page);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${width}px scrolls sideways`).toBe(true);
+
+      for (const persona of PERSONAS) {
+        const file = page.locator(`[data-persona=${persona}] .space-file`);
+        await file.scrollIntoViewIfNeeded();
+        const problems = await file.evaluate((root) => {
+          const found: string[] = [];
+          const nav = root.querySelector(".space-file__nav")!.getBoundingClientRect();
+          const sheet = root.querySelector(".platform-sheet")!.getBoundingClientRect();
+          const owns = (element: Element, x: number, y: number) => element.contains(document.elementFromPoint(x, y));
+
+          if (nav.left < sheet.left - 0.5 || nav.right > sheet.right + 0.5) found.push("tab strip runs past the sheet");
+
+          for (const tab of Array.from(root.querySelectorAll(".space-tab"))) {
+            const link = tab.querySelector(".space-tab__link")!;
+            const box = link.getBoundingClientRect();
+            const name = link.textContent!.trim();
+            if (tab.hasAttribute("data-active")) {
+              if (box.left < nav.left - 0.5 || box.right > nav.right + 0.5) found.push(`active tab "${name}" is scrolled out of view`);
+              if (tab.querySelector(".space-tab__label")!.getBoundingClientRect().width < 2) found.push("active tab lost its label");
+            }
+            // Only the part of a tab the strip shows can be pressed; that part must be the tab's.
+            const left = Math.max(box.left, nav.left);
+            const right = Math.min(box.right, nav.right);
+            if (right - left < 12) continue;
+            const y = (box.top + Math.min(box.bottom, sheet.top)) / 2;
+            if (!owns(link, (left + right) / 2, y)) found.push(`tab "${name}" does not own its own centre`);
+          }
+
+          for (const control of Array.from(root.querySelectorAll(".space-file__end button"))) {
+            const box = control.getBoundingClientRect();
+            if (!owns(control, box.left + box.width / 2, box.top + box.height / 2)) found.push(`"${control.getAttribute("aria-label")}" is covered`);
+            const overlapsStrip = box.left < nav.right && box.right > nav.left && box.top < nav.bottom && box.bottom > nav.top;
+            if (overlapsStrip) found.push(`"${control.getAttribute("aria-label")}" overlaps the tabs`);
+            if (box.right > sheet.right + 0.5 || box.left < sheet.left - 0.5) found.push(`"${control.getAttribute("aria-label")}" is outside the sheet's width`);
+          }
+          return found;
+        });
+        expect(problems, `${persona} at ${width}px`).toEqual([]);
+      }
+
+      // Real people's rows fit outright from phone width up; only the
+      // every-space stress case may fall back to a scrolling strip.
+      if (width >= 390) {
+        const scrolling = await page.evaluate(() =>
+          Array.from(document.querySelectorAll("[data-persona]:not([data-persona=every]) .space-file__nav"))
+            .filter((nav) => nav.scrollWidth > nav.clientWidth + 1)
+            .map((nav) => nav.closest("[data-persona]")!.getAttribute("data-persona")),
+        );
+        expect(scrolling, `${width}px`).toEqual([]);
+      }
+      if (width >= 820) {
+        expect(await page.locator("[data-persona=every] .space-file__nav").evaluate((nav) => nav.scrollWidth <= nav.clientWidth + 1)).toBe(true);
+      }
     }
   });
 

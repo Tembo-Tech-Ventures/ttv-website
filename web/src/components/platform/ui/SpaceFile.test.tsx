@@ -92,15 +92,19 @@ describe("SpaceFile", () => {
     expect(html).toMatch(/data-space="profile"[^]*data-avatar="fixture-amina-hassan"[^]*aria-hidden="true"/);
   });
 
-  it("puts start and end content in the row only when given", () => {
-    expect(render()).not.toContain("space-file__start");
+  it("puts end content in the row only when given", () => {
+    expect(render()).not.toContain("space-file__end");
     const html = renderToStaticMarkup(
-      <SpaceFile tabs={STAFF} active="admin" person={PERSON} start={<b>brand</b>} end={<b>tools</b>}>
+      <SpaceFile tabs={STAFF} active="admin" person={PERSON} end={<b>tools</b>}>
         x
       </SpaceFile>,
     );
-    expect(html).toContain('<div class="space-file__start"><b>brand</b></div>');
     expect(html).toContain('<div class="space-file__end"><b>tools</b></div>');
+  });
+
+  it("tells the stylesheet how many tabs it holds, which sets when labels fold", () => {
+    expect(render()).toContain('data-tabs="5"');
+    expect(render("cohort", STAFF.slice(0, 2))).toContain('data-tabs="2"');
   });
 });
 

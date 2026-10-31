@@ -215,10 +215,34 @@ function Staff() {
   );
 }
 
+/*
+ * Not a real person's view: nobody holds every role today. It is the widest
+ * row the primitives must survive, with something waiting in every space.
+ */
+function EverySpace() {
+  const tabs: SpaceTabItem[] = [
+    { space: "cohort", label: "Cohort", href: "#every-cohort", count: 12 },
+    { space: "community", label: "Community", href: "#every-community", count: 8 },
+    { space: "mentoring", label: "Mentoring", href: "#every-mentoring", count: 3 },
+    { space: "discover", label: "Discover", href: "#every-discover", count: 5 },
+    { space: "admin", label: "Admin", href: "#every-admin", count: 120 },
+    { space: "profile", label: "Profile", href: "#every-profile", count: 1 },
+  ];
+  return (
+    <SpaceFile tabs={tabs} active="discover" person={PEOPLE.joseph} end={<Tools attention={9} />}>
+      <SheetHeader title="Discover" sub="All six spaces, each with something new." />
+      <p className="px-5 py-6 text-[0.9375rem] text-ink-secondary sm:px-7">
+        The row keeps every tab on the sheet and every control clear of the others at any width.
+      </p>
+    </SpaceFile>
+  );
+}
+
 const PERSONAS = [
   { key: "student", who: PEOPLE.wanjiku, role: "Student, Cohort 04", Body: Student },
   { key: "mentor", who: PEOPLE.david, role: "Mentor", Body: Mentor },
   { key: "staff", who: PEOPLE.amina, role: "Staff", Body: Staff },
+  { key: "every", who: PEOPLE.joseph, role: "Stress case: every space open", Body: EverySpace },
 ] as const;
 
 export default function Personas() {

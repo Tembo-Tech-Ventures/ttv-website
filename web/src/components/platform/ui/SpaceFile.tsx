@@ -24,9 +24,10 @@ type SpaceFileProps = {
   active: Space;
   /** Who is signed in. The Profile tab wears their avatar. */
   person: Person;
-  /** Leading content in the tab row, such as the brand. */
-  start?: ReactNode;
-  /** Trailing content in the tab row, such as search and attention. */
+  /**
+   * Trailing content in the tab row, such as search and attention. It sits
+   * beside the tabs while they fit and moves above them when they do not.
+   */
   end?: ReactNode;
   /** The nav's accessible name. */
   label?: string;
@@ -89,7 +90,6 @@ export default function SpaceFile({
   tabs,
   active,
   person,
-  start,
   end,
   label = "Spaces",
   children,
@@ -99,10 +99,9 @@ export default function SpaceFile({
   const ordered = tabs.toSorted((a, b) => (ORDER.get(a.space) ?? 0) - (ORDER.get(b.space) ?? 0));
 
   return (
-    <div className={cx("space-file", className)} data-space-file={active}>
+    <div className={cx("space-file", className)} data-space-file={active} data-tabs={ordered.length}>
       <div className="space-file__row">
-        {start && <div className="space-file__start">{start}</div>}
-        <nav aria-label={label} className="space-file__nav min-w-0">
+        <nav aria-label={label} className="space-file__nav">
           <ul className="space-file__tabs">
             {ordered.map((tab) => (
               <SpaceTab key={tab.space} tab={tab} active={tab.space === active} person={person} />
