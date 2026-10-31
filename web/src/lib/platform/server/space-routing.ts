@@ -40,9 +40,11 @@ async function serveSpacePage(context: APIContext, next: MiddlewareNext, me: Me,
   const target = canonical ?? path;
   if (!isAvailableSpacePath(target)) return denial(404);
   const space = spaceForPath(target);
-  // Applying is an existing signed-in entry point, including before membership.
-  const applying = target === "/dashboard/cohort/apply";
-  if (!space || (!me.spaces.includes(space) && !applying)) return denial(403);
+  // These existing signed-in pages do not grant cohort or recording access.
+  const signedInEntry = target === "/dashboard/cohort/apply" || target === "/dashboard/cohort/ask";
+  // Admin review is an existing page permission, not mentoring membership.
+  const adminReview = space === "mentoring" && me.capabilities.isAdmin;
+  if (!space || (!me.spaces.includes(space) && !signedInEntry && !adminReview)) return denial(403);
 
   const read = request.method === "GET" || request.method === "HEAD";
   if (canonical && read) return privateResponse(context.redirect(canonical + url.search, 301));
@@ -64,6 +66,10 @@ async function serveSpacePage(context: APIContext, next: MiddlewareNext, me: Me,
 /** Boundary checks must precede this helper, including in the QA authentication branch. */
 export async function routeSpaceRequest(context: APIContext, next: MiddlewareNext): Promise<Response> {
   const { request, url } = context;
+  // The middleware already verified this bounded PAT probe and its allowlist.
+  // Me deliberately rejects PATs; the existing discovery page keeps its own auth.
+  if (context.locals.personalAccessToken && context.locals.stagingFixture?.retainedReadProbe
+      && request.method === "GET" && url.pathname === SPACE_PATHS.discover) return next();
   const path = normalizeSpacePath(url.pathname);
   const canonical = canonicalSpacePath(path);
   const newPath = isNewSpacePath(path);
@@ -80,7 +86,11 @@ export async function routeSpaceRequest(context: APIContext, next: MiddlewareNex
       if (error.status === 404) return newPath ? denial(404) : next();
       return privateResponse(error);
     }
-    // Database failures propagate to the existing middleware error observer.
+    // Optional space context must not make a shipped URL less available.
+    // Earlier auth/delegation/fixture boundaries already ran; the unchanged
+    // legacy page still enforces its own data access. Never rewrite on failure.
+    if (!newPath) return next();
+    // New canonical routes fail closed through the middleware error observer.
     throw error;
   }
 

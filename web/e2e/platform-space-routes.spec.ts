@@ -21,11 +21,11 @@ test.describe("space routes without JavaScript", () => {
       return;
     }
     expect(meResponse.status()).toBe(200);
-    const me = await meResponse.json() as { spaces: string[] };
+    const me = await meResponse.json() as { spaces: string[]; capabilities: { isAdmin: boolean } };
     const redirects = [
       ["apply", "cohort/apply", "profile"],
       ["sessions", "cohort/sessions", "cohort"],
-      ["ask", "cohort/ask", "cohort"],
+      ["ask", "cohort/ask", "profile"],
       ["mentorship", "mentoring/confirm", "mentoring"],
       ["portfolio", "me/portfolio", "profile"],
       ["writing", "me/writing", "profile"],
@@ -35,7 +35,8 @@ test.describe("space routes without JavaScript", () => {
     ];
     for (const [legacy, canonical, space] of redirects) {
       const response = await spaceRouteRequest(request, baseURL!, `/dashboard/${legacy}?route-check=1`);
-      if (!me.spaces.includes(space!)) {
+      const adminReview = space === "mentoring" && me.capabilities.isAdmin;
+      if (!me.spaces.includes(space!) && !adminReview) {
         expect(response.status()).toBe(403);
         continue;
       }

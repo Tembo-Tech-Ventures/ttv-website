@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { APIContext } from "astro";
 import { readMigration } from "@/test/sqlite-d1";
 import { DEMO_PERSONAS } from "@/lib/staging-demo-policy";
+import { createPersonalAccessToken } from "@/lib/personal-access-tokens";
 import { createCapabilityDatabase } from "./capabilities.test-support";
 
 const mocks = vi.hoisted(() => ({
@@ -25,17 +26,17 @@ beforeEach(() => {
   fixture = createCapabilityDatabase({ globalRoles: ["MENTOR", "INSTITUTION"], assignments: [{ programId: "cohort-a", name: "MENTOR" }] });
   for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql"]) fixture.database.exec(readMigration(migration));
   fixture.database.exec("UPDATE feature_flag SET audience='ALL' WHERE key='spaces'");
-  Object.assign(mocks.env, { DB: fixture.db.$client, DEPLOYMENT_ENVIRONMENT: "production" });
+  Object.assign(mocks.env, { DB: fixture.db.$client, DEPLOYMENT_ENVIRONMENT: "production", PLATFORM_FLAGS_OVERRIDE: undefined, STAGING_RETAINED_READ_PROBE_ENABLED: undefined });
   mocks.getSession.mockResolvedValue(auth);
   mocks.hasQaCookie.mockReturnValue(false);
   mocks.validateDemoSession.mockResolvedValue(null);
   mocks.resolveStagingFixtureIdentity.mockResolvedValue(null);
 });
-afterEach(() => { fixture.database.close(); vi.restoreAllMocks(); });
+afterEach(() => { fixture.database.close(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
-async function request(path: string, cookie = "") {
+async function request(path: string, cookie = "", authorization = "", method = "GET") {
   const url = new URL(path, "https://example.test");
-  const ctx = { url, request: new Request(url, { headers: { cookie } }), locals: {},
+  const ctx = { url, request: new Request(url, { method, headers: { cookie, authorization } }), locals: {},
     redirect: (location: string, status = 302) => new Response(null, { status, headers: { location } }),
   } as APIContext;
   const next = vi.fn(async (_rewrite?: unknown) => new Response("Existing page"));
@@ -85,8 +86,33 @@ describe("space routes through authentication middleware", () => {
 
   it("observes database failure without serving or redirecting the page", async () => {
     fixture.database.exec("DROP TABLE programRole");
-    await expect(request("/dashboard/profile")).rejects.toThrow(/no such table|Failed query/);
+    await expect(request("/dashboard/account")).rejects.toThrow(/no such table|Failed query/);
     expect(mocks.recordErrorInBackground).toHaveBeenCalledOnce();
+  });
+
+  it("legacy fallback on flag DB failure preserves earlier auth and demo restrictions", async () => {
+    fixture.database.exec("UPDATE feature_flag SET audience='OFF'; DROP TABLE feature_flag");
+    const legacy = await request("/dashboard/profile");
+    expect(legacy.response.status).toBe(200);
+    expect(legacy.next).toHaveBeenCalledExactlyOnceWith();
+    await expect(request("/dashboard/account")).rejects.toThrow(/no such table|Failed query/);
+    mocks.getSession.mockResolvedValue(null);
+    expect((await request("/dashboard/ask")).response.status).toBe(302);
+    mocks.getSession.mockResolvedValue(auth);
+    mocks.validateDemoSession.mockResolvedValue({ persona: "mentor", expiresAt: 123 });
+    expect((await request("/dashboard/profile")).response.status).toBe(403);
+    expect((await request("/dashboard/account")).response.status).toBe(403);
+  });
+
+  it("legacy flag DB fallback cannot bypass community PAT delegation", async () => {
+    fixture.database.exec(readMigration("0008_curvy_purifiers.sql"));
+    const credential = await createPersonalAccessToken({ db: fixture.db.$client, userId: user.id, label: "Synthetic community", durationHours: 8, scopes: ["community:read"] });
+    fixture.database.exec("DROP TABLE feature_flag");
+    for (const path of ["/dashboard/ask", "/dashboard/profile", "/dashboard/cohort/ask", "/dashboard/account"]) {
+      const { response, next } = await request(path, "", `Bearer ${credential.token}`);
+      expect(response.status).toBe(403);
+      expect(next).not.toHaveBeenCalled();
+    }
   });
 
   it.each(["mentor", "institution", "member-noncohort"] as const)("applies space guards in the separate QA branch: %s", async persona => {
@@ -125,9 +151,33 @@ describe("space routes through authentication middleware", () => {
   });
 
   it("retained probes remain restricted to discovery", async () => {
-    mocks.resolveStagingFixtureIdentity.mockResolvedValue({ retainedReadProbe: true });
-    expect((await request("/dashboard/discover")).response.status).toBe(200);
-    expect((await request("/dashboard/mentoring")).response.status).toBe(403);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-25T09:30:00Z"));
+    const { resolveStagingFixtureIdentity, retainedProbeMarker } = await vi.importActual<typeof import("@/lib/staging-fixtures")>("@/lib/staging-fixtures");
+    mocks.resolveStagingFixtureIdentity.mockImplementation(resolveStagingFixtureIdentity);
+    Object.assign(mocks.env, { DEPLOYMENT_ENVIRONMENT: "staging", PLATFORM_FLAGS_OVERRIDE: "all", STAGING_RETAINED_READ_PROBE_ENABLED: "true" });
+    for (const migration of ["0008_curvy_purifiers.sql", "0019_staging_fixture_identity.sql"]) fixture.database.exec(readMigration(migration));
+    const runId = "a".repeat(24), userId = `ttv-staging-fixture-${runId}-institution`;
+    const sessionId = `${userId}-retained-read-probe-session`, now = Math.floor(Date.now() / 1000);
+    fixture.database.prepare("INSERT INTO user (id,name,email) VALUES (?,?,?)").run(userId, "Synthetic institution", `${userId}@invalid.ttv`);
+    fixture.database.prepare("INSERT INTO UserRoles (id,userId,roleId) VALUES (?,?,?)").run("probe-role", userId, "INSTITUTION");
+    fixture.database.prepare("INSERT INTO session (id,userId,token,userAgent,createdAt,expiresAt) VALUES (?,?,?,?,?,?)")
+      .run(sessionId, userId, "synthetic-source-session", retainedProbeMarker(runId), now - 10, now + 800);
+    fixture.database.prepare("INSERT INTO stagingFixtureIdentity (userId,sessionId,runId,persona,expiresAt) VALUES (?,?,?,?,?)")
+      .run(userId, sessionId, runId, "institution", now + 800);
+    const credential = await createPersonalAccessToken({ db: fixture.db.$client, userId, label: "Synthetic probe", durationHours: 8, scopes: ["community:read", "institution:read"] });
+    for (const [method, path, status] of [["GET", "/dashboard/discover", 200], ["POST", "/dashboard/discover", 403], ["GET", "/dashboard/community", 403], ["GET", "/dashboard/mentoring", 403], ["GET", "/dashboard/me", 403]] as const) {
+      const { response, next, ctx } = await request(path, "", `Bearer ${credential.token}`, method);
+      expect(response.status).toBe(status);
+      expect(next.mock.calls.length).toBe(status === 200 ? 1 : 0);
+      if (status === 200) {
+        expect(ctx.locals.personalAccessToken?.scopes).toEqual(["community:read", "institution:read"]);
+        expect(ctx.locals.stagingFixture?.retainedReadProbe).toBe(true);
+      }
+    }
+    expect(mocks.getSession).not.toHaveBeenCalled();
+    vi.setSystemTime(new Date("2026-10-25T11:10:35Z"));
+    expect((await request("/dashboard/discover", "", `Bearer ${credential.token}`)).response.status).toBe(403);
   });
 
   it("demo-derived capabilities do not gain real cohort scope from global roles", async () => {

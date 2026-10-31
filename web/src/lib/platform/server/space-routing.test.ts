@@ -91,8 +91,20 @@ describe("server routing with actual flags, capabilities and context", () => {
     for (const space of ["cohort", "community", "mentoring", "discover", "profile"] as const) {
       const { ctx, next } = context(SPACE_PATHS[space]);
       const response = await routeSpaceRequest(ctx, next);
-      expect(response.status).toBe(item.expected.spaces.includes(space) ? 200 : 403);
-      expect(next.mock.calls.length).toBe(item.expected.spaces.includes(space) ? 1 : 0);
+      const allowed = item.expected.spaces.includes(space) || (space === "mentoring" && item.expected.isAdmin);
+      expect(response.status).toBe(allowed ? 200 : 403);
+      expect(next.mock.calls.length).toBe(allowed ? 1 : 0);
+    }
+  });
+
+  it("preserves admin mentor review without granting mentoring membership or a preference cookie", async () => {
+    setup({ globalRoles: ["ADMIN"] });
+    for (const [path, status] of [["/dashboard/mentorship", 301], ["/dashboard/mentoring", 200], ["/dashboard/mentoring/confirm", 200]] as const) {
+      const { ctx, next } = context(path);
+      const response = await routeSpaceRequest(ctx, next);
+      expect(response.status).toBe(status);
+      expect(response.headers.has("Set-Cookie")).toBe(false);
+      expect((await getSpaceContext(ctx)).spaces).not.toContain("mentoring");
     }
   });
 
@@ -101,6 +113,19 @@ describe("server routing with actual flags, capabilities and context", () => {
     for (const [path, status] of [["/dashboard/apply", 301], ["/dashboard/cohort/apply", 200], ["/dashboard/cohort", 403], ["/dashboard/sessions", 403]] as const) {
       const { ctx, next } = context(path);
       expect((await routeSpaceRequest(ctx, next)).status).toBe(status);
+    }
+  });
+
+  it.each([[], ["INSTITUTION"], ["MENTOR"]])("preserves signed-in Ask access for roles %j without cohort authority", async (...roles) => {
+    setup({ globalRoles: roles });
+    for (const [path, status] of [["/dashboard/ask", 301], ["/dashboard/cohort/ask", 200], ["/dashboard/cohort", 403], ["/dashboard/cohort/sessions", 403]] as const) {
+      const { ctx, next } = context(path);
+      const response = await routeSpaceRequest(ctx, next);
+      expect(response.status).toBe(status);
+      expect(response.headers.has("Set-Cookie")).toBe(false);
+      const me = await getSpaceContext(ctx);
+      expect(me.spaces).not.toContain("cohort");
+      expect(me.capabilities.cohortIds).toEqual([]);
     }
   });
 
@@ -156,9 +181,17 @@ describe("server routing with actual flags, capabilities and context", () => {
     await expect(getSpaceContext(ctx)).rejects.toMatchObject({ status: 404 });
   });
 
-  it.each(["feature_flag", "programRole", "attention_item"])("fails closed without redirects on %s database failure", async table => {
+  it.each(["feature_flag", "programRole", "attention_item"])("keeps legacy handlers intact and canonical routes closed on %s database failure", async table => {
     fixture.database.exec(`DROP TABLE ${table}`);
-    const { ctx, next } = context("/dashboard/profile");
+    for (const path of ["/dashboard", "/dashboard/ask", "/dashboard/profile", "/dashboard/discover"]) {
+      const { ctx, next } = context(path);
+      const response = await routeSpaceRequest(ctx, next);
+      expect(response.status).toBe(200);
+      expect(response.headers.has("Location")).toBe(false);
+      expect(response.headers.has("Set-Cookie")).toBe(false);
+      expect(next).toHaveBeenCalledExactlyOnceWith();
+    }
+    const { ctx, next } = context("/dashboard/account");
     await expect(routeSpaceRequest(ctx, next)).rejects.toThrow(/no such table|Failed query/);
     expect(next).not.toHaveBeenCalled();
   });
