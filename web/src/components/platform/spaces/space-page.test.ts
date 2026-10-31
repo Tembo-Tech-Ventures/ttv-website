@@ -79,7 +79,9 @@ describe("linkAllowed", () => {
     expect(linkAllowed(fixture, "/dashboard/mentoring/confirm")).toBe(true);
     expect(linkAllowed(fixture, "/dashboard/mentoring#requests")).toBe(true);
     expect(linkAllowed(fixture, "/dashboard/account")).toBe(false);
-    expect(linkAllowed(fixture, "/dashboard/cohort/apply")).toBe(false);
+    // B-1.5 opens the Apply form (GET only) so a no-cohort fixture sees its Apply link.
+    expect(linkAllowed(fixture, "/dashboard/cohort/apply")).toBe(true);
+    expect(linkAllowed(fixture, "/dashboard/me")).toBe(false);
   });
 
   it("applies the demo and QA allowlists", () => {
