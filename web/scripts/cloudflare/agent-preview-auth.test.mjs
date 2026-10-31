@@ -383,11 +383,13 @@ describe("seedAgentPreviewFixtures", () => {
     const sessionCalls = executeQuery.mock.calls.filter((call) =>
       call[1].includes('INSERT INTO "session"')
     );
-    expect(sessionCalls).toHaveLength(3);
+    expect(sessionCalls).toHaveLength(5);
     expect(sessionCalls.map((call) => call[2][0])).toEqual([
       AGENT_PREVIEW_PERSONAS.newStudent.sessionId,
       AGENT_PREVIEW_PERSONAS.acceptedStudent.sessionId,
       AGENT_PREVIEW_PERSONAS.graduateStudent.sessionId,
+      AGENT_PREVIEW_PERSONAS.mentor.sessionId,
+      AGENT_PREVIEW_PERSONAS.institution.sessionId,
     ]);
     expect(sessionCalls[0][2][2]).toBe(
       deriveAgentPreviewPersonaToken(
@@ -409,6 +411,12 @@ describe("seedAgentPreviewFixtures", () => {
         "agent-pr-55",
         "graduateStudent", "github-123-1"
       )
+    );
+    expect(sessionCalls[3][2][2]).toBe(
+      deriveAgentPreviewPersonaToken(previewSecret, "agent-pr-55", "mentor", "github-123-1")
+    );
+    expect(sessionCalls[4][2][2]).toBe(
+      deriveAgentPreviewPersonaToken(previewSecret, "agent-pr-55", "institution", "github-123-1")
     );
   });
 
