@@ -21,10 +21,13 @@ const START_PAGE = "/dashboard/feedback";
 
 /**
  * The floating launcher. The spaces shell has none (the account menu opens the
- * form), so there the page's own "Send feedback" button opens it.
+ * form), so there the page's own "Send feedback" button opens it. That button
+ * is static markup the widget listens for once it hydrates (client:idle), so
+ * wait for every island first.
  */
 async function openFeedback(page: Page) {
   const inSpaces = (await page.locator(".spaces-shell").count()) > 0;
+  if (inSpaces) await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
   await page.getByRole("button", { name: inSpaces ? "Send feedback" : "Feedback", exact: true }).click();
 }
 
