@@ -1,5 +1,8 @@
 ---
-import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
 import Card from "@/components/common/Card.astro";
 import Button from "@/components/common/Button.astro";
 import { drizzle } from "drizzle-orm/d1";
@@ -16,6 +19,7 @@ import {
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
+const spaces = await resolveSpacePage(Astro.locals, "apply");
 
 const notice = Astro.url.searchParams.get("notice");
 const success =
@@ -104,10 +108,10 @@ const availablePrograms = allPrograms.filter(
 );
 ---
 
-<DashboardLayout title="Apply">
+<SpacePage context={spaces} title="Apply to a Cohort" legacyTitle="Apply">
   <div class="space-y-6">
     <div>
-      <h2 class="text-2xl font-bold text-white">Apply to a Cohort</h2>
+      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Apply to a Cohort</PageTitle>
       <p class="mt-1 text-ink-secondary">
         Browse cohorts accepting applications and submit yours.
       </p>
@@ -163,7 +167,7 @@ const availablePrograms = allPrograms.filter(
             {appliedProgramIds.length > 0 && " You may already have applied to every open cohort."}
           </p>
           {appliedProgramIds.length > 0 && (
-            <Button href="/dashboard" class="mt-4">
+            <Button href={spaces ? SPACE_PATHS.cohort : "/dashboard"} class="mt-4">
               View your applications
             </Button>
           )}
@@ -171,4 +175,4 @@ const availablePrograms = allPrograms.filter(
       </Card>
     )}
   </div>
-</DashboardLayout>
+</SpacePage>

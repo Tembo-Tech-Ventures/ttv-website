@@ -1,5 +1,7 @@
 ---
-import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import Card from "@/components/common/Card.astro";
 import Button from "@/components/common/Button.astro";
 import Badge from "@/components/common/Badge.astro";
@@ -69,13 +71,14 @@ function formatDate(date: Date): string {
     year: "numeric",
   });
 }
+const spaces = await resolveSpacePage(Astro.locals, "leads");
 ---
 
-<DashboardLayout title="Leads">
+<SpacePage context={spaces} title={spaces ? "Visitor messages" : "Leads"}>
   <div class="space-y-6">
     <div class="flex flex-wrap items-center justify-between gap-4">
       <div>
-        <h2 class="text-2xl font-bold text-white">Leads</h2>
+        <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">{spaces ? "Visitor messages" : "Leads"}</PageTitle>
         <p class="mt-1 text-ink-secondary">
           Messages from people who found you through your profile.
         </p>
@@ -196,4 +199,4 @@ function formatDate(date: Date): string {
       </div>
     )}
   </div>
-</DashboardLayout>
+</SpacePage>

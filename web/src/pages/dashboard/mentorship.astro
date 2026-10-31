@@ -1,9 +1,33 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import CommunityApp from "@/components/community/CommunityApp";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import MentoringOverview from "@/components/platform/spaces/MentoringOverview.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { normalizeSpacePath, SPACE_PATHS } from "@/lib/platform/server/space-routes";
 // oxlint-disable-next-line import/no-unassigned-import -- Workspace stylesheet.
 import "@/styles/discovery.css";
+
+// B-1.2 serves this page at /dashboard/mentoring (the space's landing) and at
+// /dashboard/mentoring/confirm (the review). Admins who are not mentors keep
+// the review, in their Admin space, without becoming mentors.
+const atLanding = normalizeSpacePath(Astro.originPathname) === SPACE_PATHS.mentoring;
+const spaces =
+  (atLanding ? await resolveSpacePage(Astro.locals, "mentoring") : null) ??
+  (await resolveSpacePage(Astro.locals, "confirm"));
 ---
-<BaseLayout title="Review community contributions | TTV" noIndex>
-  <CommunityApp client:load view="mentor" />
-</BaseLayout>
+{
+  spaces?.page === "mentoring" ? (
+    <SpacePage context={spaces} title="Mentoring">
+      <MentoringOverview />
+    </SpacePage>
+  ) : spaces ? (
+    <SpacePage context={spaces} title={spaces.space === "admin" ? "Mentor review" : "Confirm work"}>
+      <CommunityApp client:load view="mentor" embedded />
+    </SpacePage>
+  ) : (
+    <BaseLayout title="Review community contributions | TTV" noIndex>
+      <CommunityApp client:load view="mentor" />
+    </BaseLayout>
+  )
+}

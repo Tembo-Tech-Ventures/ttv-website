@@ -1,0 +1,91 @@
+import { createHmac } from "node:crypto";
+import type { BrowserContext } from "@playwright/test";
+import {
+  deriveAgentPreviewAuthSecret,
+  isAgentEnvironmentName,
+} from "../scripts/cloudflare/agent-preview-auth.mjs";
+
+/**
+ * The people the spaces pages are checked as, and how a browser signs in as
+ * each of them.
+ *
+ * They sign in with a cookie, the way a real browser does. Bearer headers do
+ * not work for this: the community API refuses bearer sessions that are not
+ * scoped personal access tokens (lib/community/http.ts), so a bearer-header
+ * "community member" never sees their workspace. The cookie is Better Auth's
+ * own signed session cookie for a session that already exists:
+ *
+ * - On an isolated agent preview, the runner already holds the preview's
+ *   persona session tokens and the secret both the tokens and the preview's
+ *   auth secret derive from. Nothing new is granted, and nothing works
+ *   anywhere but that preview.
+ * - Locally, `platform-personas.local.sql` seeds fictional people into the
+ *   local D1 and PLATFORM_PERSONAS_LOCAL_SECRET is the dev server's
+ *   BETTER_AUTH_SECRET from .dev.vars.
+ *
+ * Previews have no mentor or institution persona yet, so those two are
+ * checked locally only.
+ */
+
+export type PersonaKey = "student" | "alumna" | "mentor" | "community" | "institution" | "staff";
+
+export interface PersonaExpectation {
+  /** Where /dashboard opens with no preference saved. */
+  landing: string;
+  /** The space tabs, in order. */
+  spaces: string[];
+}
+
+export const PERSONA_EXPECTATIONS: Record<PersonaKey, PersonaExpectation> = {
+  student: { landing: "/dashboard/cohort", spaces: ["Cohort", "Community", "Profile"] },
+  alumna: { landing: "/dashboard/cohort", spaces: ["Cohort", "Community", "Profile"] },
+  mentor: { landing: "/dashboard/community", spaces: ["Community", "Mentoring", "Profile"] },
+  community: { landing: "/dashboard/community", spaces: ["Community", "Profile"] },
+  institution: { landing: "/dashboard/community", spaces: ["Community", "Discover", "Profile"] },
+  staff: { landing: "/dashboard/cohort", spaces: ["Cohort", "Community", "Discover", "Admin", "Profile"] },
+};
+
+export interface PersonaSession {
+  key: PersonaKey;
+  token: string;
+  secret: string;
+}
+
+const PREVIEW_TOKENS: Partial<Record<PersonaKey, string>> = {
+  student: "PLAYWRIGHT_ACCEPTED_STUDENT_TOKEN",
+  alumna: "PLAYWRIGHT_GRADUATE_STUDENT_TOKEN",
+  community: "PLAYWRIGHT_NEW_STUDENT_TOKEN",
+  staff: "PLAYWRIGHT_AGENT_TOKEN",
+};
+
+/** The session to sign in as, or why there is none in this environment. */
+export function personaSession(key: PersonaKey, environment: NodeJS.ProcessEnv = process.env): PersonaSession | string {
+  if (!environment.PLAYWRIGHT_BASE_URL) {
+    const secret = environment.PLATFORM_PERSONAS_LOCAL_SECRET;
+    if (!secret) return "Set PLATFORM_PERSONAS_LOCAL_SECRET and apply platform-personas.local.sql to run locally.";
+    return { key, token: `ttv-local-persona-${key}-token`, secret };
+  }
+  const name = environment.EXPECTED_DEPLOYMENT_ENVIRONMENT ?? "";
+  const previewSecret = environment.AGENT_PREVIEW_SECRET?.trim();
+  if (!isAgentEnvironmentName(name) || !previewSecret) return "Persona sessions exist only on isolated agent previews.";
+  const variable = PREVIEW_TOKENS[key];
+  if (!variable) return `Agent previews have no ${key} persona yet; it is checked against the local seed.`;
+  const token = environment[variable]?.trim();
+  if (!token) return `${variable} is not set for this run.`;
+  if (token.startsWith("ttv_pat_")) return "A personal access token is not a browser session.";
+  return { key, token, secret: deriveAgentPreviewAuthSecret(previewSecret, name) };
+}
+
+/** Better Auth's signed session cookie (better-call signCookieValue), for a session that already exists. */
+export async function signIn(context: BrowserContext, baseURL: string, session: PersonaSession): Promise<void> {
+  const secure = new URL(baseURL).protocol === "https:";
+  const signature = createHmac("sha256", session.secret).update(session.token).digest("base64");
+  await context.addCookies([{
+    name: `${secure ? "__Secure-" : ""}better-auth.session_token`,
+    value: encodeURIComponent(`${session.token}.${signature}`),
+    url: baseURL,
+    httpOnly: true,
+    secure,
+    sameSite: "Lax",
+  }]);
+}

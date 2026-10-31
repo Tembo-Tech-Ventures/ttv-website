@@ -19,6 +19,11 @@ mkdirSync(EVIDENCE_DIR, { recursive: true });
  * server-rendered markup with no handlers attached, which made this suite flaky
  * against a cold Worker.
  */
+/** With spaces on, Ask renders inside the spaces shell instead of its own immersive frame. */
+async function inSpaces(page: Page) {
+  return (await page.locator(".spaces-shell").count()) > 0;
+}
+
 async function gotoAsk(page: Page) {
   await page.goto("/dashboard/ask");
   // Every island, not just the first: signed-in pages also carry the feedback widget.
@@ -49,8 +54,17 @@ test.describe("authenticated Ask AI page", () => {
     });
     expect(overflow).toBeLessThanOrEqual(1);
 
-    // And the dashboard shell is genuinely gone, not merely hidden.
+    // The old dashboard shell is genuinely gone, not merely hidden. Inside the
+    // spaces shell the chat fills the sheet, which does not scroll either.
     await expect(page.getByRole("button", { name: "Open navigation" })).toHaveCount(0);
+    if (await inSpaces(page)) {
+      const sheetOverflow = await page.evaluate(() => {
+        const main = document.querySelector<HTMLElement>("#spaces-main")!;
+        return main.scrollHeight - main.clientHeight;
+      });
+      expect(sheetOverflow).toBeLessThanOrEqual(1);
+      await expect(page.getByRole("heading", { name: "Ask Tembo" })).toBeVisible();
+    }
 
     await page.screenshot({
       path: `${EVIDENCE_DIR}/${testInfo.project.name}-ask-live.png`,
@@ -59,6 +73,14 @@ test.describe("authenticated Ask AI page", () => {
 
   test("keeps a signed-in user's way back into the dashboard", async ({ page }, testInfo) => {
     await gotoAsk(page);
+    if (await inSpaces(page)) {
+      // The spaces shell is the way around: Ask Tembo is current in its space's
+      // sidebar, the tabs lead everywhere else, and the account menu signs out.
+      await expect(page.locator("#space-sidebar a[aria-current='page']")).toHaveText("Ask Tembo");
+      await expect(page.locator(".spaces-account a, .spaces-account button").filter({ hasText: /^Sign out$/ })).toHaveCount(1);
+      await expect(page.getByRole("link", { name: /Back to dashboard/ })).toHaveCount(0);
+      return;
+    }
 
     // Mobile puts this in the header; desktop puts it at the top of the rail.
     await expect(page.getByRole("link", { name: /Back to dashboard/ })).toBeVisible();

@@ -548,3 +548,70 @@
     transition: none !important;
   }
 }
+
+/*
+ * One display heading per screen: the page's h1. Section headings inside the
+ * sheet, including the h2s of pages that moved in from the old dashboard, use
+ * Maven Pro.
+ */
+.spaces-shell__main h2 {
+  font-family: var(--font-body);
+  font-weight: 700;
+}
+
+/*
+ * A full-height view (a chat, a workspace with its own scrolling) fills the
+ * sheet instead of scrolling inside it.
+ */
+.spaces-shell__main:has([data-space-fill]) {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+/*
+ * Pages that moved in from the old dashboard tint their status text (badges,
+ * notices, form errors) with Tailwind's 300 and 400 steps, tuned for its
+ * darker ground. On the lighter space sheets those fall just under 4.5:1, so
+ * inside the sheet each takes the next lighter step of its own hue.
+ */
+.spaces-shell__main {
+  --color-red-300: oklch(88.5% 0.062 18.334);
+  --color-red-400: oklch(80.8% 0.114 19.571);
+  --color-orange-300: oklch(90.1% 0.076 70.697);
+  --color-orange-400: oklch(83.7% 0.128 66.29);
+  --color-amber-300: oklch(92.4% 0.12 95.746);
+  --color-amber-400: oklch(87.9% 0.169 91.605);
+  --color-yellow-300: oklch(94.5% 0.129 101.54);
+  --color-yellow-400: oklch(90.5% 0.182 98.111);
+  --color-green-300: oklch(92.5% 0.084 155.995);
+  --color-green-400: oklch(87.1% 0.15 154.449);
+  --color-emerald-300: oklch(90.5% 0.093 164.15);
+  --color-emerald-400: oklch(84.5% 0.143 164.978);
+  --color-teal-300: oklch(91% 0.096 180.426);
+  --color-teal-400: oklch(85.5% 0.138 181.071);
+  --color-cyan-300: oklch(91.7% 0.08 205.041);
+  --color-cyan-400: oklch(86.5% 0.127 207.078);
+  --color-blue-300: oklch(88.2% 0.059 254.128);
+  --color-blue-400: oklch(80.9% 0.105 251.813);
+  --color-indigo-300: oklch(87% 0.065 274.039);
+  --color-indigo-400: oklch(78.5% 0.115 274.713);
+  --color-purple-300: oklch(90.2% 0.063 306.703);
+  --color-purple-400: oklch(82.7% 0.119 306.383);
+  --color-rose-300: oklch(89.2% 0.058 10.001);
+  --color-rose-400: oklch(81% 0.117 11.638);
+  --color-slate-300: oklch(92.9% 0.013 255.508);
+  --color-slate-400: oklch(86.9% 0.022 252.894);
+  --color-gray-300: oklch(92.8% 0.006 264.531);
+  --color-gray-400: oklch(87.2% 0.01 258.338);
+  --color-zinc-300: oklch(92% 0.004 286.32);
+  --color-zinc-400: oklch(87.1% 0.006 286.286);
+  --color-stone-300: oklch(92.3% 0.003 48.717);
+  --color-stone-400: oklch(86.9% 0.005 56.366);
+}
+
+/* Peach is too dark to be text on the sheets (global.css): moved-in pages' peach text takes the peach ink. */
+.spaces-shell__main .text-primary {
+  color: var(--color-peach-ink);
+}

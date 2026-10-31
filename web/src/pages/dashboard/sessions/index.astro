@@ -1,5 +1,7 @@
 ---
-import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import Card from "@/components/common/Card.astro";
 import ProcessingStatus from "@/components/recordings/ProcessingStatus.astro";
 import { getAccessibleProgramIds } from "@/lib/recordings/access";
@@ -20,12 +22,13 @@ const recordings =
         orderBy: (recording, { desc }) => [desc(recording.recordedAt)],
       })
     : [];
+const spaces = await resolveSpacePage(Astro.locals, "sessions");
 ---
 
-<DashboardLayout title="Sessions">
+<SpacePage context={spaces} title="Sessions">
   <div class="space-y-6">
     <div>
-      <h2 class="text-2xl font-bold text-white">Sessions</h2>
+      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Sessions</PageTitle>
       <p class="mt-1 text-sm text-ink-muted">
         Watch recorded sessions and follow along with the transcript.
       </p>
@@ -59,4 +62,4 @@ const recordings =
       </div>
     )}
   </div>
-</DashboardLayout>
+</SpacePage>

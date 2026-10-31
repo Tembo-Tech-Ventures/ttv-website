@@ -1,6 +1,9 @@
 ---
 import { DEMO_PREFIX, isDemoUser } from "@/lib/staging-demo-policy";
-import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
 import Badge from "@/components/common/Badge.astro";
 import Card from "@/components/common/Card.astro";
 import Button from "@/components/common/Button.astro";
@@ -75,16 +78,17 @@ try {
 } catch {
   parsedApplication = {};
 }
+const spaces = await resolveSpacePage(Astro.locals, "apply");
 ---
 
-<DashboardLayout title="Application Details">
+<SpacePage context={spaces} title="Application details" legacyTitle="Application Details">
   <div class="space-y-6">
     <div class="flex items-center gap-4">
       <a
-        href="/dashboard"
+        href={spaces ? SPACE_PATHS.cohort : "/dashboard"}
         class="text-sm text-ink-secondary hover:text-white transition-colors"
       >
-        &larr; Back to Dashboard
+        &larr; {spaces ? "Back to Cohort" : "Back to Dashboard"}
       </a>
     </div>
 
@@ -104,9 +108,9 @@ try {
       <div class="space-y-4">
         <div class="flex items-start justify-between gap-4">
           <div>
-            <h2 class="text-2xl font-bold text-white">
+            <PageTitle spaces={Boolean(spaces)} size="card" legacyClass="text-2xl font-bold text-white">
               {application.program?.name ?? "Unknown Cohort"}
-            </h2>
+            </PageTitle>
             {application.program?.curriculum && (
               <p class="mt-1 text-ink-secondary">
                 {application.program.curriculum.title}
@@ -190,4 +194,4 @@ try {
       )}
     </Card>
   </div>
-</DashboardLayout>
+</SpacePage>

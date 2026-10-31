@@ -69,6 +69,12 @@ interface ChatAppProps {
   visibleLinkIds?: StudentDashboardLinkId[];
   unreadLeadCount?: number;
   canDiscover?: boolean;
+  /**
+   * "space" renders inside the spaces shell, which already provides the way
+   * around the product and the feedback form: the page drops its own back
+   * links and site navigation, and the assistant is Tembo.
+   */
+  variant?: "immersive" | "space";
 }
 
 /**
@@ -91,7 +97,9 @@ export default function ChatApp({
   visibleLinkIds = DASHBOARD_LINKS.map((link) => link.id).filter((id) => id !== "community" && id !== "discover"),
   unreadLeadCount = 0,
   canDiscover = false,
+  variant = "immersive",
 }: ChatAppProps) {
+  const inSpace = variant === "space";
   const [sessions, setSessions] = useState<ChatSession[]>(initialSessions);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(
     initialSessions[0]?.id ?? null
@@ -390,15 +398,17 @@ export default function ChatApp({
     <div className="flex min-h-0 flex-1">
       {/* Desktop rail. The way back into the product stays visible at both ends. */}
       <aside className="hidden w-72 shrink-0 flex-col border-r border-rule bg-dark/40 lg:flex">
-        <div className="shrink-0 border-b border-rule px-3 py-3">
-          <a
-            href="/dashboard"
-            className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-semibold text-ink-secondary transition hover:bg-ink-primary/[0.06] hover:text-ink-primary"
-          >
-            <PiArrowLeftBold className="h-4 w-4" aria-hidden="true" />
-            Back to dashboard
-          </a>
-        </div>
+        {!inSpace && (
+          <div className="shrink-0 border-b border-rule px-3 py-3">
+            <a
+              href="/dashboard"
+              className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-semibold text-ink-secondary transition hover:bg-ink-primary/[0.06] hover:text-ink-primary"
+            >
+              <PiArrowLeftBold className="h-4 w-4" aria-hidden="true" />
+              Back to dashboard
+            </a>
+          </div>
+        )}
         <div className="shrink-0 px-3 py-3">
           <NewChatButton full onClick={startNewChat} />
         </div>
@@ -411,38 +421,42 @@ export default function ChatApp({
           </p>
           {conversationList}
         </nav>
-        <nav aria-label="Site" className="shrink-0 border-t border-rule px-2 py-2">
-          {appNav.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className="block rounded-lg px-3 py-1.5 text-sm text-ink-muted transition hover:bg-ink-primary/[0.06] hover:text-ink-primary"
+        {!inSpace && (
+          <nav aria-label="Site" className="shrink-0 border-t border-rule px-2 py-2">
+            {appNav.map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                className="block rounded-lg px-3 py-1.5 text-sm text-ink-muted transition hover:bg-ink-primary/[0.06] hover:text-ink-primary"
+              >
+                {item.label}
+                {item.badge !== undefined && item.badge > 0
+                  ? ` (${item.badge} unread)`
+                  : ""}
+              </a>
+            ))}
+            <button
+              type="button"
+              onClick={openFeedbackWidget}
+              className="block w-full rounded-lg px-3 py-1.5 text-left text-sm text-ink-muted transition hover:bg-ink-primary/[0.06] hover:text-ink-primary"
             >
-              {item.label}
-              {item.badge !== undefined && item.badge > 0
-                ? ` (${item.badge} unread)`
-                : ""}
-            </a>
-          ))}
-          <button
-            type="button"
-            onClick={openFeedbackWidget}
-            className="block w-full rounded-lg px-3 py-1.5 text-left text-sm text-ink-muted transition hover:bg-ink-primary/[0.06] hover:text-ink-primary"
-          >
-            Send feedback
-          </button>
-        </nav>
+              Send feedback
+            </button>
+          </nav>
+        )}
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-1 border-b border-rule px-2 sm:px-4 lg:px-6">
-          <a
-            href="/dashboard"
-            aria-label="Back to dashboard"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink-secondary transition hover:bg-ink-primary/[0.06] hover:text-ink-primary lg:hidden"
-          >
-            <PiArrowLeftBold className="h-4 w-4" aria-hidden="true" />
-          </a>
+          {!inSpace && (
+            <a
+              href="/dashboard"
+              aria-label="Back to dashboard"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink-secondary transition hover:bg-ink-primary/[0.06] hover:text-ink-primary lg:hidden"
+            >
+              <PiArrowLeftBold className="h-4 w-4" aria-hidden="true" />
+            </a>
+          )}
 
           {/*
             On mobile the title doubles as the conversation switcher, so history
@@ -490,6 +504,7 @@ export default function ChatApp({
           conversationEpoch={conversationEpoch}
           onPickPrompt={(prompt) => void sendMessage(prompt)}
           suggestions={suggestions}
+          assistantName={inSpace ? "Ask Tembo" : "Ask AI"}
         />
 
         {/*
@@ -526,33 +541,35 @@ export default function ChatApp({
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3">
           {conversationList}
         </div>
-        <nav
-          aria-label="Site"
-          className="flex shrink-0 flex-wrap gap-x-4 gap-y-1 border-t border-rule px-4 py-3"
-        >
-          {appNav.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
+        {!inSpace && (
+          <nav
+            aria-label="Site"
+            className="flex shrink-0 flex-wrap gap-x-4 gap-y-1 border-t border-rule px-4 py-3"
+          >
+            {appNav.map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                className="text-sm text-ink-muted transition hover:text-ink-primary"
+              >
+                {item.label}
+                {item.badge !== undefined && item.badge > 0
+                  ? ` (${item.badge} unread)`
+                  : ""}
+              </a>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                setSheetOpen(false);
+                openFeedbackWidget();
+              }}
               className="text-sm text-ink-muted transition hover:text-ink-primary"
             >
-              {item.label}
-              {item.badge !== undefined && item.badge > 0
-                ? ` (${item.badge} unread)`
-                : ""}
-            </a>
-          ))}
-          <button
-            type="button"
-            onClick={() => {
-              setSheetOpen(false);
-              openFeedbackWidget();
-            }}
-            className="text-sm text-ink-muted transition hover:text-ink-primary"
-          >
-            Send feedback
-          </button>
-        </nav>
+              Send feedback
+            </button>
+          </nav>
+        )}
       </ConversationSheet>
     </div>
   );

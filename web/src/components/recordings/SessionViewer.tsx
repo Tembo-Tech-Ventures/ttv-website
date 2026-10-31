@@ -8,11 +8,14 @@ export default function SessionViewer({
   title,
   segments,
   initialTime = 0,
+  titleAs: Title = "h2",
 }: {
   videoUrl: string;
   title: string;
   segments: TranscriptSegment[];
   initialTime?: number;
+  /** In the spaces shell the session's title is the page's one h1. */
+  titleAs?: "h1" | "h2";
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [currentTime, setCurrentTime] = useState(initialTime);
@@ -54,7 +57,7 @@ export default function SessionViewer({
           </video>
         </div>
         <div>
-          <h2 className="text-xl font-semibold text-white">{title}</h2>
+          <Title className="text-xl font-semibold text-white">{title}</Title>
           <p className="mt-1 text-sm text-ink-muted">
             Use the transcript to jump to a moment in the session.
           </p>

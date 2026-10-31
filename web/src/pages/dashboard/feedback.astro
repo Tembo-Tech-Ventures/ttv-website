@@ -4,7 +4,9 @@
  * students reach it from the feedback form, which is where the question
  * "did anyone read that?" comes up.
  */
-import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import Card from "@/components/common/Card.astro";
 import { env } from "cloudflare:workers";
 import { listFeedbackForUser } from "@/lib/feedback/store";
@@ -36,13 +38,14 @@ const othersOnTheme = (students: number) =>
   students === 2
     ? "One other student raised this too."
     : `${students - 1} other students raised this too.`;
+const spaces = await resolveSpacePage(Astro.locals, "feedback");
 ---
 
-<DashboardLayout title="Your feedback">
-  <div class="mx-auto max-w-3xl space-y-6">
+<SpacePage context={spaces} title="Your feedback">
+  <div class={spaces ? "max-w-3xl space-y-6" : "mx-auto max-w-3xl space-y-6"}>
     <header class="flex flex-wrap items-end justify-between gap-4">
       <div>
-        <h2 class="text-2xl font-bold text-white">Your feedback</h2>
+        <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Your feedback</PageTitle>
         <p class="mt-1 text-sm text-ink-secondary">
           Everything you've sent, where it stands, and any reply from the team.
         </p>
@@ -64,7 +67,7 @@ const othersOnTheme = (students: number) =>
         <Card>
           <p class="text-ink-secondary">
             Nothing yet. Whenever something is broken, confusing, or could be
-            better, use the Feedback button in the corner of any page. A
+            better, use {spaces ? "Feedback in your account menu" : "the Feedback button in the corner of any page"}. A
             sentence or a screenshot is plenty.
           </p>
         </Card>
@@ -157,4 +160,4 @@ const othersOnTheme = (students: number) =>
       )
     }
   </div>
-</DashboardLayout>
+</SpacePage>

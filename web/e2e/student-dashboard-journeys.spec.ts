@@ -120,30 +120,54 @@ for (const persona of personas) {
       const isMobile = (viewport?.width ?? 1280) < 1024;
       const spaces = await personaSpaces(page, baseURL!);
       if (spaces) expect(spaces.includes("cohort")).toBe(persona.cohortMember);
-      if (spaces && !persona.cohortMember) {
-        // Spaces ON: without a cohort, /dashboard opens the community space.
-        // Its workspace is not asserted here: the community API refuses
-        // bearer-header sessions (lib/community/http.ts), which this harness
-        // uses. Cookie sessions in a real browser are unaffected.
+      if (spaces) {
+        // Spaces ON: /dashboard opens the persona's space, and each page sits
+        // in the spaces shell with its space's sidebar.
+        // (e2e/platform-personas.spec.ts walks every space with cookie sessions;
+        // this harness uses bearer headers, which the community API refuses, so
+        // the community workspace itself is not asserted here.)
         const landing = await page.goto("/dashboard");
         expect(landing?.request().redirectedFrom()?.url()).toBe(new URL("/dashboard", baseURL).href);
-        await expect(page).toHaveURL(/\/dashboard\/community$/);
+        const current = page.locator("#space-sidebar a[aria-current='page']");
+        if (!persona.cohortMember) {
+          await expect(page).toHaveURL(/\/dashboard\/community$/);
+          // The way to apply is on the page itself, not only in a menu.
+          const invitation = page.locator("[data-cohort-invitation]");
+          await expect(invitation).toBeVisible();
+          await expect(invitation.getByRole("link", { name: persona.actionName, exact: true })).toHaveAttribute(
+            "href",
+            "/dashboard/cohort/apply"
+          );
 
-        // The next step still works: the existing Apply link reaches a usable form.
-        const apply = await page.goto(persona.actionHref);
-        expect(apply?.status()).toBe(200);
-        await expect(page).toHaveURL(/\/dashboard\/cohort\/apply$/);
-        await expect(page.getByRole("heading", { name: "Apply to a Cohort" })).toBeVisible();
-        await expect(
-          page.locator("[data-cohort-id]").getByRole("button", { name: "Apply", exact: true }).first()
-        ).toBeEnabled();
-        await openMobileNavigation(page, isMobile);
-        const applyLink = visibleSiteNavigation(page).getByRole("link", {
-          name: persona.activeLabel,
-          exact: true,
-        });
-        await expect(applyLink).toHaveAttribute("aria-current", "page");
+          const apply = await page.goto(persona.actionHref);
+          expect(apply?.status()).toBe(200);
+          await expect(page).toHaveURL(/\/dashboard\/cohort\/apply$/);
+          await expect(page.getByRole("heading", { level: 1, name: "Apply to a Cohort" })).toBeVisible();
+          await expect(
+            page.locator("[data-cohort-id]").getByRole("button", { name: "Apply", exact: true }).first()
+          ).toBeEnabled();
+          await expect(current).toHaveText("Apply to a cohort");
+          await page.screenshot({ path: evidence(persona.name), fullPage: true });
+          expect(hydrationMessages).toEqual([]);
+          return;
+        }
+
+        await expect(page).toHaveURL(/\/dashboard\/cohort$/);
+        const nextStepCard = page.getByRole("region", { name: persona.nextStep });
+        await expect(nextStepCard.getByTestId("student-next-step")).toHaveText(persona.nextStep);
+        // The step links straight to its space path rather than through a redirect.
+        await expect(nextStepCard.getByRole("link", { name: persona.actionName, exact: true })).toHaveAttribute(
+          "href",
+          persona.actionHref.replace("/dashboard/sessions", "/dashboard/cohort/sessions")
+        );
+        await expect(page.getByText("Your next step", { exact: true })).toHaveCount(1);
+        await expect(current).toHaveText("Overview");
         await page.screenshot({ path: evidence(persona.name), fullPage: true });
+
+        const activeResponse = await page.goto(persona.activePath);
+        expect(activeResponse?.status()).toBe(200);
+        await expect(page).toHaveURL(/\/dashboard\/cohort\/sessions$/);
+        await expect(current).toHaveText(persona.activeLabel);
         expect(hydrationMessages).toEqual([]);
         return;
       }

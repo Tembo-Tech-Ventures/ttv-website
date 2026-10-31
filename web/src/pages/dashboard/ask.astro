@@ -1,32 +1,45 @@
 ---
 /**
- * Ask AI.
+ * Ask AI, which the spaces shell calls Ask Tembo.
  *
- * This is the one dashboard route that does not use `DashboardLayout`. A chat
- * needs the whole viewport — the shell's header and the page's own scrolling
- * pushed the composer off the bottom of a phone screen — so it uses
- * `ImmersiveLayout` and carries its own way back into the dashboard instead.
- * Auth is still enforced by middleware on `/dashboard/*`.
+ * A chat needs the whole viewport: the old dashboard shell's header and the
+ * page's own scrolling pushed the composer off the bottom of a phone screen.
+ * Without spaces it uses `ImmersiveLayout` and carries its own way back into
+ * the dashboard. In the spaces shell it fills the sheet instead, and the shell
+ * provides the way around. Auth is still enforced by middleware on
+ * `/dashboard/*`; signing in is the only page requirement (B-1.2), and the
+ * chat APIs decide what each person's questions can draw on.
  */
 import { createCommunityService } from "@/lib/community/service";
 import { hasDiscoveryAccess } from "@/lib/dashboard-presentation";
 import ImmersiveLayout from "@/layouts/ImmersiveLayout.astro";
 import ChatApp from "@/components/chat/ChatApp";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
 import { getStudentJourney } from "@/lib/student/journey";
 
 const user = Astro.locals.user!;
-const canDiscover = hasDiscoveryAccess(await createCommunityService(env.DB, user.id, Astro.locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT).access());
+const spaces = await resolveSpacePage(Astro.locals, "ask");
 const journey = await getStudentJourney(drizzle(env.DB, { schema }), user.id);
+const canDiscover = spaces ? false : hasDiscoveryAccess(await createCommunityService(env.DB, user.id, Astro.locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT).access());
 ---
 
-<ImmersiveLayout title="Ask AI | Tembo Tech Ventures">
-  <ChatApp
-    client:load
-    canDiscover={canDiscover}
-    visibleLinkIds={journey.visibleLinkIds}
-    unreadLeadCount={journey.unreadLeadCount}
-  />
-</ImmersiveLayout>
+{
+  spaces ? (
+    <SpacePage context={spaces} title="Ask Tembo" journey={journey} fill>
+      <ChatApp client:load variant="space" />
+    </SpacePage>
+  ) : (
+    <ImmersiveLayout title="Ask AI | Tembo Tech Ventures">
+      <ChatApp
+        client:load
+        canDiscover={canDiscover}
+        visibleLinkIds={journey.visibleLinkIds}
+        unreadLeadCount={journey.unreadLeadCount}
+      />
+    </ImmersiveLayout>
+  )
+}
