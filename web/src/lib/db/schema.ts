@@ -272,7 +272,7 @@ export const programRole = sqliteTable(
     userId: text("userId")
       .notNull()
       .references(() => user.id),
-    name: text("name", { enum: ["INSTRUCTOR", "TA"] }).notNull(),
+    name: text("name", { enum: ["INSTRUCTOR", "TA", "MENTOR"] }).notNull(),
     ...timestamps,
   },
   (table) => [
@@ -281,6 +281,8 @@ export const programRole = sqliteTable(
       table.userId,
       table.name,
     ),
+    index("programRole_userId_programId_name_idx").on(table.userId, table.programId, table.name),
+    check("programRole_name_check", sql`${table.name} IN ('INSTRUCTOR', 'TA', 'MENTOR')`),
   ],
 );
 
@@ -332,6 +334,7 @@ export const programApplication = sqliteTable(
       table.programId,
       table.userId,
     ),
+    index("programApplication_userId_programId_status_idx").on(table.userId, table.programId, table.status),
   ],
 );
 
