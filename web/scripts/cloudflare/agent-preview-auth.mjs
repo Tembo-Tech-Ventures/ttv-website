@@ -624,14 +624,25 @@ export async function seedAgentPreviewFixtures({
   ];
 
   if (environmentName && previewSecret) {
-    // Converge on every seed: journeys may grant roles, join cohorts or
-    // publish profiles, and none of that may carry into the next run.
+    // Converge on every seed: the per-PR database survives pushes, and what a
+    // journey granted, joined, wrote or confirmed must not reach the next run.
+    // Deleting a journey cascades to the confirmations others made on it.
     const rolePersonaUserIds = rolePersonaFixtures.map((fixture) => fixture.userId);
     const placeholders = rolePersonaUserIds.map(() => "?").join(", ");
-    for (const table of ["UserRoles", "programRole", "programApplication", "studentProfile"]) {
+    const rolePersonaRows = [
+      ["UserRoles", "userId"],
+      ["programRole", "userId"],
+      ["programApplication", "userId"],
+      ["studentProfile", "userId"],
+      ["communityProfile", "userId"],
+      ["communityJourney", "userId"],
+      ["communityConfirmation", "mentorId"],
+      ["attention_item", "userId"],
+    ];
+    for (const [table, column] of rolePersonaRows) {
       await executeQuery(
         databaseId,
-        `DELETE FROM "${table}" WHERE "userId" IN (${placeholders})`,
+        `DELETE FROM "${table}" WHERE "${column}" IN (${placeholders})`,
         rolePersonaUserIds
       );
     }

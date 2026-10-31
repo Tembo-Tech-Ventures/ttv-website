@@ -22,9 +22,6 @@ import {
  * - Locally, `platform-personas.local.sql` seeds fictional people into the
  *   local D1 and PLATFORM_PERSONAS_LOCAL_SECRET is the dev server's
  *   BETTER_AUTH_SECRET from .dev.vars.
- *
- * Previews have no mentor or institution persona yet, so those two are
- * checked locally only.
  */
 
 /** Only the variables these helpers read. */
@@ -58,6 +55,8 @@ const PREVIEW_TOKENS: Partial<Record<PersonaKey, string>> = {
   student: "PLAYWRIGHT_ACCEPTED_STUDENT_TOKEN",
   alumna: "PLAYWRIGHT_GRADUATE_STUDENT_TOKEN",
   community: "PLAYWRIGHT_NEW_STUDENT_TOKEN",
+  mentor: "PLAYWRIGHT_MENTOR_TOKEN",
+  institution: "PLAYWRIGHT_INSTITUTION_TOKEN",
   staff: "PLAYWRIGHT_AGENT_TOKEN",
 };
 

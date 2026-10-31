@@ -202,7 +202,8 @@ describe("preview mentor and institution personas", () => {
     const { database, executeQuery } = migratedDatabase();
     await seed(executeQuery);
     const snapshot = () => [mentor.userId, institution.userId].map((id) => personaRows(database, id));
-    const tableCounts = () => ["user", "UserRoles", "session", "programRole", "programApplication"]
+    const tableCounts = () => ["user", "UserRoles", "session", "programRole", "programApplication",
+      "communityProfile", "communityConfirmation", "attention_item"]
       .map((table) => database.prepare(`SELECT count(*) AS n FROM "${table}"`).get().n);
     const first = snapshot();
     const counts = tableCounts();
@@ -211,11 +212,21 @@ describe("preview mentor and institution personas", () => {
       INSERT INTO "UserRoles" ("id", "userId", "roleId") SELECT 'journey-granted-admin', '${institution.userId}', "id" FROM "Roles" WHERE "name" = 'ADMIN';
       INSERT INTO "programRole" ("id", "programId", "userId", "name") VALUES ('journey-invite', 'ttv-fixture-program-cohort-04', '${mentor.userId}', 'MENTOR');
       INSERT INTO "programApplication" ("id", "programId", "userId", "status", "application") VALUES ('journey-apply', 'ttv-fixture-program-cohort-04', '${institution.userId}', 'APPROVED', '{}');
+      INSERT INTO "communityProfile" ("userId", "headline") VALUES ('${institution.userId}', 'Written by a journey');
+      INSERT INTO "communityJourney" ("id", "userId", "title", "description", "occurredAt", "visibility") VALUES
+        ('journey-own', '${institution.userId}', 'Own entry', 'Written by a journey', '2026-10', 'private'),
+        ('journey-other', 'ttv-fixture-user-amina', 'Shared work', 'Another member', '2026-10', 'institution');
+      INSERT INTO "communityConfirmation" ("id", "journeyId", "mentorId", "statement", "method", "journeyVersion") VALUES
+        ('journey-confirm', 'journey-other', '${mentor.userId}', 'I reviewed this', 'code_review', 1);
+      INSERT INTO "attention_item" ("id", "userId", "eventKey", "kind", "space", "category", "subjectKind", "subjectId", "subjectHref", "subjectLabel", "summary", "createdAt")
+        VALUES ('journey-attention', '${mentor.userId}', 'journey-event', 'work_confirmed', 'mentoring', 'updates', 'journey', 'journey-other', '/dashboard/mentoring', 'Shared work', 'Confirmed', 1);
     `);
     await seed(executeQuery);
 
     expect(snapshot()).toEqual(first);
     expect(tableCounts()).toEqual(counts);
+    // Their writes go; another member's journey stays.
+    expect(database.prepare('SELECT "id" FROM "communityJourney"').all().map((row) => row.id)).toEqual(["journey-other"]);
   });
 
   it.each([

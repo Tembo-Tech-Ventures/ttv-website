@@ -151,6 +151,13 @@ environment-only token is never derived. Better Auth signing and credential
 encryption keys remain stable. Missing or malformed scope fails before preview
 provisioning. Staging and production credentials do not use this derivation.
 
+The seeded personas are three student journeys, a global-role mentor and an
+approved institution. Their tokens reach Playwright as
+`PLAYWRIGHT_{NEW_STUDENT,ACCEPTED_STUDENT,GRADUATE_STUDENT,MENTOR,INSTITUTION}_TOKEN`.
+`npm run test:e2e` owns these variables. Outside an `agent-*` environment it
+sets them empty, even if the shell already has values, so pass a hand-made
+token to `npx playwright test` directly instead.
+
 For a local/manual isolated deployment, generate a fresh scope once and preserve
 it for that deployment's verification commands in the same shell:
 

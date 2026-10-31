@@ -60,8 +60,10 @@ for (const persona of personas) {
       for (const path of persona.denied) {
         expect(await status(request, baseURL!, path), path).toBe(403);
       }
-      // Admin keeps its own middleware: no admin page, whatever the response.
-      expect(await status(request, baseURL!, "/admin"), "/admin").not.toBe(200);
+      // Admin keeps its own middleware, which sends a signed-in non-admin home.
+      const admin = await spaceRouteRequest(request, baseURL!, "/admin");
+      expect(admin.status(), "/admin").toBe(302);
+      expect(new URL(admin.headers().location!, baseURL).pathname, "/admin").toBe("/dashboard");
     });
   });
 }
