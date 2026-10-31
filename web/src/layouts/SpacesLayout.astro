@@ -118,10 +118,6 @@ const lastSpace = readLastSpaceCookie(Astro.request.headers.get("cookie"));
     view-transition-name: spaces-sheet;
   }
 
-  .spaces-shell .space-file__row {
-    view-transition-name: spaces-row;
-  }
-
   .spaces-bottom {
     view-transition-name: spaces-bottom;
   }
@@ -131,13 +127,15 @@ const lastSpace = readLastSpaceCookie(Astro.request.headers.get("cookie"));
     animation: none;
   }
 
-  ::view-transition-group(spaces-row),
+  /*
+   * The tab row is not named: it stays in the root, which does not animate, so
+   * it simply shows the new state at once, the steady anchor of the gesture.
+   * (Naming it would also make it a stacking context under the sheet.)
+   */
   ::view-transition-group(spaces-bottom) {
     animation-duration: 160ms;
   }
 
-  ::view-transition-old(spaces-row),
-  ::view-transition-new(spaces-row),
   ::view-transition-old(spaces-bottom),
   ::view-transition-new(spaces-bottom) {
     animation-duration: 160ms;

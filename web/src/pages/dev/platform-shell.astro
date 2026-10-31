@@ -6,7 +6,8 @@
  * `?persona=wanjiku&space=cohort`. The tabs and bottom bar link back here, so
  * switching spaces, the drawer, the account menu and the overlay triggers can
  * be exercised without a session. `?bare` drops the sidebar; `?overlays=none`
- * mounts no overlays, as production pages do until U-1.3.
+ * mounts no overlays, as production pages do until U-1.3; `?hidden` puts a
+ * hidden link and a disabled button in the sidebar, which focus must skip.
  *
  * Nothing here is reachable outside `astro dev`. `e2e/platform-shell.spec.ts`
  * holds the browser contract.
@@ -50,7 +51,7 @@ const rows = Array.from({ length: 24 }, (_, index) => index + 1);
   overlays={overlays}
   harness={{ account: { signOut: { kind: "link", href: "#signed-out", label: "Sign out" }, feedback: true }, spaceHrefs }}
 >
-  {!bare && <HarnessSidebar slot="sidebar" space={space} />}
+  {!bare && <HarnessSidebar slot="sidebar" space={space} hiddenControls={params.has("hidden")} />}
   <article class="max-w-3xl" data-harness-page={space}>
     <h1 class="text-4xl tracking-heading text-ink-primary sm:text-5xl">{SPACE_LABEL[space]}</h1>
     <p class="mt-4 max-w-2xl text-base leading-relaxed text-ink-secondary sm:text-lg">

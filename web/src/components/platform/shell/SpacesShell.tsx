@@ -6,7 +6,7 @@ import { useSpaces } from "@/lib/platform/client/hooks/spaces";
 import { Avatar, RoleBadge, SpaceFile, type SpaceTabItem } from "@/components/platform/ui";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
-import AccountMenu, { SIGN_OUT_FORM_ID, type ShellAccount } from "./AccountMenu";
+import AccountMenu, { type ShellAccount } from "./AccountMenu";
 import type { ShellOverlay } from "./overlays";
 import SpaceBottomBar from "./SpaceBottomBar";
 import { AttentionBell, SearchTrigger } from "./ShellTools";
@@ -44,6 +44,18 @@ const MAIN_ID = "spaces-main";
 
 function shown(element: HTMLElement | null): element is HTMLElement {
   return Boolean(element?.isConnected && element.getClientRects().length > 0);
+}
+
+/**
+ * Whether keyboard focus can really land here: laid out, not hidden by
+ * `visibility`, not inert, and not taken out of the tab order. A slotted
+ * sidebar may hold anything, so the drawer's focus cycle trusts none of it.
+ */
+function tabbable(element: HTMLElement): boolean {
+  if (!shown(element) || element.closest("[inert]") || element.tabIndex < 0) return false;
+  return typeof element.checkVisibility === "function"
+    ? element.checkVisibility({ visibilityProperty: true })
+    : getComputedStyle(element).visibility !== "hidden";
 }
 
 function PersonFooter({ person }: { person: PersonSummary }) {
@@ -92,6 +104,8 @@ export default function SpacesShell({
   const drawerRef = useRef<HTMLElement>(null);
   const triggerRef = useRef<HTMLAnchorElement>(null);
   const { open, focusIndex, focusTarget } = shell.drawer;
+  // Until hydration the no-JS fallback (the #space-sidebar fragment) may hold the drawer open.
+  const [hydrated, setHydrated] = useState(false);
 
   const links: SpaceLink[] = shell.spaces.map((id) => ({
     space: id,
@@ -105,7 +119,7 @@ export default function SpacesShell({
   const sidebarLabel = `${SPACE_LABEL[space]} menu`;
 
   function focusables(): HTMLElement[] {
-    return Array.from(drawerRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter(shown);
+    return Array.from(drawerRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter(tabbable);
   }
 
   function openDrawer(event: MouseEvent) {
@@ -125,11 +139,31 @@ export default function SpacesShell({
     if (chosen && chosen !== space) shell.switchSpace(chosen);
   }
 
+  /*
+   * Take over from the no-JS fallback. A drawer opened through its link before
+   * hydration (or reached later with Back) becomes controller state, and the
+   * fragment is dropped, so every way of closing it works from then on.
+   */
+  useEffect(() => {
+    setHydrated(true);
+    if (!drawerRef.current) return;
+    const adopt = () => {
+      if (window.location.hash !== `#${SIDEBAR_ID}`) return;
+      history.replaceState(history.state, "", window.location.pathname + window.location.search);
+      controller.dispatchDrawer({ type: "open", itemCount: focusables().length });
+    };
+    adopt();
+    window.addEventListener("hashchange", adopt);
+    return () => window.removeEventListener("hashchange", adopt);
+  }, [controller]);
+
   /* Apply the controller's focus intents: into the drawer, or back to the trigger. */
   useEffect(() => {
     if (focusTarget === "drawer") {
+      // The drawer was hidden when it was asked to open, so it could not count
+      // its items then; the first one is the place to start.
       const items = focusables();
-      (focusIndex === null ? drawerRef.current : items[focusIndex])?.focus();
+      (focusIndex === null ? (items[0] ?? drawerRef.current) : items[focusIndex])?.focus();
     } else if (focusTarget === "trigger" && shown(triggerRef.current)) {
       triggerRef.current.focus();
     }
@@ -235,14 +269,12 @@ export default function SpacesShell({
       data-space={space}
       data-sidebar={sidebar ? "" : undefined}
       data-drawer={open ? "open" : "closed"}
+      data-hydrated={hydrated ? "" : undefined}
       onClickCapture={rememberSpace}
     >
       <a href={`#${MAIN_ID}`} className={cx("spaces-shell__skip", FOCUS_RING)}>
         Skip to content
       </a>
-      {account.signOut.kind === "form" && (
-        <form id={SIGN_OUT_FORM_ID} method="post" action={account.signOut.action} hidden />
-      )}
       <SpaceFile className="spaces-shell__file" tabs={tabs} active={space} person={person} start={start} end={tools}>
         <div className="spaces-shell__body">
           {sidebar && (

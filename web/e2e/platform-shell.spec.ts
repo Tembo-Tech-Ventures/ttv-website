@@ -59,6 +59,12 @@ function wide(page: Page) {
   return (page.viewportSize()?.width ?? 0) >= WIDE;
 }
 
+/** The avatar's disclosure: Account, Feedback and Sign out. */
+function accountMenu(page: Page) {
+  const details = page.locator("details.spaces-account");
+  return { summary: details.locator("> summary"), panel: details.locator(".spaces-account__panel") };
+}
+
 /** The space navigation a person sees at this width: tabs, or the bottom bar. */
 function spacesNav(page: Page) {
   return wide(page) ? page.locator(".space-file__nav") : page.locator(".spaces-bottom");
@@ -113,8 +119,8 @@ test.describe("the spaces shell harness", () => {
     await open(page, harness("david", "mentoring"));
     await runAxe(page, testInfo, "rest");
 
-    await page.getByRole("button", { name: "Account menu, David Kamau" }).click();
-    await expect(page.getByRole("menu")).toBeVisible();
+    await accountMenu(page).summary.click();
+    await expect(accountMenu(page).panel).toBeVisible();
     await runAxe(page, testInfo, "menu");
     await page.keyboard.press("Escape");
 
@@ -168,7 +174,8 @@ test.describe("the spaces shell harness", () => {
               if (overlap) found.push(`"${name(chrome[i])}" overlaps "${name(chrome[j])}"`);
             }
           }
-          if (isWide) {
+          // The wide row and the phone bar each have their own rules.
+          const wideRules = () => {
             const nav = document.querySelector(".space-file__nav")!;
             if (nav.scrollWidth > nav.clientWidth + 1) found.push("the tab strip has to scroll");
             const row = document.querySelector(".space-file__row")!.getBoundingClientRect();
@@ -177,9 +184,16 @@ test.describe("the spaces shell harness", () => {
               const box = link.getBoundingClientRect();
               if (Math.abs(box.bottom - sheet.top) > 3) found.push(`tab "${name(link)}" does not stand on the sheet`);
             }
+            // The sheet's rounded top corners belong to the ground: nothing inside paints or hits there.
+            const sheetElement = document.querySelector(".platform-sheet")!;
+            for (const [x, y] of [[sheet.left + 2, sheet.top + 2], [sheet.right - 3, sheet.top + 2]]) {
+              const hit = document.elementFromPoint(x, y);
+              if (hit && sheetElement.contains(hit)) found.push(`"${name(hit)}" covers the sheet's rounded corner`);
+            }
             const active = document.querySelector(".space-tab[data-active] .space-tab__label")!.getBoundingClientRect();
             if (active.width < 2) found.push("the active tab lost its word");
-          } else {
+          };
+          const phoneRules = () => {
             const bar = document.querySelector(".spaces-bottom")!.getBoundingClientRect();
             if (Math.abs(bar.bottom - window.innerHeight) > 1) found.push("the bottom bar is not at the bottom");
             const labels = Array.from(document.querySelectorAll(".spaces-bottom__label")).filter((label) => label.getBoundingClientRect().width > 2);
@@ -189,7 +203,9 @@ test.describe("the spaces shell harness", () => {
             if (!document.querySelector('.spaces-bottom__link[aria-current="page"] .spaces-bottom__label')!.getBoundingClientRect().width) {
               found.push("the current space lost its word");
             }
-          }
+          };
+          if (isWide) wideRules();
+          else phoneRules();
           return found;
         }, width >= 1024);
         expect(problems, `${persona} at ${width}px`).toEqual([]);
@@ -313,6 +329,78 @@ test.describe("the spaces shell harness", () => {
     await expect(page.locator("#spaces-main")).not.toHaveAttribute("inert", "");
   });
 
+  test("hands a drawer opened before hydration to the shell, which then closes it every way", async ({ page }) => {
+    test.skip(wide(page), "The drawer is the phone layout's sidebar.");
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(/\/SpacesShell\.tsx/, async (route) => {
+      await held;
+      await route.continue();
+    });
+    await routeFonts(page);
+    await page.goto(harness("wanjiku", "cohort"), { waitUntil: "domcontentloaded" });
+    await expect(page.locator(".spaces-shell[data-hydrated]")).toHaveCount(0);
+
+    // Before hydration the menu link is the no-JS fallback: a jump to #space-sidebar.
+    await page.getByRole("link", { name: "Open Cohort menu" }).click();
+    await expect(page).toHaveURL(/#space-sidebar$/);
+    await expect(page.locator("#space-sidebar")).toBeVisible();
+
+    release();
+    await expect(page.locator(".spaces-shell[data-hydrated]")).toHaveCount(1);
+    const drawer = page.getByRole("dialog", { name: "Cohort menu" });
+    const trigger = page.getByRole("link", { name: "Open Cohort menu" });
+    await expect(drawer).toBeVisible();
+    await expect(page).not.toHaveURL(/#space-sidebar/);
+    await expect(page.locator("#spaces-main")).toHaveAttribute("inert", "");
+
+    await page.getByRole("link", { name: "Close Cohort menu" }).click();
+    await expect(page.locator("#space-sidebar")).toBeHidden();
+    await expect(trigger).toBeFocused();
+
+    // Reaching the fragment again (Back, a shared link) opens it as state, which Escape closes.
+    await page.evaluate(() => {
+      window.location.hash = "space-sidebar";
+    });
+    await expect(drawer).toBeVisible();
+    await expect(page.getByRole("link", { name: "Close Cohort menu" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#space-sidebar")).toBeHidden();
+    await expect(trigger).toBeFocused();
+
+    await page.evaluate(() => {
+      window.location.hash = "space-sidebar";
+    });
+    await expect(drawer).toBeVisible();
+    const viewport = page.viewportSize()!;
+    await page.mouse.click(viewport.width - 12, viewport.height / 2);
+    await expect(page.locator("#space-sidebar")).toBeHidden();
+  });
+
+  test("keeps the drawer's focus cycle on controls that can really take focus", async ({ page }) => {
+    test.skip(wide(page), "The drawer is the phone layout's sidebar.");
+    await open(page, harness("wanjiku", "cohort", "&hidden"));
+    await page.getByRole("link", { name: "Open Cohort menu" }).click();
+    const close = page.getByRole("link", { name: "Close Cohort menu" });
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#space-sidebar a", { hasText: "Overview" })).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.locator("#space-sidebar a", { hasText: "c04-announcements" })).toBeFocused();
+    for (let i = 0; i < 12; i += 1) {
+      await page.keyboard.press("Tab");
+      const where = await page.evaluate(() => {
+        const el = document.activeElement as HTMLElement;
+        return { inside: Boolean(el.closest("#space-sidebar")), visible: el.checkVisibility({ visibilityProperty: true }) };
+      });
+      expect(where).toEqual({ inside: true, visible: true });
+    }
+  });
+
   test("works without JavaScript: spaces, the page and the sidebar are all reachable", async ({ browser }, testInfo) => {
     const context = await browser.newContext({ ...testInfo.project.use, javaScriptEnabled: false });
     const page = await context.newPage();
@@ -332,32 +420,47 @@ test.describe("the spaces shell harness", () => {
     } else {
       await expect(page.locator("#space-sidebar")).toBeVisible();
     }
+
+    // The account disclosure is native, so Account and Sign out need no script either.
+    const { summary, panel } = accountMenu(page);
+    await expect(panel).toBeHidden();
+    await summary.click();
+    await expect(panel.getByRole("link", { name: "Account" })).toHaveAttribute("href", "/dashboard/account");
+    await expect(panel.getByRole("link", { name: "Sign out" })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Feedback" })).toHaveCount(0);
     await context.close();
   });
 
   test("opens the account menu from the keyboard and returns focus when it closes", async ({ page }) => {
     await open(page, harness("wanjiku", "community"));
-    const button = page.getByRole("button", { name: "Account menu, Wanjiku Mwangi" });
-    await button.focus();
+    const { summary, panel } = accountMenu(page);
+    await expect(summary).toHaveAttribute("aria-label", "Account menu, Wanjiku Mwangi");
+    await summary.focus();
     await page.keyboard.press("Enter");
-    const menu = page.getByRole("menu");
-    await expect(menu).toBeVisible();
-    await expect(menu.getByRole("menuitem")).toHaveText(["Account", "Feedback", "Sign out"]);
-    await expect(menu.getByRole("menuitem", { name: "Account" })).toHaveAttribute("href", "/dashboard/account");
+    await expect(panel).toBeVisible();
+    await expect(panel.locator("li > a, li button")).toHaveText(["Account", "Feedback", "Sign out"]);
+    await expect(panel.getByRole("link", { name: "Account" })).toHaveAttribute("href", "/dashboard/account");
+    await page.keyboard.press("Tab");
+    await expect(panel.getByRole("link", { name: "Account" })).toBeFocused();
     await page.keyboard.press("Escape");
-    await expect(menu).toBeHidden();
-    await expect(button).toBeFocused();
+    await expect(panel).toBeHidden();
+    await expect(summary).toBeFocused();
 
-    await button.click();
-    await menu.getByRole("menuitem", { name: "Feedback" }).click();
+    await summary.click();
+    await page.locator("#spaces-main").click({ position: { x: 5, y: 5 } });
+    await expect(panel).toBeHidden();
+
+    await summary.click();
+    await panel.getByRole("button", { name: "Feedback" }).click();
+    await expect(panel).toBeHidden();
     await expect(page.getByRole("dialog")).toContainText(/feedback/i);
   });
 
   test("shows no role chips for a person without role badges", async ({ page }) => {
     await open(page, harness("unbadged", "cohort"));
     await expect(page.locator("[data-role-badge]")).toHaveCount(0);
-    await page.getByRole("button", { name: /^Account menu/ }).click();
-    await expect(page.getByRole("menu")).toBeVisible();
+    await accountMenu(page).summary.click();
+    await expect(accountMenu(page).panel).toBeVisible();
     await expect(page.locator("[data-role-badge]")).toHaveCount(0);
   });
 
@@ -437,7 +540,7 @@ test.describe("the spaces shell harness", () => {
     test.skip(!testInfo.project.name.includes("mobile"), "Touch sizing applies to coarse pointers.");
     await open(page, harness("every", "discover"));
     const small = await page.evaluate(() =>
-      Array.from(document.querySelectorAll<HTMLElement>(".spaces-shell a[href], .spaces-shell button"))
+      Array.from(document.querySelectorAll<HTMLElement>(".spaces-shell a[href], .spaces-shell button, .spaces-shell summary"))
         .filter((el) => el.checkVisibility() && !el.classList.contains("spaces-shell__skip") && !el.closest("#spaces-main"))
         .map((el) => ({ name: el.getAttribute("aria-label") ?? el.textContent?.trim(), box: el.getBoundingClientRect() }))
         .filter(({ box }) => box.width < 43.5 || box.height < 43.5)
@@ -473,7 +576,7 @@ test.describe("the spaces shell harness", () => {
     else await page.setViewportSize({ width: 390, height: 844 });
     for (const [name, path, state] of shots) {
       await open(page, path);
-      if (state === "menu") await page.getByRole("button", { name: /^Account menu/ }).click();
+      if (state === "menu") await accountMenu(page).summary.click();
       if (state === "drawer") {
         if (!wide(page)) await page.getByRole("link", { name: /^Open .* menu$/ }).click();
         else continue;

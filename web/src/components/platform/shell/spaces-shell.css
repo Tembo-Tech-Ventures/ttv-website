@@ -74,7 +74,6 @@
   min-height: 0;
   padding: 1.75rem 0.875rem 1rem;
   border-right: 1px solid var(--color-hairline);
-  background-color: var(--sheet);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -160,7 +159,29 @@
   gap: 2.5rem;
 }
 
-.spaces-account-menu {
+/* The account disclosure: the avatar, and a panel that drops below it. */
+.spaces-account {
+  position: relative;
+}
+
+.spaces-account__trigger {
+  list-style: none;
+}
+
+.spaces-account__trigger::-webkit-details-marker {
+  display: none;
+}
+
+.spaces-account[open] > .spaces-account__trigger {
+  outline: 2px solid rgb(255 248 242 / 0.4);
+  outline-offset: 2px;
+}
+
+.spaces-account__panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 30;
   background-color: color-mix(in srgb, var(--color-sheet-community) 70%, var(--color-ground));
 }
 
@@ -177,6 +198,11 @@
  * If the strip still does not fit, it scrolls inside its own bounds.
  */
 @media (min-width: 64rem) {
+  /* The sheet owns its rounded corners: the sidebar and page never paint or hit past them. */
+  .spaces-shell .space-file > .platform-sheet {
+    overflow: clip;
+  }
+
   .spaces-shell .space-file__row {
     flex-wrap: nowrap;
   }
@@ -454,6 +480,8 @@
     padding-top: 1.25rem;
     border-right: 0;
     border-radius: 0 1.5rem 1.5rem 0;
+    /* A drawer is its own surface; in the sheet the sidebar is the sheet itself. */
+    background-color: var(--sheet);
     box-shadow: 30px 0 60px -20px rgb(0 0 0 / 0.7);
     transform: translateX(-100%);
     visibility: hidden;
@@ -481,16 +509,20 @@
       visibility 0s linear 220ms;
   }
 
-  /* Open with the drawer's state, or by its link when JavaScript has not run. */
+  /*
+   * Open with the drawer's state, or by its link until JavaScript has run.
+   * Once hydrated the state alone decides (a leftover #space-sidebar must not
+   * pin the drawer open); the shell adopts that fragment as state on hydration.
+   */
   .spaces-shell[data-drawer="open"] .spaces-shell__sidebar,
-  .spaces-shell__sidebar:target {
+  .spaces-shell:not([data-hydrated]) .spaces-shell__sidebar:target {
     transform: none;
     visibility: visible;
     transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
   .spaces-shell[data-drawer="open"] .spaces-shell__scrim,
-  .spaces-shell .space-file:has(.spaces-shell__sidebar:target) .spaces-shell__scrim {
+  .spaces-shell:not([data-hydrated]) .space-file:has(.spaces-shell__sidebar:target) .spaces-shell__scrim {
     opacity: 1;
     visibility: visible;
     transition: opacity 220ms ease;
@@ -498,7 +530,7 @@
 
   /* The drawer and its scrim lie over the bottom bar too. */
   .spaces-shell[data-drawer="open"] .space-file,
-  .spaces-shell .space-file:has(.spaces-shell__sidebar:target) {
+  .spaces-shell:not([data-hydrated]) .space-file:has(.spaces-shell__sidebar:target) {
     z-index: 20;
   }
 }

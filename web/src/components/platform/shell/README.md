@@ -38,6 +38,10 @@ if (!canRenderSpace(me, "community")) return new Response(null, { status: 404 })
   scroll inside the sheet; a full-height view such as a channel can size
   itself to `#spaces-main`.
 - Without a `sidebar` slot there is no drawer and no menu button.
+- Without JavaScript the drawer opens through its `#space-sidebar` link, and
+  the account menu is a native `details` disclosure (Account and Sign out work;
+  Feedback appears once hydrated). On hydration the shell adopts an open
+  fragment as drawer state and drops it, so every way of closing works.
 - Tabs link to `SPACE_HOME` in `space-routes.ts`, the paths B-1.2 serves. When
   B-1.2's `SPACE_PATHS` lands, import it there.
 
@@ -54,7 +58,7 @@ counts are U-1.3's (the attention store).
 ## Motion
 
 Switching spaces is a cross-document view transition between two spaces
-pages: the tab row stays as the anchor while the chosen sheet, opaque, rises
+pages: the tab row (not named, so it cuts to its new state) stays as the anchor while the chosen sheet, opaque, rises
 4.5rem into place over the dimmed old one (250ms). With reduced motion the
 pages do not opt in, so it is a plain cut. The drawer slides in 220ms and is
 static under reduced motion.

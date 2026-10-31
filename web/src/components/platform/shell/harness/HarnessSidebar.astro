@@ -29,10 +29,25 @@ import SidebarLink from "../SidebarLink.astro";
 
 interface Props {
   space: SpaceId;
+  /** Slot controls focus must skip: hidden by visibility, and disabled. */
+  hiddenControls?: boolean;
 }
 
-const { space } = Astro.props;
+const { space, hiddenControls = false } = Astro.props;
 ---
+
+{
+  hiddenControls && (
+    <div data-hidden-controls>
+      <a href="#hidden" style="visibility: hidden">
+        Hidden link
+      </a>
+      <button type="button" disabled>
+        Disabled button
+      </button>
+    </div>
+  )
+}
 
 {
   space === "cohort" && (

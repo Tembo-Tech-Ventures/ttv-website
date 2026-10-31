@@ -212,49 +212,85 @@ describe("SpacesShell drawer", () => {
 });
 
 describe("SpacesShell account menu", () => {
-  async function openMenu() {
-    await act(async () => q<HTMLButtonElement>('[aria-label="Account menu, David Kamau"]').click());
-    const menu = document.querySelector('[role="menu"]');
-    if (!menu) throw new Error("menu did not open");
-    return menu;
-  }
+  const items = (scope: HTMLElement) =>
+    Array.from(scope.querySelectorAll(".spaces-account__panel li > a, .spaces-account__panel li button")).map((item) =>
+      item.textContent?.trim(),
+    );
 
-  it("holds Account, Feedback and Sign out", async () => {
-    await mount();
-    const menu = await openMenu();
-    const items = Array.from(menu.querySelectorAll('[role="menuitem"]')).map((item) => item.textContent?.trim());
-    expect(items).toEqual(["Account", "Feedback", "Sign out"]);
-    expect(menu.querySelector('a[role="menuitem"][href="/dashboard/account"]')).not.toBeNull();
-    expect(menu.querySelector('a[role="menuitem"][href="/auth/logout"]')).not.toBeNull();
+  it("works before and without JavaScript: Account and Sign out are links in the page", () => {
+    const html = renderToString(<SpacesShell {...props()} />);
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    expect(host.querySelector("details.spaces-account > summary")?.getAttribute("aria-label")).toBe("Account menu, David Kamau");
+    // Feedback needs the widget, which needs JavaScript, so it is not offered yet.
+    expect(items(host)).toEqual(["Account", "Sign out"]);
+    expect(host.querySelector('.spaces-account__panel a[href="/dashboard/account"]')).not.toBeNull();
+    expect(host.querySelector('.spaces-account__panel a[href="/auth/logout"]')).not.toBeNull();
   });
 
-  it("opens the feedback form, and leaves it out where the widget is not mounted", async () => {
+  it("offers Feedback once hydrated, which opens the form and closes the menu", async () => {
     const opened = vi.fn();
     window.addEventListener(OPEN_FEEDBACK_EVENT, opened);
     await mount();
-    let menu = await openMenu();
-    await act(async () => (menu.querySelectorAll<HTMLElement>('[role="menuitem"]')[1]).click());
+    const details = q<HTMLDetailsElement>("details.spaces-account");
+    details.open = true;
+    expect(items(container)).toEqual(["Account", "Feedback", "Sign out"]);
+    await act(async () => q<HTMLButtonElement>(".spaces-account__panel button").click());
     expect(opened).toHaveBeenCalledTimes(1);
+    expect(details.open).toBe(false);
     window.removeEventListener(OPEN_FEEDBACK_EVENT, opened);
-
-    await act(async () => root.unmount());
-    root = createRoot(container);
-    await mount({ account: { ...LINK_OUT, feedback: false } });
-    menu = await openMenu();
-    expect(Array.from(menu.querySelectorAll('[role="menuitem"]')).map((item) => item.textContent?.trim())).toEqual([
-      "Account",
-      "Sign out",
-    ]);
   });
 
-  it("signs a QA persona out with a POST to its own endpoint", async () => {
-    await mount({ account: { signOut: { kind: "form", action: "/api/qa/logout", label: "Sign out of this QA persona" }, feedback: false } });
-    const form = q<HTMLFormElement>("form#spaces-sign-out");
-    expect(form.getAttribute("method")).toBe("post");
-    expect(form.getAttribute("action")).toBe("/api/qa/logout");
-    const menu = await openMenu();
-    const submit = menu.querySelector<HTMLButtonElement>('button[type="submit"][form="spaces-sign-out"]');
-    expect(submit?.textContent?.trim()).toBe("Sign out of this QA persona");
+  it("leaves Feedback out where the widget is not mounted", async () => {
+    await mount({ account: { ...LINK_OUT, feedback: false } });
+    expect(items(container)).toEqual(["Account", "Sign out"]);
+  });
+
+  it("closes on Escape with focus back on the avatar, and on a click elsewhere", async () => {
+    await mount();
+    const details = q<HTMLDetailsElement>("details.spaces-account");
+    details.open = true;
+    q<HTMLAnchorElement>('.spaces-account__panel a[href="/dashboard/account"]').focus();
+    details.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(details.open).toBe(false);
+    expect(document.activeElement).toBe(q("details.spaces-account > summary"));
+
+    details.open = true;
+    document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    expect(details.open).toBe(false);
+  });
+
+  it("signs a QA persona out with a POST to its own endpoint, without JavaScript too", () => {
+    const html = renderToString(
+      <SpacesShell
+        {...props({ account: { signOut: { kind: "form", action: "/api/qa/logout", label: "Sign out of this QA persona" }, feedback: false } })}
+      />,
+    );
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    const form = host.querySelector<HTMLFormElement>(".spaces-account__panel form");
+    expect(form?.getAttribute("method")).toBe("post");
+    expect(form?.getAttribute("action")).toBe("/api/qa/logout");
+    expect(form?.querySelector('button[type="submit"]')?.textContent?.trim()).toBe("Sign out of this QA persona");
+  });
+});
+
+describe("SpacesShell hydration handoff", () => {
+  it("adopts a drawer opened by its no-JS link before hydration, and can then close it", async () => {
+    setURL("https://ttv.test/dashboard/mentoring#space-sidebar");
+    await mount();
+    const shell = q(".spaces-shell");
+    expect(shell.hasAttribute("data-hydrated")).toBe(true);
+    expect(shell.dataset.drawer).toBe("open");
+    expect(q("#space-sidebar").getAttribute("role")).toBe("dialog");
+    // The fragment is dropped, so the stylesheet's no-JS rule can no longer pin it open.
+    expect(window.location.hash).toBe("");
+    await act(async () => q("#space-sidebar").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    expect(shell.dataset.drawer).toBe("closed");
+  });
+
+  it("is marked hydrated only after hydration, so the no-JS rules apply until then", () => {
+    expect(renderToString(<SpacesShell {...props()} />)).not.toContain("data-hydrated");
   });
 });
 
