@@ -213,6 +213,27 @@ describe("createGeneratedWranglerConfig", () => {
     expect(config.vars).not.toHaveProperty("AGENT_AUTH_ENABLED");
   });
 
+  it.each(["production", "staging", "agent-pr-235", "agent-feature-flags"])(
+    "enables platform overrides only for non-production deployments (%s)",
+    (environment) => {
+      vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME", environment);
+      // A stray process variable cannot inject an override into production.
+      vi.stubEnv("PLATFORM_FLAGS_OVERRIDE", "all");
+      const context = deriveEnvironmentContext();
+      const config = createGeneratedWranglerConfig({
+        ...context,
+        d1Id: "db-id",
+        betterAuthUrl: "https://example.test",
+      });
+      expect(config.vars.DEPLOYMENT_ENVIRONMENT).toBe(environment);
+      if (environment === "production") {
+        expect(config.vars).not.toHaveProperty("PLATFORM_FLAGS_OVERRIDE");
+      } else {
+        expect(config.vars.PLATFORM_FLAGS_OVERRIDE).toBe("all");
+      }
+    }
+  );
+
   it("passes the SAM alert URL as a plain-text var only outside previews", () => {
     const shared = createGeneratedWranglerConfig({
       workerName: "ttv-production",
