@@ -1,0 +1,192 @@
+---
+/**
+ * Dev-only harness for the platform UI primitives (U-0.1).
+ *
+ * Nothing in the platform is user-visible until its feature flag is on, and
+ * the flags have not landed yet, so the primitives can only be seen here. It
+ * shows three people's card files (the space tabs grown out of a sheet),
+ * every primitive in every state on every space tone, and one hydrated island.
+ * `e2e/platform-ui.spec.ts` checks it in a real browser, and checks that
+ * deployed environments answer 404.
+ */
+import {
+  ChatsCircleIcon,
+  FolderIcon,
+  VideoCameraIcon,
+} from "@phosphor-icons/react";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import Catalogue from "@/components/platform/dev/Catalogue.astro";
+import PersonaFile from "@/components/platform/dev/PersonaFile.astro";
+import PrimitivesPlayground from "@/components/platform/dev/PrimitivesPlayground";
+import { PEOPLE } from "@/components/platform/dev/people";
+import {
+  Avatar,
+  Button,
+  Card,
+  Pill,
+  RoleBadge,
+  Sheet,
+  SPACE_ORDER,
+  TemboMark,
+} from "@/components/platform/ui";
+
+if (!import.meta.env.DEV) {
+  return new Response("Not found", { status: 404 });
+}
+
+const wrap = "mx-auto w-full max-w-7xl px-3 sm:px-8";
+const sectionTitle = "font-body text-2xl font-bold tracking-normal";
+const name = "text-[14.5px] font-bold text-ink-primary";
+const time = "text-[13px] text-sheet-ink-muted";
+---
+
+<BaseLayout title="Platform UI | TTV" noIndex>
+  <div
+    class="min-h-screen overflow-x-clip bg-ground bg-[radial-gradient(900px_500px_at_12%_-10%,rgb(242_141_104/0.14),transparent_60%),radial-gradient(800px_600px_at_100%_0%,rgb(44_105_100/0.35),transparent_70%)] pb-24"
+  >
+    <header class={`${wrap} pt-10 pb-12 sm:pt-14`}>
+      <h1 class="text-[clamp(2.25rem,6vw,3.5rem)] leading-[1.02] tracking-display">Platform UI</h1>
+      <p class="mt-4 max-w-2xl text-base text-ink-secondary sm:text-lg">
+        The pieces every space is built from, in every state, on every space's sheet. Fictional people
+        and data. This page exists only on the dev server.
+      </p>
+    </header>
+
+    <main class="flex flex-col gap-20">
+      <section aria-labelledby="spaces-title" class={`${wrap} flex flex-col gap-12`}>
+        <h2 id="spaces-title" class={sectionTitle}>Spaces, by person</h2>
+
+        <PersonaFile
+          person={PEOPLE.wanjiku}
+          summary="Student, Cohort 04"
+          active="cohort"
+          spaces={[
+            { id: "cohort", href: "#cohort", count: 2 },
+            { id: "community", href: "#community", unread: true },
+            { id: "profile", href: "#profile" },
+          ]}
+        >
+          <div class="flex flex-col gap-5">
+            <div class="grid grid-cols-[34px_minmax(0,1fr)] gap-3">
+              <Avatar {...PEOPLE.faith} decorative />
+              <div class="min-w-0">
+                <p class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span class={name}>{PEOPLE.faith.name}</span>
+                  <RoleBadge kind="TA" label="TA" />
+                  <span class={time}>08:30</span>
+                </p>
+                <p class="mt-1">Session 9 is up. Retries start around 34 minutes.</p>
+                <Pill size="md" className="mt-2" icon={VideoCameraIcon}>Session 9 · 34:12</Pill>
+              </div>
+            </div>
+            <div class="grid grid-cols-[34px_minmax(0,1fr)] gap-3">
+              <TemboMark decorative />
+              <div class="min-w-0">
+                <p class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span class={name}>Tembo</span>
+                  <RoleBadge kind="AI" label="AI" />
+                  <span class={time}>08:55</span>
+                </p>
+                <Card className="mt-2 max-w-xl">
+                  <p>
+                    The 200 tells the provider you already have this one, so it stops retrying. The
+                    duplicate succeeded the first time.
+                  </p>
+                  <Pill tone="peach" className="mt-3" icon={VideoCameraIcon}>Session 9 · 34:12</Pill>
+                  <p class="mt-3 text-[12.5px] text-sheet-ink-muted">
+                    Sees: Cohort 04 recordings · You: 6 of 10 today
+                  </p>
+                </Card>
+              </div>
+            </div>
+          </div>
+        </PersonaFile>
+
+        <PersonaFile
+          person={PEOPLE.david}
+          summary="Mentor, and Cohort 01 alumni"
+          active="mentoring"
+          spaces={[
+            { id: "community", href: "#community" },
+            { id: "mentoring", href: "#mentoring", count: 2 },
+            { id: "profile", href: "#profile" },
+          ]}
+        >
+          <Card as="article" className="max-w-2xl">
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <Avatar {...PEOPLE.achieng} marker="builder" decorative />
+              <span class={name}>{PEOPLE.achieng.name}</span>
+              <RoleBadge kind="ALUMNI" label="Alumni · Cohort 02" />
+            </div>
+            <p class="mt-3">
+              Could you look at how I handle duplicate callbacks before more groups start using it?
+            </p>
+            <div class="mt-3 flex flex-wrap gap-1.5">
+              <Pill tone="peach" icon={FolderIcon}>Chama ledger · rev 3</Pill>
+              <Pill tone="ring">Confirmed on revision 2</Pill>
+            </div>
+            <div class="mt-4 flex flex-wrap gap-2">
+              <Button variant="primary" size="sm">Accept</Button>
+              <Button variant="quiet" size="sm">Suggest another mentor</Button>
+              <Button variant="ghost" size="sm">Decline</Button>
+            </div>
+          </Card>
+        </PersonaFile>
+
+        <PersonaFile
+          person={PEOPLE.amina}
+          summary="Staff"
+          active="admin"
+          spaces={[
+            { id: "cohort", href: "#cohort" },
+            { id: "community", href: "#community", count: 5 },
+            { id: "mentoring", href: "#mentoring" },
+            { id: "admin", href: "#admin", count: 3 },
+            { id: "profile", href: "#profile" },
+          ]}
+        >
+          <Card as="article" className="max-w-2xl">
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <Pill tone="peach">Flagged: contact details</Pill>
+              <span class={time}># help · 10:12</span>
+            </div>
+            <div class="mt-3 grid grid-cols-[34px_minmax(0,1fr)] gap-3">
+              <Avatar {...PEOPLE.kevin} decorative />
+              <div class="min-w-0">
+                <span class={name}>{PEOPLE.kevin.name}</span>
+                <p class="mt-1">Happy to pair on this, message me on 07xx xxx xxx.</p>
+              </div>
+            </div>
+            <div class="mt-4 flex flex-wrap gap-2">
+              <Button variant="quiet" size="sm">Fine as is</Button>
+              <Button variant="danger" size="sm">Hide, with a reason</Button>
+            </div>
+          </Card>
+        </PersonaFile>
+      </section>
+
+      <section aria-labelledby="catalogue-title" class="flex flex-col">
+        <div class={wrap}>
+          <h2 id="catalogue-title" class={`${sectionTitle} mb-8`}>Every primitive, on every tone</h2>
+        </div>
+        <div class={`${wrap} flex flex-col [&>*+*]:-mt-6`}>
+          {SPACE_ORDER.map((tone) => <Catalogue tone={tone} />)}
+        </div>
+      </section>
+
+      <section aria-labelledby="island-title" class={wrap}>
+        <Sheet tone="community" className="px-5 pt-7 pb-10 sm:px-8">
+          <h2 id="island-title" class={`${sectionTitle} flex items-center gap-2`}>
+            <ChatsCircleIcon aria-hidden="true" className="size-6 text-peach-ink" />
+            Inside a React island
+          </h2>
+          <p class="mt-2 mb-6 max-w-2xl text-sheet-ink-secondary">
+            The same primitives, hydrated: reactions you can give and take back, a send that shows
+            its loading state, and a toggle with a count.
+          </p>
+          <PrimitivesPlayground client:visible />
+        </Sheet>
+      </section>
+    </main>
+  </div>
+</BaseLayout>

@@ -61,6 +61,47 @@
   --tracking-display: -0.02em;
   --tracking-heading: -0.015em;
   --tracking-subhead: -0.01em;
+
+  /*
+   * Platform spaces (src/components/platform/ui). The signed-in app is a card
+   * file: each space is a rounded sheet laid on a deeper ground, in the
+   * homepage's layered-sheet tones, and its index tab is tinted with the same
+   * tone. Order is the space order, darkest (admin) to lightest (profile).
+   *
+   * Profile is the lightest surface any platform text sits on, and the tones
+   * were nudged darker than the October prototype so that every ink below
+   * clears 4.5:1 on it — including on a raised card and inside a tinted chip.
+   * `platform-contrast.test.ts` checks every pairing; adjust there first.
+   */
+  --color-ground: #01211F;
+  --color-sheet-admin: #032F2C;
+  --color-sheet-cohort: #05433E;
+  --color-sheet-community: #0A4842;
+  --color-sheet-discover: #08434A;
+  --color-sheet-mentoring: #0B4A44;
+  --color-sheet-profile: #0E4D47;
+
+  /*
+   * The app-wide ink ramp is tuned for --color-surface; raised cards on the
+   * lighter sheets need a slightly firmer secondary and muted ink to stay at AA.
+   */
+  --color-sheet-ink-secondary: rgba(255, 248, 242, 0.80);
+  --color-sheet-ink-muted: rgba(255, 248, 242, 0.70);
+
+  /* Peach as text: #F28D68 itself is a fill colour and reads at only ~4:1. */
+  --color-peach-ink: #FFB496;
+  /* The mentor ring, and text set in it. */
+  --color-ring: #A8DAD1;
+  --color-danger-ink: #FFC4B8;
+
+  /* Avatar fills, all from the brand's peach and teal families. Dark teal
+   * initials clear 5:1 on each. Chosen per person by a hash of their id. */
+  --color-avatar-peach: #F28D68;
+  --color-avatar-apricot: #F7B08F;
+  --color-avatar-shell: #FBD9C8;
+  --color-avatar-sage: #7FBCB2;
+  --color-avatar-mint: #A8DAD1;
+  --color-avatar-frost: #D7F0EA;
 }
 
 /*

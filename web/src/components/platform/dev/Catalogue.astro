@@ -1,0 +1,206 @@
+---
+/**
+ * Every primitive in every state, on one space tone. `/dev/platform-ui`
+ * renders this once per tone, so contrast and markers can be judged on the
+ * darkest and the lightest sheet alike.
+ */
+import {
+  ArrowRightIcon,
+  BellSimpleIcon,
+  ChatsCircleIcon,
+  FolderIcon,
+  MagnifyingGlassIcon,
+  PushPinIcon,
+  SparkleIcon,
+  TrashIcon,
+  UsersThreeIcon,
+  VideoCameraIcon,
+} from "@phosphor-icons/react";
+import {
+  Avatar,
+  Button,
+  Card,
+  CountBadge,
+  IconButton,
+  PersonMarker,
+  Pill,
+  REACTION_KINDS,
+  ROLE_BADGE_KINDS,
+  RoleBadge,
+  Sheet,
+  SPACE_LABELS,
+  TemboMark,
+  TextReaction,
+  type RoleBadgeKind,
+  type SpaceId,
+} from "@/components/platform/ui";
+import { PEOPLE, SAMPLE_PHOTO } from "./people";
+
+interface Props {
+  tone: SpaceId;
+}
+
+const { tone } = Astro.props;
+
+const ROLE_LABELS: Record<RoleBadgeKind, string> = {
+  COHORT: "Cohort 04",
+  ALUMNI: "Alumni · Cohort 02",
+  COMMUNITY: "Community",
+  MENTOR: "Mentor",
+  TA: "TA",
+  INSTRUCTOR: "Instructor",
+  INSTITUTION: "Institution",
+  STAFF: "Staff",
+  ADMIN: "Admin",
+  AI: "AI",
+};
+
+const people = [PEOPLE.wanjiku, PEOPLE.achieng, PEOPLE.david, PEOPLE.brian, PEOPLE.faith, PEOPLE.mercy];
+const group = "flex flex-col gap-3";
+const heading = "text-[15px] font-bold text-ink-primary";
+const row = "flex flex-wrap items-center gap-3";
+---
+
+<Sheet
+  as="section"
+  tone={tone}
+  aria-labelledby={`tone-${tone}`}
+  data-catalogue={tone}
+  className="px-5 pt-7 pb-14 sm:px-8"
+>
+  <h2 id={`tone-${tone}`} class="font-body text-xl font-bold tracking-normal">
+    {SPACE_LABELS[tone]} tone
+  </h2>
+  <div class="mt-6 grid gap-x-10 gap-y-8 lg:grid-cols-2">
+    <div class={group} data-group="buttons">
+      <h3 class={heading}>Buttons</h3>
+      <div class={row}>
+        <Button variant="primary" icon={ArrowRightIcon}>Request review</Button>
+        <Button variant="quiet" icon={PushPinIcon}>2 pinned</Button>
+        <Button variant="ghost">Not now</Button>
+        <Button variant="danger" icon={TrashIcon}>Hide message</Button>
+      </div>
+      <div class={row}>
+        <Button variant="primary" size="sm">Accept</Button>
+        <Button variant="quiet" size="sm">Redirect</Button>
+        <Button variant="ghost" size="sm">Decline</Button>
+        <Button variant="danger" size="sm">Remove</Button>
+      </div>
+      <div class={row}>
+        <Button variant="primary" loading>Sending</Button>
+        <Button variant="quiet" disabled>Archived</Button>
+        <Button variant="primary" size="sm" disabled>Full this month</Button>
+      </div>
+    </div>
+
+    <div class={group} data-group="icon-buttons">
+      <h3 class={heading}>Icon buttons</h3>
+      <div class={row}>
+        <IconButton label="Search" icon={MagnifyingGlassIcon} />
+        <IconButton label="Attention" count={4} countNoun="waiting" icon={BellSimpleIcon} />
+        <IconButton label="Thread" unread icon={ChatsCircleIcon} />
+        <IconButton label="Members" pressed icon={UsersThreeIcon} />
+        <IconButton label="Ask Tembo" variant="ghost" icon={SparkleIcon} />
+        <IconButton label="Pinned" size="sm" icon={PushPinIcon} />
+        <IconButton label="Delete" size="sm" variant="ghost" disabled icon={TrashIcon} />
+      </div>
+      <h3 class={heading}>Counts</h3>
+      <div class={row}>
+        <CountBadge count={2} />
+        <CountBadge count={12} tone="quiet" label="12 messages" />
+        <CountBadge count={140} />
+        <CountBadge variant="dot" />
+      </div>
+    </div>
+
+    <div class={group} data-group="people">
+      <h3 class={heading}>People</h3>
+      <div class={row}>
+        <Avatar {...PEOPLE.wanjiku} size="xs" />
+        <Avatar {...PEOPLE.wanjiku} size="sm" />
+        <Avatar {...PEOPLE.wanjiku} size="md" />
+        <Avatar {...PEOPLE.wanjiku} size="lg" />
+        <Avatar {...PEOPLE.wanjiku} size="xl" />
+        <Avatar {...PEOPLE.lucy} size="lg" src={SAMPLE_PHOTO} />
+      </div>
+      <div class={row}>
+        {people.map((person) => <Avatar {...person} />)}
+      </div>
+      <div class={row}>
+        <Avatar {...PEOPLE.brian} size="lg" marker="builder" />
+        <Avatar {...PEOPLE.mercy} size="lg" marker="mentor" />
+        <Avatar {...PEOPLE.joseph} size="lg" marker="institution" />
+        <TemboMark size="sm" />
+        <TemboMark size="md" />
+        <TemboMark size="lg" />
+      </div>
+      <div class={row}>
+        <PersonMarker kind="builder" label="Builder" />
+        <PersonMarker kind="mentor" label="Mentor" />
+        <PersonMarker kind="institution" label="Institution" />
+        <PersonMarker kind="community" label="Community" />
+        <PersonMarker kind="staff" label="Staff" />
+      </div>
+    </div>
+
+    <div class={group} data-group="badges">
+      <h3 class={heading}>Role badges</h3>
+      <div class={row}>
+        {ROLE_BADGE_KINDS.map((kind) => <RoleBadge kind={kind} label={ROLE_LABELS[kind]} />)}
+      </div>
+      <h3 class={heading}>Pills</h3>
+      <div class={row}>
+        <Pill>TypeScript</Pill>
+        <Pill>Cloudflare Workers</Pill>
+        <Pill tone="peach" icon={FolderIcon}>Chama ledger · rev 3</Pill>
+        <Pill tone="ring">Confirmed on revision 2</Pill>
+        <Pill size="md" icon={VideoCameraIcon}>Session 9 · 34:12</Pill>
+      </div>
+    </div>
+
+    <div class={group} data-group="cards">
+      <h3 class={heading}>Cards</h3>
+      <Card as="article">
+        <div class="flex items-center gap-3">
+          <Avatar {...PEOPLE.mercy} marker="mentor" decorative />
+          <div class="min-w-0">
+            <p class="font-bold">{PEOPLE.mercy.name}</p>
+            <p class="text-[13px] text-sheet-ink-muted">Portfolio reviews, backend</p>
+          </div>
+          <RoleBadge kind="MENTOR" label="Mentor" className="ml-auto" />
+        </div>
+        <p class="mt-3 text-sm text-sheet-ink-secondary">
+          Happy to look at how you structure an API and how you test it.
+        </p>
+        <div class="mt-3 flex flex-wrap gap-1.5">
+          <Pill>APIs</Pill>
+          <Pill>Testing</Pill>
+        </div>
+      </Card>
+      <Card as="article" selected>
+        <p class="font-bold">Selected card</p>
+        <p class="mt-1 text-[13px] text-sheet-ink-muted">
+          A peach edge, and the same fill, so text keeps its contrast.
+        </p>
+      </Card>
+    </div>
+
+    <div class={group} data-group="reactions">
+      <h3 class={heading}>Reactions</h3>
+      <div class="flex flex-wrap gap-x-1.5 gap-y-3">
+        {
+          REACTION_KINDS.map((kind, index) => (
+            <TextReaction kind={kind} count={[6, 4, 1, 0, 11][index]} mine={kind === "learned"} />
+          ))
+        }
+      </div>
+      <Card padding="sm">
+        <p class="text-[13px] text-sheet-ink-muted">On a card</p>
+        <div class="mt-2 flex flex-wrap gap-x-1.5 gap-y-3">
+          <TextReaction kind="useful" count={3} mine={false} />
+          <TextReaction kind="congrats" count={1} mine />
+        </div>
+      </Card>
+    </div>
+  </div>
+</Sheet>

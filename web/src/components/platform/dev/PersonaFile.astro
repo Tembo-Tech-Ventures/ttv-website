@@ -1,0 +1,45 @@
+---
+/**
+ * One person's card file for `/dev/platform-ui`: who they are, then their
+ * space tabs grown out of the active space's sheet, with a little real-looking
+ * content on it so the tab, sheet and primitives are judged together.
+ */
+import {
+  Avatar,
+  Sheet,
+  SpaceTabs,
+  type SpaceId,
+  type SpaceTabItem,
+} from "@/components/platform/ui";
+import type { HarnessPerson } from "./people";
+
+interface Props {
+  person: HarnessPerson;
+  summary: string;
+  spaces: SpaceTabItem[];
+  active: SpaceId;
+}
+
+const { person, summary, spaces, active } = Astro.props;
+const headingId = `persona-${person.id}`;
+---
+
+<section
+  aria-labelledby={headingId}
+  data-persona={person.id}
+  class="grid gap-5 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-8"
+>
+  <div class="flex items-center gap-3 lg:items-start lg:pt-14">
+    <Avatar {...person} size="lg" decorative />
+    <div>
+      <h3 id={headingId} class="text-base font-bold">{person.name}</h3>
+      <p class="text-sm text-ink-secondary">{summary}</p>
+    </div>
+  </div>
+  <div class="min-w-0" data-file="">
+    <SpaceTabs spaces={spaces} active={active} profile={person} />
+    <Sheet tone={active} className="px-5 pt-6 pb-7 sm:px-7">
+      <slot />
+    </Sheet>
+  </div>
+</section>
