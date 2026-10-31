@@ -130,11 +130,11 @@ export default function AccountMenu({ person, account }: { person: PersonSummary
           )}
           <li className="mt-1 border-t border-hairline pt-1">
             {signOut.kind === "link" ? (
-              <a href={signOut.href} className={ITEM}>
+              <a href={signOut.href} data-shell-sign-out className={ITEM}>
                 {signOutContent}
               </a>
             ) : (
-              <form method="post" action={signOut.action}>
+              <form method="post" action={signOut.action} data-shell-sign-out>
                 <button type="submit" className={ITEM}>
                   {signOutContent}
                 </button>

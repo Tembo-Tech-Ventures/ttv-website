@@ -48,3 +48,23 @@ describe("overlay requests", () => {
     stop();
   });
 });
+
+describe("live attention counts", () => {
+  const counts = (cohort: number) => ({ cohort, community: 0, mentoring: 0, discover: 0, admin: 0, profile: 0 });
+
+  it("reach every subscriber, once per real change, and the latest is kept for late readers", async () => {
+    const { latestAttentionCounts, publishAttentionCounts, subscribeAttentionCounts } = await import("./overlays");
+    const listener = vi.fn();
+    const stop = subscribeAttentionCounts(listener);
+    publishAttentionCounts(counts(3));
+    publishAttentionCounts(counts(3));
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(latestAttentionCounts()?.cohort).toBe(3);
+    publishAttentionCounts(counts(1));
+    expect(listener).toHaveBeenCalledTimes(2);
+    stop();
+    publishAttentionCounts(counts(0));
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(latestAttentionCounts()?.cohort).toBe(0);
+  });
+});

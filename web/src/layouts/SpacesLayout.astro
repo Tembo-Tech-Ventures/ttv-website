@@ -65,6 +65,16 @@ const account: ShellAccount = harness?.account ?? {
 };
 // Parsed here, on the server: the island gets a SpaceId or null, never the header.
 const lastSpace = readLastSpaceCookie(Astro.request.headers.get("cookie"));
+const shell = {
+  me,
+  space,
+  lastSpace,
+  heading: title,
+  account,
+  overlays,
+  persistPreference: !harness,
+  spaceHrefs: harness?.spaceHrefs,
+};
 ---
 
 <!doctype html>
@@ -78,20 +88,23 @@ const lastSpace = readLastSpaceCookie(Astro.request.headers.get("cookie"));
     {signedIn && <ClientErrorBuffer />}
   </head>
   <body class="h-full overflow-hidden overscroll-none bg-ground">
-    <SpacesShell
-      client:load
-      me={me}
-      space={space}
-      lastSpace={lastSpace}
-      heading={title}
-      account={account}
-      overlays={overlays}
-      persistPreference={!harness}
-      spaceHrefs={harness?.spaceHrefs}
-    >
-      {Astro.slots.has("sidebar") && <slot name="sidebar" slot="sidebar" />}
-      <slot />
-    </SpacesShell>
+    {
+      /*
+       * Two branches, not a conditional slot: an island receives a named slot
+       * whenever one is written, even inside a false expression, and an empty
+       * sidebar would still bring its drawer and menu button.
+       */
+      Astro.slots.has("sidebar") ? (
+        <SpacesShell client:load {...shell}>
+          <slot name="sidebar" slot="sidebar" />
+          <slot />
+        </SpacesShell>
+      ) : (
+        <SpacesShell client:load {...shell}>
+          <slot />
+        </SpacesShell>
+      )
+    }
     <slot name="overlays" />
     {
       /* No floating button: it would sit on the bottom bar. The account menu opens the form. */

@@ -1,11 +1,13 @@
 import React, {
   forwardRef,
+  useEffect,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
 import { PiArrowUpBold } from "react-icons/pi";
+import { takeAskTemboDraft } from "@/components/platform/search/ask-handoff";
 
 /** Max height before the textarea starts scrolling internally (~6 lines). */
 const MAX_HEIGHT_PX = 168;
@@ -37,6 +39,14 @@ const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
   useImperativeHandle(ref, () => ({
     focus: () => textareaRef.current?.focus(),
   }));
+
+  // A question handed over from search arrives in the box, unsent: the person decides.
+  useEffect(() => {
+    const draft = takeAskTemboDraft();
+    if (!draft) return;
+    setValue(draft);
+    textareaRef.current?.focus();
+  }, []);
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;

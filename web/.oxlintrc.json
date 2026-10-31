@@ -90,7 +90,10 @@
       "files": [
         "src/components/platform/ui/Sheet.tsx",
         "src/components/platform/ui/SpaceFile.tsx",
-        "src/components/platform/shell/SpacesShell.tsx"
+        "src/components/platform/shell/SpacesShell.tsx",
+        "src/components/platform/attention/AttentionPanel.tsx",
+        "src/components/platform/attention/AttentionPage.tsx",
+        "src/components/platform/search/SearchOverlay.tsx"
       ],
       "rules": {
         "import/no-unassigned-import": "off"

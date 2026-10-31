@@ -1,0 +1,368 @@
+/*
+ * Attention: the panel that hangs from the bell (wide screens) and the page
+ * (phones, or anyone who follows the link). Both are the same inbox: filters,
+ * then New as raised cards and Earlier as quiet rows, each with who or what,
+ * where it happened, how long ago and an unread dot.
+ */
+
+/* ---- The panel: a sheet that drops from the bell ------------------------ */
+
+.attention-panel {
+  position: fixed;
+  inset: auto;
+  top: 4.5rem;
+  right: 1.5rem;
+  width: min(30rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 6rem);
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-hairline);
+  border-radius: 1.5rem;
+  background: var(--color-sheet-community);
+  color: var(--color-ink-primary);
+  box-shadow:
+    0 1px 0 rgb(255 248 242 / 0.08) inset,
+    0 28px 60px -18px rgb(0 0 0 / 0.65);
+  transform-origin: top right;
+}
+
+.attention-panel[open] {
+  display: flex;
+}
+
+/* The page stays readable behind: the panel is a note over it, not a new place. */
+.attention-panel::backdrop {
+  background: rgb(1 33 31 / 0.35);
+}
+
+/*
+ * Arrival: the sheet unfolds from the bell's corner, a short drop that settles
+ * under it, quick because it answers a click. Leaving is a cut, so focus is
+ * never waiting on an animation. Reduced motion: it is simply there.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .attention-panel[open] {
+    transition:
+      opacity 90ms ease-out,
+      transform 200ms cubic-bezier(0.16, 0.9, 0.3, 1);
+
+    @starting-style {
+      opacity: 0;
+      transform: translateY(-0.5rem) scale(0.97);
+    }
+  }
+
+  .attention-panel[open]::backdrop {
+    transition: background-color 160ms ease-out;
+
+    @starting-style {
+      background-color: rgb(1 33 31 / 0);
+    }
+  }
+}
+
+.attention-panel__sheet {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 1.5rem 0.75rem 0.75rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.attention-panel__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0 0.5rem 1rem 0.75rem;
+}
+
+/* ---- The page ------------------------------------------------------------ */
+
+.attention-page {
+  max-width: 44rem;
+}
+
+.attention-page__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.attention-page__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding-inline: 0.5rem;
+}
+
+/* On phones the top bar already names the page (as the prototype does); the heading stays for screen readers. */
+@media (max-width: 63.999rem) {
+  .attention-page__title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+.attention-page__title {
+  font-size: clamp(1.75rem, 1.2rem + 2.2vw, 2.75rem);
+  line-height: 1.1;
+  color: var(--color-ink-primary);
+  scroll-margin-top: 1rem;
+}
+
+.attention-page__title:focus {
+  outline: none;
+}
+
+.attention-page__count {
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--color-ink-primary);
+}
+
+/* ---- The inbox ------------------------------------------------------------- */
+
+/* One row of filters; on the narrowest screens it scrolls sideways within itself rather than wrapping. */
+.attention-filters {
+  display: flex;
+  gap: 0.125rem;
+  min-width: 0;
+  min-inline-size: 0;
+  margin: 0 0 0.75rem;
+  padding: 0 0.5rem;
+  border: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.attention-panel .attention-filters {
+  padding-inline: 0.75rem;
+}
+
+.attention-filter {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 2.5rem;
+  padding: 0 0.75rem;
+  white-space: nowrap;
+  border-radius: 999px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+  transition:
+    background-color 150ms,
+    color 150ms;
+}
+
+.attention-filter:hover {
+  background: rgb(255 248 242 / 0.07);
+  color: var(--color-ink-primary);
+}
+
+.attention-filter[aria-pressed="true"] {
+  background: var(--color-ink-primary);
+  color: var(--color-dark);
+}
+
+.attention-filter__count {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+@media (pointer: coarse) {
+  .attention-filter {
+    min-height: 2.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attention-filter {
+    transition: none;
+  }
+}
+
+.attention-inbox__group {
+  margin: 1rem 0.75rem 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}
+
+.attention-inbox__group:first-child {
+  margin-top: 0.25rem;
+}
+
+.attention-inbox__items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.attention-inbox__status {
+  padding: 1.5rem 0.75rem;
+  font-size: 0.9375rem;
+  color: var(--color-ink-secondary);
+}
+
+.attention-inbox__more {
+  margin: 0.75rem 0.75rem 0.25rem;
+}
+
+/* A plain note for problems: what happened, and what you can do about it. */
+.attention-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.25rem 0.5rem 0.75rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--color-hairline);
+  border-radius: 1rem;
+  background: rgb(255 248 242 / 0.05);
+  font-size: 0.9375rem;
+  color: var(--color-ink-primary);
+}
+
+.attention-note > p {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.attention-note__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--color-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-dark);
+}
+
+@media (pointer: coarse) {
+  .attention-note__link {
+    min-height: 2.75rem;
+  }
+}
+
+.attention-failures {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- One item ------------------------------------------------------------- */
+
+.attention-item__link {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.875rem;
+  align-items: start;
+  padding: 0.875rem 0.875rem 0.875rem 0.75rem;
+  border-radius: 1.125rem;
+  transition: background-color 150ms;
+}
+
+.attention-item[data-unread] .attention-item__link {
+  background: rgb(255 248 242 / 0.045);
+}
+
+.attention-item__link:hover {
+  background: rgb(255 248 242 / 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attention-item__link {
+    transition: none;
+  }
+}
+
+.attention-item__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.875rem;
+  background: rgb(255 248 242 / 0.07);
+  color: var(--color-ink-secondary);
+}
+
+.attention-item__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-width: 0;
+  padding-top: 0.125rem;
+}
+
+.attention-item__summary {
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.attention-item__place {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  line-height: 1.25rem;
+  font-size: 0.8125rem;
+  color: var(--color-ink-muted);
+}
+
+.attention-item__aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.625rem;
+  padding-top: 0.125rem;
+}
+
+.attention-item__time {
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--color-ink-muted);
+}
+
+/* The marker sits on the first line of the place, however many lines it wraps to. */
+.attention-item__place > [aria-hidden] {
+  height: 1.25rem;
+}
+
+.attention-item__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--color-primary);
+}
+
+@media (max-width: 22rem) {
+  .attention-item__link {
+    gap: 0.625rem;
+    padding-inline: 0.5rem;
+  }
+
+  .attention-item__icon {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+}

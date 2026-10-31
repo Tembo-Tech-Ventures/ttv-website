@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
 import { PiList, PiX } from "react-icons/pi";
 import type { Me, PersonSummary, SpaceId } from "@/lib/platform/contracts";
 import { createSpacesController } from "@/lib/platform/client/spaces";
@@ -7,7 +7,7 @@ import { Avatar, RoleBadge, SpaceFile, type SpaceTabItem } from "@/components/pl
 import { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
 import AccountMenu, { type ShellAccount } from "./AccountMenu";
-import type { ShellOverlay } from "./overlays";
+import { latestAttentionCounts, subscribeAttentionCounts, type ShellOverlay } from "./overlays";
 import SpaceBottomBar from "./SpaceBottomBar";
 import { AttentionBell, SearchTrigger } from "./ShellTools";
 import { SPACE_HOME, SPACE_LABEL } from "./space-routes";
@@ -107,11 +107,14 @@ export default function SpacesShell({
   // Until hydration the no-JS fallback (the #space-sidebar fragment) may hold the drawer open.
   const [hydrated, setHydrated] = useState(false);
 
+  // The attention overlay publishes authoritative counts as they change; until then, and without it, Me's.
+  const live = useSyncExternalStore(subscribeAttentionCounts, latestAttentionCounts, () => null);
+  const counts = (overlays.includes("attention") && live) || me.unreadCounts;
   const links: SpaceLink[] = shell.spaces.map((id) => ({
     space: id,
     label: SPACE_LABEL[id],
     href: spaceHrefs[id],
-    count: me.unreadCounts[id] ?? 0,
+    count: counts[id] ?? 0,
   }));
   const tabs: SpaceTabItem[] = links;
   const attention = links.reduce((sum, link) => sum + link.count, 0);

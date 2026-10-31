@@ -52,8 +52,10 @@ overlays a page mounts: pass `overlays={["search", "attention"]}` and put the
 overlay islands in the layout's `overlays` slot. Each overlay subscribes with
 `onShellOverlay(name, handler)` from `overlays.ts`; the handler receives
 `{overlay, trigger, via}` and owns the dialog, its focus, and returning focus
-to `trigger` on close. The bell's count is the sum of `Me.unreadCounts`; live
-counts are U-1.3's (the attention store).
+to `trigger` on close. The bell's and tabs' counts start from `Me.unreadCounts`;
+when the page mounts the attention overlay, its store publishes authoritative
+counts through `publishAttentionCounts` and the shell follows them. The real
+overlays are `components/platform/overlays/PlatformOverlays` (see its README).
 
 ## Motion
 
