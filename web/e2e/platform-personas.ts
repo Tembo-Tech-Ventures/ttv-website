@@ -22,6 +22,9 @@ import {
  * - Locally, `platform-personas.local.sql` seeds fictional people into the
  *   local D1 and PLATFORM_PERSONAS_LOCAL_SECRET is the dev server's
  *   BETTER_AUTH_SECRET from .dev.vars.
+ *
+ * The preview has no mentor entry yet, so the mentor is checked locally only
+ * (see PREVIEW_TOKENS).
  */
 
 /** Only the variables these helpers read. */
@@ -55,7 +58,11 @@ const PREVIEW_TOKENS: Partial<Record<PersonaKey, string>> = {
   student: "PLAYWRIGHT_ACCEPTED_STUDENT_TOKEN",
   alumna: "PLAYWRIGHT_GRADUATE_STUDENT_TOKEN",
   community: "PLAYWRIGHT_NEW_STUDENT_TOKEN",
-  mentor: "PLAYWRIGHT_MENTOR_TOKEN",
+  // The preview mentor (PLAYWRIGHT_MENTOR_TOKEN) is not listed yet. Its
+  // session carries the delegated ttv-agent: marker, and the mentor review
+  // API refuses delegated sessions (requireBrowser in lib/community/http.ts),
+  // so its confirm page is checked against the local seed. Its spaces and
+  // route access are checked live in preview-role-personas.spec.ts.
   institution: "PLAYWRIGHT_INSTITUTION_TOKEN",
   staff: "PLAYWRIGHT_AGENT_TOKEN",
 };
