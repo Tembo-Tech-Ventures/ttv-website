@@ -60,6 +60,18 @@ describe("typed JSON API client", () => {
     expect(await result).toEqual({ count: 3 });
   });
 
+  it.each([
+    { code: "quota_exhausted", retryAfterMs: 6 * 60 * 60 * 1000 },
+    { code: "quota_exhausted", retryAfterMs: 10 },
+    { code: "rate_limited", retryAfterMs: 4001 },
+    { code: "moderation_rejected", retryAfterMs: 10 },
+    { code: "forbidden", retryAfterMs: 10 },
+  ])("immediately surfaces terminal or long cooldown rejection: %j", async error => {
+    const transport = vi.fn<typeof fetch>().mockImplementation(async () => Response.json({ error: { ...error, message: "Try again later" } }, { status: 429 }));
+    await expect(createApiClient({ fetch: transport }).call({ ...post, idempotent: true })).rejects.toMatchObject({ ...error, status: 429 });
+    expect(transport).toHaveBeenCalledTimes(1); expect(vi.getTimerCount()).toBe(0);
+  });
+
   it.each([undefined, {}, { clientNonce: "" }, { clientNonce: 1 }, { clientNonce: " " }])("does not retry unsafe writes: %j", async body => {
     const transport = vi.fn<typeof fetch>().mockRejectedValue(new Error("offline"));
     await expect(createApiClient({ fetch: transport }).call(post, { body })).rejects.toMatchObject({ code: "network_error" });
@@ -154,7 +166,7 @@ describe("typed JSON API client", () => {
     expect(transport.mock.calls[0][0]).toBe("/api/count?tag=x&tag=y&on=true");
   });
 
-  it.each([{ maxRetries: -1 }, { maxRetries: 0.5 }, { baseDelayMs: NaN }, { maxDelayMs: Infinity }])("rejects invalid retry settings", retry => {
+  it.each([{ maxRetries: -1 }, { maxRetries: 0.5 }, { baseDelayMs: NaN }, { maxDelayMs: Infinity }, { maxDelayMs: 2_147_483_648 }])("rejects invalid retry settings", retry => {
     expect(() => createApiClient({ retry })).toThrow(RangeError);
   });
 });

@@ -18,7 +18,7 @@ export interface MockOptions {
 
 /** Explicit injection only; never switches production requests into mock mode. */
 export function createMockTransport(handlers: readonly MockHandler[], { latencyMs = 0, failure }: MockOptions = {}): typeof fetch {
-  if (!Number.isFinite(latencyMs) || latencyMs < 0) throw new RangeError("Invalid mock latency");
+  if (!Number.isFinite(latencyMs) || latencyMs < 0 || latencyMs > 2_147_483_647) throw new RangeError("Invalid mock latency");
   let calls = 0;
   return async (input, init) => {
     // A fixed origin lets relative API paths work in Node without consulting window.
@@ -38,7 +38,8 @@ export function createMockTransport(handlers: readonly MockHandler[], { latencyM
       const params: Record<string, string> = {};
       const matches = pattern.every((segment, i) => {
         if (!segment.startsWith(":")) return segment === path[i];
-        params[segment.slice(1)] = decodeURIComponent(path[i]);
+        try { params[segment.slice(1)] = decodeURIComponent(path[i]); }
+        catch { return false; }
         return true;
       });
       if (!matches) continue;

@@ -28,13 +28,31 @@ describe("bounded aria-live announcement queue", () => {
 
   it("bounds memory and cancels pending announcements on dispose", async () => {
     const a = createAnnouncer({ maxQueue: 2, throttleMs: 100 });
-    a.announce("one"); a.announce("two"); a.announce("three"); a.announce("four");
+    a.announce("one"); a.announce("two"); a.announce("three"); expect(a.announce("four")).toBe(false);
     // Remembered keys are bounded too: an evicted key can be announced again.
+    await vi.advanceTimersByTimeAsync(100);
     expect(a.announce("one")).toBe(true);
-    await vi.advanceTimersByTimeAsync(200); expect(a.store.getState()?.message).toBe("three");
+    await vi.advanceTimersByTimeAsync(100); expect(a.store.getState()?.message).toBe("three");
     a.announce("pending"); a.dispose(); await vi.runAllTimersAsync();
     expect(a.store.getState()).toBeNull(); expect(a.announce("later")).toBe(false);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("reports overflow and permits retrying an unspoken announcement inside the dedupe window", async () => {
+    const a = createAnnouncer({ maxQueue: 2, throttleMs: 100, dedupeMs: 10_000 });
+    expect(["one", "two", "three", "four"].map(text => a.announce(text, "assertive"))).toEqual([true, true, true, false]);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(a.announce("four", "assertive")).toBe(true);
+    await vi.advanceTimersByTimeAsync(200); expect(a.store.getState()?.message).toBe("four");
+    a.dispose();
+  });
+
+  it("releases the dedupe key of a polite entry evicted by an urgent announcement", async () => {
+    const a = createAnnouncer({ maxQueue: 2, throttleMs: 100 });
+    a.announce("now"); a.announce("polite one"); a.announce("polite two");
+    expect(a.announce("urgent", "assertive")).toBe(true);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(a.announce("polite two")).toBe(true); a.dispose();
   });
 
   it("rejects blank text and handles reentrant subscribers", async () => {

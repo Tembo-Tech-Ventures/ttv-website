@@ -89,6 +89,7 @@ export function createApiClient({ fetch: transport = globalThis.fetch, baseUrl =
     if (!Number.isFinite(value) || value < 0) throw new RangeError(`Invalid ${name}`);
   }
   if (!Number.isInteger(retryOptions.maxRetries)) throw new RangeError("maxRetries must be an integer");
+  if (retryOptions.maxDelayMs > 2_147_483_647) throw new RangeError("maxDelayMs exceeds the timer limit");
   return {
     async call<P, Q, B, R>(route: RouteDef<P, Q, B, R>, options: CallOptions<NoInfer<P>, NoInfer<Q>, NoInfer<B>> = {}): Promise<R> {
       const { signal } = options;

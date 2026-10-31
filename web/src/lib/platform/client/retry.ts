@@ -8,6 +8,8 @@ export interface RetryOptions {
   maxDelayMs: number;
 }
 
+const terminalCodes = new Set(["quota_exhausted", "moderation_rejected", "forbidden"]);
+
 export async function withRetry<T>(
   operation: () => Promise<T>,
   safe: boolean,
@@ -21,6 +23,8 @@ export async function withRetry<T>(
     } catch (error) {
       throwIfAborted(signal);
       if (!(error instanceof ApiError) || !safe || attempt >= options.maxRetries) throw error;
+      // Long cooldowns belong in visible UI state, rather than a pending request.
+      if (terminalCodes.has(error.code) || (error.retryAfterMs ?? 0) > options.maxDelayMs) throw error;
       if (!(error.code === "network_error" && error.status === 0)
         && error.status !== 429 && !(error.status >= 500 && error.status < 600)) throw error;
       const ceiling = Math.min(options.maxDelayMs, options.baseDelayMs * 2 ** attempt);

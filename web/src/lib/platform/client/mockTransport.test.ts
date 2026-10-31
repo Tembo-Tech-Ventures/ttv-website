@@ -21,7 +21,7 @@ describe("mock transport", () => {
 
   it("returns JSON 404 for method, segment, or path-length mismatches", async () => {
     const transport = createMockTransport(handlers);
-    for (const [url, method] of [["/api/people/1", "DELETE"], ["/else/people/1", "GET"], ["/api/people", "GET"]]) {
+    for (const [url, method] of [["/api/people/1", "DELETE"], ["/else/people/1", "GET"], ["/api/people", "GET"], ["/api/people/%E0%A4%A", "GET"]]) {
       const response = await transport(url, { method }); expect(response.status).toBe(404);
       expect(await response.json()).toMatchObject({ error: { code: "mock_not_found" } });
     }
@@ -61,7 +61,7 @@ describe("mock transport", () => {
     expect(result).toEqual({ id: "synthetic-1", name: "Wanjiku Mwangi" });
   });
 
-  it.each([-1, NaN, Infinity])("rejects invalid latency %s", latencyMs => {
+  it.each([-1, NaN, Infinity, 2_147_483_648])("rejects invalid latency %s", latencyMs => {
     expect(() => createMockTransport([], { latencyMs })).toThrow(RangeError);
   });
 });

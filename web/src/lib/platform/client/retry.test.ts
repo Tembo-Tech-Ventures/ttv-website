@@ -23,11 +23,32 @@ describe("retry state machine", () => {
 
   it("honours retryAfterMs as a minimum for 429", async () => {
     const op = vi.fn().mockRejectedValueOnce(new ApiError("rate_limit", 429, "wait", 600)).mockResolvedValue(1);
-    const result = withRetry(op, true, options);
+    const result = withRetry(op, true, { ...options, maxDelayMs: 1_000 });
     await vi.advanceTimersByTimeAsync(599);
     expect(op).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(await result).toBe(1);
+  });
+
+  it.each(["quota_exhausted", "moderation_rejected", "forbidden"])("never retries terminal %s errors", async code => {
+    const error = new ApiError(code, 429, "Cannot continue", 10);
+    const op = vi.fn().mockRejectedValue(error);
+    await expect(withRetry(op, true, options)).rejects.toBe(error);
+    expect(op).toHaveBeenCalledTimes(1); expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("rejects long cooldowns immediately, preserving the error for UI feedback", async () => {
+    const error = new ApiError("rate_limited", 429, "Wait", 151);
+    const op = vi.fn().mockRejectedValue(error);
+    await expect(withRetry(op, true, options)).rejects.toBe(error);
+    expect(op).toHaveBeenCalledTimes(1); expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("honours a cooldown exactly at the cap", async () => {
+    const op = vi.fn().mockRejectedValueOnce(new ApiError("rate_limited", 429, "Wait", 150)).mockResolvedValue(1);
+    const result = withRetry(op, true, options);
+    await vi.advanceTimersByTimeAsync(149); expect(op).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1); expect(await result).toBe(1);
   });
 
   it.each([

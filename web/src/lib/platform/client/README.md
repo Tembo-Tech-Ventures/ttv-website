@@ -39,8 +39,8 @@ const api = createApiClient({ fetch?, baseUrl?, retry? });
 await api.call(route, { params?, query?, body?, signal? });
 ```
 
-`RouteDef<P,Q,B,R>` has the B-0.1 structural contract (see `route.ts`). Zod schemas
-validate params, query, body and response. Their parsed output (including defaults
+`RouteDef<P,Q,B,R>` is re-exported from the shared B-0.1 contract (see `route.ts`).
+Zod schemas validate params, query, body and response. Their parsed output (including defaults
 and stripped fields) is what gets sent/returned. `call` infers the response type
 from the route; options cannot widen the route's types.
 
@@ -58,7 +58,7 @@ const controller = new AbortController();
 const data = await createApiClient().call(route, {
   params: { id: "channel-1" }, signal: controller.signal,
 });
-// Use ROUTES from ../contracts when available instead of declaring real routes here.
+// Use ROUTES from ../contracts instead of declaring real routes here.
 ```
 
 Paths use `:param`; each value is encoded as one path segment. Empty/dot segments
@@ -85,7 +85,10 @@ reused on retry.
 
 Eligible failures: network errors, HTTP 429 and HTTP 500–599. Backoff ceilings
 are 250 ms then 500 ms, capped at 4 s; jitter chooses 50–100% of each ceiling.
-`retryAfterMs` is a minimum wait, including values greater than the local cap.
+`retryAfterMs` is a minimum wait within the local cap. A larger server cooldown
+is thrown immediately with its retry metadata intact, so the UI can display when
+to try again. Terminal `quota_exhausted`, `moderation_rejected` and `forbidden`
+codes never retry, regardless of status.
 Override with `retry: { maxRetries, baseDelayMs, maxDelayMs }`. Request, response
 read and backoff waits all honor `signal`, including an injected transport that
 ignores cancellation. Cancellation throws `ApiError` with code `aborted`.
@@ -165,9 +168,12 @@ useMessageCount(api, store);
 
 Handlers use colon parameters, decoded into `params`; inspect query/body via
 `request`. `reply` can be async, returning `{ data, status? }` (default 200).
-Use the shared `../fixtures.ts` data when B-0.1 lands; the inline count above is
-only a minimal foundation example. No automatic mode detection or production
-fallback exists. DEV harnesses must enforce their own DEV-only route gating.
+Use the shared `../fixtures.ts` data in handlers (for example
+`fixtures.communityMessages` for `ROUTES.listMessages`); the inline count above
+is only a minimal foundation example. `contracts.test.ts` exercises the real
+mentor, message-list, removal-delta and post contracts against these fixtures.
+No automatic mode detection or production fallback exists. DEV harnesses must
+enforce their own DEV-only route gating.
 Mocks support string, URL and Request inputs, init overrides, abortable latency,
 and signal cancellation while handlers are pending. Failure injection is
 deterministic by 1-based request number: return a reply for an HTTP failure, an
@@ -196,6 +202,8 @@ precede pending polite entries, preserving FIFO order within each priority.
 Deduplication uses the supplied key, or priority plus text, for `dedupeMs`.
 Both pending entries and remembered keys are bounded by `maxQueue`: overflow
 drops the last pending entry (lowest priority/latest) and evicts the oldest key.
+An immediately dropped announcement returns false. Dropped entries release
+their own deduplication keys so they can be retried before the dedupe window ends.
 For message bursts, announce a batch count instead of every individual message.
 
 ## Verification

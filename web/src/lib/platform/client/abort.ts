@@ -15,23 +15,16 @@ export function throwIfAborted(signal?: AbortSignal): void {
 
 export function delay(ms: number, signal?: AbortSignal): Promise<void> {
   throwIfAborted(signal);
+  if (!Number.isFinite(ms) || ms < 0 || ms > 2_147_483_647) throw new RangeError("Invalid delay");
   return new Promise((resolve, reject) => {
-    // Chunk long server-directed waits rather than overflowing setTimeout's signed int.
-    const end = Date.now() + ms;
-    let timer: ReturnType<typeof setTimeout>;
     const abort = () => {
       clearTimeout(timer);
       reject(new DOMException("The operation was aborted", "AbortError"));
     };
-    const tick = () => {
-      const remaining = end - Date.now();
-      if (remaining > 0) timer = setTimeout(tick, Math.min(remaining, 2_147_483_647));
-      else {
-        signal?.removeEventListener("abort", abort);
-        resolve();
-      }
-    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }, ms);
     signal?.addEventListener("abort", abort, { once: true });
-    timer = setTimeout(tick, Math.min(ms, 2_147_483_647));
   });
 }
