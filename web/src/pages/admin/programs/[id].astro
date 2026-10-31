@@ -7,12 +7,12 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { env } from "cloudflare:workers";
+import { applyApplicationMutationWithAttention } from "@/lib/attention/mutations";
 import { createId } from "@paralleldrive/cuid2";
 import {
   APPLICATION_COMPLETION_CONFIRMATION,
   MAX_BULK_SELECTION_SIZE,
   ProgramApplicationError,
-  assertAtomicMutationApplied,
   buildAdminEnrollmentStatement,
   buildBulkMutationStatement,
   createAdminEnrollment,
@@ -277,13 +277,10 @@ if (Astro.request.method === "POST") {
         completionDate: formData.get("completionDate"),
       });
       const statement = buildBulkMutationStatement(plan);
-      const result = await env.DB.prepare(statement.sql)
-        .bind(...statement.params)
-        .run();
-
-      assertAtomicMutationApplied({
-        actualChanges: result.meta.changes,
+      await applyApplicationMutationWithAttention({ db: env.DB, env }, {
         statement,
+        applicationIds: plan.applicationIds,
+        actorId: Astro.locals.user!.id,
         staleCode: "STALE_BULK_SELECTION",
         staleMessage:
           "The roster changed while this bulk action was running. No applications were updated; refresh the roster and select the rows again.",

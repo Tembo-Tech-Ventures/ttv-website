@@ -7,13 +7,75 @@ import { attentionRequest } from "./http";
 
 const userId = "synthetic-wanjiku";
 function context(method = "GET", path = "/api/attention", body?: unknown, headers: Record<string, string> = {}) {
-  return { request: new Request("https://example.test" + path, { method, headers,
-    body: body === undefined ? undefined : JSON.stringify(body) }),
+  const options: RequestInit = { method, headers };
+  if (body !== undefined) options.body = JSON.stringify(body);
+  return { request: new Request("https://example.test" + path, options),
   locals: { user: { id: userId } } as App.Locals } satisfies Pick<APIContext, "request" | "locals">;
 }
 afterEach(() => vi.restoreAllMocks());
 
 describe("attention APIs", () => {
+  it.each(CAPABILITY_ROLE_MATRIX)("applies current recording scope to list, count and read: $name", async fixture => {
+    const s = attentionDatabase(fixture);
+    try {
+      s.seed("notice", { space: "cohort" });
+      s.database.exec(`INSERT INTO recording(id,programId,title,processingStatus) VALUES ('recording','cohort-a','Private recording','complete');
+        UPDATE attention_item SET kind='recording_ready',subjectKind='recording',subjectId='recording'`);
+      const allowed = fixture.signedIn !== false && (fixture.expected.isAdmin || fixture.expected.cohortIds.includes("cohort-a"));
+      const env = { DB: s.db.$client, PLATFORM_FLAGS_OVERRIDE: "all" };
+      for (const operation of ["list", "count", "read"] as const) {
+        const ctx = operation === "read" ? context("POST", "/api/attention/read", { ids: ["notice"] }, { Origin: "https://example.test" }) : context();
+        if (fixture.signedIn === false) ctx.locals.user = null;
+        const response = await attentionRequest(operation, ctx, env);
+        if (fixture.signedIn === false) { expect(response.status).toBe(404); continue; }
+        expect(response.status).toBe(200);
+        if (operation === "list") expect(AttentionList.parse(await response.json()).items).toHaveLength(allowed ? 1 : 0);
+        else expect(AttentionCount.parse(await response.json()).count).toBe(operation === "count" && allowed ? 1 : 0);
+      }
+      const row = s.database.prepare("SELECT readAt FROM attention_item").get();
+      expect(row?.readAt === null).toBe(!allowed);
+    } finally { s.database.close(); }
+  });
+
+  it("revoked cohort access immediately removes the item from list/count/read", async () => {
+    const s = attentionDatabase({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
+    try {
+      s.seed("notice", { space: "cohort" });
+      s.database.exec(`INSERT INTO recording(id,programId,title) VALUES ('recording','cohort-a','Private');
+        UPDATE attention_item SET kind='recording_ready',subjectKind='recording',subjectId='recording'`);
+      const env = { DB: s.db.$client, PLATFORM_FLAGS_OVERRIDE: "all" };
+      expect(AttentionCount.parse(await (await attentionRequest("count", context(), env)).json()).count).toBe(1);
+      s.database.exec("UPDATE programApplication SET status='REJECTED'");
+      expect(AttentionCount.parse(await (await attentionRequest("count", context(), env)).json()).count).toBe(0);
+      expect(AttentionList.parse(await (await attentionRequest("list", context(), env)).json()).items).toEqual([]);
+      await attentionRequest("read", context("POST", "/api/attention/read", { through: Date.now() }, { Origin: "https://example.test" }), env);
+      expect(s.database.prepare("SELECT readAt FROM attention_item").get()).toEqual({ readAt: null });
+    } finally { s.database.close(); }
+  });
+
+  it("does not reveal foreign, deleted, or unsupported subjects even with an owned notification row", async () => {
+    const s = attentionDatabase();
+    try {
+      s.seed("own"); s.seed("foreign", { userId: "synthetic-otieno" });
+      const env = { DB: s.db.$client, PLATFORM_FLAGS_OVERRIDE: "all" };
+      s.database.exec("UPDATE attention_item SET subjectId='foreign' WHERE id='own'");
+      expect(AttentionCount.parse(await (await attentionRequest("count", context(), env)).json()).count).toBe(0);
+      s.database.exec("UPDATE attention_item SET subjectId='own',subjectKind='message' WHERE id='own'");
+      expect(AttentionCount.parse(await (await attentionRequest("count", context(), env)).json()).count).toBe(0);
+      s.database.exec("UPDATE attention_item SET subjectKind='visitorMessage' WHERE id='own'; DELETE FROM profileContact WHERE id='own'");
+      expect(AttentionList.parse(await (await attentionRequest("list", context(), env)).json()).items).toEqual([]);
+    } finally { s.database.close(); }
+  });
+
+  it("loads capabilities once and performs one indexed count query", async () => {
+    const s = attentionDatabase();
+    try {
+      const prepare = vi.spyOn(s.db.$client, "prepare");
+      expect((await attentionRequest("count", context(), { DB: s.db.$client, PLATFORM_FLAGS_OVERRIDE: "all" })).status).toBe(200);
+      expect(prepare).toHaveBeenCalledTimes(4);
+    } finally { s.database.close(); }
+  });
+
   it.each(CAPABILITY_ROLE_MATRIX)("scopes list/count/read to the caller: $name", async fixture => {
     const s = attentionDatabase(fixture);
     try {
@@ -55,7 +117,7 @@ describe("attention APIs", () => {
       s.database.exec("UPDATE feature_flag SET audience='STAFF' WHERE key='spaces'");
       const ctx = context(); ctx.locals.isAdmin = true;
       expect((await attentionRequest("count", ctx, { DB: s.db.$client })).status).toBe(404);
-      s.database.exec(`INSERT INTO Roles(id,name) VALUES ('admin','ADMIN'); INSERT INTO UserRoles(id,userId,roleId) VALUES ('role','synthetic-wanjiku','admin')`);
+      s.database.exec(`INSERT INTO UserRoles(id,userId,roleId) SELECT 'role','synthetic-wanjiku',id FROM Roles WHERE name='ADMIN'`);
       expect((await attentionRequest("count", context(), { DB: s.db.$client })).status).toBe(200);
     } finally { s.database.close(); }
   });
@@ -98,7 +160,7 @@ describe("attention APIs", () => {
     try {
       const env = { DB: s.db.$client, PLATFORM_FLAGS_OVERRIDE: "all" };
       const invalid = context("POST", "/api/attention/read", undefined, { Origin: "https://example.test" });
-      invalid.request = new Request(invalid.request, { body: "invalid-json" });
+      invalid.request = new Request(invalid.request, { method: "POST", body: "invalid-json" });
       expect((await attentionRequest("read", invalid, env)).status).toBe(400);
       expect((await attentionRequest("read", context("POST", "/api/attention/read", { ids: ["x".repeat(33_000)] }, { Origin: "https://example.test" }), env)).status).toBe(413);
       s.database.exec("DROP TABLE attention_item");

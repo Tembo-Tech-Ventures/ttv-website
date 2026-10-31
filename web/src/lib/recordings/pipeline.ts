@@ -14,6 +14,7 @@ import {
 import { createCredentialCipher } from "@/lib/credentials/crypto";
 import { getGoogleDriveCredentials } from "@/lib/credentials/google-drive";
 import { recordError, redactErrorMessage } from "@/lib/observability/errors";
+import { recordingReadyAttention } from "@/lib/attention/producers";
 
 export interface RecordingQueueMessage {
   type: "process_recording";
@@ -555,6 +556,7 @@ export async function processRecordingMessage(message: unknown, env: Env) {
     await embedAndIndexRecording({ db, env, recording: updatedRecording });
 
     await updateStatus(db, recording.id, "complete");
+    await recordingReadyAttention({ db: env.DB, env }, recording.id);
   } catch (error) {
     const failureMessage = redactErrorMessage(error);
     logRecordingPipelineEvent("recording_pipeline_failed", {

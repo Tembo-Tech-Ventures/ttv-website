@@ -6,10 +6,10 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
+import { applyApplicationMutationWithAttention } from "@/lib/attention/mutations";
 import {
   APPLICATION_COMPLETION_CONFIRMATION,
   ProgramApplicationError,
-  assertAtomicMutationApplied,
   buildApplicationTransitionStatement,
   formatDateInputValue,
   getAvailableApplicationTransitions,
@@ -47,13 +47,10 @@ if (Astro.request.method === "POST") {
       applicationId: id,
       transition,
     });
-    const result = await env.DB.prepare(statement.sql)
-      .bind(...statement.params)
-      .run();
-
-    assertAtomicMutationApplied({
-      actualChanges: result.meta.changes,
+    await applyApplicationMutationWithAttention({ db: env.DB, env }, {
       statement,
+      applicationIds: [id],
+      actorId: Astro.locals.user!.id,
       staleCode: "STALE_TRANSITION",
       staleMessage:
         "This application changed while you were updating it. Refresh the page before trying again.",

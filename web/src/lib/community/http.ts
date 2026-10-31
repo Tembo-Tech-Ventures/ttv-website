@@ -110,7 +110,7 @@ export async function handleCommunityRequest(request: Request, path: string, act
     authorizeRequest(request,path,actor);
     const body = await readBody(request);
     if (actor.fixture?.retainedReadProbe) authorizeRetainedProbe(request.method,path,actor.scopes,body);
-    const ctx = {request,path,actor,service:createCommunityService(db,actor.id,actor.fixture,env?.DEPLOYMENT_ENVIRONMENT),body,db,env};
+    const ctx = {request,path,actor,service:createCommunityService(db,actor.id,actor.fixture,env?.DEPLOYMENT_ENVIRONMENT,env?.PLATFORM_FLAGS_OVERRIDE),body,db,env};
     const route = routes[`${request.method} ${path}`];
     return route ? await route(ctx) : await dynamicRoute(ctx);
   } catch (error) {

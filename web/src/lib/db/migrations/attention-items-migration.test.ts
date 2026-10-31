@@ -1,9 +1,23 @@
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createSqliteD1, MINIMAL_AUTH_SCHEMA, readMigration } from "@/test/sqlite-d1";
 
 const migration = readMigration("0023_attention_items.sql");
 describe("attention migration", () => {
+  it("chains metadata after0022 and changes only the new attention table", () => {
+    const read = (name: string) => JSON.parse(readFileSync(new URL(name, import.meta.url), "utf8"));
+    const before = read("./meta/0022_snapshot.json");
+    const after = read("./meta/0023_snapshot.json");
+    expect(after.prevId).toBe(before.id);
+    const { attention_item: added, ...unchanged } = after.tables;
+    expect(unchanged).toEqual(before.tables);
+    expect(Object.keys(added.indexes)).toEqual(expect.arrayContaining([
+      "attention_item_user_event_idx", "attention_item_unread_idx", "attention_item_page_idx", "attention_item_filter_page_idx",
+    ]));
+    expect(read("./meta/_journal.json").entries.find((entry: { idx: number }) => entry.idx === 23))
+      .toMatchObject({ tag: "0023_attention_items" });
+  });
+
   it("applies after all historical migrations and preserves data on reapply", () => {
     const { database } = createSqliteD1();
     try {
