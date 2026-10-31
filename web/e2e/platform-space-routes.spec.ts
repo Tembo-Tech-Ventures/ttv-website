@@ -1,11 +1,6 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { FIXTURE_ENVIRONMENT } from "./fixture-env";
-
-// Do not include transport errors: Playwright may put bearer headers in them.
-async function getWithoutRedirect(api: APIRequestContext, path: string) {
-  try { return await api.get(path, { maxRedirects: 0 }); }
-  catch { throw new Error("Space route request failed safely."); }
-}
+import { spaceRouteRequest } from "../scripts/cloudflare/space-route-browser-guard.mjs";
 
 const entries: Record<string, string> = {
   cohort: "/dashboard/cohort", community: "/dashboard/community",
@@ -18,11 +13,11 @@ test.describe("space routes without JavaScript", () => {
   test.skip(!token, "An authenticated delivery identity is required.");
   test.use({ javaScriptEnabled: false, extraHTTPHeaders: token ? { Authorization: `Bearer ${token}` } : {} });
 
-  test("legacy links redirect only when enabled and resolve to existing pages", async ({ request, page }) => {
-    const meResponse = await getWithoutRedirect(request, "/api/platform/me");
+  test("legacy links redirect only when enabled and resolve to existing pages", async ({ request, page, baseURL }) => {
+    const meResponse = await spaceRouteRequest(request, baseURL!, "/api/platform/me");
     if (meResponse.status() === 404) {
-      expect((await getWithoutRedirect(request, "/dashboard/profile")).status()).toBe(200);
-      expect((await getWithoutRedirect(request, "/dashboard/account")).status()).toBe(404);
+      expect((await spaceRouteRequest(request, baseURL!, "/dashboard/profile")).status()).toBe(200);
+      expect((await spaceRouteRequest(request, baseURL!, "/dashboard/account")).status()).toBe(404);
       return;
     }
     expect(meResponse.status()).toBe(200);
@@ -39,7 +34,7 @@ test.describe("space routes without JavaScript", () => {
       ["profile", "account", "profile"],
     ];
     for (const [legacy, canonical, space] of redirects) {
-      const response = await getWithoutRedirect(request, `/dashboard/${legacy}?route-check=1`);
+      const response = await spaceRouteRequest(request, baseURL!, `/dashboard/${legacy}?route-check=1`);
       if (!me.spaces.includes(space!)) {
         expect(response.status()).toBe(403);
         continue;
@@ -53,7 +48,7 @@ test.describe("space routes without JavaScript", () => {
   });
 
   test("server preference and explicit URLs work without hydration", async ({ page, request, context, baseURL }) => {
-    const meResponse = await getWithoutRedirect(request, "/api/platform/me");
+    const meResponse = await spaceRouteRequest(request, baseURL!, "/api/platform/me");
     test.skip(meResponse.status() === 404, "Spaces is OFF for this caller.");
     expect(meResponse.status()).toBe(200);
     const me = await meResponse.json() as { spaces: string[] };
@@ -74,15 +69,12 @@ test.describe("space routes without JavaScript", () => {
 
   test("canonical account form retains its POST body through the rewrite", async ({ request, baseURL }) => {
     test.skip(!FIXTURE_ENVIRONMENT, "Form checks run only against isolated synthetic previews.");
-    const meResponse = await getWithoutRedirect(request, "/api/platform/me");
+    const meResponse = await spaceRouteRequest(request, baseURL!, "/api/platform/me");
     test.skip(meResponse.status() === 404, "Spaces is OFF for this caller.");
     expect(meResponse.status()).toBe(200);
-    let response;
-    try {
-      response = await request.post("/dashboard/account", {
-        form: { action: "avatar" }, headers: { Origin: new URL(baseURL!).origin }, maxRedirects: 0,
-      });
-    } catch { throw new Error("Space account form request failed safely."); }
+    const response = await spaceRouteRequest(request, baseURL!, "/dashboard/account", {
+      method: "POST", form: { action: "avatar" }, headers: { Origin: new URL(baseURL!).origin },
+    });
     // The avatar action with no file proves the body arrived without writing data.
     expect(response.status()).toBe(200);
     expect(await response.text()).toContain("Please choose an image to upload.");
