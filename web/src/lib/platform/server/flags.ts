@@ -1,8 +1,8 @@
 import { userHasAdminRole } from "@/lib/admin/roles";
-import { FlagKey, type FlagAudience } from "./flag-contracts";
+import { FlagKey, type FlagAudience } from "@/lib/platform/contracts";
 import { platformError } from "./http";
 
-export type { FlagKey, FlagAudience } from "./flag-contracts";
+export type { FlagKey, FlagAudience } from "@/lib/platform/contracts";
 export type Flags = Record<FlagKey, boolean>;
 
 export interface FlagContext {
@@ -17,7 +17,11 @@ export interface FlagContext {
 
 // Weak keys avoid retaining requests. Never key by DB, user ID or environment:
 // audience changes must take effect on the very next request.
-const requestFlags = new WeakMap<object, Promise<Flags>>();
+const requestFlags = new WeakMap<object, {
+  userId: string | null;
+  isAdmin: boolean | undefined;
+  flags: Promise<Flags>;
+}>();
 
 function uniformFlags(enabled: boolean): Flags {
   return { spaces: enabled, channels: enabled, tembo_channels: enabled, mentor_requests: enabled };
@@ -25,7 +29,12 @@ function uniformFlags(enabled: boolean): Flags {
 
 async function resolveFlags(ctx: FlagContext): Promise<Flags> {
   if (!ctx.user) return Object.freeze(uniformFlags(false));
-  if (ctx.env.DEPLOYMENT_ENVIRONMENT !== "production" && ctx.env.PLATFORM_FLAGS_OVERRIDE === "all") {
+  // Match scripts/cloudflare/lib.mjs normalizeSlug: these aliases target the
+  // same production resources. Never trust the unnormalised deployment label.
+  const environment = (ctx.env.DEPLOYMENT_ENVIRONMENT ?? "")
+    .toLowerCase().replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "").replace(/-{2,}/g, "-");
+  if (environment !== "production" && ctx.env.PLATFORM_FLAGS_OVERRIDE === "all") {
     return Object.freeze(uniformFlags(true));
   }
 
@@ -42,15 +51,16 @@ async function resolveFlags(ctx: FlagContext): Promise<Flags> {
   return Object.freeze(flags);
 }
 
-/** Reuse ctx (or pass the same request's locals) for every call in a request. */
+/** Reuse ctx/locals after authentication. Auth changes invalidate an early read. */
 export function getFlags(ctx: FlagContext): Promise<Flags> {
   const cacheKey = ctx.locals ?? ctx;
-  let flags = requestFlags.get(cacheKey);
-  if (!flags) {
-    flags = resolveFlags(ctx);
-    requestFlags.set(cacheKey, flags);
+  const userId = ctx.user?.id ?? null;
+  let cached = requestFlags.get(cacheKey);
+  if (!cached || cached.userId !== userId || cached.isAdmin !== ctx.isAdmin) {
+    cached = { userId, isAdmin: ctx.isAdmin, flags: resolveFlags(ctx) };
+    requestFlags.set(cacheKey, cached);
   }
-  return flags;
+  return cached.flags;
 }
 
 export async function isFlagEnabled(ctx: FlagContext, key: FlagKey): Promise<boolean> {

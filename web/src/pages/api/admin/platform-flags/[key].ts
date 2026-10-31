@@ -1,7 +1,7 @@
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { readBoundedJson, RequestJsonError } from "@/lib/request-json";
-import { FlagKey, UpdateFlag } from "@/lib/platform/server/flag-contracts";
+import { FlagKey, UpdateFlag } from "@/lib/platform/contracts";
 import { updateFlag } from "@/lib/platform/server/flag-admin";
 import { platformError, platformJson } from "@/lib/platform/server/http";
 
@@ -24,7 +24,7 @@ export const PUT: APIRoute = async ({ locals, params, request }) => {
 
   try {
     const flag = await updateFlag(env.DB, key.data, update.data.audience, locals.user.id);
-    return flag ? platformJson(flag) : platformError("not_found", "Feature flag not found.", 404);
+    return platformJson(flag);
   } catch {
     return platformError("server", "Could not update feature flag.", 500);
   }

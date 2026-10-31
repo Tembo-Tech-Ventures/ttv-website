@@ -22,7 +22,7 @@ vi.mock("@/lib/observability/errors", async importOriginal => ({
 import { onRequest } from "@/middleware";
 import { GET } from "@/pages/api/admin/platform-flags/index";
 import { PUT } from "@/pages/api/admin/platform-flags/[key]";
-import { FlagsAdmin, Flag } from "./flag-contracts";
+import { FlagsAdmin, Flag } from "@/lib/platform/contracts";
 
 const ORIGIN = "https://example.test";
 const PATH = "/api/admin/platform-flags";
@@ -183,14 +183,23 @@ describe("platform flags admin API through real middleware guards", () => {
     expect(await unknown.response.json()).toMatchObject({ error: { code: "validation" } });
   });
 
-  it("returns 404 if a known flag row is missing", async () => {
+  it("lists a missing known flag as OFF and repairs it with an audited admin PUT", async () => {
     setup.database.exec("DELETE FROM feature_flag WHERE key='spaces'");
-    const { response } = await request({ method: "PUT" });
-    expect(response.status).toBe(404);
-    expect(await response.json()).toMatchObject({ error: { code: "not_found" } });
     const list = await request();
-    expect(list.response.status).toBe(500);
-    expect(await list.response.json()).toMatchObject({ error: { code: "server" } });
+    expect(list.response.status).toBe(200);
+    const listed = FlagsAdmin.parse(await list.response.json());
+    expect(listed.flags.find(flag => flag.key === "spaces")).toEqual({
+      key: "spaces", audience: "OFF", updatedAt: 0, updatedBy: null,
+    });
+    const { response } = await request({ method: "PUT" });
+    expect(response.status).toBe(200);
+    const restored = Flag.parse(await response.json());
+    expect(restored).toMatchObject({ key: "spaces", audience: "STAFF", updatedBy: user.id });
+    expect(restored.updatedAt).toBeGreaterThan(0);
+    expect(setup.database.prepare("SELECT audience, updatedBy FROM feature_flag WHERE key='spaces'").get())
+      .toEqual({ audience: "STAFF", updatedBy: user.id });
+    const after = await request();
+    expect(FlagsAdmin.parse(await after.response.json()).flags).toContainEqual(restored);
   });
 
   it.each(["GET", "PUT"] as const)("returns a safe server envelope on %s DB failure", async method => {

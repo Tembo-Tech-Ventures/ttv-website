@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqliteD1, MINIMAL_AUTH_SCHEMA, readMigration } from "@/test/sqlite-d1";
 import { getFlags, isFlagEnabled, requireFlag, type FlagContext } from "./flags";
-import { FlagAudience, FlagKey } from "./flag-contracts";
+import { FlagAudience, FlagKey } from "@/lib/platform/contracts";
 
 let setup: ReturnType<typeof createSqliteD1>;
 beforeEach(() => {
@@ -55,12 +55,15 @@ describe("flag audiences", () => {
     }
   );
 
-  it("ignores the override in production and evaluates each stored audience", async () => {
+  it.each(["production", "Production", "PRODUCTION", "production-", " production", "--Production!!"])(
+    "ignores the override for production identity %s and evaluates stored audiences", async environment => {
     setup.database.exec("UPDATE feature_flag SET audience='ALL' WHERE key='channels'");
     setup.database.exec("UPDATE feature_flag SET audience='STAFF' WHERE key='spaces'");
-    const env = { DEPLOYMENT_ENVIRONMENT: "production", PLATFORM_FLAGS_OVERRIDE: "all" };
+    const queries = vi.spyOn(setup.db, "prepare");
+    const env = { DEPLOYMENT_ENVIRONMENT: environment, PLATFORM_FLAGS_OVERRIDE: "all" };
     expect(await getFlags(context({ env, isAdmin: false }))).toEqual({ ...uniform(false), channels: true });
     expect(await getFlags(context({ env, isAdmin: true }))).toEqual({ ...uniform(false), channels: true, spaces: true });
+    expect(queries).toHaveBeenCalledTimes(2);
   });
 
   it.each([undefined, "ALL", "true", "staff", " all "])("does not enable flags for override %s", async override => {
@@ -75,6 +78,17 @@ describe("flag audiences", () => {
 });
 
 describe("request cache and API guard", () => {
+  it("invalidates an early cache when authentication or the trusted role changes", async () => {
+    setup.database.exec("UPDATE feature_flag SET audience='STAFF'");
+    const locals = {};
+    const queries = vi.spyOn(setup.db, "prepare");
+    expect(await getFlags(context({ locals, user: null }))).toEqual(uniform(false));
+    expect(await getFlags(context({ locals, isAdmin: false }))).toEqual(uniform(false));
+    expect(await getFlags(context({ locals, isAdmin: true }))).toEqual(uniform(true));
+    expect(await getFlags(context({ locals, user: null, isAdmin: true }))).toEqual(uniform(false));
+    expect(queries).toHaveBeenCalledTimes(2);
+  });
+
   it("shares concurrent results across helpers and contexts using the same locals", async () => {
     const locals = {};
     const ctx = context({ locals });

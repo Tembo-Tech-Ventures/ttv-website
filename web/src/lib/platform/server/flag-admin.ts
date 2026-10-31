@@ -1,4 +1,4 @@
-import { Flag, FlagKey, FlagsAdmin } from "./flag-contracts";
+import { Flag, FlagKey, FlagsAdmin } from "@/lib/platform/contracts";
 
 type FlagRow = Flag;
 
@@ -11,7 +11,12 @@ export async function listFlags(db: D1Database): Promise<FlagsAdmin> {
   const { results } = await db.prepare(
     "SELECT key, audience, updatedAt, updatedBy FROM feature_flag WHERE key IN (?, ?, ?, ?) ORDER BY key"
   ).bind(...FlagKey.options).all<FlagRow>();
-  return FlagsAdmin.parse({ flags: results.map(toFlag) });
+  return FlagsAdmin.parse({ flags: FlagKey.options.map(key => {
+    const row = results.find(flag => flag.key === key);
+    // Missing reference data fails closed. Zero denotes no recorded update;
+    // the next admin PUT can restore the row without console SQL.
+    return row ? toFlag(row) : { key, audience: "OFF", updatedAt: 0, updatedBy: null };
+  }) });
 }
 
 export async function updateFlag(
@@ -19,10 +24,13 @@ export async function updateFlag(
   key: Flag["key"],
   audience: Flag["audience"],
   actorId: string
-): Promise<Flag | null> {
+): Promise<Flag> {
   const row = await db.prepare(
-    `UPDATE feature_flag SET audience = ?, updatedAt = unixepoch(), updatedBy = ?
-     WHERE key = ? RETURNING key, audience, updatedAt, updatedBy`
-  ).bind(audience, actorId, key).first<FlagRow>();
-  return row ? toFlag(row) : null;
+    `INSERT INTO feature_flag(key, audience, updatedBy) VALUES (?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET audience = excluded.audience,
+       updatedAt = unixepoch(), updatedBy = excluded.updatedBy
+     RETURNING key, audience, updatedAt, updatedBy`
+  ).bind(FlagKey.parse(key), audience, actorId).first<FlagRow>();
+  if (!row) throw new Error("Feature flag update returned no row");
+  return toFlag(row);
 }
