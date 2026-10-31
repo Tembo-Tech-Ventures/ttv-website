@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { FIXTURE_ENVIRONMENT } from "./fixture-env";
+import { spaceRouteRequest } from "../scripts/cloudflare/space-route-browser-guard.mjs";
 
 const EVIDENCE_DIR = "test-results/evidence";
 mkdirSync(EVIDENCE_DIR, { recursive: true });
@@ -12,6 +13,7 @@ const personas = [
   {
     name: "new-sign-in",
     token: process.env.PLAYWRIGHT_NEW_STUDENT_TOKEN,
+    cohortMember: false,
     nextStep: /Apply to Open Cohort/,
     actionName: "Apply",
     actionHref: "/dashboard/apply",
@@ -29,6 +31,7 @@ const personas = [
   {
     name: "accepted",
     token: process.env.PLAYWRIGHT_ACCEPTED_STUDENT_TOKEN,
+    cohortMember: true,
     nextStep: "Start with your cohort sessions",
     actionName: "Watch sessions",
     actionHref: "/dashboard/sessions",
@@ -47,6 +50,7 @@ const personas = [
   {
     name: "graduate",
     token: process.env.PLAYWRIGHT_GRADUATE_STUDENT_TOKEN,
+    cohortMember: true,
     nextStep: "Your certificate is ready",
     actionName: "View certificate",
     actionHref: "/certificate/ttv-fixture-app-journey-graduate",
@@ -79,6 +83,14 @@ function visibleSiteNavigation(page: Page) {
   });
 }
 
+/** The persona's spaces, or null while the spaces flag is OFF. */
+async function personaSpaces(page: Page, baseURL: string): Promise<string[] | null> {
+  const response = await spaceRouteRequest(page.request, baseURL, "/api/platform/me");
+  if (response.status() === 404) return null;
+  expect(response.status()).toBe(200);
+  return ((await response.json()) as { spaces: string[] }).spaces;
+}
+
 for (const persona of personas) {
   test.describe(`student dashboard: ${persona.name}`, () => {
     test.skip(
@@ -94,6 +106,7 @@ for (const persona of personas) {
     test("shows the applicable links, one next step and stable active state", async ({
       page,
       viewport,
+      baseURL,
     }) => {
       const hydrationMessages: string[] = [];
       const recordHydrationProblem = (message: string) => {
@@ -103,6 +116,37 @@ for (const persona of personas) {
       };
       page.on("console", (message) => recordHydrationProblem(message.text()));
       page.on("pageerror", (error) => recordHydrationProblem(error.message));
+
+      const isMobile = (viewport?.width ?? 1280) < 1024;
+      const spaces = await personaSpaces(page, baseURL!);
+      if (spaces) expect(spaces.includes("cohort")).toBe(persona.cohortMember);
+      if (spaces && !persona.cohortMember) {
+        // Spaces ON: without a cohort, /dashboard opens the community space.
+        // Its workspace is not asserted here: the community API refuses
+        // bearer-header sessions (lib/community/http.ts), which this harness
+        // uses. Cookie sessions in a real browser are unaffected.
+        const landing = await page.goto("/dashboard");
+        expect(landing?.request().redirectedFrom()?.url()).toBe(new URL("/dashboard", baseURL).href);
+        await expect(page).toHaveURL(/\/dashboard\/community$/);
+
+        // The next step still works: the existing Apply link reaches a usable form.
+        const apply = await page.goto(persona.actionHref);
+        expect(apply?.status()).toBe(200);
+        await expect(page).toHaveURL(/\/dashboard\/cohort\/apply$/);
+        await expect(page.getByRole("heading", { name: "Apply to a Cohort" })).toBeVisible();
+        await expect(
+          page.locator("[data-cohort-id]").getByRole("button", { name: "Apply", exact: true }).first()
+        ).toBeEnabled();
+        await openMobileNavigation(page, isMobile);
+        const applyLink = visibleSiteNavigation(page).getByRole("link", {
+          name: persona.activeLabel,
+          exact: true,
+        });
+        await expect(applyLink).toHaveAttribute("aria-current", "page");
+        await page.screenshot({ path: evidence(persona.name), fullPage: true });
+        expect(hydrationMessages).toEqual([]);
+        return;
+      }
 
       const response = await page.goto("/dashboard");
       expect(response?.status()).toBe(200);
@@ -119,7 +163,6 @@ for (const persona of personas) {
       ).toHaveAttribute("href", persona.actionHref);
       await expect(page.getByText("Your next step", { exact: true })).toHaveCount(1);
 
-      const isMobile = (viewport?.width ?? 1280) < 1024;
       await openMobileNavigation(page, isMobile);
       const navigation = visibleSiteNavigation(page);
       await expect(navigation).toBeVisible();
