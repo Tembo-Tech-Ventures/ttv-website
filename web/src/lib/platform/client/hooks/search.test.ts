@@ -5,12 +5,17 @@ import { createSearchStore, SEARCH_GROUP_LIMIT, useSearch } from "../search";
 import { searchSelectionReducer } from "../searchKeyboard";
 import { boundRecentQueries, readRecentQueries, writeRecentQueries } from "../searchRecent";
 import { createSearchMockClient } from "../searchMock";
-import { createApiClient } from "../apiClient";
+import { createApiClient, type ApiClient } from "../apiClient";
 import { SearchResults } from "../../contracts";
 import { searchResults } from "../../fixtures";
 
-const result = (q: string) => ({ ...searchResults, query: { q, scope: "all" } });
-function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; }
+const result = (q: string): SearchResults => ({ ...searchResults, query: { q, scope: "all" } });
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
 function setup(fetch: typeof globalThis.fetch = vi.fn(async () => Response.json(result("test")))) {
   const store = createSearchStore({ enabled: true, client: createApiClient({ fetch, retry: { maxRetries: 0 } }) });
   const stop = store.connect(); store.setOpen(true); return { store, stop, fetch };
@@ -58,6 +63,70 @@ describe("search state", () => {
     expect(store.getState().results?.query).toEqual({ q: "test", scope: "cohort", programId: "legacy/%2F? #" });
     store.setScope("all"); expect(store.getState().results).toBeNull(); await vi.advanceTimersByTimeAsync(250);
     expect(store.getState().results?.query).toEqual({ q: "test", scope: "all" }); stop();
+  });
+
+  it("rejects late success and failure from a client that ignores cancellation", async () => {
+    const old = deferred<SearchResults>();
+    const current = deferred<SearchResults>();
+    const lateFailure = deferred<SearchResults>();
+    const call = vi.fn().mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise).mockReturnValueOnce(lateFailure.promise);
+    const client: ApiClient = { call };
+    const store = createSearchStore({ enabled: true, client });
+    const stop = store.connect();
+    store.setOpen(true);
+    store.setQuery("old");
+    await vi.advanceTimersByTimeAsync(250);
+    store.setQuery("new");
+    await vi.advanceTimersByTimeAsync(250);
+    current.resolve(result("new"));
+    await vi.advanceTimersByTimeAsync(0);
+    old.resolve(result("old"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getState()).toMatchObject({ status: "ready", results: { query: { q: "new" } }, error: null });
+    store.setQuery("later");
+    await vi.advanceTimersByTimeAsync(250);
+    store.setOpen(false);
+    // Rejection handlers in the store must also ignore a previous generation.
+    // The client promise deliberately ignores AbortSignal.
+    lateFailure.reject(new Error("late failure"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getState()).toMatchObject({ status: "idle", results: null, error: null });
+    stop();
+  });
+
+  it("preserves ready results and selection on repeated enable/open actions", async () => {
+    const { store, stop, fetch } = setup();
+    store.setQuery("test");
+    await vi.advanceTimersByTimeAsync(250);
+    store.key("Home");
+    const ready = store.getState();
+    store.setEnabled(true);
+    store.setOpen(true);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(store.getState()).toBe(ready);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it("clears an old cohort filter when setQuery changes scope", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async input => Response.json({
+      ...result("test"), query: Object.fromEntries(new URL(String(input), "https://test.invalid").searchParams),
+    }));
+    const { store, stop } = setup(fetch);
+    store.setScope("cohort", "p1");
+    store.setQuery("test", "people");
+    await vi.advanceTimersByTimeAsync(250);
+    expect(store.getState().results?.query).toEqual({ q: "test", scope: "people" });
+    stop();
+  });
+
+  it.each([0, 1])("announces %i results grammatically", async count => {
+    const fetch = vi.fn(async () => Response.json({ ...result("test"), people: searchResults.people.slice(0, count), projects: [], sessionMoments: [] }));
+    const { store, stop } = setup(fetch);
+    store.setQuery("test");
+    await vi.advanceTimersByTimeAsync(250);
+    expect(store.getState().announcement).toBe(count === 0 ? "No results" : "1 search result");
+    stop();
   });
 
   it("aborts immediately on typing and ignores out-of-order responses from a transport ignoring abort", async () => {
@@ -109,7 +178,7 @@ describe("search state", () => {
   it("hands off only a local trimmed q without making a request or persisting drafts", () => {
     const fetch = vi.fn(); const { store, stop } = setup(fetch); store.setQuery("  retry webhook  ");
     expect(store.draftForAskTembo()).toEqual({ q: "retry webhook" }); expect(fetch).not.toHaveBeenCalled();
-    expect(store.getState().recentQueries).toEqual(["retry webhook"]);
+    expect(store.getState().recentQueries).toEqual([]);
     store.key("Escape"); expect(store.draftForAskTembo()).toBeNull(); expect(vi.getTimerCount()).toBe(0); stop();
   });
 
@@ -149,6 +218,8 @@ describe("selection boundaries", () => {
 });
 
 describe("recent queries", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
   it("bounds valid strings, trims and deduplicates, tolerates unavailable/corrupt storage", () => {
     expect(boundRecentQueries([" A ", "a", "", null, "x".repeat(501), ...Array.from({ length: 20 }, (_, i) => `q${i}`)])).toEqual(["A", "q0", "q1", "q2", "q3", "q4", "q5", "q6"]);
     for (const raw of ["bad json", "{}", "x".repeat(16_385)]) expect(readRecentQueries({ getItem: () => raw, setItem() {} }, "key")).toEqual([]);
@@ -157,14 +228,29 @@ describe("recent queries", () => {
     expect(readRecentQueries(blocked, "key")).toEqual([]); expect(() => writeRecentQueries(blocked, "key", ["query"])).not.toThrow();
   });
 
-  it("hydrates per-user recents on connection only, remembers explicit actions, clears safely", () => {
+  it("persists only selected searches, never Tembo drafts, and clears per-user recents", async () => {
     const storage = { getItem: vi.fn(() => '["old"]'), setItem: vi.fn() };
-    const store = createSearchStore({ enabled: true, storage: () => storage, recentStorageKey: "synthetic-user" });
-    expect(storage.getItem).not.toHaveBeenCalled(); const stop = store.connect(); store.setOpen(true);
-    expect(store.getState().recentQueries).toEqual(["old"]); store.setQuery("new"); expect(storage.setItem).not.toHaveBeenCalled();
-    store.draftForAskTembo(); expect(storage.setItem).toHaveBeenLastCalledWith("synthetic-user", '["new","old"]');
-    store.clearRecent(); expect(storage.setItem).toHaveBeenLastCalledWith("synthetic-user", "[]");
-    store.setEnabled(false); store.setEnabled(true); expect(storage.getItem).toHaveBeenCalledTimes(2); stop();
+    const client = createApiClient({ fetch: vi.fn(async () => Response.json(result("new"))) });
+    const store = createSearchStore({ enabled: true, client, storage: () => storage, recentStorageKey: "synthetic-user" });
+    expect(storage.getItem).not.toHaveBeenCalled();
+    const stop = store.connect();
+    store.setOpen(true);
+    expect(store.getState().recentQueries).toEqual(["old"]);
+    store.setQuery("private Tembo draft");
+    expect(store.draftForAskTembo()).toEqual({ q: "private Tembo draft" });
+    expect(storage.setItem).not.toHaveBeenCalled();
+    expect(store.getState().recentQueries).toEqual(["old"]);
+    store.setQuery("new");
+    await vi.advanceTimersByTimeAsync(250);
+    store.key("Home");
+    store.select();
+    expect(storage.setItem).toHaveBeenLastCalledWith("synthetic-user", '["new","old"]');
+    store.clearRecent();
+    expect(storage.setItem).toHaveBeenLastCalledWith("synthetic-user", "[]");
+    store.setEnabled(false);
+    store.setEnabled(true);
+    expect(storage.getItem).toHaveBeenCalledTimes(2);
+    stop();
   });
 
   it("survives an unavailable storage getter and invalid debounce configuration", () => {

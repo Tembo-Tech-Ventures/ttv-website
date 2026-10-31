@@ -47,7 +47,8 @@ function boundedResults(data: SearchResults): SearchResults {
     for (const item of items) {
       const id = key(item);
       if (seen.has(id)) continue;
-      seen.add(id); bounded.push(item);
+      seen.add(id);
+      bounded.push(item);
       if (bounded.length === SEARCH_GROUP_LIMIT) break;
     }
     return bounded;
@@ -76,8 +77,10 @@ export function createSearchStore(options: SearchOptions = {}) {
 
   function cancel() {
     generation++;
-    clearTimeout(timer); timer = undefined;
-    controller?.abort(); controller = undefined;
+    clearTimeout(timer);
+    timer = undefined;
+    controller?.abort();
+    controller = undefined;
   }
   function reset() {
     cancel();
@@ -109,13 +112,14 @@ export function createSearchStore(options: SearchOptions = {}) {
     timer = setTimeout(() => { timer = undefined; void request(query, version); }, debounceMs);
   }
   async function request(query: SearchQuery, version: number) {
-    const abort = new AbortController(); controller = abort;
+    const abort = new AbortController();
+    controller = abort;
     store.setState(s => ({ ...s, status: "loading" }));
     try {
       client ??= options.mock ? (await import("./searchMock")).createSearchMockClient() : createApiClient();
       if (version !== generation) return;
       const raw = SearchResults.parse(await client.call(ROUTES.search, { query, signal: abort.signal }));
-      if (version !== generation || abort.signal.aborted) return;
+      if (version !== generation) return;
       if (!sameQuery(raw.query, query)) throw new ApiError("invalid_response", 200, "Search response query mismatch");
       const results = boundedResults(raw);
       const items: SearchItem[] = [
@@ -123,43 +127,67 @@ export function createSearchStore(options: SearchOptions = {}) {
         ...results.projects.map(item => ({ group: "projects" as const, item })),
         ...results.sessionMoments.map(item => ({ group: "sessionMoments" as const, item })),
       ];
-      store.setState(s => ({ ...s, results, items, status: "ready", selected: -1, announcement: `${items.length} search results` }));
+      store.setState(s => ({ ...s, results, items, status: "ready", selected: -1, announcement: items.length === 0 ? "No results" : `${items.length} search result${items.length === 1 ? "" : "s"}` }));
     } catch (cause) {
-      if (version !== generation || abort.signal.aborted) return;
+      if (version !== generation) return;
       const error = cause instanceof ApiError ? cause : new ApiError("invalid_response", 0, "Search failed", undefined, { cause });
       store.setState(s => ({ ...s, status: "error", error, announcement: "Search failed. Try again." }));
-    } finally { if (controller === abort) controller = undefined; }
+    } finally {
+      if (controller === abort) controller = undefined;
+    }
   }
-  function visibility() { schedule(); }
+  function visibility() {
+    // Finished searches need neither polling nor cancellation on a visibility round-trip.
+    if (store.getState().status === "ready") return;
+    schedule();
+  }
   const actions = {
     connect() {
       if (++connections === 1) {
         browserDocument = typeof document === "undefined" ? undefined : document;
         browserDocument?.addEventListener("visibilitychange", visibility);
-        hydrate(); schedule();
+        hydrate();
+        schedule();
       }
       let connected = true;
       return () => {
-        if (!connected) return; connected = false;
+        if (!connected) return;
+        connected = false;
         if (--connections === 0) {
           browserDocument?.removeEventListener("visibilitychange", visibility);
-          browserDocument = undefined; reset();
+          browserDocument = undefined;
+          reset();
         }
       };
     },
     setEnabled(enabled: boolean) {
+      if (store.getState().enabled === enabled) return;
       store.setState(s => ({ ...s, enabled, ...(!enabled ? { open: false, q: "", recentQueries: [] } : {}) }));
-      if (!enabled) { hydrated = false; storage = undefined; } else if (connections) hydrate();
+      if (!enabled) {
+        hydrated = false;
+        storage = undefined;
+      } else if (connections) {
+        hydrate();
+      }
       schedule();
     },
-    setOpen(open: boolean) { store.setState(s => ({ ...s, open: s.enabled && open })); schedule(); },
-    setQuery(q: string, scope = store.getState().scope, programId = store.getState().programId) {
+    setOpen(open: boolean) {
+      const nextOpen = store.getState().enabled && open;
+      if (store.getState().open === nextOpen) return;
+      store.setState(s => ({ ...s, open: nextOpen }));
+      schedule();
+    },
+    setQuery(q: string, scope = store.getState().scope, programId?: string) {
+      const previous = store.getState();
+      const nextProgramId = programId ?? (scope === previous.scope ? previous.programId : undefined);
       // Keep overlong input bounded while retaining its validation error.
-      store.setState(s => ({ ...s, q: q.slice(0, 501), scope, programId })); schedule();
+      store.setState(s => ({ ...s, q: q.slice(0, 501), scope, programId: nextProgramId }));
+      schedule();
     },
     /** Explicitly replace the scope; omitting programId clears a previous cohort filter. */
     setScope(scope: SearchScope, programId?: string) {
-      store.setState(s => ({ ...s, scope, programId })); schedule();
+      store.setState(s => ({ ...s, scope, programId }));
+      schedule();
     },
     retry: schedule,
     key(key: SearchKey) {
@@ -182,7 +210,6 @@ export function createSearchStore(options: SearchOptions = {}) {
       if (!s.enabled || !s.open) return null;
       const parsed = SearchQuery.shape.q.safeParse(s.q.trim());
       if (!parsed.success) return null;
-      remember(parsed.data);
       return { q: parsed.data };
     },
     clearRecent() {

@@ -40,3 +40,49 @@ it("keeps a shared store connected until the last consumer unmounts", async () =
   await act(async () => root.render(<Harness key="one" />)); expect(signal.aborted).toBe(false);
   await act(async () => root.unmount()); expect(signal.aborted).toBe(true); root = createRoot(container);
 });
+
+it("preserves completed results and selection across hidden/visible without refetching", async () => {
+  const { searchResults } = await import("../../fixtures");
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({ ...searchResults, query: { q: "test", scope: "all" } }));
+  const store = createSearchStore({ enabled: true, client: createApiClient({ fetch }) });
+  function Harness() { useSearch(store); return null; }
+  await act(async () => root.render(<Harness />));
+  await act(async () => {
+    store.setOpen(true);
+    store.setQuery("test");
+    await vi.advanceTimersByTimeAsync(250);
+    store.key("Home");
+  });
+  const ready = store.getState();
+  for (const hidden of [true, false]) {
+    await act(async () => {
+      Object.defineProperty(document, "hidden", { configurable: true, value: hidden });
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+  }
+  expect(store.getState()).toBe(ready);
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it("cancels a pending debounce on hidden and restarts it when visible", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>(() => new Promise<Response>(() => {}));
+  const store = createSearchStore({ enabled: true, client: createApiClient({ fetch }) });
+  function Harness() { useSearch(store); return null; }
+  await act(async () => root.render(<Harness />));
+  await act(async () => {
+    store.setOpen(true);
+    store.setQuery("test");
+    await vi.advanceTimersByTimeAsync(249);
+    Object.defineProperty(document, "hidden", { configurable: true, value: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(1000);
+  });
+  expect(fetch).not.toHaveBeenCalled();
+  await act(async () => {
+    Object.defineProperty(document, "hidden", { configurable: true, value: false });
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(250);
+  });
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
