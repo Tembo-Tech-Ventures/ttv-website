@@ -1,18 +1,34 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readMigration } from "@/test/sqlite-d1";
 import { DEMO_PREFIX } from "@/lib/staging-demo-policy";
-import { ErrorEnvelope, FlagKey, Me, ROUTES, SPACE_ORDER } from "../contracts";
+import { ErrorEnvelope, FlagKey, Me, ROUTES, SPACE_ORDER, type RoleBadge } from "../contracts";
 import { CAPABILITY_ROLE_MATRIX, type CapabilityCase } from "./capabilities.fixtures";
 import { createCapabilityDatabase } from "./capabilities.test-support";
 import { getFlags, requireFlag } from "./flags";
 
-const mocks = vi.hoisted(() => ({ env: {} as Record<string, unknown> }));
+const mocks = vi.hoisted(() => ({ env: {} as Record<string, unknown>, recordErrorInBackground: vi.fn() }));
 vi.mock("cloudflare:workers", () => ({ env: mocks.env }));
+vi.mock("@/lib/observability/errors", () => ({ recordErrorInBackground: mocks.recordErrorInBackground }));
 import { GET } from "@/pages/api/platform/me";
 import { getSpaceContext } from "./space-context";
 
 const databases: ReturnType<typeof createCapabilityDatabase>["database"][] = [];
 const zeroCounts = { cohort: 0, community: 0, mentoring: 0, discover: 0, admin: 0, profile: 0 };
+const community: RoleBadge[] = [{ kind: "COMMUNITY", label: "Community", programId: null }];
+const mentor: RoleBadge[] = [{ kind: "MENTOR", label: "Mentor", programId: null }];
+const institution: RoleBadge[] = [{ kind: "INSTITUTION", label: "Institution partner", programId: null }];
+const admin: RoleBadge[] = [{ kind: "STAFF", label: "Staff", programId: null }, { kind: "ADMIN", label: "Admin", programId: null }];
+// Explicit DTO expectations in addition to the shared authorization matrix.
+// Program badges remain absent until their status/name display metadata exists.
+const expectedBadges: Record<string, RoleBadge[]> = {
+  unauthenticated: [], "community member": community,
+  "pending applicant": [], "rejected applicant": [], "applicant without cohort": [],
+  approved: [], audit: [], completed: [], INSTRUCTOR: [], TA: [], "per-cohort mentor only": [],
+  "global mentor without assignment": mentor, institution, admin,
+  "institution and cohort mentor": institution, "global mentor and approved student": mentor,
+  "multi-cohort roles deduplicated": [], "all global roles and cohort mentor": [...institution, ...mentor, ...admin],
+  "global staff labels do not grant cohort scope": community,
+};
 function setup(fixture: Partial<CapabilityCase> = {}, userId?: string) {
   const result = createCapabilityDatabase(fixture, userId);
   databases.push(result.database);
@@ -62,6 +78,7 @@ describe("real /me and Astro context adapters", () => {
       user: { id: context.locals.user!.id, name: "Wanjiku Njeri", avatarUrl: "https://example.test/avatar.png" },
     });
     expect(Object.keys(parsed.user).toSorted()).toEqual(["avatarUrl", "id", "name", "roleBadges"]);
+    expect(parsed.user.roleBadges).toEqual(expectedBadges[fixture.name]);
     expect(Object.keys(parsed.capabilities).toSorted()).toEqual(Object.keys(capabilities).toSorted());
     expect(parsed.spaces).toEqual(SPACE_ORDER.filter(space => spaces.includes(space)));
     expect(queries).toHaveBeenCalledTimes(4); // one flag read, three capability reads
@@ -176,11 +193,23 @@ describe("real /me and Astro context adapters", () => {
     await expect(getSpaceContext(context)).rejects.toBeInstanceOf(Error);
   });
 
-  it("does not emit a contract-invalid current user payload", async () => {
+  it.each([
+    { name: "", image: null, expectedName: "Member", expectedAvatar: null },
+    { name: " \t ", image: "", expectedName: "Member", expectedAvatar: null },
+    // oxlint-disable-next-line no-script-url -- regression fixture: this stored URL must be rejected
+    { name: " Wanjiku Njeri ", image: "javascript:alert(1)", expectedName: "Wanjiku Njeri", expectedAvatar: null },
+    { name: "Wanjiku Njeri", image: "data:image/svg+xml,unsafe", expectedName: "Wanjiku Njeri", expectedAvatar: null },
+    { name: "Wanjiku Njeri", image: "//example.test/avatar", expectedName: "Wanjiku Njeri", expectedAvatar: null },
+    { name: "Wanjiku Njeri", image: "/images/avatar.png", expectedName: "Wanjiku Njeri", expectedAvatar: "/images/avatar.png" },
+  ])("normalizes legacy display fields safely: $name / $image", async ({ name, image, expectedName, expectedAvatar }) => {
     const { context } = setup();
-    context.locals.user!.name = " ";
+    Object.assign(context.locals.user!, { name, image });
     const { response, body } = await request(context);
-    expect(response.status).toBe(500);
-    expect(ErrorEnvelope.parse(body).error.code).toBe("server");
+    expect(response.status).toBe(200);
+    const me = Me.parse(body);
+    expect(me.user.name).toBe(expectedName);
+    expect(me.user.avatarUrl).toBe(expectedAvatar);
+    expect(JSON.stringify(me)).not.toContain(context.locals.user!.email);
+    expect(await getSpaceContext(context)).toEqual(me);
   });
 });

@@ -59,6 +59,7 @@ describe("/me through existing authentication middleware", () => {
     expect(response.status).toBe(404);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(ErrorEnvelope.parse(await response.json()).error.code).toBe("flag_off");
+    expect(mocks.recordErrorInBackground).not.toHaveBeenCalled();
   });
 
   it("rejects anonymous requests even when the spaces audience is ALL", async () => {
@@ -92,6 +93,9 @@ describe("/me through existing authentication middleware", () => {
     const { response } = await request();
     expect(response.status).toBe(500);
     expect(ErrorEnvelope.parse(await response.json())).toEqual({ error: { code: "server", message: "Could not load platform context." } });
-    expect(mocks.recordErrorInBackground).toHaveBeenCalledOnce();
+    expect(mocks.recordErrorInBackground).toHaveBeenCalledTimes(2);
+    const input = mocks.recordErrorInBackground.mock.calls[0][2];
+    expect(input).toMatchObject({ source: "request", route: ROUTES.getMe.path, error: expect.any(Error) });
+    expect(input.error.message).toContain("programRole");
   });
 });

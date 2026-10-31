@@ -1,9 +1,10 @@
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
-import { Me, type RoleBadge } from "../contracts";
+import { Me, WebLink, type RoleBadge } from "../contracts";
 import { capabilitiesFor } from "./capabilities";
 import { getFlags, requireFlag, type FlagContext } from "./flags";
 import { platformError } from "./http";
+import { TEMBO_DAILY_LIMIT } from "./me-config";
 
 export interface MeContext {
   db: D1Database;
@@ -24,13 +25,21 @@ export async function getMe({ db, env, locals }: MeContext): Promise<Me> {
   // Only display roles established by the canonical capability lookup. Cohort
   // status/labels need richer display metadata; never infer them from cohortIds.
   const roleBadges: RoleBadge[] = [];
-  if (capabilities.isMentor) roleBadges.push({ kind: "MENTOR", label: "Mentor", programId: null });
   if (capabilities.isInstitution) roleBadges.push({ kind: "INSTITUTION", label: "Institution partner", programId: null });
-  if (capabilities.isAdmin) roleBadges.push({ kind: "ADMIN", label: "Admin", programId: null });
-  if (roleBadges.length === 0) roleBadges.push({ kind: "COMMUNITY", label: "Community", programId: null });
+  if (capabilities.isMentor) roleBadges.push({ kind: "MENTOR", label: "Mentor", programId: null });
+  if (capabilities.isAdmin) roleBadges.push(
+    { kind: "STAFF", label: "Staff", programId: null },
+    { kind: "ADMIN", label: "Admin", programId: null },
+  );
+  // Applicants and program members are not community-only. Until richer
+  // program display metadata exists, omit their badges rather than mislabel.
+  if (roleBadges.length === 0 && !spaces.includes("cohort")) {
+    roleBadges.push({ kind: "COMMUNITY", label: "Community", programId: null });
+  }
+  const avatar = WebLink.safeParse(user.image);
 
   return Me.parse({
-    user: { id: user.id, name: user.name, avatarUrl: user.image ?? null, roleBadges },
+    user: { id: user.id, name: user.name.trim() || "Member", avatarUrl: avatar.success ? avatar.data : null, roleBadges },
     capabilities,
     spaces,
     flags: await getFlags(flagContext),
@@ -38,6 +47,6 @@ export async function getMe({ db, env, locals }: MeContext): Promise<Me> {
     // attention counts are zero. These are never channel unread counts.
     unreadCounts: { cohort: 0, community: 0, mentoring: 0, discover: 0, admin: 0, profile: 0 },
     // Channel Tembo accounting arrives in Phase 3; not private-chat usage.
-    temboUsage: { used: 0, limit: 10 },
+    temboUsage: { used: 0, limit: TEMBO_DAILY_LIMIT },
   });
 }
