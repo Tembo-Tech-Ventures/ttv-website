@@ -17,26 +17,6 @@ type ApplicationStatus =
   | "AUDIT"
   | "COMPLETED";
 
-const APPLICATION_STATUSES = new Set<ApplicationStatus>([
-  "PENDING",
-  "APPROVED",
-  "REJECTED",
-  "AUDIT",
-  "COMPLETED",
-]);
-
-function getAllowedApplicationStatuses(where: SQL) {
-  return new Set(
-    dialect
-      .sqlToQuery(where)
-      .params.filter(
-        (value): value is ApplicationStatus =>
-          typeof value === "string" &&
-          APPLICATION_STATUSES.has(value as ApplicationStatus)
-      )
-  );
-}
-
 function createDatabase({
   applications = [],
   staffRoles = [],
@@ -51,33 +31,24 @@ function createDatabase({
   applicationAccess?: { id: string; status?: ApplicationStatus } | null;
   staffRoleAccess?: unknown;
 }) {
-  const findManyApplications = vi.fn(
-    async ({ where }: { where: SQL }) => {
-      const allowedStatuses = getAllowedApplicationStatuses(where);
-
-      return applications
-        .filter(
-          (application) =>
-            !application.status || allowedStatuses.has(application.status)
-        )
-        .map(({ programId }) => ({ programId }));
-    }
-  );
-  const findApplication = vi.fn(async ({ where }: { where: SQL }) => {
-    if (!applicationAccess?.status) return applicationAccess;
-    return getAllowedApplicationStatuses(where).has(applicationAccess.status)
-      ? applicationAccess
-      : null;
-  });
+  const applicationRows = [
+    ...applications,
+    ...(applicationAccess ? [{ programId: "program-2024", status: applicationAccess.status }] : []),
+  ].map(({ programId, status }) => ({ programId, status: status ?? "APPROVED" }));
+  const assignmentRows = [
+    ...staffRoles,
+    ...(staffRoleAccess ? [{ programId: "program-2024" }] : []),
+  ].map((role) => ({ ...role, name: "TA" }));
 
   return {
     query: {
+      userRole: { findMany: vi.fn().mockResolvedValue([]) },
       programApplication: {
-        findMany: findManyApplications,
-        findFirst: findApplication,
+        findMany: vi.fn().mockResolvedValue(applicationRows),
+        findFirst: vi.fn(),
       },
       programRole: {
-        findMany: vi.fn().mockResolvedValue(staffRoles),
+        findMany: vi.fn().mockResolvedValue(assignmentRows),
         findFirst: vi.fn().mockResolvedValue(staffRoleAccess),
       },
     },
@@ -121,8 +92,8 @@ describe("recording access", () => {
     });
 
     await expect(getAccessibleProgramIds(db, "user-1")).resolves.toEqual([
-      "program-audit",
       "program-approved",
+      "program-audit",
       "program-completed",
     ]);
   });
