@@ -75,6 +75,34 @@ export const featureFlag = sqliteTable(
   ]
 );
 
+// ─── Attention ───────────────────────────────────────────
+
+/** Attention timestamps are wire-format epoch milliseconds, not Unix seconds. */
+export const attentionItem = sqliteTable("attention_item", {
+  id: cuid("id"),
+  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  eventKey: text("eventKey").notNull(),
+  kind: text("kind").notNull(),
+  space: text("space", { enum: ["cohort", "community", "mentoring", "discover", "admin", "profile"] }).notNull(),
+  category: text("category", { enum: ["mentions", "requests", "updates"] }).notNull(),
+  subjectKind: text("subjectKind").notNull(),
+  subjectId: text("subjectId").notNull(),
+  subjectHref: text("subjectHref").notNull(),
+  subjectLabel: text("subjectLabel").notNull(),
+  actorId: text("actorId").references(() => user.id, { onDelete: "set null" }),
+  summary: text("summary").notNull(),
+  createdAt: integer("createdAt").notNull(),
+  readAt: integer("readAt"),
+}, table => [
+  uniqueIndex("attention_item_user_event_idx").on(table.userId, table.eventKey),
+  index("attention_item_unread_idx").on(table.userId, table.readAt, table.space),
+  index("attention_item_page_idx").on(table.userId, table.createdAt, table.id),
+  index("attention_item_filter_page_idx").on(table.userId, table.category, table.createdAt, table.id),
+  check("attention_item_space_check", sql`${table.space} IN ('cohort','community','mentoring','discover','admin','profile')`),
+  check("attention_item_category_check", sql`${table.category} IN ('mentions','requests','updates')`),
+  check("attention_item_time_check", sql`${table.createdAt} >= 0 AND (${table.readAt} IS NULL OR ${table.readAt} >= ${table.createdAt})`),
+]);
+
 // ─── Account (matches better-auth expected schema) ─────────
 
 export const account = sqliteTable("account", {
