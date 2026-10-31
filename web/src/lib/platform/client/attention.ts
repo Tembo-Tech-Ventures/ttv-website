@@ -1,0 +1,294 @@
+import {
+  AttentionCount, AttentionFilter, AttentionList, MarkAttentionRead, ROUTES,
+  type AttentionItem, type SpaceId,
+} from "../contracts";
+import { attention as fixtureAttention, attentionCount as fixtureCount } from "../fixtures";
+import { ApiError, createApiClient, type ApiClient } from "./apiClient";
+import { createMockTransport } from "./mockTransport";
+import { createPoller } from "./poller";
+import { createStore } from "./store";
+
+const zeroCounts = (): AttentionCount => ({ count: 0, unreadCounts: {
+  cohort: 0, community: 0, mentoring: 0, discover: 0, admin: 0, profile: 0,
+} });
+const matches = (item: AttentionItem, body: MarkAttentionRead) => "ids" in body
+  ? body.ids.includes(item.id) : item.createdAt <= body.through;
+const byNewest = (a: AttentionItem, b: AttentionItem) => b.createdAt - a.createdAt || a.id.localeCompare(b.id);
+const normalizeError = (error: unknown) => error instanceof ApiError ? error
+  : new ApiError("client_error", 0, "Attention request failed", undefined, { cause: error });
+
+/** Same grouping as the attention API; mock data never falls back to the network. */
+export function attentionMatchesFilter(item: AttentionItem, filter: AttentionFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "mentions") return ["mention", "reply", "tembo_answer"].includes(item.kind);
+  if (filter === "requests") return item.kind.startsWith("mentor_");
+  return !attentionMatchesFilter(item, "mentions") && !attentionMatchesFilter(item, "requests");
+}
+
+export function createAttentionMockClient(): ApiClient {
+  let items = AttentionList.parse(fixtureAttention).items;
+  const count = () => {
+    const result = zeroCounts();
+    for (const item of items) if (item.readAt === null) { result.count++; result.unreadCounts[item.space]++; }
+    return result;
+  };
+  return createApiClient({ fetch: createMockTransport([
+    { ...ROUTES.listAttention, reply: ({ request }) => {
+      const filter = AttentionFilter.parse(new URL(request.url).searchParams.get("filter") ?? "all");
+      return { data: { ...fixtureAttention, items: items.filter(item => attentionMatchesFilter(item, filter)) } };
+    } },
+    { ...ROUTES.countAttention, reply: () => ({ data: count() }) },
+    { ...ROUTES.markAttentionRead, reply: async ({ request }) => {
+      const body = MarkAttentionRead.parse(await request.json());
+      items = items.map(item => item.readAt === null && matches(item, body) ? { ...item, readAt: Date.now() } : item);
+      return { data: count() };
+    } },
+  ]) });
+}
+
+export interface AttentionMutation {
+  id: number;
+  body: MarkAttentionRead;
+  readAt: number;
+}
+export interface AttentionFailure extends AttentionMutation { error: ApiError }
+export interface AttentionState {
+  items: readonly AttentionItem[];
+  counts: AttentionCount;
+  filter: AttentionFilter;
+  nextCursor: string | null;
+  snapshotAt: number | null;
+  loaded: boolean;
+  loading: boolean;
+  counting: boolean;
+  listError: ApiError | null;
+  countError: ApiError | null;
+  pending: readonly AttentionMutation[];
+  failed: readonly AttentionFailure[];
+  announcement: string;
+}
+export interface AttentionOptions {
+  /** Supply Me.flags.spaces explicitly. Defaults to false; no requests when disabled. */
+  enabled?: boolean;
+  api?: ApiClient;
+  mock?: boolean;
+  initialList?: AttentionList;
+  initialCounts?: AttentionCount;
+  filter?: AttentionFilter;
+  maxItems?: number;
+}
+
+/** Per-user/request instance. Construct without side effects; start/retain owns polling. */
+export function createAttentionStore(options: AttentionOptions = {}) {
+  const { enabled = false, maxItems = 500 } = options;
+  if (!Number.isInteger(maxItems) || maxItems < 1 || maxItems > 10_000) throw new RangeError("Invalid maxItems");
+  const api = options.api ?? (options.mock ? createAttentionMockClient() : createApiClient());
+  const initial = options.initialList ? AttentionList.parse(options.initialList) : undefined;
+  let entities = new Map<string, AttentionItem>();
+  function merge(items: readonly AttentionItem[], replace = false) {
+    const next = replace ? new Map<string, AttentionItem>() : new Map(entities);
+    for (const item of items) {
+      // Read state is monotonic; an old page must never resurrect an acknowledged item.
+      const previous = entities.get(item.id);
+      next.set(item.id, previous?.readAt !== null && previous?.readAt !== undefined && item.readAt === null
+        ? { ...item, readAt: previous.readAt } : item);
+    }
+    entities = new Map([...next.values()].toSorted(byNewest).slice(0, maxItems).map(item => [item.id, item]));
+  }
+  merge(initial?.items ?? []);
+  let counts = options.initialCounts ? AttentionCount.parse(options.initialCounts)
+    : options.mock ? AttentionCount.parse(fixtureCount) : zeroCounts();
+  const store = createStore<AttentionState>({
+    items: [...entities.values()], counts, filter: AttentionFilter.parse(options.filter ?? "all"),
+    nextCursor: initial?.nextCursor ?? null, snapshotAt: initial?.snapshotAt ?? null,
+    loaded: !!initial, loading: false, counting: false, listError: null, countError: null,
+    pending: [], failed: [], announcement: "",
+  });
+  let stopped = false;
+  let epoch = 0;
+  let revision = 0;
+  let sequence = 0;
+  let retains = 0;
+  let listController: AbortController | undefined;
+  let countController: AbortController | undefined;
+  let countFlight: Promise<boolean> | undefined;
+  let listFlight: Promise<void> | undefined;
+  let mutationController: AbortController | undefined;
+  let queue: Promise<void> = Promise.resolve();
+  const available = () => enabled && !stopped;
+  const valid = (generation: number, signal: AbortSignal) => available() && epoch === generation && !signal.aborted;
+  const optimisticItems = new Map<string, AttentionItem>();
+  function project(update: Partial<AttentionState> = {}) {
+    store.setState(state => {
+      const next = { ...state, ...update };
+      const projected = { count: counts.count, unreadCounts: { ...counts.unreadCounts } };
+      // Keep the known optimistic count delta when paging/filtering evicts items.
+      for (const [id, item] of optimisticItems) {
+        if (item.readAt !== null || !next.pending.some(entry => matches(item, entry.body))) optimisticItems.delete(id);
+      }
+      for (const item of entities.values()) {
+        if (item.readAt === null && optimisticItems.size < maxItems && next.pending.some(entry => matches(item, entry.body))) {
+          optimisticItems.set(item.id, item);
+        }
+      }
+      for (const item of optimisticItems.values()) {
+        projected.count = Math.max(0, projected.count - 1);
+        projected.unreadCounts[item.space] = Math.max(0, projected.unreadCounts[item.space] - 1);
+      }
+      const items = [...entities.values()].map(item => {
+        const mutation = next.pending.find(entry => matches(item, entry.body));
+        if (!mutation || item.readAt !== null) return item;
+        return { ...item, readAt: mutation.readAt };
+      });
+      return { ...next, counts: projected, items };
+    });
+  }
+  async function refreshCounts(signal?: AbortSignal): Promise<boolean> {
+    if (!available() || store.getState().pending.length > 0) return false;
+    if (countFlight) {
+      const current = countController;
+      const abortShared = () => current?.abort();
+      signal?.addEventListener("abort", abortShared, { once: true });
+      if (signal?.aborted) abortShared();
+      try { return await countFlight; }
+      finally { signal?.removeEventListener("abort", abortShared); }
+    }
+    const controller = new AbortController();
+    countController = controller;
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+    const generation = epoch; const version = revision;
+    project({ counting: true, countError: null });
+    const flight = (async () => {
+      try {
+        const result = await api.call(ROUTES.countAttention, { signal: controller.signal });
+        if (!valid(generation, controller.signal) || revision !== version) return false;
+        const changed = JSON.stringify(counts) !== JSON.stringify(result);
+        const increase = result.count - counts.count;
+        counts = result;
+        project({ announcement: increase > 0 ? `${increase} new attention items` : store.getState().announcement });
+        return changed;
+      } catch (error) {
+        if (valid(generation, controller.signal) && version === revision) project({ countError: normalizeError(error), announcement: "Could not update attention count" });
+        throw error;
+      } finally {
+        signal?.removeEventListener("abort", abort);
+        if (countController === controller) { countController = undefined; countFlight = undefined; project({ counting: false }); }
+      }
+    })();
+    countFlight = flight;
+    return flight;
+  }
+  const poller = createPoller({
+    intervalMs: 30_000, maxIntervalMs: 180_000,
+    isActive: available,
+    run: async signal => ({ changed: await refreshCounts(signal) }),
+  });
+  async function page(reset: boolean, filter = store.getState().filter): Promise<void> {
+    if (!available()) return;
+    if (!reset && listFlight) return listFlight;
+    const state = store.getState();
+    if (!reset && state.loaded && !state.nextCursor) return;
+    listController?.abort();
+    const controller = new AbortController(); listController = controller;
+    const generation = epoch; const version = revision;
+    const cursor = reset ? undefined : state.nextCursor ?? undefined;
+    project({ loading: true, listError: null, ...(reset ? { filter } : {}) });
+    const flight = (async () => {
+      try {
+        const result = await api.call(ROUTES.listAttention, { query: { filter, cursor }, signal: controller.signal });
+        if (!valid(generation, controller.signal) || version !== revision || listController !== controller) return;
+        merge(result.items, reset);
+        // A repeated cursor cannot make forward progress. Permit explicit refresh/retry.
+        const nextCursor = result.nextCursor === cursor ? null : result.nextCursor;
+        project({ loaded: true, nextCursor, snapshotAt: reset || !state.loaded ? result.snapshotAt : state.snapshotAt });
+      } catch (error) {
+        if (valid(generation, controller.signal) && listController === controller) project({ listError: normalizeError(error), announcement: "Could not load attention items" });
+      } finally {
+        if (listController === controller) { listController = undefined; listFlight = undefined; project({ loading: false }); }
+      }
+    })();
+    listFlight = flight;
+    return flight;
+  }
+  function markRead(input: MarkAttentionRead): Promise<boolean> {
+    if (!available()) return Promise.resolve(false);
+    const body = MarkAttentionRead.parse(input);
+    if (store.getState().pending.length >= 100) return Promise.resolve(false);
+    const mutation: AttentionMutation = { id: ++sequence, body, readAt: Date.now() };
+    const generation = epoch;
+    // Invalidate reads taken before this write; counts have no server version.
+    revision++;
+    countController?.abort();
+    project({ pending: [...store.getState().pending, mutation] });
+    const outcome = queue.then(async () => {
+      if (!available() || generation !== epoch) return false;
+      const controller = new AbortController(); mutationController = controller;
+      try {
+        const result = await api.call(ROUTES.markAttentionRead, { body, signal: controller.signal });
+        if (!valid(generation, controller.signal)) return false;
+        revision++;
+        counts = result; // Server truth includes unread items outside the bounded cache.
+        for (const [id, item] of optimisticItems) if (matches(item, body)) optimisticItems.delete(id);
+        entities = new Map([...entities].map(([id, item]) => [id, item.readAt === null && matches(item, body)
+          ? { ...item, readAt: mutation.readAt } : item]));
+        project({ pending: store.getState().pending.filter(entry => entry.id !== mutation.id), announcement: "Attention marked read" });
+        return true;
+      } catch (error) {
+        if (valid(generation, controller.signal)) {
+          revision++;
+          project({ pending: store.getState().pending.filter(entry => entry.id !== mutation.id),
+            failed: [...store.getState().failed, { ...mutation, error: normalizeError(error) }].slice(-20),
+            announcement: "Could not mark attention read. Retry available" });
+        }
+        return false;
+      } finally {
+        if (mutationController === controller) mutationController = undefined;
+      }
+    });
+    queue = outcome.then(() => undefined);
+    return outcome;
+  }
+  function stop() {
+    stopped = true; epoch++; revision++;
+    poller.stop(); listController?.abort(); countController?.abort(); mutationController?.abort();
+    listController = undefined; listFlight = undefined; countController = undefined; countFlight = undefined;
+    // A queued write cannot run in a new lifecycle. Old promises still settle to false.
+    queue = Promise.resolve();
+    project({ pending: [], loading: false, counting: false });
+  }
+  function start() { stopped = false; if (enabled) poller.start(); }
+  return {
+    ...store,
+    start, stop,
+    /** Reference-counted effect ownership supports multiple badges/panels and StrictMode. */
+    retain() {
+      if (++retains === 1) start();
+      let released = false;
+      return () => { if (!released) { released = true; if (--retains === 0) stop(); } };
+    },
+    refreshCounts,
+    refresh: () => page(true),
+    loadMore: () => page(false),
+    setFilter(filter: AttentionFilter) {
+      const parsed = AttentionFilter.parse(filter);
+      if (parsed === store.getState().filter) return Promise.resolve();
+      listController?.abort(); entities = new Map();
+      project({ filter: parsed, loaded: false, nextCursor: null, snapshotAt: null });
+      return page(true, parsed);
+    },
+    markRead,
+    retry(id: number) {
+      const failed = store.getState().failed.find(entry => entry.id === id);
+      if (!failed || !available() || store.getState().pending.length >= 100) return Promise.resolve(false);
+      project({ failed: store.getState().failed.filter(entry => entry.id !== id) });
+      return markRead(failed.body);
+    },
+    dismissFailure(id: number) { project({ failed: store.getState().failed.filter(entry => entry.id !== id) }); },
+  };
+}
+export type AttentionStore = ReturnType<typeof createAttentionStore>;
+export const selectAttentionCount = (state: AttentionState) => state.counts.count;
+export const selectAttentionBadge = (space: SpaceId) => (state: AttentionState) => state.counts.unreadCounts[space];
+export { useAttention, useAttentionCount, useAttentionBadge } from "./hooks/attention";
