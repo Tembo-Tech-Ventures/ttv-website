@@ -11,6 +11,9 @@
  * The overlay owns everything after the request: dialog semantics, focus, and
  * returning focus to `trigger` when it closes.
  */
+import type { SpaceId } from "@/lib/platform/contracts";
+import { SPACES } from "@/components/platform/ui/spaces";
+
 export const SHELL_OVERLAYS = ["search", "attention"] as const;
 export type ShellOverlay = (typeof SHELL_OVERLAYS)[number];
 
@@ -37,7 +40,37 @@ export function onShellOverlay(overlay: ShellOverlay, handler: (request: ShellOv
   return () => window.removeEventListener(SHELL_OVERLAY_EVENT, listener);
 }
 
-type ShortcutEvent = Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey" | "isComposing">;
+/**
+ * Live attention counts, from the attention store's owner (U-1.3) to the bell
+ * and tabs. The store lives in the overlay island; the shell is another island,
+ * so the owner publishes each authoritative count here and the shell reads the
+ * latest. Until anything is published (and always on the server) the shell
+ * shows the counts `Me` was rendered with. Browser-only: nothing is published
+ * during server rendering, where this module is shared across requests.
+ */
+export type AttentionCounts = Readonly<Record<SpaceId, number>>;
+
+let liveCounts: AttentionCounts | null = null;
+const countListeners = new Set<() => void>();
+
+export function publishAttentionCounts(counts: AttentionCounts): void {
+  if (liveCounts && SPACES.every((space) => liveCounts?.[space] === counts[space])) return;
+  liveCounts = counts;
+  for (const listener of Array.from(countListeners)) listener();
+}
+
+export function subscribeAttentionCounts(listener: () => void): () => void {
+  countListeners.add(listener);
+  return () => {
+    countListeners.delete(listener);
+  };
+}
+
+export function latestAttentionCounts(): AttentionCounts | null {
+  return liveCounts;
+}
+
+type ShortcutEvent =Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey" | "isComposing">;
 
 /** Ctrl K, or ⌘ K on a Mac: the one shortcut every platform search uses. */
 export function isSearchShortcut(event: ShortcutEvent): boolean {

@@ -338,3 +338,20 @@ describe("SpacesShell space preference", () => {
     document.removeEventListener("click", stay);
   });
 });
+
+// Last in the file: published counts are page-wide state, as they are in a browser.
+describe("SpacesShell live attention counts", () => {
+  it("follows the attention overlay's published counts on the bell and tabs, only when it is mounted", async () => {
+    const { publishAttentionCounts } = await import("./overlays");
+    await mount({ overlays: ["search"] });
+    publishAttentionCounts({ cohort: 0, community: 4, mentoring: 1, discover: 0, admin: 0, profile: 0 });
+    // Without the attention overlay nothing publishes for this page, so Me's counts stand.
+    expect(container.querySelector('[data-space="community"]')?.textContent).toContain("1 new");
+
+    await mount({ overlays: ["search", "attention"] });
+    expect(q('[aria-label="Attention, 5 waiting"]')).toBeTruthy();
+    expect(container.querySelector('[data-space="community"]')?.textContent).toContain("4 new");
+    await act(async () => publishAttentionCounts({ cohort: 0, community: 0, mentoring: 0, discover: 0, admin: 0, profile: 0 }));
+    expect(q('[aria-label="Attention"]')).toBeTruthy();
+  });
+});
