@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import DiscoveryShell, {
+  CommunityEmbedded,
   CommunityNavigation,
 } from "../discovery/DiscoveryShell";
 import ScoutWorkspace from "../discovery/ScoutWorkspace";
@@ -33,7 +34,14 @@ export function canOpenWorkspace(view: View, access: CommunityAccess) {
   );
 }
 
-export default function CommunityApp({ view }: { view: View }) {
+export default function CommunityApp({
+  view,
+  embedded = false,
+}: {
+  view: View;
+  /** Rendered inside the spaces shell, which supplies the frame and navigation. */
+  embedded?: boolean;
+}) {
   const [access, setAccess] = useState<CommunityAccess | null>(null);
   const [profile, setProfile] = useState<CommunityProfile | null>(null);
   const [requests, setRequests] = useState<MentorReviewRequest[]>([]);
@@ -112,9 +120,12 @@ export default function CommunityApp({ view }: { view: View }) {
           <p>
             <a href="/auth/login">Sign in again</a>
           </p>
-          <p>
-            <a href="/dashboard/discover">Start a new discovery</a>
-          </p>
+          {/* In the spaces shell only institutions reach Discover, from their own tab. */}
+          {(!embedded || view === "scout") && (
+            <p>
+              <a href="/dashboard/discover">Start a new discovery</a>
+            </p>
+          )}
         </section>
       </DiscoveryShell>
     );
@@ -185,8 +196,10 @@ export default function CommunityApp({ view }: { view: View }) {
       </DiscoveryShell>
     );
   return (
-    <CommunityNavigation.Provider value={navigation}>
-      {content}
-    </CommunityNavigation.Provider>
+    <CommunityEmbedded.Provider value={embedded}>
+      <CommunityNavigation.Provider value={navigation}>
+        {content}
+      </CommunityNavigation.Provider>
+    </CommunityEmbedded.Provider>
   );
 }

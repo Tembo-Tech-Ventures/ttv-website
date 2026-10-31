@@ -77,6 +77,24 @@ describe("ChatApp", () => {
     expect(html).not.toContain("Source ");
   });
 
+  it("keeps its own way back and site navigation in the immersive frame", () => {
+    const html = renderToStaticMarkup(<ChatApp mockMode />);
+    expect(html).toContain("Back to dashboard");
+    expect(html).toContain('aria-label="Site"');
+    expect(html).toContain(">Ask AI</h2>");
+  });
+
+  it("leaves navigation to the spaces shell and introduces itself as Ask Tembo there", () => {
+    const html = renderToStaticMarkup(<ChatApp mockMode variant="space" />);
+    expect(html).not.toContain("Back to dashboard");
+    expect(html).not.toContain('aria-label="Site"');
+    expect(html).not.toContain('href="/dashboard"');
+    expect(html).toContain(">Ask Tembo</h2>");
+    expect(html).not.toContain("Ask AI");
+    // The conversations stay reachable on both widths.
+    expect(html).toContain('aria-label="Conversations"');
+  });
+
   it("puts the conversation title in the page heading", () => {
     const html = renderToStaticMarkup(
       <ChatApp mockMode initialSessions={[{ ...SESSION, title: "Pricing questions" }]} />

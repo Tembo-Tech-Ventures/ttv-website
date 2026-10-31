@@ -1,5 +1,7 @@
 ---
-import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import Card from "@/components/common/Card.astro";
 import Badge from "@/components/common/Badge.astro";
 import Button from "@/components/common/Button.astro";
@@ -42,13 +44,14 @@ function formatDate(d: Date | null) {
   if (!d) return "";
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
+const spaces = await resolveSpacePage(Astro.locals, "writing");
 ---
 
-<DashboardLayout title="Writing">
+<SpacePage context={spaces} title="Writing">
   <div class="space-y-6">
-    <div class="flex items-center justify-between">
+    <div class={spaces ? "flex flex-wrap items-center justify-between gap-4" : "flex items-center justify-between"}>
       <div>
-        <h2 class="text-2xl font-bold text-white">Writing</h2>
+        <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Writing</PageTitle>
         <p class="mt-1 text-ink-secondary">
           Write and publish posts to the TTV blog.
         </p>
@@ -192,4 +195,4 @@ function formatDate(d: Date | null) {
       </div>
     )}
   </div>
-</DashboardLayout>
+</SpacePage>

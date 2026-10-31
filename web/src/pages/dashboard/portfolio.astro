@@ -1,5 +1,7 @@
 ---
-import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import Card from "@/components/common/Card.astro";
 import Badge from "@/components/common/Badge.astro";
 import Button from "@/components/common/Button.astro";
@@ -266,12 +268,13 @@ const hasGitHubAccount = profile
       })
       .then((a) => a?.providerId === "github" && !!a.accessToken)
   : false;
+const spaces = await resolveSpacePage(Astro.locals, "portfolio");
 ---
 
-<DashboardLayout title="Portfolio">
+<SpacePage context={spaces} title={spaces ? "Public profile" : "Portfolio"}>
   <div class="space-y-6">
     <div>
-      <h2 class="text-2xl font-bold text-white">Portfolio</h2>
+      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">{spaces ? "Public profile" : "Portfolio"}</PageTitle>
       <p class="mt-1 text-ink-secondary">
         Showcase your work and connect with opportunities.
       </p>
@@ -676,4 +679,4 @@ const hasGitHubAccount = profile
       </>
     )}
   </div>
-</DashboardLayout>
+</SpacePage>

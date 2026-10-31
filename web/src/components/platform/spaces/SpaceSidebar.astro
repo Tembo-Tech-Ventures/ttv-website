@@ -1,0 +1,79 @@
+---
+/**
+ * A space's sidebar, drawn from its model (sidebar.ts) with the U-1.1 kit.
+ */
+import type { ComponentType } from "react";
+import {
+  PiBriefcase,
+  PiCertificate,
+  PiChatCircleText,
+  PiChatsCircle,
+  PiCompass,
+  PiHandshake,
+  PiEnvelopeSimple,
+  PiIdentificationCard,
+  PiNotePencil,
+  PiPaperPlaneTilt,
+  PiPath,
+  PiShieldCheck,
+  PiSparkle,
+  PiSquaresFour,
+  PiUserCircle,
+  PiUsersThree,
+  PiVideoCamera,
+  PiCalendarCheck,
+  PiWrench,
+} from "react-icons/pi";
+import SidebarGroup from "@/components/platform/shell/SidebarGroup.astro";
+import SidebarHeader from "@/components/platform/shell/SidebarHeader.astro";
+import SidebarLink from "@/components/platform/shell/SidebarLink.astro";
+import type { SidebarIcon, SidebarModel } from "./sidebar";
+
+interface Props {
+  model: SidebarModel;
+}
+
+type Icon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+
+const ICONS: Record<SidebarIcon, Icon> = {
+  overview: PiSquaresFour,
+  apply: PiPaperPlaneTilt,
+  sessions: PiVideoCamera,
+  tembo: PiSparkle,
+  journey: PiPath,
+  people: PiUsersThree,
+  mentors: PiHandshake,
+  requests: PiChatsCircle,
+  confirm: PiShieldCheck,
+  availability: PiCalendarCheck,
+  discover: PiCompass,
+  profile: PiIdentificationCard,
+  writing: PiNotePencil,
+  opportunities: PiBriefcase,
+  messages: PiEnvelopeSimple,
+  certificate: PiCertificate,
+  account: PiUserCircle,
+  feedback: PiChatCircleText,
+  admin: PiWrench,
+};
+
+const { model } = Astro.props;
+---
+
+<SidebarHeader title={model.title} description={model.description} />
+{
+  model.groups.map((group) => (
+    <SidebarGroup label={group.label}>
+      {group.items.map((entry) => (
+        <SidebarLink
+          href={entry.href}
+          label={entry.label}
+          icon={ICONS[entry.icon]}
+          current={entry.current}
+          count={entry.count}
+          note={entry.note}
+        />
+      ))}
+    </SidebarGroup>
+  ))
+}

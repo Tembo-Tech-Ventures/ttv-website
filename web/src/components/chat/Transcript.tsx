@@ -115,11 +115,11 @@ function MessageRow({ message, index }: { message: ChatMessage; index: number })
   );
 }
 
-function EmptyState({ onPick, suggestions }: { onPick: (prompt: string) => void; suggestions: string[] }) {
+function EmptyState({ onPick, suggestions, name }: { onPick: (prompt: string) => void; suggestions: string[]; name: string }) {
   const prompts = suggestions.length > 0 ? suggestions : FALLBACK_PROMPTS;
   return (
     <div className="mx-auto flex max-w-2xl flex-col items-center pt-6 text-center">
-      <h2 className="text-2xl tracking-display text-ink-primary">Ask AI</h2>
+      <h2 className="text-2xl tracking-display text-ink-primary">{name}</h2>
       <p className="mt-2 text-sm text-ink-secondary">
         Ask about your sessions, your program, or anything you need help with.
       </p>
@@ -159,6 +159,8 @@ interface TranscriptProps {
   conversationEpoch: number;
   /** Contextual prompts from the API, based on the user's actual recordings. */
   suggestions?: string[];
+  /** The assistant's name on the empty state: "Ask Tembo" in the spaces shell. */
+  assistantName?: string;
 }
 
 /**
@@ -184,6 +186,7 @@ export default function Transcript({
   onPickPrompt,
   conversationEpoch,
   suggestions = NO_SUGGESTIONS,
+  assistantName = "Ask AI",
 }: TranscriptProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [nearBottom, setNearBottom] = useState(true);
@@ -301,7 +304,7 @@ export default function Transcript({
             // fetch lands, and the transcript on screen is still the old one.
             <p className="py-10 text-center text-sm text-ink-muted">Loading conversation…</p>
           ) : messages.length === 0 ? (
-            <EmptyState onPick={onPickPrompt} suggestions={suggestions} />
+            <EmptyState onPick={onPickPrompt} suggestions={suggestions} name={assistantName} />
           ) : (
             messages.map((message, index) => (
               <MessageRow key={message.id ?? index} message={message} index={index} />

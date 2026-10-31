@@ -2,6 +2,12 @@ import React, { createContext, useContext, type ReactNode } from "react";
 
 type WorkspaceView = "scout" | "journey" | "mentor";
 export const CommunityNavigation = createContext<WorkspaceView[] | null>(null);
+/**
+ * True inside the spaces shell, which already provides the brand, the
+ * navigation between spaces, the skip link and the main landmark. The
+ * workspace then renders only its content.
+ */
+export const CommunityEmbedded = createContext(false);
 
 export default function DiscoveryShell({
   children,
@@ -13,6 +19,16 @@ export default function DiscoveryShell({
   demo?: boolean;
 }) {
   const availableViews = useContext(CommunityNavigation) ?? [active];
+  const embedded = useContext(CommunityEmbedded);
+  if (embedded) {
+    return (
+      <div className="discovery-app" data-embedded="">
+        <div id="main-content" className="discovery-main">
+          {children}
+        </div>
+      </div>
+    );
+  }
   const links = demo
     ? [
         {

@@ -1,5 +1,7 @@
 ---
-import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import Badge from "@/components/common/Badge.astro";
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
@@ -119,11 +121,12 @@ function formatDate(date: Date | null): string {
     year: "numeric",
   });
 }
+const spaces = await resolveSpacePage(Astro.locals, "opportunities");
 ---
 
-<DashboardLayout title="Opportunities">
-  <div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-    <h1 class="text-2xl font-semibold text-white">Opportunities</h1>
+<SpacePage context={spaces} title="Opportunities">
+  <div class={spaces ? "max-w-4xl" : "mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8"}>
+    <PageTitle spaces={Boolean(spaces)} legacyTag="h1" legacyClass="text-2xl font-semibold text-white">Opportunities</PageTitle>
 
     {
       gateState === "no_profile" && (
@@ -294,4 +297,4 @@ function formatDate(date: Date | null): string {
       )
     }
   </div>
-</DashboardLayout>
+</SpacePage>

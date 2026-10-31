@@ -1,0 +1,35 @@
+---
+/**
+ * An existing dashboard page's title. In the spaces shell it is the screen's
+ * one Mattone heading, an h1; in the existing dashboard it keeps the h2 and
+ * classes the page always had, so flag-off pages render exactly as before.
+ */
+interface Props {
+  spaces: boolean;
+  /** The classes the existing dashboard gives this heading. */
+  legacyClass: string;
+  /** The existing dashboard's heading level. Most pages used an h2. */
+  legacyTag?: "h1" | "h2";
+  /** A title that sits inside a card rather than heading the page. */
+  size?: "page" | "card";
+}
+
+const { spaces, legacyClass, legacyTag: Legacy = "h2", size = "page" } = Astro.props;
+---
+
+{
+  spaces ? (
+    <h1
+      class:list={[
+        "tracking-heading break-words text-ink-primary",
+        size === "page" ? "text-3xl sm:text-4xl lg:text-5xl" : "text-2xl sm:text-3xl",
+      ]}
+    >
+      <slot />
+    </h1>
+  ) : (
+    <Legacy class={legacyClass}>
+      <slot />
+    </Legacy>
+  )
+}

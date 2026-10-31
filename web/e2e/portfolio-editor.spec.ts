@@ -20,7 +20,8 @@ test.describe("authenticated portfolio editor", () => {
     await expect(page).toHaveURL(/\/dashboard\/(?:me\/)?portfolio/);
 
     await expect(
-      page.getByRole("heading", { name: /portfolio/i }),
+      // "Public profile" inside the spaces shell.
+      page.getByRole("heading", { name: /^(portfolio|public profile)$/i }),
     ).toBeVisible();
 
     const isLocked = await page
@@ -189,7 +190,8 @@ test.describe("authenticated portfolio editor", () => {
     await expect(page).toHaveURL(/\/dashboard\/(?:me\/)?leads/);
 
     await expect(
-      page.getByRole("heading", { name: "Leads", exact: true }),
+      // "Visitor messages" inside the spaces shell.
+      page.getByRole("heading", { name: /^(Leads|Visitor messages)$/ }),
     ).toBeVisible();
 
     const hasContent = await page

@@ -48,7 +48,7 @@ test.describe("authenticated talent foundation", () => {
   test("dashboard/portfolio stub renders", async ({ page }) => {
     await page.goto("/dashboard/portfolio");
     await expect(
-      page.getByRole("heading", { name: /portfolio/i }),
+      page.getByRole("heading", { name: /^(portfolio|public profile)$/i }),
     ).toBeVisible();
     await page.screenshot({
       path: evidence("dashboard-portfolio"),
@@ -58,7 +58,7 @@ test.describe("authenticated talent foundation", () => {
 
   test("dashboard/leads stub renders", async ({ page }) => {
     await page.goto("/dashboard/leads");
-    await expect(page.getByRole("heading", { name: /leads/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^(leads|visitor messages)$/i })).toBeVisible();
     await page.screenshot({
       path: evidence("dashboard-leads"),
       fullPage: true,
@@ -104,19 +104,28 @@ test.describe("authenticated talent foundation", () => {
   }) => {
     await page.goto("/dashboard");
     const isMobile = (viewport?.width ?? 1280) < 1024;
-    if (isMobile) {
-      const opener = page.getByRole("button", { name: /open navigation/i });
-      await expect(opener).toBeEnabled();
-      await opener.click();
-      await expect(opener).toHaveAttribute("aria-expanded", "true");
+    if ((await page.locator(".spaces-shell").count()) > 0) {
+      // Spaces on: the same destinations live in the Profile space's sidebar.
+      await page.goto("/dashboard/me");
+      const sidebar = page.locator("#space-sidebar");
+      await expect(sidebar.locator("a", { hasText: "Public profile" })).toHaveAttribute("href", "/dashboard/me");
+      await expect(sidebar.locator("a", { hasText: "Visitor messages" })).toHaveAttribute("href", "/dashboard/me/leads");
+      await expect(sidebar.locator("a", { hasText: "Opportunities" })).toHaveCount(0);
+    } else {
+      if (isMobile) {
+        const opener = page.getByRole("button", { name: /open navigation/i });
+        await expect(opener).toBeEnabled();
+        await opener.click();
+        await expect(opener).toHaveAttribute("aria-expanded", "true");
+      }
+      const profileLink = page.getByRole("link", { name: "Profile", exact: true });
+      await expect(profileLink).toBeVisible();
+      await expect(profileLink).toHaveAttribute("href", "/dashboard/portfolio");
+      await expect(page.getByRole("link", { name: "Leads" })).toBeVisible();
+      await expect(
+        page.getByRole("link", { name: "Opportunities" })
+      ).toHaveCount(0);
     }
-    const profileLink = page.getByRole("link", { name: "Profile", exact: true });
-    await expect(profileLink).toBeVisible();
-    await expect(profileLink).toHaveAttribute("href", "/dashboard/portfolio");
-    await expect(page.getByRole("link", { name: "Leads" })).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: "Opportunities" })
-    ).toHaveCount(0);
     await page.screenshot({
       path: evidence("dashboard-nav"),
       fullPage: true,

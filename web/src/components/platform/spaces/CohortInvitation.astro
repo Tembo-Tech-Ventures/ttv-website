@@ -1,0 +1,41 @@
+---
+/**
+ * The way into a cohort for a member who is not in one yet. Without a cohort
+ * there is no Cohort tab, so Community, where they land, carries it. The copy
+ * is the existing journey's next step, so it names a cohort only when one is
+ * actually taking applications.
+ */
+import { PiPaperPlaneTilt } from "react-icons/pi";
+import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
+import { RAISED } from "@/components/platform/ui/tones";
+import { canonicalSpacePath } from "@/lib/platform/server/space-routes";
+import type { StudentNextStep } from "@/lib/student/journey";
+
+interface Props {
+  step: StudentNextStep;
+}
+
+const { step } = Astro.props;
+const href = canonicalSpacePath(step.action.href) ?? step.action.href;
+---
+
+<section
+  aria-labelledby="cohort-invitation-title"
+  data-cohort-invitation
+  class:list={["mb-10 flex flex-wrap items-center gap-x-6 gap-y-4 rounded-[1.125rem] border border-hairline p-5 sm:p-6", RAISED]}
+>
+  <span aria-hidden="true" class="hidden size-11 shrink-0 sm:grid place-items-center rounded-full bg-primary/15 text-peach-ink">
+    <PiPaperPlaneTilt className="size-5" />
+  </span>
+  <div class="min-w-0 flex-1 basis-64">
+    <h2 id="cohort-invitation-title" class="text-lg leading-snug text-ink-primary">{step.title}</h2>
+    <p class="mt-1 text-sm leading-relaxed text-ink-secondary">{step.description}</p>
+    {step.detail && <p class="mt-1 text-sm font-semibold text-ink-muted">{step.detail}</p>}
+  </div>
+  <a
+    href={href}
+    class:list={["inline-flex h-11 shrink-0 items-center gap-2 rounded-xl px-5 text-sm font-semibold transition-colors", BUTTON_VARIANTS.primary, FOCUS_RING]}
+  >
+    {step.action.label}
+  </a>
+</section>
