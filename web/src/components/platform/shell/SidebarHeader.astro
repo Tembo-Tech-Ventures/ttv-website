@@ -1,0 +1,17 @@
+---
+/**
+ * The top of a space's sidebar: which space (or cohort) this is, and a line
+ * about it. Maven Pro, not Mattone: the display face belongs to the page title.
+ */
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<div class="px-2.5">
+  <p class="text-xl leading-tight font-bold text-ink-primary">{title}</p>
+  {description && <p class="mt-1.5 text-[0.8125rem] leading-snug text-ink-muted">{description}</p>}
+</div>

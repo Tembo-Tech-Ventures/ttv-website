@@ -102,6 +102,16 @@ describe("SpaceFile", () => {
     expect(html).toContain('<div class="space-file__end"><b>tools</b></div>');
   });
 
+  it("puts start content before the tabs, on their line, only when given", () => {
+    expect(render()).not.toContain("space-file__start");
+    const html = renderToStaticMarkup(
+      <SpaceFile tabs={STAFF} active="admin" person={PERSON} start={<i>mark</i>} end={<b>tools</b>}>
+        x
+      </SpaceFile>,
+    );
+    expect(html).toMatch(/<div class="space-file__row"><div class="space-file__start"><i>mark<\/i><\/div><nav/);
+  });
+
   it("tells the stylesheet how many tabs it holds, which sets when labels fold", () => {
     expect(render()).toContain('data-tabs="5"');
     expect(render("cohort", STAFF.slice(0, 2))).toContain('data-tabs="2"');

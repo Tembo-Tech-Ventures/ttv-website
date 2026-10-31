@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import Avatar from "./Avatar";
 import CountBadge from "./CountBadge";
 import { cx } from "./cx";
 import Sheet from "./Sheet";
+import SpaceGlyph from "./SpaceGlyph";
 import { SPACES, type Space } from "./spaces";
 import "./platform-ui.css";
 
@@ -25,6 +25,11 @@ type SpaceFileProps = {
   /** Who is signed in. The Profile tab wears their avatar. */
   person: Person;
   /**
+   * Leading content in the tab row, such as the wordmark. It stays beside the
+   * tabs on their line, so keep it narrow.
+   */
+  start?: ReactNode;
+  /**
    * Trailing content in the tab row, such as search and attention. It sits
    * beside the tabs while they fit and moves above them when they do not.
    */
@@ -37,29 +42,6 @@ type SpaceFileProps = {
 };
 
 const ORDER = new Map(SPACES.map((space, index) => [space, index]));
-
-/** Each space's marker, in the homepage's network language. */
-function SpaceGlyph({ space, person }: { space: Space; person: Person }) {
-  switch (space) {
-    case "cohort":
-      return <span className="size-2.5 rounded-full bg-primary" />;
-    case "community":
-      return (
-        <span className="relative h-3 w-[1.125rem]">
-          <span className="absolute bottom-0.5 left-0 size-2 rounded-full bg-primary" />
-          <span className="absolute top-0 right-0 size-[0.6875rem] rounded-full border-2 border-ring" />
-        </span>
-      );
-    case "mentoring":
-      return <span className="size-[0.6875rem] rounded-full border-2 border-ring" />;
-    case "discover":
-      return <span className="size-2 rotate-45 bg-ink-primary" />;
-    case "admin":
-      return <span className="size-2.5 rounded-[3px] border-2 border-primary" />;
-    case "profile":
-      return <Avatar id={person.id} name={person.name} src={person.src} size="xs" decorative />;
-  }
-}
 
 function SpaceTab({ tab, active, person }: { tab: SpaceTabItem; active: boolean; person: Person }) {
   const count = tab.count === undefined ? 0 : Math.floor(tab.count);
@@ -90,6 +72,7 @@ export default function SpaceFile({
   tabs,
   active,
   person,
+  start,
   end,
   label = "Spaces",
   children,
@@ -101,6 +84,7 @@ export default function SpaceFile({
   return (
     <div className={cx("space-file", className)} data-space-file={active} data-tabs={ordered.length}>
       <div className="space-file__row">
+        {start && <div className="space-file__start">{start}</div>}
         <nav aria-label={label} className="space-file__nav">
           <ul className="space-file__tabs">
             {ordered.map((tab) => (
