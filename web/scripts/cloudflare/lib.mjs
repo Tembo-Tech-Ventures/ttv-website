@@ -615,6 +615,9 @@ export function createGeneratedWranglerConfig({
       BETTER_AUTH_URL: betterAuthUrl,
       DEPLOYMENT_ENVIRONMENT: deployment.environment,
       DEPLOYMENT_VERSION: deployment.version,
+      ...(normalizeSlug(deployment.environment) !== "production"
+        ? { PLATFORM_FLAGS_OVERRIDE: "all" }
+        : {}),
       ...(agentAuthEnabled
         ? { AGENT_AUTH_ENABLED: "true" }
         : {}),

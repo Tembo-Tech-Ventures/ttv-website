@@ -58,6 +58,23 @@ export const userRelations = relations(user, ({ many, one }) => ({
   studentProfile: one(studentProfile),
 }));
 
+// ─── Platform rollout flags ──────────────────────────────
+
+export const featureFlag = sqliteTable(
+  "feature_flag",
+  {
+    key: text("key").primaryKey(),
+    audience: text("audience", { enum: ["OFF", "STAFF", "ALL"] })
+      .notNull()
+      .default("OFF"),
+    updatedAt: timestamps.updatedAt,
+    updatedBy: text("updatedBy").references(() => user.id, { onDelete: "set null" }),
+  },
+  (table) => [
+    check("feature_flag_audience_check", sql`${table.audience} IN ('OFF', 'STAFF', 'ALL')`),
+  ]
+);
+
 // ─── Account (matches better-auth expected schema) ─────────
 
 export const account = sqliteTable("account", {

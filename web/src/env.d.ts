@@ -6,6 +6,7 @@ declare namespace Cloudflare {
     PRIMARY_DOMAIN?: string;
     REDIRECT_DOMAIN?: string;
     DEPLOYMENT_ENVIRONMENT?: string;
+    PLATFORM_FLAGS_OVERRIDE?: string;
     DEPLOYMENT_VERSION?: string;
     AGENT_AUTH_ENABLED?: string;
     STAGING_DEMO_ENABLED?: string;
