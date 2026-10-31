@@ -169,13 +169,20 @@ describe("space routes through authentication middleware", () => {
     expect((await request("/dashboard/mentoring")).response.status).toBe(200);
     expect((await request("/dashboard/mentoring/confirm")).response.status).toBe(200);
     expect((await request("/dashboard/cohort/sessions")).response.status).toBe(200);
-    for (const path of ["/dashboard/cohort/sessions/private", "/dashboard/account", "/dashboard/me", "/dashboard/cohort/apply"]) expect((await request(path)).response.status).toBe(403);
+    for (const path of ["/dashboard/cohort/sessions/private", "/dashboard/account", "/dashboard/me"]) expect((await request(path)).response.status).toBe(403);
+    // B-1.5: the Apply form opens read-only; submitting stays outside every QA ledger.
+    expect((await request("/dashboard/cohort/apply")).response.status).toBe(200);
+    for (const path of ["/dashboard/cohort/apply", "/dashboard/apply"]) expect((await request(path, "", "", "POST")).response.status).toBe(403);
   });
 
-  it("fixture aliases preserve the existing community surface only", async () => {
+  it("fixture aliases add only read-only spaces entries to the existing community surface", async () => {
     mocks.resolveStagingFixtureIdentity.mockResolvedValue({ persona: "mentor" });
     expect((await request("/dashboard/mentoring/confirm")).response.status).toBe(200);
-    for (const path of ["/dashboard/cohort", "/dashboard/cohort/sessions", "/dashboard/account", "/dashboard/me"]) expect((await request(path)).response.status).toBe(403);
+    for (const path of ["/dashboard/cohort", "/dashboard/cohort/apply"]) {
+      expect((await request(path)).response.status).toBe(200);
+      expect((await request(path, "", "", "POST")).response.status).toBe(403);
+    }
+    for (const path of ["/dashboard/cohort/sessions", "/dashboard/account", "/dashboard/me"]) expect((await request(path)).response.status).toBe(403);
   });
 
   it("retained probes remain restricted to discovery", async () => {

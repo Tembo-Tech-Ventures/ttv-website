@@ -70,7 +70,7 @@ export function linkAllowed({ qaPersona, demo, fixture }: Restrictions, href: st
   const path = href.split(/[?#]/, 1)[0]!;
   return (!qaPersona || qaPathAllowed(qaPersona, path, "GET"))
     && (!demo || demoPathAllowed(path, "GET"))
-    && (!fixture || stagingFixturePathAllowed(path));
+    && (!fixture || stagingFixturePathAllowed(path, "GET"));
 }
 
 /** The person's own completed cohorts that have a certificate, newest first. */

@@ -74,4 +74,32 @@ an authorized default destination, but its explicit visits cannot read the
 `Path=/dashboard` preference cookie; the client shell can save a selected tab
 before navigation.
 
-Tests: `npx vitest run src/lib/platform/server/space-*.test.ts src/middleware.test.ts`.
+## Restricted staging identities (B-1.5)
+
+The demo, QA and fixture allowlists (`src/lib/staging-*-policy.ts`) open these
+Phase 1 surfaces as exact paths, after `legacySpacePath`. Flags, capabilities and
+handlers still decide what each caller sees.
+
+- GET/HEAD for every identity: `/api/platform/me`, `/api/attention`,
+  `/api/attention/count` and `/dashboard/attention`.
+- GET/HEAD Apply form (`/dashboard/cohort/apply`, alias `/dashboard/apply`): demo,
+  fixtures, and only the `member-noncohort` QA persona.
+- Fixtures also get GET/HEAD `/dashboard`, the cohort home and the spaces entry, and
+  POST `/api/attention/read`. That marks only the caller's own rows, and fixture
+  cleanup deletes the user, which cascades to them.
+- Space homes keep their existing per-persona QA gates.
+
+QA-1 limits: submitting an application stays denied for every identity, because
+no QA ledger or cleanup covers it. Search is not allowlisted: its handler refuses
+fixture and QA identities because search has no fixture scope (B-1.4), so QA-1
+can't exercise search with them; the overlay shows "That search isn't open to
+you." On the dashboard home (OFF, or the cohort home for a fixture with cohort
+access), the next-step link is filtered for QA but not for fixtures, so it can
+point at a page that returns 403. Demo and QA personas can't mark attention read,
+because their retained rows have no reset path. This change opens none of
+profile and account (`/dashboard/me`, `/dashboard/account`), Ask, sessions,
+channels, mentoring requests and availability, admin, PAT, MCP, recordings, chat
+or tokens; existing allowances and handler guards are unchanged. Demo
+and QA are also past their fixed cutoffs, so only fixture identities are live.
+
+Tests: `npx vitest run src/lib/platform/server/space-*.test.ts src/middleware.test.ts src/lib/staging-*.test.ts`.

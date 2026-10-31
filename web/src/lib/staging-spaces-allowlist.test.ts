@@ -1,0 +1,135 @@
+import { describe, expect, it, vi } from "vitest";
+import { ROUTES } from "@/lib/platform/contracts";
+import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
+import { ATTENTION_PAGE_HREF } from "@/components/platform/attention/attention-display";
+import {
+  DEMO_CUTOFF, DEMO_ORIGIN, demoEnabled, demoPathAllowed,
+  SPACES_APPLY_PATH, SPACES_MARK_READ_PATH, SPACES_READ_PATHS, type DemoPersona,
+} from "./staging-demo-policy";
+import { QA_CUTOFF, qaPathAllowed } from "./staging-qa-policy";
+import { validateQaIdentity } from "./staging-qa-access";
+import { stagingFixturePathAllowed } from "./staging-fixture-policy";
+import { resolveStagingFixtureIdentity } from "./staging-fixtures";
+
+/** Each restricted staging identity, reduced to one allow decision. */
+const IDENTITIES = {
+  demo: (path: string, method: string) => demoPathAllowed(path, method),
+  "qa:member-noncohort": (path: string, method: string) => qaPathAllowed("member-noncohort", path, method),
+  "qa:mentor": (path: string, method: string) => qaPathAllowed("mentor", path, method),
+  "qa:institution": (path: string, method: string) => qaPathAllowed("institution", path, method),
+  fixture: (path: string, method: string) => stagingFixturePathAllowed(path, method),
+} as const;
+type Identity = keyof typeof IDENTITIES;
+const ALL = Object.keys(IDENTITIES) as Identity[];
+const READ = ["GET", "HEAD"];
+const WRITE = ["POST", "PUT", "PATCH", "DELETE"];
+
+/** [path, identities allowed GET/HEAD, identities allowed POST]; every other method is denied. */
+const SURFACES: [string, Identity[], Identity[]][] = [
+  [ROUTES.getMe.path, ALL, []],
+  [ROUTES.listAttention.path, ALL, []],
+  [`${ROUTES.listAttention.path}/`, ALL, []],
+  [ROUTES.countAttention.path, ALL, []],
+  [ATTENTION_PAGE_HREF, ALL, []],
+  // Own rows only. Fixture cleanup deletes the user and cascades; retained personas have no ledger.
+  [SPACES_MARK_READ_PATH, [], ["fixture"]],
+  // GET only: a submitted application has no QA ledger or cleanup (QA-1 limit).
+  [`${SPACE_PATHS.cohort}/apply`, ["demo", "qa:member-noncohort", "fixture"], []],
+  [`${SPACE_PATHS.cohort}/apply/`, ["demo", "qa:member-noncohort", "fixture"], []],
+  ["/dashboard/apply", ["demo", "qa:member-noncohort", "fixture"], []],
+  // Space homes keep the existing per-persona QA gates.
+  [SPACE_PATHS.community, ALL, ["fixture"]],
+  [SPACE_PATHS.mentoring, ["demo", "qa:mentor", "fixture"], ["fixture"]],
+  [`${SPACE_PATHS.mentoring}/confirm`, ["demo", "qa:mentor", "fixture"], ["fixture"]],
+  [SPACE_PATHS.discover, ["demo", "qa:institution", "fixture"], ["fixture"]],
+  [SPACE_PATHS.cohort, ALL, []],
+  ["/dashboard", ALL, []],
+];
+
+/** Lookalikes, traversal and surfaces that stay closed to every identity and method. */
+const DENIED = [
+  "/api/attention-x", "/api/attentionx", "/api/attention/x", "/api/attention/read/x", "/api/attention/count/x",
+  "/api/attention/../admin/users", "/api/attention/%2e%2e/admin", "/api/attention/count%2f..%2fread",
+  // Search stays closed: its handler refuses fixture and QA identities (B-1.4).
+  ROUTES.search.path, `${ROUTES.search.path}/`, "/api/search-x", "/api/search/x", "/api/search/../admin", "/api/search/..%2fadmin", "/API/search", "//api/search",
+  "/api/platform", "/api/platform/me/x", "/api/platform/me-x", "/api/platform/flags",
+  "/dashboard/attention/x", "/dashboard/attention-x", "/dashboard/attention/../../admin",
+  "/dashboard/cohort/apply/x", "/dashboard/cohort/apply/../../admin", "/dashboard/apply/x", "/dashboard/applyx", "/dashboard/cohort/applyx",
+  SPACE_PATHS.admin, "/admin/users", "/api/admin/users", ROUTES.getFlags.path, "/admin/personal-access-tokens",
+  SPACE_PATHS.profile, `${SPACE_PATHS.profile}/portfolio`, "/dashboard/account", "/dashboard/profile",
+  "/dashboard/cohort/ask", "/dashboard/ask", "/api/chat", "/api/recordings", "/api/recordings/private", "/dashboard/cohort/sessions/private",
+  ROUTES.listChannels.path, "/api/channels/x/messages", "/api/messages/x", ROUTES.listMentors.path, ROUTES.createMentorRequest.path,
+  ROUTES.getMentorAvailability.path, ROUTES.listModerationQueue.path,
+  "/dashboard/mentoring/requests", "/dashboard/mentoring/availability", "/dashboard/community/dm/private",
+];
+
+describe("restricted staging identities reach only the Phase 1 spaces surfaces", () => {
+  describe.each(SURFACES)("%s", (path, reads, posts) => {
+    it.each(ALL)("%s", identity => {
+      const allowed = IDENTITIES[identity];
+      for (const method of READ) expect(allowed(path, method), `${identity} ${method}`).toBe(reads.includes(identity));
+      expect(allowed(path, "POST"), `${identity} POST`).toBe(posts.includes(identity));
+      for (const method of ["PUT", "PATCH", "DELETE"]) {
+        // Existing fixture space homes are path-scoped; their pages still enforce methods.
+        const legacyAnyMethod = identity === "fixture" && posts.includes("fixture") && path !== SPACES_MARK_READ_PATH;
+        expect(allowed(path, method), `${identity} ${method}`).toBe(legacyAnyMethod);
+      }
+    });
+  });
+
+  it.each(DENIED)("denies %s to every identity and method", path => {
+    for (const identity of ALL) {
+      for (const method of [...READ, ...WRITE]) expect(IDENTITIES[identity](path, method), `${identity} ${method}`).toBe(false);
+    }
+  });
+
+  it("denies traversal after the router resolves it", () => {
+    for (const raw of ["/api/search/../admin", "/api/attention/../admin/users", "/dashboard/cohort/apply/../../admin"]) {
+      const resolved = new URL(raw, DEMO_ORIGIN).pathname;
+      for (const identity of ALL) expect(IDENTITIES[identity](resolved, "GET"), `${identity} ${resolved}`).toBe(false);
+    }
+  });
+
+  it("derives the surfaces from the canonical route constants", () => {
+    expect([...SPACES_READ_PATHS].toSorted()).toEqual(["/api/attention", "/api/attention/count", "/api/platform/me", "/dashboard/attention"]);
+    expect(SPACES_APPLY_PATH).toBe("/dashboard/apply");
+    expect(SPACES_MARK_READ_PATH).toBe(ROUTES.markAttentionRead.path);
+    expect(ROUTES.markAttentionRead.method).toBe("POST");
+    for (const route of [ROUTES.getMe, ROUTES.listAttention, ROUTES.countAttention]) expect(route.method).toBe("GET");
+  });
+
+  it("never lets the cohort persona open Apply through QA", () => {
+    expect(qaPathAllowed("member-cohort" as DemoPersona, SPACES_APPLY_PATH, "GET")).toBe(false);
+  });
+});
+
+describe("production keeps every restricted identity disabled", () => {
+  const beforeCutoffs = Math.min(DEMO_CUTOFF, QA_CUTOFF) - 60;
+  const production = ["production", "Staging", "agent-pr-1", "", undefined];
+
+  it.each(production)("demo and QA personas stay disabled in %s", environment => {
+    expect(demoEnabled(environment, "true", DEMO_ORIGIN, beforeCutoffs)).toBe(false);
+  });
+
+  it.each(production)("QA identities fail before any database read in %s", async environment => {
+    const prepare = vi.fn();
+    await expect(validateQaIdentity({ DB: { prepare } as unknown as D1Database, DEPLOYMENT_ENVIRONMENT: environment, STAGING_DEMO_ENABLED: "true" }, "unit", beforeCutoffs))
+      .rejects.toThrow("QA access");
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it.each(production)("fixture identities fail before any database read in %s", async environment => {
+    const prepare = vi.fn();
+    const userId = `ttv-staging-fixture-${"a".repeat(24)}-member`;
+    await expect(resolveStagingFixtureIdentity({
+      db: { prepare } as unknown as D1Database, envName: environment, isPat: false,
+      user: { id: userId, email: `${userId}@invalid.ttv` }, session: { id: `${userId}-session`, userAgent: `ttv-agent:synthetic-staging:${"a".repeat(24)}` },
+    })).rejects.toMatchObject({ status: 403 });
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it("demo and QA stay closed on staging after the cutoff or off the staging origin", () => {
+    expect(demoEnabled("staging", "true", DEMO_ORIGIN, DEMO_CUTOFF)).toBe(false);
+    expect(demoEnabled("staging", "true", "https://tembotechventures.com", beforeCutoffs)).toBe(false);
+  });
+});

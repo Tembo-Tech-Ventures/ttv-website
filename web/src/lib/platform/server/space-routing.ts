@@ -28,7 +28,7 @@ function defaultSpaceResponse({ locals, request, url, redirect }: APIContext, me
     const target = SPACE_PATHS[space];
     return (!locals.stagingQa || qaPathAllowed(locals.stagingQa.persona, target, request.method))
       && (!locals.stagingDemo || demoPathAllowed(target, request.method))
-      && (!locals.stagingFixture || stagingFixturePathAllowed(target));
+      && (!locals.stagingFixture || stagingFixturePathAllowed(target, request.method));
   });
   const selected = selectDefaultSpace(spaces, { lastSpace: readLastSpaceCookie(request.headers.get("cookie")) });
   return selected ? privateResponse(redirect(SPACE_PATHS[selected] + url.search, 302)) : denial(403);

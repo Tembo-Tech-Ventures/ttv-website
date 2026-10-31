@@ -89,7 +89,9 @@ describe('retained demo browser boundary',()=>{
     expect(demoPathAllowed('/dashboard','GET')).toBe(true);
     expect(demoPathAllowed('/dashboard/sessions','GET')).toBe(true);
     expect(demoPathAllowed('/dashboard/application/owned','GET')).toBe(true);
-    for (const path of ['/dashboard/apply', '/dashboard/sessions/real-recording']) expect(demoPathAllowed(path,'GET')).toBe(false);
+    expect(demoPathAllowed('/dashboard/sessions/real-recording','GET')).toBe(false);
+    expect(demoPathAllowed('/dashboard/apply','GET')).toBe(true);
+    expect(demoPathAllowed('/dashboard/apply','POST')).toBe(false);
     expect(demoPathAllowed('/dashboard/application/owned','POST')).toBe(false);
   });
 });

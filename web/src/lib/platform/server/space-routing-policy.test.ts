@@ -10,17 +10,17 @@ describe("canonical aliases retain each existing synthetic-identity boundary", (
       const legacy = old.replace(":id", "synthetic-id");
       const canonical = target.replace(":id", "synthetic-id");
       expect(demoPathAllowed(canonical, method)).toBe(demoPathAllowed(legacy, method));
-      expect(stagingFixturePathAllowed(canonical)).toBe(stagingFixturePathAllowed(legacy));
+      expect(stagingFixturePathAllowed(canonical, method)).toBe(stagingFixturePathAllowed(legacy, method));
       for (const persona of QA_PERSONAS as DemoPersona[]) {
         expect(qaPathAllowed(persona, canonical, method)).toBe(qaPathAllowed(persona, legacy, method));
       }
     }
   });
 
-  it.each(["/dashboard/me", "/dashboard/me/portfolio", "/dashboard/account", "/dashboard/cohort/sessions/private", "/dashboard/cohort/apply", "/dashboard/community/dm/private", "/dashboard/mentoring/requests", "/dashboard/mentoring/availability", "/dashboard/mentoring/confirm/private"])("does not broaden restricted access to %s", path => {
+  it.each(["/dashboard/me", "/dashboard/me/portfolio", "/dashboard/account", "/dashboard/cohort/sessions/private", "/dashboard/cohort/apply/private", "/dashboard/community/dm/private", "/dashboard/mentoring/requests", "/dashboard/mentoring/availability", "/dashboard/mentoring/confirm/private"])("does not broaden restricted access to %s", path => {
     for (const method of ["GET", "HEAD", "POST"]) {
       expect(demoPathAllowed(path, method)).toBe(false);
-      expect(stagingFixturePathAllowed(path)).toBe(false);
+      expect(stagingFixturePathAllowed(path, method)).toBe(false);
       for (const persona of QA_PERSONAS as DemoPersona[]) expect(qaPathAllowed(persona, path, method)).toBe(false);
     }
   });
