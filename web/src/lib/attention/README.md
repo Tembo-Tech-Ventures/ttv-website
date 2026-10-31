@@ -7,7 +7,9 @@ all six `SpaceId` keys (including zeroes). The caller owns authentication,
 capabilities into the helper. Inaccessible spaces are zero; source ownership and
 current cohort recording access are checked in the same indexed SQL query.
 Deleted sources and unsupported future subject types fail closed. `/api/attention`, `/count`, and
-`/read` enforce those checks and return 404 when disabled. PAT access is not added.
+`/read` enforce those checks and return 404 when disabled. `/api/platform/me` and
+`getSpaceContext` reuse this helper with the same canonical capabilities; their
+counts are no longer placeholders. PAT access is not added to either surface.
 
 Lists use a 30-item keyset page, ordered by timestamp and opaque ID. The cursor
 binds user, filter, and snapshot; mark-all uses the returned `snapshotAt` so newer
