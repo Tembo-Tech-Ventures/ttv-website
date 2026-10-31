@@ -12,21 +12,26 @@ release the previous instance. Nothing is connected to a page in this change.
 ```tsx
 function AttentionPanel({ me }: { me: Me }) {
   const [attention] = useState(() => createAttentionStore({
-  enabled: me.flags.spaces,
-  initialCounts: { count: Object.values(me.unreadCounts).reduce((a, b) => a + b, 0),
-    unreadCounts: me.unreadCounts },
-  // initialList: serverAttention, // must match the initial filter
-  // mock: true, // explicit fixtures, isolated per store; never a network fallback
+    enabled: me.flags.spaces,
+    initialCounts: { count: Object.values(me.unreadCounts).reduce((a, b) => a + b, 0),
+      unreadCounts: me.unreadCounts },
+    // initialList: serverAttention, // must match the initial filter
+    // mock: createAttentionMockClient(), // DEV harness import from client/attention.mock
   }));
   const state = useAttention(attention);
+  const total = useAttentionCount(attention);
+  const cohortBadge = useAttentionBadge(attention, "cohort");
   useEffect(() => { void attention.refresh(); }, [attention]);
   return <>
-    <span>{useAttentionCount(attention)}</span>
-    <span>{useAttentionBadge(attention, "cohort")}</span>
+    <span>{total}</span>
+    <span>{cohortBadge}</span>
     {state.items.map(item => <button key={item.id}
       onClick={() => void attention.markRead({ ids: [item.id] })}>{item.summary}</button>)}
     <button disabled={state.loading || !state.nextCursor}
       onClick={() => void attention.loadMore()}>Older items</button>
+    {state.listError && <button onClick={() => void (state.loaded
+      ? attention.loadMore() : attention.refresh())}>Retry loading items</button>}
+    {state.truncated && <p>Showing the latest attention items.</p>}
     {state.failed.map(failure => <button key={failure.id}
       onClick={() => void attention.retry(failure.id)}>Retry mark read</button>)}
     <span aria-live="polite" aria-atomic="true">{state.announcement}</span>
@@ -44,7 +49,7 @@ Signatures:
 - Store `setFilter(filter: AttentionFilter): Promise<void>` resets the list and
   loads that filter. Query filtering is server-owned; clients send the contract value.
 - Store `markRead(body: MarkAttentionRead): Promise<boolean>` accepts `{ids}` or
-  `{through}`. For mark-all use `state.snapshotAt` from the list, never `Date.now()`:
+  `{through}`. For mark-all use `state.snapshotAt` from the list, never `Date.now()` (this marks all kinds across filters; offer on `all` or label it accordingly):
   `if (snapshotAt !== null) void attention.markRead({through: snapshotAt})`.
 - Store `retry(failureId): Promise<boolean>` and `dismissFailure(failureId): void`.
 - Store `refreshCounts(signal?: AbortSignal): Promise<boolean>` reports whether
@@ -62,11 +67,11 @@ observable error; mock mode is never selected on failure. This module installs
 no endpoints, changes no production surface and flips no flags.
 
 Counts are unread attention items, independent of channel unread. All six space
-keys are always present. Counts poll immediately on retain/start, then at 30s
-when changing, backing off on unchanged/error results up to 180s. Hidden tabs
+keys are always present. Counts poll immediately on retain/start without hydrated counts. With `initialCounts`, the first poll waits 30s; focus/visibility still refresh immediately. Later polls run at 30s
+when changing, backing off on unchanged/transient-error results up to 180s. Hidden tabs
 abort count work and pause timers; visibility/focus refreshes immediately.
 Manual count requests share the current flight. Pending mutations pause count
-fetches; version guards discard reads started before a write.
+fetches without increasing the idle backoff. Version guards discard stale count responses. HTTP 401/403/404 and `flag_off` stop automatic polling until explicit `start()` or `refreshCounts()` resumes it; errors remain visible.
 
 Mark-read applies immediately to cached items. Requests run serially to preserve
 ordering because count responses have no version. Each known unread item is
@@ -81,8 +86,8 @@ bounded retry policy applies. Do not change that policy locally.
 
 Pages normalize/deduplicate by opaque ID, sort by descending creation time then
 ID, and retain at most `maxItems` (default 500, allowed 1–10000) newest items.
-Older items outside that window are discarded; this is a bounded recent feed.
-Refresh replaces the window and snapshot; older pages preserve the first-page snapshot. Failed pages keep the previous cursor
+At capacity, pagination stops and `state.truncated` reports that more history exists beyond this bounded recent feed.
+Refresh replaces the window and snapshot; older pages preserve the first-page snapshot. Pages invalidated by concurrent writes retry the same cursor up to two times; further churn exposes a `stale_page` error with explicit refresh/loadMore retry. Failed pages keep the previous cursor
 for retry; repeated next cursors terminate pagination. Filter changes abort old
 pages. Read acknowledgements retained in the window are monotonic, so overlapping
 pages cannot resurrect them. IDs/cursors are passed raw to the shared API client,
@@ -92,8 +97,13 @@ counts. Failures keep at most 20 entries and queued writes at most 100; capacity
 returns false without issuing another write. Constructing a store performs no
 network/timer/browser work and initial data is used for SSR/hydration.
 
-Verification: `npx vitest run src/lib/platform/client/attention.test.ts
-src/lib/platform/client/attention.ssr.test.tsx src/lib/platform/client/hooks/attention.test.tsx`.
+Verification: `npx vitest run src/lib/platform/client/attention src/lib/platform/client/hooks/attention`.
 Includes fake timers, hidden/focus, abort/restart/StrictMode, stale reads, pagination,
 bounded caches, overlapping optimistic rollback, snapshot arrivals, authoritative
 reconciliation, authentication failures, invalid contracts and isolated fixtures.
+
+Production `attention` and hook entry points never import fixtures or mock transport.
+For UI development only, import `createAttentionMockClient` from
+`@/lib/platform/client/attention.mock` and pass `mock: createAttentionMockClient()`
+(or `api: createAttentionMockClient()`). The boolean `mock: true` is deliberately
+unsupported. Each fixture client is isolated; production does not auto-select it.

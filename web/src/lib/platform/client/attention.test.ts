@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AttentionCount, AttentionList } from "../contracts";
 import { attention, attentionCount } from "../fixtures";
+import { createAttentionMockClient } from "./attention.mock";
 import { createAttentionStore, selectAttentionBadge, selectAttentionCount } from "./attention";
 import { createApiClient } from "./apiClient";
 import { createMockTransport, type MockReply } from "./mockTransport";
@@ -15,7 +16,7 @@ const counts = (count = 4): AttentionCount => ({ count, unreadCounts: { ...atten
 const page = (items = attention.items, nextCursor: string | null = null): AttentionList => ({ items, nextCursor, snapshotAt: attention.snapshotAt });
 const tick = async () => { await vi.advanceTimersByTimeAsync(0); };
 const denied = (status = 403): MockReply => ({ status, data: { error: { code: status === 404 ? "flag_off" : "forbidden", message: "Denied" } } });
-function harness(options: { initialList?: AttentionList; maxItems?: number; enabled?: boolean } = {}) {
+function harness(options: { initialList?: AttentionList; maxItems?: number; enabled?: boolean; initialCounts?: AttentionCount } = {}) {
   const getCount = vi.fn<() => MockReply | Promise<MockReply>>(() => ({ data: counts() }));
   const getList = vi.fn<(request: Request) => MockReply | Promise<MockReply>>(() => ({ data: page() }));
   const mark = vi.fn<(request: Request) => MockReply | Promise<MockReply>>(() => ({ data: counts(0) }));
@@ -42,7 +43,7 @@ describe("attention state", () => {
   });
 
   it("polls at 30s, backs off idle counts, resumes focus and pauses hidden tabs", async () => {
-    const { store, getCount } = harness(); store.start(); await tick(); expect(getCount).toHaveBeenCalledTimes(1);
+    const { store, getCount } = harness({ initialCounts: undefined }); store.start(); await tick(); expect(getCount).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(30_000); expect(getCount).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(59_999); expect(getCount).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(1); expect(getCount).toHaveBeenCalledTimes(3);
@@ -54,11 +55,11 @@ describe("attention state", () => {
   });
 
   it("does not overlap slow counts and discards hidden responses across restart", async () => {
-    const { store, getCount } = harness(); const slow = deferred<MockReply>(); getCount.mockReturnValueOnce(slow.promise);
+    const { store, getCount } = harness({ initialCounts: undefined }); const slow = deferred<MockReply>(); getCount.mockReturnValueOnce(slow.promise);
     store.start(); await tick(); window.dispatchEvent(new Event("focus"));
     await vi.advanceTimersByTimeAsync(90_000); expect(getCount).toHaveBeenCalledTimes(1);
     Object.defineProperty(document, "hidden", { configurable: true, value: true }); document.dispatchEvent(new Event("visibilitychange")); await tick();
-    slow.resolve({ data: counts(999) }); await tick(); expect(store.getState().counts.count).toBe(4);
+    slow.resolve({ data: counts(999) }); await tick(); expect(store.getState().counts.count).toBe(0);
     store.stop(); Object.defineProperty(document, "hidden", { configurable: true, value: false }); store.start(); await tick();
     expect(getCount).toHaveBeenCalledTimes(2); expect(store.getState().counts.count).toBe(4); store.stop();
   });
@@ -134,7 +135,7 @@ describe("attention state", () => {
     slow.resolve({ data: counts(1) }); await pending; expect(store.getState().items[0].readAt).toBeNull(); expect(store.getState().items[1].readAt).not.toBeNull(); store.stop();
   });
 
-  it("ignores count/page reads started before mutation and preserves acknowledged state", async () => {
+  it("discards stale counts, retries invalidated pages and preserves acknowledged state", async () => {
     const { store, getCount, getList } = harness({ initialList: attention }); const slow = deferred<MockReply>(); const list = deferred<MockReply>();
     getCount.mockReturnValueOnce(slow.promise); getList.mockReturnValueOnce(list.promise);
     const countRun = store.refreshCounts().catch(() => false); const listRun = store.refresh(); await tick(); await store.markRead({ ids: [attention.items[0].id] });
@@ -158,10 +159,11 @@ describe("attention state", () => {
     for (let i = 0; i < 25; i++) await store.markRead({ through: attention.snapshotAt }); expect(store.getState().failed).toHaveLength(20);
     store.dismissFailure(store.getState().failed[0].id); expect(store.getState().failed).toHaveLength(19); expect(() => store.markRead({ ids: [] })).toThrow(/Too small/);
     expect(JSON.stringify(attention)).toBe(original); store.stop(); expect(() => createAttentionStore({ maxItems: 0 })).toThrow(RangeError);
+    expect(createAttentionStore({ initialList: attention, maxItems: 2 }).getState().truncated).toBe(true);
   });
 
   it("provides isolated fixture mocks with filtering and read reconciliation", async () => {
-    const a = createAttentionStore({ enabled: true, mock: true }); const b = createAttentionStore({ enabled: true, mock: true });
+    const a = createAttentionStore({ enabled: true, mock: createAttentionMockClient() }); const b = createAttentionStore({ enabled: true, mock: createAttentionMockClient() });
     await a.refresh(); await a.refreshCounts(); expect(a.getState().counts).toEqual(attentionCount); await a.markRead({ through: attention.snapshotAt }); expect(a.getState().counts.count).toBe(0);
     await a.setFilter("mentions"); expect(a.getState().items.every(item => ["mention", "reply", "tembo_answer"].includes(item.kind))).toBe(true);
     await b.refreshCounts(); expect(b.getState().counts.count).toBe(4); a.stop(); b.stop();
@@ -183,10 +185,10 @@ describe("attention state", () => {
   });
 
   it("backs off polling failures and does not start hidden", async () => {
-    const { store, getCount } = harness(); getCount.mockReturnValueOnce(denied(403));
+    const { store, getCount } = harness({ initialCounts: undefined }); getCount.mockReturnValueOnce(denied(500));
     Object.defineProperty(document, "hidden", { configurable: true, value: true }); store.start(); await tick(); expect(getCount).not.toHaveBeenCalled();
     Object.defineProperty(document, "hidden", { configurable: true, value: false }); document.dispatchEvent(new Event("visibilitychange")); await tick();
-    expect(store.getState().countError?.status).toBe(403); expect(store.getState().counts).toEqual(attentionCount);
+    expect(store.getState().countError?.status).toBe(500); expect(store.getState().counts.count).toBe(0);
     await vi.advanceTimersByTimeAsync(59_999); expect(getCount).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1); expect(getCount).toHaveBeenCalledTimes(2); expect(store.getState().countError).toBeNull(); store.stop();
   });
@@ -211,10 +213,82 @@ describe("attention state", () => {
   });
 
   it("aborts a shared manual count flight when its polling owner becomes hidden", async () => {
-    const { store, getCount } = harness(); const slow = deferred<MockReply>(); getCount.mockReturnValueOnce(slow.promise);
+    const { store, getCount } = harness({ initialCounts: undefined }); const slow = deferred<MockReply>(); getCount.mockReturnValueOnce(slow.promise);
     const manual = store.refreshCounts().catch(error => error); await tick(); store.start(); await tick(); expect(getCount).toHaveBeenCalledTimes(1);
     Object.defineProperty(document, "hidden", { configurable: true, value: true }); document.dispatchEvent(new Event("visibilitychange"));
     expect(await manual).toMatchObject({ code: "aborted" }); expect(store.getState().countError).toBeNull(); store.stop(); slow.resolve({ data: counts(99) });
+  });
+
+  it.each([false, true])("retries an in-flight page invalidated by mark-read (older=%s)", async older => {
+    const first = attention.items[0]; const second = attention.items[1];
+    const { store, getList } = harness({ initialList: older ? page([first], "p2") : undefined });
+    const slow = deferred<MockReply>();
+    const target = older ? second : first;
+    getList.mockReturnValueOnce(slow.promise).mockReturnValueOnce({ data: page([{ ...target, readAt: 123 }], "p3") });
+    const loading = older ? store.loadMore() : store.refresh(); await tick();
+    await store.markRead({ ids: [target.id] }); slow.resolve({ data: page([target], "p3") }); await loading;
+    expect(getList).toHaveBeenCalledTimes(2); expect(store.getState().loaded).toBe(true); expect(store.getState().listError).toBeNull();
+    expect(store.getState().items.find(item => item.id === target.id)?.readAt).toBe(123); expect(store.getState().nextCursor).toBe("p3");
+    const queries = getList.mock.calls.map(([request]) => new URL(request.url).searchParams.get("cursor"));
+    expect(queries).toEqual(older ? ["p2", "p2"] : [null, null]); store.stop();
+  });
+
+  it("bounds page retries under repeated mutations and exposes a retryable error", async () => {
+    const { store, getList } = harness();
+    const pending = Array.from({ length: 3 }, () => deferred<MockReply>());
+    pending.forEach(response => getList.mockReturnValueOnce(response.promise));
+    const loading = store.refresh(); await tick();
+    for (let i = 0; i < 3; i++) {
+      await store.markRead({ ids: [attention.items[0].id] }); pending[i].resolve({ data: page() }); await tick();
+    }
+    await loading; expect(getList).toHaveBeenCalledTimes(3); expect(store.getState().listError?.code).toBe("stale_page");
+    expect(store.getState().loaded).toBe(false); expect(store.getState().loading).toBe(false);
+    await store.refresh(); expect(store.getState().loaded).toBe(true); expect(store.getState().listError).toBeNull(); store.stop();
+  });
+
+  it("defers a hydrated first count by 30s, retains focus refresh, and cleans up warmup", async () => {
+    const { store, getCount } = harness(); store.start(); store.start(); await tick(); expect(getCount).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(29_999); expect(getCount).not.toHaveBeenCalled(); await vi.advanceTimersByTimeAsync(1); expect(getCount).toHaveBeenCalledTimes(1); store.stop();
+    const next = harness(); next.store.start(); window.dispatchEvent(new Event("focus")); await tick(); expect(next.getCount).toHaveBeenCalledTimes(1); next.store.stop();
+    const cancelled = harness(); cancelled.store.start(); cancelled.store.stop(); await vi.advanceTimersByTimeAsync(30_000); expect(cancelled.getCount).not.toHaveBeenCalled(); expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([401, 403, 404])("pauses terminal HTTP %s polling until an explicit resume", async status => {
+    const { store, getCount } = harness({ initialCounts: undefined }); getCount.mockReturnValueOnce(denied(status)); store.start(); await tick();
+    expect(store.getState().countError?.status).toBe(status);
+    window.dispatchEvent(new Event("focus")); document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(3_600_000); expect(getCount).toHaveBeenCalledTimes(1); expect(vi.getTimerCount()).toBe(0);
+    await store.refreshCounts(); expect(getCount).toHaveBeenCalledTimes(2); expect(store.getState().countError).toBeNull();
+    await vi.advanceTimersByTimeAsync(30_000); expect(getCount).toHaveBeenCalledTimes(3); store.stop();
+    getCount.mockReturnValueOnce(denied(status)); store.start(); await tick();
+    await vi.advanceTimersByTimeAsync(3_600_000); expect(getCount).toHaveBeenCalledTimes(4);
+    store.start(); await tick(); expect(getCount).toHaveBeenCalledTimes(5); store.stop();
+  });
+
+  it("stops pagination at the memory window and exposes truncation", async () => {
+    const { store, getList } = harness({ maxItems: 2 });
+    getList.mockReturnValueOnce({ data: page([attention.items[0]], "p2") }); await store.refresh();
+    getList.mockReturnValueOnce({ data: page([attention.items[1]], "p3") }); await store.loadMore();
+    expect(store.getState().truncated).toBe(true); expect(store.getState().nextCursor).toBeNull();
+    await store.loadMore(); expect(getList).toHaveBeenCalledTimes(2); expect(store.getState().items).toHaveLength(2); store.stop();
+  });
+
+  it("keeps array/count selectors stable and announces only later arrivals with correct grammar", async () => {
+    const { store, getCount } = harness({ initialCounts: undefined, initialList: attention });
+    const items = store.getState().items; await store.refreshCounts(); const originalCounts = store.getState().counts;
+    expect(store.getState().items).toBe(items); expect(store.getState().announcement).toBe("");
+    await store.refreshCounts(); expect(store.getState().counts).toBe(originalCounts); expect(store.getState().items).toBe(items);
+    getCount.mockReturnValueOnce({ data: counts(5) }); await store.refreshCounts(); expect(store.getState().announcement).toBe("1 new attention item");
+    getCount.mockReturnValueOnce(denied(500)); await expect(store.refreshCounts()).rejects.toMatchObject({ status: 500 });
+    getCount.mockReturnValueOnce({ data: counts(5) }); await store.refreshCounts(); expect(store.getState().announcement).toBe(""); store.stop();
+  });
+
+  it("keeps the 30s active cadence while writes are pending", async () => {
+    const { store, getCount, mark } = harness({ initialList: attention }); const slow = deferred<MockReply>(); mark.mockReturnValueOnce(slow.promise);
+    store.start(); const pending = store.markRead({ ids: [attention.items[0].id] }); await tick();
+    await vi.advanceTimersByTimeAsync(90_000); expect(getCount).not.toHaveBeenCalled();
+    slow.resolve({ data: counts(3) }); await pending;
+    await vi.advanceTimersByTimeAsync(30_000); expect(getCount).toHaveBeenCalledTimes(1); store.stop();
   });
 
 });

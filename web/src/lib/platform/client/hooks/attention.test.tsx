@@ -3,6 +3,7 @@ import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { attention, attentionCount } from "../../fixtures";
+import { createAttentionMockClient } from "../attention.mock";
 import { createAttentionStore } from "../attention";
 import { useAttention, useAttentionBadge, useAttentionCount } from "./attention";
 
@@ -16,7 +17,7 @@ describe("attention hooks", () => {
   afterEach(async () => { await act(async () => root.unmount()); container.remove(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
   it("shares one poll lifecycle across badges/panel, supports mock actions and aborts at last unmount", async () => {
-    const store = createAttentionStore({ enabled: true, mock: true, initialList: attention, initialCounts: attentionCount });
+    const store = createAttentionStore({ enabled: true, mock: createAttentionMockClient(), initialList: attention, initialCounts: attentionCount });
     const retain = vi.spyOn(store, "retain"); const subscribe = vi.spyOn(store, "subscribe");
     function Count() { return <span>{useAttentionCount(store)}</span>; }
     function Badge() { return <span>{useAttentionBadge(store, "community")}</span>; }
@@ -32,7 +33,7 @@ describe("attention hooks", () => {
   });
 
   it("restarts cleanly in StrictMode and switches store/space without cross-user state", async () => {
-    const first = createAttentionStore({ enabled: true, mock: true, initialCounts: attentionCount });
+    const first = createAttentionStore({ enabled: true, mock: createAttentionMockClient(), initialCounts: attentionCount });
     const second = createAttentionStore({ enabled: false });
     function View({ store = first, space = "cohort" as const }) { return <span>{useAttentionBadge(store, space)}</span>; }
     await act(async () => root.render(<StrictMode><View /></StrictMode>)); expect(container.textContent).toBe("2");

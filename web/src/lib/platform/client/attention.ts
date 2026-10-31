@@ -1,10 +1,8 @@
 import {
-  AttentionCount, AttentionFilter, AttentionList, MarkAttentionRead, ROUTES,
+  AttentionCount, AttentionFilter, AttentionList, MarkAttentionRead, ROUTES, SPACE_ORDER,
   type AttentionItem, type SpaceId,
 } from "../contracts";
-import { attention as fixtureAttention, attentionCount as fixtureCount } from "../fixtures";
 import { ApiError, createApiClient, type ApiClient } from "./apiClient";
-import { createMockTransport } from "./mockTransport";
 import { createPoller } from "./poller";
 import { createStore } from "./store";
 
@@ -17,33 +15,12 @@ const byNewest = (a: AttentionItem, b: AttentionItem) => b.createdAt - a.created
 const normalizeError = (error: unknown) => error instanceof ApiError ? error
   : new ApiError("client_error", 0, "Attention request failed", undefined, { cause: error });
 
-/** Same grouping as the attention API; mock data never falls back to the network. */
-export function attentionMatchesFilter(item: AttentionItem, filter: AttentionFilter): boolean {
-  if (filter === "all") return true;
-  if (filter === "mentions") return ["mention", "reply", "tembo_answer"].includes(item.kind);
-  if (filter === "requests") return item.kind.startsWith("mentor_");
-  return !attentionMatchesFilter(item, "mentions") && !attentionMatchesFilter(item, "requests");
-}
-
-export function createAttentionMockClient(): ApiClient {
-  let items = AttentionList.parse(fixtureAttention).items;
-  const count = () => {
-    const result = zeroCounts();
-    for (const item of items) if (item.readAt === null) { result.count++; result.unreadCounts[item.space]++; }
-    return result;
+function initialPaging(initial: AttentionList | undefined, size: number, capacity: number, overflow: boolean) {
+  return {
+    nextCursor: size >= capacity ? null : initial?.nextCursor ?? null,
+    snapshotAt: initial?.snapshotAt ?? null,
+    truncated: overflow || (!!initial?.nextCursor && size >= capacity),
   };
-  return createApiClient({ fetch: createMockTransport([
-    { ...ROUTES.listAttention, reply: ({ request }) => {
-      const filter = AttentionFilter.parse(new URL(request.url).searchParams.get("filter") ?? "all");
-      return { data: { ...fixtureAttention, items: items.filter(item => attentionMatchesFilter(item, filter)) } };
-    } },
-    { ...ROUTES.countAttention, reply: () => ({ data: count() }) },
-    { ...ROUTES.markAttentionRead, reply: async ({ request }) => {
-      const body = MarkAttentionRead.parse(await request.json());
-      items = items.map(item => item.readAt === null && matches(item, body) ? { ...item, readAt: Date.now() } : item);
-      return { data: count() };
-    } },
-  ]) });
 }
 
 export interface AttentionMutation {
@@ -58,6 +35,7 @@ export interface AttentionState {
   filter: AttentionFilter;
   nextCursor: string | null;
   snapshotAt: number | null;
+  truncated: boolean;
   loaded: boolean;
   loading: boolean;
   counting: boolean;
@@ -71,7 +49,8 @@ export interface AttentionOptions {
   /** Supply Me.flags.spaces explicitly. Defaults to false; no requests when disabled. */
   enabled?: boolean;
   api?: ApiClient;
-  mock?: boolean;
+  /** Explicit fixture client imported separately by a development harness. */
+  mock?: ApiClient;
   initialList?: AttentionList;
   initialCounts?: AttentionCount;
   filter?: AttentionFilter;
@@ -82,7 +61,7 @@ export interface AttentionOptions {
 export function createAttentionStore(options: AttentionOptions = {}) {
   const { enabled = false, maxItems = 500 } = options;
   if (!Number.isInteger(maxItems) || maxItems < 1 || maxItems > 10_000) throw new RangeError("Invalid maxItems");
-  const api = options.api ?? (options.mock ? createAttentionMockClient() : createApiClient());
+  const api = options.api ?? options.mock ?? createApiClient();
   const initial = options.initialList ? AttentionList.parse(options.initialList) : undefined;
   let entities = new Map<string, AttentionItem>();
   function merge(items: readonly AttentionItem[], replace = false) {
@@ -94,17 +73,22 @@ export function createAttentionStore(options: AttentionOptions = {}) {
         ? { ...item, readAt: previous.readAt } : item);
     }
     entities = new Map([...next.values()].toSorted(byNewest).slice(0, maxItems).map(item => [item.id, item]));
+    return next.size > maxItems;
   }
-  merge(initial?.items ?? []);
-  let counts = options.initialCounts ? AttentionCount.parse(options.initialCounts)
-    : options.mock ? AttentionCount.parse(fixtureCount) : zeroCounts();
+  const initialOverflow = merge(initial?.items ?? []);
+  let counts = options.initialCounts ? AttentionCount.parse(options.initialCounts) : zeroCounts();
   const store = createStore<AttentionState>({
     items: [...entities.values()], counts, filter: AttentionFilter.parse(options.filter ?? "all"),
-    nextCursor: initial?.nextCursor ?? null, snapshotAt: initial?.snapshotAt ?? null,
+    ...initialPaging(initial, entities.size, maxItems, initialOverflow),
     loaded: !!initial, loading: false, counting: false, listError: null, countError: null,
     pending: [], failed: [], announcement: "",
   });
   let stopped = false;
+  let started = false;
+  let terminal = false;
+  let delayInitial = !!options.initialCounts;
+  let countKnown = !!options.initialCounts;
+  let stopWarmup: (() => void) | undefined;
   let epoch = 0;
   let revision = 0;
   let sequence = 0;
@@ -140,7 +124,13 @@ export function createAttentionStore(options: AttentionOptions = {}) {
         if (!mutation || item.readAt !== null) return item;
         return { ...item, readAt: mutation.readAt };
       });
-      return { ...next, counts: projected, items };
+      const stableItems = items.length === state.items.length && items.every((item, i) => {
+        const previous = state.items[i];
+        return item === previous || (Object.keys(item) as (keyof AttentionItem)[]).every(key => item[key] === previous[key]);
+      }) ? state.items : items;
+      const stableCounts = projected.count === state.counts.count
+        && SPACE_ORDER.every(space => projected.unreadCounts[space] === state.counts.unreadCounts[space]) ? state.counts : projected;
+      return { ...next, counts: stableCounts, items: stableItems };
     });
   }
   async function refreshCounts(signal?: AbortSignal): Promise<boolean> {
@@ -153,6 +143,7 @@ export function createAttentionStore(options: AttentionOptions = {}) {
       try { return await countFlight; }
       finally { signal?.removeEventListener("abort", abortShared); }
     }
+    const resuming = terminal; terminal = false;
     const controller = new AbortController();
     countController = controller;
     const abort = () => controller.abort();
@@ -165,16 +156,27 @@ export function createAttentionStore(options: AttentionOptions = {}) {
         const result = await api.call(ROUTES.countAttention, { signal: controller.signal });
         if (!valid(generation, controller.signal) || revision !== version) return false;
         const changed = JSON.stringify(counts) !== JSON.stringify(result);
-        const increase = result.count - counts.count;
-        counts = result;
-        project({ announcement: increase > 0 ? `${increase} new attention items` : store.getState().announcement });
+        const increase = countKnown ? result.count - counts.count : 0;
+        countKnown = true; counts = result;
+        const announcement = increase > 0 ? `${increase} new attention item${increase === 1 ? "" : "s"}`
+          : store.getState().announcement === "Could not update attention count" ? "" : store.getState().announcement;
+        project({ announcement });
         return changed;
       } catch (error) {
-        if (valid(generation, controller.signal) && version === revision) project({ countError: normalizeError(error), announcement: "Could not update attention count" });
+        if (valid(generation, controller.signal) && version === revision) {
+          const failure = normalizeError(error);
+          if ([401, 403, 404].includes(failure.status) || failure.code === "flag_off") {
+            terminal = true; stopWarmup?.(); poller.stop();
+          }
+          project({ countError: failure, announcement: "Could not update attention count" });
+        }
         throw error;
       } finally {
         signal?.removeEventListener("abort", abort);
-        if (countController === controller) { countController = undefined; countFlight = undefined; project({ counting: false }); }
+        if (countController === controller) {
+          countController = undefined; countFlight = undefined; project({ counting: false });
+          if (resuming && started && valid(generation, controller.signal) && !terminal) deferPolling();
+        }
       }
     })();
     countFlight = flight;
@@ -182,9 +184,28 @@ export function createAttentionStore(options: AttentionOptions = {}) {
   }
   const poller = createPoller({
     intervalMs: 30_000, maxIntervalMs: 180_000,
-    isActive: available,
-    run: async signal => ({ changed: await refreshCounts(signal) }),
+    isActive: () => available() && !terminal,
+    // Pending writes are activity, not evidence of an idle feed.
+    run: async signal => ({ changed: store.getState().pending.length > 0 || await refreshCounts(signal) }),
   });
+  function deferPolling() {
+    stopWarmup?.();
+    const doc = typeof document === "undefined" ? undefined : document;
+    const win = typeof window === "undefined" ? undefined : window;
+    const begin = () => {
+      stopWarmup?.();
+      if (started && available() && !terminal) poller.start();
+    };
+    const timer = setTimeout(begin, 30_000);
+    doc?.addEventListener("visibilitychange", begin);
+    win?.addEventListener("focus", begin);
+    stopWarmup = () => {
+      clearTimeout(timer);
+      doc?.removeEventListener("visibilitychange", begin);
+      win?.removeEventListener("focus", begin);
+      stopWarmup = undefined;
+    };
+  }
   async function page(reset: boolean, filter = store.getState().filter): Promise<void> {
     if (!available()) return;
     if (!reset && listFlight) return listFlight;
@@ -192,17 +213,26 @@ export function createAttentionStore(options: AttentionOptions = {}) {
     if (!reset && state.loaded && !state.nextCursor) return;
     listController?.abort();
     const controller = new AbortController(); listController = controller;
-    const generation = epoch; const version = revision;
+    const generation = epoch;
     const cursor = reset ? undefined : state.nextCursor ?? undefined;
     project({ loading: true, listError: null, ...(reset ? { filter } : {}) });
     const flight = (async () => {
       try {
-        const result = await api.call(ROUTES.listAttention, { query: { filter, cursor }, signal: controller.signal });
-        if (!valid(generation, controller.signal) || version !== revision || listController !== controller) return;
-        merge(result.items, reset);
-        // A repeated cursor cannot make forward progress. Permit explicit refresh/retry.
-        const nextCursor = result.nextCursor === cursor ? null : result.nextCursor;
-        project({ loaded: true, nextCursor, snapshotAt: reset || !state.loaded ? result.snapshotAt : state.snapshotAt });
+        // Mutations may invalidate readAt on a page. Retry the same cursor twice;
+        // continuing churn must become a visible, retryable error, never an empty idle panel.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const version = revision;
+          const result = await api.call(ROUTES.listAttention, { query: { filter, cursor }, signal: controller.signal });
+          if (!valid(generation, controller.signal) || listController !== controller) return;
+          if (version !== revision) continue;
+          const overflow = merge(result.items, reset);
+          const truncated = overflow || (entities.size >= maxItems && result.nextCursor !== null);
+          // Stop at the memory window instead of offering pages we would immediately discard.
+          const nextCursor = truncated || result.nextCursor === cursor ? null : result.nextCursor;
+          project({ loaded: true, truncated, nextCursor, snapshotAt: reset || !state.loaded ? result.snapshotAt : state.snapshotAt });
+          return;
+        }
+        throw new ApiError("stale_page", 0, "Attention changed while loading. Retry available");
       } catch (error) {
         if (valid(generation, controller.signal) && listController === controller) project({ listError: normalizeError(error), announcement: "Could not load attention items" });
       } finally {
@@ -229,7 +259,7 @@ export function createAttentionStore(options: AttentionOptions = {}) {
         const result = await api.call(ROUTES.markAttentionRead, { body, signal: controller.signal });
         if (!valid(generation, controller.signal)) return false;
         revision++;
-        counts = result; // Server truth includes unread items outside the bounded cache.
+        counts = result; countKnown = true; // Server truth includes unread items outside the bounded cache.
         for (const [id, item] of optimisticItems) if (matches(item, body)) optimisticItems.delete(id);
         entities = new Map([...entities].map(([id, item]) => [id, item.readAt === null && matches(item, body)
           ? { ...item, readAt: mutation.readAt } : item]));
@@ -251,14 +281,20 @@ export function createAttentionStore(options: AttentionOptions = {}) {
     return outcome;
   }
   function stop() {
-    stopped = true; epoch++; revision++;
+    stopped = true; started = false; epoch++; revision++; stopWarmup?.();
     poller.stop(); listController?.abort(); countController?.abort(); mutationController?.abort();
     listController = undefined; listFlight = undefined; countController = undefined; countFlight = undefined;
     // A queued write cannot run in a new lifecycle. Old promises still settle to false.
     queue = Promise.resolve();
     project({ pending: [], loading: false, counting: false });
   }
-  function start() { stopped = false; if (enabled) poller.start(); }
+  function start() {
+    if (started && !terminal) return;
+    stopped = false; started = true; terminal = false;
+    if (!enabled) return;
+    if (delayInitial) { delayInitial = false; deferPolling(); }
+    else poller.start();
+  }
   return {
     ...store,
     start, stop,
@@ -275,7 +311,7 @@ export function createAttentionStore(options: AttentionOptions = {}) {
       const parsed = AttentionFilter.parse(filter);
       if (parsed === store.getState().filter) return Promise.resolve();
       listController?.abort(); entities = new Map();
-      project({ filter: parsed, loaded: false, nextCursor: null, snapshotAt: null });
+      project({ filter: parsed, loaded: false, truncated: false, nextCursor: null, snapshotAt: null });
       return page(true, parsed);
     },
     markRead,
