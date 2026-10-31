@@ -23,6 +23,14 @@ export const AGENT_PREVIEW_PERSONAS = {
     userId: "ttv-fixture-user-journey-graduate",
     sessionId: "ttv-fixture-session-journey-graduate",
   },
+  mentor: {
+    userId: "ttv-fixture-user-journey-mentor",
+    sessionId: "ttv-fixture-session-journey-mentor",
+  },
+  institution: {
+    userId: "ttv-fixture-user-journey-institution",
+    sessionId: "ttv-fixture-session-journey-institution",
+  },
 };
 
 export function isAgentEnvironmentName(value) {
@@ -227,6 +235,32 @@ export async function seedAgentPreviewFixtures({
     assertAgentEnvironmentName(environmentName);
     assertPreviewSecret(previewSecret);
     requirePreviewRunId(runId);
+  }
+
+  async function upsertPersonaSession({ persona, sessionId, userId }) {
+    await executeQuery(
+      databaseId,
+      `INSERT INTO "session"
+        ("id", "expiresAt", "token", "ipAddress", "userAgent", "userId", "createdAt", "updatedAt")
+       VALUES (?, ?, ?, NULL, ?, ?, ?, ?)
+       ON CONFLICT("id") DO UPDATE SET
+         "expiresAt" = excluded."expiresAt",
+         "token" = excluded."token",
+         "ipAddress" = NULL,
+         "userAgent" = excluded."userAgent",
+         "userId" = excluded."userId",
+         "createdAt" = excluded."createdAt",
+         "updatedAt" = excluded."updatedAt"`,
+      [
+        sessionId,
+        createdAt + 8 * 60 * 60,
+        deriveAgentPreviewPersonaToken(previewSecret, environmentName, persona, runId),
+        `${AGENT_PREVIEW_SESSION_MARKER}:persona`,
+        userId,
+        createdAt,
+        createdAt,
+      ]
+    );
   }
 
   // Reset the preview user's own profile so every deploy starts pristine:
@@ -559,34 +593,74 @@ export async function seedAgentPreviewFixtures({
     }
 
     if (environmentName && previewSecret) {
+      await upsertPersonaSession(fixture);
+    }
+  }
+
+  // Global-role personas for the spaces suites. Each holds exactly one global
+  // role and no cohort rows: the mentoring space needs the global MENTOR role,
+  // not a cohort invitation, and institution approval is the admin-granted
+  // INSTITUTION role alone, which widens no profile or evidence visibility.
+  // They exist only alongside their sessions on an isolated agent preview.
+  // The roles themselves are reference data from migration 0017; a missing
+  // role fails the NOT NULL roleId instead of inventing one here.
+  const rolePersonaFixtures = [
+    {
+      ...AGENT_PREVIEW_PERSONAS.mentor,
+      persona: "mentor",
+      role: "MENTOR",
+      userRoleId: "ttv-fixture-user-role-journey-mentor",
+      name: "Fictional Wairimu Kariuki",
+      email: "journey-mentor@invalid.ttv",
+    },
+    {
+      ...AGENT_PREVIEW_PERSONAS.institution,
+      persona: "institution",
+      role: "INSTITUTION",
+      userRoleId: "ttv-fixture-user-role-journey-institution",
+      name: "Fictional Kiprono Langat",
+      email: "journey-institution@invalid.ttv",
+    },
+  ];
+
+  if (environmentName && previewSecret) {
+    // Converge on every seed: journeys may grant roles, join cohorts or
+    // publish profiles, and none of that may carry into the next run.
+    const rolePersonaUserIds = rolePersonaFixtures.map((fixture) => fixture.userId);
+    const placeholders = rolePersonaUserIds.map(() => "?").join(", ");
+    for (const table of ["UserRoles", "programRole", "programApplication", "studentProfile"]) {
       await executeQuery(
         databaseId,
-        `INSERT INTO "session"
-          ("id", "expiresAt", "token", "ipAddress", "userAgent", "userId", "createdAt", "updatedAt")
-         VALUES (?, ?, ?, NULL, ?, ?, ?, ?)
-         ON CONFLICT("id") DO UPDATE SET
-           "expiresAt" = excluded."expiresAt",
-           "token" = excluded."token",
-           "ipAddress" = NULL,
-           "userAgent" = excluded."userAgent",
-           "userId" = excluded."userId",
-           "createdAt" = excluded."createdAt",
-           "updatedAt" = excluded."updatedAt"`,
-        [
-          fixture.sessionId,
-          createdAt + 8 * 60 * 60,
-          deriveAgentPreviewPersonaToken(
-            previewSecret,
-            environmentName,
-            fixture.persona,
-            runId
-          ),
-          `${AGENT_PREVIEW_SESSION_MARKER}:persona`,
-          fixture.userId,
-          createdAt,
-          createdAt,
-        ]
+        `DELETE FROM "${table}" WHERE "userId" IN (${placeholders})`,
+        rolePersonaUserIds
       );
+    }
+
+    for (const fixture of rolePersonaFixtures) {
+      await executeQuery(
+        databaseId,
+        `INSERT INTO "user"
+          ("id", "name", "email", "emailVerified", "image", "createdAt", "updatedAt")
+         VALUES (?, ?, ?, 1, NULL, ?, ?)
+         ON CONFLICT("id") DO UPDATE SET
+           "name" = excluded."name",
+           "email" = excluded."email",
+           "emailVerified" = 1,
+           "updatedAt" = excluded."updatedAt"`,
+        [fixture.userId, fixture.name, fixture.email, createdAt, createdAt]
+      );
+      await executeQuery(
+        databaseId,
+        `INSERT INTO "UserRoles"
+          ("id", "userId", "roleId", "createdAt", "updatedAt")
+         VALUES (?, ?, (SELECT "id" FROM "Roles" WHERE "name" = ?), ?, ?)
+         ON CONFLICT("id") DO UPDATE SET
+           "userId" = excluded."userId",
+           "roleId" = excluded."roleId",
+           "updatedAt" = excluded."updatedAt"`,
+        [fixture.userRoleId, fixture.userId, fixture.role, createdAt, createdAt]
+      );
+      await upsertPersonaSession(fixture);
     }
   }
 

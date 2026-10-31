@@ -25,8 +25,15 @@ export function createCapabilityDatabase(fixture: Partial<CapabilityCase> & { le
     database.prepare('INSERT INTO programRole (id,userId,programId,name) VALUES (?,?,?,?)')
       .run("assignment-" + i, userId, assignment.programId, assignment.name);
   }
+  const queries: string[] = [];
+  const db = relationalDrizzle(d1, queries);
+  return { database, db, queries, user: fixture.signedIn === false ? null : { id: userId } };
+}
+
+/** Drizzle over the shared SQLite D1 shim, recording each query it issues. */
+export function relationalDrizzle(d1: D1Database, queries: string[] = []) {
   // Drizzle's relational reader uses D1 raw(); the shared SQLite adapter
-  // supplies all(). Keep this test-only bridge local to the capability fixtures.
+  // supplies all(). Keep this test-only bridge local to the test support.
   const relationalD1 = Object.assign(Object.create(d1) as D1Database, {
     prepare(query: string) {
       const statement = d1.prepare(query);
@@ -40,7 +47,5 @@ export function createCapabilityDatabase(fixture: Partial<CapabilityCase> & { le
       return statement;
     },
   });
-  const queries: string[] = [];
-  const db = drizzle(relationalD1, { schema, logger: { logQuery(query) { queries.push(query); } } });
-  return { database, db, queries, user: fixture.signedIn === false ? null : { id: userId } };
+  return drizzle(relationalD1, { schema, logger: { logQuery(query) { queries.push(query); } } });
 }

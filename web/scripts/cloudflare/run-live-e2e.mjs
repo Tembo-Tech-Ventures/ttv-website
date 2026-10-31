@@ -30,6 +30,15 @@ export function resolvePlaywrightAgentToken(environment = process.env) {
   return undefined;
 }
 
+/** The browser variable each seeded preview persona's session token travels in. */
+export const PERSONA_TOKEN_VARIABLES = Object.freeze({
+  PLAYWRIGHT_NEW_STUDENT_TOKEN: "newStudent",
+  PLAYWRIGHT_ACCEPTED_STUDENT_TOKEN: "acceptedStudent",
+  PLAYWRIGHT_GRADUATE_STUDENT_TOKEN: "graduateStudent",
+  PLAYWRIGHT_MENTOR_TOKEN: "mentor",
+  PLAYWRIGHT_INSTITUTION_TOKEN: "institution",
+});
+
 export function resolvePlaywrightPersonaTokens(environment = process.env) {
   const environmentName =
     environment.EXPECTED_DEPLOYMENT_ENVIRONMENT?.trim() ||
@@ -43,31 +52,30 @@ export function resolvePlaywrightPersonaTokens(environment = process.env) {
     return {};
   }
 
+  return Object.fromEntries(
+    Object.entries(PERSONA_TOKEN_VARIABLES).map(([variable, persona]) => [
+      variable,
+      deriveAgentPreviewPersonaToken(
+        previewSecret,
+        environmentName,
+        persona,
+        environment.AGENT_PREVIEW_RUN_ID
+      ),
+    ])
+  );
+}
+
+/** Persona sessions exist only on agent previews; never inherit one elsewhere. */
+function personaTokenEnvironment(environment) {
   return {
-    PLAYWRIGHT_NEW_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
-      previewSecret,
-      environmentName,
-      "newStudent",
-      environment.AGENT_PREVIEW_RUN_ID
-    ),
-    PLAYWRIGHT_ACCEPTED_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
-      previewSecret,
-      environmentName,
-      "acceptedStudent",
-      environment.AGENT_PREVIEW_RUN_ID
-    ),
-    PLAYWRIGHT_GRADUATE_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
-      previewSecret,
-      environmentName,
-      "graduateStudent",
-      environment.AGENT_PREVIEW_RUN_ID
-    ),
+    ...Object.fromEntries(Object.keys(PERSONA_TOKEN_VARIABLES).map((variable) => [variable, ""])),
+    ...resolvePlaywrightPersonaTokens(environment),
   };
 }
 
 export async function main(args = process.argv.slice(2), { environment = process.env, spawnImpl = spawn, withFeedbackWriter = withPreviewFeedbackWriter } = {}) {
   const token = resolvePlaywrightAgentToken(environment);
-  const personaTokens = resolvePlaywrightPersonaTokens(environment);
+  const personaTokens = personaTokenEnvironment(environment);
   const binary = process.platform === "win32" ? "npx.cmd" : "npx";
   const launch = async feedbackToken => {
     const child = spawnImpl(binary, ["playwright", "test", ...args], {

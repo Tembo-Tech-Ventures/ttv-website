@@ -1,14 +1,32 @@
 import { EventEmitter } from "node:events";
+import { readFileSync, readdirSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vitest";
 import {
+  AGENT_PREVIEW_PERSONAS,
   deriveAgentPreviewPersonaToken,
   deriveAgentPreviewToken,
+  seedAgentPreviewAccess,
+  seedAgentPreviewFixtures,
 } from "./agent-preview-auth.mjs";
 import {
+  PERSONA_TOKEN_VARIABLES,
   main,
   resolvePlaywrightAgentToken,
   resolvePlaywrightPersonaTokens,
 } from "./run-live-e2e.mjs";
+import { createSqliteD1 } from "../../src/test/sqlite-d1";
+import { capabilitiesFor } from "../../src/lib/platform/server/capabilities";
+import { relationalDrizzle } from "../../src/lib/platform/server/capabilities.test-support";
+
+const PREVIEW_SECRET = "p".repeat(32);
+const preview = {
+  AGENT_PREVIEW_SECRET: PREVIEW_SECRET,
+  AGENT_PREVIEW_RUN_ID: "github-123-1",
+  EXPECTED_DEPLOYMENT_ENVIRONMENT: "agent-pr-55",
+};
+const personaToken = (persona) =>
+  deriveAgentPreviewPersonaToken(PREVIEW_SECRET, "agent-pr-55", persona, "github-123-1");
 
 describe("live browser authentication", () => {
   it("rejects missing run scope instead of deriving legacy preview credentials", () => {
@@ -64,40 +82,20 @@ describe("live browser authentication", () => {
     ).toBeUndefined();
   });
 
-  it("supplies deterministic tokens for the isolated student journeys", () => {
-    const previewSecret = "p".repeat(32);
-    expect(
-      resolvePlaywrightPersonaTokens({
-        AGENT_PREVIEW_SECRET: previewSecret,
-        AGENT_PREVIEW_RUN_ID: "github-123-1",
-        EXPECTED_DEPLOYMENT_ENVIRONMENT: "agent-pr-55",
-      })
-    ).toEqual({
-      PLAYWRIGHT_NEW_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
-        previewSecret,
-        "agent-pr-55",
-        "newStudent", "github-123-1"
-      ),
-      PLAYWRIGHT_ACCEPTED_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
-        previewSecret,
-        "agent-pr-55",
-        "acceptedStudent", "github-123-1"
-      ),
-      PLAYWRIGHT_GRADUATE_STUDENT_TOKEN: deriveAgentPreviewPersonaToken(
-        previewSecret,
-        "agent-pr-55",
-        "graduateStudent", "github-123-1"
-      ),
+  it("supplies deterministic tokens for every isolated preview persona", () => {
+    expect(resolvePlaywrightPersonaTokens(preview)).toEqual({
+      PLAYWRIGHT_NEW_STUDENT_TOKEN: personaToken("newStudent"),
+      PLAYWRIGHT_ACCEPTED_STUDENT_TOKEN: personaToken("acceptedStudent"),
+      PLAYWRIGHT_GRADUATE_STUDENT_TOKEN: personaToken("graduateStudent"),
+      PLAYWRIGHT_MENTOR_TOKEN: personaToken("mentor"),
+      PLAYWRIGHT_INSTITUTION_TOKEN: personaToken("institution"),
     });
+    expect(Object.values(PERSONA_TOKEN_VARIABLES).toSorted()).toEqual(Object.keys(AGENT_PREVIEW_PERSONAS).toSorted());
   });
 
-  it("never derives persona tokens outside isolated previews", () => {
+  it.each(["production", "staging"])("never derives persona tokens in %s", (environmentName) => {
     expect(
-      resolvePlaywrightPersonaTokens({
-        AGENT_PREVIEW_SECRET: "p".repeat(32),
-        AGENT_PREVIEW_RUN_ID: "github-123-1",
-        EXPECTED_DEPLOYMENT_ENVIRONMENT: "production",
-      })
+      resolvePlaywrightPersonaTokens({ ...preview, EXPECTED_DEPLOYMENT_ENVIRONMENT: environmentName })
     ).toEqual({});
   });
 });
@@ -130,5 +128,140 @@ describe("feedback identity runner integration", () => {
     const withFeedbackWriter = vi.fn();
     await main(["--list"], { environment: { EXPECTED_DEPLOYMENT_ENVIRONMENT: "agent-pr-171-1" }, spawnImpl: child(), withFeedbackWriter });
     expect(withFeedbackWriter).not.toHaveBeenCalled();
+  });
+});
+
+function migratedDatabase() {
+  const database = new DatabaseSync(":memory:");
+  database.exec("PRAGMA foreign_keys=ON");
+  const migrations = new URL("../../src/lib/db/migrations/", import.meta.url);
+  for (const name of readdirSync(migrations).filter((n) => n.endsWith(".sql")).toSorted()) {
+    database.exec(readFileSync(new URL(name, migrations), "utf8"));
+  }
+  const executeQuery = vi.fn(async (_databaseId, sql, params) => {
+    const statement = database.prepare(sql);
+    return [{ results: sql.trimStart().startsWith("SELECT") ? statement.all(...params) : (statement.run(...params), []) }];
+  });
+  return { database, executeQuery };
+}
+
+/** The deploy order: the isolated admin first, then the fixtures. */
+async function seed(executeQuery, environmentName = "agent-pr-55") {
+  const options = {
+    databaseId: "db-agent-pr-55", executeQuery, environmentName, previewSecret: PREVIEW_SECRET, runId: "github-123-1",
+    now: new Date("2026-10-31T12:00:00.000Z"),
+  };
+  await seedAgentPreviewAccess(options);
+  await seedAgentPreviewFixtures(options);
+}
+
+function personaRows(database, userId) {
+  const rows = (sql) => database.prepare(sql).all(userId).map((row) => ({ ...row }));
+  return {
+    user: rows('SELECT "name", "email" FROM "user" WHERE "id" = ?'),
+    roles: rows('SELECT r."name" FROM "UserRoles" ur JOIN "Roles" r ON r."id" = ur."roleId" WHERE ur."userId" = ?').map((row) => row.name),
+    sessions: rows('SELECT "token", "userAgent", "expiresAt" - "createdAt" AS "lifetime" FROM "session" WHERE "userId" = ?'),
+    cohortRows: ["programRole", "programApplication", "studentProfile"]
+      .flatMap((table) => rows(`SELECT "id" FROM "${table}" WHERE "userId" = ?`)),
+  };
+}
+
+describe("preview mentor and institution personas", () => {
+  const { mentor, institution } = AGENT_PREVIEW_PERSONAS;
+
+  it("seeds one global role each, with no cohort rows, and capabilities to match", async () => {
+    const { database, executeQuery } = migratedDatabase();
+    await seed(executeQuery);
+
+    expect(personaRows(database, mentor.userId)).toEqual({
+      user: [{ name: "Fictional Wairimu Kariuki", email: "journey-mentor@invalid.ttv" }],
+      roles: ["MENTOR"],
+      sessions: [{ token: personaToken("mentor"), userAgent: "ttv-agent:isolated-preview:persona", lifetime: 8 * 60 * 60 }],
+      cohortRows: [],
+    });
+    expect(personaRows(database, institution.userId)).toEqual({
+      user: [{ name: "Fictional Kiprono Langat", email: "journey-institution@invalid.ttv" }],
+      roles: ["INSTITUTION"],
+      sessions: [{ token: personaToken("institution"), userAgent: "ttv-agent:isolated-preview:persona", lifetime: 8 * 60 * 60 }],
+      cohortRows: [],
+    });
+
+    const db = relationalDrizzle(createSqliteD1(database).db);
+    expect(await capabilitiesFor(db, { id: mentor.userId })).toEqual({
+      spaces: ["community", "mentoring", "profile"],
+      cohortIds: [], mentorCohortIds: [], isMentor: true, isInstitution: false, isAdmin: false,
+    });
+    // Approval is the role alone: discovery, and no cohort, mentor or admin reach.
+    expect(await capabilitiesFor(db, { id: institution.userId })).toEqual({
+      spaces: ["community", "discover", "profile"],
+      cohortIds: [], mentorCohortIds: [], isMentor: false, isInstitution: true, isAdmin: false,
+    });
+  });
+
+  it("converges on reseed, discarding roles and cohort rows a journey added", async () => {
+    const { database, executeQuery } = migratedDatabase();
+    await seed(executeQuery);
+    const snapshot = () => [mentor.userId, institution.userId].map((id) => personaRows(database, id));
+    const tableCounts = () => ["user", "UserRoles", "session", "programRole", "programApplication"]
+      .map((table) => database.prepare(`SELECT count(*) AS n FROM "${table}"`).get().n);
+    const first = snapshot();
+    const counts = tableCounts();
+
+    database.exec(`
+      INSERT INTO "UserRoles" ("id", "userId", "roleId") SELECT 'journey-granted-admin', '${institution.userId}', "id" FROM "Roles" WHERE "name" = 'ADMIN';
+      INSERT INTO "programRole" ("id", "programId", "userId", "name") VALUES ('journey-invite', 'ttv-fixture-program-cohort-04', '${mentor.userId}', 'MENTOR');
+      INSERT INTO "programApplication" ("id", "programId", "userId", "status", "application") VALUES ('journey-apply', 'ttv-fixture-program-cohort-04', '${institution.userId}', 'APPROVED', '{}');
+    `);
+    await seed(executeQuery);
+
+    expect(snapshot()).toEqual(first);
+    expect(tableCounts()).toEqual(counts);
+  });
+
+  it.each([
+    ["production", 'must start with "agent-"', 'must start with "agent-"'],
+    ["staging", 'must start with "agent-"', 'must start with "agent-"'],
+    ["prod", 'must start with "agent-"', 'must start with "agent-"'],
+    ["", 'must start with "agent-"', "require both environmentName and previewSecret"],
+  ])("refuses to seed for %j before touching the database", async (environmentName, accessError, fixturesError) => {
+    const executeQuery = vi.fn();
+    const options = { databaseId: "db-1", executeQuery, environmentName, previewSecret: PREVIEW_SECRET, runId: "github-123-1" };
+    await expect(seedAgentPreviewAccess(options)).rejects.toThrow(accessError);
+    await expect(seedAgentPreviewFixtures(options)).rejects.toThrow(fixturesError);
+    expect(executeQuery).not.toHaveBeenCalled();
+  });
+
+  it("never logs a token while seeding or launching the browser run", async () => {
+    const output = [];
+    const capture = (...parts) => { output.push(parts.map(String).join(" ")); return true; };
+    const spies = [
+      ...["log", "info", "warn", "error", "debug"].map((method) => vi.spyOn(console, method).mockImplementation(capture)),
+      vi.spyOn(process.stdout, "write").mockImplementation(capture),
+      vi.spyOn(process.stderr, "write").mockImplementation(capture),
+    ];
+    const spawnImpl = vi.fn(() => { const emitter = new EventEmitter(); globalThis.queueMicrotask(() => emitter.emit("close", 1)); return emitter; });
+    try {
+      await seed(migratedDatabase().executeQuery);
+      await expect(main(["--list"], { environment: preview, spawnImpl })).rejects.toThrow("Playwright exited with code 1.");
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+
+    const tokens = Object.values(resolvePlaywrightPersonaTokens(preview));
+    const [, argv, options] = spawnImpl.mock.calls[0];
+    expect(options.env).toMatchObject(resolvePlaywrightPersonaTokens(preview));
+    for (const token of tokens) {
+      expect(argv.join(" ")).not.toContain(token);
+      expect(output.join("\n")).not.toContain(token);
+    }
+  });
+
+  it.each(["production", "staging"])("blanks inherited persona tokens in %s", async (environmentName) => {
+    const spawnImpl = vi.fn(() => { const emitter = new EventEmitter(); globalThis.queueMicrotask(() => emitter.emit("close", 0)); return emitter; });
+    const inherited = Object.fromEntries(Object.keys(PERSONA_TOKEN_VARIABLES).map((variable) => [variable, "inherited-token"]));
+    await main(["--list"], { environment: { ...inherited, EXPECTED_DEPLOYMENT_ENVIRONMENT: environmentName }, spawnImpl });
+    for (const variable of Object.keys(PERSONA_TOKEN_VARIABLES)) {
+      expect(spawnImpl.mock.calls[0][2].env[variable]).toBe("");
+    }
   });
 });
