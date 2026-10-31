@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { runAxe } from "./platform-axe";
-import { PERSONA_EXPECTATIONS, personaSession, signIn, type PersonaKey } from "./platform-personas";
+import { assertPersonaOrigin, PERSONA_EXPECTATIONS, personaSession, signIn, type PersonaKey } from "./platform-personas";
 import { FIXTURE_ENVIRONMENT } from "./fixture-env";
 
 /**
@@ -114,6 +114,23 @@ async function expectSpacePage(page: Page, path: string, space: string, name: st
   await runAxe(page, test.info(), name);
   await page.screenshot({ path: evidence(name) });
 }
+
+test("mints persona sessions only for localhost or this run's agent preview", () => {
+  const preview = { PLAYWRIGHT_BASE_URL: "x", EXPECTED_DEPLOYMENT_ENVIRONMENT: "agent-pr-250" };
+  expect(() => assertPersonaOrigin("https://ttv-website-agent-pr-250.tembo.workers.dev", preview)).not.toThrow();
+  expect(() => assertPersonaOrigin("http://127.0.0.1:4321", {})).not.toThrow();
+  for (const [url, environment] of [
+    ["https://tembotechventures.com", preview],
+    ["https://staging.tembotechventures.com", { ...preview, EXPECTED_DEPLOYMENT_ENVIRONMENT: "staging" }],
+    ["https://ttv-website-agent-pr-251.tembo.workers.dev", preview],
+    ["https://ttv-website-agent-pr-250.tembo.workers.dev.example.com", preview],
+    ["http://ttv-website-agent-pr-250.tembo.workers.dev", preview],
+    ["https://ttv-website-production.tembo.workers.dev", { ...preview, EXPECTED_DEPLOYMENT_ENVIRONMENT: "production" }],
+    ["http://127.0.0.1:4321", preview],
+  ] as const) {
+    expect(() => assertPersonaOrigin(url, environment), url).toThrow();
+  }
+});
 
 for (const key of PERSONAS) {
   test.describe(`spaces for the ${key} persona`, () => {

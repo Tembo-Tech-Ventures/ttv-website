@@ -27,6 +27,9 @@ import {
  * checked locally only.
  */
 
+/** Only the variables these helpers read. */
+type Environment = Readonly<Record<string, string | undefined>>;
+
 export type PersonaKey = "student" | "alumna" | "mentor" | "community" | "institution" | "staff";
 
 export interface PersonaExpectation {
@@ -59,7 +62,7 @@ const PREVIEW_TOKENS: Partial<Record<PersonaKey, string>> = {
 };
 
 /** The session to sign in as, or why there is none in this environment. */
-export function personaSession(key: PersonaKey, environment: NodeJS.ProcessEnv = process.env): PersonaSession | string {
+export function personaSession(key: PersonaKey, environment: Environment = process.env): PersonaSession | string {
   if (!environment.PLAYWRIGHT_BASE_URL) {
     const secret = environment.PLATFORM_PERSONAS_LOCAL_SECRET;
     if (!secret) return "Set PLATFORM_PERSONAS_LOCAL_SECRET and apply platform-personas.local.sql to run locally.";
@@ -76,8 +79,24 @@ export function personaSession(key: PersonaKey, environment: NodeJS.ProcessEnv =
   return { key, token, secret: deriveAgentPreviewAuthSecret(previewSecret, name) };
 }
 
+/**
+ * Sessions are minted only for this machine or the isolated agent preview the
+ * run deployed: `https://<app>-<agent-environment>.<account>.workers.dev`.
+ * Anything else (staging, production, a custom domain) is refused.
+ */
+export function assertPersonaOrigin(baseURL: string, environment: Environment = process.env): void {
+  const { hostname, protocol } = new URL(baseURL);
+  if (["localhost", "127.0.0.1"].includes(hostname) && !environment.PLAYWRIGHT_BASE_URL) return;
+  const name = environment.EXPECTED_DEPLOYMENT_ENVIRONMENT ?? "";
+  const [worker = "", ...rest] = hostname.split(".");
+  const preview = protocol === "https:" && isAgentEnvironmentName(name) && worker.endsWith(`-${name}`)
+    && rest.length === 3 && rest.slice(-2).join(".") === "workers.dev";
+  if (!preview) throw new Error("Persona sessions are only minted for localhost or this run's isolated agent preview.");
+}
+
 /** Better Auth's signed session cookie (better-call signCookieValue), for a session that already exists. */
 export async function signIn(context: BrowserContext, baseURL: string, session: PersonaSession): Promise<void> {
+  assertPersonaOrigin(baseURL);
   const secure = new URL(baseURL).protocol === "https:";
   const signature = createHmac("sha256", session.secret).update(session.token).digest("base64");
   await context.addCookies([{
