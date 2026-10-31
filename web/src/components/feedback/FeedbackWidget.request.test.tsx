@@ -22,10 +22,21 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it("opens on mount when a menu asked for it before the widget hydrated", async () => {
+it("opens once on mount when a menu asked for it before the widget hydrated", async () => {
   openFeedbackWidget();
   await act(async () => root.render(<FeedbackWidget showLauncher={false} />));
-  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+  expect(takeFeedbackRequest()).toBe(false);
+});
+
+it("keeps repeated early requests to one open form and one pending intent", async () => {
+  openFeedbackWidget();
+  openFeedbackWidget();
+  openFeedbackWidget();
+  await act(async () => root.render(<FeedbackWidget showLauncher={false} />));
+  await act(async () => openFeedbackWidget());
+  expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+  // Nothing is left over to reopen the form once it is closed.
   expect(takeFeedbackRequest()).toBe(false);
 });
 
