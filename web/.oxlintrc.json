@@ -85,6 +85,12 @@
       "rules": {
         "import/no-unassigned-import": "off"
       }
+    },
+    {
+      "files": ["src/components/platform/ui/Sheet.tsx", "src/components/platform/ui/SpaceFile.tsx"],
+      "rules": {
+        "import/no-unassigned-import": "off"
+      }
     }
   ]
 }

@@ -1,0 +1,54 @@
+---
+/**
+ * Dev-only harness for the platform UI primitives (U-0.1).
+ *
+ * Every primitive in every state on each space's sheet, the assembled tab row
+ * and sheet for three people, and one hydrated island. Nothing here is
+ * reachable outside `astro dev`: the spaces screens that use these primitives
+ * ship behind feature flags of their own. `e2e/platform-ui.spec.ts` holds the
+ * geometry, contrast, focus, touch-target and reduced-motion contract.
+ */
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import Catalogue from "@/components/platform/ui/harness/Catalogue";
+import Interactive from "@/components/platform/ui/harness/Interactive";
+import Personas from "@/components/platform/ui/harness/Personas";
+import { Sheet } from "@/components/platform/ui";
+
+if (!import.meta.env.DEV) {
+  return new Response("Not found", { status: 404 });
+}
+---
+
+<BaseLayout title="Platform primitives | TTV" noIndex>
+  <main class="min-h-screen overflow-x-clip bg-ground pb-24">
+    <div class="mx-auto max-w-6xl px-3 pt-12 sm:px-8 sm:pt-16">
+      <header class="max-w-3xl px-2 sm:px-0">
+        <h1 class="text-4xl tracking-heading text-ink-primary sm:text-6xl">Platform primitives</h1>
+        <p class="mt-5 text-base leading-relaxed text-ink-secondary sm:text-lg">
+          The parts every space is built from, on each space's own sheet. The people are fictional, and
+          this page exists only in development.
+        </p>
+      </header>
+
+      <section aria-labelledby="personas" class="mt-14">
+        <h2 id="personas" class="px-2 font-body text-2xl font-bold sm:px-0">Spaces by person</h2>
+        <p class="mt-2 mb-8 max-w-3xl px-2 text-ink-secondary sm:px-0">
+          Each person sees only the spaces their roles open, always in the same order, with Profile last.
+        </p>
+        <Personas />
+      </section>
+
+      <section aria-labelledby="catalogue" class="mt-20">
+        <h2 id="catalogue" class="mb-8 px-2 font-body text-2xl font-bold sm:px-0">Every part on every sheet</h2>
+        <Catalogue />
+      </section>
+
+      <section aria-labelledby="island" class="mt-20">
+        <h2 id="island" class="mb-8 px-2 font-body text-2xl font-bold sm:px-0">In a live island</h2>
+        <Sheet space="community" className="px-5 pt-6 pb-8 sm:px-8">
+          <Interactive client:load />
+        </Sheet>
+      </section>
+    </div>
+  </main>
+</BaseLayout>
