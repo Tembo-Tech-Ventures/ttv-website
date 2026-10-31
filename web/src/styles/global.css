@@ -47,6 +47,32 @@
 
   --color-rule: rgba(242, 141, 104, 0.20);
 
+  /*
+   * Platform spaces (see src/components/platform/ui/). Each space is a sheet
+   * with its own tone, so a person can tell where they are from the colour of
+   * the page under their hand. The tones sit in a narrow lightness band on
+   * purpose: every ink below, and every chip tint the primitives lay on a
+   * sheet, has to clear 4.5:1 on the lightest of them
+   * (src/components/platform/ui/contrast.test.ts). They differ in hue instead —
+   * cohort greener, mentoring bluer, profile warmer.
+   *
+   * --color-ground is the dark behind the sheets, where inactive space tabs
+   * sit. Peach is too dark to be text on these sheets, so peach text uses
+   * --color-peach-ink; --color-ring is the mentor ring the homepage already
+   * draws (#9fd3ca).
+   */
+  --color-ground: #01211F;
+  --color-sheet-cohort: #05433E;
+  --color-sheet-community: #0A4842;
+  --color-sheet-mentoring: #08454A;
+  --color-sheet-discover: #073B39;
+  --color-sheet-admin: #032F2C;
+  --color-sheet-profile: #12463F;
+  --color-peach-ink: #FFB496;
+  --color-ring: #9FD3CA;
+  --color-danger-ink: #FFB3A6;
+  --color-hairline: rgba(255, 248, 242, 0.1);
+
   --font-heading: "Mattone", sans-serif;
   --font-body: "Maven Pro", sans-serif;
 
