@@ -81,6 +81,7 @@ describe("linkAllowed", () => {
     expect(linkAllowed(fixture, "/dashboard/account")).toBe(false);
     // B-1.5 opens the Apply form (GET only) so a no-cohort fixture sees its Apply link.
     expect(linkAllowed(fixture, "/dashboard/cohort/apply")).toBe(true);
+    expect(linkAllowed(fixture, "/dashboard/attention")).toBe(true);
     expect(linkAllowed(fixture, "/dashboard/me")).toBe(false);
   });
 
