@@ -1,5 +1,7 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { FIXTURE_ENVIRONMENT } from "./fixture-env";
+import { signIn } from "./platform-personas";
+import { deriveAgentPreviewAuthSecret } from "../scripts/cloudflare/agent-preview-auth.mjs";
 import { spaceRouteRequest } from "../scripts/cloudflare/space-route-browser-guard.mjs";
 
 /**
@@ -67,3 +69,30 @@ for (const persona of personas) {
     });
   });
 }
+
+test.describe("preview mentor persona in a browser", () => {
+  const token = process.env.PLAYWRIGHT_MENTOR_TOKEN;
+  const previewSecret = process.env.AGENT_PREVIEW_SECRET?.trim();
+  test.skip(!FIXTURE_ENVIRONMENT || !token || !previewSecret, "Role personas exist only on isolated agent previews.");
+
+  // Known gap, kept visible: the preview persona session carries the delegated
+  // ttv-agent: marker, and the mentor review API refuses delegated sessions
+  // (requireBrowser in lib/community/http.ts). So the seeded mentor reaches
+  // the mentoring space but cannot load the review it offers. Admitting this
+  // one synthetic session is an auth decision for a follow-up; when it lands,
+  // this expectation becomes 200 and the mentor joins PREVIEW_TOKENS.
+  test("signs in, and is refused mentor review as a delegated session", async ({ browser, baseURL }) => {
+    const context = await browser.newContext({ baseURL });
+    try {
+      const environmentName = process.env.EXPECTED_DEPLOYMENT_ENVIRONMENT!;
+      await signIn(context, baseURL!, { key: "mentor", token: token!, secret: deriveAgentPreviewAuthSecret(previewSecret!, environmentName) });
+      // The cookie session itself is valid, so the refusal below is not an auth failure.
+      expect((await context.request.get("/api/platform/me", { maxRedirects: 0 })).status()).toBe(200);
+      const review = await context.request.get("/api/community/mentorship", { maxRedirects: 0 });
+      expect(review.status()).toBe(403);
+      expect(await review.json()).toEqual({ error: "Use a browser session to manage access or review mentorship." });
+    } finally {
+      await context.close();
+    }
+  });
+});

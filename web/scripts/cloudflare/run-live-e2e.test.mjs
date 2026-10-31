@@ -203,7 +203,7 @@ describe("preview mentor and institution personas", () => {
     await seed(executeQuery);
     const snapshot = () => [mentor.userId, institution.userId].map((id) => personaRows(database, id));
     const tableCounts = () => ["user", "UserRoles", "session", "programRole", "programApplication",
-      "communityProfile", "communityConfirmation", "attention_item"]
+      "communityProfile", "communityConfirmation", "attention_item", "chat_session", "chat_message"]
       .map((table) => database.prepare(`SELECT count(*) AS n FROM "${table}"`).get().n);
     const first = snapshot();
     const counts = tableCounts();
@@ -220,6 +220,8 @@ describe("preview mentor and institution personas", () => {
         ('journey-confirm', 'journey-other', '${mentor.userId}', 'I reviewed this', 'code_review', 1);
       INSERT INTO "attention_item" ("id", "userId", "eventKey", "kind", "space", "category", "subjectKind", "subjectId", "subjectHref", "subjectLabel", "summary", "createdAt")
         VALUES ('journey-attention', '${mentor.userId}', 'journey-event', 'work_confirmed', 'mentoring', 'updates', 'journey', 'journey-other', '/dashboard/mentoring', 'Shared work', 'Confirmed', 1);
+      INSERT INTO "chat_session" ("id", "userId", "title") VALUES ('journey-chat', '${institution.userId}', 'Ask Tembo');
+      INSERT INTO "chat_message" ("id", "sessionId", "userId", "role", "content") VALUES ('journey-chat-message', 'journey-chat', '${institution.userId}', 'user', 'A question');
     `);
     await seed(executeQuery);
 

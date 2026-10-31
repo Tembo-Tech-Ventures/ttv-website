@@ -638,6 +638,8 @@ export async function seedAgentPreviewFixtures({
       ["communityJourney", "userId"],
       ["communityConfirmation", "mentorId"],
       ["attention_item", "userId"],
+      ["chat_message", "userId"],
+      ["chat_session", "userId"],
     ];
     for (const [table, column] of rolePersonaRows) {
       await executeQuery(
