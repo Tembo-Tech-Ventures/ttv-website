@@ -52,7 +52,7 @@ function shown(element: HTMLElement | null): element is HTMLElement {
  * sidebar may hold anything, so the drawer's focus cycle trusts none of it.
  */
 function tabbable(element: HTMLElement): boolean {
-  if (!shown(element) || element.closest("[inert]") || element.tabIndex < 0) return false;
+  if (!shown(element) || element.matches(":disabled") || element.closest("[inert]") || element.tabIndex < 0) return false;
   return typeof element.checkVisibility === "function"
     ? element.checkVisibility({ visibilityProperty: true })
     : getComputedStyle(element).visibility !== "hidden";
@@ -150,7 +150,8 @@ export default function SpacesShell({
     const adopt = () => {
       if (window.location.hash !== `#${SIDEBAR_ID}`) return;
       history.replaceState(history.state, "", window.location.pathname + window.location.search);
-      controller.dispatchDrawer({ type: "open", itemCount: focusables().length });
+      // On a wide screen the sidebar is already in the sheet: there is no drawer to open.
+      if (!window.matchMedia(WIDE).matches) controller.dispatchDrawer({ type: "open", itemCount: focusables().length });
     };
     adopt();
     window.addEventListener("hashchange", adopt);
@@ -209,12 +210,14 @@ export default function SpacesShell({
     };
   }, [controller]);
 
-  /* Widening past the phone layout puts the sidebar back in the sheet. */
+  /* Widening past the phone layout puts the sidebar back in the sheet, and closes the drawer. */
   useEffect(() => {
     const wide = window.matchMedia(WIDE);
     const onChange = () => {
       if (wide.matches) controller.dispatchDrawer({ type: "close" });
     };
+    // Also reconcile now: the page may have widened while it was hydrating.
+    onChange();
     wide.addEventListener("change", onChange);
     return () => wide.removeEventListener("change", onChange);
   }, [controller]);

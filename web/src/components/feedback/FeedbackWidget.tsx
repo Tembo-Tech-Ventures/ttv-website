@@ -32,6 +32,7 @@ import {
   imageFilesFrom,
   prepareImageFile,
   readClientErrors,
+  takeFeedbackRequest,
   type AttachmentSource,
   type WidgetAttachment,
 } from "./feedback-client";
@@ -118,7 +119,10 @@ export default function FeedbackWidget({
   );
 
   useEffect(() => {
-    const show = () => setOpen(true);
+    const show = () => {
+      takeFeedbackRequest();
+      setOpen(true);
+    };
     // Lets server-rendered pages offer the form with a plain button.
     const onClick = (event: MouseEvent) => {
       if (
@@ -130,6 +134,8 @@ export default function FeedbackWidget({
     };
     window.addEventListener(OPEN_FEEDBACK_EVENT, show);
     document.addEventListener("click", onClick);
+    // A menu may have asked for the form before this island hydrated.
+    if (takeFeedbackRequest()) setOpen(true);
     return () => {
       window.removeEventListener(OPEN_FEEDBACK_EVENT, show);
       document.removeEventListener("click", onClick);

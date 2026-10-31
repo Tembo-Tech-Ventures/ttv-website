@@ -32,9 +32,12 @@ function props(overrides: Partial<Props> = {}): Props {
   };
 }
 
+type HappyDOM = { setURL(next: string): void; setViewport(size: { width: number; height: number }): void };
+const happyDOM = () => (window as unknown as { happyDOM: HappyDOM }).happyDOM;
+
 /** happy-dom's own control surface, for putting the page under /dashboard. */
 function setURL(url: string) {
-  (window as unknown as { happyDOM?: { setURL(next: string): void } }).happyDOM?.setURL(url);
+  happyDOM().setURL(url);
 }
 
 let root: Root;
@@ -277,6 +280,7 @@ describe("SpacesShell account menu", () => {
 
 describe("SpacesShell hydration handoff", () => {
   it("adopts a drawer opened by its no-JS link before hydration, and can then close it", async () => {
+    happyDOM().setViewport({ width: 390, height: 844 });
     setURL("https://ttv.test/dashboard/mentoring#space-sidebar");
     await mount();
     const shell = q(".spaces-shell");
@@ -287,6 +291,17 @@ describe("SpacesShell hydration handoff", () => {
     expect(window.location.hash).toBe("");
     await act(async () => q("#space-sidebar").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
     expect(shell.dataset.drawer).toBe("closed");
+  });
+
+  it("on a wide screen drops the fragment without opening anything: the sidebar is already in the sheet", async () => {
+    happyDOM().setViewport({ width: 1440, height: 900 });
+    setURL("https://ttv.test/dashboard/mentoring#space-sidebar");
+    await mount();
+    const shell = q(".spaces-shell");
+    expect(shell.dataset.drawer).toBe("closed");
+    expect(q("#space-sidebar").hasAttribute("role")).toBe(false);
+    expect(q("#spaces-main").hasAttribute("inert")).toBe(false);
+    expect(window.location.hash).toBe("");
   });
 
   it("is marked hydrated only after hydration, so the no-JS rules apply until then", () => {

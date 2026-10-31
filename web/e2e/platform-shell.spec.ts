@@ -379,6 +379,69 @@ test.describe("the spaces shell harness", () => {
     await expect(page.locator("#space-sidebar")).toBeHidden();
   });
 
+  test("never leaves a wide screen with a drawer: widening before hydration, or a #space-sidebar visit", async ({ page }) => {
+    const expectPlainSidebar = async () => {
+      await expect(page.locator(".spaces-shell[data-hydrated]")).toHaveCount(1);
+      await expect(page.locator(".spaces-shell")).toHaveAttribute("data-drawer", "closed");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(page.locator("#spaces-main")).not.toHaveAttribute("inert", "");
+      await expect(page.locator(".space-file__row")).not.toHaveAttribute("inert", "");
+      await expect(page.locator("#space-sidebar")).toBeVisible();
+      await expect(page).not.toHaveURL(/#space-sidebar/);
+    };
+
+    if (!wide(page)) {
+      // Open the no-JS drawer on a phone, widen while the shell is still loading, then hydrate.
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await page.route(/\/SpacesShell\.tsx/, async (route) => {
+        await held;
+        await route.continue();
+      });
+      await routeFonts(page);
+      await page.goto(harness("wanjiku", "cohort"), { waitUntil: "domcontentloaded" });
+      await page.getByRole("link", { name: "Open Cohort menu" }).click();
+      await expect(page).toHaveURL(/#space-sidebar$/);
+      await page.setViewportSize({ width: 1440, height: 900 });
+      release();
+      await expectPlainSidebar();
+      return;
+    }
+
+    await routeFonts(page);
+    await page.goto(`${harness("wanjiku", "cohort")}#space-sidebar`);
+    await expectPlainSidebar();
+    await page.evaluate(() => {
+      window.location.hash = "space-sidebar";
+    });
+    await expectPlainSidebar();
+    // The fragment moved the browser's focus starting point into the sidebar; the next stop is its first link.
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#space-sidebar a", { hasText: "Overview" })).toBeFocused();
+  });
+
+  test("opens feedback even when it is asked for before the widget has loaded", async ({ page }) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(/\/FeedbackWidget\.tsx/, async (route) => {
+      await held;
+      await route.continue();
+    });
+    await routeFonts(page);
+    await page.goto(harness("wanjiku", "community"), { waitUntil: "domcontentloaded" });
+    await expect(page.locator(".spaces-shell[data-hydrated]")).toHaveCount(1);
+    const { summary, panel } = accountMenu(page);
+    await summary.click();
+    await panel.getByRole("button", { name: "Feedback" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    release();
+    await expect(page.getByRole("dialog")).toContainText(/feedback/i);
+  });
+
   test("keeps the drawer's focus cycle on controls that can really take focus", async ({ page }) => {
     test.skip(wide(page), "The drawer is the phone layout's sidebar.");
     await open(page, harness("wanjiku", "cohort", "&hidden"));
@@ -395,9 +458,13 @@ test.describe("the spaces shell harness", () => {
       await page.keyboard.press("Tab");
       const where = await page.evaluate(() => {
         const el = document.activeElement as HTMLElement;
-        return { inside: Boolean(el.closest("#space-sidebar")), visible: el.checkVisibility({ visibilityProperty: true }) };
+        return {
+          inside: Boolean(el.closest("#space-sidebar")),
+          visible: el.checkVisibility({ visibilityProperty: true }),
+          enabled: !el.matches(":disabled"),
+        };
       });
-      expect(where).toEqual({ inside: true, visible: true });
+      expect(where).toEqual({ inside: true, visible: true, enabled: true });
     }
   });
 
