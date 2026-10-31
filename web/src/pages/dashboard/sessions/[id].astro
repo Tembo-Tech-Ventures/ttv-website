@@ -1,5 +1,7 @@
 ---
-import DashboardLayout from "@/layouts/DashboardLayout.astro";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import Card from "@/components/common/Card.astro";
 import SessionViewer from "@/components/recordings/SessionViewer";
 import ProcessingStatus from "@/components/recordings/ProcessingStatus.astro";
@@ -30,9 +32,10 @@ const hasAccess = await userCanAccessProgram(db, user.id, recording.programId);
 if (!hasAccess) return Astro.redirect("/dashboard/sessions");
 
 const initialTime = parseTimestampParam(Astro.url.searchParams.get("t"));
+const spaces = await resolveSpacePage(Astro.locals, "sessions");
 ---
 
-<DashboardLayout title={recording.title}>
+<SpacePage context={spaces} title={recording.title}>
   <div class="space-y-6">
     <a href="/dashboard/sessions" class="text-sm text-primary hover:underline">
       &larr; Back to Sessions
@@ -42,7 +45,7 @@ const initialTime = parseTimestampParam(Astro.url.searchParams.get("t"));
       <Card>
         <div class="space-y-3 py-8 text-center">
           <ProcessingStatus status={recording.processingStatus} />
-          <h2 class="text-xl font-semibold text-white">{recording.title}</h2>
+          <PageTitle spaces={Boolean(spaces)} size="card" legacyClass="text-xl font-semibold text-white">{recording.title}</PageTitle>
           <p class="text-ink-muted">
             This recording is still being processed. Check back once the transcript is ready.
           </p>
@@ -52,6 +55,7 @@ const initialTime = parseTimestampParam(Astro.url.searchParams.get("t"));
       <SessionViewer
         client:load
         title={recording.title}
+        titleAs={spaces ? "h1" : "h2"}
         videoUrl={`/api/recordings/${recording.id}/video`}
         initialTime={initialTime}
         segments={recording.segments.map((segment) => ({
@@ -64,4 +68,4 @@ const initialTime = parseTimestampParam(Astro.url.searchParams.get("t"));
       />
     )}
   </div>
-</DashboardLayout>
+</SpacePage>

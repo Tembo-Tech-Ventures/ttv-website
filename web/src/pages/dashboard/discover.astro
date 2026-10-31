@@ -1,10 +1,22 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import CommunityApp from "@/components/community/CommunityApp";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 // oxlint-disable-next-line import/no-unassigned-import -- Workspace stylesheet.
 import "@/styles/discovery.css";
 // No profile data is serialized here. Institutional APIs authorize every request.
+
+const spaces = await resolveSpacePage(Astro.locals, "discover");
 ---
-<BaseLayout title="Discover community builders | TTV" noIndex>
-  <CommunityApp client:load view="scout" />
-</BaseLayout>
+{
+  spaces ? (
+    <SpacePage context={spaces} title="Discover people">
+      <CommunityApp client:load view="scout" embedded />
+    </SpacePage>
+  ) : (
+    <BaseLayout title="Discover community builders | TTV" noIndex>
+      <CommunityApp client:load view="scout" />
+    </BaseLayout>
+  )
+}

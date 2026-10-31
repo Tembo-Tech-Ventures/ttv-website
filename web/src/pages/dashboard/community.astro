@@ -1,10 +1,31 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import CommunityApp from "@/components/community/CommunityApp";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import CohortInvitation from "@/components/platform/spaces/CohortInvitation.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { drizzle } from "drizzle-orm/d1";
+import { env } from "cloudflare:workers";
+import * as schema from "@/lib/db/schema";
+import { getStudentJourney } from "@/lib/student/journey";
 // oxlint-disable-next-line import/no-unassigned-import -- Workspace stylesheet.
 import "@/styles/discovery.css";
 // Authentication is enforced by dashboard middleware; every data API checks access.
+
+const spaces = await resolveSpacePage(Astro.locals, "journey");
+const journey = spaces ? await getStudentJourney(drizzle(env.DB, { schema }), spaces.me.user.id) : undefined;
+// Without a cohort there is no Cohort tab: the way to apply has to be here, on screen.
+const invitation = spaces && !spaces.me.spaces.includes("cohort") ? journey?.nextStep : undefined;
 ---
-<BaseLayout title="Your community journey | TTV" noIndex>
-  <CommunityApp client:load view="journey" />
-</BaseLayout>
+{
+  spaces ? (
+    <SpacePage context={spaces} title="Your journey" journey={journey}>
+      {invitation && <CohortInvitation step={invitation} />}
+      <CommunityApp client:load view="journey" embedded />
+    </SpacePage>
+  ) : (
+    <BaseLayout title="Your community journey | TTV" noIndex>
+      <CommunityApp client:load view="journey" />
+    </BaseLayout>
+  )
+}

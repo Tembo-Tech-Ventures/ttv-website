@@ -33,19 +33,20 @@ test.describe("authenticated dashboard greeting", () => {
     const firstName = fullName.split(/\s+/)[0]!;
 
     await page.goto("/dashboard");
-    await expect(
-      page.getByRole("heading", { name: `Welcome back, ${firstName}` })
-    ).toHaveCount(0);
+    // The existing dashboard greets with a heading. Inside the spaces shell the
+    // Cohort overview's heading is the page's name, and the greeting is a line under it.
+    const inSpaces = (await page.locator(".spaces-shell").count()) > 0;
+    const greeting = (name: string) =>
+      inSpaces
+        ? page.locator("#spaces-main").getByText(`Welcome back, ${name}`, { exact: true })
+        : page.getByRole("heading", { name: `Welcome back, ${name}` });
+    await expect(greeting(firstName)).toHaveCount(0);
 
     await page.reload();
 
-    await expect(
-      page.getByRole("heading", { name: `Welcome back, ${firstName}` })
-    ).toBeVisible();
+    await expect(greeting(firstName)).toBeVisible();
     if (fullName !== firstName) {
-      await expect(
-        page.getByRole("heading", { name: `Welcome back, ${fullName}` })
-      ).toHaveCount(0);
+      await expect(greeting(fullName)).toHaveCount(0);
     }
 
     await page.screenshot({

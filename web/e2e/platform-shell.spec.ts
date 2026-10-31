@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+import { runAxe } from "./platform-axe";
 import { installTextTracker, sampleText, textReport } from "./text-integrity";
 
 /**
@@ -16,8 +16,6 @@ const WIDE = 1024;
 const SWEEP = [320, 360, 390, 414, 600, 768, 820, 1023, 1024, 1100, 1180, 1280, 1366, 1440];
 const SWEEP_PERSONAS = ["every", "amina", "joseph", "david", "wanjiku", "lucy"] as const;
 
-const AXE_URL = "https://cdn.jsdelivr.net/npm/axe-core@4.10.3/axe.min.js";
-const AXE_SHA384 = "17w4i/EfU4m8vRTTBQs69gAb/fjBpQi0/OOcQTspZXbRlDA0OcGoZX3ZUxQpgTYL";
 
 const SPACES_BY_PERSONA = {
   wanjiku: ["Cohort", "Community", "Profile"],
@@ -70,25 +68,6 @@ function spacesNav(page: Page) {
   return wide(page) ? page.locator(".space-file__nav") : page.locator(".spaces-bottom");
 }
 
-async function runAxe(page: Page, testInfo: TestInfo, name: string) {
-  const source = Buffer.from(await (await fetch(AXE_URL)).arrayBuffer());
-  expect(createHash("sha384").update(source).digest("base64")).toBe(AXE_SHA384);
-  if (!(await page.evaluate(() => "axe" in window))) await page.addScriptTag({ content: source.toString("utf8") });
-  const result = await page.evaluate(async () => {
-    type Run = { violations: { id: string; nodes: { target: string[] }[] }[]; incomplete: { id: string; nodes: unknown[] }[] };
-    const { axe } = window as unknown as { axe: { run: (context: unknown, options: unknown) => Promise<Run> } };
-    const run = await axe.run(
-      { exclude: [["astro-dev-toolbar"]] },
-      { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"] } },
-    );
-    return {
-      violations: run.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(", ")}`),
-      incomplete: run.incomplete.map((v) => `${v.id} × ${v.nodes.length}`),
-    };
-  });
-  await testInfo.attach(`axe-incomplete-${name}`, { body: result.incomplete.join("\n") || "none", contentType: "text/plain" });
-  expect(result.violations, name).toEqual([]);
-}
 
 test.describe("on a deployed build", () => {
   test.skip(!process.env.PLAYWRIGHT_BASE_URL, "Only deployed builds prove the harness is absent.");
