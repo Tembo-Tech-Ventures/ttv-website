@@ -1,16 +1,15 @@
+import type { ReactionKind } from "@/lib/platform/contracts";
 import { FOCUS_RING } from "./Button";
 import { cx } from "./cx";
 import { RAISED } from "./tones";
 
-export const REACTIONS = {
+export const REACTIONS: Record<ReactionKind, string> = {
   useful: "Useful",
   learned: "Learned something",
   thanks: "Thanks",
   agree: "Agree",
   congrats: "Congrats",
-} as const;
-
-export type ReactionKind = keyof typeof REACTIONS;
+};
 
 type TextReactionProps = {
   kind: ReactionKind;
@@ -18,10 +17,13 @@ type TextReactionProps = {
   /** You are one of the people who reacted. */
   mine?: boolean;
   /**
-   * Makes the chip a toggle. Without it the chip is a read-only tally, so a
-   * reaction never looks pressable where it cannot be pressed.
+   * Makes the chip a toggle, called with the membership the person asked for
+   * (`!mine`). It says what to become rather than "flip", like the contract's
+   * `ReactToMessage {kind, active}`, so a retried request cannot undo itself.
+   * Without it the chip is a read-only tally, so a reaction never looks
+   * pressable where it cannot be pressed.
    */
-  onToggle?: () => void;
+  onChange?: (active: boolean) => void;
   className?: string;
 };
 
@@ -33,7 +35,7 @@ function people(count: number) {
  * A reaction in words, not emoji: "Useful · 6". Words say what a reaction
  * means, read the same in every font, and keep the conversation's register.
  */
-export default function TextReaction({ kind, count, mine = false, onToggle, className }: TextReactionProps) {
+export default function TextReaction({ kind, count, mine = false, onChange, className }: TextReactionProps) {
   const label = REACTIONS[kind];
   const classes = cx(
     "inline-flex h-7 shrink-0 items-center gap-1 rounded-full border px-2.5 text-[0.8125rem] font-semibold whitespace-nowrap",
@@ -46,7 +48,7 @@ export default function TextReaction({ kind, count, mine = false, onToggle, clas
     </span>
   );
 
-  if (!onToggle) {
+  if (!onChange) {
     return (
       <span data-reaction={kind} data-mine={mine || undefined} className={classes}>
         {label}
@@ -60,7 +62,7 @@ export default function TextReaction({ kind, count, mine = false, onToggle, clas
     <button
       type="button"
       aria-pressed={mine}
-      onClick={onToggle}
+      onClick={() => onChange(!mine)}
       data-reaction={kind}
       data-mine={mine || undefined}
       className={cx(

@@ -1,20 +1,25 @@
+import type { RoleBadge } from "@/lib/platform/contracts";
+
 /**
- * Fictional people for the primitives harness. Synthetic ids and names; any
- * resemblance to a real student is unintended. The same people appear in the
- * platform prototypes (/reports/platform-ux-2026-10-30/).
+ * The harness draws the mission's shared fictional people (B-0.1 fixtures), so
+ * the primitives are judged with the same names and server-shaped role badges
+ * the spaces screens will receive.
  */
-export const PEOPLE = {
-  wanjiku: { id: "fixture-wanjiku-mwangi", name: "Wanjiku Mwangi" },
-  achieng: { id: "fixture-achieng-otieno", name: "Achieng Otieno" },
-  david: { id: "fixture-david-kamau", name: "David Kamau" },
-  lucy: { id: "fixture-lucy-chebet", name: "Lucy Chebet" },
-  joseph: { id: "fixture-joseph-mutua", name: "Joseph Mutua" },
-  amina: { id: "fixture-amina-hassan", name: "Amina Hassan" },
-  brian: { id: "fixture-brian-kiprop", name: "Brian Kiprop" },
-  mercy: { id: "fixture-mercy-wambui", name: "Mercy Wambui" },
-  kevin: { id: "fixture-kevin-omondi", name: "Kevin Omondi" },
-  faith: { id: "fixture-faith-njeri", name: "Faith Njeri" },
-} as const;
+export { people as PEOPLE, temboAuthor as TEMBO } from "@/lib/platform/fixtures";
+
+/** One badge of every kind, worded as the server words them. */
+export const EVERY_ROLE: RoleBadge[] = [
+  { kind: "COHORT", label: "Cohort 04", programId: null },
+  { kind: "ALUMNI", label: "Alumni · Cohort 02", programId: null },
+  { kind: "COMMUNITY", label: "Community", programId: null },
+  { kind: "MENTOR", label: "Mentor", programId: null },
+  { kind: "TA", label: "TA", programId: null },
+  { kind: "INSTRUCTOR", label: "Instructor", programId: null },
+  { kind: "INSTITUTION", label: "Institution partner", programId: null },
+  { kind: "STAFF", label: "Staff", programId: null },
+  { kind: "ADMIN", label: "Admin", programId: null },
+  { kind: "AI", label: "AI", programId: null },
+];
 
 /** A stand-in photo: an abstract portrait, so no real face is ever used. */
 export const SAMPLE_PHOTO = `data:image/svg+xml,${encodeURIComponent(

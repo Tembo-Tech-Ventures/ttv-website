@@ -3,45 +3,60 @@ import { describe, expect, it, vi } from "vitest";
 import Card from "./Card";
 import Chip from "./Chip";
 import Pill from "./Pill";
-import RoleBadge, { cohortName } from "./RoleBadge";
+import { ReactionKind, RoleBadgeKind } from "@/lib/platform/contracts";
+import { people } from "@/lib/platform/fixtures";
+import RoleBadge from "./RoleBadge";
 import TextReaction, { REACTIONS } from "./TextReaction";
 import { CHIP_TONES } from "./tones";
 
 describe("RoleBadge", () => {
-  it("writes cohorts as two digits", () => {
-    expect(cohortName(4)).toBe("Cohort 04");
-    expect(cohortName(12)).toBe("Cohort 12");
-    expect(renderToStaticMarkup(<RoleBadge kind="cohort" cohort={4} />)).toContain(">Cohort 04<");
-  });
+  const badge = (kind: RoleBadgeKind, label: string) => ({ kind, label });
 
-  it("names alumni with or without their cohort", () => {
-    expect(renderToStaticMarkup(<RoleBadge kind="alumni" cohort={2} />)).toContain(">Alumni · Cohort 02<");
-    expect(renderToStaticMarkup(<RoleBadge kind="alumni" />)).toContain(">Alumni<");
+  it("renders every contract kind with the server's own wording", () => {
+    for (const kind of RoleBadgeKind.options) {
+      const html = renderToStaticMarkup(<RoleBadge badge={badge(kind, `Label for ${kind}`)} />);
+      expect(html).toContain(`data-role-badge="${kind}"`);
+      expect(html).toContain(`Label for ${kind}`);
+    }
   });
 
   it("gives mentors their ring, in ring ink", () => {
-    const html = renderToStaticMarkup(<RoleBadge kind="mentor" />);
+    const html = renderToStaticMarkup(<RoleBadge badge={badge("MENTOR", "Mentor")} />);
     expect(html).toContain('data-person-marker="mentor"');
     expect(html).toContain(CHIP_TONES.ring);
     expect(html).toMatch(/Mentor<\/span>$/);
   });
 
-  it("spells out TA for screen readers", () => {
-    const html = renderToStaticMarkup(<RoleBadge kind="ta" />);
-    expect(html).toContain('<span aria-hidden="true">TA</span>');
-    expect(html).toContain('<span class="sr-only">Teaching assistant</span>');
+  it("gives institutions their diamond", () => {
+    const html = renderToStaticMarkup(<RoleBadge badge={badge("INSTITUTION", "Institution partner")} />);
+    expect(html).toContain('data-person-marker="institution"');
+    expect(html).toContain(CHIP_TONES.neutral);
   });
 
   it("marks Tembo's answers as AI in peach", () => {
-    const html = renderToStaticMarkup(<RoleBadge kind="ai" />);
+    const html = renderToStaticMarkup(<RoleBadge badge={badge("AI", "AI")} />);
     expect(html).toContain(CHIP_TONES.peach);
     expect(html).toContain(">AI<");
   });
 
-  it("labels staff in the neutral tone", () => {
-    const html = renderToStaticMarkup(<RoleBadge kind="staff" />);
-    expect(html).toContain(CHIP_TONES.neutral);
-    expect(html).toContain('data-role-badge="staff"');
+  it.each(["COHORT", "ALUMNI", "COMMUNITY", "TA", "INSTRUCTOR", "STAFF", "ADMIN"] as const)(
+    "labels %s quietly, with no marker",
+    (kind) => {
+      const html = renderToStaticMarkup(<RoleBadge badge={badge(kind, "x")} />);
+      expect(html).toContain(CHIP_TONES.neutral);
+      expect(html).not.toContain("data-person-marker");
+    },
+  );
+
+  it("spells out TA for screen readers", () => {
+    const html = renderToStaticMarkup(<RoleBadge badge={badge("TA", "TA")} />);
+    expect(html).toContain('<span aria-hidden="true">TA</span>');
+    expect(html).toContain('<span class="sr-only">Teaching assistant</span>');
+  });
+
+  it("takes a fixture person's badge as is", () => {
+    const html = renderToStaticMarkup(<RoleBadge badge={people.achieng.roleBadges[0]} />);
+    expect(html).toContain(">Alumni · Cohort 02<");
   });
 });
 
@@ -114,20 +129,25 @@ describe("TextReaction", () => {
   });
 
   it("becomes a pressed/unpressed toggle with a handler", () => {
-    const onToggle = vi.fn();
-    const mine = renderToStaticMarkup(<TextReaction kind="agree" count={3} mine onToggle={onToggle} />);
+    const onChange = vi.fn();
+    const mine = renderToStaticMarkup(<TextReaction kind="agree" count={3} mine onChange={onChange} />);
     expect(mine).toMatch(/^<button type="button" aria-pressed="true"/);
     expect(mine).toContain('<span class="sr-only">, 3 people</span>');
-    const theirs = renderToStaticMarkup(<TextReaction kind="agree" count={3} onToggle={onToggle} />);
+    const theirs = renderToStaticMarkup(<TextReaction kind="agree" count={3} onChange={onChange} />);
     expect(theirs).toContain('aria-pressed="false"');
     expect(theirs).toContain("pointer-coarse:min-h-11");
   });
 
-  it("calls its handler when pressed", () => {
-    const onToggle = vi.fn();
-    const element = TextReaction({ kind: "congrats", count: 11, onToggle });
-    element.props.onClick();
-    expect(onToggle).toHaveBeenCalledOnce();
+  it("asks for the membership it wants, never a bare flip", () => {
+    const onChange = vi.fn();
+    TextReaction({ kind: "congrats", count: 11, onChange }).props.onClick();
+    expect(onChange).toHaveBeenLastCalledWith(true);
+    TextReaction({ kind: "congrats", count: 12, mine: true, onChange }).props.onClick();
+    expect(onChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("names every contract reaction kind", () => {
+    expect(Object.keys(REACTIONS).toSorted()).toEqual([...ReactionKind.options].toSorted());
   });
 
   it("drops the tally at zero but still says so", () => {

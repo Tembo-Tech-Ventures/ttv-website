@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PiPushPin } from "react-icons/pi";
-import { Button, IconButton, Pill, REACTIONS, TextReaction, type ReactionKind } from "..";
+import type { ReactionKind } from "@/lib/platform/contracts";
+import { Button, IconButton, Pill, REACTIONS, TextReaction } from "..";
 
 const START: Record<ReactionKind, { count: number; mine: boolean }> = {
   useful: { count: 6, mine: false },
@@ -21,10 +22,12 @@ export default function Interactive() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(0);
 
-  function toggle(kind: ReactionKind) {
+  /** Set, never flip: asking twice for the same state changes nothing. */
+  function react(kind: ReactionKind, active: boolean) {
     setReactions((current) => {
       const { count, mine } = current[kind];
-      return { ...current, [kind]: { count: count + (mine ? -1 : 1), mine: !mine } };
+      if (mine === active) return current;
+      return { ...current, [kind]: { count: count + (active ? 1 : -1), mine: active } };
     });
   }
 
@@ -42,7 +45,7 @@ export default function Interactive() {
         <legend className="mb-3 text-sm font-semibold text-ink-secondary">React to the message</legend>
         <div className="flex flex-wrap gap-2">
           {(Object.keys(REACTIONS) as ReactionKind[]).map((kind) => (
-            <TextReaction key={kind} kind={kind} {...reactions[kind]} onToggle={() => toggle(kind)} />
+            <TextReaction key={kind} kind={kind} {...reactions[kind]} onChange={(active) => react(kind, active)} />
           ))}
         </div>
       </fieldset>

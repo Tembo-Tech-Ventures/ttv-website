@@ -13,7 +13,7 @@ import {
   TextReaction,
   type SpaceTabItem,
 } from "..";
-import { PEOPLE } from "./people";
+import { PEOPLE, TEMBO } from "./people";
 
 /*
  * The assembled "tab row + sheet" for three people, using only primitives.
@@ -82,10 +82,10 @@ function Student() {
     <SpaceFile tabs={tabs} active="cohort" person={PEOPLE.wanjiku} end={<Tools attention={4} />}>
       <SheetHeader title="# cohort-04" sub="Cohort 04 · 23 people" />
       <ul className="space-y-6 px-5 py-6 sm:px-7">
-        <Message who={PEOPLE.faith} badge={<RoleBadge kind="ta" />} time="08:30">
+        <Message who={PEOPLE.faith} badge={<RoleBadge badge={PEOPLE.faith.roleBadges[0]} />} time="08:30">
           Session 9 is up. Retries start around 34 minutes.
         </Message>
-        <Message who={PEOPLE.wanjiku} badge={<RoleBadge kind="cohort" cohort={4} />} time="08:55">
+        <Message who={PEOPLE.wanjiku} badge={<RoleBadge badge={PEOPLE.wanjiku.roleBadges[0]} />} time="08:55">
           <span className="rounded bg-primary/10 px-1 font-semibold text-peach-ink">@tembo</span> why return
           200 on a duplicate?
         </Message>
@@ -94,7 +94,7 @@ function Student() {
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-2 text-[0.8125rem] text-ink-muted">
               <span className="text-[0.9375rem] font-bold text-ink-primary">Tembo</span>
-              <RoleBadge kind="ai" />
+              <RoleBadge badge={TEMBO.roleBadges[0]} />
               <span>08:55</span>
             </p>
             <Card className="mt-2">
@@ -150,7 +150,7 @@ function Mentor() {
                 Wanjiku Mwangi
               </h5>
               <div className="mt-1 flex flex-wrap gap-1.5">
-                <RoleBadge kind="cohort" cohort={4} />
+                <RoleBadge badge={PEOPLE.wanjiku.roleBadges[0]} />
               </div>
             </div>
           </div>
@@ -197,7 +197,7 @@ function Staff() {
             <Chip tone="peach">Flagged</Chip>
           </h5>
           <ul className="mt-3">
-            <Message who={PEOPLE.kevin} badge={<RoleBadge kind="cohort" cohort={4} />} time="Yesterday">
+            <Message who={PEOPLE.kevin} badge={<RoleBadge badge={PEOPLE.kevin.roleBadges[0]} />} time="Yesterday">
               Happy to pair on this, message me on my number and we can set it up.
             </Message>
           </ul>

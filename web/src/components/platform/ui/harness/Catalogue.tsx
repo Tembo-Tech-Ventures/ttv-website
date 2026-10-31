@@ -15,10 +15,10 @@ import {
   Sheet,
   TemboMark,
   TextReaction,
-  type ReactionKind,
   type Space,
 } from "..";
-import { PEOPLE, SAMPLE_PHOTO } from "./people";
+import type { ReactionKind } from "@/lib/platform/contracts";
+import { EVERY_ROLE, PEOPLE, SAMPLE_PHOTO } from "./people";
 
 const SPACE_NAMES: Record<Space, string> = {
   cohort: "Cohort",
@@ -61,12 +61,9 @@ function Markers() {
 function Roles() {
   return (
     <>
-      <RoleBadge kind="cohort" cohort={4} />
-      <RoleBadge kind="alumni" cohort={2} />
-      <RoleBadge kind="mentor" />
-      <RoleBadge kind="ta" />
-      <RoleBadge kind="ai" />
-      <RoleBadge kind="staff" />
+      {EVERY_ROLE.map((badge) => (
+        <RoleBadge key={badge.kind} badge={badge} />
+      ))}
     </>
   );
 }

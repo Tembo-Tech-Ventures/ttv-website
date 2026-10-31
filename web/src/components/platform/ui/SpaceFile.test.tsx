@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import Sheet from "./Sheet";
 import SpaceFile, { type SpaceTabItem } from "./SpaceFile";
+import { SPACE_ORDER } from "@/lib/platform/contracts";
 import { SPACES, type Space } from "./spaces";
 
 const PERSON = { id: "fixture-amina-hassan", name: "Amina Hassan" };
@@ -48,6 +49,10 @@ describe("SpaceFile", () => {
     const order = [...render().matchAll(/data-space="([a-z]+)"/g)].map((m) => m[1]);
     expect(order).toEqual(["cohort", "community", "mentoring", "admin", "profile"]);
     expect(SPACES.at(-1)).toBe("profile");
+  });
+
+  it("uses the contract's space order exactly", () => {
+    expect([...SPACES]).toEqual([...SPACE_ORDER]);
   });
 
   it("marks exactly one tab as the current page, and the sheet takes its tone", () => {
