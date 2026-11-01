@@ -261,6 +261,13 @@ describe("editing and deleting", () => {
     const id = s.message("help", { author: VIEWER, body: "Original" });
     const refused = await s.call("editMessage", { id, body: { body: "Rewritten" } });
     expect([refused.status, errorOf(refused.body).code]).toEqual([403, "conduct_required"]);
+    // A refused edit neither changes the message nor uses up the edit limit.
+    expect(row(s, id).body).toBe("Original");
+    expect(s.database.prepare("SELECT COUNT(*) AS n FROM channel_action").get()).toEqual({ n: 0 });
+    s.agree(VIEWER, CONDUCT_VERSION);
+    const bumped = await s.call("editMessage", { id, body: { body: "Rewritten" }, conductVersion: CONDUCT_VERSION + 1 });
+    expect([bumped.status, errorOf(bumped.body).code]).toEqual([403, "conduct_required"]);
+    s.database.exec("DELETE FROM channel_conduct");
     s.agree();
     const before = row(s, id);
     expect(Message.parse((await s.call("editMessage", { id, body: { body: "Original" } })).body).edited).toBe(false);
@@ -349,6 +356,19 @@ describe("edit and reaction limits", () => {
     expect([limited.status, errorOf(limited.body).retryAfterMs]).toEqual([429, start + ACTION_LIMITS.REACT.windowMs - now]);
     const count = () => (s.database.prepare("SELECT COUNT(*) AS n FROM channel_action").get() as { n: number }).n;
     expect(count()).toBe(ACTION_LIMITS.REACT.count);
+    // A refused change writes nothing and moves nothing for pollers, either way round.
+    const fresh = s.message("help");
+    const reacted = s.message("help");
+    s.database.exec(`INSERT INTO message_reaction(messageId,userId,kind) VALUES ('${reacted}','${VIEWER}','thanks')`);
+    const before = MessageList.parse((await s.call("listMessages", { id: s.channel("help") })).body);
+    const reactions = (id: string) => s.database.prepare("SELECT kind FROM message_reaction WHERE messageId = ? AND userId = ?").all(id, VIEWER);
+    for (const [id, body] of [[fresh, { kind: "useful", active: true }], [reacted, { kind: "thanks", active: false }]] as const) {
+      const refused = await s.call("reactToMessage", { id, body, now: () => now });
+      expect([refused.status, errorOf(refused.body).code]).toEqual([429, "rate_limited"]);
+    }
+    expect([reactions(fresh), reactions(reacted)]).toEqual([[], [{ kind: "thanks" }]]);
+    const after = MessageList.parse((await s.call("listMessages", { id: s.channel("help"), query: `?since=${before.sinceCursor}` })).body);
+    expect(after.items).toEqual([]);
     now = start + 2 * 60 * 60_000;
     expect((await react(0)).status).toBe(200);
     expect(count()).toBe(1);

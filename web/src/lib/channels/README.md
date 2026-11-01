@@ -251,8 +251,10 @@ fail; when nothing was written, one read of the same conditions says why.
   channel per minute, and 30 reaction changes per person per minute across
   channels (429 with `retryAfterMs`). Each one moves the message for every
   poller, so they are limited too. They are logged in `channel_action`
-  (migration `0031_channel_action.sql`), checked by the batch's first
-  statement, and pruned by a trigger after an hour.
+  (migration `0031_channel_action.sql`) by the batch's first statement,
+  which for an edit also checks the code of conduct; everything after it
+  acts only when that row was written, so a refusal writes nothing and moves
+  nothing. A trigger prunes the log after an hour.
 - **Edits and deletes** belong to the author only; moderators hide instead
   (B-2.5), and nobody edits Tembo. Editing needs `canPost` and a current
   agreement; the same body again changes nothing. Deleted and hidden messages
@@ -291,7 +293,8 @@ fail; when nothing was written, one read of the same conditions says why.
 
 Statements per request, with flags read from the database (asserted in
 `http.test.ts`): list channels 5, list messages 6 (7 with a thread), post 7
-(8 for a reply), mark read 8, delete 9, edit 10, react 10. Every one is an
+(8 for a reply), mark read 8, edit 9, delete 9, react 10. A post or edit the
+moderation hook flags adds one, for its moderation event. Every one is an
 indexed read; the plans are asserted in `messages.test.ts`,
 `mutations.test.ts` and `access.test.ts`.
 

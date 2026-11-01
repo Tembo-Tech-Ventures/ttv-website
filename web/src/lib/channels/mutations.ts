@@ -53,6 +53,8 @@ const FLAG_EVENT = "INSERT INTO moderation_event (id, messageId, action, source,
 
 const conductRequired = () =>
   new ChannelError("conduct_required", "Agree to how we talk to each other before you post.", 403);
+/** The code of conduct version posting and editing need. */
+const conductVersion = (ctx: WriteContext) => ctx.conductVersion ?? CONDUCT_VERSION;
 const cannotPost = () => new ChannelError("forbidden", "You can read this channel but not post in it.", 403);
 
 async function loaded(ctx: ReadContext, id: string): Promise<Message> {
@@ -110,7 +112,7 @@ async function refusal(ctx: WriteContext, input: PostMessage, now: number): Prom
       ctx.channel.capabilities.canModerate ? 1 : 0)
     .first<{ conductVersion: number | null; day: string; burst: string; parent: string | null }>();
   if (!why) throw new Error("Could not read the posting conditions.");
-  if ((why.conductVersion ?? 0) < (ctx.conductVersion ?? CONDUCT_VERSION)) return conductRequired();
+  if ((why.conductVersion ?? 0) < conductVersion(ctx)) return conductRequired();
   for (const [[count, oldest], limit] of [[usage(why.burst), burst], [usage(why.day), day]] as const) {
     if (count >= limit.count) {
       return new ChannelError("rate_limited", "You're posting quickly. Try again in a moment.", 429,
@@ -159,7 +161,7 @@ export async function postMessage(ctx: WriteContext, input: PostMessage): Promis
     ON CONFLICT (authorId, clientNonce) DO NOTHING`).bind(
     ctx.channel.id, ctx.viewerId, input.clientNonce, input.parentId, input.body,
     reasons.length > 0 ? "FLAGGED" : "VISIBLE", JSON.stringify(reasons), now, id,
-    ctx.conductVersion ?? CONDUCT_VERSION, now - day.windowMs, day.count, now - burst.windowMs, burst.count,
+    conductVersion(ctx), now - day.windowMs, day.count, now - burst.windowMs, burst.count,
   )];
   // The statements after the INSERT act only if it wrote the new id.
   const written = "EXISTS (SELECT 1 FROM channel_message WHERE id = ?3)";
@@ -187,9 +189,12 @@ export async function postMessage(ctx: WriteContext, input: PostMessage): Promis
  */
 function logAction(ctx: WriteContext, kind: ActionKind, id: string, now: number): D1PreparedStatement {
   const { count, windowMs, perChannel } = ACTION_LIMITS[kind];
+  // An edit also needs the current code of conduct (?8); a refused edit logs nothing.
+  const conduct = kind === "EDIT" ? "AND EXISTS (SELECT 1 FROM channel_conduct WHERE userId = ?1 AND version >= ?8)" : "";
   return ctx.db.prepare(`INSERT INTO channel_action (id, userId, channelId, kind, at) SELECT ?4, ?1, ?3, ?2, ?5
-    WHERE (SELECT COUNT(*) FROM channel_action WHERE userId = ?1 AND kind = ?2 AND at > ?6 ${perChannel ? "AND channelId = ?3" : ""}) < ?7`)
-    .bind(ctx.viewerId, kind, ctx.channel.id, id, now, now - windowMs, count);
+    WHERE (SELECT COUNT(*) FROM channel_action WHERE userId = ?1 AND kind = ?2 AND at > ?6 ${perChannel ? "AND channelId = ?3" : ""}) < ?7
+      ${conduct}`)
+    .bind(ctx.viewerId, kind, ctx.channel.id, id, now, now - windowMs, count, ...kind === "EDIT" ? [conductVersion(ctx)] : []);
 }
 const logged = (param: string) => `EXISTS (SELECT 1 FROM channel_action WHERE id = ${param})`;
 
@@ -222,15 +227,13 @@ export async function editMessage(ctx: WriteContext, target: MessageTarget, inpu
     throw new ChannelError("conflict", "A moderator hid this message, so it can't be edited.", 409);
   }
   if (!ctx.channel.capabilities.canPost) throw cannotPost();
-  const agreement = await getConductAcknowledgement(ctx.db, ctx.viewerId, { currentVersion: ctx.conductVersion ?? CONDUCT_VERSION });
-  if (!agreement?.current) throw conductRequired();
   if (input.body === target.body) return loaded(ctx, target.id);
 
   const now = ctx.now ?? Date.now();
   const reasons = JSON.stringify(await screen(ctx, input.body, target.parentId, "edit"));
   const action = createId();
-  // ?1 channel, ?2 id, ?3 author, ?7 the logged action. Each statement repeats the guard, so the
-  // rate limit, and a concurrent delete or hide, win.
+  // ?1 channel, ?2 id, ?3 author, ?7 the logged action, which also stands for the current code of
+  // conduct. Each statement repeats the guard, so those, and a concurrent delete or hide, win.
   const guard = `id = ?2 AND channelId = ?1 AND authorId = ?3 AND deletedAt IS NULL AND moderationState <> 'HIDDEN' AND ${logged("?7")}`;
   const statements = [logAction(ctx, "EDIT", action, now)];
   if (reasons !== "[]") {
@@ -244,7 +247,10 @@ export async function editMessage(ctx: WriteContext, target: MessageTarget, inpu
         FROM (SELECT value FROM json_each(moderationReasons) UNION SELECT value FROM json_each(?6))) END
     WHERE ${guard}`).bind(ctx.channel.id, target.id, ctx.viewerId, input.body, now, reasons, action));
   const results = await ctx.db.batch(statements);
-  if (results[0]?.meta.changes !== 1) throw await actionRefusal(ctx, "EDIT", now);
+  if (results[0]?.meta.changes !== 1) {
+    const agreement = await getConductAcknowledgement(ctx.db, ctx.viewerId, { currentVersion: conductVersion(ctx) });
+    throw agreement?.current ? await actionRefusal(ctx, "EDIT", now) : conductRequired();
+  }
   if (results.at(-1)?.meta.changes !== 1) throw new ChannelError("conflict", "This message changed while you were editing it.", 409);
   return loaded(ctx, target.id);
 }
@@ -303,7 +309,7 @@ export async function reactToMessage(ctx: WriteContext, target: MessageTarget, i
   // Counts are part of the message, so other readers' polls pick the change up. The touch is in the
   // same batch and depends only on the wanted state, so a retry after a failure still delivers it.
   const touched = ctx.db.prepare(`UPDATE channel_message SET changeSeq = (SELECT MAX(changeSeq) + 1 FROM channel_message
-      WHERE channelId = ?6) WHERE id = ?1 AND channelId = ?6 AND ${logged("?5")} AND ${input.active ? "" : "NOT "}${mine}`)
+      WHERE channelId = ?6) WHERE id = ?1 AND channelId = ?6 AND ${open} AND ${input.active ? "" : "NOT "}${mine}`)
     .bind(...params, ctx.channel.id);
   const [log] = await ctx.db.batch([logAction(ctx, "REACT", action, now), change, touched]);
   if (log?.meta.changes !== 1) throw await actionRefusal(ctx, "REACT", now);
