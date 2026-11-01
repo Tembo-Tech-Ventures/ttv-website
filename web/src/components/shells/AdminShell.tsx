@@ -16,6 +16,7 @@ import {
   PiChatTeardropTextDuotone,
   PiArrowLeftDuotone,
   PiUserPlusDuotone,
+  PiToggleRightDuotone,
 } from "react-icons/pi";
 import { PiListBold } from "react-icons/pi";
 
@@ -37,6 +38,7 @@ const primaryLinks = [
   { href: "/admin/programs", label: "Cohorts", icon: PiBookOpenDuotone },
   { href: "/admin/recordings", label: "Recordings", icon: PiVideoCameraDuotone },
   { href: "/admin/settings/integrations", label: "Integrations", icon: PiPlugsDuotone },
+  { href: "/admin/platform-flags", label: "Feature flags", icon: PiToggleRightDuotone },
   {
     href: "/admin/personal-access-tokens",
     label: "Personal Access Tokens",

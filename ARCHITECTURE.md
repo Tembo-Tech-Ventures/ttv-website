@@ -123,6 +123,7 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/admin/programs/[id]` | Program detail, role assignments | ADMIN |
 | `/admin/programs/new` | Create program | ADMIN |
 | `/admin/data-migration` | Import data from old stack | ADMIN |
+| `/admin/platform-flags` | Who sees each platform feature flag (Off, Staff, Everyone); Everyone asks to confirm, and dependency warnings never block. No JavaScript needed | ADMIN |
 | `/dashboard/feedback` | The student's own feedback, status and replies | Session |
 | `/dashboard/cohort/c/[slug]`, `/dashboard/community/c/[slug]` | A channel; 404 unless the caller can read it (flag `channels`) | Session |
 | `/dashboard/community/conduct` | "How we talk to each other": the channel code of conduct; flag `channels` | Session |

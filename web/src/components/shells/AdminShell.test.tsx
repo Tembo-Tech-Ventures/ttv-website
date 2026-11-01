@@ -104,6 +104,16 @@ describe("access requests in the admin navigation", () => {
   });
 });
 
+describe("feature flags in the admin navigation", () => {
+  it("is always listed, after the settings it sits beside", () => {
+    const labels = getAdminLinks(false).map(({ label }) => label);
+    expect(getAdminLinks(false)).toContainEqual(
+      expect.objectContaining({ href: "/admin/platform-flags", label: "Feature flags" })
+    );
+    expect(labels.indexOf("Feature flags")).toBe(labels.indexOf("Integrations") + 1);
+  });
+});
+
 describe("admin shell ways in and out", () => {
   it("offers the way back to the dashboard first", () => {
     expect(getAdminLinks(false)[0]).toEqual(expect.objectContaining({ href: "/dashboard", label: "Back to dashboard" }));

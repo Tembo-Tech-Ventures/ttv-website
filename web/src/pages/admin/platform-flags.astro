@@ -1,0 +1,212 @@
+---
+import { env } from "cloudflare:workers";
+import { PiInfoDuotone, PiWarningDuotone } from "react-icons/pi";
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import Button from "@/components/platform/ui/Button";
+import {
+  AUDIENCE_LABELS, AUDIENCE_MEANINGS, CONFIRM_ALL, FLAG_DETAILS, FLAG_ORDER, PLATFORM_FLAGS_PATH,
+  changeNotice, changedByNames, dependencyWarnings, flagsOverridden, lastChanged, parseFlagForm,
+} from "@/lib/admin/platform-flags";
+import { listFlags, updateFlag } from "@/lib/platform/server/flag-admin";
+import { FlagAudience, FlagKey } from "@/lib/platform/contracts";
+
+/*
+ * Who sees each platform feature flag (U-F.1). Middleware has required ADMIN, admin:write for a
+ * personal access token's POST, and a same-origin Origin header for any admin POST, so this page
+ * only turns the form into updateFlag, which records the signed-in administrator as the actor.
+ * Every setting is a plain form post: the page needs no JavaScript. Everyone takes a second,
+ * explicit post; Off and Staff apply at once.
+ */
+const adminId = Astro.locals.user?.id;
+if (!adminId) return Astro.redirect("/auth/login");
+
+let failure: string | undefined;
+let failedKey: FlagKey | undefined;
+let confirming: FlagKey | undefined;
+
+if (Astro.request.method === "POST") {
+  const parsed = parseFlagForm(await Astro.request.formData());
+  if (!parsed.ok) {
+    Astro.response.status = 400;
+    failure = parsed.error;
+  } else if (parsed.needsConfirmation) {
+    confirming = parsed.key;
+  } else {
+    try {
+      await updateFlag(env.DB, parsed.key, parsed.audience, adminId);
+      return Astro.redirect(`${PLATFORM_FLAGS_PATH}?changed=${parsed.key}`, 303);
+    } catch (error) {
+      console.error("A platform flag could not be updated.", error);
+      Astro.response.status = 500;
+      failedKey = parsed.key;
+    }
+  }
+}
+
+const { flags } = await listFlags(env.DB);
+const byKey = new Map(flags.map((flag) => [flag.key, flag]));
+const rows = FLAG_ORDER.flatMap((key) => byKey.get(key) ?? []);
+// A missing name must not take the switches down with it.
+const names = await changedByNames(env.DB, flags).catch((error: unknown) => {
+  console.warn("Flag editors' names could not be read.", error);
+  return new Map<string, string>();
+});
+const warnings = dependencyWarnings(flags);
+
+// The failure says what the flag is now, read back after the refused write.
+if (failedKey) {
+  const current = byKey.get(failedKey);
+  failure = `${FLAG_DETAILS[failedKey].name} could not be changed. It is still ${current ? AUDIENCE_LABELS[current.audience] : "unknown"}. Try again.`;
+}
+
+const changedKey = Astro.request.method === "GET" ? FlagKey.safeParse(Astro.url.searchParams.get("changed")).data : undefined;
+const changed = changedKey ? byKey.get(changedKey) : undefined;
+const notice = changed
+  ? [changeNotice(changed), ...warnings.filter((w) => w.key === changed.key || w.requires === changed.key).map((w) => w.message)].join(" ")
+  : undefined;
+
+const confirmName = confirming ? FLAG_DETAILS[confirming].name : "";
+const confirmWarnings = confirming
+  ? dependencyWarnings(flags.map((flag) => (flag.key === confirming ? { ...flag, audience: "ALL" as const } : flag)))
+    .filter((w) => w.key === confirming)
+  : [];
+const overridden = flagsOverridden(env);
+
+const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
+const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
+---
+
+<AdminLayout title="Feature flags">
+  <div class="mx-auto max-w-6xl space-y-8 lg:px-6 lg:pt-6">
+    <header class="space-y-4">
+      <h2 class="text-[2.5rem] leading-[0.95] tracking-display text-ink-primary sm:text-5xl lg:text-6xl">
+        Feature flags
+      </h2>
+      <p class="max-w-3xl text-base leading-relaxed text-ink-secondary sm:text-lg">
+        Who sees each part of the new platform. Try a feature as Staff before you give it to Everyone.
+        Changes apply from the next page anyone opens.
+      </p>
+    </header>
+
+    {overridden && (
+      <p class="flex gap-2 text-sm text-ink-secondary" data-flags-overridden>
+        <PiInfoDuotone className="mt-0.5 size-4 shrink-0 text-ink-muted" aria-hidden="true" />
+        This test environment turns every flag on for everyone who is signed in, whatever is set here.
+      </p>
+    )}
+
+    {notice && (
+      <p role="status" tabindex="-1" autofocus class={`${BANNER} border-ring/30 bg-ring/8`} data-flag-notice>
+        {notice}
+      </p>
+    )}
+    {failure && (
+      <p role="alert" tabindex="-1" autofocus class={`${BANNER} border-danger-ink/40 bg-danger-ink/8`} data-flag-failure>
+        {failure}
+      </p>
+    )}
+
+    {confirming && (
+      <section
+        aria-labelledby="flag-confirm-heading"
+        tabindex="-1"
+        autofocus
+        class={`space-y-4 rounded-2xl border border-primary/50 bg-primary/8 p-5 sm:p-6 ${FOCUS}`}
+        data-flag-confirm={confirming}
+      >
+        <h3 id="flag-confirm-heading" class="text-xl font-bold text-ink-primary">Show {confirmName} to everyone?</h3>
+        <p class="text-[0.9375rem] leading-relaxed text-ink-primary">
+          This makes it visible to every signed-in user. Nothing has changed yet.
+        </p>
+        {confirmWarnings.map((warning) => (
+          <p class="flex gap-2 text-sm text-ink-primary">
+            <PiWarningDuotone className="mt-0.5 size-4 shrink-0 text-peach-ink" aria-hidden="true" />
+            <span><span class="sr-only">Warning: </span>{warning.message}</span>
+          </p>
+        ))}
+        <form method="POST" class="flex flex-wrap gap-3">
+          <input type="hidden" name="key" value={confirming} />
+          <input type="hidden" name="audience" value="ALL" />
+          <input type="hidden" name="confirm" value={CONFIRM_ALL} />
+          <Button type="submit" variant="primary" className="h-11">Show {confirmName} to everyone</Button>
+          <a
+            href={PLATFORM_FLAGS_PATH}
+            class={`inline-flex h-11 items-center rounded-xl border border-hairline bg-ink-primary/6 px-4 text-sm font-semibold text-ink-primary hover:bg-ink-primary/10 ${FOCUS}`}
+          >
+            Cancel
+          </a>
+        </form>
+      </section>
+    )}
+
+    <ul aria-label="Platform feature flags" class="-mt-2">
+      {rows.map((flag) => {
+        const { name, description } = FLAG_DETAILS[flag.key];
+        const warning = warnings.find((w) => w.key === flag.key);
+        return (
+          <li
+            class="grid gap-x-10 gap-y-4 border-b border-hairline py-6 lg:grid-cols-[minmax(0,1fr)_22rem]"
+            data-flag={flag.key}
+            data-audience={flag.audience}
+          >
+            <div class="min-w-0 space-y-2">
+              <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <h3 class="text-lg font-bold text-ink-primary">{name}</h3>
+                <code class="text-xs text-ink-muted">{flag.key}</code>
+              </div>
+              <p class="max-w-2xl text-[0.9375rem] leading-relaxed text-ink-secondary">{description}</p>
+              <p class="text-sm text-ink-muted" data-flag-changed>{lastChanged(flag, names)}</p>
+              {warning && (
+                <p class="flex max-w-2xl gap-2 rounded-xl border border-primary/40 bg-primary/8 px-3.5 py-2.5 text-sm text-ink-primary" data-flag-warning>
+                  <PiWarningDuotone className="mt-0.5 size-4 shrink-0 text-peach-ink" aria-hidden="true" />
+                  <span><span class="sr-only">Warning: </span>{warning.message}</span>
+                </p>
+              )}
+            </div>
+
+            <form method="POST" class="space-y-2" data-flag-form={flag.key}>
+              <input type="hidden" name="key" value={flag.key} />
+              <p class="text-sm text-ink-secondary" data-flag-audience>
+                <span class="font-semibold text-ink-primary">{AUDIENCE_LABELS[flag.audience]}</span>
+                <span aria-hidden="true"> · </span>
+                <span class="sr-only">: </span>{AUDIENCE_MEANINGS[flag.audience]}
+              </p>
+              <div role="group" aria-label={`Who sees ${name}`} class="grid grid-cols-3 gap-1 rounded-xl border border-hairline bg-ground/60 p-1">
+                {FlagAudience.options.map((audience) =>
+                  audience === flag.audience ? (
+                    <span
+                      class:list={[
+                        "inline-flex min-h-11 items-center justify-center rounded-lg px-3 text-sm font-semibold",
+                        // Peach means someone sees it; a flag that is off stays quiet.
+                        audience === "OFF" ? "bg-ink-primary/12 text-ink-primary" : "bg-primary text-dark",
+                      ]}
+                      data-flag-current
+                    >
+                      {AUDIENCE_LABELS[audience]}<span class="sr-only"> (current)</span>
+                    </span>
+                  ) : (
+                    <button
+                      type="submit"
+                      name="audience"
+                      value={audience}
+                      aria-label={`Set ${name} to ${AUDIENCE_LABELS[audience]}`}
+                      class={`inline-flex min-h-11 items-center justify-center rounded-lg px-3 text-sm font-semibold text-ink-secondary transition-colors hover:bg-ink-primary/8 hover:text-ink-primary motion-reduce:transition-none ${FOCUS}`}
+                    >
+                      {AUDIENCE_LABELS[audience]}
+                    </button>
+                  )
+                )}
+              </div>
+            </form>
+          </li>
+        );
+      })}
+    </ul>
+
+    <p class="flex gap-2 text-sm text-ink-secondary">
+      <PiInfoDuotone className="mt-0.5 size-4 shrink-0 text-ink-muted" aria-hidden="true" />
+      Staff means administrators only. Everyone asks you to confirm first. A warning means a flag reaches
+      more people than the flag it needs; the setting is saved anyway.
+    </p>
+  </div>
+</AdminLayout>
