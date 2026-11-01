@@ -602,6 +602,98 @@
   background-color: rgb(255 179 166 / 0.06);
 }
 
+/* A report, a hide or restore, or a review request: a form that opens in place under the message. */
+.channel-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  /* Brought into view whole when it opens, with room to spare while it is still unfolding. */
+  scroll-margin-block: 0.75rem;
+  max-width: 38rem;
+  margin-top: 0.625rem;
+  padding: 0.875rem 1rem 1rem;
+  border: 1px solid var(--color-hairline);
+  border-radius: 1rem;
+  background-color: rgb(1 33 31 / 0.45);
+}
+
+.channel-panel[data-panel="hide"] {
+  border-color: rgb(255 179 166 / 0.4);
+}
+
+.channel-panel__title {
+  color: var(--color-ink-primary);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.channel-panel__error {
+  color: var(--color-danger-ink);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.channel-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-height: 2rem;
+  padding-inline: 0.25rem;
+  border-radius: 0.5rem;
+  color: var(--color-ink-primary);
+  font-size: 0.875rem;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.channel-choice:hover {
+  background-color: rgb(255 248 242 / 0.04);
+}
+
+.channel-choice__input {
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.channel-choice__input:focus-visible {
+  outline: 2px solid var(--color-peach-ink);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .channel-choice {
+    min-height: 2.75rem;
+  }
+}
+
+.channel-reported {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+  color: var(--color-ink-secondary);
+  font-size: 0.8125rem;
+}
+
+.channel-moderation__asked {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.375rem;
+  color: var(--color-ink-primary);
+  font-weight: 600;
+}
+
+.channel-moderation__asked:focus-visible {
+  border-radius: 0.375rem;
+  outline: 2px solid var(--color-peach-ink);
+  outline-offset: 2px;
+}
+
 .channel-input {
   border: 1px solid var(--color-hairline);
   background-color: rgb(1 33 31 / 0.45);
@@ -1079,6 +1171,12 @@
   .channel-jump {
     animation: channel-jump-in 180ms ease-out both;
   }
+
+  /* The form opens out of the message it is about, rather than arriving from elsewhere. */
+  .channel-panel {
+    transform-origin: top left;
+    animation: channel-panel-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1105,6 +1203,13 @@
   from {
     opacity: 0;
     transform: translateX(1.5rem);
+  }
+}
+
+@keyframes channel-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.25rem) scaleY(0.97);
   }
 }
 

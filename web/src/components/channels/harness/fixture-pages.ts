@@ -14,8 +14,16 @@ export const HARNESS_CHANNELS: Readonly<Record<string, Channel>> = Object.fromEn
 
 const compare = (a: Message, b: Message) => a.createdAt - b.createdAt || a.id.localeCompare(b.id);
 
+/**
+ * Who moderates a fixture channel, following B-2.2's rule (lib/channels/README.md): admins; global
+ * mentors in community channels; a cohort's mentors in its channels. Teaching assignments are
+ * server-only, so a TA persona does not moderate here.
+ */
 function canModerate(channel: Channel, me: Me): boolean {
-  return channel.capabilities.canModerate || me.capabilities.isAdmin;
+  const { isAdmin, isMentor, mentorCohortIds } = me.capabilities;
+  if (isAdmin) return true;
+  if (channel.kind === "COMMUNITY") return isMentor;
+  return channel.kind === "COHORT" && mentorCohortIds.includes(channel.programId ?? "");
 }
 
 /** One message as this person receives it, or null when they may not see it. */
@@ -32,7 +40,7 @@ export function channelFor(slug: string, me: Me): Channel | null {
   const channel = HARNESS_CHANNELS[slug];
   if (!channel) return null;
   if (channel.kind === "COHORT" && !me.capabilities.cohortIds.includes(channel.programId ?? "") && !me.capabilities.isAdmin) return null;
-  return me.capabilities.isAdmin ? { ...channel, capabilities: { ...channel.capabilities, canModerate: true } } : channel;
+  return canModerate(channel, me) ? { ...channel, capabilities: { ...channel.capabilities, canModerate: true } } : channel;
 }
 
 function page(items: Message[], channel: Channel, thread: string | null): MessageList {
