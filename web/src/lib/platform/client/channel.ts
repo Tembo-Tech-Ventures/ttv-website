@@ -257,13 +257,26 @@ export function createChannelStore(options: ChannelOptions) {
   }
 
   /**
-   * Cache an older page's messages. A message already cached (kept fresh by
-   * polling, or a thread parent kept for the pane) keeps its cached copy, but
-   * every id still joins the segment; `prependOlder` skips ids already retained.
+   * Cache an older page's messages. Every id joins the segment (`prependOlder`
+   * skips ids already retained), even one cached for another reason, such as an
+   * open thread's parent. While the segment is live, polling keeps cached copies
+   * fresh, so they win; otherwise the page's copy is the newer one.
    */
-  function cacheOlder(items: readonly Message[]): Message[] {
-    for (const item of items) if (!entities.has(item.id)) entities.set(item.id, item);
+  function cacheOlder(items: readonly Message[], live: boolean): Message[] {
+    for (const item of items) if (!live || !entities.has(item.id)) entities.set(item.id, item);
     return items.map(item => entities.get(item.id)!);
+  }
+
+  /** A successful thread request clears an earlier failure; a removed thread stays removed. */
+  function recoverThread() {
+    store.setState(state => state.thread?.status === "error"
+      ? { ...state, thread: { ...state.thread, status: "ready", error: null } } : state);
+  }
+
+  /** The parent of the open thread was removed while the pane is showing it. */
+  function threadRemoved() {
+    patchThread({ status: "removed" });
+    publish({ announcement: "This thread is no longer available" });
   }
 
   function announceFresh(fresh: readonly Message[], noun: string): Partial<ChannelState> {
@@ -312,7 +325,7 @@ export function createChannelStore(options: ChannelOptions) {
       if (!available() || gen !== windowGen || !channel?.live || channel.sinceCursor !== cursor) return false;
       const { changed, fresh, parentRemoved } = applyDelta("channel", page);
       publish({ error: null, ...announceFresh(fresh, "message") });
-      if (parentRemoved) patchThread({ status: "removed" });
+      if (parentRemoved) threadRemoved();
       return changed;
     } catch (error) {
       if (isAbort(error) || gen !== windowGen) return false;
@@ -331,7 +344,7 @@ export function createChannelStore(options: ChannelOptions) {
       const page = await list({ before: cursor }, signal);
       if (!available() || gen !== windowGen || channel?.olderCursor !== cursor) return;
       forget(page.removedIds);
-      const roots = cacheOlder(page.items.filter(item => item.parentId === null));
+      const roots = cacheOlder(page.items.filter(item => item.parentId === null), channel.live);
       channel = evict(prependOlder(channel, page, roots), { maxMessages, anchorId: keep });
     } catch (error) {
       if (isAbort(error) || gen !== windowGen) return;
@@ -428,7 +441,8 @@ export function createChannelStore(options: ChannelOptions) {
       if (!currentThread(cache) || !cache.segment?.live || cache.segment.sinceCursor !== cursor) return false;
       const { changed, fresh, parentRemoved } = applyDelta("thread", page);
       publish(announceFresh(fresh, "reply"));
-      if (parentRemoved) patchThread({ status: "removed" });
+      recoverThread();
+      if (parentRemoved) threadRemoved();
       return changed;
     } catch (error) {
       if (isAbort(error) || !currentThread(cache)) return false;
@@ -444,9 +458,10 @@ export function createChannelStore(options: ChannelOptions) {
       const page = await list({ before: cursor, thread: cache.parentId }, signal);
       if (!currentThread(cache) || cache.segment?.olderCursor !== cursor) return;
       forget(page.removedIds);
-      const replies = cacheOlder(page.items.filter(item => item.parentId === cache.parentId));
+      const replies = cacheOlder(page.items.filter(item => item.parentId === cache.parentId), cache.segment.live);
       const keep = cache.segment.pages[0]?.ids[0] ?? null;
       cache.segment = evict(prependOlder(cache.segment, page, replies), { maxMessages: maxThreadMessages, anchorId: keep });
+      recoverThread();
     } catch (error) {
       if (isAbort(error) || !currentThread(cache)) return;
       threadFailure(normalizeError(error));

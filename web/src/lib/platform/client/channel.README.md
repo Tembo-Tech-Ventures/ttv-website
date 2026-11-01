@@ -100,8 +100,8 @@ counts (S-1.1); badges that show both add them in the UI.
 Messages are normalised by id in one entity map shared by the channel window and
 the open thread. Entities nothing references are dropped. Lists are ordered by
 `createdAt`, then id, whatever order a page arrives in. Duplicates within or across
-pages collapse to one entry; for an older page, the cached copy (kept fresh by
-polling) wins.
+pages collapse to one entry. For an older page, a cached copy wins while the
+window is live (polling keeps it fresh); otherwise the page's copy wins.
 
 The window is a list of server pages, each keeping its own `beforeCursor`.
 
@@ -133,7 +133,10 @@ store aborts its requests, and late responses are ignored. A loaded pane survive
 terminal error and `restart()`, or a release followed by a new `retain()`, and
 resumes polling. Each poll checks the channel and the open thread together.
 Replies are routed by `parentId`, so a channel delta never puts a reply in the root
-list. A removed parent (tombstone or 404) sets `thread.status = "removed"`.
+list. A removed parent (tombstone or 404) sets `thread.status = "removed"` and
+announces "This thread is no longer available". A failed thread request sets
+`status: "error"`. The next successful poll or older-replies request restores
+`"ready"`, keeping the loaded replies.
 
 ## Read markers
 

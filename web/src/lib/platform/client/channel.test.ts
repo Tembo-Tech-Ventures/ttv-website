@@ -352,7 +352,7 @@ describe("channel store", () => {
       await store.poll(signal());
       expect(ids(store.getState().messages)).toEqual([1, 3]);
       expect(store.getState().thread).toMatchObject({ status: "removed", parent: null });
-      expect(store.getState().announcement).toBe("");
+      expect(store.getState().announcement).toBe("This thread is no longer available");
     });
 
     it("distinguishes unavailable threads, failures and expired thread cursors", async () => {
@@ -643,6 +643,48 @@ describe("channel store", () => {
     store.closeThread();
     expect(fake.seen[2].signal.aborted).toBe(true);
     expect(await polling).toEqual({ changed: false });
+  });
+
+  it("recovers the thread pane after a failed poll or a failed older-replies request", async () => {
+    const { fake, store } = setup({ initial: page(range(1, 3), null, "s1") });
+    const thread = (items: Message[], since: string, before: string | null = null) => page(items, before, since, { thread: msg(2).id });
+    fake.list(thread([reply(11, msg(2).id)], "t1", "tb11"));
+    await store.openThread(msg(2).id);
+    fake.list(page([], null, "s2"), () => error(500, "server"));
+    await store.poll(signal());
+    expect(store.getState().thread).toMatchObject({ status: "error", error: { status: 500 } });
+    fake.list(page([], null, "s3"), thread([reply(12, msg(2).id)], "t2"));
+    await store.poll(signal());
+    expect(store.getState().thread).toMatchObject({ status: "ready", error: null });
+    expect(ids(store.getState().thread!.messages)).toEqual([11, 12]);
+
+    fake.list(() => error(500, "server"), thread([reply(10, msg(2).id)], "x"));
+    await store.loadOlderReplies();
+    expect(store.getState().thread).toMatchObject({ status: "error", hasOlder: true });
+    await store.loadOlderReplies();
+    expect(store.getState().thread).toMatchObject({ status: "ready", error: null, hasOlder: false });
+    expect(ids(store.getState().thread!.messages)).toEqual([10, 11, 12]);
+  });
+
+  it("prefers an older page's copy of a cached message when the window is not live", async () => {
+    const { fake, store } = setup({ initial: page(range(41, 50), "b41", "s1"), pageSize: 10 });
+    fake.list(page(range(31, 40), "b31", "x"), page(range(21, 30), "b21", "x"), page(range(11, 20), "b11", "x"), page(range(1, 10), null, "x"));
+    for (let i = 0; i < 4; i++) await store.loadOlder();
+    fake.list(page([], null, "t1", { thread: msg(5).id }));
+    await store.openThread(msg(5).id);
+    store.setAnchor(msg(35).id);
+    // Reading the middle: first the oldest page (holding the thread parent) is evicted, then the newest.
+    fake.list(page(range(51, 60), "b51", "s2"), page([], null, "t2", { thread: msg(5).id }));
+    await store.poll(signal());
+    expect(store.getState().hasOlder).toBe(true);
+    fake.list(page(range(61, 70), "b61", "s3"), page([], null, "t3", { thread: msg(5).id }));
+    await store.poll(signal());
+    expect(store.getState().live).toBe(false);
+    expect(store.getState().thread?.parent?.body).toBe(msg(5).body);
+    // Nothing polls the parent while the window isn't live, so the reloaded page's copy is the newer one.
+    fake.list(page([msg(5, { body: "Edited while away", edited: true }), ...range(1, 4), ...range(6, 10)], null, "x"));
+    await store.loadOlder();
+    expect(store.getState().thread?.parent?.body).toBe("Edited while away");
   });
 
   it("clears announcements on request", async () => {
