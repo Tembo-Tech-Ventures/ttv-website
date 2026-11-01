@@ -77,6 +77,19 @@ new screen or test.
   Availability PUT replaces the editable fields. Backend state-machine and
   capacity checks belong to the later implementation.
 
+- Onboarding (library `/reports/platform-onboarding-2026-11-01/SPEC.md` §5):
+  intents choose routing and copy only and never reach `capabilitiesFor()`.
+  `EXPLORING` stands alone; inferred intents are computed, never written.
+  Mentor and institution access are *access requests* (not `MentorRequest`,
+  which asks a mentor for time). Requester-facing shapes (`AccessRequestSummary`,
+  `OnboardingState`, `access_decided` attention) never identify the deciding
+  administrator: `decidedBy` exists only on `AdminAccessRequest`, and
+  `access_decided` items must have a null actor. Request text is untrusted plain
+  text. Every requester write returns the whole `OnboardingState`, because a
+  withdraw also removes its intent. These routes are for same-origin browser
+  sessions only: PATs and agent sessions are refused, admin routes included. The
+  admin routes are not flag-gated, so pending requests are never stranded.
+
 ## Fixture scenarios and verification
 
 All people and work are **fictional, synthetic demo data**. `FIXTURE_NOTICE` must
@@ -93,6 +106,14 @@ in screen 02). Current mission rules also keep alumni's Cohort space and give
 admins Discover without inventing a mentor role. The four `/me` flags are on for
 demo scenes; `flagsAdmin` separately illustrates the initial OFF database state.
 Attention and channel unread counts are separate counters, not summed together.
+
+The onboarding scenario follows `/reports/platform-onboarding-2026-11-01/`:
+Mercy Akinyi chose member + mentor and waits, Joseph Ochieng asks for
+institution access, Peter Njoroge's mentor request was declined, and Wairimu
+Ndung'u has just signed up (`onboardingByPersona`, `accessRequests`,
+`adminAccessRequests`, `accessAttention`). Mercy Wambui and Joseph Mutua already
+hold approved roles in the scenes above, so the onboarding Mercy and Joseph are
+separate fictional people.
 
 Run `npx vitest run src/lib/platform/contracts.test.ts src/lib/platform/fixtures.test.ts`
 from `web/`. Tests validate every exported fixture through JSON round trips,

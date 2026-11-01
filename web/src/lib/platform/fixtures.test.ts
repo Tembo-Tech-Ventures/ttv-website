@@ -17,6 +17,8 @@ const schemas = {
   pendingMentorRequest: C.MentorRequest, acceptedMentorRequest: C.MentorRequest, brianMentorRequest: C.MentorRequest,
   availability: C.MentorAvailability, moderationQueue: C.ModerationQueue,
   temboPending: C.TemboResponse, temboAnswer: C.TemboResponse, flagsAdmin: C.FlagsAdmin,
+  accessRequests: z.record(z.string(), C.AccessRequestSummary), onboardingByPersona: z.record(z.string(), C.OnboardingState),
+  adminAccessRequests: z.record(z.string(), C.AdminAccessRequestList), accessAttention: z.record(z.string(), C.AttentionList),
 } satisfies Record<keyof typeof F, z.ZodType>;
 
 describe("synthetic fixtures", () => {
@@ -112,5 +114,75 @@ describe("synthetic fixtures", () => {
     expect(F.messages.hidden.moderation?.state).toBe("HIDDEN");
     expect(F.temboPending.status).toBe("pending");
     expect(F.temboAnswer.status).toBe("answer");
+  });
+
+  describe("onboarding scenario", () => {
+    const personas = ["mercyAkinyi", "josephOchieng", "peter", "wairimu"] as const;
+    const requesterFacing = { accessRequests: F.accessRequests, onboardingByPersona: F.onboardingByPersona, peterAttention: F.accessAttention.peter };
+
+    it("uses separate fictional people for the onboarding Mercy and Joseph, who hold no role yet", () => {
+      expect(Object.keys(F.onboardingByPersona).toSorted()).toEqual([...personas].toSorted());
+      expect(F.people.mercyAkinyi.id).not.toBe(F.people.mercy.id);
+      expect(F.people.josephOchieng.id).not.toBe(F.people.joseph.id);
+      expect(new Set(Object.values(F.people).map((p) => p.id)).size).toBe(Object.keys(F.people).length);
+      expect(new Set(Object.values(F.people).map((p) => p.name)).size).toBe(Object.keys(F.people).length);
+    });
+
+    it.each(personas)("grants %s nothing beyond a member's spaces while a request is open or declined", (key) => {
+      expect(F.meByPersona[key].spaces).toEqual(F.meByPersona.lucy.spaces);
+      expect(F.meByPersona[key].capabilities).toEqual(F.meByPersona.lucy.capabilities);
+      expect(F.meByPersona[key].user.roleBadges.map((b) => b.kind)).toEqual(["COMMUNITY"]);
+      expect(F.onboardingByPersona[key].roles).toEqual([]);
+    });
+
+    it("keeps each request's intent, including after a decline, and leaves Wairimu at the welcome step", () => {
+      for (const key of personas) {
+        for (const request of F.onboardingByPersona[key].requests) expect(F.onboardingByPersona[key].intents).toContain(request.role);
+      }
+      expect(F.onboardingByPersona.mercyAkinyi.intents).toEqual(["MEMBER", "MENTOR"]);
+      expect(F.onboardingByPersona.mercyAkinyi.requests.map((r) => [r.role, r.status])).toEqual([["MENTOR", "PENDING"]]);
+      expect(F.onboardingByPersona.josephOchieng.requests.map((r) => [r.role, r.status])).toEqual([["INSTITUTION", "PENDING"]]);
+      expect(F.onboardingByPersona.peter.requests.map((r) => [r.role, r.status])).toEqual([["MENTOR", "DECLINED"]]);
+      expect(F.onboardingByPersona.peter.requests[0].seenAt).toBeNull();
+      expect(F.onboardingByPersona.wairimu).toEqual({ stage: "NEW", intents: [], inferred: [], requests: [], roles: [] });
+    });
+
+    it("shows administrators the same requests the requesters see, plus who asked and who decided", () => {
+      const { pending, decided } = F.adminAccessRequests;
+      const all = [...pending.items, ...decided.items];
+      expect(pending.items.every((r) => r.status === "PENDING")).toBe(true);
+      expect(decided.items.every((r) => r.status === "APPROVED" || r.status === "DECLINED")).toBe(true);
+      for (const list of [pending, decided]) expect(list.pendingCount).toBe(pending.items.length);
+      expect(all.map((r) => r.id).toSorted()).toEqual(Object.values(F.accessRequests).map((r) => r.id).toSorted());
+      for (const admin of all) {
+        const { seenAt: _seenAt, ...summary } = Object.values(F.accessRequests).find((r) => r.id === admin.id)!;
+        expect(admin).toMatchObject(summary);
+        const owner = personas.find((key) => F.onboardingByPersona[key].requests.some((r) => r.id === admin.id))!;
+        expect(admin.requester).toEqual(F.people[owner]);
+      }
+      expect(decided.items[0].decidedBy).toEqual(F.people.amina);
+      expect(pending.items.map((r) => r.decidedBy)).toEqual([null, null]);
+    });
+
+    it("never names the deciding administrator to a requester", () => {
+      const text = JSON.stringify(requesterFacing);
+      expect(text).not.toContain(F.people.amina.id);
+      expect(text).not.toContain(F.people.amina.name);
+      expect(text).not.toContain("decidedBy");
+      expect(F.accessAttention.peter.items.map((a) => a.actor)).toEqual([null]);
+    });
+
+    it("tells admins about each pending request, from its requester, and the requester about the decision", () => {
+      const pending = F.adminAccessRequests.pending.items;
+      expect(F.accessAttention.amina.items.map((a) => [a.kind, a.space, a.subject.id, a.actor?.id]))
+        .toEqual(pending.map((r) => ["access_request", "admin", r.id, r.requester.id]));
+      expect(F.accessAttention.peter.items.map((a) => [a.kind, a.space, a.subject.id]))
+        .toEqual([["access_decided", "community", F.accessRequests.peterMentor.id]]);
+      expect(F.accessAttention.peter.items[0].createdAt).toBe(F.accessRequests.peterMentor.decidedAt);
+    });
+
+    it("points every request link at example.com", () => {
+      for (const r of Object.values(F.accessRequests)) if (r.link) expect(new URL(r.link).hostname).toBe("example.com");
+    });
   });
 });

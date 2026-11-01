@@ -4,9 +4,9 @@
  * Append-only: add a named scenario rather than changing an existing consumer's data.
  */
 import type {
-  AttentionCount, AttentionList, AuthorSummary, Channel, ChannelList, FlagsAdmin, Me,
+  AccessRequestSummary, AdminAccessRequest, AdminAccessRequestList, AttentionCount, AttentionList, AuthorSummary, Channel, ChannelList, FlagsAdmin, Me,
   MentorAvailability, MentorDirectory, MentorRequest, Message, MessageList,
-  ModerationQueue, PersonSummary, ProjectEmbed, RoleBadge, SearchResults,
+  ModerationQueue, OnboardingState, PersonSummary, ProjectEmbed, RoleBadge, SearchResults,
   SessionClipEmbed, SpaceId, TemboResponse,
 } from "./contracts";
 
@@ -41,6 +41,11 @@ export const people = {
   peter: person(12, "Peter Njoroge", [badge("COMMUNITY", "Community")]),
   collins: person(13, "Collins Mutai", [badge("COMMUNITY", "Community")]),
   dennis: person(14, "Dennis Kiprono", [badge("COMMUNITY", "Community")]),
+  // Onboarding personas (/reports/platform-onboarding-2026-11-01). Mercy Wambui and Joseph Mutua above already
+  // hold approved roles, so the onboarding Mercy and Joseph are separate people with full-name keys.
+  mercyAkinyi: person(15, "Mercy Akinyi", [badge("COMMUNITY", "Community")]),
+  josephOchieng: person(16, "Joseph Ochieng", [badge("COMMUNITY", "Community")]),
+  wairimu: person(17, "Wairimu Ndung'u", [badge("COMMUNITY", "Community")]),
 };
 export const temboAuthor: AuthorSummary = {
   id: null, name: "Tembo", avatarUrl: null, roleBadges: [badge("AI", "AI")],
@@ -88,6 +93,10 @@ export const meByPersona = {
   peter: me(people.peter, ["community", "profile"]),
   collins: me(people.collins, ["community", "profile"]),
   dennis: me(people.dennis, ["community", "profile"]),
+  // A pending request grants nothing: these three have exactly Lucy's spaces and capabilities.
+  mercyAkinyi: me(people.mercyAkinyi, ["community", "profile"]),
+  josephOchieng: me(people.josephOchieng, ["community", "profile"]),
+  wairimu: me(people.wairimu, ["community", "profile"]),
 } satisfies Record<keyof typeof people, Me>;
 
 function channel(n: number, slug: string, overrides: Partial<Channel> = {}): Channel {
@@ -346,3 +355,80 @@ export const flagsAdmin: FlagsAdmin = {
     { key: "mentor_requests", audience: "OFF", updatedAt: FIXTURE_NOW, updatedBy: null },
   ],
 };
+
+// Onboarding (/reports/platform-onboarding-2026-11-01/SPEC.md §2, §7): Mercy chose member + mentor and waits,
+// Joseph asks for institution access, Peter's mentor request was declined, and Wairimu has just signed up.
+const accessRequestIds = { mercyMentor: id(901), josephInstitution: id(902), peterMentor: id(903) };
+export const accessRequests = {
+  mercyMentor: {
+    id: accessRequestIds.mercyMentor, role: "MENTOR", status: "PENDING",
+    note: "I build Flutter apps at work and would like to review the mobile projects members share.",
+    organisation: null, organisationRole: null, link: "https://example.com/synthetic/mercy-akinyi/portfolio",
+    decisionMessage: null, createdAt: FIXTURE_NOW - 2 * day, updatedAt: FIXTURE_NOW - 2 * day, decidedAt: null, seenAt: null,
+  },
+  josephInstitution: {
+    id: accessRequestIds.josephInstitution, role: "INSTITUTION", status: "PENDING",
+    note: "We want to find junior mobile developers whose shared work shows offline-first apps.",
+    organisation: "Mto Labs", organisationRole: "Engineering lead", link: "https://example.com/synthetic/mto-labs",
+    decisionMessage: null, createdAt: FIXTURE_NOW - day, updatedAt: FIXTURE_NOW - day, decidedAt: null, seenAt: null,
+  },
+  peterMentor: {
+    id: accessRequestIds.peterMentor, role: "MENTOR", status: "DECLINED",
+    note: "I have built USSD and SMS tools for three years and could review backend work members share.",
+    organisation: null, organisationRole: null, link: null,
+    decisionMessage: "Thanks for offering, Peter. We can't add this right now.",
+    createdAt: FIXTURE_NOW - 10 * day, updatedAt: FIXTURE_NOW - 3 * day, decidedAt: FIXTURE_NOW - 3 * day, seenAt: null,
+  },
+} satisfies Record<string, AccessRequestSummary>;
+export const onboardingByPersona = {
+  mercyAkinyi: { stage: "DONE", intents: ["MEMBER", "MENTOR"], inferred: [], requests: [accessRequests.mercyMentor], roles: [] },
+  josephOchieng: { stage: "DONE", intents: ["INSTITUTION"], inferred: [], requests: [accessRequests.josephInstitution], roles: [] },
+  // A decline keeps the intent, so the declined card and Account can offer a new request.
+  peter: { stage: "DONE", intents: ["MENTOR"], inferred: [], requests: [accessRequests.peterMentor], roles: [] },
+  wairimu: { stage: "NEW", intents: [], inferred: [], requests: [], roles: [] },
+} satisfies Partial<Record<keyof typeof people, OnboardingState>>;
+const adminView = (summary: AccessRequestSummary, requester: PersonSummary, githubLogin: string,
+  overrides: Partial<AdminAccessRequest> = {}): AdminAccessRequest => {
+  const { seenAt: _seenAt, ...shared } = summary;
+  return {
+    ...shared, requester, githubLogin, decidedBy: null, earlierRequests: [],
+    scopeAcknowledgedAt: summary.role === "INSTITUTION" ? summary.createdAt : null, ...overrides,
+  };
+};
+export const adminAccessRequests = {
+  pending: {
+    pendingCount: 2, nextCursor: null,
+    items: [
+      adminView(accessRequests.josephInstitution, people.josephOchieng, "synthetic-joseph-ochieng"),
+      adminView(accessRequests.mercyMentor, people.mercyAkinyi, "synthetic-mercy-akinyi"),
+    ],
+  },
+  decided: {
+    pendingCount: 2, nextCursor: null,
+    items: [adminView(accessRequests.peterMentor, people.peter, "synthetic-peter-njoroge", { decidedBy: people.amina })],
+  },
+} satisfies Record<string, AdminAccessRequestList>;
+const accessRequestHref = "/dashboard/account#taking-part";
+export const accessAttention = {
+  // Amina's admin Attention group: one item per pending request, from the requester.
+  amina: {
+    snapshotAt: FIXTURE_NOW, nextCursor: null,
+    items: [
+      { id: id(911), kind: "access_request", space: "admin", actor: people.josephOchieng,
+        subject: { kind: "accessRequest", id: accessRequests.josephInstitution.id, href: "/admin/access-requests", label: "Institution access" },
+        summary: "Joseph Ochieng asked for institution access", createdAt: accessRequests.josephInstitution.createdAt, readAt: null },
+      { id: id(912), kind: "access_request", space: "admin", actor: people.mercyAkinyi,
+        subject: { kind: "accessRequest", id: accessRequests.mercyMentor.id, href: "/admin/access-requests", label: "Mentor access" },
+        summary: "Mercy Akinyi asked for mentor access", createdAt: accessRequests.mercyMentor.createdAt, readAt: null },
+    ],
+  },
+  // Peter's decision arrives without an actor: the requester never learns which administrator decided.
+  peter: {
+    snapshotAt: FIXTURE_NOW, nextCursor: null,
+    items: [
+      { id: id(913), kind: "access_decided", space: "community", actor: null,
+        subject: { kind: "accessRequest", id: accessRequests.peterMentor.id, href: accessRequestHref, label: "Mentor access" },
+        summary: "Mentor access wasn't approved this time", createdAt: FIXTURE_NOW - 3 * day, readAt: null },
+    ],
+  },
+} satisfies Record<string, AttentionList>;

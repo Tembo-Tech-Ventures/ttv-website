@@ -7,9 +7,11 @@ import {
   PiEnvelopeSimple,
   PiEyeSlash,
   PiHandshake,
+  PiKey,
   PiPaperPlaneTilt,
   PiSealCheck,
   PiShieldCheck,
+  PiUserPlus,
   PiVideoCamera,
 } from "react-icons/pi";
 import type { AttentionItem, AttentionKind } from "@/lib/platform/contracts";
@@ -34,6 +36,8 @@ const KIND_ICON: Record<AttentionKind, IconType> = {
   opportunity_match: PiBriefcase,
   moderation_pending: PiShieldCheck,
   message_hidden: PiEyeSlash,
+  access_request: PiUserPlus,
+  access_decided: PiKey,
 };
 
 type Viewer = { id: string; name: string; src?: string };

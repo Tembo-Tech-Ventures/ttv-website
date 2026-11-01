@@ -20,6 +20,12 @@ const planEndpoints = [
 const additionalEndpoints = [
   "GET /api/admin/platform-flags", "PUT /api/admin/platform-flags/:key", "POST /api/messages/:id/tembo-feedback",
 ];
+/** Independent transcription of the onboarding SPEC §5 routes. */
+const onboardingEndpoints = [
+  "GET /api/platform/onboarding", "PUT /api/platform/onboarding", "POST /api/platform/access-requests",
+  "POST /api/platform/access-requests/:id/withdraw", "POST /api/platform/access-requests/:id/dismiss",
+  "GET /api/admin/access-requests", "POST /api/admin/access-requests/:id/decision",
+];
 const post: C.PostMessage = {
   body: "Could you review this?", clientNonce: "test-nonce-1", parentId: null,
   embeds: [{ type: "project", journeyId: F.fixtureIds.chamaLedger, version: 3 }],
@@ -29,6 +35,18 @@ type RouteExample<T> = T extends C.RouteDef<infer P, infer Q, infer B, infer R>
 const channelParams = { id: F.channels.showYourWork.id };
 const messageParams = { id: F.messages.projectPost.id };
 const requestParams = { id: F.pendingMentorRequest.id };
+const createMentorAccess: C.CreateAccessRequest = {
+  role: "MENTOR", note: F.accessRequests.mercyMentor.note, link: F.accessRequests.mercyMentor.link,
+};
+const createInstitutionAccess: C.CreateAccessRequest = {
+  role: "INSTITUTION", note: F.accessRequests.josephInstitution.note, organisation: "Mto Labs",
+  organisationRole: "Engineering lead", link: "https://example.com/synthetic/mto-labs", scopeAcknowledged: true,
+};
+const withdrawnMercy: C.OnboardingState = {
+  ...F.onboardingByPersona.mercyAkinyi, intents: ["MEMBER"],
+  requests: [{ ...F.accessRequests.mercyMentor, status: "WITHDRAWN", updatedAt: F.FIXTURE_NOW }],
+};
+const declined = F.adminAccessRequests.decided.items[0];
 const routeExamples = {
   getMe: { response: F.meByPersona.wanjiku },
   listAttention: { query: { filter: "all" }, response: F.attention },
@@ -63,12 +81,21 @@ const routeExamples = {
   getFlags: { response: F.flagsAdmin },
   updateFlag: { params: { key: "spaces" }, body: { audience: "STAFF" },
     response: { key: "spaces", audience: "STAFF", updatedAt: F.FIXTURE_NOW, updatedBy: F.people.amina.id } },
+  getOnboarding: { response: F.onboardingByPersona.wairimu },
+  updateOnboarding: { body: { intents: ["MEMBER", "MENTOR"] }, response: { ...F.onboardingByPersona.mercyAkinyi, requests: [] } },
+  createAccessRequest: { body: createMentorAccess, response: F.onboardingByPersona.mercyAkinyi },
+  withdrawAccessRequest: { params: { id: F.accessRequests.mercyMentor.id }, body: {}, response: withdrawnMercy },
+  dismissAccessRequest: { params: { id: F.accessRequests.peterMentor.id }, body: {},
+    response: { ...F.onboardingByPersona.peter, requests: [{ ...F.accessRequests.peterMentor, seenAt: F.FIXTURE_NOW }] } },
+  listAccessRequests: { query: { status: "PENDING" }, response: F.adminAccessRequests.pending },
+  decideAccessRequest: { params: { id: declined.id }, body: { decision: "decline", message: "Thanks for offering, Peter. We can't add this right now." },
+    response: declined },
 } satisfies { [K in keyof typeof C.ROUTES]: RouteExample<(typeof C.ROUTES)[K]> };
 
 describe("route registry", () => {
-  it("covers every plan endpoint and only the three agreed additions", () => {
+  it("covers every plan endpoint, the three agreed additions and the onboarding routes, and nothing else", () => {
     const actual = Object.values(C.ROUTES).map((r) => `${r.method} ${r.path}`);
-    expect(actual.toSorted()).toEqual([...planEndpoints, ...additionalEndpoints].toSorted());
+    expect(actual.toSorted()).toEqual([...planEndpoints, ...additionalEndpoints, ...onboardingEndpoints].toSorted());
     expect(new Set(actual).size).toBe(actual.length);
   });
 
@@ -219,5 +246,149 @@ describe("wire invariants", () => {
   it.each(C.ErrorCode.options)("uses the one error envelope for %s", (code) => {
     const error: C.ErrorEnvelope = { error: { code, message: "Synthetic failure", retryAfterMs: 1000 } };
     expect(C.ErrorEnvelope.parse(error)).toEqual(error);
+  });
+});
+
+describe("onboarding contracts", () => {
+  const mercy = F.accessRequests.mercyMentor;
+  const peter = F.accessRequests.peterMentor;
+  const decision = { decidedAt: F.FIXTURE_NOW, updatedAt: F.FIXTURE_NOW };
+
+  it("fixes the intent, stage, role, status and decision vocabulary", () => {
+    expect(C.Intent.options).toEqual(["MEMBER", "MENTOR", "INSTITUTION", "EXPLORING"]);
+    expect(C.InferredIntent.options).toEqual(["MEMBER", "MENTOR", "INSTITUTION"]);
+    expect(C.OnboardingStage.options).toEqual(["NEW", "PROMPT", "DONE"]);
+    expect(C.AccessRole.options).toEqual(["MENTOR", "INSTITUTION"]);
+    expect(C.AccessRequestStatus.options).toEqual(["PENDING", "APPROVED", "DECLINED", "WITHDRAWN"]);
+    expect(C.AccessDecisionKind.options).toEqual(["approve", "decline"]);
+    expect(C.AttentionKind.options).toEqual(expect.arrayContaining(["access_request", "access_decided"]));
+    expect(C.SubjectKind.options).toContain("accessRequest");
+  });
+
+  it("leaves the flag vocabulary to B-O.2", () => {
+    expect(C.FlagKey.options).not.toContain("onboarding");
+  });
+
+  it("refuses retries for writes with effects, and allows them for setting intents and dismissing", () => {
+    expect(C.ROUTES.createAccessRequest.idempotent).toBe(false);
+    expect(C.ROUTES.withdrawAccessRequest.idempotent).toBe(false);
+    expect(C.ROUTES.decideAccessRequest.idempotent).toBe(false);
+    expect(C.ROUTES.updateOnboarding.idempotent).toBe(true);
+    expect(C.ROUTES.dismissAccessRequest.idempotent).toBe(true);
+  });
+
+  it.each<C.UpdateOnboarding>([
+    { intents: [] }, { intents: ["EXPLORING"] }, { intents: ["MEMBER"] },
+    { intents: ["MEMBER", "MENTOR", "INSTITUTION"] }, { intents: ["INSTITUTION", "MENTOR"] },
+  ])("accepts the intent set %j", (body) => {
+    expect(C.UpdateOnboarding.parse(body)).toEqual(body);
+  });
+
+  it("round-trips both create shapes, with and without optional details", () => {
+    for (const body of [createMentorAccess, { ...createMentorAccess, link: null }, createInstitutionAccess,
+      { ...createInstitutionAccess, organisationRole: null, link: null }]) {
+      expect(C.CreateAccessRequest.parse(JSON.parse(JSON.stringify(body)))).toEqual(body);
+    }
+    expect(C.UpdateOnboarding.parse({ dismissPrompt: true })).toEqual({ dismissPrompt: true });
+    expect(C.AccessDecision.parse({ decision: "approve" })).toEqual({ decision: "approve" });
+  });
+
+  it("measures the note on its content: 20 characters of text, at most 600 in all", () => {
+    expect(C.AccessRequestNote.safeParse("x".repeat(20)).success).toBe(true);
+    expect(C.AccessRequestNote.safeParse("x".repeat(600)).success).toBe(true);
+    expect(C.AccessRequestNote.safeParse(`  ${"x".repeat(19)}  `).success).toBe(false);
+  });
+
+  it.each(["ttv-fixture-user-student", "legacy:user_123", "x".repeat(255)])("keeps opaque request ids: %s", (id) => {
+    expect(C.AccessRequestSummary.parse({ ...mercy, id }).id).toBe(id);
+    expect(C.AdminAccessRequest.parse({ ...declined, id, requester: { ...declined.requester, id } }).requester.id).toBe(id);
+  });
+
+  describe("actor-neutral decisions", () => {
+    const admin = F.people.amina;
+    // Any key a careless serialiser might copy from the row or the admin view.
+    const leaked = { ...peter, decidedBy: admin.id, decider: admin, decidedByName: admin.name, githubLogin: "synthetic-amina" };
+
+    it("strips administrator identity from the requester's view, alone and inside OnboardingState", () => {
+      const summary = C.AccessRequestSummary.parse(leaked);
+      expect(summary).toEqual(peter);
+      const state = C.OnboardingState.parse({ ...F.onboardingByPersona.peter, requests: [leaked] });
+      for (const text of [JSON.stringify(summary), JSON.stringify(state)]) {
+        expect(text).not.toContain(admin.id);
+        expect(text).not.toContain(admin.name);
+        expect(text).not.toContain("decidedBy");
+      }
+    });
+
+    it("has no requester-facing field that names an administrator", () => {
+      const fields = Object.keys(C.AccessRequestSummary.shape);
+      expect(fields.filter((f) => /decided?By|decider|admin|reviewer|actor/i.test(f))).toEqual([]);
+      expect(Object.keys(C.OnboardingState.shape).toSorted()).toEqual(["inferred", "intents", "requests", "roles", "stage"]);
+      expect(Object.keys(C.AdminAccessRequest.shape)).toContain("decidedBy");
+    });
+
+    it("accepts a decision whose deciding account was later deleted", () => {
+      expect(C.AdminAccessRequest.parse({ ...declined, decidedBy: null }).decidedBy).toBeNull();
+    });
+  });
+
+  const decidedItem = F.accessAttention.peter.items[0];
+  const requestItem = F.accessAttention.amina.items[0];
+  it.each([
+    ["exploring with another intent", C.IntentSet, ["EXPLORING", "MEMBER"]],
+    ["duplicate intent", C.IntentSet, ["MENTOR", "MENTOR"]],
+    ["unknown intent", C.IntentSet, ["EMPLOYER"]],
+    ["oversize intent set", C.IntentSet, ["MEMBER", "MENTOR", "INSTITUTION", "EXPLORING", "MEMBER"]],
+    ["inferred exploring", C.OnboardingState, { ...F.onboardingByPersona.wairimu, inferred: ["EXPLORING"] }],
+    ["duplicate inferred intent", C.OnboardingState, { ...F.onboardingByPersona.wairimu, inferred: ["MEMBER", "MEMBER"] }],
+    ["duplicate role", C.OnboardingState, { ...F.onboardingByPersona.wairimu, roles: ["MENTOR", "MENTOR"] }],
+    ["unknown stage", C.OnboardingState, { ...F.onboardingByPersona.wairimu, stage: "SKIPPED" }],
+    ["two requests for one role", C.OnboardingState, { ...F.onboardingByPersona.peter, requests: [peter, mercy] }],
+    ["pending beside the held role", C.OnboardingState, { ...F.onboardingByPersona.mercyAkinyi, roles: ["MENTOR"] }],
+    ["update with both shapes", C.UpdateOnboarding, { intents: ["MEMBER"], dismissPrompt: true }],
+    ["undoing a dismissal", C.UpdateOnboarding, { dismissPrompt: false }],
+    ["self-granted role in update", C.UpdateOnboarding, { intents: ["MENTOR"], roles: ["MENTOR"] }],
+    ["unknown access role", C.CreateAccessRequest, { ...createMentorAccess, role: "ADMIN" }],
+    ["institution type", C.CreateAccessRequest, { ...createInstitutionAccess, organisationType: "EMPLOYER" }],
+    ["short note", C.CreateAccessRequest, { ...createMentorAccess, note: "Happy to help out." }],
+    ["oversize note", C.CreateAccessRequest, { ...createMentorAccess, note: "x".repeat(601) }],
+    ["mentor with an organisation", C.CreateAccessRequest, { ...createMentorAccess, organisation: "Mto Labs" }],
+    ["institution without an organisation", C.CreateAccessRequest, { ...createInstitutionAccess, organisation: undefined }],
+    ["blank organisation", C.CreateAccessRequest, { ...createInstitutionAccess, organisation: "  " }],
+    ["unacknowledged scope", C.CreateAccessRequest, { ...createInstitutionAccess, scopeAcknowledged: false }],
+    ["missing scope acknowledgement", C.CreateAccessRequest, { ...createInstitutionAccess, scopeAcknowledged: undefined }],
+    // oxlint-disable-next-line no-script-url -- Adversarial input must be rejected by the link contract.
+    ["script link", C.CreateAccessRequest, { ...createMentorAccess, link: "javascript:alert(1)" }],
+    ["internal path as link", C.CreateAccessRequest, { ...createMentorAccess, link: "/admin/access-requests" }],
+    ["forged status", C.CreateAccessRequest, { ...createMentorAccess, status: "APPROVED" }],
+    ["pending with a decision time", C.AccessRequestSummary, { ...mercy, ...decision }],
+    ["pending with a message", C.AccessRequestSummary, { ...mercy, decisionMessage: "Welcome" }],
+    ["declined without a decision time", C.AccessRequestSummary, { ...peter, decidedAt: null }],
+    ["withdrawn with a decision time", C.AccessRequestSummary, { ...mercy, status: "WITHDRAWN", ...decision }],
+    ["pending marked seen", C.AccessRequestSummary, { ...mercy, seenAt: F.FIXTURE_NOW }],
+    ["mentor summary with an organisation", C.AccessRequestSummary, { ...mercy, organisation: "Mto Labs" }],
+    ["mentor summary with an organisation role", C.AccessRequestSummary, { ...mercy, organisationRole: "Lead" }],
+    ["institution summary without an organisation", C.AccessRequestSummary, { ...F.accessRequests.josephInstitution, organisation: null }],
+    ["oversize decision message", C.AccessRequestSummary, { ...peter, decisionMessage: "x".repeat(601) }],
+    ["pending with a decider", C.AdminAccessRequest, { ...F.adminAccessRequests.pending.items[1], decidedBy: F.people.amina }],
+    ["institution without acknowledgement", C.AdminAccessRequest, { ...F.adminAccessRequests.pending.items[0], scopeAcknowledgedAt: null }],
+    ["mentor with acknowledgement", C.AdminAccessRequest, { ...F.adminAccessRequests.pending.items[1], scopeAcknowledgedAt: F.FIXTURE_NOW }],
+    ["pending history item", C.AccessRequestHistoryItem, { id: mercy.id, role: "MENTOR", status: "PENDING", decisionMessage: null, createdAt: 0, decidedAt: null }],
+    ["unknown queue", C.AdminAccessRequestQuery, { status: "WITHDRAWN" }],
+    ["unknown decision", C.AccessDecision, { decision: "defer" }],
+    ["empty decision message", C.AccessDecision, { decision: "decline", message: " " }],
+    ["oversize decision message", C.AccessDecision, { decision: "decline", message: "x".repeat(601) }],
+    ["forged decider", C.AccessDecision, { decision: "approve", decidedBy: F.people.amina.id }],
+    ["decision naming an actor", C.AttentionItem, { ...decidedItem, actor: F.people.amina }],
+    ["decision outside Community", C.AttentionItem, { ...decidedItem, space: "admin" }],
+    ["request outside Admin", C.AttentionItem, { ...requestItem, space: "community" }],
+    ["request pointing elsewhere", C.AttentionItem, { ...requestItem, subject: { ...requestItem.subject, kind: "message" } }],
+  ] satisfies [string, z.ZodType, unknown][])("rejects %s", (_label, schema, input) => {
+    expect(schema.safeParse(input).success).toBe(false);
+  });
+
+  it("leaves existing attention kinds free to use any space and actor", () => {
+    const item = F.attention.items[0];
+    expect(C.AttentionItem.parse({ ...item, space: "admin", subject: { ...item.subject, kind: "accessRequest" } }).space).toBe("admin");
   });
 });
