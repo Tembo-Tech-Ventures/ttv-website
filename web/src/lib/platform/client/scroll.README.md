@@ -44,6 +44,9 @@ const { atBottom, measured, scrollToBottom, scrollToItem } = useScrollAnchoring(
   `atBottom` and anchor stay as they were, and the reader is put back where they
   were when it shows again. A list mounted that way stays unmeasured, and opens
   once it has a box.
+- Items appended while the list has no box are not followed when it shows again
+  (`shouldFollow` applies to visible lists only); the reader returns to where they
+  were.
 - **`visibility: hidden` keeps a box**, so such a list (U-2.1 hides the list this
   way under a phone's thread view) is measured as usual: layout still happens, and
   its anchoring stays correct. `atBottom` then describes the list's position, not

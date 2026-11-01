@@ -255,6 +255,27 @@ describe("useScrollAnchoring", () => {
     expect(anchoring.measured).toBe(true);
   });
 
+  it("never reports atBottom when the first page arrives after mount, opened at an earlier item", async () => {
+    const seen = vi.fn();
+    const marked = vi.fn();
+    function Consumer({ items }: { items: Item[] }) {
+      const ref = useRef<HTMLElement>(null);
+      const { atBottom } = useScrollAnchoring(ref, { items, initialItemId: "m5" });
+      const last = items.at(-1)?.id;
+      useEffect(() => { seen(atBottom); if (atBottom && last) marked(last); }, [atBottom, last]);
+      return (
+        <section ref={ref} data-viewport="300">
+          <ol>{items.map(item => <li key={item.id} data-message-row={item.id} data-height={100} />)}</ol>
+        </section>
+      );
+    }
+    await act(async () => root.render(<Consumer items={[]} />));
+    await act(async () => root.render(<Consumer items={range(1, 30)} />));
+    expect(scroller().scrollTop).toBe(400);
+    expect(seen.mock.calls.every(([value]) => value === false)).toBe(true);
+    expect(marked).not.toHaveBeenCalled();
+  });
+
   it("positions a re-mounted scroller even when the items are the very same array", async () => {
     const items = range(1, 10);
     await render({ items, surface: "a" });
