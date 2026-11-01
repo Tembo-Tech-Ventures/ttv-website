@@ -418,7 +418,7 @@ v1.
   Every new read is checked.
 - **Search (B-2.6).** The stored snapshot must never be indexed for search
   without the same read-time check, or private and moved work would come back
-  through search.
+  through search. Search indexes the body only (`src/lib/search/README.md`).
 - **Retries.** A repeated post returns the original even if the work has
   changed since; the same nonce with different work is 409.
 
@@ -504,6 +504,13 @@ them. The trigger then creates fresh, empty channels with new ids. Fixtures
 that re-seed programs must use `ON CONFLICT(id) DO UPDATE` (the local persona
 seed, `e2e/platform-personas.local.sql`, still uses REPLACE and needs this
 change before re-seeding a database that holds messages).
+
+**Rebuilding `channel_message_search`.** Message search (migration
+`0033_channel_message_search.sql`) keys its FTS5 index on that table's own
+integer key, so rebuilding `channel_message` leaves it intact, provided the
+rebuild recreates the `channel_message_fts_*` triggers (dropping a table drops
+its triggers). Rebuilding `channel_message_search` itself must end with
+`INSERT INTO channel_message_fts(channel_message_fts) VALUES ('rebuild')`.
 
 **Rebuilding `program` or `channel`.** A migration that rebuilds either table
 (create, copy, drop, rename) must drop and recreate `cohort_channel_request`,

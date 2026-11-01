@@ -5,6 +5,7 @@ import { capabilitiesFor } from "@/lib/platform/server/capabilities";
 import { DEMO_USER_IDS, isDemoUser } from "@/lib/staging-demo-policy";
 import { DISCOVERY_EXCLUDED_ROLES_SQL, discoverableMember } from "@/lib/community/eligibility";
 import { resolvePublicProfileIdentity } from "@/lib/talent/public-identity";
+import { searchMessages } from "./messages";
 
 export const SEARCH_RESULT_LIMIT = 10;
 
@@ -39,16 +40,24 @@ function discoveryScopes(caps: { isInstitution: boolean; isAdmin: boolean }, use
   };
 }
 
+export interface SearchOptions {
+  /** Whether the `channels` flag is on for the caller: off, messages are never read. */
+  messages?: boolean;
+}
+
 /**
  * One canonical access lookup per search, before retrieving any content.
  * No AI/Vectorize binding is accepted: v1 performs literal text search over
  * authorized sources, not the chat tool's global vector query. Limits apply
  * after matching, so a large cohort does not silently lose searchable content.
  */
-export async function searchPlatform(d1: D1Database, userId: string, input: SearchQuery): Promise<SearchResults> {
+export async function searchPlatform(
+  d1: D1Database, userId: string, input: SearchQuery, { messages = false }: SearchOptions = {},
+): Promise<SearchResults> {
   if (!userId) throw new SearchScopeError("Authentication required.");
   const query = SearchQuery.parse(input);
-  const caps = await capabilitiesFor(drizzle(d1, { schema }), { id: userId });
+  const db = drizzle(d1, { schema });
+  const caps = await capabilitiesFor(db, { id: userId });
   if (query.programId && !["all", "cohort", "sessionMoments"].includes(query.scope)) {
     throw new SearchScopeError("This scope does not accept a cohort.");
   }
@@ -116,6 +125,9 @@ export async function searchPlatform(d1: D1Database, userId: string, input: Sear
       title: row.title, startSeconds: row.startTime, quote: row.quote,
       href: `/dashboard/sessions/${encodeURIComponent(row.recordingId)}?t=${Math.floor(row.startTime)}`,
       visibility: { kind: "COHORT", label: "Only you and your cohort" } }));
+  }
+  if (messages) {
+    results.messages = await searchMessages(d1, db, { userId, capabilities: caps, query, limit: SEARCH_RESULT_LIMIT });
   }
   return SearchResults.parse(results);
 }

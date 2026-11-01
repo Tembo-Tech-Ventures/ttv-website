@@ -232,6 +232,13 @@
       "when": 1793572543780,
       "tag": "0032_moderation_pipeline",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1793576466845,
+      "tag": "0033_channel_message_search",
+      "breakpoints": true
     }
   ]
 }

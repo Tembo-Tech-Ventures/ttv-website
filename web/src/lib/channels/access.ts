@@ -63,6 +63,24 @@ function readable(row: ChannelRow, capabilities: PlatformCapabilities): Channel 
 }
 
 /**
+ * Narrows the channel table to the rows the caller might read; channelAccessFor still decides each
+ * one. Community channels, the caller's cohorts' channels (every cohort's for admins), and their
+ * direct conversations.
+ */
+function candidateChannels(db: Database, userId: string, caps: PlatformCapabilities): SQL | undefined {
+  const cohortScope = caps.isAdmin ? undefined
+    : caps.cohortIds.length > 0 ? inArray(channel.programId, caps.cohortIds) : sql`0`;
+  return or(
+    eq(channel.kind, "COMMUNITY"),
+    and(eq(channel.kind, "COHORT"), cohortScope),
+    // From the caller's memberships (channel_member_userId_idx), never a walk over every
+    // conversation: unary + keeps SQLite from choosing channel_kind_idx for this branch.
+    and(inArray(channel.id, db.select({ id: channelMember.channelId }).from(channelMember)
+      .where(eq(channelMember.userId, userId))), sql`+${channel.kind} = 'DIRECT'`),
+  );
+}
+
+/**
  * Every channel the caller can read, in display order: cohort channels (newest cohort first), then
  * community channels, then their direct conversations. Within a group, open channels come before
  * archived ones, then by position and name. Signed-out callers get nothing, without a query.
@@ -73,16 +91,7 @@ export async function listChannelsFor(
 ): Promise<Channel[]> {
   if (!user?.id) return [];
   const caps = capabilities ?? await capabilitiesFor(db, user);
-  const cohortScope = caps.isAdmin ? undefined
-    : caps.cohortIds.length > 0 ? inArray(channel.programId, caps.cohortIds) : sql`0`;
-  const rows = await selectChannels(db, user.id, or(
-    eq(channel.kind, "COMMUNITY"),
-    and(eq(channel.kind, "COHORT"), cohortScope),
-    // From the caller's memberships (channel_member_userId_idx), never a walk over every
-    // conversation: unary + keeps SQLite from choosing channel_kind_idx for this branch.
-    and(inArray(channel.id, db.select({ id: channelMember.channelId }).from(channelMember)
-      .where(eq(channelMember.userId, user.id))), sql`+${channel.kind} = 'DIRECT'`),
-  )).orderBy(
+  const rows = await selectChannels(db, user.id, candidateChannels(db, user.id, caps)).orderBy(
     sql`CASE ${channel.kind} WHEN 'COHORT' THEN 0 WHEN 'COMMUNITY' THEN 1 ELSE 2 END`,
     sql`${program.startDate} DESC NULLS LAST`, asc(program.name), asc(channel.programId),
     sql`${channel.archivedAt} IS NOT NULL`, asc(channel.position), asc(channel.name), asc(channel.id),
@@ -136,4 +145,26 @@ export async function readMarker(
     .leftJoin(channelRead, and(eq(channelRead.channelId, channel.id), eq(channelRead.userId, userId)))
     .where(eq(channel.id, channelId));
   return { lastReadMessageId: row?.lastReadMessageId ?? null, unreadCount: row?.unreadCount ?? 0 };
+}
+
+/** Just enough of a readable channel to search it and link to it. */
+export type ChannelRef = Pick<Channel, "id" | "kind" | "slug" | "programId">;
+
+/**
+ * Every channel the caller can read, without the counts the channel list carries: one indexed read,
+ * each row decided by channelAccessFor like everywhere else. For search and, later, Tembo.
+ */
+export async function readableChannelRefs(
+  db: Database, userId: string, capabilities: PlatformCapabilities,
+): Promise<ChannelRef[]> {
+  const rows = await db.select({
+    id: channel.id, kind: channel.kind, slug: channel.slug, programId: channel.programId,
+    postingPolicy: channel.postingPolicy, archivedAt: channel.archivedAt,
+    isMember: sql<number>`${channelMember.userId} IS NOT NULL`,
+  })
+    .from(channel)
+    .leftJoin(channelMember, and(eq(channelMember.channelId, channel.id), eq(channelMember.userId, userId)))
+    .where(candidateChannels(db, userId, capabilities));
+  return rows.flatMap(({ postingPolicy, archivedAt, isMember, ...ref }) =>
+    channelAccessFor(capabilities, { ...ref, postingPolicy, archivedAt }, { isMember: isMember === 1 }).canRead ? [ref] : []);
 }

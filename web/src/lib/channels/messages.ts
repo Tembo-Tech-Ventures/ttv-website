@@ -84,8 +84,8 @@ const NonBlank = z.string().refine((text) => text.trim().length > 0);
 const parsedArray = <T>(schema: z.ZodType<T>, text: string): T[] =>
   jsonArray(text).flatMap((value) => { const result = schema.safeParse(value); return result.success ? [result.data] : []; });
 
-const TEMBO: AuthorSummary = { id: null, name: "Tembo", avatarUrl: null, roleBadges: [{ kind: "AI", label: "AI", programId: null }] };
-const DELETED_USER: AuthorSummary = { id: null, name: "Deleted user", avatarUrl: null, roleBadges: [] };
+export const TEMBO_AUTHOR: AuthorSummary = { id: null, name: "Tembo", avatarUrl: null, roleBadges: [{ kind: "AI", label: "AI", programId: null }] };
+export const DELETED_AUTHOR: AuthorSummary = { id: null, name: "Deleted user", avatarUrl: null, roleBadges: [] };
 
 /**
  * Display badges, never permissions: staff, mentor and institution roles everywhere; a cohort's
@@ -109,8 +109,8 @@ function badges(row: MessageRow, programId: string | null): RoleBadge[] {
 }
 
 function author(row: MessageRow, programId: string | null): AuthorSummary {
-  if (row.authorKind === "TEMBO") return TEMBO;
-  if (row.authorId === null) return DELETED_USER;
+  if (row.authorKind === "TEMBO") return TEMBO_AUTHOR;
+  if (row.authorId === null) return DELETED_AUTHOR;
   const avatar = WebLink.safeParse(row.authorImage);
   return { id: row.authorId, name: row.authorName?.trim() || "Member", avatarUrl: avatar.success ? avatar.data : null, roleBadges: badges(row, programId) };
 }
