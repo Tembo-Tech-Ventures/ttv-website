@@ -38,14 +38,24 @@ export function demoEnabled(environment: string | undefined, enabled: string | u
 export const SPACES_READ_PATHS: ReadonlySet<string> = new Set([
   ROUTES.getMe.path, ROUTES.listAttention.path, ROUTES.countAttention.path, "/dashboard/attention", WELCOME_PATH,
 ]);
+/** A channel id these allowlists accept: the seeded hex and cuid shapes. Anything else stays closed. */
+const CHANNEL_API_ID = "[A-Za-z0-9_-]{1,255}";
+const CHANNEL_MESSAGES_API = new RegExp(`^/api/channels/${CHANNEL_API_ID}/messages$`);
+const CHANNEL_READ_API = new RegExp(`^/api/channels/${CHANNEL_API_ID}/read$`);
 /**
  * GET/HEAD surfaces every restricted identity may open: the Phase 1 reads above, plus the channel
- * pages and the code of conduct (B-2.2). Only valid channel slugs match. Posting, reacting and
- * agreeing to the code of conduct stay closed: retained personas have no cleanup. The channels flag,
- * the caller's channel access and the pages still decide what each one sees.
+ * pages and the code of conduct (B-2.2), and the channel list and message reads those pages poll
+ * (B-2.3). Only valid channel slugs and ids match. Posting, editing, reacting and agreeing to the
+ * code of conduct stay closed: retained personas have no cleanup. The channels flag, the caller's
+ * channel access and the handlers still decide what each one sees.
  */
 export function spacesReadPathAllowed(path: string): boolean {
-  return SPACES_READ_PATHS.has(path) || isChannelPagePath(path);
+  return SPACES_READ_PATHS.has(path) || isChannelPagePath(path)
+    || path === ROUTES.listChannels.path || CHANNEL_MESSAGES_API.test(path);
+}
+/** POST: the caller's own channel read marker, which fixture cleanup removes with the user (B-2.3). */
+export function channelReadMarkerPath(path: string): boolean {
+  return CHANNEL_READ_API.test(path);
 }
 /** The signed-in Apply form. GET only: no QA ledger covers a submitted application. */
 export const SPACES_APPLY_PATH = legacySpacePath(`${SPACE_PATHS.cohort}/apply`);

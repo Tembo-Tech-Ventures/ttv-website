@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
-import { channel, channelMember, channelMessage, program, type Database } from "@/lib/db/schema";
+import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { channel, channelMember, channelMessage, channelRead, program, type Database } from "@/lib/db/schema";
 import { Channel } from "@/lib/platform/contracts";
 import {
   capabilitiesFor, channelAccessFor, type CapabilityUser, type PlatformCapabilities,
@@ -21,14 +22,33 @@ const lastMessageAt = sql<number | null>`(SELECT ${channelMessage.createdAt} FRO
     AND ${channelMessage.moderationState} <> 'HIDDEN'
   ORDER BY ${channelMessage.seq} DESC LIMIT 1)`;
 
+/** Unread counts stop here; the UI shows "99+" from 100 on. */
+export const UNREAD_COUNT_CAP = 100;
+
+/**
+ * The caller's unread messages in the channel: root messages after their read marker (all of them
+ * without one) that someone else wrote and that nobody deleted or hid, counted up to
+ * UNREAD_COUNT_CAP so a long history never costs more than that. Thread replies reach people
+ * through attention instead. One range of channel_message_thread_idx per channel.
+ */
+export function unreadCount(userId: string, channelId: SQL | AnySQLiteColumn, lastReadMessageId: SQL | AnySQLiteColumn) {
+  return sql<number>`(SELECT COUNT(*) FROM (SELECT 1 FROM channel_message u
+    WHERE u.channelId = ${channelId} AND u.parentId IS NULL
+      AND u.seq > coalesce((SELECT r.seq FROM channel_message r WHERE r.id = ${lastReadMessageId}), 0)
+      AND u.deletedAt IS NULL AND u.moderationState <> 'HIDDEN' AND u.authorId IS NOT ${userId}
+    LIMIT ${UNREAD_COUNT_CAP}))`;
+}
+
 function selectChannels(db: Database, userId: string, where: SQL | undefined) {
   return db.select({
     id: channel.id, kind: channel.kind, slug: channel.slug, name: channel.name, topic: channel.topic,
     postingPolicy: channel.postingPolicy, programId: channel.programId, archivedAt: channel.archivedAt,
     isMember: sql<number>`${channelMember.userId} IS NOT NULL`, lastMessageAt,
+    unreadCount: unreadCount(userId, channel.id, channelRead.lastReadMessageId),
   })
     .from(channel)
     .leftJoin(channelMember, and(eq(channelMember.channelId, channel.id), eq(channelMember.userId, userId)))
+    .leftJoin(channelRead, and(eq(channelRead.channelId, channel.id), eq(channelRead.userId, userId)))
     .leftJoin(program, eq(program.id, channel.programId))
     .where(where);
 }
@@ -38,8 +58,8 @@ type ChannelRow = Awaited<ReturnType<typeof selectChannels>>[number];
 function readable(row: ChannelRow, capabilities: PlatformCapabilities): Channel | null {
   const { canRead, ...access } = channelAccessFor(capabilities, row, { isMember: row.isMember === 1 });
   if (!canRead) return null;
-  // Parsing drops isMember. Read markers arrive with B-2.3; until then nothing is unread.
-  return Channel.parse({ ...row, unreadCount: 0, capabilities: access });
+  // Parsing drops isMember.
+  return Channel.parse({ ...row, capabilities: access });
 }
 
 /**
@@ -87,4 +107,33 @@ export async function findReadableChannel(
     eq(channel.slug, slug), sql`${channel.kind} <> 'DIRECT'`, eq(channel.kind, KIND_FOR_SPACE[space]),
   )).limit(1);
   return row ? readable(row, caps) : null;
+}
+
+/**
+ * The channel with this id, or null when it does not exist or the caller cannot read it, through the
+ * same queries either way: the /api/channels/:id routes never confirm another cohort's channel.
+ */
+export async function findChannelById(
+  db: Database, user: CapabilityUser, channelId: string, capabilities?: PlatformCapabilities,
+): Promise<Channel | null> {
+  if (!user?.id) return null;
+  const caps = capabilities ?? await capabilitiesFor(db, user);
+  const [row] = await selectChannels(db, user.id, eq(channel.id, channelId)).limit(1);
+  return row ? readable(row, caps) : null;
+}
+
+/**
+ * The caller's read marker in a channel they can read, and how many messages are unread after it:
+ * the same count the channel list shows. lastReadMessageId is null before their first marker.
+ */
+export async function readMarker(
+  db: Database, userId: string, channelId: string,
+): Promise<{ lastReadMessageId: string | null; unreadCount: number }> {
+  const [row] = await db.select({
+    lastReadMessageId: channelRead.lastReadMessageId,
+    unreadCount: unreadCount(userId, channel.id, channelRead.lastReadMessageId),
+  }).from(channel)
+    .leftJoin(channelRead, and(eq(channelRead.channelId, channel.id), eq(channelRead.userId, userId)))
+    .where(eq(channel.id, channelId));
+  return { lastReadMessageId: row?.lastReadMessageId ?? null, unreadCount: row?.unreadCount ?? 0 };
 }

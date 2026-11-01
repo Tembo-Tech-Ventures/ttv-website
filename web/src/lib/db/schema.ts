@@ -1381,6 +1381,8 @@ export const channelMessage = sqliteTable("channel_message", {
   index("channel_message_thread_idx").on(table.channelId, table.parentId, table.seq),
   uniqueIndex("channel_message_nonce_idx").on(table.authorId, table.clientNonce),
   index("channel_message_hiddenBy_idx").on(table.hiddenBy).where(sql`${table.hiddenBy} IS NOT NULL`),
+  // B-2.3 posting rate limits: one person's recent messages, in any channel.
+  index("channel_message_author_idx").on(table.authorId, table.createdAt).where(sql`${table.authorId} IS NOT NULL`),
   check("channel_message_seq_check", sql`${table.seq} >= 1 AND ${table.changeSeq} >= ${table.seq}`),
   check("channel_message_authorKind_check", sql`${table.authorKind} IN ('USER','TEMBO')`),
   // Tembo has no account, and only ever answers inside the thread that asked.
