@@ -44,6 +44,26 @@ describe("the welcome flow on the onboarding service", () => {
     expect(rows("SELECT * FROM UserRoles WHERE userId = ?", "wairimu")).toEqual([]);
   });
 
+  it("finishes onboarding before any request: a new account cannot reach the request step first", async () => {
+    // B-O.4 sends a NEW account to the welcome step until onboarding is DONE, and only saving
+    // intents does that (createAccessRequest leaves the stage alone). So S1 must always come first.
+    const { db, rows } = setup();
+    await startOnboarding(db, "wairimu");
+    const actions = onboardingActions(db, "wairimu");
+    expect(await handleWelcome(new Request(`https://ttv.example${ROUTES.request}`), ROUTES, actions))
+      .toEqual({ kind: "redirect", location: ROUTES.choose });
+    expect(await handleWelcome(post(ROUTES.request, [["mentorNote", NOTE]]), ROUTES, actions))
+      .toEqual({ kind: "redirect", location: ROUTES.choose });
+    expect(rows("SELECT * FROM access_request WHERE userId = ?", "wairimu")).toEqual([]);
+    expect((await getOnboardingState(db, "wairimu")).stage).toBe("NEW");
+
+    // Through S1, the stage is DONE before the request is sent.
+    await handleWelcome(post(ROUTES.choose, [["intent", "MENTOR"]]), ROUTES, actions);
+    expect((await getOnboardingState(db, "wairimu")).stage).toBe("DONE");
+    await handleWelcome(post(ROUTES.request, [["mentorNote", NOTE]]), ROUTES, actions);
+    expect(await getOnboardingState(db, "wairimu")).toMatchObject({ stage: "DONE", requests: [{ role: "MENTOR", status: "PENDING" }] });
+  });
+
   it("saves just looking around for a new account and lands", async () => {
     const { db } = setup();
     await startOnboarding(db, "otieno");

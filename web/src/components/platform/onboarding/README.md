@@ -17,6 +17,10 @@ administrator decides, and the page says so before anything is sent.
   so a reload never sends anything twice, and re-renders with what was typed
   on failure. The next step is chosen from the state the server returns, never
   from what the form asked for.
+- Order matters: S1 always saves intents, which completes onboarding, before
+  S2 can send a request. Only saving intents moves an account from NEW to
+  DONE, and B-O.4 keeps sending a NEW account to the welcome step, so S2 is
+  unreachable until the person has chosen (`server-actions.test.ts`).
 - `WelcomeScreen.astro` renders a step inside `OnboardingFrame.astro`: the top
   bar (brand and account menu, no space tabs) and the welcome sheet resting on
   a complete Community sheet, the card file the person is about to enter.
