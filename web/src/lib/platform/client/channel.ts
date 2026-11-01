@@ -1,4 +1,4 @@
-import { ROUTES, type ChannelRead, type Id, type Message, type MessageList } from "../contracts";
+import { ROUTES, type ChannelRead, type Id, type Message, type MessageList, type ReactionKind } from "../contracts";
 import { ApiError, createApiClient, type ApiClient } from "./apiClient";
 import type { PollResult } from "./poller";
 import { createStore } from "./store";
@@ -51,6 +51,17 @@ export interface ChannelState {
   /** Polite aria-live text: new messages and failures. */
   announcement: string;
 }
+/**
+ * An unconfirmed change shown over the cached copy of a message (S-2.2's
+ * optimistic edits, deletions and reactions). Server copies replace the cached
+ * message underneath; the overlay stays on top until its owner clears it.
+ */
+export interface MessageOverlay {
+  body?: string;
+  deleted?: boolean;
+  /** The reader's wanted `mine` for each reaction kind. */
+  reactions?: Partial<Record<ReactionKind, boolean>>;
+}
 export interface ChannelInitialRead {
   lastReadMessageId: Id | null;
   unreadCount: number;
@@ -96,6 +107,30 @@ const normalizeError = (error: unknown) => error instanceof ApiError ? error
 const ahead = (a: ReadKey | null, b: ReadKey | null) => a !== null && (b === null || compareMessages(a.position, b.position) > 0);
 const keyOf = (message: Message): ReadKey => ({ id: message.id, position: message });
 
+function withReaction(reactions: Message["reactions"], kind: ReactionKind, mine: boolean): Message["reactions"] {
+  const existing = reactions.find(reaction => reaction.kind === kind);
+  if ((existing?.mine ?? false) === mine) return reactions;
+  const count = Math.max(0, (existing?.count ?? 0) + (mine ? 1 : -1));
+  const next = existing
+    ? reactions.map(reaction => reaction.kind === kind ? { ...reaction, count, mine } : reaction)
+    : [...reactions, { kind, count, mine }];
+  return next.filter(reaction => reaction.count > 0);
+}
+
+/** The message as the reader should see it while the overlay's changes are unconfirmed. */
+export function applyOverlay(message: Message, overlay: MessageOverlay): Message {
+  if (overlay.deleted || message.deleted) {
+    return message.deleted ? message : { ...message, body: "", embeds: [], citations: [], reactions: [], deleted: true };
+  }
+  let reactions = message.reactions;
+  for (const [kind, mine] of Object.entries(overlay.reactions ?? {}) as [ReactionKind, boolean][]) {
+    reactions = withReaction(reactions, kind, mine);
+  }
+  const edited = overlay.body !== undefined && overlay.body !== message.body;
+  if (!edited && reactions === message.reactions) return message;
+  return { ...message, reactions, ...(edited ? { body: overlay.body, edited: true } : {}) };
+}
+
 /** Keep the previous array when every element is the same object, so selectors stay stable. */
 function stable<T>(previous: readonly T[], next: readonly T[]): readonly T[] {
   return previous.length === next.length && next.every((item, i) => item === previous[i]) ? previous : next;
@@ -133,6 +168,11 @@ export function createChannelStore(options: ChannelOptions) {
   const api = options.api ?? options.mock ?? createApiClient();
 
   const entities = new Map<Id, Message>();
+  // Confirmed writes (S-2.2) are pinned against copies from requests that started before them.
+  let requestSeq = 0;
+  const pins = new Map<Id, number>();
+  const overlays = new Map<Id, MessageOverlay>();
+  const overlaid = new WeakMap<Message, { overlay: MessageOverlay; result: Message }>();
   let channel: Segment | null = null;
   let thread: ThreadCache | null = null;
   let anchorId: Id | null = null;
@@ -162,6 +202,33 @@ export function createChannelStore(options: ChannelOptions) {
       for (const id of thread.segment ? segmentIds(thread.segment) : []) keep.add(id);
     }
     for (const id of entities.keys()) if (!keep.has(id)) entities.delete(id);
+    for (const id of pins.keys()) if (!entities.has(id)) pins.delete(id);
+  }
+
+  /** Cache a server copy, unless a write confirmed after this request started is newer. */
+  function put(item: Message, started: number) {
+    const pin = pins.get(item.id);
+    if (pin !== undefined && entities.has(item.id)) {
+      if (started <= pin) return;
+      pins.delete(item.id);
+    }
+    entities.set(item.id, item);
+  }
+
+  /** A server copy from a confirmed write: newer than any response to a request already in flight. */
+  function confirmWrite(item: Message) {
+    entities.set(item.id, item);
+    pins.set(item.id, requestSeq);
+  }
+
+  function view(message: Message): Message {
+    const overlay = overlays.get(message.id);
+    if (!overlay) return message;
+    const cached = overlaid.get(message);
+    if (cached?.overlay === overlay) return cached.result;
+    const result = applyOverlay(message, overlay);
+    overlaid.set(message, { overlay, result });
+    return result;
   }
 
   function threadState(previous: ChannelThreadState | null): ChannelThreadState | null {
@@ -170,9 +237,10 @@ export function createChannelStore(options: ChannelOptions) {
       parentId: thread.parentId, status: "loading", messages: [], parent: null, hasOlder: false,
       loadingOlder: false, error: null,
     };
-    const messages = thread.segment ? segmentMessages(thread.segment, entities) : [];
+    const messages = thread.segment ? segmentMessages(thread.segment, entities).map(view) : [];
+    const parent = entities.get(thread.parentId);
     return {
-      ...base, messages: stable(base.messages, messages), parent: entities.get(thread.parentId) ?? null,
+      ...base, messages: stable(base.messages, messages), parent: parent ? view(parent) : null,
       hasOlder: (thread.segment?.olderCursor ?? null) !== null, loadingOlder: threadOlder !== undefined,
     };
   }
@@ -180,7 +248,7 @@ export function createChannelStore(options: ChannelOptions) {
   /** Fill every field derived from the caches. */
   function derive(state: ChannelState): ChannelState {
     gc();
-    const messages = channel ? segmentMessages(channel, entities) : [];
+    const messages = channel ? segmentMessages(channel, entities).map(view) : [];
     return {
       ...state, messages: stable(state.messages, messages), hasOlder: (channel?.olderCursor ?? null) !== null,
       loadingOlder: older !== undefined,
@@ -236,16 +304,17 @@ export function createChannelStore(options: ChannelOptions) {
    * Merge a forward delta (a `since` page, or messages the client posted) into
    * one scope: removals, edits to cached messages, then accepted new messages.
    */
-  function applyDelta(scope: Scope, page: MessageList) {
+  function applyDelta(scope: Scope, page: MessageList, started: number | "confirmed") {
     const removal = forget(page.removedIds);
     let changed = removal.changed;
     const fresh: Message[] = [];
+    const cache = (item: Message) => started === "confirmed" ? confirmWrite(item) : put(item, started);
     for (const item of page.items) {
-      if (entities.has(item.id)) { entities.set(item.id, item); changed = true; continue; }
+      if (entities.has(item.id)) { cache(item); changed = true; continue; }
       const segment = scope === "channel" ? channel : thread?.segment;
       const belongs = scope === "channel" ? item.parentId === null : item.parentId === thread?.parentId;
       if (!belongs || !segment?.live || !acceptsNew(segment, entities, item)) continue;
-      entities.set(item.id, item);
+      cache(item);
       fresh.push(item);
     }
     if (scope === "channel" && channel) {
@@ -262,8 +331,8 @@ export function createChannelStore(options: ChannelOptions) {
    * open thread's parent. While the segment is live, polling keeps cached copies
    * fresh, so they win; otherwise the page's copy is the newer one.
    */
-  function cacheOlder(items: readonly Message[], live: boolean): Message[] {
-    for (const item of items) if (!live || !entities.has(item.id)) entities.set(item.id, item);
+  function cacheOlder(items: readonly Message[], live: boolean, started: number): Message[] {
+    for (const item of items) if (!live || !entities.has(item.id)) put(item, started);
     return items.map(item => entities.get(item.id)!);
   }
 
@@ -296,6 +365,7 @@ export function createChannelStore(options: ChannelOptions) {
 
   async function fetchLatest(signal: AbortSignal): Promise<boolean> {
     const gen = ++windowGen;
+    const started = ++requestSeq;
     older?.controller.abort();
     if (!channel) publish({ status: "loading", error: null });
     try {
@@ -303,7 +373,7 @@ export function createChannelStore(options: ChannelOptions) {
       if (!available() || gen !== windowGen) return false;
       forget(page.removedIds);
       const roots = page.items.filter(item => item.parentId === null);
-      for (const item of roots) entities.set(item.id, item);
+      for (const item of roots) put(item, started);
       anchorId = null;
       channel = evict(segmentFromLatest(page, roots), { maxMessages, anchorId: null });
       publish({ status: "ready", error: null, olderError: null });
@@ -319,11 +389,12 @@ export function createChannelStore(options: ChannelOptions) {
     if (!channel?.live) return false;
     const cursor = channel.sinceCursor;
     const gen = windowGen;
+    const started = ++requestSeq;
     try {
       const page = await list({ since: cursor }, signal);
       // A reset, eviction or newer response already moved the checkpoint: this response is stale.
       if (!available() || gen !== windowGen || !channel?.live || channel.sinceCursor !== cursor) return false;
-      const { changed, fresh, parentRemoved } = applyDelta("channel", page);
+      const { changed, fresh, parentRemoved } = applyDelta("channel", page, started);
       publish({ error: null, ...announceFresh(fresh, "message") });
       if (parentRemoved) threadRemoved();
       return changed;
@@ -340,11 +411,12 @@ export function createChannelStore(options: ChannelOptions) {
     const gen = windowGen;
     // Reading older history: keep the current top unless the UI reported an anchor.
     const keep = anchorId ?? channel?.pages[0]?.ids[0] ?? null;
+    const started = ++requestSeq;
     try {
       const page = await list({ before: cursor }, signal);
       if (!available() || gen !== windowGen || channel?.olderCursor !== cursor) return;
       forget(page.removedIds);
-      const roots = cacheOlder(page.items.filter(item => item.parentId === null), channel.live);
+      const roots = cacheOlder(page.items.filter(item => item.parentId === null), channel.live, started);
       channel = evict(prependOlder(channel, page, roots), { maxMessages, anchorId: keep });
     } catch (error) {
       if (isAbort(error) || gen !== windowGen) return;
@@ -379,23 +451,29 @@ export function createChannelStore(options: ChannelOptions) {
   /** A loaded thread whose parent still exists keeps polling, even when the channel window does not. */
   const threadLive = () => thread?.segment?.live === true && store.getState().thread?.status !== "removed";
 
+  const threadGone = () => store.getState().thread?.status === "removed";
+
   function threadFailure(failure: ApiError) {
     const removed = failure.status === 404 && failure.code !== "flag_off";
     if (!removed && isTerminal(failure)) { fail(failure, "Could not load replies"); return; }
+    // A removed thread stays removed: a later failure must not let it recover to "ready".
+    if (threadGone()) return;
     patchThread({ status: removed ? "removed" : "error", error: failure });
     publish({ announcement: removed ? "This thread is no longer available" : "Could not load replies" });
   }
 
   async function fetchThread(cache: ThreadCache, signal: AbortSignal): Promise<boolean> {
+    const started = ++requestSeq;
     try {
       const page = await list({ thread: cache.parentId }, signal);
       if (!currentThread(cache)) return false;
       forget(page.removedIds);
       const replies = page.items.filter(item => item.parentId === cache.parentId);
-      for (const item of replies) entities.set(item.id, item);
+      for (const item of replies) put(item, started);
       cache.segment = evict(segmentFromLatest(page, replies), { maxMessages: maxThreadMessages, anchorId: null });
       publish();
-      patchThread({ status: "ready", error: null });
+      // The parent's tombstone arrived while the thread was loading: it stays removed.
+      if (!threadGone()) patchThread({ status: "ready", error: null });
       return true;
     } catch (error) {
       if (isAbort(error) || !currentThread(cache)) return false;
@@ -436,10 +514,11 @@ export function createChannelStore(options: ChannelOptions) {
     const cache = thread;
     if (!cache?.segment || !threadLive() || threadTail) return false;
     const cursor = cache.segment.sinceCursor;
+    const started = ++requestSeq;
     try {
       const page = await list({ since: cursor, thread: cache.parentId }, signal);
       if (!currentThread(cache) || !cache.segment?.live || cache.segment.sinceCursor !== cursor) return false;
-      const { changed, fresh, parentRemoved } = applyDelta("thread", page);
+      const { changed, fresh, parentRemoved } = applyDelta("thread", page, started);
       publish(announceFresh(fresh, "reply"));
       recoverThread();
       if (parentRemoved) threadRemoved();
@@ -454,11 +533,12 @@ export function createChannelStore(options: ChannelOptions) {
   }
 
   async function fetchOlderReplies(cache: ThreadCache, cursor: string, signal: AbortSignal): Promise<void> {
+    const started = ++requestSeq;
     try {
       const page = await list({ before: cursor, thread: cache.parentId }, signal);
       if (!currentThread(cache) || cache.segment?.olderCursor !== cursor) return;
       forget(page.removedIds);
-      const replies = cacheOlder(page.items.filter(item => item.parentId === cache.parentId), cache.segment.live);
+      const replies = cacheOlder(page.items.filter(item => item.parentId === cache.parentId), cache.segment.live, started);
       const keep = cache.segment.pages[0]?.ids[0] ?? null;
       cache.segment = evict(prependOlder(cache.segment, page, replies), { maxMessages: maxThreadMessages, anchorId: keep });
       recoverThread();
@@ -602,15 +682,38 @@ export function createChannelStore(options: ChannelOptions) {
     },
     /**
      * Merge server-confirmed messages (for example S-2.2's post response) without
-     * moving cursors. Polling later returns them again; ids deduplicate.
+     * moving cursors. Polling later returns them again; ids deduplicate. A
+     * response to a request that started before this call cannot replace them.
      */
     receive(items: readonly Message[]) {
       if (!available()) return;
       const own = items.filter(item => item.channelId === channelId);
-      if (channel) applyDelta("channel", { items: own, removedIds: [], beforeCursor: null, sinceCursor: channel.sinceCursor, thread: null });
+      if (channel) applyDelta("channel", { items: own, removedIds: [], beforeCursor: null, sinceCursor: channel.sinceCursor, thread: null }, "confirmed");
       if (thread?.segment) {
-        applyDelta("thread", { items: own, removedIds: [], beforeCursor: null, sinceCursor: thread.segment.sinceCursor, thread: thread.parentId });
+        applyDelta("thread", { items: own, removedIds: [], beforeCursor: null, sinceCursor: thread.segment.sinceCursor, thread: thread.parentId }, "confirmed");
       }
+      publish();
+    },
+    /**
+     * Replace cached copies with server-confirmed ones (edit, delete and reaction
+     * responses). Unlike `receive`, it never adds a message, so a confirmation
+     * cannot bring back one that polling removed.
+     */
+    update(items: readonly Message[]) {
+      let changed = false;
+      for (const item of items) {
+        if (item.channelId !== channelId || !entities.has(item.id)) continue;
+        confirmWrite(item);
+        changed = true;
+      }
+      if (changed) publish();
+    },
+    /** The cached server copy, without any overlay. */
+    peek(id: Id): Message | undefined { return entities.get(id); },
+    /** Show (or with null, clear) unconfirmed changes over a message. */
+    setOverlay(id: Id, overlay: MessageOverlay | null) {
+      if (overlay === null ? !overlays.delete(id) : overlays.get(id) === overlay) return;
+      if (overlay !== null) overlays.set(id, overlay);
       publish();
     },
     /** Reference-counted ownership: hooks retain; the last release aborts all work. */

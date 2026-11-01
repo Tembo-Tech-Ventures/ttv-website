@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChannelRead, Message, MessageList } from "../contracts";
 import { messages } from "../fixtures";
 import { createApiClient } from "./apiClient";
-import { createChannelStore, selectFirstUnread, selectPollable, selectUnreadCount, type ChannelOptions } from "./channel";
+import { applyOverlay, createChannelStore, selectFirstUnread, selectPollable, selectUnreadCount, type ChannelOptions } from "./channel";
 import { createMockTransport, type MockReply } from "./mockTransport";
 
 const CHANNEL = "channel-1";
@@ -694,5 +694,123 @@ describe("channel store", () => {
     expect(store.getState().announcement).toBe("2 new messages");
     store.clearAnnouncement();
     expect(store.getState().announcement).toBe("");
+  });
+});
+
+describe("optimistic layer for the composer (S-2.2)", () => {
+  it("shows overlays over the window, the thread and its parent, and clears them", async () => {
+    const { fake, store } = setup({ initial: page(range(1, 3), null, "s1") });
+    fake.list(page([reply(11, msg(2).id)], null, "t1", { thread: msg(2).id }));
+    await store.openThread(msg(2).id);
+    const listener = vi.fn();
+    store.subscribe(listener);
+    const overlay = { body: "Edited here" };
+    store.setOverlay(msg(1).id, overlay);
+    store.setOverlay(msg(2).id, { reactions: { thanks: true } });
+    store.setOverlay(msg(11).id, { deleted: true });
+    const state = store.getState();
+    expect(state.messages[0]).toMatchObject({ body: "Edited here", edited: true });
+    expect(state.thread?.parent?.reactions).toContainEqual({ kind: "thanks", count: 1, mine: true });
+    expect(state.thread?.messages[0]).toMatchObject({ deleted: true, body: "", embeds: [] });
+    expect(store.peek(msg(1).id)?.body).toBe(msg(1).body);
+    // The overlaid copy stays the same object while nothing changes, so selectors stay stable.
+    store.setOverlay(msg(3).id, { body: msg(3).body });
+    expect(store.getState().messages[0]).toBe(state.messages[0]);
+    expect(store.getState().messages[2]).toBe(state.messages[2]);
+    const calls = listener.mock.calls.length;
+    store.setOverlay(msg(1).id, overlay);
+    store.setOverlay("not-overlaid", null);
+    expect(listener).toHaveBeenCalledTimes(calls);
+    store.setOverlay(msg(1).id, null);
+    expect(store.getState().messages[0]).toBe(store.peek(msg(1).id));
+    expect(store.peek("missing")).toBeUndefined();
+  });
+
+  it("applies an overlay without inventing changes", () => {
+    const base = msg(1, { reactions: [{ kind: "useful", count: 1, mine: true }] });
+    expect(applyOverlay(base, {})).toBe(base);
+    expect(applyOverlay(base, { body: base.body, reactions: { useful: true } })).toBe(base);
+    expect(applyOverlay(base, { reactions: { useful: false } }).reactions).toEqual([]);
+    const deleted = msg(2, { deleted: true, body: "", embeds: [] });
+    expect(applyOverlay(deleted, { body: "Too late", deleted: true })).toBe(deleted);
+    expect(applyOverlay(deleted, { reactions: { thanks: true } })).toBe(deleted);
+    expect(applyOverlay(base, { deleted: true, body: "ignored" })).toMatchObject({ deleted: true, body: "", reactions: [] });
+  });
+
+  it("update replaces only cached copies of this channel, and a request already in flight cannot undo it", async () => {
+    const { fake, store } = setup({ initial: page(range(1, 3), null, "s1") });
+    const listener = vi.fn();
+    store.subscribe(listener);
+    store.update([msg(9), msg(1, { channelId: "elsewhere", body: "Other channel" })]);
+    expect(listener).not.toHaveBeenCalled();
+    expect(ids(store.getState().messages)).toEqual([1, 2, 3]);
+
+    const stale = deferred<MockReply>();
+    fake.list(() => stale.promise);
+    const polling = store.poll(signal());
+    await vi.waitFor(() => expect(fake.seen).toHaveLength(1));
+    store.update([msg(1, { body: "Confirmed edit", edited: true })]);
+    stale.resolve({ data: page([msg(1), msg(2, { body: "Someone else's edit", edited: true })], null, "s2") });
+    await polling;
+    expect(store.getState().messages.map(item => item.body)).toEqual(["Confirmed edit", "Someone else's edit", msg(3).body]);
+    // A request that starts after the confirmation is server truth again.
+    fake.list(page([msg(1, { body: "Edited again", edited: true })], null, "s3"));
+    await store.poll(signal());
+    expect(store.getState().messages[0].body).toBe("Edited again");
+    // A pinned message that polling removes is forgotten with its pin.
+    store.update([msg(2, { body: "Pinned" })]);
+    fake.list(page([], null, "s4", { removedIds: [msg(2).id] }));
+    await store.poll(signal());
+    expect(store.peek(msg(2).id)).toBeUndefined();
+  });
+
+  it("pins a received post against a latest page or thread page that was already in flight", async () => {
+    const { fake, store } = setup({ initial: page(range(1, 3), null, "s1") });
+    const latest = deferred<MockReply>();
+    fake.list(() => latest.promise);
+    const jumping = store.jumpToLatest();
+    await vi.waitFor(() => expect(fake.seen).toHaveLength(1));
+    store.update([msg(3, { reactions: [{ kind: "agree", count: 1, mine: true }] })]);
+    latest.resolve({ data: page(range(1, 3), null, "s2") });
+    await jumping;
+    expect(store.getState().messages[2].reactions).toEqual([{ kind: "agree", count: 1, mine: true }]);
+
+    fake.list(page([reply(11, msg(2).id)], null, "t1", { thread: msg(2).id }));
+    await store.openThread(msg(2).id);
+    const replies = deferred<MockReply>();
+    fake.list(page([], null, "s3"), () => replies.promise);
+    const polling = store.poll(signal());
+    await vi.waitFor(() => expect(fake.seen).toHaveLength(4));
+    store.receive([reply(11, msg(2).id, { body: "Confirmed reply edit", edited: true })]);
+    replies.resolve({ data: page([reply(11, msg(2).id)], null, "t2", { thread: msg(2).id }) });
+    await polling;
+    expect(store.getState().thread?.messages[0].body).toBe("Confirmed reply edit");
+  });
+
+  it("keeps a thread removed when its reply poll fails in the same tick (S-2.1 follow-up 1)", async () => {
+    const { fake, store } = setup({ initial: page(range(1, 3), null, "s1") });
+    fake.list(page([reply(11, msg(2).id)], null, "t1", { thread: msg(2).id }));
+    await store.openThread(msg(2).id);
+    fake.list(page([], null, "s2", { removedIds: [msg(2).id] }), () => error(500, "server"));
+    await store.poll(signal());
+    expect(store.getState().thread).toMatchObject({ status: "removed", parent: null });
+    expect(store.getState().announcement).toBe("This thread is no longer available");
+    fake.list(page([], null, "s3"));
+    await store.poll(signal());
+    expect(store.getState().thread?.status).toBe("removed");
+  });
+
+  it("keeps a thread removed when its parent's tombstone arrives while it loads (S-2.1 follow-up 2)", async () => {
+    const { fake, store } = setup({ initial: page(range(1, 3), null, "s1") });
+    const loading = deferred<MockReply>();
+    fake.list(() => loading.promise);
+    const opening = store.openThread(msg(2).id);
+    await vi.waitFor(() => expect(fake.seen).toHaveLength(1));
+    fake.list(page([], null, "s2", { removedIds: [msg(2).id] }));
+    await store.poll(signal());
+    expect(store.getState().thread?.status).toBe("removed");
+    loading.resolve({ data: page([reply(11, msg(2).id)], null, "t1", { thread: msg(2).id }) });
+    await opening;
+    expect(store.getState().thread).toMatchObject({ status: "removed", parent: null });
   });
 });
