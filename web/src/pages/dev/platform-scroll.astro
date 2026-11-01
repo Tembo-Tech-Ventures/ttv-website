@@ -1,0 +1,23 @@
+---
+/**
+ * Dev-only harness for the channel scroll-anchoring hooks (S-2.3).
+ *
+ * A bare message list on `useScrollAnchoring`: load older messages above the
+ * reader, have someone post, post yourself, grow the newest message as an
+ * embed would, and jump to latest. Nothing here is reachable outside
+ * `astro dev`. `e2e/platform-scroll.spec.ts` holds the browser check.
+ */
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import ScrollHarness from "@/lib/platform/client/hooks/scroll.harness";
+
+if (!import.meta.env.DEV) {
+  return new Response("Not found", { status: 404 });
+}
+---
+
+<BaseLayout title="Scroll anchoring | TTV" noIndex>
+  <main class="mx-auto max-w-xl px-4 py-10">
+    <h1 class="mb-6 text-3xl tracking-heading text-ink-primary">Scroll anchoring</h1>
+    <ScrollHarness client:load />
+  </main>
+</BaseLayout>
