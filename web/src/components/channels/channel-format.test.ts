@@ -3,7 +3,7 @@ import { channels, FIXTURE_NOW, messages, meByPersona, people } from "@/lib/plat
 import type { Channel, Message } from "@/lib/platform/contracts";
 import {
   ago, channelTitle, clipTime, clock, composerTools, dayKey, dayLabel, groupByDay, mentionsTembo, moderationNotice,
-  parseBody, postingFor, temboScope, threadSummary,
+  openingDivider, parseBody, postingFor, temboScope, threadSummary,
 } from "./channel-format";
 
 const MINUTE = 60_000;
@@ -116,6 +116,28 @@ describe("message bodies", () => {
     expect(mentionsTembo(messages.communityAsk.body)).toBe(true);
     expect(mentionsTembo("tembo, without the at")).toBe(false);
     expect(mentionsTembo("`@tembo` in code")).toBe(false);
+  });
+});
+
+describe("the New divider", () => {
+  const list = [messages.recordingPost, messages.duplicateQuestion, messages.cohortAsk, messages.sessionTime, messages.sessionTimeReply, messages.mention];
+  const wanjikuId = people.wanjiku.id;
+
+  it("sits before the first message by someone else after the marker", () => {
+    expect(openingDivider(list, { markerId: messages.recordingPost.id, unreadCount: 4 }, wanjikuId)).toBe(messages.duplicateQuestion.id);
+    // Wanjiku's own question after the marker is not news to her.
+    expect(openingDivider(list, { markerId: messages.duplicateQuestion.id, unreadCount: 3 }, wanjikuId)).toBe(messages.sessionTime.id);
+  });
+
+  it("has nowhere to go when everything is read", () => {
+    expect(openingDivider(list, { markerId: messages.mention.id, unreadCount: 0 }, wanjikuId)).toBeNull();
+    expect(openingDivider(list, { markerId: null, unreadCount: 0 }, wanjikuId)).toBeNull();
+    expect(openingDivider([], { markerId: null, unreadCount: 3 }, wanjikuId)).toBeNull();
+  });
+
+  it("counts back from the end when the marker is older than anything loaded, or there is none", () => {
+    expect(openingDivider(list, { markerId: "older-than-the-page", unreadCount: 2 }, wanjikuId)).toBe(messages.sessionTimeReply.id);
+    expect(openingDivider(list, { markerId: null, unreadCount: 99 }, wanjikuId)).toBe(messages.recordingPost.id);
   });
 });
 

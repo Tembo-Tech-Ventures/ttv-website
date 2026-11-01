@@ -39,12 +39,14 @@ type HarnessChannelProps = {
   initialThread: MessageList | null;
   threadId: string | null;
   messageId: string | null;
+  /** The reader's read marker as the server would send it (`?marker=`): the "New" divider follows it. */
+  initialRead?: { lastReadMessageId: string | null; unreadCount: number };
   children?: ReactNode;
 };
 
 type Refusal = { count: number; status: number; data: { error: { code: string; message: string; retryAfterMs?: number } } };
 
-export default function HarnessChannel({ me, channel, initial, initialThread, threadId, messageId, children }: HarnessChannelProps) {
+export default function HarnessChannel({ me, channel, initial, initialThread, threadId, messageId, initialRead, children }: HarnessChannelProps) {
   const [harness] = useState(() => {
     const started = Date.now();
     // Fixture time runs on from FIXTURE_NOW, so new messages land "Today" after the fixtures.
@@ -62,7 +64,7 @@ export default function HarnessChannel({ me, channel, initial, initialThread, th
     });
     const store = createChannelStore({
       channelId: channel.id, enabled: me.flags.channels, viewerId: me.user.id, initial, api: client.api,
-      initialRead: { lastReadMessageId: null, unreadCount: channel.unreadCount },
+      initialRead: initialRead ?? { lastReadMessageId: null, unreadCount: 0 },
     });
     const composer = createComposer({ store, me, api: client.api, now });
     return { client, store, composer, now, refusal };

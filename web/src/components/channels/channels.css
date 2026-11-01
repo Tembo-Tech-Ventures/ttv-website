@@ -216,6 +216,8 @@
   align-items: center;
   gap: 0.25rem 0.5rem;
   min-height: 1.75rem;
+  /* Room for the actions button, which sits in the corner rather than wrapping onto a line of its own. */
+  padding-right: 2.25rem;
   color: var(--color-ink-muted);
   font-size: 0.8125rem;
 }
@@ -227,12 +229,13 @@
 }
 
 .channel-message__more {
-  position: relative;
+  position: absolute;
+  top: -0.125rem;
+  right: -0.25rem;
   display: inline-grid;
   place-items: center;
   width: 2rem;
   height: 2rem;
-  margin-left: auto;
   border-radius: 0.5rem;
   color: var(--color-ink-secondary);
   opacity: 0;

@@ -235,6 +235,50 @@ test.describe("the channel view", () => {
     await expect.poll(reads).toContain("arrival0001");
   });
 
+  test("a channel opens at the first unread message: the divider stays, and nothing is read until the end", async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 390, height: 600 });
+    await open(page, harness({ channel: "cohort-04", marker: "s00000000000000000000410" }));
+    const divider = page.locator("[data-new-divider]");
+    await expect(divider).toBeInViewport();
+    // The first unread is Kevin's question, right after the marker (Wanjiku's own question is not news to her).
+    await expect(page.locator(`[data-message-row="s00000000000000000000411"] [data-new-divider]`)).toHaveCount(1);
+    const reads = () => page.evaluate(() => window.__channelHarness!.reads());
+    await page.waitForTimeout(600);
+    expect(await reads()).toEqual([]);
+    expect(await atEnd(page)).toBe(false);
+    await expect(page.locator("[data-jump-latest]")).toBeVisible();
+    await page.screenshot({ path: `${EVIDENCE_DIR}/new-divider-390.png` });
+    await runAxe(page, testInfo, "new-divider-390");
+
+    await scroller(page).evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+    await expect.poll(reads).toEqual(["s00000000000000000000418"]);
+    await expect(divider).toHaveCount(1);
+  });
+
+  test("a linked message opens in view without marking what follows it read", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 600 });
+    await open(page, harness({ channel: "cohort-04", message: "s00000000000000000000410" }));
+    await expect(page.locator('[data-message="s00000000000000000000410"]')).toBeInViewport();
+    await page.waitForTimeout(600);
+    expect(await page.evaluate(() => window.__channelHarness!.reads())).toEqual([]);
+    await expect(page.locator("[data-jump-latest]")).toBeVisible();
+  });
+
+  test("the actions button stays on the name line, in the list and in a thread", async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await open(page, harness({ thread: COMMUNITY_THREAD }));
+    const offsets = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>(".channel-message")]
+        .map((message) => {
+          const button = message.querySelector(".channel-message__more")?.getBoundingClientRect();
+          const name = message.querySelector(".channel-author")?.getBoundingClientRect();
+          return button && name ? Math.abs(button.top + button.height / 2 - (name.top + name.height / 2)) : 0;
+        }),
+    );
+    expect(offsets.length).toBeGreaterThan(3);
+    for (const offset of offsets) expect(offset).toBeLessThan(6);
+  });
+
   test("the mention list shows Tembo's reach and allowance, and is keyboard driven (m4)", async ({ page }, testInfo) => {
     await page.setViewportSize(PHONE);
     await open(page, harness({ thread: COMMUNITY_THREAD }));

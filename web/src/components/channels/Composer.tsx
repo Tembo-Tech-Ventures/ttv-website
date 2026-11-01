@@ -112,6 +112,9 @@ export default function Composer({
   const conductRequired = useComposer(composer, (state) => state.conductRequired);
   const [attached, setAttached] = useState<MessageEmbed[]>([]);
   const enterSends = useEnterSends();
+  // Posting needs the island: until it runs (or without JavaScript) the box is shown but closed, and says so.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const id = useId();
   const listId = `${id}-mentions`;
   const scope = temboScope(channel);
@@ -131,7 +134,7 @@ export default function Composer({
 
   const body = draft.text.trim();
   const tooLong = draft.text.length > MAX_BODY;
-  const canSend = body.length > 0 && !tooLong;
+  const canSend = hydrated && body.length > 0 && !tooLong;
 
   function replace(next: string, at: number) {
     draft.replace(next, at);
@@ -212,6 +215,9 @@ export default function Composer({
         />
       )}
 
+      <noscript>
+        <p className="channel-composer__note text-ink-secondary">Posting needs JavaScript. Everything here can still be read.</p>
+      </noscript>
       <form
         className="channel-composer__box"
         onSubmit={(event) => {
@@ -229,6 +235,7 @@ export default function Composer({
           value={draft.text}
           placeholder={thread ? "Reply in thread…" : `${label}…`}
           enterKeyHint={enterSends ? "send" : "enter"}
+          disabled={!hydrated}
           aria-describedby={`${id}-hint`}
           aria-controls={picker.open ? listId : undefined}
           aria-activedescendant={picker.open ? `${listId}-${picker.active}` : undefined}

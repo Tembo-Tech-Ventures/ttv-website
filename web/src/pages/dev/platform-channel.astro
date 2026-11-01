@@ -9,6 +9,7 @@
  *   ?persona=wanjiku&channel=show-your-work&thread=<id>&message=<id>
  *   &tembo=off   tembo_channels off: no Ask Tembo, no @tembo
  *   &channels=off   the channels flag off: the view renders nothing
+ *   &marker=<id>    the reader's read marker, so the "New" divider and reading are exercised
  *
  * The header is U-2.3's ChannelHeader; the sidebar stands in for U-2.3's. Nothing is reachable
  * outside `astro dev`; `e2e/platform-channel.spec.ts` holds the contract.
@@ -52,6 +53,12 @@ const threadId = params.get("thread");
 const messageId = params.get("message");
 const initial = channelPage(channel, me);
 const initialThread = threadId ? threadPage(channel, threadId, me) : null;
+// The read marker the server would send: messages by others after it are unread.
+const marker = params.get("marker");
+const markerAt = marker ? initial.items.findIndex((item) => item.id === marker) : -1;
+const initialRead = markerAt >= 0
+  ? { lastReadMessageId: marker, unreadCount: initial.items.slice(markerAt + 1).filter((item) => item.author.id !== me.user.id && !item.deleted).length }
+  : undefined;
 const keep = (slug: string) => {
   const next = new URLSearchParams({ persona, channel: slug });
   for (const key of ["tembo", "channels"]) if (params.has(key)) next.set(key, params.get(key)!);
@@ -99,6 +106,7 @@ const spaceHrefs = Object.fromEntries(me.spaces.map((id) => [id, `/dev/platform-
       initialThread={initialThread}
       threadId={threadId}
       messageId={messageId}
+      initialRead={initialRead}
     >
       <div class="channel-view__header">
         <ChannelHeader channel={channel} />

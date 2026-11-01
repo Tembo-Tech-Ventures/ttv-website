@@ -188,6 +188,13 @@ describe("reading without JavaScript", () => {
     expect(container.textContent).not.toMatch(/Ask Tembo|Tembo · Sees/);
   });
 
+  it("shows the composer closed, and says so, until the island runs", () => {
+    serverHtml(wanjiku, community);
+    expect($<HTMLTextAreaElement>("[data-composer=channel] textarea")?.disabled).toBe(true);
+    expect(container.innerHTML).toContain("Posting needs JavaScript. Everything here can still be read.");
+    expect($("[data-jump-latest]")).toBeNull();
+  });
+
   it("offers no attach tools until the page can list the person's work, rather than claim there is none", () => {
     serverHtml(wanjiku, cohort, { shareables: null });
     const labels = $$("[data-composer=channel] button").map((b) => b.getAttribute("aria-label") ?? b.textContent);

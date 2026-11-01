@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PiArrowDown, PiChatsCircle } from "react-icons/pi";
-import type { AuthorSummary, Channel, Message, PersonSummary } from "@/lib/platform/contracts";
+import type { AuthorSummary, Channel, PersonSummary } from "@/lib/platform/contracts";
 import type { ChannelState, ChannelStore } from "@/lib/platform/client/channel";
 import type { Composer } from "@/lib/platform/client/composer";
 import { useOutbox } from "@/lib/platform/client/hooks/composer";
@@ -24,7 +24,8 @@ type MessageListProps = {
   composer: Composer;
   names: readonly string[];
   people: ReadonlyMap<string, AuthorSummary>;
-  firstUnread: Message | null;
+  /** Where the "New" divider sits for this visit (ChannelSurface decides it once). */
+  firstUnreadId: string | null;
   openThreadId: string | null;
   threadHref: (messageId: string) => string;
   onOpenThread: (messageId: string, trigger: HTMLElement) => void;
@@ -127,11 +128,13 @@ function scrollToEnd(element: HTMLElement, smooth: boolean) {
  * by this list, so opening a channel does not read it all aloud.
  */
 export default function MessageList({
-  state, store, channel, viewer, now, composer, names, people, firstUnread, openThreadId, threadHref, onOpenThread,
+  state, store, channel, viewer, now, composer, names, people, firstUnreadId, openThreadId, threadHref, onOpenThread,
   focusMessageId, retry, announce,
 }: MessageListProps) {
   const scroller = useRef<HTMLDivElement>(null);
-  const [atEnd, setAtEnd] = useState(true);
+  // Unknown until the list has been positioned and measured: nothing is marked read before that.
+  const [atEnd, setAtEnd] = useState(false);
+  const [measured, setMeasured] = useState(false);
   const following = useRef(true);
   const positioned = useRef(false);
   const previous = useRef<{ first?: string; last?: string; height: number } | null>(null);
@@ -184,10 +187,15 @@ export default function MessageList({
     const before = previous.current;
     if (!positioned.current && messages.length > 0) {
       positioned.current = true;
-      const target = focusMessageId ?? firstUnread?.id ?? null;
-      const node = target ? element.querySelector(`[data-message="${CSS.escape(target)}"]`) : null;
+      const target = focusMessageId ?? firstUnreadId;
+      const node = target ? element.querySelector(`[data-message-row="${CSS.escape(target)}"]`) : null;
       if (node) node.scrollIntoView({ block: focusMessageId ? "center" : "start" });
       else element.scrollTop = element.scrollHeight;
+      // Where that left the reader decides whether they are at the end, and so whether anything is read.
+      const near = element.scrollHeight - element.scrollTop - element.clientHeight < NEAR_BOTTOM_PX;
+      following.current = near;
+      setAtEnd(near);
+      setMeasured(true);
     } else if (before && messages.length > 0) {
       if (first !== before.first && last === before.last) {
         // Older messages arrived above: keep the reader exactly where they were.
@@ -198,7 +206,7 @@ export default function MessageList({
       }
     }
     previous.current = { first, last, height: element.scrollHeight };
-  }, [messages, first, last, focusMessageId, firstUnread, viewerId, pinToEnd]);
+  }, [messages, first, last, focusMessageId, firstUnreadId, viewerId, pinToEnd]);
 
   // The tab coming back is a chance to have read what arrived while it was away.
   const [shownAgain, setShownAgain] = useState(0);
@@ -244,7 +252,7 @@ export default function MessageList({
     });
   }
 
-  const showJump = messages.length > 0 && (!atEnd || !state.live);
+  const showJump = measured && messages.length > 0 && (!atEnd || !state.live);
   const groups = groupByDay(messages, now);
 
   return (
@@ -264,7 +272,7 @@ export default function MessageList({
             <ol className="channel-messages">
               {group.messages.map((message) => (
                 <li key={message.id} data-message-row={message.id}>
-                  {message.id === firstUnread?.id && (
+                  {message.id === firstUnreadId && (
                     <p className="channel-new" data-new-divider>
                       <span>New</span>
                     </p>

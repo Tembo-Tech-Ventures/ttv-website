@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AuthorSummary, Channel, Me, Message, MessageList as MessagePage } from "@/lib/platform/contracts";
-import { selectFirstUnread, type ChannelStore } from "@/lib/platform/client/channel";
+import type { ChannelStore } from "@/lib/platform/client/channel";
 import type { Composer as ChannelComposer } from "@/lib/platform/client/composer";
 import { useChannel, useChannelFeed } from "@/lib/platform/client/hooks/channel";
 import { useComposer } from "@/lib/platform/client/hooks/composer";
 import type { Shareables } from "./actions";
-import { channelTitle } from "./channel-format";
+import { channelTitle, openingDivider } from "./channel-format";
 import Composer from "./Composer";
 import MessageList from "./MessageList";
 import { PostingNote } from "./PostingNote";
@@ -63,7 +63,10 @@ export default function ChannelSurface({
 }: ChannelSurfaceProps) {
   const refresh = useChannelFeed(store);
   const state = useChannel(store);
-  const firstUnread = useChannel(store, selectFirstUnread);
+  // The "New" divider is decided when the channel first has messages, from the marker the page opened
+  // with, and kept for the visit: marking messages read must not move it out from under the reader.
+  const divider = useRef<string | null | undefined>(undefined);
+  if (divider.current === undefined && state.messages.length > 0) divider.current = openingDivider(state.messages, state.read, me.user.id);
   const [threadId, setThreadId] = useState<string | null>(initialThreadId);
   const [announcement, setAnnouncement] = useState("");
   const heading = useRef<HTMLHeadingElement>(null);
@@ -175,7 +178,7 @@ export default function ChannelSurface({
           composer={composer}
           names={names}
           people={people}
-          firstUnread={firstUnread}
+          firstUnreadId={divider.current ?? null}
           openThreadId={threadId}
           threadHref={threadHref}
           onOpenThread={openThread}

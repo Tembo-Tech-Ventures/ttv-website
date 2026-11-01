@@ -173,6 +173,28 @@ export function mentionsTembo(body: string): boolean {
   return parseBody(body).some((paragraph) => paragraph.some((segment) => segment.kind === "mention" && segment.tembo));
 }
 
+// ---- The "New" divider ----
+
+/**
+ * Where the "New" divider goes when a channel opens: before the first message by
+ * someone else after the reader's marker. A marker older than everything loaded
+ * (or none yet) puts it before the last `unreadCount` messages by others. Chosen
+ * once per visit, so reading on never moves or removes it.
+ */
+export function openingDivider(
+  messages: readonly Message[],
+  read: { markerId: string | null; unreadCount: number | null },
+  viewerId: string | null,
+): string | null {
+  const byOthers = (message: Message) => !message.deleted && message.author.id !== viewerId;
+  const marker = read.markerId === null ? -1 : messages.findIndex((message) => message.id === read.markerId);
+  if (marker >= 0) return messages.slice(marker + 1).find(byOthers)?.id ?? null;
+  const unread = read.unreadCount ?? 0;
+  if (unread <= 0) return null;
+  const others = messages.filter(byOthers);
+  return others[Math.max(0, others.length - unread)]?.id ?? null;
+}
+
 // ---- Threads ----
 
 /** "5 replies · last 12 min ago". */
