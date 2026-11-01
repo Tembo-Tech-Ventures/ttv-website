@@ -11,7 +11,9 @@ describe("member audience page", () => {
     expect(html).toContain("Fictional illustration");
     expect(html).toContain("Project source · example only");
     expect(html).toContain("not the whole person");
-    expect(html).toContain("available to approved institutions");
+    // Every privacy sentence on the page says exactly what discovery covers.
+    expect(html.match(/Approved institutions can discover your saved community profile and the contributions you share\./g)).toHaveLength(4);
+    expect(html).not.toContain("available to approved institutions");
     expect(html).toContain("Private cohort recordings and internal records stay outside");
     expect(html).toContain("does not guarantee a job");
     expect(html).not.toContain("/api/community");
