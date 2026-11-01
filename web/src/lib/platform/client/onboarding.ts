@@ -88,8 +88,11 @@ const sameIntents = (a: readonly Intent[], b: readonly Intent[]) => a.length ===
 const normalizeError = (error: unknown) => error instanceof ApiError ? error
   : new ApiError("client_error", 0, "Onboarding request failed", undefined, { cause: error });
 
+/** requireFlag answers 404 `flag_off`; a write's other 404 is a stale or foreign request id. */
+const staleId = (error: ApiError) => error.status === 404 && error.code !== "flag_off";
+
 function classify(error: ApiError): OnboardingFailureKind {
-  if (error.status === 409) return "conflict";
+  if (error.status === 409 || staleId(error)) return "conflict";
   if (error.status === 429) return "rate_limited";
   if (error.code === "network_error") return "offline";
   if (error.code === "validation_error" || error.status === 400 || error.status === 422) return "invalid";
@@ -97,7 +100,7 @@ function classify(error: ApiError): OnboardingFailureKind {
 }
 
 /** The write may or may not have landed, so the server must be asked before anything is shown. */
-const uncertain = (error: ApiError) => error.status === 409 || error.code === "network_error"
+const uncertain = (error: ApiError) => error.status === 409 || staleId(error) || error.code === "network_error"
   || error.code === "invalid_response" || error.status >= 500;
 
 /** Whether server truth already shows the action's outcome, e.g. after a lost response or a second tab. */
@@ -165,12 +168,13 @@ export function createOnboardingStore(options: OnboardingOptions = {}) {
         : intentSelectionReducer(state.selection, { type: "sync", from: state.server?.intents ?? null, to: next.intents }),
     }));
   }
-  function close(error: ApiError): boolean {
+  /** On a write, only a `flag_off` 404 closes; on a read, any 404 does. */
+  function close(error: ApiError, read = false): boolean {
     if (error.status === 401) {
       signOut();
       return true;
     }
-    if (error.status === 403 || error.status === 404) {
+    if (error.status === 403 || (error.status === 404 && (read || !staleId(error)))) {
       stop();
       update({ closed: "unavailable" });
       return true;
@@ -194,7 +198,7 @@ export function createOnboardingStore(options: OnboardingOptions = {}) {
       return true;
     } catch (error) {
       const failure = normalizeError(error);
-      if (current(generation, controller.signal) && version === revision && !close(failure)) {
+      if (current(generation, controller.signal) && version === revision && !close(failure, true)) {
         update({ loadError: failure, announcement: "Couldn't load your onboarding choices." });
       }
       return false;

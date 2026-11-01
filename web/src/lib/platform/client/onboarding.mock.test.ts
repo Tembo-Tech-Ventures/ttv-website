@@ -66,6 +66,37 @@ describe("onboarding mock mode", () => {
     expect(mock.state()).toMatchObject({ stage: "DONE", intents: ["MENTOR"] });
   });
 
+  it("a withdraw that empties a completed onboarding leaves EXPLORING, as B-O.2 does", async () => {
+    const mock = createOnboardingMock("josephOchieng");
+    const store = createOnboardingStore({ enabled: true, mock: mock.api, initialState: mock.state() });
+    expect(await store.withdrawRequest("INSTITUTION")).toBe(true);
+    expect(mock.state().intents).toEqual(["EXPLORING"]);
+    expect(store.getState().selection.intents).toEqual(["EXPLORING"]);
+  });
+
+  it("answers an unknown id with 404 not_found and a wrong state with 409; the store settles both from truth", async () => {
+    const mock = createOnboardingMock("wairimu");
+    const declined = createOnboardingStore({ enabled: true, mock: mock.api, initialState: onboardingByPersona.peter });
+    // The server has no such request, so there is no card left to dismiss: settled by truth, still open.
+    expect(await declined.dismissRequest("MENTOR")).toBe(true);
+    expect(declined.getState()).toMatchObject({ closed: null, failure: null, server: onboardingByPersona.wairimu });
+    const withdrawing = createOnboardingStore({ enabled: true, mock: mock.api, initialState: onboardingByPersona.mercyAkinyi });
+    expect(await withdrawing.withdrawRequest("MENTOR")).toBe(true); // Gone on the server: nothing left pending.
+    expect(withdrawing.getState()).toMatchObject({ closed: null, failure: null, server: onboardingByPersona.wairimu });
+    const pending = createOnboardingMock("mercyAkinyi");
+    const early = createOnboardingStore({
+      enabled: true, mock: pending.api,
+      initialState: { ...onboardingByPersona.mercyAkinyi, requests: [{ ...onboardingByPersona.peter.requests[0], id: onboardingByPersona.mercyAkinyi.requests[0].id }] },
+    });
+    expect(await early.dismissRequest("MENTOR")).toBe(false);
+    expect(early.getState().failure).toMatchObject({ kind: "conflict", error: { status: 409 } });
+    pending.decide("MENTOR", "approve");
+    const racing = createOnboardingStore({ enabled: true, mock: pending.api, initialState: onboardingByPersona.mercyAkinyi });
+    expect(await racing.withdrawRequest("MENTOR")).toBe(false); // Approved first: the approval is shown, not a withdrawal.
+    expect(racing.getState().failure).toMatchObject({ kind: "conflict", error: { status: 409 } });
+    expect(accessStatus(racing.getState().server, "MENTOR")).toBe("APPROVED");
+  });
+
   it("answers conflicts with 409, as the server would", async () => {
     const mock = createOnboardingMock("mercyAkinyi");
     const stale = createOnboardingStore({ enabled: true, mock: mock.api, initialState: onboardingByPersona.wairimu });

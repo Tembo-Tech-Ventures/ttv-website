@@ -347,6 +347,24 @@ describe("onboarding store", () => {
       expect(accessStatus(store.getState().server, "MENTOR")).toBe("APPROVED");
     });
 
+    it("404 not_found on a write is a stale id, not a switched-off flag: it reconciles and stays open", async () => {
+      const { store, withdraw, get } = harness(mercy);
+      withdraw.mockReturnValueOnce(fail(404, "not_found"));
+      get.mockReturnValueOnce(ok(mercyApproved));
+      expect(await store.withdrawRequest("MENTOR")).toBe(false);
+      expect(store.getState()).toMatchObject({ closed: null, failure: { kind: "conflict", error: { status: 404 } } });
+      expect(accessStatus(store.getState().server, "MENTOR")).toBe("APPROVED");
+    });
+
+    it("404 flag_off on a write closes onboarding", async () => {
+      const { store, create, reads } = harness();
+      fillMentorDraft(store);
+      create.mockReturnValueOnce(fail(404, "flag_off"));
+      expect(await store.submitRequest("MENTOR")).toBe(false);
+      expect(store.getState()).toMatchObject({ closed: "unavailable", failure: null, pending: null });
+      expect(reads()).toBe(0);
+    });
+
     it("withdraw already done in another tab settles as success", async () => {
       const { store, withdraw, get } = harness(mercy);
       withdraw.mockReturnValueOnce(fail(409, "conflict"));
@@ -474,9 +492,9 @@ describe("onboarding store", () => {
       expect(store.getState().closed).toBe("signed_out");
     });
 
-    it.each([403, 404])("%i on load closes onboarding without an error", async status => {
+    it.each([[403, "forbidden"], [404, "flag_off"], [404, "not_found"]])("%i %s on load closes onboarding without an error", async (status, code) => {
       const { store, get } = harness(null);
-      get.mockReturnValueOnce(fail(status, status === 404 ? "flag_off" : "forbidden"));
+      get.mockReturnValueOnce(fail(status, code));
       store.start();
       await tick();
       expect(store.getState()).toMatchObject({ closed: "unavailable", loadError: null, loading: false });

@@ -19,6 +19,7 @@ export interface OnboardingMock {
 
 const failure = (status: number, code: string, message: string, retryAfterMs?: number): MockReply =>
   ({ status, data: { error: { code, message, ...(retryAfterMs === undefined ? {} : { retryAfterMs }) } } });
+const notFound = () => failure(404, "not_found", "Request not found.");
 const order = (intents: Iterable<Intent>) => {
   const chosen = new Set(intents);
   return Intent.options.filter(intent => chosen.has(intent));
@@ -26,8 +27,10 @@ const order = (intents: Iterable<Intent>) => {
 
 /**
  * A stateful, in-memory onboarding API over the shared synthetic personas, following SPEC §5: EXPLORING
- * stands alone, one PENDING request per role, at most five requests a day, withdraw removes the intent,
- * and only decided requests can be dismissed. Nothing here grants anything outside the mock.
+ * stands alone, one PENDING request per role, at most five requests a day, a request records its intent
+ * and a withdraw removes it (leaving EXPLORING when that empties a completed onboarding), only decided
+ * requests can be dismissed, and an unknown id is 404 `not_found`. It mirrors B-O.2's service; that
+ * service stays the authority. Nothing here grants anything outside the mock.
  * `options` passes latency and failure injection (409, 429, offline) through to the mock transport.
  */
 export function createOnboardingMock(persona: OnboardingPersona = "wairimu", options: MockOptions = {}): OnboardingMock {
@@ -66,13 +69,19 @@ export function createOnboardingMock(persona: OnboardingPersona = "wairimu", opt
     } },
     { ...ROUTES.withdrawAccessRequest, reply: ({ params }) => {
       const request = find(params.id);
-      if (request?.status !== "PENDING") return failure(409, "conflict", "This request can no longer be withdrawn.");
-      replace({ ...request, status: "WITHDRAWN", updatedAt: Date.now() }, state.intents.filter(intent => intent !== request.role));
+      if (!request) return notFound();
+      if (request.status !== "PENDING") return failure(409, "conflict", "Only pending requests can do that.");
+      const intents = state.intents.filter(intent => intent !== request.role);
+      replace({ ...request, status: "WITHDRAWN", updatedAt: Date.now() },
+        intents.length === 0 && state.stage === "DONE" ? ["EXPLORING"] : intents);
       return reply();
     } },
     { ...ROUTES.dismissAccessRequest, reply: ({ params }) => {
       const request = find(params.id);
-      if (request?.status !== "APPROVED" && request?.status !== "DECLINED") return failure(409, "conflict", "Nothing to dismiss.");
+      if (!request) return notFound();
+      if (request.status !== "APPROVED" && request.status !== "DECLINED") {
+        return failure(409, "conflict", "Only approved or declined requests can do that.");
+      }
       replace({ ...request, seenAt: request.seenAt ?? Date.now() });
       return reply();
     } },

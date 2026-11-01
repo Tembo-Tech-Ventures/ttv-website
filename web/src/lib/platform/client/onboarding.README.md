@@ -26,8 +26,8 @@ Import `createOnboardingStore`, `useOnboarding`, `accessStatus`,
   user (`ttv-onboarding-drafts:<userId>`). A draft is cleared after a successful
   send, by `signOut()`, and by a 401. Stored drafts are bounded and validated
   when read, and anything corrupt is dropped.
-- **Server truth settles uncertainty.** After a 409, a 5xx, an invalid response
-  or a network failure, the store asks `GET /api/platform/onboarding`. If the
+- **Server truth settles uncertainty.** After a 409, a write's 404 `not_found`
+  (a stale or foreign request id), a 5xx, an invalid response or a network failure, the store asks `GET /api/platform/onboarding`. If the
   server already shows the intended outcome (a lost response, another tab), the
   action counts as done. Otherwise the failure is shown next to the latest truth.
 - One write runs at a time, and a create is never retried automatically.
@@ -77,7 +77,7 @@ The last one to unmount aborts work in flight.
 | `loading`, `loadError` | The GET |
 | `pending` | The write in flight (`save`, `dismissPrompt`, `submit`, `withdraw`, `dismiss`) |
 | `failure` | `{action, kind, error, retryAfterMs}`, where `kind` is `conflict`, `rate_limited` (with the server's cooldown), `offline`, `invalid` or `failed` |
-| `closed` | `signed_out` after a 401 or `signOut()`, or `unavailable` after a 403/404 (flag off). No further requests are made |
+| `closed` | `signed_out` after a 401 or `signOut()`, or `unavailable` after a 403, a 404 `flag_off`, or any 404 on the read. No further requests are made |
 | `announcement` | Short text for a polite `aria-live` region. Render it as text |
 
 `accessStatus(state, role)` returns:
@@ -96,11 +96,13 @@ starts from `onboardingByPersona` and follows SPEC §5:
 - EXPLORING stands alone;
 - one PENDING request per role, with 409 otherwise;
 - five creations a day, with 429 and `retryAfterMs` after that;
-- a withdraw removes the intent;
-- only decided requests can be dismissed.
+- a request records its intent (replacing EXPLORING), and a withdraw removes it,
+  leaving EXPLORING when that empties a completed onboarding;
+- only decided requests can be dismissed, with 409 otherwise;
+- an unknown id is 404 `not_found`.
 
-Creating a request also adds its intent, the inverse of withdraw. B-O.2 is the
-authority on that rule. `decide` plays the administrator, so a harness can show
+These mirror B-O.2's `src/lib/onboarding/service.ts` (#260), which is the
+authority. `decide` plays the administrator, so a harness can show
 the Approved and Declined cards. `mockOptions` passes latency and failure
 injection through to `createMockTransport`. Keep the mock out of production
 imports: the production entry imports no fixtures or mock transport, and
