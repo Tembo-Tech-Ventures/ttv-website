@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, useRef } from "react";
+import { act, useEffect, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,10 +12,15 @@ const range = (from: number, to: number, extra: Partial<Item> = {}): Item[] =>
   Array.from({ length: to - from + 1 }, (_, i) => ({ id: `m${from + i}`, ...extra }));
 
 let anchoring: ScrollAnchoring;
-type ListProps = Omit<ScrollAnchoringOptions<Item>, "items"> & { items: Item[]; viewport?: number; surface?: string };
-function List({ items, viewport = 300, surface = "a", ...options }: ListProps) {
+type ListProps = Omit<ScrollAnchoringOptions<Item>, "items"> & {
+  items: Item[]; viewport?: number; surface?: string; seen?: (atBottom: boolean) => void;
+};
+function List({ items, viewport = 300, surface = "a", seen, ...options }: ListProps) {
   const ref = useRef<HTMLElement>(null);
   anchoring = useScrollAnchoring(ref, { items, ...options });
+  // A consumer that marks read while atBottom, as the README describes.
+  const { atBottom } = anchoring;
+  useEffect(() => { seen?.(atBottom); }, [atBottom, seen]);
   return (
     <section key={surface} ref={ref} data-viewport={viewport} data-surface={surface} data-at-bottom={anchoring.atBottom}>
       <ol>{items.map(item => <li key={item.id} data-message-row={item.id} data-height={item.height ?? 100} />)}</ol>
@@ -228,6 +233,42 @@ describe("useScrollAnchoring", () => {
     expect(anchoring.atBottom).toBe(false);
   });
 
+  it("never reports atBottom before the list is positioned and measured", async () => {
+    const seen = vi.fn();
+    // Opening mid-history at the first unread: a read-marking effect must never see true.
+    await render({ items: range(1, 20), initialItemId: "m3", seen });
+    expect(scroller().scrollTop).toBe(200);
+    expect(seen.mock.calls.map(([value]) => value)).toEqual([false]);
+    expect(anchoring.measured).toBe(true);
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    // Mounted hidden: unmeasured and not at the bottom until it has a box.
+    const hidden = vi.fn();
+    const items = range(1, 20);
+    await render({ items, initialItemId: "m3", seen: hidden, viewport: 0 });
+    expect(anchoring).toMatchObject({ atBottom: false, measured: false });
+    await render({ items, initialItemId: "m3", seen: hidden, viewport: 300 });
+    // Gaining a box is a resize: the observer positions the list.
+    await act(async () => FakeResizeObserver.instances.at(-1)!.callback());
+    expect(scroller().scrollTop).toBe(200);
+    expect(hidden.mock.calls.every(([value]) => value === false)).toBe(true);
+    expect(anchoring.measured).toBe(true);
+  });
+
+  it("positions a re-mounted scroller even when the items are the very same array", async () => {
+    const items = range(1, 10);
+    await render({ items, surface: "a" });
+    expect(anchoring.atBottom).toBe(true);
+    await act(async () => userScroll(scroller(), 0));
+    // The owner swaps in a new scroll element, with the same items reference.
+    await render({ items, surface: "b", initialItemId: "m5" });
+    expect(scroller().scrollTop).toBe(400);
+    expect(anchoring).toMatchObject({ atBottom: false, measured: true });
+    const observer = FakeResizeObserver.instances.at(-1)!;
+    expect(observer.observed.has(scroller())).toBe(true);
+    expect(observer.observed.size).toBe(2);
+  });
+
   it("works without ResizeObserver and cleans up on unmount", async () => {
     vi.stubGlobal("ResizeObserver", undefined);
     await render({ items: range(1, 10) });
@@ -250,8 +291,8 @@ describe("useScrollAnchoring", () => {
   });
 });
 
-it("server-renders at the bottom without touching the DOM", () => {
+it("server-renders unmeasured, not at the bottom, without touching the DOM", () => {
   const html = renderToString(<List items={range(1, 3)} />);
-  expect(html).toContain('data-at-bottom="true"');
-  expect(anchoring.atBottom).toBe(true);
+  expect(html).toContain('data-at-bottom="false"');
+  expect(anchoring).toMatchObject({ atBottom: false, measured: false });
 });

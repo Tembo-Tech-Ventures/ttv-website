@@ -33,7 +33,8 @@ test.describe("scroll anchoring", () => {
   });
 
   test("keeps the reader's place when older messages load, and follows the newest only from the bottom", async ({ page }) => {
-    // Opens at the newest message.
+    // Opens at the newest message, measured.
+    await expect(harness(page)).toHaveAttribute("data-measured", "true");
     await expect(harness(page)).toHaveAttribute("data-at-bottom", "true");
     expect(await distanceFromBottom(page)).toBeLessThanOrEqual(1);
 
@@ -61,18 +62,20 @@ test.describe("scroll anchoring", () => {
     await page.getByRole("button", { name: "I post" }).click();
     await expect.poll(() => distanceFromBottom(page)).toBeLessThanOrEqual(1);
 
-    // A thread takes the list's place (phone): hidden, the list reports nothing; shown, the reader is where they were.
-    await scroller(page).evaluate(element => { element.scrollTop = 0; });
-    await expect(harness(page)).toHaveAttribute("data-anchor", "msg-41");
-    const reading = await top(page, "msg-41");
+    // A thread takes the list's place (phone): hidden mid-history, the list reports nothing; shown, the reader
+    // is where they were (a browser that reset scroll offsets on display: none would fail this).
+    await scroller(page).evaluate(element => { element.scrollTop = 600; });
+    await expect(harness(page)).not.toHaveAttribute("data-anchor", "msg-41");
+    const held = (await harness(page).getAttribute("data-anchor"))!;
+    const reading = await top(page, held);
     await page.getByRole("button", { name: "Open thread" }).click();
     await expect(scroller(page)).toBeHidden();
     await page.getByRole("button", { name: "Someone posts" }).click();
     await expect(harness(page)).toHaveAttribute("data-at-bottom", "false");
-    await expect(harness(page)).toHaveAttribute("data-anchor", "msg-41");
+    await expect(harness(page)).toHaveAttribute("data-anchor", held);
     await page.getByRole("button", { name: "Back to channel" }).click();
     await expect(scroller(page)).toBeVisible();
-    await expect.poll(async () => Math.abs(await top(page, "msg-41") - reading)).toBeLessThanOrEqual(1);
+    await expect.poll(async () => Math.abs(await top(page, held) - reading)).toBeLessThanOrEqual(1);
     await expect(harness(page)).toHaveAttribute("data-at-bottom", "false");
 
     // A scroll whose event hasn't arrived yet survives older messages rendering in the same frame.

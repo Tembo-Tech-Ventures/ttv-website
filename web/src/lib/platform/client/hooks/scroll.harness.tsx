@@ -17,19 +17,19 @@ export default function ScrollHarness() {
   const [anchor, setAnchor] = useState<string | null>(null);
   // A phone opens a thread in the list's place: the list is hidden, not unmounted.
   const [listHidden, setListHidden] = useState(false);
-  const { atBottom, scrollToBottom } = useScrollAnchoring(ref, {
+  const { atBottom, measured, scrollToBottom } = useScrollAnchoring(ref, {
     items: rows, onAnchor: setAnchor, shouldFollow: appended => appended.some(item => item.n < 0),
   });
   const first = rows[0]?.n ?? 1;
   const last = rows.at(-1)?.n ?? 0;
   return (
-    <div className="flex flex-col gap-3" data-scroll-harness data-at-bottom={atBottom} data-anchor={anchor ?? ""}>
+    <div className="flex flex-col gap-3" data-scroll-harness data-at-bottom={atBottom} data-measured={measured} data-anchor={anchor ?? ""}>
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => setRows(current => [...span(Math.max(1, first - 20), first - 1), ...current])} disabled={first <= 1}>Load older</button>
         <button type="button" onClick={() => setRows(current => [...current, row(last + 1)])}>Someone posts</button>
         <button type="button" onClick={() => setRows(current => [...current, { id: `own-${current.length}`, n: -1, lines: 1 }])}>I post</button>
         <button type="button" onClick={() => setGrown(rows.at(-1)?.id ?? null)}>Embed loads</button>
-        <button type="button" onClick={scrollToBottom} hidden={atBottom}>Jump to latest</button>
+        <button type="button" onClick={scrollToBottom} hidden={!measured || atBottom}>Jump to latest</button>
         <button type="button" onClick={() => setListHidden(value => !value)}>{listHidden ? "Back to channel" : "Open thread"}</button>
       </div>
       {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scroll container */}

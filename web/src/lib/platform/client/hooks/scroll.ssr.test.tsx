@@ -12,7 +12,7 @@ it("server-renders without browser globals or layout-effect warnings", () => {
     const { atBottom } = useScrollAnchoring(ref, { items: [{ id: "m1" }] });
     return <section ref={ref} data-at-bottom={atBottom} />;
   }
-  expect(renderToString(<List />)).toBe('<section data-at-bottom="true"></section>');
+  expect(renderToString(<List />)).toBe('<section data-at-bottom="false"></section>');
   expect(error).not.toHaveBeenCalled();
   error.mockRestore();
 });

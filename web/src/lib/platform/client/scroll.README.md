@@ -7,7 +7,7 @@ consumers.
 
 ```tsx
 const scroller = useRef<HTMLElement>(null);
-const { atBottom, scrollToBottom, scrollToItem } = useScrollAnchoring(scroller, {
+const { atBottom, measured, scrollToBottom, scrollToItem } = useScrollAnchoring(scroller, {
   items: state.messages,                       // oldest first; each row renders data-message-row={id}
   initialItemId: focusMessageId ?? firstUnread?.id ?? null,
   shouldFollow: appended => appended.some(message => message.author.id === me.user.id),
@@ -15,7 +15,8 @@ const { atBottom, scrollToBottom, scrollToItem } = useScrollAnchoring(scroller, 
 });
 // "Jump to latest": await store.jumpToLatest(); scrollToBottom();
 // One list per channel: key it by channel id (<MessageList key={channel.id} … />), so a new channel opens fresh.
-// Mark read only while atBottom; show "Jump to latest" while !atBottom or !state.live.
+// Mark read only while atBottom AND the list is visible to the reader (not under a phone's thread view,
+// document.visibilityState "visible"); show "Jump to latest" only once measured, while !atBottom or !state.live.
 <section ref={scroller}>{state.messages.map(m => <li key={m.id} data-message-row={m.id}>…</li>)}</section>
 ```
 
@@ -36,11 +37,17 @@ const { atBottom, scrollToBottom, scrollToItem } = useScrollAnchoring(scroller, 
   end counts as the bottom until the reader scrolls or `scrollToBottom()` runs, so a
   "New" divider that opens just above the end is neither followed away nor read at
   once.
-- **A hidden list** (no box: `display: none`, a phone's thread replacing the list)
-  is never measured. Its position, `atBottom` and anchor stay as they were, so a
-  hidden list never reads as "at the bottom" (and never marks messages read), and
-  the reader is put back where they were when it shows again. A list mounted
-  hidden opens once it has a box.
+- **`atBottom` is `false` until the list has been positioned and measured**
+  (`measured` turns true then), so a consumer that marks read while `atBottom` sends
+  nothing on open, even when the list opens mid-history at the "New" divider.
+- **A list without a box** (`display: none`) is never measured. Its position,
+  `atBottom` and anchor stay as they were, and the reader is put back where they
+  were when it shows again. A list mounted that way stays unmeasured, and opens
+  once it has a box.
+- **`visibility: hidden` keeps a box**, so such a list (U-2.1 hides the list this
+  way under a phone's thread view) is measured as usual: layout still happens, and
+  its anchoring stays correct. `atBottom` then describes the list's position, not
+  what the reader can see, so check visibility before marking read.
 - **A scroll whose event hasn't arrived yet** (a commit in the same frame, such as
   `loadOlder` during a fling) is kept, not undone; clamping by shrinking content is
   not mistaken for one.

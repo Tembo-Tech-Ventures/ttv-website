@@ -26,8 +26,14 @@ export interface ScrollAnchoringOptions<T extends { id: string }> {
 }
 
 export interface ScrollAnchoring {
-  /** The reader is at the newest end: new items will be followed. False shows "Jump to latest". */
+  /**
+   * The list is at the newest end, so new items will be followed. False until the list has been
+   * positioned and measured (see `measured`), so nothing is marked read before that. It describes the
+   * list's position, not whether the reader can see it: check visibility too before marking read.
+   */
   atBottom: boolean;
+  /** The list has been positioned and measured at least once. Until then, show no "Jump to latest". */
+  measured: boolean;
   /** Go to the newest end now, and keep following what arrives next (for example after `jumpToLatest()`). */
   scrollToBottom(): void;
   /** Bring a rendered item into view inside the container only. Returns false when it is not rendered. */
@@ -42,8 +48,9 @@ export interface ScrollAnchoring {
  * - at the bottom, appended items and growing content (images, embeds) keep the
  *   reader at the bottom; elsewhere they never move the reader;
  * - the first render with items and a box opens at `initialItemId` or the newest end;
- * - a hidden container (no box) is never measured: its last position, `atBottom`
- *   and anchor stay as they were and are re-applied when it shows again;
+ * - a container without a box (`display: none`) is never measured: its last
+ *   position, `atBottom` and anchor stay as they were and are re-applied when it
+ *   shows again (`visibility: hidden` keeps a box, and is measured as usual);
  * - a different scroll element (re-mounted) starts over as a new surface.
  *
  * The container gets `overflow-anchor: none`, so the browser's own anchoring
@@ -64,7 +71,7 @@ export function useScrollAnchoring<T extends { id: string }>(
   // reader scrolls, so an item that opens just above the end is neither followed away nor read at once.
   const heldAtItem = useRef(false);
   const ownScrollTop = useRef<number | null>(null);
-  const [atBottom, setAtBottom] = useState(true);
+  const [view, setView] = useState({ atBottom: false, measured: false });
   useClientLayoutEffect(() => { latest.current = options; });
 
   const attribute = () => latest.current.itemAttribute ?? DEFAULT_ITEM_ATTRIBUTE;
@@ -81,7 +88,7 @@ export function useScrollAnchoring<T extends { id: string }>(
     // Every path but a scroll event moves the list itself: remember where, to tell the reader's scrolls apart.
     ownScrollTop.current = element.scrollTop;
     snapshot.current = next;
-    setAtBottom(next.atBottom);
+    setView(current => current.measured && current.atBottom === next.atBottom ? current : { atBottom: next.atBottom, measured: true });
     const anchor = next.atBottom ? null : next.anchors[0]?.id ?? null;
     if (anchor !== reported.current) {
       reported.current = anchor;
@@ -103,6 +110,8 @@ export function useScrollAnchoring<T extends { id: string }>(
   const settle = useCallback(() => {
     const element = ref.current;
     if (!element || !isMeasurable(element)) return;
+    // Nothing to read yet: no position, no anchor.
+    if (!positioned.current && latest.current.items.length === 0) return;
     if (!position(element) && snapshot.current) restoreScroll(element, snapshot.current, attribute());
     record();
   }, [ref, position, record]);
@@ -138,11 +147,16 @@ export function useScrollAnchoring<T extends { id: string }>(
     positioned.current = false;
     heldAtItem.current = false;
     snapshot.current = null;
+    // A new surface is unmeasured until it has been positioned, whatever the old one said.
+    setView(current => current.measured || current.atBottom ? { atBottom: false, measured: false } : current);
     if (!element) return;
     attached.current = element;
     element.style.overflowAnchor = "none";
     element.addEventListener("scroll", onScroll, { passive: true });
     if (typeof ResizeObserver !== "undefined") observer.current = new ResizeObserver(settle);
+    // Position and observe it now: `items` may be the very same array as before the swap.
+    settle();
+    observe(element);
   });
   useEffect(() => detach, [detach]);
 
@@ -179,5 +193,5 @@ export function useScrollAnchoring<T extends { id: string }>(
     return true;
   }, [ref, record]);
 
-  return { atBottom, scrollToBottom, scrollToItem };
+  return { atBottom: view.atBottom, measured: view.measured, scrollToBottom, scrollToItem };
 }
