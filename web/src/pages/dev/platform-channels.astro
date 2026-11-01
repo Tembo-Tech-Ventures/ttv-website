@@ -13,6 +13,8 @@
  * - `&view=conduct`: the conduct page.
  * - `&channels=off`: the `channels` flag off for the persona, so the sidebar
  *   is exactly what it was before channels.
+ * - `&agent`: an agent's delegated session, which reads the habits but sees
+ *   why it cannot agree, and is refused if it posts.
  *
  * Nothing here is reachable outside `astro dev`. `e2e/platform-channels.spec.ts`
  * holds the browser contract.
@@ -49,6 +51,7 @@ const me: Me = params.get("channels") === "off" ? { ...base, flags: { ...base.fl
 const readable = harnessChannels(me);
 const viewing: Channel | null = readable.find((channel) => channel.slug === params.get("channel") && channelSpace(channel)) ?? null;
 const conductView = params.get("view") === "conduct";
+const agent = params.has("agent");
 const requested = SpaceIdSchema.safeParse(params.get("space"));
 const space: SpaceId = viewing ? channelSpace(viewing)! : conductView ? "community"
   : requested.success && me.spaces.includes(requested.data) ? requested.data : me.spaces[0];
@@ -60,6 +63,7 @@ if (!canRenderSpace(me, space) || (params.has("channel") && !viewing) || ((viewi
 function here(extra: Record<string, string | null>): string {
   const query = new URLSearchParams({ persona });
   if (params.get("channels") === "off") query.set("channels", "off");
+  if (agent) query.set("agent", "");
   for (const [key, value] of Object.entries(extra)) if (value !== null) query.set(key, value);
   return `/dev/platform-channels?${query.toString()}`;
 }
@@ -68,6 +72,7 @@ function here(extra: Record<string, string | null>): string {
 let record: ConductAcknowledgement | null = params.has("agreed") ? { version: 1, acknowledgedAt: FIXTURE_NOW, current: true } : null;
 const self = Astro.url.pathname + Astro.url.search;
 const agreeBack = here({ ...(viewing ? { channel: viewing.slug } : { view: "conduct" }), agreed: "" });
+if (agent && Astro.request.method === "POST") return new Response("Only the person can agree to how we talk to each other.", { status: 403 });
 const posted = await handleConductPost(Astro.request, {
   load: async () => record,
   acknowledge: async (version) => { record = { version, acknowledgedAt: FIXTURE_NOW, current: true }; },
@@ -111,9 +116,9 @@ const title = viewing ? `#${viewing.name}` : conductView ? CONDUCT_TITLE : SPACE
   <SpaceSidebar slot="sidebar" model={harnessModel} />
   {
     viewing ? (
-      <ChannelFrame channel={viewing} agreed={agreed} action={self} />
+      <ChannelFrame channel={viewing} agreed={agreed} canAgree={!agent} action={self} />
     ) : conductView ? (
-      <ConductArticle record={record} action={self} />
+      <ConductArticle record={record} canAgree={!agent} action={self} />
     ) : (
       <article class="max-w-3xl" data-harness-page={space}>
         <PageTitle spaces legacyClass="">{SPACE_LABEL[space]}</PageTitle>

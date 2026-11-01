@@ -161,6 +161,16 @@ test.describe("channel sidebars and how we talk to each other", () => {
     expect(response.status(), String(baseURL)).toBe(403);
   });
 
+  test("an agent acting for someone reads the habits and sees why it cannot agree", async ({ page }, testInfo) => {
+    for (const query of ["persona=lucy&channel=help&agent", "persona=lucy&view=conduct&agent"]) {
+      await open(page, query);
+      await expect(page.locator("[data-conduct-habits]"), query).toBeVisible();
+      await expect(page.locator("[data-conduct-agent-note]"), query).toHaveText("An agent acting for someone can read these habits, but only the person can agree to them.");
+      await expect(page.locator("[data-conduct-agree]"), query).toHaveCount(0);
+      await runAxe(page, testInfo, `agent-${query.includes("conduct") ? "conduct" : "gate"}`);
+    }
+  });
+
   test("the habits are always there to read again, with the day you agreed", async ({ page }) => {
     await open(page, "persona=lucy&view=conduct&agreed");
     await expect(page.getByRole("heading", { level: 1, name: CONDUCT })).toBeVisible();
