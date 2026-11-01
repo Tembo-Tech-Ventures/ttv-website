@@ -13,15 +13,32 @@ only the existing contracts, with no React or browser globals:
 
 ```ts
 selectDefaultSpace(spaces: readonly SpaceId[], options?: {
-  explicitSpace?: unknown; lastSpace?: unknown;
+  explicitSpace?: unknown; lastSpace?: unknown; preferred?: unknown;
 }): SpaceId | null
+preferredSpace(intents: readonly Intent[], spaces: readonly SpaceId[]): SpaceId | null
 readLastSpaceCookie(cookieHeader: string | null | undefined): SpaceId | null
 serializeLastSpaceCookie(space: SpaceId, secure: boolean): string
 ```
 
-Pass **current** `Me.spaces`. An authorized explicit URL wins over an authorized
-cookie; otherwise the first authorized `SPACE_ORDER` entry wins. Empty membership
-returns null. Candidates are checked with `SpaceId` and membership; cookies do not
+Pass **current** `Me.spaces`. The first authorized candidate wins, in the order
+explicit URL → cookie → `preferred` → first `SPACE_ORDER` entry. Empty membership
+returns null.
+
+`preferredSpace` (onboarding SPEC §3) turns the person's effective intents (saved,
+or inferred when nothing is saved) into a preference: mentoring (MENTOR, granted)
+→ discover (INSTITUTION, granted) → cohort (MEMBER, granted) → community. Intent
+order doesn't matter, an intent whose space isn't held is skipped, and EXPLORING
+goes to community. It only returns a space in `spaces`, so an intent never grants
+anything. No intents at all returns null, which keeps the legacy `SPACE_ORDER`
+default for accounts that have neither saved nor inferred intents.
+
+```ts
+const preferred = preferredSpace(effectiveIntents, me.spaces);
+const selectedSpace = selectDefaultSpace(me.spaces, {explicitSpace, lastSpace, preferred});
+```
+
+An unseen approval that should win over the cookie once (SPEC §3) is the caller's
+decision: pass its space as `preferred` and omit `lastSpace` for that request. Candidates are checked with `SpaceId` and membership; cookies do not
 grant authority. This helper does not authorize or redirect an explicit forbidden
 URL: that decision belongs to server route guards. No path parsing/encoding occurs
 here; pass the already parsed space value.
