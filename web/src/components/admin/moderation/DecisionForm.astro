@@ -1,0 +1,58 @@
+---
+import Button from "@/components/platform/ui/Button";
+import { REASON_MAX } from "./decision-form";
+import type { DecisionOption } from "./case-model";
+
+/**
+ * The decision form for one case: a required reason, then one button per decision. A plain form
+ * post; enhance.ts posts the same form without a page load. The error paragraph is always there
+ * (empty and hidden until needed), so the enhancement can say why nothing changed in place.
+ */
+interface Props {
+  caseId: string;
+  action: string;
+  options: DecisionOption[];
+  /** Each button's accessible name, which says whose message it decides. */
+  names: string[];
+  error?: string;
+  draftReason?: string;
+  class?: string;
+}
+
+const { caseId, action, options, names, error, draftReason = "", class: className } = Astro.props;
+const ids = { reason: `moderation-${caseId}-reason`, hint: `moderation-${caseId}-hint`, error: `moderation-${caseId}-error` };
+const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
+---
+
+<form method="POST" action={action} class:list={["space-y-3", className]} data-moderation-form>
+  <input type="hidden" name="messageId" value={caseId} />
+  <div class="space-y-1.5">
+    <label for={ids.reason} class="block text-sm font-semibold text-ink-primary">Reason</label>
+    <textarea
+      id={ids.reason}
+      name="reason"
+      rows="2"
+      required
+      maxlength={REASON_MAX}
+      aria-describedby={error ? `${ids.error} ${ids.hint}` : ids.hint}
+      aria-invalid={error ? "true" : undefined}
+      class={`block min-h-11 w-full resize-y rounded-xl border border-hairline bg-ground/60 px-3.5 py-2.5 text-[0.9375rem] text-ink-primary placeholder:text-ink-muted focus-visible:border-peach-ink ${FOCUS}`}
+    >{draftReason}</textarea>
+    <p id={ids.hint} class="text-xs text-ink-muted">Kept with your decision in this queue.</p>
+    <p
+      id={ids.error}
+      role="alert"
+      tabindex="-1"
+      autofocus={Boolean(error)}
+      class:list={["text-sm text-danger-ink", FOCUS, !error && "hidden"]}
+      data-moderation-error
+    >{error}</p>
+  </div>
+  <div class:list={["grid gap-3", options.length > 1 && "grid-cols-2"]}>
+    {options.map((option, index) => (
+      <Button type="submit" name="action" value={option.action} variant="quiet" aria-label={names[index]} className="h-11 w-full">
+        {option.label}
+      </Button>
+    ))}
+  </div>
+</form>
