@@ -27,7 +27,7 @@ function everyRoute(s: ChannelFixture) {
   const help = s.channel("help");
   const own = s.message("help", { author: VIEWER, body: "Mine" });
   return [
-    ["listChannels", {}], ["listMessages", { id: help }], ["postMessage", { id: help, body: post() }],
+    ["listChannels", {}], ["listMessages", { id: help }], ["listShareables", { id: help }], ["postMessage", { id: help, body: post() }],
     ["markChannelRead", { id: help, body: { messageId: own } }], ["editMessage", { id: own, body: { body: "Changed" } }],
     ["reactToMessage", { id: own, body: { kind: "useful", active: true } }], ["deleteMessage", { id: own }],
   ] as const satisfies readonly (readonly [ChannelOperation, Parameters<ChannelFixture["call"]>[1]])[];
@@ -202,7 +202,8 @@ describe("channel APIs: contracts", () => {
 describe("channel APIs: query budget", () => {
   /** Statements per request with production flags (one flag read) and capabilities read once. */
   const BUDGET: Record<ChannelOperation, number> = {
-    listChannels: 5, listMessages: 6, postMessage: 7, markChannelRead: 8, editMessage: 9, reactToMessage: 10, deleteMessage: 9,
+    listChannels: 5, listMessages: 6, listShareables: 6, postMessage: 7, markChannelRead: 8, editMessage: 9, reactToMessage: 10,
+    deleteMessage: 9,
   };
 
   it.each(Object.entries(BUDGET) as [ChannelOperation, number][])("%s issues at most %i statements", async (operation, budget) => {
@@ -245,6 +246,30 @@ describe("channel APIs: query budget", () => {
     const sent = await s.call("postMessage", { id: s.channel("help"), body: post("Flag me"), screen, env: DATABASE_FLAGS });
     expect(sent.status).toBe(403);
     expect(prepare.mock.calls.length).toBeLessThanOrEqual(10);
+  });
+
+  it("embeds cost a post one statement and a page none; cohort shareables cost one more, for clips", async () => {
+    const s = setup({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
+    s.agree();
+    s.database.exec("UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'");
+    s.database.exec(`INSERT INTO communityJourney (id, userId, title, description, occurredAt, visibility) VALUES
+        ('ledger', '${VIEWER}', 'Ledger', 'A ledger', '2026-10-01', 'institution'),
+        ('kiosk', '${VIEWER}', 'Kiosk', 'A kiosk', '2026-10-01', 'institution');
+      INSERT INTO recording (id, programId, title, processingStatus) VALUES ('s9', 'cohort-a', 'Session 9', 'complete');
+      INSERT INTO transcript_segment (id, recordingId, startTime, endTime, text) VALUES ('s9-0', 's9', 0, 30, 'Retries.');`);
+    const embeds = [{ type: "project", journeyId: "ledger", version: 1 }, { type: "project", journeyId: "kiosk", version: 1 },
+      { type: "sessionClip", recordingId: "s9", startSeconds: 0, durationSeconds: 30 }];
+    const cohort = s.channel("cohort-04");
+    const prepare = vi.spyOn(s.d1, "prepare");
+    expect((await s.call("postMessage", { id: cohort, body: { ...post(), embeds }, env: DATABASE_FLAGS })).status).toBe(201);
+    expect(prepare).toHaveBeenCalledTimes(BUDGET.postMessage + 1);
+    prepare.mockClear();
+    const page = await s.call("listMessages", { id: cohort, env: DATABASE_FLAGS });
+    expect(MessageList.parse(page.body).items[0]?.embeds).toHaveLength(3);
+    expect(prepare).toHaveBeenCalledTimes(BUDGET.listMessages);
+    prepare.mockClear();
+    expect((await s.call("listShareables", { id: cohort, query: "?q=retries", env: DATABASE_FLAGS })).status).toBe(200);
+    expect(prepare).toHaveBeenCalledTimes(BUDGET.listShareables + 1);
   });
 
   it("a thread page and a reply cost one statement more each", async () => {

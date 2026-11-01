@@ -1,7 +1,12 @@
 import { createId } from "@paralleldrive/cuid2";
-import type { Channel, EditMessage, Message, MessageReactions, PostMessage, ReactToMessage } from "@/lib/platform/contracts";
+import {
+  MessageEmbed, type Channel, type EditMessage, type Message, type MessageEmbed as StoredEmbed, type MessageReactions,
+  type PostMessage, type ReactToMessage,
+} from "@/lib/platform/contracts";
 import { CONDUCT_VERSION } from "./conduct";
-import { ChannelError, readMessage, type ReadContext } from "./messages";
+import { refOf, resolveEmbeds, sameRefs, screeningText } from "./embeds";
+import { ChannelError } from "./errors";
+import { readMessage, type ReadContext } from "./messages";
 import { screenMessage, type MessageScreen } from "./moderation";
 
 /**
@@ -72,19 +77,30 @@ async function screen(ctx: WriteContext, body: string, parentId: string | null, 
   return [...new Set(reasons.map((reason) => reason.trim()).filter(Boolean))];
 }
 
-interface NonceRow { id: string; channelId: string; parentId: string | null; body: string; editedAt: number | null; deletedAt: number | null }
+interface NonceRow {
+  id: string; channelId: string; parentId: string | null; body: string; embeds: string; editedAt: number | null; deletedAt: number | null;
+}
+
+/** The references a stored message's embeds were resolved from; null when they cannot be read back. */
+function storedRefs(text: string) {
+  try {
+    const embeds = MessageEmbed.array().safeParse(JSON.parse(text));
+    return embeds.success ? embeds.data.map(refOf) : null;
+  } catch { return null; }
+}
 
 /**
  * The message this author already sent with this nonce, when the request repeats it: same channel,
- * same thread and the same body (or a body the author has since edited or deleted). Different
- * content under a used nonce is a 409. null when the nonce is unused.
+ * same thread, the same body and the same attached work (or a message the author has since edited
+ * or deleted). Different content under a used nonce is a 409. null when the nonce is unused.
  */
 async function previousPost(ctx: WriteContext, input: PostMessage): Promise<{ message: Message; created: false } | null> {
-  const row = await ctx.db.prepare(`SELECT id, channelId, parentId, body, editedAt, deletedAt
+  const row = await ctx.db.prepare(`SELECT id, channelId, parentId, body, embeds, editedAt, deletedAt
     FROM channel_message WHERE authorId = ?1 AND clientNonce = ?2`).bind(ctx.viewerId, input.clientNonce).first<NonceRow>();
   if (!row) return null;
+  const refs = storedRefs(row.embeds);
   const repeat = row.channelId === ctx.channel.id && row.parentId === input.parentId
-    && (row.body === input.body || row.editedAt !== null || row.deletedAt !== null);
+    && ((row.body === input.body && refs !== null && sameRefs(refs, input.embeds)) || row.editedAt !== null || row.deletedAt !== null);
   if (!repeat) throw new ChannelError("conflict", "This message was already sent with different content.", 409);
   return { message: await loaded(ctx, row.id), created: false };
 }
@@ -133,23 +149,33 @@ async function refusal(ctx: WriteContext, input: PostMessage, now: number): Prom
  * back even if it could no longer post. Refusals: a nonce used for different content (409); no
  * posting right (403); the code of conduct not agreed at its current version (403
  * conduct_required); a rate limit (429 with retryAfterMs); a thread that is not an open root of
- * this channel the caller can see (404), or a deleted or hidden one (409). Embeds arrive with B-2.4.
+ * this channel the caller can see (404), or a deleted or hidden one (409); attached work that cannot
+ * be shared here (resolveEmbeds: 400, or 409 for a stale project revision).
  */
 export async function postMessage(ctx: WriteContext, input: PostMessage): Promise<{ message: Message; created: boolean }> {
-  if (input.embeds.length > 0) throw new ChannelError("validation", "Attachments are not available yet.", 400);
   if (!ctx.channel.capabilities.canPost) {
     const previous = await previousPost(ctx, input);
     if (previous) return previous;
     throw cannotPost();
   }
+  let embeds: StoredEmbed[];
+  try {
+    embeds = await resolveEmbeds(ctx, input.embeds);
+  } catch (error) {
+    // A retry gets its message back even when the work it shared has changed since.
+    const previous = error instanceof ChannelError ? await previousPost(ctx, input) : null;
+    if (previous) return previous;
+    throw error;
+  }
 
   const now = ctx.now ?? Date.now();
-  const reasons = await screen(ctx, input.body, input.parentId, "post");
+  // Shared projects are screened with the body: readers see their text too.
+  const reasons = await screen(ctx, screeningText(input.body, embeds), input.parentId, "post");
   const id = createId();
   const { channel: burst, day } = POST_LIMITS;
   const statements = [ctx.db.prepare(`INSERT INTO channel_message
-      (id, channelId, parentId, seq, changeSeq, authorKind, authorId, clientNonce, body, moderationState, moderationReasons, createdAt)
-    SELECT ?9, ?1, ?4, n.next, n.next, 'USER', ?2, ?3, ?5, ?6, ?7, max(?8, n.lastAt)
+      (id, channelId, parentId, seq, changeSeq, authorKind, authorId, clientNonce, body, embeds, moderationState, moderationReasons, createdAt)
+    SELECT ?9, ?1, ?4, n.next, n.next, 'USER', ?2, ?3, ?5, ?15, ?6, ?7, max(?8, n.lastAt)
     FROM (SELECT coalesce(MAX(changeSeq), 0) + 1 AS next,
       coalesce((SELECT createdAt FROM channel_message WHERE channelId = ?1 ORDER BY seq DESC LIMIT 1), 0) AS lastAt
       FROM channel_message WHERE channelId = ?1) n
@@ -161,7 +187,7 @@ export async function postMessage(ctx: WriteContext, input: PostMessage): Promis
     ON CONFLICT (authorId, clientNonce) DO NOTHING`).bind(
     ctx.channel.id, ctx.viewerId, input.clientNonce, input.parentId, input.body,
     reasons.length > 0 ? "FLAGGED" : "VISIBLE", JSON.stringify(reasons), now, id,
-    conductVersion(ctx), now - day.windowMs, day.count, now - burst.windowMs, burst.count,
+    conductVersion(ctx), now - day.windowMs, day.count, now - burst.windowMs, burst.count, JSON.stringify(embeds),
   )];
   // The statements after the INSERT act only if it wrote the new id.
   const written = "EXISTS (SELECT 1 FROM channel_message WHERE id = ?3)";

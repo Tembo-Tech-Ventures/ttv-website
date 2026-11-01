@@ -19,6 +19,8 @@ const planEndpoints = [
 ];
 const additionalEndpoints = [
   "GET /api/admin/platform-flags", "PUT /api/admin/platform-flags/:key", "POST /api/messages/:id/tembo-feedback",
+  // B-2.4: what the composer's attach tools offer in one channel.
+  "GET /api/channels/:id/shareables",
 ];
 /** Independent transcription of the onboarding SPEC §5 routes. */
 const onboardingEndpoints = [
@@ -61,6 +63,8 @@ const routeExamples = {
   reactToMessage: { params: messageParams, body: { kind: "useful", active: true },
     response: { messageId: F.messages.projectPost.id, reactions: F.messages.projectPost.reactions } },
   reportMessage: { params: messageParams, body: { reason: "Unrelated promotion" }, response: { ok: true } },
+  listShareables: { params: { id: F.channels.cohort04.id }, query: { q: "retries" },
+    response: { projects: [F.projects.chamaLedger, { ...F.projects.fareSplitter, link: null }], clips: [F.sessionClip] } },
   markChannelRead: { params: channelParams, body: { messageId: F.messages.projectPost.id },
     response: { channelId: channelParams.id, lastReadMessageId: F.messages.projectPost.id, unreadCount: 0 } },
   listModerationQueue: { query: { state: "PENDING" }, response: F.moderationQueue },
@@ -175,6 +179,14 @@ describe("wire invariants", () => {
     ["zero revision", C.ProjectEmbedRef, { ...post.embeds[0], version: 0 }],
     ["negative clip start", C.SessionClipEmbedRef, { type: "sessionClip", recordingId: F.fixtureIds.session09, startSeconds: -1, durationSeconds: 30 }],
     ["zero clip duration", C.SessionClipEmbed, { ...F.sessionClip, durationSeconds: 0 }],
+    ["clip longer than ten minutes", C.SessionClipEmbedRef, { type: "sessionClip", recordingId: F.fixtureIds.session09, startSeconds: 0, durationSeconds: 601 }],
+    ["six embeds", C.PostMessage, { ...post, embeds: Array.from({ length: 6 }, (_, i) => ({ ...post.embeds[0], version: i + 1 })) }],
+    ["unavailable work offered to attach", C.MessageEmbed, { type: "unavailable", was: "project" }],
+    ["unavailable embed of an unknown kind", C.MessageEmbedView, { type: "unavailable", was: "linkPreview" }],
+    ["blank shareables query", C.ShareablesQuery, { q: "  " }],
+    ["oversize shareables query", C.ShareablesQuery, { q: "x".repeat(201) }],
+    ["unknown shareables parameter", C.ShareablesQuery, { q: "retries", programId: F.fixtureIds.cohort04 }],
+    ["too many shareable clips", C.ChannelShareables, { projects: [], clips: Array.from({ length: 21 }, () => F.sessionClip) }],
     ["unknown reaction", C.ReactToMessage, { kind: "upvote", active: true }],
     ["implicit reaction toggle", C.ReactToMessage, { kind: "thanks" }],
     ["unknown returned reaction", C.Reaction, { kind: "heart", count: 1, mine: false }],
@@ -249,6 +261,27 @@ describe("wire invariants", () => {
   it.each(C.ErrorCode.options)("uses the one error envelope for %s", (code) => {
     const error: C.ErrorEnvelope = { error: { code, message: "Synthetic failure", retryAfterMs: 1000 } };
     expect(C.ErrorEnvelope.parse(error)).toEqual(error);
+  });
+});
+
+describe("embed contracts (B-2.4)", () => {
+  it("lets a message carry a neutral unavailable embed, and strips anything a server might leave on it", () => {
+    const leaky = { type: "unavailable", was: "project", title: "Private draft", journeyId: F.fixtureIds.chamaLedger };
+    expect(C.MessageEmbedView.parse(leaky)).toEqual({ type: "unavailable", was: "project" });
+    const message = { ...F.messages.projectPost, embeds: [{ type: "unavailable", was: "sessionClip" }] };
+    expect(C.Message.parse(message).embeds).toEqual([{ type: "unavailable", was: "sessionClip" }]);
+  });
+
+  it("accepts a project without an evidence link, and a clip of exactly ten minutes", () => {
+    expect(C.ProjectEmbed.parse({ ...F.projects.chamaLedger, link: null }).link).toBeNull();
+    const clip = { type: "sessionClip", recordingId: F.fixtureIds.session09, startSeconds: 0, durationSeconds: C.MAX_CLIP_SECONDS };
+    expect(C.SessionClipEmbedRef.parse(clip)).toEqual(clip);
+    expect(C.PostMessage.parse({ ...post, embeds: Array.from({ length: 5 }, (_, i) => ({ ...post.embeds[0], version: i + 1 })) }).embeds).toHaveLength(5);
+  });
+
+  it("trims the shareables query and allows none", () => {
+    expect(C.ShareablesQuery.parse({ q: "  retries " })).toEqual({ q: "retries" });
+    expect(C.ShareablesQuery.parse({})).toEqual({});
   });
 });
 

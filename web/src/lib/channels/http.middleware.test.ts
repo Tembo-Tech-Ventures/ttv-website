@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { APIContext } from "astro";
-import { ChannelList, ErrorEnvelope, Message } from "@/lib/platform/contracts";
+import { ChannelList, ChannelShareables, ErrorEnvelope, Message } from "@/lib/platform/contracts";
 import { channelDatabase, ORIGIN, post, VIEWER, type ChannelFixture } from "./test-support";
 
 const mocks = vi.hoisted(() => ({
@@ -18,10 +18,11 @@ vi.mock("@/lib/observability/errors", async (importOriginal) => ({
   recordErrorInBackground: vi.fn(),
 }));
 import { onRequest } from "@/middleware";
-import { getRouteChannelPage } from "@/lib/platform/server/channel-context";
+import { getRouteChannelPage, getRouteChannelShareables } from "@/lib/platform/server/channel-context";
 import { GET as listChannels } from "@/pages/api/channels/index";
 import { GET as listMessages, POST as postMessage } from "@/pages/api/channels/[id]/messages";
 import { POST as markRead } from "@/pages/api/channels/[id]/read";
+import { GET as listShareables } from "@/pages/api/channels/[id]/shareables";
 import { DELETE as deleteMessage, PATCH as editMessage } from "@/pages/api/messages/[id]";
 import { POST as react } from "@/pages/api/messages/[id]/reactions";
 
@@ -64,6 +65,8 @@ describe("channel API route files through the middleware", () => {
     const listed = await call("/api/channels", listChannels);
     expect(ChannelList.parse(await listed.json()).items.some((channel) => channel.id === help)).toBe(true);
     expect((await call(`/api/channels/${help}/messages`, listMessages, { params: { id: help } })).status).toBe(200);
+    const shareables = await call(`/api/channels/${help}/shareables?q=retries`, listShareables, { params: { id: help } });
+    expect(ChannelShareables.parse(await shareables.json())).toEqual({ projects: [], clips: [] });
     const created = await call(`/api/channels/${help}/messages`, postMessage, { method: "POST", params: { id: help }, body: post("Habari") });
     expect(created.status).toBe(201);
     const { id } = Message.parse(await created.json());
@@ -82,6 +85,9 @@ describe("channel API route files through the middleware", () => {
   it("refuse personal access tokens: community tokens at the middleware, admin tokens in the handler", async () => {
     const community = await call("/api/channels", listChannels, { scopes: ["community:read"] });
     expect(community.status).toBe(403);
+    const help = s.channel("help");
+    const shareables = await call(`/api/channels/${help}/shareables`, listShareables, { params: { id: help }, scopes: ["admin:read"] });
+    expect([shareables.status, ErrorEnvelope.parse(await shareables.json()).error.code]).toEqual([403, "forbidden"]);
     const admin = await call("/api/channels", listChannels, { scopes: ["admin:read"] });
     expect([admin.status, ErrorEnvelope.parse(await admin.json()).error.code]).toEqual([403, "forbidden"]);
   });
@@ -105,5 +111,23 @@ describe("channel API route files through the middleware", () => {
     const capabilityReads = prepare.mock.calls.filter(([query]) => /from "programRole"/.test(query));
     expect(capabilityReads).toHaveLength(1);
     expect(s.database.prepare("SELECT COUNT(*) AS n FROM channel_read").get()).toEqual({ n: 0 });
+  });
+
+  it("give a channel page its attach tools: the caller's projects where they can post, none where they cannot", async () => {
+    s.database.exec(`INSERT INTO communityJourney (id, userId, title, description, occurredAt, visibility) VALUES
+      ('ledger', '${VIEWER}', 'Ledger', 'A ledger', '2026-10-01', 'institution')`);
+    const shareablesAt = async (path: string) => {
+      let shareables: Awaited<ReturnType<typeof getRouteChannelShareables>> = null;
+      const response = await call(path, async (ctx) => {
+        shareables = await getRouteChannelShareables(ctx);
+        return new Response("Channel page");
+      });
+      expect(response.status).toBe(200);
+      return shareables as Awaited<ReturnType<typeof getRouteChannelShareables>>;
+    };
+    expect((await shareablesAt("/dashboard/community/c/help"))?.projects.map((project) => project.journeyId)).toEqual(["ledger"]);
+    expect((await shareablesAt("/dashboard/community/c/help"))?.clips).toEqual([]);
+    s.database.exec("UPDATE channel SET archivedAt = 1 WHERE slug = 'help'");
+    expect(await shareablesAt("/dashboard/community/c/help")).toBeNull();
   });
 });

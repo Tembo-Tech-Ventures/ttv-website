@@ -1,10 +1,12 @@
 import { z } from "zod";
 import {
-  Citation, MessageEmbed, ReactionKind, WebLink,
-  type AuthorSummary, type Channel, type ErrorCode, type Message, type MessageList, type MessageListQuery,
+  Citation, ReactionKind, WebLink,
+  type AuthorSummary, type Channel, type Message, type MessageList, type MessageListQuery,
   type ModerationState, type Reaction, type RoleBadge,
 } from "@/lib/platform/contracts";
 import { CursorExpiredError, decodeCursor, encodeCursor } from "./cursor";
+import { EMBED_ACCESS_COLUMN, embedsForReader } from "./embeds";
+import { ChannelError } from "./errors";
 
 /**
  * Reading messages (README.md beside this file, "Reading messages"). Raw D1 SQL, because one
@@ -21,12 +23,7 @@ export const SINCE_LIMIT = 100;
 /** Thread participants listed on a root message. */
 const PARTICIPANT_LIMIT = 10;
 
-/** A refusal the HTTP layer turns into the error envelope. */
-export class ChannelError extends Error {
-  constructor(readonly code: ErrorCode, message: string, readonly status: number, readonly retryAfterMs?: number) {
-    super(message);
-  }
-}
+export { ChannelError } from "./errors";
 
 /** Who is reading, and the channel they may read (with their capabilities in it). */
 export interface ReadContext {
@@ -42,12 +39,14 @@ interface MessageRow {
   editedAt: number | null; deletedAt: number | null; createdAt: number;
   authorName: string | null; authorImage: string | null; programName: string | null;
   globalRoles: string; programRoles: string; applications: string; reactions: string; thread: string | null;
+  embedAccess: string | null;
 }
 
 /**
  * Every column a Message needs. Parameters: ?1 channel id, ?2 viewer id, ?3 the channel's program
  * (null outside cohort channels), so cohort roles only ever describe this cohort. The thread summary
- * counts replies everyone can see, so it is the same for every reader.
+ * counts replies everyone can see, so it is the same for every reader. Embeds are checked again
+ * here, in the same statement (embeds.ts).
  */
 const MESSAGE_COLUMNS = `m.id, m.channelId, m.parentId, m.seq, m.changeSeq, m.authorKind, m.authorId, m.clientNonce,
   m.body, m.embeds, m.citations, m.moderationState, m.moderationReasons, m.editedAt, m.deletedAt, m.createdAt,
@@ -61,7 +60,8 @@ const MESSAGE_COLUMNS = `m.id, m.channelId, m.parentId, m.seq, m.changeSeq, m.au
     FROM message_reaction WHERE messageId = m.id GROUP BY kind) x) AS reactions,
   CASE WHEN m.parentId IS NULL THEN (SELECT json_array(COUNT(*), MAX(t.createdAt), json_group_array(DISTINCT t.authorId))
     FROM channel_message t WHERE t.channelId = m.channelId AND t.parentId = m.id
-      AND t.deletedAt IS NULL AND t.moderationState <> 'HIDDEN') END AS thread`;
+      AND t.deletedAt IS NULL AND t.moderationState <> 'HIDDEN') END AS thread,
+  ${EMBED_ACCESS_COLUMN}`;
 const FROM_MESSAGES = `FROM channel_message m LEFT JOIN "user" u ON u.id = m.authorId`;
 /** Hidden messages reach only their author and the channel's moderators. ?2 viewer, ?4 canModerate. */
 const VISIBLE = `(m.moderationState <> 'HIDDEN' OR m.authorId = ?2 OR ?4)`;
@@ -153,7 +153,7 @@ function toMessage(row: MessageRow, ctx: ReadContext): Message {
     clientNonce: own ? row.clientNonce : null,
     authorKind: row.authorKind, author: author(row, ctx.channel.programId),
     body: deleted ? "" : row.body,
-    embeds: deleted ? [] : parsedArray(MessageEmbed, row.embeds),
+    embeds: deleted ? [] : embedsForReader(jsonArray(row.embeds), row.embedAccess),
     citations: deleted ? [] : parsedArray(Citation, row.citations),
     reactions: deleted ? [] : reactions(row.reactions),
     createdAt: row.createdAt, edited: !deleted && row.editedAt !== null, deleted,

@@ -1,5 +1,5 @@
 import { PiArrowRight, PiFolderSimple, PiPlayFill, PiVideoCamera } from "react-icons/pi";
-import type { MessageEmbed, ProjectEmbed, SessionClipEmbed } from "@/lib/platform/contracts";
+import type { MessageEmbedView, ProjectEmbed, SessionClipEmbed, UnavailableEmbed } from "@/lib/platform/contracts";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
 import Chip from "@/components/platform/ui/Chip";
 import { cx } from "@/components/platform/ui/cx";
@@ -26,7 +26,8 @@ function confirmationText(embed: ProjectEmbed, confirmation: ProjectEmbed["confi
 }
 
 function ProjectCard({ embed, compact }: { embed: ProjectEmbed; compact: boolean }) {
-  const external = isExternal(embed.link);
+  const link = embed.link;
+  const external = link !== null && isExternal(link);
   return (
     <div className="channel-embed" data-embed="project">
       <p className="channel-embed__kind">
@@ -55,14 +56,16 @@ function ProjectCard({ embed, compact }: { embed: ProjectEmbed; compact: boolean
             ))}
           </ul>
         )}
-        <a
-          href={embed.link}
-          {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-          className={cx("channel-embed__go", FOCUS_RING)}
-        >
-          Open<span className="sr-only"> {embed.title}{external ? " (opens in a new tab)" : ""}</span>
-          <PiArrowRight aria-hidden="true" className="size-3.5" />
-        </a>
+        {link !== null && (
+          <a
+            href={link}
+            {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+            className={cx("channel-embed__go", FOCUS_RING)}
+          >
+            Open<span className="sr-only"> {embed.title}{external ? " (opens in a new tab)" : ""}</span>
+            <PiArrowRight aria-hidden="true" className="size-3.5" />
+          </a>
+        )}
       </div>
     </div>
   );
@@ -98,11 +101,26 @@ function ClipCard({ embed, compact }: { embed: SessionClipEmbed; compact: boolea
   );
 }
 
+/** Shared work this reader can no longer see: no title, no way in, nothing that was in it. */
+function UnavailableCard({ embed }: { embed: UnavailableEmbed }) {
+  const project = embed.was === "project";
+  const Icon = project ? PiFolderSimple : PiVideoCamera;
+  return (
+    <div className="channel-embed" data-embed="unavailable">
+      <p className="channel-embed__kind">
+        <Icon aria-hidden="true" className="size-4 shrink-0" />
+        {project ? "This project is no longer available" : "This session clip is no longer available"}
+      </p>
+    </div>
+  );
+}
+
 /**
  * Work shared in a message. U-2.2 owns the full embed design; this is its
  * first form. `compact` (a thread's first message) keeps the title, the
  * confirmation and the way in, as on the phone prototype (m4).
  */
-export default function EmbedCard({ embed, compact = false }: { embed: MessageEmbed; compact?: boolean }) {
+export default function EmbedCard({ embed, compact = false }: { embed: MessageEmbedView; compact?: boolean }) {
+  if (embed.type === "unavailable") return <UnavailableCard embed={embed} />;
   return embed.type === "project" ? <ProjectCard embed={embed} compact={compact} /> : <ClipCard embed={embed} compact={compact} />;
 }

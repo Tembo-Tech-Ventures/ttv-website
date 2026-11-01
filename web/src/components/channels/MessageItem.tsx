@@ -96,9 +96,10 @@ function MemberContent({ message, names, compact }: { message: Message; names: r
   return (
     <div className={cx(hidden && "channel-message__hidden")}>
       {message.body && <MessageBody body={message.body} names={names} />}
-      {message.embeds.map((embed) => (
+      {message.embeds.map((embed, index) => (
         <EmbedCard
-          key={embed.type === "project" ? `p-${embed.journeyId}-${embed.version}` : `c-${embed.recordingId}-${embed.startSeconds}`}
+          key={embed.type === "project" ? `p-${embed.journeyId}-${embed.version}`
+            : embed.type === "sessionClip" ? `c-${embed.recordingId}-${embed.startSeconds}` : `u-${index}`}
           embed={embed}
           compact={compact}
         />

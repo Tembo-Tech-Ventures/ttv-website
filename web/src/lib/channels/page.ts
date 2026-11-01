@@ -1,6 +1,7 @@
 import type { Database } from "@/lib/db/schema";
-import { Id, MessageList, type Channel } from "@/lib/platform/contracts";
+import { ChannelShareables, Id, MessageList, type Channel } from "@/lib/platform/contracts";
 import { readMarker } from "./access";
+import { listShareables } from "./embeds";
 import { ChannelError, listMessages } from "./messages";
 
 /**
@@ -35,4 +36,14 @@ export async function loadChannelPage(
     readMarker(db, viewerId, channel.id),
   ]);
   return { initial: MessageList.parse(initial), thread: replies && MessageList.parse(replies), read };
+}
+
+/**
+ * What the composer's attach tools offer in this channel (embeds.ts listShareables): the caller's own
+ * published projects, and session clips in their cohort's own channels. null where the caller cannot
+ * post, so the page shows no attach tools. One read, two in a cohort channel they can share clips in.
+ */
+export async function loadChannelShareables(d1: D1Database, viewerId: string, channel: Channel): Promise<ChannelShareables | null> {
+  if (!channel.capabilities.canPost) return null;
+  return ChannelShareables.parse(await listShareables({ db: d1, viewerId, channel }));
 }
