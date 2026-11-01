@@ -50,7 +50,7 @@ test("a narrow screen with enlarged text has no horizontal overflow", async ({ p
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-for (const [audience, headline, cta, destination, requestCta, question] of [
+for (const [audience, headline, cta, destination, requestCta, accessQuestion] of [
   ["mentors", "Make the contribution clearer.", "Continue to mentor review", "/dashboard/welcome?intent=mentor", "Ask to mentor", "Can I start reviewing as soon as I sign in?"],
   ["institutions", "Look beyond the profile. Understand the work.", "Continue to institutional access", "/dashboard/welcome?intent=institution", "Ask for institutional access", "Who can use institutional discovery?"],
 ]) {
@@ -86,7 +86,7 @@ for (const [audience, headline, cta, destination, requestCta, question] of [
     const links = page.getByRole("link", { name: requestCta });
     await expect(links).toHaveCount(2);
     for (const link of await links.all()) await expect(link).toHaveAttribute("href", `/auth/login?next=${encodeURIComponent(destination)}`);
-    const answer = page.locator("details").filter({ hasText: question });
+    const answer = page.locator("details").filter({ hasText: accessQuestion });
     await answer.locator("summary").click();
     await expect(answer.locator("p")).toContainText("An administrator reads each request and decides; approval is not guaranteed.");
     await expect(answer.locator("p")).toContainText("pending");

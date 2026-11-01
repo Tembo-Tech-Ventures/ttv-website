@@ -52,6 +52,7 @@ const HOSTILE_NEXT = [
   "\\\\evil.example",
   "%2F%2Fevil.example",
   "/%2F%2Fevil.example",
+  // oxlint-disable-next-line no-script-url -- A hostile next value under test; it is never followed.
   "javascript:alert(1)",
   "dashboard/welcome?intent=mentor",
 ];
