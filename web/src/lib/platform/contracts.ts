@@ -205,9 +205,14 @@ export type ConductAcknowledgement = z.infer<typeof ConductAcknowledgement>;
 
 export const ProjectConfirmation = z.object({ mentorId: Id, mentorName: NonEmptyText, version: z.int().positive() });
 export type ProjectConfirmation = z.infer<typeof ProjectConfirmation>;
+/**
+ * A project at one revision. link is the project's own evidence page, or null when it has none: no
+ * other page is open to every reader. confirmations are the mentors' latest confirmations at or
+ * before this revision, each with the revision it confirmed.
+ */
 export const ProjectEmbed = z.object({
   type: z.literal("project"), journeyId: Id, version: z.int().positive(), title: NonEmptyText,
-  summary: z.string(), skills: z.array(NonEmptyText), link: WebLink, confirmations: z.array(ProjectConfirmation),
+  summary: z.string(), skills: z.array(NonEmptyText), link: WebLink.nullable(), confirmations: z.array(ProjectConfirmation),
 });
 export type ProjectEmbed = z.infer<typeof ProjectEmbed>;
 export const SessionClipEmbed = z.object({
@@ -215,13 +220,26 @@ export const SessionClipEmbed = z.object({
   startSeconds: z.number().nonnegative(), durationSeconds: z.number().positive(), quote: NonEmptyText,
 });
 export type SessionClipEmbed = z.infer<typeof SessionClipEmbed>;
+/** The kinds of work a message can share. */
 export const MessageEmbed = z.discriminatedUnion("type", [ProjectEmbed, SessionClipEmbed]);
 export type MessageEmbed = z.infer<typeof MessageEmbed>;
+/**
+ * What a reader gets in place of shared work they can no longer see: a project made private or
+ * removed, a recording removed or moved out of the channel's cohort. No title, ids or quotation.
+ */
+export const UnavailableEmbed = z.object({ type: z.literal("unavailable"), was: z.enum(["project", "sessionClip"]) });
+export type UnavailableEmbed = z.infer<typeof UnavailableEmbed>;
+/** An embed as one reader sees it, checked again on every read. */
+export const MessageEmbedView = z.discriminatedUnion("type", [ProjectEmbed, SessionClipEmbed, UnavailableEmbed]);
+export type MessageEmbedView = z.infer<typeof MessageEmbedView>;
+/** The longest session clip a message can share, in seconds. */
+export const MAX_CLIP_SECONDS = 600;
 /** Writes send references only; the server resolves labels, quotations and confirmations. */
 export const ProjectEmbedRef = z.strictObject({ type: z.literal("project"), journeyId: Id, version: z.int().positive() });
 export type ProjectEmbedRef = z.infer<typeof ProjectEmbedRef>;
 export const SessionClipEmbedRef = z.strictObject({
-  type: z.literal("sessionClip"), recordingId: Id, startSeconds: z.number().nonnegative(), durationSeconds: z.number().positive(),
+  type: z.literal("sessionClip"), recordingId: Id, startSeconds: z.number().nonnegative(),
+  durationSeconds: z.number().positive().max(MAX_CLIP_SECONDS),
 });
 export type SessionClipEmbedRef = z.infer<typeof SessionClipEmbedRef>;
 export const EmbedRef = z.discriminatedUnion("type", [ProjectEmbedRef, SessionClipEmbedRef]);
@@ -247,7 +265,7 @@ export type TemboScope = z.infer<typeof TemboScope>;
 export const Message = z.object({
   id: Id, channelId: Id, parentId: Id.nullable(), clientNonce: ClientNonce.nullable(),
   authorKind: AuthorKind, author: AuthorSummary, body: z.string().max(10_000),
-  embeds: z.array(MessageEmbed), citations: z.array(Citation), reactions: z.array(Reaction),
+  embeds: z.array(MessageEmbedView), citations: z.array(Citation), reactions: z.array(Reaction),
   createdAt: Timestamp, edited: z.boolean(), deleted: z.boolean(),
   // Null for ordinary readers. Only authors/moderators receive reasons and state.
   moderation: MessageModeration.nullable(), thread: ThreadSummary, temboScope: TemboScope.nullable(),
@@ -286,6 +304,15 @@ export const MarkChannelRead = z.strictObject({ messageId: Id });
 export type MarkChannelRead = z.infer<typeof MarkChannelRead>;
 export const ChannelRead = z.object({ channelId: Id, lastReadMessageId: Id, unreadCount: Count });
 export type ChannelRead = z.infer<typeof ChannelRead>;
+/** q finds session moments by their transcript. */
+export const ShareablesQuery = z.strictObject({ q: z.string().trim().min(1).max(200).optional() });
+export type ShareablesQuery = z.infer<typeof ShareablesQuery>;
+/**
+ * What the caller can attach in this channel: their own published projects at the current revision,
+ * and session clips only where every reader can see the recording (canShareSessionClip).
+ */
+export const ChannelShareables = z.object({ projects: z.array(ProjectEmbed).max(50), clips: z.array(SessionClipEmbed).max(20) });
+export type ChannelShareables = z.infer<typeof ChannelShareables>;
 
 export const ModerationSource = z.enum(["AI_FLAG", "REPORT", "MENTOR_HIDE"]);
 export type ModerationSource = z.infer<typeof ModerationSource>;
@@ -507,6 +534,7 @@ export const ROUTES = {
   deleteMessage: defineRoute({ method: "DELETE", path: "/api/messages/:id", params: DeleteMessage, response: Message, idempotent: true }),
   reactToMessage: defineRoute({ method: "POST", path: "/api/messages/:id/reactions", params: IdParams, body: ReactToMessage, response: MessageReactions, idempotent: true }),
   reportMessage: defineRoute({ method: "POST", path: "/api/messages/:id/report", params: IdParams, body: ReportMessage, response: Success, idempotent: false }),
+  listShareables: defineRoute({ method: "GET", path: "/api/channels/:id/shareables", params: IdParams, query: ShareablesQuery, response: ChannelShareables, idempotent: true }),
   markChannelRead: defineRoute({ method: "POST", path: "/api/channels/:id/read", params: IdParams, body: MarkChannelRead, response: ChannelRead, idempotent: true }),
   listModerationQueue: defineRoute({ method: "GET", path: "/api/moderation/queue", query: ModerationQueueQuery, response: ModerationQueue, idempotent: true }),
   moderateMessage: defineRoute({ method: "POST", path: "/api/moderation/:messageId", params: ModerationParams, body: ModerationAction, response: Message, idempotent: false }),

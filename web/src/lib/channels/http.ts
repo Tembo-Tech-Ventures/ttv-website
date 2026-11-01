@@ -5,7 +5,7 @@ import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
 import * as schema from "@/lib/db/schema";
 import { recordErrorInBackground } from "@/lib/observability/errors";
 import {
-  EditMessage, IdParams, MarkChannelRead, MessageListQuery, PostMessage, ReactToMessage, ROUTES, type Channel,
+  EditMessage, IdParams, MarkChannelRead, MessageListQuery, PostMessage, ReactToMessage, ROUTES, ShareablesQuery, type Channel,
 } from "@/lib/platform/contracts";
 import { requireFlag } from "@/lib/platform/server/flags";
 import { platformError, platformJson } from "@/lib/platform/server/http";
@@ -14,6 +14,7 @@ import { requestCapabilities } from "@/lib/platform/server/request-capabilities"
 import { readBoundedJson, RequestJsonError } from "@/lib/request-json";
 import { findChannelById, listChannelsFor, readMarker } from "./access";
 import { CursorExpiredError, CursorInvalidError } from "./cursor";
+import { listShareables } from "./embeds";
 import { ChannelError, listMessages } from "./messages";
 import type { MessageScreen } from "./moderation";
 import {
@@ -32,11 +33,12 @@ import {
 type Env = Pick<Cloudflare.Env, "DB" | "DEPLOYMENT_ENVIRONMENT" | "PLATFORM_FLAGS_OVERRIDE" | "DEPLOYMENT_VERSION">;
 type Context = Pick<APIContext, "request" | "locals" | "params">;
 export type ChannelOperation = Extract<keyof typeof ROUTES,
-  "listChannels" | "listMessages" | "postMessage" | "editMessage" | "deleteMessage" | "reactToMessage" | "markChannelRead">;
+  "listChannels" | "listMessages" | "listShareables" | "postMessage" | "editMessage" | "deleteMessage" | "reactToMessage"
+  | "markChannelRead">;
 /** Test seams: the moderation hook, the clock and the code of conduct version. */
 export interface ChannelRequestOptions { screen?: MessageScreen; now?: () => number; conductVersion?: number }
 
-const READS: ReadonlySet<ChannelOperation> = new Set(["listChannels", "listMessages"]);
+const READS: ReadonlySet<ChannelOperation> = new Set(["listChannels", "listMessages", "listShareables"]);
 /** The longest legal message (10,000 characters of up to 4 bytes, JSON-escaped) fits; nothing else needs more. */
 const MESSAGE_BYTES = 64_000;
 const SMALL_BYTES = 1_024;
@@ -60,12 +62,12 @@ async function readBody(request: Request, maxBytes: number): Promise<unknown> {
   }
 }
 
-function readQuery(request: Request): MessageListQuery {
+function readQuery<T>(request: Request, contract: z.ZodType<T>): T {
   const search = new URL(request.url).searchParams;
   if ([...search.keys()].some((key) => search.getAll(key).length !== 1)) {
     throw new Refusal(platformError("validation", "Duplicate query parameter.", 400));
   }
-  return parse(MessageListQuery, Object.fromEntries(search));
+  return parse(contract, Object.fromEntries(search));
 }
 
 function failure(error: unknown, operation: ChannelOperation, context: Context, env: Env): Response {
@@ -108,7 +110,10 @@ async function channelRoute({ operation, request, id, user, db, capabilities, sc
   const channel = await findChannelById(db, user, id, capabilities);
   if (!channel) throw notFound("Channel");
   if (operation === "listMessages") {
-    return platformJson(ROUTES.listMessages.response.parse(await listMessages(scope(channel), readQuery(request))));
+    return platformJson(ROUTES.listMessages.response.parse(await listMessages(scope(channel), readQuery(request, MessageListQuery))));
+  }
+  if (operation === "listShareables") {
+    return platformJson(ROUTES.listShareables.response.parse(await listShareables(scope(channel), readQuery(request, ShareablesQuery))));
   }
   if (operation === "postMessage") {
     const { message, created } = await postMessage(scope(channel), parse(PostMessage, await readBody(request, MESSAGE_BYTES)));
@@ -142,7 +147,7 @@ function visibleTo(target: MessageTarget, userId: string, channel: Channel): boo
   return target.moderationState !== "HIDDEN" || target.authorId === userId || channel.capabilities.canModerate;
 }
 
-const CHANNEL_ROUTES: ReadonlySet<ChannelOperation> = new Set(["listMessages", "postMessage", "markChannelRead"]);
+const CHANNEL_ROUTES: ReadonlySet<ChannelOperation> = new Set(["listMessages", "listShareables", "postMessage", "markChannelRead"]);
 
 export async function channelRequest(
   operation: ChannelOperation, context: Context, env: Env, options: ChannelRequestOptions = {},

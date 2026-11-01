@@ -145,6 +145,7 @@ deleting your own message and read markers do not.
 |---|---|
 | `GET /api/channels` | `listChannelsFor`, with unread counts |
 | `GET /api/channels/:id/messages?before\|since&thread` | A page of messages (below) |
+| `GET /api/channels/:id/shareables?q=` | What the caller can attach here (B-2.4, "Embeds" below) |
 | `POST /api/channels/:id/messages` | Post; idempotent on `clientNonce` (201 new, 200 repeat) |
 | `POST /api/channels/:id/read` | Move the read marker forward |
 | `PATCH /api/messages/:id` | The author edits |
@@ -235,10 +236,10 @@ fail; when nothing was written, one read of the same conditions says why.
   archived), a current code of conduct agreement (403 `conduct_required`), and
   room in the rate limits (429 `rate_limited` with `retryAfterMs` and
   `Retry-After`). A reply needs an open root of the same channel: a missing,
-  foreign, reply or unseen parent is 404, a deleted or hidden one 409. Embeds
-  are refused (400) until B-2.4 resolves them.
+  foreign, reply or unseen parent is 404, a deleted or hidden one 409.
+  Attached work is resolved first ("Embeds" below).
 - **Idempotency.** `(authorId, clientNonce)` is unique. Repeating a post
-  (same channel, thread and body) returns the original with 200, even when
+  (same channel, thread, body and attached work) returns the original with 200, even when
   the requests race or the author can no longer post. Once the author has
   edited or deleted it, the same channel and thread are enough. Anything else
   under a used nonce is 409 `conflict`.
@@ -283,6 +284,54 @@ fail; when nothing was written, one read of the same conditions says why.
   moderator reviews: snapshot it when a message is flagged or reported, and
   keep earlier versions across edits and deletes.
 
+### Embeds (B-2.4)
+
+`embeds.ts`. A post sends references (`EmbedRef`, at most five, each once);
+the server resolves them in one statement, stores what readers will see in
+`channel_message.embeds`, and checks every one again on each read. Edits
+never change embeds; deleting a message clears them. Link previews are off in
+v1.
+
+| Work | Shared when | Refused |
+|---|---|---|
+| Project (`journeyId` + `version`) | It is the poster's own published project (`communityJourney.visibility = 'institution'`) at its current revision | Missing or someone else's: 400, one answer for both. A private draft: 400, telling its owner to publish it. Any other revision: 409 `conflict`, so the composer offers the current one |
+| Session clip (`recordingId`, `startSeconds`, `durationSeconds` ≤ 600) | The channel's `canShareSessionClip` (a cohort channel the caller may post in) and the recording is that program's, complete, with transcript in the window | Community, DIRECT and other cohorts' channels, before anything is read; a missing or another cohort's recording, with the same answer; unfinished, past the recording's end, or nothing to quote: 400 |
+
+- **Whose consent.** A project's owner sharing it is the consent for that
+  channel's readers, so nobody shares another person's work (`institution`
+  visibility alone is not community-public; see `src/lib/search/README.md`).
+  A clip goes only where every reader can see the recording: every reader of
+  a cohort channel (members, alumni, instructors, TAs, invited mentors,
+  admins) has that cohort's recordings.
+- **Stored.** A project keeps its title, a summary of its description (500
+  characters), no skills (projects have none of their own) and its https
+  evidence link (`link: null` without one). A clip keeps the recording's
+  title and a quotation of the transcript segments overlapping its window
+  (280 characters).
+- **On every read** (`EMBED_ACCESS_COLUMN`, a column of the page's own
+  statement, so pages cost no extra statement): a project must still exist,
+  belong to the message's author and be published; a recording must still be
+  complete and in the channel's cohort. Otherwise the reader, author
+  included, gets `{type: "unavailable", was}` with no title, ids or
+  quotation. A project's confirmations are read live: each mentor's latest
+  confirmation at or before the shared revision, with the revision it
+  confirmed. An edited project keeps showing the revision that was shared;
+  publishing a private project again brings its card back.
+- **Retries.** A repeated post returns the original even if the work has
+  changed since; the same nonce with different work is 409.
+
+`listShareables` (`GET /api/channels/:id/shareables`, and
+`getRouteChannelShareables(Astro)` / `loadChannelShareables` for page
+frontmatter, which give null where the caller cannot post) is what the
+composer's attach tools offer: the caller's own published projects at their
+current revision (50, most recently changed first), and only where
+`canShareSessionClip`, 60-second clips (`CLIP_SECONDS`, cut at the session's
+end): from the start of each of the 10 newest complete recordings with a
+transcript there, or with `q`, up to 20 transcript moments that mention it
+(case-insensitive substring, as in search). Everything listed posts as listed
+while nothing changes. Restricted staging identities cannot post, so the route
+is not on their allowlist.
+
 ### Read markers and unread counts
 
 - Only `POST /api/channels/:id/read` moves a marker, and only forwards (by
@@ -297,9 +346,11 @@ fail; when nothing was written, one read of the same conditions says why.
 ### Query budget
 
 Statements per request, with flags read from the database (asserted in
-`http.test.ts`): list channels 5, list messages 6 (7 with a thread), post 7
-(8 for a reply), mark read 8, edit 9, delete 9, react 10. A post or edit the
-moderation hook flags adds one, for its moderation event. Every one is an
+`http.test.ts`): list channels 5, list messages 6 (7 with a thread), list
+shareables 6 (7 where clips can be shared), post 7 (8 for a reply), mark read
+8, edit 9, delete 9, react 10. A post or edit the moderation hook flags adds
+one, for its moderation event, and a post with embeds one, to resolve them;
+embeds on a page add none. Every one is an
 indexed read; the plans are asserted in `messages.test.ts`,
 `mutations.test.ts` and `access.test.ts`.
 
@@ -357,7 +408,9 @@ migration and fails if new programs stop getting their channels.
 Tests: `src/lib/db/migrations/channels-migration.test.ts`,
 `channel-conduct-migration.test.ts`, `channel-message-author-migration.test.ts`,
 `channel-action-migration.test.ts`;
-beside this file `access.test.ts`, `conduct.test.ts`, `messages.test.ts`
+beside this file `access.test.ts`, `conduct.test.ts`, `embeds.test.ts`
+(sharing, refusals, later visibility changes, retries, shareables, plans),
+`messages.test.ts`
 (paging, polling, cursors, visibility), `mutations.test.ts` (posting,
 idempotency, the conduct gate, rate limits, STAFF posting, the edit/delete
 matrix, reactions, read markers), `http.test.ts` (flag, origin and token

@@ -2,9 +2,9 @@ import type { APIContext } from "astro";
 import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import { findReadableChannel } from "@/lib/channels/access";
-import { loadChannelPage, type ChannelPage } from "@/lib/channels/page";
+import { loadChannelPage, loadChannelShareables, type ChannelPage } from "@/lib/channels/page";
 import * as schema from "@/lib/db/schema";
-import type { Channel } from "../contracts";
+import type { Channel, ChannelShareables } from "../contracts";
 import { requestCapabilities } from "./request-capabilities";
 import { getSpaceContext } from "./space-context";
 import { channelRoute, normalizeSpacePath } from "./space-routes";
@@ -48,4 +48,16 @@ export async function getRouteChannelPage(
     thread: context.url.searchParams.get("thread"),
   });
   return { channel, page };
+}
+
+/**
+ * What the route channel's composer can attach (B-2.4): the caller's own published projects, and
+ * session clips in their cohort's own channels, as U-2.1's Shareables. null wherever getRouteChannel
+ * is null or the caller cannot post there, so the page shows no attach tools.
+ */
+export async function getRouteChannelShareables(context: Pick<APIContext, "locals" | "url">): Promise<ChannelShareables | null> {
+  const channel = await getRouteChannel(context);
+  const user = context.locals.user;
+  if (!channel || !user) return null;
+  return loadChannelShareables(env.DB, user.id, channel);
 }

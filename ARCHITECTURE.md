@@ -138,7 +138,8 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/api/admin/feedback` | Feedback queue JSON for admins and PAT-holding agents (GET, PATCH `[id]`) | ADMIN |
 | `/api/admin/feedback/themes` | Feedback themes JSON (GET, POST; GET/PATCH `[id]`) | ADMIN |
 | `/api/channels` | The caller's readable channels with unread counts (GET); flag `channels` | Session; no personal access tokens yet |
-| `/api/channels/[id]/messages` | A page of messages: latest, `?before=`, `?since=` polling, `&thread=` (GET); post, idempotent on `clientNonce`, after the code of conduct and within rate limits (POST); flag `channels` | Session; no personal access tokens yet |
+| `/api/channels/[id]/messages` | A page of messages: latest, `?before=`, `?since=` polling, `&thread=` (GET); post, idempotent on `clientNonce`, after the code of conduct and within rate limits, with up to five embeds checked again on every read (POST); flag `channels` | Session; no personal access tokens yet |
+| `/api/channels/[id]/shareables` | What the caller can attach here (GET, `?q=` finds session moments): their own published projects, and clips only in that cohort's own channels; flag `channels` | Session; no personal access tokens yet |
 | `/api/channels/[id]/read` | Move the caller's read marker forward (POST); the only thing that moves it; flag `channels` | Session; no personal access tokens yet |
 | `/api/messages/[id]` | The author edits (PATCH) or deletes, leaving a placeholder (DELETE); `/reactions` sets one fixed reaction on or off (POST); flag `channels` | Session; no personal access tokens yet |
 | `/api/platform/onboarding` | The caller's onboarding state and intents (GET, PUT); flag `onboarding` | Session, browser only |

@@ -167,14 +167,6 @@ describe("posting", () => {
     expect((await s.call("postMessage", { id: help, body: post("Replying", root) })).status).toBe(201);
   });
 
-  it("refuses attachments until embeds land", async () => {
-    const s = setup();
-    s.agree();
-    const response = await s.call("postMessage", { id: s.channel("help"),
-      body: { ...post(), embeds: [{ type: "project", journeyId: "journey", version: 1 }] } });
-    expect([response.status, errorOf(response.body).code]).toEqual([400, "validation"]);
-  });
-
   it("stores what the moderation hook flags, with a detector event, and keeps the message visible", async () => {
     const s = setup();
     s.agree();

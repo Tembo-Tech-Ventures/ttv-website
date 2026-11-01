@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { capabilitiesFor } from "@/lib/platform/server/capabilities";
 import { findReadableChannel } from "./access";
-import { loadChannelPage } from "./page";
+import { loadChannelPage, loadChannelShareables } from "./page";
 import { channelDatabase, VIEWER, type ChannelFixture } from "./test-support";
 
 const fixtures: ChannelFixture[] = [];
@@ -62,5 +62,19 @@ describe("loadChannelPage", () => {
       return prepare(query);
     }) as typeof s.d1.prepare);
     await expect(loadChannelPage(s.db, s.d1, VIEWER, channel, { thread: s.message("help") })).rejects.toThrow("D1 unavailable");
+  });
+});
+
+describe("loadChannelShareables", () => {
+  it("lists the caller's attach tools in one read, and gives null where they cannot post", async () => {
+    const { s, channel } = await setup();
+    s.database.exec(`INSERT INTO communityJourney (id, userId, title, description, occurredAt, visibility) VALUES
+      ('ledger', '${VIEWER}', 'Ledger', 'A ledger', '2026-10-01', 'institution')`);
+    const prepare = vi.spyOn(s.d1, "prepare");
+    const shareables = await loadChannelShareables(s.d1, VIEWER, channel);
+    expect(shareables?.projects.map((project) => project.journeyId)).toEqual(["ledger"]);
+    expect(shareables?.clips).toEqual([]);
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(await loadChannelShareables(s.d1, VIEWER, { ...channel, capabilities: { ...channel.capabilities, canPost: false } })).toBeNull();
   });
 });

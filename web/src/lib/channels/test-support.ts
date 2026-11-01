@@ -78,7 +78,7 @@ export function channelDatabase(fixture: Partial<CapabilityCase> = {}) {
     id?: string; query?: string; body?: unknown; user?: string | null; origin?: string | null; locals?: Partial<App.Locals>;
     env?: Partial<Parameters<typeof channelRequest>[2]>;
   } & ChannelRequestOptions = {}) {
-    const method = { listChannels: "GET", listMessages: "GET", postMessage: "POST", editMessage: "PATCH", deleteMessage: "DELETE",
+    const method = { listChannels: "GET", listMessages: "GET", listShareables: "GET", postMessage: "POST", editMessage: "PATCH", deleteMessage: "DELETE",
       reactToMessage: "POST", markChannelRead: "POST" }[operation];
     const headers = new Headers();
     const origin = options.origin === undefined ? ORIGIN : options.origin;
