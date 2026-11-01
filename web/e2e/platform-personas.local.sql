@@ -158,3 +158,7 @@ INSERT INTO access_request (id,userId,role,status,note,organisation,organisation
  ('ttv-local-persona-request-baraka','ttv-local-persona-onb-baraka','MENTOR','DECLINED','Data pipelines and SQL reviews for small teams.',NULL,NULL,NULL,NULL,'ttv-local-persona-decision-baraka','Thanks, Baraka. Tell us a little more about the work you could review.',1793510000000,NULL,1793500000000,1793510000000);
 -- U-2.3: every persona meets "How we talk to each other" afresh on each seed (e2e/platform-channels.spec.ts agrees as the alumna).
 DELETE FROM channel_conduct WHERE userId LIKE 'ttv-local-persona-%';
+-- U-2.3: Lucy's session delegated to an agent (userAgent "ttv-agent:…"), so e2e/platform-channels.spec.ts can show
+-- that the real channel and conduct pages tell an agent why it cannot agree for her, and refuse its post.
+INSERT OR REPLACE INTO session (id,expiresAt,token,ipAddress,userAgent,userId,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-community-agent-session',1893456000,'ttv-local-persona-community-agent-token',NULL,'ttv-agent:local e2e','ttv-local-persona-community',1793400000,1793400000);

@@ -28,13 +28,15 @@ const PRIVATE = { "Cache-Control": "no-store", Vary: "Cookie" } as const;
 /** A refusal says what happened in words; a redirect has no body. */
 const REASON: Record<number, string> = {
   400: "That form could not be read.",
-  403: "Only the person can agree to how we talk to each other.",
+  403: "That request was refused.",
   404: "Not found.",
   405: "Not allowed.",
   413: "That form was too large.",
 };
-const respond = (status: number, headers: Record<string, string> = {}) =>
-  new Response(REASON[status] ?? null, { status, headers: { ...PRIVATE, ...(REASON[status] ? { "Content-Type": "text/plain; charset=utf-8" } : {}), ...headers } });
+/** Why an agent's delegated session may not post the form, rather than the generic refusal. */
+export const AGENT_REFUSAL = "Only the person can agree to how we talk to each other.";
+const respond = (status: number, headers: Record<string, string> = {}, reason = REASON[status]) =>
+  new Response(reason ?? null, { status, headers: { ...PRIVATE, ...(reason ? { "Content-Type": "text/plain; charset=utf-8" } : {}), ...headers } });
 
 export interface ChannelsPage {
   context: SpacePageContext;
@@ -63,7 +65,7 @@ async function resolve<T extends object>(
 
   const self = astro.url.pathname + astro.url.search;
   const canAgree = !isAgentSession(astro.locals.session?.userAgent);
-  if (method === "POST" && !canAgree) return respond(403);
+  if (method === "POST" && !canAgree) return respond(403, {}, AGENT_REFUSAL);
   const posted = await handleConductPost(astro.request, server.conduct, self);
   if (posted) return posted.kind === "redirect" ? respond(303, { Location: posted.location }) : respond(posted.status);
   const record = await server.conduct.load();

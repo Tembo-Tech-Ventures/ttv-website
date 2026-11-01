@@ -122,6 +122,18 @@ describe("a channel's page", () => {
     expect(mocks.acknowledge).not.toHaveBeenCalled();
   });
 
+  it("refuses a post from another site in neutral words: it is not an agent's refusal", async () => {
+    given();
+    const request = new Request(new URL("/dashboard/community/c/help", ORIGIN), {
+      method: "POST", headers: { origin: "https://elsewhere.test" },
+      body: new URLSearchParams({ intent: CONDUCT_INTENT, version: String(CONDUCT_VERSION) }),
+    });
+    const response = await resolveChannelPage({ ...astro(), request } as unknown as AstroGlobal, "community");
+    expect((response as Response).status).toBe(403);
+    expect(await (response as Response).text()).toBe("That request was refused.");
+    expect(mocks.acknowledge).not.toHaveBeenCalled();
+  });
+
   it("refuses other methods, in words", async () => {
     given();
     const response = await resolveChannelPage(astro({ method: "PUT" }), "community");

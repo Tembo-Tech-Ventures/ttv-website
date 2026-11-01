@@ -161,6 +161,21 @@ test.describe("channel sidebars and how we talk to each other", () => {
     expect(response.status(), String(baseURL)).toBe(403);
   });
 
+  test("an agent acting for someone reads the habits and sees why it cannot agree", async ({ page }, testInfo) => {
+    for (const query of ["persona=lucy&channel=help&agent", "persona=lucy&view=conduct&agent"]) {
+      await open(page, query);
+      await expect(page.locator("[data-conduct-habits]"), query).toBeVisible();
+      await expect(page.locator("[data-conduct-agent-note]"), query).toHaveText("An agent acting for someone can read these habits, but only the person can agree to them.");
+      await expect(page.locator("[data-conduct-agree]"), query).toHaveCount(0);
+      await runAxe(page, testInfo, `agent-${query.includes("conduct") ? "conduct" : "gate"}`);
+    }
+    const refused = await page.request.post(harness("persona=lucy&view=conduct&agent"), {
+      form: { intent: "conduct", version: "1" }, headers: { origin: new URL(page.url()).origin }, maxRedirects: 0,
+    });
+    expect(refused.status()).toBe(403);
+    expect(await refused.text()).toBe("Only the person can agree to how we talk to each other.");
+  });
+
   test("the habits are always there to read again, with the day you agreed", async ({ page }) => {
     await open(page, "persona=lucy&view=conduct&agreed");
     await expect(page.getByRole("heading", { level: 1, name: CONDUCT })).toBeVisible();
@@ -298,6 +313,25 @@ test.describe("channels on real sessions", () => {
     await openReal(page, "/dashboard/community/c/introductions");
     await expect(page.getByRole("heading", { level: 1, name: "introductions" })).toBeVisible();
     await runAxe(page, testInfo, "institution-channel");
+  });
+
+  test("the real pages tell an agent acting for someone why it cannot agree, and refuse its post", async ({ page, context, baseURL }) => {
+    test.skip(!LOCAL, "Uses the local seed's agent-delegated session for Lucy.");
+    const secret = process.env.PLATFORM_PERSONAS_LOCAL_SECRET;
+    test.skip(!secret, "Set PLATFORM_PERSONAS_LOCAL_SECRET and apply platform-personas.local.sql to run locally.");
+    await routeFonts(page);
+    await signIn(context, baseURL!, { token: "ttv-local-persona-community-agent-token", secret: secret! });
+    for (const path of ["/dashboard/community/c/help", "/dashboard/community/conduct"]) {
+      await openReal(page, path);
+      await expect(page.locator("[data-conduct-habits]"), path).toBeVisible();
+      await expect(page.locator("[data-conduct-agent-note]"), path).toBeVisible();
+      await expect(page.locator("[data-conduct-agree]"), path).toHaveCount(0);
+    }
+    const refused = await page.request.post("/dashboard/community/conduct", {
+      form: { intent: "conduct", version: "1" }, headers: { origin: new URL(baseURL!).origin }, maxRedirects: 0,
+    });
+    expect(refused.status()).toBe(403);
+    expect(await refused.text()).toBe("Only the person can agree to how we talk to each other.");
   });
 
   test("the first channel asks; agreeing is kept, opens the channel and dates the habits page", async ({ page, context, baseURL }) => {
