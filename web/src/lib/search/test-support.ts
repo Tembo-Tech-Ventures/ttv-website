@@ -38,7 +38,11 @@ export function searchDatabase(fixture: Partial<CapabilityCase> = {}, actor = "s
       ('segment-a','recording-a',12.5,20,'Webhook cohort A evidence'),
       ('segment-b','recording-b',5,10,'Webhook cohort B secret'),
       ('segment-pending','recording-pending',0,5,'Webhook pending secret'),
-      ('segment-null','recording-null',0,5,'Webhook unscoped secret');`);
+      ('segment-null','recording-null',0,5,'Webhook unscoped secret');
+    INSERT INTO channel_message(id,channelId,seq,changeSeq,authorId,body,createdAt)
+      SELECT 'message-help',id,1,1,'synthetic-otieno','Webhook question for everyone',1 FROM channel WHERE slug='help';
+    INSERT INTO channel_message(id,channelId,seq,changeSeq,authorId,body,createdAt)
+      SELECT 'message-cohort-b',id,1,1,'synthetic-otieno','Webhook cohort B channel secret',2 FROM channel WHERE seedKey='cohort:cohort-b:main';`);
   const queries: { sql: string; values: unknown[] }[] = [];
   const retrieved: unknown[] = [];
   const db = Object.assign(Object.create(base) as D1Database, { prepare(sql: string) {

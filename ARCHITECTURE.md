@@ -188,6 +188,7 @@ SQLite via Cloudflare D1, managed with Drizzle ORM. Schema at `web/src/lib/db/sc
 - `channel_member`, `channel_read`, `message_reaction`, `message_report`, `moderation_event` — explicit members, read markers, reactions, member reports and the moderation audit trail
 - `channel_conduct` — each person's latest agreement to the channel code of conduct (version, acknowledgedAt); a new version asks again
 - `channel_message_version`, `moderation_case`, `moderation_allowlist` — moderation (B-2.5): earlier texts kept as evidence for moderators, the admin queue (one case per message, kept by triggers on `moderation_event`), and what an admin's "fine as is" allowlisted. Detectors flag contact details and spam before the write; Clef flash checks after the response and hides only near-certain abuse
+- `channel_message_search` + `channel_message_fts` — the FTS5 index over the bodies of messages nobody deleted or hid, kept by triggers (never embeds); `/api/search` reads it for the channels the caller can read (see `web/src/lib/search/README.md`)
 - Access: `channelAccessFor` beside `capabilitiesFor` — cohort channels for that program's members (alumni included), instructors, TAs, invited mentors and admins; community channels for every signed-in person; STAFF posting for admins and the cohort's instructors/TAs
 
 ### Conventions

@@ -31,7 +31,9 @@ describe("GET /api/search", () => {
       expect(result.sessionMoments.map(m => m.programId)).toEqual(fixture.expected.cohortIds);
       expect(result.projects).toHaveLength(fixture.expected.isInstitution || fixture.expected.isAdmin ? 1 : 0);
       expect(result.people.map(p => p.person.id)).toEqual(["synthetic-otieno"]);
-      expect(result.messages).toEqual([]);
+      // Everyone signed in reads the community; cohort B's channel, its people and admins.
+      const readsCohortB = fixture.expected.isAdmin || fixture.expected.cohortIds.includes("cohort-b");
+      expect(result.messages.map(m => m.id)).toEqual(readsCohortB ? ["message-cohort-b", "message-help"] : ["message-help"]);
       const retrieval = s.queries.filter(q => q.sql.includes("CROSS JOIN transcript_segment"));
       expect(retrieval).toHaveLength(fixture.expected.cohortIds.length > 0 ? 1 : 0);
       if (retrieval.length > 0) expect(retrieval[0]?.values[0]).toBe(JSON.stringify(fixture.expected.cohortIds));
@@ -74,15 +76,15 @@ describe("GET /api/search", () => {
     expect(result.people).toHaveLength(["all", "people", "community"].includes(scope) ? 1 : 0);
     expect(result.projects).toHaveLength(["all", "projects", "community"].includes(scope) ? 1 : 0);
     expect(result.sessionMoments).toHaveLength(["all", "sessionMoments", "cohort"].includes(scope) ? 1 : 0);
-    expect(result.messages).toEqual([]);
+    expect(result.messages).toHaveLength(["all", "messages", "community"].includes(scope) ? 1 : 0);
   });
 
   it.each(["all", "cohort", "sessionMoments"])("narrows %s to an authorized program", async scope => {
     const s = setup({ assignments: [{ programId: "cohort-a", name: "MENTOR" }, { programId: "cohort-b", name: "MENTOR" }] });
     const result = SearchResults.parse(await (await searchRequest(context(`q=Webhook&scope=${scope}&programId=cohort-a`), environment(s))).json());
-    expect(result.people).toEqual([]); expect(result.projects).toEqual([]);
+    expect(result.people).toEqual([]); expect(result.projects).toEqual([]); expect(result.messages).toEqual([]);
     expect(result.sessionMoments.map(m => m.programId)).toEqual(["cohort-a"]);
-    expect(s.queries.at(-1)?.values[0]).toBe('["cohort-a"]');
+    expect(s.queries.find(q => q.sql.includes("CROSS JOIN transcript_segment"))?.values[0]).toBe('["cohort-a"]');
     expect(JSON.stringify(s.retrieved)).not.toContain("Webhook cohort B secret");
   });
 
@@ -98,10 +100,11 @@ describe("GET /api/search", () => {
     expect(s.retrieved).toEqual([]);
   });
 
-  it.each(["flags", "capabilities", "people", "projects", "transcripts"])("fails closed without raw errors or partial results on %s failure", async stage => {
+  it.each(["flags", "capabilities", "people", "projects", "transcripts", "channels", "messages"])("fails closed without raw errors or partial results on %s failure", async stage => {
     const s = setup({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
     const realPrepare = s.db.prepare.bind(s.db);
-    const needle = { flags: "feature_flag", capabilities: "UserRoles", people: "FROM studentProfile", projects: "FROM communityJourney", transcripts: "CROSS JOIN transcript_segment" }[stage]!;
+    const needle = { flags: "feature_flag", capabilities: "UserRoles", people: "FROM studentProfile", projects: "FROM communityJourney", transcripts: "CROSS JOIN transcript_segment",
+      channels: "from \"channel\"", messages: "channel_message_fts" }[stage]!;
     vi.spyOn(s.db, "prepare").mockImplementation(sql => { if (sql.includes(needle)) throw new Error("SQL secret operational data"); return realPrepare(sql); });
     const env = environment(s); if (stage === "flags") env.PLATFORM_FLAGS_OVERRIDE = "";
     const response = await searchRequest(context(), env);
