@@ -21,8 +21,10 @@ import { handleWelcome, onboardingOpen, type WelcomeRoutes } from "@/components/
 import { shellAccount } from "@/components/platform/shell/account";
 import { isAgentSession } from "@/lib/agent-auth";
 import { getSpaceContext } from "@/lib/platform/server/space-context";
+import { WELCOME_PATH } from "@/lib/platform/server/space-routes";
 
-const ROUTES: WelcomeRoutes = { choose: "/dashboard/welcome", request: "/dashboard/welcome?step=request", landing: "/dashboard" };
+// WELCOME_PATH is where B-O.4 routes new accounts; /dashboard picks the space after it.
+const ROUTES: WelcomeRoutes = { choose: WELCOME_PATH, request: `${WELCOME_PATH}?step=request`, landing: "/dashboard" };
 const PRIVATE = { "Cache-Control": "no-store", Vary: "Cookie" };
 const notFound = () => new Response("Not found.", { status: 404, headers: PRIVATE });
 
