@@ -86,13 +86,17 @@ const MULTIPLIERS: Readonly<Record<string, number>> = Object.freeze({ double: 2,
 const SEPARATORS = new Set([" ", "\t", ".", "-", "(", ")"]);
 /** Between two digit groups these make one number of another kind: 10:30, 1,500,000, 31/10/2025. */
 const NUMBER_JOINERS = new Set([":", ",", "/"]);
+/** Digits written straight after these are a value, an id or an amount: ?v=0712…, #0712…, $100, 50%. */
+const NUMBER_MARKS = new Set(["=", "#", "$", "%"]);
+/** Links: digits in a URL are ids, not phone numbers (invitation links are their own finding). */
+const URL = /(?:https?:\/\/|www\.)[^\s<>"'`)\]]+/giu;
 /** The longest separator run inside a phone number, such as ") - ". */
 const MAX_SEPARATOR = 4;
 
 type Lexeme = { kind: "digits" | "word" | "space" | "char"; text: string };
 type Atom =
   | { kind: "digits"; text: string; excluded: boolean }
-  | { kind: "separator"; text: string } | { kind: "plus" } | { kind: "word" } | { kind: "joiner" } | { kind: "break" };
+  | { kind: "separator"; text: string } | { kind: "plus" } | { kind: "word" } | { kind: "joiner" } | { kind: "mark" } | { kind: "break" };
 /** tight: joined to the previous group by one "." or "-" with nothing else between (10.0.19041, 07-12-34). */
 interface Group { digits: string; plus: boolean; tight: boolean }
 
@@ -128,18 +132,29 @@ function multiplier(lexemes: Lexeme[], i: number): number {
 function charAtom(char: string): Atom {
   if (char === "+") return { kind: "plus" };
   if (SEPARATORS.has(char)) return { kind: "separator", text: char };
+  if (NUMBER_MARKS.has(char)) return { kind: "mark" };
   return { kind: NUMBER_JOINERS.has(char) ? "joiner" : "break" };
 }
 
 /**
- * Digits written against letters (v2, 10am, KSh500) or joined to other digits by : , / (times,
- * thousands, dates) are some other number.
+ * Digits written against letters (v2, 10am, KSh500), after a mark (?v=, #, $), joined to other digits
+ * by : , / (times, thousands, dates), or after "0." (a decimal) are some other number.
  */
 function excludeOtherNumbers(list: Atom[]): void {
   const joined = (i: number, step: 1 | -1) => list[i + step]?.kind === "joiner" && list[i + 2 * step]?.kind === "digits";
+  const point = (i: number) => {
+    const at = list[i];
+    return at?.kind === "separator" && at.text === ".";
+  };
   for (const [i, atom] of list.entries()) {
     if (atom.kind !== "digits") continue;
-    if (list[i - 1]?.kind === "word" || list[i + 1]?.kind === "word" || joined(i, -1) || joined(i, 1)) atom.excluded = true;
+    const before = list[i - 1]?.kind;
+    if (before === "word" || before === "mark" || list[i + 1]?.kind === "word" || joined(i, -1) || joined(i, 1)) atom.excluded = true;
+    const zero = list[i - 2];
+    if (point(i - 1) && zero?.kind === "digits" && zero.text === "0" && list[i - 3]?.kind !== "digits") {
+      zero.excluded = true;
+      atom.excluded = true;
+    }
   }
 }
 
@@ -234,7 +249,7 @@ function phoneNumber(groups: Group[]): string | null {
 
 function phoneFindings(text: string): Finding[] {
   const findings: Finding[] = [];
-  for (const run of runs(text)) {
+  for (const run of runs(text.replace(URL, " "))) {
     let start = 0;
     while (start < run.length) {
       // The longest number that starts at this group and ends at a group boundary. A tightly joined
@@ -269,14 +284,17 @@ const DOMAIN = `(${LABEL}(?:${DOT}${LABEL})*${DOT}${TLD})`;
 const PROVIDERS = String.raw`(?:gmail|googlemail|yahoo|ymail|outlook|hotmail|live|icloud|me|proton|protonmail|pm|aol|zoho|gmx|mail|yandex)`;
 const STRICT_DOMAIN = String.raw`(${LABEL}(?:\.${LABEL})*\.${TLD})`;
 const PROVIDER_DOMAIN = String.raw`(${PROVIDERS}(?:\s+dot\s+|\s?\.\s?)${TLD}(?:(?:\s+dot\s+|\s?\.\s?)${TLD})?)`;
+/** A local part whose dots are spelled out or bracketed: jane dot doe, jane[dot]doe. */
+const WORD_DOT = String.raw`(?:\s+dot\s+|\s?[\[(]\s?dot\s?[\])]\s?)`;
+const HIDDEN_LOCAL = `(${LOCAL}(?:${WORD_DOT}${LOCAL})*)`;
 const EMAILS = [
   // name@example.org
   new RegExp(String.raw`(?<![\w.%+-])(${LOCAL})@${STRICT_DOMAIN}(?![\w-])`, "giu"),
   // name[at]example.org, name (at) example (dot) org: hidden on purpose, so any domain.
-  new RegExp(String.raw`(?<![\w.%+-])(${LOCAL})\s?[\[({]\s?(?:at|@)\s?[\])}]\s?${DOMAIN}(?![\w-])`, "giu"),
+  new RegExp(String.raw`(?<![\w.%+-])${HIDDEN_LOCAL}\s?[\[({]\s?(?:at|@)\s?[\])}]\s?${DOMAIN}(?![\w-])`, "giu"),
   // name @ gmail.com, name at gmail dot com: only webmail domains, since "thanks @Achieng. Great" and
   // "look at github dot com" are prose.
-  new RegExp(String.raw`(?<![\w.%+-])(${LOCAL})(?:\s@\s?|@\s|\s+at\s+)${PROVIDER_DOMAIN}(?![\w-])`, "giu"),
+  new RegExp(String.raw`(?<![\w.%+-])${HIDDEN_LOCAL}(?:\s@\s?|@\s|\s+at\s+)${PROVIDER_DOMAIN}(?![\w-])`, "giu"),
 ];
 /** Documentation and protocol addresses that reach nobody (RFC 2606), and git's SSH user. */
 const NOT_CONTACT = /(?:^|\.)(?:example\.(?:com|org|net)|example|test|invalid|localhost|users\.noreply\.github\.com)$/;
@@ -287,7 +305,8 @@ function emailFindings(text: string): Finding[] {
     for (const [, local = "", rawDomain = ""] of text.matchAll(pattern)) {
       const domain = rawDomain.toLowerCase().replace(new RegExp(DOT, "giu"), ".");
       if (NOT_CONTACT.test(domain) || local.toLowerCase() === "git") continue;
-      findings.push({ kind: "email", reason: FINDING_REASONS.email, key: `email:${local.toLowerCase()}@${domain}` });
+      const address = local.toLowerCase().replace(new RegExp(WORD_DOT, "giu"), ".");
+      findings.push({ kind: "email", reason: FINDING_REASONS.email, key: `email:${address}@${domain}` });
     }
   }
   return findings;

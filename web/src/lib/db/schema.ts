@@ -1509,12 +1509,16 @@ export const channelMessageVersion = sqliteTable("channel_message_version", {
   body: text("body").notNull(),
   cause: text("cause", { enum: ["EDIT", "DELETE", "FLAG", "REPORT", "HIDE"] }).notNull(),
   capturedAt: integer("capturedAt").notNull(),
+  // 1 once the message has any moderation event or report: then nothing of it is pruned.
+  retained: integer("retained").notNull().default(0),
 }, (table) => [
   index("channel_message_version_message_idx").on(table.messageId, table.capturedAt),
-  index("channel_message_version_expiry_idx").on(table.capturedAt).where(sql`${table.cause} IN ('EDIT','DELETE')`),
+  // Only what may expire, so pruning never reads retained evidence.
+  index("channel_message_version_expiry_idx").on(table.capturedAt).where(sql`${table.cause} IN ('EDIT','DELETE') AND ${table.retained} = 0`),
   check("channel_message_version_cause_check", sql`${table.cause} IN ('EDIT','DELETE','FLAG','REPORT','HIDE')`),
   check("channel_message_version_body_check", sql`length(${table.body}) BETWEEN 1 AND 10000`),
   check("channel_message_version_time_check", sql`${table.capturedAt} >= 0`),
+  check("channel_message_version_retained_check", sql`${table.retained} IN (0, 1)`),
 ]);
 
 /**

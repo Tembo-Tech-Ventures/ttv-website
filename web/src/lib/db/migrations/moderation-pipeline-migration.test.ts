@@ -57,7 +57,7 @@ describe("moderation pipeline migration", () => {
     const before = read("./meta/0031_snapshot.json");
     const after = read("./meta/0032_snapshot.json");
     expect(after.prevId).toBe(before.id);
-    expect(Object.keys(after.tables.channel_message_version.columns)).toEqual(["id", "messageId", "body", "cause", "capturedAt"]);
+    expect(Object.keys(after.tables.channel_message_version.columns)).toEqual(["id", "messageId", "body", "cause", "capturedAt", "retained"]);
     expect(Object.keys(after.tables.moderation_allowlist.columns)).toEqual(["key", "messageId", "createdBy", "createdAt"]);
     expect(Object.keys(after.tables.moderation_case.columns)).toEqual([
       "messageId", "state", "source", "reasons", "reportCount", "actorId", "openedAt", "updatedAt",
@@ -82,7 +82,8 @@ describe("moderation pipeline migration", () => {
       const triggers = database.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE '%version%' OR name LIKE 'moderation_event_case%' ORDER BY name").all();
       expect(triggers.map((row) => row.name)).toEqual([
         "channel_message_version_insert", "channel_message_version_prune", "channel_message_version_update",
-        "message_report_version", "moderation_event_case_decision", "moderation_event_case_signal",
+        "message_report_version", "message_report_version_retain", "moderation_event_case_decision", "moderation_event_case_signal",
+        "moderation_event_version_retain",
       ]);
     } finally { database.close(); }
   });
@@ -144,9 +145,15 @@ describe("moderation pipeline migration", () => {
       expect(versions(database, "plain")).toEqual([]);
       expect(versions(database, "reported").map((v) => v.cause)).toEqual(["EDIT", "REPORT"]);
       expect(versions(database, "flagged").map((v) => v.cause)).toEqual(["FLAG"]);
-      const plan = database.prepare(`EXPLAIN QUERY PLAN SELECT id FROM channel_message_version
-        WHERE cause IN ('EDIT','DELETE') AND capturedAt <= ?`).all(0).map((row) => String(row.detail)).join("\n");
-      expect(plan).toContain("channel_message_version_expiry_idx");
+      // Retained evidence is out of the expiry index: pruning reads only what it deletes.
+      expect(database.prepare("SELECT messageId, cause, retained FROM channel_message_version ORDER BY messageId, rowid").all()).toEqual([
+        { messageId: "flagged", cause: "FLAG", retained: 1 }, { messageId: "later", cause: "EDIT", retained: 0 },
+        { messageId: "later", cause: "EDIT", retained: 0 }, { messageId: "reported", cause: "EDIT", retained: 1 },
+        { messageId: "reported", cause: "REPORT", retained: 1 },
+      ]);
+      const plan = database.prepare(`EXPLAIN QUERY PLAN DELETE FROM channel_message_version
+        WHERE cause IN ('EDIT','DELETE') AND retained = 0 AND capturedAt <= ?`).all(0).map((row) => String(row.detail)).join("\n");
+      expect(plan).toBe("SEARCH channel_message_version USING INDEX channel_message_version_expiry_idx (capturedAt<?)");
     } finally { database.close(); }
   });
 
@@ -175,6 +182,16 @@ describe("moderation pipeline migration", () => {
         state: "PENDING", source: "REPORT", reasons: '["Still spam"]', reportCount: 1, actorId: null, openedAt: 5_000, updatedAt: 5_000,
         decision: null, decisionReason: null, decidedBy: null, decidedAt: null,
       });
+    } finally { database.close(); }
+  });
+
+  it("counts only flags and hides as signals", () => {
+    const { database, help } = migrated();
+    try {
+      const w = writer(database, help);
+      w.post("m", "Text", 1_000);
+      w.event("m", "RESTORE", "MENTOR", "amina", "VISIBLE", "VISIBLE", ["Not a signal"], 2_000);
+      expect(caseOf(database, "m")).toBeUndefined();
     } finally { database.close(); }
   });
 

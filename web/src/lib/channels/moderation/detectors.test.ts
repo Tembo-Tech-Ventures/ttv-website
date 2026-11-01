@@ -82,14 +82,16 @@ const EMAILS: Case[] = [
   ["wanjiku @ gmail.com", ["email"]],
   ["wanjiku@ gmail.com", ["email"]],
   ["ＷＡＮＪＩＫＵ@ＧＭＡＩＬ.ＣＯＭ", ["email"]],
+  ["jane dot doe at gmail dot com", ["email"]],
+  ["jane[dot]doe(at)example(dot)co(dot)ke", ["email"]],
 ];
 
 const LINKS: Case[] = [
   ["join chat.whatsapp.com/AbCdEf123", ["invite"]],
   ["https://chat.whatsapp.com/AbCdEf123", ["invite"]],
-  ["https://wa.me/254712345678", ["invite", "phone"]],
+  ["https://wa.me/254712345678", ["invite"]],
   ["wa.me/message/ABCDEF", ["invite"]],
-  ["api.whatsapp.com/send?phone=254712345678", ["invite", "phone"]],
+  ["api.whatsapp.com/send?phone=254712345678", ["invite"]],
   ["https://whatsapp.com/channel/0029VaAbCd", ["invite"]],
   ["wa.link/ttv04", ["invite"]],
   ["t.me/ttvcohort", ["invite"]],
@@ -170,6 +172,13 @@ const ORDINARY: Case[] = [
   ["https://tembotechventures.com/dashboard/community", []],
   ["whatsapp.com is down again", []],
   ["telegram.org/apps", []],
+  // Digits in links, after a mark, or after "0." are not phone numbers.
+  ["https://www.youtube.com/watch?v=0712345678", []],
+  ["https://github.com/tembo/ttv/commit/0712345678", []],
+  ["youtube.com/watch?v=0712345678", []],
+  ["Order #0712345678", []],
+  ["score 0.712345678", []],
+  ["Paid $0712345678 lol", []],
   ["https://docs.astro.build/en/guides/upgrade-to/v6/", []],
   ["Release 2025.10.31.1 is live", []],
   ["IP 10.0.0.1 port 8080", []],
@@ -226,8 +235,10 @@ describe("known limits", () => {
     ["oh seven twelve three four five six seven eight", []],
     // Flagged although it is not a phone number: a hyphenated ISBN-10 starting with 0.
     ["ISBN 0-13-468599-1", ["phone"]],
-    // Flagged: a hash before a phone-length number, as in an order number.
-    ["Order #0712345678", ["phone"]],
+    // Missed: a Kenyan number glued to a hash or after "0." (read as an id or a decimal).
+    ["#0712345678", []],
+    // Flagged: digits in a link without a scheme, after a slash and a word.
+    ["github.com/tembo/ttv/commit/0712345678", ["phone"]],
   ];
   it.each(KNOWN_LIMITS)("%s", (text, kinds) => {
     expect([...kindsIn(text)]).toEqual(kinds);
@@ -237,13 +248,14 @@ describe("known limits", () => {
 describe("finding keys", () => {
   it("gives every spelling of one Kenyan number the same key", () => {
     const spellings = ["0712345678", "0712 345 678", "+254 712 345 678", "254712345678", "+254 (0) 712-345-678",
-      "00254712345678", "zero seven one two three four five six seven eight", "０７１２３４５６７８", "wa.me/254712345678"];
+      "00254712345678", "zero seven one two three four five six seven eight", "０７１２３４５６７８", "wa . me / 254712345678"];
     for (const text of spellings) {
       expect(detectFindings(text).filter((f) => f.kind === "phone").map((f) => f.key), `${text}`).toEqual(["phone:+254712345678"]);
     }
   });
 
   it("normalises emails and links, and keeps one finding per key", () => {
+    expect(detectFindings("jane dot doe at gmail dot com").map((f) => f.key)).toEqual(["email:jane.doe@gmail.com"]);
     expect(detectFindings("Wanjiku [at] Gmail [dot] com or wanjiku@gmail.com").map((f) => f.key)).toEqual(["email:wanjiku@gmail.com"]);
     expect(detectFindings("wa . me / 254712345678 and https://wa.me/254712345678.").map((f) => f.key))
       .toEqual(["phone:+254712345678", "link:wa.me/254712345678"]);

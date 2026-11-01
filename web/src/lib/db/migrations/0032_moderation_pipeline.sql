@@ -14,14 +14,16 @@ CREATE TABLE IF NOT EXISTS `channel_message_version` (
 	`body` text NOT NULL,
 	`cause` text NOT NULL,
 	`capturedAt` integer NOT NULL,
+	`retained` integer DEFAULT 0 NOT NULL,
 	FOREIGN KEY (`messageId`) REFERENCES `channel_message`(`id`) ON UPDATE no action ON DELETE cascade,
 	CONSTRAINT "channel_message_version_cause_check" CHECK("channel_message_version"."cause" IN ('EDIT','DELETE','FLAG','REPORT','HIDE')),
 	CONSTRAINT "channel_message_version_body_check" CHECK(length("channel_message_version"."body") BETWEEN 1 AND 10000),
-	CONSTRAINT "channel_message_version_time_check" CHECK("channel_message_version"."capturedAt" >= 0)
+	CONSTRAINT "channel_message_version_time_check" CHECK("channel_message_version"."capturedAt" >= 0),
+	CONSTRAINT "channel_message_version_retained_check" CHECK("channel_message_version"."retained" IN (0, 1))
 );
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `channel_message_version_message_idx` ON `channel_message_version` (`messageId`,`capturedAt`);--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS `channel_message_version_expiry_idx` ON `channel_message_version` (`capturedAt`) WHERE "channel_message_version"."cause" IN ('EDIT','DELETE');--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS `channel_message_version_expiry_idx` ON `channel_message_version` (`capturedAt`) WHERE "channel_message_version"."cause" IN ('EDIT','DELETE') AND "channel_message_version"."retained" = 0;--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `moderation_allowlist` (
 	`key` text PRIMARY KEY NOT NULL,
 	`messageId` text,
@@ -74,17 +76,18 @@ CREATE INDEX IF NOT EXISTS `user_name_lower_idx` ON `user` (lower("name"));
 CREATE TRIGGER IF NOT EXISTS `channel_message_version_update`
 AFTER UPDATE OF `body`, `moderationState`, `moderationReasons` ON `channel_message`
 BEGIN
-	INSERT INTO `channel_message_version` (`id`, `messageId`, `body`, `cause`, `capturedAt`)
+	INSERT INTO `channel_message_version` (`id`, `messageId`, `body`, `cause`, `capturedAt`, `retained`)
 	SELECT lower(hex(randomblob(16))), OLD.`id`, OLD.`body`,
 		CASE WHEN NEW.`deletedAt` IS NOT NULL AND OLD.`deletedAt` IS NULL THEN 'DELETE' ELSE 'EDIT' END,
-		coalesce(NEW.`deletedAt`, NEW.`editedAt`, OLD.`createdAt`)
+		coalesce(NEW.`deletedAt`, NEW.`editedAt`, OLD.`createdAt`),
+		EXISTS (SELECT 1 FROM `moderation_event` WHERE `messageId` = OLD.`id`) OR EXISTS (SELECT 1 FROM `message_report` WHERE `messageId` = OLD.`id`)
 	WHERE OLD.`body` <> NEW.`body` AND OLD.`body` <> ''
 		AND OLD.`body` IS NOT (SELECT `body` FROM `channel_message_version` WHERE `messageId` = OLD.`id`
 			ORDER BY `capturedAt` DESC, rowid DESC LIMIT 1);
-	INSERT INTO `channel_message_version` (`id`, `messageId`, `body`, `cause`, `capturedAt`)
+	INSERT INTO `channel_message_version` (`id`, `messageId`, `body`, `cause`, `capturedAt`, `retained`)
 	SELECT lower(hex(randomblob(16))), NEW.`id`, NEW.`body`,
 		CASE NEW.`moderationState` WHEN 'HIDDEN' THEN 'HIDE' ELSE 'FLAG' END,
-		coalesce((SELECT MAX(`createdAt`) FROM `moderation_event` WHERE `messageId` = NEW.`id`), NEW.`editedAt`, NEW.`createdAt`)
+		coalesce((SELECT MAX(`createdAt`) FROM `moderation_event` WHERE `messageId` = NEW.`id`), NEW.`editedAt`, NEW.`createdAt`), 1
 	WHERE NEW.`moderationState` <> 'VISIBLE' AND NEW.`body` <> ''
 		AND (OLD.`moderationState` <> NEW.`moderationState` OR OLD.`moderationReasons` <> NEW.`moderationReasons`)
 		AND NEW.`body` IS NOT (SELECT `body` FROM `channel_message_version` WHERE `messageId` = NEW.`id`
@@ -95,17 +98,17 @@ END;
 CREATE TRIGGER IF NOT EXISTS `channel_message_version_insert`
 AFTER INSERT ON `channel_message` WHEN NEW.`moderationState` <> 'VISIBLE' AND NEW.`body` <> ''
 BEGIN
-	INSERT INTO `channel_message_version` (`id`, `messageId`, `body`, `cause`, `capturedAt`)
+	INSERT INTO `channel_message_version` (`id`, `messageId`, `body`, `cause`, `capturedAt`, `retained`)
 	VALUES (lower(hex(randomblob(16))), NEW.`id`, NEW.`body`,
-		CASE NEW.`moderationState` WHEN 'HIDDEN' THEN 'HIDE' ELSE 'FLAG' END, NEW.`createdAt`);
+		CASE NEW.`moderationState` WHEN 'HIDDEN' THEN 'HIDE' ELSE 'FLAG' END, NEW.`createdAt`, 1);
 END;
 --> statement-breakpoint
 -- Evidence for a report: the text the reporter saw.
 CREATE TRIGGER IF NOT EXISTS `message_report_version`
 AFTER INSERT ON `message_report`
 BEGIN
-	INSERT INTO `channel_message_version` (`id`, `messageId`, `body`, `cause`, `capturedAt`)
-	SELECT lower(hex(randomblob(16))), m.`id`, m.`body`, 'REPORT', NEW.`createdAt`
+	INSERT INTO `channel_message_version` (`id`, `messageId`, `body`, `cause`, `capturedAt`, `retained`)
+	SELECT lower(hex(randomblob(16))), m.`id`, m.`body`, 'REPORT', NEW.`createdAt`, 1
 	FROM `channel_message` m
 	WHERE m.`id` = NEW.`messageId` AND m.`body` <> ''
 		AND m.`body` IS NOT (SELECT `body` FROM `channel_message_version` WHERE `messageId` = m.`id`
@@ -113,21 +116,33 @@ BEGIN
 END;
 --> statement-breakpoint
 -- Edits and deletes of messages nobody flagged, hid or reported are kept for 14 days (1,209,600,000 ms),
--- so a late report still sees what was said; each new version prunes the expired ones.
+-- so a late report still sees what was said; each new version prunes the expired ones. Everything
+-- else is `retained`, and out of the expiry index, so pruning reads only rows it deletes.
 CREATE TRIGGER IF NOT EXISTS `channel_message_version_prune`
 AFTER INSERT ON `channel_message_version`
 BEGIN
 	DELETE FROM `channel_message_version`
-	WHERE `cause` IN ('EDIT','DELETE') AND `capturedAt` <= NEW.`capturedAt` - 1209600000
-		AND NOT EXISTS (SELECT 1 FROM `moderation_event` e WHERE e.`messageId` = `channel_message_version`.`messageId`)
-		AND NOT EXISTS (SELECT 1 FROM `message_report` r WHERE r.`messageId` = `channel_message_version`.`messageId`);
+	WHERE `cause` IN ('EDIT','DELETE') AND `retained` = 0 AND `capturedAt` <= NEW.`capturedAt` - 1209600000;
 END;
 --> statement-breakpoint
--- A signal (a detector or Clef flag or hide, a member's report, a moderator's hide) opens a PENDING
+-- The first moderation event or report of a message retains the earlier texts kept for it.
+CREATE TRIGGER IF NOT EXISTS `moderation_event_version_retain`
+AFTER INSERT ON `moderation_event`
+BEGIN
+	UPDATE `channel_message_version` SET `retained` = 1 WHERE `messageId` = NEW.`messageId` AND `retained` = 0;
+END;
+--> statement-breakpoint
+CREATE TRIGGER IF NOT EXISTS `message_report_version_retain`
+AFTER INSERT ON `message_report`
+BEGIN
+	UPDATE `channel_message_version` SET `retained` = 1 WHERE `messageId` = NEW.`messageId` AND `retained` = 0;
+END;
+--> statement-breakpoint
+-- A signal (a FLAG or HIDE by a detector, Clef, a member's report or a moderator) opens a PENDING
 -- case, or adds to the open one: reasons merge, reports count, and the strongest source names it
 -- (MENTOR_HIDE over REPORT over AI_FLAG). A signal after an admin's decision opens a new case.
 CREATE TRIGGER IF NOT EXISTS `moderation_event_case_signal`
-AFTER INSERT ON `moderation_event` WHEN NEW.`source` <> 'ADMIN'
+AFTER INSERT ON `moderation_event` WHEN NEW.`source` <> 'ADMIN' AND NEW.`action` IN ('FLAG','HIDE')
 BEGIN
 	INSERT INTO `moderation_case` (`messageId`, `state`, `source`, `reasons`, `reportCount`, `actorId`, `openedAt`, `updatedAt`)
 	VALUES (NEW.`messageId`, 'PENDING',

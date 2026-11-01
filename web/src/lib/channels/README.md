@@ -301,7 +301,8 @@ returns findings, each with a plain-language reason and an allowlist key:
 A digit run counts as a phone number only when it starts and ends where the
 author's own grouping does, and has a phone number's shape. So years, dates,
 times, prices, cohort numbers, versions (`10.0.19041.1234`: a tight chain of
-digits is one number) and IP addresses are not flagged. The fixture table in
+digits is one number), decimals (`0.712345678`), IP addresses, digits in links
+(`https://…`, `www.…`) and digits after `=`, `#`, `$` or `%` are not flagged. The fixture table in
 `detectors.test.ts` measures precision and recall for every kind, and
 `KNOWN_LIMITS` there records what is deliberately missed (a Kenyan number
 without its leading 0, commas between spelled digits) or caught (a
@@ -352,7 +353,10 @@ spends a statement:
 
 A text equal to the newest one kept is not kept again. Edits and deletes of
 a message nobody flagged, hid or reported are pruned after 14 days, as new
-versions arrive; everything else stays with the message.
+versions arrive. A message's first moderation event or report marks its
+versions `retained`, which takes them out of the expiry index, so pruning
+reads only rows it deletes. Retained evidence stays with the message; a
+retention rule for decided cases is an open owner question.
 
 ### 4. Cases
 

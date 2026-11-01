@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "7233d92d-6e72-47b0-8694-89197f68a817",
+  "id": "332d4941-eb91-4774-bd83-d1a5ad1ba534",
   "prevId": "b3b7233f-76c3-415f-88a9-fab74800c562",
   "tables": {
     "access_request": {
@@ -1502,6 +1502,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "retained": {
+          "name": "retained",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         }
       },
       "indexes": {
@@ -1519,7 +1527,7 @@
             "capturedAt"
           ],
           "isUnique": false,
-          "where": "\"channel_message_version\".\"cause\" IN ('EDIT','DELETE')"
+          "where": "\"channel_message_version\".\"cause\" IN ('EDIT','DELETE') AND \"channel_message_version\".\"retained\" = 0"
         }
       },
       "foreignKeys": {
@@ -1551,6 +1559,10 @@
         "channel_message_version_time_check": {
           "name": "channel_message_version_time_check",
           "value": "\"channel_message_version\".\"capturedAt\" >= 0"
+        },
+        "channel_message_version_retained_check": {
+          "name": "channel_message_version_retained_check",
+          "value": "\"channel_message_version\".\"retained\" IN (0, 1)"
         }
       }
     },
