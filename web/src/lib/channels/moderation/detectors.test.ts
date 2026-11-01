@@ -65,6 +65,16 @@ const PHONES: Case[] = [
   ["+255 754 123 456 for Dar", ["phone"]],
   ["+256 772 123456", ["phone"]],
   ["0044 20 7946 0958", ["phone"]],
+  // A one-character prefix does not hide a number.
+  ["WhatsApp me www.0712345678", ["phone"]],
+  ["call https://0712345678", ["phone"]],
+  ["https://me/0712345678", ["phone"]],
+  ["link https://ttv.com|0712345678", ["phone"]],
+  ["phone=0712345678", ["phone"]],
+  ["WhatsApp:#0712345678", ["phone"]],
+  ["#0712 345 678", ["phone"]],
+  ["0.7.1.2.3.4.5.6.7.8", ["phone"]],
+  ["0.712 345 678", ["phone"]],
   ["Namba yangu ni 0798 765 432", ["phone"]],
   ["Nipigie 0700-123-456 jioni", ["phone"]],
   ["My number (Safaricom): 0745.678.901", ["phone"]],
@@ -176,6 +186,7 @@ const ORDINARY: Case[] = [
   ["https://www.youtube.com/watch?v=0712345678", []],
   ["https://github.com/tembo/ttv/commit/0712345678", []],
   ["youtube.com/watch?v=0712345678", []],
+  ["github.com/tembo/ttv/commit/0712345678", []],
   ["Order #0712345678", []],
   ["score 0.712345678", []],
   ["Paid $0712345678 lol", []],
@@ -235,10 +246,11 @@ describe("known limits", () => {
     ["oh seven twelve three four five six seven eight", []],
     // Flagged although it is not a phone number: a hyphenated ISBN-10 starting with 0.
     ["ISBN 0-13-468599-1", ["phone"]],
-    // Missed: a Kenyan number glued to a hash or after "0." (read as an id or a decimal).
-    ["#0712345678", []],
-    // Flagged: digits in a link without a scheme, after a slash and a word.
-    ["github.com/tembo/ttv/commit/0712345678", ["phone"]],
+    // Missed: a number written as a decimal, or as the number of something.
+    ["0.712345678", []],
+    ["Ticket #0712345678", []],
+    // Missed: a number in the path or query of a link to a named host.
+    ["example.com/call/0712345678", []],
   ];
   it.each(KNOWN_LIMITS)("%s", (text, kinds) => {
     expect([...kindsIn(text)]).toEqual(kinds);
@@ -266,6 +278,28 @@ describe("finding keys", () => {
     const [flood] = detectFindings(Array.from({ length: MENTION_FLOOD }, (_, i) => `@person${i}`).join(" "));
     expect(flood).toEqual({ kind: "mentions", reason: FINDING_REASONS.mentions, key: null });
     expect(detectFindings("bit.ly/x1")).toEqual([{ kind: "shortener", reason: "Uses a shortened link", key: "link:bit.ly/x1" }]);
+  });
+});
+
+describe("cost", () => {
+  /** The fastest of three runs, after a warm-up, in milliseconds. */
+  const time = (text: string) => {
+    detectFindings(text);
+    return Math.min(...[0, 1, 2].map(() => {
+      const started = performance.now();
+      detectFindings(text);
+      return performance.now() - started;
+    }));
+  };
+
+  it("grows linearly on long adversarial texts", () => {
+    for (const unit of ["dot ", "a dot ", "a (dot) ", "x[at]", "0 ", "1 ", "+254 7", "wa . me / ", "@a ", "07 "]) {
+      const text = (length: number) => unit.repeat(Math.ceil(length / unit.length)).slice(0, length);
+      const [short, long] = [time(text(2_500)), time(text(10_000))];
+      // Four times the text: about four times the work, never the sixteen a quadratic scan costs.
+      expect(long, `${unit}`).toBeLessThan(8 * short + 15);
+      expect(long, `${unit}`).toBeLessThan(150);
+    }
   });
 });
 

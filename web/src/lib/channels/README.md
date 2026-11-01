@@ -301,8 +301,10 @@ returns findings, each with a plain-language reason and an allowlist key:
 A digit run counts as a phone number only when it starts and ends where the
 author's own grouping does, and has a phone number's shape. So years, dates,
 times, prices, cohort numbers, versions (`10.0.19041.1234`: a tight chain of
-digits is one number), decimals (`0.712345678`), IP addresses, digits in links
-(`https://…`, `www.…`) and digits after `=`, `#`, `$` or `%` are not flagged. The fixture table in
+digits is one number), decimals (`0.712345678`), IP addresses, digits in the
+path or query of a link to a named host (`example.com/…/0712…?v=…`), amounts
+(`$…`) and named numbers (`Order #…`) are not flagged. A one-character prefix
+does not hide a number (`www.0712…`, `phone=0712…`, `#0712 345 678`). The fixture table in
 `detectors.test.ts` measures precision and recall for every kind, and
 `KNOWN_LIMITS` there records what is deliberately missed (a Kenyan number
 without its leading 0, commas between spelled digits) or caught (a

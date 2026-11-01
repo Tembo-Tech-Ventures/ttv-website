@@ -86,17 +86,22 @@ const MULTIPLIERS: Readonly<Record<string, number>> = Object.freeze({ double: 2,
 const SEPARATORS = new Set([" ", "\t", ".", "-", "(", ")"]);
 /** Between two digit groups these make one number of another kind: 10:30, 1,500,000, 31/10/2025. */
 const NUMBER_JOINERS = new Set([":", ",", "/"]);
-/** Digits written straight after these are a value, an id or an amount: ?v=0712…, #0712…, $100, 50%. */
-const NUMBER_MARKS = new Set(["=", "#", "$", "%"]);
-/** Links: digits in a URL are ids, not phone numbers (invitation links are their own finding). */
-const URL = /(?:https?:\/\/|www\.)[^\s<>"'`)\]]+/giu;
+/** Digits straight after these are an amount ($100), or a number of something when a word names it (Order #0712…). */
+const NUMBER_MARKS = new Set(["#", "$"]);
+/**
+ * The path and query of a link to a named host (example.com/…/0712…?v=0712…): ids, not phone numbers.
+ * The host stays, and a "link" whose host is digits (www.0712345678) is no link. Invitation links are
+ * their own finding.
+ */
+const LINK_PATH = /((?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,24})[/?#][^\s<>"'`)\]|]*/giu;
 /** The longest separator run inside a phone number, such as ") - ". */
 const MAX_SEPARATOR = 4;
 
 type Lexeme = { kind: "digits" | "word" | "space" | "char"; text: string };
 type Atom =
   | { kind: "digits"; text: string; excluded: boolean }
-  | { kind: "separator"; text: string } | { kind: "plus" } | { kind: "word" } | { kind: "joiner" } | { kind: "mark" } | { kind: "break" };
+  | { kind: "separator"; text: string } | { kind: "plus" } | { kind: "word" } | { kind: "joiner" } | { kind: "mark"; text: string }
+  | { kind: "break" };
 /** tight: joined to the previous group by one "." or "-" with nothing else between (10.0.19041, 07-12-34). */
 interface Group { digits: string; plus: boolean; tight: boolean }
 
@@ -132,26 +137,38 @@ function multiplier(lexemes: Lexeme[], i: number): number {
 function charAtom(char: string): Atom {
   if (char === "+") return { kind: "plus" };
   if (SEPARATORS.has(char)) return { kind: "separator", text: char };
-  if (NUMBER_MARKS.has(char)) return { kind: "mark" };
+  if (NUMBER_MARKS.has(char)) return { kind: "mark", text: char };
   return { kind: NUMBER_JOINERS.has(char) ? "joiner" : "break" };
 }
 
 /**
- * Digits written against letters (v2, 10am, KSh500), after a mark (?v=, #, $), joined to other digits
- * by : , / (times, thousands, dates), or after "0." (a decimal) are some other number.
+ * Some other number: digits written against letters (v2, 10am, KSh500), after $ or a named # (Order
+ * #0712…, PR #283), joined to other digits by : , / (times, thousands, dates), or a decimal (0.712345678,
+ * a lone "0." and one group: "0.712 345 678" and "0.7.1.2…" stay phone-shaped).
  */
 function excludeOtherNumbers(list: Atom[]): void {
   const joined = (i: number, step: 1 | -1) => list[i + step]?.kind === "joiner" && list[i + 2 * step]?.kind === "digits";
-  const point = (i: number) => {
+  const isSeparator = (i: number, text?: string) => {
     const at = list[i];
-    return at?.kind === "separator" && at.text === ".";
+    return at?.kind === "separator" && (text === undefined || at.text === text);
+  };
+  const marked = (i: number) => {
+    const mark = list[i - 1];
+    if (mark?.kind !== "mark") return false;
+    return mark.text === "$" || (isSeparator(i - 2, " ") && list[i - 3]?.kind === "word");
+  };
+  // "0." and one group that ends the number. The zero must not be inside a tight chain (10.0.712…).
+  const decimal = (i: number) => {
+    const zero = list[i - 2];
+    const chained = (isSeparator(i - 3, ".") || isSeparator(i - 3, "-")) && list[i - 4]?.kind === "digits";
+    const continues = isSeparator(i + 1) && list[i + 2]?.kind === "digits";
+    return isSeparator(i - 1, ".") && zero?.kind === "digits" && zero.text === "0" && list[i - 3]?.kind !== "digits" && !chained && !continues;
   };
   for (const [i, atom] of list.entries()) {
     if (atom.kind !== "digits") continue;
-    const before = list[i - 1]?.kind;
-    if (before === "word" || before === "mark" || list[i + 1]?.kind === "word" || joined(i, -1) || joined(i, 1)) atom.excluded = true;
+    if (list[i - 1]?.kind === "word" || list[i + 1]?.kind === "word" || marked(i) || joined(i, -1) || joined(i, 1)) atom.excluded = true;
     const zero = list[i - 2];
-    if (point(i - 1) && zero?.kind === "digits" && zero.text === "0" && list[i - 3]?.kind !== "digits") {
+    if (decimal(i) && zero?.kind === "digits") {
       zero.excluded = true;
       atom.excluded = true;
     }
@@ -228,15 +245,13 @@ function runs(text: string): Group[][] {
  * The canonical form of a phone number written as these groups, or null when they are not one.
  * Kenyan numbers in every spelling become +254 and nine digits.
  */
-function phoneNumber(groups: Group[]): string | null {
-  const digits = groups.map((group) => group.digits).join("");
-  const shape = groups.map((group) => group.digits.length).join("-");
+function phoneNumber(digits: string, shape: string, plus: boolean): string | null {
   const kenyan = (national: string) => `+254${national}`;
-  if (groups[0]?.plus) {
+  if (plus) {
     if (digits.startsWith("254")) return /^2540?[1-9]\d{8}$/.test(digits) ? kenyan(digits.replace(/^2540?/, "")) : null;
-    return digits.length >= 10 && digits.length <= 15 && !digits.startsWith("0") ? `+${digits}` : null;
+    return digits.length <= 15 && !digits.startsWith("0") ? `+${digits}` : null;
   }
-  if (/^00[1-9]\d{8,12}$/.test(digits)) return phoneNumber([{ digits: digits.slice(2), plus: true, tight: false }]);
+  if (/^00[1-9]\d{8,12}$/.test(digits)) return phoneNumber(digits.slice(2), "", true);
   if (/^2540?[1-9]\d{8}$/.test(digits)) return kenyan(digits.replace(/^2540?/, ""));
   // A trunk zero: Kenyan mobiles and landlines (07xx, 01xx, 020), and other national numbers.
   if (/^0[1-9]\d{8}$/.test(digits)) return kenyan(digits.slice(1));
@@ -247,18 +262,27 @@ function phoneNumber(groups: Group[]): string | null {
   return null;
 }
 
+/** Every phone rule needs at least this many digits, and none more than MAX_DIGITS. */
+const MIN_DIGITS = 10;
+const MAX_DIGITS = 16;
+
 function phoneFindings(text: string): Finding[] {
   const findings: Finding[] = [];
-  for (const run of runs(text.replace(URL, " "))) {
+  for (const run of runs(text.replace(LINK_PATH, "$1 "))) {
     let start = 0;
     while (start < run.length) {
       // The longest number that starts at this group and ends at a group boundary. A tightly joined
       // chain (10.0.19041.1234) is one number: a phone number never starts or ends inside it.
       let match: { end: number; number: string } | null = null;
-      let length = 0;
-      for (let end = start; end < run.length && length <= 16 && !run[start]?.tight; end += 1) {
-        length += run[end]?.digits.length ?? 0;
-        const number = length <= 16 && !run[end + 1]?.tight ? phoneNumber(run.slice(start, end + 1)) : null;
+      let digits = "";
+      let shape = "";
+      for (let end = start; end < run.length && !run[start]?.tight; end += 1) {
+        const group = run[end]?.digits ?? "";
+        digits += group;
+        shape += `${shape ? "-" : ""}${group.length}`;
+        // No phone number starts with 000, or with 0 after a plus.
+        if (digits.length > MAX_DIGITS || digits.startsWith(run[start]?.plus ? "0" : "000")) break;
+        const number = digits.length >= MIN_DIGITS && !run[end + 1]?.tight ? phoneNumber(digits, shape, run[start]?.plus ?? false) : null;
         if (number) match = { end, number };
       }
       if (match) {
@@ -286,7 +310,8 @@ const STRICT_DOMAIN = String.raw`(${LABEL}(?:\.${LABEL})*\.${TLD})`;
 const PROVIDER_DOMAIN = String.raw`(${PROVIDERS}(?:\s+dot\s+|\s?\.\s?)${TLD}(?:(?:\s+dot\s+|\s?\.\s?)${TLD})?)`;
 /** A local part whose dots are spelled out or bracketed: jane dot doe, jane[dot]doe. */
 const WORD_DOT = String.raw`(?:\s+dot\s+|\s?[\[(]\s?dot\s?[\])]\s?)`;
-const HIDDEN_LOCAL = `(${LOCAL}(?:${WORD_DOT}${LOCAL})*)`;
+// At most three spelled dots, so each start position costs the same however long the text is.
+const HIDDEN_LOCAL = `(${LOCAL}(?:${WORD_DOT}${LOCAL}){0,3})`;
 const EMAILS = [
   // name@example.org
   new RegExp(String.raw`(?<![\w.%+-])(${LOCAL})@${STRICT_DOMAIN}(?![\w-])`, "giu"),
