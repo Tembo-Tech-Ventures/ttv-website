@@ -129,6 +129,7 @@ async function expectContained(page: Page) {
 }
 
 test.describe("the real page, /dashboard/welcome", () => {
+  const PREVIEW = Boolean(process.env.PLAYWRIGHT_BASE_URL);
   const member = personaSession("community");
   const unavailable = typeof member === "string" ? member : null;
   test.use({ reducedMotion: "reduce" });
@@ -155,8 +156,20 @@ test.describe("the real page, /dashboard/welcome", () => {
     expect(posted.status()).toBe(404);
   });
 
+  test("refuses an agent's delegated session, even with onboarding on", async ({ page, baseURL }) => {
+    test.skip(unavailable !== null, unavailable ?? "");
+    // Isolated previews seed their personas as delegated agent sessions (ttv-agent:…), so only there is this the case.
+    test.skip(!PREVIEW, "Local personas are ordinary browser sessions; the tests below use them.");
+    test.skip(!(await signedIn(page, baseURL)), "Onboarding is off here; the first test covers it.");
+    // A person chooses how they take part, and asks for access, themselves: never an agent on their behalf.
+    for (const path of ["/dashboard/welcome", "/dashboard/welcome?step=request"]) {
+      expect((await page.request.get(path, { maxRedirects: 0 })).status(), path).toBe(403);
+    }
+  });
+
   test("sends a member's mentor request, which waits for an administrator and opens nothing", async ({ page, baseURL }) => {
     test.skip(unavailable !== null, unavailable ?? "");
+    test.skip(PREVIEW, "Preview personas are agent sessions, which this page refuses (above).");
     test.skip(test.info().project.name !== "chromium", "One project writes; the persona is shared.");
     test.skip(!(await signedIn(page, baseURL)), "Onboarding is off here; the test above covers it.");
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -185,6 +198,7 @@ test.describe("the real page, /dashboard/welcome", () => {
 
   test("fits a phone with nothing sideways", async ({ page, baseURL }) => {
     test.skip(unavailable !== null, unavailable ?? "");
+    test.skip(PREVIEW, "Preview personas are agent sessions, which this page refuses.");
     test.skip(test.info().project.name !== "mobile-chromium", "The phone's check.");
     test.skip(!(await signedIn(page, baseURL)), "Onboarding is off here.");
     await page.setViewportSize({ width: 390, height: 844 });
