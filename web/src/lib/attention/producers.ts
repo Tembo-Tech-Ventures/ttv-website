@@ -1,13 +1,13 @@
 import { createId } from "@paralleldrive/cuid2";
 import type { FlagContext } from "@/lib/platform/server/flags";
 import type { ProgramApplicationStatus } from "@/lib/admin/program-application";
-import type { AccessRole, AttentionFilter, AttentionKind, FlagAudience, SpaceId, SubjectRef } from "@/lib/platform/contracts";
+import type { AccessRole, AttentionFilter, AttentionKind, FlagAudience, FlagKey, SpaceId, SubjectRef } from "@/lib/platform/contracts";
 
 export interface AttentionProducerContext {
   db: D1Database;
   env: FlagContext["env"];
 }
-interface EventItem {
+export interface EventItem {
   userId: string;
   eventKey: string;
   kind: AttentionKind;
@@ -26,13 +26,23 @@ const ATTENTION_CATEGORY: Record<AttentionKind, Exclude<AttentionFilter, "all">>
   opportunity_match: "updates", moderation_pending: "updates", message_hidden: "updates", access_decided: "updates",
 };
 
-/** One audience read per event/bulk operation; OFF never reads the domain sources. */
-async function audienceFor(context: AttentionProducerContext): Promise<FlagAudience> {
+/**
+ * One audience read per event/bulk operation; OFF never reads the domain sources. Attention follows
+ * `spaces`; items about channels also need `channels`, so they take the narrower of the two.
+ */
+export async function audienceFor(context: AttentionProducerContext, flag: Extract<FlagKey, "spaces" | "channels"> = "spaces"): Promise<FlagAudience> {
   // Keep the production aliases identical to the API flag resolver.
   const environment = (context.env.DEPLOYMENT_ENVIRONMENT ?? "")
     .toLowerCase().replace(/[^a-z0-9-]+/g, "-")
     .replace(/^-+|-+$/g, "").replace(/-{2,}/g, "-");
   if (environment !== "production" && context.env.PLATFORM_FLAGS_OVERRIDE === "all") return "ALL";
+  if (flag === "channels") {
+    const { results } = await context.db.prepare("SELECT audience FROM feature_flag WHERE key IN ('spaces','channels')")
+      .all<{ audience: FlagAudience }>();
+    const audiences = results.map(row => row.audience);
+    if (audiences.length < 2 || audiences.some(audience => audience !== "ALL" && audience !== "STAFF")) return "OFF";
+    return audiences.includes("STAFF") ? "STAFF" : "ALL";
+  }
   const row = await context.db.prepare("SELECT audience FROM feature_flag WHERE key='spaces'")
     .first<{ audience: FlagAudience }>();
   return row?.audience === "ALL" || row?.audience === "STAFF" ? row.audience : "OFF";
@@ -42,7 +52,7 @@ async function audienceFor(context: AttentionProducerContext): Promise<FlagAudie
 const audienceAdmits = (recipient: string, audience: string) => `(${audience}='ALL' OR (${audience}='STAFF' AND EXISTS
   (SELECT 1 FROM UserRoles ur JOIN Roles r ON r.id=ur.roleId WHERE ur.userId=${recipient} AND r.name='ADMIN')))`;
 
-async function persist(context: AttentionProducerContext, audience: FlagAudience, items: EventItem[]) {
+export async function persist(context: AttentionProducerContext, audience: FlagAudience, items: EventItem[]) {
   if (items.length === 0) return;
   // JSON keeps both the bind count and the number of D1 round trips constant.
   await context.db.prepare(`INSERT INTO attention_item
@@ -67,7 +77,7 @@ const applicationSummary: Record<ProgramApplicationStatus, string> = {
 };
 
 /** Attention is secondary: failure must never turn a committed domain event into a failed mutation. */
-async function bestEffort(work: () => Promise<void>) {
+export async function bestEffort(work: () => Promise<void>) {
   try { await work(); }
   catch { console.warn("Attention event could not be recorded."); }
 }

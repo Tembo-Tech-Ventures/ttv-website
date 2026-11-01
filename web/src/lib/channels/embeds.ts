@@ -228,11 +228,11 @@ export async function resolveEmbeds(ctx: ReadContext, refs: readonly EmbedRef[])
  * this channel's cohort. Every reader of a cohort channel can see that cohort's recordings, so the
  * channel decides for all of them. Deleted messages carry no embeds and cost nothing here.
  */
-export const EMBED_ACCESS_COLUMN = `(SELECT json_group_array(CASE json_extract(e.value, '$.type')
+export const embedAccessColumn = (program: string) => `(SELECT json_group_array(CASE json_extract(e.value, '$.type')
     WHEN 'project' THEN (SELECT ${confirmationsOf("j.id", "json_extract(e.value, '$.version')")} FROM communityJourney j
       WHERE j.id = json_extract(e.value, '$.journeyId') AND j.userId = m.authorId AND j.visibility = 'institution')
     WHEN 'sessionClip' THEN (SELECT json_array() FROM recording r
-      WHERE r.id = json_extract(e.value, '$.recordingId') AND r.programId = ?3 AND r.processingStatus = 'complete')
+      WHERE r.id = json_extract(e.value, '$.recordingId') AND r.programId = ${program} AND r.processingStatus = 'complete')
   END) FROM json_each(CASE WHEN m.deletedAt IS NULL AND json_valid(m.embeds) THEN m.embeds ELSE '[]' END) e) AS embedAccess`;
 
 /**

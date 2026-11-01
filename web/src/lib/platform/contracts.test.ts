@@ -21,6 +21,8 @@ const additionalEndpoints = [
   "GET /api/admin/platform-flags", "PUT /api/admin/platform-flags/:key", "POST /api/messages/:id/tembo-feedback",
   // B-2.4: what the composer's attach tools offer in one channel.
   "GET /api/channels/:id/shareables",
+  // B-2.5 contract change (feature.platform-spaces seq 379): the author's "Ask for review".
+  "POST /api/messages/:id/review",
 ];
 /** Independent transcription of the onboarding SPEC §5 routes. */
 const onboardingEndpoints = [
@@ -69,6 +71,7 @@ const routeExamples = {
     response: { channelId: channelParams.id, lastReadMessageId: F.messages.projectPost.id, unreadCount: 0 } },
   listModerationQueue: { query: { state: "PENDING" }, response: F.moderationQueue },
   moderateMessage: { params: { messageId: F.messages.hidden.id }, body: { action: "hide", reason: "Harsh, not about the work" }, response: F.messages.hidden },
+  requestModerationReview: { params: { id: F.messages.hidden.id }, body: { note: "I was quoting the brief." }, response: { ok: true } },
   askTembo: { params: channelParams, body: { messageId: F.messages.communityAsk.id }, response: F.temboPending },
   temboFeedback: { params: { id: F.messages.communityAnswer.id }, body: { feedback: "helpful" }, response: { ok: true } },
   listMentors: { query: { area: "Code review", available: true }, response: F.mentors },
@@ -97,7 +100,7 @@ const routeExamples = {
 } satisfies { [K in keyof typeof C.ROUTES]: RouteExample<(typeof C.ROUTES)[K]> };
 
 describe("route registry", () => {
-  it("covers every plan endpoint, the three agreed additions and the onboarding routes, and nothing else", () => {
+  it("covers every plan endpoint, the agreed additions and the onboarding routes, and nothing else", () => {
     const actual = Object.values(C.ROUTES).map((r) => `${r.method} ${r.path}`);
     expect(actual.toSorted()).toEqual([...planEndpoints, ...additionalEndpoints, ...onboardingEndpoints].toSorted());
     expect(new Set(actual).size).toBe(actual.length);
@@ -199,6 +202,13 @@ describe("wire invariants", () => {
     ["empty report", C.ReportMessage, { reason: " " }],
     ["unknown moderation action", C.ModerationAction, { action: "ban", reason: "report" }],
     ["missing moderation reason", C.ModerationAction, { action: "hide" }],
+    ["decided case without a decision", C.ModerationQueueItem, { ...F.moderationQueue.items[0], state: "DECIDED" }],
+    ["pending case with a decision", C.ModerationQueueItem, { ...F.decidedModerationQueue.items[0], state: "PENDING" }],
+    ["unknown moderation source", C.ModerationQueueItem, { ...F.moderationQueue.items[0], source: "BOT" }],
+    ["blank evidence", C.MessageVersion, { body: " ", cause: "EDIT", capturedAt: F.FIXTURE_NOW }],
+    ["unknown evidence cause", C.MessageVersion, { body: "x", cause: "TRANSLATE", capturedAt: F.FIXTURE_NOW }],
+    ["blank review note", C.RequestModerationReview, { note: " " }],
+    ["oversize review note", C.RequestModerationReview, { note: "x".repeat(1001) }],
     ["empty attention batch", C.MarkAttentionRead, { ids: [] }],
     ["ambiguous attention read", C.MarkAttentionRead, { ids: [F.attention.items[0].id], through: F.FIXTURE_NOW }],
     ["empty query", C.SearchQuery, { q: " ", scope: "all" }],

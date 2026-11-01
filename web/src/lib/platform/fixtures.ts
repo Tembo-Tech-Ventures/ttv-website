@@ -339,11 +339,26 @@ export const moderationQueue: ModerationQueue = {
   nextCursor: null,
   items: [
     { id: id(801), message: messages.flagged, channel: channels.opportunities, source: "AI_FLAG",
-      reasons: ["Contact details"], state: "PENDING", reportCount: 0, actor: null, createdAt: FIXTURE_NOW - 10 * minute },
+      reasons: ["Contact details"], state: "PENDING", reportCount: 0, actor: null, createdAt: FIXTURE_NOW - 10 * minute,
+      evidence: [{ body: messages.flagged.body, cause: "FLAG", capturedAt: FIXTURE_NOW - 10 * minute }], review: null, decision: null },
     { id: id(802), message: messages.reported, channel: channels.introductions, source: "REPORT",
-      reasons: ["Unrelated promotion"], state: "PENDING", reportCount: 2, actor: null, createdAt: FIXTURE_NOW - 20 * minute },
+      reasons: ["Unrelated promotion"], state: "PENDING", reportCount: 2, actor: null, createdAt: FIXTURE_NOW - 20 * minute,
+      evidence: [{ body: messages.reported.body, cause: "REPORT", capturedAt: FIXTURE_NOW - 20 * minute }], review: null, decision: null },
     { id: id(803), message: messages.hidden, channel: channels.showYourWork, source: "MENTOR_HIDE",
-      reasons: ["Harsh, not about the work"], state: "PENDING", reportCount: 0, actor: people.david, createdAt: FIXTURE_NOW - 30 * minute },
+      reasons: ["Harsh, not about the work"], state: "PENDING", reportCount: 0, actor: people.david, createdAt: FIXTURE_NOW - 30 * minute,
+      evidence: [{ body: messages.hidden.body, cause: "HIDE", capturedAt: FIXTURE_NOW - 30 * minute }],
+      review: { requestedAt: FIXTURE_NOW - 5 * minute, note: "I was quoting the brief, not the person." }, decision: null },
+  ],
+};
+/** Cases an admin already decided: one hidden by an admin directly, one kept as fine (which also allowlisted its text). */
+export const decidedModerationQueue: ModerationQueue = {
+  nextCursor: null,
+  items: [
+    { ...moderationQueue.items[2]!, id: id(804), source: "ADMIN_HIDE", reasons: ["Harsh, not about the work"], state: "DECIDED",
+      actor: people.amina, review: null,
+      decision: { action: "hide", reason: "Harsh, not about the work", by: people.amina, decidedAt: FIXTURE_NOW - 3 * minute } },
+    { ...moderationQueue.items[0]!, id: id(805), state: "DECIDED",
+      decision: { action: "keep", reason: "The office line, shared on purpose", by: people.amina, decidedAt: FIXTURE_NOW - 2 * minute } },
   ],
 };
 export const temboPending: TemboResponse = { status: "pending", messageId: messages.communityAsk.id, usage: { used: 6, limit: 10 } };
