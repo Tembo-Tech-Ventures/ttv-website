@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AccessRequestSummary, OnboardingState } from "../contracts";
+import type { AccessRequestSummary, Intent, OnboardingState } from "../contracts";
 import { accessRequests, onboardingByPersona } from "../fixtures";
 import { createApiClient, type ApiClient } from "./apiClient";
 import { createMockTransport, type MockReply } from "./mockTransport";
@@ -103,7 +103,8 @@ describe("onboarding store", () => {
     expect(await store.retry()).toBe(false);
     expect(fetch).not.toHaveBeenCalled();
     expect(storage).not.toHaveBeenCalled();
-    expect(store.getState()).toMatchObject({ enabled: false, server: null, drafts: {} });
+    expect(store.getState()).toMatchObject({ enabled: false, server: null });
+    expect(store.getState().drafts).toEqual({});
   });
 
   it("constructs without side effects and hydrates from server-rendered state", () => {
@@ -186,6 +187,16 @@ describe("onboarding store", () => {
       expect(await store.saveIntents()).toBe(false);
       expect(store.getState().failure).toMatchObject({ kind: "failed", action: { type: "save", intents: ["MEMBER", "MENTOR"] } });
     });
+
+    it("matching intents are not 'Saved.' while the step is still open on the server", async () => {
+      const prompt: OnboardingState = { ...wairimu, stage: "PROMPT", intents: ["MEMBER"] };
+      const { store, put, get } = harness(prompt);
+      put.mockReturnValueOnce(fail(503, "unavailable"));
+      get.mockReturnValueOnce(ok(prompt));
+      expect(await store.saveIntents()).toBe(false);
+      expect(store.getState()).toMatchObject({ failure: { kind: "failed" }, server: { stage: "PROMPT" } });
+      expect(store.getState().announcement).not.toBe("Saved.");
+    });
   });
 
   describe("access requests", () => {
@@ -208,9 +219,10 @@ describe("onboarding store", () => {
       expect(await sent).toBe(true);
       expect(selectAccessStatus("MENTOR")(store.getState())).toBe("PENDING");
       expect(store.getState()).toMatchObject({
-        pending: null, failure: null, drafts: {}, announcement: "Your mentor request is with the team.",
+        pending: null, failure: null, announcement: "Your mentor request is with the team.",
         selection: { intents: ["MEMBER", "MENTOR"] },
       });
+      expect(store.getState().drafts).toEqual({});
       expect(storage.map.has(draftKey)).toBe(false);
       expect(await create.mock.calls[0][0].json()).toEqual({ role: "MENTOR", note: mentorNote, link: null });
     });
@@ -251,14 +263,18 @@ describe("onboarding store", () => {
       expect(await store.submitRequest("MENTOR")).toBe(true); // A decline can be followed by a new request.
     });
 
-    it("409: a request already pending elsewhere settles from server truth and clears the draft", async () => {
-      const { store, create, get } = harness();
+    it("409: a request already pending elsewhere settles from truth, but this unsent text is kept", async () => {
+      const { store, create, get, storage } = harness();
       fillMentorDraft(store);
       create.mockReturnValueOnce(fail(409, "conflict"));
       get.mockReturnValueOnce(ok(wairimuPending));
       expect(await store.submitRequest("MENTOR")).toBe(true);
       expect(accessStatus(store.getState().server, "MENTOR")).toBe("PENDING");
-      expect(store.getState()).toMatchObject({ failure: null, drafts: {} });
+      expect(store.getState()).toMatchObject({
+        failure: null, announcement: "A mentor request is already with the team, so this one wasn't sent.",
+      });
+      expect(store.getState().drafts).toEqual({ MENTOR: { note: mentorNote, link: "" } });
+      expect(storage.map.get(draftKey)).toContain(mentorNote);
     });
 
     it("409: access granted meanwhile settles quietly, with no request to announce", async () => {
@@ -267,7 +283,8 @@ describe("onboarding store", () => {
       create.mockReturnValueOnce(fail(409, "conflict"));
       get.mockReturnValueOnce(ok({ ...wairimu, roles: ["MENTOR"] }));
       expect(await store.submitRequest("MENTOR")).toBe(true);
-      expect(store.getState()).toMatchObject({ failure: null, drafts: {}, announcement: "" });
+      expect(store.getState()).toMatchObject({ failure: null, announcement: "" });
+      expect(store.getState().drafts).toEqual({ MENTOR: { note: mentorNote, link: "" } });
       expect(accessStatus(store.getState().server, "MENTOR")).toBe("ACTIVE");
     });
 
@@ -313,6 +330,15 @@ describe("onboarding store", () => {
       expect(await store.retry()).toBe(true);
       expect(accessStatus(store.getState().server, "MENTOR")).toBe("PENDING");
       expect(storage.map.has(draftKey)).toBe(false);
+    });
+
+    it("a failed dismiss whose truth is still unseen keeps the card and offers a retry", async () => {
+      const { store, dismiss, get } = harness(peter);
+      dismiss.mockReturnValueOnce(fail(503, "unavailable"));
+      get.mockReturnValueOnce(ok(peter));
+      expect(await store.dismissRequest("MENTOR")).toBe(false);
+      expect(store.getState().failure).toMatchObject({ kind: "failed", action: { type: "dismiss", role: "MENTOR" } });
+      expect(store.getState().server?.requests[0].seenAt).toBeNull();
     });
 
     it("a lost response is resolved by asking the server, never by guessing", async () => {
@@ -475,13 +501,35 @@ describe("onboarding store", () => {
       fillMentorDraft(store);
       create.mockReturnValueOnce(fail(401, "unauthorized"));
       expect(await store.submitRequest("MENTOR")).toBe(false);
-      expect(store.getState()).toMatchObject({ closed: "signed_out", server: null, drafts: {}, pending: null, failure: null });
+      expect(store.getState()).toMatchObject({ closed: "signed_out", server: null, pending: null, failure: null });
+      expect(store.getState().drafts).toEqual({});
       expect([...storage.map.keys()]).toEqual(["unrelated"]);
       const calls = fetch.mock.calls.length;
       store.start();
       expect(await store.refresh()).toBe(false);
       expect(await store.saveIntents()).toBe(false);
       expect(fetch.mock.calls.length).toBe(calls);
+    });
+
+    it("a disabled store's sign-out never touches storage", () => {
+      const storage = vi.fn(() => memoryStorage());
+      const store = createOnboardingStore({ draftKey, storage });
+      store.signOut();
+      expect(storage).not.toHaveBeenCalled();
+      expect(store.getState().closed).toBe("signed_out");
+    });
+
+    it("drops a read that a client ignoring abort answers after a write", async () => {
+      const call = vi.fn<(...args: unknown[]) => Promise<unknown>>();
+      const store = createOnboardingStore({ enabled: true, api: { call } as unknown as ApiClient, initialState: wairimu });
+      const read = deferred<OnboardingState>();
+      call.mockReturnValueOnce(read.promise).mockResolvedValueOnce(wairimuPending);
+      const refreshing = store.refresh();
+      store.updateDraft("MENTOR", { note: mentorNote });
+      expect(await store.submitRequest("MENTOR")).toBe(true);
+      read.resolve(wairimu); // Older than the write: never applied.
+      expect(await refreshing).toBe(false);
+      expect(store.getState().server).toEqual(wairimuPending);
     });
 
     it("an explicit sign-out clears drafts before any were loaded", () => {
@@ -593,15 +641,61 @@ describe("onboarding store", () => {
       expect(await declined.store.dismissRequest("MENTOR")).toBe(true);
     });
 
-    it("first-load truth replaces choices made before state arrived", async () => {
+    it.each<[string, OnboardingState, Intent[]]>([
+      ["a new account", { ...wairimu, stage: "NEW" }, ["MENTOR"]],
+      ["the one-time card keeps the inferred prefill", { ...wairimu, stage: "PROMPT", inferred: ["MEMBER"] }, ["MEMBER", "MENTOR"]],
+      ["revisit mode adds the hint to saved intents", mercy, ["MEMBER", "MENTOR"]],
+    ])("the ?intent= hint survives a client-side first load: %s", async (_name, state, expected) => {
+      const { store, get } = harness(null, { hint: "mentor" });
+      get.mockReturnValueOnce(ok(state));
+      expect(store.getState().selection.intents).toEqual(["MENTOR"]);
+      store.start();
+      await tick();
+      expect(store.getState().selection).toMatchObject({ intents: expected });
+    });
+
+    it("choices made before the first load are replayed onto it as choices, not flips", async () => {
       const { store, get } = harness(null);
       const answer = deferred<MockReply>();
       get.mockReturnValueOnce(answer.promise);
       store.start();
-      store.select({ type: "toggle", intent: "MEMBER" });
-      answer.resolve(ok(mercy));
+      store.select({ type: "toggle", intent: "MEMBER" }); // chosen
+      store.select({ type: "toggle", intent: "INSTITUTION" });
+      store.select({ type: "toggle", intent: "INSTITUTION" }); // chosen, then unchosen
+      answer.resolve(ok(mercy)); // The server already holds MEMBER and MENTOR.
       await tick();
-      expect(store.getState().selection).toEqual({ intents: ["MEMBER", "MENTOR"], empty: false, dirty: false });
+      expect(store.getState().selection).toEqual({ intents: ["MEMBER", "MENTOR"], empty: false, dirty: true });
+    });
+
+    it("an explore before the first load stays exclusive after it", async () => {
+      const { store, get } = harness(null, { hint: "institution" });
+      const answer = deferred<MockReply>();
+      get.mockReturnValueOnce(answer.promise);
+      store.start();
+      store.select({ type: "explore" });
+      answer.resolve(ok({ ...wairimu, stage: "PROMPT", inferred: ["MEMBER"] }));
+      await tick();
+      expect(store.getState().selection.intents).toEqual(["EXPLORING"]);
+    });
+
+    it("a save before the first load commits the selection, so nothing is replayed onto its answer", async () => {
+      const { store, put } = harness(null);
+      store.select({ type: "toggle", intent: "MEMBER" });
+      put.mockReturnValueOnce(ok({ ...wairimu, stage: "DONE", intents: ["MEMBER"] }));
+      expect(await store.saveIntents()).toBe(true);
+      expect(store.getState().selection).toEqual({ intents: ["MEMBER"], empty: false, dirty: false });
+    });
+
+    it("bounds the replay log", async () => {
+      const { store, get } = harness(null);
+      const answer = deferred<MockReply>();
+      get.mockReturnValueOnce(answer.promise);
+      store.start();
+      for (let i = 0; i < 100; i++) store.select({ type: "toggle", intent: "MEMBER" });
+      answer.resolve(ok(wairimu));
+      await tick();
+      // 100 toggles from empty end unchosen; the kept tail of 32 ends the same way.
+      expect(store.getState().selection.intents).toEqual([]);
     });
 
     it("normalizes non-API errors and ignores answers from a client that ignores abort", async () => {

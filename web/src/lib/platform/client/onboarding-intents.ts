@@ -15,6 +15,8 @@ export interface IntentSelection {
 
 export type IntentSelectionAction =
   | { type: "toggle"; intent: Intent }
+  /** Choose or unchoose one intent, whatever it was before (how a toggle is replayed onto loaded state). */
+  | { type: "set"; intent: Intent; chosen: boolean }
   /** "I'm just looking around": EXPLORING alone. */
   | { type: "explore" }
   /** `?intent=` from the partner pages preselects a card. It never submits. */
@@ -61,6 +63,10 @@ export function intentSelectionReducer(state: IntentSelection, action: IntentSel
           : add(state.intents, action.intent),
         empty: false, dirty: true,
       };
+    case "set":
+      return state.intents.includes(action.intent) === action.chosen
+        ? { ...state, empty: false, dirty: true }
+        : intentSelectionReducer(state, { type: "toggle", intent: action.intent });
     case "explore":
       return { intents: ["EXPLORING"], empty: false, dirty: true };
     case "hint": {

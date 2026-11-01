@@ -75,6 +75,7 @@ export function accessStatus(state: OnboardingState | null, role: AccessRole): A
   return "NOT_REQUESTED";
 }
 
+const MAX_PRELOAD = 32;
 const ROLE_NAMES: Record<AccessRole, string> = { MENTOR: "mentor", INSTITUTION: "organisation" };
 const FAILURE_MESSAGES: Record<OnboardingFailureKind, string> = {
   conflict: "This changed since the page loaded. It now shows the latest.",
@@ -107,7 +108,7 @@ const uncertain = (error: ApiError) => error.status === 409 || staleId(error) ||
 function satisfied(action: OnboardingAction, state: OnboardingState): boolean {
   const request = "role" in action ? requestFor(state, action.role) : null;
   switch (action.type) {
-    case "save": return sameIntents(state.intents, action.intents);
+    case "save": return state.stage === "DONE" && sameIntents(state.intents, action.intents);
     case "dismissPrompt": return state.stage === "DONE";
     case "submit": return state.roles.includes(action.role) || request?.status === "PENDING";
     case "withdraw": return !state.roles.includes(action.role)
@@ -116,11 +117,16 @@ function satisfied(action: OnboardingAction, state: OnboardingState): boolean {
   }
 }
 
-function successMessage(action: OnboardingAction, state: OnboardingState): string {
+/** `refused`: the server turned this write down (409), and its truth already shows the outcome. */
+function successMessage(action: OnboardingAction, state: OnboardingState, refused: boolean): string {
   switch (action.type) {
     case "save": case "dismissPrompt": return "Saved.";
-    // Settled by truth, the role may already be held: then there is no request to announce.
-    case "submit": return accessStatus(state, action.role) === "PENDING" ? `Your ${ROLE_NAMES[action.role]} request is with the team.` : "";
+    case "submit": {
+      // Settled by truth, the role may already be held: then there is no request to announce.
+      if (accessStatus(state, action.role) !== "PENDING") return "";
+      const role = ROLE_NAMES[action.role];
+      return refused ? `A ${role} request is already with the team, so this one wasn't sent.` : `Your ${role} request is with the team.`;
+    }
     case "withdraw": return "Request withdrawn.";
     case "dismiss": return "";
   }
@@ -136,13 +142,14 @@ export function createOnboardingStore(options: OnboardingOptions = {}) {
     draftsPersisted: true, loading: false, loadError: null, pending: null, failure: null, closed: null, announcement: "",
   });
   let epoch = 0;
-  let revision = 0;
   let retains = 0;
   let stopped = false;
   let hydrated = false;
   let storage: DraftStorage | undefined;
   let readController: AbortController | undefined;
   let writeController: AbortController | undefined;
+  /** Selection changes made before the first server state, replayed onto it (hint and inferred prefill kept). */
+  let preload: IntentSelectionAction[] = [];
   const update = (patch: Partial<OnboardingClientState>) => store.setState(state => ({ ...state, ...patch }));
   const available = () => enabled && !stopped && store.getState().closed === null;
   const current = (generation: number, signal: AbortSignal) => available() && generation === epoch && !signal.aborted;
@@ -161,11 +168,13 @@ export function createOnboardingStore(options: OnboardingOptions = {}) {
   }
   /** Server truth replaces the server state and carries its intent changes into the local selection. */
   function apply(next: OnboardingState, patch: Partial<OnboardingClientState> = {}) {
+    const replay = preload;
+    preload = [];
     store.setState(state => ({
       ...state, ...patch, server: next, loadError: null,
-      selection: state.server === null && !state.selection.dirty
-        ? initialSelection(next, options.hint)
-        : intentSelectionReducer(state.selection, { type: "sync", from: state.server?.intents ?? null, to: next.intents }),
+      selection: state.server === null
+        ? replay.reduce(intentSelectionReducer, initialSelection(next, options.hint))
+        : intentSelectionReducer(state.selection, { type: "sync", from: state.server.intents, to: next.intents }),
     }));
   }
   /** On a write, only a `flag_off` 404 closes; on a read, any 404 does. */
@@ -188,17 +197,16 @@ export function createOnboardingStore(options: OnboardingOptions = {}) {
     const controller = new AbortController();
     readController = controller;
     const generation = epoch;
-    const version = revision;
     update({ loading: true, loadError: null });
     try {
       const next = await api.call(ROUTES.getOnboarding, { signal: controller.signal });
-      // A write that started meanwhile owns the truth now; this read may predate it.
-      if (!current(generation, controller.signal) || version !== revision) return false;
+      // A write that started meanwhile aborted this read: it may predate the write, so it is dropped.
+      if (!current(generation, controller.signal)) return false;
       apply(next);
       return true;
     } catch (error) {
       const failure = normalizeError(error);
-      if (current(generation, controller.signal) && version === revision && !close(failure, true)) {
+      if (current(generation, controller.signal) && !close(failure, true)) {
         update({ loadError: failure, announcement: "Couldn't load your onboarding choices." });
       }
       return false;
@@ -213,16 +221,16 @@ export function createOnboardingStore(options: OnboardingOptions = {}) {
   async function write(action: OnboardingAction, send: (signal: AbortSignal) => Promise<OnboardingState>): Promise<boolean> {
     if (!available() || store.getState().pending) return false;
     readController?.abort();
-    revision++;
     const controller = new AbortController();
     writeController = controller;
     const generation = epoch;
-    const succeed = (next: OnboardingState) => {
-      if (action.type === "submit") {
+    const succeed = (next: OnboardingState, refused = false) => {
+      // A refused send never reached the team, so its text stays for the person to keep or discard.
+      if (action.type === "submit" && !refused) {
         const { [action.role]: _sent, ...rest } = store.getState().drafts;
         saveDrafts(rest);
       }
-      apply(next, { pending: null, failure: null, announcement: successMessage(action, next) });
+      apply(next, { pending: null, failure: null, announcement: successMessage(action, next, refused) });
       return true;
     };
     update({ pending: action, failure: null });
@@ -236,7 +244,7 @@ export function createOnboardingStore(options: OnboardingOptions = {}) {
         // Never show an outcome without a 2xx: ask the server what actually happened.
         const truth = await api.call(ROUTES.getOnboarding, { signal: controller.signal }).catch(() => null);
         if (!current(generation, controller.signal)) return false;
-        if (truth && satisfied(action, truth)) return succeed(truth);
+        if (truth && satisfied(action, truth)) return succeed(truth, failure.status === 409);
         if (truth) apply(truth);
       }
       const kind = classify(failure);
@@ -256,6 +264,7 @@ export function createOnboardingStore(options: OnboardingOptions = {}) {
     update({ selection });
     if (selection.empty) return Promise.resolve(false);
     const intents = selection.intents;
+    preload = [];
     return write({ type: "save", intents }, signal => api.call(ROUTES.updateOnboarding, { body: { intents: [...intents] }, signal }));
   }
 
@@ -313,7 +322,9 @@ export function createOnboardingStore(options: OnboardingOptions = {}) {
   /** Ends this user's onboarding state in the tab: drafts are removed and no further requests are made. */
   function signOut() {
     stop();
-    clearOnboardingDrafts(storage ?? draftStorage());
+    // Disabled stores never touch storage; the sign-out flow can call clearOnboardingDrafts() itself.
+    if (enabled) clearOnboardingDrafts(storage ?? draftStorage());
+    preload = [];
     update({ server: null, selection: initialSelection(null), drafts: {}, fieldErrors: {}, failure: null, closed: "signed_out" });
   }
 
@@ -339,6 +350,12 @@ export function createOnboardingStore(options: OnboardingOptions = {}) {
       };
     },
     select(action: IntentSelectionAction) {
+      const { server, selection } = store.getState();
+      if (server === null) {
+        // Record what was chosen, not the flip, so the replay onto loaded state keeps the person's intent.
+        const replay = action.type === "toggle" ? { type: "set" as const, intent: action.intent, chosen: !selection.intents.includes(action.intent) } : action;
+        preload = [...preload, replay].slice(-MAX_PRELOAD);
+      }
       update({ selection: intentSelectionReducer(store.getState().selection, action) });
     },
     updateDraft<R extends AccessRole>(role: R, patch: Partial<DraftFor<R>>) {

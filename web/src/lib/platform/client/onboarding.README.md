@@ -24,13 +24,21 @@ Import `createOnboardingStore`, `useOnboarding`, `accessStatus`,
   anything else clears it.
 - **Drafts live in sessionStorage, never localStorage.** There is one key per
   user (`ttv-onboarding-drafts:<userId>`). A draft is cleared after a successful
-  send, by `signOut()`, and by a 401. Stored drafts are bounded and validated
-  when read, and anything corrupt is dropped.
+  send, by `signOut()`, and by a 401. Stored drafts are bounded on write and
+  validated on read, and anything corrupt is dropped. A send the server refused
+  with 409 (another tab's request is already pending) keeps its text, and the
+  announcement says it wasn't sent.
+- **The first load keeps what the person chose.** Without `initialState`, the
+  `?intent=` hint and the inferred prefill are applied to the loaded state, and
+  any choices made before it arrived are replayed as choices (`set`), not flips.
 - **Server truth settles uncertainty.** After a 409, a write's 404 `not_found`
   (a stale or foreign request id), a 5xx, an invalid response or a network failure, the store asks `GET /api/platform/onboarding`. If the
   server already shows the intended outcome (a lost response, another tab), the
-  action counts as done. Otherwise the failure is shown next to the latest truth.
-- One write runs at a time, and a create is never retried automatically.
+  action counts as done. A save counts as done only when the step is DONE as
+  well. Otherwise the failure is shown next to the latest truth.
+- One write runs at a time, and a create is never retried automatically. The
+  shared API client has no request timeout, so a write that never settles keeps
+  `pending` until the page is left. That's a known client-lane follow-up.
 
 ## Usage
 
@@ -46,7 +54,7 @@ const { selection, drafts, fieldErrors, pending, failure, announcement } = useOn
 const mentor = useOnboarding(onboarding, selectAccessStatus("MENTOR"));
 
 // S1
-onboarding.select({ type: "toggle", intent: "MENTOR" });
+onboarding.select({ type: "toggle", intent: "MENTOR" }); // or { type: "set", intent, chosen }
 onboarding.select({ type: "explore" });         // "I'm just looking around"
 await onboarding.saveIntents();                 // false + selection.empty when nothing is chosen
 // S2
@@ -57,7 +65,8 @@ await onboarding.dismissRequest("MENTOR");      // the Approved or Declined card
 await onboarding.dismissPrompt();               // S4 "Not now"
 await onboarding.withdrawRequest("MENTOR");     // the server also removes the MENTOR intent
 await onboarding.retry();                       // re-runs the failed action against current state
-// Sign out (call before authClient.signOut). Without a store, use clearOnboardingDrafts().
+// Sign out (call before authClient.signOut). A disabled store doesn't touch storage;
+// without an enabled store, call clearOnboardingDrafts().
 onboarding.signOut();
 ```
 

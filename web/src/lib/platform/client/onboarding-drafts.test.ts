@@ -71,6 +71,16 @@ describe("draft storage", () => {
     expect(readDrafts(storage, "k")).toEqual({ MENTOR: mentor });
   });
 
+  it("never writes what readDrafts would reject: oversized values are removed instead", () => {
+    const storage = memoryStorage();
+    expect(writeDrafts(storage, "k", { MENTOR: mentor })).toBe(true);
+    // Seven fields of escaped characters at the field cap serialise to about twice the stored cap.
+    const heavy = "\n".repeat(4_096);
+    const big = { MENTOR: { note: heavy, link: heavy }, INSTITUTION: { note: heavy, organisation: heavy, organisationRole: heavy, link: heavy, scopeAcknowledged: true } };
+    expect(writeDrafts(storage, "k", big)).toBe(false);
+    expect(storage.map.has("k")).toBe(false);
+  });
+
   it("reports refused writes and throwing reads without throwing", () => {
     const storage = memoryStorage();
     storage.setItem = () => { throw new DOMException("full", "QuotaExceededError"); };

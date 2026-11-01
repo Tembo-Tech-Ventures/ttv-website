@@ -57,12 +57,23 @@ export function readDrafts(storage: DraftStorage | undefined, key: string): Acce
   return {};
 }
 
-/** Returns false when the browser refused the write; the in-memory draft still works. */
+/**
+ * Returns false when the browser refused the write or the drafts exceed what `readDrafts` accepts; the
+ * in-memory draft still works. An oversized value is removed rather than left stale or unreadable.
+ */
 export function writeDrafts(storage: DraftStorage | undefined, key: string, drafts: AccessRequestDrafts): boolean {
   if (!storage) return false;
   try {
-    if (!drafts.MENTOR && !drafts.INSTITUTION) storage.removeItem(key);
-    else storage.setItem(key, JSON.stringify(StoredDrafts.parse(drafts)));
+    if (!drafts.MENTOR && !drafts.INSTITUTION) {
+      storage.removeItem(key);
+      return true;
+    }
+    const value = JSON.stringify(StoredDrafts.parse(drafts));
+    if (value.length > MAX_STORED) {
+      storage.removeItem(key);
+      return false;
+    }
+    storage.setItem(key, value);
     return true;
   } catch { return false; }
 }

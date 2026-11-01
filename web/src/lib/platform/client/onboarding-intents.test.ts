@@ -33,6 +33,18 @@ describe("intent selection reducer", () => {
     }
   });
 
+  it.each<[string, Intent[], Intent, boolean, Intent[]]>([
+    ["chooses an unchosen intent", ["MEMBER"], "MENTOR", true, ["MEMBER", "MENTOR"]],
+    ["keeps a chosen intent chosen", ["MEMBER"], "MEMBER", true, ["MEMBER"]],
+    ["unchooses a chosen intent", ["MEMBER", "MENTOR"], "MEMBER", false, ["MENTOR"]],
+    ["keeps an unchosen intent unchosen", ["MEMBER"], "MENTOR", false, ["MEMBER"]],
+    ["choosing EXPLORING stays exclusive", ["MEMBER"], "EXPLORING", true, ["EXPLORING"]],
+    ["choosing another intent drops EXPLORING", ["EXPLORING"], "MEMBER", true, ["MEMBER"]],
+  ])("set: %s", (_name, from, intent, chosen, expected) => {
+    expect(intentSelectionReducer(selection(from, { empty: true }), { type: "set", intent, chosen }))
+      .toEqual({ intents: expected, empty: false, dirty: true });
+  });
+
   it("'I'm just looking around' selects EXPLORING alone", () => {
     expect(intentSelectionReducer(selection(["MEMBER", "MENTOR"], { empty: true }), { type: "explore" }))
       .toEqual({ intents: ["EXPLORING"], empty: false, dirty: true });
