@@ -14,6 +14,7 @@ const { atBottom, scrollToBottom, scrollToItem } = useScrollAnchoring(scroller, 
   onAnchor: store.setAnchor,                   // eviction keeps the page being read
 });
 // "Jump to latest": await store.jumpToLatest(); scrollToBottom();
+// One list per channel: key it by channel id (<MessageList key={channel.id} … />), so a new channel opens fresh.
 // Mark read only while atBottom; show "Jump to latest" while !atBottom or !state.live.
 <section ref={scroller}>{state.messages.map(m => <li key={m.id} data-message-row={m.id}>…</li>)}</section>
 ```
@@ -30,8 +31,18 @@ const { atBottom, scrollToBottom, scrollToItem } = useScrollAnchoring(scroller, 
   and growing content (an embed or image loading, observed with `ResizeObserver`)
   keep the reader at the bottom. Away from the bottom, nothing moves the reader,
   except appended items `shouldFollow` accepts (their own message).
-- **First render with items** opens at `initialItemId` (its top), or at the newest
-  end when it is null or not rendered.
+- **First render with items and a box** opens at `initialItemId` (its top), or at
+  the newest end when it is null or not rendered.
+- **A hidden list** (no box: `display: none`, a phone's thread replacing the list)
+  is never measured. Its position, `atBottom` and anchor stay as they were, so a
+  hidden list never reads as "at the bottom" (and never marks messages read), and
+  the reader is put back where they were when it shows again. A list mounted
+  hidden opens once it has a box.
+- **A scroll whose event hasn't arrived yet** (a commit in the same frame, such as
+  `loadOlder` during a fling) is kept, not undone; clamping by shrinking content is
+  not mistaken for one.
+- **A re-mounted scroll element** is a new surface: listeners move to it and it
+  opens afresh.
 - `atBottom` drives "Jump to latest" and reading the end of a live channel.
   `onAnchor` reports the first visible item's id, or null at the newest end,
   whenever it changes: exactly what `ChannelStore.setAnchor` takes.

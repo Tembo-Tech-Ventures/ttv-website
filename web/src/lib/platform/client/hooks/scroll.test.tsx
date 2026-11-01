@@ -12,11 +12,12 @@ const range = (from: number, to: number, extra: Partial<Item> = {}): Item[] =>
   Array.from({ length: to - from + 1 }, (_, i) => ({ id: `m${from + i}`, ...extra }));
 
 let anchoring: ScrollAnchoring;
-function List({ items, ...options }: Omit<ScrollAnchoringOptions<Item>, "items"> & { items: Item[] }) {
+type ListProps = Omit<ScrollAnchoringOptions<Item>, "items"> & { items: Item[]; viewport?: number; surface?: string };
+function List({ items, viewport = 300, surface = "a", ...options }: ListProps) {
   const ref = useRef<HTMLElement>(null);
   anchoring = useScrollAnchoring(ref, { items, ...options });
   return (
-    <section ref={ref} data-viewport="300" data-at-bottom={anchoring.atBottom}>
+    <section key={surface} ref={ref} data-viewport={viewport} data-surface={surface} data-at-bottom={anchoring.atBottom}>
       <ol>{items.map(item => <li key={item.id} data-message-row={item.id} data-height={item.height ?? 100} />)}</ol>
     </section>
   );
@@ -141,6 +142,61 @@ describe("useScrollAnchoring", () => {
     // Jump to latest replaces the window with a fresh page.
     await render({ items: range(40, 60) });
     expect(scroller().scrollTop).toBe(1_800);
+  });
+
+  it("a hidden list is never measured: it keeps the place, atBottom and the anchor until it shows again", async () => {
+    const onAnchor = vi.fn();
+    await render({ items: range(1, 20), onAnchor });
+    await act(async () => userScroll(scroller(), 300));
+    expect(onAnchor).toHaveBeenLastCalledWith("m4");
+    const calls = onAnchor.mock.calls.length;
+    // The thread rail takes the sheet on a phone: the list loses its box, and someone posts meanwhile.
+    await render({ items: range(1, 21), onAnchor, viewport: 0 });
+    const [observer] = FakeResizeObserver.instances;
+    await act(async () => observer.callback());
+    expect(anchoring.atBottom).toBe(false);
+    expect(onAnchor).toHaveBeenCalledTimes(calls);
+    expect(anchoring.scrollToItem("m2")).toBe(false);
+    await act(async () => anchoring.scrollToBottom());
+    expect(anchoring.atBottom).toBe(false);
+    // Shown again: the reader is where they were, not at the bottom.
+    await render({ items: range(1, 21), onAnchor, viewport: 300 });
+    await act(async () => observer.callback());
+    expect(firstVisible()).toEqual({ id: "m4", offset: 0 });
+    expect(anchoring.atBottom).toBe(false);
+    expect(onAnchor).toHaveBeenCalledTimes(calls);
+  });
+
+  it("a list mounted hidden opens at its linked item once it has a box", async () => {
+    const onAnchor = vi.fn();
+    await render({ items: range(1, 10), initialItemId: "m4", onAnchor, viewport: 0 });
+    expect(onAnchor).not.toHaveBeenCalled();
+    expect(scroller().scrollTop).toBe(0);
+    await render({ items: range(1, 10), initialItemId: "m4", onAnchor, viewport: 300 });
+    expect(scroller().scrollTop).toBe(300);
+    expect(onAnchor).toHaveBeenLastCalledWith("m4");
+  });
+
+  it("keeps a scroll whose event hasn't arrived when older items render in the same frame", async () => {
+    await render({ items: range(11, 20) });
+    await act(async () => userScroll(scroller(), 400));
+    scroller().scrollTop = 280;
+    await render({ items: range(1, 20) });
+    expect(scroller().scrollTop).toBe(1_280);
+  });
+
+  it("starts over on a re-mounted scroll element, and listens to the new one", async () => {
+    await render({ items: range(1, 10), surface: "a" });
+    await act(async () => userScroll(scroller(), 0));
+    const first = scroller();
+    const remove = vi.spyOn(first, "removeEventListener");
+    await render({ items: range(1, 10), surface: "b", initialItemId: "m5" });
+    expect(scroller()).not.toBe(first);
+    expect(remove).toHaveBeenCalledWith("scroll", expect.any(Function));
+    expect(scroller().scrollTop).toBe(400);
+    await act(async () => userScroll(scroller(), 100));
+    expect(firstVisible()?.id).toBe("m2");
+    expect(anchoring.atBottom).toBe(false);
   });
 
   it("works without ResizeObserver and cleans up on unmount", async () => {

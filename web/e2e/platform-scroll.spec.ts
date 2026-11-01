@@ -61,6 +61,33 @@ test.describe("scroll anchoring", () => {
     await page.getByRole("button", { name: "I post" }).click();
     await expect.poll(() => distanceFromBottom(page)).toBeLessThanOrEqual(1);
 
+    // A thread takes the list's place (phone): hidden, the list reports nothing; shown, the reader is where they were.
+    await scroller(page).evaluate(element => { element.scrollTop = 0; });
+    await expect(harness(page)).toHaveAttribute("data-anchor", "msg-41");
+    const reading = await top(page, "msg-41");
+    await page.getByRole("button", { name: "Open thread" }).click();
+    await expect(scroller(page)).toBeHidden();
+    await page.getByRole("button", { name: "Someone posts" }).click();
+    await expect(harness(page)).toHaveAttribute("data-at-bottom", "false");
+    await expect(harness(page)).toHaveAttribute("data-anchor", "msg-41");
+    await page.getByRole("button", { name: "Back to channel" }).click();
+    await expect(scroller(page)).toBeVisible();
+    await expect.poll(async () => Math.abs(await top(page, "msg-41") - reading)).toBeLessThanOrEqual(1);
+    await expect(harness(page)).toHaveAttribute("data-at-bottom", "false");
+
+    // A scroll whose event hasn't arrived yet survives older messages rendering in the same frame.
+    await page.locator("[data-scroller]").evaluate(element => { element.scrollTop = 600; });
+    await expect(harness(page)).not.toHaveAttribute("data-anchor", "msg-41");
+    const anchored = (await harness(page).getAttribute("data-anchor"))!;
+    const settled = await top(page, anchored);
+    await page.evaluate(() => {
+      const element = document.querySelector<HTMLElement>("[data-scroller]")!;
+      element.scrollTop -= 120;
+      [...document.querySelectorAll("button")].find(button => button.textContent === "Load older")!.click();
+    });
+    await expect(page.locator('[data-message-row="msg-21"]')).toHaveCount(1);
+    await expect.poll(async () => Math.abs(await top(page, anchored) - (settled + 120))).toBeLessThanOrEqual(1);
+
     // Jump to latest from anywhere.
     await scroller(page).evaluate(element => { element.scrollTop = 0; });
     await page.getByRole("button", { name: "Jump to latest" }).click();

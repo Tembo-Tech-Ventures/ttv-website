@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
-  appendedSince, captureScroll, distanceFromBottom, findItem, isAtBottom, restoreScroll, scrollToBottom, scrollToItem,
+  appendedSince, captureScroll, distanceFromBottom, findItem, isAtBottom, isMeasurable, restoreScroll, scrollToBottom,
+  scrollToItem,
 } from "./scrollAnchor";
 import { installScrollGeometry } from "./scrollGeometry.test-support";
 
@@ -45,7 +46,7 @@ describe("scroll anchoring core", () => {
     render(range(1, 10));
     container.scrollTop = 250;
     expect(captureScroll(container)).toEqual({
-      atBottom: false,
+      atBottom: false, scrollTop: 250,
       anchors: [{ id: "m3", offset: -50 }, { id: "m4", offset: 50 }, { id: "m5", offset: 150 }],
     });
     const unnamed = document.createElement("li");
@@ -87,9 +88,11 @@ describe("scroll anchoring core", () => {
     expect(before.anchors[0].id).toBe("m11");
     render(range(6, 20));
     restoreScroll(container, before);
-    expect(captureScroll(container).anchors[0]).toEqual({ id: "m11", offset: -30 });
+    // As the hook does, the position is captured again after each restore.
+    const after = captureScroll(container);
+    expect(after.anchors[0]).toEqual({ id: "m11", offset: -30 });
     render([["m6", 400], ...range(7, 10), ...range(12, 20)]);
-    restoreScroll(container, before);
+    restoreScroll(container, after);
     // The next remembered item, m12, is back at its offset; m10 now peeks in above it.
     expect(captureScroll(container).anchors.slice(0, 2)).toEqual([{ id: "m10", offset: -30 }, { id: "m12", offset: 70 }]);
   });
@@ -103,10 +106,41 @@ describe("scroll anchoring core", () => {
     restoreScroll(container, atEnd);
     expect(container.scrollTop).toBe(500);
     container.scrollTop = 100;
-    expect(restoreScroll(container, { atBottom: false, anchors: [{ id: "gone", offset: 0 }] })).toBe(false);
+    expect(restoreScroll(container, { atBottom: false, scrollTop: 100, anchors: [{ id: "gone", offset: 0 }] })).toBe(false);
     expect(container.scrollTop).toBe(100);
-    expect(restoreScroll(container, { atBottom: false, anchors: [{ id: "m2", offset: 0 }] })).toBe(true);
+    expect(restoreScroll(container, { atBottom: false, scrollTop: 100, anchors: [{ id: "m2", offset: 0 }] })).toBe(true);
     expect(container.scrollTop).toBe(100);
+  });
+
+  it("keeps a scroll made before its event arrived, when older items land in the same frame", () => {
+    render(range(11, 20));
+    container.scrollTop = 400;
+    const before = captureScroll(container);
+    // The reader scrolls up 120px; the prepend renders before that scroll event is seen.
+    container.scrollTop = 280;
+    render([...range(1, 10), ...range(11, 20)]);
+    restoreScroll(container, before);
+    expect(container.scrollTop).toBe(1_280);
+  });
+
+  it("does not take clamping by shrinking content for a reader's scroll", () => {
+    render(range(1, 20));
+    container.scrollTop = 1_050;
+    const before = captureScroll(container);
+    expect(before.anchors[0]).toEqual({ id: "m11", offset: -50 });
+    // Older pages are evicted; the browser clamps scrollTop to the new end (here: via the setter).
+    render(range(11, 20));
+    container.scrollTop = 1_050;
+    expect(container.scrollTop).toBe(700);
+    restoreScroll(container, before);
+    expect(captureScroll(container).anchors[0]).toEqual({ id: "m11", offset: -50 });
+  });
+
+  it("treats a container without a box as not measurable", () => {
+    render(range(1, 3));
+    expect(isMeasurable(container)).toBe(true);
+    container.dataset.viewport = "0";
+    expect(isMeasurable(container)).toBe(false);
   });
 
   it("scrolls the container alone to an item's top or middle", () => {

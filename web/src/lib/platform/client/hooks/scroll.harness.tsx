@@ -15,6 +15,8 @@ export default function ScrollHarness() {
   const [rows, setRows] = useState(() => span(61, 100));
   const [grown, setGrown] = useState<string | null>(null);
   const [anchor, setAnchor] = useState<string | null>(null);
+  // A phone opens a thread in the list's place: the list is hidden, not unmounted.
+  const [listHidden, setListHidden] = useState(false);
   const { atBottom, scrollToBottom } = useScrollAnchoring(ref, {
     items: rows, onAnchor: setAnchor, shouldFollow: appended => appended.some(item => item.n < 0),
   });
@@ -28,9 +30,10 @@ export default function ScrollHarness() {
         <button type="button" onClick={() => setRows(current => [...current, { id: `own-${current.length}`, n: -1, lines: 1 }])}>I post</button>
         <button type="button" onClick={() => setGrown(rows.at(-1)?.id ?? null)}>Embed loads</button>
         <button type="button" onClick={scrollToBottom} hidden={atBottom}>Jump to latest</button>
+        <button type="button" onClick={() => setListHidden(value => !value)}>{listHidden ? "Back to channel" : "Open thread"}</button>
       </div>
       {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scroll container */}
-      <div ref={ref} tabIndex={0} aria-label="Messages" data-scroller className="h-80 overflow-y-auto rounded border border-rule px-2">
+      <div ref={ref} tabIndex={0} aria-label="Messages" data-scroller className={`h-80 overflow-y-auto rounded border border-rule px-2${listHidden ? " hidden" : ""}`}>
         <ol>
           {rows.map(item => (
             <li key={item.id} data-message-row={item.id} className="border-b border-rule py-2">

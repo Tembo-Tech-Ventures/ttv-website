@@ -2,10 +2,12 @@
  * A tiny layout model for DOM tests (happy-dom has no layout). A scroll container
  * is marked `data-viewport="<px>"`; every element marked `data-height="<px>"`
  * inside it is a block stacked in document order. scrollTop is clamped as a
- * browser would; getBoundingClientRect reflects it.
+ * browser would; getBoundingClientRect reflects it. `data-viewport="0"` is a hidden
+ * container (display: none): like a browser, every measurement inside it reads 0.
  */
 const scrollTops = new WeakMap<Element, number>();
 const viewport = (element: Element) => element.closest<HTMLElement>("[data-viewport]");
+const hidden = (element: Element | null) => (element as HTMLElement | null)?.dataset.viewport === "0";
 const height = (element: Element) => Number((element as HTMLElement).dataset.height ?? 0);
 const blocks = (container: Element) => Array.from(container.querySelectorAll("[data-height]"));
 const contentHeight = (container: Element) => blocks(container).reduce((sum, block) => sum + height(block), 0);
@@ -17,10 +19,16 @@ export function installScrollGeometry(): () => void {
   const savedRect = prototype.getBoundingClientRect;
   Object.defineProperties(prototype, {
     clientHeight: { configurable: true, get(this: HTMLElement) { return this.dataset.viewport ? Number(this.dataset.viewport) : height(this); } },
-    scrollHeight: { configurable: true, get(this: HTMLElement) { return this.dataset.viewport ? Math.max(contentHeight(this), Number(this.dataset.viewport)) : height(this); } },
+    scrollHeight: {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (hidden(this)) return 0;
+        return this.dataset.viewport ? Math.max(contentHeight(this), Number(this.dataset.viewport)) : height(this);
+      },
+    },
     scrollTop: {
       configurable: true,
-      get(this: HTMLElement) { return scrollTops.get(this) ?? 0; },
+      get(this: HTMLElement) { return hidden(this) ? 0 : scrollTops.get(this) ?? 0; },
       set(this: HTMLElement, value: number) {
         const max = Math.max(0, this.scrollHeight - this.clientHeight);
         scrollTops.set(this, Math.min(max, Math.max(0, value)));
@@ -30,7 +38,7 @@ export function installScrollGeometry(): () => void {
   prototype.getBoundingClientRect = function (this: HTMLElement) {
     if (this.dataset.viewport) return rect(0, Number(this.dataset.viewport));
     const container = viewport(this);
-    if (!container) return rect(0, 0);
+    if (!container || hidden(container)) return rect(0, 0);
     let top = 0;
     for (const block of blocks(container)) {
       if (block === this || block.contains(this)) break;

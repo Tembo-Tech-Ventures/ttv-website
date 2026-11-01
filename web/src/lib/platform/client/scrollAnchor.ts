@@ -25,6 +25,8 @@ export interface ScrollAnchorPoint {
 export interface ScrollSnapshot {
   anchors: readonly ScrollAnchorPoint[];
   atBottom: boolean;
+  /** scrollTop when taken: a scroll made since (its event not yet seen) is kept by a restore. */
+  scrollTop: number;
 }
 export interface ScrollAnchorOptions {
   attribute?: string;
@@ -37,6 +39,14 @@ export function distanceFromBottom(element: HTMLElement): number {
 
 export function isAtBottom(element: HTMLElement, thresholdPx = DEFAULT_BOTTOM_THRESHOLD_PX): boolean {
   return distanceFromBottom(element) <= thresholdPx;
+}
+
+/**
+ * A hidden or collapsed container (display: none, a closed pane) has no box: every
+ * measurement is 0 and it would read as "at the bottom". Such a state is no observation.
+ */
+export function isMeasurable(element: HTMLElement): boolean {
+  return element.clientHeight > 0;
 }
 
 /** The top of the scrolling area: inside the container's border, where content is visible. */
@@ -64,7 +74,7 @@ export function captureScroll(element: HTMLElement, { attribute = DEFAULT_ITEM_A
     anchors.push({ id, offset: rect.top - top });
     if (anchors.length === ANCHOR_CANDIDATES) break;
   }
-  return { anchors, atBottom: isAtBottom(element, bottomThresholdPx) };
+  return { anchors, atBottom: isAtBottom(element, bottomThresholdPx), scrollTop: element.scrollTop };
 }
 
 /** Jump to the newest end at once, so following stays exact while messages keep arriving. */
@@ -83,10 +93,15 @@ export function restoreScroll(element: HTMLElement, snapshot: ScrollSnapshot, at
     return true;
   }
   const top = viewportTop(element);
+  // The reader may have scrolled since the snapshot, before its scroll event arrived: keep that
+  // movement. A DOM change alone never moves scrollTop (overflow-anchor is off) unless shrinking
+  // content clamped it to the end; that is not the reader's doing.
+  const clamped = element.scrollTop < snapshot.scrollTop && distanceFromBottom(element) <= VISIBLE_SLIVER_PX;
+  const scrolled = clamped ? 0 : element.scrollTop - snapshot.scrollTop;
   for (const anchor of snapshot.anchors) {
     const item = findItem(element, anchor.id, attribute);
     if (!item) continue;
-    const shift = item.getBoundingClientRect().top - top - anchor.offset;
+    const shift = item.getBoundingClientRect().top - top - anchor.offset + scrolled;
     if (shift !== 0) element.scrollTop += shift;
     return true;
   }

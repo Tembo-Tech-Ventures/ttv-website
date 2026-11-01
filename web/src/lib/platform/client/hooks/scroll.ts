@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import {
-  appendedSince, captureScroll, DEFAULT_BOTTOM_THRESHOLD_PX, DEFAULT_ITEM_ATTRIBUTE, findItem, restoreScroll,
+  appendedSince, captureScroll, DEFAULT_BOTTOM_THRESHOLD_PX, DEFAULT_ITEM_ATTRIBUTE, findItem, isMeasurable, restoreScroll,
   scrollToBottom as jumpToBottom, scrollToItem as revealItem, type ScrollSnapshot,
 } from "../scrollAnchor";
 
@@ -41,7 +41,10 @@ export interface ScrollAnchoring {
  *   reader's place, measured from the first visible item, not from heights;
  * - at the bottom, appended items and growing content (images, embeds) keep the
  *   reader at the bottom; elsewhere they never move the reader;
- * - the first render with items opens at `initialItemId` or the newest end.
+ * - the first render with items and a box opens at `initialItemId` or the newest end;
+ * - a hidden container (no box) is never measured: its last position, `atBottom`
+ *   and anchor stay as they were and are re-applied when it shows again;
+ * - a different scroll element (re-mounted) starts over as a new surface.
  *
  * The container gets `overflow-anchor: none`, so the browser's own anchoring
  * never adjusts twice. SSR-safe: everything runs in effects.
@@ -56,15 +59,19 @@ export function useScrollAnchoring<T extends { id: string }>(
   const previous = useRef<readonly T[]>([]);
   const reported = useRef<string | null | undefined>(undefined);
   const observer = useRef<ResizeObserver | null>(null);
+  const attached = useRef<HTMLElement | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   useClientLayoutEffect(() => { latest.current = options; });
 
   const attribute = () => latest.current.itemAttribute ?? DEFAULT_ITEM_ATTRIBUTE;
 
-  /** Remember where the reader is now, and report the anchor when it changes. */
+  /**
+   * Remember where the reader is now, and report the anchor when it changes. A hidden
+   * container is no observation: the last real position is kept until it shows again.
+   */
   const record = useCallback(() => {
     const element = ref.current;
-    if (!element) return;
+    if (!element || !isMeasurable(element)) return;
     const { bottomThresholdPx = DEFAULT_BOTTOM_THRESHOLD_PX } = latest.current;
     const next = captureScroll(element, { attribute: attribute(), bottomThresholdPx });
     snapshot.current = next;
@@ -76,6 +83,23 @@ export function useScrollAnchoring<T extends { id: string }>(
     }
   }, [ref]);
 
+  /** Open at `initialItemId` or the newest end, once the container has items and a box. */
+  const position = useCallback((element: HTMLElement) => {
+    if (positioned.current || latest.current.items.length === 0 || !isMeasurable(element)) return false;
+    positioned.current = true;
+    const { initialItemId } = latest.current;
+    if (!initialItemId || !revealItem(element, initialItemId, { attribute: attribute() })) jumpToBottom(element);
+    return true;
+  }, []);
+
+  /** Re-apply the last position: after a render, or when content (or the container) changes size. */
+  const settle = useCallback(() => {
+    const element = ref.current;
+    if (!element || !isMeasurable(element)) return;
+    if (!position(element) && snapshot.current) restoreScroll(element, snapshot.current, attribute());
+    record();
+  }, [ref, position, record]);
+
   /** Growing or shrinking content re-applies the last position. Children are observed again after each render. */
   const observe = useCallback((element: HTMLElement) => {
     const current = observer.current;
@@ -85,15 +109,35 @@ export function useScrollAnchoring<T extends { id: string }>(
     for (const child of Array.from(element.children)) current.observe(child);
   }, []);
 
+  const detach = useCallback(() => {
+    attached.current?.removeEventListener("scroll", record);
+    observer.current?.disconnect();
+    observer.current = null;
+    attached.current = null;
+  }, [record]);
+
+  // Follow the scroll element itself: a different node (the list re-mounted) is a new surface.
+  useClientLayoutEffect(() => {
+    const element = ref.current;
+    if (element === attached.current) return;
+    detach();
+    positioned.current = false;
+    snapshot.current = null;
+    if (!element) return;
+    attached.current = element;
+    element.style.overflowAnchor = "none";
+    element.addEventListener("scroll", record, { passive: true });
+    if (typeof ResizeObserver !== "undefined") observer.current = new ResizeObserver(settle);
+  });
+  useEffect(() => detach, [detach]);
+
   useClientLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
-    const { items, initialItemId, shouldFollow } = latest.current;
-    if (!positioned.current) {
-      if (items.length === 0) return;
-      positioned.current = true;
-      if (!initialItemId || !revealItem(element, initialItemId, { attribute: attribute() })) jumpToBottom(element);
-    } else if (snapshot.current) {
+    const { items, shouldFollow } = latest.current;
+    // Nothing to read yet: no position, no anchor.
+    if (!positioned.current && items.length === 0) return;
+    if (isMeasurable(element) && !position(element) && snapshot.current) {
       const appended = appendedSince(previous.current, items);
       if (!snapshot.current.atBottom && appended.length > 0 && shouldFollow?.(appended)) jumpToBottom(element);
       else restoreScroll(element, snapshot.current, attribute());
@@ -101,31 +145,11 @@ export function useScrollAnchoring<T extends { id: string }>(
     previous.current = items;
     record();
     observe(element);
-  }, [ref, options.items, record, observe]);
-
-  useEffect(() => {
-    const element = ref.current;
-    if (!element) return;
-    element.style.overflowAnchor = "none";
-    element.addEventListener("scroll", record, { passive: true });
-    if (typeof ResizeObserver !== "undefined") {
-      observer.current = new ResizeObserver(() => {
-        if (!positioned.current || !snapshot.current) return;
-        restoreScroll(element, snapshot.current, attribute());
-        record();
-      });
-      observe(element);
-    }
-    return () => {
-      element.removeEventListener("scroll", record);
-      observer.current?.disconnect();
-      observer.current = null;
-    };
-  }, [ref, record, observe]);
+  }, [ref, options.items, position, record, observe]);
 
   const scrollToBottom = useCallback(() => {
     const element = ref.current;
-    if (!element) return;
+    if (!element || !isMeasurable(element)) return;
     jumpToBottom(element);
     // At the bottom now, so the next render (for example a jump to latest's new page) is followed too.
     record();
@@ -133,7 +157,7 @@ export function useScrollAnchoring<T extends { id: string }>(
 
   const scrollToItem = useCallback((id: string, block: "start" | "center" = "start") => {
     const element = ref.current;
-    if (!element || !findItem(element, id, attribute())) return false;
+    if (!element || !isMeasurable(element) || !findItem(element, id, attribute())) return false;
     revealItem(element, id, { attribute: attribute(), block });
     record();
     return true;
