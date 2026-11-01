@@ -232,6 +232,21 @@ describe("channel APIs: query budget", () => {
     expect(Math.max(BUDGET.editMessage, BUDGET.postMessage) + 1).toBeLessThanOrEqual(10);
   });
 
+  it("refused writes stay within 10 statements too, flagged edits included", async () => {
+    const s = setup();
+    s.database.exec("UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'");
+    const screen = () => ({ reasons: ["Contact details"] });
+    const own = s.message("help", { author: VIEWER });
+    const prepare = vi.spyOn(s.d1, "prepare");
+    // No code of conduct agreement: the edit and the post are refused.
+    const edit = await s.call("editMessage", { id: own, body: { body: "Flag me" }, screen, env: DATABASE_FLAGS });
+    expect([edit.status, prepare.mock.calls.length]).toEqual([403, 10]);
+    prepare.mockClear();
+    const sent = await s.call("postMessage", { id: s.channel("help"), body: post("Flag me"), screen, env: DATABASE_FLAGS });
+    expect(sent.status).toBe(403);
+    expect(prepare.mock.calls.length).toBeLessThanOrEqual(10);
+  });
+
   it("a thread page and a reply cost one statement more each", async () => {
     const s = setup();
     s.agree();

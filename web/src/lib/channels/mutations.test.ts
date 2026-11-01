@@ -259,8 +259,9 @@ describe("editing and deleting", () => {
   it("asks for the current code of conduct before an edit, and treats the same body as no change", async () => {
     const s = setup();
     const id = s.message("help", { author: VIEWER, body: "Original" });
-    const refused = await s.call("editMessage", { id, body: { body: "Rewritten" } });
+    const refused = await s.call("editMessage", { id, body: { body: "Rewritten" }, screen: () => ({ reasons: ["Contact details"] }) });
     expect([refused.status, errorOf(refused.body).code]).toEqual([403, "conduct_required"]);
+    expect(s.database.prepare("SELECT COUNT(*) AS n FROM moderation_event").get()).toEqual({ n: 0 });
     // A refused edit neither changes the message nor uses up the edit limit.
     expect(row(s, id).body).toBe("Original");
     expect(s.database.prepare("SELECT COUNT(*) AS n FROM channel_action").get()).toEqual({ n: 0 });
@@ -335,7 +336,10 @@ describe("edit and reaction limits", () => {
     const [first, other] = [s.message("help", { author: VIEWER }), s.message("introductions", { author: VIEWER })];
     const edit = (id: string, i: number) => s.call("editMessage", { id, body: { body: `Edit ${i}` }, now: () => now });
     for (let i = 0; i < ACTION_LIMITS.EDIT.count; i++) { expect((await edit(first, i)).status).toBe(200); now += 1_000; }
-    const limited = await edit(first, 99);
+    const flagging = () => ({ reasons: ["Contact details"] });
+    const limited = await s.call("editMessage", { id: first, body: { body: "Edit 99" }, now: () => now, screen: flagging });
+    // A refused edit leaves no detector event behind, flagged or not.
+    expect(s.database.prepare("SELECT COUNT(*) AS n FROM moderation_event").get()).toEqual({ n: 0 });
     expect([limited.status, errorOf(limited.body).code]).toEqual([429, "rate_limited"]);
     expect(errorOf(limited.body).retryAfterMs).toBe(start + ACTION_LIMITS.EDIT.windowMs - now);
     expect(MessageList.parse((await s.call("listMessages", { id: s.channel("help") })).body).items[0]!.body).toBe(`Edit ${ACTION_LIMITS.EDIT.count - 1}`);
@@ -354,7 +358,7 @@ describe("edit and reaction limits", () => {
     for (let i = 0; i < ACTION_LIMITS.REACT.count; i++) { expect((await react(i)).status, `${i}`).toBe(200); now += 100; }
     const limited = await react(0);
     expect([limited.status, errorOf(limited.body).retryAfterMs]).toEqual([429, start + ACTION_LIMITS.REACT.windowMs - now]);
-    const count = () => (s.database.prepare("SELECT COUNT(*) AS n FROM channel_action").get() as { n: number }).n;
+    const count = () => (s.database.prepare("SELECT COUNT(*) AS n FROM channel_action WHERE kind = 'REACT'").get() as { n: number }).n;
     expect(count()).toBe(ACTION_LIMITS.REACT.count);
     // A refused change writes nothing and moves nothing for pollers, either way round.
     const fresh = s.message("help");
@@ -362,13 +366,21 @@ describe("edit and reaction limits", () => {
     s.database.exec(`INSERT INTO message_reaction(messageId,userId,kind) VALUES ('${reacted}','${VIEWER}','thanks')`);
     const before = MessageList.parse((await s.call("listMessages", { id: s.channel("help") })).body);
     const reactions = (id: string) => s.database.prepare("SELECT kind FROM message_reaction WHERE messageId = ? AND userId = ?").all(id, VIEWER);
-    for (const [id, body] of [[fresh, { kind: "useful", active: true }], [reacted, { kind: "thanks", active: false }]] as const) {
+    for (const [id, body] of [
+      [fresh, { kind: "useful", active: true }], [reacted, { kind: "thanks", active: false }],
+      // A retry asking for a state the reaction already has must not move the message either.
+      [reacted, { kind: "thanks", active: true }], [fresh, { kind: "useful", active: false }],
+    ] as const) {
       const refused = await s.call("reactToMessage", { id, body, now: () => now });
       expect([refused.status, errorOf(refused.body).code]).toEqual([429, "rate_limited"]);
     }
     expect([reactions(fresh), reactions(reacted)]).toEqual([[], [{ kind: "thanks" }]]);
     const after = MessageList.parse((await s.call("listMessages", { id: s.channel("help"), query: `?since=${before.sinceCursor}` })).body);
     expect(after.items).toEqual([]);
+    // Edits have their own window: a full reaction window leaves editing open.
+    s.agree();
+    const own = s.message("help", { author: VIEWER });
+    expect((await s.call("editMessage", { id: own, body: { body: "Still editable" }, now: () => now })).status).toBe(200);
     now = start + 2 * 60 * 60_000;
     expect((await react(0)).status).toBe(200);
     expect(count()).toBe(1);

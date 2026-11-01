@@ -254,10 +254,15 @@ fail; when nothing was written, one read of the same conditions says why.
   (migration `0031_channel_action.sql`) by the batch's first statement,
   which for an edit also checks the code of conduct; everything after it
   acts only when that row was written, so a refusal writes nothing and moves
-  nothing. A trigger prunes the log after an hour.
+  nothing. A trigger prunes the log after an hour. A refused edit or
+  reaction, flagged or not, stays within the 10-statement budget. Open for
+  B-2.5: an edit is screened before the batch decides the limit and the code
+  of conduct, so a screen that calls a model should first run a read-only
+  pre-check, or refused edits pay for a model call.
 - **Edits and deletes** belong to the author only; moderators hide instead
   (B-2.5), and nobody edits Tembo. Editing needs `canPost` and a current
-  agreement; the same body again changes nothing. Deleted and hidden messages
+  agreement; the same body again changes nothing (it answers with the
+  unchanged message before any other check). Deleted and hidden messages
   are not edited (409). Deleting works in any channel the author can still
   read, clears the body and reactions, and keeps the message as a
   placeholder; deleting again returns the same placeholder.

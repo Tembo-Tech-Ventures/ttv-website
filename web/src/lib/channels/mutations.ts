@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import type { Channel, EditMessage, Message, MessageReactions, PostMessage, ReactToMessage } from "@/lib/platform/contracts";
-import { CONDUCT_VERSION, getConductAcknowledgement } from "./conduct";
+import { CONDUCT_VERSION } from "./conduct";
 import { ChannelError, readMessage, type ReadContext } from "./messages";
 import { screenMessage, type MessageScreen } from "./moderation";
 
@@ -198,12 +198,17 @@ function logAction(ctx: WriteContext, kind: ActionKind, id: string, now: number)
 }
 const logged = (param: string) => `EXISTS (SELECT 1 FROM channel_action WHERE id = ${param})`;
 
-/** The 429 for an action that found no room, with when the oldest action in its window expires. */
+/**
+ * Why an action was not logged, from one read: an edit without the current code of conduct
+ * (conduct_required), otherwise the limit (429, with when the oldest action in its window expires).
+ */
 async function actionRefusal(ctx: WriteContext, kind: ActionKind, now: number): Promise<ChannelError> {
   const { windowMs, perChannel } = ACTION_LIMITS[kind];
-  const row = await ctx.db.prepare(`SELECT MIN(at) AS oldest FROM channel_action
-      WHERE userId = ?1 AND kind = ?2 AND at > ?4 ${perChannel ? "AND channelId = ?3" : ""}`)
-    .bind(ctx.viewerId, kind, ctx.channel.id, now - windowMs).first<{ oldest: number | null }>();
+  const row = await ctx.db.prepare(`SELECT
+      (SELECT version FROM channel_conduct WHERE userId = ?1) AS conduct,
+      (SELECT MIN(at) FROM channel_action WHERE userId = ?1 AND kind = ?2 AND at > ?4 ${perChannel ? "AND channelId = ?3" : ""}) AS oldest`)
+    .bind(ctx.viewerId, kind, ctx.channel.id, now - windowMs).first<{ conduct: number | null; oldest: number | null }>();
+  if (kind === "EDIT" && (row?.conduct ?? 0) < conductVersion(ctx)) return conductRequired();
   const message = kind === "EDIT" ? "You're editing quickly. Try again in a moment." : "You're reacting quickly. Try again in a moment.";
   return new ChannelError("rate_limited", message, 429, Math.max(1, (row?.oldest ?? now) + windowMs - now));
 }
@@ -247,10 +252,7 @@ export async function editMessage(ctx: WriteContext, target: MessageTarget, inpu
         FROM (SELECT value FROM json_each(moderationReasons) UNION SELECT value FROM json_each(?6))) END
     WHERE ${guard}`).bind(ctx.channel.id, target.id, ctx.viewerId, input.body, now, reasons, action));
   const results = await ctx.db.batch(statements);
-  if (results[0]?.meta.changes !== 1) {
-    const agreement = await getConductAcknowledgement(ctx.db, ctx.viewerId, { currentVersion: conductVersion(ctx) });
-    throw agreement?.current ? await actionRefusal(ctx, "EDIT", now) : conductRequired();
-  }
+  if (results[0]?.meta.changes !== 1) throw await actionRefusal(ctx, "EDIT", now);
   if (results.at(-1)?.meta.changes !== 1) throw new ChannelError("conflict", "This message changed while you were editing it.", 409);
   return loaded(ctx, target.id);
 }
