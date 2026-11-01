@@ -10,6 +10,8 @@
  * recordings and transcripts keep their own rules.
  */
 export const DISCOVERY_EXCLUDED_ROLES = ["MENTOR", "ADMIN"] as const;
+/** The same roles as an SQL list literal, for queries that need the role exclusion alone. */
+export const DISCOVERY_EXCLUDED_ROLES_SQL = DISCOVERY_EXCLUDED_ROLES.map(role => `'${role}'`).join(",");
 
 const COLUMN = /^[a-z][A-Za-z_]*\.[a-z][A-Za-z_]*$/;
 
@@ -20,11 +22,10 @@ const COLUMN = /^[a-z][A-Za-z_]*\.[a-z][A-Za-z_]*$/;
  */
 export function discoverableMember(column: string, callerId: string) {
   if (!COLUMN.test(column)) throw new Error("Discovery eligibility needs a qualified column name.");
-  const excluded = DISCOVERY_EXCLUDED_ROLES.map(role => `'${role}'`).join(",");
   return {
     clause: `(EXISTS (SELECT 1 FROM communityProfile savedProfile WHERE savedProfile.userId=${column})
       AND NOT EXISTS (SELECT 1 FROM UserRoles excludedRole JOIN Roles excludedRoleName ON excludedRoleName.id=excludedRole.roleId
-        WHERE excludedRole.userId=${column} AND excludedRoleName.name IN (${excluded}))
+        WHERE excludedRole.userId=${column} AND excludedRoleName.name IN (${DISCOVERY_EXCLUDED_ROLES_SQL}))
       AND ${column}<>?)`,
     values: [callerId] as [string],
   };

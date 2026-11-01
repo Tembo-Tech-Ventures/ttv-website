@@ -16,7 +16,7 @@ export const RETAINED_CASES=Object.freeze([
  {label:'mentor excluded',query:'Fictional Amina Wanjiku',skills:[]},{label:'casefold',query:'typescript',skills:['react']},
 ]);
 export function expectedMatches(profiles,{query='',skills=[],limit=50}) {
- return profiles.filter(p=>!p.excluded && [p.name,p.headline,p.skills,p.bio].join(' ').toLowerCase().includes(query.toLowerCase()) && skills.every(s=>JSON.parse(p.skills??'[]').some(v=>v.toLowerCase()===s.toLowerCase())))
+ return profiles.filter(p=>p.saved && !p.excluded && [p.name,p.headline,p.skills,p.bio].join(' ').toLowerCase().includes(query.toLowerCase()) && skills.every(s=>JSON.parse(p.skills??'[]').some(v=>v.toLowerCase()===s.toLowerCase())))
  .toSorted((a,b)=>a.name<b.name?-1:a.name>b.name?1:a.id<b.id?-1:a.id>b.id?1:0).slice(0,limit).map(p=>p.id);
 }
 function ensure(ok){if(!ok)throw new Error('Retained probe verification failed.');}
@@ -29,7 +29,7 @@ export async function runRetainedSearch({environment=process.env,api=cfApi,fetch
  const bindings=(await api('/workers/scripts/ttv-website-staging/settings'))?.bindings??[];
  ensure(bindings.some(b=>b.name==='STAGING_RETAINED_READ_PROBE_ENABLED'&&b.text==='true') && bindings.some(b=>b.name==='AI'&&b.type==='ai') && bindings.some(b=>b.name==='AI_GATEWAY_NAME'&&b.text==='ttv-website-ai-staging'));
  const ids=buildDemoDataset().user.map(u=>u.id), placeholders='SELECT value FROM json_each(?)', idJson=JSON.stringify(ids);
- const profiles=resultRows(await target.executeQuery(`SELECT u.id,u.email,u.name,p.headline,p.skills,p.bio,EXISTS(SELECT 1 FROM UserRoles ur JOIN Roles r ON r.id=ur.roleId WHERE ur.userId=u.id AND r.name IN ('ADMIN','MENTOR')) AS excluded FROM user u LEFT JOIN communityProfile p ON p.userId=u.id WHERE u.id IN (${placeholders})`,[idJson]));
+ const profiles=resultRows(await target.executeQuery(`SELECT u.id,u.email,u.name,p.headline,p.skills,p.bio,p.userId IS NOT NULL AS saved,EXISTS(SELECT 1 FROM UserRoles ur JOIN Roles r ON r.id=ur.roleId WHERE ur.userId=u.id AND r.name IN ('ADMIN','MENTOR')) AS excluded FROM user u LEFT JOIN communityProfile p ON p.userId=u.id WHERE u.id IN (${placeholders})`,[idJson]));
  ensure(profiles.length===150 && profiles.every(u=>ids.includes(u.id)&&u.email===`${u.id}@invalid.ttv`));
  const sources=resultRows(await target.executeQuery(`SELECT u.id,'profile' AS kind,p.version FROM user u JOIN communityProfile p ON p.userId=u.id WHERE u.id IN (${placeholders}) UNION ALL SELECT j.id,'journey' AS kind,j.version FROM communityJourney j WHERE j.userId IN (${placeholders}) AND j.visibility='institution' UNION ALL SELECT c.id,'confirmation' AS kind,c.journeyVersion AS version FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId WHERE j.userId IN (${placeholders}) AND c.mentorId IN (${placeholders}) AND j.visibility='institution' AND c.journeyVersion=j.version`,[idJson,idJson,idJson,idJson]));
  const sourceKeys=new Set(sources.map(s=>`${s.kind}:${s.id}:${s.version}`));

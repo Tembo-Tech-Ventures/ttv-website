@@ -41,12 +41,15 @@ revisions with `institution` visibility, and additionally require a publicly
 eligible owner profile. Mentor/admin owners are excluded. Only the owner or
 canonical institution/admin can read them.
 
-Institution and admin callers see people and other owners' projects only when
-the person also passes institutional discovery's shared rule,
-`discoverableMember` in `src/lib/community/eligibility.ts` (owner decision
-2026-11-01): a saved community profile, no MENTOR or ADMIN role, and not the
-caller. The INSTITUTION role never excludes an otherwise eligible member. Other
-callers see the public talent directory unchanged. `institution` does not mean community-public. Private projects never
+Institutional discovery's shared rule, `discoverableMember` in
+`src/lib/community/eligibility.ts` (owner decision 2026-11-01), requires a
+saved community profile, no MENTOR or ADMIN role, and not the caller. The
+INSTITUTION role never excludes an otherwise eligible member. Institution
+callers see only such people; institution and admin callers see only such
+owners' shared projects. Everyone else, admins included, sees the public talent
+directory unchanged.
+
+`institution` does not mean community-public. Private projects never
 appear, even for their owner. The `PRIVATE` visibility kind carries the explicit
 label “Shared with approved institutions”; no institution enum is added.
 

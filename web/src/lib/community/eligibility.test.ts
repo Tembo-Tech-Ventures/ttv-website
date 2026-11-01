@@ -208,9 +208,14 @@ describe("discoverableMember", () => {
     await expect(createCommunityService(db, id("achieng")).getProfile(id("kevin"))).rejects.toMatchObject({ status: 403 });
     await expect(createCommunityService(db, id("achieng")).getProfile(GHOST)).rejects.toMatchObject({ status: 403 });
   });
-  it("leaves the public talent directory unchanged for other callers", async () => {
+  it.each(["achieng", "amina"] as const)("leaves the public talent directory unchanged for %s", async caller => {
     const db = world();
-    const people = await searchPlatform(db, id("achieng"), { q: "Webhook", scope: "people" });
+    const people = await searchPlatform(db, id(caller), { q: "Webhook", scope: "people" });
     expect(people.people.map(p => p.person.id).toSorted()).toEqual(EVERYONE.map(id).toSorted());
+  });
+  it("shows admins only discoverable owners' shared projects", async () => {
+    const db = world();
+    const { projects } = await searchPlatform(db, id("amina"), { q: "Webhook", scope: "projects" });
+    expect(projects.map(p => p.owner.id).toSorted()).toEqual(["achieng", "joseph", "kevin"].map(person => id(person as Person)).toSorted());
   });
 });
