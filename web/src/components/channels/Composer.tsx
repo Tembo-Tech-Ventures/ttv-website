@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { AuthorSummary, Channel, Me, Message, MessageEmbed } from "@/lib/platform/contracts";
 import { ApiError } from "@/lib/platform/client/apiClient";
+import { CONDUCT_PATH } from "@/lib/platform/server/space-routes";
 import { cx } from "@/components/platform/ui/cx";
 import { embedRef, NO_SHAREABLES, sameEmbed, type ChannelActions, type Shareables } from "./actions";
 import { composerTools, mentionsTembo, temboScope } from "./channel-format";
@@ -34,6 +35,8 @@ type ComposerProps = {
 /** Why a send failed, in words that say what to do next. */
 export function sendError(error: unknown): string {
   switch (error instanceof ApiError ? error.code : null) {
+    case "conduct_required":
+      return "Agree to how we talk to each other, then send again. Your message is still here.";
     case "rate_limited":
       return "You're sending quickly. Wait a moment, then send again.";
     case "moderation_rejected":
@@ -128,6 +131,7 @@ export default function Composer({
   const [attached, setAttached] = useState<MessageEmbed[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conduct, setConduct] = useState(false);
   const enterSends = useEnterSends();
   const id = useId();
   const listId = `${id}-mentions`;
@@ -195,6 +199,7 @@ export default function Composer({
       onSent?.(message);
     } catch (failure) {
       setError(sendError(failure));
+      setConduct(failure instanceof ApiError && failure.code === "conduct_required");
     } finally {
       setSending(false);
       draft.box.current?.focus();
@@ -289,6 +294,14 @@ export default function Composer({
       {error && (
         <p role="alert" className="channel-composer__note text-danger-ink">
           {error}
+          {conduct && (
+            <>
+              {" "}
+              <a href={CONDUCT_PATH} className="font-semibold text-peach-ink underline underline-offset-2">
+                Read how we talk to each other
+              </a>
+            </>
+          )}
         </p>
       )}
       {!thread && tools.askTembo && (

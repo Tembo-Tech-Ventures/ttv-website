@@ -1,5 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { runAxe } from "./platform-axe";
+import { personaSession, signIn, type PersonaKey } from "./platform-personas";
 
 /**
  * The browser contract for the channel view (U-2.1), on the DEV-only harness
@@ -345,5 +346,79 @@ test.describe("motion", () => {
     await expect(rail).toHaveCSS("animation-name", "channel-rail-in");
     await expect.poll(() => rail.evaluate((el) => el.getAnimations().every((a) => a.playState === "finished"))).toBe(true);
     await expect(rail).toHaveCSS("opacity", "1");
+  });
+});
+
+/**
+ * The real channel page (U-2.3's frame, B-2.3's APIs) on a signed-in session: the
+ * server renders the conversation, and a message makes the round trip. Locally
+ * only, because it writes; run as in src/components/platform/spaces/README.md
+ * (persona seed plus PLATFORM_PERSONAS_LOCAL_SECRET).
+ */
+test.describe("on a real channel page", () => {
+  test.describe.configure({ timeout: 90_000 });
+  test.skip(Boolean(process.env.PLAYWRIGHT_BASE_URL), "It posts messages; previews run the read-only journeys in platform-channels.spec.ts.");
+  const PATH = "/dashboard/community/c/design-crit";
+
+  async function as(page: Page, context: BrowserContext, baseURL: string, key: PersonaKey) {
+    const session = personaSession(key);
+    test.skip(typeof session === "string", typeof session === "string" ? session : "");
+    if (typeof session === "string") return;
+    await routeFonts(page);
+    await signIn(context, baseURL, session);
+    const me = await page.request.get("/api/platform/me");
+    const flags = me.ok() ? ((await me.json()) as { flags?: { channels?: boolean } }).flags : undefined;
+    test.skip(!flags?.channels, "The channels flag is off here.");
+  }
+
+  async function openChannel(page: Page) {
+    const response = await page.goto(PATH);
+    expect(response?.status()).toBe(200);
+    await page.addStyleTag({ content: "astro-dev-toolbar { display: none !important; }" });
+    await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
+    // A first visit asks for the habits; agreeing opens the conversation.
+    const agree = page.getByRole("button", { name: "I’ll keep to this" });
+    if (await agree.isVisible()) {
+      await agree.click();
+      await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
+    }
+    await expect(page.locator(".channel-view [data-channel-header]")).toBeVisible();
+  }
+
+  test("a message makes the round trip, and the server renders it without JavaScript", async ({ page, context, baseURL, browser }, testInfo) => {
+    await page.setViewportSize(DESKTOP);
+    await as(page, context, baseURL!, "community");
+    await openChannel(page);
+    await runAxe(page, testInfo, "real-channel-1440");
+
+    const words = `Sharing a draft for critique (${testInfo.project.name} ${Date.now()})`;
+    await composer(page).fill(words);
+    await page.keyboard.press("Enter");
+    const mine = page.locator("[data-own]").filter({ hasText: words });
+    await expect(mine).toBeVisible();
+    await expect(composer(page)).toHaveValue("");
+
+    // React through the API: the chip shows the reader's own reaction.
+    await mine.getByRole("button", { name: /Actions for/ }).click();
+    await page.getByRole("menuitem", { name: "Useful", exact: true }).click();
+    await expect(mine.locator("[data-reaction='useful']")).toHaveAttribute("aria-pressed", "true");
+    await page.screenshot({ path: `${EVIDENCE_DIR}/real-round-trip-1440.png` });
+
+    // A fresh page without JavaScript reads it from the server's first page.
+    const state = await context.storageState();
+    const plain = await browser.newContext({ javaScriptEnabled: false, storageState: state, viewport: PHONE });
+    const noScript = await plain.newPage();
+    const response = await noScript.goto(PATH);
+    expect(response?.status()).toBe(200);
+    await expect(noScript.locator("[data-message]").filter({ hasText: words })).toBeVisible();
+    expect(await horizontalOverflow(noScript)).toBe(0);
+    await noScript.screenshot({ path: `${EVIDENCE_DIR}/real-no-js-390.png` });
+    await plain.close();
+
+    // And the author can take it back.
+    await mine.getByRole("button", { name: /Actions for/ }).click();
+    await page.getByRole("menuitem", { name: "Delete…" }).click();
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page.locator("[data-message]").filter({ hasText: words })).toHaveCount(0);
   });
 });

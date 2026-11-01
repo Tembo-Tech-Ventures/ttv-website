@@ -6,9 +6,11 @@
  * thread rail can run the full height beside both. The page passes `fill`
  * to SpacePage exactly when the view shows, so the view sizes to the sheet.
  *
- * `?thread=` opens a thread and `?message=` marks a linked message.
+ * `?thread=` opens a thread (only one this reader can open: the server
+ * answers no thread otherwise) and `?message=` marks a linked message.
  */
 import type { Channel } from "@/lib/platform/contracts";
+import { getRouteChannelPage } from "@/lib/platform/server/channel-context";
 import type { ChannelsPage } from "./channel-page";
 import ChannelFrame from "./ChannelFrame.astro";
 import ChannelHeader from "./ChannelHeader.astro";
@@ -20,6 +22,10 @@ interface Props {
 
 const { page } = Astro.props;
 const query = Astro.url.searchParams;
+// The first page, the `?thread=` replies and the read marker (B-2.3), so the channel reads without
+// JavaScript. Only once agreed: the habits come first. It never moves the read marker.
+const first = page.agreed ? await getRouteChannelPage(Astro) : null;
+const threadId = first?.page.thread ? query.get("thread") : null;
 ---
 
 {
@@ -27,9 +33,12 @@ const query = Astro.url.searchParams;
     <ChannelView
       client:load
       me={page.context.me}
-      channel={page.channel}
+      channel={first?.channel ?? page.channel}
+      initial={first?.page.initial ?? null}
+      initialThread={first?.page.thread ?? null}
+      initialRead={first?.page.read ?? null}
       now={Date.now()}
-      threadId={query.get("thread")}
+      threadId={threadId}
       messageId={query.get("message")}
     >
       <div class="channel-view__header">

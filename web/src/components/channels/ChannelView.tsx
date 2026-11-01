@@ -11,6 +11,8 @@ export type ChannelViewProps = {
   initial?: MessageList | null;
   /** The server-rendered replies when the page opens on `?thread=`. */
   initialThread?: MessageList | null;
+  /** The reader's marker for the "New" divider, as the server read it (it never moves on a page load). */
+  initialRead?: { lastReadMessageId: string | null; unreadCount: number } | null;
   /** The server's clock at render. */
   now: number;
   threadId?: string | null;
@@ -37,12 +39,12 @@ export type ChannelViewProps = {
  * route itself returns 404 then; this is the second lock.
  */
 export default function ChannelView({
-  me, channel, initial = null, initialThread = null, now, threadId = null, messageId = null, shareables = null, children,
+  me, channel, initial = null, initialThread = null, initialRead = null, now, threadId = null, messageId = null, shareables = null, children,
 }: ChannelViewProps) {
   const enabled = me.flags.channels === true;
   const [store] = useState(() => createChannelStore({
     channelId: channel.id, enabled, viewerId: me.user.id, initial: initial ?? undefined,
-    initialRead: { lastReadMessageId: null, unreadCount: channel.unreadCount },
+    initialRead: initialRead ?? { lastReadMessageId: null, unreadCount: channel.unreadCount },
   }));
   const [actions] = useState(() => createLiveActions(store));
   if (!enabled) return null;

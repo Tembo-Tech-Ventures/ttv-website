@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ROUTES, type Channel, type Me, type Message, type MessageList } from "@/lib/platform/contracts";
-import { createApiClient, type ApiClient } from "@/lib/platform/client/apiClient";
+import { ApiError, createApiClient, type ApiClient } from "@/lib/platform/client/apiClient";
 import { createChannelStore } from "@/lib/platform/client/channel";
 import { createMockTransport } from "@/lib/platform/client/mockTransport";
 import { channels, FIXTURE_NOW, meByPersona, messages, people } from "@/lib/platform/fixtures";
@@ -376,6 +376,33 @@ describe("live behaviour", () => {
     await click($(`[data-message="${messages.projectPost.id}"] [data-reaction='useful']`));
     expect(react).toHaveBeenCalledWith(messages.projectPost.id, "useful", false);
     expect(text(`[data-message="${messages.projectPost.id}"] [data-reaction='useful']`)).toContain("· 5");
+  });
+});
+
+describe("refused sends", () => {
+  it("keeps the words and points to the habits when the code of conduct is not agreed", async () => {
+    const fake = server(wanjiku, community);
+    const { store, actions } = setup(wanjiku, community, fake.api, fake.root);
+    vi.spyOn(actions, "send").mockRejectedValue(new ApiError("conduct_required", 403, "Agree first"));
+    await render(<ChannelSurface me={wanjiku} channel={community} store={store} actions={actions} now={FIXTURE_NOW} shareables={null} />);
+    const box = $<HTMLTextAreaElement>("[data-composer=channel] textarea")!;
+    await typeInto(box, "Hello everyone");
+    await key(box, "Enter");
+    expect(text("[role=alert]")).toContain("Agree to how we talk to each other, then send again.");
+    expect($<HTMLAnchorElement>("[role=alert] a")?.getAttribute("href")).toBe("/dashboard/community/conduct");
+    expect(box.value).toBe("Hello everyone");
+  });
+
+  it("says plainly when someone is sending too fast, without a conduct link", async () => {
+    const fake = server(wanjiku, community);
+    const { store, actions } = setup(wanjiku, community, fake.api, fake.root);
+    vi.spyOn(actions, "send").mockRejectedValue(new ApiError("rate_limited", 429, "Slow down", 4000));
+    await render(<ChannelSurface me={wanjiku} channel={community} store={store} actions={actions} now={FIXTURE_NOW} shareables={null} />);
+    const box = $<HTMLTextAreaElement>("[data-composer=channel] textarea")!;
+    await typeInto(box, "Again");
+    await key(box, "Enter");
+    expect(text("[role=alert]")).toBe("You're sending quickly. Wait a moment, then send again.");
+    expect($("[role=alert] a")).toBeNull();
   });
 });
 
