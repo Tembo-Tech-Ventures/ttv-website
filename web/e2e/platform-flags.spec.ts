@@ -78,10 +78,12 @@ function evidence(name: string) {
   return `${EVIDENCE_DIR}/${test.info().project.name}-${name}.png`;
 }
 
-async function stored(request: APIRequestContext): Promise<Record<string, { audience: Audience; updatedBy: string | null }>> {
+type StoredFlag = { key: string; audience: Audience; updatedAt: number; updatedBy: string | null };
+
+async function stored(request: APIRequestContext): Promise<Record<string, StoredFlag>> {
   const response = await request.get(API);
   expect(response.status()).toBe(200);
-  const { flags } = await response.json() as { flags: { key: string; audience: Audience; updatedBy: string | null }[] };
+  const { flags } = await response.json() as { flags: StoredFlag[] };
   return Object.fromEntries(flags.map((flag) => [flag.key, flag]));
 }
 
@@ -165,7 +167,8 @@ test("an administrator switches Spaces from Off to Staff, and it stays", async (
       "Warning: Onboarding needs Spaces, which is Off. Set Spaces to Staff too, or Onboarding won't work for everyone it is set for."
     );
 
-    await press(row(page, "spaces").getByRole("button", { name: "Set Spaces to Staff" }));
+    // A pointer click here keeps the mouse path covered: the first row is clear of the Feedback pill.
+    await row(page, "spaces").getByRole("button", { name: "Set Spaces to Staff" }).click();
     await hideDevToolbar(page);
     await expect(page).toHaveURL(new RegExp(`${PAGE}\\?changed=spaces$`));
     await expect(page.getByRole("status")).toHaveText("Spaces is now Staff: administrators only.");
@@ -225,6 +228,18 @@ test("works without JavaScript, through the Everyone confirmation and back", asy
     await restore(page, baseURL, { channels: before.channels.audience, mentor_requests: before.mentor_requests.audience });
     await context.close();
   }
+});
+
+test("says nothing when the change in the address did not just happen", async ({ context, page, baseURL }) => {
+  await as(context, baseURL, staff);
+  await open(page);
+  // Tembo in channels: no test here writes it, so its last change is old (a reload or a bookmark).
+  const { updatedAt } = (await stored(page.request)).tembo_channels;
+  test.skip(Date.now() - updatedAt <= 70_000, "Tembo in channels changed within the last minute here.");
+  await open(page, `${PAGE}?changed=tembo_channels`);
+  await expect(row(page, "tembo_channels")).toBeVisible();
+  await expect(page.locator("[data-flag-notice]")).toHaveCount(0);
+  await expect(page.getByRole("status")).toHaveCount(0);
 });
 
 test("refuses a form posted from another site", async ({ context, page, baseURL }) => {
