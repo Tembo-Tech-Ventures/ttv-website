@@ -40,7 +40,8 @@ const ids = {
 };
 const roleLabel = ACCESS_ROLE_LABELS[request.role];
 // Every card has the same two buttons, so each name says whose request it decides (QAO-06).
-const decides = (verb: string) => `${verb} ${roleLabel.toLowerCase()} access for ${requester.name}`;
+// A deleted or unnamed account reads as Admin Home's attention list says it (lib/admin/attention.ts).
+const decides = (verb: string) => `${verb} ${roleLabel.toLowerCase()} access for ${requester.name.trim() || "a member"}`;
 const date = (at: number) => formatMomentDate(new Date(at));
 const HISTORY_SHOWN = 3;
 const earlier = request.earlierRequests.slice(0, HISTORY_SHOWN);

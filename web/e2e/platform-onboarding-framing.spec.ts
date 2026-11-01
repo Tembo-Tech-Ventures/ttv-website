@@ -496,9 +496,11 @@ test.describe("F-6: what the onboarding QA found (QAO-01 to QAO-10)", () => {
       await page.screenshot({ path: evidence("f6-request-rule") });
       await note.fill(NOTE);
       await main(page).getByLabel("A link that shows your work").fill("baraka.example/pipelines");
+      const landing = page.waitForResponse((response) => new URL(response.url()).pathname === "/dashboard/community");
       await main(page).getByRole("button", { name: "Send request", exact: true }).click();
+      // Never where the last-space cookie points: the request's own card, told which role was sent.
+      expect(new URL((await landing).url()).search).toBe("?sent=mentor");
       await page.waitForURL((url) => url.pathname === "/dashboard/community");
-      expect(new URL(page.url()).search).toBe("?sent=mentor");
       // QAO-05: focus is on the result, a status that says it went.
       const sent = page.locator("[data-onboarding-sent]");
       await expect(sent).toHaveText("Request sent.");
@@ -511,6 +513,8 @@ test.describe("F-6: what the onboarding QA found (QAO-01 to QAO-10)", () => {
     const pending = status(page, "pending", "MENTOR");
     await expect(page.getByRole("region", { name: "Your mentor request is with the team" })).toBeVisible();
     await expect(page.locator("[data-onboarding-sent]")).toHaveText("Request sent.");
+    // Said once: the address forgets it, so a reload shows the card without saying it again.
+    await expect(page).toHaveURL((url) => url.pathname === "/dashboard/community" && url.search === "");
     await expect(page.getByText("Your portfolio unlocks when you complete a cohort")).toHaveCount(0);
     expect((await outline(page))[0]).toBe("h1");
     await noSideways(page);
@@ -546,16 +550,14 @@ test.describe("F-6: what the onboarding QA found (QAO-01 to QAO-10)", () => {
     await as(page, baseURL, "onb-wanjiku");
     await open(page, "/dashboard");
     expect(new URL(page.url()).pathname).toBe("/dashboard/mentoring");
-    if (await prompt(page).count() > 0) {
-      // A mentor from before onboarding: Mentor is already Active and ticked.
-      await expect(prompt(page).getByRole("checkbox", { name: "Mentor, Active", exact: true })).toBeChecked();
-      await noStraySpaces(page);
-      await prompt(page).getByRole("button", { name: "Save" }).click();
-      await page.waitForURL((url) => url.pathname === "/dashboard/mentoring" && url.search === "?onboarding=saved");
-    } else {
-      test.info().annotations.push({ type: "rerun", description: "Wanjiku saved the card in an earlier run: reseed to replay it." });
-      await open(page, "/dashboard/mentoring?onboarding=saved");
-    }
+    test.skip(await prompt(page).count() === 0, "Wanjiku saved the card in an earlier run: reseed to replay it.");
+    // A mentor from before onboarding: Mentor is already Active and ticked.
+    await expect(prompt(page).getByRole("checkbox", { name: "Mentor, Active", exact: true })).toBeChecked();
+    await noStraySpaces(page);
+    const back = page.waitForResponse((response) => new URL(response.url()).pathname === "/dashboard/mentoring");
+    await prompt(page).getByRole("button", { name: "Save" }).click();
+    expect(new URL((await back).url()).search).toBe("?onboarding=saved");
+    await page.waitForURL((url) => url.pathname === "/dashboard/mentoring");
     await expect(prompt(page)).toHaveCount(0);
     const done = page.locator("[data-onboarding-prompt-done='saved']");
     await expect(done).toHaveText("Saved. You can change how you take part any time in Account.");
@@ -564,6 +566,10 @@ test.describe("F-6: what the onboarding QA found (QAO-01 to QAO-10)", () => {
     await expect(done).toBeFocused();
     await page.screenshot({ path: evidence("f6-prompt-saved") });
     await runAxe(page, test.info(), "mentoring, one-time card saved");
+    // Said once: a reload neither repeats it nor takes focus.
+    await expect(page).toHaveURL((url) => url.pathname === "/dashboard/mentoring" && url.search === "");
+    await page.reload();
+    await expect(page.locator("[data-onboarding-prompt-done]")).toHaveCount(0);
   });
 
   test("QAO-07: mentors and organisations get no student lock on their public profile", async ({ page, baseURL }) => {

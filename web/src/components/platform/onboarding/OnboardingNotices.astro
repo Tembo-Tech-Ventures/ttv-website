@@ -7,8 +7,10 @@
  *
  * After a form, the page says what happened and focus lands on it (QAO-02,
  * QAO-05, QAO-10): "Request sent." above the request's own Pending card, or
- * that the one-time card was saved or hidden. Each is said only while it is
- * still true, so a copied URL cannot claim a request that is not waiting.
+ * that the one-time card was saved or hidden. "Request sent." is said only
+ * while that request is still waiting, and the saved or hidden line only once
+ * the card is gone. Each is said once: a script drops its parameter from the
+ * address after rendering, so a reload or a bookmark does not repeat it.
  *
  * These sit above the page's h1, so their titles are not headings: each card
  * is a region named by its title, and the page's own h1 comes first in the
@@ -29,7 +31,7 @@ import ExistingAccountCard from "./ExistingAccountCard.astro";
 import { ROLE_SPACES, cardsFor, yourSpaces, type OnboardingView } from "./framing";
 import StatusCard from "./StatusCard.astro";
 import { SEAL, action } from "./styles";
-import { parseSent } from "./welcome-flow";
+import { SENT_PARAM, parseSent } from "./welcome-flow";
 
 interface Props {
   view: OnboardingView;
@@ -64,13 +66,13 @@ const LINK = "font-semibold text-ink-primary underline underline-offset-3 hover:
       <p role="alert" class="rounded-xl border border-danger-ink/40 bg-danger-ink/8 px-4 py-3 text-sm font-semibold text-ink-primary">{STATUS.unsaved}</p>
     )}
     {sent.length > 0 && (
-      <p role="status" tabindex="-1" autofocus data-onboarding-sent class={CONFIRMATION}>
+      <p role="status" tabindex="-1" autofocus data-onboarding-sent data-once-param={SENT_PARAM} class={CONFIRMATION}>
         <PiCheckCircleBold aria-hidden className="mt-0.5 size-5 shrink-0 text-peach-ink" />
         <span>{STATUS.justSent(sent.length)}</span>
       </p>
     )}
     {promptDone && (
-      <p role="status" tabindex="-1" autofocus data-onboarding-prompt-done={note} class={CONFIRMATION}>
+      <p role="status" tabindex="-1" autofocus data-onboarding-prompt-done={note} data-once-param={UNSAVED_PARAM} class={CONFIRMATION}>
         <PiCheckCircleBold aria-hidden className="mt-0.5 size-5 shrink-0 text-peach-ink" />
         <span>{promptDone} <a href={`${ACCOUNT_PATH}#${TAKING_PART_ID}`} class={LINK}>{PROMPT.account}</a>.</span>
       </p>
@@ -106,3 +108,13 @@ const LINK = "font-semibold text-ink-primary underline underline-offset-3 hover:
     )}
   </div>
 )}
+
+<script>
+  // Said once: the address forgets what a shown confirmation was about, so a reload or a bookmark does not say it again.
+  const shown = document.querySelectorAll<HTMLElement>("[data-once-param]");
+  if (shown.length > 0) {
+    const url = new URL(window.location.href);
+    for (const notice of shown) url.searchParams.delete(notice.dataset.onceParam ?? "");
+    window.history.replaceState(window.history.state, "", url);
+  }
+</script>
