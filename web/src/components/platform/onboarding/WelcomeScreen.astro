@@ -11,6 +11,7 @@ import { PiArrowLeftBold } from "react-icons/pi";
 import type { PersonSummary } from "@/lib/platform/contracts";
 import type { ShellAccount } from "@/components/platform/shell/AccountMenu";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
+import { onboardingDraftKey } from "@/lib/platform/client/onboarding-drafts";
 import OnboardingFrame from "./OnboardingFrame.astro";
 import ApprovalScope from "./ApprovalScope.astro";
 import WelcomeChoices, { WELCOME_TITLE_ID } from "./WelcomeChoices";
@@ -61,6 +62,7 @@ const title = view.step === "choose" ? WELCOME.title : REQUEST.title;
           draft={view.draft}
           errors={view.errors}
           failure={view.failure}
+          draftKey={onboardingDraftKey(person.id)}
         />
       </div>
     )

@@ -273,6 +273,24 @@ describe("SpacesShell account menu", () => {
     expect(details.open).toBe(false);
   });
 
+  it("forgets this tab's unsent onboarding requests when signing out, by link or by form", async () => {
+    for (const account of [LINK_OUT, { signOut: { kind: "form", action: "/api/qa/logout", label: "Sign out of this QA persona" }, feedback: false }] as const) {
+      sessionStorage.setItem("ttv-onboarding-drafts:someone", JSON.stringify({ MENTOR: { note: "Unsent", link: "" } }));
+      await mount({ account });
+      const control = q<HTMLElement>("[data-shell-sign-out]");
+      // The sign-out navigation itself is the browser's; only the clearing is checked here.
+      if (control instanceof HTMLFormElement) {
+        await act(async () => control.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+      } else {
+        control.addEventListener("click", (event) => event.preventDefault(), { once: true });
+        await act(async () => control.click());
+      }
+      expect(sessionStorage.getItem("ttv-onboarding-drafts:someone")).toBeNull();
+      await act(async () => root.unmount());
+      root = createRoot(container);
+    }
+  });
+
   it("signs a QA persona out with a POST to its own endpoint, without JavaScript too", () => {
     const html = renderToString(
       <SpacesShell

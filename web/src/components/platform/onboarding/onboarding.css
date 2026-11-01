@@ -224,10 +224,14 @@
   }
 }
 
-/* Chosen: drawn up out of the file, peach-edged, ticked. Readable in a still frame. */
+/*
+ * Chosen: drawn up out of the file, peach-edged, ticked. Readable in a still
+ * frame. The card brightens only a little: its chips' words must still clear
+ * 4.5:1 on it (onboarding-contrast.test.ts).
+ */
 .welcome-choice:has(:checked) {
   border-color: var(--color-primary);
-  background-color: rgb(255 248 242 / 0.085);
+  background-color: rgb(255 248 242 / 0.065);
   box-shadow:
     0 0 0 1px var(--color-primary),
     0 18px 40px -22px rgb(0 0 0 / 0.7);

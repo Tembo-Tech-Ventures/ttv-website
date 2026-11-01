@@ -1,0 +1,51 @@
+---
+/**
+ * Onboarding: "How will you take part?" (S1) and "A few details for the team"
+ * (S2), from library /reports/platform-onboarding-2026-11-01/SPEC.md §2.
+ *
+ * The flow is `handleWelcome` (components/platform/onboarding); this page
+ * only decides who may see it and hands it the person's onboarding services.
+ * It works without JavaScript: each step is a plain form that posts here.
+ *
+ * - Invisible unless the `onboarding` flag (which builds on `spaces`) is on
+ *   for this person: 404, as if it did not exist.
+ * - Browser sessions only. A personal access token or an agent's delegated
+ *   session never chooses, or asks for access, on a person's behalf.
+ * - Choosing grants nothing: mentor and organisation access stay requests an
+ *   administrator decides. When the flow finishes, /dashboard picks the space.
+ */
+import { env } from "cloudflare:workers";
+import WelcomeScreen from "@/components/platform/onboarding/WelcomeScreen.astro";
+import { onboardingActions } from "@/components/platform/onboarding/server-actions";
+import { handleWelcome, onboardingOpen, type WelcomeRoutes } from "@/components/platform/onboarding/welcome-flow";
+import { shellAccount } from "@/components/platform/shell/account";
+import { isAgentSession } from "@/lib/agent-auth";
+import { getSpaceContext } from "@/lib/platform/server/space-context";
+
+const ROUTES: WelcomeRoutes = { choose: "/dashboard/welcome", request: "/dashboard/welcome?step=request", landing: "/dashboard" };
+const PRIVATE = { "Cache-Control": "no-store", Vary: "Cookie" };
+const notFound = () => new Response("Not found.", { status: 404, headers: PRIVATE });
+
+if (Astro.locals.personalAccessToken || isAgentSession(Astro.locals.session?.userAgent)) {
+  return new Response("Forbidden.", { status: 403, headers: PRIVATE });
+}
+
+let me;
+try {
+  me = await getSpaceContext(Astro);
+} catch (error) {
+  // The shell's own refusals (flag off, no browser session) read as a page that does not exist.
+  if (error instanceof Response) return notFound();
+  throw error;
+}
+if (!onboardingOpen(me.flags)) return notFound();
+
+const result = await handleWelcome(Astro.request, ROUTES, onboardingActions(env.DB, me.user.id));
+if (result.kind === "redirect") {
+  return new Response(null, { status: 303, headers: { ...PRIVATE, Location: result.location } });
+}
+Astro.response.status = result.status;
+for (const [name, value] of Object.entries(PRIVATE)) Astro.response.headers.set(name, value);
+---
+
+<WelcomeScreen view={result.view} routes={ROUTES} person={me.user} account={shellAccount(Astro.locals)} />

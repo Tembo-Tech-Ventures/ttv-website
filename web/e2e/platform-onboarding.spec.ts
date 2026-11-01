@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { runAxe } from "./platform-axe";
+import { personaSession, signIn } from "./platform-personas";
 import { installTextTracker, textReport, walkAndSample } from "./text-integrity";
 
 /**
@@ -14,7 +15,11 @@ import { installTextTracker, textReport, walkAndSample } from "./text-integrity"
  * on each step's h1 and on problems, keyboard order, axe, containment and
  * text at every width, reduced motion, and the card's selection gesture.
  *
- * Against a deployed build it checks that the harness is absent.
+ * The real page, /dashboard/welcome, is checked as a signed-in member (the
+ * local seed's or an isolated preview's community persona): invisible while
+ * the onboarding flag is off for them, and with it on, a mentor request sent
+ * through it is Pending and opens nothing. Against a deployed build the
+ * harness must be absent.
  */
 const HARNESS = "/dev/platform-onboarding";
 const LANDING = "/dev/platform-shell";
@@ -123,6 +128,73 @@ async function expectContained(page: Page) {
   expect(report).toEqual({ scroll: 0, outside: [], overlaps: [] });
 }
 
+test.describe("the real page, /dashboard/welcome", () => {
+  const member = personaSession("community");
+  const unavailable = typeof member === "string" ? member : null;
+  test.use({ reducedMotion: "reduce" });
+
+  /** Signs the member in and says whether onboarding is on for them, from their own Me. */
+  async function signedIn(page: Page, baseURL: string | undefined): Promise<boolean> {
+    if (typeof member === "string") throw new Error(member);
+    await signIn(page.context(), baseURL!, member);
+    const me = await page.request.get("/api/platform/me");
+    const on = me.status() === 200 && ((await me.json()) as { flags: { onboarding?: boolean } }).flags.onboarding === true;
+    test.info().annotations.push({ type: "onboarding", description: on ? "on" : "off" });
+    return on;
+  }
+
+  test("does not exist while onboarding is off", async ({ page, baseURL }) => {
+    test.skip(unavailable !== null, unavailable ?? "");
+    test.skip(await signedIn(page, baseURL), "Onboarding is on here; the next test covers it.");
+    for (const path of ["/dashboard/welcome", "/dashboard/welcome?step=request"]) {
+      expect((await page.request.get(path, { maxRedirects: 0 })).status(), path).toBe(404);
+    }
+    const posted = await page.request.post("/dashboard/welcome", {
+      form: { intent: "MENTOR", action: "continue" }, headers: { Origin: new URL(baseURL!).origin }, maxRedirects: 0,
+    });
+    expect(posted.status()).toBe(404);
+  });
+
+  test("sends a member's mentor request, which waits for an administrator and opens nothing", async ({ page, baseURL }) => {
+    test.skip(unavailable !== null, unavailable ?? "");
+    test.skip(test.info().project.name !== "chromium", "One project writes; the persona is shared.");
+    test.skip(!(await signedIn(page, baseURL)), "Onboarding is off here; the test above covers it.");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await open(page, "/dashboard/welcome");
+    await expect(heading(page)).toHaveText("How will you take part?");
+    await expect(heading(page)).toBeFocused();
+    await runAxe(page, test.info(), "real welcome step");
+
+    // A rerun against the same database finds the request already sent: it must still read as Pending.
+    if (!(await card(page, "mentor").getByText("Pending").isVisible())) {
+      if (!(await checkbox(page, "Mentor").isChecked())) await card(page, "mentor").click();
+      await continueButton(page).click();
+      await page.waitForURL(/step=request/);
+      await settled(page);
+      await expect(heading(page)).toHaveText("A few details for the team");
+      await expect(heading(page)).toBeFocused();
+      await main(page).getByLabel("What kind of work could you review?").fill("Frontend reviews: accessibility, React and CSS.");
+      await main(page).getByRole("button", { name: /^Send requests?$/ }).click();
+      await page.waitForURL((url) => url.pathname.startsWith("/dashboard/") && !url.pathname.startsWith("/dashboard/welcome"));
+      await open(page, "/dashboard/welcome");
+    }
+    await expect(card(page, "mentor")).toContainText("Pending");
+    const me = (await (await page.request.get("/api/platform/me")).json()) as { spaces: string[] };
+    expect(me.spaces).not.toContain("mentoring");
+  });
+
+  test("fits a phone with nothing sideways", async ({ page, baseURL }) => {
+    test.skip(unavailable !== null, unavailable ?? "");
+    test.skip(test.info().project.name !== "mobile-chromium", "The phone's check.");
+    test.skip(!(await signedIn(page, baseURL)), "Onboarding is off here.");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await open(page, "/dashboard/welcome");
+    await expect(heading(page)).toBeFocused();
+    await expectContained(page);
+    await runAxe(page, test.info(), "real welcome step, phone");
+  });
+});
+
 test.describe("deployed builds", () => {
   test("have no onboarding harness", async ({ page }) => {
     test.skip(!process.env.PLAYWRIGHT_BASE_URL, "Only deployed builds prove the harness is absent.");
@@ -180,6 +252,8 @@ test.describe("the welcome and request steps (DEV harness)", () => {
     await page.screenshot({ path: evidence("01-welcome") });
     await page.screenshot({ path: evidence("01-welcome-full"), fullPage: true });
     await expectContained(page);
+    // A chosen card is the brightest surface its chip sits on.
+    await runAxe(page, test.info(), "welcome step, two chosen");
   });
 
   test("asks for a choice instead of continuing with none", async ({ page }) => {
@@ -309,6 +383,7 @@ test.describe("the welcome and request steps (DEV harness)", () => {
     await expect(checkbox(page, "Build and learn")).toBeChecked();
     await expect(checkbox(page, "Mentor")).toBeChecked();
     await expect(card(page, "mentor")).toContainText("Pending");
+    await runAxe(page, test.info(), "welcome step, revisited with a pending request");
     await continueButton(page).click();
     await page.waitForURL((url) => url.pathname === LANDING);
 

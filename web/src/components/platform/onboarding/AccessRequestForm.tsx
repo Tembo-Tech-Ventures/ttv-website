@@ -1,10 +1,12 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { PiLockSimpleBold, PiWarningCircleBold } from "react-icons/pi";
 import type { AccessRole } from "@/lib/platform/contracts";
+import { readDrafts, sessionDraftStorage, writeDrafts } from "@/lib/platform/client/onboarding-drafts";
 import { PersonMarker } from "@/components/platform/ui";
 import { BUTTON_VARIANTS } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
 import { REQUEST } from "./copy";
+import { fillForm, fromStoredDrafts, isPristine, mergeDrafts, readForm } from "./request-drafts";
 import { ACTION_BUTTON } from "./WelcomeChoices";
 import { REQUEST_FIELDS, type RequestDraft, type RequestErrors, type RequestField } from "./welcome-flow";
 
@@ -17,6 +19,8 @@ type Props = {
   errors: RequestErrors;
   /** Why the server could not send it, when the answers themselves were fine. */
   failure: string | null;
+  /** This person's sessionStorage key for unsent text (S-O.2's `onboardingDraftKey`). */
+  draftKey: string;
 };
 
 const NOTE_MAX = 600;
@@ -73,14 +77,28 @@ function Field({ field, label, optional, hint, srHint, error, counter, children 
  *
  * A plain form that works without JavaScript; the server re-renders it with
  * what was typed and a list of problems that takes focus. Hydration adds the
- * note counters and holds the button once the form is on its way.
+ * note counters, keeps unsent text for this tab (so "Back to your choices"
+ * loses nothing) and holds the button once the form is on its way.
  */
-export default function AccessRequestForm({ action, roles, draft, errors, failure }: Props) {
+export default function AccessRequestForm({ action, roles, draft, errors, failure, draftKey }: Props) {
+  const formRef = useRef<HTMLFormElement>(null);
+  // The server's first answer: later typing is the person's, so restoring a draft happens once.
+  const first = useRef({ draft, draftKey });
   const [hydrated, setHydrated] = useState(false);
   const [sending, setSending] = useState(false);
   const [lengths, setLengths] = useState({ mentorNote: draft.mentorNote.length, institutionNote: draft.institutionNote.length });
 
-  useEffect(() => setHydrated(true), []);
+  useEffect(() => {
+    setHydrated(true);
+    const form = formRef.current;
+    // What the server sent back after a refusal always wins; only a fresh form takes the stored text.
+    if (!form || !isPristine(first.current.draft)) return;
+    const stored = fromStoredDrafts(readDrafts(sessionDraftStorage(), first.current.draftKey));
+    if (isPristine(stored)) return;
+    fillForm(form, stored);
+    const current = readForm(form);
+    setLengths({ mentorNote: current.mentorNote.length, institutionNote: current.institutionNote.length });
+  }, []);
   useEffect(() => {
     const onShow = (event: PageTransitionEvent) => {
       if (event.persisted) setSending(false);
@@ -89,9 +107,20 @@ export default function AccessRequestForm({ action, roles, draft, errors, failur
     return () => window.removeEventListener("pageshow", onShow);
   }, []);
 
+  /** Keeps the roles on screen in this tab's drafts, or forgets them once they are on their way. */
+  function store(form: HTMLFormElement, sent: boolean) {
+    const storage = sessionDraftStorage();
+    writeDrafts(storage, draftKey, mergeDrafts(readDrafts(storage, draftKey), readForm(form), roles, sent));
+  }
+
   function onSubmit(event: FormEvent<HTMLFormElement>) {
-    if (sending) event.preventDefault();
-    else setSending(true);
+    if (sending) {
+      event.preventDefault();
+      return;
+    }
+    // A refused post comes back with every answer in it, so the draft is no longer needed either way.
+    store(event.currentTarget, true);
+    setSending(true);
   }
 
   const problems = REQUEST_FIELDS.filter((field) => errors[field]);
@@ -110,7 +139,16 @@ export default function AccessRequestForm({ action, roles, draft, errors, failur
   };
 
   return (
-    <form method="post" action={action} noValidate onSubmit={onSubmit} className="request-form">
+    <form
+      ref={formRef}
+      method="post"
+      action={action}
+      noValidate
+      onSubmit={onSubmit}
+      onInput={(event) => store(event.currentTarget, false)}
+      onChange={(event) => store(event.currentTarget, false)}
+      className="request-form"
+    >
       {(problems.length > 0 || failure) && (
         <div
           id={SUMMARY_ID}

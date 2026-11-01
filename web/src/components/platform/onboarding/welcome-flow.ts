@@ -68,12 +68,13 @@ const ORGANISATION_MAX = 200;
 const CHOICE_ORDER: readonly ChoiceIntent[] = CHOICES.map((choice) => choice.intent);
 
 /**
- * Whether this person may see onboarding at all: it needs the `spaces` shell
- * and its own `onboarding` flag (SPEC §6). B-O.2 adds the `onboarding` key;
- * until it exists the page is closed for everyone, overrides included.
+ * Whether this person may see onboarding at all: its own `onboarding` flag,
+ * which builds on the `spaces` shell (SPEC §6). flags.ts already makes
+ * onboarding effective only while spaces is; this says so again, so the page
+ * never opens without the shell it lands in.
  */
 export function onboardingOpen(flags: EffectiveFlags): boolean {
-  return flags.spaces === true && (flags as Partial<Record<string, boolean>>).onboarding === true;
+  return flags.spaces && flags.onboarding;
 }
 
 function isChoiceIntent(value: unknown): value is ChoiceIntent {

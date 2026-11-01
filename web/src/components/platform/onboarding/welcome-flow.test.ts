@@ -71,11 +71,11 @@ const requestFields = (draft: RequestDraft): [string, string][] => [
 ];
 
 describe("onboardingOpen", () => {
-  const flags = (extra: Record<string, boolean>) => ({ spaces: true, channels: false, tembo_channels: false, mentor_requests: false, ...extra }) as EffectiveFlags;
+  const flags = (extra: Partial<EffectiveFlags>): EffectiveFlags =>
+    ({ spaces: true, channels: false, tembo_channels: false, mentor_requests: false, onboarding: false, ...extra });
 
-  it("stays closed until the onboarding flag exists and is on", () => {
+  it("stays closed while the onboarding flag is off", () => {
     expect(onboardingOpen(flags({}))).toBe(false);
-    expect(onboardingOpen(flags({ onboarding: false }))).toBe(false);
   });
 
   it("needs the spaces shell as well as its own flag", () => {

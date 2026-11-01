@@ -9,7 +9,7 @@ import { EMPTY_DRAFT } from "./welcome-flow";
 
 type Props = ComponentProps<typeof AccessRequestForm>;
 const props = (overrides: Partial<Props> = {}): Props => ({
-  action: "/dashboard/welcome?step=request", roles: ["MENTOR"], draft: EMPTY_DRAFT, errors: {}, failure: null, ...overrides,
+  action: "/dashboard/welcome?step=request", roles: ["MENTOR"], draft: EMPTY_DRAFT, errors: {}, failure: null, draftKey: "ttv-onboarding-drafts:wairimu", ...overrides,
 });
 
 function html(overrides: Partial<Props> = {}) {
@@ -128,6 +128,47 @@ describe("AccessRequestForm, hydrated", () => {
       note.dispatchEvent(new Event("input", { bubbles: true }));
     });
     expect(counters()).toEqual(["3 / 600", "16 / 600"]);
+  });
+
+  const KEY = "ttv-onboarding-drafts:wairimu";
+  const stored = () => JSON.parse(sessionStorage.getItem(KEY) ?? "{}") as Record<string, unknown>;
+  const type = (field: Parameters<typeof fieldId>[0], value: string) => {
+    const control = container.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${fieldId(field)}`)!;
+    act(() => {
+      control.value = value;
+      control.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+
+  it("keeps unsent text for this tab, and gives it back to a fresh form", async () => {
+    sessionStorage.clear();
+    await act(async () => root.render(<AccessRequestForm {...props()} />));
+    type("mentorNote", "Backend and data reviews");
+    expect(stored()).toEqual({ MENTOR: { note: "Backend and data reviews", link: "" } });
+
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await act(async () => root.render(<AccessRequestForm {...props()} />));
+    expect(container.querySelector<HTMLTextAreaElement>(`#${fieldId("mentorNote")}`)?.value).toBe("Backend and data reviews");
+    expect(container.querySelector(".request-field__counter")?.textContent).toBe("24 / 600");
+  });
+
+  it("lets what the server sent back win over a stored draft", async () => {
+    sessionStorage.setItem(KEY, JSON.stringify({ MENTOR: { note: "An older draft of mine", link: "" } }));
+    await act(async () => root.render(<AccessRequestForm {...props({ draft: { ...EMPTY_DRAFT, mentorNote: "Too short" } })} />));
+    expect(container.querySelector<HTMLTextAreaElement>(`#${fieldId("mentorNote")}`)?.value).toBe("Too short");
+  });
+
+  it("forgets the sent roles' drafts as the form goes, keeping any other role's", async () => {
+    sessionStorage.setItem(KEY, JSON.stringify({
+      INSTITUTION: { note: "Junior engineers", organisation: "Mto Labs", organisationRole: "", link: "", scopeAcknowledged: false },
+    }));
+    await act(async () => root.render(<AccessRequestForm {...props()} />));
+    type("mentorNote", "Backend and data reviews");
+    act(() => {
+      container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    expect(Object.keys(stored())).toEqual(["INSTITUTION"]);
   });
 
   it("sends once, however many times the button is pressed", async () => {
