@@ -10,8 +10,8 @@ const mocks = vi.hoisted(() => ({
   getAccessibleProgramIds: vi.fn(),
   generateToolCompletion: vi.fn(),
   executeTool: vi.fn(),
-  ensureOwnedChatSession: vi.fn(),
-  touchChatSession: vi.fn(),
+  resolveOwnedChatSession: vi.fn(),
+  saveChatExchange: vi.fn(),
 }));
 
 vi.mock("cloudflare:workers", () => ({ env: mocks.env }));
@@ -27,8 +27,8 @@ vi.mock("@/lib/chat/tools", async (importOriginal) => {
   return { ...actual, executeTool: mocks.executeTool };
 });
 vi.mock("@/lib/chat/sessions", () => ({
-  ensureOwnedChatSession: mocks.ensureOwnedChatSession,
-  touchChatSession: mocks.touchChatSession,
+  resolveOwnedChatSession: mocks.resolveOwnedChatSession,
+  saveChatExchange: mocks.saveChatExchange,
 }));
 
 import { POST } from "./chat";
@@ -73,17 +73,15 @@ function createD1Mock(adminResult: Record<string, unknown> | null = null) {
 }
 
 function createDrizzleMock() {
-  const values = vi.fn().mockResolvedValue(undefined);
-  const insert = vi.fn(() => ({ values }));
-  return { insert, values, query: {} };
+  return { query: {} };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.env.DB = createD1Mock();
   mocks.getAccessibleProgramIds.mockResolvedValue(["program-1"]);
-  mocks.ensureOwnedChatSession.mockResolvedValue("session-1");
-  mocks.touchChatSession.mockResolvedValue(undefined);
+  mocks.resolveOwnedChatSession.mockResolvedValue({ kind: "existing", id: "session-1" });
+  mocks.saveChatExchange.mockResolvedValue(undefined);
   mocks.generateToolCompletion.mockResolvedValue({
     content: "Here is your answer based on the transcripts.",
     toolCalls: [],
@@ -96,6 +94,8 @@ describe("POST /api/chat", () => {
   it("returns 401 when not authenticated", async () => {
     const response = await POST(context({ user: null }));
     expect(response.status).toBe(401);
+    // Only a signed-out request gets 401, so clients can offer "sign in again" on the status alone.
+    expect(await response.json()).toEqual({ error: "Unauthorized" });
   });
 
   it("returns 400 when message is missing", async () => {
@@ -117,11 +117,11 @@ describe("POST /api/chat", () => {
   });
 
   function expectNoWork() {
-    expect(mocks.ensureOwnedChatSession).not.toHaveBeenCalled();
+    expect(mocks.resolveOwnedChatSession).not.toHaveBeenCalled();
     expect(mocks.drizzle).not.toHaveBeenCalled();
     expect(mocks.generateToolCompletion).not.toHaveBeenCalled();
     expect(mocks.executeTool).not.toHaveBeenCalled();
-    expect(mocks.touchChatSession).not.toHaveBeenCalled();
+    expect(mocks.saveChatExchange).not.toHaveBeenCalled();
   }
 
   it.each([undefined, "https://other.example", "null"])("rejects origin %s before reading or writing", async (origin) => {
@@ -192,15 +192,12 @@ describe("POST /api/chat", () => {
     expect(messages.slice(1, 9)).toEqual(history.map(entry => ({ role: entry.role, content: entry.content.slice(0, 1000) })));
   });
 
-  it("does not disclose provider errors or persist messages after provider failure", async () => {
-    const db = createDrizzleMock();
-    mocks.drizzle.mockReturnValue(db);
+  it("does not disclose provider errors or persist anything after provider failure", async () => {
     mocks.generateToolCompletion.mockRejectedValue(new Error("private provider details"));
     const response = await POST(context());
     expect(response.status).toBe(500);
     expect(await response.text()).not.toContain("private provider details");
-    expect(db.insert).not.toHaveBeenCalled();
-    expect(mocks.touchChatSession).not.toHaveBeenCalled();
+    expect(mocks.saveChatExchange).not.toHaveBeenCalled();
   });
 
   it("offers transcript tools when the shared access helper grants cohort access", async () => {
@@ -344,22 +341,21 @@ describe("POST /api/chat", () => {
     expect(body.answer).toBeTruthy();
   });
 
-  it("persists both user and assistant messages", async () => {
-    const db = createDrizzleMock();
-    mocks.drizzle.mockReturnValue(db);
+  it("persists the question and answer in the resolved conversation", async () => {
+    const target = { kind: "new", id: "new-session", title: "What happened in mentor hours?" };
+    mocks.resolveOwnedChatSession.mockResolvedValue(target);
 
-    await POST(context());
+    const response = await POST(context());
 
-    expect(db.insert).toHaveBeenCalled();
-    expect(db.values).toHaveBeenCalledWith([
-      expect.objectContaining({ role: "user", sessionId: "session-1" }),
-      expect.objectContaining({ role: "assistant", sessionId: "session-1" }),
-    ]);
-    expect(mocks.touchChatSession).toHaveBeenCalledWith(
-      mocks.env.DB,
-      "user-1",
-      "session-1"
+    expect(mocks.resolveOwnedChatSession).toHaveBeenCalledWith(
+      mocks.env.DB, "user-1", null, "What happened in mentor hours?"
     );
+    expect(mocks.saveChatExchange).toHaveBeenCalledWith(mocks.env.DB, "user-1", target, {
+      question: "What happened in mentor hours?",
+      answer: "Here is your answer based on the transcripts.",
+      citations: [],
+    });
+    expect((await json(response)).sessionId).toBe("new-session");
   });
 
   it("strips <think> blocks from the model answer", async () => {

@@ -678,7 +678,11 @@ export const chatMessage = sqliteTable("chat_message", {
   createdAt: integer("createdAt", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
-});
+}, (table) => [
+  // Serves a conversation's transcript, Recent's message counts and the
+  // empty-conversation check in saveChatExchange.
+  index("chat_message_sessionId_createdAt_idx").on(table.sessionId, table.createdAt),
+]);
 
 export const chatMessageRelations = relations(chatMessage, ({ one }) => ({
   session: one(chatSession, {

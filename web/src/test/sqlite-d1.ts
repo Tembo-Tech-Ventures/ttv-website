@@ -5,7 +5,8 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
  * A D1Database backed by an in-memory node:sqlite database, so tests exercise
  * the real SQL (constraints, joins, cascades) instead of a hand-written mock.
  * Covers the subset of the D1 API the app uses: prepare/bind/first/all/run and
- * batch (run inside one transaction, as D1 does).
+ * batch (run inside one transaction, as D1 does). Batches never interleave, as
+ * D1 serialises writes: a batch runs synchronously from BEGIN to COMMIT.
  */
 export function createSqliteD1(database = new DatabaseSync(":memory:")) {
   database.exec("PRAGMA foreign_keys = ON");
@@ -37,13 +38,16 @@ export function createSqliteD1(database = new DatabaseSync(":memory:")) {
           meta: {},
         };
       },
-      async run() {
+      runSync() {
         const result = database.prepare(sql).run(...this.params);
         return {
           results: [],
           success: true,
           meta: { changes: Number(result.changes) },
         };
+      },
+      async run() {
+        return this.runSync();
       },
     };
     return statement;
@@ -53,7 +57,7 @@ export function createSqliteD1(database = new DatabaseSync(":memory:")) {
     database.exec("BEGIN");
     try {
       const results = [];
-      for (const statement of statements) results.push(await statement.run());
+      for (const statement of statements) results.push(statement.runSync());
       database.exec("COMMIT");
       return results;
     } catch (error) {
