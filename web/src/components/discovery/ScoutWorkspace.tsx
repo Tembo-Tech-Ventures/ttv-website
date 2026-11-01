@@ -576,10 +576,9 @@ export default function ScoutWorkspace({
                       placeholder="Enter their name"
                     />
                     <small>
-                      Search eligible talent without your scouting skills or
-                      opportunity criteria. Mentor and administrator profiles
-                      may not appear here; use a direct profile link if you have
-                      one.
+                      Finds members who have saved a community profile, by
+                      name, without your scouting skills or opportunity
+                      criteria. Nobody else appears here.
                     </small>
                   </label>
                 ) : (

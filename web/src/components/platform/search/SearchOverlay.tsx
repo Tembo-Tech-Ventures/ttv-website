@@ -425,8 +425,14 @@ export default function SearchOverlay({ me, client }: SearchOverlayProps) {
                 onKeyDown={onKeyDown}
                 className="search-overlay__input"
               />
-              <button type="button" onClick={dialog.hide} className={cx("search-overlay__close", FOCUS_RING)} aria-label="Close search">
-                {/* The key's name where there is a keyboard; a close mark on touch screens. */}
+              <button
+                type="button"
+                onClick={dialog.hide}
+                className={cx("search-overlay__close", FOCUS_RING)}
+                aria-label="Close search, Esc"
+                aria-keyshortcuts="Escape"
+              >
+                {/* The key's name where there is a keyboard, which the name holds too (WCAG 2.5.3); a close mark on touch screens. */}
                 <span aria-hidden="true" className="search-overlay__esc">
                   Esc
                 </span>

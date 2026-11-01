@@ -679,6 +679,13 @@
   margin: 0 auto 24px;
   font-size: 14px;
 }
+/* A way out of a failure ("Sign in again") is a full touch target, clear of the button above it (WCAG 2.5.8). */
+.discovery-empty p > a:only-child {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: 8px;
+}
 .discovery-footer {
   padding: 26px 5%;
   display: flex;

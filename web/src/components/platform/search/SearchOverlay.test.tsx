@@ -122,6 +122,14 @@ describe("SearchOverlay", () => {
     expect(input().placeholder).toBe("Search people, projects and your cohort's sessions");
   });
 
+  it("names its close button with the key it shows, and gives Escape as its shortcut (WCAG 2.5.3)", async () => {
+    await mount();
+    const close = container.querySelector<HTMLButtonElement>("button.search-overlay__close")!;
+    expect(close.querySelector(".search-overlay__esc")?.textContent?.trim()).toBe("Esc");
+    expect(close.getAttribute("aria-label")).toBe("Close search, Esc");
+    expect(close.getAttribute("aria-keyshortcuts")).toBe("Escape");
+  });
+
   it("says why a result matched when its words do not show it", async () => {
     await mount();
     await type("SQL");

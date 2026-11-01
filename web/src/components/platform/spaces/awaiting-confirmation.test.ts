@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { meByPersona } from "@/lib/platform/fixtures";
-import { awaitingConfirmation, awaitingConfirmationText } from "./awaiting-confirmation";
+import { awaitingConfirmation, awaitingConfirmationShort, awaitingConfirmationText } from "./awaiting-confirmation";
 
 describe("awaitingConfirmation", () => {
   it("is zero without the Mentoring space, even if a payload carried a count", () => {
@@ -19,5 +19,12 @@ describe("awaitingConfirmationText", () => {
   it("counts in words a mentor can act on", () => {
     expect(awaitingConfirmationText(1)).toBe("1 shared contribution is waiting for your confirmation.");
     expect(awaitingConfirmationText(4)).toBe("4 shared contributions are waiting for your confirmation.");
+  });
+});
+
+describe("awaitingConfirmationShort", () => {
+  it("is the same count as a phrase for a control's name", () => {
+    expect(awaitingConfirmationShort(1)).toBe("1 shared contribution to confirm");
+    expect(awaitingConfirmationShort(4)).toBe("4 shared contributions to confirm");
   });
 });

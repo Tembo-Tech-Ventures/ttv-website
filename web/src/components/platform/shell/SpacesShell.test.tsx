@@ -131,7 +131,7 @@ describe("SpacesShell on the server", () => {
 describe("SpacesShell overlay triggers", () => {
   it("shows no search or bell unless the page mounts their overlays", async () => {
     await mount();
-    expect(container.querySelector('[aria-label="Search"]')).toBeNull();
+    expect(container.querySelector('[aria-label^="Search"]')).toBeNull();
     expect(container.querySelector('[aria-label^="Attention"]')).toBeNull();
   });
 
@@ -141,7 +141,7 @@ describe("SpacesShell overlay triggers", () => {
     window.addEventListener(SHELL_OVERLAY_EVENT, listen);
     await mount({ overlays: ["search", "attention"] });
 
-    const search = q<HTMLButtonElement>('[aria-label="Search"]');
+    const search = q<HTMLButtonElement>('[aria-label="Search, Ctrl K"]');
     const bell = q<HTMLButtonElement>('[aria-label="Attention, 3 waiting"]');
     await act(async () => search.click());
     await act(async () => {
@@ -155,6 +155,14 @@ describe("SpacesShell overlay triggers", () => {
       { overlay: "attention", trigger: bell, via: "click" },
     ]);
     window.removeEventListener(SHELL_OVERLAY_EVENT, listen);
+  });
+
+  it("names the search button with the words and keys it shows (WCAG 2.5.3)", async () => {
+    await mount({ overlays: ["search"] });
+    const search = q<HTMLButtonElement>("button.spaces-search");
+    const shown = search.querySelector(".spaces-search__words")?.textContent;
+    expect(shown).toBe("Search Ctrl K");
+    expect(search.getAttribute("aria-label")).toBe("Search, Ctrl K");
   });
 
   it("stops listening for the shortcut when it unmounts", async () => {
@@ -224,7 +232,7 @@ describe("SpacesShell account menu", () => {
     const html = renderToString(<SpacesShell {...props()} />);
     const host = document.createElement("div");
     host.innerHTML = html;
-    expect(host.querySelector("details.spaces-account > summary")?.getAttribute("aria-label")).toBe("Account menu, David Kamau");
+    expect(host.querySelector("details.spaces-account > summary")?.getAttribute("aria-label")).toBe("Account menu, David Kamau, DK");
     // Feedback needs the widget, which needs JavaScript, so it is not offered yet.
     expect(items(host)).toEqual(["Account", "Sign out"]);
     expect(host.querySelector('.spaces-account__panel a[href="/dashboard/account"]')).not.toBeNull();
@@ -355,6 +363,66 @@ describe("SpacesShell space preference", () => {
     await act(async () => q<HTMLAnchorElement>('.space-file__nav [data-space="community"] a').click());
     expect(document.cookie).not.toContain("ttv-last-space=community");
     document.removeEventListener("click", stay);
+  });
+});
+
+describe("SpacesShell names hold the words they show (WCAG 2.5.3)", () => {
+  it("names the TEMBO mark with its visible words, kept apart as words", async () => {
+    await mount();
+    const brand = q<HTMLAnchorElement>("a.spaces-shell__brand");
+    expect(brand.getAttribute("aria-label")).toBe("Tembo Tech Ventures home");
+    // Read as a voice user sees it: "TEMBO Tech · Ventures", never "TEMBOTech".
+    expect(brand.textContent?.replace(/\s+/g, " ").trim()).toBe("TEMBO Tech · Ventures");
+  });
+
+  it("ends the account menu's name with the initials its avatar shows, and leaves them out behind a photo", async () => {
+    await mount();
+    const summary = q("details.spaces-account > summary");
+    expect(summary.textContent).toBe("DK");
+    expect(summary.getAttribute("aria-label")).toBe("Account menu, David Kamau, DK");
+
+    const photo: Me = { ...meByPersona.david, user: { ...meByPersona.david.user, avatarUrl: "https://avatars.example/david.png" } };
+    await mount({ me: photo });
+    expect(q("details.spaces-account > summary").textContent).toBe("");
+    expect(q("details.spaces-account > summary").getAttribute("aria-label")).toBe("Account menu, David Kamau");
+  });
+});
+
+describe("SpacesShell bell: shared work waiting for confirmation (QA1R-03)", () => {
+  const quiet = { cohort: 0, community: 0, mentoring: 0, discover: 0, admin: 0, profile: 0 };
+  const mentor = (awaiting: number | undefined, unreadCounts: Me["unreadCounts"] = quiet): Me => {
+    const { mentoring: _omitted, ...rest } = meByPersona.david;
+    return { ...rest, unreadCounts, ...(awaiting === undefined ? {} : { mentoring: { awaitingConfirmation: awaiting } }) };
+  };
+  const bell = () => q<HTMLButtonElement>('button[aria-label^="Attention"]');
+
+  it("shows a dot and names the work when nothing is unread", async () => {
+    await mount({ me: mentor(4), overlays: ["attention"] });
+    expect(bell().getAttribute("aria-label")).toBe("Attention, 4 shared contributions to confirm");
+    expect(bell().querySelector('[data-count-badge="dot"]')).not.toBeNull();
+    expect(bell().querySelector('[data-count-badge="count"]')).toBeNull();
+  });
+
+  it("keeps the unread count on the badge and adds the work to the name", async () => {
+    await mount({ me: mentor(1, { ...quiet, mentoring: 2, community: 1 }), overlays: ["attention"] });
+    expect(bell().getAttribute("aria-label")).toBe("Attention, 3 waiting, 1 shared contribution to confirm");
+    expect(bell().querySelector('[data-count-badge="count"]')?.textContent).toContain("3");
+    expect(bell().querySelector('[data-count-badge="dot"]')).toBeNull();
+  });
+
+  it.each([
+    ["unknown", undefined],
+    ["none", 0],
+  ])("says nothing when the count is %s, and never shows a 0", async (_state, awaiting) => {
+    await mount({ me: mentor(awaiting), overlays: ["attention"] });
+    expect(bell().getAttribute("aria-label")).toBe("Attention");
+    expect(bell().querySelector("[data-count-badge]")).toBeNull();
+    expect(bell().textContent).not.toMatch(/\d/);
+  });
+
+  it("gives nobody without the Mentoring space a confirmation signal", async () => {
+    await mount({ me: { ...meByPersona.wanjiku, unreadCounts: quiet }, space: "community", overlays: ["attention"] });
+    expect(bell().getAttribute("aria-label")).toBe("Attention");
   });
 });
 

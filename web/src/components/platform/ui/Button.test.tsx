@@ -131,6 +131,24 @@ describe("IconButton", () => {
     expect(html).toContain('data-count-badge="dot"');
   });
 
+  it("names the number the badge shows past 99, so the name holds what is visible (WCAG 2.5.3)", () => {
+    const html = renderToStaticMarkup(
+      <IconButton label="Attention" icon={<Icon />} badge={120} badgeLabel="waiting" />,
+    );
+    expect(html).toContain('aria-label="Attention, 99+ waiting"');
+    expect(html).toMatch(/>99\+</);
+  });
+
+  it("reads a detail after the badge, and on its own without one", () => {
+    const counted = renderToStaticMarkup(
+      <IconButton label="Attention" icon={<Icon />} badge={2} badgeLabel="waiting" detail="1 to confirm" />,
+    );
+    expect(counted).toContain('aria-label="Attention, 2 waiting, 1 to confirm"');
+    const alone = renderToStaticMarkup(<IconButton label="Attention" icon={<Icon />} detail="1 to confirm" />);
+    expect(alone).toContain('aria-label="Attention, 1 to confirm"');
+    expect(alone).not.toContain("data-count-badge");
+  });
+
   it("shows no badge for zero", () => {
     const html = renderToStaticMarkup(<IconButton label="Attention" icon={<Icon />} badge={0} />);
     expect(html).toContain('aria-label="Attention"');

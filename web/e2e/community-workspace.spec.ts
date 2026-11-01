@@ -545,6 +545,23 @@ test("profile deep link checks access first and safely handles missing profiles"
   }
 });
 
+test("a workspace that cannot open offers its ways out as full touch targets (mock API)", async ({
+  page,
+}) => {
+  await page.route("**/api/community/**", (route) =>
+    route.fulfill({ status: 500, json: { error: "unavailable" } }),
+  );
+  await page.goto("/dev/community-ui?api=mock&view=scout");
+  await expect(
+    page.getByRole("heading", { name: "We could not open this workspace." }),
+  ).toBeVisible();
+  // WCAG 2.5.8: axe 4.14 flagged "Sign in again" as too small and too close to Try again.
+  for (const name of ["Sign in again", "Start a new discovery"]) {
+    const box = await page.getByRole("link", { name }).boundingBox();
+    expect(box?.height, name).toBeGreaterThanOrEqual(44);
+  }
+});
+
 test("changing a profile link discards the prior question and encodes unusual IDs", async ({
   page,
 }) => {
