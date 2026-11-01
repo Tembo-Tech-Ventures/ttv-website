@@ -37,9 +37,17 @@ const preferred = preferredSpace(effectiveIntents, me.spaces);
 const selectedSpace = selectDefaultSpace(me.spaces, {explicitSpace, lastSpace, preferred});
 ```
 
+Derive `preferred` once per request and pass the same value everywhere a default
+is chosen (the `/dashboard` redirect, space-less pages and the island), so they
+agree on the space.
+
 An unseen approval that should win over the cookie once (SPEC §3) is the caller's
-decision: pass its space as `preferred` and omit `lastSpace` for that request. Candidates are checked with `SpaceId` and membership; cookies do not
-grant authority. This helper does not authorize or redirect an explicit forbidden
+decision. Only when its space is in the `spaces` passed in, pass that space as
+`preferred` and omit `lastSpace` for that request; otherwise select as usual, so a
+filtered-out approval never discards the cookie.
+
+Candidates are checked with `SpaceId` and membership; cookies do not grant
+authority. This helper does not authorize or redirect an explicit forbidden
 URL: that decision belongs to server route guards. No path parsing/encoding occurs
 here; pass the already parsed space value.
 
