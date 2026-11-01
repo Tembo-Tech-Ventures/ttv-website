@@ -1,5 +1,5 @@
 import {
-  MessageEmbed, WebLink,
+  MessageEmbed,
   type ChannelShareables, type EmbedRef, type MessageEmbedView, type ProjectConfirmation, type ProjectEmbed,
   type SessionClipEmbed, type ShareablesQuery,
 } from "@/lib/platform/contracts";
@@ -25,8 +25,12 @@ const END_TOLERANCE_SECONDS = 1;
 const TITLE_LIMIT = 300;
 const SUMMARY_LIMIT = 500;
 const QUOTE_LIMIT = 280;
-/** Attach-tool list sizes; ChannelShareables caps them on the wire. */
-export const SHAREABLE_LIMITS = Object.freeze({ projects: 50, recentSessions: 10, moments: 20 });
+/**
+ * Attach-tool list sizes; ChannelShareables caps them on the wire. searchedSessions bounds `q`: it
+ * reads the transcripts of the cohort's newest complete sessions only, because a substring match
+ * cannot use an index.
+ */
+export const SHAREABLE_LIMITS = Object.freeze({ projects: 50, recentSessions: 10, moments: 20, searchedSessions: 50 });
 
 const PROJECT_REFUSED = "This project can't be shared here.";
 const CLIP_REFUSED = "Session clips can only be shared in that cohort's own channels.";
@@ -38,13 +42,6 @@ function shorten(text: string, limit: number): string {
   const cut = clean.slice(0, limit - 1);
   const space = cut.lastIndexOf(" ");
   return `${(space > limit * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
-}
-
-/** The project's own evidence page, when it is a link a reader can safely open. */
-function evidenceLink(url: string | null): string | null {
-  if (!url) return null;
-  const link = WebLink.safeParse(url);
-  return link.success && /^https:\/\//i.test(link.data) ? link.data : null;
 }
 
 /** Transcript segments as SQL returns them: [startTime, id, text]. */
@@ -100,14 +97,16 @@ function confirmations(rows: unknown): ProjectConfirmation[] {
 const confirmationsOf = (journey: string, version: string) => `(SELECT json_group_array(json_array(c.mentorId, cu.name, c.journeyVersion))
   FROM communityConfirmation c JOIN "user" cu ON cu.id = c.mentorId WHERE c.journeyId = ${journey} AND c.journeyVersion <= ${version})`;
 
-interface JourneyRow { id: string; version: number; title: string; description: string; evidenceUrl: string | null; confirmations?: unknown }
+interface JourneyRow { id: string; version: number; title: string; description: string; confirmations?: unknown }
 
 function projectEmbed(row: JourneyRow): ProjectEmbed {
   return {
     type: "project", journeyId: row.id, version: row.version,
     title: shorten(row.title, TITLE_LIMIT) || "Untitled project", summary: shorten(row.description, SUMMARY_LIMIT),
     // Projects carry no skills of their own; the owner's profile skills are not this project's.
-    skills: [], link: evidenceLink(row.evidenceUrl), confirmations: confirmations(row.confirmations),
+    // No link until TTV has a project page every reader can open (coordinator E3): shared work never
+    // links out of TTV (owner decision 6), so the evidence URL is not shared at all.
+    skills: [], link: null, confirmations: confirmations(row.confirmations),
   };
 }
 
@@ -141,7 +140,7 @@ export const sameRefs = (a: readonly EmbedRef[], b: readonly EmbedRef[]) =>
 interface ResolvedRow {
   position: number;
   ownerId: string | null; visibility: string | null; currentVersion: number | null;
-  journeyTitle: string | null; description: string | null; evidenceUrl: string | null;
+  journeyTitle: string | null; description: string | null;
   programId: string | null; processingStatus: string | null; recordingTitle: string | null;
   recordingSeconds: number | null; segments: unknown;
 }
@@ -156,8 +155,7 @@ function resolveProject(ctx: ReadContext, ref: Extract<EmbedRef, { type: "projec
     throw new ChannelError("conflict", "This project has changed since you picked it. Pick it again to share the latest revision.", 409);
   }
   return projectEmbed({
-    id: ref.journeyId, version: ref.version, title: row.journeyTitle ?? "", description: row.description ?? "",
-    evidenceUrl: row.evidenceUrl, confirmations: [],
+    id: ref.journeyId, version: ref.version, title: row.journeyTitle ?? "", description: row.description ?? "", confirmations: [],
   });
 }
 
@@ -171,6 +169,16 @@ function resolveClip(ctx: ReadContext, ref: Extract<EmbedRef, { type: "sessionCl
   const clip = clipEmbed(ref.recordingId, row.recordingTitle ?? "", ref.startSeconds, ref.durationSeconds, row.segments);
   if (!clip) throw new ChannelError("validation", "There's no transcript at that moment of the session to quote.", 400);
   return clip;
+}
+
+/**
+ * The text the moderation screen sees for a post: its body, then the title and summary of each
+ * project it shares, which every reader sees too and nothing else screens (projects are not
+ * moderated where they are written). Clip quotations are the session's own words, not the poster's.
+ */
+export function screeningText(body: string, embeds: readonly MessageEmbed[]): string {
+  return [body, ...embeds.flatMap((embed) => embed.type === "project" ? [embed.title, embed.summary] : [])]
+    .filter((text) => text !== "").join("\n\n");
 }
 
 /**
@@ -191,7 +199,7 @@ export async function resolveEmbeds(ctx: ReadContext, refs: readonly EmbedRef[])
   }
   const ref = (path: string) => `json_extract(e.value, '$.${path}')`;
   const { results } = await ctx.db.prepare(`SELECT e.key AS position,
-      j.userId AS ownerId, j.visibility, j.version AS currentVersion, j.title AS journeyTitle, j.description, j.evidenceUrl,
+      j.userId AS ownerId, j.visibility, j.version AS currentVersion, j.title AS journeyTitle, j.description,
       r.programId, r.processingStatus, r.title AS recordingTitle, r.durationSeconds AS recordingSeconds,
       CASE WHEN r.id IS NULL THEN NULL ELSE ${segmentsIn("r.id", ref("startSeconds"), `${ref("startSeconds")} + ${ref("durationSeconds")}`)} END AS segments
     FROM json_each(?1) e
@@ -231,7 +239,7 @@ export function embedsForReader(stored: unknown[], access: string | null): Messa
     const embed = MessageEmbed.safeParse(value);
     if (!embed.success) return [];
     const check = checks[i];
-    if (check === null || check === undefined) return [{ type: "unavailable", was: embed.data.type }];
+    if (check === null || check === undefined) return [{ type: "unavailable", kind: embed.data.type }];
     return [embed.data.type === "project" ? { ...embed.data, confirmations: confirmations(check) } : embed.data];
   });
 }
@@ -250,7 +258,7 @@ export async function listShareables(ctx: ReadContext, query: ShareablesQuery = 
 }
 
 async function shareableProjects(ctx: ReadContext): Promise<ProjectEmbed[]> {
-  const { results } = await ctx.db.prepare(`SELECT j.id, j.version, j.title, j.description, j.evidenceUrl,
+  const { results } = await ctx.db.prepare(`SELECT j.id, j.version, j.title, j.description,
       ${confirmationsOf("j.id", "j.version")} AS confirmations
     FROM communityJourney j WHERE j.userId = ?1 AND j.visibility = 'institution'
     ORDER BY j.updatedAt DESC, j.id LIMIT ?2`).bind(ctx.viewerId, SHAREABLE_LIMITS.projects).all<JourneyRow>();
@@ -264,20 +272,25 @@ async function shareableClips(ctx: ReadContext, q: string | undefined): Promise<
   if (!ctx.channel.capabilities.canShareSessionClip || programId === null) return [];
   // The window is [start, start + CLIP_SECONDS), cut at the session's end, as clipLength computes it.
   const end = `min(m.startSeconds + ${CLIP_SECONDS}, coalesce(m.recordingSeconds, m.startSeconds + ${CLIP_SECONDS}))`;
-  const recordings = `SELECT r.id AS recordingId, r.title, r.durationSeconds AS recordingSeconds, coalesce(r.recordedAt, r.createdAt) AS newest`;
+  const recordings = (r: string) => `SELECT ${r}.id AS recordingId, ${r}.title, ${r}.durationSeconds AS recordingSeconds,
+    coalesce(${r}.recordedAt, ${r}.createdAt) AS newest`;
   const moments = q === undefined
-    ? `${recordings}, 0 AS startSeconds FROM recording r WHERE r.programId = ?1 AND r.processingStatus = 'complete'
+    ? `${recordings("r")}, 0 AS startSeconds FROM recording r WHERE r.programId = ?1 AND r.processingStatus = 'complete'
           AND EXISTS (SELECT 1 FROM transcript_segment s WHERE s.recordingId = r.id AND s.startTime < ${CLIP_SECONDS})
         ORDER BY newest DESC, r.id LIMIT ?2`
-    // Case-insensitive substring, as in platform search; instr has no wildcards to escape.
-    : `${recordings}, CAST(s.startTime AS INTEGER) AS startSeconds FROM recording r JOIN transcript_segment s ON s.recordingId = r.id
-        WHERE r.programId = ?1 AND r.processingStatus = 'complete' AND s.startTime >= 0 AND instr(lower(s.text), lower(?3)) > 0
-          AND (r.durationSeconds IS NULL OR s.startTime < r.durationSeconds)
-        ORDER BY newest DESC, r.id, s.startTime, s.id LIMIT ?2`;
+    // Case-insensitive substring, as in platform search; instr has no wildcards to escape. Only the
+    // newest sessions' transcripts are read (?4).
+    : `${recordings("recent")}, CAST(s.startTime AS INTEGER) AS startSeconds
+        FROM (SELECT * FROM recording WHERE programId = ?1 AND processingStatus = 'complete'
+          ORDER BY coalesce(recordedAt, createdAt) DESC, id LIMIT ?4) recent
+        JOIN transcript_segment s ON s.recordingId = recent.id
+        WHERE s.startTime >= 0 AND instr(lower(s.text), lower(?3)) > 0
+          AND (recent.durationSeconds IS NULL OR s.startTime < recent.durationSeconds)
+        ORDER BY newest DESC, recent.id, s.startTime, s.id LIMIT ?2`;
   const { results } = await ctx.db.prepare(`WITH m AS (${moments})
     SELECT m.recordingId, m.title, m.recordingSeconds, m.startSeconds, ${segmentsIn("m.recordingId", "m.startSeconds", end)} AS segments
     FROM m ORDER BY m.newest DESC, m.recordingId, m.startSeconds`)
-    .bind(programId, q === undefined ? SHAREABLE_LIMITS.recentSessions : SHAREABLE_LIMITS.moments, ...q === undefined ? [] : [q])
+    .bind(programId, ...q === undefined ? [SHAREABLE_LIMITS.recentSessions] : [SHAREABLE_LIMITS.moments, q, SHAREABLE_LIMITS.searchedSessions])
     .all<MomentRow>();
   const seen = new Set<string>();
   return results.flatMap((row) => {

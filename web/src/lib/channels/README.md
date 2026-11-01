@@ -304,31 +304,51 @@ v1.
   a cohort channel (members, alumni, instructors, TAs, invited mentors,
   admins) has that cohort's recordings.
 - **Stored.** A project keeps its title, a summary of its description (500
-  characters), no skills (projects have none of their own) and its https
-  evidence link (`link: null` without one). A clip keeps the recording's
-  title and a quotation of the transcript segments overlapping its window
-  (280 characters).
+  characters) and no skills (projects have none of their own). It is a
+  snapshot of the shared revision: an owner who edits the project to remove
+  something must make it private, or delete the message, to take the old
+  text out of the channel. `link` is null until TTV has a project page every
+  reader can open (coordinator E3); the evidence URL is never shared, because
+  shared work does not link out of TTV (owner decision 6). A clip keeps the
+  recording's title and a quotation of the transcript segments overlapping
+  its window (280 characters).
+- **Screened.** Projects are not moderated where they are written, and every
+  reader sees their text, so the moderation screen gets the body followed by
+  each shared project's title and summary (`screeningText`). Contact details
+  in attached work are flagged like contact details in the body. Clip
+  quotations are the session's own words and are not screened. Edits change
+  only the body, so they screen only the body.
 - **On every read** (`EMBED_ACCESS_COLUMN`, a column of the page's own
   statement, so pages cost no extra statement): a project must still exist,
   belong to the message's author and be published; a recording must still be
   complete and in the channel's cohort. Otherwise the reader, author
-  included, gets `{type: "unavailable", was}` with no title, ids or
+  included, gets `{type: "unavailable", kind}` with no title, ids or
   quotation. A project's confirmations are read live: each mentor's latest
   confirmation at or before the shared revision, with the revision it
   confirmed. An edited project keeps showing the revision that was shared;
   publishing a private project again brings its card back.
+- **Not pushed.** A change to the work alone does not move the message, so a
+  `since` poll does not carry it: an open page shows the change when it next
+  reads that message (a fresh latest page, or any change to the message).
+  Every new read is checked.
+- **Search (B-2.6).** The stored snapshot must never be indexed for search
+  without the same read-time check, or private and moved work would come back
+  through search.
 - **Retries.** A repeated post returns the original even if the work has
   changed since; the same nonce with different work is 409.
 
 `listShareables` (`GET /api/channels/:id/shareables`, and
-`getRouteChannelShareables(Astro)` / `loadChannelShareables` for page
+`getChannelShareables(Astro, channel)` / `loadChannelShareables` for page
 frontmatter, which give null where the caller cannot post) is what the
 composer's attach tools offer: the caller's own published projects at their
 current revision (50, most recently changed first), and only where
 `canShareSessionClip`, 60-second clips (`CLIP_SECONDS`, cut at the session's
 end): from the start of each of the 10 newest complete recordings with a
 transcript there, or with `q`, up to 20 transcript moments that mention it
-(case-insensitive substring, as in search). Everything listed posts as listed
+(case-insensitive substring, as in search). A substring cannot use an index,
+so `q` reads only the transcripts of the cohort's 50 newest complete sessions
+(`SHAREABLE_LIMITS.searchedSessions`); callers should debounce it and abort
+stale requests. Everything listed posts as listed
 while nothing changes. Restricted staging identities cannot post, so the route
 is not on their allowlist.
 

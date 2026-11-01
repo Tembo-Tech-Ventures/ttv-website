@@ -4,7 +4,7 @@ import {
   type PostMessage, type ReactToMessage,
 } from "@/lib/platform/contracts";
 import { CONDUCT_VERSION } from "./conduct";
-import { refOf, resolveEmbeds, sameRefs } from "./embeds";
+import { refOf, resolveEmbeds, sameRefs, screeningText } from "./embeds";
 import { ChannelError } from "./errors";
 import { readMessage, type ReadContext } from "./messages";
 import { screenMessage, type MessageScreen } from "./moderation";
@@ -169,7 +169,8 @@ export async function postMessage(ctx: WriteContext, input: PostMessage): Promis
   }
 
   const now = ctx.now ?? Date.now();
-  const reasons = await screen(ctx, input.body, input.parentId, "post");
+  // Shared projects are screened with the body: readers see their text too.
+  const reasons = await screen(ctx, screeningText(input.body, embeds), input.parentId, "post");
   const id = createId();
   const { channel: burst, day } = POST_LIMITS;
   const statements = [ctx.db.prepare(`INSERT INTO channel_message

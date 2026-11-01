@@ -206,9 +206,10 @@ export type ConductAcknowledgement = z.infer<typeof ConductAcknowledgement>;
 export const ProjectConfirmation = z.object({ mentorId: Id, mentorName: NonEmptyText, version: z.int().positive() });
 export type ProjectConfirmation = z.infer<typeof ProjectConfirmation>;
 /**
- * A project at one revision. link is the project's own evidence page, or null when it has none: no
- * other page is open to every reader. confirmations are the mentors' latest confirmations at or
- * before this revision, each with the revision it confirmed.
+ * A project at one revision. link is the project's page inside TTV, or null while there is none
+ * (coordinator E3, owner decision 6: shared work never links out; its evidence URL belongs on that
+ * page). confirmations are the mentors' latest confirmations at or before this revision, each with
+ * the revision it confirmed.
  */
 export const ProjectEmbed = z.object({
   type: z.literal("project"), journeyId: Id, version: z.int().positive(), title: NonEmptyText,
@@ -227,9 +228,13 @@ export type MessageEmbed = z.infer<typeof MessageEmbed>;
  * What a reader gets in place of shared work they can no longer see: a project made private or
  * removed, a recording removed or moved out of the channel's cohort. No title, ids or quotation.
  */
-export const UnavailableEmbed = z.object({ type: z.literal("unavailable"), was: z.enum(["project", "sessionClip"]) });
+export const UnavailableEmbed = z.object({ type: z.literal("unavailable"), kind: z.enum(["project", "sessionClip"]) });
 export type UnavailableEmbed = z.infer<typeof UnavailableEmbed>;
-/** An embed as one reader sees it, checked again on every read. */
+/**
+ * An embed as one reader sees it, checked again on every read of the message. A change to the work
+ * alone does not move the message, so `since` polls do not carry it: an open page shows it when it
+ * next reads the message (a fresh latest page, or any change to the message).
+ */
 export const MessageEmbedView = z.discriminatedUnion("type", [ProjectEmbed, SessionClipEmbed, UnavailableEmbed]);
 export type MessageEmbedView = z.infer<typeof MessageEmbedView>;
 /** The longest session clip a message can share, in seconds. */
