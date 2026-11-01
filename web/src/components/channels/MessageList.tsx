@@ -135,7 +135,8 @@ export default function MessageList({
   // Unknown until the list has been positioned and measured: nothing is marked read before that.
   const [atEnd, setAtEnd] = useState(false);
   const [measured, setMeasured] = useState(false);
-  const following = useRef(true);
+  // Set from measurement once the list is positioned; until then nothing follows the end.
+  const following = useRef(false);
   const positioned = useRef(false);
   const previous = useRef<{ first?: string; last?: string; height: number } | null>(null);
   const messages = state.messages;

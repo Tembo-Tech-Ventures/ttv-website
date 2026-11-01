@@ -5,8 +5,7 @@ import { useComposer, useDraft as useStoredDraft } from "@/lib/platform/client/h
 import { CONDUCT_PATH } from "@/lib/platform/server/space-routes";
 import { cx } from "@/components/platform/ui/cx";
 import { embedRef, NO_SHAREABLES, sameEmbed, type Shareables } from "./actions";
-import { composerTools, mentionsTembo, temboScope } from "./channel-format";
-import { TEMBO_SEES } from "./TemboAnswer";
+import { composerTools, mentionsTembo, temboReach, temboScope } from "./channel-format";
 import { AttachedList, ComposerToolbar, MAX_EMBEDS, MentionList } from "./ComposerParts";
 import { insertMention, mentionCandidates, mentionQuery, type MentionCandidate } from "./mentions";
 import { useEnterSends } from "./useEnterSends";
@@ -117,8 +116,9 @@ export default function Composer({
   useEffect(() => setHydrated(true), []);
   const id = useId();
   const listId = `${id}-mentions`;
-  const scope = temboScope(channel);
   const thread = variant === "thread";
+  // One source for Tembo's reach: the @tembo option, the line under it and the scope line agree.
+  const scope = temboScope(channel, thread);
   const where = useCallback(
     (person: AuthorSummary) => (threadPeople?.has(person.id ?? "") ? "in this thread" : "in this channel"),
     [threadPeople],
@@ -129,7 +129,7 @@ export default function Composer({
     [people, threadPeople],
   );
   const picker = useMentionPicker(draft.text, draft.caret, {
-    people: ranked, tembo: tools.askTembo, temboDescription: `Answers from ${TEMBO_SEES[channel.kind]}`, where,
+    people: ranked, tembo: tools.askTembo, temboDescription: `Answers from ${temboReach(channel, thread)}`, where,
   });
 
   const body = draft.text.trim();

@@ -15,7 +15,7 @@ export function citationIcon(citation: Citation) {
 }
 
 /** What Tembo could read for this answer, from the scope the server stored with it. */
-export const TEMBO_SEES: Record<TemboScope, string> = {
+const TEMBO_SEES: Record<TemboScope, string> = {
   COHORT: "this cohort's recordings and this channel",
   COMMUNITY: "this thread and public projects",
   DIRECT: "only this conversation",

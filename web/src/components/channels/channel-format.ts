@@ -272,16 +272,24 @@ export function composerTools(channel: Channel, flags: EffectiveFlags): Composer
   };
 }
 
-/** What Tembo can read when asked here (plan §3), said before anyone asks. */
-export function temboScope(channel: Channel): string {
+/** What Tembo reads when asked here (plan §3), in a channel or in one of its threads. */
+export function temboReach(channel: Channel, inThread = false): string {
   switch (channel.kind) {
     case "COHORT":
-      return "This cohort's recordings and this channel. Never private conversations or other cohorts.";
+      return "this cohort's recordings and this channel";
     case "COMMUNITY":
-      return "This channel and public projects. Never cohort recordings or private conversations.";
+      return inThread ? "this thread and public projects" : "this channel and public projects";
     case "DIRECT":
-      return "Only this conversation, and only when you ask.";
+      return "only this conversation";
   }
+}
+
+/** Tembo's reach as a sentence, with what it never reads, said before anyone asks. One source for every line that says it. */
+export function temboScope(channel: Channel, inThread = false): string {
+  if (channel.kind === "DIRECT") return "Only this conversation, and only when you ask.";
+  const reach = temboReach(channel, inThread);
+  const never = channel.kind === "COHORT" ? "Never private conversations or other cohorts." : "Never cohort recordings or private conversations.";
+  return `${reach.charAt(0).toUpperCase()}${reach.slice(1)}. ${never}`;
 }
 
 /** "# show-your-work", the way a channel is written. Conversations use the person's name. */

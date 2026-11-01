@@ -3,7 +3,7 @@ import { channels, FIXTURE_NOW, messages, meByPersona, people } from "@/lib/plat
 import type { Channel, Message } from "@/lib/platform/contracts";
 import {
   ago, channelTitle, clipTime, clock, composerTools, dayKey, dayLabel, groupByDay, mentionsTembo, moderationNotice,
-  openingDivider, parseBody, postingFor, temboScope, threadSummary,
+  openingDivider, parseBody, postingFor, temboReach, temboScope, threadSummary,
 } from "./channel-format";
 
 const MINUTE = 60_000;
@@ -214,6 +214,13 @@ describe("the composer", () => {
     expect(temboScope(channels.cohort04)).toMatch(/^This cohort's recordings and this channel\. Never private/);
     expect(temboScope(channels.showYourWork)).toMatch(/Never cohort recordings/);
     expect(temboScope(channels.davidConversation)).toBe("Only this conversation, and only when you ask.");
+  });
+
+  it("says the same reach everywhere it is said, in a channel and in a thread", () => {
+    expect(temboScope(channels.showYourWork)).toBe("This channel and public projects. Never cohort recordings or private conversations.");
+    expect(temboScope(channels.showYourWork, true)).toBe("This thread and public projects. Never cohort recordings or private conversations.");
+    expect(temboReach(channels.showYourWork)).toBe("this channel and public projects");
+    expect(temboReach(channels.cohort04, true)).toBe("this cohort's recordings and this channel");
   });
 
   it("writes channels with a hash and conversations by name", () => {

@@ -40,6 +40,12 @@ export function accountMenuName(person: Pick<PersonSummary, "name" | "avatarUrl"
   return person.avatarUrl ? base : `${base}, ${initials(person.name)}`;
 }
 
+/** What this tab keeps for the signed-in person and must not hand to the next one. */
+function forgetDrafts() {
+  clearOnboardingDrafts();
+  clearChannelDrafts();
+}
+
 /**
  * The avatar in the top bar, disclosing Account, Feedback and Sign out. Who
  * you are lives in Profile, the last space; this only holds the account.
@@ -49,12 +55,6 @@ export function accountMenuName(person: Pick<PersonSummary, "name" | "avatarUrl"
  * Escape and clicking or tabbing away close it, and Feedback appears, because
  * only then is there a widget for it to open.
  */
-/** What this tab keeps for the signed-in person and must not hand to the next one. */
-function forgetDrafts() {
-  clearOnboardingDrafts();
-  clearChannelDrafts();
-}
-
 export default function AccountMenu({ person, account }: { person: PersonSummary; account: ShellAccount }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const [hydrated, setHydrated] = useState(false);

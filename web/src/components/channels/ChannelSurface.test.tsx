@@ -329,6 +329,8 @@ describe("live behaviour", () => {
     await typeInto(box, "Thanks @");
     const options = $$("[role=option]");
     expect(options[0].dataset.mentionOption).toBe("tembo");
+    // The option and the line under it say the same reach: this channel, not "this thread".
+    expect(options[0].textContent).toContain("Answers from this channel and public projects");
     expect(text(".channel-mentions__scope")).toBe(
       "Tembo sees: this channel and public projects. Never cohort recordings or private conversations. You: 6 of 10 today.",
     );
