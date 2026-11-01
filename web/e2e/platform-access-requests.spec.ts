@@ -222,7 +222,7 @@ test("approving gives the person their new space, and the user page can take it 
   await as(context, baseURL, staff);
   await open(page, QUEUE);
   await row(page, OTIENO_REQUEST).getByRole("button", { name: "Approve" }).click();
-  await expect(page.getByRole("status")).toHaveText("Approved. Otieno Ouma now has mentor access.");
+  await expect(page.getByRole("status")).toHaveText("Approved. Otieno Ouma was given mentor access.");
   await expect(row(page, OTIENO_REQUEST)).toHaveCount(0);
   expect(await tabLabels(his)).toContain("Mentoring");
 

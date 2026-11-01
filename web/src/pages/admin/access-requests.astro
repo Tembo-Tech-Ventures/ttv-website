@@ -49,7 +49,8 @@ if (Astro.request.method === "POST") {
     } catch (error) {
       const refused = decisionFailure(error);
       if (!refused) throw error;
-      const current = refused.status === 409 ? await getAdminAccessRequest(env.DB, parsed.id) : null;
+      // Best effort: if the re-read fails too, the 409 copy still stands.
+      const current = refused.status === 409 ? await getAdminAccessRequest(env.DB, parsed.id).catch(() => null) : null;
       if (isOwnRepeatDecision(current, adminId, parsed.decision.decision)) {
         repeated = parsed.id;
       } else {

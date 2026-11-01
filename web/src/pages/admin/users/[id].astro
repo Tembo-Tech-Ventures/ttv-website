@@ -18,9 +18,8 @@ import {
 import {
   ACCESS_REQUESTS_PATH,
   ACCESS_ROLE_LABELS,
+  changeCommunityRole,
   communityRoleNotice,
-  communityRoleRedirect,
-  COMMUNITY_ROLE_FAILED,
   isDelegatedCredential,
   parseCommunityRoleAction,
 } from "@/lib/admin/access-requests";
@@ -63,20 +62,16 @@ if (Astro.request.method === "POST") {
       communityError =
         "Agent sessions and personal access tokens cannot change mentor or institution access. Sign in with a browser session.";
     } else {
-      try {
-        if (communityAction.kind === "grant") {
-          await grantCommunityRole(
-            { db: env.DB, env },
-            { userId: id, role: communityAction.role, actorId: signedInAdminId }
-          );
-        } else {
-          await revokeCommunityRole(env.DB, id, communityAction.role);
-        }
-        changedAccess = communityRoleRedirect(id, communityAction);
-      } catch (error) {
-        console.error("Community role change failed", error);
+      const result = await changeCommunityRole(
+        { grant: grantCommunityRole, revoke: revokeCommunityRole },
+        { db: env.DB, env },
+        { userId: id, actorId: signedInAdminId, action: communityAction }
+      );
+      if (result.ok) {
+        changedAccess = result.redirect;
+      } else {
         Astro.response.status = 500;
-        communityError = COMMUNITY_ROLE_FAILED;
+        communityError = result.error;
       }
     }
   } else {

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { OnboardingError } from "@/lib/onboarding/service";
 import type { AdminAccessRequest } from "@/lib/platform/contracts";
 import {
-  addressName, communityRoleNotice, communityRoleRedirect, countPendingAccessRequests, decisionFailure, decisionNotice, displayLink,
+  addressName, changeCommunityRole, COMMUNITY_ROLE_FAILED, communityRoleNotice, communityRoleRedirect, countPendingAccessRequests, decisionFailure, decisionNotice, displayLink,
   githubProfileUrl, isDelegatedCredential, isOwnRepeatDecision, parseCommunityRoleAction, parseDecisionForm,
 } from "./access-requests";
 
@@ -83,8 +83,8 @@ describe("decisionNotice", () => {
     ({ role: "MENTOR", status: "APPROVED", decisionMessage: null, requester, ...overrides }) as AdminAccessRequest;
 
   it("says who now has which access after an approval", () => {
-    expect(decisionNotice(decided({}))).toBe("Approved. Mercy Wambui now has mentor access.");
-    expect(decisionNotice(decided({ role: "INSTITUTION" }))).toBe("Approved. Mercy Wambui now has institution access.");
+    expect(decisionNotice(decided({}))).toBe("Approved. Mercy Wambui was given mentor access.");
+    expect(decisionNotice(decided({ role: "INSTITUTION" }))).toBe("Approved. Mercy Wambui was given institution access.");
   });
 
   it("says the person sees a message but never the administrator's name", () => {
@@ -162,6 +162,39 @@ describe("mentor and institution controls", () => {
       .toBe("/admin/users/user%2F1?access=revoked&accessRole=MENTOR#community-access");
     expect(communityRoleRedirect("user-1", { kind: "grant", role: "INSTITUTION" }))
       .toBe("/admin/users/user-1?access=granted&accessRole=INSTITUTION#community-access");
+  });
+
+  describe("changeCommunityRole", () => {
+    const context = { db: {} as D1Database, env: {} };
+    const writers = () => ({ grant: vi.fn().mockResolvedValue(undefined), revoke: vi.fn().mockResolvedValue(undefined) });
+
+    it("gives a role with the administrator as the actor, and lands back on the user page", async () => {
+      const w = writers();
+      await expect(changeCommunityRole(w, context, { userId: "user-1", actorId: "admin-1", action: { kind: "grant", role: "MENTOR" } }))
+        .resolves.toEqual({ ok: true, redirect: "/admin/users/user-1?access=granted&accessRole=MENTOR#community-access" });
+      expect(w.grant).toHaveBeenCalledWith(context, { userId: "user-1", role: "MENTOR", actorId: "admin-1" });
+      expect(w.revoke).not.toHaveBeenCalled();
+    });
+
+    it("removes a role", async () => {
+      const w = writers();
+      await expect(changeCommunityRole(w, context, { userId: "user-1", actorId: "admin-1", action: { kind: "revoke", role: "INSTITUTION" } }))
+        .resolves.toMatchObject({ ok: true });
+      expect(w.revoke).toHaveBeenCalledWith(context.db, "user-1", "INSTITUTION");
+      expect(w.grant).not.toHaveBeenCalled();
+    });
+
+    it("reports a failed write as a message for the page instead of throwing", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      for (const kind of ["grant", "revoke"] as const) {
+        const w = writers();
+        w[kind].mockRejectedValue(new Error("D1_ERROR: batch aborted"));
+        await expect(changeCommunityRole(w, context, { userId: "user-1", actorId: "admin-1", action: { kind, role: "MENTOR" } }))
+          .resolves.toEqual({ ok: false, error: COMMUNITY_ROLE_FAILED });
+      }
+      expect(error).toHaveBeenCalledTimes(2);
+      error.mockRestore();
+    });
   });
 
   it("reads the outcome back from the redirect, and nothing else", () => {

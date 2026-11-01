@@ -5,6 +5,8 @@ import {
   type AccessDecision, type AdminAccessRequest,
 } from "@/lib/platform/contracts";
 import { OnboardingError } from "@/lib/onboarding/service";
+import type { grantCommunityRole, revokeCommunityRole } from "@/lib/onboarding/decisions";
+import type { AttentionProducerContext } from "@/lib/attention/producers";
 
 /**
  * The admin side of access requests (onboarding SPEC S6): the queue at /admin/access-requests, the
@@ -104,7 +106,7 @@ export function decisionNotice(request: Pick<AdminAccessRequest, "role" | "statu
   const name = request.requester.name;
   const first = addressName(name);
   if (request.status === "APPROVED") {
-    return `Approved. ${name} now has ${ACCESS_ROLE_LABELS[request.role].toLowerCase()} access.`;
+    return `Approved. ${name} was given ${ACCESS_ROLE_LABELS[request.role].toLowerCase()} access.`;
   }
   if (request.status === "DECLINED") {
     return request.decisionMessage
@@ -139,6 +141,31 @@ export function parseCommunityRoleAction(action: FormDataEntryValue | null): Com
 const COMMUNITY_ROLE_OUTCOMES = { granted: "given", revoked: "removed" } as const;
 
 export const COMMUNITY_ROLE_FAILED = "Nothing changed: the access change could not be saved. Try again.";
+
+export interface CommunityRoleWriters {
+  grant: typeof grantCommunityRole;
+  revoke: typeof revokeCommunityRole;
+}
+
+/**
+ * Gives or removes a mentor or institution role for the user page. Both writers run as one D1
+ * statement or batch, so a failure changes nothing; it is reported as a message for the page, not
+ * thrown into a bare error page.
+ */
+export async function changeCommunityRole(
+  writers: CommunityRoleWriters, context: AttentionProducerContext,
+  change: { userId: string; actorId: string; action: CommunityRoleAction },
+): Promise<{ ok: true; redirect: string } | { ok: false; error: string }> {
+  const { userId, actorId, action } = change;
+  try {
+    if (action.kind === "grant") await writers.grant(context, { userId, role: action.role, actorId });
+    else await writers.revoke(context.db, userId, action.role);
+  } catch (error) {
+    console.error("Community role change failed", error);
+    return { ok: false, error: COMMUNITY_ROLE_FAILED };
+  }
+  return { ok: true, redirect: communityRoleRedirect(userId, action) };
+}
 
 /** Where a mentor or institution change lands: back on the user page, at its section, saying what changed. */
 export function communityRoleRedirect(userId: string, action: CommunityRoleAction): string {
