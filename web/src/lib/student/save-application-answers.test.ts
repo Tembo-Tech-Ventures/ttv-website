@@ -117,7 +117,8 @@ describe("saveApplicationAnswers", () => {
   it.each(["APPROVED", "AUDIT", "REJECTED", "COMPLETED"])("says it was reviewed, and writes nothing, once it is %s", async (status) => {
     // The form was loaded while PENDING; staff reviewed it before the member pressed Save.
     sqlite.database.prepare('UPDATE "programApplication" SET "status" = ? WHERE "id" = ?').run(status, "app-njeri");
-    expect(await save(VALID)).toEqual({ kind: "reviewed" });
+    // Refused, with every typed answer handed back so the page can show it.
+    expect(await save(VALID)).toEqual({ kind: "reviewed", drafts: { name: "Njeri Wambui", htmlCssDone: "yes", project: "A matatu route finder" } });
     expect(stored()!.application).toBe(QUESTIONS);
   });
 
@@ -151,14 +152,14 @@ describe("saveApplicationAnswers", () => {
 
   it("is a lost race when the team reviews it between read and write", async () => {
     raceWith(`UPDATE "programApplication" SET "status" = 'APPROVED' WHERE "id" = 'app-njeri'`);
-    expect(await save(VALID)).toEqual({ kind: "stale" });
+    expect(await save(VALID)).toEqual({ kind: "stale", drafts: { name: "Njeri Wambui", htmlCssDone: "yes", project: "A matatu route finder" } });
     expect(stored()).toEqual({ status: "APPROVED", application: QUESTIONS });
   });
 
   it("is a lost race when the answers change between read and write (another tab)", async () => {
     const other = QUESTIONS.replace("A chama ledger", "Saved from another tab");
     raceWith(`UPDATE "programApplication" SET "application" = '${other}' WHERE "id" = 'app-njeri'`);
-    expect(await save(VALID)).toEqual({ kind: "stale" });
+    expect(await save(VALID)).toEqual({ kind: "stale", drafts: { name: "Njeri Wambui", htmlCssDone: "yes", project: "A matatu route finder" } });
     expect(stored()!.application).toBe(other);
   });
 

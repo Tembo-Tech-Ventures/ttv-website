@@ -17,6 +17,7 @@ import { personaSession, signIn, type PersonaSession } from "./platform-personas
  * test records which one it saw.
  * - Njeri, a member whose pending application carries questions;
  * - Brian, a member with no application, who applies here (re-seed to rerun);
+ * - Mercy, whose pending application staff approve while she edits it (re-seed to rerun);
  * - Wanjiku, the cohort persona, whose approved application has no answers;
  * - Amina, staff, for the admin view.
  * They sign in like the community persona, with its cookie and secret.
@@ -26,6 +27,7 @@ const EVIDENCE_DIR = "test-results/evidence/platform-application";
 mkdirSync(EVIDENCE_DIR, { recursive: true });
 
 const APPLICANT_APPLICATION = "ttv-local-persona-app-applicant";
+const REVIEWEE_APPLICATION = "ttv-local-persona-app-reviewee";
 const STUDENT_APPLICATION = "ttv-local-persona-app-student";
 const OPEN_COHORT = "ttv-local-persona-cohort-06";
 const PROJECT_LABEL = "Propose an idea for a project you would like to build.";
@@ -42,6 +44,7 @@ function localMember(user: string): PersonaSession | string {
 
 const applicant = localMember("applicant");
 const newcomer = localMember("newcomer");
+const reviewee = localMember("reviewee");
 // The local seed's cohort persona: a preview's student has a different application id.
 const student = localMember("student");
 const staff = personaSession("staff");
@@ -203,6 +206,62 @@ test.describe("a member whose application carries questions", () => {
         await admin.close();
       }
     });
+  });
+});
+
+test.describe("a member whose application the team reviews while she edits it", () => {
+  test.skip(typeof reviewee === "string", typeof reviewee === "string" ? reviewee : "");
+
+  test("is told why her answers can no longer change, and keeps what she typed", async ({ browser, context, page, baseURL }) => {
+    test.skip(test.info().project.name !== "chromium", "Approving is once per seed; one project runs it.");
+    test.skip(typeof staff === "string", typeof staff === "string" ? staff : "");
+    if (typeof staff === "string") return;
+    test.setTimeout(60_000);
+    const frame = await signedIn(context, page, baseURL!, reviewee);
+    await openApplication(page, frame, REVIEWEE_APPLICATION);
+    const form = page.locator("form[data-application-answers-form]");
+    await expect(form, "Re-apply platform-personas.local.sql: this application is no longer pending.").toBeVisible();
+
+    const typed = `A matatu fare tracker for commuters in Kisumu.\nIt sends a weekly summary. (${Date.now()})`;
+    await page.getByLabel(PROJECT_LABEL).fill(typed);
+
+    // Staff approve it from the admin page while the form is still open.
+    const admin = await browser.newContext({ baseURL });
+    try {
+      await signIn(admin, baseURL!, staff);
+      const adminPage = await admin.newPage();
+      expect((await adminPage.goto(`/admin/applications/${REVIEWEE_APPLICATION}`))?.status()).toBe(200);
+      // The admin page asks "Change application status to APPROVED?" first.
+      adminPage.once("dialog", (dialog) => void dialog.accept());
+      const [approval] = await Promise.all([
+        adminPage.waitForResponse((candidate) => candidate.request().method() === "POST" && candidate.url().includes(REVIEWEE_APPLICATION)),
+        adminPage.locator("form:has(input[name='status'][value='APPROVED']) button[type='submit']").click(),
+      ]);
+      expect(approval.status(), "staff approval redirects back to the application").toBe(302);
+      await adminPage.waitForURL(new RegExp(`/admin/applications/${REVIEWEE_APPLICATION}$`));
+      await expect(adminPage.locator("form:has(input[name='status'][value='APPROVED'])")).toHaveCount(0);
+    } finally {
+      await admin.close();
+    }
+
+    const [response] = await Promise.all([
+      page.waitForResponse((candidate) => candidate.request().method() === "POST" && candidate.url().includes(REVIEWEE_APPLICATION)),
+      form.getByRole("button", { name: "Save answers" }).click(),
+    ]);
+    expect(response.status()).toBe(409);
+    await hideDevToolbar(page);
+
+    await expect(page.getByRole("alert").filter({ hasText: "The team reviewed this application before your answers were saved" })).toBeVisible();
+    await expect(page.locator("form[data-application-answers-form]")).toHaveCount(0);
+    const unsaved = page.locator("[data-unsaved-answers]");
+    await expect(unsaved.getByRole("heading", { name: "Your unsaved answers" })).toBeVisible();
+    await expect(unsaved.locator("dd").filter({ hasText: "A matatu fare tracker for commuters in Kisumu." })).toHaveText(typed);
+    // The saved answers are unchanged, under their own heading.
+    await expect(page.getByRole("heading", { name: "Saved answers", exact: true })).toBeVisible();
+    await expect(page.locator("[data-application-answers-summary]")).toContainText("A shared calendar for a youth football league.");
+    await expectNoJson(page);
+    await page.screenshot({ path: evidence(`reviewed-while-editing-${frame}`), fullPage: true });
+    await runAxe(page, test.info(), `application-reviewed-while-editing-${frame}`);
   });
 });
 

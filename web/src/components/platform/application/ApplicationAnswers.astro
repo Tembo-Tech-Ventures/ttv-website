@@ -15,6 +15,7 @@ import {
   canEditAnswers,
   fieldName,
   formatAnswer,
+  formatDraft,
   formQuestions,
   plainLabel,
   summaryQuestions,
@@ -29,9 +30,11 @@ interface Props {
   status: string;
   drafts: ApplicationAnswerDrafts;
   errors: Readonly<Record<string, string>>;
+  /** Answers typed but not saved because the team reviewed the application first. */
+  unsaved?: ApplicationAnswerDrafts;
 }
 
-const { answers, status, drafts, errors } = Astro.props;
+const { answers, status, drafts, errors, unsaved = {} } = Astro.props;
 const editable = canEditAnswers(answers, status);
 const nothingRecorded =
   answers.kind === "enrollment"
@@ -51,7 +54,29 @@ const fieldClass = (question: ApplicationQuestion) => [
 const stored = answers.kind === "questions" ? answers.questions : [];
 const questions = editable ? formQuestions(stored) : summaryQuestions(stored);
 const failed = questions.filter((question) => errorFor(question));
+const unsavedAnswers = formQuestions(stored).flatMap((question) => {
+  const typed = formatDraft(question, unsaved[question.name] ?? "");
+  return typed === null ? [] : [{ question, typed }];
+});
 ---
+
+{
+  !editable && unsavedAnswers.length > 0 && (
+    <section data-unsaved-answers aria-labelledby="unsaved-answers-heading" class="mb-6 rounded-md border border-primary/40 bg-primary/10 p-4">
+      <h4 id="unsaved-answers-heading" class="font-semibold text-white">Your unsaved answers</h4>
+      <p class="mt-1 text-sm text-ink-secondary">These weren't saved. Copy anything you want to keep.</p>
+      <dl class="mt-3 space-y-3">
+        {unsavedAnswers.map(({ question, typed }) => (
+          <div>
+            <dt class="text-sm text-ink-muted"><QuestionLabel label={question.label} /></dt>
+            <dd class="mt-1 whitespace-pre-line break-words text-white">{typed}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  )
+}
+{!editable && unsavedAnswers.length > 0 && <h4 class="mb-3 font-semibold text-white">Saved answers</h4>}
 
 {
   answers.kind === "questions" && editable ? (

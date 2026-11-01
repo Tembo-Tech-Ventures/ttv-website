@@ -213,6 +213,16 @@ export function draftsFor(questions: readonly ApplicationQuestion[]): Applicatio
   return Object.fromEntries(questions.map((question) => [question.name, toDraft(question)]));
 }
 
+/** What a member typed or chose, in words, for showing back answers that were not saved. */
+export function formatDraft(question: ApplicationQuestion, draft: string): string | null {
+  const text = draft.trim();
+  if (text === "") return null;
+  if (question.type === "boolean" || question.type === "requiredBoolean") {
+    return text === "yes" ? "Yes" : text === "no" ? "No" : draft;
+  }
+  return question.options.find((option) => option.value === text)?.label ?? draft;
+}
+
 /** A stored answer in words, for the read-only view. */
 export function formatAnswer(question: ApplicationQuestion): string | null {
   const { value } = question;

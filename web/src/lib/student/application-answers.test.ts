@@ -5,6 +5,7 @@ import {
   draftsFor,
   fieldName,
   formatAnswer,
+  formatDraft,
   formQuestions,
   hasEditableAnswers,
   humanizeKey,
@@ -209,6 +210,14 @@ describe("drafts and read-only answers", () => {
   it("has nothing to edit when the partner link is the only question", () => {
     const text = JSON.stringify({ version: "1", submission: [{ type: "string", name: "partnerId", label: "Partner", value: "p" }] });
     expect(hasEditableAnswers(text, "PENDING")).toBe(false);
+  });
+
+  it("shows unsaved typed answers back in words", () => {
+    const [, , html, , track, project] = questionsOf(LEGACY_TEXT);
+    expect(formatDraft(html!, "no")).toBe("No");
+    expect(formatDraft(track!, "data")).toBe("Data");
+    expect(formatDraft(project!, "Line one\nLine two")).toBe("Line one\nLine two");
+    expect(formatDraft(project!, "   ")).toBeNull();
   });
 
   it("names fields after their question", () => {

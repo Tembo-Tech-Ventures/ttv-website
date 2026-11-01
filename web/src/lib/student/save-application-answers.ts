@@ -21,12 +21,12 @@ export type SaveApplicationAnswersResult =
   | { kind: "not-found" }
   /** Nothing a member can answer here: no questions to answer. */
   | { kind: "not-editable" }
-  /** It has questions, but the team has reviewed it, so answers no longer change. */
-  | { kind: "reviewed" }
+  /** It has questions, but the team has reviewed it, so answers no longer change. The typed answers come back. */
+  | { kind: "reviewed"; drafts: ApplicationAnswerDrafts }
   | { kind: "invalid"; drafts: ApplicationAnswerDrafts; errors: Readonly<Record<string, string>> }
   | { kind: "saved"; application: string }
-  /** It was reviewed or changed while the form was open. */
-  | { kind: "stale" }
+  /** It was reviewed or changed between reading and writing. The typed answers come back. */
+  | { kind: "stale"; drafts: ApplicationAnswerDrafts }
   | { kind: "failed"; drafts: ApplicationAnswerDrafts };
 
 export interface SaveApplicationAnswersInput {
@@ -61,9 +61,8 @@ export async function saveApplicationAnswers({
 
   const answers = parseApplicationAnswers(stored.application);
   if (!canEditAnswers(answers, "PENDING") || answers.kind !== "questions") return { kind: "not-editable" };
-  if (stored.status !== "PENDING") return { kind: "reviewed" };
-
   const submission = readAnswerSubmission(answers.questions, read);
+  if (stored.status !== "PENDING") return { kind: "reviewed", drafts: submission.drafts };
   if (!submission.ok) return { kind: "invalid", drafts: submission.drafts, errors: submission.errors };
 
   const written = writeAnswers(stored.application, submission.values);
@@ -75,7 +74,9 @@ export async function saveApplicationAnswers({
       )
       .bind(written, applicationId, userId, stored.application, ...scopeParams)
       .run();
-    return result.meta.changes === 1 ? { kind: "saved", application: written } : { kind: "stale" };
+    return result.meta.changes === 1
+      ? { kind: "saved", application: written }
+      : { kind: "stale", drafts: submission.drafts };
   } catch {
     return { kind: "failed", drafts: submission.drafts };
   }

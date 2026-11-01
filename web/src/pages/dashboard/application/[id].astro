@@ -46,6 +46,10 @@ if (!application) {
 let answers = parseApplicationAnswers(application.application);
 let drafts: ApplicationAnswerDrafts = answers.kind === "questions" ? draftsFor(answers.questions) : {};
 let fieldErrors: Readonly<Record<string, string>> = {};
+// Typed answers that could not be saved because the team reviewed the application first.
+let unsaved: ApplicationAnswerDrafts = {};
+const reviewedMessage =
+  "The team reviewed this application before your answers were saved, so they can no longer change. What you typed is shown below so you can keep a copy.";
 
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData().catch(() => null);
@@ -76,17 +80,24 @@ if (Astro.request.method === "POST") {
       success = "Your answers are saved.";
       break;
     case "stale":
-      // Reviewed or changed while the form was open: show where it stands now.
+      // Changed between reading and writing: show where it stands now, keeping what was typed.
       application = (await loadApplication()) ?? application;
       answers = parseApplicationAnswers(application.application);
-      drafts = answers.kind === "questions" ? draftsFor(answers.questions) : {};
-      error = application.status === "PENDING"
-        ? "This application changed while you were editing it. Check the answers below and save again."
-        : "The team has already reviewed this application, so its answers can no longer change.";
+      if (application.status === "PENDING") {
+        drafts = result.drafts;
+        error = "This application changed while you were editing it. Your answers are still in the form: check them and save again.";
+      } else {
+        unsaved = result.drafts;
+        error = reviewedMessage;
+      }
       Astro.response.status = 409;
       break;
     case "reviewed":
-      error = "The team has already reviewed this application, so its answers can no longer change.";
+      // The page was read as PENDING moments ago only if staff acted in between; reload what they saw.
+      application = (await loadApplication()) ?? application;
+      answers = parseApplicationAnswers(application.application);
+      unsaved = result.drafts;
+      error = reviewedMessage;
       Astro.response.status = 409;
       break;
     case "failed":
@@ -181,7 +192,7 @@ const titlePrefix = error || Object.keys(fieldErrors).length > 0 ? "Error: " : "
     <Card>
       <h3 class="mb-4 text-lg font-semibold text-white">Application Details</h3>
 
-      <ApplicationAnswers answers={answers} status={application.status} drafts={drafts} errors={fieldErrors} />
+      <ApplicationAnswers answers={answers} status={application.status} drafts={drafts} errors={fieldErrors} unsaved={unsaved} />
     </Card>
   </div>
 </SpacePage>
