@@ -50,12 +50,23 @@ export function createChatSessionId() {
   return createId();
 }
 
-export async function ensureOwnedChatSession(
+/**
+ * The conversation a question is asked in: one the user already owns, or a new
+ * one that is only written to the database together with its first exchange.
+ */
+export type ChatSessionTarget =
+  | { kind: "existing"; id: string }
+  | { kind: "new"; id: string; title: string };
+
+/** Empty conversations younger than this may still belong to a request in flight. */
+export const ORPHANED_CHAT_SESSION_AGE_SECONDS = 10 * 60;
+
+export async function resolveOwnedChatSession(
   db: D1Database,
   userId: string,
   sessionId: string | null | undefined,
   firstMessage: string
-) {
+): Promise<ChatSessionTarget> {
   if (sessionId) {
     const existing = await db
       .prepare(
@@ -66,34 +77,79 @@ export async function ensureOwnedChatSession(
       )
       .bind(sessionId, userId)
       .first<{ id: string }>();
-    if (existing) return existing.id;
+    if (existing) return { kind: "existing", id: existing.id };
   }
 
-  const id = createChatSessionId();
-  const title = buildChatTitle(firstMessage);
-  await db
-    .prepare(
-      `INSERT INTO "chat_session" ("id", "userId", "title")
-       VALUES (?, ?, ?)`
-    )
-    .bind(id, userId, title)
-    .run();
-  return id;
+  return { kind: "new", id: createChatSessionId(), title: buildChatTitle(firstMessage) };
 }
 
-export async function touchChatSession(
+export interface ChatExchange {
+  question: string;
+  answer: string;
+  citations: unknown[];
+}
+
+/**
+ * Saves one answered question in a single D1 batch (one transaction), so a new
+ * conversation never exists without its messages and a request that fails
+ * before this point leaves nothing behind. Saving a new conversation also
+ * removes the user's empty ones, left by failed requests before this was atomic.
+ */
+export async function saveChatExchange(
   db: D1Database,
   userId: string,
-  sessionId: string
+  target: ChatSessionTarget,
+  exchange: ChatExchange
 ) {
-  await db
-    .prepare(
-      `UPDATE "chat_session"
-       SET "updatedAt" = unixepoch()
-       WHERE "id" = ? AND "userId" = ?`
-    )
-    .bind(sessionId, userId)
-    .run();
+  const insertMessage = db.prepare(
+    `INSERT INTO "chat_message" ("id", "sessionId", "userId", "role", "content", "citations")
+     VALUES (?, ?, ?, ?, ?, ?)`
+  );
+  const messages = [
+    insertMessage.bind(createId(), target.id, userId, "user", exchange.question, null),
+    insertMessage.bind(
+      createId(),
+      target.id,
+      userId,
+      "assistant",
+      exchange.answer,
+      JSON.stringify(exchange.citations)
+    ),
+  ];
+
+  if (target.kind === "existing") {
+    await db.batch([
+      ...messages,
+      db
+        .prepare(
+          `UPDATE "chat_session"
+           SET "updatedAt" = unixepoch()
+           WHERE "id" = ? AND "userId" = ?`
+        )
+        .bind(target.id, userId),
+    ]);
+    return;
+  }
+
+  await db.batch([
+    db
+      .prepare(
+        `DELETE FROM "chat_session"
+         WHERE "userId" = ?
+           AND "createdAt" < unixepoch() - ?
+           AND NOT EXISTS (
+             SELECT 1 FROM "chat_message" cm WHERE cm."sessionId" = "chat_session"."id"
+           )`
+      )
+      .bind(userId, ORPHANED_CHAT_SESSION_AGE_SECONDS),
+    db
+      .prepare(
+        `INSERT INTO "chat_session" ("id", "userId", "title")
+         VALUES (?, ?, ?)`
+      )
+      .bind(target.id, userId, target.title),
+    ...messages,
+  ]);
 }
 
 export async function listChatSessions(db: D1Database, userId: string) {
@@ -113,7 +169,9 @@ export async function listChatSessions(db: D1Database, userId: string) {
            LIMIT 1
          ) AS "latestMessage"
        FROM "chat_session" cs
-       LEFT JOIN "chat_message" cm ON cm."sessionId" = cs."id"
+       -- An inner join: a conversation without messages is one a failed request
+       -- left behind, and there is nothing in it to show.
+       JOIN "chat_message" cm ON cm."sessionId" = cs."id"
        WHERE cs."userId" = ?
        GROUP BY cs."id"
        ORDER BY cs."updatedAt" DESC

@@ -127,6 +127,7 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/admin/feedback/themes` | Feedback themes with agreement stats; `[id]` to plan, ship or decline | ADMIN |
 | `/certificate/[id]` | Certificate display | None |
 | `/api/auth/[...all]` | better-auth API handler | N/A |
+| `/api/chat` | Ask Tembo question (JSON, same-origin). A new conversation is saved only together with its first answer, in one D1 batch, so a failed request leaves nothing in Recent. Only a signed-out request gets `401` (body `{ "error": "Unauthorized" }`), so clients can offer "sign in again" on the status alone | Session |
 | `/api/admin/import` | Data import API | ADMIN |
 | `/api/feedback` | Feedback widget submission (multipart, same-origin) | Session |
 | `/api/feedback/attachments/[id]` | Feedback screenshot (author or admin only) | Session |

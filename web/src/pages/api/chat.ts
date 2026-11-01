@@ -5,7 +5,7 @@ import { readBoundedJson, RequestJsonError } from "@/lib/request-json";
 import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
-import { ensureOwnedChatSession, touchChatSession } from "@/lib/chat/sessions";
+import { resolveOwnedChatSession, saveChatExchange } from "@/lib/chat/sessions";
 import { getAccessibleProgramIds } from "@/lib/recordings/access";
 import { userHasAdminRole } from "@/lib/admin/roles";
 import { generateToolCompletion, type GatewayMessage } from "@/lib/ai/gateway";
@@ -96,7 +96,9 @@ const handleChat: APIRoute = async ({ request, locals }) => {
   const { message, sessionId: requestedSessionId, conversationHistory } = input;
 
   const db = drizzle(env.DB, { schema });
-  const sessionId = await ensureOwnedChatSession(
+  // A new conversation is not written yet: it is saved with its first answer,
+  // so a failed request cannot leave an empty one in Recent.
+  const session = await resolveOwnedChatSession(
     env.DB,
     user.id,
     typeof requestedSessionId === "string" ? requestedSessionId : null,
@@ -176,13 +178,9 @@ const handleChat: APIRoute = async ({ request, locals }) => {
 
   const citations = buildCitations(toolCtx.sources);
 
-  await db.insert(schema.chatMessage).values([
-    { userId: user.id, sessionId, role: "user", content: message },
-    { userId: user.id, sessionId, role: "assistant", content: answer, citations: JSON.stringify(citations) },
-  ]);
-  await touchChatSession(env.DB, user.id, sessionId);
+  await saveChatExchange(env.DB, user.id, session, { question: message, answer, citations });
 
-  return Response.json({ sessionId, answer, citations });
+  return Response.json({ sessionId: session.id, answer, citations });
 };
 
 export const POST: APIRoute = async (context) => {
