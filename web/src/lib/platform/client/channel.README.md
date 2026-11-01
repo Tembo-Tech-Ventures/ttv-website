@@ -71,7 +71,9 @@ Selectors: `selectFirstUnread` (the "New" divider), `selectUnreadCount`,
   every 5 s while the tab is visible, backing off ×2 to 30 s while nothing changes.
   Nothing runs while the tab is hidden; visibility and focus poll immediately.
   Runs never overlap. The returned function polls now. The poller goes quiet when
-  nothing is live and wakes when `selectPollable` turns true again.
+  nothing is live and wakes when `selectPollable` turns true again. Hiding the tab
+  aborts the poll's own requests. A poll that joins a `jumpToLatest()` the reader
+  started waits for it, without cancelling it.
 - `useChannel(store, selector?, isEqual?)` reads state and keeps the store alive.
   The last released hook aborts all requests.
 - `useChannelList(list, selector?, isEqual?)`, `useChannelUnread(list, channelId)`,
@@ -126,8 +128,10 @@ The window is a list of server pages, each keeping its own `beforeCursor`.
 
 ## Thread pane
 
-One thread is open at a time. Opening another aborts the previous one, and its late
-responses are ignored. Each poll checks the channel and the open thread together.
+One thread is open at a time. Opening another, closing the pane or releasing the
+store aborts its requests, and late responses are ignored. A loaded pane survives a
+terminal error and `restart()`, or a release followed by a new `retain()`, and
+resumes polling. Each poll checks the channel and the open thread together.
 Replies are routed by `parentId`, so a channel delta never puts a reply in the root
 list. A removed parent (tombstone or 404) sets `thread.status = "removed"`.
 

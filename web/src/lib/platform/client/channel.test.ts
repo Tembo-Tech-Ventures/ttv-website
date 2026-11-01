@@ -597,6 +597,54 @@ describe("channel store", () => {
     expect(store.getState().thread).toBeNull();
   });
 
+  it("keeps an open thread's parent in the window when its older page is reloaded", async () => {
+    const { fake, store } = setup({ initial: page(range(1, 50), null, "s1"), maxMessages: 600 });
+    fake.list(page([reply(1001, msg(10).id)], null, "t1", { thread: msg(10).id }));
+    await store.openThread(msg(10).id);
+    fake.list(page(range(51, 100), "b51", "s2"));
+    await store.jumpToLatest();
+    expect(store.getState().thread?.parent?.id).toBe(msg(10).id);
+    fake.list(page(range(1, 50), null, "x"));
+    await store.loadOlder();
+    expect(ids(store.getState().messages)).toEqual(Array.from({ length: 100 }, (_, i) => i + 1));
+  });
+
+  it("resumes a loaded thread pane after a terminal error and restart, and after release and retain", async () => {
+    const { fake, store } = setup({ initial: page(range(1, 3), null, "s1") });
+    const thread = (items: Message[], since: string) => page(items, null, since, { thread: msg(2).id });
+    store.retain();
+    fake.list(thread([reply(1001, msg(2).id)], "t1"));
+    await store.openThread(msg(2).id);
+    fake.list(() => error(401, "unauthorized"), () => error(401, "unauthorized"));
+    await store.poll(signal());
+    expect(store.getState().terminal).toBe(true);
+    store.restart();
+    expect(await store.openThread(msg(2).id)).toBe(true);
+    fake.list(page([], null, "s2"), thread([reply(1002, msg(2).id)], "t2"));
+    await store.poll(signal());
+    expect(ids(store.getState().thread!.messages)).toEqual([1001, 1002]);
+
+    const release = store.retain();
+    release();
+    store.retain();
+    fake.list(page([], null, "s3"), thread([reply(1003, msg(2).id)], "t3"));
+    await store.poll(signal());
+    expect(ids(store.getState().thread!.messages)).toEqual([1001, 1002, 1003]);
+    expect(fake.pending()).toBe(0);
+  });
+
+  it("aborts an in-flight thread poll when the pane closes", async () => {
+    const { fake, store } = setup({ initial: page(range(1, 3), null, "s1") });
+    fake.list(page([], null, "t1", { thread: msg(2).id }));
+    await store.openThread(msg(2).id);
+    fake.list(page([], null, "s2"), never);
+    const polling = store.poll(signal());
+    await vi.waitFor(() => expect(fake.seen).toHaveLength(3));
+    store.closeThread();
+    expect(fake.seen[2].signal.aborted).toBe(true);
+    expect(await polling).toEqual({ changed: false });
+  });
+
   it("clears announcements on request", async () => {
     const { fake, store } = setup({ initial: page(range(1, 3), null, "s1") });
     fake.list(page([msg(4), msg(5)], null, "s2"));

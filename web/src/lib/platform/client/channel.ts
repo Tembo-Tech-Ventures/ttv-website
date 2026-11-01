@@ -145,6 +145,7 @@ export function createChannelStore(options: ChannelOptions) {
   let older: Flight<void> | undefined;
   let threadTail: Flight<boolean> | undefined;
   let threadOlder: Flight<void> | undefined;
+  let threadPoll: Flight<boolean> | undefined;
   const available = () => enabled && !stopped && !terminal;
 
   // Read markers: one request at a time, the newest target wins, nothing rewinds.
@@ -255,6 +256,16 @@ export function createChannelStore(options: ChannelOptions) {
     return { changed: changed || fresh.length > 0, fresh, parentRemoved: removal.parentRemoved };
   }
 
+  /**
+   * Cache an older page's messages. A message already cached (kept fresh by
+   * polling, or a thread parent kept for the pane) keeps its cached copy, but
+   * every id still joins the segment; `prependOlder` skips ids already retained.
+   */
+  function cacheOlder(items: readonly Message[]): Message[] {
+    for (const item of items) if (!entities.has(item.id)) entities.set(item.id, item);
+    return items.map(item => entities.get(item.id)!);
+  }
+
   function announceFresh(fresh: readonly Message[], noun: string): Partial<ChannelState> {
     const count = fresh.filter(item => item.author.id === null || item.author.id !== viewerId).length;
     return count > 0 ? { announcement: `${count} new ${noun}${count === 1 ? "" : "s"}` } : {};
@@ -320,9 +331,7 @@ export function createChannelStore(options: ChannelOptions) {
       const page = await list({ before: cursor }, signal);
       if (!available() || gen !== windowGen || channel?.olderCursor !== cursor) return;
       forget(page.removedIds);
-      // Shifted server pages may repeat retained messages; the cached copy, kept fresh by polling, wins.
-      const roots = page.items.filter(item => item.parentId === null && !entities.has(item.id));
-      for (const item of roots) entities.set(item.id, item);
+      const roots = cacheOlder(page.items.filter(item => item.parentId === null));
       channel = evict(prependOlder(channel, page, roots), { maxMessages, anchorId: keep });
     } catch (error) {
       if (isAbort(error) || gen !== windowGen) return;
@@ -384,10 +393,10 @@ export function createChannelStore(options: ChannelOptions) {
 
   function abortThread() {
     threadGen++;
-    threadTail?.controller.abort();
-    threadOlder?.controller.abort();
+    for (const current of [threadTail, threadOlder, threadPoll]) current?.controller.abort();
     threadTail = undefined;
     threadOlder = undefined;
+    threadPoll = undefined;
   }
 
   function openThread(parentId: Id): Promise<boolean> {
@@ -435,8 +444,7 @@ export function createChannelStore(options: ChannelOptions) {
       const page = await list({ before: cursor, thread: cache.parentId }, signal);
       if (!currentThread(cache) || cache.segment?.olderCursor !== cursor) return;
       forget(page.removedIds);
-      const replies = page.items.filter(item => item.parentId === cache.parentId && !entities.has(item.id));
-      for (const item of replies) entities.set(item.id, item);
+      const replies = cacheOlder(page.items.filter(item => item.parentId === cache.parentId));
       const keep = cache.segment.pages[0]?.ids[0] ?? null;
       cache.segment = evict(prependOlder(cache.segment, page, replies), { maxMessages: maxThreadMessages, anchorId: keep });
     } catch (error) {
@@ -469,7 +477,11 @@ export function createChannelStore(options: ChannelOptions) {
   async function poll(signal: AbortSignal): Promise<PollResult> {
     if (!available()) return { changed: false };
     const channelWork = runTail(inner => channel === null ? fetchLatest(inner) : pollChannel(inner), signal);
-    const threadWork = threadLive() ? flight(pollThread, signal, () => undefined).promise : Promise.resolve(false);
+    let threadWork = Promise.resolve(false);
+    if (threadLive()) {
+      threadPoll = flight(pollThread, signal, done => { if (threadPoll === done) threadPoll = undefined; });
+      threadWork = threadPoll.promise;
+    }
     const [channelChanged, threadChanged] = await Promise.all([channelWork, threadWork]);
     return { changed: channelChanged || threadChanged };
   }
@@ -541,7 +553,9 @@ export function createChannelStore(options: ChannelOptions) {
     if (target) target = null;
     patchRead({ markerId: confirmed?.id ?? null, unreadCount: confirmedUnread, pending: false });
     abortThread();
-    if (thread && !thread.segment) thread = null;
+    // A loaded thread survives (restart or a new owner resumes it); a half-opened one is dropped.
+    if (thread?.segment) thread.gen = threadGen;
+    else thread = null;
   }
 
   return {
