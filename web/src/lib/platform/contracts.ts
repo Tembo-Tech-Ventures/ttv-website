@@ -383,7 +383,16 @@ const isDecided = (status: AccessRequestStatus) => status === "APPROVED" || stat
 /** What the person wrote: 20 to 600 characters, untrusted, always rendered as plain text. */
 export const AccessRequestNote = z.string().max(600).refine((s) => s.trim().length >= 20, "Write at least 20 characters");
 export type AccessRequestNote = z.infer<typeof AccessRequestNote>;
-export const ExternalLink = z.url({ protocol: /^https?$/ }).max(2048);
+const hasNoCredentials = (s: string) => {
+  try {
+    const url = new URL(s);
+    return url.username === "" && url.password === "";
+  } catch {
+    return false; // Not a URL: the format check has already reported it.
+  }
+};
+/** http(s) without credentials: `https://ttv.example@other.example` reads as one host but opens another. */
+export const ExternalLink = z.url({ protocol: /^https?$/ }).max(2048).refine(hasNoCredentials, "Links cannot carry credentials");
 export type ExternalLink = z.infer<typeof ExternalLink>;
 const OrganisationText = NonEmptyText.max(200);
 /** An administrator's optional message, shown to the requester without the administrator's name. */

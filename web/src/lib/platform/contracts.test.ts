@@ -293,6 +293,10 @@ describe("onboarding contracts", () => {
     expect(C.AccessDecision.parse({ decision: "approve" })).toEqual({ decision: "approve" });
   });
 
+  it("stores links without the spaces around them", () => {
+    expect(C.ExternalLink.parse(" https://example.com/portfolio ")).toBe("https://example.com/portfolio");
+  });
+
   it("measures the note on its content: 20 characters of text, at most 600 in all", () => {
     expect(C.AccessRequestNote.safeParse("x".repeat(20)).success).toBe(true);
     expect(C.AccessRequestNote.safeParse("x".repeat(600)).success).toBe(true);
@@ -360,6 +364,9 @@ describe("onboarding contracts", () => {
     // oxlint-disable-next-line no-script-url -- Adversarial input must be rejected by the link contract.
     ["script link", C.CreateAccessRequest, { ...createMentorAccess, link: "javascript:alert(1)" }],
     ["internal path as link", C.CreateAccessRequest, { ...createMentorAccess, link: "/admin/access-requests" }],
+    ["link with a disguising user name", C.ExternalLink, "https://tembotechventures.com@other.example/portfolio"],
+    ["link with credentials", C.ExternalLink, "https://user:secret@example.com/"],
+    ["link that is not a URL", C.ExternalLink, "portfolio on request"],
     ["forged status", C.CreateAccessRequest, { ...createMentorAccess, status: "APPROVED" }],
     ["pending with a decision time", C.AccessRequestSummary, { ...mercy, ...decision }],
     ["pending with a message", C.AccessRequestSummary, { ...mercy, decisionMessage: "Welcome" }],

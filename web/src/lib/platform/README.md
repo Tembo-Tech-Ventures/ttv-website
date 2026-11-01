@@ -89,6 +89,8 @@ new screen or test.
   withdraw also removes its intent. These routes are for same-origin browser
   sessions only: PATs and agent sessions are refused, admin routes included. The
   admin routes are not flag-gated, so pending requests are never stranded.
+  `earlierRequests` lists only closed requests: a pending request for the other
+  role is its own queue row. Request links are http(s) without credentials.
 
 ## Fixture scenarios and verification
 
