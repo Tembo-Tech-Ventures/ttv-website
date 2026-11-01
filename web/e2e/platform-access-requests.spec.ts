@@ -187,6 +187,13 @@ test("declines with a message the person reads without the administrator's name,
   await runAxe(stale, testInfo, "access-requests-conflict");
   await stale.screenshot({ path: evidence("conflict"), fullPage: true });
 
+  // Sending the same decline again (a double-click) is this administrator's own decision: it reads as done.
+  const repeat = await page.request.post(QUEUE, {
+    form: { id: id!, decision: "decline", message: DECLINE_MESSAGE }, headers: { Origin: new URL(baseURL!).origin }, maxRedirects: 0,
+  });
+  expect(repeat.status()).toBe(303);
+  expect(repeat.headers().location).toBe(`${QUEUE}?decided=${id}`);
+
   // Wairimu reads the decision and its message; who decided never reaches her.
   const requester = await browser.newContext();
   const her = await requester.newPage();

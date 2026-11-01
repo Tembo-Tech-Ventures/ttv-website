@@ -74,6 +74,16 @@ export interface DecisionFailure {
   message: string;
 }
 
+/**
+ * A refused decision this administrator already made with the same outcome: a double-click, or a
+ * resubmitted page. That is their own decision, not someone else's, so it reads as done.
+ */
+export function isOwnRepeatDecision(
+  request: Pick<AdminAccessRequest, "status" | "decidedBy"> | null, actorId: string, decision: AccessDecision["decision"],
+): boolean {
+  return request?.decidedBy?.id === actorId && request.status === (decision === "approve" ? "APPROVED" : "DECLINED");
+}
+
 /** Copy for a decision the domain refused. Anything else is unexpected and propagates. */
 export function decisionFailure(error: unknown): DecisionFailure | null {
   if (!(error instanceof OnboardingError)) return null;
@@ -127,6 +137,8 @@ export function parseCommunityRoleAction(action: FormDataEntryValue | null): Com
 }
 
 const COMMUNITY_ROLE_OUTCOMES = { granted: "given", revoked: "removed" } as const;
+
+export const COMMUNITY_ROLE_FAILED = "Nothing changed: the access change could not be saved. Try again.";
 
 /** Where a mentor or institution change lands: back on the user page, at its section, saying what changed. */
 export function communityRoleRedirect(userId: string, action: CommunityRoleAction): string {

@@ -3,7 +3,7 @@ import { OnboardingError } from "@/lib/onboarding/service";
 import type { AdminAccessRequest } from "@/lib/platform/contracts";
 import {
   addressName, communityRoleNotice, communityRoleRedirect, countPendingAccessRequests, decisionFailure, decisionNotice, displayLink,
-  githubProfileUrl, isDelegatedCredential, parseCommunityRoleAction, parseDecisionForm,
+  githubProfileUrl, isDelegatedCredential, isOwnRepeatDecision, parseCommunityRoleAction, parseDecisionForm,
 } from "./access-requests";
 
 function form(fields: Record<string, string>): FormData {
@@ -57,6 +57,24 @@ describe("decisionFailure", () => {
   it("leaves anything unexpected to propagate", () => {
     expect(decisionFailure(new OnboardingError("rate_limited", "Slow down.", 1000))).toBeNull();
     expect(decisionFailure(new Error("D1 is down"))).toBeNull();
+  });
+});
+
+describe("isOwnRepeatDecision", () => {
+  const admin = { id: "admin-1", name: "Amina Hassan", avatarUrl: null, roleBadges: [] };
+  const other = { ...admin, id: "admin-2" };
+
+  it("reads a double-submit of the same decision by the same administrator as done", () => {
+    expect(isOwnRepeatDecision({ status: "APPROVED", decidedBy: admin }, "admin-1", "approve")).toBe(true);
+    expect(isOwnRepeatDecision({ status: "DECLINED", decidedBy: admin }, "admin-1", "decline")).toBe(true);
+  });
+
+  it("keeps the 409 for someone else's decision, a different outcome, a withdrawal or a missing request", () => {
+    expect(isOwnRepeatDecision({ status: "APPROVED", decidedBy: other }, "admin-1", "approve")).toBe(false);
+    expect(isOwnRepeatDecision({ status: "DECLINED", decidedBy: admin }, "admin-1", "approve")).toBe(false);
+    expect(isOwnRepeatDecision({ status: "WITHDRAWN", decidedBy: null }, "admin-1", "decline")).toBe(false);
+    expect(isOwnRepeatDecision({ status: "APPROVED", decidedBy: null }, "admin-1", "approve")).toBe(false);
+    expect(isOwnRepeatDecision(null, "admin-1", "approve")).toBe(false);
   });
 });
 

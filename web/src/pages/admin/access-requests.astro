@@ -4,7 +4,7 @@ import { PiInfoDuotone } from "react-icons/pi";
 import AdminLayout from "@/layouts/AdminLayout.astro";
 import AccessRequestCard from "@/components/admin/AccessRequestCard.astro";
 import {
-  ACCESS_REQUESTS_PATH, decisionFailure, decisionNotice, isDelegatedCredential, parseDecisionForm,
+  ACCESS_REQUESTS_PATH, decisionFailure, decisionNotice, isDelegatedCredential, isOwnRepeatDecision, parseDecisionForm,
 } from "@/lib/admin/access-requests";
 import {
   AccessRequestCursorError, decideAccessRequest, getAdminAccessRequest, listAccessRequests,
@@ -32,6 +32,7 @@ const cursor = Cursor.safeParse(search.get("cursor")).data;
 
 let failure: string | undefined;
 let rowError: { id: string; message: string; draft: string } | undefined;
+let repeated: string | undefined;
 
 if (Astro.request.method === "POST") {
   const form = await Astro.request.formData();
@@ -48,11 +49,18 @@ if (Astro.request.method === "POST") {
     } catch (error) {
       const refused = decisionFailure(error);
       if (!refused) throw error;
-      Astro.response.status = refused.status;
-      failure = refused.message;
+      const current = refused.status === 409 ? await getAdminAccessRequest(env.DB, parsed.id) : null;
+      if (isOwnRepeatDecision(current, adminId, parsed.decision.decision)) {
+        repeated = parsed.id;
+      } else {
+        Astro.response.status = refused.status;
+        failure = refused.message;
+      }
     }
   }
 }
+
+if (repeated) return Astro.redirect(`${ACCESS_REQUESTS_PATH}?decided=${encodeURIComponent(repeated)}`, 303);
 
 let list;
 try {

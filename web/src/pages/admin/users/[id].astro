@@ -20,6 +20,7 @@ import {
   ACCESS_ROLE_LABELS,
   communityRoleNotice,
   communityRoleRedirect,
+  COMMUNITY_ROLE_FAILED,
   isDelegatedCredential,
   parseCommunityRoleAction,
 } from "@/lib/admin/access-requests";
@@ -62,15 +63,21 @@ if (Astro.request.method === "POST") {
       communityError =
         "Agent sessions and personal access tokens cannot change mentor or institution access. Sign in with a browser session.";
     } else {
-      if (communityAction.kind === "grant") {
-        await grantCommunityRole(
-          { db: env.DB, env },
-          { userId: id, role: communityAction.role, actorId: signedInAdminId }
-        );
-      } else {
-        await revokeCommunityRole(env.DB, id, communityAction.role);
+      try {
+        if (communityAction.kind === "grant") {
+          await grantCommunityRole(
+            { db: env.DB, env },
+            { userId: id, role: communityAction.role, actorId: signedInAdminId }
+          );
+        } else {
+          await revokeCommunityRole(env.DB, id, communityAction.role);
+        }
+        changedAccess = communityRoleRedirect(id, communityAction);
+      } catch (error) {
+        console.error("Community role change failed", error);
+        Astro.response.status = 500;
+        communityError = COMMUNITY_ROLE_FAILED;
       }
-      changedAccess = communityRoleRedirect(id, communityAction);
     }
   } else {
     try {
@@ -121,6 +128,8 @@ const communityRoles = AccessRole.options.map((role) => ({
   held: heldRoles.has(role),
   pending: pendingRoles.has(role),
 }));
+// Delegated credentials cannot change these roles, so they are not offered the buttons.
+const delegated = isDelegatedCredential(Astro.locals);
 const communityNotice = communityRoleNotice(
   Astro.url.searchParams.get("access"),
   Astro.url.searchParams.get("accessRole")
@@ -253,7 +262,7 @@ const applicationBadgeVariants = {
                   </p>
                 </div>
               </div>
-              <form method="POST" class="shrink-0">
+              {!delegated && <form method="POST" class="shrink-0">
                 {access.held ? (
                   <>
                     <input type="hidden" name="action" value={`revoke-${access.role}`} />
@@ -274,7 +283,7 @@ const applicationBadgeVariants = {
                     </Button>
                   </>
                 )}
-              </form>
+              </form>}
             </li>
           ))}
         </ul>
