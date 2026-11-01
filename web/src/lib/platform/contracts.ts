@@ -92,11 +92,20 @@ export const Capabilities = z.object({
   isMentor: z.boolean(), isInstitution: z.boolean(), isAdmin: z.boolean(),
 });
 export type Capabilities = z.infer<typeof Capabilities>;
+/**
+ * Derived on each load, not attention: shared contributions this mentor has
+ * not confirmed at their current revision, as the Confirm page lists them.
+ * Sent only with the Mentoring space; absent means the number is not known.
+ */
+export const MentoringSummary = z.object({ awaitingConfirmation: Count });
+export type MentoringSummary = z.infer<typeof MentoringSummary>;
 export const Me = z.object({
   user: PersonSummary, capabilities: Capabilities, spaces: z.array(SpaceId),
   unreadCounts: SpaceUnreadCounts, flags: EffectiveFlags, temboUsage: TemboUsage,
+  mentoring: MentoringSummary.optional(),
 }).refine((m) => m.spaces.every((space, i) => i === 0 || SPACE_ORDER.indexOf(m.spaces[i - 1]) < SPACE_ORDER.indexOf(space)),
-  "Spaces must be unique and in SPACE_ORDER");
+  "Spaces must be unique and in SPACE_ORDER")
+  .refine((m) => !m.mentoring || m.spaces.includes("mentoring"), "Mentoring summary needs the Mentoring space");
 export type Me = z.infer<typeof Me>;
 
 export const AttentionKind = z.enum([

@@ -3,6 +3,8 @@ import type { AttentionItem } from "@/lib/platform/contracts";
 import { attention, people } from "@/lib/platform/fixtures";
 import {
   attentionActor,
+  attentionEmpty,
+  attentionSummary,
   attentionPlace,
   attentionTime,
   groupAttention,
@@ -30,6 +32,31 @@ describe("attentionActor", () => {
   it("gives Tembo its own mark and shows no person for a deleted author", () => {
     expect(attentionActor(tembo)).toBeNull();
     expect(attentionActor(item({ actor: { ...people.kevin, id: null, name: "Deleted user" } }))).toBeNull();
+  });
+});
+
+describe("attentionEmpty", () => {
+  it("says nothing needs you only when no confirmation is known to be waiting", () => {
+    expect(attentionEmpty("all", 0)).toBe("Nothing needs you right now.");
+    expect(attentionEmpty("all", 3)).toBe("No new notifications.");
+    expect(attentionEmpty("all", null)).toBe("No new notifications.");
+  });
+
+  it("keeps each filter's own line, which never claims nothing needs you", () => {
+    for (const awaiting of [0, 3, null]) {
+      expect(attentionEmpty("mentions", awaiting)).toBe("No mentions, replies or Tembo answers yet.");
+      expect(attentionEmpty("requests", awaiting)).toBe("No mentoring requests yet.");
+      expect(attentionEmpty("updates", awaiting)).toBe("No updates yet.");
+    }
+  });
+});
+
+describe("attentionSummary", () => {
+  it("counts new items, and says all caught up only when no confirmation is known to be waiting", () => {
+    expect(attentionSummary(2, 4)).toBe("2 new");
+    expect(attentionSummary(0, 0)).toBe("You're all caught up.");
+    expect(attentionSummary(0, 4)).toBe("Nothing new.");
+    expect(attentionSummary(0, null)).toBe("Nothing new.");
   });
 });
 

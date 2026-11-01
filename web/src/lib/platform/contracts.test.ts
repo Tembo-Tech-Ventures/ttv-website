@@ -117,6 +117,12 @@ describe("wire invariants", () => {
     },
   );
 
+  it("keeps the Mentoring summary additive: Me without it still parses, and a mentor's carries a count", () => {
+    expect(C.Me.parse(F.meByPersona.david)).not.toHaveProperty("mentoring");
+    const withSummary = { ...F.meByPersona.david, mentoring: { awaitingConfirmation: 4 } };
+    expect(C.Me.parse(withSummary)).toEqual(withSummary);
+  });
+
   it("fixes the space, flag and reaction vocabulary", () => {
     expect(C.SpaceId.options).toEqual(["cohort", "community", "mentoring", "discover", "admin", "profile"]);
     expect(C.FlagKey.options).toEqual(["spaces", "channels", "tembo_channels", "mentor_requests"]);
@@ -191,6 +197,8 @@ describe("wire invariants", () => {
     ["missing effective flag", C.EffectiveFlags, { spaces: true }],
     ["wrong space order", C.Me, { ...F.meByPersona.wanjiku, spaces: ["profile", "community"] }],
     ["duplicate space", C.Me, { ...F.meByPersona.lucy, spaces: ["community", "community", "profile"] }],
+    ["mentoring summary without the Mentoring space", C.Me, { ...F.meByPersona.wanjiku, mentoring: { awaitingConfirmation: 1 } }],
+    ["negative waiting confirmations", C.Me, { ...F.meByPersona.david, mentoring: { awaitingConfirmation: -1 } }],
     // oxlint-disable-next-line no-script-url -- Adversarial input must be rejected by the link contract.
     ["unsafe embed link", C.ProjectEmbed, { ...F.projects.chamaLedger, link: "javascript:alert(1)" }],
     ["protocol-relative link", C.InternalPath, "//example.com"],

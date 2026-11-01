@@ -1,5 +1,7 @@
-import React, { useId, useRef, useState } from "react";
+import React, { useContext, useId, useRef, useState } from "react";
+import { awaitingConfirmationText } from "@/components/platform/spaces/awaiting-confirmation";
 import ClaimConfirmations from "../discovery/ClaimConfirmations";
+import { CommunityEmbedded } from "../discovery/DiscoveryShell";
 import type { ClaimConfirmation } from "../discovery/types";
 import { UiApiError, displayUiError } from "../discovery/ui-errors";
 
@@ -71,6 +73,7 @@ function ReviewRequest({
   allowDecline: boolean;
 }) {
   const id = useId();
+  const embedded = useContext(CommunityEmbedded);
   const [note, setNote] = useState("");
   const [method, setMethod] = useState("");
   const [decision, setDecision] = useState<
@@ -161,7 +164,9 @@ function ReviewRequest({
       )}
       <output>
         {status === "pending"
-          ? "You can add a confirmation after reviewing this revision."
+          ? embedded
+            ? "Waiting for your confirmation of this revision."
+            : "You can add a confirmation after reviewing this revision."
           : status === "confirmed"
             ? `${demo ? "Demo: " : ""}Claim confirmed: ${request.claimTitle}`
             : `${demo ? "Demo: " : ""}Confirmation declined for this claim: ${request.claimTitle}`}
@@ -246,6 +251,17 @@ export default function MentorReview({
   allowDecline = false,
 }: MentorReviewProps) {
   const id = useId();
+  // In the spaces shell the Mentoring space counts these as waiting, so the
+  // page says the same; the existing dashboard keeps its wording.
+  const embedded = useContext(CommunityEmbedded);
+  const [reviewed, setReviewed] = useState<ReadonlySet<string>>(() => new Set());
+  const waiting = requests.filter(
+    (request) => request.status === "pending" && !reviewed.has(`${request.id}:${request.version}`),
+  ).length;
+  async function review(requestId: string, decision: MentorReviewDecision) {
+    await onReview(requestId, decision);
+    setReviewed((current) => new Set(current).add(`${requestId}:${decision.expectedRevision}`));
+  }
   return (
     <section className="discovery-panel" aria-labelledby={`${id}-heading`}>
       <h2 id={`${id}-heading`}>Confirm what you have personally checked</h2>
@@ -253,10 +269,30 @@ export default function MentorReview({
         Confirm only the named contribution and evidence you reviewed, not the
         whole person. An assistant response does not confirm a claim.
       </p>
-      <p>
-        Published contributions may already have reviews. Check the confirmation
-        history; this list is not a queue of review requests.
-      </p>
+      {embedded ? (
+        <>
+          <p>
+            Members share these contributions so mentors can confirm the parts
+            they have checked. Nobody has sent you a review request: confirm
+            only work you have checked yourself. Some already have reviews from
+            other mentors in their confirmation history.
+          </p>
+          {requests.length > 0 && (
+            <p data-awaiting-confirmation={waiting}>
+              <strong>
+                {waiting > 0
+                  ? awaitingConfirmationText(waiting)
+                  : "Nothing here is waiting for your confirmation."}
+              </strong>
+            </p>
+          )}
+        </>
+      ) : (
+        <p>
+          Published contributions may already have reviews. Check the confirmation
+          history; this list is not a queue of review requests.
+        </p>
+      )}
       {demo && (
         <p className="discovery-demo-notice">
           Demo data · Reviews here are demonstration actions, not real mentor
@@ -270,7 +306,7 @@ export default function MentorReview({
           <ReviewRequest
             key={`${request.id}:${request.version}`}
             request={request}
-            onReview={onReview}
+            onReview={review}
             demo={demo}
             allowDecline={allowDecline}
           />

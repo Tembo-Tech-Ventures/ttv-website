@@ -102,14 +102,49 @@ describe("real /me and Astro context adapters", () => {
     expect(parsed.user.roleBadges).toEqual(expectedBadges[fixture.name]);
     expect(Object.keys(parsed.capabilities).toSorted()).toEqual(Object.keys(capabilities).toSorted());
     expect(parsed.spaces).toEqual(SPACE_ORDER.filter(space => spaces.includes(space)));
-    expect(queries).toHaveBeenCalledTimes(5); // one flag, three capability, one attention count read
+    const mentoring = spaces.includes("mentoring");
+    // Only the Mentoring space derives its waiting confirmations, and only from the Confirm page's rows.
+    expect(parsed.mentoring).toEqual(mentoring ? { awaitingConfirmation: 0 } : undefined);
+    // One flag, three capability and one attention count read; mentors add a role and a row read.
+    const reads = mentoring ? 7 : 5;
+    expect(queries).toHaveBeenCalledTimes(reads);
     const fetch = vi.fn(() => { throw new Error("No self-fetch allowed"); });
     vi.stubGlobal("fetch", fetch);
     const page = await getSpaceContext(context);
     expect(Me.parse(page)).toEqual(body);
     expect(JSON.parse(JSON.stringify(page))).toEqual(body);
     expect(fetch).not.toHaveBeenCalled();
-    expect(queries).toHaveBeenCalledTimes(5); // middleware/page/API share the same request context
+    expect(queries).toHaveBeenCalledTimes(reads); // middleware/page/API share the same request context
+  });
+
+  it("counts the shared work waiting for a mentor's confirmation, behind the Confirm page's own checks", async () => {
+    const { database, context } = setup({ globalRoles: ["MENTOR"] });
+    const mentorId = context.locals.user!.id;
+    database.exec(`INSERT INTO user (id,name,email) VALUES ('synthetic-member','Member','member@example.test')`);
+    const journey = database.prepare("INSERT INTO communityJourney (id,userId,title,description,occurredAt,visibility) VALUES (?,?,'Work','Fictional work','2026-10-01',?)");
+    journey.run("shared", "synthetic-member", "institution");
+    journey.run("shared-confirmed", "synthetic-member", "institution");
+    journey.run("private", "synthetic-member", "private");
+    journey.run("own", mentorId, "institution");
+    database.prepare("INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journeyVersion) VALUES ('c','shared-confirmed',?,'I checked it','Review',1)").run(mentorId);
+    expect(Me.parse((await request(context)).body).mentoring).toEqual({ awaitingConfirmation: 1 });
+
+    // A delegated agent session is refused by the Confirm page, so it gets no number at all.
+    const agent = { ...context.locals, session: { userAgent: "ttv-agent:fixture" } as unknown as App.Locals["session"] };
+    const refused = Me.parse((await request({ ...context, locals: agent } as typeof context)).body);
+    expect(refused).not.toHaveProperty("mentoring");
+    expect(refused.spaces).toContain("mentoring");
+  });
+
+  it("still serves a mentor's spaces when the waiting count cannot be read, with no number and the failure recorded", async () => {
+    const { database, context } = setup({ globalRoles: ["MENTOR"] });
+    database.exec("DROP TABLE communityConfirmation");
+    const { response, body } = await request(context);
+    expect(response.status).toBe(200);
+    const me = Me.parse(body);
+    expect(me.spaces).toContain("mentoring");
+    expect(me).not.toHaveProperty("mentoring");
+    expect(mocks.recordErrorInBackground).toHaveBeenCalledWith(undefined, expect.anything(), expect.objectContaining({ level: "warning" }));
   });
 
   it.each(["OFF", "STAFF"])("keeps %s dark for non-admins before any feature read", async audience => {

@@ -18,6 +18,8 @@ function profile(row: ProfileRow): CommunityProfile {
   return { userId: row.userId, name: row.name, image: row.image, headline: row.headline ?? "", bio: row.bio ?? "", skills,
     opportunityGoals: row.opportunityGoals ?? "", version: row.version ?? 0, updatedAt: row.updatedAt };
 }
+/** How many shared contributions the Confirm page lists, newest first. */
+const MENTORSHIP_WINDOW = 50;
 const PROFILE_SELECT = `SELECT u.id AS userId,u.name,u.image,p.headline,p.bio,p.skills,p.opportunityGoals,p.version,p.updatedAt
   FROM user u LEFT JOIN communityProfile p ON p.userId=u.id`;
 
@@ -77,6 +79,20 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       WHERE j.userId=? AND (?=j.userId OR j.visibility='institution')${mentorScope.clause} ORDER BY c.createdAt DESC LIMIT 500`).bind(target, actorId,...mentorScope.values).all<CommunityConfirmation>();
     return results.map((entry) => ({ ...entry, confirmations: confirmations.filter((c) => c.journeyId === entry.id) }));
   }
+  /**
+   * The Confirm page's rows: the 50 newest contributions shared beyond their
+   * author, never the mentor's own. One query for the list and its count, so
+   * they cannot drift apart. `columns` is an internal constant, never input.
+   */
+  async function mentorshipRows<Row extends { userId: string }>(columns: string) {
+    const a = await access();
+    if (!a.isMentor && !a.isAdmin) throw new CommunityError("Mentor access is required.", 403);
+    const scope = fixtureScope("j.userId");
+    const { results } = await db.prepare(`SELECT ${columns}, EXISTS (SELECT 1 FROM communityConfirmation ownReview WHERE ownReview.journeyId=j.id AND ownReview.mentorId=? AND ownReview.journeyVersion=j.version) AS reviewedByCurrentMentor
+      FROM communityJourney j JOIN user u ON u.id=j.userId WHERE j.visibility='institution' AND j.userId<>?${scope.clause} ORDER BY j.createdAt DESC,j.id DESC LIMIT ${MENTORSHIP_WINDOW}`).bind(actorId,actorId,...scope.values).all<Row & { reviewedByCurrentMentor: number }>();
+    await Promise.all(results.map(row=>requireFixtureTarget(row.userId)));
+    return results.map(row => ({...row,reviewedByCurrentMentor:Boolean(row.reviewedByCurrentMentor)}));
+  }
   return {
     access, getProfile, listJourney,
     getOwnProfile: () => getProfile(actorId),
@@ -124,17 +140,28 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       return results.map(row => ({profile:profile(row),entries:entries.filter(e=>e.userId===row.userId).map(e=>({...e,confirmations:confirmations.filter(c=>c.journeyId===e.id)}))}));
     },
     async listMentorship() {
-      const a = await access();
-      if (!a.isMentor && !a.isAdmin) throw new CommunityError("Mentor access is required.", 403);
       const scope = fixtureScope("j.userId");
-      const { results } = await db.prepare(`SELECT j.id,j.userId,u.name AS memberName,j.title,j.description,j.evidenceUrl,j.occurredAt,j.visibility,j.version,j.createdAt,j.updatedAt, EXISTS (SELECT 1 FROM communityConfirmation ownReview WHERE ownReview.journeyId=j.id AND ownReview.mentorId=? AND ownReview.journeyVersion=j.version) AS reviewedByCurrentMentor
-        FROM communityJourney j JOIN user u ON u.id=j.userId WHERE j.visibility='institution' AND j.userId<>?${scope.clause} ORDER BY j.createdAt DESC,j.id DESC LIMIT 50`).bind(actorId,actorId,...scope.values).all<Omit<CommunityJourney, "confirmations"> & { memberName: string; reviewedByCurrentMentor: number }>();
+      const results = await mentorshipRows<Omit<CommunityJourney, "confirmations"> & { memberName: string }>(
+        "j.id,j.userId,u.name AS memberName,j.title,j.description,j.evidenceUrl,j.occurredAt,j.visibility,j.version,j.createdAt,j.updatedAt");
       const mentorScope = fixtureScope("c.mentorId");
       const {results: confirmations} = await db.prepare(`SELECT c.id,c.journeyId,c.mentorId,u.name AS mentorName,c.statement,c.method,c.journeyVersion,c.mentorRole,c.createdAt
         FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=c.mentorId
         WHERE j.visibility='institution' AND j.userId<>?${scope.clause}${mentorScope.clause} ORDER BY c.createdAt DESC LIMIT 500`).bind(actorId,...scope.values,...mentorScope.values).all<CommunityConfirmation>();
-      await Promise.all(results.map(row=>requireFixtureTarget(row.userId)));
-      return results.map(entry => ({...entry,confirmations:confirmations.filter(c=>c.journeyId===entry.id),reviewedByCurrentMentor:Boolean(entry.reviewedByCurrentMentor)}));
+      return results.map(entry => ({...entry,confirmations:confirmations.filter(c=>c.journeyId===entry.id)}));
+    },
+    /**
+     * How many of the contributions listMentorship returns still have no
+     * confirmation from this mentor for their current revision: the same rows,
+     * read through the same checks, so the number matches the review forms the
+     * Confirm page shows. When that window is full and none of it waits,
+     * older work beyond it might, so the answer is null (not known) rather
+     * than a "nothing waiting" zero. It is derived, not an attention item;
+     * see src/lib/mentoring/README.md.
+     */
+    async countAwaitingConfirmation(): Promise<number | null> {
+      const results = await mentorshipRows<{ userId: string }>("j.userId");
+      const waiting = results.filter((entry) => !entry.reviewedByCurrentMentor).length;
+      return waiting === 0 && results.length === MENTORSHIP_WINDOW ? null : waiting;
     },
     async setAccess(input: unknown) {
       requireWritable();

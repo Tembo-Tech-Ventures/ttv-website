@@ -3,6 +3,7 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 import CommunityApp from "@/components/community/CommunityApp";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import MentoringOverview from "@/components/platform/spaces/MentoringOverview.astro";
+import { awaitingConfirmation } from "@/components/platform/spaces/awaiting-confirmation";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import { normalizeSpacePath, SPACE_PATHS } from "@/lib/platform/server/space-routes";
 // oxlint-disable-next-line import/no-unassigned-import -- Workspace stylesheet.
@@ -19,7 +20,7 @@ const spaces =
 {
   spaces?.page === "mentoring" ? (
     <SpacePage context={spaces} title="Mentoring">
-      <MentoringOverview />
+      <MentoringOverview awaiting={awaitingConfirmation(spaces.me)} />
     </SpacePage>
   ) : spaces ? (
     <SpacePage context={spaces} title={spaces.space === "admin" ? "Mentor review" : "Confirm work"}>

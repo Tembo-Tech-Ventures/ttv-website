@@ -8,6 +8,14 @@ import { PiArrowRight, PiCalendarCheck, PiChatsCircle, PiShieldCheck } from "rea
 import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
 import { RAISED } from "@/components/platform/ui/tones";
 import { SPACE_PAGE_PATHS } from "./sidebar";
+import { awaitingConfirmationText } from "./awaiting-confirmation";
+
+interface Props {
+  /** The server's derived count (Me.mentoring); null when it is not known, so nothing is claimed. */
+  awaiting: number | null;
+}
+
+const { awaiting } = Astro.props;
 
 const later = [
   {
@@ -28,7 +36,7 @@ const later = [
 <div class="max-w-4xl">
   <h1 class="text-3xl tracking-heading break-words text-ink-primary sm:text-4xl lg:text-5xl">Mentoring</h1>
   <p class="mt-3 max-w-2xl text-base leading-relaxed text-ink-secondary sm:text-lg">
-    Members share what they built and ask a mentor to confirm the part that was theirs.
+    Members share what they built so mentors can confirm the part that was theirs.
   </p>
 
   <section
@@ -45,6 +53,18 @@ const later = [
           Review a contribution and its sources, then record what you checked. A confirmation covers that
           piece of work as it was shared; it is not an endorsement of the person.
         </p>
+        {
+          awaiting !== null && (
+            <p
+              data-awaiting-confirmation={awaiting}
+              class:list={["mt-3 max-w-2xl text-base leading-relaxed", awaiting > 0 ? "font-semibold text-ink-primary" : "text-ink-secondary"]}
+            >
+              {awaiting > 0
+                ? awaitingConfirmationText(awaiting)
+                : "Nothing is waiting for your confirmation right now. Work appears here when members share it."}
+            </p>
+          )
+        }
       </div>
       <a
         href={SPACE_PAGE_PATHS.confirm}

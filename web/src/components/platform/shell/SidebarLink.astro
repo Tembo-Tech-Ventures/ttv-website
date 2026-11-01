@@ -4,7 +4,8 @@ import { CountBadge } from "@/components/platform/ui";
 
 /**
  * One destination in a space's sidebar. `current` marks the page you are on.
- * A count is unread attention; `note` is quiet text such as "1 new".
+ * A count is unread attention unless `countLabel` says what it counts
+ * instead; `note` is quiet text such as "1 new".
  */
 interface Props {
   href: string;
@@ -12,10 +13,12 @@ interface Props {
   icon?: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   current?: boolean;
   count?: number;
+  /** Read after the number by screen readers. */
+  countLabel?: string;
   note?: string;
 }
 
-const { href, label, icon: Icon, current = false, count = 0, note } = Astro.props;
+const { href, label, icon: Icon, current = false, count = 0, countLabel = "new", note } = Astro.props;
 ---
 
 <li>
@@ -30,6 +33,6 @@ const { href, label, icon: Icon, current = false, count = 0, note } = Astro.prop
   >
     {Icon && <Icon aria-hidden className="size-5 shrink-0" />}
     <span class="min-w-0 flex-1 break-words">{label}</span>
-    {count > 0 ? <CountBadge count={count} label="new" /> : note && <span class="shrink-0 text-xs font-semibold text-ink-muted">{note}</span>}
+    {count > 0 ? <CountBadge count={count} label={countLabel} /> : note && <span class="shrink-0 text-xs font-semibold text-ink-muted">{note}</span>}
   </a>
 </li>
