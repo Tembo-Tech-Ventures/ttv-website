@@ -77,6 +77,9 @@ export function accessStatus(state: OnboardingState | null, role: AccessRole): A
   return "NOT_REQUESTED";
 }
 
+/** "Choose at least one…" stays up across the first load while nothing is chosen. */
+const keepEmpty = (local: IntentSelection, seeded: IntentSelection): IntentSelection =>
+  local.empty && seeded.intents.length === 0 ? { ...seeded, empty: true } : seeded;
 const ROLE_NAMES: Record<AccessRole, string> = { MENTOR: "mentor", INSTITUTION: "organisation" };
 const FAILURE_MESSAGES: Record<OnboardingFailureKind, string> = {
   conflict: "This changed since the page loaded. It now shows the latest.",
@@ -183,7 +186,7 @@ export function createOnboardingStore(options: OnboardingOptions = {}) {
     store.setState(state => ({
       ...state, ...patch, server: next, loadError: null,
       selection: seed
-        ? replayChoices(initialSelection(next, options.hint), choices)
+        ? keepEmpty(state.selection, replayChoices(initialSelection(next, options.hint), choices))
         : intentSelectionReducer(state.selection, { type: "sync", from: state.server?.intents ?? null, to: next.intents }),
     }));
     choices.clear();
@@ -264,6 +267,9 @@ export function createOnboardingStore(options: OnboardingOptions = {}) {
         pending: null, failure: { action, kind, error: failure, retryAfterMs: failure.retryAfterMs ?? null },
         announcement: FAILURE_MESSAGES[kind],
       });
+      // This write aborted the first load and learned nothing: load again, so the page isn't left without
+      // a stage or request status (a failed load then shows loadError and its retry).
+      if (store.getState().server === null) void refresh();
       return false;
     } finally {
       if (writeController === controller) writeController = undefined;

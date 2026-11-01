@@ -734,6 +734,47 @@ describe("onboarding store", () => {
       expect(await Promise.all(put.mock.calls.map(([request]) => request.json()))).toEqual([{ intents: ["MEMBER"] }, { intents: ["MEMBER"] }]);
     });
 
+    it("a definite write failure before the first load loads again, so status is never left unknown", async () => {
+      const { store, get, put, reads } = harness(null, { hint: "mentor" });
+      const first = deferred<MockReply>();
+      get.mockReturnValueOnce(first.promise).mockReturnValueOnce(ok(mercy));
+      store.start();
+      store.select({ type: "toggle", intent: "MEMBER" });
+      put.mockReturnValueOnce(fail(429, "rate_limited", 60_000));
+      expect(await store.saveIntents()).toBe(false);
+      first.resolve(ok(wairimu)); // Aborted by the write: dropped.
+      await tick();
+      expect(reads()).toBe(2);
+      expect(store.getState()).toMatchObject({
+        server: mercy, loadError: null, failure: { kind: "rate_limited" },
+        selection: { intents: ["MEMBER", "MENTOR"], dirty: false },
+      });
+      expect(accessStatus(store.getState().server, "MENTOR")).toBe("PENDING");
+    });
+
+    it("if that second load fails too, the page gets a load error and its retry", async () => {
+      const { store, get, put } = harness(null);
+      get.mockReturnValueOnce(deferred<MockReply>().promise).mockReturnValueOnce(fail(500, "boom"));
+      store.start();
+      store.select({ type: "toggle", intent: "MEMBER" });
+      put.mockReturnValueOnce(fail(422, "invalid_request"));
+      expect(await store.saveIntents()).toBe(false);
+      await tick();
+      expect(store.getState()).toMatchObject({ server: null, loadError: { status: 500 }, failure: { kind: "invalid" } });
+    });
+
+    it("keeps 'Choose at least one' up across the first load while nothing is chosen", async () => {
+      const { store, get } = harness(null);
+      const answer = deferred<MockReply>();
+      get.mockReturnValueOnce(answer.promise);
+      store.start();
+      expect(await store.saveIntents()).toBe(false);
+      expect(store.getState().selection.empty).toBe(true);
+      answer.resolve(ok(wairimu));
+      await tick();
+      expect(store.getState().selection).toEqual({ intents: [], empty: true, dirty: false });
+    });
+
     it("a pre-load save that fails never brings back the inferred prefill", async () => {
       const { store, put, get } = harness(null);
       store.select({ type: "toggle", intent: "MENTOR" });
