@@ -64,7 +64,10 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
   async function requireProfileAccess(target: string) {
     await requireFixtureTarget(target);
     if (target === actorId) return;
-    const eligible = discoverableMember("u.id", await requireInstitution());
+    const caller = await requireInstitution();
+    // Staff keep their reach: an admin may open any account, as before.
+    if (caller.isAdmin) return;
+    const eligible = discoverableMember("u.id", caller);
     const row = await db.prepare(`SELECT 1 AS found FROM user u WHERE u.id=? AND ${eligible.clause}`).bind(target, ...eligible.values).first();
     if (!row) throw new CommunityError("Profile not found.", 404);
   }

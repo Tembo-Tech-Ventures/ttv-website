@@ -5,8 +5,9 @@
  * never excludes an otherwise eligible member.
  *
  * The decision covers institutions, not staff. Admins keep the reach they had
- * (coordinator decision on #255): every account except mentors and admins,
- * with or without a saved profile, including on surfaces institutions share.
+ * (coordinator decision on #255): lists show every account except mentors and
+ * admins, with or without a saved profile, and by-id reads open any account.
+ * A caller holding ADMIN is staff, whatever other roles they also hold.
  *
  * REST search and Discover, chat tools, MCP and platform search all apply
  * this one fragment, so the surfaces cannot drift apart. It decides who is

@@ -24,6 +24,7 @@ const PEOPLE = {
   david: { name: "David Kamau", roles: ["MENTOR"], saved: true },
   amina: { name: "Amina Hassan", roles: ["ADMIN"], saved: true },
   kevin: { name: "Kevin Wafula", roles: ["INSTITUTION"], saved: true },
+  grace: { name: "Grace Njeri", roles: ["ADMIN", "INSTITUTION"], saved: true },
 } as const;
 type Person = keyof typeof PEOPLE;
 const EVERYONE = Object.keys(PEOPLE) as Person[];
@@ -161,7 +162,7 @@ const READ_SURFACES: Record<string, (db: D1Database, caller: string, target: str
 };
 
 const CALLERS: { caller: Person; listed: Person[] }[] = [
-  // Lucy has no saved profile, David is a mentor, Amina an admin, Joseph the caller.
+  // Lucy has no saved profile, David is a mentor, Amina and Grace admins, Joseph the caller.
   // Kevin also holds the institution role, and stays discoverable.
   { caller: "joseph", listed: ["achieng", "kevin"] },
   // The mixed-role rule from the other side: Joseph is discoverable to Kevin.
@@ -189,21 +190,22 @@ describe.each(Object.entries(READ_SURFACES))("%s fails closed for ineligible peo
  * The decision covers institutions, not staff (coordinator decision on #255):
  * an admin still finds Lucy, who has no saved profile, wherever an admin
  * searched before, while no institution can. Mentors and admins stay excluded
- * from these lists, as they always were.
+ * from these lists, as they always were. Grace holds ADMIN and INSTITUTION and
+ * is staff; MCP admits her through the institution role, but not Amina.
  */
-const ADMIN_LIST_SURFACES = Object.entries(LIST_SURFACES).filter(([surface]) => !surface.startsWith("MCP"));
-describe.each(ADMIN_LIST_SURFACES)("%s keeps an admin's reach", (surface, list) => {
-  it("as amina", async () => {
+describe.each(Object.entries(LIST_SURFACES))("%s keeps an admin's reach", (surface, list) => {
+  it.each(surface.startsWith("MCP") ? ["grace"] as const : ["amina", "grace"] as const)("as %s", async caller => {
     const db = world();
     // Platform search's people group is the public talent directory, which lists everyone.
     const expected: Person[] = surface === "platform search" ? EVERYONE : ["achieng", "joseph", "kevin", "lucy"];
-    expect((await list(db, id("amina"))).toSorted()).toEqual(expected.map(id).toSorted());
+    expect((await list(db, id(caller))).toSorted()).toEqual(expected.map(id).toSorted());
   });
 });
-describe.each(["REST profile", "REST assessment", "chat selected profile", "chat get_profile tool"])("%s keeps an admin's reach", surface => {
-  it("reads lucy as amina, while an institution gets not found", async () => {
+describe.each(Object.keys(READ_SURFACES))("%s keeps an admin's reach", surface => {
+  it.each(surface.startsWith("MCP") ? ["grace"] as const : ["amina", "grace"] as const)("opens any account as %s, while an institution gets not found", async caller => {
     const db = world();
-    expect(await READ_SURFACES[surface](db, id("amina"), id("lucy"))).toBe("allowed");
+    // As before this change, an admin's by-id read opens mentors and admins too.
+    for (const target of ["lucy", "david"] as const) expect(await READ_SURFACES[surface](db, id(caller), id(target))).toBe("allowed");
     expect(await READ_SURFACES[surface](db, id("joseph"), id("lucy"))).toEqual(await READ_SURFACES[surface](db, id("joseph"), GHOST));
   });
 });
