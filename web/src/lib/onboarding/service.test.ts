@@ -286,6 +286,30 @@ describe("createAccessRequest", () => {
     expect((await getOnboardingState(db, "wairimu")).intents).toEqual(["MEMBER", "INSTITUTION"]);
   });
 
+  it.each([
+    { name: "an application", sql: "INSERT INTO programApplication(id,userId,programId,status,application) VALUES ('a','wairimu','cohort-a','COMPLETED','{}')", role: null, expected: ["MEMBER", "MENTOR"] },
+    { name: "the INSTITUTION role", sql: null, role: "INSTITUTION", expected: ["MENTOR", "INSTITUTION"] },
+    { name: "nothing to infer", sql: null, role: null, expected: ["MENTOR"] },
+  ] as const)("saves what was inferred from $name before the first request", async ({ sql, role, expected }) => {
+    const { db, database, grant } = setup();
+    if (sql) database.exec(sql);
+    if (role) grant("wairimu", role);
+    await createAccessRequest(db, "wairimu", mentor, T);
+    expect((await getOnboardingState(db, "wairimu")).intents).toEqual(expected);
+  });
+
+  it("never re-infers over a saved choice, nor when the request is refused", async () => {
+    const { db, database, grant, rows } = setup();
+    database.exec("INSERT INTO studentProfile(id,userId,handle) VALUES ('p','wairimu','wairimu')");
+    await saveIntents(db, "wairimu", ["EXPLORING"], T);
+    await createAccessRequest(db, "wairimu", mentor, T + 1);
+    expect((await getOnboardingState(db, "wairimu")).intents).toEqual(["MENTOR"]);
+    database.exec("DELETE FROM member_intent");
+    grant("wairimu", "INSTITUTION");
+    await rejection(createAccessRequest(db, "wairimu", institution, T + 2));
+    expect(rows("SELECT * FROM member_intent")).toEqual([]);
+  });
+
   it("refuses a second pending request for the same role, but not for the other role", async () => {
     const { db, rows } = setup();
     await createAccessRequest(db, "wairimu", mentor, T);
@@ -388,12 +412,20 @@ describe("withdrawAccessRequest", () => {
   });
 
   it("returns an account that never chose to its inferred intents", async () => {
-    const { db, database } = setup();
-    database.exec("INSERT INTO studentProfile(id,userId,handle) VALUES ('p','wairimu','wairimu')");
+    const { db } = setup();
     const id = await createAccessRequest(db, "wairimu", mentor, T);
     expect(await getOnboardingState(db, "wairimu")).toMatchObject({ stage: "PROMPT", intents: ["MENTOR"], inferred: [] });
     await withdrawAccessRequest(db, "wairimu", id, T + 1);
-    expect(await getOnboardingState(db, "wairimu")).toMatchObject({ stage: "PROMPT", intents: [], inferred: ["MEMBER"] });
+    expect(await getOnboardingState(db, "wairimu")).toMatchObject({ stage: "PROMPT", intents: [], inferred: [] });
+  });
+
+  it("keeps an alumna a member after she asks to mentor and then withdraws (second review of #260)", async () => {
+    const { db, database } = setup();
+    database.exec("INSERT INTO studentProfile(id,userId,handle) VALUES ('p','wairimu','wairimu')");
+    const id = await createAccessRequest(db, "wairimu", mentor, T);
+    expect(await getOnboardingState(db, "wairimu")).toMatchObject({ stage: "PROMPT", intents: ["MEMBER", "MENTOR"], inferred: [] });
+    await withdrawAccessRequest(db, "wairimu", id, T + 1);
+    expect(await getOnboardingState(db, "wairimu")).toMatchObject({ stage: "PROMPT", intents: ["MEMBER"] });
   });
 
   it("is refused for someone else's request exactly as for a missing one", async () => {

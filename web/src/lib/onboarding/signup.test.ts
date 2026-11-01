@@ -1,6 +1,7 @@
 import type { SQLInputValue } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAuth } from "@/lib/auth";
+import { syntheticSessionHooks } from "@/lib/synthetic-session-lifetime";
 import { startOnboardingForNewAccount, type SignUpEnv } from "./signup";
 import { onboardingDatabase } from "./test-support";
 
@@ -120,6 +121,12 @@ describe("Better Auth user.create hook in createAuth", () => {
     const fixture = setup();
     await signUp(fixture, { DEPLOYMENT_ENVIRONMENT: "agent-pr-260", PLATFORM_FLAGS_OVERRIDE: "all" });
     expect(newcomer(fixture)).toEqual([{ stage: "NEW" }]);
+  });
+
+  it("sits beside the synthetic-session hooks without replacing any (createAuth spreads them first)", () => {
+    for (const [environment, enabled, demo] of [["staging", true, true], ["agent-pr-260", true, false], ["production", false, false]] as const) {
+      expect(Object.keys(syntheticSessionHooks(environment, enabled, demo) ?? {})).not.toContain("user");
+    }
   });
 
   it("never breaks sign-up when onboarding cannot be written", async () => {

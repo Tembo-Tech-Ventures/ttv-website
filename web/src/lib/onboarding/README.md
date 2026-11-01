@@ -46,7 +46,8 @@ return nothing; routes reply with `getOnboardingState`.
   stored as `EXPLORING`, so "nothing saved" always means "never chose".
 - `dismissPrompt`: the card's "Not now"; inference keeps applying.
 - `createAccessRequest`: records the request and its intent (replacing
-  `EXPLORING`). Refused with `conflict` when the role is held or a request is
+  `EXPLORING`). When nothing is saved yet, the inferred intents are saved first,
+  so an alumna who asks to mentor keeps her member framing while she waits. Refused with `conflict` when the role is held or a request is
   already pending, and with `rate_limited` (with `retryAfterMs`) after
   `ACCESS_REQUEST_DAILY_LIMIT` (5) creations in 24 hours. The insert re-checks
   both conditions itself, so concurrent calls cannot pass them. If neither reason

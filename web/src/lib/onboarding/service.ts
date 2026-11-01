@@ -29,22 +29,26 @@ interface SummaryRow {
 }
 type RequestRow = Omit<AccessRequestSummary, "seenAt"> & { seenAt: number | null };
 
+/**
+ * MEMBER is inferred only from an application or a student profile: never from a cohort assignment
+ * (programRole holds only instructors, TAs and cohort mentors) or from a community profile or journey,
+ * which mentors keep too. MENTOR and INSTITUTION are inferred from the roles held.
+ */
+const hasMemberFootprint = (userParam: string) => `(EXISTS (SELECT 1 FROM programApplication WHERE userId = ${userParam})
+  OR EXISTS (SELECT 1 FROM studentProfile WHERE userId = ${userParam}))`;
+const heldAccessRoles = (userParam: string) => `SELECT r.name FROM UserRoles ur JOIN Roles r ON r.id = ur.roleId
+  WHERE ur.userId = ${userParam} AND r.name IN ('MENTOR', 'INSTITUTION')`;
+
 const byOrder = <T extends string>(order: readonly T[]) => (a: T, b: T) => order.indexOf(a) - order.indexOf(b);
 
-/**
- * One summary read and one request read. MEMBER is inferred only from an application or a student
- * profile: never from a cohort assignment (programRole holds only instructors, TAs and cohort mentors)
- * or from a community profile or journey, which mentors keep too.
- */
+/** One summary read and one request read. Inferred intents apply only while nothing is saved. */
 export async function getOnboardingState(db: D1Database, userId: string): Promise<OnboardingState> {
   const [summary, { results: requestRows }] = await Promise.all([
     db.prepare(`SELECT
         (SELECT stage FROM member_onboarding WHERE userId = ?1) AS stage,
         (SELECT json_group_array(intent) FROM member_intent WHERE userId = ?1) AS intents,
-        (SELECT json_group_array(r.name) FROM UserRoles ur JOIN Roles r ON r.id = ur.roleId
-          WHERE ur.userId = ?1 AND r.name IN ('MENTOR', 'INSTITUTION')) AS roles,
-        EXISTS (SELECT 1 FROM programApplication WHERE userId = ?1)
-          OR EXISTS (SELECT 1 FROM studentProfile WHERE userId = ?1) AS memberFootprint`)
+        (SELECT json_group_array(name) FROM (${heldAccessRoles("?1")})) AS roles,
+        ${hasMemberFootprint("?1")} AS memberFootprint`)
       .bind(userId).first<SummaryRow>(),
     // The latest request per role. decidedBy is deliberately never selected: requesters are not told who decided.
     db.prepare(`SELECT id, role, status, note, organisation, organisationRole, link, decisionMessage,
@@ -121,7 +125,8 @@ const isPendingConflict = (error: unknown) =>
 
 /**
  * Asks for a global role; an administrator decides (B-O.3). The request also records the matching
- * intent, replacing EXPLORING, so a withdrawal can remove it again. Refused while the role is held or
+ * intent, replacing EXPLORING, so a withdrawal can remove it again. When nothing is saved yet, the
+ * inferred intents are saved first, so an alumna asking to mentor keeps her member framing. Refused while the role is held or
  * another request for it is pending, and after ACCESS_REQUEST_DAILY_LIMIT creations in 24 hours.
  * The insert re-checks both conditions itself, so concurrent requests cannot slip past them.
  */
@@ -139,6 +144,11 @@ export async function createAccessRequest(db: D1Database, userId: string, input:
           AND (SELECT count(*) FROM access_request WHERE userId = ?2 AND createdAt > ?9 - ${DAY_MS}) < ${ACCESS_REQUEST_DAILY_LIMIT}`)
         .bind(id, userId, request.role, request.note, institution?.organisation ?? null, institution?.organisationRole ?? null,
           request.link, institution ? now : null, now),
+      db.prepare(`INSERT OR IGNORE INTO member_intent (userId, intent, createdAt)
+        SELECT ?2, intent, ?3 FROM (SELECT 'MEMBER' AS intent WHERE ${hasMemberFootprint("?2")}
+          UNION ALL ${heldAccessRoles("?2")})
+        WHERE EXISTS (SELECT 1 FROM access_request WHERE id = ?1)
+          AND NOT EXISTS (SELECT 1 FROM member_intent WHERE userId = ?2)`).bind(id, userId, now),
       db.prepare(`INSERT OR IGNORE INTO member_intent (userId, intent, createdAt)
         SELECT userId, role, ?2 FROM access_request WHERE id = ?1`).bind(id, now),
       db.prepare(`DELETE FROM member_intent WHERE userId = ?2 AND intent = 'EXPLORING'
