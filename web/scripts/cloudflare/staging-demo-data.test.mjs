@@ -31,9 +31,10 @@ it("seeds actual migrations idempotently, preserves edits/real records and mints
  for(const table of["session","account","personal_access_token","stagingFixtureIdentity","studentProfile","recording"])expect(count(f.db,table)).toBe(0);
  expect(f.queries.every(sql=>! /\b(UPDATE|DELETE|REPLACE)\b/.test(sql))).toBe(true);
 });
-it("includes institutional and both cohort modes as talent but excludes mentor",async()=>{
+it("includes both cohort modes as talent but excludes the mentor and the searching institution",async()=>{
  const f=await fixture();await seedDemoData(f.target);const service=createCommunityService(f.d1,DEMO_PERSONAS.institution,undefined,"staging");
- for(const id of[DEMO_PERSONAS.institution,DEMO_PERSONAS.cohort,DEMO_PERSONAS.noncohort]){const name=f.db.prepare('SELECT name FROM user WHERE id=?').get(id).name;expect((await service.searchProfiles({query:name})).map(p=>p.userId)).toContain(id);}
+ for(const id of[DEMO_PERSONAS.cohort,DEMO_PERSONAS.noncohort]){const name=f.db.prepare('SELECT name FROM user WHERE id=?').get(id).name;expect((await service.searchProfiles({query:name})).map(p=>p.userId)).toContain(id);}
+ const own=f.db.prepare('SELECT name FROM user WHERE id=?').get(DEMO_PERSONAS.institution).name;expect((await service.searchProfiles({query:own})).map(p=>p.userId)).not.toContain(DEMO_PERSONAS.institution);
  const name=f.db.prepare('SELECT name FROM user WHERE id=?').get(DEMO_PERSONAS.mentor).name;expect(await service.searchProfiles({query:name})).toEqual([]);expect(f.db.prepare('SELECT status FROM programApplication WHERE userId=?').get(DEMO_PERSONAS.cohort).status).toBe("APPROVED");expect(f.db.prepare('SELECT id FROM programApplication WHERE userId=?').get(DEMO_PERSONAS.noncohort)).toBeUndefined();
 });
 it.each(["identity","journey","privilege","email"])("rejects %s collision before writes",async kind=>{

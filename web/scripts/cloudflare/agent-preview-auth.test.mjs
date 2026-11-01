@@ -160,11 +160,12 @@ describe("seedAgentPreviewFixtures", () => {
     // profile reset, curriculum, eight convergent cohorts, self-application
     // reset, staff-role reset, two staff users/roles, cohort-application reset,
     // ten cohort users, six eligible cohort applications, preview app, amina
-    // user/app/profile, four blog posts, invalid-completion user/app/profile,
-    // two amina highlights, kwame user/app/profile, two projects, and two
-    // attention fixtures, plus three isolated student-journey users, their
-    // profile reset, and two applications = 60 total
-    expect(executeQuery).toHaveBeenCalledTimes(60);
+    // user/app/profile, amina community profile, four blog posts,
+    // invalid-completion user/app/profile, two amina highlights, kwame
+    // user/app/profile, two projects, and two attention fixtures, plus three
+    // isolated student-journey users, their profile reset, and two
+    // applications = 61 total
+    expect(executeQuery).toHaveBeenCalledTimes(61);
 
     // All calls should target the correct database
     for (const call of executeQuery.mock.calls) {
@@ -316,6 +317,8 @@ describe("seedAgentPreviewFixtures", () => {
     expect(aminaProfile?.[2]).toContain("Kenya");
     expect(aminaProfile?.[1]).toContain("'error'");
     expect(aminaProfile?.[1]).toContain('"moderationReviewRequired" = 1');
+    const aminaCommunity = findInsertByParam("communityProfile", "ttv-fixture-user-amina");
+    expect(aminaCommunity?.[1]).toContain('ON CONFLICT("userId") DO UPDATE');
     const readerPost = findByParam("ttv-fixture-post-amina-reader");
     expect(readerPost?.[1]).toContain('INSERT INTO "blogPost"');
     expect(readerPost?.[2]).toContain("building-resilient-interfaces");

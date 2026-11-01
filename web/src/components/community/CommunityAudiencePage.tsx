@@ -6,7 +6,7 @@ import { communityEntryHref } from "../../lib/community-entry";
 const steps = [
   { title: "Start with something you made.", text: "A project, a small improvement, a piece of a team effort. Explain what you contributed and why it mattered." },
   { title: "Let the evidence add context.", text: "Connect your contribution to a source. A mentor can record what they checked about that specific work." },
-  { title: "Say what comes next.", text: "Share your interests and opportunity goals. Approved institutions can explore your profile and documented work." },
+  { title: "Say what comes next.", text: "Share your interests and opportunity goals. Approved institutions can discover your saved community profile and the contributions you share." },
 ];
 
 function ContributionTrail() {
@@ -32,7 +32,7 @@ export default function CommunityAudiencePage({ isAuthenticated = false }: { isA
           <h1 id="audience-title">Give your work <em>a story.</em></h1>
           <p className="audience-lead">You are more than a list of skills. Show what you have made, the part you played, and where you want to go.</p>
           <a className="audience-button" href={href}>{cta}<span aria-hidden="true">↗</span></a>
-          <p className="audience-cta-note">Open to builders within and beyond TTV cohorts. Approved institutions can discover your saved profile.{!isAuthenticated && " Continue with GitHub to join or sign in."}</p>
+          <p className="audience-cta-note">Open to builders within and beyond TTV cohorts. Approved institutions can discover your saved community profile and the contributions you share.{!isAuthenticated && " Continue with GitHub to join or sign in."}</p>
           <a className="audience-text-link" href="#your-first-contribution">See how it works <span aria-hidden="true">↓</span></a>
         </div>
         <ContributionTrail />
@@ -46,6 +46,6 @@ export default function CommunityAudiencePage({ isAuthenticated = false }: { isA
         <div className="audience-context-notes"><div><h3>Add a mentor’s perspective.</h3><p>Mentor confirmation stays attached to the specific work reviewed. It is not a blanket endorsement of your skills or a promise of a job.</p></div><div><h3>Help institutions understand your work.</h3><p>Saved community profiles and contributions are available to approved institutions, and mentors can review shared contributions. Private cohort recordings and internal records stay outside institutional discovery.</p></div></div>
       </CommunitySheet>
       <CommunitySheet className="audience-questions" labelledby="questions-title" tone="deep" layer={4}><h2 id="questions-title">Before you begin.</h2><div><details><summary>What can I share?</summary><p>Describe a project or contribution and add a source you have permission to share. Explain your own role in team work. Keep private information out of your profile and linked evidence.</p></details><details><summary>Do I need to join a TTV cohort?</summary><p>No. Community profiles are open to members with or without a cohort. Cohort applications and access to cohort learning materials remain separate.</p></details></div></CommunitySheet>
-      <CommunitySheet className="audience-close" labelledby="close-title" tone="peach" layer={5} last><span className="audience-close-mark" aria-hidden="true">↗</span><div><h2 id="close-title">Start with your work.<br />See where the conversation goes.</h2><a className="audience-button" href={href}>{cta}<span aria-hidden="true">↗</span></a><p>Approved institutions can discover your saved profile. Shared contributions are available for mentor review. Participation does not guarantee a job, placement, or introduction.</p></div></CommunitySheet>
+      <CommunitySheet className="audience-close" labelledby="close-title" tone="peach" layer={5} last><span className="audience-close-mark" aria-hidden="true">↗</span><div><h2 id="close-title">Start with your work.<br />See where the conversation goes.</h2><a className="audience-button" href={href}>{cta}<span aria-hidden="true">↗</span></a><p>Approved institutions can discover your saved community profile and the contributions you share. Shared contributions are available for mentor review. Participation does not guarantee a job, placement, or introduction.</p></div></CommunitySheet>
   </article>;
 }

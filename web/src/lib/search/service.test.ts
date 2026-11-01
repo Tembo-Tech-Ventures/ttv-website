@@ -142,9 +142,10 @@ describe("authorized source retrieval", () => {
     const profile = s.database.prepare("INSERT INTO studentProfile(id,userId,handle,status,publicName,bio) VALUES (?,?,?,'PUBLISHED','Synthetic','Ordinary work')");
     const completion = s.database.prepare("INSERT INTO programApplication(id,userId,programId,status,completedAt,application) VALUES (?,?,'cohort-a','COMPLETED',1,'{}')");
     const project = s.database.prepare("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES (?,?,'Ordinary project','Evidence','2026-10-31','institution')");
+    const saved = s.database.prepare("INSERT INTO communityProfile(userId) VALUES (?)");
     for (let i = 0; i < 600; i++) {
       const id = `candidate-${String(i).padStart(4, "0")}`;
-      user.run(id, id + "@example.test"); profile.run(id, id, id); completion.run(id, id); project.run(id, id);
+      user.run(id, id + "@example.test"); profile.run(id, id, id); completion.run(id, id); project.run(id, id); saved.run(id);
     }
     s.database.prepare("UPDATE studentProfile SET bio=? WHERE id='candidate-0599'").run("x".repeat(4500) + " Rare evidence");
     s.database.prepare("UPDATE communityJourney SET description=? WHERE id='candidate-0599'").run("x".repeat(4500) + " Rare evidence");

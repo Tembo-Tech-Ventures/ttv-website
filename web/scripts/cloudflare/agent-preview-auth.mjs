@@ -780,6 +780,31 @@ export async function seedAgentPreviewFixtures({
     ],
   );
 
+  // Saved community profile for Amina: institutional discovery lists only
+  // people who saved one, so the preview institution persona has an eligible
+  // synthetic member to find. Converges on every seed.
+  await executeQuery(
+    databaseId,
+    `INSERT INTO "communityProfile"
+      ("userId", "headline", "bio", "skills", "opportunityGoals", "createdAt", "updatedAt")
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT("userId") DO UPDATE SET
+       "headline" = excluded."headline",
+       "bio" = excluded."bio",
+       "skills" = excluded."skills",
+       "opportunityGoals" = excluded."opportunityGoals",
+       "updatedAt" = excluded."updatedAt"`,
+    [
+      "ttv-fixture-user-amina",
+      "Fictional full-stack builder · Nairobi",
+      "Synthetic preview profile. I build booking and payment tools for community clinics.",
+      '["TypeScript","React","D1"]',
+      "A first full-stack developer role",
+      createdAt,
+      createdAt,
+    ],
+  );
+
   // Public-reader and moderation fixtures. The second published post is kept
   // separate from the reader assertion so the admin mutation journey can
   // suspend and restore it without racing the public blog journey.

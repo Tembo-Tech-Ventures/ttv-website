@@ -7,6 +7,7 @@ import CommunityLanding from "./CommunityLanding";
   it.each([false, true])("offers all three persona routes and correct entry paths (authenticated=%s)", isAuthenticated => {
     const html = renderToStaticMarkup(<CommunityLanding isAuthenticated={isAuthenticated} />);
     expect(html.match(/<h1 /g)).toHaveLength(1);
+    expect(html).toContain("Approved institutions can discover your saved community profile and the contributions you share.");
     for (const persona of ["members", "mentors", "institutions"]) expect(html).toContain(`href="/community/${persona}"`);
     for (const destination of ["/dashboard/community", "/dashboard/discover"]) {
       expect(html).toContain(`href="${isAuthenticated ? destination : `/auth/login?next=${encodeURIComponent(destination)}`}"`);

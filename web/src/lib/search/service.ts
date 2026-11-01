@@ -3,6 +3,7 @@ import * as schema from "@/lib/db/schema";
 import { SearchQuery, SearchResults, WebLink, type PersonSummary } from "@/lib/platform/contracts";
 import { capabilitiesFor } from "@/lib/platform/server/capabilities";
 import { DEMO_USER_IDS, isDemoUser } from "@/lib/staging-demo-policy";
+import { discoverableMember } from "@/lib/community/eligibility";
 import { resolvePublicProfileIdentity } from "@/lib/talent/public-identity";
 
 export const SEARCH_RESULT_LIMIT = 10;
@@ -48,14 +49,20 @@ export async function searchPlatform(d1: D1Database, userId: string, input: Sear
   const publicValues = demo ? [JSON.stringify(DEMO_USER_IDS)] : [];
   const publicColumns = "p.userId,p.handle,p.publicName,p.publicAvatarUrl";
   const includePublic = !query.programId && ["all", "community"].includes(query.scope);
+  // Institutions and admins see people through institutional discovery's one
+  // eligibility rule; everyone else sees the public talent directory as is.
+  const institutional = caps.isInstitution || caps.isAdmin;
+  const discoverable = discoverableMember("p.userId", userId);
+  const discoverableScope = institutional ? ` AND ${discoverable.clause}` : "";
+  const discoverableValues = institutional ? discoverable.values : [];
 
   if (includePublic || query.scope === "people") {
     const { results: rows } = await d1.prepare(`SELECT ${publicColumns},substr(coalesce(p.bio,''),1,500) AS bio
-      FROM studentProfile p WHERE ${PUBLIC_PROFILE}${publicScope}
+      FROM studentProfile p WHERE ${PUBLIC_PROFILE}${publicScope}${discoverableScope}
       AND (instr(lower(coalesce(p.publicName,'') || ' ' || coalesce(p.headline,'') || ' ' || coalesce(p.bio,'')),lower(?))>0
         OR EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(p.skills) THEN p.skills ELSE '[]' END) skill
           WHERE skill.type='text' AND instr(lower(skill.value),lower(?))>0))
-      ORDER BY p.userId LIMIT ${SEARCH_RESULT_LIMIT}`).bind(...publicValues, term, term)
+      ORDER BY p.userId LIMIT ${SEARCH_RESULT_LIMIT}`).bind(...publicValues, ...discoverableValues, term, term)
       .all<PublicPersonRow & { bio: string }>();
     results.people = rows.map(row => ({ person: person(row), bio: row.bio,
       href: `/talent/${encodeURIComponent(row.handle)}`, visibility: { kind: "PUBLIC", label: "Public profile" } }));
@@ -69,11 +76,11 @@ export async function searchPlatform(d1: D1Database, userId: string, input: Sear
         substr(j.description,1,500) AS summary
       FROM communityJourney j JOIN studentProfile p ON p.userId=j.userId
       WHERE ${PUBLIC_PROFILE}${publicScope} AND j.visibility='institution'
-        AND (j.userId=? OR ?=1)
+        AND (j.userId=? OR ${institutional ? discoverable.clause : "0"})
         AND NOT EXISTS (SELECT 1 FROM UserRoles ur JOIN Roles role ON role.id=ur.roleId
           WHERE ur.userId=j.userId AND role.name IN ('MENTOR','ADMIN'))
         AND instr(lower(j.title || ' ' || j.description),lower(?))>0
-      ORDER BY j.id LIMIT ${SEARCH_RESULT_LIMIT}`).bind(...publicValues, userId, Number(caps.isInstitution || caps.isAdmin), term)
+      ORDER BY j.id LIMIT ${SEARCH_RESULT_LIMIT}`).bind(...publicValues, userId, ...discoverableValues, term)
       .all<PublicPersonRow & { id: string; version: number; title: string; summary: string }>();
     results.projects = rows.map(row => ({ journeyId: row.id, version: row.version, title: row.title,
       summary: row.summary, owner: person(row),

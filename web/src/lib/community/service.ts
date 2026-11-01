@@ -2,6 +2,7 @@ import { DEMO_PREFIX, DEMO_USER_IDS, isDemoUser } from "@/lib/staging-demo-polic
 import { verifySameRunTarget, verifyRetainedProbeTarget, retainedProbeScope, StagingFixtureAccessError, type StagingFixtureIdentity } from "@/lib/staging-fixtures";
 import { createId } from "@paralleldrive/cuid2";
 import { workConfirmedAttention } from "@/lib/attention/producers";
+import { discoverableMember } from "./eligibility";
 import {
   CommunityError, profileInput, journeyInput, journeyUpdateInput, confirmationInput, searchInput, parseInput,
   type CommunityProfile, type CommunityJourney, type CommunityConfirmation,
@@ -58,9 +59,14 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
     const a = await access();
     if (!a.isInstitution && !a.isAdmin) throw new CommunityError("Approved institutional access is required.", 403);
   }
+  // Someone outside discovery reads exactly like someone who does not exist.
   async function requireProfileAccess(target: string) {
     await requireFixtureTarget(target);
-    if (target !== actorId) await requireInstitution();
+    if (target === actorId) return;
+    await requireInstitution();
+    const eligible = discoverableMember("u.id", actorId);
+    const row = await db.prepare(`SELECT 1 AS found FROM user u WHERE u.id=? AND ${eligible.clause}`).bind(target, ...eligible.values).first();
+    if (!row) throw new CommunityError("Profile not found.", 404);
   }
   async function getProfile(target: string): Promise<CommunityProfile> {
     await requireProfileAccess(target);
@@ -115,19 +121,21 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       const clauses = skills.map(() => `EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(p.skills) THEN p.skills ELSE '[]' END) skill WHERE lower(skill.value)=?)`);
       const skillFilter = clauses.length > 0 ? ` AND ${clauses.join(" AND ")}` : "";
       const scope = fixtureScope("u.id");
+      const eligible = discoverableMember("u.id", actorId);
       const { results } = await db.prepare(`${PROFILE_SELECT}
-        WHERE NOT EXISTS (SELECT 1 FROM UserRoles directoryRole JOIN Roles directoryRoleName ON directoryRoleName.id=directoryRole.roleId WHERE directoryRole.userId=u.id AND directoryRoleName.name IN ('MENTOR','ADMIN'))
+        WHERE ${eligible.clause}
           AND instr(lower(u.name || ' ' || coalesce(p.headline,'') || ' ' || coalesce(p.skills,'') || ' ' || coalesce(p.bio,'')),?)>0${skillFilter}${scope.clause}
-        ORDER BY u.name,u.id LIMIT ?`).bind(query,...skills,...scope.values,p.limit).all<ProfileRow>();
+        ORDER BY u.name,u.id LIMIT ?`).bind(...eligible.values,query,...skills,...scope.values,p.limit).all<ProfileRow>();
       await Promise.all(results.map(row=>requireFixtureTarget(row.userId)));
       return results.map(profile);
     },
     async discoveryEvidence() {
       await requireInstitution();
       const scope = fixtureScope("u.id");
+      const eligible = discoverableMember("u.id", actorId);
       const { results } = await db.prepare(`${PROFILE_SELECT}
-        WHERE NOT EXISTS (SELECT 1 FROM UserRoles ur JOIN Roles r ON r.id=ur.roleId WHERE ur.userId=u.id AND r.name IN ('MENTOR','ADMIN'))${scope.clause}
-        ORDER BY u.id LIMIT 501`).bind(...scope.values).all<ProfileRow>();
+        WHERE ${eligible.clause}${scope.clause}
+        ORDER BY u.id LIMIT 501`).bind(...eligible.values,...scope.values).all<ProfileRow>();
       if (results.length > 500) throw new CommunityError("Discovery capacity reached. Please try again later.",503);
       const ids = JSON.stringify(results.map(row => row.userId));
       const { results: entries } = await db.prepare(`SELECT id,userId,title,description,evidenceUrl,occurredAt,visibility,version,createdAt,updatedAt

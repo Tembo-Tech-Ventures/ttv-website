@@ -7,7 +7,7 @@ describe("member audience page", () => {
   it("provides an honest join destination and clearly illustrative evidence without exposing a real profile", () => {
     const html = renderToStaticMarkup(<CommunityAudiencePage />);
     expect(html).toContain('href="/auth/login?next=%2Fdashboard%2Fcommunity"');
-    expect(html).toMatch(/class="audience-cta-note">[^<]*Approved institutions can discover your saved profile/);
+    expect(html).toMatch(/class="audience-cta-note">[^<]*Approved institutions can discover your saved community profile and the contributions you share\./);
     expect(html).toContain("Fictional illustration");
     expect(html).toContain("Project source · example only");
     expect(html).toContain("not the whole person");

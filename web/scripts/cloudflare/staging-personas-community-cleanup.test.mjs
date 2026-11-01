@@ -75,7 +75,9 @@ describe("real persona cleanup cascades community evidence", () => {
         contribute(db, personas);
         db.prepare("DELETE FROM user WHERE id=?").run(personas.mentor.userId);
         expect(db.prepare("SELECT * FROM communityConfirmation").all()).toEqual([]);
-        expect(db.prepare("SELECT userId FROM communityProfile").all()).toEqual([{ userId: personas.member.userId }]);
+        // The other member is provisioned with a saved profile, so institutions can discover them.
+        expect(db.prepare("SELECT userId FROM communityProfile ORDER BY userId").all())
+          .toEqual([personas.member.userId, personas.otherMember.userId].toSorted().map(userId => ({ userId })));
         expect(db.prepare("SELECT count(*) AS n FROM communityJourney WHERE userId=?").get(personas.member.userId).n).toBe(2);
         expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
       } });
