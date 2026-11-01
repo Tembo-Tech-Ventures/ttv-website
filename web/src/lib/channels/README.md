@@ -304,25 +304,24 @@ v1.
   a cohort channel (members, alumni, instructors, TAs, invited mentors,
   admins) has that cohort's recordings.
 - **Stored.** A project keeps its title, a summary of its description (500
-  characters) and no skills (projects have none of their own). It is a
-  snapshot of the shared revision: an owner who edits the project to remove
-  something must make it private, or delete the message, to take the old
-  text out of the channel. `link` is null until TTV has a project page every
-  reader can open (coordinator E3); the evidence URL is never shared, because
-  shared work does not link out of TTV (owner decision 6). A clip keeps the
-  recording's title and a quotation of the transcript segments overlapping
-  its window (280 characters).
+  characters), no skills (projects have none of their own) and its https
+  evidence link (`link: null` without one, or for anything else: no TTV page
+  is open to every reader, coordinator seq 382). It is a snapshot of the
+  shared revision: an owner who edits the project to remove something must
+  make it private, or delete the message, to take the old text out of the
+  channel. A clip keeps the recording's title and a quotation of the
+  transcript segments overlapping its window (280 characters).
 - **Screened.** Projects are not moderated where they are written, and every
-  reader sees their text, so the moderation screen gets the body followed by
-  each shared project's title and summary (`screeningText`). Contact details
-  in attached work are flagged like contact details in the body. Clip
+  reader sees them, so the moderation screen gets the body followed by each
+  shared project's title, summary and link (`screeningText`). Contact details
+  and invite links in attached work are flagged like those in the body. Clip
   quotations are the session's own words and are not screened. Edits change
   only the body, so they screen only the body.
 - **On every read** (`EMBED_ACCESS_COLUMN`, a column of the page's own
   statement, so pages cost no extra statement): a project must still exist,
   belong to the message's author and be published; a recording must still be
   complete and in the channel's cohort. Otherwise the reader, author
-  included, gets `{type: "unavailable", kind}` with no title, ids or
+  included, gets `{type: "unavailable", was}` with no title, ids or
   quotation. A project's confirmations are read live: each mentor's latest
   confirmation at or before the shared revision, with the revision it
   confirmed. An edited project keeps showing the revision that was shared;
@@ -338,7 +337,7 @@ v1.
   changed since; the same nonce with different work is 409.
 
 `listShareables` (`GET /api/channels/:id/shareables`, and
-`getChannelShareables(Astro, channel)` / `loadChannelShareables` for page
+`getRouteChannelShareables(Astro)` / `loadChannelShareables` for page
 frontmatter, which give null where the caller cannot post) is what the
 composer's attach tools offer: the caller's own published projects at their
 current revision (50, most recently changed first), and only where

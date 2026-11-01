@@ -51,13 +51,14 @@ export async function getRouteChannelPage(
 }
 
 /**
- * What a channel's composer can attach (B-2.4, coordinator E2), for a channel the page already
- * resolved (getRouteChannel / getRouteChannelPage): the caller's own published projects, and session
- * clips in their cohort's own channels, as U-2.1's Shareables. null when signed out or where the
- * caller cannot post, so the page shows no attach tools.
+ * What the route channel's composer can attach (B-2.4): the caller's own published projects, and
+ * session clips in their cohort's own channels, as U-2.1's Shareables. null wherever getRouteChannel
+ * is null or the caller cannot post there, so the page shows no attach tools. Shares
+ * getRouteChannel's one lookup per request.
  */
-export async function getChannelShareables(context: Pick<APIContext, "locals">, channel: Channel): Promise<ChannelShareables | null> {
+export async function getRouteChannelShareables(context: Pick<APIContext, "locals" | "url">): Promise<ChannelShareables | null> {
+  const channel = await getRouteChannel(context);
   const user = context.locals.user;
-  if (!user) return null;
+  if (!channel || !user) return null;
   return loadChannelShareables(env.DB, user.id, channel);
 }

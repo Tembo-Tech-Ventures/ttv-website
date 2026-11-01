@@ -181,8 +181,8 @@ describe("wire invariants", () => {
     ["zero clip duration", C.SessionClipEmbed, { ...F.sessionClip, durationSeconds: 0 }],
     ["clip longer than ten minutes", C.SessionClipEmbedRef, { type: "sessionClip", recordingId: F.fixtureIds.session09, startSeconds: 0, durationSeconds: 601 }],
     ["six embeds", C.PostMessage, { ...post, embeds: Array.from({ length: 6 }, (_, i) => ({ ...post.embeds[0], version: i + 1 })) }],
-    ["unavailable work offered to attach", C.MessageEmbed, { type: "unavailable", kind: "project" }],
-    ["unavailable embed of an unknown kind", C.MessageEmbedView, { type: "unavailable", kind: "linkPreview" }],
+    ["unavailable work offered to attach", C.MessageEmbed, { type: "unavailable", was: "project" }],
+    ["unavailable embed of an unknown kind", C.MessageEmbedView, { type: "unavailable", was: "linkPreview" }],
     ["blank shareables query", C.ShareablesQuery, { q: "  " }],
     ["oversize shareables query", C.ShareablesQuery, { q: "x".repeat(201) }],
     ["unknown shareables parameter", C.ShareablesQuery, { q: "retries", programId: F.fixtureIds.cohort04 }],
@@ -266,10 +266,10 @@ describe("wire invariants", () => {
 
 describe("embed contracts (B-2.4)", () => {
   it("lets a message carry a neutral unavailable embed, and strips anything a server might leave on it", () => {
-    const leaky = { type: "unavailable", kind: "project", title: "Private draft", journeyId: F.fixtureIds.chamaLedger };
-    expect(C.MessageEmbedView.parse(leaky)).toEqual({ type: "unavailable", kind: "project" });
-    const message = { ...F.messages.projectPost, embeds: [{ type: "unavailable", kind: "sessionClip" }] };
-    expect(C.Message.parse(message).embeds).toEqual([{ type: "unavailable", kind: "sessionClip" }]);
+    const leaky = { type: "unavailable", was: "project", title: "Private draft", journeyId: F.fixtureIds.chamaLedger };
+    expect(C.MessageEmbedView.parse(leaky)).toEqual({ type: "unavailable", was: "project" });
+    const message = { ...F.messages.projectPost, embeds: [{ type: "unavailable", was: "sessionClip" }] };
+    expect(C.Message.parse(message).embeds).toEqual([{ type: "unavailable", was: "sessionClip" }]);
   });
 
   it("accepts a project without an evidence link, and a clip of exactly ten minutes", () => {

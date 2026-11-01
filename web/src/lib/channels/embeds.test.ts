@@ -88,7 +88,7 @@ describe("sharing a project", () => {
     const message = sent(await s.share("show-your-work", [s.project("ledger", 2)]));
     const expected = {
       type: "project", journeyId: "ledger", version: 2, title: "Chama ledger", summary: "A ledger for a savings group.", skills: [],
-      link: null,
+      link: "https://example.com/ledger",
       confirmations: [
         { mentorId: "synthetic-faith", mentorName: "Faith Njeri", version: 2 },
         { mentorId: "synthetic-achieng", mentorName: "Achieng Atieno", version: 1 },
@@ -98,30 +98,34 @@ describe("sharing a project", () => {
     expect(await s.seen("show-your-work", message.id, "synthetic-otieno")).toEqual([expected]);
   });
 
-  it("never links out of TTV: the evidence URL is not shared, whatever it is", async () => {
+  it("links only to an https evidence page, never to one a reader shouldn't open", async () => {
     const s = setup();
-    s.journey("repo", { evidenceUrl: "https://chat.whatsapp.com/InviteCode123" });
     s.journey("none", { evidenceUrl: null });
+    s.journey("plain-http", { evidenceUrl: "http://example.com/insecure" });
     // oxlint-disable-next-line no-script-url -- Adversarial stored data must never become a link.
     s.journey("script", { evidenceUrl: "javascript:alert(1)" });
-    const response = await s.share("help", [s.project("repo"), s.project("none"), s.project("script")]);
-    expect(sent(response).embeds.map((embed) => embed.type === "project" && embed.link)).toEqual([null, null, null]);
-    expect(JSON.stringify(response.body)).not.toMatch(/whatsapp|javascript:/);
-    const shareables = await s.call("listShareables", { id: s.channel("help") });
-    expect(JSON.stringify(shareables.body)).not.toMatch(/whatsapp|javascript:|example\.com/);
+    s.journey("credentials", { evidenceUrl: "https://ttv.example@evil.example/" });
+    const response = await s.share("help", ["none", "plain-http", "script", "credentials"].map((id) => s.project(id)));
+    expect(sent(response).embeds.map((embed) => embed.type === "project" && embed.link)).toEqual([null, null, null, null]);
+    const shareables = ChannelShareables.parse((await s.call("listShareables", { id: s.channel("help") })).body);
+    expect(shareables.projects.map((project) => project.link)).toEqual([null, null, null, null]);
   });
 
-  it("screens the shared projects' text with the body, so contact details in attached work are flagged too", async () => {
+  it("screens the shared projects' text and link with the body, so contact details in attached work are flagged too", async () => {
     const s = setup();
-    s.journey("contact", { title: "Call 0712 345 678", description: "WhatsApp me on +254 712 345 678" });
+    s.journey("contact", { title: "Call 0712 345 678", description: "WhatsApp me on +254 712 345 678",
+      evidenceUrl: "https://chat.whatsapp.com/InviteCode123" });
+    s.journey("plain", { title: "Kiosk", description: "", evidenceUrl: null });
     const screened: string[] = [];
     const screen = ({ body }: { body: string }) => {
       screened.push(body);
       return { reasons: /\d{3} \d{3} \d{3}/.test(body) ? ["Contact details"] : [] };
     };
     const response = await s.call("postMessage", { id: s.channel("help"), screen,
-      body: { ...post("Have a look"), embeds: [s.project("contact")] } });
-    expect(screened).toEqual(["Have a look\n\nCall 0712 345 678\n\nWhatsApp me on +254 712 345 678"]);
+      body: { ...post("Have a look"), embeds: [s.project("contact"), s.project("plain")] } });
+    expect(screened).toEqual([
+      "Have a look\n\nCall 0712 345 678\n\nWhatsApp me on +254 712 345 678\n\nhttps://chat.whatsapp.com/InviteCode123\n\nKiosk",
+    ]);
     expect(sent(response).moderation).toEqual({ state: "FLAGGED", reasons: ["Contact details"] });
     // Clip quotations are the session's words, not the poster's: only the body is screened.
     s.recording("s9");
@@ -170,7 +174,7 @@ describe("sharing a project", () => {
 });
 
 describe("a shared project later", () => {
-  const unavailable = [{ type: "unavailable", kind: "project" }];
+  const unavailable = [{ type: "unavailable", was: "project" }];
 
   it("becomes a neutral unavailable card for every reader, author included, once made private, and comes back when published", async () => {
     const s = setup();
@@ -289,7 +293,7 @@ describe("a shared clip later", () => {
     const message = sent(await s.share("cohort-04", ["moved", "removed", "reprocessing", "kept"].map((id) => s.clip(id))));
     s.database.exec(`UPDATE recording SET programId = 'cohort-b' WHERE id = 'moved';
       DELETE FROM recording WHERE id = 'removed'; UPDATE recording SET processingStatus = 'failed' WHERE id = 'reprocessing';`);
-    const gone = { type: "unavailable", kind: "sessionClip" };
+    const gone = { type: "unavailable", was: "sessionClip" };
     for (const reader of [VIEWER, "synthetic-otieno", "synthetic-faith"]) {
       const response = await s.call("listMessages", { id: s.channel("cohort-04"), user: reader });
       const embeds = MessageList.parse(response.body).items.find((item) => item.id === message.id)?.embeds;
@@ -338,7 +342,7 @@ describe("attaching: limits and retries", () => {
     expect(await refused(s, s.share("help", [], { nonce: "retry-1" }))).toMatchObject({ status: 409, code: "conflict" });
     s.database.exec("UPDATE communityJourney SET visibility = 'private', version = 2 WHERE id = 'ledger'");
     const late = await s.share("help", [s.project("ledger")], { nonce: "retry-1" });
-    expect([late.status, Message.parse(late.body).embeds]).toEqual([200, [{ type: "unavailable", kind: "project" }]]);
+    expect([late.status, Message.parse(late.body).embeds]).toEqual([200, [{ type: "unavailable", was: "project" }]]);
   });
 });
 

@@ -18,7 +18,7 @@ vi.mock("@/lib/observability/errors", async (importOriginal) => ({
   recordErrorInBackground: vi.fn(),
 }));
 import { onRequest } from "@/middleware";
-import { getChannelShareables, getRouteChannel, getRouteChannelPage } from "@/lib/platform/server/channel-context";
+import { getRouteChannelPage, getRouteChannelShareables } from "@/lib/platform/server/channel-context";
 import { GET as listChannels } from "@/pages/api/channels/index";
 import { GET as listMessages, POST as postMessage } from "@/pages/api/channels/[id]/messages";
 import { POST as markRead } from "@/pages/api/channels/[id]/read";
@@ -117,14 +117,13 @@ describe("channel API route files through the middleware", () => {
     s.database.exec(`INSERT INTO communityJourney (id, userId, title, description, occurredAt, visibility) VALUES
       ('ledger', '${VIEWER}', 'Ledger', 'A ledger', '2026-10-01', 'institution')`);
     const shareablesAt = async (path: string) => {
-      let shareables: Awaited<ReturnType<typeof getChannelShareables>> = null;
+      let shareables: Awaited<ReturnType<typeof getRouteChannelShareables>> = null;
       const response = await call(path, async (ctx) => {
-        const channel = await getRouteChannel(ctx);
-        shareables = channel && await getChannelShareables(ctx, channel);
+        shareables = await getRouteChannelShareables(ctx);
         return new Response("Channel page");
       });
       expect(response.status).toBe(200);
-      return shareables as Awaited<ReturnType<typeof getChannelShareables>>;
+      return shareables as Awaited<ReturnType<typeof getRouteChannelShareables>>;
     };
     expect((await shareablesAt("/dashboard/community/c/help"))?.projects.map((project) => project.journeyId)).toEqual(["ledger"]);
     expect((await shareablesAt("/dashboard/community/c/help"))?.clips).toEqual([]);
