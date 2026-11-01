@@ -20,6 +20,10 @@ interface Props {
 }
 
 const { caseId, action, options, names, error, draftReason = "", class: className } = Astro.props;
+// Only a hide shows its reason to the author (with the message's other reasons); every reason stays here.
+const hint = options.some((option) => option.action === "hide")
+  ? "Kept with your decision. If you hide the message, its author sees this reason."
+  : "Kept with your decision. Only admins see it.";
 const ids = { reason: `moderation-${caseId}-reason`, hint: `moderation-${caseId}-hint`, error: `moderation-${caseId}-error` };
 const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 ---
@@ -38,7 +42,7 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
       aria-invalid={error ? "true" : undefined}
       class={`block min-h-11 w-full resize-y rounded-xl border border-hairline bg-ground/60 px-3.5 py-2.5 text-[0.9375rem] text-ink-primary placeholder:text-ink-muted focus-visible:border-peach-ink ${FOCUS}`}
     >{draftReason}</textarea>
-    <p id={ids.hint} class="text-xs text-ink-muted">Kept with your decision in this queue.</p>
+    <p id={ids.hint} class="text-xs text-ink-muted">{hint}</p>
     <p
       id={ids.error}
       role="alert"

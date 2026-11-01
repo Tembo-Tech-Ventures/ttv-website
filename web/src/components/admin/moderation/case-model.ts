@@ -39,6 +39,8 @@ export interface DecisionOption { action: ModerationActionKind; label: string }
  * does not suggest an answer. A decided case can be reversed with the one opposite decision.
  */
 export function decisionOptions(item: Pick<ModerationCase, "state" | "message">): DecisionOption[] {
+  // A deleted message is gone for everyone: there is nothing to hide, only the case to close.
+  if (item.message.deleted) return item.state === "DECIDED" ? [] : [{ action: "keep", label: "Close the case" }];
   const hidden = item.message.moderation?.state === "HIDDEN";
   if (item.state === "DECIDED") {
     return hidden ? [{ action: "restore", label: "Restore" }] : [{ action: "hide", label: "Hide" }];
@@ -105,7 +107,7 @@ export const DECISION_LABEL: Record<ModerationActionKind, string> = {
 export const DECIDED_NOTICE: Record<ModerationActionKind, string> = {
   hide: "Hidden. Members no longer see the message. Its author is told and can ask for a review.",
   restore: "Restored. Everyone in the channel sees the message again.",
-  keep: "Kept as is. The message stays visible, and the same text won't be flagged again.",
+  keep: "Kept as is. Nothing is hidden, and the same text won't be flagged again.",
 };
 
 export const QUEUE_TABS: readonly { state: ModerationQueueState; label: string }[] = [

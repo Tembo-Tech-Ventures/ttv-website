@@ -83,7 +83,7 @@ export function decideHarnessCase(
   input: { messageId: string; action: ModerationActionKind; reason: string },
   failWith: number | null,
 ): void {
-  if (failWith) throw new HarnessRefusal(failWith, "The harness refused this decision.");
+  if (failWith) throw new HarnessRefusal(failWith, failWith === 409 ? "An admin has already reviewed this message." : "The harness refused this decision.");
   const cases = harnessQueue(run);
   const index = cases.findIndex((item) => item.id === input.messageId);
   if (index < 0) throw new HarnessRefusal(404, "No such message.");

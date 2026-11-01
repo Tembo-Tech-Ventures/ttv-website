@@ -26,6 +26,12 @@ describe("decisionOptions", () => {
     expect(decisionOptions(withState(decided, "HIDDEN"))).toEqual([{ action: "restore", label: "Restore" }]);
   });
 
+  it("offers only closing the case for a deleted message", () => {
+    const gone = { ...flagged, message: { ...messages.deleted, moderation: { state: "FLAGGED" as const, reasons: [] } } };
+    expect(decisionOptions(gone)).toEqual([{ action: "keep", label: "Close the case" }]);
+    expect(decisionOptions({ ...gone, state: "DECIDED" })).toEqual([]);
+  });
+
   it("reads a message without moderation as visible", () => {
     expect(decisionOptions({ ...flagged, message: { ...flagged.message, moderation: null } })[0].action).toBe("keep");
   });
