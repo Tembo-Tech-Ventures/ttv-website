@@ -2,6 +2,8 @@ import { DEMO_PREFIX, DEMO_USER_IDS, isDemoUser } from "@/lib/staging-demo-polic
 import { verifySameRunTarget, verifyRetainedProbeTarget, retainedProbeScope, StagingFixtureAccessError, type StagingFixtureIdentity } from "@/lib/staging-fixtures";
 import { createId } from "@paralleldrive/cuid2";
 import { workConfirmedAttention } from "@/lib/attention/producers";
+import { grantCommunityRole, revokeCommunityRole } from "@/lib/onboarding/decisions";
+import { AccessRole } from "@/lib/platform/contracts";
 import { discoverableMember } from "./eligibility";
 import {
   CommunityError, profileInput, journeyInput, journeyUpdateInput, confirmationInput, searchInput, parseInput,
@@ -188,8 +190,10 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       if (!target) throw new CommunityError("User not found.", 404);
       const role = await db.prepare(`SELECT id FROM "Roles" WHERE name=?`).bind(p.role).first<{id: string}>();
       if (!role) throw new CommunityError("Apply community migrations before changing access.", 409);
-      if (p.granted) await db.prepare(`INSERT INTO "UserRoles" (id,userId,roleId) VALUES (?,?,?) ON CONFLICT(userId,roleId) DO NOTHING`).bind(createId(),p.userId,role.id).run();
-      else await db.prepare(`DELETE FROM "UserRoles" WHERE userId=? AND roleId=?`).bind(p.userId,role.id).run();
+      const accessRole = AccessRole.parse(p.role);
+      if (p.granted) await grantCommunityRole({ db, env: { DEPLOYMENT_ENVIRONMENT: environment, PLATFORM_FLAGS_OVERRIDE: flagsOverride } },
+        { userId: p.userId, role: accessRole, actorId });
+      else await revokeCommunityRole(db, p.userId, accessRole);
       return { userId: p.userId, role: p.role, granted: p.granted };
     },
     async createJourney(input: unknown) {

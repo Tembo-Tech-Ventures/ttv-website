@@ -11,6 +11,7 @@ export interface AdminAttentionItem {
 
 export interface AdminAttentionGroup {
   id:
+    | "access-requests"
     | "new-feedback"
     | "failed-recordings"
     | "import-errors"
@@ -57,6 +58,19 @@ interface NewFeedbackRow {
   userName: string;
   createdAt: number;
 }
+
+interface AccessRequestRow {
+  id: string;
+  role: "MENTOR" | "INSTITUTION";
+  organisation: string | null;
+  userName: string;
+  createdAt: number;
+}
+
+const ACCESS_ROLE_LABELS: Record<AccessRequestRow["role"], string> = {
+  MENTOR: "Mentor",
+  INSTITUTION: "Institution",
+};
 
 interface StaleContactRow {
   id: string;
@@ -140,9 +154,30 @@ export async function getAdminAttention(
        ORDER BY f."createdAt" ASC
        LIMIT 10`
     ),
+    // Epoch milliseconds, unlike the other sources. Uses the (status, createdAt) queue index.
+    db.prepare(
+      `SELECT a."id", a."role", a."organisation", a."createdAt", u."name" AS "userName"
+       FROM "access_request" AS a
+       JOIN "user" AS u ON u."id" = a."userId"
+       WHERE a."status" = 'PENDING'
+       ORDER BY a."createdAt" ASC
+       LIMIT 10`
+    ),
   ]);
 
   return [
+    {
+      id: "access-requests",
+      label: "Access requests",
+      // The note is the requester's own words, so it stays in the queue.
+      items: rows<AccessRequestRow>(results[6]).map((row) => ({
+        id: row.id,
+        title: `${ACCESS_ROLE_LABELS[row.role]} access for ${row.userName.trim() || "a member"}`,
+        detail: row.organisation ?? "Waiting for a decision",
+        href: "/admin/access-requests",
+        occurredAt: new Date(Number(row.createdAt)).toISOString(),
+      })),
+    },
     {
       id: "new-feedback",
       label: "New student feedback",

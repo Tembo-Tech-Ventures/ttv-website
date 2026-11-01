@@ -15,6 +15,8 @@ function fixture(beforeWrite?: (sql: DatabaseSync,query: string) => void) {
     INSERT INTO user VALUES ('member','Member',null),('other','Other',null),('mentor','Mentor',null),('institution','Institution',null);`);
   sql.exec(migration);
   sql.exec(readFileSync(new URL("../db/migrations/0018_confirmation_role_snapshot.sql",import.meta.url),"utf8"));
+  // Role grants also answer pending access requests (src/lib/onboarding/decisions.ts), in one batch.
+  for (const name of ["0021_feature_flags.sql","0025_onboarding.sql"]) sql.exec(readFileSync(new URL(`../db/migrations/${name}`,import.meta.url),"utf8").replaceAll("--> statement-breakpoint", ""));
   for (const [actor,role] of [["mentor","MENTOR"],["institution","INSTITUTION"]]) sql.prepare(`INSERT INTO UserRoles VALUES (?,?,(SELECT id FROM Roles WHERE name=?))`).run(actor,actor,role);
   const db = { prepare(query: string) {
     let values: (string | number | null)[] = [];
@@ -24,6 +26,10 @@ function fixture(beforeWrite?: (sql: DatabaseSync,query: string) => void) {
       async all() { return { results: sql.prepare(query).all(...values) }; },
       async run() { beforeWrite?.(sql,query); const r = sql.prepare(query).run(...values); return { success: true, meta: { changes: Number(r.changes) } }; },
     }; return statement;
+  }, async batch(statements: { run(): Promise<unknown> }[]) {
+    sql.exec("BEGIN");
+    try { const results = []; for (const statement of statements) results.push(await statement.run()); sql.exec("COMMIT"); return results; }
+    catch (error) { sql.exec("ROLLBACK"); throw error; }
   } } as unknown as D1Database;
   return { db, sql, member: createCommunityService(db,"member"), institution: createCommunityService(db,"institution"), mentor: createCommunityService(db,"mentor") };
 }
