@@ -19,6 +19,8 @@ import {
   saveContribution,
   updateContribution,
   confirmContribution,
+  setAsideContribution,
+  undoSetAside,
   askProfile,
   type CommunityAccess,
 } from "./community-client";
@@ -191,7 +193,13 @@ export default function CommunityApp({
             checked.
           </p>
         </div>
-        <MentorReview requests={requests} onReview={confirmContribution} />
+        {/* Set-aside belongs to the spaces Confirm page, where work counts as waiting (src/lib/mentoring/README.md). */}
+        <MentorReview
+          requests={requests}
+          onReview={confirmContribution}
+          onSetAside={embedded ? setAsideContribution : undefined}
+          onUndoSetAside={embedded ? undoSetAside : undefined}
+        />
         <button
           className="discovery-button-secondary"
           onClick={() => setAttempt((current) => current + 1)}

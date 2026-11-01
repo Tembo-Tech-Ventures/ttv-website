@@ -1,4 +1,4 @@
-import React, { useContext, useId, useRef, useState } from "react";
+import React, { useContext, useEffect, useId, useRef, useState } from "react";
 import { awaitingConfirmationText } from "@/components/platform/spaces/awaiting-confirmation";
 import ClaimConfirmations from "../discovery/ClaimConfirmations";
 import { CommunityEmbedded } from "../discovery/DiscoveryShell";
@@ -15,6 +15,8 @@ export interface MentorReviewRequest {
   confirmations?: ClaimConfirmation[];
   // Form availability, not a claim that this contribution has never been reviewed.
   status: "pending" | "confirmed" | "declined";
+  /** This mentor set this revision aside ("I can't confirm this"); only they ever see it. */
+  setAside?: boolean;
 }
 
 export interface MentorReviewDecision {
@@ -27,9 +29,17 @@ export interface MentorReviewDecision {
 export interface MentorReviewProps {
   requests: MentorReviewRequest[];
   onReview: (id: string, review: MentorReviewDecision) => Promise<void>;
+  /**
+   * Private set-aside and its undo. Given only on the spaces Confirm page,
+   * where work counts as waiting; without them the action is not offered.
+   */
+  onSetAside?: (id: string, expectedRevision: number) => Promise<void>;
+  onUndoSetAside?: (id: string) => Promise<void>;
   demo?: boolean;
   allowDecline?: boolean;
 }
+
+const revisionKey = (request: MentorReviewRequest) => `${request.id}:${request.version}`;
 
 export function validateMentorNote(note: string): string | null {
   const text = note.trim();
@@ -79,11 +89,13 @@ export function safeMentorEvidenceUrl(value: string): string | null {
 function ReviewRequest({
   request,
   onReview,
+  onSetAside,
   demo,
   allowDecline,
 }: {
   request: MentorReviewRequest;
   onReview: MentorReviewProps["onReview"];
+  onSetAside?: (request: MentorReviewRequest) => Promise<void>;
   demo: boolean;
   allowDecline: boolean;
 }) {
@@ -258,13 +270,111 @@ function ReviewRequest({
           )}
         </form>
       )}
+      <SetAsideAction
+        request={request}
+        waiting={status === "pending"}
+        titleId={`${id}-title`}
+        disabled={busy}
+        onSetAside={onSetAside}
+      />
     </article>
+  );
+}
+
+/** "I can't confirm this", for one contribution waiting for this mentor, when offered. */
+function SetAsideAction({
+  request,
+  waiting,
+  titleId,
+  disabled,
+  onSetAside,
+}: {
+  request: MentorReviewRequest;
+  waiting: boolean;
+  titleId: string;
+  disabled: boolean;
+  onSetAside?: (request: MentorReviewRequest) => Promise<void>;
+}) {
+  const id = useId();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!waiting || !onSetAside) return null;
+  const offer = onSetAside;
+  async function setAside() {
+    setBusy(true);
+    setError(null);
+    try {
+      // On success the parent moves this contribution to the set-aside list.
+      await offer(request);
+    } catch (failure) {
+      setError(
+        failure instanceof UiApiError && failure.status === 409
+          ? "This contribution changed since you opened it. Refresh contributions to see its latest revision."
+          : displayUiError(failure, "This could not be set aside. Please try again."),
+      );
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="mentor-set-aside-action">
+      <button
+        className="discovery-button-secondary"
+        type="button"
+        onClick={() => void setAside()}
+        disabled={disabled || busy}
+        aria-describedby={`${titleId} ${id}-help`}
+      >
+        Set aside: I can&apos;t confirm this
+      </button>
+      <p id={`${id}-help`}>
+        Only you see this. It leaves your waiting list, and the member
+        isn&apos;t told.
+      </p>
+      {error && <p role="alert">{error}</p>}
+    </div>
+  );
+}
+
+function UndoSetAside({
+  request,
+  onUndo,
+}: {
+  request: MentorReviewRequest;
+  onUndo: (request: MentorReviewRequest) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function undo() {
+    setBusy(true);
+    setError(null);
+    try {
+      await onUndo(request);
+    } catch (failure) {
+      setError(displayUiError(failure, "This could not be undone. Please try again."));
+      setBusy(false);
+    }
+  }
+  return (
+    <>
+      <button
+        className="discovery-button-secondary"
+        type="button"
+        onClick={() => void undo()}
+        disabled={busy}
+        aria-label={`Undo: put ${request.claimTitle} back in your waiting list`}
+      >
+        Undo
+      </button>
+      {error && <p role="alert">{error}</p>}
+    </>
   );
 }
 
 export default function MentorReview({
   requests,
   onReview,
+  onSetAside,
+  onUndoSetAside,
   demo = false,
   allowDecline = false,
 }: MentorReviewProps) {
@@ -272,13 +382,38 @@ export default function MentorReview({
   // In the spaces shell the Mentoring space counts these as waiting, so the
   // page says the same; the existing dashboard keeps its wording.
   const embedded = useContext(CommunityEmbedded);
+  const canSetAside = Boolean(onSetAside && onUndoSetAside);
   const [reviewed, setReviewed] = useState<ReadonlySet<string>>(() => new Set());
-  const waiting = requests.filter(
-    (request) => request.status === "pending" && !reviewed.has(`${request.id}:${request.version}`),
+  const [setAside, setSetAside] = useState<ReadonlySet<string>>(
+    () => new Set(canSetAside ? requests.filter((request) => request.setAside).map(revisionKey) : []),
+  );
+  const [notice, setNotice] = useState<{ text: string; undo?: MentorReviewRequest } | null>(null);
+  const noticeRef = useRef<HTMLOutputElement>(null);
+  useEffect(() => {
+    if (notice) noticeRef.current?.focus();
+  }, [notice]);
+  const listed = requests.filter((request) => !setAside.has(revisionKey(request)));
+  const setAsideRequests = requests.filter((request) => setAside.has(revisionKey(request)));
+  const waiting = listed.filter(
+    (request) => request.status === "pending" && !reviewed.has(revisionKey(request)),
   ).length;
   async function review(requestId: string, decision: MentorReviewDecision) {
     await onReview(requestId, decision);
     setReviewed((current) => new Set(current).add(`${requestId}:${decision.expectedRevision}`));
+  }
+  async function setRequestAside(request: MentorReviewRequest) {
+    await onSetAside?.(request.id, request.version);
+    setSetAside((current) => new Set(current).add(revisionKey(request)));
+    setNotice({ text: `You've set aside ${request.claimTitle}. The member isn't told.`, undo: request });
+  }
+  async function undoSetAside(request: MentorReviewRequest) {
+    await onUndoSetAside?.(request.id);
+    setSetAside((current) => {
+      const next = new Set(current);
+      next.delete(revisionKey(request));
+      return next;
+    });
+    setNotice({ text: `${request.claimTitle} is back in your waiting list.` });
   }
   return (
     <section className="discovery-panel" aria-labelledby={`${id}-heading`}>
@@ -317,14 +452,48 @@ export default function MentorReview({
           confirmations.
         </p>
       )}
+      {canSetAside && (
+        <div className="mentor-set-aside-notice">
+          <output ref={noticeRef} tabIndex={-1}>
+            {notice?.text}
+          </output>
+          {notice?.undo && setAside.has(revisionKey(notice.undo)) && (
+            <UndoSetAside key={revisionKey(notice.undo)} request={notice.undo} onUndo={undoSetAside} />
+          )}
+        </div>
+      )}
+      {setAsideRequests.length > 0 && (
+        <details className="mentor-set-aside">
+          <summary>Set aside ({setAsideRequests.length})</summary>
+          <p>
+            Only you see this list. Setting work aside doesn&apos;t tell the
+            member or change anything about their work. If they share a new
+            revision, it comes back to your waiting list.
+          </p>
+          <ul>
+            {setAsideRequests.map((request) => (
+              <li key={revisionKey(request)}>
+                <p className="discovery-eyebrow">{request.memberName}</p>
+                <p>
+                  <strong>{request.claimTitle}</strong> · Claim revision{" "}
+                  {request.version}
+                </p>
+                <p>You&apos;ve set this aside. The member isn&apos;t told.</p>
+                <UndoSetAside request={request} onUndo={undoSetAside} />
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       {requests.length === 0 ? (
         <p>No published contributions are available to review.</p>
       ) : (
-        requests.map((request) => (
+        listed.map((request) => (
           <ReviewRequest
-            key={`${request.id}:${request.version}`}
+            key={revisionKey(request)}
             request={request}
             onReview={review}
+            onSetAside={canSetAside ? setRequestAside : undefined}
             demo={demo}
             allowDecline={allowDecline}
           />

@@ -33,6 +33,10 @@ export const confirmationInput = z.object({
   statement: z.string().trim().min(10).max(2000),
   method: z.string().trim().min(3).max(500),
 }).strict();
+/** Setting aside names the revision the mentor saw; a newer one waits again. */
+export const setAsideInput = z.object({
+  expectedRevision: z.number().int().positive(),
+}).strict();
 export const searchInput = z.object({
   skills: z.array(z.string().trim().min(1).max(60)).max(10).default([]),
   query: z.string().trim().max(200).default(""),

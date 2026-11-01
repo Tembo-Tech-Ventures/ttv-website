@@ -11,6 +11,8 @@ import {
   saveContribution,
   updateContribution,
   confirmContribution,
+  setAsideContribution,
+  undoSetAside,
   askProfile,
 } from "./community-client";
 import { UiApiError, displayUiError } from "../discovery/ui-errors";
@@ -161,6 +163,39 @@ describe("community API boundary", () => {
       mentorRole: "ADMIN",
       journeyVersion: 2,
     });
+  });
+  it("reads the mentor's own set-aside, which a confirmation outranks, and defaults it off", async () => {
+    respond({
+      entries: [
+        { ...entry, id: "aside", memberName: "Fictional Member", reviewedByCurrentMentor: false, setAsideByCurrentMentor: true },
+        { ...entry, id: "both", memberName: "Fictional Member", reviewedByCurrentMentor: true, setAsideByCurrentMentor: true },
+        { ...entry, id: "older", memberName: "Fictional Member", reviewedByCurrentMentor: false },
+      ],
+    });
+    const requests = await loadMentorship();
+    expect(requests.map((request) => [request.id, request.status, request.setAside])).toEqual([
+      ["aside", "pending", true],
+      ["both", "confirmed", false],
+      ["older", "pending", false],
+    ]);
+  });
+  it("sets aside the revision the mentor saw, and undoes it", async () => {
+    const fetcher = respond({ setAside: { journeyId: "entry", journeyVersion: 3, setAside: true } });
+    await setAsideContribution("entry", 3);
+    expect(fetcher.mock.calls[0][0]).toBe("/api/community/journey/entry/set-aside");
+    expect(fetcher.mock.calls[0][1]).toMatchObject({ method: "POST", credentials: "same-origin" });
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ expectedRevision: 3 });
+    respond({ setAside: { journeyId: "entry", journeyVersion: 4, setAside: true } });
+    await expect(setAsideContribution("entry", 3)).rejects.toMatchObject({ status: 502 });
+    respond({}, 409);
+    await expect(setAsideContribution("entry", 3)).rejects.toMatchObject({ status: 409 });
+
+    const undo = respond({ setAside: { journeyId: "entry", setAside: false } });
+    await undoSetAside("entry");
+    expect(undo.mock.calls[0][0]).toBe("/api/community/journey/entry/set-aside");
+    expect(undo.mock.calls[0][1]).toMatchObject({ method: "DELETE", body: undefined });
+    respond({ setAside: { journeyId: "other", setAside: false } });
+    await expect(undoSetAside("entry")).rejects.toMatchObject({ status: 502 });
   });
   it("publishes only supported contribution fields", async () => {
     const fetcher = respond({ entry });

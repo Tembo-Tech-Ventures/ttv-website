@@ -16,7 +16,7 @@ function fixture(beforeWrite?: (sql: DatabaseSync,query: string) => void) {
   sql.exec(migration);
   sql.exec(readFileSync(new URL("../db/migrations/0018_confirmation_role_snapshot.sql",import.meta.url),"utf8"));
   // Role grants also answer pending access requests (src/lib/onboarding/decisions.ts), in one batch.
-  for (const name of ["0021_feature_flags.sql","0025_onboarding.sql"]) sql.exec(readFileSync(new URL(`../db/migrations/${name}`,import.meta.url),"utf8").replaceAll("--> statement-breakpoint", ""));
+  for (const name of ["0021_feature_flags.sql","0025_onboarding.sql","0027_mentor_set_aside.sql"]) sql.exec(readFileSync(new URL(`../db/migrations/${name}`,import.meta.url),"utf8").replaceAll("--> statement-breakpoint", ""));
   for (const [actor,role] of [["mentor","MENTOR"],["institution","INSTITUTION"]]) sql.prepare(`INSERT INTO UserRoles VALUES (?,?,(SELECT id FROM Roles WHERE name=?))`).run(actor,actor,role);
   const db = { prepare(query: string) {
     let values: (string | number | null)[] = [];

@@ -6,6 +6,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import { CommunityEmbedded } from "../discovery/DiscoveryShell";
+import { UiApiError } from "../discovery/ui-errors";
 import MentorReview, {
   evidenceDestination,
   safeMentorEvidenceUrl,
@@ -284,6 +285,98 @@ describe("mentor revision and method contract", () => {
       expect(host.textContent).toContain("1 shared contribution is waiting for your confirmation.");
       await act(async () => root.unmount());
       host.remove();
+    });
+
+    describe("private set-aside", () => {
+      const other = { ...request, id: "claim-3", claimTitle: "Wrote the deployment guide" };
+      async function mount(requests: MentorReviewRequest[], handlers: { onSetAside?: () => Promise<void>; onUndoSetAside?: () => Promise<void> } = {}) {
+        (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+        const host = document.createElement("div");
+        document.body.appendChild(host);
+        const root = createRoot(host);
+        const onSetAside = vi.fn(handlers.onSetAside ?? (async () => {}));
+        const onUndoSetAside = vi.fn(handlers.onUndoSetAside ?? (async () => {}));
+        await act(async () =>
+          root.render(
+            <CommunityEmbedded.Provider value>
+              <MentorReview requests={requests} onReview={vi.fn(async () => {})} onSetAside={onSetAside} onUndoSetAside={onUndoSetAside} />
+            </CommunityEmbedded.Provider>,
+          ),
+        );
+        const button = (name: string) => [...host.querySelectorAll("button")].find((b) => (b.getAttribute("aria-label") ?? b.textContent) === name);
+        const article = (title: string) => [...host.querySelectorAll("article")].find((a) => a.querySelector("h3")?.textContent === title);
+        const click = (element: Element | undefined) => act(async () => { (element as HTMLElement).click(); });
+        const count = () => host.querySelector("[data-awaiting-confirmation]")?.getAttribute("data-awaiting-confirmation");
+        const done = async () => { await act(async () => root.unmount()); host.remove(); };
+        return { host, onSetAside, onUndoSetAside, button, article, click, count, done };
+      }
+
+      it("is offered only on work waiting for this mentor, and only on the spaces Confirm page", () => {
+        const html = renderToStaticMarkup(
+          <CommunityEmbedded.Provider value>
+            <MentorReview requests={[request, confirmed]} onReview={vi.fn(async () => {})} onSetAside={vi.fn(async () => {})} onUndoSetAside={vi.fn(async () => {})} />
+          </CommunityEmbedded.Provider>,
+        );
+        expect(html.match(/Set aside: I can&#x27;t confirm this/g)).toHaveLength(1);
+        expect(html).toContain("Only you see this. It leaves your waiting list, and the member isn&#x27;t told.");
+        expect(embedded([request])).not.toContain("Set aside");
+        expect(render([request])).not.toContain("Set aside");
+      });
+
+      it("takes the work out of the waiting list, says the member isn't told, and undoes", async () => {
+        const view = await mount([request, other]);
+        expect(view.count()).toBe("2");
+        await view.click(view.article(request.claimTitle)?.querySelector(".mentor-set-aside-action button") ?? undefined);
+        expect(view.onSetAside).toHaveBeenCalledWith("claim-1", 3);
+        expect(view.article(request.claimTitle)).toBeUndefined();
+        expect(view.count()).toBe("1");
+        const status = view.host.querySelector(".mentor-set-aside-notice output")!;
+        expect(status.textContent).toBe("You've set aside Built a scheduling API. The member isn't told.");
+        expect(document.activeElement).toBe(status);
+        expect(view.host.querySelector("summary")?.textContent).toBe("Set aside (1)");
+        expect(view.host.querySelector(".mentor-set-aside li")?.textContent).toContain("You've set this aside. The member isn't told.");
+
+        // The notice's own undo puts it straight back.
+        await view.click(view.host.querySelector(".mentor-set-aside-notice button") ?? undefined);
+        expect(view.onUndoSetAside).toHaveBeenCalledWith("claim-1");
+        expect(view.article(request.claimTitle)).toBeDefined();
+        expect(view.count()).toBe("2");
+        expect(status.textContent).toBe("Built a scheduling API is back in your waiting list.");
+        expect(view.host.querySelector(".mentor-set-aside")).toBeNull();
+        expect(view.host.querySelector(".mentor-set-aside-notice button")).toBeNull();
+        await view.done();
+      });
+
+      it("lists work already set aside apart, out of the count, with an undo for each", async () => {
+        const view = await mount([{ ...request, setAside: true }, other]);
+        expect(view.count()).toBe("1");
+        expect(view.article(request.claimTitle)).toBeUndefined();
+        expect(view.host.querySelector("summary")?.textContent).toBe("Set aside (1)");
+        expect(view.host.querySelector(".mentor-set-aside")?.textContent).toContain("Only you see this list.");
+        await view.click(view.button("Undo: put Built a scheduling API back in your waiting list"));
+        expect(view.onUndoSetAside).toHaveBeenCalledWith("claim-1");
+        expect(view.count()).toBe("2");
+        await view.done();
+      });
+
+      it("keeps the work in place and explains when setting aside or undoing fails", async () => {
+        const view = await mount([request], {
+          onSetAside: async () => { throw new UiApiError(409); },
+        });
+        const action = view.article(request.claimTitle)!.querySelector(".mentor-set-aside-action")!;
+        await view.click(action.querySelector("button") ?? undefined);
+        expect(view.article(request.claimTitle)).toBeDefined();
+        expect(view.count()).toBe("1");
+        expect(action.querySelector('[role="alert"]')?.textContent).toContain("Refresh contributions to see its latest revision.");
+        expect(action.querySelector("button")?.disabled).toBe(false);
+        await view.done();
+
+        const undo = await mount([{ ...request, setAside: true }], { onUndoSetAside: async () => { throw new UiApiError(500); } });
+        await undo.click(undo.button("Undo: put Built a scheduling API back in your waiting list"));
+        expect(undo.host.querySelector(".mentor-set-aside [role=\"alert\"]")).not.toBeNull();
+        expect(undo.count()).toBe("0");
+        await undo.done();
+      });
     });
 
     it("leaves the existing dashboard's wording unchanged", () => {

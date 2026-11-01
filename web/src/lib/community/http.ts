@@ -1,5 +1,6 @@
 import { readBoundedJson, RequestJsonError } from "@/lib/request-json";
 import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
+import { isFlagEnabled } from "@/lib/platform/server/flags";
 import { CommunityError } from "./model";
 import { requireBrowser, type CommunityActor } from "./actor";
 import { createCommunityService, type CommunityService } from "./service";
@@ -71,6 +72,19 @@ async function journeyMutation(ctx: RouteContext,id: string) {
   if (ctx.request.method === "DELETE") return communityJson(await ctx.service.deleteJourney(id));
   return communityJson({error:"Route not found."},404);
 }
+/**
+ * A mentor's private set-aside and its undo (src/lib/mentoring/README.md).
+ * Part of the spaces Confirm page only, so it does not exist while spaces is
+ * off for the caller, and it follows the browser rules of confirming.
+ */
+async function setAsideRoute(ctx: RouteContext,id: string) {
+  const method = ctx.request.method;
+  if ((method !== "POST" && method !== "DELETE") || !await isFlagEnabled({db:ctx.db,env:ctx.env ?? {},user:{id:ctx.actor.id}},"spaces")) return communityJson({error:"Route not found."},404);
+  requireBrowser(ctx.actor);
+  return method === "POST"
+    ? communityJson({setAside: await ctx.service.setAsideJourney(id,ctx.body)},201)
+    : communityJson({setAside: await ctx.service.undoSetAside(id)});
+}
 async function dynamicRoute(ctx: RouteContext) {
   const parts = ctx.path.split("/");
   if (parts[0] === "journey" && parts.length === 2) return journeyMutation(ctx,parts[1]);
@@ -78,6 +92,7 @@ async function dynamicRoute(ctx: RouteContext) {
     requireBrowser(ctx.actor);
     return communityJson({confirmation: await ctx.service.confirmJourney(parts[1],ctx.body)},201);
   }
+  if (parts[0] === "journey" && parts[2] === "set-aside" && parts.length === 3) return setAsideRoute(ctx,parts[1]);
   if (parts[0] !== "profiles" || parts.length < 2) return communityJson({error:"Route not found."},404);
   if (parts.length === 2 && ctx.request.method === "GET") return communityJson({profile: await ctx.service.getProfile(parts[1]),entries: await ctx.service.listJourney(parts[1])});
   if (parts.length === 3 && parts[2] === "assessment" && ctx.request.method === "POST") {

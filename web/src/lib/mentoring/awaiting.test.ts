@@ -29,6 +29,7 @@ function setup() {
   database.exec(MINIMAL_AUTH_SCHEMA);
   database.exec(readMigration("0017_community_discovery.sql"));
   database.exec(readMigration("0018_confirmation_role_snapshot.sql"));
+  database.exec(readMigration("0027_mentor_set_aside.sql"));
   const users = ["member", "member2", "mentor", "mentor2", "admin", demoMentor, demoMember];
   for (const id of users) database.prepare(`INSERT INTO user (id,name,email) VALUES (?,?,?)`).run(id, id, `${id}@example.test`);
   database.exec(`INSERT INTO Roles (id,name) VALUES ('admin-role','ADMIN')`);
@@ -61,8 +62,8 @@ const token = { scopes: ["community:read"] } as unknown as Locals["personalAcces
 async function confirmPageWaiting(db: D1Database, env: AwaitingConfirmationContext["env"], caller: Locals): Promise<number | null> {
   const response = await handleCommunityRequest(new Request("https://example.test/api/community/mentorship"), "mentorship", communityActor(caller), db, env as Env);
   if (response.status !== 200) return null;
-  const { entries } = await response.json() as { entries: { reviewedByCurrentMentor: boolean }[] };
-  return entries.filter((entry) => !entry.reviewedByCurrentMentor).length;
+  const { entries } = await response.json() as { entries: { reviewedByCurrentMentor: boolean; setAsideByCurrentMentor: boolean }[] };
+  return entries.filter((entry) => !entry.reviewedByCurrentMentor && !entry.setAsideByCurrentMentor).length;
 }
 
 describe("awaitingConfirmation", () => {
@@ -99,6 +100,20 @@ describe("awaitingConfirmation", () => {
     database.exec(`INSERT INTO communityConfirmation (id,journeyId,mentorId,statement,method,journeyVersion,mentorRole) VALUES ('again','B','mentor','I checked it again','Review',2,'MENTOR')`);
     database.exec(`UPDATE communityJourney SET visibility='private' WHERE id='E'`);
     expect(await count()).toBe(2);
+  });
+
+  it("leaves out work this mentor set aside, at its current revision only, for them alone (F-7)", async () => {
+    const { database, db } = setup();
+    const count = (id: string) => awaitingConfirmation({ db, env: {}, locals: locals(id) });
+    database.exec(`INSERT INTO communitySetAside (mentorId,journeyId,journeyVersion) VALUES ('mentor','A',1),('mentor','E',1)`);
+    expect(await count("mentor")).toBe(1);
+    expect(await confirmPageWaiting(db, {}, locals("mentor"))).toBe(1);
+    expect(await count("mentor2")).toBe(4);
+    // A new revision waits again; undo restores the rest.
+    database.exec(`UPDATE communityJourney SET version=2 WHERE id='A'`);
+    expect(await count("mentor")).toBe(2);
+    database.exec(`DELETE FROM communitySetAside WHERE mentorId='mentor' AND journeyId='E'`);
+    expect(await count("mentor")).toBe(3);
   });
 
   it("records a failed read and reports not known, so the spaces pages still render and claim nothing", async () => {

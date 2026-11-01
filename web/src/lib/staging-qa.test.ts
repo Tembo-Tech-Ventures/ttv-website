@@ -14,7 +14,7 @@ function setup(){
  CREATE TABLE session(id TEXT PRIMARY KEY,userId TEXT,token TEXT,userAgent TEXT,createdAt INTEGER,updatedAt INTEGER,expiresAt INTEGER);
  CREATE TABLE Roles(id TEXT PRIMARY KEY,name TEXT UNIQUE,createdAt INTEGER,updatedAt INTEGER);CREATE TABLE UserRoles(id TEXT PRIMARY KEY,userId TEXT,roleId TEXT,UNIQUE(userId,roleId));
  CREATE TABLE program(id TEXT PRIMARY KEY,curriculumId TEXT,applicationsOpen INTEGER);CREATE TABLE programApplication(id TEXT PRIMARY KEY,userId TEXT,programId TEXT,status TEXT);`);
- for(const name of ['0017_community_discovery','0018_confirmation_role_snapshot','0020_retained_persona_qa'])sql.exec(readFileSync(new URL(`./db/migrations/${name}.sql`,import.meta.url),'utf8').replaceAll('--> statement-breakpoint',''));
+ for(const name of ['0017_community_discovery','0018_confirmation_role_snapshot','0020_retained_persona_qa','0027_mentor_set_aside'])sql.exec(readFileSync(new URL(`./db/migrations/${name}.sql`,import.meta.url),'utf8').replaceAll('--> statement-breakpoint',''));
  sql.prepare('INSERT INTO stagingQaRun VALUES(?,?,?,?,?,?,?)').run(QA_RUN_ID,now,now+3600,null,'b'.repeat(40),QA_KEY_PIN,'seed-digest');
  sql.prepare('INSERT INTO program VALUES(?,?,0)').run(DEMO_PREFIX+'program',DEMO_PREFIX+'curriculum');
  const tokens:Record<string,string>={};

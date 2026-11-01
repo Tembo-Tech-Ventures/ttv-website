@@ -1242,6 +1242,23 @@ export const communityConfirmation = sqliteTable("communityConfirmation", {
   ...timestamps,
 }, (table) => [index("communityConfirmation_journeyId_idx").on(table.journeyId)]);
 
+/**
+ * A mentor's private "I can't confirm this" for one revision of a shared
+ * contribution: it only leaves that mentor's waiting list, and a new revision
+ * waits again. Only the mentor's own Confirm page reads it; it is never a
+ * signal about the member (src/lib/mentoring/README.md).
+ */
+export const communitySetAside = sqliteTable("communitySetAside", {
+  mentorId: text("mentorId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  journeyId: text("journeyId").notNull().references(() => communityJourney.id, { onDelete: "cascade" }),
+  journeyVersion: integer("journeyVersion").notNull(),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+}, (table) => [
+  primaryKey({ columns: [table.mentorId, table.journeyId, table.journeyVersion] }),
+  index("communitySetAside_journeyId_idx").on(table.journeyId),
+  check("communitySetAside_journeyVersion_check", sql`${table.journeyVersion} >= 1`),
+]);
+
 // Registry membership is required for synthetic staging authority; names alone never grant it.
 export const stagingFixtureIdentity = sqliteTable("stagingFixtureIdentity", {
   userId: text("userId").primaryKey().references(() => user.id, {onDelete:"cascade"}),
