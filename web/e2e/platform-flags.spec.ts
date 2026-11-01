@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { expect, test, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type BrowserContext, type Locator, type Page } from "@playwright/test";
 import { runAxe } from "./platform-axe";
 import { personaSession, signIn, type PersonaSession } from "./platform-personas";
 
@@ -58,6 +58,16 @@ async function hideDevToolbar(page: Page) {
   if (process.env.PLAYWRIGHT_BASE_URL || scriptless.has(page)) return;
   await page.waitForLoadState("load");
   await page.addStyleTag({ content: "astro-dev-toolbar { display: none !important; }" });
+}
+
+/**
+ * Presses a control from the keyboard: focus, then Enter. The site-wide Feedback pill is fixed to
+ * the bottom right, so a pointer click on the last row can land on the pill instead (and without
+ * JavaScript the pill is a disabled button). Keyboard activation needs no hit-testing and no script.
+ */
+async function press(control: Locator) {
+  await control.focus();
+  await control.press("Enter");
 }
 
 function row(page: Page, key: string) {
@@ -124,7 +134,7 @@ test("asks before Everyone, and changes nothing until it is confirmed", async ({
   // Channels is still in development, so Everyone is safe to ask about here.
   test.skip(before.channels.audience === "ALL", "Channels is already Everyone here.");
 
-  await row(page, "channels").getByRole("button", { name: "Set Channels to Everyone" }).click();
+  await press(row(page, "channels").getByRole("button", { name: "Set Channels to Everyone" }));
   await hideDevToolbar(page);
   const confirm = page.locator("[data-flag-confirm='channels']");
   await expect(confirm.getByRole("heading", { name: "Show Channels to everyone?" })).toBeVisible();
@@ -135,7 +145,7 @@ test("asks before Everyone, and changes nothing until it is confirmed", async ({
   await runAxe(page, testInfo, "platform-flags-confirm");
   await page.screenshot({ path: evidence("confirm"), fullPage: true });
 
-  await confirm.getByRole("link", { name: "Cancel" }).click();
+  await press(confirm.getByRole("link", { name: "Cancel" }));
   await expect(page).toHaveURL(new RegExp(`${PAGE}$`));
   await expect(page.locator("[data-flag-confirm]")).toHaveCount(0);
   expect((await stored(page.request)).channels.audience).toBe(before.channels.audience);
@@ -155,7 +165,7 @@ test("an administrator switches Spaces from Off to Staff, and it stays", async (
       "Warning: Onboarding needs Spaces, which is Off. Set Spaces to Staff too, or Onboarding won't work for everyone it is set for."
     );
 
-    await row(page, "spaces").getByRole("button", { name: "Set Spaces to Staff" }).click();
+    await press(row(page, "spaces").getByRole("button", { name: "Set Spaces to Staff" }));
     await hideDevToolbar(page);
     await expect(page).toHaveURL(new RegExp(`${PAGE}\\?changed=spaces$`));
     await expect(page.getByRole("status")).toHaveText("Spaces is now Staff: administrators only.");
@@ -191,14 +201,14 @@ test("works without JavaScript, through the Everyone confirmation and back", asy
     await restore(page, baseURL, { channels: "OFF", mentor_requests: "OFF" });
     await open(page);
 
-    await row(page, "mentor_requests").getByRole("button", { name: "Set Mentor requests to Everyone" }).click();
+    await press(row(page, "mentor_requests").getByRole("button", { name: "Set Mentor requests to Everyone" }));
     const confirm = page.locator("[data-flag-confirm='mentor_requests']");
     await expect(confirm).toContainText("This makes it visible to every signed-in user.");
     // Channels is Off, so the confirmation says what Everyone would leave unusable.
     await expect(confirm).toContainText("Mentor requests needs Channels, which is Off. Set Channels to Everyone too");
     expect((await stored(page.request)).mentor_requests.audience).toBe("OFF");
 
-    await confirm.getByRole("button", { name: "Show Mentor requests to everyone" }).click();
+    await press(confirm.getByRole("button", { name: "Show Mentor requests to everyone" }));
     await expect(page.getByRole("status")).toHaveText(
       "Mentor requests is now Everyone: every signed-in user. Mentor requests needs Channels, which is Off. Set Channels to Everyone too, or Mentor requests won't work for everyone it is set for."
     );
@@ -208,7 +218,7 @@ test("works without JavaScript, through the Everyone confirmation and back", asy
     await page.screenshot({ path: evidence("no-js-everyone"), fullPage: true });
 
     // Off applies at once, with no confirmation.
-    await row(page, "mentor_requests").getByRole("button", { name: "Set Mentor requests to Off" }).click();
+    await press(row(page, "mentor_requests").getByRole("button", { name: "Set Mentor requests to Off" }));
     await expect(page.getByRole("status")).toHaveText("Mentor requests is now Off: no one.");
     expect((await stored(page.request)).mentor_requests.audience).toBe("OFF");
   } finally {
