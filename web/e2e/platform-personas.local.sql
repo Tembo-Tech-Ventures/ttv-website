@@ -52,3 +52,33 @@ INSERT OR REPLACE INTO transcript_segment (id,recordingId,startTime,endTime,spea
 -- one, so Joseph can discover her. Wanjiku and Lucy have not, so he cannot.
 INSERT OR REPLACE INTO communityProfile (userId,headline,bio,skills,opportunityGoals,version,createdAt,updatedAt) VALUES
  ('ttv-local-persona-alumna','Backend builder','Fictional local profile. I build payment and ledger tools for small groups.','["TypeScript","SQL"]','A backend developer role',1,1793400000,1793400000);
+-- e2e/platform-access-requests.spec.ts: people asking for mentor or organisation access (onboarding SPEC S6).
+-- Re-seeding starts them over: requests, roles, intents and decision items are cleared, then the queue is rebuilt.
+-- Otieno asks to mentor and is approved; Njambi asks for organisation access and Peter asks again after a
+-- decline, and both stay pending for the screenshots; Wairimu asks during the run, and is declined.
+INSERT OR REPLACE INTO user (id,name,email,emailVerified,image,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-mentor-request','Otieno Ouma','otieno@invalid.ttv',1,NULL,1793400000,1793400000),
+ ('ttv-local-persona-org-request','Njambi Karanja','njambi@invalid.ttv',1,NULL,1793400000,1793400000),
+ ('ttv-local-persona-declined-request','Peter Njoroge','peter@invalid.ttv',1,NULL,1793400000,1793400000),
+ ('ttv-local-persona-note-request','Wairimu Kamau','wairimu@invalid.ttv',1,NULL,1793400000,1793400000);
+INSERT OR REPLACE INTO session (id,expiresAt,token,ipAddress,userAgent,userId,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-mentor-request-session',1893456000,'ttv-local-persona-mentor-request-token',NULL,'local','ttv-local-persona-mentor-request',1793400000,1793400000),
+ ('ttv-local-persona-org-request-session',1893456000,'ttv-local-persona-org-request-token',NULL,'local','ttv-local-persona-org-request',1793400000,1793400000),
+ ('ttv-local-persona-declined-request-session',1893456000,'ttv-local-persona-declined-request-token',NULL,'local','ttv-local-persona-declined-request',1793400000,1793400000),
+ ('ttv-local-persona-note-request-session',1893456000,'ttv-local-persona-note-request-token',NULL,'local','ttv-local-persona-note-request',1793400000,1793400000);
+DELETE FROM access_request WHERE userId IN ('ttv-local-persona-mentor-request','ttv-local-persona-org-request','ttv-local-persona-declined-request','ttv-local-persona-note-request');
+DELETE FROM member_intent WHERE userId IN ('ttv-local-persona-mentor-request','ttv-local-persona-org-request','ttv-local-persona-declined-request','ttv-local-persona-note-request');
+DELETE FROM attention_item WHERE kind IN ('access_request','access_decided') AND (userId LIKE 'ttv-local-persona-%' OR subjectId LIKE 'ttv-local-access-%');
+DELETE FROM UserRoles WHERE userId IN ('ttv-local-persona-mentor-request','ttv-local-persona-org-request','ttv-local-persona-declined-request','ttv-local-persona-note-request');
+INSERT OR REPLACE INTO studentProfile (id,userId,handle,status,githubLogin) VALUES
+ ('ttv-local-persona-profile-mentor-request','ttv-local-persona-mentor-request','otieno-ouma','DRAFT','otieno-ouma'),
+ ('ttv-local-persona-profile-declined-request','ttv-local-persona-declined-request','peter-njoroge','DRAFT','pnjoroge');
+INSERT INTO access_request (id,userId,role,status,note,organisation,organisationRole,link,scopeAcknowledgedAt,decisionId,decisionMessage,decidedAt,createdAt,updatedAt) VALUES
+ ('ttv-local-access-peter-earlier','ttv-local-persona-declined-request','MENTOR','DECLINED','I can help with SQL questions when I have time.',NULL,NULL,NULL,NULL,'ttv-local-access-peter-earlier-decision','Thanks for offering. Tell us a little more about the work you have reviewed before.',1789207200000,1788256800000,1789207200000),
+ ('ttv-local-access-otieno','ttv-local-persona-mentor-request','MENTOR','PENDING','Android and offline-first apps. I lead a mobile team and can review Kotlin and sync code.',NULL,NULL,'https://github.com/otieno-ouma',NULL,NULL,NULL,NULL,1793439000000,1793439000000),
+ ('ttv-local-access-njambi','ttv-local-persona-org-request','INSTITUTION','PENDING','Junior engineers who have built mobile or payments features, so we can understand their work before we talk to them.','Mto Labs','Engineering lead',NULL,1793505600000,NULL,NULL,NULL,1793505600000,1793505600000),
+ ('ttv-local-access-peter','ttv-local-persona-declined-request','MENTOR','PENDING','Backend and data work: SQL, APIs, testing. I review pull requests at work every week.',NULL,NULL,NULL,NULL,NULL,NULL,NULL,1793509200000,1793509200000);
+INSERT INTO member_intent (userId,intent,createdAt) VALUES
+ ('ttv-local-persona-mentor-request','MENTOR',1793439000000),
+ ('ttv-local-persona-org-request','INSTITUTION',1793505600000),
+ ('ttv-local-persona-declined-request','MENTOR',1789207200000);

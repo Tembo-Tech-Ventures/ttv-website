@@ -1,0 +1,162 @@
+---
+import { env } from "cloudflare:workers";
+import { PiInfoDuotone } from "react-icons/pi";
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import AccessRequestCard from "@/components/admin/AccessRequestCard.astro";
+import {
+  ACCESS_REQUESTS_PATH, decisionFailure, decisionNotice, isDelegatedCredential, parseDecisionForm,
+} from "@/lib/admin/access-requests";
+import {
+  AccessRequestCursorError, decideAccessRequest, getAdminAccessRequest, listAccessRequests,
+} from "@/lib/onboarding/decisions";
+import { AccessRequestQueueState, Cursor, Id } from "@/lib/platform/contracts";
+
+/*
+ * Mentor and institution access requests (onboarding SPEC S6). Middleware has required ADMIN, and
+ * admin POSTs must be same-origin. The page also refuses personal access tokens and agent sessions,
+ * as /api/admin/access-requests does: notes are for human administrators, and no agent grants roles.
+ * Not flag-gated, so pending requests are never stranded while onboarding is off.
+ */
+if (isDelegatedCredential(Astro.locals)) {
+  return new Response("Forbidden: decide access requests in a browser session.", {
+    status: 403,
+    headers: { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" },
+  });
+}
+const adminId = Astro.locals.user?.id;
+if (!adminId) return Astro.redirect("/auth/login");
+
+const search = Astro.url.searchParams;
+const state = AccessRequestQueueState.safeParse(search.get("status")).data ?? "PENDING";
+const cursor = Cursor.safeParse(search.get("cursor")).data;
+
+let failure: string | undefined;
+let rowError: { id: string; message: string; draft: string } | undefined;
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const parsed = parseDecisionForm(form);
+  if (!parsed.ok) {
+    Astro.response.status = 400;
+    const draft = form.get("message");
+    if (parsed.id) rowError = { id: parsed.id, message: parsed.error, draft: typeof draft === "string" ? draft : "" };
+    else failure = parsed.error;
+  } else {
+    try {
+      await decideAccessRequest({ db: env.DB, env }, { id: parsed.id, actorId: adminId, ...parsed.decision });
+      return Astro.redirect(`${ACCESS_REQUESTS_PATH}?decided=${encodeURIComponent(parsed.id)}`, 303);
+    } catch (error) {
+      const refused = decisionFailure(error);
+      if (!refused) throw error;
+      Astro.response.status = refused.status;
+      failure = refused.message;
+    }
+  }
+}
+
+let list;
+try {
+  list = await listAccessRequests(env.DB, { status: state, cursor });
+} catch (error) {
+  if (!(error instanceof AccessRequestCursorError)) throw error;
+  return Astro.redirect(state === "PENDING" ? ACCESS_REQUESTS_PATH : `${ACCESS_REQUESTS_PATH}?status=${state}`);
+}
+
+// A refused form whose request is not on this page still has to say why.
+if (rowError && !list.items.some((request) => request.id === rowError?.id)) {
+  failure = rowError.message;
+  rowError = undefined;
+}
+
+const decidedId = Id.safeParse(search.get("decided")).data;
+const decided = !failure && decidedId ? await getAdminAccessRequest(env.DB, decidedId) : null;
+const notice = decided ? decisionNotice(decided) : null;
+
+const tabs = [
+  { state: "PENDING", label: "Pending", href: ACCESS_REQUESTS_PATH, count: list.pendingCount },
+  { state: "DECIDED", label: "Decided", href: `${ACCESS_REQUESTS_PATH}?status=DECIDED`, count: 0 },
+] as const;
+const current = tabs.find((tab) => tab.state === state) ?? tabs[0];
+const nextHref = list.nextCursor ? `${current.href}${state === "PENDING" ? "?" : "&"}cursor=${encodeURIComponent(list.nextCursor)}` : null;
+---
+
+<AdminLayout title="Access requests" pendingAccessRequests={list.pendingCount}>
+  <div class="mx-auto max-w-6xl space-y-8 lg:px-6 lg:pt-6">
+    <header class="space-y-4">
+      <h2 class="text-[2.5rem] leading-[0.95] tracking-display text-ink-primary sm:text-5xl lg:text-6xl">
+        Access requests
+      </h2>
+      <p class="max-w-3xl text-base leading-relaxed text-ink-secondary sm:text-lg">
+        People asking for mentor or organisation access. Approving adds the role. Declining leaves them a
+        member, with your message if you write one.
+      </p>
+    </header>
+
+    {notice && (
+      <p role="status" class="rounded-xl border border-ring/30 bg-ring/8 px-4 py-3 text-sm text-ink-primary" data-access-request-notice>
+        {notice}
+      </p>
+    )}
+    {failure && (
+      <p role="alert" class="rounded-xl border border-danger-ink/40 bg-danger-ink/8 px-4 py-3 text-sm text-ink-primary" data-access-request-failure>
+        {failure}
+      </p>
+    )}
+
+    <nav aria-label="Access request lists" class="border-b border-hairline">
+      <ul class="-mb-px flex gap-2">
+        {tabs.map((tab) => (
+          <li>
+            <a
+              href={tab.href}
+              aria-current={tab.state === state ? "page" : undefined}
+              class:list={[
+                "inline-flex min-h-11 items-center gap-2 border-b-2 px-4 text-[0.9375rem] font-semibold transition-colors",
+                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink",
+                tab.state === state ? "border-primary text-ink-primary" : "border-transparent text-ink-secondary hover:text-ink-primary",
+              ]}
+            >
+              {tab.label}
+              {tab.count > 0 && (
+                <span class="grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1.5 text-xs font-bold text-dark">
+                  <span aria-hidden="true">{tab.count}</span>
+                  <span class="sr-only">{`${tab.count} waiting`}</span>
+                </span>
+              )}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+
+    {list.items.length === 0 ? (
+      <p class="py-6 text-ink-secondary" data-access-request-empty>
+        {state === "PENDING"
+          ? "No one is waiting for a decision. New mentor and organisation requests appear here."
+          : "Nothing decided yet. Approved and declined requests appear here."}
+      </p>
+    ) : (
+      <ul class="-mt-6" aria-label={state === "PENDING" ? "Pending requests" : "Decided requests"} data-access-request-list={state}>
+        {list.items.map((request) => (
+          <AccessRequestCard
+            request={request}
+            error={rowError?.id === request.id ? rowError.message : undefined}
+            draftMessage={rowError?.id === request.id ? rowError.draft : undefined}
+          />
+        ))}
+      </ul>
+    )}
+
+    {(nextHref || cursor) && (
+      <nav aria-label="More requests" class="flex flex-wrap gap-4 text-sm">
+        {cursor && <a href={current.href} class="text-peach-ink hover:underline">Back to the start</a>}
+        {nextHref && <a href={nextHref} class="text-peach-ink hover:underline">{state === "PENDING" ? "Next requests" : "Older decisions"}</a>}
+      </nav>
+    )}
+
+    <p class="flex gap-2 text-sm text-ink-secondary">
+      <PiInfoDuotone className="mt-0.5 size-4 shrink-0 text-ink-muted" aria-hidden="true" />
+      The person sees your message, not your name. Notes in a request are visible only to administrators.
+    </p>
+  </div>
+</AdminLayout>

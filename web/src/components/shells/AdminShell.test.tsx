@@ -75,6 +75,35 @@ describe("admin navigation", () => {
   });
 });
 
+describe("access requests in the admin navigation", () => {
+  it("comes straight after admin home", () => {
+    const labels = getAdminLinks(false).map(({ label }) => label);
+    expect(labels.indexOf("Access requests")).toBe(labels.indexOf("Admin Home") + 1);
+  });
+
+  it("counts the requests waiting, and says what it counts", () => {
+    expect(getAdminLinks(false, false, false, 3)).toContainEqual(
+      expect.objectContaining({ href: "/admin/access-requests", badge: 3, badgeLabel: "pending" })
+    );
+    const html = renderToStaticMarkup(
+      <AdminShell currentPath="/admin/access-requests" pendingAccessRequests={3}>
+        <div>Admin content</div>
+      </AdminShell>
+    );
+    expect(html).toContain('<span class="sr-only">3 pending</span>');
+  });
+
+  it("shows no count when nothing is waiting", () => {
+    const html = renderToStaticMarkup(
+      <AdminShell currentPath="/admin">
+        <div>Admin content</div>
+      </AdminShell>
+    );
+    expect(html).toContain('href="/admin/access-requests"');
+    expect(html).not.toContain("pending</span>");
+  });
+});
+
 describe("admin shell ways in and out", () => {
   it("offers the way back to the dashboard first", () => {
     expect(getAdminLinks(false)[0]).toEqual(expect.objectContaining({ href: "/dashboard", label: "Back to dashboard" }));
