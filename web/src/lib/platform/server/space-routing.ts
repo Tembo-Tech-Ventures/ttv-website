@@ -87,17 +87,19 @@ async function welcomeResponse(context: APIContext, next: MiddlewareNext): Promi
 
 /**
  * Opening the space an approval unlocked is what makes that approval seen (onboarding SPEC §3), so
- * `/dashboard` stops preferring it. The page has already rendered; a failed write only means the
- * preference applies once more.
+ * `/dashboard` stops preferring it. It matters at most once, so the page never waits for it: the
+ * write runs after the response through waitUntil. A failed write is recorded as a warning and only
+ * means the preference applies once more.
  */
 async function acknowledgeApproval({ locals }: APIContext, me: Me, space: SpaceId): Promise<void> {
   const role = acknowledgedRole(space, me, locals);
   if (!role) return;
-  try {
-    await markAccessRequestSeen(env.DB, me.user.id, { role });
-  } catch (error) {
-    await recordError(env.DB, { source: "request", route: SPACE_PATHS[space], error, level: "warning" });
-  }
+  const write = markAccessRequestSeen(env.DB, me.user.id, { role }).catch(error =>
+    // recordError never throws; it reports its own ledger failures.
+    recordError(env.DB, { source: "request", route: SPACE_PATHS[space], error, level: "warning" }));
+  // Without an execution context (tests, non-Workers runtimes) the write is awaited, not dropped.
+  if (locals.cfContext) locals.cfContext.waitUntil(write);
+  else await write;
 }
 
 async function serveSpacePage(context: APIContext, next: MiddlewareNext, me: Me, canonical: string | null): Promise<Response> {

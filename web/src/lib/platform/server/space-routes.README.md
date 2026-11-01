@@ -88,8 +88,10 @@ filtered through any restricted identity's allowlist.
 - **An approval is seen** when its holder opens any page of the space it
   unlocked (a successful GET; not HEAD, a legacy redirect, an admin without
   the role, or a delegated or restricted session), via
-  `markAccessRequestSeen` by role. A failed write is recorded as a warning
-  and the page is served; the approval is then preferred once more.
+  `markAccessRequestSeen` by role. The write runs after the response through
+  `waitUntil` (awaited only without an execution context), so these pages never
+  wait for it. A failed write is recorded as a warning; the approval is then
+  preferred once more.
 
 Restricted identities may GET the welcome step (it is in `SPACES_READ_PATHS`)
 so partner-page links resolve for them; POSTs and the onboarding APIs stay

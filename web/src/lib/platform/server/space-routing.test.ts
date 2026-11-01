@@ -399,6 +399,16 @@ describe("onboarding routing (B-O.4)", () => {
       expect((await location("/dashboard", { cookie: "ttv-last-space=community" })).location).toBe("/dashboard/community");
     });
 
+    it("acknowledges after the response through waitUntil, so the page never waits", async () => {
+      const { ctx, next } = context("/dashboard/mentoring");
+      const background: Promise<unknown>[] = [];
+      ctx.locals.cfContext = { waitUntil: (promise: Promise<unknown>) => background.push(promise) } as never;
+      expect((await routeSpaceRequest(ctx, next)).status).toBe(200);
+      expect(background).toHaveLength(1);
+      await Promise.all(background);
+      expect(seenAt("MENTOR")).toBeGreaterThan(0);
+    });
+
     it("is acknowledged by any page of that space", async () => {
       expect((await location("/dashboard/mentoring/confirm")).response.status).toBe(200);
       expect(seenAt("MENTOR")).toBeGreaterThan(0);
@@ -429,11 +439,17 @@ describe("onboarding routing (B-O.4)", () => {
       expect(seenAt("MENTOR")).toBeNull();
     });
 
-    it("still serves the page when the acknowledgement cannot be written", async () => {
+    it("still serves the page when the acknowledgement cannot be written, in the background or not", async () => {
       vi.spyOn(console, "error").mockImplementation(() => undefined);
       fixture.database.exec("CREATE TRIGGER refuse_seen BEFORE UPDATE ON access_request BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END");
       const visit = await location("/dashboard/mentoring");
       expect(visit.response.status).toBe(200);
+      const { ctx, next } = context("/dashboard/mentoring");
+      const background: Promise<unknown>[] = [];
+      ctx.locals.cfContext = { waitUntil: (promise: Promise<unknown>) => background.push(promise) } as never;
+      expect((await routeSpaceRequest(ctx, next)).status).toBe(200);
+      // The background write settles (it never rejects into the runtime) and changes nothing.
+      await expect(Promise.all(background)).resolves.toBeDefined();
       expect(seenAt("MENTOR")).toBeNull();
     });
 
