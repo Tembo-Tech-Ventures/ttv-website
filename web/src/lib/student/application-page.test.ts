@@ -17,20 +17,12 @@ describe("member application page wiring (QA1-01, QA1-02)", () => {
     }
   });
 
-  it("posts only answers to the application's own questions, while it is pending", () => {
-    expect(detailPage).toContain('answers.kind === "questions" && canEditAnswers(answers, application.status)');
-    expect(detailPage).toContain("readAnswerSubmission(answers.questions");
-    expect(detailPage).toContain("writeAnswers(application.application, submission.values)");
-    expect(detailPage).toContain('and(ownApplication, eq(schema.programApplication.status, "PENDING"))');
-  });
-
-  it("returns a rejected form with what was typed and a status that says so", () => {
-    expect(detailPage).toContain("drafts = submission.drafts;");
-    expect(detailPage).toContain("fieldErrors = submission.errors;");
-    expect(detailPage).toContain("Astro.response.status = 400;");
-    expect(detailPage).toContain("Astro.response.status = 409;");
-    expect(answersView).toContain('role="alert"');
-    expect(answersView).toContain("aria-invalid");
+  // What a POST may write is tested against real SQL in save-application-answers.test.ts;
+  // here only that the page hands it the signed-in member and the right cohort scope.
+  it("saves through saveApplicationAnswers as the signed-in member", () => {
+    expect(detailPage).toContain("saveApplicationAnswers({");
+    expect(detailPage).toContain("userId: user.id,");
+    expect(detailPage).toContain('programId: isDemoUser(user.id) ? DEMO_PREFIX + "program" : undefined,');
   });
 
   it("keeps the ordinary no-script POST form", () => {

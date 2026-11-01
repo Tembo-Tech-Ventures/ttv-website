@@ -5,12 +5,14 @@ import {
   draftsFor,
   fieldName,
   formatAnswer,
+  formQuestions,
   hasEditableAnswers,
   humanizeKey,
   labelSegments,
   parseApplicationAnswers,
   plainLabel,
   readAnswerSubmission,
+  summaryQuestions,
   writeAnswers,
   type ApplicationQuestion,
 } from "./application-answers";
@@ -36,6 +38,13 @@ const LEGACY = {
       value: true,
     },
     { type: "boolean", name: "gitDone", label: "Did you finish Git?", value: null },
+    {
+      type: "string",
+      name: "track",
+      label: "Which track?",
+      value: "web",
+      options: [{ label: "Web", value: "web" }, { label: "Data", value: "data" }],
+    },
     { type: "textarea", name: "project", label: "Propose an idea for a project you would like to build.", value: "A chama ledger" },
     { type: "number", name: "hours", label: "Hours a week", value: 6 },
     { type: "date", name: "available", label: "Available from", value: "2027-01-15" },
@@ -59,6 +68,7 @@ function validForm(overrides: Record<string, string> = {}) {
     "answer.partnerId": "",
     "answer.htmlCssDone": "yes",
     "answer.gitDone": "",
+    "answer.track": "web",
     "answer.project": "A chama ledger",
     "answer.hours": "6",
     "answer.available": "2027-01-15",
@@ -82,11 +92,18 @@ describe("parseApplicationAnswers", () => {
       ["partnerId", "string", null],
       ["htmlCssDone", "requiredBoolean", true],
       ["gitDone", "boolean", null],
+      ["track", "string", "web"],
       ["project", "textarea", "A chama ledger"],
       ["hours", "number", 6],
       ["available", "date", "2027-01-15"],
     ]);
     expect(questions[1]?.options).toEqual([{ label: "Nairobi Makers", value: "partner-1" }]);
+  });
+
+  it("reads an untouched old required Yes/No (stored null) as No, as the old switch showed it", () => {
+    const text = JSON.stringify({ version: "1", submission: [{ type: "requiredBoolean", name: "gitDone", label: "Git?", value: null }] });
+    expect(questionsOf(text)[0]?.value).toBe(false);
+    expect(formatAnswer(questionsOf(text)[0]!)).toBe("No");
   });
 
   it("accepts a numeric version and a missing value as unanswered", () => {
@@ -160,6 +177,7 @@ describe("drafts and read-only answers", () => {
       partnerId: "",
       htmlCssDone: "yes",
       gitDone: "",
+      track: "web",
       project: "A chama ledger",
       hours: "6",
       available: "2027-01-15",
@@ -167,14 +185,30 @@ describe("drafts and read-only answers", () => {
   });
 
   it("formats answers in words: Yes/No, option labels, and nothing for unanswered", () => {
-    const [name, partner, html, git, , hours] = questionsOf(LEGACY_TEXT);
+    const [name, partner, html, git, track, , hours] = questionsOf(LEGACY_TEXT);
     expect(formatAnswer(name!)).toBe("Njeri Wambui");
     expect(formatAnswer(partner!)).toBeNull();
     expect(formatAnswer({ ...partner!, value: "partner-1" })).toBe("Nairobi Makers");
     expect(formatAnswer(html!)).toBe("Yes");
     expect(formatAnswer({ ...html!, value: false })).toBe("No");
     expect(formatAnswer(git!)).toBeNull();
+    expect(formatAnswer(track!)).toBe("Web");
     expect(formatAnswer(hours!)).toBe("6");
+  });
+
+  it("never offers the partner link to members, and shows it only by name", () => {
+    const questions = questionsOf(LEGACY_TEXT);
+    expect(formQuestions(questions).map((question) => question.name)).not.toContain("partnerId");
+    expect(summaryQuestions(questions).map((question) => question.name)).not.toContain("partnerId");
+    const named = questions.map((question) => (question.name === "partnerId" ? { ...question, value: "partner-1" } : question));
+    expect(summaryQuestions(named).map((question) => question.name)).toContain("partnerId");
+    const bareId = questions.map((question) => (question.name === "partnerId" ? { ...question, options: [], value: "partner-1" } : question));
+    expect(summaryQuestions(bareId).map((question) => question.name)).not.toContain("partnerId");
+  });
+
+  it("has nothing to edit when the partner link is the only question", () => {
+    const text = JSON.stringify({ version: "1", submission: [{ type: "string", name: "partnerId", label: "Partner", value: "p" }] });
+    expect(hasEditableAnswers(text, "PENDING")).toBe(false);
   });
 
   it("names fields after their question", () => {
@@ -188,15 +222,16 @@ describe("readAnswerSubmission", () => {
   it("accepts plain answers and converts them to stored values", () => {
     const result = readAnswerSubmission(
       questions,
-      validForm({ "answer.gitDone": "no", "answer.project": "  A shared\r\nledger  ", "answer.partnerId": "partner-1", "answer.hours": "2.5" }),
+      validForm({ "answer.gitDone": "no", "answer.project": "  A shared\r\nledger  ", "answer.partnerId": "partner-1", "answer.hours": "2.5", "answer.track": "data" }),
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
+    // The partner link is never read from the form.
     expect(Object.fromEntries(result.values)).toEqual({
       name: "Njeri Wambui",
-      partnerId: "partner-1",
       htmlCssDone: true,
       gitDone: false,
+      track: "data",
       project: "A shared\nledger",
       hours: 2.5,
       available: "2027-01-15",
@@ -217,7 +252,7 @@ describe("readAnswerSubmission", () => {
         "answer.project": typed,
         "answer.hours": "six",
         "answer.available": "2027-02-30",
-        "answer.partnerId": "partner-unknown",
+        "answer.track": "track-unknown",
       }),
     );
     expect(result.ok).toBe(false);
@@ -226,9 +261,9 @@ describe("readAnswerSubmission", () => {
       htmlCssDone: "Choose Yes or No.",
       hours: "Enter a number, like 3 or 2.5.",
       available: "Enter a real date, like 2027-01-15.",
-      partnerId: "Choose one of the listed options.",
+      track: "Choose one of the listed options.",
     });
-    expect(result.drafts).toMatchObject({ project: typed, hours: "six", available: "2027-02-30", partnerId: "partner-unknown" });
+    expect(result.drafts).toMatchObject({ project: typed, hours: "six", available: "2027-02-30", track: "track-unknown" });
   });
 
   it("treats a missing field as blank, so an unanswered required choice is an error", () => {
@@ -237,6 +272,13 @@ describe("readAnswerSubmission", () => {
     if (result.ok) return;
     expect(Object.keys(result.errors)).toEqual(["htmlCssDone"]);
     expect(result.drafts.project).toBe("");
+  });
+
+  it("accepts every number a number field can submit", () => {
+    for (const [typed, value] of [["3", 3], ["-2.5", -2.5], [".5", 0.5], ["1e3", 1000], ["+4", 4]] as const) {
+      const result = readAnswerSubmission(questions, validForm({ "answer.hours": typed }));
+      expect({ typed, value: result.ok && result.values.get("hours") }).toEqual({ typed, value });
+    }
   });
 
   it("limits answer length", () => {
@@ -274,15 +316,16 @@ describe("writeAnswers", () => {
     expect(written.version).toBe("1");
     expect(written.submission[1].options).toEqual([{ label: "Nairobi Makers", value: "partner-1" }]);
     expect(written.submission.every((item: { extra: number }) => item.extra === 1)).toBe(true);
-    expect(written.submission[4].value).toBe("New idea");
+    expect(written.submission[5].value).toBe("New idea");
     expect(written.submission[2].value).toBe(true);
   });
 
   it("updates the old stack's top-level copies of text answers", () => {
-    const written = JSON.parse(writeAnswers(LEGACY_TEXT, new Map<string, string | null>([["name", "Njeri W."], ["partnerId", null]])));
+    const written = JSON.parse(writeAnswers(LEGACY_TEXT, new Map<string, string | null>([["name", "Njeri W."]])));
     expect(written.name).toBe("Njeri W.");
     expect(written.partnerId).toBe("");
     expect(written.submission[0].value).toBe("Njeri W.");
+    expect(written.submission[1].value).toBeNull();
   });
 
   it("refuses to write into an application with no questions", () => {

@@ -33,7 +33,7 @@ const PREVIOUS_LABEL = "What projects have you built in the past? (either tech o
 /** The question's link carries a screen-reader note, "(opens in a new tab)", inside its accessible name. */
 const HTML_LABEL = /^Did you complete the free portion of the HTML\/CSS course \(opens in a new tab\)\s?\?$/;
 
-/** A seeded member who signs in the way the community persona does. */
+/** A member of the local seed, signed in the way the community persona is. Previews seed other ids, so these skip there. */
 function localMember(user: string): PersonaSession | string {
   if (process.env.PLAYWRIGHT_BASE_URL) return "These members are seeded locally only (platform-personas.local.sql).";
   const community = personaSession("community");
@@ -42,7 +42,8 @@ function localMember(user: string): PersonaSession | string {
 
 const applicant = localMember("applicant");
 const newcomer = localMember("newcomer");
-const student = personaSession("student");
+// The local seed's cohort persona: a preview's student has a different application id.
+const student = localMember("student");
 const staff = personaSession("staff");
 
 test.use({ reducedMotion: "reduce" });
@@ -68,7 +69,9 @@ let scripted = true;
 
 /** astro dev's toolbar sits over the page in local evidence. */
 async function hideDevToolbar(page: Page) {
-  if (scripted && !process.env.PLAYWRIGHT_BASE_URL) await page.addStyleTag({ content: "astro-dev-toolbar { display: none !important; }" });
+  if (!scripted || process.env.PLAYWRIGHT_BASE_URL) return;
+  await page.waitForLoadState("load");
+  await page.addStyleTag({ content: "astro-dev-toolbar { display: none !important; }" });
 }
 
 async function open(page: Page, path: string) {
@@ -234,6 +237,7 @@ test.describe("a member applying to a cohort that asks no questions", () => {
     const view = page.getByRole("link", { name: "View application" });
     await expect(view).toBeVisible();
     await view.click();
+    await expect(page).toHaveURL(/\/application\//);
     await hideDevToolbar(page);
 
     await expect(page.locator("[data-application-answers-summary]")).toHaveText(

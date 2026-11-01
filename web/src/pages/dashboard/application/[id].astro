@@ -12,14 +12,8 @@ import * as schema from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { toProgramApplicationBadgeVariant } from "@/lib/admin/program-application";
-import {
-  canEditAnswers,
-  draftsFor,
-  parseApplicationAnswers,
-  readAnswerSubmission,
-  writeAnswers,
-  type ApplicationAnswerDrafts,
-} from "@/lib/student/application-answers";
+import { draftsFor, parseApplicationAnswers, type ApplicationAnswerDrafts } from "@/lib/student/application-answers";
+import { saveApplicationAnswers } from "@/lib/student/save-application-answers";
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
@@ -47,46 +41,59 @@ if (!application) {
 }
 
 // Members answer the questions their application carries, as plain fields;
-// they never edit the stored JSON. Without questions there is nothing to post.
+// they never edit the stored JSON. Without questions there is nothing to post
+// (saveApplicationAnswers ignores the form).
 let answers = parseApplicationAnswers(application.application);
 let drafts: ApplicationAnswerDrafts = answers.kind === "questions" ? draftsFor(answers.questions) : {};
 let fieldErrors: Readonly<Record<string, string>> = {};
 
-if (Astro.request.method === "POST" && answers.kind === "questions" && canEditAnswers(answers, application.status)) {
+if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData().catch(() => null);
-  const submission = formData ? readAnswerSubmission(answers.questions, (field) => formData.get(field)) : null;
-  if (!submission) {
-    error = "Your answers could not be read. Please try again.";
-    Astro.response.status = 400;
-  } else if (!submission.ok) {
-    drafts = submission.drafts;
-    fieldErrors = submission.errors;
-    Astro.response.status = 400;
-  } else {
-    try {
-      const [saved] = await db
-        .update(schema.programApplication)
-        .set({ application: writeAnswers(application.application, submission.values) })
-        .where(and(ownApplication, eq(schema.programApplication.status, "PENDING")))
-        .returning({ application: schema.programApplication.application });
+  const result = formData
+    ? await saveApplicationAnswers({
+        db: env.DB,
+        userId: user.id,
+        applicationId: application.id,
+        programId: isDemoUser(user.id) ? DEMO_PREFIX + "program" : undefined,
+        read: (field) => formData.get(field),
+      })
+    : null;
 
-      if (saved) {
-        application.application = saved.application;
-        answers = parseApplicationAnswers(saved.application);
-        drafts = answers.kind === "questions" ? draftsFor(answers.questions) : {};
-        success = "Your answers are saved.";
-      } else {
-        // The team reviewed it while the form was open: show where it stands now.
-        application = (await loadApplication()) ?? application;
-        answers = parseApplicationAnswers(application.application);
-        error = "The team has already reviewed this application, so its answers can no longer change.";
-        Astro.response.status = 409;
-      }
-    } catch {
-      drafts = submission.drafts;
+  switch (result?.kind) {
+    case undefined:
+      error = "Your answers could not be read. Please try again.";
+      Astro.response.status = 400;
+      break;
+    case "invalid":
+      drafts = result.drafts;
+      fieldErrors = result.errors;
+      Astro.response.status = 400;
+      break;
+    case "saved":
+      application.application = result.application;
+      answers = parseApplicationAnswers(result.application);
+      drafts = answers.kind === "questions" ? draftsFor(answers.questions) : {};
+      success = "Your answers are saved.";
+      break;
+    case "stale":
+      // Reviewed or changed while the form was open: show where it stands now.
+      application = (await loadApplication()) ?? application;
+      answers = parseApplicationAnswers(application.application);
+      drafts = answers.kind === "questions" ? draftsFor(answers.questions) : {};
+      error = application.status === "PENDING"
+        ? "This application changed while you were editing it. Check the answers below and save again."
+        : "The team has already reviewed this application, so its answers can no longer change.";
+      Astro.response.status = 409;
+      break;
+    case "failed":
+      drafts = result.drafts;
       error = "Your answers could not be saved. Please try again.";
       Astro.response.status = 500;
-    }
+      break;
+    case "not-found":
+    case "not-editable":
+      // Nothing a member can post here: the page renders as it would for a GET.
+      break;
   }
 }
 

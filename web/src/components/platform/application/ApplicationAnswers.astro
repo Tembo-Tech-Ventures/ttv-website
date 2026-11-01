@@ -15,7 +15,9 @@ import {
   canEditAnswers,
   fieldName,
   formatAnswer,
+  formQuestions,
   plainLabel,
+  summaryQuestions,
   type ApplicationAnswerDrafts,
   type ApplicationAnswers,
   type ApplicationQuestion,
@@ -34,7 +36,7 @@ const editable = canEditAnswers(answers, status);
 const nothingRecorded =
   answers.kind === "enrollment"
     ? "The TTV team added you to this cohort directly, so there were no application questions."
-    : status === "PENDING"
+    : status === "PENDING" && answers.kind === "empty"
       ? "This cohort doesn't ask any application questions, so there's nothing to fill in. Your application's status is shown above and changes when the team reviews it."
       : "No answers were recorded with this application.";
 
@@ -46,7 +48,8 @@ const fieldClass = (question: ApplicationQuestion) => [
   "form-control placeholder:text-ink-muted",
   errorFor(question) && "border-red-500",
 ];
-const questions = answers.kind === "questions" ? answers.questions : [];
+const stored = answers.kind === "questions" ? answers.questions : [];
+const questions = editable ? formQuestions(stored) : summaryQuestions(stored);
 const failed = questions.filter((question) => errorFor(question));
 ---
 
@@ -154,7 +157,7 @@ const failed = questions.filter((question) => errorFor(question));
 
       <Button type="submit">Save answers</Button>
     </form>
-  ) : answers.kind === "questions" ? (
+  ) : answers.kind === "questions" && questions.length > 0 ? (
     <dl class="space-y-4" data-application-answers-summary>
       {questions.map((question) => {
         const answer = formatAnswer(question);

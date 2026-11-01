@@ -69,7 +69,8 @@ export const ANSWER_LIMITS = { string: 500, textarea: 5_000 } as const;
 
 const QUESTION_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 const DATE_VALUE = /^\d{4}-\d{2}-\d{2}$/;
-const NUMBER_VALUE = /^-?\d+(\.\d+)?$/;
+/** What a number field can submit: "3", "-2.5", ".5", "1e3". */
+const NUMBER_VALUE = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -108,7 +109,10 @@ function parseQuestion(item: unknown): ApplicationQuestion | null {
   if (!isQuestionType(type) || typeof name !== "string" || !QUESTION_NAME.test(name)) return null;
   if (typeof label !== "string" || label.trim() === "" || !isAnswerValue(value)) return null;
   const options = parseOptions(item.options);
-  return options ? { name, type, label, options, value } : null;
+  if (!options) return null;
+  // The old form showed a required Yes/No as a switch that starts off: an
+  // untouched one was stored as null and read "No" to the applicant.
+  return { name, type, label, options, value: type === "requiredBoolean" && value === null ? false : value };
 }
 
 /** The legacy version 1 questions, or null when the stored shape is anything else. */
@@ -165,9 +169,30 @@ export function parseApplicationAnswers(text: string): ApplicationAnswers {
   return details.length === 0 && !hidden ? { kind: "empty" } : { kind: "details", details, hidden };
 }
 
+/**
+ * Whether a member answers this question. The old stack's "partnerId" records
+ * which partner organisation an applicant came through; staff own that link,
+ * so members never edit it.
+ */
+export function isMemberAnswerable(question: Pick<ApplicationQuestion, "name">): boolean {
+  return question.name !== "partnerId";
+}
+
+/** The questions the answers form offers. */
+export function formQuestions(questions: readonly ApplicationQuestion[]): ApplicationQuestion[] {
+  return questions.filter(isMemberAnswerable);
+}
+
+/** The questions the read-only view shows: a partner only by name, never as a bare id. */
+export function summaryQuestions(questions: readonly ApplicationQuestion[]): ApplicationQuestion[] {
+  return questions.filter(
+    (question) => isMemberAnswerable(question) || question.options.some((option) => option.value === question.value),
+  );
+}
+
 /** Whether a member can change these answers: questions to answer, on a pending application. */
 export function canEditAnswers(answers: ApplicationAnswers, status: string): boolean {
-  return status === "PENDING" && answers.kind === "questions";
+  return status === "PENDING" && answers.kind === "questions" && formQuestions(answers.questions).length > 0;
 }
 
 export function hasEditableAnswers(text: string, status: string): boolean {
@@ -254,7 +279,7 @@ export function readAnswerSubmission(
   const errors: Record<string, string> = {};
   const values = new Map<string, ApplicationAnswerValue>();
 
-  for (const question of questions) {
+  for (const question of formQuestions(questions)) {
     const entry = read(fieldName(question));
     // Browsers send textarea line breaks as CRLF.
     const draft = typeof entry === "string" ? entry.replace(/\r\n?/g, "\n") : "";

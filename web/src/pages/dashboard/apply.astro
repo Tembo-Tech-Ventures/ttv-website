@@ -115,9 +115,11 @@ const applicationsHref = spaces ? SPACE_PATHS.cohort : "/dashboard";
   <div class="space-y-6">
     <div>
       <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Apply to a Cohort</PageTitle>
-      <p class="mt-1 text-ink-secondary">
-        Browse cohorts accepting applications and submit yours.
-      </p>
+      {!(submitted && availablePrograms.length === 0) && (
+        <p class="mt-1 text-ink-secondary">
+          Browse cohorts accepting applications and submit yours.
+        </p>
+      )}
     </div>
 
     {submitted && (
