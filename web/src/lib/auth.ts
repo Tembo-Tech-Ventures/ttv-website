@@ -3,6 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { bearer } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/d1";
 import { isAgentAuthEnabled } from "./agent-auth";
+import { onboardingSignUpHooks } from "./onboarding/signup";
 import { syntheticSessionHooks, syntheticSessionResponseHook } from "./synthetic-session-lifetime";
 import * as schema from "./db/schema";
 
@@ -16,6 +17,7 @@ type AuthRuntimeEnv = Pick<
   | "AGENT_AUTH_ENABLED"
   | "STAGING_DEMO_ENABLED"
   | "DEPLOYMENT_ENVIRONMENT"
+  | "PLATFORM_FLAGS_OVERRIDE"
 >;
 
 /**
@@ -38,7 +40,11 @@ export function createAuth(runtimeEnv: AuthRuntimeEnv) {
     basePath: "/api/auth",
     secret: runtimeEnv.BETTER_AUTH_SECRET,
     baseURL: runtimeEnv.BETTER_AUTH_URL,
-    databaseHooks: syntheticSessionHooks(runtimeEnv.DEPLOYMENT_ENVIRONMENT, isAgentAuthEnabled(runtimeEnv.AGENT_AUTH_ENABLED), runtimeEnv.STAGING_DEMO_ENABLED === "true"),
+    databaseHooks: {
+      ...syntheticSessionHooks(runtimeEnv.DEPLOYMENT_ENVIRONMENT, isAgentAuthEnabled(runtimeEnv.AGENT_AUTH_ENABLED), runtimeEnv.STAGING_DEMO_ENABLED === "true"),
+      // Fail-open onboarding hook (approved exception, onboarding B-O.2): never blocks sign-up.
+      user: onboardingSignUpHooks(runtimeEnv),
+    },
     hooks: syntheticSessionResponseHook(runtimeEnv.DEPLOYMENT_ENVIRONMENT, isAgentAuthEnabled(runtimeEnv.AGENT_AUTH_ENABLED), runtimeEnv.STAGING_DEMO_ENABLED === "true"),
     session: {
       cookieCache: {

@@ -50,7 +50,8 @@ export type ErrorEnvelope = z.infer<typeof ErrorEnvelope>;
 export const SPACE_ORDER = ["cohort", "community", "mentoring", "discover", "admin", "profile"] as const;
 export const SpaceId = z.enum(SPACE_ORDER);
 export type SpaceId = z.infer<typeof SpaceId>;
-export const FlagKey = z.enum(["spaces", "channels", "tembo_channels", "mentor_requests"]);
+/** onboarding is effective only while spaces is (onboarding SPEC §6). */
+export const FlagKey = z.enum(["spaces", "channels", "tembo_channels", "mentor_requests", "onboarding"]);
 export type FlagKey = z.infer<typeof FlagKey>;
 export const FlagAudience = z.enum(["OFF", "STAFF", "ALL"]);
 export type FlagAudience = z.infer<typeof FlagAudience>;

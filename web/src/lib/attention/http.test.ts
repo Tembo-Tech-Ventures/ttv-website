@@ -1,7 +1,7 @@
 import type { APIContext } from "astro";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CAPABILITY_ROLE_MATRIX } from "@/lib/platform/server/capabilities.fixtures";
-import { AttentionCount, AttentionList } from "@/lib/platform/contracts";
+import { AttentionCount, AttentionList, FlagKey } from "@/lib/platform/contracts";
 import { attentionDatabase } from "./test-support";
 import { attentionRequest } from "./http";
 
@@ -107,7 +107,9 @@ describe("attention APIs", () => {
         DB: s.db.$client, DEPLOYMENT_ENVIRONMENT: "production", PLATFORM_FLAGS_OVERRIDE: "all",
       });
       expect(response.status).toBe(404);
-      expect(prepare.mock.calls.map(call => call[0])).toEqual(["SELECT key, audience FROM feature_flag WHERE key IN (?, ?, ?, ?)"]);
+      expect(prepare.mock.calls.map(call => call[0])).toEqual([
+        `SELECT key, audience FROM feature_flag WHERE key IN (${FlagKey.options.map(() => "?").join(", ")})`,
+      ]);
     } finally { s.database.close(); }
   });
 

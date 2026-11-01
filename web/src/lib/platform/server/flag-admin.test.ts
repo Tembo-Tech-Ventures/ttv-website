@@ -35,6 +35,7 @@ beforeEach(() => {
   setup = createSqliteD1();
   setup.database.exec(MINIMAL_AUTH_SCHEMA);
   setup.database.exec(readMigration("0021_feature_flags.sql"));
+  setup.database.exec(readMigration("0025_onboarding.sql"));
   setup.database.exec(`
     INSERT INTO user(id,name,email) VALUES ('amina','Amina Hassan','amina@example.test');
     INSERT INTO Roles(id,name) VALUES ('admin','ADMIN');
@@ -136,10 +137,17 @@ describe("platform flags admin API through real middleware guards", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     const data = FlagsAdmin.parse(await response.json());
-    expect(data.flags).toHaveLength(4);
+    expect(data.flags.map(flag => flag.key)).toEqual(["spaces", "channels", "tembo_channels", "mentor_requests", "onboarding"]);
     expect(data.flags.every(flag => flag.audience === "OFF" && flag.updatedBy === null)).toBe(true);
     expect(data.flags.every(flag => flag.updatedAt > 1_700_000_000_000)).toBe(true);
     expect(queries.mock.calls.filter(([sql]) => sql.startsWith("SELECT key"))).toHaveLength(1);
+  });
+
+  it("updates the onboarding flag like any other key", async () => {
+    const { response } = await request({ method: "PUT", key: "onboarding", body: '{"audience":"STAFF"}' });
+    expect(response.status).toBe(200);
+    expect(Flag.parse(await response.json())).toMatchObject({ key: "onboarding", audience: "STAFF", updatedBy: "amina" });
+    expect(setup.database.prepare("SELECT key FROM feature_flag WHERE audience='STAFF'").all()).toEqual([{ key: "onboarding" }]);
   });
 
   it.each(["OFF", "STAFF", "ALL"])("updates %s, records the actor and returns epoch milliseconds", async audience => {

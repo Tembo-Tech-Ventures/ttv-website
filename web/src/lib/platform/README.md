@@ -105,7 +105,7 @@ The source is library `/reports/platform-ux-2026-10-30/screens/`: `01` maps to
 have a `meByPersona` entry; additional fictional prototype people support these
 scenes. Lucy is community-only (Brian replaces her inconsistent cohort message
 in screen 02). Current mission rules also keep alumni's Cohort space and give
-admins Discover without inventing a mentor role. The four `/me` flags are on for
+admins Discover without inventing a mentor role. The five `/me` flags are on for
 demo scenes; `flagsAdmin` separately illustrates the initial OFF database state.
 Attention and channel unread counts are separate counters, not summed together.
 
