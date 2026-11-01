@@ -1,11 +1,15 @@
 ---
+import { env } from "cloudflare:workers";
 import CommunityMotion from "@/components/community/CommunityMotion.astro";
 import PublicLayout from "@/layouts/PublicLayout.astro";
 import CommunityPartnerPage from "@/components/community/CommunityPartnerPage";
+import { partnerAccessFlow } from "@/components/community/partner-access-flow";
 // oxlint-disable-next-line import/no-unassigned-import -- Page-scoped CSS; no client hydration required.
 import "@/styles/community-audience.css";
+
+const flow = await partnerAccessFlow({ locals: Astro.locals, db: env.DB, env, route: Astro.url.pathname });
 ---
 <PublicLayout title="Community for institutions | Tembo Tech Ventures" description="Explore community profiles, documented contributions, and mentor context. Follow the evidence and decide what to ask next." canonical="/community/institutions">
   <CommunityMotion />
-  <CommunityPartnerPage audience="institutions" isAuthenticated={Boolean(Astro.locals.user)} />
+  <CommunityPartnerPage audience="institutions" isAuthenticated={Boolean(Astro.locals.user)} flow={flow} />
 </PublicLayout>

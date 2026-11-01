@@ -4,11 +4,21 @@ import CommunityTrail from "./CommunityTrail";
 
 export type CommunityPartner = "mentors" | "institutions";
 
+/**
+ * How access is asked for after sign-in, which the CTA and one FAQ answer describe:
+ * - `request`: onboarding is on. The welcome step opens with this page's card chosen, and access
+ *   becomes a request an administrator decides.
+ * - `legacy`: onboarding is off. B-O.4 sends the welcome hint on to the page this CTA used to open,
+ *   which explains the approval requirement.
+ */
+export type PartnerAccessFlow = "request" | "legacy";
+
 const content = {
   mentors: {
     label: "For mentors", title: "Make the contribution", emphasis: "clearer.",
     lead: "Help someone’s work speak for itself. Add a specific account of what you checked, how you checked it, and what you can confirm.",
-    destination: "/dashboard/mentorship", cta: "Continue to mentor review",
+    destination: "/dashboard/welcome?intent=mentor",
+    cta: { request: "Ask to mentor", legacy: "Continue to mentor review" },
     approval: "Mentor access requires administrator approval after sign-in.",
     caption: "A review with a clear scope", foot: "Specific work. A named reviewer. A clear basis.",
     nodes: [
@@ -29,7 +39,10 @@ const content = {
     ],
     questions: [
       { title: "How much time should I set aside?", text: "Before taking on a review, agree its scope and timing with the team. Start with work you can give careful, specific attention to." },
-      { title: "Can I start reviewing as soon as I sign in?", text: "Review tools require mentor access granted by an administrator. Signing in does not grant that access. If it is missing, the mentor page explains the requirement and offers a return to your community journey." },
+      { title: "Can I start reviewing as soon as I sign in?", text: {
+        request: "Not straight away. Signing in does not grant mentor access. After you sign in, choose Mentor and tell the team what kind of work you could review. An administrator reads each request and decides; approval is not guaranteed. While your request is pending, you can use Community and your Profile like any member. If it is approved, Mentoring opens as one of your spaces.",
+        legacy: "Review tools require mentor access granted by an administrator. Signing in does not grant that access. If it is missing, the mentor page explains the requirement and offers a return to your community journey.",
+      } },
       { title: "Does my note certify the member?", text: "No. A mentor confirmation records the specific contribution and revision reviewed. It does not certify the whole person or guarantee a job, placement, or introduction." },
     ],
     close: "Bring your perspective to the work.", closeNote: "Administrator-approved mentor access is required. Confirmations stay scoped to reviewed work; they do not guarantee opportunities.",
@@ -37,7 +50,8 @@ const content = {
   institutions: {
     label: "For institutions", title: "Look beyond the profile.", emphasis: "Understand the work.",
     lead: "Explore community members through their contributions, supporting sources, and mentor context. Use the evidence to decide what you want to ask next.",
-    destination: "/dashboard/discover", cta: "Continue to institutional access",
+    destination: "/dashboard/welcome?intent=institution",
+    cta: { request: "Ask for institutional access", legacy: "Continue to institutional access" },
     approval: "Institutional access requires administrator approval after sign-in.",
     caption: "From a profile to a better question", foot: "Evidence informs the conversation. People decide.",
     nodes: [
@@ -57,25 +71,37 @@ const content = {
       { title: "Approval is not unrestricted access.", text: "Approved institutions can discover saved community profiles and the contributions members share. Private cohort recordings and internal records stay outside institutional discovery." },
     ],
     questions: [
-      { title: "Who can use institutional discovery?", text: "Institutional access must be granted by an administrator after sign-in. Signing in alone does not enable discovery. Without that access, the page explains the requirement and links to your community journey." },
+      { title: "Who can use institutional discovery?", text: {
+        request: "Organisations an administrator has approved. Signing in alone does not enable discovery. After you sign in, choose “Find people for your organisation”, then name your organisation and what you would like to explore. An administrator reads each request and decides; approval is not guaranteed. While it is pending, you can use Community and your Profile like any member. If it is approved, Discover opens as one of your spaces.",
+        legacy: "Institutional access must be granted by an administrator after sign-in. Signing in alone does not enable discovery. Without that access, the page explains the requirement and links to your community journey.",
+      } },
       { title: "Does discovery arrange an introduction?", text: "No. Exploring a profile does not send a message, book an interview, or arrange an introduction. Use the documented work to inform your own next steps; participation does not guarantee a job or placement." },
     ],
     close: "Start with evidence. Ask a better question.", closeNote: "Administrator-approved institutional access is required. Discovery preserves private-data boundaries and does not guarantee hiring outcomes or introductions.",
   },
 } as const;
 
-export default function CommunityPartnerPage({ audience, isAuthenticated = false }: { audience: CommunityPartner; isAuthenticated?: boolean }) {
+/** Where a partner CTA leads: the welcome step with this page's card chosen, by way of sign-in when needed. */
+export function partnerHref(audience: CommunityPartner, isAuthenticated: boolean): string {
+  const { destination } = content[audience];
+  return isAuthenticated ? destination : `/auth/login?next=${encodeURIComponent(destination)}`;
+}
+
+export default function CommunityPartnerPage({ audience, isAuthenticated = false, flow = "legacy" }: {
+  audience: CommunityPartner; isAuthenticated?: boolean; flow?: PartnerAccessFlow;
+}) {
   const page = content[audience];
-  const href = isAuthenticated ? page.destination : `/auth/login?next=${encodeURIComponent(page.destination)}`;
-  return <article className={`community-audience hp audience-${audience}`} data-community-root>
+  const href = partnerHref(audience, isAuthenticated);
+  const cta = page.cta[flow];
+  return <article className={`community-audience hp audience-${audience}`} data-community-root data-access-flow={flow}>
       <nav className="audience-breadcrumb audience-container" aria-label="Breadcrumb"><a href="/community">← Community</a><span aria-current="page">{page.label}</span></nav>
       <CommunitySheet className="audience-hero" labelledby="audience-title" tone="base" layer={1}>
-        <div className="audience-hero-copy"><h1 id="audience-title">{page.title} <em>{page.emphasis}</em></h1><p className="audience-lead">{page.lead}</p><a className="audience-button" href={href}>{page.cta}<span aria-hidden="true">↗</span></a><p className="audience-cta-note">{page.approval}{!isAuthenticated && " Continue with GitHub to sign in."}</p><a className="audience-text-link" href="#participation">See how it works <span aria-hidden="true">↓</span></a></div>
+        <div className="audience-hero-copy"><h1 id="audience-title">{page.title} <em>{page.emphasis}</em></h1><p className="audience-lead">{page.lead}</p><a className="audience-button" href={href}>{cta}<span aria-hidden="true">↗</span></a><p className="audience-cta-note">{page.approval}{!isAuthenticated && " Continue with GitHub to sign in."}</p><a className="audience-text-link" href="#participation">See how it works <span aria-hidden="true">↓</span></a></div>
         <CommunityTrail story={audience}><figcaption id="trail-caption">{page.caption}<span>Fictional illustration</span></figcaption><ol className="audience-evidence-path">{page.nodes.map((node, i) => <li key={node.label} className={i === 2 ? "audience-mentor-note" : undefined}><span className="audience-node" aria-hidden="true">{audience === "mentors" ? "○" : "◇"}</span><div><span className="audience-card-label">{node.label}</span><h3>{node.title}</h3><p>{node.text}</p>{"detail" in node && <small>{node.detail}</small>}</div></li>)}</ol><p className="audience-trail-foot">{page.foot}</p></CommunityTrail>
       </CommunitySheet>
       <CommunitySheet className="audience-journey" id="participation" labelledby="journey-title" tone="raised" layer={2}><div className="audience-section-intro"><h2 id="journey-title">{page.journey}</h2><p>{page.intro}</p></div><ol className="audience-steps">{page.steps.map((step, i) => <li key={step.title}><span aria-hidden="true">0{i + 1}</span><h3>{step.title}</h3><p>{step.text}</p></li>)}</ol></CommunitySheet>
       <CommunitySheet className="audience-context" labelledby="context-title" tone="lift" layer={3}><div><h2 id="context-title">{page.context}</h2><p>{page.contextIntro}</p></div><div className="audience-context-notes">{page.notes.map(note => <div key={note.title}><h3>{note.title}</h3><p>{note.text}</p></div>)}</div></CommunitySheet>
-      <CommunitySheet className="audience-questions" labelledby="questions-title" tone="deep" layer={4}><h2 id="questions-title">Before you begin.</h2><div>{page.questions.map(question => <details key={question.title}><summary>{question.title}</summary><p>{question.text}</p></details>)}</div></CommunitySheet>
-      <CommunitySheet className="audience-close" labelledby="close-title" tone="peach" layer={5} last><span className="audience-close-mark" aria-hidden="true">↗</span><div><h2 id="close-title">{page.close}</h2><a className="audience-button" href={href}>{page.cta}<span aria-hidden="true">↗</span></a><p>{page.closeNote}</p></div></CommunitySheet>
+      <CommunitySheet className="audience-questions" labelledby="questions-title" tone="deep" layer={4}><h2 id="questions-title">Before you begin.</h2><div>{page.questions.map(question => <details key={question.title}><summary>{question.title}</summary><p>{typeof question.text === "string" ? question.text : question.text[flow]}</p></details>)}</div></CommunitySheet>
+      <CommunitySheet className="audience-close" labelledby="close-title" tone="peach" layer={5} last><span className="audience-close-mark" aria-hidden="true">↗</span><div><h2 id="close-title">{page.close}</h2><a className="audience-button" href={href}>{cta}<span aria-hidden="true">↗</span></a><p>{page.closeNote}</p></div></CommunitySheet>
   </article>;
 }

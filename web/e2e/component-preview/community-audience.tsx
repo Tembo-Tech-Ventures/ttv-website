@@ -17,7 +17,7 @@ function Preview() {
   }, []);
   return <>
   <header className="mx-auto flex max-w-7xl items-center justify-between border-b border-primary/20 px-6 py-5"><a href="/" className="font-heading text-xl">TEMBO</a><span className="text-xs text-ink-muted">Local component preview · fictional content</span></header>
-  <main>{audience === "community" ? <CommunityLanding isAuthenticated={query.has("signed-in")} /> : audience === "mentors" || audience === "institutions" ? <CommunityPartnerPage audience={audience} isAuthenticated={query.has("signed-in")} /> : <CommunityAudiencePage isAuthenticated={query.has("signed-in")} />}</main>
+  <main>{audience === "community" ? <CommunityLanding isAuthenticated={query.has("signed-in")} /> : audience === "mentors" || audience === "institutions" ? <CommunityPartnerPage audience={audience} isAuthenticated={query.has("signed-in")} flow={query.has("onboarding") ? "request" : "legacy"} /> : <CommunityAudiencePage isAuthenticated={query.has("signed-in")} />}</main>
 </>;
 }
 createRoot(document.getElementById("root")!).render(<Preview />);
