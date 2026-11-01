@@ -133,6 +133,8 @@ describe("onboarding migration", () => {
     ["a decision message on a withdrawal", { status: "WITHDRAWN", decisionMessage: "Thanks" }],
     ["a long decision message", { status: "DECLINED", decidedAt: 2_000, decisionMessage: "x".repeat(601) }],
     ["a seen pending request", { requesterSeenAt: 2_000 }],
+    ["a withdrawal id on a pending request", { withdrawalId: "withdrawal" }],
+    ["a withdrawal id on a decision", { status: "DECLINED", decidedAt: 2_000, withdrawalId: "withdrawal" }],
     ["an update before creation", { updatedAt: 999 }],
     ["a missing requester", { userId: "missing" }],
     ["a missing decider", { status: "APPROVED", decidedAt: 2_000, decidedBy: "missing" }],
@@ -145,11 +147,13 @@ describe("onboarding migration", () => {
   it("accepts the shapes the domain writes", () => {
     const database = migrated();
     insertRequest(database, { id: "mentor", link: "https://example.com/wairimu" });
+    insertRequest(database, { id: "withdrawn", userId: "amina", status: "WITHDRAWN", withdrawalId: "w1", updatedAt: 2_000 });
     insertRequest(database, { id: "institution", ...institution, organisationRole: "Engineering lead", note: "x".repeat(600) });
     insertRequest(database, { id: "declined", userId: "otieno", status: "DECLINED", decidedAt: 2_000, decidedBy: "amina",
       decisionMessage: "Thank you for offering.", requesterSeenAt: 3_000, updatedAt: 3_000 });
     expect(database.prepare("SELECT id, status FROM access_request ORDER BY id").all()).toEqual([
       { id: "declined", status: "DECLINED" }, { id: "institution", status: "PENDING" }, { id: "mentor", status: "PENDING" },
+      { id: "withdrawn", status: "WITHDRAWN" },
     ]);
   });
 

@@ -32,8 +32,9 @@ type RequestRow = Omit<AccessRequestSummary, "seenAt"> & { seenAt: number | null
 const byOrder = <T extends string>(order: readonly T[]) => (a: T, b: T) => order.indexOf(a) - order.indexOf(b);
 
 /**
- * One summary read and one request read. MEMBER is inferred only from an application, a student
- * profile or a cohort assignment, never from a community profile or journey, which mentors keep too.
+ * One summary read and one request read. MEMBER is inferred only from an application or a student
+ * profile: never from a cohort assignment (programRole holds only instructors, TAs and cohort mentors)
+ * or from a community profile or journey, which mentors keep too.
  */
 export async function getOnboardingState(db: D1Database, userId: string): Promise<OnboardingState> {
   const [summary, { results: requestRows }] = await Promise.all([
@@ -43,8 +44,7 @@ export async function getOnboardingState(db: D1Database, userId: string): Promis
         (SELECT json_group_array(r.name) FROM UserRoles ur JOIN Roles r ON r.id = ur.roleId
           WHERE ur.userId = ?1 AND r.name IN ('MENTOR', 'INSTITUTION')) AS roles,
         EXISTS (SELECT 1 FROM programApplication WHERE userId = ?1)
-          OR EXISTS (SELECT 1 FROM studentProfile WHERE userId = ?1)
-          OR EXISTS (SELECT 1 FROM programRole WHERE userId = ?1) AS memberFootprint`)
+          OR EXISTS (SELECT 1 FROM studentProfile WHERE userId = ?1) AS memberFootprint`)
       .bind(userId).first<SummaryRow>(),
     // The latest request per role. decidedBy is deliberately never selected: requesters are not told who decided.
     db.prepare(`SELECT id, role, status, note, organisation, organisationRole, link, decisionMessage,
@@ -158,8 +158,9 @@ export async function createAccessRequest(db: D1Database, userId: string, input:
   const recent = JSON.parse(refusal?.recent ?? "[]") as number[];
   // A slot frees when enough of the last day's requests age out to drop below the limit.
   const freesAt = recent[recent.length - ACCESS_REQUEST_DAILY_LIMIT];
-  throw new OnboardingError("rate_limited", "Too many requests today. Try again later.",
-    freesAt === undefined ? DAY_MS : Math.max(1, freesAt + DAY_MS - now));
+  // Neither reason holds any more (say, the role was removed in between): ask for a plain retry.
+  if (freesAt === undefined) throw new OnboardingError("conflict", "Your access changed while sending. Try again.");
+  throw new OnboardingError("rate_limited", "Too many requests today. Try again later.", Math.max(1, freesAt + DAY_MS - now));
 }
 
 async function refuseUnchanged(db: D1Database, userId: string, id: string, allowed: string): Promise<never> {
@@ -172,20 +173,20 @@ async function refuseUnchanged(db: D1Database, userId: string, id: string, allow
 /**
  * The owner withdraws a pending request; the matching intent goes with it. When that empties a
  * completed onboarding, the person reads as exploring again rather than as never having chosen.
- * The later statements key on this exact withdrawal (a pending row's updatedAt is its createdAt until
- * now), so a replay never removes an intent the person has added again since.
+ * The later statements key on this call's own withdrawalId, so a replay never removes an intent the
+ * person has added again since, whatever the clock says.
  */
 export async function withdrawAccessRequest(db: D1Database, userId: string, id: string, now = Date.now()): Promise<void> {
-  const withdrawn = `SELECT role FROM access_request
-    WHERE id = ?2 AND userId = ?1 AND status = 'WITHDRAWN' AND updatedAt = max(createdAt, ?3)`;
+  const withdrawalId = createId();
+  const withdrawn = "SELECT role FROM access_request WHERE id = ?2 AND userId = ?1 AND withdrawalId = ?4";
   const [update] = await db.batch([
-    db.prepare(`UPDATE access_request SET status = 'WITHDRAWN', updatedAt = max(createdAt, ?3)
-      WHERE id = ?2 AND userId = ?1 AND status = 'PENDING'`).bind(userId, id, now),
-    db.prepare(`DELETE FROM member_intent WHERE userId = ?1 AND intent = (${withdrawn})`).bind(userId, id, now),
+    db.prepare(`UPDATE access_request SET status = 'WITHDRAWN', withdrawalId = ?4, updatedAt = max(updatedAt, ?3)
+      WHERE id = ?2 AND userId = ?1 AND status = 'PENDING'`).bind(userId, id, now, withdrawalId),
+    db.prepare(`DELETE FROM member_intent WHERE userId = ?1 AND intent = (${withdrawn})`).bind(userId, id, now, withdrawalId),
     db.prepare(`INSERT OR IGNORE INTO member_intent (userId, intent, createdAt)
       SELECT ?1, 'EXPLORING', ?3 WHERE EXISTS (${withdrawn})
         AND EXISTS (SELECT 1 FROM member_onboarding WHERE userId = ?1 AND completedAt IS NOT NULL)
-        AND NOT EXISTS (SELECT 1 FROM member_intent WHERE userId = ?1)`).bind(userId, id, now),
+        AND NOT EXISTS (SELECT 1 FROM member_intent WHERE userId = ?1)`).bind(userId, id, now, withdrawalId),
   ]);
   if (update.meta.changes !== 1) await refuseUnchanged(db, userId, id, "pending");
 }

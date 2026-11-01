@@ -42,14 +42,15 @@ describe("getOnboardingState", () => {
   it.each([
     ["an application", "INSERT INTO programApplication(id,userId,programId,status,application) VALUES ('a','wairimu','cohort-a','PENDING','{}')", ["MEMBER"]],
     ["a student profile", "INSERT INTO studentProfile(id,userId,handle) VALUES ('p','wairimu','wairimu')", ["MEMBER"]],
-    ["a cohort assignment", "INSERT INTO programRole(id,userId,programId,name) VALUES ('r','wairimu','cohort-a','MENTOR')", ["MEMBER"]],
+    ...(["MENTOR", "TA", "INSTRUCTOR"] as const).map((name) => [`a cohort ${name} assignment alone`,
+      `INSERT INTO programRole(id,userId,programId,name) VALUES ('r','wairimu','cohort-a','${name}')`, []] as const),
     ["a community profile alone", "INSERT INTO communityProfile(userId) VALUES ('wairimu')", []],
     ["a journey alone", "INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility) VALUES ('j','wairimu','Built','A thing','2026-10','private')", []],
     ["the MENTOR role", "INSERT INTO UserRoles(id,userId,roleId) SELECT 'ur','wairimu',id FROM Roles WHERE name='MENTOR'", ["MENTOR"]],
     ["the INSTITUTION role", "INSERT INTO UserRoles(id,userId,roleId) SELECT 'ur','wairimu',id FROM Roles WHERE name='INSTITUTION'", ["INSTITUTION"]],
     ["the ADMIN role", "INSERT INTO UserRoles(id,userId,roleId) SELECT 'ur','wairimu',id FROM Roles WHERE name='ADMIN'", []],
     ["another person's footprint", "INSERT INTO studentProfile(id,userId,handle) VALUES ('p','otieno','otieno')", []],
-  ])("infers intents from %s", async (_name, sql, inferred) => {
+  ] as const)("infers intents from %s", async (_name, sql, inferred) => {
     const { db, database } = setup();
     database.exec(sql);
     expect((await getOnboardingState(db, "wairimu")).inferred).toEqual(inferred);
@@ -334,6 +335,15 @@ describe("createAccessRequest", () => {
     await createAccessRequest(db, "wairimu", mentor, T + DAY);
   });
 
+  it("asks for a plain retry when neither refusal reason holds by the time it looks", async () => {
+    const { db } = setup();
+    // The insert saw a held role that was removed before the follow-up read.
+    vi.spyOn(db, "batch").mockResolvedValueOnce([{ meta: { changes: 0 } }, { meta: { changes: 0 } }, { meta: { changes: 0 } }] as D1Result[]);
+    const error = await rejection(createAccessRequest(db, "wairimu", mentor, T));
+    expect(error).toMatchObject({ code: "conflict", retryAfterMs: undefined });
+    await createAccessRequest(db, "wairimu", mentor, T + 1);
+  });
+
   it("rejects malformed input before writing", async () => {
     const { db, rows } = setup();
     for (const input of [
@@ -357,13 +367,16 @@ describe("createAccessRequest", () => {
 
 describe("withdrawAccessRequest", () => {
   it("withdraws the owner's pending request and removes its intent", async () => {
-    const { db } = setup();
+    const { db, rows } = setup();
     await saveIntents(db, "wairimu", ["MEMBER", "MENTOR"], T);
     const id = await createAccessRequest(db, "wairimu", mentor, T + 1);
     await withdrawAccessRequest(db, "wairimu", id, T + 2);
-    expect(await getOnboardingState(db, "wairimu")).toMatchObject({
+    const state = await getOnboardingState(db, "wairimu");
+    expect(state).toMatchObject({
       intents: ["MEMBER"], requests: [{ id, status: "WITHDRAWN", updatedAt: T + 2, decidedAt: null }],
     });
+    expect(rows("SELECT withdrawalId, decisionId FROM access_request")).toEqual([{ withdrawalId: expect.any(String), decisionId: null }]);
+    expect(JSON.stringify(state)).not.toContain("withdrawalId");
   });
 
   it("leaves a completed onboarding exploring when it removes the last intent", async () => {
@@ -409,6 +422,15 @@ describe("withdrawAccessRequest", () => {
     await withdrawAccessRequest(db, "wairimu", id, T + 2);
     await saveIntents(db, "wairimu", ["MEMBER", "MENTOR"], T + 3);
     expect((await rejection(withdrawAccessRequest(db, "wairimu", id, T + 4))).code).toBe("conflict");
+    expect((await getOnboardingState(db, "wairimu")).intents).toEqual(["MEMBER", "MENTOR"]);
+  });
+
+  it("does not remove a re-added intent when a replay follows a clock step-back (review of #260)", async () => {
+    const { db } = setup();
+    const id = await createAccessRequest(db, "wairimu", mentor, T);
+    await withdrawAccessRequest(db, "wairimu", id, T - 5);
+    await saveIntents(db, "wairimu", ["MEMBER", "MENTOR"], T + 1);
+    expect((await rejection(withdrawAccessRequest(db, "wairimu", id, T - 3))).code).toBe("conflict");
     expect((await getOnboardingState(db, "wairimu")).intents).toEqual(["MEMBER", "MENTOR"]);
   });
 

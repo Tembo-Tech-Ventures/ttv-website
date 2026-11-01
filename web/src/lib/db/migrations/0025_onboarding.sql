@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS `access_request` (
 	`link` text,
 	`scopeAcknowledgedAt` integer,
 	`decisionId` text,
+	`withdrawalId` text,
 	`decisionMessage` text,
 	`decidedBy` text,
 	`decidedAt` integer,
@@ -29,6 +30,7 @@ CREATE TABLE IF NOT EXISTS `access_request` (
 	CONSTRAINT "access_request_link_check" CHECK("access_request"."link" IS NULL OR length("access_request"."link") <= 2048),
 	CONSTRAINT "access_request_decided_check" CHECK(("access_request"."status" IN ('APPROVED','DECLINED')) = ("access_request"."decidedAt" IS NOT NULL)),
 	CONSTRAINT "access_request_message_check" CHECK("access_request"."decisionMessage" IS NULL OR ("access_request"."status" IN ('APPROVED','DECLINED') AND length(trim("access_request"."decisionMessage")) > 0 AND length("access_request"."decisionMessage") <= 600)),
+	CONSTRAINT "access_request_withdrawal_check" CHECK("access_request"."withdrawalId" IS NULL OR "access_request"."status" = 'WITHDRAWN'),
 	CONSTRAINT "access_request_seen_check" CHECK("access_request"."requesterSeenAt" IS NULL OR "access_request"."status" IN ('APPROVED','DECLINED')),
 	CONSTRAINT "access_request_time_check" CHECK("access_request"."createdAt" >= 0 AND "access_request"."updatedAt" >= "access_request"."createdAt")
 );

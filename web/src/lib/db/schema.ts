@@ -116,6 +116,8 @@ export const accessRequest = sqliteTable("access_request", {
   link: text("link"),
   scopeAcknowledgedAt: integer("scopeAcknowledgedAt"),
   decisionId: text("decisionId"),
+  /** Set by the withdrawal itself, so the statements batched with it act only for that call. */
+  withdrawalId: text("withdrawalId"),
   decisionMessage: text("decisionMessage"),
   decidedBy: text("decidedBy").references(() => user.id, { onDelete: "set null" }),
   decidedAt: integer("decidedAt"),
@@ -137,6 +139,7 @@ export const accessRequest = sqliteTable("access_request", {
   check("access_request_link_check", sql`${table.link} IS NULL OR length(${table.link}) <= 2048`),
   check("access_request_decided_check", sql`(${table.status} IN ('APPROVED','DECLINED')) = (${table.decidedAt} IS NOT NULL)`),
   check("access_request_message_check", sql`${table.decisionMessage} IS NULL OR (${table.status} IN ('APPROVED','DECLINED') AND length(trim(${table.decisionMessage})) > 0 AND length(${table.decisionMessage}) <= 600)`),
+  check("access_request_withdrawal_check", sql`${table.withdrawalId} IS NULL OR ${table.status} = 'WITHDRAWN'`),
   check("access_request_seen_check", sql`${table.requesterSeenAt} IS NULL OR ${table.status} IN ('APPROVED','DECLINED')`),
   check("access_request_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt}`),
 ]);

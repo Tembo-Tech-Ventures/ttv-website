@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "a0162c51-30b0-4f64-87ec-07ab5a9e169a",
+  "id": "ac0280be-0686-49b6-98af-1b883d4b996c",
   "prevId": "1f4c705a-7e55-4c71-9e09-cf30b8181533",
   "tables": {
     "access_request": {
@@ -73,6 +73,13 @@
         },
         "decisionId": {
           "name": "decisionId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "withdrawalId": {
+          "name": "withdrawalId",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -227,6 +234,10 @@
         "access_request_message_check": {
           "name": "access_request_message_check",
           "value": "\"access_request\".\"decisionMessage\" IS NULL OR (\"access_request\".\"status\" IN ('APPROVED','DECLINED') AND length(trim(\"access_request\".\"decisionMessage\")) > 0 AND length(\"access_request\".\"decisionMessage\") <= 600)"
+        },
+        "access_request_withdrawal_check": {
+          "name": "access_request_withdrawal_check",
+          "value": "\"access_request\".\"withdrawalId\" IS NULL OR \"access_request\".\"status\" = 'WITHDRAWN'"
         },
         "access_request_seen_check": {
           "name": "access_request_seen_check",

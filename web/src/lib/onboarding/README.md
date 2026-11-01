@@ -18,6 +18,8 @@ administrator decides. "Access request" is deliberately distinct from
   `PENDING` request per person and role. CHECKs mirror the contracts: note length,
   institution-only organisation and scope acknowledgement, decision fields only
   on decided rows. `decidedBy` is audit-only and never selected for the requester.
+  `withdrawalId` is a per-call nonce that only a withdrawal sets, so the
+  statements batched with it act for that call alone.
 - The `onboarding` flag row is seeded `OFF`. `flags.ts` makes it effective only
   while `spaces` is.
 
@@ -33,10 +35,12 @@ return nothing; routes reply with `getOnboardingState`.
 
 - `getOnboardingState(db, userId)`: two reads. `inferred` is filled only while
   nothing is saved: MENTOR and INSTITUTION from the roles held, MEMBER from an
-  application, a student profile or a cohort assignment (never from a community
-  profile or journey, which mentors keep too). `requests` holds the latest
-  request per role; a request left pending beside a held role is hidden, because
-  role state wins. `unseenApprovals(state)` lists held, approved and unseen roles.
+  application or a student profile. Never from a cohort assignment
+  (`programRole` holds only instructors, TAs and cohort mentors, who must not get
+  the student framing) or a community profile or journey, which mentors keep
+  too. `requests` holds the latest request per role; a request left pending
+  beside a held role is hidden, because role state wins. `unseenApprovals(state)`
+  lists held, approved and unseen roles.
 - `startOnboarding`: the NEW row (see the sign-up hook below).
 - `saveIntents`: replaces the set and completes onboarding. An empty choice is
   stored as `EXPLORING`, so "nothing saved" always means "never chose".
@@ -45,9 +49,12 @@ return nothing; routes reply with `getOnboardingState`.
   `EXPLORING`). Refused with `conflict` when the role is held or a request is
   already pending, and with `rate_limited` (with `retryAfterMs`) after
   `ACCESS_REQUEST_DAILY_LIMIT` (5) creations in 24 hours. The insert re-checks
-  both conditions itself, so concurrent calls cannot pass them.
+  both conditions itself, so concurrent calls cannot pass them. If neither reason
+  still holds when it looks (a role removed in between), it answers `conflict`
+  so the caller simply retries.
 - `withdrawAccessRequest`: owner-only, from `PENDING` only; removes the intent in
-  the same batch. A completed onboarding left with no intents reads as
+  the same batch, keyed on its own `withdrawalId`, so a replay never removes an
+  intent added again since. A completed onboarding left with no intents reads as
   `EXPLORING`. Someone else's request is `not_found`, exactly like a missing one.
 - `markAccessRequestSeen`: by id when the card is dismissed (idempotent), or by
   role when the person visits the space it opened.
