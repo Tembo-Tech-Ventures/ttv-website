@@ -4,10 +4,11 @@ import type { ChannelStore } from "@/lib/platform/client/channel";
 import type { Composer as ChannelComposer } from "@/lib/platform/client/composer";
 import { useChannel, useChannelFeed } from "@/lib/platform/client/hooks/channel";
 import { useComposer } from "@/lib/platform/client/hooks/composer";
-import type { Shareables } from "./actions";
+import type { ModerationActions, Shareables } from "./actions";
 import { channelTitle, openingDivider } from "./channel-format";
 import Composer from "./Composer";
 import MessageList from "./MessageList";
+import { ModerationProvider } from "./MessageModeration";
 import { PostingNote } from "./PostingNote";
 import ThreadRail, { type ThreadView } from "./ThreadRail";
 import "./channels.css";
@@ -22,6 +23,8 @@ export type ChannelSurfaceProps = {
   now: number;
   /** Null: no attach tools (see ChannelView). */
   shareables: Shareables | null;
+  /** Reporting and, where the channel says this reader moderates, hiding and restoring. Null offers neither. */
+  moderation?: ModerationActions | null;
   /** `?thread=`: the thread open on arrival. */
   threadId?: string | null;
   /** The server-rendered replies for `threadId`, shown until the store has its own (and without JavaScript). */
@@ -59,7 +62,8 @@ function collectPeople(...lists: ReadonlyArray<readonly (Message | null | undefi
  * it through ChannelView; the DEV harness with both on a fixture API.
  */
 export default function ChannelSurface({
-  me, channel, store, composer, now, shareables, threadId: initialThreadId = null, initialThread = null, messageId = null, children,
+  me, channel, store, composer, now, shareables, moderation = null, threadId: initialThreadId = null, initialThread = null, messageId = null,
+  children,
 }: ChannelSurfaceProps) {
   const refresh = useChannelFeed(store);
   const state = useChannel(store);
@@ -165,66 +169,68 @@ export default function ChannelSurface({
   const posting = channel.archivedAt === null && channel.capabilities.canPost;
 
   return (
-    <div className="channel-view" data-channel={channel.slug} data-thread={thread ? "open" : "closed"}>
-      <div className="channel-view__grid">
-      <section aria-label={title} className="channel-view__main">
-        {children}
-        <MessageList
-          key={channel.id}
-          state={state}
-          store={store}
-          channel={channel}
-          viewer={me.user}
-          now={now}
-          composer={composer}
-          names={names}
-          people={people}
-          firstUnreadId={divider.current ?? null}
-          openThreadId={threadId}
-          threadHref={threadHref}
-          onOpenThread={openThread}
-          focusMessageId={messageId}
-          retry={refresh}
-          announce={announce}
-        />
-        {posting ? (
-          <Composer
+    <ModerationProvider actions={moderation} canModerate={channel.capabilities.canModerate} canRestore={me.capabilities.isAdmin}>
+      <div className="channel-view" data-channel={channel.slug} data-thread={thread ? "open" : "closed"}>
+        <div className="channel-view__grid">
+        <section aria-label={title} className="channel-view__main">
+          {children}
+          <MessageList
+            key={channel.id}
+            state={state}
+            store={store}
+            channel={channel}
+            viewer={me.user}
+            now={now}
+            composer={composer}
+            names={names}
+            people={people}
+            firstUnreadId={divider.current ?? null}
+            openThreadId={threadId}
+            threadHref={threadHref}
+            onOpenThread={openThread}
+            focusMessageId={messageId}
+            retry={refresh}
+            announce={announce}
+          />
+          {posting ? (
+            <Composer
+              channel={channel}
+              me={me}
+              parentId={null}
+              composer={composer}
+              shareables={shareables}
+              people={mentionPeople}
+              label={`Message ${title}`}
+            />
+          ) : (
+            <PostingNote channel={channel} />
+          )}
+        </section>
+
+        {thread && (
+          <ThreadRail
+            thread={thread}
             channel={channel}
             me={me}
-            parentId={null}
+            now={now}
             composer={composer}
             shareables={shareables}
-            people={mentionPeople}
-            label={`Message ${title}`}
+            names={names}
+            people={people}
+            mentionPeople={mentionPeople}
+            headingRef={heading}
+            onClose={closeThread}
+            onLoadOlder={() => void store.loadOlderReplies()}
+            onRetry={() => threadId && void store.openThread(threadId)}
+            announce={announce}
           />
-        ) : (
-          <PostingNote channel={channel} />
         )}
-      </section>
+        </div>
 
-      {thread && (
-        <ThreadRail
-          thread={thread}
-          channel={channel}
-          me={me}
-          now={now}
-          composer={composer}
-          shareables={shareables}
-          names={names}
-          people={people}
-          mentionPeople={mentionPeople}
-          headingRef={heading}
-          onClose={closeThread}
-          onLoadOlder={() => void store.loadOlderReplies()}
-          onRetry={() => threadId && void store.openThread(threadId)}
-          announce={announce}
-        />
-      )}
+        <p className="sr-only" aria-live="polite" aria-atomic="true" data-channel-announcer>
+          {announcement}
+        </p>
       </div>
-
-      <p className="sr-only" aria-live="polite" aria-atomic="true" data-channel-announcer>
-        {announcement}
-      </p>
-    </div>
+    </ModerationProvider>
   );
 }

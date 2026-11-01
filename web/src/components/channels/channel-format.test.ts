@@ -170,7 +170,7 @@ describe("moderation notices", () => {
   });
 
   it("tells the author their hidden message is theirs alone now", () => {
-    expect(moderationNotice(messages.hidden, people.dennis.id)?.title).toBe("Hidden by a moderator: Harsh, not about the work");
+    expect(moderationNotice(messages.hidden, people.dennis.id)?.title).toBe("Hidden from the channel: Harsh, not about the work");
     expect(moderationNotice(messages.hidden, people.dennis.id)?.detail).toBe("Only you can see this message now.");
   });
 

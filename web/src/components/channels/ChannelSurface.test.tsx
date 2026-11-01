@@ -220,7 +220,7 @@ describe("reading without JavaScript", () => {
   it("shows the author their hidden message and why; others never get it", () => {
     serverHtml(meByPersona.dennis, community);
     expect(text(`[data-message="${messages.hidden.id}"] [data-moderation]`)).toBe(
-      "Hidden by a moderator: Harsh, not about the work. Only you can see this message now.",
+      "Hidden from the channel: Harsh, not about the work. Only you can see this message now.",
     );
     serverHtml(wanjiku, community);
     expect($(`[data-message="${messages.hidden.id}"]`)).toBeNull();

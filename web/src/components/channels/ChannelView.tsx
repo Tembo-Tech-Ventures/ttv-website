@@ -4,6 +4,7 @@ import { createChannelStore } from "@/lib/platform/client/channel";
 import { createComposer } from "@/lib/platform/client/composer";
 import type { Shareables } from "./actions";
 import ChannelSurface from "./ChannelSurface";
+import { createModerationActions } from "./moderation-actions";
 
 export type ChannelViewProps = {
   me: Me;
@@ -49,6 +50,7 @@ export default function ChannelView({
     initialRead: initialRead ?? { lastReadMessageId: null, unreadCount: channel.unreadCount },
   }));
   const [composer] = useState(() => createComposer({ store, me }));
+  const [moderation] = useState(() => createModerationActions({ store }));
   if (!enabled) return null;
   return (
     <ChannelSurface
@@ -58,6 +60,7 @@ export default function ChannelView({
       composer={composer}
       now={now}
       shareables={shareables}
+      moderation={moderation}
       threadId={threadId}
       initialThread={initialThread}
       messageId={messageId}

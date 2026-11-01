@@ -77,6 +77,8 @@ talk to each other, U-2.3's `ChannelFrame` asks; after, the conversation:
   cohort's own channels, a clip from each recent session. It is null where
   they cannot post, and then the composer offers no attach tools rather than
   claim there is nothing to share.
+- The view creates `createModerationActions` (`moderation-actions.ts`) for
+  reports and in-place moderation on B-2.5's routes.
 - It renders nothing while `channels` is off for the person. The route 404s
   then (B-2.2); this is the second lock.
 
@@ -91,6 +93,7 @@ talk to each other, U-2.3's `ChannelFrame` asks; after, the conversation:
 | `MessageItem.tsx`, `MessageMenu.tsx`, `MessageEdit.tsx` | A message: author, server role badges, time, (edited), deleted, text reactions, thread link; reply, react, edit and delete |
 | `MessageBody.tsx` | Words, mentions, inline code and plain links. Never Markdown links or markup |
 | `EmbedCard.tsx` | Shared work (U-2.2): a project at the shared revision with one confirmation per mentor and the revision it covers, a session clip at its moment, or "no longer available" with nothing about what it was. "Open" only when the project has a link (none yet: owner decision 6). DEV gallery: `/dev/platform-embeds` |
+| `MessageModeration.tsx`, `moderation-actions.ts` | Report (anyone but the author), Hide with a reason (the channel's moderators), Restore (admins), and the author's "Ask for review" on a hidden message; the notes that say what happened |
 | `TemboAnswer.tsx` | First form of Tembo answers. U-3.1 owns their full design |
 | `ThreadRail.tsx` | The thread: beside the list on a wide sheet, in its place on a narrow one |
 | `Composer.tsx`, `ComposerParts.tsx`, `mentions.ts` | Writing, on S-2.2's draft (kept for the tab): `@` suggestions, Share project, Session clip (cohort channels only), Ask Tembo (`tembo_channels` only), the code-of-conduct prompt |
@@ -128,7 +131,18 @@ talk to each other, U-2.3's `ChannelFrame` asks; after, the conversation:
 - **Moderation is shown to the people the server tells.** `moderation` reaches
   only the author and moderators. A flag says the message stays up until a
   person decides; a hidden message tells its author only they can see it.
-  Reporting, hiding and asking for review are U-2.2.
+  Clef can hide too, so the author's note says "Hidden from the channel",
+  not who hid it.
+- **Moderating in place** (U-2.2, B-2.5). Everyone but the author can report
+  a message, once, with a reason (a choice and their own words); the message
+  stays up and the report goes to the admin queue, so the reporter sees
+  "You reported this" and nothing else changes. The channel's moderators
+  (`canModerate`) hide with a reason the author reads; only admins restore.
+  The author of a hidden message can ask for a review once (session-only
+  "Review requested" until the server reports it). Each opens as a form
+  under its message, takes focus, closes on Escape, and returns focus to the
+  message's actions. Nothing is optimistic: a refused step says why and
+  changes nothing.
 - **Session clip is offered only in cohort channels** that allow it, never in
   community channels or conversations, whatever a capability says.
 
