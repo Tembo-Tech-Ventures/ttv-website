@@ -26,6 +26,7 @@ function fixture() {
   return {...f,add};
 }
 const entry={title:"Published test",description:"Synthetic evidence",occurredAt:"2026-10-24",visibility:"institution"};
+const saved={headline:"Synthetic builder",bio:"Synthetic profile",skills:["Testing"],opportunityGoals:"Synthetic goal"};
 describe("synthetic assessment durable claim", () => {
  it.each(["expiresAt=0", "userAgent='tampered'", "createdAt=unixepoch()+30"])("rejects source-session race at atomic consume: %s", async mutation => {
    const f=fixture(), institution=f.add("institution",runId,true);
@@ -48,6 +49,8 @@ describe("synthetic assessment durable claim", () => {
  });
  it("uses the deployed route with one provider binding call, then rejects replay", async () => {
    const f=fixture(), institution=f.add("institution",runId,true), member=f.add("member"), empty=f.add("otherMember");
+   // A saved profile with no evidence in it: discoverable, but nothing to assess.
+   await member.service.updateOwnProfile(saved);f.database.prepare("INSERT INTO communityProfile(userId) VALUES (?)").run(empty.identity.userId);
    const journey=await member.service.createJourney(entry);
    const inference=vi.fn().mockResolvedValue(Response.json({choices:[{finish_reason:"stop",message:{content:JSON.stringify({criteria:[{criterionId:"test",status:"assessed",rating:2,explanation:"Synthetic self-report with limitations",citations:[{kind:"journey",id:journey.id,version:journey.version}]}]})}}]}));
    vi.stubGlobal("fetch",inference);
@@ -75,7 +78,7 @@ describe("synthetic assessment durable claim", () => {
  });
  it.each(["timeout","invalid-output"])("never restores the claim after %s", async failure => {
    const f=fixture(), institution=f.add("institution",runId,true), member=f.add("member");
-   await member.service.createJourney(entry);
+   await member.service.updateOwnProfile(saved);await member.service.createJourney(entry);
    const inference=vi.fn();
    if(failure==="timeout")inference.mockRejectedValue(new Error("private provider failure"));
    else inference.mockResolvedValue(Response.json({choices:[{finish_reason:"stop",message:{content:"invalid"}}]}));
@@ -121,10 +124,10 @@ describe("synthetic assessment durable claim", () => {
 describe("registered synthetic service confinement",()=>{
  it("scouts only same-run synthetic people and never real or other-run records",async()=>{
    const f=fixture();const member=f.add("member"),institution=f.add("institution"),other=f.add("member","b".repeat(24));
-   await member.service.createJourney(entry);await other.service.createJourney(entry);await createCommunityService(f.db,"real").createJourney(entry);
+   for(const service of [member.service,other.service,createCommunityService(f.db,"real")]){await service.updateOwnProfile(saved);await service.createJourney(entry);}
    expect(()=>createCommunityService(f.db,member.identity.userId)).toThrow("Verified staging fixture context");
    const found=await institution.service.searchProfiles({});
-   expect(found.map(p=>p.userId)).toEqual(expect.arrayContaining([member.identity.userId,institution.identity.userId]));
+   expect(found.map(p=>p.userId)).toEqual([member.identity.userId]);
    expect(found.every(p=>p.userId.startsWith(`ttv-staging-fixture-${runId}-`))).toBe(true);
    await expect(institution.service.getProfile("real")).rejects.toMatchObject({status:403});
    await expect(institution.service.getProfile(other.identity.userId)).rejects.toMatchObject({status:403});

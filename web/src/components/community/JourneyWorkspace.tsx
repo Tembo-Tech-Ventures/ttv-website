@@ -166,8 +166,8 @@ export default function JourneyWorkspace({
           <div className="discovery-visibility">
             <strong>Who can discover this?</strong>
             <p>
-              Your community profile and published contributions are available
-              to approved institutions. Mentors can review those shared
+              Approved institutions can discover your saved community profile
+              and the contributions you share. Mentors can review those shared
               contributions. Private contributions remain visible only to you.
               Private calls, recordings, and internal information
               do not belong here.

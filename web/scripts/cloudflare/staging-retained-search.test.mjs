@@ -13,8 +13,11 @@ describe('retained runner safeguards',()=>{
   expect(executeQuery).not.toHaveBeenCalled();expect(withPersonas).not.toHaveBeenCalled();
  });
  it('computes literal filters and stable alphabetical limits independently from fresh seed',()=>{
-  const data=buildDemoDataset(), profiles=data.user.map(u=>({...u,...data.communityProfile.find(p=>p.userId===u.id),excluded:u.id.endsWith('-mentor')}));
+  const data=buildDemoDataset(), profiles=data.user.map(u=>({...u,...data.communityProfile.find(p=>p.userId===u.id),saved:data.communityProfile.some(p=>p.userId===u.id),excluded:u.id.endsWith('-mentor')}));
   expect(expectedMatches(profiles,{query:'Kotlin',limit:50})).toHaveLength(15);
+  // Institutional discovery lists only saved community profiles.
+  const [first]=expectedMatches(profiles,{query:'Kotlin',limit:1});
+  expect(expectedMatches(profiles.map(p=>p.id===first?{...p,saved:false}:p),{query:'Kotlin',limit:50})).toHaveLength(14);
   expect(expectedMatches(profiles,{skills:['React','Kotlin']})).toEqual([]);
   expect(expectedMatches(profiles,{query:'TypeScript',skills:['react']})).toEqual(expectedMatches(profiles,{query:'typescript',skills:['React']}));
   expect(expectedMatches(profiles,{query:'',limit:2})).toEqual(expectedMatches(profiles,{query:'',limit:50}).slice(0,2));

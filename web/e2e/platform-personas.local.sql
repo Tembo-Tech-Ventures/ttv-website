@@ -48,3 +48,7 @@ INSERT OR REPLACE INTO transcript_segment (id,recordingId,startTime,endTime,spea
  ('ttv-local-persona-segment-1','ttv-local-persona-recording-05',0,4,'Mentor','Welcome back, everyone.'),
  ('ttv-local-persona-segment-2','ttv-local-persona-recording-05',4,75,NULL,'Today is about joins, and when an index helps.'),
  ('ttv-local-persona-segment-3','ttv-local-persona-recording-05',75,90,NULL,'Questions before we start?');
+-- Institutional discovery lists only saved community profiles: Achieng has saved
+-- one, so Joseph can discover her. Wanjiku and Lucy have not, so he cannot.
+INSERT OR REPLACE INTO communityProfile (userId,headline,bio,skills,opportunityGoals,version,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-alumna','Backend builder','Fictional local profile. I build payment and ledger tools for small groups.','["TypeScript","SQL"]','A backend developer role',1,1793400000,1793400000);

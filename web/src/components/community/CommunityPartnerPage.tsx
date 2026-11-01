@@ -54,7 +54,7 @@ const content = {
     context: "More context. Your judgment.", contextIntro: "A profile is a starting point. The contribution and its evidence give you something concrete to discuss.",
     notes: [
       { title: "Keep confirmation in scope.", text: "A mentor note describes the particular work reviewed. It is not a universal score, a certification of the person, or a hiring decision." },
-      { title: "Approval is not unrestricted access.", text: "Approved institutions can explore saved community profiles and contributions. Private cohort recordings and internal records stay outside institutional discovery." },
+      { title: "Approval is not unrestricted access.", text: "Approved institutions can discover saved community profiles and the contributions members share. Private cohort recordings and internal records stay outside institutional discovery." },
     ],
     questions: [
       { title: "Who can use institutional discovery?", text: "Institutional access must be granted by an administrator after sign-in. Signing in alone does not enable discovery. Without that access, the page explains the requirement and links to your community journey." },

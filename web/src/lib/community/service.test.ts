@@ -38,9 +38,11 @@ describe("community service real SQL boundaries", () => {
     expect(await f.member.listJourney()).toHaveLength(1);
     expect(await f.institution.searchProfiles({query:"TypeScript"})).toHaveLength(1);
   });
-  it("searches all community users and revalidates institutional approval", async () => {
+  it("searches only saved community profiles and revalidates institutional approval", async () => {
     const f = fixture();
-    expect(await f.institution.searchProfiles({query:"Other"})).toEqual([expect.objectContaining({userId:"other",version:0})]);
+    expect(await f.institution.searchProfiles({query:"Other"})).toEqual([]);
+    await createCommunityService(f.db,"other").updateOwnProfile(profile);
+    expect(await f.institution.searchProfiles({query:"Other"})).toEqual([expect.objectContaining({userId:"other",version:1})]);
     await expect(f.member.searchProfiles({})).rejects.toMatchObject({status:403});
     f.sql.prepare("DELETE FROM UserRoles WHERE userId=?").run("institution");
     await expect(f.institution.searchProfiles({})).rejects.toMatchObject({status:403});
@@ -66,14 +68,21 @@ describe("community service real SQL boundaries", () => {
     expect(all.map(p=>p.userId).toSorted()).toEqual(candidates.filter(c=>c[2]).map(c=>c[0]).toSorted());
     expect(await f.institution.searchProfiles({query:"Eligibility candidate",skills:["typescript"],limit:1})).toHaveLength(1);
     expect((await f.institution.searchProfiles({query:"Eligibility candidate",skills:["typescript"],limit:1}))[0].userId).toBe("dual");
-    for (const [id,,included] of candidates) if (!included) {
-      expect(await f.institution.searchProfiles({query:id})).toEqual([]);
-      expect(await f.institution.getProfile(id)).toMatchObject({userId:id});
-      const entries=await f.institution.listJourney(id);
-      expect(entries).toHaveLength(1);
-      expect(JSON.stringify(entries)).not.toContain("Hidden evidence");
+    for (const [id,,included] of candidates) {
+      if (included) {
+        expect(await f.institution.getProfile(id)).toMatchObject({userId:id});
+        const entries=await f.institution.listJourney(id);
+        expect(entries).toHaveLength(1);
+        expect(JSON.stringify(entries)).not.toContain("Hidden evidence");
+      } else {
+        expect(await f.institution.searchProfiles({query:id})).toEqual([]);
+        await expect(f.institution.getProfile(id)).rejects.toMatchObject({status:404});
+        await expect(f.institution.listJourney(id)).rejects.toMatchObject({status:404});
+      }
+      // Removing the saved profile removes the person from discovery.
       f.sql.prepare("DELETE FROM communityProfile WHERE userId=?").run(id);
       expect(await f.institution.searchProfiles({query:id})).toEqual([]);
+      await expect(f.institution.getProfile(id)).rejects.toMatchObject({status:404});
     }
   });
   it("AND matches skill criteria before limiting results", async () => {
@@ -85,7 +94,7 @@ describe("community service real SQL boundaries", () => {
     await expect(f.institution.searchProfiles({skills:Array(11).fill("React")})).rejects.toMatchObject({status:400});
   });
   it("excludes private contributions from institution and mentor reads", async () => {
-    const f = fixture(); await f.member.createJourney(entry);
+    const f = fixture(); await f.member.updateOwnProfile(profile); await f.member.createJourney(entry);
     const hidden = await f.member.createJourney({...entry,title:"Private",description:"Private call",visibility:"private"});
     expect(await f.member.listJourney()).toHaveLength(2);
     const shared = await f.institution.listJourney("member"); expect(shared).toHaveLength(1);
@@ -94,7 +103,7 @@ describe("community service real SQL boundaries", () => {
     await expect(createCommunityService(f.db,"other").getProfile("member")).rejects.toMatchObject({status:403});
   });
   it("records scoped mentor provenance and rejects self confirmation and revoked mentors", async () => {
-    const f = fixture(); const item = await f.member.createJourney(entry);
+    const f = fixture(); await f.member.updateOwnProfile(profile); const item = await f.member.createJourney(entry);
     const claim = {expectedRevision:1,statement:"I reviewed the test implementation",method:"Repository review"};
     await f.mentor.confirmJourney(item.id,claim);
     expect((await f.institution.listJourney("member"))[0].confirmations).toEqual([expect.objectContaining({mentorId:"mentor",journeyVersion:1,mentorRole:"MENTOR",statement:claim.statement,method:claim.method})]);
@@ -134,7 +143,7 @@ describe("community service real SQL boundaries", () => {
     expect(f.sql.prepare("SELECT count(*) AS count FROM communityConfirmation").get()).toMatchObject({count:0});
   });
   it("versions edited evidence without transferring a mentor confirmation to the revision", async () => {
-    const f = fixture(); const item = await f.member.createJourney(entry);
+    const f = fixture(); await f.member.updateOwnProfile(profile); const item = await f.member.createJourney(entry);
     await f.mentor.confirmJourney(item.id,{expectedRevision:1,statement:"I checked the original implementation",method:"Review"});
     await expect(createCommunityService(f.db,"other").updateJourney(item.id,{...entry,title:"Changed"})).rejects.toMatchObject({status:404});
     await f.member.updateJourney(item.id,{...entry,title:"Changed implementation"});
@@ -146,7 +155,7 @@ describe("community service real SQL boundaries", () => {
     expect(queue[0].confirmations[0]).toMatchObject({journeyVersion:1,mentorRole:"MENTOR"});
   });
   it("lets owners retract shared evidence while rejecting other users", async () => {
-    const f = fixture(); const item = await f.member.createJourney(entry);
+    const f = fixture(); await f.member.updateOwnProfile(profile); const item = await f.member.createJourney(entry);
     await f.mentor.confirmJourney(item.id,{expectedRevision:1,statement:"I reviewed this code",method:"Review"});
     await expect(createCommunityService(f.db,"other").setJourneyVisibility(item.id,{visibility:"private"})).rejects.toMatchObject({status:404});
     await f.member.setJourneyVisibility(item.id,{visibility:"private"});
@@ -210,7 +219,7 @@ describe("community HTTP", () => {
     expect((await handleCommunityRequest(huge,"profile",{id:"member",scopes:null},db)).status).toBe(413);
   });
   it("assesses only authorized shared evidence and rejects unknown bearer fallback", async () => {
-    const f = fixture(); await f.member.createJourney(entry);
+    const f = fixture(); await f.member.updateOwnProfile(profile); await f.member.createJourney(entry);
     await f.member.createJourney({...entry,description:"secret skill",visibility:"private"});
     const body = {id:"hiring",version:1,criteria:[{id:"tool",label:"Tool evidence",terms:["implemented"]}]};
     const req = new Request("https://ttv.example/api/community/profiles/member/assessment",{method:"POST",body:JSON.stringify(body)});
@@ -220,7 +229,7 @@ describe("community HTTP", () => {
     expect((await handleCommunityRequest(spoof,"profile",{id:"member",scopes:null},f.db)).status).toBe(401);
   });
   it("uses the validated model contract over REST and authorizes before inference", async () => {
-    const f = fixture(); const contribution = await f.member.createJourney(entry);
+    const f = fixture(); await f.member.updateOwnProfile(profile); const contribution = await f.member.createJourney(entry);
     await f.member.createJourney({...entry,description:"private-only-secret",visibility:"private"});
     const complete = vi.fn().mockResolvedValue(JSON.stringify({criteria:[{criterionId:"tool",status:"assessed",rating:3,explanation:"Specific documented contribution, not inferred ability.",citations:[{kind:"journey",id:contribution.id,version:1}]}]}));
     vi.spyOn(assessmentProvider,"createAssessmentProvider").mockReturnValue({model:"test-model",complete});
@@ -245,6 +254,7 @@ describe('retained demo dataset isolation',()=>{
     const demoMember=createCommunityService(f.db,member,null,'staging');
     const demoInstitution=createCommunityService(f.db,institution,null,'staging');
     const demoMentor=createCommunityService(f.db,mentor,null,'staging');
+    await demoMember.updateOwnProfile(profile);
     const realEntry=await f.member.createJourney(entry);
     const demoEntry=await demoMember.createJourney(entry);
     await f.mentor.confirmJourney(demoEntry.id,{statement:'Private real mentor statement',method:'Review',expectedRevision:1});
@@ -254,7 +264,7 @@ describe('retained demo dataset isolation',()=>{
       expect(JSON.stringify(journeys)).not.toContain('Private real mentor statement');
     }
     const results=await demoInstitution.searchProfiles({});
-    expect(results.map(p=>p.userId).toSorted()).toEqual([institution,member].toSorted());
+    expect(results.map(p=>p.userId)).toEqual([member]);
     await expect(demoInstitution.getProfile('member')).rejects.toMatchObject({status:403});
     await expect(demoInstitution.listJourney('member')).rejects.toMatchObject({status:403});
     expect((await demoMentor.listMentorship()).map(j=>j.id)).toEqual([demoEntry.id]);
@@ -300,7 +310,7 @@ it('edits an owned contribution once per loaded revision and preserves confirmat
 
 describe("discovery corpus authorization",()=>{
   it("includes published courses, excludes private journeys and superseded confirmations",async()=>{
-    const f=fixture();const course=await f.member.createJourney({...entry,title:"First Aid Course"});
+    const f=fixture();await f.member.updateOwnProfile(profile);const course=await f.member.createJourney({...entry,title:"First Aid Course"});
     await f.member.createJourney({...entry,visibility:"private",title:"Secret"});
     await f.institution.createJourney({...entry,visibility:"private",title:"Institution private"});
     await f.mentor.confirmJourney(course.id,{statement:"Reviewed the completed training",method:"Discussion",expectedRevision:1});
