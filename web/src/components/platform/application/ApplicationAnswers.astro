@@ -44,7 +44,8 @@ const nothingRecorded =
       : "No answers were recorded with this application.";
 
 const fieldId = (question: ApplicationQuestion) => `answer-${question.name}`;
-const errorId = (question: ApplicationQuestion) => `${fieldId(question)}-error`;
+// Field ids start "answer-" and error ids "error-for-", so no question name can make two collide.
+const errorId = (question: ApplicationQuestion) => `error-for-${question.name}`;
 const errorFor = (question: ApplicationQuestion) => errors[question.name];
 const describedBy = (question: ApplicationQuestion) => (errorFor(question) ? errorId(question) : undefined);
 const fieldClass = (question: ApplicationQuestion) => [

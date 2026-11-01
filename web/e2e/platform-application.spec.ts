@@ -155,6 +155,8 @@ test.describe("a member whose application carries questions", () => {
     // Announced on arrival: focus moves to the summary, and the title says it failed.
     await expect(alert).toBeFocused();
     await expect(page).toHaveTitle(/^Error: Application details/i);
+    // Only the tab title: the visible page and the phone's top bar keep the plain name.
+    await expect(page.getByText(/Error: Application details/i)).toHaveCount(0);
     await expect(alert.getByRole("link", { name: "Did you complete the free portion of the HTML/CSS course? Choose Yes or No." })).toHaveAttribute("href", "#answer-htmlCssDone");
     await expect(page.getByLabel(PROJECT_LABEL)).toHaveValue(typed);
     await expect(page.getByRole("group", { name: HTML_LABEL }).getByRole("radio", { name: "Yes" })).toHaveAttribute("aria-invalid", "true");
@@ -253,6 +255,8 @@ test.describe("a member whose application the team reviews while she edits it", 
 
     await expect(page.getByRole("alert").filter({ hasText: "The team reviewed this application before your answers were saved" })).toBeVisible();
     await expect(page.locator("form[data-application-answers-form]")).toHaveCount(0);
+    // Being accepted is not an error: no "Error:" title.
+    await expect(page).not.toHaveTitle(/^Error:/);
     const unsaved = page.locator("[data-unsaved-answers]");
     await expect(unsaved.getByRole("heading", { name: "Your unsaved answers" })).toBeVisible();
     await expect(unsaved.locator("dd").filter({ hasText: "A matatu fare tracker for commuters in Kisumu." })).toHaveText(typed);

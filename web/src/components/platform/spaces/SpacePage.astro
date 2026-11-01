@@ -32,13 +32,15 @@ interface Props {
   title: string;
   /** The existing dashboard's tab title, when it differs. */
   legacyTitle?: string;
+  /** Prepended to the tab title only, never the visible bar: "Error: " after a rejected form. */
+  titlePrefix?: string;
   journey?: StudentJourney;
   canDiscover?: boolean;
   /** A full-height view (a chat, a workspace) that sizes itself to the sheet instead of scrolling in it. */
   fill?: boolean;
 }
 
-const { context, title, legacyTitle = title, journey: suppliedJourney, canDiscover, fill = false } = Astro.props;
+const { context, title, legacyTitle = title, titlePrefix = "", journey: suppliedJourney, canDiscover, fill = false } = Astro.props;
 const overlays: readonly ShellOverlay[] = ["search", "attention"];
 
 let sidebar = null;
@@ -63,7 +65,7 @@ if (context) {
 
 {
   context && sidebar ? (
-    <SpacesLayout me={context.me} space={context.space} title={title} overlays={overlays}>
+    <SpacesLayout me={context.me} space={context.space} title={title} titlePrefix={titlePrefix} overlays={overlays}>
       <SpaceSidebar slot="sidebar" model={sidebar} />
       {fill ? (
         <div data-space-fill class="flex min-h-0 flex-1 flex-col">
@@ -75,7 +77,7 @@ if (context) {
       <PlatformOverlays slot="overlays" client:load me={context.me} />
     </SpacesLayout>
   ) : (
-    <DashboardLayout title={legacyTitle} journey={suppliedJourney} canDiscover={canDiscover}>
+    <DashboardLayout title={titlePrefix + legacyTitle} journey={suppliedJourney} canDiscover={canDiscover}>
       <slot />
     </DashboardLayout>
   )

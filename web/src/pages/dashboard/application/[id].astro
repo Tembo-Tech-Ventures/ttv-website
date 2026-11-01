@@ -113,11 +113,12 @@ if (Astro.request.method === "POST") {
 }
 
 const spaces = await resolveSpacePage(Astro.locals, "apply");
-// Screen readers hear the title first on a reloaded page, so a rejected form says so there too.
-const titlePrefix = error || Object.keys(fieldErrors).length > 0 ? "Error: " : "";
+// Screen readers hear the tab title first on a reloaded page, so a form the member must
+// fix or resend says so there too. "Already reviewed" is not an error to fix.
+const titlePrefix = Object.keys(unsaved).length === 0 && (error || Object.keys(fieldErrors).length > 0) ? "Error: " : "";
 ---
 
-<SpacePage context={spaces} title={`${titlePrefix}Application details`} legacyTitle={`${titlePrefix}Application Details`}>
+<SpacePage context={spaces} title="Application details" legacyTitle="Application Details" titlePrefix={titlePrefix}>
   <div class="space-y-6">
     <div class="flex items-center gap-4">
       <a

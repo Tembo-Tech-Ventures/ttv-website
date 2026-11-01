@@ -206,6 +206,8 @@ export function toDraft(question: ApplicationQuestion): string {
   const { value, type } = question;
   if (value === null) return "";
   if (type === "boolean" || type === "requiredBoolean") return value === true ? "yes" : value === false ? "no" : "";
+  // A date field takes YYYY-MM-DD; a stored timestamp keeps its day rather than being wiped.
+  if (type === "date" && typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) return value.slice(0, 10);
   return String(value);
 }
 
@@ -317,16 +319,18 @@ export function readAnswerSubmission(
  */
 export function writeAnswers(text: string, values: ReadonlyMap<string, ApplicationAnswerValue>): string {
   const application = parseJson(text);
-  if (!isRecord(application) || !parseQuestions(application)) {
+  const questions = isRecord(application) ? parseQuestions(application) : null;
+  if (!isRecord(application) || !questions) {
     throw new Error("This application has no questions to answer.");
   }
+  const textAnswers = new Set(questions.filter((question) => question.type === "string" || question.type === "textarea").map((question) => question.name));
   const submission = (application.submission as JsonRecord[]).map((item) => {
     const name = item.name as string;
     return values.has(name) ? { ...item, value: values.get(name) ?? null } : item;
   });
   const mirrored = Object.fromEntries(
     Object.entries(application)
-      .filter(([key, current]) => !STRUCTURAL_KEYS.has(key) && values.has(key) && (typeof current === "string" || current === null))
+      .filter(([key, current]) => !STRUCTURAL_KEYS.has(key) && textAnswers.has(key) && values.has(key) && (typeof current === "string" || current === null))
       .map(([key]) => {
         const value = values.get(key);
         return [key, typeof value === "string" ? value : ""];

@@ -220,6 +220,11 @@ describe("drafts and read-only answers", () => {
     expect(formatDraft(project!, "   ")).toBeNull();
   });
 
+  it("keeps the day of a stored date timestamp in the date field", () => {
+    const text = JSON.stringify({ version: "1", submission: [{ type: "date", name: "available", label: "From", value: "2024-01-15T00:00:00.000Z" }] });
+    expect(draftsFor(questionsOf(text))).toEqual({ available: "2024-01-15" });
+  });
+
   it("names fields after their question", () => {
     expect(fieldName({ name: "project" })).toBe("answer.project");
   });
@@ -354,6 +359,13 @@ describe("writeAnswers", () => {
     expect(written.version).toBe("1");
     expect(written.submission[0].value).toBe("2");
     expect(parseApplicationAnswers(JSON.stringify(written)).kind).toBe("questions");
+  });
+
+  it("mirrors only text answers to their top-level copies", () => {
+    const text = JSON.stringify({ version: "1", ready: null, submission: [{ type: "boolean", name: "ready", label: "Ready?", value: null }] });
+    const written = JSON.parse(writeAnswers(text, new Map([["ready", true]])));
+    expect(written.ready).toBeNull();
+    expect(written.submission[0].value).toBe(true);
   });
 
   it("refuses to write into an application with no questions", () => {
