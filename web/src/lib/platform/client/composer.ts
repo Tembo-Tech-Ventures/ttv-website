@@ -13,8 +13,8 @@ import { createStore } from "./store";
 
 /** Why a send or change did not go through, in terms the composer can act on. */
 export type ComposerFailureReason =
-  | "offline" | "interrupted" | "rate_limited" | "conduct_required" | "moderation_rejected" | "forbidden"
-  | "unavailable" | "signed_out" | "gone" | "invalid" | "server";
+  | "offline" | "unreachable" | "timeout" | "interrupted" | "rate_limited" | "conduct_required" | "moderation_rejected"
+  | "forbidden" | "unavailable" | "signed_out" | "gone" | "invalid" | "server";
 
 export interface ComposerFailure {
   reason: ComposerFailureReason;
@@ -77,7 +77,13 @@ export interface ComposerOptions {
   storage?: DraftStorage;
   now?: () => number;
   newNonce?: () => string;
+  /** A write without an answer by then fails as `timeout`, so it can be retried or discarded. Default 20 s. */
+  timeoutMs?: number;
 }
+
+export const WRITE_TIMEOUT_MS = 20_000;
+/** Typing is saved to sessionStorage this long after it pauses (and on pagehide and release). */
+export const DRAFT_SAVE_DELAY_MS = 300;
 
 /** At most this many people are offered for `@`. */
 export const MAX_MENTION_PEOPLE = 50;
@@ -88,11 +94,9 @@ const asApiError = (error: unknown) => error instanceof ApiError ? error
   : new ApiError("client_error", 0, "Channel request failed", undefined, { cause: error });
 
 type FailureKind = readonly [reason: ComposerFailureReason, message: string, retryable: boolean];
-const OFFLINE: FailureKind = ["offline", "You're offline. It will send when you're back online, or try again.", true];
 const INVALID: FailureKind = ["invalid", "Check the message and try again.", false];
 const FAILURE_BY_CODE: Readonly<Partial<Record<string, FailureKind>>> = {
-  network_error: OFFLINE,
-  aborted: OFFLINE,
+  aborted: ["timeout", "TTV didn't answer in time. Try again.", true],
   validation_error: INVALID,
   conduct_required: ["conduct_required", "Agree to how we talk to each other first, then try again.", true],
   moderation_rejected: ["moderation_rejected", "This can't be posted as written. Change it and send it again.", false],
@@ -103,9 +107,16 @@ function failureByStatus(status: number, change: boolean): FailureKind {
   if (status === 401) return ["signed_out", "Your session ended. Sign in again, then try again.", true];
   if (change && (status === 404 || status === 409)) return ["gone", "That message has changed or is no longer here.", false];
   if (status === 404) return ["unavailable", "This channel isn't available.", false];
-  if (status === 403) return ["forbidden", "You can't post here.", false];
+  if (status === 403) return change ? ["forbidden", "You can't change this message.", false] : ["forbidden", "You can't post here.", false];
   if (status >= 400 && status < 500) return INVALID;
   return ["server", "Something went wrong on our side. Try again.", true];
+}
+
+/** A request that never reached TTV: offline only when the browser says so. Only sends are retried for you. */
+function networkFailure(change: boolean): FailureKind {
+  if (globalThis.navigator?.onLine !== false) return ["unreachable", "Couldn't reach TTV. Check your connection and try again.", true];
+  return change ? ["offline", "You're offline. Try again when you're back online.", true]
+    : ["offline", "You're offline. It will send when you're back online.", true];
 }
 
 /** Turn a refused write into what the composer shows. `change` covers edits, deletions and reactions. */
@@ -118,8 +129,16 @@ export function describeFailure(error: unknown, now: number, change = false): Co
       : `You're sending quickly. Try again in ${seconds} second${seconds === 1 ? "" : "s"}.`;
     return { reason: "rate_limited", message, retryable: true, retryAt: wait === undefined ? null : now + wait, error: failure };
   }
-  const [reason, message, retryable] = FAILURE_BY_CODE[failure.code] ?? failureByStatus(failure.status, change);
+  const [reason, message, retryable] = failure.code === "network_error" ? networkFailure(change)
+    : FAILURE_BY_CODE[failure.code] ?? failureByStatus(failure.status, change);
   return { reason, message, retryable, retryAt: null, error: failure };
+}
+
+/** Abort a write that has no answer in time; `clear` once it settles. Uses timers, so tests can fake them. */
+function deadline(ms: number): { signal: AbortSignal; clear(): void } {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return { signal: controller.signal, clear: () => clearTimeout(timer) };
 }
 
 const INTERRUPTED: ComposerFailure = {
@@ -175,6 +194,7 @@ export function createComposer(options: ComposerOptions) {
   const api = options.api ?? options.mock ?? createApiClient();
   const now = options.now ?? Date.now;
   const newNonce = options.newNonce ?? createNonce;
+  const timeoutMs = options.timeoutMs ?? WRITE_TIMEOUT_MS;
   const storageKey = channelDraftKey(viewerId, channelId);
   const offersTembo = me.flags.tembo_channels === true;
 
@@ -186,6 +206,7 @@ export function createComposer(options: ComposerOptions) {
   let hydrated = false;
   let retains = 0;
   let unsubscribe: (() => void) | undefined;
+  let draftTimer: ReturnType<typeof setTimeout> | undefined;
 
   const patch = (update: Partial<ComposerState>) => store.setState(state => ({ ...state, ...update }));
   const findItem = (nonce: string) => store.getState().outbox.find(item => item.clientNonce === nonce);
@@ -193,9 +214,18 @@ export function createComposer(options: ComposerOptions) {
 
   function persist() {
     if (!hydrated) return;
+    clearTimeout(draftTimer);
+    draftTimer = undefined;
     const { drafts, outbox } = store.getState();
     const sends = outbox.map(({ clientNonce, parentId, body, embeds, createdAt }) => ({ clientNonce, parentId, body, embeds, createdAt }));
     writeChannelDrafts(storage, storageKey, { drafts, sends });
+  }
+
+  /** Typing is saved once it pauses; unconfirmed sends are always saved at once. */
+  function persistSoon() {
+    if (!hydrated) return;
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(persist, DRAFT_SAVE_DELAY_MS);
   }
 
   function setOutbox(update: (outbox: readonly OutboxItem[]) => readonly OutboxItem[], extra: Partial<ComposerState> = {}) {
@@ -260,7 +290,7 @@ export function createComposer(options: ComposerOptions) {
       updatedAt: now(),
     };
     store.setState(state => ({ ...state, drafts: { ...state.drafts, [scope]: draft } }));
-    persist();
+    persistSoon();
   }
 
   function clearDraft(parentId: Id | null) {
@@ -277,10 +307,12 @@ export function createComposer(options: ComposerOptions) {
 
   async function post(item: OutboxItem): Promise<Message> {
     const { clientNonce } = item;
+    const timer = deadline(timeoutMs);
     try {
       if (globalThis.navigator?.onLine === false) throw new ApiError("network_error", 0, "The browser is offline");
       const message = await api.call(ROUTES.postMessage, {
         params: { id: channelId }, body: { body: item.body, clientNonce, parentId: item.parentId, embeds: [...item.embeds] },
+        signal: timer.signal,
       });
       channel.receive([message]);
       setOutbox(items => items.filter(entry => entry.clientNonce !== clientNonce), {
@@ -290,7 +322,10 @@ export function createComposer(options: ComposerOptions) {
     } catch (error) {
       // Polling may already have shown the message this request carried.
       const landed = findLanded(clientNonce);
-      if (landed) return landed;
+      if (landed) {
+        if (findItem(clientNonce)) setOutbox(items => items.filter(entry => entry.clientNonce !== clientNonce));
+        return landed;
+      }
       const failure = describeFailure(error, now());
       if (findItem(clientNonce)) {
         setOutbox(items => items.map(entry => entry.clientNonce === clientNonce ? { ...entry, status: "failed", failure } : entry), {
@@ -298,6 +333,8 @@ export function createComposer(options: ComposerOptions) {
         });
       }
       throw asApiError(error);
+    } finally {
+      timer.clear();
     }
   }
 
@@ -347,6 +384,9 @@ export function createComposer(options: ComposerOptions) {
     if (inFlight && item?.status !== "failed") return inFlight;
     if (!item) return Promise.reject(new ApiError("not_found", 0, "That message is no longer waiting to send."));
     if (!channel.enabled) return Promise.reject(notEnabled());
+    // The server would refuse again until then; the item keeps saying when to try.
+    const wait = (item.failure?.retryAt ?? 0) - now();
+    if (wait > 0) return Promise.reject(new ApiError("rate_limited", 429, "Not yet: try again shortly.", wait));
     setOutbox(items => items.map(entry => entry.clientNonce === clientNonce ? { ...entry, status: "sending", failure: null } : entry));
     return dispatch({ ...item, status: "sending", failure: null });
   }
@@ -406,11 +446,17 @@ export function createComposer(options: ComposerOptions) {
    * so the server applies them in the order the reader made them. On success the
    * server's copy replaces the cached one; on failure only this change is undone.
    */
-  function change<T>(messageId: Id, entry: Change, request: () => Promise<T>, confirm: (result: T) => void, noun: string): Promise<T> {
+  function change<T>(messageId: Id, entry: Change, request: (signal: AbortSignal) => Promise<T>, confirm: (result: T) => void, noun: string): Promise<T> {
     if (!channel.enabled) return Promise.reject(notEnabled());
     changes.set(messageId, [...changes.get(messageId) ?? [], entry]);
     showChanges(messageId);
-    const run = (queues.get(messageId) ?? Promise.resolve()).then(request).then(
+    // The deadline starts when this change's request goes out, after the ones queued before it.
+    const attempt = async () => {
+      const timer = deadline(timeoutMs);
+      try { return await request(timer.signal); }
+      finally { timer.clear(); }
+    };
+    const run = (queues.get(messageId) ?? Promise.resolve()).then(attempt).then(
       result => {
         confirm(result);
         if (store.getState().conductRequired) patch({ conductRequired: false });
@@ -442,20 +488,20 @@ export function createComposer(options: ComposerOptions) {
       return Promise.reject(new ApiError("validation_error", 0, "Write a message of up to 10,000 characters.", undefined, { cause: parsed.error }));
     }
     return change(messageId, { kind: "edit", body: parsed.data.body },
-      () => api.call(ROUTES.editMessage, { params: { id: messageId }, body: parsed.data }),
+      signal => api.call(ROUTES.editMessage, { params: { id: messageId }, body: parsed.data, signal }),
       message => channel.update([message]), "Your edit wasn't saved.");
   }
 
   function remove(messageId: Id): Promise<Message> {
     return change(messageId, { kind: "delete" },
-      () => api.call(ROUTES.deleteMessage, { params: { id: messageId } }),
+      signal => api.call(ROUTES.deleteMessage, { params: { id: messageId }, signal }),
       message => channel.update([message]), "Your message wasn't deleted.");
   }
 
   /** Set (never toggle) the reader's reaction, so a retried request cannot reverse it. */
   async function react(messageId: Id, kind: ReactionKind, active: boolean): Promise<void> {
     await change(messageId, { kind: "react", reaction: kind, active },
-      () => api.call(ROUTES.reactToMessage, { params: { id: messageId }, body: { kind, active } }),
+      signal => api.call(ROUTES.reactToMessage, { params: { id: messageId }, body: { kind, active }, signal }),
       ({ reactions }: MessageReactions) => {
         const cached = channel.peek(messageId);
         if (cached) channel.update([{ ...cached, reactions }]);
@@ -465,6 +511,7 @@ export function createComposer(options: ComposerOptions) {
   // ---- Lifecycle ----
 
   const onOnline = () => retryOffline();
+  const onPageHide = () => { if (draftTimer !== undefined) persist(); };
 
   return {
     ...store,
@@ -500,6 +547,7 @@ export function createComposer(options: ComposerOptions) {
         hydrate();
         unsubscribe = channel.subscribe(() => reconcile(channel.getState()));
         globalThis.addEventListener?.("online", onOnline);
+        globalThis.addEventListener?.("pagehide", onPageHide);
       }
       let released = false;
       return () => {
@@ -509,6 +557,8 @@ export function createComposer(options: ComposerOptions) {
         unsubscribe?.();
         unsubscribe = undefined;
         globalThis.removeEventListener?.("online", onOnline);
+        globalThis.removeEventListener?.("pagehide", onPageHide);
+        onPageHide();
       };
     },
     clearAnnouncement() { patch({ announcement: "" }); },

@@ -764,27 +764,68 @@ describe("optimistic layer for the composer (S-2.2)", () => {
     expect(store.peek(msg(2).id)).toBeUndefined();
   });
 
-  it("pins a received post against a latest page or thread page that was already in flight", async () => {
+  it("re-reads a delta that carried a copy older than a confirmed write, so later changes are never lost", async () => {
+    const { fake, store } = setup({ initial: page(range(1, 3), null, "s1") });
+    // A poll is in flight while the reader's reaction to m2 is confirmed.
+    const stale = deferred<MockReply>();
+    fake.list(() => stale.promise);
+    const polling = store.poll(signal());
+    await vi.waitFor(() => expect(fake.seen).toHaveLength(1));
+    store.update([msg(2, { reactions: [{ kind: "useful", count: 1, mine: true }] })]);
+    // Its m2 may predate the reaction or follow it (here: deleted by its author meanwhile). It is not applied yet...
+    stale.resolve({ data: page([msg(2, { deleted: true, body: "", embeds: [] }), msg(4)], null, "s2") });
+    await polling;
+    expect(store.getState().messages[1]).toMatchObject({ deleted: false, reactions: [{ kind: "useful", mine: true }] });
+    expect(ids(store.getState().messages)).toEqual([1, 2, 3, 4]);
+    // ...and the next poll asks again from the old checkpoint, getting server truth.
+    fake.list(page([msg(2, { deleted: true, body: "", embeds: [] }), msg(4)], null, "s2"));
+    await store.poll(signal());
+    expect(fake.seen[1].query.get("since")).toBe("s1");
+    expect(store.getState().messages[1]).toMatchObject({ deleted: true, body: "" });
+    expect(ids(store.getState().messages)).toEqual([1, 2, 3, 4]);
+    fake.list(page([], null, "s3"));
+    await store.poll(signal());
+    expect(fake.seen[2].query.get("since")).toBe("s2");
+  });
+
+  it("does the same for an open thread's replies", async () => {
+    const { fake, store } = setup({ initial: page(range(1, 3), null, "s1") });
+    fake.list(page([reply(11, msg(2).id)], null, "t1", { thread: msg(2).id }));
+    await store.openThread(msg(2).id);
+    const replies = deferred<MockReply>();
+    fake.list(page([], null, "s2"), () => replies.promise);
+    const polling = store.poll(signal());
+    await vi.waitFor(() => expect(fake.seen).toHaveLength(3));
+    store.receive([reply(11, msg(2).id, { body: "Confirmed reply edit", edited: true })]);
+    replies.resolve({ data: page([reply(11, msg(2).id, { body: "Edited again by its author", edited: true })], null, "t2", { thread: msg(2).id }) });
+    await polling;
+    expect(store.getState().thread?.messages[0].body).toBe("Confirmed reply edit");
+    fake.list(page([], null, "s3"), page([reply(11, msg(2).id, { body: "Edited again by its author", edited: true })], null, "t2", { thread: msg(2).id }));
+    await store.poll(signal());
+    expect(fake.seen[4].query.get("since")).toBe("t1");
+    expect(store.getState().thread?.messages[0].body).toBe("Edited again by its author");
+  });
+
+  it("lets a snapshot in flight replace a confirmed copy; polling from its checkpoint brings the write", async () => {
     const { fake, store } = setup({ initial: page(range(1, 3), null, "s1") });
     const latest = deferred<MockReply>();
     fake.list(() => latest.promise);
     const jumping = store.jumpToLatest();
     await vi.waitFor(() => expect(fake.seen).toHaveLength(1));
-    store.update([msg(3, { reactions: [{ kind: "agree", count: 1, mine: true }] })]);
+    const confirmed = msg(3, { reactions: [{ kind: "agree", count: 1, mine: true }] });
+    store.update([confirmed]);
     latest.resolve({ data: page(range(1, 3), null, "s2") });
     await jumping;
-    expect(store.getState().messages[2].reactions).toEqual([{ kind: "agree", count: 1, mine: true }]);
+    expect(store.getState().messages[2].reactions).toEqual(msg(3).reactions);
+    fake.list(page([confirmed], null, "s3"));
+    await store.poll(signal());
+    expect(store.getState().messages[2].reactions).toEqual(confirmed.reactions);
+  });
 
-    fake.list(page([reply(11, msg(2).id)], null, "t1", { thread: msg(2).id }));
-    await store.openThread(msg(2).id);
-    const replies = deferred<MockReply>();
-    fake.list(page([], null, "s3"), () => replies.promise);
-    const polling = store.poll(signal());
-    await vi.waitFor(() => expect(fake.seen).toHaveLength(4));
-    store.receive([reply(11, msg(2).id, { body: "Confirmed reply edit", edited: true })]);
-    replies.resolve({ data: page([reply(11, msg(2).id)], null, "t2", { thread: msg(2).id }) });
-    await polling;
-    expect(store.getState().thread?.messages[0].body).toBe("Confirmed reply edit");
+  it("ignores confirmations while the store is released", () => {
+    const { store } = setup({ initial: page(range(1, 3), null, "s1"), enabled: false });
+    store.update([msg(1, { body: "Not applied" })]);
+    expect(store.getState().messages[0].body).toBe(msg(1).body);
   });
 
   it("keeps a thread removed when its reply poll fails in the same tick (S-2.1 follow-up 1)", async () => {

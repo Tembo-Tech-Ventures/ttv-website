@@ -169,6 +169,7 @@ export function createChannelStore(options: ChannelOptions) {
 
   const entities = new Map<Id, Message>();
   // Confirmed writes (S-2.2) are pinned against copies from requests that started before them.
+  // Such a copy may be older or newer than the write, so a delta that carried one is read again.
   let requestSeq = 0;
   const pins = new Map<Id, number>();
   const overlays = new Map<Id, MessageOverlay>();
@@ -205,14 +206,18 @@ export function createChannelStore(options: ChannelOptions) {
     for (const id of pins.keys()) if (!entities.has(id)) pins.delete(id);
   }
 
-  /** Cache a server copy, unless a write confirmed after this request started is newer. */
-  function put(item: Message, started: number) {
+  /**
+   * Cache a server copy, unless a write was confirmed after this request started:
+   * then the copy may predate the write, and it is skipped. Returns false when skipped.
+   */
+  function put(item: Message, started: number): boolean {
     const pin = pins.get(item.id);
     if (pin !== undefined && entities.has(item.id)) {
-      if (started <= pin) return;
+      if (started <= pin) return false;
       pins.delete(item.id);
     }
     entities.set(item.id, item);
+    return true;
   }
 
   /** A server copy from a confirmed write: newer than any response to a request already in flight. */
@@ -307,8 +312,12 @@ export function createChannelStore(options: ChannelOptions) {
   function applyDelta(scope: Scope, page: MessageList, started: number | "confirmed") {
     const removal = forget(page.removedIds);
     let changed = removal.changed;
+    let skipped = false;
     const fresh: Message[] = [];
-    const cache = (item: Message) => started === "confirmed" ? confirmWrite(item) : put(item, started);
+    const cache = (item: Message) => {
+      if (started === "confirmed") confirmWrite(item);
+      else if (!put(item, started)) skipped = true;
+    };
     for (const item of page.items) {
       if (entities.has(item.id)) { cache(item); changed = true; continue; }
       const segment = scope === "channel" ? channel : thread?.segment;
@@ -317,10 +326,16 @@ export function createChannelStore(options: ChannelOptions) {
       cache(item);
       fresh.push(item);
     }
+    // A skipped copy might hold a later change (another person's edit or deletion): keep the old
+    // checkpoint, so the next poll, which starts after the write, reads this delta again.
+    const next = (segment: Segment) => {
+      const appended = appendNewer(segment, page, fresh, pageSize);
+      return skipped ? { ...appended, sinceCursor: segment.sinceCursor } : appended;
+    };
     if (scope === "channel" && channel) {
-      channel = evict(appendNewer(channel, page, fresh, pageSize), { maxMessages, anchorId });
+      channel = evict(next(channel), { maxMessages, anchorId });
     } else if (scope === "thread" && thread?.segment) {
-      thread.segment = evict(appendNewer(thread.segment, page, fresh, pageSize), { maxMessages: maxThreadMessages, anchorId: null });
+      thread.segment = evict(next(thread.segment), { maxMessages: maxThreadMessages, anchorId: null });
     }
     return { changed: changed || fresh.length > 0, fresh, parentRemoved: removal.parentRemoved };
   }
@@ -365,7 +380,6 @@ export function createChannelStore(options: ChannelOptions) {
 
   async function fetchLatest(signal: AbortSignal): Promise<boolean> {
     const gen = ++windowGen;
-    const started = ++requestSeq;
     older?.controller.abort();
     if (!channel) publish({ status: "loading", error: null });
     try {
@@ -373,7 +387,8 @@ export function createChannelStore(options: ChannelOptions) {
       if (!available() || gen !== windowGen) return false;
       forget(page.removedIds);
       const roots = page.items.filter(item => item.parentId === null);
-      for (const item of roots) put(item, started);
+      // A snapshot is polled from its own checkpoint, so anything it predates arrives next.
+      for (const item of roots) entities.set(item.id, item);
       anchorId = null;
       channel = evict(segmentFromLatest(page, roots), { maxMessages, anchorId: null });
       publish({ status: "ready", error: null, olderError: null });
@@ -463,13 +478,12 @@ export function createChannelStore(options: ChannelOptions) {
   }
 
   async function fetchThread(cache: ThreadCache, signal: AbortSignal): Promise<boolean> {
-    const started = ++requestSeq;
     try {
       const page = await list({ thread: cache.parentId }, signal);
       if (!currentThread(cache)) return false;
       forget(page.removedIds);
       const replies = page.items.filter(item => item.parentId === cache.parentId);
-      for (const item of replies) put(item, started);
+      for (const item of replies) entities.set(item.id, item);
       cache.segment = evict(segmentFromLatest(page, replies), { maxMessages: maxThreadMessages, anchorId: null });
       publish();
       // The parent's tombstone arrived while the thread was loading: it stays removed.
@@ -700,6 +714,7 @@ export function createChannelStore(options: ChannelOptions) {
      * cannot bring back one that polling removed.
      */
     update(items: readonly Message[]) {
+      if (!available()) return;
       let changed = false;
       for (const item of items) {
         if (item.channelId !== channelId || !entities.has(item.id)) continue;

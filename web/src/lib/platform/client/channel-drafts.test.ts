@@ -77,6 +77,10 @@ describe("channel drafts storage", () => {
     expect(writeChannelDrafts(storage, KEY, { drafts: {}, sends: [{ ...send(1), clientNonce: "not a nonce!" }] })).toBe(false);
     expect(writeChannelDrafts(undefined, KEY, EMPTY_RECORD)).toBe(false);
     expect(writeChannelDrafts(throwing(), KEY, { drafts: { root: draft("x") }, sends: [] })).toBe(false);
+    const full = memoryStorage({ [KEY]: JSON.stringify({ drafts: {}, sends: [send(1)] }) });
+    full.setItem = () => { throw new DOMException("Quota exceeded", "QuotaExceededError"); };
+    expect(writeChannelDrafts(full, KEY, { drafts: { root: draft("x") }, sends: [] })).toBe(false);
+    expect(full.data.has(KEY)).toBe(false);
     expect(readChannelDrafts(undefined, KEY)).toBe(EMPTY_RECORD);
     expect(readChannelDrafts(throwing(), KEY)).toBe(EMPTY_RECORD);
   });

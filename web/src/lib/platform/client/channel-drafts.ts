@@ -101,7 +101,11 @@ export function writeChannelDrafts(storage: DraftStorage | undefined, key: strin
     }
     storage.setItem(key, value);
     return true;
-  } catch { return false; }
+  } catch {
+    // A refused write (quota) must not leave the previous record looking current.
+    remove(storage, key);
+    return false;
+  }
 }
 
 function keysWhere(storage: DraftStorage, keep: (key: string) => boolean): string[] {

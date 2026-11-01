@@ -5,8 +5,8 @@ import { ApiError, createApiClient } from "./apiClient";
 import { createChannelStore, type ChannelStore } from "./channel";
 import { channelDraftKey, CHANNEL_DRAFT_PREFIX, MAX_STORED_SENDS, type DraftStorage } from "./channel-drafts";
 import {
-  createComposer, createNonce, describeFailure, MAX_MENTION_PEOPLE, selectBusy, selectDraft, selectMentionPeople, selectOutbox,
-  type ComposerOptions,
+  createComposer, createNonce, describeFailure, DRAFT_SAVE_DELAY_MS, MAX_MENTION_PEOPLE, selectBusy, selectDraft,
+  selectMentionPeople, selectOutbox, WRITE_TIMEOUT_MS, type ComposerOptions,
 } from "./composer";
 import { createMockTransport, type MockReply } from "./mockTransport";
 
@@ -44,7 +44,7 @@ function memoryStorage(initial: Record<string, string> = {}): DraftStorage & { d
 }
 
 type Next = () => Promise<MockReply>;
-type Intercept = (request: { body: unknown; params: Record<string, string> }, next: Next) => MockReply | Promise<MockReply>;
+type Intercept = (request: { body: unknown; params: Record<string, string>; query: URLSearchParams }, next: Next) => MockReply | Promise<MockReply>;
 
 /**
  * A small channel server: posts are idempotent on (author, nonce), edits and
@@ -64,7 +64,7 @@ function backend(seed: Message[] = []) {
     calls.push({ route, body });
     const next = async () => base(body);
     const intercept = intercepts[route].shift();
-    return intercept ? intercept({ body, params }, next) : next();
+    return intercept ? intercept({ body, params, query: new URL(request.url).searchParams }, next) : next();
   }
 
   const api = createApiClient({ retry: { maxRetries: 0 }, fetch: createMockTransport([
@@ -124,19 +124,20 @@ function setup({ seed = [msg(1), msg(2)], options = {}, channel: channelOptions 
     channelId: CHANNEL, enabled: true, api: server.api, viewerId: VIEWER, initial: page(seed, "s0"), ...channelOptions,
   });
   let nonce = 0;
+  const clock = { now: 50_000 };
   const composer = createComposer({
     store: channel, me: { user: { id: VIEWER }, flags: { tembo_channels: false } }, api: server.api, storage,
-    now: () => 50_000, newNonce: () => `nonce-${++nonce}`, ...options,
+    now: () => clock.now, newNonce: () => `nonce-${++nonce}`, ...options,
   });
   const releaseChannel = channel.retain();
   const release = retain ? composer.retain() : () => {};
-  return { server, storage, channel, composer, release, releaseChannel };
+  return { server, storage, channel, composer, release, releaseChannel, clock };
 }
 const stored = (storage: DraftStorage) => JSON.parse(storage.getItem(channelDraftKey(VIEWER, CHANNEL)) ?? "null") as
   { drafts: Record<string, { body: string }>; sends: { clientNonce: string; body: string }[] } | null;
 const body = (channel: ChannelStore, id: string) => channel.getState().messages.find(item => item.id === id);
 
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("composer drafts", () => {
   it("touches no storage until a hook retains it, and SSR keeps the empty snapshot", () => {
@@ -152,10 +153,16 @@ describe("composer drafts", () => {
   });
 
   it("keeps one draft per channel and per thread, bounded, in this user's key", () => {
+    vi.useFakeTimers();
     const { composer, storage } = setup();
+    const setItem = vi.spyOn(storage, "setItem");
     composer.setDraft(null, { body: "In the channel" });
     composer.setDraft("m0001", { body: "In the thread", embeds: [{ type: "project", journeyId: "j1", version: 1 }] });
     composer.setDraft(null, { body: "x".repeat(10_050) });
+    // Typing is saved once it pauses, in one write.
+    expect(setItem).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(DRAFT_SAVE_DELAY_MS);
+    expect(setItem).toHaveBeenCalledTimes(1);
     expect(selectDraft(null)(composer.getState()).body).toHaveLength(10_000);
     expect(composer.draft("m0001")).toMatchObject({ body: "In the thread", embeds: [{ journeyId: "j1" }] });
     expect(stored(storage)?.drafts).toMatchObject({ root: { body: "x".repeat(10_000) }, "thread:m0001": { body: "In the thread" } });
@@ -264,14 +271,20 @@ describe("optimistic sends", () => {
     expect(composer.restore(item.clientNonce)).toBe(false);
   });
 
-  it("rate limited: shows when to try again and retries only when asked, with the same nonce", async () => {
-    const { composer, server } = setup();
+  it("rate limited: shows when to try again and retries only when asked and allowed, with the same nonce", async () => {
+    const { composer, server, clock } = setup();
     server.intercept("post", () => refusal(429, "rate_limited", 12_000));
     await expect(composer.send({ body: "Quick one", parentId: null, embeds: [] })).rejects.toMatchObject({ status: 429 });
     expect(composer.getState().outbox[0].failure).toMatchObject({
       reason: "rate_limited", retryable: true, retryAt: 62_000, message: "You're sending quickly. Try again in 12 seconds.",
     });
     expect(server.count("post")).toBe(1);
+    // Before retryAt the server would refuse again: no request.
+    clock.now = 61_000;
+    await expect(composer.retry("nonce-1")).rejects.toMatchObject({ code: "rate_limited", retryAfterMs: 1_000 });
+    expect(server.count("post")).toBe(1);
+    expect(composer.getState().outbox[0].status).toBe("failed");
+    clock.now = 62_000;
     await composer.retry("nonce-1");
     expect(server.calls.filter(call => call.route === "post").map(call => (call.body as PostMessage).clientNonce)).toEqual(["nonce-1", "nonce-1"]);
     expect(composer.getState().outbox).toEqual([]);
@@ -291,7 +304,7 @@ describe("optimistic sends", () => {
     // The server stores the post, but the response never arrives.
     server.intercept("post", async (_request, next) => { await next(); throw new TypeError("connection reset"); });
     await expect(composer.send({ body: "Once only", parentId: null, embeds: [] })).rejects.toMatchObject({ code: "network_error" });
-    expect(composer.getState().outbox[0].failure?.reason).toBe("offline");
+    expect(composer.getState().outbox[0].failure).toMatchObject({ reason: "unreachable", message: "Couldn't reach TTV. Check your connection and try again." });
     expect(server.byNonce.size).toBe(1);
     const first = composer.retry("nonce-1");
     const second = composer.retry("nonce-1");
@@ -595,12 +608,14 @@ describe("describeFailure", () => {
     describeFailure(new ApiError(code, status, "x", retryAfterMs), 1_000, change);
 
   it.each([
-    [0, "network_error", false, "offline", true],
-    [0, "aborted", false, "offline", true],
+    [0, "network_error", false, "unreachable", true],
+    [0, "network_error", true, "unreachable", true],
+    [0, "aborted", false, "timeout", true],
     [0, "validation_error", false, "invalid", false],
     [400, "validation", false, "invalid", false],
     [401, "unauthorized", false, "signed_out", true],
     [403, "forbidden", false, "forbidden", false],
+    [403, "forbidden", true, "forbidden", false],
     [403, "conduct_required", false, "conduct_required", true],
     [404, "flag_off", true, "unavailable", false],
     [404, "not_found", false, "unavailable", false],
@@ -612,6 +627,14 @@ describe("describeFailure", () => {
     [200, "invalid_response", false, "server", true],
   ] as const)("%i %s (change: %s) is %s", (status, code, change, reason, retryable) => {
     expect(at(status, code, change)).toMatchObject({ reason, retryable, retryAt: null });
+  });
+
+  it("says offline only when the browser is, and promises a resend only for sends", () => {
+    vi.stubGlobal("navigator", { onLine: false });
+    expect(at(0, "network_error")).toMatchObject({ reason: "offline", message: "You're offline. It will send when you're back online." });
+    expect(at(0, "network_error", true)).toMatchObject({ reason: "offline", message: "You're offline. Try again when you're back online." });
+    expect(at(403, "forbidden", true).message).toBe("You can't change this message.");
+    expect(at(403, "forbidden").message).toBe("You can't post here.");
   });
 
   it("words rate limits with and without a wait, and wraps unknown errors", () => {
@@ -721,5 +744,110 @@ describe("composer lifecycle and edges", () => {
     expect(selectMentionPeople(state, null, VIEWER)).toHaveLength(MAX_MENTION_PEOPLE);
     const orphan = { ...state, messages: [], thread: { parentId: "gone", status: "removed" as const, messages: [msg(1, { parentId: "gone" })], parent: null, hasOlder: false, loadingOlder: false, error: null } };
     expect(selectMentionPeople(orphan, "gone", VIEWER).map(person => person.id)).toEqual(["author"]);
+  });
+});
+
+describe("review follow-ups (#279)", () => {
+  it("B1: reacting while a poll is in flight never hides another person's deletion", async () => {
+    const { composer, channel, server } = setup({ seed: [msg(1), msg(2)] });
+    const stale = deferred<MockReply>();
+    server.intercept("list", () => stale.promise);
+    const polling = channel.poll(signal());
+    await flush();
+    await composer.react("m0002", "useful", true);
+    const deletedByAuthor = msg(2, { deleted: true, body: "", embeds: [] });
+    stale.resolve({ data: page([deletedByAuthor], "s1") });
+    await polling;
+    // A real server answers by checkpoint: only "since s0" carries the deletion again.
+    server.intercept("list", ({ query }) => ({ data: query.get("since") === "s0" ? page([deletedByAuthor], "s1") : page([], "s2") }));
+    await channel.poll(signal());
+    expect(body(channel, "m0002")).toMatchObject({ deleted: true, body: "" });
+  });
+
+  it("a send with no answer times out, and can then be retried with its nonce or discarded", async () => {
+    vi.useFakeTimers();
+    const { composer, server } = setup();
+    server.intercept("post", () => new Promise<MockReply>(() => {}));
+    const sent = composer.send({ body: "Into the void", parentId: null, embeds: [] });
+    const failed = sent.catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS);
+    expect(await failed).toMatchObject({ code: "aborted" });
+    expect(composer.getState().outbox[0]).toMatchObject({ status: "failed", failure: { reason: "timeout", retryable: true } });
+    await composer.retry("nonce-1");
+    expect(server.calls.filter(call => call.route === "post").map(call => (call.body as PostMessage).clientNonce)).toEqual(["nonce-1", "nonce-1"]);
+    expect(composer.getState().outbox).toEqual([]);
+  });
+
+  it("a hung change times out and the next change to that message still goes", async () => {
+    vi.useFakeTimers();
+    const { composer, channel, server } = setup({ seed: [msg(1, { author: viewer })] });
+    server.intercept("edit", () => new Promise<MockReply>(() => {}));
+    const editing = composer.edit("m0001", "Stuck edit");
+    const failed = editing.catch((error: unknown) => error);
+    const reacting = composer.react("m0001", "thanks", true);
+    // The reaction's own deadline starts only when its request goes out.
+    await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS);
+    expect(await failed).toMatchObject({ code: "aborted" });
+    await reacting;
+    expect(body(channel, "m0001")).toMatchObject({ body: messages.projectPost.body, reactions: [{ kind: "thanks", count: 1, mine: true }] });
+    expect(composer.getState().announcement).toBe("Your edit wasn't saved. TTV didn't answer in time. Try again.");
+  });
+
+  it("while one change settles, later changes to the message stay shown and busy", async () => {
+    const { composer, channel, server } = setup({ seed: [msg(1, { author: viewer })] });
+    const first = deferred();
+    const second = deferred();
+    server.intercept("edit", async (_request, next) => { await first.promise; return next(); });
+    server.intercept("delete", async (_request, next) => { await second.promise; return next(); });
+    const editing = composer.edit("m0001", "Edited");
+    const deleting = composer.remove("m0001");
+    first.resolve();
+    await editing;
+    // The edit is confirmed; the deletion is still pending and still shown.
+    expect(body(channel, "m0001")).toMatchObject({ deleted: true });
+    expect(composer.getState().busy).toEqual(["m0001"]);
+    second.resolve();
+    await deleting;
+    expect(composer.getState().busy).toEqual([]);
+  });
+
+  it("a send polling already showed leaves the outbox even when no hook retains the composer", async () => {
+    const { composer, channel, server } = setup({ retain: false });
+    const gate = deferred();
+    server.intercept("post", async (_request, next) => { await next(); await gate.promise; throw new TypeError("reset"); });
+    const sent = composer.send({ body: "Seen first", parentId: null, embeds: [] });
+    await flush();
+    server.intercept("list", () => ({ data: page([server.byNonce.get("nonce-1")!], "s1") }));
+    await channel.poll(signal());
+    expect(composer.getState().outbox).toHaveLength(1);
+    gate.resolve();
+    await expect(sent).resolves.toMatchObject({ clientNonce: "nonce-1" });
+    expect(composer.getState().outbox).toEqual([]);
+  });
+
+  it("saves typing on pagehide and on release, and a send's text at once", () => {
+    vi.useFakeTimers();
+    const events = new EventTarget();
+    vi.stubGlobal("addEventListener", events.addEventListener.bind(events));
+    vi.stubGlobal("removeEventListener", events.removeEventListener.bind(events));
+    const { composer, storage, release } = setup();
+    composer.setDraft(null, { body: "Half a thought" });
+    expect(stored(storage)).toBeNull();
+    events.dispatchEvent(new Event("pagehide"));
+    expect(stored(storage)?.drafts.root.body).toBe("Half a thought");
+    composer.setDraft("m0001", { body: "A reply" });
+    release();
+    expect(stored(storage)?.drafts["thread:m0001"].body).toBe("A reply");
+    // Nothing is left to save; a stray pagehide writes nothing.
+    const setItem = vi.spyOn(storage, "setItem");
+    events.dispatchEvent(new Event("pagehide"));
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it("an online network failure of a change says so, without promising to resend", async () => {
+    const { composer, server } = setup({ seed: [msg(1)] });
+    server.intercept("react", () => { throw new TypeError("reset"); });
+    await expect(composer.react("m0001", "useful", true)).rejects.toMatchObject({ code: "network_error" });
+    expect(composer.getState().announcement).toBe("Your reaction wasn't saved. Couldn't reach TTV. Check your connection and try again.");
   });
 });

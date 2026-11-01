@@ -8,7 +8,7 @@ import { messages, people } from "../../fixtures";
 import { createApiClient } from "../apiClient";
 import { createChannelStore, type ChannelStore } from "../channel";
 import { channelDraftKey } from "../channel-drafts";
-import { createComposer, type Composer } from "../composer";
+import { createComposer, DRAFT_SAVE_DELAY_MS, type Composer } from "../composer";
 import { createMockTransport } from "../mockTransport";
 import { useComposer, useDraft, useMentionCandidates, useMessageBusy, useOutbox } from "./composer";
 
@@ -99,6 +99,7 @@ describe("composer hooks", () => {
     expect(textarea().value).toBe("Stored");
     await act(async () => composer.setDraft(null, { body: "Stored and more" }));
     expect(textarea().value).toBe("Stored and more");
+    await act(async () => { await new Promise(resolve => { setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 5); }); });
     expect(sessionStorage.getItem(channelDraftKey(VIEWER, CHANNEL))).toContain("Stored and more");
     expect(text("mentions")).toBe(`@tembo,${people.david.name}`);
   });

@@ -204,8 +204,9 @@ holds the server's copy, and rejects with the `ApiError` otherwise.
   `EmbedRef`s. They are kept in **sessionStorage only**, under one key per user and
   channel (`ttv-channel-drafts:<user>:<channel>`), so they end with the tab and are
   bounded: 20 thread drafts per channel, the most recently edited kept.
-- Sending empties the draft at once; the text waits in the outbox, and in storage,
-  until the server confirms it. Then it is gone. A failed send keeps its text.
+- Typing is saved 300 ms after it pauses, and on `pagehide` and release. Sending
+  empties the draft at once; the text waits in the outbox, saved at once, until the
+  server confirms it. Then it is gone. A failed send keeps its text.
 - **Sign-out:** call `clearChannelDrafts()` from the sign-out flow, beside
   `clearOnboardingDrafts()`. As a second lock, loading a composer removes every
   other account's channel drafts from the tab.
@@ -227,15 +228,20 @@ item (`status: "sending"`) with a fresh `clientNonce` and posts it.
   and the message is announced. `retry(nonce)` sends it again with the **same
   nonce**, so the server stores it once; a retry while it is in flight joins it.
   `discard(nonce)` drops it; `restore(nonce)` puts it back into its empty draft.
+  A retry before a rate limit's `retryAt` is refused without a request.
+- **No answer:** every write gives up after 20 s (`timeoutMs`) and fails as
+  `timeout`, so a stalled connection never leaves an item stuck in `sending`.
 
 | Reason | When | Retryable |
 |---|---|---|
-| `offline` | No network (also checked with `navigator.onLine`); retried automatically on `online` | yes |
+| `offline` | The browser is offline (`navigator.onLine`); sends are retried automatically on `online` | yes |
+| `unreachable` | The request never reached TTV while the browser is online | yes |
+| `timeout` | No answer within `timeoutMs` (the write may still land; a retried send reuses its nonce) | yes |
 | `rate_limited` | 429; `retryAt` from `retryAfterMs`. Never retried automatically | yes |
 | `conduct_required` | The code of conduct isn't agreed; also sets `conductRequired` | yes |
 | `moderation_rejected` | Refused as written; `restore` to change it | no |
 | `signed_out` | 401 | yes |
-| `forbidden` | 403: can't post here (for example a STAFF channel) | no |
+| `forbidden` | 403: can't post here (for example a STAFF channel), or can't change this message | no |
 | `unavailable` | 404 or `flag_off` | no |
 | `gone` | Edits, deletions, reactions: 404 or 409 | no |
 | `invalid` | Other 4xx | no |
@@ -253,8 +259,13 @@ server applies them as the reader did. Reactions set, never toggle.
   which never adds a message (a confirmation can't bring back one polling removed).
 - On failure only that change is undone: the overlay is recomputed from the
   changes still pending, over the cached copy, which polling kept fresh.
-- **Stale responses:** a confirmed copy is pinned. A list response to a request
-  that started before the confirmation cannot replace it; later requests can.
+- **Stale responses:** a confirmed copy is pinned. A `since` response to a request
+  that started before the confirmation does not replace it, because that copy may
+  predate the write. It could also follow it, for example someone else's deletion,
+  so the store keeps its previous checkpoint and the next poll reads that delta
+  again; that answer is applied. Nothing is lost, and the confirmed copy never
+  flickers back. A latest or thread snapshot is applied as it is: polling from its
+  own checkpoint brings anything it predates.
 
 ### Mentions
 
