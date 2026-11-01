@@ -9,7 +9,7 @@ function toFlag(row: FlagRow): Flag {
 
 export async function listFlags(db: D1Database): Promise<FlagsAdmin> {
   const { results } = await db.prepare(
-    "SELECT key, audience, updatedAt, updatedBy FROM feature_flag WHERE key IN (?, ?, ?, ?) ORDER BY key"
+    `SELECT key, audience, updatedAt, updatedBy FROM feature_flag WHERE key IN (${FlagKey.options.map(() => "?").join(", ")}) ORDER BY key`
   ).bind(...FlagKey.options).all<FlagRow>();
   return FlagsAdmin.parse({ flags: FlagKey.options.map(key => {
     const row = results.find(flag => flag.key === key);

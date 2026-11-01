@@ -2,6 +2,7 @@ import {
   check,
   index,
   integer,
+  primaryKey,
   real,
   sqliteTable,
   text,
@@ -74,6 +75,74 @@ export const featureFlag = sqliteTable(
     check("feature_flag_audience_check", sql`${table.audience} IN ('OFF', 'STAFF', 'ALL')`),
   ]
 );
+
+// ─── Onboarding (src/lib/onboarding/README.md) ─────────────
+// Timestamps are epoch milliseconds, like attention, and are written by the
+// domain. Intents choose routing and copy only; capabilitiesFor never reads them.
+
+export const memberIntent = sqliteTable("member_intent", {
+  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  intent: text("intent", { enum: ["MEMBER", "MENTOR", "INSTITUTION", "EXPLORING"] }).notNull(),
+  createdAt: integer("createdAt").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.intent] }),
+  check("member_intent_intent_check", sql`${table.intent} IN ('MEMBER','MENTOR','INSTITUTION','EXPLORING')`),
+  check("member_intent_time_check", sql`${table.createdAt} >= 0`),
+]);
+
+/** NEW only for accounts created while onboarding is open; no row means an account from before rollout. */
+export const memberOnboarding = sqliteTable("member_onboarding", {
+  userId: text("userId").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  stage: text("stage", { enum: ["NEW", "DONE"] }).notNull(),
+  completedAt: integer("completedAt"),
+  promptDismissedAt: integer("promptDismissedAt"),
+  createdAt: integer("createdAt").notNull(),
+  updatedAt: integer("updatedAt").notNull(),
+}, (table) => [
+  check("member_onboarding_stage_check", sql`${table.stage} IN ('NEW','DONE')`),
+  check("member_onboarding_done_check", sql`${table.stage} = 'DONE' OR (${table.completedAt} IS NULL AND ${table.promptDismissedAt} IS NULL)`),
+  check("member_onboarding_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt}`),
+]);
+
+/** A request for a global MENTOR or INSTITUTION role. decidedBy is audit-only and never reaches the requester. */
+export const accessRequest = sqliteTable("access_request", {
+  id: cuid("id"),
+  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  role: text("role", { enum: ["MENTOR", "INSTITUTION"] }).notNull(),
+  status: text("status", { enum: ["PENDING", "APPROVED", "DECLINED", "WITHDRAWN"] }).notNull().default("PENDING"),
+  note: text("note").notNull(),
+  organisation: text("organisation"),
+  organisationRole: text("organisationRole"),
+  link: text("link"),
+  scopeAcknowledgedAt: integer("scopeAcknowledgedAt"),
+  decisionId: text("decisionId"),
+  /** Set by the withdrawal itself, so the statements batched with it act only for that call. */
+  withdrawalId: text("withdrawalId"),
+  decisionMessage: text("decisionMessage"),
+  decidedBy: text("decidedBy").references(() => user.id, { onDelete: "set null" }),
+  decidedAt: integer("decidedAt"),
+  requesterSeenAt: integer("requesterSeenAt"),
+  createdAt: integer("createdAt").notNull(),
+  updatedAt: integer("updatedAt").notNull(),
+}, (table) => [
+  uniqueIndex("access_request_pending_idx").on(table.userId, table.role).where(sql`${table.status} = 'PENDING'`),
+  uniqueIndex("access_request_decision_idx").on(table.decisionId).where(sql`${table.decisionId} IS NOT NULL`),
+  index("access_request_queue_idx").on(table.status, table.createdAt),
+  index("access_request_user_idx").on(table.userId, table.role, table.createdAt),
+  check("access_request_role_check", sql`${table.role} IN ('MENTOR','INSTITUTION')`),
+  check("access_request_status_check", sql`${table.status} IN ('PENDING','APPROVED','DECLINED','WITHDRAWN')`),
+  check("access_request_note_check", sql`length(trim(${table.note})) >= 20 AND length(${table.note}) <= 600`),
+  check("access_request_institution_check", sql`${table.role} <> 'INSTITUTION' OR (${table.organisation} IS NOT NULL AND ${table.scopeAcknowledgedAt} IS NOT NULL)`),
+  check("access_request_mentor_check", sql`${table.role} <> 'MENTOR' OR (${table.organisation} IS NULL AND ${table.organisationRole} IS NULL AND ${table.scopeAcknowledgedAt} IS NULL)`),
+  check("access_request_organisation_check", sql`${table.organisation} IS NULL OR (length(trim(${table.organisation})) > 0 AND length(${table.organisation}) <= 200)`),
+  check("access_request_organisation_role_check", sql`${table.organisationRole} IS NULL OR (length(trim(${table.organisationRole})) > 0 AND length(${table.organisationRole}) <= 200)`),
+  check("access_request_link_check", sql`${table.link} IS NULL OR length(${table.link}) <= 2048`),
+  check("access_request_decided_check", sql`(${table.status} IN ('APPROVED','DECLINED')) = (${table.decidedAt} IS NOT NULL)`),
+  check("access_request_message_check", sql`${table.decisionMessage} IS NULL OR (${table.status} IN ('APPROVED','DECLINED') AND length(trim(${table.decisionMessage})) > 0 AND length(${table.decisionMessage}) <= 600)`),
+  check("access_request_withdrawal_check", sql`${table.withdrawalId} IS NULL OR ${table.status} = 'WITHDRAWN'`),
+  check("access_request_seen_check", sql`${table.requesterSeenAt} IS NULL OR ${table.status} IN ('APPROVED','DECLINED')`),
+  check("access_request_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt}`),
+]);
 
 // ─── Attention ───────────────────────────────────────────
 

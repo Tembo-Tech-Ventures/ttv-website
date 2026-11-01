@@ -152,7 +152,7 @@ describe("wire invariants", () => {
 
   it("fixes the space, flag and reaction vocabulary", () => {
     expect(C.SpaceId.options).toEqual(["cohort", "community", "mentoring", "discover", "admin", "profile"]);
-    expect(C.FlagKey.options).toEqual(["spaces", "channels", "tembo_channels", "mentor_requests"]);
+    expect(C.FlagKey.options).toEqual(["spaces", "channels", "tembo_channels", "mentor_requests", "onboarding"]);
     expect(C.FlagAudience.options).toEqual(["OFF", "STAFF", "ALL"]);
     expect(C.ReactionKind.options).toEqual(["useful", "learned", "thanks", "agree", "congrats"]);
   });
@@ -265,8 +265,9 @@ describe("onboarding contracts", () => {
     expect(C.SubjectKind.options).toContain("accessRequest");
   });
 
-  it("leaves the flag vocabulary to B-O.2", () => {
-    expect(C.FlagKey.options).not.toContain("onboarding");
+  it("adds onboarding to the flag vocabulary, which /me reports like every other key", () => {
+    expect(C.FlagKey.options).toContain("onboarding");
+    expect(C.EffectiveFlags.safeParse({ spaces: true, channels: true, tembo_channels: true, mentor_requests: true }).success).toBe(false);
   });
 
   it("refuses retries for writes with effects, and allows them for setting intents and dismissing", () => {

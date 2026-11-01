@@ -32,7 +32,7 @@ const expectedBadges: Record<string, RoleBadge[]> = {
 function setup(fixture: Partial<CapabilityCase> = {}, userId?: string) {
   const result = createCapabilityDatabase(fixture, userId);
   databases.push(result.database);
-  for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql"]) {
+  for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql"]) {
     result.database.exec(readMigration(migration));
   }
   result.database.exec("UPDATE feature_flag SET audience='ALL' WHERE key='spaces'");
@@ -94,7 +94,7 @@ describe("real /me and Astro context adapters", () => {
     expect(body).toMatchObject({ spaces, capabilities, unreadCounts: { ...zeroCounts,
       profile: 1, cohort: capabilities.isAdmin ? 2 : capabilities.cohortIds.length,
     },
-      flags: { spaces: true, channels: false, tembo_channels: false, mentor_requests: false },
+      flags: { spaces: true, channels: false, tembo_channels: false, mentor_requests: false, onboarding: false },
       temboUsage: { used: 0, limit: 10 },
       user: { id: context.locals.user!.id, name: "Wanjiku Njeri", avatarUrl: "https://example.test/avatar.png" },
     });

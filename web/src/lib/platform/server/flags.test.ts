@@ -8,6 +8,7 @@ beforeEach(() => {
   setup = createSqliteD1();
   setup.database.exec(MINIMAL_AUTH_SCHEMA);
   setup.database.exec(readMigration("0021_feature_flags.sql"));
+  setup.database.exec(readMigration("0025_onboarding.sql"));
   setup.database.exec("INSERT INTO user(id,name,email) VALUES ('amina','Amina Hassan','amina@example.test')");
 });
 afterEach(() => { setup.database.close(); vi.restoreAllMocks(); });
@@ -70,10 +71,40 @@ describe("flag audiences", () => {
     expect(await getFlags(context({ env: { DEPLOYMENT_ENVIRONMENT: "staging", PLATFORM_FLAGS_OVERRIDE: override } }))).toEqual(uniform(false));
   });
 
+  it("reads every key in one query, including onboarding", async () => {
+    const queries = vi.spyOn(setup.db, "prepare");
+    await getFlags(context());
+    expect(queries).toHaveBeenCalledOnce();
+    expect(queries.mock.calls[0][0]).toBe(
+      `SELECT key, audience FROM feature_flag WHERE key IN (${FlagKey.options.map(() => "?").join(", ")})`
+    );
+    expect(FlagKey.options).toContain("onboarding");
+  });
+
+  it.each([
+    { spaces: "OFF", onboarding: "ALL", isAdmin: true, expected: false },
+    { spaces: "STAFF", onboarding: "ALL", isAdmin: false, expected: false },
+    { spaces: "STAFF", onboarding: "ALL", isAdmin: true, expected: true },
+    { spaces: "ALL", onboarding: "STAFF", isAdmin: false, expected: false },
+    { spaces: "ALL", onboarding: "STAFF", isAdmin: true, expected: true },
+    { spaces: "ALL", onboarding: "OFF", isAdmin: true, expected: false },
+    { spaces: "ALL", onboarding: "ALL", isAdmin: false, expected: true },
+  ] as const)("makes onboarding effective only with spaces: $spaces/$onboarding, admin $isAdmin", async ({ spaces, onboarding, isAdmin, expected }) => {
+    setup.database.prepare("UPDATE feature_flag SET audience=? WHERE key='spaces'").run(spaces);
+    setup.database.prepare("UPDATE feature_flag SET audience=? WHERE key='onboarding'").run(onboarding);
+    const flags = await getFlags(context({ isAdmin }));
+    expect(flags.onboarding).toBe(expected);
+    expect(flags.spaces).toBe(spaces === "ALL" || (spaces === "STAFF" && isAdmin));
+    expect(await requireFlag(context({ isAdmin }), "onboarding")).toEqual(expected ? null : expect.any(Response));
+  });
+
   it("defaults missing keys to OFF and ignores future keys", async () => {
     setup.database.exec("DELETE FROM feature_flag WHERE key='spaces'");
     setup.database.exec("INSERT INTO feature_flag(key,audience) VALUES ('future','ALL')");
     expect(await getFlags(context())).toEqual(uniform(false));
+    setup.database.exec("UPDATE feature_flag SET audience='ALL'");
+    // onboarding builds on spaces, so a missing spaces row keeps it off too.
+    expect(await getFlags(context())).toEqual({ ...uniform(true), spaces: false, onboarding: false });
   });
 });
 

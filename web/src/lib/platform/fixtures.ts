@@ -54,7 +54,7 @@ const zeroUnread = { cohort: 0, community: 0, mentoring: 0, discover: 0, admin: 
 function me(user: PersonSummary, spaces: SpaceId[], overrides: Partial<Me> = {}): Me {
   return {
     user, spaces, unreadCounts: { ...zeroUnread },
-    flags: { spaces: true, channels: true, tembo_channels: true, mentor_requests: true },
+    flags: { spaces: true, channels: true, tembo_channels: true, mentor_requests: true, onboarding: true },
     capabilities: { cohortIds: [], mentorCohortIds: [], isMentor: false, isInstitution: false, isAdmin: false },
     temboUsage: { used: 0, limit: 10 }, ...overrides,
   };
@@ -353,6 +353,7 @@ export const flagsAdmin: FlagsAdmin = {
     { key: "channels", audience: "OFF", updatedAt: FIXTURE_NOW, updatedBy: null },
     { key: "tembo_channels", audience: "OFF", updatedAt: FIXTURE_NOW, updatedBy: null },
     { key: "mentor_requests", audience: "OFF", updatedAt: FIXTURE_NOW, updatedBy: null },
+    { key: "onboarding", audience: "OFF", updatedAt: FIXTURE_NOW, updatedBy: null },
   ],
 };
 

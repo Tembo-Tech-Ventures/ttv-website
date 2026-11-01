@@ -23,8 +23,12 @@ const requestFlags = new WeakMap<object, {
   flags: Promise<Flags>;
 }>();
 
+/** A flag listed here is effective only while the flag it builds on is (onboarding SPEC §6). */
+const REQUIRES: Partial<Record<FlagKey, FlagKey>> = { onboarding: "spaces" };
+const FLAG_KEY_PLACEHOLDERS = FlagKey.options.map(() => "?").join(", ");
+
 function uniformFlags(enabled: boolean): Flags {
-  return { spaces: enabled, channels: enabled, tembo_channels: enabled, mentor_requests: enabled };
+  return Object.fromEntries(FlagKey.options.map((key) => [key, enabled])) as Flags;
 }
 
 async function resolveFlags(ctx: FlagContext): Promise<Flags> {
@@ -39,7 +43,7 @@ async function resolveFlags(ctx: FlagContext): Promise<Flags> {
   }
 
   const { results } = await ctx.db.prepare(
-    "SELECT key, audience FROM feature_flag WHERE key IN (?, ?, ?, ?)"
+    `SELECT key, audience FROM feature_flag WHERE key IN (${FLAG_KEY_PLACEHOLDERS})`
   ).bind(...FlagKey.options).all<{ key: FlagKey; audience: FlagAudience }>();
   const isAdmin = results.some((flag) => flag.audience === "STAFF")
     ? ctx.isAdmin ?? await userHasAdminRole(ctx.db, ctx.user.id)
@@ -47,6 +51,10 @@ async function resolveFlags(ctx: FlagContext): Promise<Flags> {
   const flags = uniformFlags(false);
   for (const flag of results) {
     flags[flag.key] = flag.audience === "ALL" || (flag.audience === "STAFF" && isAdmin);
+  }
+  for (const key of FlagKey.options) {
+    const required = REQUIRES[key];
+    if (required) flags[key] &&= flags[required];
   }
   return Object.freeze(flags);
 }
