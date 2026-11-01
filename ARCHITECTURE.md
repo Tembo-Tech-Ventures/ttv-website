@@ -123,6 +123,7 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/admin/programs/[id]` | Program detail, role assignments | ADMIN |
 | `/admin/programs/new` | Create program | ADMIN |
 | `/admin/data-migration` | Import data from old stack | ADMIN |
+| `/admin/platform-flags` | Who sees each platform feature flag (Off, Staff, Everyone); Everyone asks to confirm, and dependency warnings never block. No JavaScript needed | ADMIN |
 | `/dashboard/feedback` | The student's own feedback, status and replies | Session |
 | `/admin/feedback` | Feedback queue; `/admin/feedback/[id]` to reply, theme and resolve | ADMIN |
 | `/admin/feedback/themes` | Feedback themes with agreement stats; `[id]` to plan, ship or decline | ADMIN |
