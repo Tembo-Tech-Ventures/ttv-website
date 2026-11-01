@@ -50,9 +50,9 @@ test("a narrow screen with enlarged text has no horizontal overflow", async ({ p
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-for (const [audience, headline, cta, destination] of [
-  ["mentors", "Make the contribution clearer.", "Continue to mentor review", "/dashboard/mentorship"],
-  ["institutions", "Look beyond the profile. Understand the work.", "Continue to institutional access", "/dashboard/discover"],
+for (const [audience, headline, cta, destination, requestCta, accessQuestion] of [
+  ["mentors", "Make the contribution clearer.", "Continue to mentor review", "/dashboard/welcome?intent=mentor", "Ask to mentor", "Can I start reviewing as soon as I sign in?"],
+  ["institutions", "Look beyond the profile. Understand the work.", "Continue to institutional access", "/dashboard/welcome?intent=institution", "Ask for institutional access", "Who can use institutional discovery?"],
 ]) {
   test(`${audience} explains approval, supports keyboard disclosures and retains its CTA destination`, async ({ page }) => {
     await page.goto(`/community-audience.html?audience=${audience}`);
@@ -77,6 +77,22 @@ for (const [audience, headline, cta, destination] of [
     await page.goto(`/community-audience.html?audience=${audience}&signed-in`);
     await expect(page.getByRole("link", { name: cta }).first()).toHaveAttribute("href", destination);
     await expect(page.locator(".audience-cta-note")).toContainText("administrator approval");
+  });
+
+  test(`${audience} describes the request and approval once onboarding is on`, async ({ page }) => {
+    await page.goto(`/community-audience.html?audience=${audience}&onboarding`);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(headline);
+    await page.evaluate(() => document.fonts.ready);
+    const links = page.getByRole("link", { name: requestCta });
+    await expect(links).toHaveCount(2);
+    for (const link of await links.all()) await expect(link).toHaveAttribute("href", `/auth/login?next=${encodeURIComponent(destination)}`);
+    const answer = page.locator("details").filter({ hasText: accessQuestion });
+    await answer.locator("summary").click();
+    await expect(answer.locator("p")).toContainText("An administrator reads each request and decides; approval is not guaranteed.");
+    await expect(answer.locator("p")).toContainText("pending");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await answer.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `test-results/audience-${audience}-request-faq-${test.info().project.name}.png`, animations: "disabled" });
   });
   test(`${audience} stays readable at 320px with enlarged text and reduced motion`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });

@@ -27,10 +27,18 @@ test("existing builder and hiring pages explain the wider community", async ({ p
   await expect(page.getByRole("link", { name: "Learn about institutional access" })).toHaveAttribute("href", "/community#institutions");
 });
 
-for (const [audience, headline, cta, destination] of [
-  ["members", "Give your work a story.", "Build your community profile", "/dashboard/community"],
-  ["mentors", "Make the contribution clearer.", "Continue to mentor review", "/dashboard/mentorship"],
-  ["institutions", "Look beyond the profile. Understand the work.", "Continue to institutional access", "/dashboard/discover"],
+// A partner page's CTA words follow the onboarding flag a member would get after sign-in
+// (data-access-flow); where it leads does not.
+const CTAS: Record<string, Record<string, string>> = {
+  members: { page: "Build your community profile" },
+  mentors: { legacy: "Continue to mentor review", request: "Ask to mentor" },
+  institutions: { legacy: "Continue to institutional access", request: "Ask for institutional access" },
+};
+
+for (const [audience, headline, destination] of [
+  ["members", "Give your work a story.", "/dashboard/community"],
+  ["mentors", "Make the contribution clearer.", "/dashboard/welcome?intent=mentor"],
+  ["institutions", "Look beyond the profile. Understand the work.", "/dashboard/welcome?intent=institution"],
 ]) {
   test(`public ${audience} journey reaches GitHub sign-in with the intended return path`, async ({ page, baseURL }) => {
     test.skip(baseURL === "http://127.0.0.1:4322", "Requires actual Astro routes, not the component harness.");
@@ -40,7 +48,8 @@ for (const [audience, headline, cta, destination] of [
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(headline);
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", new RegExp(`/community/${audience}$`));
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.getByRole("link", { name: cta }).first().click();
+    const flow = await page.locator("[data-community-root]").getAttribute("data-access-flow") ?? "page";
+    await page.getByRole("link", { name: CTAS[audience]![flow] }).first().click();
     await expect(page).toHaveURL(new URL(`/auth/login?next=${encodeURIComponent(destination)}`, baseURL!).href);
     await expect(page.getByRole("heading", { name: "Sign in to Tembo." })).toBeVisible();
   });
