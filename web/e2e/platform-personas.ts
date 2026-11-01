@@ -89,6 +89,18 @@ export function personaSession(key: PersonaKey, environment: Environment = proce
 }
 
 /**
+ * A fictional person seeded only locally (`platform-personas.local.sql`), such
+ * as the onboarding personas in each landing state, or why there is none: on a
+ * preview, these people do not exist.
+ */
+export function localPersonaSession(name: string, environment: Environment = process.env): Pick<PersonaSession, "token" | "secret"> | string {
+  if (environment.PLAYWRIGHT_BASE_URL) return "This persona is seeded locally only.";
+  const secret = environment.PLATFORM_PERSONAS_LOCAL_SECRET;
+  if (!secret) return "Set PLATFORM_PERSONAS_LOCAL_SECRET and apply platform-personas.local.sql to run locally.";
+  return { token: `ttv-local-persona-${name}-token`, secret };
+}
+
+/**
  * Sessions are minted only for this machine or the isolated agent preview the
  * run deployed: `https://<app>-<agent-environment>.<account>.workers.dev`.
  * Anything else (staging, production, a custom domain) is refused.
@@ -104,7 +116,7 @@ export function assertPersonaOrigin(baseURL: string, environment: Environment = 
 }
 
 /** Better Auth's signed session cookie (better-call signCookieValue), for a session that already exists. */
-export async function signIn(context: BrowserContext, baseURL: string, session: PersonaSession): Promise<void> {
+export async function signIn(context: BrowserContext, baseURL: string, session: Pick<PersonaSession, "token" | "secret"> & Partial<PersonaSession>): Promise<void> {
   assertPersonaOrigin(baseURL);
   const secure = new URL(baseURL).protocol === "https:";
   const signature = createHmac("sha256", session.secret).update(session.token).digest("base64");

@@ -1,0 +1,75 @@
+---
+/**
+ * What onboarding puts at the top of a space's landing page (SPEC §2, §3):
+ * the one-time card for older accounts (S4), then the status cards (S3). In
+ * Community it adds the welcome for someone just looking around, and the
+ * "Your spaces" line for anyone a role has opened Mentoring or Discover to.
+ *
+ * Nothing renders while onboarding is off for the person: the page passes
+ * `view` only from its spaces context, which is null then.
+ */
+import type { AccessRole, SpaceId } from "@/lib/platform/contracts";
+import PersonMarker from "@/components/platform/ui/PersonMarker";
+import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
+import { ACCOUNT_PATH, TAKING_PART_ID, UNSAVED_PARAM, UNSAVED_VALUE } from "./account-actions";
+import { STATUS, YOUR_SPACES } from "./copy";
+import ExistingAccountCard from "./ExistingAccountCard.astro";
+import { ROLE_SPACES, cardsFor, yourSpaces, type OnboardingView } from "./framing";
+import StatusCard from "./StatusCard.astro";
+import { SEAL, action } from "./styles";
+
+interface Props {
+  view: OnboardingView;
+  /** The landing page this sits on: its space, and where its forms return. */
+  space: SpaceId;
+  /** Space below the notices, when the page's next card sits closer than its heading would. */
+  class?: string;
+}
+
+const { view, space, class: spacing = "mb-10" } = Astro.props;
+const returnTo = SPACE_PATHS[space];
+const cards = cardsFor(view, space);
+const community = space === "community";
+const opened: AccessRole[] = community ? yourSpaces(view) : [];
+const welcome = community && view.framing === "exploring";
+const unsaved = Astro.url.searchParams.get(UNSAVED_PARAM) === UNSAVED_VALUE;
+const shown = unsaved || view.prompt || cards.length > 0 || opened.length > 0 || welcome;
+const LINK = "font-semibold text-ink-primary underline underline-offset-3 hover:text-peach-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
+---
+
+{shown && (
+  <div data-onboarding-notices class:list={["flex flex-col gap-4", spacing]}>
+    {unsaved && (
+      <p role="alert" class="rounded-xl border border-danger-ink/40 bg-danger-ink/8 px-4 py-3 text-sm font-semibold text-ink-primary">{STATUS.unsaved}</p>
+    )}
+    {view.prompt && <ExistingAccountCard prompt={view.prompt} returnTo={returnTo} />}
+    {cards.map((card) => <StatusCard card={card} returnTo={returnTo} />)}
+    {welcome && (
+      <section aria-labelledby="onboarding-welcome-title" data-onboarding-welcome class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 rounded-[1.125rem] border border-hairline bg-ink-primary/4 p-5 sm:items-center sm:gap-x-5 sm:p-6">
+        <span aria-hidden="true" class={SEAL}><PersonMarker kind="builder" className="scale-150" /></span>
+        <div class="min-w-0">
+          <h2 id="onboarding-welcome-title" class="text-lg leading-snug font-bold text-ink-primary">{STATUS.welcome.title}</h2>
+          <p class="mt-1 text-[0.9375rem] leading-relaxed text-ink-secondary">
+            {STATUS.welcome.body} <a href={`${ACCOUNT_PATH}#${TAKING_PART_ID}`} class={LINK}>{STATUS.welcome.account}</a>.
+          </p>
+        </div>
+      </section>
+    )}
+    {opened.length > 0 && (
+      <section aria-labelledby="onboarding-spaces-title" data-onboarding-spaces class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-4 rounded-[1.125rem] border border-hairline bg-ink-primary/4 p-5 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-x-5 sm:p-6">
+        <span aria-hidden="true" class={SEAL}><PersonMarker kind={opened[0] === "MENTOR" ? "mentor" : "institution"} className="scale-150" /></span>
+        <div class="min-w-0">
+          <h2 id="onboarding-spaces-title" class="text-lg leading-snug font-bold text-ink-primary">{YOUR_SPACES.title}</h2>
+          <p class="mt-1 text-[0.9375rem] leading-relaxed text-ink-secondary">
+            {opened.length > 1 ? YOUR_SPACES.body.both : YOUR_SPACES.body[opened[0]!]} {YOUR_SPACES.keeps}
+          </p>
+        </div>
+        <div class="col-span-2 flex flex-wrap items-center gap-2 sm:col-span-1 sm:justify-end">
+          {opened.map((role) => (
+            <a href={SPACE_PATHS[ROLE_SPACES[role]]} class:list={action("quiet")}>{YOUR_SPACES.open[role]}</a>
+          ))}
+        </div>
+      </section>
+    )}
+  </div>
+)}

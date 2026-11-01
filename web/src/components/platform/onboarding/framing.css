@@ -1,0 +1,241 @@
+/*
+ * The onboarding cards that sit on the landing pages and Account (U-O.2): the
+ * one-time card's toggles (S4) and the "Build and learn" switch (S5). The
+ * status cards are Tailwind only; these need states a utility can't name.
+ *
+ * Nothing here animates on arrival. A toggle's peach edge and fill change at
+ * once under reduced motion, and within 150 ms otherwise.
+ */
+
+.onboarding-prompt {
+  border: 1px solid rgb(242 141 104 / 0.4);
+  border-radius: 1.375rem;
+  background-color: rgb(255 248 242 / 0.06);
+  padding: 1.25rem;
+}
+
+.onboarding-prompt__form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1.125rem 1.5rem;
+  align-items: center;
+}
+
+.onboarding-prompt__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.onboarding-prompt__choose {
+  display: none;
+}
+
+.onboarding-prompt__options {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.onboarding-prompt__note {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 40rem) {
+  .onboarding-prompt {
+    padding: 1.375rem 1.5rem;
+  }
+}
+
+/* Phones: one column, with the toggles before the buttons that save them. */
+@media (max-width: 47.999rem) {
+  .onboarding-prompt__form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .onboarding-prompt__options {
+    order: 1;
+  }
+
+  .onboarding-prompt__actions {
+    order: 2;
+    justify-content: stretch;
+  }
+
+  .onboarding-prompt__actions > * {
+    flex: 1 1 0;
+  }
+
+  .onboarding-prompt__note {
+    order: 3;
+  }
+}
+
+/*
+ * Compact until Choose, only when a script can open it: without one, the
+ * whole card shows and both buttons work as they are.
+ */
+@media (max-width: 47.999rem) and (scripting: enabled) {
+  .onboarding-prompt:not([data-expanded]) .onboarding-prompt__body {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .onboarding-prompt:not([data-expanded]) .onboarding-prompt__options,
+  .onboarding-prompt:not([data-expanded]) .onboarding-prompt__save,
+  .onboarding-prompt:not([data-expanded]) .onboarding-prompt__note {
+    display: none;
+  }
+
+  .onboarding-prompt:not([data-expanded]) .onboarding-prompt__choose {
+    display: inline-flex;
+  }
+}
+
+/* ---- A toggle: a native checkbox inside a pill. The pill's edge and box say "on". ---- */
+
+.onboarding-toggle {
+  position: relative;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.625rem;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: 0.5rem 1rem 0.5rem 0.75rem;
+  border: 1px solid rgb(255 248 242 / 0.22);
+  border-radius: 999px;
+  background-color: rgb(1 33 31 / 0.35);
+  color: var(--color-ink-primary);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 150ms ease-out, background-color 150ms ease-out;
+}
+
+.onboarding-toggle:hover {
+  border-color: rgb(255 248 242 / 0.4);
+}
+
+.onboarding-toggle:has(:checked) {
+  border-color: var(--color-primary);
+  background-color: rgb(242 141 104 / 0.12);
+}
+
+.onboarding-toggle:has(:focus-visible) {
+  outline: 2px solid var(--color-peach-ink);
+  outline-offset: 2px;
+}
+
+.onboarding-toggle__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  opacity: 0;
+}
+
+.onboarding-toggle__box {
+  display: grid;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  place-items: center;
+  border: 2px solid rgb(255 248 242 / 0.45);
+  border-radius: 0.375rem;
+  color: var(--color-dark);
+  transition: background-color 150ms ease-out, border-color 150ms ease-out;
+}
+
+.onboarding-toggle__tick {
+  width: 0.875rem;
+  height: 0.875rem;
+  visibility: hidden;
+}
+
+.onboarding-toggle:has(:checked) .onboarding-toggle__box {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary);
+}
+
+.onboarding-toggle:has(:checked) .onboarding-toggle__tick {
+  visibility: visible;
+}
+
+.onboarding-toggle__label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.onboarding-toggle__aside {
+  color: var(--color-ink-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.onboarding-toggle__aside::before {
+  content: "· ";
+}
+
+/* ---- The "Build and learn" switch: a track and a knob, the state its only text. ---- */
+
+.onboarding-switch {
+  display: inline-grid;
+  width: 3.75rem;
+  height: 2.75rem;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.onboarding-switch:focus-visible {
+  outline: 2px solid var(--color-peach-ink);
+  outline-offset: 2px;
+}
+
+.onboarding-switch__track {
+  position: relative;
+  width: 3.25rem;
+  height: 1.875rem;
+  border: 2px solid rgb(255 248 242 / 0.45);
+  border-radius: 999px;
+  background-color: rgb(1 33 31 / 0.45);
+  transition: background-color 150ms ease-out, border-color 150ms ease-out;
+}
+
+.onboarding-switch__knob {
+  position: absolute;
+  top: 0.1875rem;
+  left: 0.1875rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+  background-color: var(--color-ink-primary);
+  transition: transform 150ms ease-out;
+}
+
+.onboarding-switch[aria-checked="true"] .onboarding-switch__track {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary);
+}
+
+.onboarding-switch[aria-checked="true"] .onboarding-switch__knob {
+  background-color: var(--color-dark);
+  transform: translateX(1.375rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-toggle,
+  .onboarding-toggle__box,
+  .onboarding-switch__track,
+  .onboarding-switch__knob {
+    transition: none;
+  }
+}

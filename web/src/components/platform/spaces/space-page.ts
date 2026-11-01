@@ -1,6 +1,10 @@
 import { and, desc, eq } from "drizzle-orm";
+import { env } from "cloudflare:workers";
 import type { Me, SpaceId } from "@/lib/platform/contracts";
 import { getSpaceContext } from "@/lib/platform/server/space-context";
+import { getOnboardingState } from "@/lib/onboarding/service";
+import { recordError } from "@/lib/observability/errors";
+import { isAgentSession } from "@/lib/agent-auth";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 import { DEMO_PREFIX, demoPathAllowed, isDemoUser } from "@/lib/staging-demo-policy";
@@ -10,7 +14,9 @@ import { isValidCompletion } from "@/lib/talent/eligibility";
 import { restrictedQaNextStep } from "@/lib/dashboard-presentation";
 import type { StudentNextStep } from "@/lib/student/journey";
 import { canRenderSpace } from "@/components/platform/shell/access";
-import { PAGE_SPACES, type SpacePageKey } from "./sidebar";
+import { onboardingView, type OnboardingView } from "@/components/platform/onboarding/framing";
+import { onboardingOpen } from "@/components/platform/onboarding/welcome-flow";
+import { PAGE_SPACES, SPACE_PAGE_PATHS, type SpacePageKey } from "./sidebar";
 
 /**
  * How an existing dashboard page decides whether it renders inside the spaces
@@ -22,6 +28,8 @@ export interface SpacePageContext {
   me: Me;
   space: SpaceId;
   page: SpacePageKey;
+  /** How onboarding frames this page, or null where it does not (onboarding SPEC §2, §3). */
+  onboarding: OnboardingView | null;
 }
 
 /** The first of the page's spaces this person can open, or null for the existing dashboard. */
@@ -47,7 +55,41 @@ export async function resolveSpacePage(locals: App.Locals, page: SpacePageKey): 
     return null;
   }
   const space = pickSpace(me, page);
-  return space ? { me, space, page } : null;
+  return space ? { me, space, page, onboarding: await loadOnboarding(locals, me, space, page) } : null;
+}
+
+/**
+ * Whether onboarding applies to this person and session at all: the flag is on
+ * for them, and they are not a restricted synthetic identity, a personal access
+ * token or an agent's delegated session (none of which chooses for a person).
+ */
+export function onboardingFor(locals: App.Locals, me: Me): boolean {
+  const { qaPersona, demo, fixture } = restrictionsFor(locals);
+  return onboardingOpen(me.flags)
+    && !qaPersona && !demo && !fixture && !locals.personalAccessToken && !isAgentSession(locals.session?.userAgent);
+}
+
+/** The landing pages a person can arrive on, which carry the status cards and the one-time card, and Account. */
+const ONBOARDING_PAGES: ReadonlySet<SpacePageKey> = new Set(["cohort", "journey", "mentoring", "discover", "account"]);
+
+/**
+ * The person's onboarding, read for the pages that show it: the landing pages,
+ * Account, and every Community page, whose sidebar lists "Your requests".
+ * Null while the `onboarding` flag is off for them, so those pages stay
+ * exactly as they were. Restricted synthetic identities, agents' delegated
+ * sessions and personal access tokens never see it either: none of them
+ * chooses on a person's behalf. A failed read is recorded and the page keeps
+ * the framing it had before onboarding; nothing here grants anything.
+ */
+export async function loadOnboarding(locals: App.Locals, me: Me, space: SpaceId, page: SpacePageKey): Promise<OnboardingView | null> {
+  if (!onboardingFor(locals, me) || (!ONBOARDING_PAGES.has(page) && space !== "community")) return null;
+  try {
+    return onboardingView(await getOnboardingState(env.DB, me.user.id), me);
+  } catch (error) {
+    // recordError never throws; it reports its own ledger failures.
+    await recordError(env.DB, { source: "request", route: SPACE_PAGE_PATHS[page], error, level: "warning" });
+    return null;
+  }
 }
 
 export interface Restrictions {

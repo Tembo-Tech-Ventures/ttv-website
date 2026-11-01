@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { runAxe } from "./platform-axe";
-import { personaSession, signIn } from "./platform-personas";
+import { localPersonaSession, personaSession, signIn } from "./platform-personas";
 import { installTextTracker, textReport, walkAndSample } from "./text-integrity";
 
 /**
@@ -111,10 +111,16 @@ test.describe("the real page, /dashboard/welcome", () => {
   const unavailable = typeof member === "string" ? member : null;
   test.use({ reducedMotion: "reduce" });
 
-  /** Signs the member in and says whether onboarding is on for them, from their own Me. */
-  async function signedIn(page: Page, baseURL: string | undefined): Promise<boolean> {
-    if (typeof member === "string") throw new Error(member);
-    await signIn(page.context(), baseURL!, member);
+  /**
+   * Sends a request locally as Zawadi, seeded for it alone: a request changes how Community frames a
+   * person (U-O.2), so it must not be sent as the member other specs check.
+   */
+  const writer = localPersonaSession("onb-zawadi");
+
+  /** Signs the member (or another session) in and says whether onboarding is on for them, from their own Me. */
+  async function signedIn(page: Page, baseURL: string | undefined, session: typeof member | typeof writer = member): Promise<boolean> {
+    if (typeof session === "string") throw new Error(session);
+    await signIn(page.context(), baseURL!, session);
     const me = await page.request.get("/api/platform/me");
     const on = me.status() === 200 && ((await me.json()) as { flags: { onboarding?: boolean } }).flags.onboarding === true;
     test.info().annotations.push({ type: "onboarding", description: on ? "on" : "off" });
@@ -145,10 +151,10 @@ test.describe("the real page, /dashboard/welcome", () => {
   });
 
   test("sends a member's mentor request, which waits for an administrator and opens nothing", async ({ page, baseURL }) => {
-    test.skip(unavailable !== null, unavailable ?? "");
     test.skip(PREVIEW, "Preview personas are agent sessions, which this page refuses (above).");
+    test.skip(typeof writer === "string", typeof writer === "string" ? writer : "");
     test.skip(test.info().project.name !== "chromium", "One project writes; the persona is shared.");
-    test.skip(!(await signedIn(page, baseURL)), "Onboarding is off here; the test above covers it.");
+    test.skip(!(await signedIn(page, baseURL, writer)), "Onboarding is off here; the test above covers it.");
     await page.setViewportSize({ width: 1440, height: 900 });
     await open(page, "/dashboard/welcome");
     await expect(heading(page)).toHaveText("How will you take part?");

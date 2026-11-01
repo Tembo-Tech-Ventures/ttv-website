@@ -2,12 +2,14 @@
 import type { ComponentType } from "react";
 import { PiArrowUpRight } from "react-icons/pi";
 import { CountBadge } from "@/components/platform/ui";
+import { CHIP_TONES } from "@/components/platform/ui/tones";
 
 /**
  * One destination in a space's sidebar. `current` marks the page you are on.
  * A count is unread attention unless `countLabel` says what it counts
  * instead; `note` is quiet text such as "Not open yet". `publicPage` marks a
- * link that leaves the app for the public website.
+ * link that leaves the app for the public website. `noteTone` shows the note
+ * as a status chip, such as a request's "Pending".
  */
 interface Props {
   href: string;
@@ -18,10 +20,11 @@ interface Props {
   /** Read after the number by screen readers. */
   countLabel?: string;
   note?: string;
+  noteTone?: "ring";
   publicPage?: boolean;
 }
 
-const { href, label, icon: Icon, current = false, count = 0, countLabel = "new", note, publicPage = false } = Astro.props;
+const { href, label, icon: Icon, current = false, count = 0, countLabel = "new", note, noteTone, publicPage = false } = Astro.props;
 ---
 
 <li>
@@ -38,8 +41,12 @@ const { href, label, icon: Icon, current = false, count = 0, countLabel = "new",
     <span class="min-w-0 flex-1 break-words">
       {label}
       {publicPage && <span class="sr-only"> (public website)</span>}
+      {/* The note is a separate box: without a separator its words run into the label's ("Mentor accessPending"). */}
+      {count === 0 && note && <span class="sr-only">, </span>}
     </span>
     {publicPage && <PiArrowUpRight aria-hidden className="size-4 shrink-0 text-ink-muted" />}
-    {count > 0 ? <CountBadge count={count} label={countLabel} /> : note && <span class="shrink-0 text-xs font-semibold text-ink-muted">{note}</span>}
+    {count > 0 ? <CountBadge count={count} label={countLabel} /> : note && (
+      <span class:list={["shrink-0 text-xs font-semibold", noteTone ? ["rounded-full px-2 py-0.5", CHIP_TONES[noteTone]] : "text-ink-muted"]}>{note}</span>
+    )}
   </a>
 </li>

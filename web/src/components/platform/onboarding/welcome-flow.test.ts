@@ -6,7 +6,7 @@ import { onboardingByPersona } from "@/lib/platform/fixtures";
 import { FAILURES, FIELD_ERRORS, WELCOME } from "./copy";
 import {
   EMPTY_DRAFT, MAX_FORM_BYTES, choiceStatuses, handleWelcome, initialSelection, normaliseLink, onboardingOpen, parseHint,
-  readDraft, requestableRoles, validateRequests, type RequestDraft, type WelcomeActions, type WelcomeResult,
+  parseRoleFilter, readDraft, requestableRoles, validateRequests, type RequestDraft, type WelcomeActions, type WelcomeResult,
 } from "./welcome-flow";
 
 const ROUTES = { choose: "/dashboard/welcome", request: "/dashboard/welcome?step=request", landing: "/dashboard" };
@@ -139,6 +139,46 @@ describe("statuses and requestable roles", () => {
   it("asks only for roles the person chose", () => {
     expect(requestableRoles(state({ stage: "DONE", intents: ["MEMBER"] }))).toEqual([]);
     expect(requestableRoles(state({ stage: "DONE", intents: ["INSTITUTION", "MENTOR"] }))).toEqual(["MENTOR", "INSTITUTION"]);
+  });
+
+  it("narrows to the one access a page asked about", () => {
+    const both = state({ stage: "DONE", intents: ["INSTITUTION", "MENTOR"] });
+    expect(requestableRoles(both, "INSTITUTION")).toEqual(["INSTITUTION"]);
+    expect(requestableRoles(both, "MENTOR")).toEqual(["MENTOR"]);
+    expect(requestableRoles(state({ stage: "DONE", intents: ["MENTOR"] }), "INSTITUTION")).toEqual([]);
+  });
+});
+
+describe("parseRoleFilter", () => {
+  it("reads ?role=mentor|institution and nothing else", () => {
+    expect(parseRoleFilter(new URLSearchParams("role=mentor"))).toBe("MENTOR");
+    expect(parseRoleFilter(new URLSearchParams("role=INSTITUTION"))).toBe("INSTITUTION");
+    for (const query of ["", "role=admin", "role=member", "role="]) expect(parseRoleFilter(new URLSearchParams(query))).toBeNull();
+  });
+});
+
+describe("the request step for one access (Account's Request access)", () => {
+  // Peter's mentor request was declined, so it could be sent again; he asked about organisation access alone.
+  const peter = () => state({ stage: "DONE", intents: ["MENTOR", "INSTITUTION"] });
+  const ONLY = `${ROUTES.request}&role=institution`;
+  const routes = { ...ROUTES, request: ONLY };
+
+  it("shows only that section", async () => {
+    const { actions } = server(peter());
+    expect(view(await handleWelcome(get(ONLY), routes, actions), "request").view.roles).toEqual(["INSTITUTION"]);
+  });
+
+  it("sends only that request, without asking for the other's note, then lands", async () => {
+    const { actions, now } = server(peter());
+    const result = await handleWelcome(post(ONLY, requestFields(institutionDraft())), routes, actions);
+    expect(result).toEqual({ kind: "redirect", location: ROUTES.landing });
+    expect(actions.requestAccess).toHaveBeenCalledTimes(1);
+    expect(now().requests.map((request) => request.role)).toEqual(["INSTITUTION"]);
+  });
+
+  it("lands when that access is already pending or held", async () => {
+    const { actions } = server(state({ stage: "DONE", intents: ["MENTOR"], roles: [] }));
+    expect(await handleWelcome(get(ONLY), routes, actions)).toEqual({ kind: "redirect", location: ROUTES.landing });
   });
 });
 

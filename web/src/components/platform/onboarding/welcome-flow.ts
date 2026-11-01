@@ -122,10 +122,18 @@ export function choiceStatuses(state: OnboardingState): Partial<Record<ChoiceInt
 /**
  * The access this person chose and can still ask for: not held already, and
  * not waiting on a request. A declined or withdrawn request can be sent again.
+ * `only` narrows it to the one role a page asked about (Account's "Request
+ * access" for organisation access never also reopens an old mentor request).
  */
-export function requestableRoles(state: OnboardingState): AccessRole[] {
+export function requestableRoles(state: OnboardingState, only: AccessRole | null = null): AccessRole[] {
   const status = choiceStatuses(state);
-  return AccessRole.options.filter((role) => state.intents.includes(role) && status[role] === undefined);
+  return AccessRole.options.filter((role) => state.intents.includes(role) && status[role] === undefined && (only === null || role === only));
+}
+
+/** `?role=mentor|institution` on the request step: ask about that access only. */
+export function parseRoleFilter(params: URLSearchParams): AccessRole | null {
+  const parsed = AccessRole.safeParse(params.get("role")?.toUpperCase());
+  return parsed.success ? parsed.data : null;
 }
 
 function text(form: FormData, name: string): string {
@@ -255,9 +263,9 @@ async function submitChoices(form: FormData, routes: WelcomeRoutes, actions: Wel
   return redirect(requestableRoles(state).length > 0 ? routes.request : routes.landing);
 }
 
-async function submitRequests(form: FormData, routes: WelcomeRoutes, actions: WelcomeActions): Promise<WelcomeResult> {
+async function submitRequests(form: FormData, routes: WelcomeRoutes, actions: WelcomeActions, only: AccessRole | null): Promise<WelcomeResult> {
   let state = await actions.load();
-  const roles = requestableRoles(state);
+  const roles = requestableRoles(state, only);
   if (roles.length === 0) return afterRequests(state, routes);
 
   const draft = readDraft(form);
@@ -278,7 +286,7 @@ async function submitRequests(form: FormData, routes: WelcomeRoutes, actions: We
       }
       const failure = failureOf(error);
       if (!failure) throw error;
-      const remaining = requestableRoles(state);
+      const remaining = requestableRoles(state, only);
       if (remaining.length === 0) return afterRequests(state, routes);
       return { kind: "view", status: failure.status, view: { step: "request", roles: remaining, draft, errors: {}, failure: failure.message } };
     }
@@ -286,7 +294,7 @@ async function submitRequests(form: FormData, routes: WelcomeRoutes, actions: We
   // Land only when every request is now Pending or its role is held. One that
   // is still askable was not sent, and saying nothing would leave the person
   // believing it was.
-  const unsent = requestableRoles(state).filter((role) => requests.some((request) => request.role === role));
+  const unsent = requestableRoles(state, only).filter((role) => requests.some((request) => request.role === role));
   if (unsent.length > 0) {
     return { kind: "view", status: 409, view: { step: "request", roles: unsent, draft, errors: {}, failure: FAILURES.unavailable } };
   }
@@ -324,16 +332,17 @@ async function boundedForm(request: Request): Promise<FormData | null> {
 export async function handleWelcome(request: Request, routes: WelcomeRoutes, actions: WelcomeActions): Promise<WelcomeResult> {
   const url = new URL(request.url);
   const step = url.searchParams.get("step") === "request" ? "request" : "choose";
+  const only = parseRoleFilter(url.searchParams);
 
   if (request.method === "POST") {
     const form = await boundedForm(request);
     if (!form) return { kind: "refuse", status: 413 };
-    return step === "request" ? submitRequests(form, routes, actions) : submitChoices(form, routes, actions);
+    return step === "request" ? submitRequests(form, routes, actions, only) : submitChoices(form, routes, actions);
   }
 
   const state = await actions.load();
   if (step === "choose") return chooseView(state, initialSelection(state, parseHint(url.searchParams)), null);
-  const roles = requestableRoles(state);
+  const roles = requestableRoles(state, only);
   if (roles.length === 0) return afterRequests(state, routes);
   return { kind: "view", status: 200, view: { step: "request", roles, draft: EMPTY_DRAFT, errors: {}, failure: null } };
 }

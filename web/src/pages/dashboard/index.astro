@@ -3,6 +3,7 @@ import { createCommunityService } from "@/lib/community/service";
 import { hasDiscoveryAccess, dashboardNextStep } from "@/lib/dashboard-presentation";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import OnboardingNotices from "@/components/platform/onboarding/OnboardingNotices.astro";
 import { inSpacesWords, resolveSpacePage, restrictedNextStep, restrictionsFor } from "@/components/platform/spaces/space-page";
 import { canonicalSpacePath } from "@/lib/platform/server/space-routes";
 import Card from "@/components/common/Card.astro";
@@ -53,6 +54,7 @@ Astro.cookies.set("ttv-dashboard-visited", user.id, {
         </h2>
       </header>
     )}
+    {spaces?.onboarding && <OnboardingNotices view={spaces.onboarding} space={spaces.space} />}
 
     <section aria-labelledby="next-step-title">
       <Card>

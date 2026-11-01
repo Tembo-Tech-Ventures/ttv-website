@@ -1,7 +1,10 @@
 ---
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { onboardingFor, resolveSpacePage } from "@/components/platform/spaces/space-page";
+import TakingPart from "@/components/platform/onboarding/TakingPart.astro";
+import { ACTION_FIELD, handleAccountAction } from "@/components/platform/onboarding/account-actions";
+import { accountActions } from "@/components/platform/onboarding/server-actions";
 import Card from "@/components/common/Card.astro";
 import Button from "@/components/common/Button.astro";
 import { drizzle } from "drizzle-orm/d1";
@@ -62,11 +65,38 @@ const discardAvatar = async (imageUrl: string | null | undefined) => {
   });
 };
 
-// Handle POST — update user profile or avatar
+/**
+ * The onboarding forms (Account's "How you take part", and the cards on the
+ * landing pages, which post here) exist only while onboarding applies to this
+ * person and session; otherwise, as if they did not exist. Whether it applies
+ * is the flag and the session, never a read that can fail: a failed write
+ * returns to the page with "That didn't save". Each answer is private to this
+ * person and never cached.
+ */
+async function answerOnboardingForm(form: FormData): Promise<Response> {
+  const respond = (status: number, headers: Record<string, string> = {}) =>
+    new Response(status === 404 ? "Not found." : null, { status, headers: { "Cache-Control": "no-store", Vary: "Cookie", ...headers } });
+  const context = await resolveSpacePage(Astro.locals, "account");
+  if (!context || !onboardingFor(Astro.locals, context.me)) return respond(404);
+  const result = await handleAccountAction(form, accountActions(env.DB, user.id));
+  return result.kind === "refuse" ? respond(result.status) : respond(303, { Location: result.location });
+}
+
+let formData: FormData | null = null;
 if (Astro.request.method === "POST") {
+  try {
+    formData = await Astro.request.formData();
+  } catch {
+    error = "Something went wrong. Please try again.";
+  }
+}
+const onboardingAnswer = formData?.has(ACTION_FIELD) ? await answerOnboardingForm(formData) : null;
+if (onboardingAnswer) return onboardingAnswer;
+
+// Handle POST — update user profile or avatar
+if (formData) {
   let uploadedAvatarUrl: string | null = null;
   try {
-    const formData = await Astro.request.formData();
     const action = formData.get("action");
 
     if (action === "avatar") {
@@ -145,6 +175,7 @@ if (Astro.request.method === "POST") {
   }
 }
 const spaces = await resolveSpacePage(Astro.locals, "account");
+const onboarding = spaces?.onboarding ?? null;
 ---
 
 <SpacePage context={spaces} title={spaces ? "Account" : "Profile"}>
@@ -172,6 +203,8 @@ const spaces = await resolveSpacePage(Astro.locals, "account");
         )}
       </div>
     )}
+
+    {onboarding && <TakingPart view={onboarding} />}
 
     <div class="grid gap-6 lg:grid-cols-3">
       {/* Avatar section */}

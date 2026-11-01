@@ -3,6 +3,7 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 import CommunityApp from "@/components/community/CommunityApp";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import OnboardingNotices from "@/components/platform/onboarding/OnboardingNotices.astro";
 // oxlint-disable-next-line import/no-unassigned-import -- Workspace stylesheet.
 import "@/styles/discovery.css";
 // No profile data is serialized here. Institutional APIs authorize every request.
@@ -12,6 +13,7 @@ const spaces = await resolveSpacePage(Astro.locals, "discover");
 {
   spaces ? (
     <SpacePage context={spaces} title="Discover people">
+      {spaces.onboarding && <OnboardingNotices view={spaces.onboarding} space={spaces.space} />}
       <CommunityApp client:load view="scout" embedded />
     </SpacePage>
   ) : (

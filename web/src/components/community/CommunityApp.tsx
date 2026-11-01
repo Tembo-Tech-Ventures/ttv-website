@@ -24,6 +24,7 @@ import {
 } from "./community-client";
 
 import { assessProfile } from "./assessment-client";
+import type { CommunityFraming } from "@/components/platform/onboarding/framing";
 
 type View = "journey" | "scout" | "mentor";
 export function canOpenWorkspace(view: View, access: CommunityAccess) {
@@ -37,10 +38,13 @@ export function canOpenWorkspace(view: View, access: CommunityAccess) {
 export default function CommunityApp({
   view,
   embedded = false,
+  framing,
 }: {
   view: View;
   /** Rendered inside the spaces shell, which supplies the frame and navigation. */
   embedded?: boolean;
+  /** How onboarding frames the journey, when it is on for this person; member framing otherwise. */
+  framing?: CommunityFraming;
 }) {
   const [access, setAccess] = useState<CommunityAccess | null>(null);
   const [profile, setProfile] = useState<CommunityProfile | null>(null);
@@ -164,6 +168,7 @@ export default function CommunityApp({
     content = (
       <JourneyWorkspace
         profile={profile}
+        framing={framing}
         onSave={saveContribution}
         onUpdate={updateContribution}
         onSaveProfile={saveProfile}

@@ -107,3 +107,88 @@ export const FAILURES = {
   rateLimited: "You’ve sent several requests in the last day. Your answers are still here: try again later.",
   unavailable: "That didn’t save. Your answers are still here: try again in a moment.",
 } as const;
+
+/**
+ * The status cards at the top of a landing page (S3): SPEC §2 verbatim. They
+ * are driven by the request and the role, never by the intent alone, and make
+ * no promise about timing. The administrator who decided is never named.
+ */
+export const STATUS = {
+  pending: {
+    MENTOR: {
+      title: "Your mentor request is with the team",
+      body: "An administrator reads each request. The decision will appear here and under Attention.",
+      opens: "Mentoring opens as a new space once approved",
+    },
+    INSTITUTION: {
+      title: "Your organisation request is with the team",
+      body: "An administrator reads each request. The decision will appear here and under Attention.",
+      opens: "Discover opens as a new space once approved",
+    },
+  } satisfies Record<AccessRole, { title: string; body: string; opens: string }>,
+  /** The institution version adds where to read about Discover meanwhile. */
+  institutionsPage: { before: "Meanwhile, the public ", link: "For institutions", after: " page explains what Discover does." },
+  sent: (date: string) => `Sent ${date}`,
+  view: "View request",
+  approved: {
+    MENTOR: { title: "Mentoring is open", body: "Mentoring is now one of your spaces. Start with Confirm work.", open: "Open Mentoring" },
+    INSTITUTION: { title: "Discover is open", body: "Search saved community profiles and explore the work behind them.", open: "Open Discover" },
+  } satisfies Record<AccessRole, { title: string; body: string; open: string }>,
+  declined: {
+    title: { MENTOR: "Mentor access wasn’t approved this time.", INSTITUTION: "Organisation access wasn’t approved this time." } satisfies Record<AccessRole, string>,
+    body: "You can still take part as a member, and you can send a new request later.",
+    again: "Send a new request",
+  },
+  dismiss: "Dismiss",
+  welcome: {
+    title: "Welcome to the community",
+    body: "Look around at your own pace. When you’re ready, add your profile and the work you’ve done. You can choose how you take part any time in",
+    account: "Account",
+  },
+  unsaved: "That didn’t save. Try again in a moment.",
+} as const;
+
+/** The "Your spaces" line: the spaces a granted role opened, shown in Community. */
+export const YOUR_SPACES = {
+  title: "Your spaces",
+  body: { MENTOR: "Mentoring is open to you.", INSTITUTION: "Discover is open to you.", both: "Mentoring and Discover are open to you." },
+  keeps: "Community keeps your own work.",
+  open: { MENTOR: "Open Mentoring", INSTITUTION: "Open Discover" } satisfies Record<AccessRole, string>,
+} as const;
+
+/** Community for someone who chose to mentor or find people, and not to build and learn. */
+export const PARTNER = { title: "Community", ownWork: "Your own work" } as const;
+
+/**
+ * The one-time card for accounts from before onboarding (S4). "Not now" hides
+ * it for good; nothing the person already has changes either way.
+ */
+export const PROMPT = {
+  title: "How do you take part now?",
+  body: "We use this to choose where you start and what we suggest. Nothing you already have changes.",
+  save: "Save",
+  choose: "Choose",
+  notNow: "Not now",
+  note: "“Not now” hides this card for good. You can still choose in Account.",
+} as const;
+
+/** Account → "How you take part" (S5). Choices are revisitable; access stays the team's decision. */
+export const TAKING_PART = {
+  title: "How you take part",
+  lead: "This shapes where you start and what we suggest. It never grants access by itself.",
+  exploring: "Just looking around for now",
+  rows: {
+    MEMBER: { title: "Build and learn", body: "Community profile, contributions and cohort applications." },
+    MENTOR: { title: "Mentor", body: "Review work that members share, and record what you checked." },
+    INSTITUTION: { title: "Find people for your organisation", body: "Explore saved community profiles and the evidence behind them." },
+  } satisfies Record<ChoiceIntent, { title: string; body: string }>,
+  sent: (date: string) => `Request sent ${date}. An administrator will review it.`,
+  declined: (role: AccessRole) => STATUS.declined.title[role],
+  active: { MENTOR: "Mentoring is one of your spaces.", INSTITUTION: "Discover is one of your spaces." } satisfies Record<AccessRole, string>,
+  chips: { none: "Not requested", pending: "Pending", declined: "Not approved", active: "Active" },
+  request: "Request access",
+  withdraw: "Withdraw request",
+  again: STATUS.declined.again,
+  remove: "Remove",
+  note: "Access the team has approved stays on until an administrator removes it. To step back, send the team a note through Feedback.",
+} as const;
