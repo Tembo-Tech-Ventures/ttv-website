@@ -189,12 +189,12 @@ describe("preview mentor and institution personas", () => {
     const db = relationalDrizzle(createSqliteD1(database).db);
     expect(await capabilitiesFor(db, { id: mentor.userId })).toEqual({
       spaces: ["community", "mentoring", "profile"],
-      cohortIds: [], mentorCohortIds: [], isMentor: true, isInstitution: false, isAdmin: false,
+      cohortIds: [], mentorCohortIds: [], teachingCohortIds: [], isMentor: true, isInstitution: false, isAdmin: false,
     });
     // Approval is the role alone: discovery, and no cohort, mentor or admin reach.
     expect(await capabilitiesFor(db, { id: institution.userId })).toEqual({
       spaces: ["community", "discover", "profile"],
-      cohortIds: [], mentorCohortIds: [], isMentor: false, isInstitution: true, isAdmin: false,
+      cohortIds: [], mentorCohortIds: [], teachingCohortIds: [], isMentor: false, isInstitution: true, isAdmin: false,
     });
   });
 

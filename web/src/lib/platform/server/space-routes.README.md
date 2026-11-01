@@ -108,10 +108,10 @@ therefore still resolve through the redirect table.
 U-1.2 must replace the rendering rewrite in `serveSpacePage` when moving a page
 to its canonical path, while preserving legacy redirects, OFF behavior and
 the same access guards. Keep the pure alias map for restricted allowlists;
-do not turn it into a broad prefix allowlist. New channel, direct-message,
-mentor-request, availability and certificate page routes remain 404 until
-their owning phase supplies a real page and its guards. Existing public
-certificate URLs are unchanged.
+do not turn it into a broad prefix allowlist. Direct-message, mentor-request,
+availability and certificate page routes remain 404 until their owning phase
+supplies a real page and its guards. Existing public certificate URLs are
+unchanged.
 
 U-1.2 also owns browser error-page composition: routing currently returns minimal
 403/404 responses. Keep their status and no-store policy when adding styled errors;
@@ -121,6 +121,24 @@ The Admin entry remains `/admin` under the existing admin middleware. It is
 an authorized default destination, but its explicit visits cannot read the
 `Path=/dashboard` preference cookie; the client shell can save a selected tab
 before navigation.
+
+## Channel pages (B-2.2)
+
+`/dashboard/cohort/c/<slug>`, `/dashboard/community/c/<slug>` and
+`/dashboard/community/conduct` (`CONDUCT_PATH`). `channelRoute(pathname)`
+matches only slugs valid as written (the database's slug rule, never
+decoded) and `isChannelPagePath` adds the code of conduct; both count as
+available space paths, and none has a legacy alias.
+
+- Every method is 404 until `channels` is on for the caller (and `spaces`,
+  which Me needs).
+- A channel page is then 404 unless `getRouteChannel` finds a channel the
+  caller can read in that space (`src/lib/channels/README.md`). A missing
+  slug, another cohort's channel and a channel from the other space give the
+  same response, before the space check, so nothing confirms that a channel
+  exists. The page frontmatter calls `getRouteChannel(Astro)` for the same
+  cached lookup.
+- Form posts (the conduct agreement) reach the page with their bodies.
 
 ## Restricted staging identities (B-1.5)
 
@@ -135,6 +153,9 @@ handlers still decide what each caller sees.
 - Fixtures also get GET/HEAD `/dashboard`, the cohort home and the spaces entry, and
   POST `/api/attention/read`. That marks only the caller's own rows, and fixture
   cleanup deletes the user, which cascades to them.
+- GET/HEAD channel pages and the code of conduct for every identity
+  (`spacesReadPathAllowed`, B-2.2): agreeing, posting and reacting stay
+  closed, because retained personas have no cleanup.
 - Space homes keep their existing per-persona QA gates.
 
 QA-1 limits: submitting an application stays denied for every identity, because
@@ -146,8 +167,8 @@ access), the next-step link is filtered for QA but not for fixtures, so it can
 point at a page that returns 403. Demo and QA personas can't mark attention read,
 because their retained rows have no reset path. This change opens none of
 profile and account (`/dashboard/me`, `/dashboard/account`), Ask, sessions,
-channels, mentoring requests and availability, admin, PAT, MCP, recordings, chat
-or tokens; existing allowances and handler guards are unchanged. Demo
+channel APIs, mentoring requests and availability, admin, PAT, MCP, recordings,
+chat or tokens; existing allowances and handler guards are unchanged. Demo
 and QA are also past their fixed cutoffs, so only fixture identities are live.
 
 Tests: `npx vitest run src/lib/platform/server/space-*.test.ts src/lib/platform/server/onboarding-routing.test.ts src/middleware.test.ts src/lib/staging-*.test.ts`.

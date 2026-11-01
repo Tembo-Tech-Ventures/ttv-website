@@ -1,4 +1,4 @@
-import { DEMO_ORIGIN, DEMO_PERSONAS, demoPathAllowed, SPACES_APPLY_PATH, SPACES_READ_PATHS, type DemoPersona } from './staging-demo-policy';
+import { DEMO_ORIGIN, DEMO_PERSONAS, demoPathAllowed, SPACES_APPLY_PATH, spacesReadPathAllowed, type DemoPersona } from './staging-demo-policy';
 import {QA_RUN_ID,QA_PERSONAS} from './staging-qa-config.mjs';
 import { legacySpacePath } from './platform/server/space-routes';
 export {QA_RUN_ID,QA_COOKIE,QA_MARKER,QA_KEY_PIN,QA_CUTOFF,QA_PERSONAS,QA_MAX_TTL_SECONDS} from './staging-qa-config.mjs';
@@ -14,7 +14,7 @@ function qaReadAllowed(persona:DemoPersona,path:string,method:string){
     }
     if (path.startsWith('/dashboard/application/')) return persona === 'member-cohort' && path === '/dashboard/application/'+DEMO_PERSONAS['member-cohort'].userId+'-application';
     // Retained personas have no cleanup path, so attention stays read-only and only the no-cohort member may open Apply.
-    if (SPACES_READ_PATHS.has(path)) return true;
+    if (spacesReadPathAllowed(path)) return true;
     if (path === SPACES_APPLY_PATH) return persona === 'member-noncohort';
     return ['/', '/dashboard', '/dashboard/community','/community/members','/community/mentors','/community/institutions'].includes(path) || path === '/dashboard/mentorship' && persona === 'mentor' || path === '/dashboard/discover' && persona === 'institution';
   }

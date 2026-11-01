@@ -26,12 +26,13 @@ export function createCapabilityDatabase(fixture: Partial<CapabilityCase> & { le
       .run("assignment-" + i, userId, assignment.programId, assignment.name);
   }
   const queries: string[] = [];
-  const db = relationalDrizzle(d1, queries);
-  return { database, db, queries, user: fixture.signedIn === false ? null : { id: userId } };
+  const parameters: unknown[][] = [];
+  const db = relationalDrizzle(d1, queries, parameters);
+  return { database, db, queries, parameters, user: fixture.signedIn === false ? null : { id: userId } };
 }
 
-/** Drizzle over the shared SQLite D1 shim, recording each query it issues. */
-export function relationalDrizzle(d1: D1Database, queries: string[] = []) {
+/** Drizzle over the shared SQLite D1 shim, recording each query it issues (and its parameters, if asked). */
+export function relationalDrizzle(d1: D1Database, queries: string[] = [], parameters?: unknown[][]) {
   // Drizzle's relational reader uses D1 raw(); the shared SQLite adapter
   // supplies all(). Keep this test-only bridge local to the test support.
   const relationalD1 = Object.assign(Object.create(d1) as D1Database, {
@@ -47,5 +48,5 @@ export function relationalDrizzle(d1: D1Database, queries: string[] = []) {
       return statement;
     },
   });
-  return drizzle(relationalD1, { schema, logger: { logQuery(query) { queries.push(query); } } });
+  return drizzle(relationalD1, { schema, logger: { logQuery(query, params) { queries.push(query); parameters?.push(params); } } });
 }

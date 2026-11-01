@@ -195,6 +195,12 @@ export const Channel = z.object({
 export type Channel = z.infer<typeof Channel>;
 export const ChannelList = z.object({ items: z.array(Channel) });
 export type ChannelList = z.infer<typeof ChannelList>;
+/**
+ * The caller's agreement to the channel code of conduct ("How we talk to each other"): the latest
+ * version they accepted and when. current is false once a newer version asks everyone again.
+ */
+export const ConductAcknowledgement = z.object({ version: z.int().positive(), acknowledgedAt: Timestamp, current: z.boolean() });
+export type ConductAcknowledgement = z.infer<typeof ConductAcknowledgement>;
 
 export const ProjectConfirmation = z.object({ mentorId: Id, mentorName: NonEmptyText, version: z.int().positive() });
 export type ProjectConfirmation = z.infer<typeof ProjectConfirmation>;

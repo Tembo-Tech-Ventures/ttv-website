@@ -124,6 +124,8 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/admin/programs/new` | Create program | ADMIN |
 | `/admin/data-migration` | Import data from old stack | ADMIN |
 | `/dashboard/feedback` | The student's own feedback, status and replies | Session |
+| `/dashboard/cohort/c/[slug]`, `/dashboard/community/c/[slug]` | A channel; 404 unless the caller can read it (flag `channels`) | Session |
+| `/dashboard/community/conduct` | "How we talk to each other": the channel code of conduct; flag `channels` | Session |
 | `/admin/feedback` | Feedback queue; `/admin/feedback/[id]` to reply, theme and resolve | ADMIN |
 | `/admin/feedback/themes` | Feedback themes with agreement stats; `[id]` to plan, ship or decline | ADMIN |
 | `/certificate/[id]` | Certificate display | None |
@@ -178,6 +180,8 @@ SQLite via Cloudflare D1, managed with Drizzle ORM. Schema at `web/src/lib/db/sc
 - `channel` — COHORT (one program), COMMUNITY or DIRECT; slug, topic, postingPolicy ALL/STAFF, archivedAt. Default community channels and each program's `cohort-NN`, `cNN-help` and `cNN-announcements` are seeded by migration, and a trigger creates a new program's channels
 - `channel_message` — one-level threads, authorKind USER/TEMBO, per-channel `seq`/`changeSeq` for paging and polling, clientNonce unique per author, moderation VISIBLE/FLAGGED/HIDDEN with reasons
 - `channel_member`, `channel_read`, `message_reaction`, `message_report`, `moderation_event` — explicit members, read markers, reactions, member reports and the moderation audit trail
+- `channel_conduct` — each person's latest agreement to the channel code of conduct (version, acknowledgedAt); a new version asks again
+- Access: `channelAccessFor` beside `capabilitiesFor` — cohort channels for that program's members (alumni included), instructors, TAs, invited mentors and admins; community channels for every signed-in person; STAFF posting for admins and the cohort's instructors/TAs
 
 ### Conventions
 

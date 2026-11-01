@@ -8,7 +8,7 @@ import { SPACE_ORDER } from "@/lib/platform/contracts";
 import { createSqliteD1, readMigration } from "@/test/sqlite-d1";
 
 export const allSpaces: PlatformCapabilities = {
-  spaces: [...SPACE_ORDER], cohortIds: ["cohort-a"], mentorCohortIds: [], isAdmin: false, isMentor: false, isInstitution: false,
+  spaces: [...SPACE_ORDER], cohortIds: ["cohort-a"], mentorCohortIds: [], teachingCohortIds: [], isAdmin: false, isMentor: false, isInstitution: false,
 };
 
 /** Adds D1's raw() to the test D1, preserving duplicate column names for Drizzle's joined projections. */

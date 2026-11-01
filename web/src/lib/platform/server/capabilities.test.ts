@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readMigration } from "@/test/sqlite-d1";
 import { Capabilities, Intent, IntentSet, SPACE_ORDER } from "../contracts";
-import { capabilitiesFor } from "./capabilities";
-import { CAPABILITY_ROLE_MATRIX } from "./capabilities.fixtures";
+import { capabilitiesFor, channelAccessFor } from "./capabilities";
+import {
+  accessFromLetters, CAPABILITY_ROLE_MATRIX, CHANNEL_ACCESS_MATRIX, CHANNEL_TARGETS, MEMBER_OF, type ChannelTarget,
+} from "./capabilities.fixtures";
 import { createCapabilityDatabase } from "./capabilities.test-support";
 
 const databases: ReturnType<typeof createCapabilityDatabase>["database"][] = [];
@@ -38,7 +40,7 @@ describe("capabilitiesFor", () => {
     const { db, database, user } = setup({ globalRoles: ["MENTOR"], assignments: [{ programId: "cohort-a", name: "MENTOR" }] });
     expect((await capabilitiesFor(db, user)).cohortIds).toEqual(["cohort-a"]);
     database.exec('DELETE FROM programRole; DELETE FROM UserRoles');
-    expect(await capabilitiesFor(db, user)).toEqual({ spaces: ["community", "profile"], cohortIds: [], mentorCohortIds: [], isAdmin: false, isMentor: false, isInstitution: false });
+    expect(await capabilitiesFor(db, user)).toEqual({ spaces: ["community", "profile"], cohortIds: [], mentorCohortIds: [], teachingCohortIds: [], isAdmin: false, isMentor: false, isInstitution: false });
   });
 
   // Onboarding SPEC §1: a choice changes framing, never authority. Every valid intent set, with the
@@ -71,5 +73,42 @@ describe("capabilitiesFor", () => {
     vi.spyOn(db.query[table], "findMany").mockRejectedValueOnce(new Error("D1 unavailable"));
     await expect(capabilitiesFor(db, user)).rejects.toThrow("D1 unavailable");
   });
+});
 
+describe("channelAccessFor", () => {
+  it.each(CHANNEL_ACCESS_MATRIX)("$name", async (fixture) => {
+    const { db, user } = setup(fixture);
+    const capabilities = await capabilitiesFor(db, user);
+    for (const target of Object.keys(CHANNEL_TARGETS) as ChannelTarget[]) {
+      const access = channelAccessFor(capabilities, CHANNEL_TARGETS[target], { isMember: MEMBER_OF.has(target) });
+      expect({ target, access }).toEqual({ target, access: accessFromLetters(fixture.channels[target]) });
+    }
+  });
+
+  it("covers every role-matrix case and a mentor of another cohort", () => {
+    expect(CHANNEL_ACCESS_MATRIX.map(({ name }) => name)).toEqual([...CAPABILITY_ROLE_MATRIX.map(({ name }) => name), "mentor of another cohort"]);
+  });
+
+  it("an explicit membership opens only direct conversations, never another cohort's channels", async () => {
+    const { db, user } = setup({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
+    const capabilities = await capabilitiesFor(db, user);
+    for (const target of ["cohortB", "cohortBAnnouncements"] as const) {
+      expect(channelAccessFor(capabilities, CHANNEL_TARGETS[target], { isMember: true })).toEqual(accessFromLetters(""));
+    }
+    expect(channelAccessFor(capabilities, CHANNEL_TARGETS.community, { isMember: true })).toEqual(accessFromLetters("rp"));
+  });
+
+  it("a cohort channel without a program is never readable, even by admins", async () => {
+    const { db, user } = setup({ globalRoles: ["ADMIN"] });
+    const capabilities = await capabilitiesFor(db, user);
+    expect(channelAccessFor(capabilities, { ...CHANNEL_TARGETS.cohortA, programId: null })).toEqual(accessFromLetters(""));
+  });
+
+  it("signed-out capabilities read nothing, whatever the claimed membership", async () => {
+    const { db } = setup({ globalRoles: ["ADMIN"] });
+    const capabilities = await capabilitiesFor(db, null);
+    for (const target of Object.values(CHANNEL_TARGETS)) {
+      expect(channelAccessFor(capabilities, target, { isMember: true })).toEqual(accessFromLetters(""));
+    }
+  });
 });

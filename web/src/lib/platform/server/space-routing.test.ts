@@ -2,13 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { APIContext } from "astro";
 import { readMigration } from "@/test/sqlite-d1";
 import { createCapabilityDatabase } from "./capabilities.test-support";
-import { CAPABILITY_ROLE_MATRIX } from "./capabilities.fixtures";
-import { SPACE_PATHS, SPACE_REDIRECTS } from "./space-routes";
+import { accessFromLetters, CAPABILITY_ROLE_MATRIX, CHANNEL_ACCESS_MATRIX } from "./capabilities.fixtures";
+import { CONDUCT_PATH, SPACE_PATHS, SPACE_REDIRECTS } from "./space-routes";
 
 const mocks = vi.hoisted(() => ({ env: {} as Record<string, unknown> }));
 vi.mock("cloudflare:workers", () => ({ env: mocks.env }));
 import { routeSpaceRequest } from "./space-routing";
 import { getSpaceContext } from "./space-context";
+import { getRouteChannel } from "./channel-context";
+import { AGENT_SESSION_PREFIX } from "@/lib/agent-auth";
 
 let fixture: ReturnType<typeof createCapabilityDatabase>;
 function setup(input: Parameters<typeof createCapabilityDatabase>[0] = {}) {
@@ -553,3 +555,134 @@ describe("onboarding routing (B-O.4)", () => {
     });
   });
 });
+
+describe("channel pages (B-2.2)", () => {
+  const channels = (audience: "OFF" | "STAFF" | "ALL") =>
+    fixture.database.prepare("UPDATE feature_flag SET audience=? WHERE key='channels'").run(audience);
+  function setupChannels(input: Parameters<typeof setup>[0] = {}) {
+    setup(input);
+    fixture.database.exec(readMigration("0028_channels.sql"));
+    channels("ALL");
+  }
+  const slug = (seedKey: string) =>
+    (fixture.database.prepare("SELECT slug FROM channel WHERE seedKey=?").get(seedKey) as { slug: string }).slug;
+  const request = async (path: string, options: Parameters<typeof context>[1] = {}) => {
+    const { ctx, next } = context(path, options);
+    const response = await routeSpaceRequest(ctx, next);
+    return { ctx, next, response, status: response.status, body: await response.clone().text() };
+  };
+  const pages = () => [
+    `/dashboard/cohort/c/${slug("cohort:cohort-a:main")}`, `/dashboard/cohort/c/${slug("cohort:cohort-a:announcements")}`,
+    "/dashboard/community/c/help", CONDUCT_PATH,
+  ];
+
+  it.each([
+    ["OFF", ["ADMIN"]], ["OFF", []], ["STAFF", []],
+  ] as const)("are 404 for every method while channels is %s for the caller (roles %j)", async (audience, globalRoles) => {
+    setupChannels({ globalRoles: [...globalRoles], applications: [{ programId: "cohort-a", status: "APPROVED" }] });
+    channels(audience);
+    for (const path of pages()) {
+      for (const method of ["GET", "HEAD", "POST"]) {
+        const { status, next, response } = await request(path, { method });
+        expect({ path, method, status }).toEqual({ path, method, status: 404 });
+        expect(next).not.toHaveBeenCalled();
+        expect(response.headers.get("Cache-Control")).toBe("no-store");
+      }
+    }
+  });
+
+  it("open for staff while channels is STAFF", async () => {
+    setupChannels({ globalRoles: ["ADMIN"] });
+    channels("STAFF");
+    for (const path of pages()) expect((await request(path)).status).toBe(200);
+  });
+
+  it("are 404 while spaces is off, even with channels on", async () => {
+    setupChannels({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
+    fixture.database.exec("UPDATE feature_flag SET audience='OFF' WHERE key='spaces'");
+    for (const path of pages()) expect((await request(path)).status).toBe(404);
+  });
+
+  it.each(CHANNEL_ACCESS_MATRIX.filter((item) => item.signedIn !== false))("open exactly the channels $name can read; every other slug is the same 404", async (item) => {
+    setupChannels(item);
+    const missing = await request("/dashboard/cohort/c/cohort-99");
+    expect(missing.status).toBe(404);
+    const cases = [
+      [`/dashboard/cohort/c/${slug("cohort:cohort-a:main")}`, item.channels.cohortA],
+      [`/dashboard/cohort/c/${slug("cohort:cohort-a:announcements")}`, item.channels.cohortAAnnouncements],
+      [`/dashboard/cohort/c/${slug("cohort:cohort-b:main")}`, item.channels.cohortB],
+      ["/dashboard/community/c/introductions", item.channels.community],
+      // A slug only opens in its own space.
+      [`/dashboard/community/c/${slug("cohort:cohort-a:main")}`, ""],
+      ["/dashboard/cohort/c/introductions", ""],
+    ] as const;
+    for (const [path, letters] of cases) {
+      const result = await request(path);
+      if (accessFromLetters(letters).canRead) {
+        expect({ path, status: result.status }).toEqual({ path, status: 200 });
+        expect(result.next).toHaveBeenCalledExactlyOnceWith();
+        expect((await getRouteChannel(result.ctx))?.capabilities).toEqual((({ canRead: _r, ...rest }) => rest)(accessFromLetters(letters)));
+      } else {
+        // Indistinguishable from a slug that does not exist: no channel's existence leaks.
+        expect({ path, status: result.status, body: result.body, headers: [...result.response.headers] })
+          .toEqual({ path, status: 404, body: missing.body, headers: [...missing.response.headers] });
+        expect(result.next).not.toHaveBeenCalled();
+      }
+    }
+    // The code of conduct is for every signed-in person.
+    expect((await request(CONDUCT_PATH)).status).toBe(200);
+  });
+
+  it("pass the conduct form post to the page with its body", async () => {
+    setupChannels();
+    const { ctx } = context(CONDUCT_PATH, { method: "POST", body: "version=1" });
+    const next = vi.fn(async (rewrite?: string | URL | Request) => new Response(await (rewrite instanceof Request ? rewrite : ctx.request).text()));
+    const response = await routeSpaceRequest(ctx, next);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("version=1");
+    expect(response.headers.has("Set-Cookie")).toBe(false);
+  });
+
+  it("remember the space they belong to", async () => {
+    setupChannels({ applications: [{ programId: "cohort-a", status: "COMPLETED" }] });
+    expect((await request(`/dashboard/cohort/c/${slug("cohort:cohort-a:help")}`)).response.headers.get("Set-Cookie")).toMatch(/^ttv-last-space=cohort;/);
+    expect((await request("/dashboard/community/c/help")).response.headers.get("Set-Cookie")).toMatch(/^ttv-last-space=community;/);
+  });
+
+  it("look the channel up once per request, for the router and the page alike", async () => {
+    setupChannels({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
+    const { ctx, next } = context(`/dashboard/cohort/c/${slug("cohort:cohort-a:main")}`);
+    expect((await routeSpaceRequest(ctx, next)).status).toBe(200);
+    const prepare = vi.spyOn(mocks.env.DB as D1Database, "prepare");
+    expect(await getRouteChannel(ctx)).toMatchObject({ programId: "cohort-a", kind: "COHORT" });
+    expect(prepare).not.toHaveBeenCalled();
+    // A different identity on the same locals never reuses the lookup.
+    ctx.locals.user = { ...ctx.locals.user!, id: "synthetic-otieno" };
+    expect(await getRouteChannel(ctx)).toBeNull();
+  });
+
+  it("refuse personal access tokens and admit agent sessions only to what their person can read", async () => {
+    setupChannels({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
+    const own = `/dashboard/cohort/c/${slug("cohort:cohort-a:main")}`;
+    for (const path of [own, "/dashboard/community/c/help", CONDUCT_PATH]) {
+      const { ctx, next } = context(path);
+      ctx.locals.personalAccessToken = { scopes: ["admin:read"] } as never;
+      expect((await routeSpaceRequest(ctx, next)).status).toBe(403);
+      expect(next).not.toHaveBeenCalled();
+    }
+    for (const [path, status] of [[own, 200], [`/dashboard/cohort/c/${slug("cohort:cohort-b:main")}`, 404]] as const) {
+      const { ctx, next } = context(path);
+      ctx.locals.session = { userAgent: `${AGENT_SESSION_PREFIX}synthetic persona` } as never;
+      expect((await routeSpaceRequest(ctx, next)).status).toBe(status);
+    }
+  });
+
+  it("fail closed when the channel lookup fails", async () => {
+    setupChannels({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
+    fixture.database.exec("DROP TABLE channel_member");
+    const { ctx, next } = context("/dashboard/community/c/help");
+    await expect(routeSpaceRequest(ctx, next)).rejects.toThrow(/no such table|Failed query/);
+    expect(next).not.toHaveBeenCalled();
+  });
+});
+

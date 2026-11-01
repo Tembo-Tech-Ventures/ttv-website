@@ -7,8 +7,8 @@ idea 01M68GQAP1DCSVMRJMZS771ZRB, §3; wire contracts in
 
 ## Schema (B-2.1, migration `0028_channels.sql`)
 
-Timestamps are epoch milliseconds, like attention. Access is decided in
-`capabilitiesFor` (B-2.2), never by these tables.
+Timestamps are epoch milliseconds, like attention. Access is decided by
+`channelAccessFor` beside `capabilitiesFor` (B-2.2, below), never by these tables.
 
 | Table | Holds |
 |---|---|
@@ -19,6 +19,7 @@ Timestamps are epoch milliseconds, like attention. Access is decided in
 | `message_reaction` | One row per person, message and reaction from the fixed set (desired state, not a toggle) |
 | `message_report` | A member's report: one per person and message |
 | `moderation_event` | Append-only audit trail: who flagged, hid, restored or kept what, from which source, and why |
+| `channel_conduct` | (B-2.2, migration `0029_channel_conduct.sql`) One row per person: the latest code of conduct version they agreed to, and when |
 
 ### Invariants the database enforces
 
@@ -53,6 +54,71 @@ Deleting a person keeps their messages (author set to null) and the
 moderation history (actor set to null), and removes their reactions, reports,
 read markers and memberships. Deleting a channel, or the program a cohort
 channel belongs to, removes its messages and everything attached to them.
+
+## Access (B-2.2)
+
+`channelAccessFor(capabilities, channel, { isMember })` in
+`src/lib/platform/server/capabilities.ts` is the one rule set, over
+`capabilitiesFor`'s result. Pages, the channel APIs, search and Tembo all
+decide through it; `CHANNEL_ACCESS_MATRIX` in `capabilities.fixtures.ts` is
+the parameterised role matrix every surface can reuse.
+
+| Channel | Reads | Posts | Moderates |
+|---|---|---|---|
+| COMMUNITY | Every signed-in person, institutions included | Everyone who reads it | Admins and global mentors |
+| COHORT | That program's members (APPROVED, AUDIT and COMPLETED, so alumni stay after the cohort ends), its INSTRUCTOR, TA and MENTOR assignments, and admins | Everyone who reads it | Its instructors, TAs and mentors, and admins |
+| DIRECT | Explicit `channel_member` rows only (Phase 4) | Its members | Nobody in place |
+
+- **postingPolicy STAFF** (the `cNN-announcements` channels): only admins,
+  and on a cohort channel its instructors and TAs, post. Mentors and members
+  read.
+- **Archived** channels stay readable and take no new posts.
+- **Session clips** are shared only where every reader can see the
+  recording: a cohort channel the caller may post in.
+- Pending and rejected applicants have the Cohort space but no cohort
+  channels. A global MENTOR role moderates community channels only; a cohort
+  is joined through a per-program MENTOR assignment.
+- A `channel_member` row opens DIRECT conversations only. It never opens
+  another cohort's channels.
+- `teachingCohortIds` (INSTRUCTOR/TA assignments) is a server-only field of
+  `capabilitiesFor`; `Me` never serializes it.
+
+### Listing and opening channels
+
+`access.ts` holds the reads; callers own the `channels` flag.
+
+- `listChannelsFor(db, user, capabilities?)` → `Channel[]`: every channel the
+  caller can read, with its capabilities, in display order (cohort channels,
+  newest cohort first; then community; then direct; archived last in each
+  group; then position and name). `unreadCount` is 0 until B-2.3's read
+  markers. `lastMessageAt` is the newest message nobody hid or deleted. Four
+  reads (capabilitiesFor's three and one indexed channel read), or one when
+  the caller passes capabilities it already holds.
+- `findReadableChannel(db, user, { space, slug })` → `Channel | null`: a
+  cohort channel in Cohort, a community channel in Community. A missing slug,
+  a channel in the other space and a channel the caller cannot read all give
+  null, through the same queries.
+
+### Routes
+
+`/dashboard/cohort/c/<slug>`, `/dashboard/community/c/<slug>` and
+`/dashboard/community/conduct` (`space-routes.ts`) are 404 for every method
+until `channels` is on for the caller. A channel page is then 404 unless the
+caller can read that channel, whatever the reason, so no slug confirms that
+another cohort's channel exists. Personal access tokens get 403, as on every
+spaces page. The page frontmatter reads the same lookup through
+`getRouteChannel(Astro)` (`src/lib/platform/server/channel-context.ts`),
+once per request. Restricted staging identities may GET these pages only.
+
+### Code of conduct
+
+`conduct.ts`: `getConductAcknowledgement(db, userId)` and
+`acknowledgeConduct(db, userId, version?)` return a `ConductAcknowledgement`
+(`version`, `acknowledgedAt`, `current`). Raise `CONDUCT_VERSION` whenever the
+text changes in substance: `current` turns false for everyone who agreed to
+an older version, so the page asks again. An agreement never moves back, and
+agreeing again to the same version keeps its date. Whether a first post
+requires a current agreement is B-2.3's decision.
 
 ## Seeded channels
 
@@ -105,4 +171,7 @@ rename while the view or trigger names a missing table, and dropping
 `program` silently drops the hook. The migration test applies every
 migration and fails if new programs stop getting their channels.
 
-Tests: `src/lib/db/migrations/channels-migration.test.ts`.
+Tests: `src/lib/db/migrations/channels-migration.test.ts`,
+`channel-conduct-migration.test.ts`, `access.test.ts` and `conduct.test.ts`
+beside this file, `src/lib/platform/server/capabilities.test.ts` (the role
+matrix) and `space-routing.test.ts` (the routes).

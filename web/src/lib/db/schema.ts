@@ -1461,3 +1461,16 @@ export const moderationEvent = sqliteTable("moderation_event", {
   check("moderation_event_reasons_check", sql`${isJsonArray(table.reasons)} AND json_array_length(${table.reasons}) > 0`),
   check("moderation_event_time_check", sql`${table.createdAt} >= 0`),
 ]);
+
+/**
+ * A person's agreement to "How we talk to each other" (B-2.2): the latest version they accepted.
+ * A new CONDUCT_VERSION (src/lib/channels/conduct.ts) asks everyone again.
+ */
+export const channelConduct = sqliteTable("channel_conduct", {
+  userId: text("userId").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  acknowledgedAt: integer("acknowledgedAt").notNull(),
+}, (table) => [
+  check("channel_conduct_version_check", sql`${table.version} >= 1`),
+  check("channel_conduct_time_check", sql`${table.acknowledgedAt} >= 0`),
+]);

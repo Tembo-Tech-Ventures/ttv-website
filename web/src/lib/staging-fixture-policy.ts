@@ -1,4 +1,4 @@
-import { SPACES_APPLY_PATH, SPACES_MARK_READ_PATH, SPACES_READ_PATHS } from "./staging-demo-policy";
+import { SPACES_APPLY_PATH, SPACES_MARK_READ_PATH, spacesReadPathAllowed } from "./staging-demo-policy";
 import { legacySpacePath } from "./platform/server/space-routes";
 
 /** A synthetic fixture never inherits real admin, recording or credential surfaces. */
@@ -10,5 +10,5 @@ export function stagingFixturePathAllowed(pathname: string, method: string): boo
   if (path === SPACES_MARK_READ_PATH) return method === "POST";
   if (method !== "GET" && method !== "HEAD") return false;
   // The cohort space home is also the spaces entry, which redirects to an allowed space.
-  return path === "/dashboard" || SPACES_READ_PATHS.has(path) || path === SPACES_APPLY_PATH;
+  return path === "/dashboard" || spacesReadPathAllowed(path) || path === SPACES_APPLY_PATH;
 }

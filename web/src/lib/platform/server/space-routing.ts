@@ -10,9 +10,10 @@ import { stagingFixturePathAllowed } from "@/lib/staging-fixture-policy";
 import {
   acknowledgedRole, grantedHintSpace, parseWelcomeHint, selectLandingSpace, WELCOME_LEGACY_PATHS, welcomeDue,
 } from "./onboarding-routing";
+import { getRouteChannel } from "./channel-context";
 import { getSpaceContext } from "./space-context";
 import {
-  canonicalSpacePath, isAvailableSpacePath, isNewSpacePath, legacySpacePath,
+  canonicalSpacePath, channelRoute, isAvailableSpacePath, isChannelPagePath, isNewSpacePath, legacySpacePath,
   normalizeSpacePath, SPACE_PATHS, spaceForPath, WELCOME_PATH,
 } from "./space-routes";
 
@@ -102,11 +103,23 @@ async function acknowledgeApproval({ locals }: APIContext, me: Me, space: SpaceI
   else await write;
 }
 
+/**
+ * A page that does not exist for this caller. Channel pages exist only with the flag on, and a channel
+ * the caller cannot read is missing whatever the reason (no such slug, another space, another cohort),
+ * so no slug confirms that a channel exists.
+ */
+async function pageMissing(context: APIContext, me: Me, target: string): Promise<boolean> {
+  if (!isAvailableSpacePath(target)) return true;
+  if (!isChannelPagePath(target)) return false;
+  if (!me.flags.channels) return true;
+  return channelRoute(target) !== null && !await getRouteChannel(context);
+}
+
 async function serveSpacePage(context: APIContext, next: MiddlewareNext, me: Me, canonical: string | null): Promise<Response> {
   const { request, url } = context;
   const path = normalizeSpacePath(url.pathname);
   const target = canonical ?? path;
-  if (!isAvailableSpacePath(target)) return denial(404);
+  if (await pageMissing(context, me, target)) return denial(404);
   const space = spaceForPath(target);
   // These existing signed-in pages do not grant cohort or recording access.
   const signedInEntry = target === "/dashboard/cohort/apply" || target === "/dashboard/cohort/ask";
