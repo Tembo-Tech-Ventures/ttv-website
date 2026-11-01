@@ -8,6 +8,8 @@ import type { CommunityProfile, JourneyClaim } from "../discovery/types";
 import ClaimConfirmations from "../discovery/ClaimConfirmations";
 import { UiApiError, displayUiError } from "../discovery/ui-errors";
 import ProfileEditor, { type EditableCommunityProfile } from "./ProfileEditor";
+import { PARTNER } from "@/components/platform/onboarding/copy";
+import type { CommunityFraming } from "@/components/platform/onboarding/framing";
 
 export interface ClaimDraft {
   title: string;
@@ -49,12 +51,20 @@ export function validateClaimDraft(draft: ClaimDraft): string | null {
 export default function JourneyWorkspace({
   profile: initialProfile,
   demo = false,
+  framing = "member",
   onSave,
   onUpdate,
   onSaveProfile,
 }: {
   profile: CommunityProfile;
   demo?: boolean;
+  /**
+   * How onboarding frames Community for this person (platform/onboarding/framing.ts).
+   * Someone just looking around has a welcome card above instead of the first
+   * contribution prompt; mentors and organisations keep their own work under
+   * its own name, without a student's prompt.
+   */
+  framing?: CommunityFraming;
   onSave?: (draft: ClaimDraft) => Promise<JourneyClaim>;
   onUpdate?: (claim: JourneyClaim, draft: ClaimDraft) => Promise<JourneyClaim>;
   onSaveProfile?: (
@@ -207,7 +217,7 @@ export default function JourneyWorkspace({
           )}
           <div className="discovery-results-bar">
             <div>
-              <h2>Your journey</h2>
+              <h2>{framing === "partner" ? PARTNER.ownWork : "Your journey"}</h2>
             </div>
             <button
               className="discovery-button"
@@ -338,7 +348,7 @@ export default function JourneyWorkspace({
               </li>
             ))}
           </ol>
-          {claims.length === 0 && (
+          {claims.length === 0 && framing === "member" && (
             <div className="discovery-empty">
               <h3>Your first contribution belongs here.</h3>
               <p>

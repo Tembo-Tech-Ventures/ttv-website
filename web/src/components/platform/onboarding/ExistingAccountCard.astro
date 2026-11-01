@@ -1,0 +1,81 @@
+---
+/**
+ * The one-time card for accounts from before onboarding (SPEC §2, S4), at the
+ * top of whichever space they land in. It asks how they take part now, with
+ * what their roles and cohort history suggest already ticked. "Save" records
+ * it (and goes on to the request step if they ticked access they don't have);
+ * "Not now" hides the card for good. Either way nothing they have changes.
+ *
+ * It is a plain form, so both work without JavaScript. On a phone, with a
+ * script, it starts compact (title, one line, Choose / Not now) so the page's
+ * own task stays above the fold, and Choose opens the toggles.
+ */
+import { ACCOUNT_PATH, ACTION_FIELD, RETURN_FIELD } from "./account-actions";
+import { CHOICES, PROMPT, WELCOME, type ChoiceIntent } from "./copy";
+import type { OnboardingView } from "./framing";
+import { action } from "./styles";
+// oxlint-disable-next-line import/no-unassigned-import -- Card stylesheet.
+import "./framing.css";
+
+interface Props {
+  prompt: NonNullable<OnboardingView["prompt"]>;
+  /** The page the form returns to. */
+  returnTo: string;
+}
+
+const { prompt, returnTo } = Astro.props;
+/** Where a held role or a waiting request already stands, else whether it is open or needs approval. */
+function aside(intent: ChoiceIntent, needsApproval: boolean): string {
+  const status = prompt.statuses[intent];
+  if (status === "active") return WELCOME.active;
+  if (status === "pending") return WELCOME.pending;
+  return needsApproval ? WELCOME.needsApproval : WELCOME.open;
+}
+---
+
+<section aria-labelledby="onboarding-prompt-title" data-onboarding-prompt class="onboarding-prompt">
+  <form method="post" action={ACCOUNT_PATH} class="onboarding-prompt__form">
+    <input type="hidden" name={RETURN_FIELD} value={returnTo} />
+    <div class="onboarding-prompt__head">
+      <h2 id="onboarding-prompt-title" class="text-lg leading-snug font-bold text-ink-primary sm:text-[1.1875rem]">{PROMPT.title}</h2>
+      <p class="onboarding-prompt__body mt-1 text-[0.9375rem] leading-relaxed text-ink-secondary">{PROMPT.body}</p>
+    </div>
+    <div class="onboarding-prompt__actions">
+      <button type="submit" name={ACTION_FIELD} value="save-prompt" class:list={["onboarding-prompt__save", action("primary")]}>{PROMPT.save}</button>
+      <button
+        type="button"
+        data-prompt-choose
+        aria-expanded="false"
+        aria-controls="onboarding-prompt-options"
+        class:list={["onboarding-prompt__choose", action("primary")]}
+      >{PROMPT.choose}</button>
+      <button type="submit" name={ACTION_FIELD} value="dismiss-prompt" class:list={action("quiet")}>{PROMPT.notNow}</button>
+    </div>
+    <fieldset id="onboarding-prompt-options" class="onboarding-prompt__options">
+      <legend class="sr-only">{PROMPT.title}</legend>
+      {CHOICES.map((choice) => (
+        <label class="onboarding-toggle" data-intent={choice.intent.toLowerCase()}>
+          <input type="checkbox" name="intent" value={choice.intent} checked={prompt.selected.includes(choice.intent)} class="onboarding-toggle__input" />
+          <span aria-hidden="true" class="onboarding-toggle__box">
+            <svg viewBox="0 0 16 16" fill="none" class="onboarding-toggle__tick"><path d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </span>
+          <span class="onboarding-toggle__label">{choice.title}</span>
+          <span class="onboarding-toggle__aside"><span class="sr-only">, </span>{aside(choice.intent, choice.needsApproval)}</span>
+        </label>
+      ))}
+    </fieldset>
+    <p class="onboarding-prompt__note text-sm text-ink-secondary">{PROMPT.note}</p>
+  </form>
+</section>
+
+<script>
+  // Phones start compact (framing.css, only when scripts run); Choose opens the toggles and moves focus to them.
+  for (const card of document.querySelectorAll<HTMLElement>("[data-onboarding-prompt]")) {
+    const choose = card.querySelector<HTMLButtonElement>("[data-prompt-choose]");
+    choose?.addEventListener("click", () => {
+      card.dataset.expanded = "";
+      choose.setAttribute("aria-expanded", "true");
+      card.querySelector<HTMLInputElement>(".onboarding-toggle__input")?.focus();
+    });
+  }
+</script>

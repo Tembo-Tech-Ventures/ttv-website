@@ -3,15 +3,18 @@ import { meByPersona } from "@/lib/platform/fixtures";
 import { createCapabilityDatabase } from "@/lib/platform/server/capabilities.test-support";
 import { DEMO_PERSONAS } from "@/lib/staging-demo-policy";
 
-const mocks = vi.hoisted(() => ({ getSpaceContext: vi.fn() }));
-vi.mock("cloudflare:workers", () => ({ env: {} }));
+const mocks = vi.hoisted(() => ({ getSpaceContext: vi.fn(), getOnboardingState: vi.fn(), recordError: vi.fn() }));
+vi.mock("cloudflare:workers", () => ({ env: { DB: "synthetic-d1" } }));
 vi.mock("@/lib/platform/server/space-context", () => ({ getSpaceContext: mocks.getSpaceContext }));
+vi.mock("@/lib/onboarding/service", () => ({ getOnboardingState: mocks.getOnboardingState }));
+vi.mock("@/lib/observability/errors", () => ({ recordError: mocks.recordError }));
 import { DASHBOARD_LINKS } from "@/components/shells/DashboardShell";
 import type { StudentNextStep } from "@/lib/student/journey";
 import {
   inSpacesWords,
   linkAllowed,
   loadCertificates,
+  loadOnboarding,
   pickSpace,
   resolveSpacePage,
   restrictedHrefs,
@@ -24,7 +27,14 @@ const off = { ...meByPersona.amina, flags: { ...meByPersona.amina.flags, spaces:
 
 afterEach(() => {
   mocks.getSpaceContext.mockReset();
+  mocks.getOnboardingState.mockReset();
+  mocks.recordError.mockReset();
 });
+
+const PENDING = {
+  stage: "DONE", intents: ["MENTOR"], inferred: [], roles: [],
+  requests: [{ id: "r1", role: "MENTOR", status: "PENDING", note: "Backend reviews for small teams.", organisation: null, organisationRole: null, link: null, decisionMessage: null, createdAt: 1, updatedAt: 1, decidedAt: null, seenAt: null }],
+};
 
 describe("pickSpace", () => {
   it("opens applying and Ask Tembo in Community until the person has a cohort", () => {
@@ -54,10 +64,14 @@ describe("pickSpace", () => {
 });
 
 describe("resolveSpacePage", () => {
-  it("returns the person, space and page when spaces is on", async () => {
+  it("returns the person, space and page when spaces is on, with how onboarding frames it", async () => {
     mocks.getSpaceContext.mockResolvedValue(meByPersona.lucy);
-    await expect(resolveSpacePage(locals, "apply")).resolves.toEqual({ me: meByPersona.lucy, space: "community", page: "apply" });
+    mocks.getOnboardingState.mockResolvedValue(PENDING);
+    await expect(resolveSpacePage(locals, "apply")).resolves.toMatchObject({
+      me: meByPersona.lucy, space: "community", page: "apply", onboarding: { framing: "partner", pending: ["MENTOR"] },
+    });
     expect(mocks.getSpaceContext).toHaveBeenCalledWith({ locals });
+    expect(mocks.getOnboardingState).toHaveBeenCalledWith("synthetic-d1", meByPersona.lucy.user.id);
   });
 
   it("keeps the existing dashboard when the flag is off for the person", async () => {
@@ -75,6 +89,51 @@ describe("resolveSpacePage", () => {
   it("keeps the existing dashboard, and grants nothing, when the context cannot load", async () => {
     mocks.getSpaceContext.mockRejectedValue(new Error("D1 unavailable"));
     await expect(resolveSpacePage(locals, "account")).resolves.toBeNull();
+  });
+});
+
+describe("loadOnboarding", () => {
+  const lucy = meByPersona.lucy;
+  const flagOff = { ...lucy, flags: { ...lucy.flags, onboarding: false } };
+
+  it("reads the person's onboarding for the landing pages, Account and every Community page", async () => {
+    mocks.getOnboardingState.mockResolvedValue(PENDING);
+    for (const [space, page] of [["community", "journey"], ["community", "apply"], ["cohort", "cohort"], ["mentoring", "mentoring"], ["discover", "discover"], ["profile", "account"]] as const) {
+      expect.soft(await loadOnboarding(locals, lucy, space, page)).toMatchObject({ cards: [{ kind: "pending", role: "MENTOR" }] });
+    }
+  });
+
+  it("reads nothing for other pages, which onboarding does not change", async () => {
+    for (const [space, page] of [["cohort", "sessions"], ["profile", "portfolio"], ["mentoring", "confirm"], ["cohort", "apply"]] as const) {
+      await expect(loadOnboarding(locals, lucy, space, page)).resolves.toBeNull();
+    }
+    expect(mocks.getOnboardingState).not.toHaveBeenCalled();
+  });
+
+  it("is null, and reads nothing, while onboarding is off for the person: the pages stay exactly as they were", async () => {
+    await expect(loadOnboarding(locals, flagOff, "community", "journey")).resolves.toBeNull();
+    await expect(loadOnboarding(locals, { ...lucy, flags: { ...lucy.flags, spaces: false } }, "community", "journey")).resolves.toBeNull();
+    expect(mocks.getOnboardingState).not.toHaveBeenCalled();
+  });
+
+  it("never shows to restricted synthetic identities, personal access tokens or an agent's delegated session", async () => {
+    const restricted = [
+      { stagingFixture: { persona: "member" } },
+      { stagingDemo: { persona: "mentor", expiresAt: 0 } },
+      { stagingQa: { persona: "member-noncohort" } },
+      { personalAccessToken: { id: "pat" } },
+      { session: { userAgent: "ttv-agent:01EXAMPLE" } },
+    ];
+    for (const extra of restricted) {
+      expect.soft(await loadOnboarding({ ...locals, ...extra } as unknown as App.Locals, lucy, "community", "journey")).toBeNull();
+    }
+    expect(mocks.getOnboardingState).not.toHaveBeenCalled();
+  });
+
+  it("keeps the framing from before onboarding when the read fails, and records why", async () => {
+    mocks.getOnboardingState.mockRejectedValue(new Error("D1 unavailable"));
+    await expect(loadOnboarding(locals, lucy, "community", "journey")).resolves.toBeNull();
+    expect(mocks.recordError).toHaveBeenCalledWith("synthetic-d1", expect.objectContaining({ route: "/dashboard/community", level: "warning" }));
   });
 });
 

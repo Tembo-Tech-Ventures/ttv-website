@@ -17,14 +17,20 @@
 import { env } from "cloudflare:workers";
 import WelcomeScreen from "@/components/platform/onboarding/WelcomeScreen.astro";
 import { onboardingActions } from "@/components/platform/onboarding/server-actions";
-import { handleWelcome, onboardingOpen, type WelcomeRoutes } from "@/components/platform/onboarding/welcome-flow";
+import { handleWelcome, onboardingOpen, parseRoleFilter, type WelcomeRoutes } from "@/components/platform/onboarding/welcome-flow";
 import { shellAccount } from "@/components/platform/shell/account";
 import { isAgentSession } from "@/lib/agent-auth";
 import { getSpaceContext } from "@/lib/platform/server/space-context";
 import { WELCOME_PATH } from "@/lib/platform/server/space-routes";
 
 // WELCOME_PATH is where B-O.4 routes new accounts; /dashboard picks the space after it.
-const ROUTES: WelcomeRoutes = { choose: WELCOME_PATH, request: `${WELCOME_PATH}?step=request`, landing: "/dashboard" };
+// Account's "Request access" asks about one role (?role=); the request form keeps asking about only that one.
+const only = parseRoleFilter(Astro.url.searchParams);
+const ROUTES: WelcomeRoutes = {
+  choose: WELCOME_PATH,
+  request: `${WELCOME_PATH}?step=request${only ? `&role=${only.toLowerCase()}` : ""}`,
+  landing: "/dashboard",
+};
 const PRIVATE = { "Cache-Control": "no-store", Vary: "Cookie" };
 const notFound = () => new Response("Not found.", { status: 404, headers: PRIVATE });
 

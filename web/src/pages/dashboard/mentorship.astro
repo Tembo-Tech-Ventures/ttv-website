@@ -3,6 +3,7 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 import CommunityApp from "@/components/community/CommunityApp";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import MentoringOverview from "@/components/platform/spaces/MentoringOverview.astro";
+import OnboardingNotices from "@/components/platform/onboarding/OnboardingNotices.astro";
 import { awaitingConfirmation } from "@/components/platform/spaces/awaiting-confirmation";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import { normalizeSpacePath, SPACE_PATHS } from "@/lib/platform/server/space-routes";
@@ -20,6 +21,7 @@ const spaces =
 {
   spaces?.page === "mentoring" ? (
     <SpacePage context={spaces} title="Mentoring">
+      {spaces.onboarding && <OnboardingNotices view={spaces.onboarding} space={spaces.space} />}
       <MentoringOverview awaiting={awaitingConfirmation(spaces.me)} />
     </SpacePage>
   ) : spaces ? (

@@ -69,3 +69,40 @@ cut: no lift animation, no sheet transition. Focus lands on the step's heading
 page load; if choosing reads as decoration rather than selection (the ticked
 state must be readable in a still frame); if any card's edge crosses its
 neighbour; or if focus is lost across a step.
+
+# Intent-aware framing (U-O.2)
+
+What onboarding changes on the pages people land on (SPEC §2 S3–S5, §3; screens
+`03`–`05` and `07`). Intents choose words and order only. Every card that says
+something about access follows the request and the role held, never the
+intent alone.
+
+- `framing.ts` reads `getOnboardingState` into an `OnboardingView`: the Community
+  framing (`member`, `exploring` or `partner`), the status cards, the one-time
+  card for older accounts, the granted roles for "Your spaces", and the pending
+  requests for the sidebar. Inferred intents apply only while nothing is saved.
+- `spaces/space-page.ts` (`loadOnboarding`) loads it into the spaces context for
+  the landing pages (Cohort, Community, Mentoring, Discover), Account and every
+  Community page. It is null, and nothing changes, while the `onboarding` flag
+  is off for the person, for restricted staging identities, for personal access
+  tokens and for agents' delegated sessions. A failed read is recorded and the
+  page keeps the framing it had before onboarding.
+- `OnboardingNotices.astro` sits at the top of a landing page: the one-time card
+  (`ExistingAccountCard.astro`, S4), the status cards (`StatusCard.astro`, S3)
+  and, in Community, the welcome for someone just looking around and the
+  "Your spaces" line. An approval is announced everywhere but in the space it
+  opened, since opening that space marks it seen.
+- Community: `partner` (chose to mentor or find people, and not to build and
+  learn) drops the cohort invitation and "Apply to a cohort", and names the
+  journey "Your own work"; `exploring` keeps the invitation and replaces the
+  first-contribution prompt with the welcome. The sidebar lists pending
+  requests under "Your requests", each opening Account: a request is never a tab.
+- `TakingPart.astro` is Account → "How you take part" (S5): the Build and learn
+  switch, and one state per access (Not requested, Pending, Not approved,
+  Active) with the one thing that can be done about it.
+- `account-actions.ts`: every form above is a plain form posting to Account,
+  which answers with a redirect back to the page it came from (a fixed list,
+  never an arbitrary URL), so all of it works without JavaScript. Asking for
+  access goes on to the request step, narrowed with `?role=` to that access
+  alone; the request step is what an administrator decides.
+- No analytics: nothing here records or counts choices.

@@ -174,4 +174,55 @@ describe("space sidebars", () => {
     expect(labels(joseph)).toEqual(["Discover people"]);
     expect(current(joseph)).toEqual(["Discover people"]);
   });
+
+  describe("Community, framed by onboarding (SPEC §3)", () => {
+    const groupLabels = (model: SidebarModel) => model.groups.map((group) => group.label ?? "");
+
+    it("is exactly as before while onboarding is off for the person", () => {
+      for (const onboarding of [undefined, null]) {
+        expect(spaceSidebar("community", facts(meByPersona.lucy, "journey", { onboarding }))).toEqual(spaceSidebar("community", facts(meByPersona.lucy, "journey")));
+      }
+    });
+
+    it("keeps the way to apply for members and for someone just looking around", () => {
+      for (const framing of ["member", "exploring"] as const) {
+        const model = spaceSidebar("community", facts(meByPersona.lucy, "journey", { onboarding: { framing, pending: [] } }));
+        expect(labels(model)).toContain("Apply to a cohort");
+        expect(labels(model)).toContain("Your journey");
+      }
+    });
+
+    it("does not ask mentors and organisations to apply, and names their work their own", () => {
+      const model = spaceSidebar("community", facts(meByPersona.lucy, "journey", { onboarding: { framing: "partner", pending: [] } }));
+      expect(labels(model)).not.toContain("Apply to a cohort");
+      expect(groupLabels(model)).not.toContain("Cohorts");
+      expect(labels(model)[0]).toBe("Your own work");
+      expect(current(model)).toEqual(["Your own work"]);
+    });
+
+    it("lists pending requests under Your requests, each opening Account, as a status and never a tab", () => {
+      const model = spaceSidebar("community", facts(meByPersona.lucy, "journey", { onboarding: { framing: "member", pending: ["MENTOR", "INSTITUTION"] } }));
+      const requests = model.groups.find((group) => group.label === "Your requests")!;
+      expect(requests.items).toEqual([
+        expect.objectContaining({ label: "Mentor access", href: "/dashboard/account#taking-part", icon: "mentorRequest", note: "Pending", noteTone: "ring", current: false }),
+        expect.objectContaining({ label: "Organisation access", href: "/dashboard/account#taking-part", icon: "institutionRequest", note: "Pending" }),
+      ]);
+      expect(groupLabels(model).at(-1)).toBe("Your requests");
+      expect(groupLabels(spaceSidebar("community", facts(meByPersona.lucy, "journey", { onboarding: { framing: "member", pending: [] } })))).not.toContain("Your requests");
+    });
+
+    it("lists requests only in Community", () => {
+      const onboarding = { framing: "member" as const, pending: ["MENTOR" as const] };
+      for (const [space, page] of [["profile", "account"], ["cohort", "cohort"]] as const) {
+        expect(labels(spaceSidebar(space, facts(meByPersona.wanjiku, page, { onboarding })))).not.toContain("Mentor access");
+      }
+    });
+
+    it("drops a request entry a restricted identity could not follow", () => {
+      const model = spaceSidebar("community", facts(meByPersona.lucy, "journey", {
+        onboarding: { framing: "member", pending: ["MENTOR"] }, allowed: (href) => !href.startsWith("/dashboard/account"),
+      }));
+      expect(groupLabels(model)).not.toContain("Your requests");
+    });
+  });
 });

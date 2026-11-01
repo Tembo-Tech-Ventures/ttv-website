@@ -340,9 +340,18 @@ test.describe("an institution", () => {
     await open(page, "/dashboard/discover");
     await expect(page.getByRole("heading", { level: 1, name: "Find the person. See the work." })).toBeVisible();
     await expect(page.locator("#space-sidebar a[aria-current='page']")).toHaveText("Discover people");
-    // An institution has no Cohort space, so Community offers the way to apply like any member.
     await open(page, "/dashboard/community");
-    await expect(page.locator("[data-cohort-invitation]")).toBeVisible();
+    // Onboarding (U-O.2) frames Community by how a person takes part. An institution that has not
+    // chosen to build and learn is not asked to apply; "Your spaces" leads back to Discover. With
+    // onboarding off, or for an agent's delegated session (every preview persona), Community offers
+    // the way to apply like any member's, as before.
+    const me = (await (await page.request.get("/api/platform/me")).json()) as { flags: { onboarding?: boolean } };
+    if (me.flags.onboarding && !process.env.PLAYWRIGHT_BASE_URL) {
+      await expect(page.locator("[data-cohort-invitation]")).toHaveCount(0);
+      await expect(page.locator("[data-onboarding-spaces]").getByRole("link", { name: "Open Discover" })).toBeVisible();
+    } else {
+      await expect(page.locator("[data-cohort-invitation]")).toBeVisible();
+    }
   });
 });
 

@@ -8,7 +8,9 @@ import {
   PiCertificate,
   PiChatCircleText,
   PiChatsCircle,
+  PiCircle,
   PiCompass,
+  PiDiamond,
   PiHandshake,
   PiEnvelopeSimple,
   PiIdentificationCard,
@@ -55,6 +57,9 @@ const ICONS: Record<SidebarIcon, Icon> = {
   account: PiUserCircle,
   feedback: PiChatCircleText,
   admin: PiWrench,
+  // A request carries its person marker's shape: mentors are rings, institutions diamonds.
+  mentorRequest: PiCircle,
+  institutionRequest: PiDiamond,
 };
 
 const { model } = Astro.props;
@@ -73,6 +78,7 @@ const { model } = Astro.props;
           count={entry.count}
           countLabel={entry.countLabel}
           note={entry.note}
+          noteTone={entry.noteTone}
           publicPage={entry.publicPage}
         />
       ))}

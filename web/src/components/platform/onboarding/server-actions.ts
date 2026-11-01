@@ -1,6 +1,8 @@
 import {
-  OnboardingError, createAccessRequest, getOnboardingState, saveIntents, type OnboardingErrorCode,
+  OnboardingError, createAccessRequest, dismissPrompt, getOnboardingState, markAccessRequestSeen, saveIntents,
+  withdrawAccessRequest, type OnboardingErrorCode,
 } from "@/lib/onboarding/service";
+import type { AccountActions } from "./account-actions";
 import type { WelcomeActions } from "./welcome-flow";
 
 /** The HTTP meaning of each refusal, as the onboarding routes answer it, so the flow treats both alike. */
@@ -44,5 +46,29 @@ export function onboardingActions(db: D1Database, userId: string): WelcomeAction
       }
       return load();
     },
+  };
+}
+
+/** Runs a write, translating the service's refusals into the statuses the forms read. */
+async function attempt(write: () => Promise<void>): Promise<void> {
+  try {
+    await write();
+  } catch (error) {
+    throw refusal(error);
+  }
+}
+
+/**
+ * The server functions behind the onboarding forms on the landing pages and
+ * Account (account-actions.ts), for one signed-in person. As above, the caller
+ * has already checked the browser session and the flag.
+ */
+export function accountActions(db: D1Database, userId: string): AccountActions {
+  return {
+    load: () => getOnboardingState(db, userId),
+    saveIntents: (intents) => attempt(() => saveIntents(db, userId, intents)),
+    dismissPrompt: () => attempt(() => dismissPrompt(db, userId)),
+    withdraw: (id) => attempt(() => withdrawAccessRequest(db, userId, id)),
+    dismissRequest: (id) => attempt(() => markAccessRequestSeen(db, userId, { id })),
   };
 }

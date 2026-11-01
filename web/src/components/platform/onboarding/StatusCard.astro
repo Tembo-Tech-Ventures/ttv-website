@@ -1,0 +1,105 @@
+---
+/**
+ * One status card at the top of a landing page (onboarding SPEC §2, S3): a
+ * request that is pending, or a decision the person has not dismissed yet.
+ * It always says what the request and the role say, never what the person
+ * merely chose, and promises nothing about timing. A decline carries the
+ * administrator's optional message as plain text, and never their name.
+ */
+import PersonMarker from "@/components/platform/ui/PersonMarker";
+import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
+import { formatMomentDate } from "@/lib/display-date";
+import { ACCOUNT_PATH, ACTION_FIELD, RETURN_FIELD, TAKING_PART_ID } from "./account-actions";
+import { REQUEST, STATUS } from "./copy";
+import { ROLE_SPACES, type StatusCard } from "./framing";
+import { SEAL, action } from "./styles";
+
+interface Props {
+  card: StatusCard;
+  /** The page the card's forms return to. */
+  returnTo: string;
+}
+
+const { card, returnTo } = Astro.props;
+const titleId = `onboarding-status-${card.role.toLowerCase()}`;
+const marker = card.role === "MENTOR" ? "mentor" : "institution";
+const title = card.kind === "pending" ? STATUS.pending[card.role].title
+  : card.kind === "approved" ? STATUS.approved[card.role].title
+  : STATUS.declined.title[card.role];
+const TONES = {
+  pending: "border-ring/30 bg-linear-to-r from-ring/9 to-ink-primary/3",
+  approved: "border-primary/45 bg-linear-to-r from-primary/12 to-ink-primary/3",
+  declined: "border-hairline bg-ink-primary/4",
+} as const;
+// Read with the title: "Dismiss" alone would not say which card it closes.
+const subject = REQUEST.sections[card.role].toLowerCase();
+---
+
+<section
+  aria-labelledby={titleId}
+  data-onboarding-status={card.kind}
+  data-role={card.role}
+  class:list={[
+    "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-4 rounded-[1.125rem] border p-5",
+    "sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-x-5 sm:p-6",
+    TONES[card.kind],
+  ]}
+>
+  <span aria-hidden="true" class={SEAL}>
+    <PersonMarker kind={marker} className="scale-150" />
+  </span>
+  <div class="min-w-0">
+    <h2 id={titleId} class="text-lg leading-snug font-bold text-ink-primary">{title}</h2>
+    {card.kind === "pending" && (
+      <>
+        <p class="mt-1 text-[0.9375rem] leading-relaxed text-ink-secondary">
+          {STATUS.pending[card.role].body}
+          {card.role === "INSTITUTION" && (
+            <>
+              {" "}{STATUS.institutionsPage.before}<a href="/community/institutions" class="font-semibold text-ink-primary underline underline-offset-3 hover:text-peach-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink">{STATUS.institutionsPage.link}</a>{STATUS.institutionsPage.after}
+            </>
+          )}
+        </p>
+        <p class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-muted">
+          <span>{STATUS.sent(formatMomentDate(new Date(card.sentAt)))}</span>
+          <span>{STATUS.pending[card.role].opens}</span>
+        </p>
+      </>
+    )}
+    {card.kind === "approved" && (
+      <p class="mt-1 text-[0.9375rem] leading-relaxed text-ink-secondary">{STATUS.approved[card.role].body}</p>
+    )}
+    {card.kind === "declined" && (
+      <p class="mt-1 text-[0.9375rem] leading-relaxed text-ink-secondary">
+        {card.message && <span data-decision-message class="break-words">“{card.message}”{" "}</span>}
+        {STATUS.declined.body}
+      </p>
+    )}
+  </div>
+  <div class="col-span-2 flex flex-wrap items-center gap-2 sm:col-span-1 sm:justify-end">
+    {card.kind === "pending" && (
+      <a href={`${ACCOUNT_PATH}#${TAKING_PART_ID}`} class:list={[action("quiet"), "max-sm:flex-1"]}>
+        {STATUS.view}<span class="sr-only">: {subject}</span>
+      </a>
+    )}
+    {card.kind === "approved" && (
+      <a href={SPACE_PATHS[ROLE_SPACES[card.role]]} class:list={action("primary")}>{STATUS.approved[card.role].open}</a>
+    )}
+    {card.kind === "declined" && (
+      <form method="post" action={ACCOUNT_PATH}>
+        <input type="hidden" name={ACTION_FIELD} value="request" />
+        <input type="hidden" name="role" value={card.role} />
+        <input type="hidden" name={RETURN_FIELD} value={returnTo} />
+        <button type="submit" class:list={action("quiet")}>{STATUS.declined.again}<span class="sr-only">: {subject}</span></button>
+      </form>
+    )}
+    {card.kind !== "pending" && (
+      <form method="post" action={ACCOUNT_PATH}>
+        <input type="hidden" name={ACTION_FIELD} value="dismiss" />
+        <input type="hidden" name="id" value={card.id} />
+        <input type="hidden" name={RETURN_FIELD} value={returnTo} />
+        <button type="submit" class:list={action("ghost")}>{STATUS.dismiss}<span class="sr-only">: {title}</span></button>
+      </form>
+    )}
+  </div>
+</section>

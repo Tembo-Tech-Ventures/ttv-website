@@ -39,6 +39,20 @@ describe("community contribution editor", () => {
     );
     expect(html).toContain("Your first contribution belongs here");
   });
+  it("frames the journey as onboarding says, member framing by default", () => {
+    const empty = { ...demoProfiles[0], claims: [] };
+    const member = renderToStaticMarkup(<JourneyWorkspace profile={empty} framing="member" />);
+    expect(member).toBe(renderToStaticMarkup(<JourneyWorkspace profile={empty} />));
+    // Just looking around: the welcome card above replaces the first contribution prompt.
+    const exploring = renderToStaticMarkup(<JourneyWorkspace profile={empty} framing="exploring" />);
+    expect(exploring).not.toContain("Your first contribution belongs here");
+    expect(exploring).toContain("<h2>Your journey</h2>");
+    // Mentors and organisations: their own work, fully usable, without a student's prompt.
+    const partner = renderToStaticMarkup(<JourneyWorkspace profile={empty} framing="partner" />);
+    expect(partner).not.toContain("Your first contribution belongs here");
+    expect(partner).toContain("<h2>Your own work</h2>");
+    expect(partner).toContain("Add a contribution");
+  });
   it.each([
     [{ title: "a" }, "title"],
     [{ description: "short" }, "contribution"],
