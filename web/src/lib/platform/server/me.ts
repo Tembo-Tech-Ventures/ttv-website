@@ -11,7 +11,8 @@ import { TEMBO_DAILY_LIMIT } from "./me-config";
 export interface MeContext {
   db: D1Database;
   env: FlagContext["env"];
-  locals: Pick<App.Locals, "user" | "isAdmin" | "personalAccessToken" | "session" | "stagingDemo" | "stagingFixture" | "stagingQa">;
+  locals: Pick<App.Locals, "user" | "isAdmin" | "personalAccessToken" | "session" | "stagingDemo" | "stagingFixture" | "stagingQa">
+    & Partial<Pick<App.Locals, "cfContext">>;
 }
 
 /** Shared API/page loader. Denials throw a no-store Response; DB errors propagate. */

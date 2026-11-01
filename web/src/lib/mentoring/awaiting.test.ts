@@ -1,13 +1,19 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { communityActor } from "@/lib/community/actor";
 import { handleCommunityRequest } from "@/lib/community/http";
 import { DEMO_PERSONAS } from "@/lib/staging-demo-policy";
 import { createSqliteD1, MINIMAL_AUTH_SCHEMA, readMigration } from "@/test/sqlite-d1";
 import { awaitingConfirmation, type AwaitingConfirmationContext } from "./awaiting";
 
+const recordErrorInBackground = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/observability/errors", () => ({ recordErrorInBackground }));
+
 type Locals = AwaitingConfirmationContext["locals"];
 const databases: { close(): void }[] = [];
-afterEach(() => databases.splice(0).forEach((database) => database.close()));
+afterEach(() => {
+  databases.splice(0).forEach((database) => database.close());
+  recordErrorInBackground.mockClear();
+});
 
 const demoMentor = DEMO_PERSONAS.mentor.userId;
 const demoMember = DEMO_PERSONAS["member-cohort"].userId;
@@ -95,9 +101,20 @@ describe("awaitingConfirmation", () => {
     expect(await count()).toBe(2);
   });
 
-  it("lets database failures through rather than reporting nothing waiting", async () => {
+  it("records a failed read and reports not known, so the spaces pages still render and claim nothing", async () => {
     const { database, db } = setup();
     database.exec(`DROP TABLE communityConfirmation`);
-    await expect(awaitingConfirmation({ db, env: {}, locals: locals("mentor") })).rejects.toThrow(/no such table/);
+    const cfContext = { waitUntil: vi.fn() } as unknown as App.Locals["cfContext"];
+    expect(await awaitingConfirmation({ db, env: {}, locals: { ...locals("mentor"), cfContext } })).toBeNull();
+    expect(recordErrorInBackground).toHaveBeenCalledOnce();
+    expect(recordErrorInBackground).toHaveBeenCalledWith(cfContext, db, expect.objectContaining({
+      source: "request", level: "warning", error: expect.objectContaining({ message: expect.stringMatching(/no such table/) }),
+    }));
+  });
+
+  it("records nothing for a caller the Confirm page refuses", async () => {
+    const { db } = setup();
+    expect(await awaitingConfirmation({ db, env: {}, locals: locals("member") })).toBeNull();
+    expect(recordErrorInBackground).not.toHaveBeenCalled();
   });
 });

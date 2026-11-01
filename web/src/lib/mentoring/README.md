@@ -21,8 +21,12 @@ serves. Retained QA personas reach the Confirm page through a separate
 filtered handler, which the count does not reproduce, so they get none either.
 `awaiting.test.ts` checks each kind of caller against the route itself.
 
-A refused or unknown caller gets null, not zero. Pages treat null as "not
-known" and never say nothing is waiting.
+Null, not zero, means "not known", and pages then never say nothing is
+waiting. It is returned for a caller the Confirm page refuses; for a failed
+read, which is recorded as a warning so a badge never takes the spaces shell
+down with it; and when the Confirm page's 50-row window is full with none of
+it waiting, since older work beyond the window might be. With work in the
+window the number is what the Confirm page shows, a floor rather than a total.
 
 **Why this is not attention.** Mission contract B-1.3 allows attention only
 from real existing events with a real recipient, and forbids inventing a
@@ -45,4 +49,7 @@ space switcher still count notifications only. When mentor requests arrive
 in attention.
 
 Cost: for people with the Mentoring space, `getMe` adds two reads (roles, then
-at most 50 rows). It is not polled; it refreshes with each page.
+at most 50 rows); staging-fixture mentors add their per-row fixture checks. It
+is not polled; it refreshes with each page. On the Confirm page the island's
+own summary drops as the mentor saves, while the server-rendered sidebar badge
+keeps the page-load number until the next navigation.

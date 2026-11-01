@@ -136,6 +136,17 @@ describe("real /me and Astro context adapters", () => {
     expect(refused.spaces).toContain("mentoring");
   });
 
+  it("still serves a mentor's spaces when the waiting count cannot be read, with no number and the failure recorded", async () => {
+    const { database, context } = setup({ globalRoles: ["MENTOR"] });
+    database.exec("DROP TABLE communityConfirmation");
+    const { response, body } = await request(context);
+    expect(response.status).toBe(200);
+    const me = Me.parse(body);
+    expect(me.spaces).toContain("mentoring");
+    expect(me).not.toHaveProperty("mentoring");
+    expect(mocks.recordErrorInBackground).toHaveBeenCalledWith(undefined, expect.anything(), expect.objectContaining({ level: "warning" }));
+  });
+
   it.each(["OFF", "STAFF"])("keeps %s dark for non-admins before any feature read", async audience => {
     const { database, context, queries } = setup({ globalRoles: ["MENTOR", "INSTITUTION"] });
     database.prepare("UPDATE feature_flag SET audience=? WHERE key='spaces'").run(audience);

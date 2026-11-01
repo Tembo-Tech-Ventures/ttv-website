@@ -333,6 +333,11 @@ it('counts waiting confirmations over exactly the rows the Confirm page lists',a
  const listed=await f.mentor.listMentorship();
  expect(await f.mentor.countAwaitingConfirmation()).toBe(listed.filter(row=>!row.reviewedByCurrentMentor).length);
  expect(await f.mentor.countAwaitingConfirmation()).toBe(49);
+ // With the whole window confirmed, older unconfirmed work may lie beyond it: not known, never "nothing waiting".
+ for(const row of listed.filter(item=>!item.reviewedByCurrentMentor))await f.mentor.confirmJourney(row.id,{expectedRevision:1,statement:'I checked this change',method:'Review'});
+ expect(await f.mentor.countAwaitingConfirmation()).toBeNull();
+ f.sql.prepare("DELETE FROM communityJourney WHERE id IN ('window-01','window-02','window-03','window-04','window-05','window-06')").run();
+ expect(await f.mentor.countAwaitingConfirmation()).toBe(0);
  await expect(f.member.countAwaitingConfirmation()).rejects.toMatchObject({status:403});
  await expect(f.institution.countAwaitingConfirmation()).rejects.toMatchObject({status:403});
 });

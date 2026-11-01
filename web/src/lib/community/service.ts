@@ -18,6 +18,8 @@ function profile(row: ProfileRow): CommunityProfile {
   return { userId: row.userId, name: row.name, image: row.image, headline: row.headline ?? "", bio: row.bio ?? "", skills,
     opportunityGoals: row.opportunityGoals ?? "", version: row.version ?? 0, updatedAt: row.updatedAt };
 }
+/** How many shared contributions the Confirm page lists, newest first. */
+const MENTORSHIP_WINDOW = 50;
 const PROFILE_SELECT = `SELECT u.id AS userId,u.name,u.image,p.headline,p.bio,p.skills,p.opportunityGoals,p.version,p.updatedAt
   FROM user u LEFT JOIN communityProfile p ON p.userId=u.id`;
 
@@ -87,7 +89,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
     if (!a.isMentor && !a.isAdmin) throw new CommunityError("Mentor access is required.", 403);
     const scope = fixtureScope("j.userId");
     const { results } = await db.prepare(`SELECT ${columns}, EXISTS (SELECT 1 FROM communityConfirmation ownReview WHERE ownReview.journeyId=j.id AND ownReview.mentorId=? AND ownReview.journeyVersion=j.version) AS reviewedByCurrentMentor
-      FROM communityJourney j JOIN user u ON u.id=j.userId WHERE j.visibility='institution' AND j.userId<>?${scope.clause} ORDER BY j.createdAt DESC,j.id DESC LIMIT 50`).bind(actorId,actorId,...scope.values).all<Row & { reviewedByCurrentMentor: number }>();
+      FROM communityJourney j JOIN user u ON u.id=j.userId WHERE j.visibility='institution' AND j.userId<>?${scope.clause} ORDER BY j.createdAt DESC,j.id DESC LIMIT ${MENTORSHIP_WINDOW}`).bind(actorId,actorId,...scope.values).all<Row & { reviewedByCurrentMentor: number }>();
     await Promise.all(results.map(row=>requireFixtureTarget(row.userId)));
     return results.map(row => ({...row,reviewedByCurrentMentor:Boolean(row.reviewedByCurrentMentor)}));
   }
@@ -151,12 +153,15 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
      * How many of the contributions listMentorship returns still have no
      * confirmation from this mentor for their current revision: the same rows,
      * read through the same checks, so the number matches the review forms the
-     * Confirm page shows. It is derived, not an attention item; see
-     * src/lib/mentoring/README.md.
+     * Confirm page shows. When that window is full and none of it waits,
+     * older work beyond it might, so the answer is null (not known) rather
+     * than a "nothing waiting" zero. It is derived, not an attention item;
+     * see src/lib/mentoring/README.md.
      */
-    async countAwaitingConfirmation() {
+    async countAwaitingConfirmation(): Promise<number | null> {
       const results = await mentorshipRows<{ userId: string }>("j.userId");
-      return results.filter((entry) => !entry.reviewedByCurrentMentor).length;
+      const waiting = results.filter((entry) => !entry.reviewedByCurrentMentor).length;
+      return waiting === 0 && results.length === MENTORSHIP_WINDOW ? null : waiting;
     },
     async setAccess(input: unknown) {
       requireWritable();
