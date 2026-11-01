@@ -202,7 +202,7 @@ describe("channel APIs: contracts", () => {
 describe("channel APIs: query budget", () => {
   /** Statements per request with production flags (one flag read) and capabilities read once. */
   const BUDGET: Record<ChannelOperation, number> = {
-    listChannels: 5, listMessages: 6, postMessage: 7, markChannelRead: 8, editMessage: 9, reactToMessage: 9, deleteMessage: 9,
+    listChannels: 5, listMessages: 6, postMessage: 7, markChannelRead: 8, editMessage: 9, reactToMessage: 10, deleteMessage: 9,
   };
 
   it.each(Object.entries(BUDGET) as [ChannelOperation, number][])("%s issues at most %i statements", async (operation, budget) => {
@@ -215,6 +215,36 @@ describe("channel APIs: query budget", () => {
     expect(response.status).toBeLessThan(300);
     expect(prepare).toHaveBeenCalledTimes(budget);
     expect(budget).toBeLessThanOrEqual(10);
+  });
+
+  it("a flagged post or edit costs one statement more, for its moderation event, and stays within 10", async () => {
+    const s = setup();
+    s.agree();
+    s.database.exec("UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'");
+    const screen = () => ({ reasons: ["Contact details"] });
+    const own = s.message("help", { author: VIEWER });
+    const prepare = vi.spyOn(s.d1, "prepare");
+    expect((await s.call("editMessage", { id: own, body: { body: "Flag me" }, screen, env: DATABASE_FLAGS })).status).toBe(200);
+    expect(prepare).toHaveBeenCalledTimes(BUDGET.editMessage + 1);
+    prepare.mockClear();
+    expect((await s.call("postMessage", { id: s.channel("help"), body: post("Flag me too"), screen, env: DATABASE_FLAGS })).status).toBe(201);
+    expect(prepare).toHaveBeenCalledTimes(BUDGET.postMessage + 1);
+    expect(Math.max(BUDGET.editMessage, BUDGET.postMessage) + 1).toBeLessThanOrEqual(10);
+  });
+
+  it("refused writes stay within 10 statements too, flagged edits included", async () => {
+    const s = setup();
+    s.database.exec("UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'");
+    const screen = () => ({ reasons: ["Contact details"] });
+    const own = s.message("help", { author: VIEWER });
+    const prepare = vi.spyOn(s.d1, "prepare");
+    // No code of conduct agreement: the edit and the post are refused.
+    const edit = await s.call("editMessage", { id: own, body: { body: "Flag me" }, screen, env: DATABASE_FLAGS });
+    expect([edit.status, prepare.mock.calls.length]).toEqual([403, 10]);
+    prepare.mockClear();
+    const sent = await s.call("postMessage", { id: s.channel("help"), body: post("Flag me"), screen, env: DATABASE_FLAGS });
+    expect(sent.status).toBe(403);
+    expect(prepare.mock.calls.length).toBeLessThanOrEqual(10);
   });
 
   it("a thread page and a reply cost one statement more each", async () => {

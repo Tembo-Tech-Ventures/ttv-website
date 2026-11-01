@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import type { Channel, EditMessage, Message, MessageReactions, PostMessage, ReactToMessage } from "@/lib/platform/contracts";
-import { CONDUCT_VERSION, getConductAcknowledgement } from "./conduct";
+import { CONDUCT_VERSION } from "./conduct";
 import { ChannelError, readMessage, type ReadContext } from "./messages";
 import { screenMessage, type MessageScreen } from "./moderation";
 
@@ -20,6 +20,17 @@ export const POST_LIMITS = Object.freeze({
   channel: Object.freeze({ count: 10, windowMs: 60_000 }),
   day: Object.freeze({ count: 300, windowMs: 24 * 60 * 60_000 }),
 });
+
+/**
+ * Edits and reaction changes are cheap to repeat but each one moves the message for every poller
+ * (and each edit is screened again), so they are limited too: edits per person per channel,
+ * reaction changes per person across channels. Logged in channel_action (migration 0031).
+ */
+export const ACTION_LIMITS = Object.freeze({
+  EDIT: Object.freeze({ count: 10, windowMs: 60_000, perChannel: true }),
+  REACT: Object.freeze({ count: 30, windowMs: 60_000, perChannel: false }),
+});
+type ActionKind = keyof typeof ACTION_LIMITS;
 
 export interface WriteContext extends ReadContext {
   channel: ReadContext["channel"] & Pick<Channel, "archivedAt">;
@@ -42,6 +53,8 @@ const FLAG_EVENT = "INSERT INTO moderation_event (id, messageId, action, source,
 
 const conductRequired = () =>
   new ChannelError("conduct_required", "Agree to how we talk to each other before you post.", 403);
+/** The code of conduct version posting and editing need. */
+const conductVersion = (ctx: WriteContext) => ctx.conductVersion ?? CONDUCT_VERSION;
 const cannotPost = () => new ChannelError("forbidden", "You can read this channel but not post in it.", 403);
 
 async function loaded(ctx: ReadContext, id: string): Promise<Message> {
@@ -99,7 +112,7 @@ async function refusal(ctx: WriteContext, input: PostMessage, now: number): Prom
       ctx.channel.capabilities.canModerate ? 1 : 0)
     .first<{ conductVersion: number | null; day: string; burst: string; parent: string | null }>();
   if (!why) throw new Error("Could not read the posting conditions.");
-  if ((why.conductVersion ?? 0) < (ctx.conductVersion ?? CONDUCT_VERSION)) return conductRequired();
+  if ((why.conductVersion ?? 0) < conductVersion(ctx)) return conductRequired();
   for (const [[count, oldest], limit] of [[usage(why.burst), burst], [usage(why.day), day]] as const) {
     if (count >= limit.count) {
       return new ChannelError("rate_limited", "You're posting quickly. Try again in a moment.", 429,
@@ -148,7 +161,7 @@ export async function postMessage(ctx: WriteContext, input: PostMessage): Promis
     ON CONFLICT (authorId, clientNonce) DO NOTHING`).bind(
     ctx.channel.id, ctx.viewerId, input.clientNonce, input.parentId, input.body,
     reasons.length > 0 ? "FLAGGED" : "VISIBLE", JSON.stringify(reasons), now, id,
-    ctx.conductVersion ?? CONDUCT_VERSION, now - day.windowMs, day.count, now - burst.windowMs, burst.count,
+    conductVersion(ctx), now - day.windowMs, day.count, now - burst.windowMs, burst.count,
   )];
   // The statements after the INSERT act only if it wrote the new id.
   const written = "EXISTS (SELECT 1 FROM channel_message WHERE id = ?3)";
@@ -167,6 +180,37 @@ export async function postMessage(ctx: WriteContext, input: PostMessage): Promis
   const previous = await previousPost(ctx, input);
   if (previous) return previous;
   throw await refusal(ctx, input, now);
+}
+
+/**
+ * The statement that opens an edit or reaction batch: log this action under `id` if the person's
+ * window has room. Later statements act only when that row exists (`logged(id)`), so the limit and
+ * the write are decided together; its `changes` says which. A trigger prunes rows older than an hour.
+ */
+function logAction(ctx: WriteContext, kind: ActionKind, id: string, now: number): D1PreparedStatement {
+  const { count, windowMs, perChannel } = ACTION_LIMITS[kind];
+  // An edit also needs the current code of conduct (?8); a refused edit logs nothing.
+  const conduct = kind === "EDIT" ? "AND EXISTS (SELECT 1 FROM channel_conduct WHERE userId = ?1 AND version >= ?8)" : "";
+  return ctx.db.prepare(`INSERT INTO channel_action (id, userId, channelId, kind, at) SELECT ?4, ?1, ?3, ?2, ?5
+    WHERE (SELECT COUNT(*) FROM channel_action WHERE userId = ?1 AND kind = ?2 AND at > ?6 ${perChannel ? "AND channelId = ?3" : ""}) < ?7
+      ${conduct}`)
+    .bind(ctx.viewerId, kind, ctx.channel.id, id, now, now - windowMs, count, ...kind === "EDIT" ? [conductVersion(ctx)] : []);
+}
+const logged = (param: string) => `EXISTS (SELECT 1 FROM channel_action WHERE id = ${param})`;
+
+/**
+ * Why an action was not logged, from one read: an edit without the current code of conduct
+ * (conduct_required), otherwise the limit (429, with when the oldest action in its window expires).
+ */
+async function actionRefusal(ctx: WriteContext, kind: ActionKind, now: number): Promise<ChannelError> {
+  const { windowMs, perChannel } = ACTION_LIMITS[kind];
+  const row = await ctx.db.prepare(`SELECT
+      (SELECT version FROM channel_conduct WHERE userId = ?1) AS conduct,
+      (SELECT MIN(at) FROM channel_action WHERE userId = ?1 AND kind = ?2 AND at > ?4 ${perChannel ? "AND channelId = ?3" : ""}) AS oldest`)
+    .bind(ctx.viewerId, kind, ctx.channel.id, now - windowMs).first<{ conduct: number | null; oldest: number | null }>();
+  if (kind === "EDIT" && (row?.conduct ?? 0) < conductVersion(ctx)) return conductRequired();
+  const message = kind === "EDIT" ? "You're editing quickly. Try again in a moment." : "You're reacting quickly. Try again in a moment.";
+  return new ChannelError("rate_limited", message, 429, Math.max(1, (row?.oldest ?? now) + windowMs - now));
 }
 
 /** Editing and deleting belong to a message's author; moderators hide instead (B-2.5). */
@@ -188,26 +232,27 @@ export async function editMessage(ctx: WriteContext, target: MessageTarget, inpu
     throw new ChannelError("conflict", "A moderator hid this message, so it can't be edited.", 409);
   }
   if (!ctx.channel.capabilities.canPost) throw cannotPost();
-  const agreement = await getConductAcknowledgement(ctx.db, ctx.viewerId, { currentVersion: ctx.conductVersion ?? CONDUCT_VERSION });
-  if (!agreement?.current) throw conductRequired();
   if (input.body === target.body) return loaded(ctx, target.id);
 
   const now = ctx.now ?? Date.now();
   const reasons = JSON.stringify(await screen(ctx, input.body, target.parentId, "edit"));
-  // ?1 channel, ?2 id, ?3 author. Each statement repeats the guard, so a concurrent delete or hide wins.
-  const guard = "id = ?2 AND channelId = ?1 AND authorId = ?3 AND deletedAt IS NULL AND moderationState <> 'HIDDEN'";
-  const statements = [];
+  const action = createId();
+  // ?1 channel, ?2 id, ?3 author, ?7 the logged action, which also stands for the current code of
+  // conduct. Each statement repeats the guard, so those, and a concurrent delete or hide, win.
+  const guard = `id = ?2 AND channelId = ?1 AND authorId = ?3 AND deletedAt IS NULL AND moderationState <> 'HIDDEN' AND ${logged("?7")}`;
+  const statements = [logAction(ctx, "EDIT", action, now)];
   if (reasons !== "[]") {
     statements.push(ctx.db.prepare(`${FLAG_EVENT} SELECT ?4, id, 'FLAG', 'DETECTOR', NULL, moderationState, 'FLAGGED', ?5, ?6
-      FROM channel_message WHERE ${guard}`).bind(ctx.channel.id, target.id, ctx.viewerId, createId(), reasons, now));
+      FROM channel_message WHERE ${guard}`).bind(ctx.channel.id, target.id, ctx.viewerId, createId(), reasons, now, action));
   }
   statements.push(ctx.db.prepare(`UPDATE channel_message SET body = ?4, editedAt = ?5,
       changeSeq = (SELECT MAX(changeSeq) + 1 FROM channel_message WHERE channelId = ?1),
       moderationState = CASE WHEN ?6 = '[]' THEN moderationState ELSE 'FLAGGED' END,
       moderationReasons = CASE WHEN ?6 = '[]' THEN moderationReasons ELSE (SELECT json_group_array(value)
         FROM (SELECT value FROM json_each(moderationReasons) UNION SELECT value FROM json_each(?6))) END
-    WHERE ${guard}`).bind(ctx.channel.id, target.id, ctx.viewerId, input.body, now, reasons));
+    WHERE ${guard}`).bind(ctx.channel.id, target.id, ctx.viewerId, input.body, now, reasons, action));
   const results = await ctx.db.batch(statements);
+  if (results[0]?.meta.changes !== 1) throw await actionRefusal(ctx, "EDIT", now);
   if (results.at(-1)?.meta.changes !== 1) throw new ChannelError("conflict", "This message changed while you were editing it.", 409);
   return loaded(ctx, target.id);
 }
@@ -252,15 +297,24 @@ export async function reactToMessage(ctx: WriteContext, target: MessageTarget, i
   if (target.deletedAt !== null || target.moderationState === "HIDDEN") {
     throw new ChannelError("conflict", "This message can't take reactions.", 409);
   }
-  const open = "EXISTS (SELECT 1 FROM channel_message WHERE id = ?1 AND deletedAt IS NULL AND moderationState <> 'HIDDEN')";
+  const now = ctx.now ?? Date.now();
+  const action = createId();
+  // ?1 message, ?2 person, ?3 kind, ?4 now, ?5 the logged action.
+  const open = `EXISTS (SELECT 1 FROM channel_message WHERE id = ?1 AND deletedAt IS NULL AND moderationState <> 'HIDDEN') AND ${logged("?5")}`;
+  const mine = "EXISTS (SELECT 1 FROM message_reaction WHERE messageId = ?1 AND userId = ?2 AND kind = ?3)";
+  const params = [target.id, ctx.viewerId, input.kind, now, action];
   const change = input.active
     ? ctx.db.prepare(`INSERT INTO message_reaction (messageId, userId, kind, createdAt) SELECT ?1, ?2, ?3, ?4 WHERE ${open}
-        ON CONFLICT (messageId, userId, kind) DO NOTHING`).bind(target.id, ctx.viewerId, input.kind, ctx.now ?? Date.now())
-    : ctx.db.prepare("DELETE FROM message_reaction WHERE messageId = ?1 AND userId = ?2 AND kind = ?3")
-      .bind(target.id, ctx.viewerId, input.kind);
-  const { meta } = await change.run();
-  // Counts are part of the message, so other readers' polls pick the change up.
-  if (meta.changes > 0) await ctx.db.prepare(touch("?2")).bind(ctx.channel.id, target.id).run();
+        ON CONFLICT (messageId, userId, kind) DO NOTHING`).bind(...params)
+    : ctx.db.prepare(`DELETE FROM message_reaction WHERE messageId = ?1 AND userId = ?2 AND kind = ?3 AND ${logged("?5")}`)
+      .bind(...params);
+  // Counts are part of the message, so other readers' polls pick the change up. The touch is in the
+  // same batch and depends only on the wanted state, so a retry after a failure still delivers it.
+  const touched = ctx.db.prepare(`UPDATE channel_message SET changeSeq = (SELECT MAX(changeSeq) + 1 FROM channel_message
+      WHERE channelId = ?6) WHERE id = ?1 AND channelId = ?6 AND ${open} AND ${input.active ? "" : "NOT "}${mine}`)
+    .bind(...params, ctx.channel.id);
+  const [log] = await ctx.db.batch([logAction(ctx, "REACT", action, now), change, touched]);
+  if (log?.meta.changes !== 1) throw await actionRefusal(ctx, "REACT", now);
   const { id, reactions } = await loaded(ctx, target.id);
   return { messageId: id, reactions };
 }
