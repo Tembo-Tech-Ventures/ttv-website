@@ -3,7 +3,7 @@ import { ROUTES } from "@/lib/platform/contracts";
 import { CONDUCT_PATH, SPACE_PATHS, WELCOME_PATH } from "@/lib/platform/server/space-routes";
 import { ATTENTION_PAGE_HREF } from "@/components/platform/attention/attention-display";
 import {
-  DEMO_CUTOFF, DEMO_ORIGIN, demoEnabled, demoPathAllowed,
+  channelReadMarkerPath, DEMO_CUTOFF, DEMO_ORIGIN, demoEnabled, demoPathAllowed,
   SPACES_APPLY_PATH, SPACES_MARK_READ_PATH, SPACES_READ_PATHS, type DemoPersona,
 } from "./staging-demo-policy";
 import { QA_CUTOFF, qaPathAllowed } from "./staging-qa-policy";
@@ -55,6 +55,13 @@ const SURFACES: [string, Identity[], Identity[]][] = [
   ["/dashboard/cohort/c/c04-announcements", ALL, []],
   [CONDUCT_PATH, ALL, []],
   [`${CONDUCT_PATH}/`, ALL, []],
+  // What those pages poll (B-2.3): reads for everyone; the read marker only for fixtures, whose
+  // cleanup deletes the user and its markers. Posting, editing and reacting stay closed.
+  [ROUTES.listChannels.path, ALL, []],
+  [`${ROUTES.listChannels.path}/`, ALL, []],
+  ["/api/channels/0f3c9a1be2d84c7aa1b2c3d4e5f60718/messages", ALL, []],
+  ["/api/channels/clh3am8hi0000qwer1234abcd/messages/", ALL, []],
+  ["/api/channels/0f3c9a1be2d84c7aa1b2c3d4e5f60718/read", [], ["fixture"]],
 ];
 
 /** Lookalikes, traversal and surfaces that stay closed to every identity and method. */
@@ -69,7 +76,10 @@ const DENIED = [
   SPACE_PATHS.admin, "/admin/users", "/api/admin/users", ROUTES.getFlags.path, "/admin/personal-access-tokens",
   SPACE_PATHS.profile, `${SPACE_PATHS.profile}/portfolio`, "/dashboard/account", "/dashboard/profile",
   "/dashboard/cohort/ask", "/dashboard/ask", "/api/chat", "/api/recordings", "/api/recordings/private", "/dashboard/cohort/sessions/private",
-  ROUTES.listChannels.path, "/api/channels/x/messages", "/api/messages/x", ROUTES.listMentors.path, ROUTES.createMentorRequest.path,
+  "/api/messages/x", "/api/messages/x/reactions", ROUTES.listMentors.path, ROUTES.createMentorRequest.path,
+  // Channel API lookalikes: one plain id segment, and only the list, messages and read routes.
+  "/api/channels/x", "/api/channels/x/messages/y", "/api/channels/x/tembo", "/api/channels//messages", "/api/channels/x%2f..%2fadmin/messages",
+  "/api/channels/x.y/messages", "/api/channels/../admin/messages", "/api/channelsx", "/api/channels/x/readx", "/api/channels/x/read/y",
   ROUTES.getMentorAvailability.path, ROUTES.listModerationQueue.path,
   "/dashboard/mentoring/requests", "/dashboard/mentoring/availability", "/dashboard/community/dm/private",
   // Channel lookalikes: only valid slugs, one segment, in the cohort and community spaces.
@@ -91,7 +101,8 @@ describe("restricted staging identities reach only the Phase 1 spaces surfaces",
       expect(allowed(path, "POST"), `${identity} POST`).toBe(posts.includes(identity));
       for (const method of ["PUT", "PATCH", "DELETE"]) {
         // Existing fixture space homes are path-scoped; their pages still enforce methods.
-        const legacyAnyMethod = identity === "fixture" && posts.includes("fixture") && path !== SPACES_MARK_READ_PATH;
+        const legacyAnyMethod = identity === "fixture" && posts.includes("fixture") && path !== SPACES_MARK_READ_PATH
+          && !channelReadMarkerPath(path);
         expect(allowed(path, method), `${identity} ${method}`).toBe(legacyAnyMethod);
       }
     });

@@ -37,9 +37,10 @@ export type IdParams = z.infer<typeof IdParams>;
 export const Success = z.object({ ok: z.literal(true) });
 export type Success = z.infer<typeof Success>;
 
+/** conduct_required (HTTP 403): agree to the current channel code of conduct, then post again. */
 export const ErrorCode = z.enum([
   "not_found", "forbidden", "flag_off", "validation", "rate_limited",
-  "quota_exhausted", "conflict", "moderation_rejected", "server",
+  "quota_exhausted", "conflict", "moderation_rejected", "conduct_required", "server",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 export const ErrorEnvelope = z.object({

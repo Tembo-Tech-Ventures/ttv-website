@@ -3,9 +3,9 @@ import { getAttentionCount } from "@/lib/attention/count";
 import * as schema from "@/lib/db/schema";
 import { awaitingConfirmation } from "@/lib/mentoring/awaiting";
 import { Me, WebLink, type RoleBadge } from "../contracts";
-import { capabilitiesFor } from "./capabilities";
 import { getFlags, requireFlag, type FlagContext } from "./flags";
 import { platformError } from "./http";
+import { requestCapabilities } from "./request-capabilities";
 import { TEMBO_DAILY_LIMIT } from "./me-config";
 
 export interface MeContext {
@@ -27,7 +27,7 @@ export async function getMe({ db, env, locals }: MeContext): Promise<Me> {
   if (locals.personalAccessToken) throw platformError("forbidden", "Not permitted.", 403);
 
   const database = drizzle(db, { schema });
-  const canonical = await capabilitiesFor(database, user);
+  const canonical = await requestCapabilities(database, locals);
   const { spaces, ...capabilities } = canonical;
   const attention = await getAttentionCount(database, user.id, canonical);
   // Derived, not attention: see src/lib/mentoring/README.md.

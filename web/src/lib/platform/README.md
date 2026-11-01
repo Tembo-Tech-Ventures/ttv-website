@@ -69,7 +69,9 @@ new screen or test.
   unread. Mentor transitions, reports and moderation actions are conservatively
   marked non-retryable until their future implementations define deduplication.
 - One `ErrorEnvelope` covers failures. `retryAfterMs` is milliseconds.
-  Flags-off APIs will return HTTP 404 with `flag_off`. Success bodies, including
+  Flags-off APIs will return HTTP 404 with `flag_off`. `conduct_required`
+  (HTTP 403) means the caller must agree to the current channel code of
+  conduct before posting or editing; agreeing and sending again succeeds. Success bodies, including
   deletes and empty action requests (`{}`), are explicitly defined in `ROUTES`.
 - Mentor capacity and Tembo usage may exceed a newly reduced limit; clients must
   clamp available capacity to zero. Mentor month boundaries use Africa/Nairobi.

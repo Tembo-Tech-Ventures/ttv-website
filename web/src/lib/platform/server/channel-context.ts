@@ -2,8 +2,10 @@ import type { APIContext } from "astro";
 import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import { findReadableChannel } from "@/lib/channels/access";
+import { loadChannelPage, type ChannelPage } from "@/lib/channels/page";
 import * as schema from "@/lib/db/schema";
 import type { Channel } from "../contracts";
+import { requestCapabilities } from "./request-capabilities";
 import { getSpaceContext } from "./space-context";
 import { channelRoute, normalizeSpacePath } from "./space-routes";
 
@@ -23,8 +25,27 @@ export async function getRouteChannel(context: Pick<APIContext, "locals" | "url"
   if (!me.flags.channels) return null;
   let cached = resolved.get(locals);
   if (!cached || cached.user !== locals.user || cached.path !== path) {
-    cached = { user: locals.user, path, channel: findReadableChannel(drizzle(env.DB, { schema }), locals.user, route) };
+    const db = drizzle(env.DB, { schema });
+    cached = { user: locals.user, path, channel: requestCapabilities(db, locals).then((capabilities) => findReadableChannel(db, locals.user, route, capabilities)) };
     resolved.set(locals, cached);
   }
   return cached.channel;
+}
+
+/**
+ * The route channel and its first page for the page frontmatter (U-2.1): latest messages, the
+ * `?thread=` replies and the read marker (src/lib/channels/page.ts), or null wherever
+ * getRouteChannel is null. Server-rendered, so the channel reads without JavaScript. It never moves
+ * the read marker.
+ */
+export async function getRouteChannelPage(
+  context: Pick<APIContext, "locals" | "url">,
+): Promise<{ channel: Channel; page: ChannelPage } | null> {
+  const channel = await getRouteChannel(context);
+  const user = context.locals.user;
+  if (!channel || !user) return null;
+  const page = await loadChannelPage(drizzle(env.DB, { schema }), env.DB, user.id, channel, {
+    thread: context.url.searchParams.get("thread"),
+  });
+  return { channel, page };
 }

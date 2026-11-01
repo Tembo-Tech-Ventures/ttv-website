@@ -93,7 +93,8 @@ describe("listChannelsFor", () => {
     expect(channel).toEqual({
       id, kind: "COHORT", slug: slugOf(fixture, "cohort:cohort-a:main"), name: slugOf(fixture, "cohort:cohort-a:main"),
       topic: "Everyday talk for the cohort, its mentors and its instructors.", postingPolicy: "ALL", programId: "cohort-a",
-      unreadCount: 0, lastMessageAt: 150, archivedAt: null,
+      // Otieno's flagged message: her own, hidden and deleted messages are not unread.
+      unreadCount: 1, lastMessageAt: 150, archivedAt: null,
       capabilities: { canPost: true, canModerate: false, canShareSessionClip: true },
     });
   });
@@ -121,7 +122,10 @@ describe("listChannelsFor", () => {
     expect(plan).toContain("SEARCH channel_member USING COVERING INDEX channel_member_userId_idx (userId=?)");
     expect(plan).toContain("SEARCH channel USING INDEX sqlite_autoindex_channel_1 (id=?)");
     expect(plan).toContain("SEARCH channel_message USING INDEX channel_message_seq_idx (channelId=?)");
-    expect(plan).not.toMatch(/\bSCAN (?:channel|channel_member|channel_message)\b/);
+    // Unread counts: the caller's marker by key, then one range of roots after it.
+    expect(plan).toContain("SEARCH channel_read USING INDEX sqlite_autoindex_channel_read_1 (userId=? AND channelId=?)");
+    expect(plan).toContain("SEARCH u USING INDEX channel_message_thread_idx (channelId=? AND parentId=? AND seq>?)");
+    expect(plan).not.toMatch(/\bSCAN (?:channel|channel_member|channel_message|channel_read|u|r)\b/);
   });
 });
 
