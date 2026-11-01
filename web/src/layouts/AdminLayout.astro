@@ -5,9 +5,12 @@ import { env } from "cloudflare:workers";
 import { demoEnabled } from "@/lib/staging-demo-policy";
 import { isAgentAuthEnabled } from "@/lib/agent-auth";
 import { isLegacyImportEnabled } from "@/lib/admin/import";
+import { countPendingAccessRequests } from "@/lib/admin/access-requests";
 
 interface Props {
   title?: string;
+  /** The queue page already holds the open-request count; every other page reads it here. */
+  pendingAccessRequests?: number;
 }
 
 const { title = "Admin" } = Astro.props;
@@ -16,6 +19,8 @@ const { title = "Admin" } = Astro.props;
 if (!Astro.locals.isAdmin) {
   return Astro.redirect(Astro.locals.user ? "/dashboard" : "/auth/login");
 }
+
+const pendingAccessRequests = Astro.props.pendingAccessRequests ?? await countPendingAccessRequests(env.DB);
 ---
 
 <BaseLayout title={`${title} | TTV Admin`}>
@@ -25,6 +30,7 @@ if (!Astro.locals.isAdmin) {
     agentAuthEnabled={isAgentAuthEnabled(env.AGENT_AUTH_ENABLED)}
     stagingDemoEnabled={demoEnabled(env.DEPLOYMENT_ENVIRONMENT, env.STAGING_DEMO_ENABLED, Astro.url.origin)}
     dataMigrationEnabled={isLegacyImportEnabled(env.DEPLOYMENT_ENVIRONMENT)}
+    pendingAccessRequests={pendingAccessRequests}
   >
     <slot />
   </AdminShell>

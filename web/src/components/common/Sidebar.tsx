@@ -8,6 +8,8 @@ interface SidebarLink {
   label: string;
   icon?: IconType;
   badge?: number;
+  /** What the badge counts, said to screen readers: "3 pending". Defaults to "unread". */
+  badgeLabel?: string;
   activePrefixes?: string[];
 }
 
@@ -47,7 +49,7 @@ function NavLinks({
 
   return (
     <nav className="flex flex-col gap-1">
-      {links.map(({ href, label, icon: Icon, badge, activePrefixes }) => {
+      {links.map(({ href, label, icon: Icon, badge, badgeLabel = "unread", activePrefixes }) => {
         const isActive = isSidebarLinkActive(currentPath, href, activePrefixes);
         return (
           <a
@@ -63,11 +65,11 @@ function NavLinks({
             {Icon && <Icon className="h-5 w-5" />}
             {label}
             {badge !== undefined && badge > 0 && (
-              <span
-                className="ml-auto rounded-full bg-primary/20 px-2 py-0.5 text-xs font-semibold text-primary"
-                aria-label={`${badge} unread`}
-              >
-                {badge}
+              // The count joins the link's name ("Leads 2 unread") as text: an aria-label on a
+              // plain span is not part of it, and axe reports it as a prohibited attribute.
+              <span className="ml-auto rounded-full bg-primary/20 px-2 py-0.5 text-xs font-semibold text-primary">
+                <span aria-hidden="true">{badge}</span>
+                <span className="sr-only">{`${badge} ${badgeLabel}`}</span>
               </span>
             )}
           </a>

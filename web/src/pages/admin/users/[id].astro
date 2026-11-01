@@ -3,6 +3,7 @@ import AdminLayout from "@/layouts/AdminLayout.astro";
 import Card from "@/components/common/Card.astro";
 import Badge from "@/components/common/Badge.astro";
 import Button from "@/components/common/Button.astro";
+import PersonMarker from "@/components/platform/ui/PersonMarker";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -14,6 +15,16 @@ import {
   createDrizzleAdminRoleStore,
   revokeAdminRole,
 } from "@/lib/admin/roles";
+import {
+  ACCESS_REQUESTS_PATH,
+  ACCESS_ROLE_LABELS,
+  changeCommunityRole,
+  communityRoleNotice,
+  isDelegatedCredential,
+  parseCommunityRoleAction,
+} from "@/lib/admin/access-requests";
+import { grantCommunityRole, revokeCommunityRole } from "@/lib/onboarding/decisions";
+import { AccessRole } from "@/lib/platform/contracts";
 
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
@@ -35,32 +46,58 @@ if (!targetUser) return Astro.redirect("/admin/users");
 
 const roleStore = createDrizzleAdminRoleStore(db);
 let roleError: string | undefined;
+let communityError: string | undefined;
+let changedAccess: string | undefined;
 
 if (Astro.request.method === "POST") {
   const formData = await Astro.request.formData();
   const action = formData.get("action");
+  const communityAction = parseCommunityRoleAction(action);
 
-  try {
-    assertPersistentAdminRoleMutationAllowed(
-      action,
-      Astro.locals.session?.userAgent
-    );
+  // Mentor and institution access: the same writers as the access-request queue, and like it,
+  // browser sessions only. Granting also approves a request pending for that role.
+  if (communityAction) {
+    if (isDelegatedCredential(Astro.locals)) {
+      Astro.response.status = 403;
+      communityError =
+        "Agent sessions and personal access tokens cannot change mentor or institution access. Sign in with a browser session.";
+    } else {
+      const result = await changeCommunityRole(
+        { grant: grantCommunityRole, revoke: revokeCommunityRole },
+        { db: env.DB, env },
+        { userId: id, actorId: signedInAdminId, action: communityAction }
+      );
+      if (result.ok) {
+        changedAccess = result.redirect;
+      } else {
+        Astro.response.status = 500;
+        communityError = result.error;
+      }
+    }
+  } else {
+    try {
+      assertPersistentAdminRoleMutationAllowed(
+        action,
+        Astro.locals.session?.userAgent
+      );
 
-    if (action === "add-admin") {
-      const result = await assignAdminRole(roleStore, id);
-      const outcome = result.changed ? "assigned" : "unchanged";
-      return Astro.redirect(`/admin/users/${id}?role=${outcome}`);
+      if (action === "add-admin") {
+        const result = await assignAdminRole(roleStore, id);
+        const outcome = result.changed ? "assigned" : "unchanged";
+        return Astro.redirect(`/admin/users/${id}?role=${outcome}`);
+      }
+      if (action === "remove-admin") {
+        const result = await revokeAdminRole(roleStore, id, signedInAdminId);
+        const outcome = result.changed ? "revoked" : "unchanged";
+        return Astro.redirect(`/admin/users/${id}?role=${outcome}`);
+      }
+      roleError = "Choose a valid role action.";
+    } catch (error) {
+      roleError = adminRoleErrorMessage(error);
     }
-    if (action === "remove-admin") {
-      const result = await revokeAdminRole(roleStore, id, signedInAdminId);
-      const outcome = result.changed ? "revoked" : "unchanged";
-      return Astro.redirect(`/admin/users/${id}?role=${outcome}`);
-    }
-    roleError = "Choose a valid role action.";
-  } catch (error) {
-    roleError = adminRoleErrorMessage(error);
   }
 }
+if (changedAccess) return Astro.redirect(changedAccess, 303);
 
 const isTargetAdmin = targetUser.userRoles.some((ur) => ur.role.name === "ADMIN");
 const isSignedInUser = targetUser.id === signedInAdminId;
@@ -73,6 +110,25 @@ const roleOutcome = Astro.url.searchParams.get("role");
 const roleNotice = roleOutcome
   ? roleNoticeByOutcome[roleOutcome]
   : undefined;
+const heldRoles = new Set(targetUser.userRoles.map((ur) => ur.role.name));
+const { results: pendingRequests } = await env.DB
+  .prepare("SELECT role FROM access_request WHERE userId = ? AND status = 'PENDING'")
+  .bind(id)
+  .all<{ role: string }>();
+const pendingRoles = new Set(pendingRequests.map((request) => request.role));
+const communityRoles = AccessRole.options.map((role) => ({
+  role,
+  label: ACCESS_ROLE_LABELS[role],
+  marker: role === "MENTOR" ? ("mentor" as const) : ("institution" as const),
+  held: heldRoles.has(role),
+  pending: pendingRoles.has(role),
+}));
+// Delegated credentials cannot change these roles, so they are not offered the buttons.
+const delegated = isDelegatedCredential(Astro.locals);
+const communityNotice = communityRoleNotice(
+  Astro.url.searchParams.get("access"),
+  Astro.url.searchParams.get("accessRole")
+);
 const applicationBadgeVariants = {
   PENDING: "pending",
   APPROVED: "approved",
@@ -165,6 +221,69 @@ const applicationBadgeVariants = {
         )}
       </div>
     </Card>
+
+    <section id="community-access" aria-labelledby="community-access-title">
+      <Card>
+        <h3 id="community-access-title" class="text-lg font-semibold text-white">Mentor and institution access</h3>
+        <p class="mt-1 max-w-2xl text-sm text-ink-secondary">
+          Approved access stays on until an administrator removes it. Removing it keeps their own work and
+          request history.
+        </p>
+        {communityError && (
+          <p role="alert" class="mt-4 rounded-md border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100">
+            {communityError}
+          </p>
+        )}
+        {communityNotice && (
+          <p role="status" class="mt-4 rounded-md border border-emerald-400/40 bg-emerald-500/15 px-4 py-3 text-sm text-emerald-100">
+            {communityNotice}
+          </p>
+        )}
+        <ul class="mt-4 divide-y divide-teal/20">
+          {communityRoles.map((access) => (
+            <li class="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between" data-community-role={access.role}>
+              <div class="flex items-start gap-3">
+                <PersonMarker kind={access.marker} className="mt-1" />
+                <div>
+                  <p class="font-semibold text-ink-primary">{access.label}</p>
+                  <p class="text-sm text-ink-secondary">
+                    {access.held ? `Has ${access.label.toLowerCase()} access.` : `No ${access.label.toLowerCase()} access.`}
+                    {!access.held && access.pending && (
+                      <>
+                        {" "}A request is waiting in{" "}
+                        <a href={ACCESS_REQUESTS_PATH} class="text-primary hover:underline">Access requests</a>.
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+              {!delegated && <form method="POST" class="shrink-0">
+                {access.held ? (
+                  <>
+                    <input type="hidden" name="action" value={`revoke-${access.role}`} />
+                    <Button
+                      type="submit"
+                      variant="danger"
+                      class="min-h-11"
+                      onclick={`return confirm('Remove ${access.label.toLowerCase()} access from this user?')`}
+                    >
+                      Remove {access.label.toLowerCase()} access
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <input type="hidden" name="action" value={`grant-${access.role}`} />
+                    <Button type="submit" variant="secondary" class="min-h-11">
+                      {access.pending ? "Approve and give access" : `Give ${access.label.toLowerCase()} access`}
+                    </Button>
+                  </>
+                )}
+              </form>}
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </section>
 
     <Card>
       <h3 class="mb-4 text-lg font-semibold text-white">Applications</h3>

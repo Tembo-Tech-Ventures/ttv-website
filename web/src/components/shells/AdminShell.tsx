@@ -15,15 +15,19 @@ import {
   PiPlugsDuotone,
   PiChatTeardropTextDuotone,
   PiArrowLeftDuotone,
+  PiUserPlusDuotone,
 } from "react-icons/pi";
 import { PiListBold } from "react-icons/pi";
 
 const MAIN_ID = "admin-main";
+const ACCESS_REQUESTS_HREF = "/admin/access-requests";
 
 const primaryLinks = [
   // Admin is one of the person's spaces: the way back to the rest of the app comes first.
   { href: "/dashboard", label: "Back to dashboard", icon: PiArrowLeftDuotone },
   { href: "/admin", label: "Admin Home", icon: PiGaugeDuotone },
+  // People waiting on a decision come straight after home, with how many are waiting.
+  { href: ACCESS_REQUESTS_HREF, label: "Access requests", icon: PiUserPlusDuotone },
   { href: "/admin/users", label: "Users", icon: PiUsersDuotone },
   { href: "/admin/applications", label: "Applications", icon: PiFileTextDuotone },
   { href: "/admin/profiles", label: "Profiles", icon: PiIdentificationCardDuotone },
@@ -43,10 +47,15 @@ const primaryLinks = [
 export function getAdminLinks(
   agentAuthEnabled: boolean,
   dataMigrationEnabled = false,
-  stagingDemoEnabled = false
+  stagingDemoEnabled = false,
+  pendingAccessRequests = 0
 ) {
   return [
-    ...primaryLinks,
+    ...primaryLinks.map((link) =>
+      link.href === ACCESS_REQUESTS_HREF
+        ? { ...link, badge: pendingAccessRequests, badgeLabel: "pending" }
+        : link
+    ),
     ...(stagingDemoEnabled ? [{ href: "/demo", label: "Staging demo personas", icon: PiUsersDuotone }] : []),
     ...(dataMigrationEnabled
       ? [{ href: "/admin/data-migration", label: "Data Migration", icon: PiDatabaseDuotone }]
@@ -64,12 +73,15 @@ export default function AdminShell({
   agentAuthEnabled = false,
   dataMigrationEnabled = false,
   stagingDemoEnabled = false,
+  pendingAccessRequests = 0,
 }: {
   children: ReactNode;
   currentPath?: string;
   agentAuthEnabled?: boolean;
   dataMigrationEnabled?: boolean;
   stagingDemoEnabled?: boolean;
+  /** Open mentor and institution requests, for the sidebar badge. */
+  pendingAccessRequests?: number;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const hydrated = useSyncExternalStore(
@@ -77,7 +89,7 @@ export default function AdminShell({
     () => true,
     () => false
   );
-  const links = getAdminLinks(agentAuthEnabled, dataMigrationEnabled, stagingDemoEnabled);
+  const links = getAdminLinks(agentAuthEnabled, dataMigrationEnabled, stagingDemoEnabled, pendingAccessRequests);
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-surface to-dark">
@@ -113,7 +125,8 @@ export default function AdminShell({
           >
             <PiListBold className="h-6 w-6" />
           </button>
-          <h1 className="text-lg font-semibold text-white">TTV Admin</h1>
+          {/* font-body, as in the sidebar: the page's own heading is the one display line. */}
+          <h1 className="font-body text-lg font-semibold text-white">TTV Admin</h1>
         </header>
 
         {/* Content */}

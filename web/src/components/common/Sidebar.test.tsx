@@ -57,7 +57,37 @@ describe("Sidebar", () => {
       />
     );
 
-    expect(html).toContain('aria-label="2 unread"');
+    expect(html).toContain('<span aria-hidden="true">2</span><span class="sr-only">2 unread</span>');
+    expect(html).not.toContain("aria-label=\"2");
     expect(html).not.toContain('aria-current="page"');
+  });
+
+  it("says what a badge counts when the link names it", () => {
+    const html = renderToStaticMarkup(
+      <Sidebar
+        links={[{ href: "/admin/access-requests", label: "Access requests", badge: 3, badgeLabel: "pending" }]}
+        title="TTV Admin"
+        currentPath="/admin"
+        isOpen={false}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('<span class="sr-only">3 pending</span>');
+    expect(html).not.toContain("unread");
+  });
+
+  it("shows no badge for a count of zero", () => {
+    const html = renderToStaticMarkup(
+      <Sidebar
+        links={[{ href: "/admin/access-requests", label: "Access requests", badge: 0, badgeLabel: "pending" }]}
+        title="TTV Admin"
+        currentPath="/admin"
+        isOpen={false}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(html).not.toContain("pending");
   });
 });
