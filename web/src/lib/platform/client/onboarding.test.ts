@@ -263,7 +263,7 @@ describe("onboarding store", () => {
       expect(await store.submitRequest("MENTOR")).toBe(true); // A decline can be followed by a new request.
     });
 
-    it("409: a request already pending elsewhere settles from truth, but this unsent text is kept", async () => {
+    it("409: a request already pending elsewhere settles from truth, and this tab's text is kept", async () => {
       const { store, create, get, storage } = harness();
       fillMentorDraft(store);
       create.mockReturnValueOnce(fail(409, "conflict"));
@@ -271,7 +271,7 @@ describe("onboarding store", () => {
       expect(await store.submitRequest("MENTOR")).toBe(true);
       expect(accessStatus(store.getState().server, "MENTOR")).toBe("PENDING");
       expect(store.getState()).toMatchObject({
-        failure: null, announcement: "A mentor request is already with the team, so this one wasn't sent.",
+        failure: null, announcement: "Your mentor request is already with the team.",
       });
       expect(store.getState().drafts).toEqual({ MENTOR: { note: mentorNote, link: "" } });
       expect(storage.map.get(draftKey)).toContain(mentorNote);
@@ -284,7 +284,7 @@ describe("onboarding store", () => {
       get.mockReturnValueOnce(ok({ ...wairimu, roles: ["MENTOR"] }));
       expect(await store.submitRequest("MENTOR")).toBe(true);
       expect(store.getState()).toMatchObject({ failure: null, announcement: "" });
-      expect(store.getState().drafts).toEqual({ MENTOR: { note: mentorNote, link: "" } });
+      expect(store.getState().drafts).toEqual({}); // The role is held: nothing is left to send the text to.
       expect(accessStatus(store.getState().server, "MENTOR")).toBe("ACTIVE");
     });
 
@@ -686,16 +686,61 @@ describe("onboarding store", () => {
       expect(store.getState().selection).toEqual({ intents: ["MEMBER"], empty: false, dirty: false });
     });
 
-    it("bounds the replay log", async () => {
+    it("keeps one net choice per intent, so no early choice is lost however many follow", async () => {
       const { store, get } = harness(null);
       const answer = deferred<MockReply>();
       get.mockReturnValueOnce(answer.promise);
       store.start();
-      for (let i = 0; i < 100; i++) store.select({ type: "toggle", intent: "MEMBER" });
-      answer.resolve(ok(wairimu));
+      store.select({ type: "toggle", intent: "MENTOR" });
+      for (let i = 0; i < 101; i++) store.select({ type: "toggle", intent: "MEMBER" });
+      answer.resolve(ok({ ...wairimu, stage: "PROMPT", inferred: ["INSTITUTION"] }));
       await tick();
-      // 100 toggles from empty end unchosen; the kept tail of 32 ends the same way.
-      expect(store.getState().selection.intents).toEqual([]);
+      expect(store.getState().selection.intents).toEqual(["MEMBER", "MENTOR", "INSTITUTION"]);
+    });
+
+    it("a later choice never leaves an earlier one stale: member, then exploring, then mentor is mentor", async () => {
+      const { store, get } = harness(null);
+      const answer = deferred<MockReply>();
+      get.mockReturnValueOnce(answer.promise);
+      store.start();
+      store.select({ type: "toggle", intent: "MEMBER" });
+      store.select({ type: "explore" });
+      store.select({ type: "toggle", intent: "MENTOR" });
+      answer.resolve(ok({ ...wairimu, stage: "PROMPT", inferred: ["INSTITUTION"] }));
+      await tick();
+      expect(store.getState().selection.intents).toEqual(["MENTOR"]);
+    });
+
+    it("a pre-load save that succeeds shows the saved truth, never the hint again", async () => {
+      const { store, put } = harness(null, { hint: "mentor" });
+      store.select({ type: "toggle", intent: "MENTOR" }); // untick the preselected card
+      store.select({ type: "toggle", intent: "MEMBER" });
+      put.mockReturnValueOnce(ok({ ...wairimu, stage: "DONE", intents: ["MEMBER"] }));
+      expect(await store.saveIntents()).toBe(true);
+      expect(await put.mock.calls[0][0].json()).toEqual({ intents: ["MEMBER"] });
+      expect(store.getState().selection).toEqual({ intents: ["MEMBER"], empty: false, dirty: false });
+    });
+
+    it("a pre-load save that fails keeps the person's choice, and the retry sends exactly it", async () => {
+      const { store, put, get } = harness(null, { hint: "mentor" });
+      store.select({ type: "toggle", intent: "MENTOR" });
+      store.select({ type: "toggle", intent: "MEMBER" });
+      put.mockReturnValueOnce(fail(503, "unavailable"));
+      get.mockReturnValueOnce(ok({ ...wairimu, stage: "NEW" }));
+      expect(await store.saveIntents()).toBe(false);
+      expect(store.getState().selection).toEqual({ intents: ["MEMBER"], empty: false, dirty: true });
+      put.mockReturnValueOnce(ok({ ...wairimu, stage: "DONE", intents: ["MEMBER"] }));
+      expect(await store.retry()).toBe(true);
+      expect(await Promise.all(put.mock.calls.map(([request]) => request.json()))).toEqual([{ intents: ["MEMBER"] }, { intents: ["MEMBER"] }]);
+    });
+
+    it("a pre-load save that fails never brings back the inferred prefill", async () => {
+      const { store, put, get } = harness(null);
+      store.select({ type: "toggle", intent: "MENTOR" });
+      put.mockReturnValueOnce(fail(503, "unavailable"));
+      get.mockReturnValueOnce(ok({ ...wairimu, stage: "PROMPT", inferred: ["MEMBER"] }));
+      expect(await store.saveIntents()).toBe(false);
+      expect(store.getState().selection).toEqual({ intents: ["MENTOR"], empty: false, dirty: true });
     });
 
     it("normalizes non-API errors and ignores answers from a client that ignores abort", async () => {

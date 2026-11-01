@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { Intent, IntentSet, type OnboardingState } from "../contracts";
 import { onboardingByPersona } from "../fixtures";
 import {
-  initialSelection, intentSelectionReducer, parseIntentHint, type IntentSelection, type IntentSelectionAction,
+  initialSelection, intentSelectionReducer, intentsDecidedBy, intentsTouched, parseIntentHint, replayChoices,
+  type IntentSelection, type IntentSelectionAction,
 } from "./onboarding-intents";
 
 const selection = (intents: Intent[], extra: Partial<IntentSelection> = {}): IntentSelection => ({ intents, empty: false, dirty: false, ...extra });
@@ -76,11 +77,18 @@ describe("intent selection reducer", () => {
   });
 
   describe("sync with server truth", () => {
-    it("replaces a clean selection, and any selection on first load", () => {
+    it("replaces a clean selection", () => {
       expect(intentSelectionReducer(selection(["MEMBER"]), { type: "sync", from: ["MEMBER"], to: ["MENTOR", "MEMBER"] }))
         .toEqual({ intents: ["MEMBER", "MENTOR"], empty: false, dirty: false });
-      expect(intentSelectionReducer(selection(["MEMBER"], { dirty: true, empty: true }), { type: "sync", from: null, to: ["INSTITUTION"] }))
+      expect(intentSelectionReducer(selection(["MEMBER"]), { type: "sync", from: null, to: ["INSTITUTION"] }))
         .toEqual({ intents: ["INSTITUTION"], empty: false, dirty: false });
+    });
+
+    it("keeps an unsaved choice when there is no earlier server view to diff against", () => {
+      expect(intentSelectionReducer(selection(["MEMBER"], { dirty: true }), { type: "sync", from: null, to: ["INSTITUTION"] }))
+        .toEqual({ intents: ["MEMBER"], empty: false, dirty: true });
+      expect(intentSelectionReducer(selection(["MEMBER"], { dirty: true }), { type: "sync", from: null, to: ["MEMBER"] }))
+        .toEqual({ intents: ["MEMBER"], empty: false, dirty: false });
     });
 
     it.each<[string, Intent[], Intent[], Intent[], Intent[], boolean]>([
@@ -109,6 +117,56 @@ describe("intent selection reducer", () => {
     reduce(state, { type: "toggle", intent: "EXPLORING" }, { type: "hint", intent: "institution" }, { type: "continue" },
       { type: "sync", from: ["MEMBER"], to: ["INSTITUTION"] }, { type: "explore" });
     expect(state).toEqual(frozen);
+  });
+});
+
+describe("net choices", () => {
+  it.each<[IntentSelectionAction, Intent[]]>([
+    [{ type: "toggle", intent: "MENTOR" }, ["MENTOR"]],
+    [{ type: "set", intent: "MEMBER", chosen: false }, ["MEMBER"]],
+    [{ type: "explore" }, ["MEMBER", "MENTOR", "INSTITUTION", "EXPLORING"]],
+    [{ type: "hint", intent: "institution" }, ["INSTITUTION"]],
+    [{ type: "hint", intent: "admin" }, []],
+    [{ type: "continue" }, []],
+    [{ type: "sync", from: null, to: ["MEMBER"] }, []],
+  ])("%j decides %j", (action, expected) => expect(intentsDecidedBy(action)).toEqual(expected));
+
+  it.each<[string, Intent[], [Intent, boolean][], Intent[]]>([
+    ["chosen and unchosen intents apply over the prefill", ["MEMBER", "MENTOR"], [["MENTOR", false], ["INSTITUTION", true]], ["MEMBER", "INSTITUTION"]],
+    ["a chosen EXPLORING clears the prefill", ["MEMBER"], [["MEMBER", false], ["MENTOR", false], ["INSTITUTION", false], ["EXPLORING", true]], ["EXPLORING"]],
+    ["choosing an intent over a base EXPLORING", ["EXPLORING"], [["MEMBER", true], ["EXPLORING", false]], ["MEMBER"]],
+    ["no choices leaves the base untouched", ["MENTOR"], [], ["MENTOR"]],
+  ])("replay: %s", (_name, base, choices, expected) => {
+    expect(replayChoices(selection(base), new Map(choices)).intents).toEqual(expected);
+  });
+
+  it("records every intent a step changes, so later steps never leave an earlier choice stale", () => {
+    const explored = intentSelectionReducer(selection(["MEMBER"]), { type: "explore" });
+    const mentor = intentSelectionReducer(explored, { type: "toggle", intent: "MENTOR" });
+    expect(intentsTouched({ type: "toggle", intent: "MENTOR" }, explored, mentor)).toEqual(["MENTOR", "EXPLORING"]);
+    expect(intentsTouched({ type: "continue" }, mentor, mentor)).toEqual([]);
+  });
+
+  it("replays any choice sequence onto any base to exactly the person's own selection", () => {
+    // 4^4 four-step sequences, each replayed from every single-intent and empty base.
+    const bases: Intent[][] = [[], ...Intent.options.map(intent => [intent]), ["MEMBER", "MENTOR"]];
+    for (let code = 0; code < 4 ** 4; code++) {
+      let local = selection([]);
+      const choices = new Map<Intent, boolean>();
+      for (let step = 0; step < 4; step++) {
+        const intent = Intent.options[Math.floor(code / 4 ** step) % 4];
+        const action: IntentSelectionAction = step === 2 && intent === "EXPLORING" ? { type: "explore" } : { type: "toggle", intent };
+        const next = intentSelectionReducer(local, action);
+        for (const touched of intentsTouched(action, local, next)) choices.set(touched, next.intents.includes(touched));
+        local = next;
+      }
+      for (const base of bases) {
+        const replayed = replayChoices(selection(base), choices).intents;
+        // Every touched intent ends as the person left it; untouched base intents survive unless EXPLORING excludes them.
+        for (const [intent, chosen] of choices) expect(replayed.includes(intent)).toBe(chosen);
+        expect(IntentSet.safeParse(replayed).success).toBe(true);
+      }
+    }
   });
 });
 

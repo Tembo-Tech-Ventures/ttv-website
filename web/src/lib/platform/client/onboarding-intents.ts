@@ -54,6 +54,34 @@ export function initialSelection(state: OnboardingState | null, hint?: unknown):
   return hint === undefined ? base : intentSelectionReducer(base, { type: "hint", intent: hint });
 }
 
+/** The intents an action decides. Explore decides all of them: EXPLORING on, everything else off. */
+export function intentsDecidedBy(action: IntentSelectionAction): readonly Intent[] {
+  switch (action.type) {
+    case "toggle": case "set": return [action.intent];
+    case "explore": return Intent.options;
+    case "hint": {
+      const intent = parseIntentHint(action.intent);
+      return intent ? [intent] : [];
+    }
+    case "continue": case "sync": return [];
+  }
+}
+
+/** The intents a step changed or decided: what the person's net choices must record. */
+export function intentsTouched(action: IntentSelectionAction, before: IntentSelection, after: IntentSelection): Intent[] {
+  const decided = new Set(intentsDecidedBy(action));
+  return Intent.options.filter(intent => decided.has(intent) || before.intents.includes(intent) !== after.intents.includes(intent));
+}
+
+/**
+ * Applies a person's net choices (one per intent, at most four) onto a fresh selection. Recorded with
+ * `intentsTouched`, they always agree with the person's own selection, so they never conflict over
+ * EXPLORING and their order doesn't matter.
+ */
+export function replayChoices(base: IntentSelection, choices: ReadonlyMap<Intent, boolean>): IntentSelection {
+  return [...choices].reduce((state, [intent, chosen]) => intentSelectionReducer(state, { type: "set", intent, chosen }), base);
+}
+
 export function intentSelectionReducer(state: IntentSelection, action: IntentSelectionAction): IntentSelection {
   switch (action.type) {
     case "toggle":
@@ -78,7 +106,9 @@ export function intentSelectionReducer(state: IntentSelection, action: IntentSel
       return state.intents.length === 0 && !state.empty ? { ...state, empty: true } : state;
     case "sync": {
       const to = ordered(action.to);
-      if (!state.dirty || action.from === null) return { intents: to, empty: false, dirty: false };
+      if (!state.dirty) return { intents: to, empty: false, dirty: false };
+      // No earlier server view to diff against: the person's unsaved choice stands as it is.
+      if (action.from === null) return { ...state, dirty: !same(state.intents, to) };
       // Keep local edits, but carry over what the server changed (a withdraw removes its intent).
       const from = new Set(action.from);
       const now = new Set(to);

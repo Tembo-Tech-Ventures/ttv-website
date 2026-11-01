@@ -26,11 +26,15 @@ Import `createOnboardingStore`, `useOnboarding`, `accessStatus`,
   user (`ttv-onboarding-drafts:<userId>`). A draft is cleared after a successful
   send, by `signOut()`, and by a 401. Stored drafts are bounded on write and
   validated on read, and anything corrupt is dropped. A send the server refused
-  with 409 (another tab's request is already pending) keeps its text, and the
-  announcement says it wasn't sent.
+  with 409 keeps its text while a request is pending (another tab's, or an
+  earlier attempt whose answer was lost), announced as "Your … request is already
+  with the team." Once the role is held, the text is cleared.
 - **The first load keeps what the person chose.** Without `initialState`, the
-  `?intent=` hint and the inferred prefill are applied to the loaded state, and
-  any choices made before it arrived are replayed as choices (`set`), not flips.
+  `?intent=` hint and the inferred prefill are applied to the loaded state. Any
+  choices made before it arrived are replayed on top, as one net choice per
+  intent (`set`), not as flips. A save made before the load commits the choice:
+  its answer, or the truth after a failure, is rebased onto the person's selection
+  and never re-seeded with the hint, so a retry sends exactly what they chose.
 - **Server truth settles uncertainty.** After a 409, a write's 404 `not_found`
   (a stale or foreign request id), a 5xx, an invalid response or a network failure, the store asks `GET /api/platform/onboarding`. If the
   server already shows the intended outcome (a lost response, another tab), the
