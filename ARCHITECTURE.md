@@ -113,6 +113,7 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/dashboard/apply` | Program application form | Session |
 | `/dashboard/application/[id]` | View/edit own application | Session |
 | `/dashboard/profile` | User profile | Session |
+| `/dashboard/welcome` | Onboarding: "How will you take part?"; new accounts land here from `/dashboard`; flag `onboarding` (`?intent=` takes the legacy page when off) | Session |
 | `/admin` | Admin dashboard home | ADMIN |
 | `/admin/users` | User management | ADMIN |
 | `/admin/users/[id]` | User detail (roles) | ADMIN |

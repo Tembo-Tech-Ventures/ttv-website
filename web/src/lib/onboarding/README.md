@@ -126,6 +126,15 @@ non-production `PLATFORM_FLAGS_OVERRIDE=all`. It **fails open**: any error is
 recorded as a warning and sign-up continues; without a row the person later gets
 the one-time card instead of the welcome step.
 
+## Routing
+
+`src/lib/platform/server/onboarding-routing.ts` (B-O.4, documented in
+`space-routes.README.md`) reads `getOnboardingState` for `GET /dashboard`
+only while onboarding is effective: NEW accounts go to `/dashboard/welcome`,
+and the default space prefers an unseen approval, then the cookie, then the
+saved or inferred intents. Opening the space an approval unlocked calls
+`markAccessRequestSeen` by role.
+
 ## Invariant
 
 `capabilitiesFor` never reads these tables. `capabilities.test.ts` runs every

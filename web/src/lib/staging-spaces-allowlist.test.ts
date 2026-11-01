@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ROUTES } from "@/lib/platform/contracts";
-import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
+import { SPACE_PATHS, WELCOME_PATH } from "@/lib/platform/server/space-routes";
 import { ATTENTION_PAGE_HREF } from "@/components/platform/attention/attention-display";
 import {
   DEMO_CUTOFF, DEMO_ORIGIN, demoEnabled, demoPathAllowed,
@@ -44,6 +44,9 @@ const SURFACES: [string, Identity[], Identity[]][] = [
   [SPACE_PATHS.discover, ["demo", "qa:institution", "fixture"], ["fixture"]],
   [SPACE_PATHS.cohort, ALL, []],
   ["/dashboard", ALL, []],
+  // Onboarding (B-O.4): partner-page hints must resolve, but no persona chooses or asks for access.
+  [WELCOME_PATH, ALL, []],
+  [`${WELCOME_PATH}/`, ALL, []],
 ];
 
 /** Lookalikes, traversal and surfaces that stay closed to every identity and method. */
@@ -61,6 +64,10 @@ const DENIED = [
   ROUTES.listChannels.path, "/api/channels/x/messages", "/api/messages/x", ROUTES.listMentors.path, ROUTES.createMentorRequest.path,
   ROUTES.getMentorAvailability.path, ROUTES.listModerationQueue.path,
   "/dashboard/mentoring/requests", "/dashboard/mentoring/availability", "/dashboard/community/dm/private",
+  // Onboarding writes and lookalikes: retained personas have no cleanup, and agents never decide access.
+  `${WELCOME_PATH}/x`, `${WELCOME_PATH}x`, "/dashboard/welcome/../../admin", "/dashboard/welcome%2f..%2fadmin",
+  ROUTES.getOnboarding.path, `${ROUTES.getOnboarding.path}/`, "/api/platform/access-requests", "/api/platform/access-requests/x/withdraw",
+  "/api/platform/access-requests/x/dismiss", "/api/admin/access-requests", "/api/admin/access-requests/x/decision", "/admin/access-requests",
 ];
 
 describe("restricted staging identities reach only the Phase 1 spaces surfaces", () => {
@@ -91,7 +98,7 @@ describe("restricted staging identities reach only the Phase 1 spaces surfaces",
   });
 
   it("derives the surfaces from the canonical route constants", () => {
-    expect([...SPACES_READ_PATHS].toSorted()).toEqual(["/api/attention", "/api/attention/count", "/api/platform/me", "/dashboard/attention"]);
+    expect([...SPACES_READ_PATHS].toSorted()).toEqual(["/api/attention", "/api/attention/count", "/api/platform/me", "/dashboard/attention", "/dashboard/welcome"]);
     expect(SPACES_APPLY_PATH).toBe("/dashboard/apply");
     expect(SPACES_MARK_READ_PATH).toBe(ROUTES.markAttentionRead.path);
     expect(ROUTES.markAttentionRead.method).toBe("POST");

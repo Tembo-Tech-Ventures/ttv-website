@@ -1,13 +1,19 @@
 import type { APIContext, MiddlewareNext } from "astro";
-import type { Me } from "../contracts";
-import { readLastSpaceCookie, selectDefaultSpace, serializeLastSpaceCookie } from "../client/spaces-selection";
+import { env } from "cloudflare:workers";
+import { getOnboardingState, markAccessRequestSeen } from "@/lib/onboarding/service";
+import { recordError } from "@/lib/observability/errors";
+import type { Me, OnboardingState, SpaceId } from "../contracts";
+import { readLastSpaceCookie, serializeLastSpaceCookie } from "../client/spaces-selection";
 import { demoPathAllowed } from "@/lib/staging-demo-policy";
 import { qaPathAllowed } from "@/lib/staging-qa-policy";
 import { stagingFixturePathAllowed } from "@/lib/staging-fixture-policy";
+import {
+  acknowledgedRole, grantedHintSpace, parseWelcomeHint, selectLandingSpace, WELCOME_LEGACY_PATHS, welcomeDue,
+} from "./onboarding-routing";
 import { getSpaceContext } from "./space-context";
 import {
   canonicalSpacePath, isAvailableSpacePath, isNewSpacePath, legacySpacePath,
-  normalizeSpacePath, SPACE_PATHS, spaceForPath,
+  normalizeSpacePath, SPACE_PATHS, spaceForPath, WELCOME_PATH,
 } from "./space-routes";
 
 function privateResponse(response: Response): Response {
@@ -22,16 +28,78 @@ function denial(status: number): Response {
   return privateResponse(new Response(status === 404 ? "Not found." : "Forbidden.", { status }));
 }
 
-function defaultSpaceResponse({ locals, request, url, redirect }: APIContext, me: Me): Response {
-  // Restricted test identities retain their exact existing surface boundaries.
-  const spaces = me.spaces.filter(space => {
+/** Restricted test identities retain their exact existing surface boundaries. */
+function reachableSpaces({ locals, request }: APIContext, spaces: readonly SpaceId[]): SpaceId[] {
+  return spaces.filter(space => {
     const target = SPACE_PATHS[space];
     return (!locals.stagingQa || qaPathAllowed(locals.stagingQa.persona, target, request.method))
       && (!locals.stagingDemo || demoPathAllowed(target, request.method))
       && (!locals.stagingFixture || stagingFixturePathAllowed(target, request.method));
   });
-  const selected = selectDefaultSpace(spaces, { lastSpace: readLastSpaceCookie(request.headers.get("cookie")) });
+}
+
+/** Onboarding only steers the default choice, so a failed read falls back to the choice without it. */
+async function landingOnboardingState(me: Me): Promise<OnboardingState | null> {
+  if (!me.flags.onboarding) return null;
+  try {
+    return await getOnboardingState(env.DB, me.user.id);
+  } catch (error) {
+    // recordError never throws; it reports its own ledger failures.
+    await recordError(env.DB, { source: "request", route: "/dashboard", error, level: "warning" });
+    return null;
+  }
+}
+
+async function defaultSpaceResponse(context: APIContext, me: Me): Promise<Response> {
+  const { locals, request, url, redirect } = context;
+  const onboarding = await landingOnboardingState(me);
+  if (onboarding && welcomeDue(locals, me, onboarding)) return privateResponse(redirect(WELCOME_PATH + url.search, 302));
+  const lastSpace = readLastSpaceCookie(request.headers.get("cookie"));
+  const selected = selectLandingSpace(reachableSpaces(context, me.spaces), lastSpace, onboarding);
   return selected ? privateResponse(redirect(SPACE_PATHS[selected] + url.search, 302)) : denial(403);
+}
+
+/**
+ * `/dashboard/welcome` (onboarding SPEC §2, §3). The page itself (U-O.1) refuses delegated callers.
+ * - Onboarding off: a partner-page hint takes its legacy route; anything else is 404.
+ * - On: a hint naming an access role already held goes to that space. Otherwise the page renders,
+ *   and the hint only preselects a card.
+ */
+async function welcomeResponse(context: APIContext, next: MiddlewareNext): Promise<Response> {
+  const { request, url } = context;
+  const read = request.method === "GET" || request.method === "HEAD";
+  const hint = read ? parseWelcomeHint(url.searchParams) : null;
+  const legacy = () => hint ? privateResponse(context.redirect(WELCOME_LEGACY_PATHS[hint], 302)) : denial(404);
+  let me;
+  try {
+    me = await getSpaceContext(context);
+  } catch (error) {
+    if (error instanceof Response) return error.status === 404 ? legacy() : privateResponse(error);
+    // A hinted link still lands on the page that enforces its own access; the step itself fails closed.
+    if (hint) return legacy();
+    throw error;
+  }
+  if (!me.flags.onboarding) return legacy();
+  const granted = grantedHintSpace(hint, reachableSpaces(context, me.spaces));
+  if (granted) return privateResponse(context.redirect(SPACE_PATHS[granted], 302));
+  return privateResponse(await next());
+}
+
+/**
+ * Opening the space an approval unlocked is what makes that approval seen (onboarding SPEC §3), so
+ * `/dashboard` stops preferring it. It matters at most once, so the page never waits for it: the
+ * write runs after the response through waitUntil. A failed write is recorded as a warning and only
+ * means the preference applies once more.
+ */
+async function acknowledgeApproval({ locals }: APIContext, me: Me, space: SpaceId): Promise<void> {
+  const role = acknowledgedRole(space, me, locals);
+  if (!role) return;
+  const write = markAccessRequestSeen(env.DB, me.user.id, { role }).catch(error =>
+    // recordError never throws; it reports its own ledger failures.
+    recordError(env.DB, { source: "request", route: SPACE_PATHS[space], error, level: "warning" }));
+  // Without an execution context (tests, non-Workers runtimes) the write is awaited, not dropped.
+  if (locals.cfContext) locals.cfContext.waitUntil(write);
+  else await write;
 }
 
 async function serveSpacePage(context: APIContext, next: MiddlewareNext, me: Me, canonical: string | null): Promise<Response> {
@@ -59,6 +127,7 @@ async function serveSpacePage(context: APIContext, next: MiddlewareNext, me: Me,
   privateResponse(response);
   if (read && response.status >= 200 && response.status < 300 && me.spaces.includes(space)) {
     response.headers.append("Set-Cookie", serializeLastSpaceCookie(space, url.protocol === "https:"));
+    if (request.method === "GET" && me.flags.onboarding) await acknowledgeApproval(context, me, space);
   }
   return response;
 }
@@ -68,6 +137,7 @@ export async function routeSpaceRequest(context: APIContext, next: MiddlewareNex
   const { request, url } = context;
   const path = normalizeSpacePath(url.pathname);
   const canonical = canonicalSpacePath(path);
+  if (path === WELCOME_PATH) return welcomeResponse(context, next);
   const newPath = isNewSpacePath(path);
   // Me is browser-only. Preserve existing PAT page verification after the
   // middleware's authentication, delegation and fixture allowlists have run.
