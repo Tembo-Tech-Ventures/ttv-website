@@ -49,12 +49,14 @@ describe("refusals", () => {
     expect(isDecisionRefusal({ status: 409 })).toBe(false);
   });
 
-  it.each([400, 403, 404, 409, 500, 503])("says nothing changed for %i", (status) => {
+  it.each([400, 403, 404, 409, 429, 500, 503])("says nothing changed for %i", (status) => {
     expect(refusalMessage(new Refused(status))).toMatch(/^Nothing changed\./);
   });
 
-  it("explains a conflicting decision", () => {
-    expect(refusalMessage(new Refused(409))).toContain("Someone decided this case");
+  it("says why a decision conflicted, in the server's words when it gave them", () => {
+    expect(refusalMessage(new Refused(409, "This message was deleted.")))
+      .toBe("Nothing changed. This message was deleted. The case below is as it stands now.");
+    expect(refusalMessage(new Refused(409, " "))).toContain("Someone decided this case");
   });
 
   it("passes the server's validation message through", () => {
