@@ -169,6 +169,13 @@ describe("evidence links", () => {
     expect(html).toContain('<span class="sr-only"> (opens in a new tab)</span>');
   });
 
+  it("always shows the whole host, so a look-alike cannot pass for the real site", () => {
+    const lookAlike = "https://github.com.repos.achieng-ledger-project.portfolio-review.evil.example/login";
+    expect(evidenceDestination(lookAlike)).toBe("github.com.repos.achieng-ledger-project.portfolio-review.evil.example…");
+    expect(evidenceDestination(lookAlike)).toContain("evil.example");
+    expect(evidenceDestination("https://example.org/notes")).toBe("example.org/notes");
+  });
+
   it("shortens a long address without losing where it goes", () => {
     expect(evidenceDestination("https://github.com/achieng")).toBe("github.com/achieng");
     expect(evidenceDestination("https://example.com/")).toBe("example.com");

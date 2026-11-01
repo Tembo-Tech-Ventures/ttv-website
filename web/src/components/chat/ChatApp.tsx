@@ -393,7 +393,10 @@ export default function ChatApp({
   }
 
   function retryQuestion() {
-    if (failedQuestion) void sendMessage(failedQuestion.message, failedQuestion.history);
+    if (!failedQuestion) return;
+    // The button goes away as the question is asked again: keep focus where the next words go.
+    composerRef.current?.focus();
+    void sendMessage(failedQuestion.message, failedQuestion.history);
   }
 
   function editQuestion() {

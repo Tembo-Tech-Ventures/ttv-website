@@ -76,9 +76,26 @@ describe("session viewer", () => {
     expect(lines()).toHaveLength(3);
 
     const retry = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Try again")!;
+    retry.focus();
     await act(async () => retry.click());
     expect(HTMLMediaElement.prototype.load).toHaveBeenCalled();
+    // Still there while it retries, so keyboard focus is not dropped on the page.
+    expect(retry.isConnected).toBe(true);
+    expect(document.activeElement).toBe(retry);
+    expect(retry.textContent).toBe("Trying again…");
+    expect(retry.getAttribute("aria-disabled")).toBe("true");
+
+    // Failing again: the same button, still focused, offers another try.
+    await act(async () => video.dispatchEvent(new Event("error")));
+    expect(document.activeElement).toBe(retry);
+    expect(retry.textContent).toBe("Try again");
+
+    // Loading this time: the message goes, and focus moves to the player it brought back.
+    await act(async () => retry.click());
+    await act(async () => video.dispatchEvent(new Event("loadeddata")));
     expect(status.textContent).toBe("");
     expect(video.classList).not.toContain("invisible");
+    expect(container.querySelector("[data-video-unavailable]")).toBeNull();
+    expect(document.activeElement).toBe(video);
   });
 });

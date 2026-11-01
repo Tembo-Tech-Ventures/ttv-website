@@ -51,12 +51,16 @@ export function validateMentorMethod(method: string): string | null {
 /**
  * Where an evidence link goes, short enough to read: "github.com/achieng/ledger".
  * Members often leave the default title ("Supporting work"), so the address is
- * what tells one link from the next.
+ * what tells one link from the next. The host is always shown whole, so a long
+ * look-alike ("github.com.evil.example") can never pass for the real site; only
+ * the path is shortened.
  */
 export function evidenceDestination(href: string, max = 48): string {
   const url = new URL(href);
-  const place = (url.hostname.replace(/^www\./, "") + url.pathname).replace(/\/$/, "");
-  return place.length > max ? `${place.slice(0, max - 1)}…` : place;
+  const host = url.hostname.replace(/^www\./, "");
+  const path = url.pathname.replace(/\/$/, "");
+  const room = Math.max(0, max - host.length);
+  return path.length <= room ? host + path : `${host}${path.slice(0, Math.max(0, room - 1))}…`;
 }
 
 export function safeMentorEvidenceUrl(value: string): string | null {

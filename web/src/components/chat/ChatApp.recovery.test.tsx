@@ -68,7 +68,10 @@ describe("a question that fails", () => {
 
   it("asks the same question again, in the same conversation, and answers it", async () => {
     chatReplies.push({ status: 200, body: { answer: "In week 4.", citations: [], sessionId: null } });
+    button("Try again")!.focus();
     await act(async () => button("Try again")!.click());
+    // The button goes as the question is asked again; focus waits in the composer, not on the page.
+    expect(document.activeElement).toBe(composer());
     expect(asked).toHaveLength(2);
     expect(asked[1]!.message).toBe("Where did we cover joins?");
     // Asked once: the failed copy is not left in the history it is sent with.

@@ -21,10 +21,16 @@ export default function SessionViewer({
   titleAs?: "h1" | "h2";
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const retryRef = useRef<HTMLButtonElement | null>(null);
   const titleId = useId();
   const [currentTime, setCurrentTime] = useState(initialTime);
-  /** The video could not load. Without this the player just sat at 0:00 and said nothing. */
-  const [failed, setFailed] = useState(false);
+  /**
+   * Whether the video could load. Without a failed state the player just sat
+   * at 0:00 and said nothing. While retrying, the message and its button stay
+   * put, so keyboard focus is not dropped on the page.
+   */
+  const [media, setMedia] = useState<"ok" | "failed" | "retrying">("ok");
+  const failed = media !== "ok";
 
   const activeSegment = useMemo(() => {
     return (
@@ -44,7 +50,7 @@ export default function SessionViewer({
   /* The source may have failed before hydration attached onError: ask the element. */
   useEffect(() => {
     const video = videoRef.current;
-    if (video && (video.error || video.networkState === NETWORK_NO_SOURCE)) setFailed(true);
+    if (video && (video.error || video.networkState === NETWORK_NO_SOURCE)) setMedia("failed");
   }, []);
 
   const seek = (seconds: number) => {
@@ -54,9 +60,25 @@ export default function SessionViewer({
   };
 
   const retry = () => {
-    setFailed(false);
+    if (media !== "failed") return;
+    setMedia("retrying");
     videoRef.current?.load();
   };
+
+  /* Loaded after all: hand focus from the retry button to the player it brought back. */
+  const focusPlayer = useRef(false);
+  const loaded = () => {
+    if (media === "ok") return;
+    focusPlayer.current = document.activeElement === retryRef.current;
+    setMedia("ok");
+  };
+
+  /* After the render that shows the player again; it cannot take focus while hidden. */
+  useEffect(() => {
+    if (media !== "ok" || !focusPlayer.current) return;
+    focusPlayer.current = false;
+    videoRef.current?.focus();
+  }, [media]);
 
   return (
     <div className="grid min-h-[70vh] gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
@@ -70,7 +92,8 @@ export default function SessionViewer({
             aria-labelledby={titleId}
             className={failed ? "invisible aspect-video w-full bg-black" : "aspect-video w-full bg-black"}
             onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
-            onError={() => setFailed(true)}
+            onError={() => setMedia("failed")}
+            onLoadedData={loaded}
           >
             <track kind="captions" srcLang="en" label="English" />
           </video>
@@ -84,11 +107,13 @@ export default function SessionViewer({
             </output>
             {failed && (
               <button
+                ref={retryRef}
                 type="button"
                 onClick={retry}
-                className="min-h-11 rounded-md border border-teal/40 px-4 text-sm font-semibold text-white hover:bg-teal/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                aria-disabled={media === "retrying" || undefined}
+                className="min-h-11 rounded-md border border-white/40 px-4 text-sm font-semibold text-white hover:bg-teal/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary aria-disabled:cursor-wait aria-disabled:opacity-70"
               >
-                Try again
+                {media === "retrying" ? "Trying again…" : "Try again"}
               </button>
             )}
           </div>
