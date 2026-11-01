@@ -42,6 +42,9 @@ open yet and point at the Mentoring overview, which says what they will be.
 A member without a cohort gets the way to apply in Community, on the page
 itself (`CohortInvitation`) as well as in the sidebar.
 
+While `channels` is on for the person, Community and Cohort also list their
+channels (U-2.3, `components/channels/README.md`).
+
 ## Styling moved-in pages
 
 The old dashboard tuned its status colours for a darker ground. Inside the

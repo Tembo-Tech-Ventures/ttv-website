@@ -1,9 +1,11 @@
-import type { AccessRole, Me, SpaceId } from "@/lib/platform/contracts";
-import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
+import type { AccessRole, Channel, Me, SpaceId } from "@/lib/platform/contracts";
+import { CONDUCT_PATH, SPACE_PATHS, type ChannelSpace } from "@/lib/platform/server/space-routes";
 import type { StudentDashboardLinkId } from "@/lib/student/journey";
 import { ACCOUNT_PATH, requestRowId } from "@/components/platform/onboarding/account-actions";
 import { PARTNER, REQUEST, TAKING_PART } from "@/components/platform/onboarding/copy";
 import { offersCohort, type OnboardingView } from "@/components/platform/onboarding/framing";
+import { CONDUCT_TITLE } from "@/components/channels/conduct";
+import { channelPath, channelPathPrefix } from "@/components/channels/paths";
 
 /**
  * What each space's sidebar lists, as data. The links are the existing pages
@@ -27,7 +29,10 @@ export type SpacePageKey =
   | "opportunities"
   | "leads"
   | "account"
-  | "feedback";
+  | "feedback"
+  | "communityChannel"
+  | "cohortChannel"
+  | "conduct";
 
 export type SidebarIcon =
   | "overview"
@@ -50,7 +55,10 @@ export type SidebarIcon =
   | "feedback"
   | "admin"
   | "mentorRequest"
-  | "institutionRequest";
+  | "institutionRequest"
+  | "channel"
+  | "cohortChannel"
+  | "conduct";
 
 export interface SidebarItem {
   key: string;
@@ -68,6 +76,8 @@ export interface SidebarItem {
   noteTone?: "ring";
   /** Leaves the app for a public page of the website, and says so. */
   publicPage?: boolean;
+  /** A channel: its name is bold while it has unread messages, and quieter once read. */
+  emphasis?: "read" | "unread";
 }
 
 export interface SidebarGroupModel {
@@ -94,6 +104,15 @@ export interface SidebarFacts {
   allowed?: (href: string) => boolean;
   /** How onboarding frames Community, when it is on for this person (space-page.ts). */
   onboarding?: Pick<OnboardingView, "framing" | "pending"> | null;
+  /** The channels this person can read, while `channels` is on for them. Without it the sidebars are as they were. */
+  channels?: SidebarChannels | null;
+}
+
+export interface SidebarChannels {
+  /** Readable channels, in the server's order. Each space lists its own kind; direct conversations wait for Phase 4. */
+  items: readonly Channel[];
+  /** The channel being read, marked current. */
+  currentId?: string | null;
 }
 
 /** Where each page opens, in order of preference. The first space the person can open wins. */
@@ -115,6 +134,9 @@ export const PAGE_SPACES: Readonly<Record<SpacePageKey, readonly SpaceId[]>> = {
   leads: ["profile"],
   account: ["profile"],
   feedback: ["profile"],
+  communityChannel: ["community"],
+  cohortChannel: ["cohort"],
+  conduct: ["community"],
 };
 
 export const SPACE_PAGE_PATHS = {
@@ -132,23 +154,61 @@ export const SPACE_PAGE_PATHS = {
   leads: "/dashboard/me/leads",
   account: "/dashboard/account",
   feedback: "/dashboard/feedback",
+  // A channel page is one of many under this prefix; its own path is channelPath(channel).
+  communityChannel: channelPathPrefix("community"),
+  cohortChannel: channelPathPrefix("cohort"),
+  conduct: CONDUCT_PATH,
 } as const satisfies Record<SpacePageKey, string>;
 
 /** What an entry whose page has not opened says, here and on the page it leads to. */
 export const NOT_OPEN_YET = "Not open yet";
 
-/** An entry opens either one of the migrated pages (and is current on it) or a plain path. */
-type Entry = Omit<SidebarItem, "current" | "href"> & ({ page: SpacePageKey; href?: never } | { href: string; page?: never });
+/** An entry opens either one of the migrated pages (and is current on it) or a plain path, current only when it says so. */
+type Entry = Omit<SidebarItem, "current" | "href"> & (
+  | { page: SpacePageKey; href?: never; current?: never }
+  | { href: string; page?: never; current?: boolean }
+);
 
 function item(facts: SidebarFacts, entry: Entry): SidebarItem {
-  const { page, href, ...rest } = entry;
-  return page === undefined ? { ...rest, href, current: false } : { ...rest, href: SPACE_PAGE_PATHS[page], current: page === facts.page };
+  const { page, href, current = false, ...rest } = entry;
+  return page === undefined ? { ...rest, href, current } : { ...rest, href: SPACE_PAGE_PATHS[page], current: page === facts.page };
 }
 
 function group(facts: SidebarFacts, label: string | undefined, entries: (Entry | false)[]): SidebarGroupModel[] {
   const allowed = facts.allowed ?? (() => true);
   const items = entries.filter((entry): entry is Entry => entry !== false).map((entry) => item(facts, entry)).filter((entry) => allowed(entry.href));
   return items.length > 0 ? [{ ...(label ? { label } : {}), items }] : [];
+}
+
+const CHANNEL_KIND = { community: "COMMUNITY", cohort: "COHORT" } as const satisfies Record<ChannelSpace, Channel["kind"]>;
+
+/**
+ * A space's channels. Nothing while `channels` is off for the person, and
+ * nothing in a space with no channel they can read (an applicant's Cohort).
+ * Community, where the page lives, ends the list with the way back to how we
+ * talk to each other; Cohort does not, so no sidebar link changes space.
+ * Every channel shows the habits itself on a person's first visit.
+ */
+function channels(facts: SidebarFacts, space: ChannelSpace): SidebarGroupModel[] {
+  const readable = facts.channels?.items.filter((channel) => channel.kind === CHANNEL_KIND[space]) ?? [];
+  if (readable.length === 0) return [];
+  return group(facts, "Channels", [
+    ...readable.map((channel): Entry => {
+      const unread = channel.unreadCount;
+      return {
+        key: `channel-${channel.id}`,
+        href: channelPath(channel)!,
+        label: channel.name,
+        icon: space === "cohort" ? "cohortChannel" : "channel",
+        current: channel.id === facts.channels?.currentId,
+        emphasis: unread > 0 ? "unread" : "read",
+        ...(unread > 0 ? { count: unread, countLabel: unread === 1 ? "unread message" : "unread messages" } : {}),
+        ...(channel.archivedAt !== null ? { note: "Archived" } : {}),
+      };
+    }),
+    // Set in the channels' quieter weight: a way back to the habits, not one more place to read.
+    space === "community" && { key: "conduct", page: "conduct", label: CONDUCT_TITLE, icon: "conduct", emphasis: "read" },
+  ]);
 }
 
 function cohort(facts: SidebarFacts): SidebarModel {
@@ -163,6 +223,7 @@ function cohort(facts: SidebarFacts): SidebarModel {
         { key: "ask", page: "ask", label: "Ask Tembo", icon: "tembo" },
         { key: "apply", page: "apply", label: "Apply", icon: "apply" },
       ]),
+      ...channels(facts, "cohort"),
     ],
   };
 }
@@ -183,6 +244,7 @@ function community(facts: SidebarFacts): SidebarModel {
         { key: "journey", page: "journey", label: framing === "partner" ? PARTNER.ownWork : "Your journey", icon: "journey" },
         noCohort && { key: "ask", page: "ask", label: "Ask Tembo", icon: "tembo" },
       ]),
+      ...channels(facts, "community"),
       // The directories are the website's public pages, outside the app: say so before the click.
       ...group(facts, "Public directory", [
         { key: "members", href: "/community/members", label: "Members", icon: "people", publicPage: true },

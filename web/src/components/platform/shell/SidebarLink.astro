@@ -9,7 +9,8 @@ import { CHIP_TONES } from "@/components/platform/ui/tones";
  * A count is unread attention unless `countLabel` says what it counts
  * instead; `note` is quiet text such as "Not open yet". `publicPage` marks a
  * link that leaves the app for the public website. `noteTone` shows the note
- * as a status chip, such as a request's "Pending".
+ * as a status chip, such as a request's "Pending". `emphasis` is for channels:
+ * the name is bold while there is something unread, and quieter once read.
  */
 interface Props {
   href: string;
@@ -22,9 +23,10 @@ interface Props {
   note?: string;
   noteTone?: "ring";
   publicPage?: boolean;
+  emphasis?: "read" | "unread";
 }
 
-const { href, label, icon: Icon, current = false, count = 0, countLabel = "new", note, noteTone, publicPage = false } = Astro.props;
+const { href, label, icon: Icon, current = false, count = 0, countLabel = "new", note, noteTone, publicPage = false, emphasis } = Astro.props;
 /*
  * With a note, the link's name is said in one string ("Mentor access, Pending"). The note is a
  * separate box, and a visually hidden separator between them would be read with a stray space
@@ -41,13 +43,17 @@ const name = noted ? `${label}${publicPage ? " (public website)" : ""}, ${note}`
     aria-current={current ? "page" : undefined}
     aria-label={name}
     class:list={[
-      "flex min-h-10 items-center gap-3 rounded-xl px-2.5 py-2 text-[0.9375rem] leading-snug font-semibold transition-colors duration-150 motion-reduce:transition-none pointer-coarse:min-h-11",
+      "flex min-h-10 items-center gap-3 rounded-xl px-2.5 py-2 text-[0.9375rem] leading-snug transition-colors duration-150 motion-reduce:transition-none pointer-coarse:min-h-11",
       "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink",
-      current ? "bg-ink-primary/8 text-ink-primary" : "text-ink-secondary hover:bg-ink-primary/5 hover:text-ink-primary",
+      // One colour and one weight each, so no two utilities compete.
+      current ? "bg-ink-primary/8" : "hover:bg-ink-primary/5",
+      current || emphasis === "unread" ? "text-ink-primary" : "text-ink-secondary hover:text-ink-primary",
+      { read: "font-medium", unread: "font-bold", none: "font-semibold" }[emphasis ?? "none"],
     ]}
+    data-emphasis={emphasis}
   >
     {Icon && <Icon aria-hidden className="size-5 shrink-0" />}
-    <span class="min-w-0 flex-1 break-words">
+    <span class="min-w-0 flex-1 break-words" data-sidebar-label>
       {label}
       {publicPage && <span class="sr-only"> (public website)</span>}
     </span>

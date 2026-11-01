@@ -1,0 +1,18 @@
+---
+/**
+ * "How we talk to each other" (U-2.3), always open to read again from the
+ * Channels list. Someone who arrives before opening any channel can agree
+ * here too. Not found while `channels` is off for the person.
+ */
+import ConductArticle from "@/components/channels/ConductArticle.astro";
+import { resolveConductPage } from "@/components/channels/channel-page";
+import { CONDUCT_TITLE } from "@/components/channels/conduct";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+
+const page = await resolveConductPage(Astro);
+if (page instanceof Response) return page;
+---
+
+<SpacePage context={page.context} title={CONDUCT_TITLE} channels={page.readable}>
+  <ConductArticle record={page.record} action={page.self} />
+</SpacePage>

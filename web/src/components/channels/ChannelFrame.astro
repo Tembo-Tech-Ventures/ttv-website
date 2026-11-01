@@ -1,0 +1,45 @@
+---
+/**
+ * A channel's page before its conversation exists: the header, then either
+ * "How we talk to each other" on a person's first visit to any channel, or a
+ * plain note that conversations are not open yet. Once U-2.1 lands, the page
+ * renders its ChannelView (with ChannelHeader as its children) in place of
+ * the note, and keeps this frame for the first visit.
+ */
+import type { Channel } from "@/lib/platform/contracts";
+import { CONDUCT_FIRST_VISIT, CONDUCT_TITLE } from "./conduct";
+import ChannelHeader from "./ChannelHeader.astro";
+import ConductAgree from "./ConductAgree.astro";
+import ConductHabits from "./ConductHabits.astro";
+
+interface Props {
+  channel: Channel;
+  /** Whether this person has agreed to the habits as they are now (conduct-flow.ts). */
+  agreed: boolean;
+  /** This page with its query, where agreeing posts and returns. */
+  action: string;
+}
+
+const { channel, agreed, action } = Astro.props;
+---
+
+<div class="flex min-h-full flex-col" data-channel-frame={channel.slug} data-channel-kind={channel.kind}>
+  <ChannelHeader channel={channel} />
+  {
+    agreed ? (
+      <section aria-labelledby="channel-not-open" data-channel-not-open class="mt-8 max-w-xl">
+        <h2 id="channel-not-open" class="text-lg font-bold text-ink-primary">Conversations aren’t open yet</h2>
+        <p class="mt-2 text-[0.9375rem] leading-relaxed text-ink-secondary">
+          Messages in #{channel.name} will appear here once conversations open.
+        </p>
+      </section>
+    ) : (
+      <section aria-labelledby="conduct-title" data-conduct-gate class="mt-8">
+        <h2 id="conduct-title" class="text-2xl leading-tight font-bold text-ink-primary">{CONDUCT_TITLE}</h2>
+        <p class="mt-2 mb-5 text-[0.9375rem] text-ink-muted">{CONDUCT_FIRST_VISIT}</p>
+        <ConductHabits />
+        <ConductAgree action={action} />
+      </section>
+    )
+  }
+</div>

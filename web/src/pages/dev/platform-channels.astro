@@ -1,0 +1,133 @@
+---
+/**
+ * Dev-only harness for channel sidebars and "How we talk to each other" (U-2.3).
+ *
+ * Renders the real Community and Cohort sidebars (spaceSidebar) and the real
+ * channel frame and conduct page for a synthetic persona, with fixture
+ * channels in place of the backend's list:
+ *
+ * - `?persona=wanjiku&space=community` (or `space=cohort`): the space's sidebar.
+ * - `&channel=help`: that channel's page. `&agreed` means the persona has
+ *   already agreed to the habits; without it the channel shows them first,
+ *   and agreeing posts back here through the real conduct flow.
+ * - `&view=conduct`: the conduct page.
+ * - `&channels=off`: the `channels` flag off for the persona, so the sidebar
+ *   is exactly what it was before channels.
+ *
+ * Nothing here is reachable outside `astro dev`. `e2e/platform-channels.spec.ts`
+ * holds the browser contract.
+ */
+import type { Channel, ConductAcknowledgement, Me, SpaceId } from "@/lib/platform/contracts";
+import { CONDUCT_PATH } from "@/lib/platform/server/space-routes";
+import { SpaceId as SpaceIdSchema } from "@/lib/platform/contracts";
+import { FIXTURE_NOTICE, FIXTURE_NOW } from "@/lib/platform/fixtures";
+import { STUDENT_DASHBOARD_LINK_IDS } from "@/lib/student/journey";
+import SpacesLayout from "@/layouts/SpacesLayout.astro";
+import { canRenderSpace } from "@/components/platform/shell/access";
+import { HARNESS_PERSONAS, isHarnessPersona } from "@/components/platform/shell/harness/personas";
+import { SPACE_LABEL } from "@/components/platform/shell/space-routes";
+import SpaceSidebar from "@/components/platform/spaces/SpaceSidebar.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { spaceSidebar, type SidebarModel, type SpacePageKey } from "@/components/platform/spaces/sidebar";
+import ChannelFrame from "@/components/channels/ChannelFrame.astro";
+import ConductArticle from "@/components/channels/ConductArticle.astro";
+import { CONDUCT_TITLE } from "@/components/channels/conduct";
+import { conductAgreed, handleConductPost } from "@/components/channels/conduct-flow";
+import { harnessChannels } from "@/components/channels/harness/fixtures";
+import { channelPath, channelSpace } from "@/components/channels/paths";
+import { loadSidebarChannels } from "@/components/channels/sidebar-channels";
+
+if (!import.meta.env.DEV) {
+  return new Response("Not found", { status: 404 });
+}
+
+const params = Astro.url.searchParams;
+const personaParam = params.get("persona");
+const persona = isHarnessPersona(personaParam) ? personaParam : "wanjiku";
+const base: Me = HARNESS_PERSONAS[persona];
+const me: Me = params.get("channels") === "off" ? { ...base, flags: { ...base.flags, channels: false } } : base;
+const readable = harnessChannels(me);
+const viewing: Channel | null = readable.find((channel) => channel.slug === params.get("channel") && channelSpace(channel)) ?? null;
+const conductView = params.get("view") === "conduct";
+const requested = SpaceIdSchema.safeParse(params.get("space"));
+const space: SpaceId = viewing ? channelSpace(viewing)! : conductView ? "community"
+  : requested.success && me.spaces.includes(requested.data) ? requested.data : me.spaces[0];
+if (!canRenderSpace(me, space) || (params.has("channel") && !viewing) || ((viewing || conductView) && !me.flags.channels)) {
+  return new Response("Not found", { status: 404 });
+}
+
+/** A harness URL for this persona, keeping the flag switch. */
+function here(extra: Record<string, string | null>): string {
+  const query = new URLSearchParams({ persona });
+  if (params.get("channels") === "off") query.set("channels", "off");
+  for (const [key, value] of Object.entries(extra)) if (value !== null) query.set(key, value);
+  return `/dev/platform-channels?${query.toString()}`;
+}
+
+// The persona's agreement lives in the URL here; the real flow is the same function the pages use.
+let record: ConductAcknowledgement | null = params.has("agreed") ? { version: 1, acknowledgedAt: FIXTURE_NOW, current: true } : null;
+const self = Astro.url.pathname + Astro.url.search;
+const agreeBack = here({ ...(viewing ? { channel: viewing.slug } : { view: "conduct" }), agreed: "" });
+const posted = await handleConductPost(Astro.request, {
+  load: async () => record,
+  acknowledge: async (version) => { record = { version, acknowledgedAt: FIXTURE_NOW, current: true }; },
+}, agreeBack);
+if (posted) {
+  return posted.kind === "redirect"
+    ? new Response(null, { status: 303, headers: { Location: posted.location } })
+    : new Response(null, { status: posted.status });
+}
+const agreed = conductAgreed(record);
+
+const page: SpacePageKey = viewing ? (space === "cohort" ? "cohortChannel" : "communityChannel")
+  : conductView ? "conduct" : space === "community" ? "journey" : space === "cohort" ? "cohort" : "portfolio";
+const sidebarChannels = await loadSidebarChannels(me, space, async () => readable, async () => {}, viewing?.id ?? null);
+const model: SidebarModel = spaceSidebar(space, {
+  me, page, visibleLinkIds: STUDENT_DASHBOARD_LINK_IDS, unreadLeadCount: 0, certificates: [], channels: sidebarChannels,
+});
+
+// Keep the harness's own links inside the harness: channels and the conduct page open here, with this persona.
+const harnessHref = new Map<string, string>([
+  ...readable.flatMap((channel): [string, string][] => {
+    const path = channelPath(channel);
+    return path ? [[path, here({ channel: channel.slug, agreed: agreed ? "" : null })]] : [];
+  }),
+  [CONDUCT_PATH, here({ view: "conduct", agreed: agreed ? "" : null })],
+]);
+const harnessModel: SidebarModel = {
+  ...model,
+  groups: model.groups.map((group) => ({ ...group, items: group.items.map((entry) => ({ ...entry, href: harnessHref.get(entry.href) ?? entry.href })) })),
+};
+const spaceHrefs = Object.fromEntries(me.spaces.map((id) => [id, here({ space: id, agreed: agreed ? "" : null })])) as Record<SpaceId, string>;
+const title = viewing ? `#${viewing.name}` : conductView ? CONDUCT_TITLE : SPACE_LABEL[space];
+---
+
+<SpacesLayout
+  me={me}
+  space={space}
+  title={title}
+  harness={{ account: { signOut: { kind: "link", href: "#signed-out", label: "Sign out" }, feedback: true }, spaceHrefs }}
+>
+  <SpaceSidebar slot="sidebar" model={harnessModel} />
+  {
+    viewing ? (
+      <ChannelFrame channel={viewing} agreed={agreed} action={self} />
+    ) : conductView ? (
+      <ConductArticle record={record} action={self} />
+    ) : (
+      <article class="max-w-3xl" data-harness-page={space}>
+        <PageTitle spaces legacyClass="">{SPACE_LABEL[space]}</PageTitle>
+        <p class="mt-4 max-w-2xl text-base leading-relaxed text-ink-secondary">
+          {me.user.name}’s {SPACE_LABEL[space]} space. The page itself is the existing one; this harness shows its sidebar.
+        </p>
+        <p class="mt-3 text-sm text-ink-muted">{FIXTURE_NOTICE}</p>
+      </article>
+    )
+  }
+</SpacesLayout>
+
+<style is:global>
+  astro-dev-toolbar {
+    display: none !important;
+  }
+</style>
