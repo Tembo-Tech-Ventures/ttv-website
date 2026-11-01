@@ -45,9 +45,10 @@ Institutional discovery's shared rule, `discoverableMember` in
 `src/lib/community/eligibility.ts` (owner decision 2026-11-01), requires a
 saved community profile, no MENTOR or ADMIN role, and not the caller. The
 INSTITUTION role never excludes an otherwise eligible member. Institution
-callers see only such people; institution and admin callers see only such
-owners' shared projects. Everyone else, admins included, sees the public talent
-directory unchanged.
+callers see only such people and such owners' shared projects. Admins keep
+their reach: the public talent directory, and shared projects of every owner
+who is not a mentor or admin. Everyone else sees the public talent directory
+unchanged.
 
 `institution` does not mean community-public. Private projects never
 appear, even for their owner. The `PRIVATE` visibility kind carries the explicit

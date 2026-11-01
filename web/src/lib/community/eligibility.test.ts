@@ -185,10 +185,37 @@ describe.each(Object.entries(READ_SURFACES))("%s fails closed for ineligible peo
   });
 });
 
+/**
+ * The decision covers institutions, not staff (coordinator decision on #255):
+ * an admin still finds Lucy, who has no saved profile, wherever an admin
+ * searched before, while no institution can. Mentors and admins stay excluded
+ * from these lists, as they always were.
+ */
+const ADMIN_LIST_SURFACES = Object.entries(LIST_SURFACES).filter(([surface]) => !surface.startsWith("MCP"));
+describe.each(ADMIN_LIST_SURFACES)("%s keeps an admin's reach", (surface, list) => {
+  it("as amina", async () => {
+    const db = world();
+    // Platform search's people group is the public talent directory, which lists everyone.
+    const expected: Person[] = surface === "platform search" ? EVERYONE : ["achieng", "joseph", "kevin", "lucy"];
+    expect((await list(db, id("amina"))).toSorted()).toEqual(expected.map(id).toSorted());
+  });
+});
+describe.each(["REST profile", "REST assessment", "chat selected profile", "chat get_profile tool"])("%s keeps an admin's reach", surface => {
+  it("reads lucy as amina, while an institution gets not found", async () => {
+    const db = world();
+    expect(await READ_SURFACES[surface](db, id("amina"), id("lucy"))).toBe("allowed");
+    expect(await READ_SURFACES[surface](db, id("joseph"), id("lucy"))).toEqual(await READ_SURFACES[surface](db, id("joseph"), GHOST));
+  });
+});
+
 describe("discoverableMember", () => {
   it("binds the caller and refuses anything but a qualified column", () => {
-    expect(discoverableMember("u.id", "caller")).toMatchObject({ values: ["caller"] });
-    for (const column of ["id", "u.id;--", "u.id OR 1", "(select 1).id", ""]) expect(() => discoverableMember(column, "caller")).toThrow("qualified column name");
+    expect(discoverableMember("u.id", { id: "caller", isAdmin: false })).toMatchObject({ values: ["caller"] });
+    expect(discoverableMember("u.id", { id: "caller", isAdmin: true })).toMatchObject({ values: [] });
+    for (const column of ["id", "u.id;--", "u.id OR 1", "(select 1).id", ""]) {
+      expect(() => discoverableMember(column, { id: "caller", isAdmin: false })).toThrow("qualified column name");
+      expect(() => discoverableMember(column, { id: "caller", isAdmin: true })).toThrow("qualified column name");
+    }
   });
   it("treats a saved profile with empty fields as saved", async () => {
     const db = world();
@@ -212,10 +239,5 @@ describe("discoverableMember", () => {
     const db = world();
     const people = await searchPlatform(db, id(caller), { q: "Webhook", scope: "people" });
     expect(people.people.map(p => p.person.id).toSorted()).toEqual(EVERYONE.map(id).toSorted());
-  });
-  it("shows admins only discoverable owners' shared projects", async () => {
-    const db = world();
-    const { projects } = await searchPlatform(db, id("amina"), { q: "Webhook", scope: "projects" });
-    expect(projects.map(p => p.owner.id).toSorted()).toEqual(["achieng", "joseph", "kevin"].map(person => id(person as Person)).toSorted());
   });
 });

@@ -27,14 +27,15 @@ function person(row: PublicPersonRow): PersonSummary {
 
 /**
  * Institutional discovery's one eligibility rule narrows what institutions see
- * of people, and what institutions and admins see of other owners' shared
- * projects. Everyone else, admins included, sees the public talent directory.
+ * of people and of other owners' shared projects. Admins keep their reach, and
+ * everyone else sees the public talent directory unchanged.
  */
 function discoveryScopes(caps: { isInstitution: boolean; isAdmin: boolean }, userId: string) {
-  const discoverable = discoverableMember("p.userId", userId);
+  const discoverable = discoverableMember("p.userId", { id: userId, isAdmin: caps.isAdmin });
+  const narrowed = caps.isInstitution && !caps.isAdmin;
   return {
-    people: caps.isInstitution ? { clause: ` AND ${discoverable.clause}`, values: discoverable.values } : { clause: "", values: [] },
-    othersProjects: caps.isInstitution || caps.isAdmin ? discoverable : { clause: "0", values: [] },
+    people: narrowed ? { clause: ` AND ${discoverable.clause}`, values: discoverable.values } : { clause: "", values: [] as string[] },
+    othersProjects: caps.isInstitution || caps.isAdmin ? discoverable : { clause: "0", values: [] as string[] },
   };
 }
 

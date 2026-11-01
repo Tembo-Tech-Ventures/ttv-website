@@ -58,13 +58,13 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
   async function requireInstitution() {
     const a = await access();
     if (!a.isInstitution && !a.isAdmin) throw new CommunityError("Approved institutional access is required.", 403);
+    return { id: actorId, isAdmin: a.isAdmin };
   }
   // Someone outside discovery reads exactly like someone who does not exist.
   async function requireProfileAccess(target: string) {
     await requireFixtureTarget(target);
     if (target === actorId) return;
-    await requireInstitution();
-    const eligible = discoverableMember("u.id", actorId);
+    const eligible = discoverableMember("u.id", await requireInstitution());
     const row = await db.prepare(`SELECT 1 AS found FROM user u WHERE u.id=? AND ${eligible.clause}`).bind(target, ...eligible.values).first();
     if (!row) throw new CommunityError("Profile not found.", 404);
   }
@@ -113,7 +113,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       return getProfile(actorId);
     },
     async searchProfiles(input: unknown) {
-      await requireInstitution();
+      const caller = await requireInstitution();
       const p = parseInput(searchInput, input);
       // instr treats wildcard characters literally; all values are bound.
       const query = (p.query ?? "").toLowerCase();
@@ -121,7 +121,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       const clauses = skills.map(() => `EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(p.skills) THEN p.skills ELSE '[]' END) skill WHERE lower(skill.value)=?)`);
       const skillFilter = clauses.length > 0 ? ` AND ${clauses.join(" AND ")}` : "";
       const scope = fixtureScope("u.id");
-      const eligible = discoverableMember("u.id", actorId);
+      const eligible = discoverableMember("u.id", caller);
       const { results } = await db.prepare(`${PROFILE_SELECT}
         WHERE ${eligible.clause}
           AND instr(lower(u.name || ' ' || coalesce(p.headline,'') || ' ' || coalesce(p.skills,'') || ' ' || coalesce(p.bio,'')),?)>0${skillFilter}${scope.clause}
@@ -130,9 +130,9 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       return results.map(profile);
     },
     async discoveryEvidence() {
-      await requireInstitution();
+      const caller = await requireInstitution();
       const scope = fixtureScope("u.id");
-      const eligible = discoverableMember("u.id", actorId);
+      const eligible = discoverableMember("u.id", caller);
       const { results } = await db.prepare(`${PROFILE_SELECT}
         WHERE ${eligible.clause}${scope.clause}
         ORDER BY u.id LIMIT 501`).bind(...eligible.values,...scope.values).all<ProfileRow>();
