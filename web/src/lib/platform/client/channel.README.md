@@ -265,10 +265,14 @@ server applies them as the reader did. Reactions set, never toggle.
   so the store keeps its previous checkpoint and the next poll reads that delta
   again; that answer is applied. Nothing is lost, and with `since` responses the
   confirmed copy never flickers back.
-- A latest snapshot that was in flight is applied as it is (no
+- A latest or thread snapshot that was in flight is applied as it is (no
   checkpoint can be held), and polling from its own checkpoint brings anything it
   predates. Until that next poll, an edit or reaction can show its earlier
-  version; a confirmed deletion is kept, because deletion is terminal.
+  version.
+- **Deletions are terminal.** The ids of the reader's confirmed deletions (the 500
+  newest) are remembered, cached or not, for example a reply in a thread that was
+  closed meanwhile. No server copy, from a snapshot or a poll, shows those messages
+  again.
 
 ### Mentions
 

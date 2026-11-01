@@ -837,10 +837,31 @@ describe("optimistic layer for the composer (S-2.2)", () => {
     fake.list(page([msg(3, { body: "Edited", edited: true })], null, "s3"));
     await store.poll(signal());
     expect(store.getState().messages[2].body).toBe("Edited");
-    // A snapshot that starts after the write is truth, even when it disagrees.
-    fake.list(page(range(1, 3), null, "s4"));
-    await store.jumpToLatest();
-    expect(store.getState().messages[0].deleted).toBe(false);
+  });
+
+  it("keeps a reply deleted when its thread reopens before the deletion is confirmed", async () => {
+    const { fake, store } = setup({ initial: page(range(1, 3), null, "s1") });
+    fake.list(page([reply(11, msg(2).id)], null, "t1", { thread: msg(2).id }));
+    await store.openThread(msg(2).id);
+    // The pane closes (dropping the reply), the DELETE is confirmed, then the thread reopens with an older copy.
+    store.closeThread();
+    store.update([reply(11, msg(2).id, { deleted: true, body: "", embeds: [] })]);
+    fake.list(page([reply(11, msg(2).id), reply(12, msg(2).id)], null, "t2", { thread: msg(2).id }));
+    await store.openThread(msg(2).id);
+    expect(store.getState().thread?.messages.map(item => [item.id, item.deleted])).toEqual([[reply(11, msg(2).id).id, true], [reply(12, msg(2).id).id, false]]);
+    // Polled copies too.
+    fake.list(page([], null, "s2"), page([reply(11, msg(2).id)], null, "t3", { thread: msg(2).id }));
+    await store.poll(signal());
+    expect(store.getState().thread?.messages[0]).toMatchObject({ deleted: true, body: "" });
+  });
+
+  it("remembers at most 500 confirmed deletions", async () => {
+    const { fake, store } = setup({ initial: page([], null, "s1") });
+    store.update(Array.from({ length: 501 }, (_, i) => msg(i + 1, { deleted: true, body: "", embeds: [] })));
+    fake.list(page([msg(1), msg(501)], null, "s2"));
+    await store.poll(signal());
+    // The oldest was forgotten; the newest still shows as deleted.
+    expect(store.getState().messages.map(item => item.deleted)).toEqual([false, true]);
   });
 
   it("ignores confirmations while the store is released", () => {

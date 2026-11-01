@@ -79,7 +79,8 @@ describe("channel mock client", () => {
     expect(placeholder).toMatchObject({ deleted: true, body: "", embeds: [] });
     expect(await api.call(ROUTES.deleteMessage, { params: { id } })).toEqual(placeholder);
     await expect(api.call(ROUTES.editMessage, { params: { id }, body: { body: "Too late" } })).rejects.toMatchObject({ status: 409 });
-    await expect(api.call(ROUTES.reactToMessage, { params: { id }, body: { kind: "useful", active: true } })).rejects.toMatchObject({ status: 404 });
+    await expect(api.call(ROUTES.reactToMessage, { params: { id }, body: { kind: "useful", active: true } })).rejects.toMatchObject({ status: 409, code: "conflict" });
+    await expect(api.call(ROUTES.reactToMessage, { params: { id: "missing" }, body: { kind: "useful", active: true } })).rejects.toMatchObject({ status: 404 });
     await expect(api.call(ROUTES.editMessage, { params: { id: messages.mentorReply.id }, body: { body: "Not mine" } })).rejects.toMatchObject({ status: 403 });
     await expect(api.call(ROUTES.editMessage, { params: { id: "missing" }, body: { body: "x" } })).rejects.toMatchObject({ status: 404 });
     const latest = await api.call(ROUTES.listMessages, { params: { id: channels.showYourWork.id }, query: {} });

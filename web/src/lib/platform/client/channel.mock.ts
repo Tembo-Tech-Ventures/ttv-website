@@ -110,7 +110,8 @@ export function createChannelMockClient({ viewer = fixtures.people.wanjiku, now 
     { ...ROUTES.reactToMessage, reply: async ({ request, params }) => {
       const { kind, active } = ReactToMessage.parse(await request.json());
       const message = all.get(params.id);
-      if (!message || message.deleted) return refused(404, "not_found", "That message is no longer here.");
+      if (!message) return refused(404, "not_found", "That message is no longer here.");
+      if (message.deleted) return refused(409, "conflict", "This message can't take reactions.");
       const { reactions } = save(applyOverlay(message, { reactions: { [kind]: active } })).data;
       return { data: { messageId: message.id, reactions } };
     } },
