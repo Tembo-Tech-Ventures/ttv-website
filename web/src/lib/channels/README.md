@@ -188,8 +188,10 @@ channel's change counter, all from one snapshot.
   checkpoints exactly what was returned: a capped delta continues on the next
   poll. A change to a message this reader may no longer see becomes a
   `removedIds` entry when the message existed at the checkpoint, and is
-  skipped when it did not, so a newcomer never learns a hidden id. Items come
-  back in position order.
+  skipped when it did not. A reader never receives a hidden message's
+  content. A capped backlog may name an id it never delivered (the message
+  existed before the advanced checkpoint): only an opaque id, and evicting an
+  unknown id is a no-op. Items come back in position order.
 - A since page's `beforeCursor` reaches the messages older than the oldest
   message the page *adds* (edits in it are of messages already cached), or is
   null when it adds none. This is the window the channel store files the
@@ -245,6 +247,12 @@ fail; when nothing was written, one read of the same conditions says why.
   messages still count. A post counts for exactly the window, so
   `retryAfterMs` is when the oldest one stops counting. Index:
   `channel_message_author_idx` (migration `0030_channel_message_author.sql`).
+- **Edit and reaction limits** (`ACTION_LIMITS`): 10 edits per person per
+  channel per minute, and 30 reaction changes per person per minute across
+  channels (429 with `retryAfterMs`). Each one moves the message for every
+  poller, so they are limited too. They are logged in `channel_action`
+  (migration `0031_channel_action.sql`), checked by the batch's first
+  statement, and pruned by a trigger after an hour.
 - **Edits and deletes** belong to the author only; moderators hide instead
   (B-2.5), and nobody edits Tembo. Editing needs `canPost` and a current
   agreement; the same body again changes nothing. Deleted and hidden messages
@@ -252,7 +260,9 @@ fail; when nothing was written, one read of the same conditions says why.
   read, clears the body and reactions, and keeps the message as a
   placeholder; deleting again returns the same placeholder.
 - **Reactions** set a wanted state (`{kind, active}`), never a toggle, so a
-  retry cannot undo itself. Anyone who reads an open channel reacts,
+  retry cannot undo itself. The write and the change to the message go in
+  one batch, so the message also moves on a retry whose write changes
+  nothing: a failed attempt cannot leave other readers with the old count. Anyone who reads an open channel reacts,
   announcements included. Archived channels (403), deleted and hidden
   messages (409) take none.
 - **Moderation hook.** `moderation.ts` `screenMessage` runs before every
@@ -260,6 +270,11 @@ fail; when nothing was written, one read of the same conditions says why.
   FLAGGED (the message stays visible) with a DETECTOR `moderation_event`, in
   the same batch as the write; an edit never clears an earlier flag. B-2.5
   puts its detectors here.
+- **Open for B-2.5: moderation evidence.** An author's edit overwrites the
+  body and a delete empties it, and `moderation_event` keeps only reasons.
+  Before reports and the moderation queue exist, B-2.5 must keep the text a
+  moderator reviews: snapshot it when a message is flagged or reported, and
+  keep earlier versions across edits and deletes.
 
 ### Read markers and unread counts
 
@@ -276,7 +291,7 @@ fail; when nothing was written, one read of the same conditions says why.
 
 Statements per request, with flags read from the database (asserted in
 `http.test.ts`): list channels 5, list messages 6 (7 with a thread), post 7
-(8 for a reply), mark read 8, edit 9, react 9, delete 9. Every one is an
+(8 for a reply), mark read 8, delete 9, edit 10, react 10. Every one is an
 indexed read; the plans are asserted in `messages.test.ts`,
 `mutations.test.ts` and `access.test.ts`.
 
@@ -332,7 +347,8 @@ rename while the view or trigger names a missing table, and dropping
 migration and fails if new programs stop getting their channels.
 
 Tests: `src/lib/db/migrations/channels-migration.test.ts`,
-`channel-conduct-migration.test.ts`, `channel-message-author-migration.test.ts`;
+`channel-conduct-migration.test.ts`, `channel-message-author-migration.test.ts`,
+`channel-action-migration.test.ts`;
 beside this file `access.test.ts`, `conduct.test.ts`, `messages.test.ts`
 (paging, polling, cursors, visibility), `mutations.test.ts` (posting,
 idempotency, the conduct gate, rate limits, STAFF posting, the edit/delete

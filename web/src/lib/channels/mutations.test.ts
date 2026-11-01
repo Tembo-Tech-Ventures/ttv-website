@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { ChannelList, ChannelRead, ErrorEnvelope, Message, MessageList, MessageReactions } from "@/lib/platform/contracts";
 import { CONDUCT_VERSION } from "./conduct";
-import { POST_LIMITS } from "./mutations";
+import { ACTION_LIMITS, POST_LIMITS } from "./mutations";
 import { channelDatabase, post, VIEWER, type ChannelFixture } from "./test-support";
 
 const fixtures: ChannelFixture[] = [];
@@ -316,6 +316,54 @@ describe("reactions", () => {
     }
     s.database.exec(`UPDATE channel SET archivedAt = 5 WHERE slug = 'c04-announcements'`);
     expect((await s.call("reactToMessage", { id: announcement, body: { kind: "useful", active: true } })).status).toBe(403);
+  });
+});
+
+describe("edit and reaction limits", () => {
+  it("limit edits per person per channel, with how long to wait", async () => {
+    const s = setup();
+    s.agree();
+    const start = 1_800_000_000_000;
+    let now = start;
+    const [first, other] = [s.message("help", { author: VIEWER }), s.message("introductions", { author: VIEWER })];
+    const edit = (id: string, i: number) => s.call("editMessage", { id, body: { body: `Edit ${i}` }, now: () => now });
+    for (let i = 0; i < ACTION_LIMITS.EDIT.count; i++) { expect((await edit(first, i)).status).toBe(200); now += 1_000; }
+    const limited = await edit(first, 99);
+    expect([limited.status, errorOf(limited.body).code]).toEqual([429, "rate_limited"]);
+    expect(errorOf(limited.body).retryAfterMs).toBe(start + ACTION_LIMITS.EDIT.windowMs - now);
+    expect(MessageList.parse((await s.call("listMessages", { id: s.channel("help") })).body).items[0]!.body).toBe(`Edit ${ACTION_LIMITS.EDIT.count - 1}`);
+    // Another channel has its own allowance, and the window moves on.
+    expect((await edit(other, 1)).status).toBe(200);
+    now = start + ACTION_LIMITS.EDIT.windowMs;
+    expect((await edit(first, 100)).status).toBe(200);
+  });
+
+  it("limit reaction changes per person across channels, and keep the log to the last hour", async () => {
+    const s = setup();
+    const start = 1_800_000_000_000;
+    let now = start;
+    const ids = [s.message("help"), s.message("introductions")];
+    const react = (i: number) => s.call("reactToMessage", { id: ids[i % 2]!, body: { kind: "useful", active: i % 4 < 2 }, now: () => now });
+    for (let i = 0; i < ACTION_LIMITS.REACT.count; i++) { expect((await react(i)).status, `${i}`).toBe(200); now += 100; }
+    const limited = await react(0);
+    expect([limited.status, errorOf(limited.body).retryAfterMs]).toEqual([429, start + ACTION_LIMITS.REACT.windowMs - now]);
+    const count = () => (s.database.prepare("SELECT COUNT(*) AS n FROM channel_action").get() as { n: number }).n;
+    expect(count()).toBe(ACTION_LIMITS.REACT.count);
+    now = start + 2 * 60 * 60_000;
+    expect((await react(0)).status).toBe(200);
+    expect(count()).toBe(1);
+  });
+
+  it("move the message for pollers in the same batch, even when a retry changes nothing", async () => {
+    const s = setup();
+    const help = s.channel("help");
+    const id = s.message("help");
+    const start = MessageList.parse((await s.call("listMessages", { id: help })).body);
+    // The reaction is already there (an earlier attempt stored it, then failed before answering).
+    s.database.exec(`INSERT INTO message_reaction(messageId,userId,kind) VALUES ('${id}','${VIEWER}','useful')`);
+    expect((await s.call("reactToMessage", { id, body: { kind: "useful", active: true } })).status).toBe(200);
+    const delta = MessageList.parse((await s.call("listMessages", { id: help, query: `?since=${start.sinceCursor}` })).body);
+    expect(delta.items.map((item) => item.reactions)).toEqual([[{ kind: "useful", count: 1, mine: true }]]);
   });
 });
 

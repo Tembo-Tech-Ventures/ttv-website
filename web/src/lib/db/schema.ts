@@ -1476,3 +1476,20 @@ export const channelConduct = sqliteTable("channel_conduct", {
   check("channel_conduct_version_check", sql`${table.version} >= 1`),
   check("channel_conduct_time_check", sql`${table.acknowledgedAt} >= 0`),
 ]);
+
+/**
+ * Recent edits and reaction changes, one row each, for their rate limits (src/lib/channels/README.md).
+ * A trigger prunes each person's rows older than an hour as new ones arrive (migration 0031).
+ */
+export const channelAction = sqliteTable("channel_action", {
+  id: cuid("id"),
+  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  channelId: text("channelId").notNull().references(() => channel.id, { onDelete: "cascade" }),
+  kind: text("kind", { enum: ["EDIT", "REACT"] }).notNull(),
+  at: integer("at").notNull(),
+}, (table) => [
+  index("channel_action_user_idx").on(table.userId, table.kind, table.at),
+  index("channel_action_channelId_idx").on(table.channelId),
+  check("channel_action_kind_check", sql`${table.kind} IN ('EDIT','REACT')`),
+  check("channel_action_time_check", sql`${table.at} >= 0`),
+]);

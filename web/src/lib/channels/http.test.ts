@@ -202,7 +202,7 @@ describe("channel APIs: contracts", () => {
 describe("channel APIs: query budget", () => {
   /** Statements per request with production flags (one flag read) and capabilities read once. */
   const BUDGET: Record<ChannelOperation, number> = {
-    listChannels: 5, listMessages: 6, postMessage: 7, markChannelRead: 8, editMessage: 9, reactToMessage: 9, deleteMessage: 9,
+    listChannels: 5, listMessages: 6, postMessage: 7, markChannelRead: 8, editMessage: 10, reactToMessage: 10, deleteMessage: 9,
   };
 
   it.each(Object.entries(BUDGET) as [ChannelOperation, number][])("%s issues at most %i statements", async (operation, budget) => {
