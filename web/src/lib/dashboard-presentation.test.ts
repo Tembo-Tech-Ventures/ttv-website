@@ -28,4 +28,7 @@ it("replaces a disallowed QA next-step CTA without changing ordinary journeys", 
   expect(restrictedQaNextStep(memberStep, true)).toBe(memberStep);
   expect(restrictedQaNextStep(memberStep, false).action.href).toBe("/dashboard/community");
   expect(restrictedQaNextStep(memberStep, false).description).toContain("not available in this session");
+  // A staging fixture has no QA sign-out control to point at.
+  expect(restrictedQaNextStep(memberStep, false, false)).toMatchObject({ detail: null, action: { href: "/dashboard/community" } });
+  expect(restrictedQaNextStep(memberStep, false, false).description).not.toContain("QA");
 });

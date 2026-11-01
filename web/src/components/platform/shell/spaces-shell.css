@@ -188,7 +188,7 @@
 /*
  * The wide row never wraps. As tabs are added it gives way in three steps,
  * least useful first: the "Tech · Ventures" line, then the search words (the
- * magnifier stays, named "Search everything"), then the inactive tabs' words
+ * magnifier stays, named "Search"), then the inactive tabs' words
  * (their markers stay, and the words stay in the accessibility tree).
  *
  * The thresholds are sums of worst cases: tabs carrying two-digit counts

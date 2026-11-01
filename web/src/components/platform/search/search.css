@@ -1,5 +1,5 @@
 /*
- * Search everything: a sheet that comes forward over the page with the
+ * Search: a sheet that comes forward over the page with the
  * question at its top, the places to look under it, and the answers grouped
  * by kind. On phones it takes the whole screen, so the keyboard and results
  * share it without anything floating.
@@ -344,12 +344,24 @@
   color: var(--color-ink-muted);
 }
 
-/* Matches: a quiet peach wash, never a colour the text depends on. */
+/*
+ * Matches: a quiet peach wash, never a colour the text depends on. The wash
+ * reaches past the letters, but the negative margin gives the space back, so a
+ * match inside a word ("web" in "webhook") does not split it apart.
+ */
 .search-mark {
   border-radius: 0.25rem;
   padding: 0 0.125rem;
+  margin-inline: -0.125rem;
   background: rgb(242 141 104 / 0.2);
   color: inherit;
+}
+
+/* Why a result matched, when the match is in a field the result does not show. */
+.search-option__why {
+  font-size: 0.8125rem;
+  font-style: italic;
+  color: var(--color-ink-secondary);
 }
 
 .search-recent__head {

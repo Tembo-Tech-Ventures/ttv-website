@@ -14,8 +14,11 @@ import {
   PiBooksDuotone,
   PiPlugsDuotone,
   PiChatTeardropTextDuotone,
+  PiArrowUUpLeftDuotone,
 } from "react-icons/pi";
 import { PiListBold } from "react-icons/pi";
+
+const ADMIN_MAIN_ID = "admin-main";
 
 const primaryLinks = [
   { href: "/admin", label: "Admin Home", icon: PiGaugeDuotone },
@@ -49,6 +52,8 @@ export function getAdminLinks(
     ...(agentAuthEnabled
       ? [{ href: "/admin/agent-access", label: "Agent Access", icon: PiKeyDuotone }]
       : []),
+    // The way out of admin: /dashboard opens the person's own spaces (or the existing dashboard).
+    { href: "/dashboard", label: "Back to dashboard", icon: PiArrowUUpLeftDuotone },
     { href: "/auth/logout", label: "Logout", icon: PiSignOutDuotone },
   ];
 }
@@ -76,6 +81,13 @@ export default function AdminShell({
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-surface to-dark">
+      {/* The first Tab stop, past the sidebar's links to the page. */}
+      <a
+        href={`#${ADMIN_MAIN_ID}`}
+        className="sr-only rounded-xl bg-primary font-bold text-dark focus-visible:not-sr-only focus-visible:fixed focus-visible:px-4 focus-visible:py-2.5 focus-visible:left-3 focus-visible:top-3 focus-visible:z-[60] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+      >
+        Skip to content
+      </a>
       <Sidebar
         links={links}
         title="TTV Admin"
@@ -107,7 +119,9 @@ export default function AdminShell({
 
         {/* Content */}
         {/* Bottom padding keeps the last control clear of the floating feedback button. */}
-        <main className="min-w-0 flex-1 p-4 pb-24 lg:p-6 lg:pb-24">{children}</main>
+        <main id={ADMIN_MAIN_ID} tabIndex={-1} className="min-w-0 flex-1 p-4 pb-24 focus:outline-none lg:p-6 lg:pb-24">
+          {children}
+        </main>
       </div>
     </div>
   );

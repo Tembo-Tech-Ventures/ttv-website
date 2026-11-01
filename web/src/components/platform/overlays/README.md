@@ -1,6 +1,6 @@
 # Attention and search overlays (U-1.3)
 
-Search everything (Ctrl K / ⌘ K) and the attention inbox: a panel hanging from
+Search (Ctrl K / ⌘ K) and the attention inbox: a panel hanging from
 the bell on wide screens, and `/dashboard/attention` on phones (or for anyone
 who follows the link). Dark until the `spaces` flag is on for the person.
 
@@ -62,5 +62,8 @@ mounts `<PlatformOverlays attention={false} />` and handles the bell itself.
   scenarios: default, slow, empty, many, error, readfail, expired, off,
   arrivals). On a deployed preview the same spec checks the harness is absent,
   that `/dashboard/attention` follows the flag, and the real APIs for a student.
+  Islands can hydrate before their listeners attach, so browser tests wait for
+  `.spaces-shell[data-hydrated]` and `dialog[data-search-overlay][data-ready]`
+  before pressing Ctrl K.
 - `OVERLAY_EVIDENCE=1 npx playwright test e2e/platform-overlays.spec.ts -g captures`
   saves review screenshots under `test-results/evidence/platform-overlays/`.

@@ -83,6 +83,9 @@ export interface SidebarFacts {
   allowed?: (href: string) => boolean;
 }
 
+/** The label for a mentoring feature that has a place but has not opened, here and on the Mentoring overview. */
+export const NOT_OPEN_YET = "Not open yet";
+
 /** Where each page opens, in order of preference. The first space the person can open wins. */
 export const PAGE_SPACES: Readonly<Record<SpacePageKey, readonly SpaceId[]>> = {
   cohort: ["cohort"],
@@ -162,9 +165,10 @@ function community(facts: SidebarFacts): SidebarModel {
         { key: "journey", page: "journey", label: "Your journey", icon: "journey" },
         noCohort && { key: "ask", page: "ask", label: "Ask Tembo", icon: "tembo" },
       ]),
-      ...group(facts, "Directory", [
-        { key: "members", href: "/community/members", label: "Members", icon: "people" },
-        { key: "mentors", href: "/community/mentors", label: "Mentors", icon: "mentors" },
+      // The public pages about taking part, not an in-app directory: say so before the click leaves the app.
+      ...group(facts, "Public pages", [
+        { key: "members", href: "/community/members", label: "For members", icon: "people" },
+        { key: "mentors", href: "/community/mentors", label: "For mentors", icon: "mentors" },
       ]),
       ...(noCohort ? group(facts, "Cohorts", [{ key: "apply", page: "apply", label: "Apply to a cohort", icon: "apply" }]) : []),
     ],
@@ -178,9 +182,9 @@ function mentoring(facts: SidebarFacts): SidebarModel {
     groups: group(facts, undefined, [
       { key: "mentoring", page: "mentoring", label: "Overview", icon: "overview" },
       { key: "confirm", page: "confirm", label: "Confirm work", icon: "confirm" },
-      // Requests and availability arrive with mentor requests; the overview says so.
-      { key: "requests", href: `${SPACE_PATHS.mentoring}#requests`, label: "Requests", icon: "requests", note: "Soon" },
-      { key: "availability", href: `${SPACE_PATHS.mentoring}#availability`, label: "Availability", icon: "availability", note: "Soon" },
+      // Requests and availability arrive with mentor requests; the overview says so, in the same words.
+      { key: "requests", href: `${SPACE_PATHS.mentoring}#requests`, label: "Requests", icon: "requests", note: NOT_OPEN_YET },
+      { key: "availability", href: `${SPACE_PATHS.mentoring}#availability`, label: "Availability", icon: "availability", note: NOT_OPEN_YET },
     ]),
   };
 }

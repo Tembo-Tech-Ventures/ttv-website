@@ -93,6 +93,25 @@ const shell = {
        * bundled stylesheet would opt them into view transitions too.
        */
     }
+    <script is:inline>
+      /*
+       * Space-to-space transitions are cross-document, so both pages must opt in.
+       * Leaving for a page that does not (admin, the writing editor, the public
+       * site), the browser would start one that the next page then refuses, and
+       * report "Transition was aborted because of invalid state" there as an
+       * uncaught error (QA1-22). Skip it here instead: those pages simply load.
+       */
+      addEventListener("pageswap", (event) => {
+        if (!event.viewTransition) return;
+        const url = event.activation && event.activation.entry && event.activation.entry.url;
+        const to = url ? new URL(url) : null;
+        const path = to && to.origin === location.origin ? to.pathname.replace(/\/$/, "") : "";
+        // Dashboard pages render in the shell, except the writing editor; so do the DEV shell harnesses.
+        const inSpaces = ((path === "/dashboard" || path.startsWith("/dashboard/")) && !/^\/dashboard\/(me\/)?writing\/[^/]+$/.test(path))
+          || path.startsWith("/dev/platform-");
+        if (!inSpaces) event.viewTransition.skipTransition();
+      });
+    </script>
     <style is:inline>
       /*
        * Switching spaces: the card file. The tab row stays put as the anchor while

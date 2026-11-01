@@ -7,6 +7,7 @@ import { DEMO_PREFIX, demoPathAllowed, isDemoUser } from "@/lib/staging-demo-pol
 import { qaPathAllowed } from "@/lib/staging-qa-policy";
 import { stagingFixturePathAllowed } from "@/lib/staging-fixture-policy";
 import { isValidCompletion } from "@/lib/talent/eligibility";
+import { canonicalSpacePath } from "@/lib/platform/server/space-routes";
 import { canRenderSpace } from "@/components/platform/shell/access";
 import { PAGE_SPACES, type SpacePageKey } from "./sidebar";
 
@@ -71,6 +72,26 @@ export function linkAllowed({ qaPersona, demo, fixture }: Restrictions, href: st
   return (!qaPersona || qaPathAllowed(qaPersona, path, "GET"))
     && (!demo || demoPathAllowed(path, "GET"))
     && (!fixture || stagingFixturePathAllowed(path, "GET"));
+}
+
+/**
+ * The flag-off dashboard sidebar's links a restricted session may follow, or
+ * undefined (every link) for everyone else. Demo sessions keep every link:
+ * the sidebar swaps their Logout for "Demo controls".
+ */
+export function restrictedDashboardHrefs({ qaPersona, fixture }: Restrictions, hrefs: readonly string[]): string[] | undefined {
+  return qaPersona || fixture ? hrefs.filter((href) => linkAllowed({ qaPersona, fixture }, href)) : undefined;
+}
+
+/**
+ * Where a next-step button leads: straight to the step's space path in the
+ * spaces shell (not through its redirect), or null when a restricted synthetic
+ * identity may not follow it, so a page can offer something else instead of a
+ * button into a 403.
+ */
+export function nextStepHref(restrictions: Restrictions, href: string, inSpaces: boolean): string | null {
+  const target = inSpaces ? (canonicalSpacePath(href) ?? href) : href;
+  return linkAllowed(restrictions, target) ? target : null;
 }
 
 /** The person's own completed cohorts that have a certificate, newest first. */

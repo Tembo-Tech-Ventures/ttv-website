@@ -14,8 +14,9 @@ import SearchOverlay from "./SearchOverlay";
 const wanjiku = meByPersona.wanjiku;
 
 type Backend = { calls: string[]; queries: string[]; fail: MockReply[]; latency: (q: string) => number };
+type Answer = Pick<SearchResults, "people" | "projects" | "sessionMoments">;
 
-function backend(): { client: ApiClient; state: Backend } {
+function backend(answer?: (q: string) => Answer): { client: ApiClient; state: Backend } {
   const state: Backend = { calls: [], queries: [], fail: [], latency: () => 0 };
   const fetch = createMockTransport(
     [
@@ -36,6 +37,7 @@ function backend(): { client: ApiClient; state: Backend } {
               people: none ? [] : searchResults.people,
               projects: none ? [] : searchResults.projects,
               sessionMoments: none ? [] : searchResults.sessionMoments,
+              ...answer?.(query.q),
             }),
           };
         },
@@ -111,6 +113,13 @@ async function key(name: string) {
 }
 
 describe("SearchOverlay", () => {
+  it("marks itself ready once it listens for the shell's open request", async () => {
+    await act(async () => root.render(<SearchOverlay me={wanjiku} client={backend().client} />));
+    expect(dialog().hasAttribute("data-ready")).toBe(true);
+    await act(async () => root.render(<></>));
+    expect(container.querySelector("[data-search-overlay]")).toBeNull();
+  });
+
   it("opens for Ctrl K with focus in the box, and Escape-closing gives focus back", async () => {
     await mount();
     expect(dialog().open).toBe(true);
@@ -139,6 +148,45 @@ describe("SearchOverlay", () => {
     await key("Enter");
     expect(assign).toHaveBeenCalledWith(searchResults.projects[0].href);
     expect(JSON.parse(localStorage.getItem(recentSearchKey(wanjiku.user.id))!)).toEqual(["retry webhook"]);
+  });
+
+  it("says what it covers for this person, never everything (QA1-11)", async () => {
+    await mount();
+    expect(input().getAttribute("aria-label")).toBe("Search people, projects and your sessions");
+    expect(input().placeholder).toBe("Search people, projects and your sessions");
+    expect(container.querySelector(".search-overlay__status")?.textContent).toBe(
+      "Finds people with public profiles, your shared projects, and moments from your own cohort's sessions.",
+    );
+    expect(container.textContent).not.toMatch(/everything|everywhere/i);
+  });
+
+  it("says what it covers for staff outside a cohort: no sessions", async () => {
+    await mount(meByPersona.amina);
+    expect(input().getAttribute("aria-label")).toBe("Search people and projects");
+    expect(container.querySelector(".search-overlay__status")?.textContent).not.toMatch(/session/);
+  });
+
+  it("shows why each result matched: the matching part of a long text, or which hidden field matched", async () => {
+    const long = `${"Offline-first Android tools for clinics and co-ops. ".repeat(8)}Also writes SQL for ledgers.`;
+    const { client } = backend(() => ({
+      people: [
+        { ...searchResults.people[0]!, bio: long },
+        { ...searchResults.people[0]!, person: { ...searchResults.people[0]!.person, id: "p-2", name: "Brian Odhiambo" }, bio: "USSD tinkerer." },
+      ],
+      projects: [{ ...searchResults.projects[0]!, title: "Chama ledger", summary: "Weekly contributions." }],
+      sessionMoments: [],
+    }));
+    await mount(wanjiku, client);
+    await type("sql");
+    await settle(300);
+    const [faith, brian, project] = options();
+    // The bio is cut to the match, which is marked.
+    expect(faith.querySelector(".search-option__text")?.textContent).toMatch(/^….*SQL for ledgers\.$/);
+    expect(faith.querySelector(".search-mark")?.textContent).toBe("SQL");
+    expect(faith.querySelector(".search-option__why")).toBeNull();
+    // Matched in a field the result does not carry: say so rather than show no reason.
+    expect(brian.querySelector(".search-option__why")?.textContent).toBe("Matches their headline, skills or full bio");
+    expect(project.querySelector(".search-option__why")?.textContent).toBe("Matches its full description");
   });
 
   it("never lets an older answer replace a newer question", async () => {

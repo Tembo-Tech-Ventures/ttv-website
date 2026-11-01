@@ -4,7 +4,7 @@ import { meByPersona } from "@/lib/platform/fixtures";
 import { ApiError } from "@/lib/platform/client/apiError";
 import { askTemboHref, takeAskTemboDraft } from "./ask-handoff";
 import { clearRecentSearches, onShellSignOut, recentSearchKey, RECENT_PREFIX } from "./recent-searches";
-import { highlight, scopesFor, searchProblem, timestamp } from "./search-display";
+import { highlight, matchingPart, mentions, opening, scopesFor, searchCoverage, searchProblem, timestamp } from "./search-display";
 
 afterEach(() => {
   localStorage.clear();
@@ -19,8 +19,66 @@ describe("scopesFor", () => {
     expect(scopesFor(meByPersona.amina).map((option) => option.scope)).not.toContain("cohort");
   });
 
+  it("calls the widest scope All, not Everywhere: it covers only the scopes beside it", () => {
+    for (const me of Object.values(meByPersona)) expect(scopesFor(me)[0]).toEqual({ scope: "all", label: "All" });
+  });
+
   it("never offers message search before channels exist", () => {
     for (const me of Object.values(meByPersona)) expect(scopesFor(me).map((option) => option.scope)).not.toContain("messages");
+  });
+});
+
+describe("searchCoverage (QA1-11)", () => {
+  it("names only what this person's search reaches", () => {
+    expect(searchCoverage(meByPersona.wanjiku)).toEqual({
+      label: "Search people, projects and your sessions",
+      hint: "Finds people with public profiles, your shared projects, and moments from your own cohort's sessions.",
+    });
+    // No cohort, so no sessions; staff and institutions see projects shared with institutions.
+    expect(searchCoverage(meByPersona.lucy).label).toBe("Search people and projects");
+    expect(searchCoverage(meByPersona.lucy).hint).not.toMatch(/session/);
+    expect(searchCoverage(meByPersona.amina)).toEqual({
+      label: "Search people and projects",
+      hint: "Finds people with public profiles and projects shared with institutions.",
+    });
+  });
+
+  it("never promises everything", () => {
+    for (const me of Object.values(meByPersona)) {
+      const { label, hint } = searchCoverage(me);
+      expect(`${label} ${hint}`).not.toMatch(/everything|everywhere/i);
+    }
+  });
+});
+
+describe("why a result matched", () => {
+  const bio = `${"Builds offline-first tools for clinics and savings groups. ".repeat(6)}Lately: SQL joins and indexes for a ledger.`;
+
+  it("finds the whole query first, then any of its words, case-insensitively", () => {
+    expect(mentions("Week 4: SQL joins and indexes", "sql JOINS")).toBe(true);
+    expect(mentions("Idempotent webhook handling", "retry webhook")).toBe(true);
+    expect(mentions("Mentor · Backend engineer", "retry webhook")).toBe(false);
+    expect(mentions("anything", " ")).toBe(false);
+  });
+
+  it("brings a match deep in a long text on screen, cut between words", () => {
+    const shown = matchingPart(bio, "sql joins")!;
+    expect(shown).toMatch(/^…/);
+    expect(shown).toContain("SQL joins and indexes");
+    expect(shown.length).toBeLessThanOrEqual(162);
+    expect(shown.replace(/^…|…$/g, "").split(" ").every((word) => bio.includes(word))).toBe(true);
+  });
+
+  it("keeps a short text whole, and says nothing when the query is not in it", () => {
+    expect(matchingPart("SQL for ledgers", "sql")).toBe("SQL for ledgers");
+    expect(matchingPart(bio, "kotlin")).toBeNull();
+  });
+
+  it("opens a long text at its start for a result whose title matched", () => {
+    const start = opening(bio, 60);
+    expect(start.startsWith("Builds offline-first")).toBe(true);
+    expect(start.endsWith("…")).toBe(true);
+    expect(opening("Short.")).toBe("Short.");
   });
 });
 

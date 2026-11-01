@@ -102,3 +102,25 @@ it("exposes staging demo personas only with the server-computed staging gate", (
   expect(getAdminLinks(false,false).some(link=>link.href==="/demo")).toBe(false);
   expect(getAdminLinks(false,false,true)).toContainEqual(expect.objectContaining({href:"/demo",label:"Staging demo personas"}));
 });
+
+describe("ways out of admin (QA1-12)", () => {
+  it("links back to the dashboard, just before signing out", () => {
+    for (const enabled of [false, true]) {
+      const hrefs = getAdminLinks(enabled, enabled, enabled).map(({ href }) => href);
+      expect(hrefs.slice(-2)).toEqual(["/dashboard", "/auth/logout"]);
+    }
+    expect(getAdminLinks(false)).toContainEqual(expect.objectContaining({ href: "/dashboard", label: "Back to dashboard" }));
+  });
+
+  it("starts with a skip link to the main landmark", () => {
+    const html = renderToStaticMarkup(
+      <AdminShell>
+        <div>Admin content</div>
+      </AdminShell>
+    );
+    const firstLink = /<a [^>]*>[^<]*<\/a>/.exec(html)?.[0] ?? "";
+    expect(firstLink).toContain('href="#admin-main"');
+    expect(firstLink).toContain("Skip to content");
+    expect(html).toMatch(/<main id="admin-main" tabindex="-1"/);
+  });
+});

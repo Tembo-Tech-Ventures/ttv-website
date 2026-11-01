@@ -131,7 +131,7 @@ describe("SpacesShell on the server", () => {
 describe("SpacesShell overlay triggers", () => {
   it("shows no search or bell unless the page mounts their overlays", async () => {
     await mount();
-    expect(container.querySelector('[aria-label="Search everything"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Search"]')).toBeNull();
     expect(container.querySelector('[aria-label^="Attention"]')).toBeNull();
   });
 
@@ -141,7 +141,7 @@ describe("SpacesShell overlay triggers", () => {
     window.addEventListener(SHELL_OVERLAY_EVENT, listen);
     await mount({ overlays: ["search", "attention"] });
 
-    const search = q<HTMLButtonElement>('[aria-label="Search everything"]');
+    const search = q<HTMLButtonElement>('[aria-label="Search"]');
     const bell = q<HTMLButtonElement>('[aria-label="Attention, 3 waiting"]');
     await act(async () => search.click());
     await act(async () => {

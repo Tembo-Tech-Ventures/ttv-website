@@ -46,8 +46,9 @@ async function open(page: Page, path: string) {
 const wide = (page: Page) => (page.viewportSize()?.width ?? 0) >= WIDE;
 const bell = (page: Page) => page.getByRole("button", { name: /^Attention/ });
 const panel = (page: Page) => page.getByRole("dialog", { name: "Needs your attention" });
-const search = (page: Page) => page.getByRole("dialog", { name: "Search everything" });
-const box = (page: Page) => page.getByRole("combobox", { name: "Search people, projects and your sessions" });
+const search = (page: Page) => page.getByRole("dialog", { name: "Search", exact: true });
+// What search names depends on the person: sessions only for someone in a cohort.
+const box = (page: Page) => page.getByRole("combobox", { name: /^Search people(, projects and your sessions| and projects)$/ });
 
 async function runAxe(page: Page, testInfo: TestInfo, name: string) {
   const source = Buffer.from(await (await fetch(AXE_URL)).arrayBuffer());
@@ -144,7 +145,7 @@ test.describe("on a deployed build", () => {
       await expect(page.locator("[data-attention-problem]")).toHaveCount(0);
       await expect(page.locator("[data-attention-item], [data-attention-empty]").first()).toBeVisible();
 
-      await page.getByRole("button", { name: "Search everything" }).click();
+      await page.getByRole("button", { name: "Search", exact: true }).click();
       await page.getByRole("combobox").fill("a");
       await page.getByRole("combobox").fill("session");
       await expect(page.locator('[data-search-status="ready"]')).toBeAttached({ timeout: 15_000 });
@@ -178,6 +179,25 @@ test.describe("the overlays harness", () => {
       expect(Math.abs(bellBox!.x + bellBox!.width - (panelBox!.x + panelBox!.width))).toBeLessThan(2);
       expect(panelBox!.y).toBeGreaterThan(bellBox!.y + bellBox!.height);
       await expectContained(page, "[data-attention-panel]");
+    });
+
+    test("the open panel follows the bell as the window resizes, and closes when it no longer fits", async ({ page }) => {
+      await open(page, harness());
+      test.skip(!wide(page), "The panel is the wide layout's.");
+      await bell(page).click();
+      await expect(panel(page)).toBeVisible();
+      for (const width of [1280, 1100]) {
+        await page.setViewportSize({ width, height: 900 });
+        await expect(async () => {
+          const [bellBox, panelBox] = [await bell(page).boundingBox(), await panel(page).boundingBox()];
+          expect(Math.abs(bellBox!.x + bellBox!.width - (panelBox!.x + panelBox!.width)), `right edge at ${width}px`).toBeLessThan(2);
+        }).toPass();
+        await expectContained(page, "[data-attention-panel]");
+      }
+      // Below the wide layout there is no room for it: closed, and focus is back on the bell.
+      await page.setViewportSize({ width: 800, height: 900 });
+      await expect(panel(page)).toBeHidden();
+      await expect(bell(page)).toBeFocused();
     });
 
     test("keyboard: Tab stays inside, Escape closes, focus returns to the bell", async ({ page }) => {
@@ -338,15 +358,19 @@ test.describe("the overlays harness", () => {
 
   test.describe("search", () => {
     async function openSearch(page: Page) {
+      // Islands can be hydrated before their listeners are attached: wait until the shell (Ctrl K)
+      // and the overlay (its open request) both say they are listening.
+      await expect(page.locator(".spaces-shell[data-hydrated]")).toHaveCount(1);
+      await expect(page.locator("dialog[data-search-overlay][data-ready]")).toHaveCount(1);
       if (wide(page)) await page.keyboard.press("Control+k");
-      else await page.getByRole("button", { name: "Search everything" }).click();
+      else await page.getByRole("button", { name: "Search", exact: true }).click();
       await expect(search(page)).toBeVisible();
       await expect(box(page)).toBeFocused();
     }
 
     test("Ctrl K or the button opens it; arrows choose, Enter opens; Escape gives focus back", async ({ page }, testInfo) => {
       await open(page, harness());
-      const trigger = page.getByRole("button", { name: "Search everything" });
+      const trigger = page.getByRole("button", { name: "Search", exact: true });
       await trigger.focus();
       await openSearch(page);
       await box(page).fill("retry webhook");
@@ -502,7 +526,7 @@ test.describe("evidence", () => {
         `search-${width}.png`,
         async (page) => {
           await open(page, harness());
-          await page.getByRole("button", { name: "Search everything" }).click();
+          await page.getByRole("button", { name: "Search", exact: true }).click();
           await box(page).fill("retry webhook");
           await expect(page.locator('[role="option"]')).toHaveCount(3);
         },

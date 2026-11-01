@@ -79,7 +79,7 @@ describe("space sidebars", () => {
 
   it("put the way into a cohort in Community for a member without one", () => {
     const lucy = spaceSidebar("community", facts(meByPersona.lucy, "journey", { visibleLinkIds: NEW_SIGN_IN }));
-    expect(lucy.groups.map((group) => group.label)).toEqual([undefined, "Directory", "Cohorts"]);
+    expect(lucy.groups.map((group) => group.label)).toEqual([undefined, "Public pages", "Cohorts"]);
     expect(lucy.groups.at(-1)!.items).toEqual([
       expect.objectContaining({ label: "Apply to a cohort", href: "/dashboard/cohort/apply", current: false }),
     ]);
@@ -89,7 +89,17 @@ describe("space sidebars", () => {
 
     // With a cohort, applying and Ask Tembo live in the Cohort space instead.
     const wanjiku = spaceSidebar("community", facts(meByPersona.wanjiku, "journey"));
-    expect(labels(wanjiku)).toEqual(["Your journey", "Members", "Mentors"]);
+    expect(labels(wanjiku)).toEqual(["Your journey", "For members", "For mentors"]);
+  });
+
+  it("label the public community pages as public pages, not an in-app directory (QA1-10)", () => {
+    const wanjiku = spaceSidebar("community", facts(meByPersona.wanjiku, "journey"));
+    const publicPages = wanjiku.groups.find((group) => group.label === "Public pages");
+    expect(publicPages?.items.map(({ label, href }) => ({ label, href }))).toEqual([
+      { label: "For members", href: "/community/members" },
+      { label: "For mentors", href: "/community/mentors" },
+    ]);
+    expect(wanjiku.groups.map((group) => group.label)).not.toContain("Directory");
   });
 
   it("label requests and availability as not open yet", () => {
@@ -97,8 +107,9 @@ describe("space sidebars", () => {
     expect(david.groups[0]!.items.map(({ label, note, current: isCurrent }) => ({ label, note, current: isCurrent }))).toEqual([
       { label: "Overview", note: undefined, current: false },
       { label: "Confirm work", note: undefined, current: true },
-      { label: "Requests", note: "Soon", current: false },
-      { label: "Availability", note: "Soon", current: false },
+      // The same words as the Mentoring overview's sections.
+      { label: "Requests", note: "Not open yet", current: false },
+      { label: "Availability", note: "Not open yet", current: false },
     ]);
     expect(hrefs(david).slice(2)).toEqual(["/dashboard/mentoring#requests", "/dashboard/mentoring#availability"]);
   });

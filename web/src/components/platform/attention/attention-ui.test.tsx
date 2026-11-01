@@ -311,6 +311,49 @@ describe("the attention panel", () => {
     bell.remove();
   });
 
+  it("follows the bell while the window resizes, and closes when the panel no longer fits", async () => {
+    const { api } = server();
+    const bell = await mountPanel(api);
+    let rect = { bottom: 56, right: 1392 };
+    vi.spyOn(bell, "getBoundingClientRect").mockImplementation(() => ({ ...rect }) as DOMRect);
+    const dialog = container.querySelector<HTMLDialogElement>("[data-attention-panel]")!;
+    await act(async () => requestShellOverlay({ overlay: "attention", trigger: bell, via: "click" }));
+    await settle();
+    expect(dialog.style.top).toBe("66px");
+    expect(dialog.style.right).toBe("48px");
+
+    // A wider window moves the bell; the sheet hangs from where it is now.
+    rect = { bottom: 60, right: 1800 };
+    await act(async () => happyDOM().setViewport({ width: 1920, height: 1080 }));
+    await act(async () => window.dispatchEvent(new Event("resize")));
+    expect(dialog.open).toBe(true);
+    expect(dialog.style.top).toBe("70px");
+    expect(dialog.style.right).toBe("120px");
+
+    // Below the wide layout there is no room for the panel: it closes, and focus goes back to the bell.
+    await act(async () => happyDOM().setViewport({ width: 800, height: 900 }));
+    await act(async () => window.dispatchEvent(new Event("resize")));
+    await settle();
+    expect(dialog.open).toBe(false);
+    expect(document.activeElement).toBe(bell);
+    expect(assign).not.toHaveBeenCalled();
+    bell.remove();
+  });
+
+  it("stops following the window once closed", async () => {
+    const { api } = server();
+    const bell = await mountPanel(api);
+    const measure = vi.spyOn(bell, "getBoundingClientRect").mockImplementation(() => ({ bottom: 56, right: 1392 }) as DOMRect);
+    const dialog = container.querySelector<HTMLDialogElement>("[data-attention-panel]")!;
+    await act(async () => requestShellOverlay({ overlay: "attention", trigger: bell, via: "click" }));
+    await act(async () => dialog.close());
+    await settle();
+    measure.mockClear();
+    await act(async () => window.dispatchEvent(new Event("resize")));
+    expect(measure).not.toHaveBeenCalled();
+    bell.remove();
+  });
+
   it("cycles Tab within the panel", async () => {
     const { api } = server();
     const bell = await mountPanel(api);

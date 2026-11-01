@@ -25,7 +25,7 @@ import { PEOPLE, TEMBO } from "./people";
 function Tools({ attention }: { attention: number }) {
   return (
     <>
-      <IconButton label="Search everything" icon={<PiMagnifyingGlass size={18} />} variant="ghost" />
+      <IconButton label="Search" icon={<PiMagnifyingGlass size={18} />} variant="ghost" />
       <IconButton
         label="Attention"
         icon={<PiBellSimple size={18} />}

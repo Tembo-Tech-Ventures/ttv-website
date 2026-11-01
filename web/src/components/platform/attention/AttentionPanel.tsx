@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react";
+import { useCallback, useEffect, useId, useRef } from "react";
 import { PiX } from "react-icons/pi";
 import type { Me } from "@/lib/platform/contracts";
 import { IconButton } from "@/components/platform/ui";
@@ -22,8 +22,20 @@ export default function AttentionPanel({ owner, me }: { owner: AttentionOwner; m
   const headingId = useId();
   const firstFilter = useRef<HTMLButtonElement>(null);
   const dialog = useModalDialog();
-  const { show, hide } = dialog;
+  const { open, show, hide } = dialog;
+  const dialogRef = dialog.props.ref;
   const now = useNow(null);
+  /** The bell the sheet hangs from, while it is open. */
+  const anchor = useRef<HTMLElement | null>(null);
+
+  /** Hang the sheet from the bell: its top just under it, its right edge in line. */
+  const place = useCallback(() => {
+    const rect = anchor.current?.getBoundingClientRect();
+    const node = dialogRef.current;
+    if (!node || !rect) return;
+    node.style.top = `${Math.round(rect.bottom + GAP_PX)}px`;
+    node.style.right = `${Math.max(16, Math.round(window.innerWidth - rect.right))}px`;
+  }, [dialogRef]);
 
   useEffect(
     () =>
@@ -32,20 +44,27 @@ export default function AttentionPanel({ owner, me }: { owner: AttentionOwner; m
           window.location.assign(ATTENTION_PAGE_HREF);
           return;
         }
-        // Hang the sheet from the bell: its top just under it, its right edge in line.
-        const rect = trigger?.getBoundingClientRect();
-        const node = dialog.props.ref.current;
-        if (node && rect) {
-          node.style.top = `${Math.round(rect.bottom + GAP_PX)}px`;
-          node.style.right = `${Math.max(16, Math.round(window.innerWidth - rect.right))}px`;
-        }
+        anchor.current = trigger;
+        place();
         show(trigger);
         firstFilter.current?.focus();
         void loadAndAnnounce(owner, () => owner.store.refresh());
         owner.store.refreshCounts().catch(() => undefined);
       }),
-    [owner, show, dialog.props.ref],
+    [owner, show, place],
   );
+
+  /*
+   * While open, the sheet follows the bell as the window resizes. Below the
+   * wide layout there is no room for a panel (the bell leads to the attention
+   * page there), so it closes rather than hanging from stale coordinates.
+   */
+  useEffect(() => {
+    if (!open) return;
+    const follow = () => (window.matchMedia(WIDE).matches ? place() : hide());
+    window.addEventListener("resize", follow);
+    return () => window.removeEventListener("resize", follow);
+  }, [open, hide, place]);
 
   /* Ctrl K reaches the window even from inside this dialog: search takes over, one overlay at a time. */
   useEffect(() => onShellOverlay("search", hide), [hide]);

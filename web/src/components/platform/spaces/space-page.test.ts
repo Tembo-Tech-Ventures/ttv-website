@@ -6,7 +6,8 @@ import { DEMO_PERSONAS } from "@/lib/staging-demo-policy";
 const mocks = vi.hoisted(() => ({ getSpaceContext: vi.fn() }));
 vi.mock("cloudflare:workers", () => ({ env: {} }));
 vi.mock("@/lib/platform/server/space-context", () => ({ getSpaceContext: mocks.getSpaceContext }));
-import { linkAllowed, loadCertificates, pickSpace, resolveSpacePage, restrictionsFor } from "./space-page";
+import { DASHBOARD_LINKS } from "@/components/shells/DashboardShell";
+import { linkAllowed, loadCertificates, nextStepHref, pickSpace, resolveSpacePage, restrictedDashboardHrefs, restrictionsFor } from "./space-page";
 
 const locals = { user: { id: "synthetic" } } as unknown as App.Locals;
 const off = { ...meByPersona.amina, flags: { ...meByPersona.amina.flags, spaces: false } };
@@ -91,6 +92,53 @@ describe("linkAllowed", () => {
     expect(linkAllowed(demo, "/dashboard/me")).toBe(false);
     const qa = { qaPersona: "institution" as keyof typeof DEMO_PERSONAS };
     expect(linkAllowed(qa, "/dashboard/account")).toBe(false);
+  });
+});
+
+describe("nextStepHref", () => {
+  it("goes straight to the space path in the shell, and keeps the legacy path without it", () => {
+    expect(nextStepHref({}, "/dashboard/sessions", true)).toBe("/dashboard/cohort/sessions");
+    expect(nextStepHref({}, "/dashboard/apply", true)).toBe("/dashboard/cohort/apply");
+    expect(nextStepHref({}, "/dashboard/sessions", false)).toBe("/dashboard/sessions");
+    expect(nextStepHref({}, "/dashboard/community", true)).toBe("/dashboard/community");
+  });
+
+  it("offers no button a restricted fixture could only follow into a 403", () => {
+    const fixture = restrictionsFor({ stagingFixture: { persona: "member" } } as unknown as App.Locals);
+    for (const inSpaces of [true, false]) {
+      expect(nextStepHref(fixture, "/dashboard/sessions", inSpaces)).toBeNull();
+      expect(nextStepHref(fixture, "/dashboard/application/app-1", inSpaces)).toBeNull();
+      expect(nextStepHref(fixture, "/dashboard/portfolio", inSpaces)).toBeNull();
+      expect(nextStepHref(fixture, "/dashboard/leads", inSpaces)).toBeNull();
+    }
+    expect(nextStepHref(fixture, "/dashboard/apply", true)).toBe("/dashboard/cohort/apply");
+    expect(nextStepHref(fixture, "/dashboard/community", false)).toBe("/dashboard/community");
+  });
+
+  it("applies the QA allowlist too", () => {
+    const qa = { qaPersona: "institution" as keyof typeof DEMO_PERSONAS };
+    expect(nextStepHref(qa, "/dashboard/profile", true)).toBeNull();
+  });
+});
+
+describe("restrictedDashboardHrefs", () => {
+  const hrefs = DASHBOARD_LINKS.map((link) => link.href);
+
+  it("leaves ordinary and demo sessions every link", () => {
+    expect(restrictedDashboardHrefs({}, hrefs)).toBeUndefined();
+    expect(restrictedDashboardHrefs({ demo: true, qaPersona: null, fixture: false }, hrefs)).toBeUndefined();
+  });
+
+  it("gives a staging fixture's flag-off sidebar only the pages it may open", () => {
+    const fixture = restrictionsFor({ stagingFixture: { persona: "member" } } as unknown as App.Locals);
+    expect(restrictedDashboardHrefs(fixture, hrefs)).toEqual([
+      "/dashboard", "/dashboard/discover", "/dashboard/community", "/dashboard/apply", "/auth/logout",
+    ]);
+  });
+
+  it("still applies a QA persona's allowlist", () => {
+    const qa = { qaPersona: "institution" as keyof typeof DEMO_PERSONAS };
+    expect(restrictedDashboardHrefs(qa, hrefs)).not.toContain("/dashboard/profile");
   });
 });
 

@@ -13,7 +13,7 @@ import { signInHref } from "@/components/platform/overlays/sign-in";
 import { useModalDialog } from "@/components/platform/overlays/useModalDialog";
 import { askTemboHref } from "./ask-handoff";
 import { clearRecentSearches, onShellSignOut, recentSearchKey } from "./recent-searches";
-import { GROUP_LABEL, highlight, scopesFor, searchProblem, timestamp } from "./search-display";
+import { GROUP_LABEL, highlight, matchingPart, mentions, opening, scopesFor, searchCoverage, searchesSessions, searchProblem, timestamp } from "./search-display";
 import "./search.css";
 
 function Marked({ text, query }: { text: string; query: string }) {
@@ -44,12 +44,28 @@ function Tile({ children }: { children: ReactNode }) {
   );
 }
 
-/** One result: what it is, the words that matched, and who can see it (the server's label, as given). */
+/** The text under a result's title: the part where the query matched, or its opening. Null when empty. */
+function resultText(text: string, query: string): string | null {
+  return text ? (matchingPart(text, query) ?? opening(text)) : null;
+}
+
+/**
+ * Why a result came back when none of the text it carries shows the match.
+ * The server also matches fields it does not send (a profile's headline and
+ * skills, the rest of a long bio or description), so say which.
+ */
+function Why({ children }: { children: ReactNode }) {
+  return <span className="search-option__why">{children}</span>;
+}
+
+/** One result: what it is, why it matched, and who can see it (the server's label, as given). */
 function Option({ entry, query }: { entry: SearchItem; query: string }) {
   switch (entry.group) {
     case "people": {
       const { person, bio, visibility } = entry.item;
       const mentor = person.roleBadges.some((badge) => badge.kind === "MENTOR");
+      const nameMatched = mentions(person.name, query);
+      const text = resultText(bio, query);
       return (
         <>
           <Avatar id={person.id} name={person.name} src={person.avatarUrl ?? undefined} size="lg" mentor={mentor} decorative />
@@ -57,11 +73,12 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
             <span className="search-option__title">
               <Marked text={person.name} query={query} />
             </span>
-            {bio && (
+            {text && (
               <span className="search-option__text">
-                <Marked text={bio} query={query} />
+                <Marked text={text} query={query} />
               </span>
             )}
+            {!nameMatched && !mentions(bio, query) && <Why>Matches their headline, skills or full bio</Why>}
             <span className="search-option__meta">{visibility.label}</span>
           </span>
         </>
@@ -69,6 +86,8 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
     }
     case "projects": {
       const { title, summary, owner, visibility } = entry.item;
+      const titleMatched = mentions(title, query);
+      const text = resultText(summary, query);
       return (
         <>
           <Tile>
@@ -80,13 +99,14 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
             </span>
             <span className="search-option__text">
               {owner.name}
-              {summary && (
+              {text && (
                 <>
                   {" · "}
-                  <Marked text={summary} query={query} />
+                  <Marked text={text} query={query} />
                 </>
               )}
             </span>
+            {!titleMatched && !mentions(summary, query) && <Why>Matches its full description</Why>}
             <span className="search-option__meta">{visibility.label}</span>
           </span>
         </>
@@ -104,7 +124,7 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
               <Marked text={title} query={query} /> · {timestamp(startSeconds)}
             </span>
             <span className="search-option__text">
-              “<Marked text={quote} query={query} />”
+              “<Marked text={matchingPart(quote, query) ?? quote} query={query} />”
             </span>
             <span className="search-option__meta">{visibility.label}</span>
           </span>
@@ -240,14 +260,14 @@ function Results({ state, listboxId, optionId, onOpen }: ResultsProps) {
 }
 
 /** Everything under the scopes: recent searches, progress, problems, nothing found, or the answers. */
-function Body({ store, state, listboxId, optionId, onOpen, onPick }: ResultsProps & { store: Store; onPick: (query: string) => void }) {
+function Body({ store, state, listboxId, optionId, onOpen, onPick, hint }: ResultsProps & { store: Store; onPick: (query: string) => void; hint: string }) {
   const query = state.q.trim();
   const busy = state.status === "debouncing" || state.status === "loading";
   return (
     <div className="search-overlay__results" aria-busy={busy || undefined} data-search-status={state.status}>
       {!query && state.recentQueries.length > 0 && <RecentSearches store={store} recent={state.recentQueries} onPick={onPick} />}
       {!query && state.recentQueries.length === 0 && (
-        <p className="search-overlay__status">Find people, projects, and moments from your own cohort's sessions.</p>
+        <p className="search-overlay__status">{hint}</p>
       )}
       {query && busy && (
         <p className="search-overlay__status" data-search-loading>
@@ -272,9 +292,9 @@ type SearchOverlayProps = {
 };
 
 /**
- * Search everything (Ctrl K / ⌘ K, or the top bar's search): people,
- * projects and moments from your own sessions, grouped, with the arrow keys
- * to move and Enter to open. Typing waits a beat before searching, and an
+ * Search (Ctrl K / ⌘ K, or the top bar's search): people, projects and
+ * moments from your own cohort's sessions, as `searchCoverage` tells each
+ * person, grouped, with the arrow keys to move and Enter to open. Typing waits a beat before searching, and an
  * older answer never replaces a newer question. What you type is kept only in
  * memory; a search is remembered (on this browser, for you) only once you open
  * one of its results. "Ask Tembo" hands the words to the cohort assistant's
@@ -296,7 +316,8 @@ export default function SearchOverlay({ me, client }: SearchOverlayProps) {
   const input = useRef<HTMLInputElement>(null);
   const titleId = useId();
   const listboxId = useId();
-  const canAsk = me.spaces.includes("cohort") && me.capabilities.cohortIds.length > 0;
+  const canAsk = searchesSessions(me);
+  const coverage = searchCoverage(me);
   const query = state.q.trim();
   const shown = state.status === "ready" && state.items.length > 0;
   const optionId = (index: number) => `${listboxId}-option-${index}`;
@@ -312,19 +333,25 @@ export default function SearchOverlay({ me, client }: SearchOverlayProps) {
     });
   }, [store, recentKey]);
 
-  useEffect(
-    () =>
-      onShellOverlay("search", ({ trigger }) => {
-        store.setOpen(true);
-        show(trigger);
-        // After this frame, so a panel closing for search cannot take focus back to its bell.
-        requestAnimationFrame(() => {
-          input.current?.focus();
-          input.current?.select();
-        });
-      }),
-    [store, show],
-  );
+  const dialogRef = dialog.props.ref;
+  useEffect(() => {
+    const off = onShellOverlay("search", ({ trigger }) => {
+      store.setOpen(true);
+      show(trigger);
+      // After this frame, so a panel closing for search cannot take focus back to its bell.
+      requestAnimationFrame(() => {
+        input.current?.focus();
+        input.current?.select();
+      });
+    });
+    // Hydrated and listening: browser tests wait for this before pressing Ctrl K.
+    const node = dialogRef.current;
+    node?.setAttribute("data-ready", "");
+    return () => {
+      off();
+      node?.removeAttribute("data-ready");
+    };
+  }, [store, show, dialogRef]);
 
   /* Say what came back, once per answer (the same words again if the same thing happens again). */
   useEffect(() => {
@@ -382,7 +409,7 @@ export default function SearchOverlay({ me, client }: SearchOverlayProps) {
       <dialog {...dialog.props} aria-labelledby={titleId} className="search-overlay" data-search-overlay>
         <div className="search-overlay__sheet">
           <h2 id={titleId} className="sr-only">
-            Search everything
+            Search
           </h2>
           <div className="search-overlay__top">
             <div className="search-overlay__field">
@@ -391,7 +418,7 @@ export default function SearchOverlay({ me, client }: SearchOverlayProps) {
                 ref={input}
                 type="search"
                 role="combobox"
-                aria-label="Search people, projects and your sessions"
+                aria-label={coverage.label}
                 aria-expanded={shown}
                 aria-controls={listboxId}
                 aria-autocomplete="list"
@@ -399,7 +426,7 @@ export default function SearchOverlay({ me, client }: SearchOverlayProps) {
                 autoComplete="off"
                 spellCheck={false}
                 enterKeyHint="search"
-                placeholder="Search people, projects and sessions"
+                placeholder={coverage.label}
                 value={state.q}
                 onChange={(event) => store.setQuery(event.target.value)}
                 onKeyDown={onKeyDown}
@@ -437,6 +464,7 @@ export default function SearchOverlay({ me, client }: SearchOverlayProps) {
           </div>
 
           <Body
+            hint={coverage.hint}
             store={store}
             state={state}
             listboxId={listboxId}

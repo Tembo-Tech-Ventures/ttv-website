@@ -14,11 +14,16 @@ export function dashboardNextStep(memberStep: StudentNextStep, canDiscover: bool
   } : memberStep;
 }
 
-export function restrictedQaNextStep(step: StudentNextStep, actionAllowed: boolean): StudentNextStep {
+/**
+ * The next step for a restricted synthetic session (a QA persona or a staging
+ * fixture) whose own step leads somewhere its allowlist closes. Only QA
+ * personas have the QA sign-out control to point at.
+ */
+export function restrictedQaNextStep(step: StudentNextStep, actionAllowed: boolean, qaSession = true): StudentNextStep {
   return actionAllowed ? step : {
     title: "Explore your community journey",
-    description: "This temporary fictional QA session supports community activities. Cohort sessions and account tools are not available in this session.",
-    detail: "Use the QA sign-out control above when you finish.",
+    description: `This temporary fictional ${qaSession ? "QA " : ""}session supports community activities. Cohort sessions and account tools are not available in this session.`,
+    detail: qaSession ? "Use the QA sign-out control above when you finish." : null,
     action: { href: "/dashboard/community", label: "Open my journey" },
   };
 }

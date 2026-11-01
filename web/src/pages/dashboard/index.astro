@@ -1,11 +1,9 @@
 ---
-import { qaPathAllowed } from "@/lib/staging-qa-policy";
 import { createCommunityService } from "@/lib/community/service";
 import { hasDiscoveryAccess, dashboardNextStep, restrictedQaNextStep } from "@/lib/dashboard-presentation";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import { canonicalSpacePath } from "@/lib/platform/server/space-routes";
+import { nextStepHref, resolveSpacePage, restrictionsFor } from "@/components/platform/spaces/space-page";
 import Card from "@/components/common/Card.astro";
 import Button from "@/components/common/Button.astro";
 import { CommunityJourneyCard } from "@/components/community/CommunityIntro";
@@ -20,12 +18,14 @@ const journey = await getStudentJourney(drizzle(env.DB, { schema }), user.id);
 const canDiscover = hasDiscoveryAccess(await createCommunityService(env.DB, user.id, Astro.locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT).access());
 const proposedStep = dashboardNextStep(journey.nextStep, canDiscover);
 const qa = Astro.locals.stagingQa;
-const nextStep = restrictedQaNextStep(proposedStep, !qa || qaPathAllowed(qa.persona, proposedStep.action.href, "GET"));
 const greetingName = getDashboardGreetingName(user.name);
 // With spaces on, this page is the Cohort overview at /dashboard/cohort.
 const spaces = await resolveSpacePage(Astro.locals, "cohort");
-// Link straight to the step's space path rather than through its redirect.
-const nextStepHref = spaces ? canonicalSpacePath(nextStep.action.href) ?? nextStep.action.href : nextStep.action.href;
+// Restricted QA and fixture sessions get a step their allowlist opens, never a button into a 403.
+const restrictions = restrictionsFor(Astro.locals);
+const proposedHref = nextStepHref(restrictions, proposedStep.action.href, Boolean(spaces));
+const nextStep = restrictedQaNextStep(proposedStep, proposedHref !== null, Boolean(qa));
+const stepHref = proposedHref ?? nextStepHref(restrictions, nextStep.action.href, Boolean(spaces)) ?? nextStep.action.href;
 const hasVisitedDashboard =
   Astro.cookies.get("ttv-dashboard-visited")?.value === user.id;
 
@@ -74,7 +74,7 @@ Astro.cookies.set("ttv-dashboard-visited", user.id, {
               {nextStep.detail}
             </p>
           )}
-          <Button href={nextStepHref} class="mt-6">
+          <Button href={stepHref} class="mt-6">
             {nextStep.action.label}
           </Button>
         </div>
