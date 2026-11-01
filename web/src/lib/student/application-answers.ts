@@ -68,6 +68,8 @@ export type ApplicationAnswerSubmission =
 export const ANSWER_LIMITS = { string: 500, textarea: 5_000 } as const;
 
 const QUESTION_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+/** Top-level keys that hold the schema itself, never a copy of an answer. */
+const STRUCTURAL_KEYS = new Set(["version", "submission"]);
 const DATE_VALUE = /^\d{4}-\d{2}-\d{2}$/;
 /** What a number field can submit: "3", "-2.5", ".5", "1e3". */
 const NUMBER_VALUE = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
@@ -241,8 +243,14 @@ function readText(question: ApplicationQuestion & { type: "string" | "textarea" 
   const limit = ANSWER_LIMITS[question.type];
   if (draft.length > limit) return { error: `Keep this answer to ${limit.toLocaleString("en-US")} characters or fewer.` };
   const text = draft.trim();
-  if (question.options.length > 0 && text !== "" && !question.options.some((option) => option.value === text)) {
+  const isOption = (value: unknown) => question.options.some((option) => option.value === value);
+  if (question.options.length > 0 && text !== "" && !isOption(text)) {
     return { error: "Choose one of the listed options." };
+  }
+  // A stored answer that is no longer among the options cannot be shown as
+  // selected, so the list posts "Choose one": keep the answer rather than wipe it.
+  if (question.options.length > 0 && text === "" && question.value !== null && !isOption(question.value)) {
+    return { value: question.value };
   }
   return { value: text === "" ? null : text };
 }
@@ -308,7 +316,7 @@ export function writeAnswers(text: string, values: ReadonlyMap<string, Applicati
   });
   const mirrored = Object.fromEntries(
     Object.entries(application)
-      .filter(([key, current]) => key !== "submission" && values.has(key) && (typeof current === "string" || current === null))
+      .filter(([key, current]) => !STRUCTURAL_KEYS.has(key) && values.has(key) && (typeof current === "string" || current === null))
       .map(([key]) => {
         const value = values.get(key);
         return [key, typeof value === "string" ? value : ""];

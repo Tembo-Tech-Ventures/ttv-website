@@ -19,8 +19,10 @@ import {
 export type SaveApplicationAnswersResult =
   /** Not this member's application (or outside their allowed cohort). */
   | { kind: "not-found" }
-  /** Nothing a member can answer here: no questions, or no longer pending. */
+  /** Nothing a member can answer here: no questions to answer. */
   | { kind: "not-editable" }
+  /** It has questions, but the team has reviewed it, so answers no longer change. */
+  | { kind: "reviewed" }
   | { kind: "invalid"; drafts: ApplicationAnswerDrafts; errors: Readonly<Record<string, string>> }
   | { kind: "saved"; application: string }
   /** It was reviewed or changed while the form was open. */
@@ -58,7 +60,8 @@ export async function saveApplicationAnswers({
   if (!stored) return { kind: "not-found" };
 
   const answers = parseApplicationAnswers(stored.application);
-  if (answers.kind !== "questions" || !canEditAnswers(answers, stored.status)) return { kind: "not-editable" };
+  if (!canEditAnswers(answers, "PENDING") || answers.kind !== "questions") return { kind: "not-editable" };
+  if (stored.status !== "PENDING") return { kind: "reviewed" };
 
   const submission = readAnswerSubmission(answers.questions, read);
   if (!submission.ok) return { kind: "invalid", drafts: submission.drafts, errors: submission.errors };

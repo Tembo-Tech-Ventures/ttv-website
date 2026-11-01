@@ -16,6 +16,7 @@ import {
   createSelfApplication,
   throwSelfApplicationFailure,
 } from "@/lib/admin/program-application";
+import { applyPageState } from "@/lib/student/apply-page";
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
@@ -105,9 +106,13 @@ const availablePrograms = allPrograms.filter(
 
 // After a successful post the page confirms the application and nothing else
 // contradicts it: the cohort list only offers the other open cohorts, and the
-// "nothing open" message is left out. The notice is only believed once the
-// person has an application to show.
-const submitted = notice === "application-submitted" && appliedProgramIds.length > 0;
+// "nothing open" message is left out.
+const { submitted, showSubtitle, showOtherCohortsHeading, emptyMessage } = applyPageState({
+  notice,
+  appliedCount: appliedProgramIds.length,
+  openCount: allPrograms.length,
+  availableCount: availablePrograms.length,
+});
 const applicationsHref = spaces ? SPACE_PATHS.cohort : "/dashboard";
 ---
 
@@ -115,7 +120,7 @@ const applicationsHref = spaces ? SPACE_PATHS.cohort : "/dashboard";
   <div class="space-y-6">
     <div>
       <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Apply to a Cohort</PageTitle>
-      {!(submitted && availablePrograms.length === 0) && (
+      {showSubtitle && (
         <p class="mt-1 text-ink-secondary">
           Browse cohorts accepting applications and submit yours.
         </p>
@@ -140,8 +145,8 @@ const applicationsHref = spaces ? SPACE_PATHS.cohort : "/dashboard";
       </div>
     )}
 
-    {submitted && availablePrograms.length > 0 && (
-      <h2 class="text-lg font-semibold text-white">Other open cohorts</h2>
+    {showOtherCohortsHeading && (
+      <h2 class="font-body text-lg font-semibold text-white">Other open cohorts</h2>
     )}
 
     {availablePrograms.length > 0 ? (
@@ -174,14 +179,10 @@ const applicationsHref = spaces ? SPACE_PATHS.cohort : "/dashboard";
           </div>
         ))}
       </div>
-    ) : !submitted && (
+    ) : emptyMessage && (
       <Card>
         <div class="text-center py-8" data-apply-empty>
-          <p class="text-ink-secondary">
-            {allPrograms.length > 0
-              ? "You've applied to every cohort that's open right now."
-              : "No cohorts are accepting applications right now."}
-          </p>
+          <p class="text-ink-secondary">{emptyMessage}</p>
           {appliedProgramIds.length > 0 && (
             <Button href={applicationsHref} class="mt-4">
               View your applications

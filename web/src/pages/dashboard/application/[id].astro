@@ -85,6 +85,10 @@ if (Astro.request.method === "POST") {
         : "The team has already reviewed this application, so its answers can no longer change.";
       Astro.response.status = 409;
       break;
+    case "reviewed":
+      error = "The team has already reviewed this application, so its answers can no longer change.";
+      Astro.response.status = 409;
+      break;
     case "failed":
       drafts = result.drafts;
       error = "Your answers could not be saved. Please try again.";
@@ -92,15 +96,17 @@ if (Astro.request.method === "POST") {
       break;
     case "not-found":
     case "not-editable":
-      // Nothing a member can post here: the page renders as it would for a GET.
+      // No questions to answer: the page renders as it would for a GET.
       break;
   }
 }
 
 const spaces = await resolveSpacePage(Astro.locals, "apply");
+// Screen readers hear the title first on a reloaded page, so a rejected form says so there too.
+const titlePrefix = error || Object.keys(fieldErrors).length > 0 ? "Error: " : "";
 ---
 
-<SpacePage context={spaces} title="Application details" legacyTitle="Application Details">
+<SpacePage context={spaces} title={`${titlePrefix}Application details`} legacyTitle={`${titlePrefix}Application Details`}>
   <div class="space-y-6">
     <div class="flex items-center gap-4">
       <a

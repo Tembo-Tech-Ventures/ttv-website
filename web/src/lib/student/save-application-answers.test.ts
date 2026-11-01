@@ -114,10 +114,16 @@ describe("saveApplicationAnswers", () => {
     expect(stored("app-self")!.application).toBe("{}");
   });
 
-  it.each(["APPROVED", "AUDIT", "REJECTED", "COMPLETED"])("writes nothing once the application is %s", async (status) => {
+  it.each(["APPROVED", "AUDIT", "REJECTED", "COMPLETED"])("says it was reviewed, and writes nothing, once it is %s", async (status) => {
+    // The form was loaded while PENDING; staff reviewed it before the member pressed Save.
     sqlite.database.prepare('UPDATE "programApplication" SET "status" = ? WHERE "id" = ?').run(status, "app-njeri");
-    expect(await save(VALID)).toEqual({ kind: "not-editable" });
+    expect(await save(VALID)).toEqual({ kind: "reviewed" });
     expect(stored()!.application).toBe(QUESTIONS);
+  });
+
+  it("treats a reviewed application with no questions as nothing to answer", async () => {
+    insertApplication("app-approved", "njeri", "APPROVED", "{}", "demo-program");
+    expect(await save(VALID, { applicationId: "app-approved" })).toEqual({ kind: "not-editable" });
   });
 
   it("writes nothing to another member's application", async () => {

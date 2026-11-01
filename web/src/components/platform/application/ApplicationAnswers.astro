@@ -57,7 +57,12 @@ const failed = questions.filter((question) => errorFor(question));
   answers.kind === "questions" && editable ? (
     <form method="POST" class="space-y-6" data-application-answers-form>
       {failed.length > 0 && (
-        <div role="alert" class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+        <div
+          id="answers-error-summary"
+          role="alert"
+          tabindex="-1"
+          class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+        >
           <p class="font-medium">
             {failed.length === 1 ? "One answer needs" : `${failed.length} answers need`} another look. Everything you typed is still here.
           </p>
@@ -71,6 +76,9 @@ const failed = questions.filter((question) => errorFor(question));
             ))}
           </ul>
         </div>
+      )}
+      {failed.length > 0 && (
+        <script is:inline>document.getElementById("answers-error-summary")?.focus();</script>
       )}
 
       <p class="text-sm text-ink-secondary">You can change your answers until the team reviews your application.</p>
@@ -91,7 +99,12 @@ const failed = questions.filter((question) => errorFor(question));
             </legend>
             <div class="flex flex-wrap gap-3">
               {(["yes", "no"] as const).map((choice) => (
-                <label class="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-teal/40 px-4 text-white has-[:checked]:border-primary">
+                <label
+                  class:list={[
+                    "flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-4 text-white has-[:checked]:border-primary",
+                    error ? "border-red-500" : "border-teal/40",
+                  ]}
+                >
                   <input
                     type="radio"
                     id={choice === "yes" ? fieldId(question) : undefined}

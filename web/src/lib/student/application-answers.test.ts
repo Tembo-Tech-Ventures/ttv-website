@@ -266,6 +266,17 @@ describe("readAnswerSubmission", () => {
     expect(result.drafts).toMatchObject({ project: typed, hours: "six", available: "2027-02-30", track: "track-unknown" });
   });
 
+  it("keeps a stored choice that is no longer among the options instead of wiping it", () => {
+    const stale = questions.map((question) => (question.name === "track" ? { ...question, value: "mobile" } : question));
+    const kept = readAnswerSubmission(stale, validForm({ "answer.track": "" }));
+    expect(kept.ok && kept.values.get("track")).toBe("mobile");
+    const changed = readAnswerSubmission(stale, validForm({ "answer.track": "data" }));
+    expect(changed.ok && changed.values.get("track")).toBe("data");
+    // A listed answer can still be cleared.
+    const cleared = readAnswerSubmission(questions, validForm({ "answer.track": "" }));
+    expect(cleared.ok && cleared.values.get("track")).toBeNull();
+  });
+
   it("treats a missing field as blank, so an unanswered required choice is an error", () => {
     const result = readAnswerSubmission(questions, formOf({}));
     expect(result.ok).toBe(false);
@@ -326,6 +337,14 @@ describe("writeAnswers", () => {
     expect(written.partnerId).toBe("");
     expect(written.submission[0].value).toBe("Njeri W.");
     expect(written.submission[1].value).toBeNull();
+  });
+
+  it("never lets an answer overwrite the schema's own keys", () => {
+    const text = JSON.stringify({ version: "1", submission: [{ type: "string", name: "version", label: "Which version?", value: "1" }] });
+    const written = JSON.parse(writeAnswers(text, new Map([["version", "2"]])));
+    expect(written.version).toBe("1");
+    expect(written.submission[0].value).toBe("2");
+    expect(parseApplicationAnswers(JSON.stringify(written)).kind).toBe("questions");
   });
 
   it("refuses to write into an application with no questions", () => {

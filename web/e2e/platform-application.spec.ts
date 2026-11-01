@@ -149,6 +149,9 @@ test.describe("a member whose application carries questions", () => {
 
     const alert = page.locator("form[data-application-answers-form] [role='alert']");
     await expect(alert).toContainText("One answer needs another look. Everything you typed is still here.");
+    // Announced on arrival: focus moves to the summary, and the title says it failed.
+    await expect(alert).toBeFocused();
+    await expect(page).toHaveTitle(/^Error: Application details/i);
     await expect(alert.getByRole("link", { name: "Did you complete the free portion of the HTML/CSS course? Choose Yes or No." })).toHaveAttribute("href", "#answer-htmlCssDone");
     await expect(page.getByLabel(PROJECT_LABEL)).toHaveValue(typed);
     await expect(page.getByRole("group", { name: HTML_LABEL }).getByRole("radio", { name: "Yes" })).toHaveAttribute("aria-invalid", "true");
@@ -208,6 +211,8 @@ test.describe("a member applying to a cohort that asks no questions", () => {
 
   test("is told it was submitted, without a contradiction, and gets no edit step", async ({ context, page, baseURL }) => {
     test.skip(test.info().project.name !== "chromium", "Applying is once per seed; the phone view is captured in this test.");
+    // The whole journey, two widths and two axe runs, in one test.
+    test.setTimeout(60_000);
     const frame = await signedIn(context, page, baseURL!, newcomer);
 
     await open(page, "/dashboard/apply");
