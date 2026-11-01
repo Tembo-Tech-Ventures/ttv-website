@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { runAxe } from "./platform-axe";
 import { assertPersonaOrigin, PERSONA_EXPECTATIONS, personaSession, signIn, type PersonaKey } from "./platform-personas";
 import { FIXTURE_ENVIRONMENT } from "./fixture-env";
@@ -363,6 +363,86 @@ test.describe("staff", () => {
     await expect(page.locator(".spaces-shell")).toHaveAttribute("data-space", "admin");
     await expect(page.locator("#space-sidebar a[aria-current='page']")).toHaveText("Mentor review");
     await expect(page.locator("#space-sidebar a", { hasText: "Admin home" })).toHaveAttribute("href", "/admin");
+  });
+});
+
+test.describe("QA-1 polish (F-3)", () => {
+  /** Signs in, or skips when this environment has no such persona or the spaces flag is off. */
+  async function as(key: PersonaKey, { context, page, baseURL }: { context: BrowserContext; page: Page; baseURL?: string }) {
+    const session = personaSession(key);
+    test.skip(typeof session === "string", typeof session === "string" ? session : "");
+    if (typeof session === "string") return;
+    await routeFonts(page);
+    await signIn(context, baseURL!, session);
+    test.skip((await page.request.get("/api/platform/me")).status() === 404, "The spaces flag is off here.");
+  }
+
+  test.describe("with motion", () => {
+    test.use({ reducedMotion: "no-preference" });
+
+    test("staff reach Admin from the tabs without a transition error, and Admin leads back", async ({ context, page, baseURL }) => {
+      await as("staff", { context, page, baseURL });
+      const errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      page.on("console", (message) => {
+        if (["error", "warning"].includes(message.type())) errors.push(message.text());
+      });
+      await open(page, "/dashboard/community");
+      await page.locator(`.space-file__nav a[href="/admin"], .spaces-bottom a[href="/admin"]`).locator("visible=true").first().click();
+      await expect(page).toHaveURL(/\/admin$/);
+      await expect(page.locator("main#admin-main")).toBeVisible();
+      expect(errors.filter((message) => /transition/i.test(message))).toEqual([]);
+
+      // The first stop is a skip link to the page; a way back to the dashboard comes first in the menu.
+      await page.keyboard.press("Tab");
+      await expect(page.locator(":focus")).toHaveText("Skip to content");
+      await page.keyboard.press("Enter");
+      await expect(page.locator("#admin-main")).toBeFocused();
+      if (!wide(page)) await page.getByRole("button", { name: "Open navigation" }).click();
+      await page.getByRole("link", { name: "Back to dashboard" }).locator("visible=true").first().click();
+      // Back in a space, not bounced back to Admin.
+      await expect(page.locator(".spaces-shell")).toBeVisible();
+      expect(new URL(page.url()).pathname).not.toBe("/admin");
+      await runAxe(page, test.info(), "staff-back-from-admin");
+    });
+  });
+
+  test("/dashboard says it reopened the space used last, once", async ({ context, page, baseURL }) => {
+    await as("student", { context, page, baseURL });
+    await open(page, "/dashboard/community");
+    await open(page, "/dashboard");
+    expect(new URL(page.url()).pathname).toBe("/dashboard/community");
+    const hint = page.locator(".spaces-shell__landing");
+    await expect(hint).toContainText("You’re in Community, the space you used last.");
+    await runAxe(page, test.info(), "student-landing-hint");
+    await page.screenshot({ path: evidence("student-landing-hint") });
+    await hint.getByRole("button", { name: "Dismiss" }).click();
+    await expect(hint).toHaveCount(0);
+    await expect(page.locator("#spaces-main")).toBeFocused();
+    await open(page, "/dashboard");
+    await expect(page.locator(".spaces-shell__landing")).toHaveCount(0);
+  });
+
+  test("Community says its directories are public pages before anyone follows them", async ({ context, page, baseURL }) => {
+    await as("community", { context, page, baseURL });
+    await open(page, "/dashboard/community");
+    if (!wide(page)) await page.getByRole("link", { name: /^Open .+ menu$/ }).click();
+    const directory = page.locator("#space-sidebar ul[aria-labelledby]", { has: page.locator('a[href="/community/members"]') });
+    await expect(page.locator("#space-sidebar")).toContainText("Public directory");
+    await expect(directory.getByRole("link", { name: "Members (public website)" })).toHaveAttribute("href", "/community/members");
+    await expect(directory.getByRole("link", { name: "Mentors (public website)" })).toHaveAttribute("href", "/community/mentors");
+  });
+
+  test("sessions open at their space paths, and lead back the same way", async ({ context, page, baseURL }) => {
+    test.skip(Boolean(process.env.PLAYWRIGHT_BASE_URL), "The fictional recording is in the local seed only.");
+    await as("student", { context, page, baseURL });
+    await open(page, "/dashboard/cohort/sessions");
+    await page.locator('a[href="/dashboard/cohort/sessions/ttv-local-persona-recording-05"]').click();
+    // No hop through the legacy /dashboard/sessions/:id redirect.
+    await expect(page).toHaveURL(/\/dashboard\/cohort\/sessions\/ttv-local-persona-recording-05$/);
+    await expect(page.getByRole("link", { name: "← Back to Sessions" })).toHaveAttribute("href", "/dashboard/cohort/sessions");
+    const missing = await page.request.get("/dashboard/cohort/sessions/ttv-local-persona-missing", { maxRedirects: 0 });
+    expect(missing.headers().location).toBe("/dashboard/cohort/sessions");
   });
 });
 

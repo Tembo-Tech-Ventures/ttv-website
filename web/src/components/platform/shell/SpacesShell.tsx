@@ -7,10 +7,11 @@ import { Avatar, RoleBadge, SpaceFile, type SpaceTabItem } from "@/components/pl
 import { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
 import AccountMenu, { type ShellAccount } from "./AccountMenu";
+import { browserLanding, landedOnLastSpace, rememberLandingHint } from "./landing-hint";
 import { latestAttentionCounts, subscribeAttentionCounts, type ShellOverlay } from "./overlays";
 import SpaceBottomBar from "./SpaceBottomBar";
 import { AttentionBell, SearchTrigger } from "./ShellTools";
-import { SPACE_HOME, SPACE_LABEL } from "./space-routes";
+import { opensInShell, SPACE_HOME, SPACE_LABEL } from "./space-routes";
 import "./spaces-shell.css";
 
 export type SpaceLink = { space: SpaceId; label: string; href: string; count: number };
@@ -41,6 +42,15 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 const WIDE = "(min-width: 64rem)";
 const SIDEBAR_ID = "space-sidebar";
 const MAIN_ID = "spaces-main";
+
+/**
+ * Whether choosing a space is remembered for /dashboard. Admin is not: it has
+ * its own frame outside /dashboard, and remembering it would send /dashboard,
+ * including Admin's own "Back to dashboard", straight back to Admin.
+ */
+function remembered(id: string): boolean {
+  return id !== "admin";
+}
 
 function shown(element: HTMLElement | null): element is HTMLElement {
   return Boolean(element?.isConnected && element.getClientRects().length > 0);
@@ -97,7 +107,7 @@ export default function SpacesShell({
   children,
 }: SpacesShellProps) {
   const [controller] = useState(() =>
-    createSpacesController({ me, explicitSpace: space, lastSpace, browser: persistPreference ? undefined : null }),
+    createSpacesController({ me, explicitSpace: remembered(space) ? space : undefined, lastSpace, browser: persistPreference ? undefined : null }),
   );
   const shell = useSpaces(controller);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -106,6 +116,8 @@ export default function SpacesShell({
   const { open, focusIndex, focusTarget } = shell.drawer;
   // Until hydration the no-JS fallback (the #space-sidebar fragment) may hold the drawer open.
   const [hydrated, setHydrated] = useState(false);
+  /** /dashboard just reopened the space used last: say so, once. */
+  const [landingHint, setLandingHint] = useState(false);
 
   // The attention overlay publishes authoritative counts as they change; until then, and without it, Me's.
   const live = useSyncExternalStore(subscribeAttentionCounts, latestAttentionCounts, () => null);
@@ -139,7 +151,7 @@ export default function SpacesShell({
   function rememberSpace(event: MouseEvent) {
     const link = (event.target as Element).closest<HTMLAnchorElement>("[data-space] a[href]");
     const chosen = link?.closest<HTMLElement>("[data-space]")?.dataset.space;
-    if (chosen && chosen !== space) shell.switchSpace(chosen);
+    if (chosen && chosen !== space && remembered(chosen)) shell.switchSpace(chosen);
   }
 
   /*
@@ -212,6 +224,31 @@ export default function SpacesShell({
       drawer.removeEventListener("click", onClick);
     };
   }, [controller]);
+
+  useEffect(() => {
+    if (!persistPreference) return;
+    if (landedOnLastSpace({ space, lastSpace, home: spaceHrefs[space], ...browserLanding() })) {
+      setLandingHint(true);
+      rememberLandingHint();
+    }
+  }, [persistPreference, space, lastSpace, spaceHrefs]);
+
+  /*
+   * Switching spaces slides the new sheet in, but only a page in the shell can
+   * finish that transition. Leaving for any other page (Admin, a public page)
+   * skips it at once, instead of the browser aborting it with an error.
+   */
+  useEffect(() => {
+    const onSwap = (event: PageSwapEvent) => {
+      const to = event.activation?.entry.url;
+      const path = to ? new URL(to).pathname : null;
+      if (event.viewTransition && !(path && (opensInShell(path) || path === window.location.pathname))) {
+        event.viewTransition.skipTransition();
+      }
+    };
+    window.addEventListener("pageswap", onSwap);
+    return () => window.removeEventListener("pageswap", onSwap);
+  }, []);
 
   /* Widening past the phone layout puts the sidebar back in the sheet, and closes the drawer. */
   useEffect(() => {
@@ -315,6 +352,29 @@ export default function SpacesShell({
           {/* The page scrolls here, so a keyboard must be able to reach and scroll it (WCAG 2.1.1). */}
           {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scroll container */}
           <main id={MAIN_ID} tabIndex={0} className={cx("spaces-shell__main", FOCUS_RING)}>
+            <div className={landingHint ? "spaces-shell__landing" : "sr-only"}>
+              {/* Always present, so the hint is announced when it appears. */}
+              <output className="min-w-0 flex-1">
+                {landingHint && `You’re in ${SPACE_LABEL[space]}, the space you used last. Switch any time from the tabs.`}
+              </output>
+              {landingHint && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLandingHint(false);
+                    // The button goes with the hint: keep focus where the reader was, in the page.
+                    document.getElementById(MAIN_ID)?.focus();
+                  }}
+                  aria-label="Dismiss"
+                  className={cx(
+                    "inline-grid size-10 shrink-0 place-items-center rounded-lg text-ink-secondary hover:bg-ink-primary/7 hover:text-ink-primary pointer-coarse:size-11",
+                    FOCUS_RING,
+                  )}
+                >
+                  <PiX aria-hidden="true" className="size-4" />
+                </button>
+              )}
+            </div>
             {children}
           </main>
         </div>

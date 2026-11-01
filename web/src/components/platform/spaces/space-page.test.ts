@@ -6,7 +6,18 @@ import { DEMO_PERSONAS } from "@/lib/staging-demo-policy";
 const mocks = vi.hoisted(() => ({ getSpaceContext: vi.fn() }));
 vi.mock("cloudflare:workers", () => ({ env: {} }));
 vi.mock("@/lib/platform/server/space-context", () => ({ getSpaceContext: mocks.getSpaceContext }));
-import { linkAllowed, loadCertificates, pickSpace, resolveSpacePage, restrictionsFor } from "./space-page";
+import { DASHBOARD_LINKS } from "@/components/shells/DashboardShell";
+import type { StudentNextStep } from "@/lib/student/journey";
+import {
+  inSpacesWords,
+  linkAllowed,
+  loadCertificates,
+  pickSpace,
+  resolveSpacePage,
+  restrictedHrefs,
+  restrictedNextStep,
+  restrictionsFor,
+} from "./space-page";
 
 const locals = { user: { id: "synthetic" } } as unknown as App.Locals;
 const off = { ...meByPersona.amina, flags: { ...meByPersona.amina.flags, spaces: false } };
@@ -91,6 +102,54 @@ describe("linkAllowed", () => {
     expect(linkAllowed(demo, "/dashboard/me")).toBe(false);
     const qa = { qaPersona: "institution" as keyof typeof DEMO_PERSONAS };
     expect(linkAllowed(qa, "/dashboard/account")).toBe(false);
+  });
+});
+
+describe("restricted identities", () => {
+  const fixture = restrictionsFor({ stagingFixture: { persona: "member" } } as unknown as App.Locals);
+  const qa = { qaPersona: "member-noncohort" as keyof typeof DEMO_PERSONAS };
+  const sessions: StudentNextStep = {
+    title: "Start with your cohort sessions",
+    description: "You are part of the cohort. Revisit each session and use Ask AI as you build with the community.",
+    detail: "Cohort 05",
+    action: { href: "/dashboard/sessions", label: "Watch sessions" },
+  };
+  const apply: StudentNextStep = { ...sessions, title: "Apply to Cohort 06", action: { href: "/dashboard/apply", label: "Apply" } };
+
+  it("are never offered a next step they cannot open", () => {
+    expect(restrictedNextStep({}, sessions)).toBe(sessions);
+    expect(restrictedNextStep(fixture, apply)).toBe(apply);
+    const fixtureStep = restrictedNextStep(fixture, sessions);
+    expect(fixtureStep.action.href).toBe("/dashboard/community");
+    expect(fixtureStep.description).toContain("synthetic staging account");
+    expect(linkAllowed(fixture, fixtureStep.action.href)).toBe(true);
+    // A QA persona keeps its existing replacement step, word for word.
+    expect(restrictedNextStep(qa, sessions).description).toContain("not available in this session");
+  });
+
+  it("see only the existing dashboard links their allowlists open; everyone else sees them all", () => {
+    const hrefs = DASHBOARD_LINKS.map((link) => link.href);
+    expect(restrictedHrefs({}, hrefs)).toBeUndefined();
+    expect(restrictedHrefs({ demo: true }, hrefs)).toBeUndefined();
+    const forFixture = restrictedHrefs(fixture, hrefs)!;
+    expect(forFixture).toContain("/dashboard/community");
+    expect(forFixture).not.toContain("/dashboard/sessions");
+    expect(forFixture).not.toContain("/dashboard/profile");
+    expect(forFixture.every((href) => linkAllowed(fixture, href))).toBe(true);
+    expect(restrictedHrefs(qa, hrefs)!.every((href) => linkAllowed(qa, href))).toBe(true);
+  });
+});
+
+describe("inSpacesWords", () => {
+  it("calls the assistant Ask Tembo, as the shell does, and changes nothing else", () => {
+    const step: StudentNextStep = {
+      title: "Start with your cohort sessions",
+      description: "Revisit each session and use Ask AI as you build with the community.",
+      detail: null,
+      action: { href: "/dashboard/sessions", label: "Watch sessions" },
+    };
+    expect(inSpacesWords(step)).toEqual({ ...step, description: "Revisit each session and use Ask Tembo as you build with the community." });
+    expect(step.description).toContain("Ask AI");
   });
 });
 

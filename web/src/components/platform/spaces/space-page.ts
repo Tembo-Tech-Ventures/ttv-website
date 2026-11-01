@@ -7,6 +7,8 @@ import { DEMO_PREFIX, demoPathAllowed, isDemoUser } from "@/lib/staging-demo-pol
 import { qaPathAllowed } from "@/lib/staging-qa-policy";
 import { stagingFixturePathAllowed } from "@/lib/staging-fixture-policy";
 import { isValidCompletion } from "@/lib/talent/eligibility";
+import { restrictedQaNextStep } from "@/lib/dashboard-presentation";
+import type { StudentNextStep } from "@/lib/student/journey";
 import { canRenderSpace } from "@/components/platform/shell/access";
 import { PAGE_SPACES, type SpacePageKey } from "./sidebar";
 
@@ -71,6 +73,42 @@ export function linkAllowed({ qaPersona, demo, fixture }: Restrictions, href: st
   return (!qaPersona || qaPathAllowed(qaPersona, path, "GET"))
     && (!demo || demoPathAllowed(path, "GET"))
     && (!fixture || stagingFixturePathAllowed(path, "GET"));
+}
+
+/**
+ * The existing dashboard's links a QA persona or staging fixture may follow,
+ * or undefined for everyone else (nothing is filtered). Demo sessions keep
+ * their existing sidebar, as before.
+ */
+export function restrictedHrefs({ qaPersona, fixture }: Restrictions, hrefs: readonly string[]): string[] | undefined {
+  return qaPersona || fixture ? hrefs.filter((href) => linkAllowed({ qaPersona, fixture }, href)) : undefined;
+}
+
+/**
+ * The journey's next step, unless a restricted synthetic identity cannot
+ * follow it. A QA persona keeps its existing replacement step; a staging
+ * fixture gets the same way back to its journey, in words that fit it. Real
+ * people (no restrictions) always get the step as it is.
+ */
+export function restrictedNextStep({ qaPersona, fixture }: Restrictions, step: StudentNextStep): StudentNextStep {
+  const href = step.action.href;
+  if (qaPersona) return restrictedQaNextStep(step, linkAllowed({ qaPersona }, href));
+  if (!fixture || linkAllowed({ fixture }, href)) return step;
+  return {
+    title: "Explore your community journey",
+    description: "This synthetic staging account supports community activities. Cohort sessions and account tools are not open to it.",
+    detail: null,
+    action: { href: "/dashboard/community", label: "Open my journey" },
+  };
+}
+
+/**
+ * A next step in the spaces shell's words. The shell calls the cohort
+ * assistant Ask Tembo (owner decision, 31 Oct 2026); the existing dashboard,
+ * whose navigation still says Ask AI, keeps the journey's own wording.
+ */
+export function inSpacesWords(step: StudentNextStep): StudentNextStep {
+  return { ...step, description: step.description.replaceAll("Ask AI", "Ask Tembo") };
 }
 
 /** The person's own completed cohorts that have a certificate, newest first. */

@@ -1,6 +1,6 @@
 # Attention and search overlays (U-1.3)
 
-Search everything (Ctrl K / ⌘ K) and the attention inbox: a panel hanging from
+Search (Ctrl K / ⌘ K) and the attention inbox: a panel hanging from
 the bell on wide screens, and `/dashboard/attention` on phones (or for anyone
 who follows the link). Dark until the `spaces` flag is on for the person.
 

@@ -2,6 +2,7 @@
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
 import Card from "@/components/common/Card.astro";
 import SessionViewer from "@/components/recordings/SessionViewer";
 import ProcessingStatus from "@/components/recordings/ProcessingStatus.astro";
@@ -15,7 +16,10 @@ import { env } from "cloudflare:workers";
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
-if (!id) return Astro.redirect("/dashboard/sessions");
+const spaces = await resolveSpacePage(Astro.locals, "sessions");
+// In the shell, go straight to the list's space path instead of through its redirect.
+const sessionsHref = spaces ? SPACE_PAGE_PATHS.sessions : "/dashboard/sessions";
+if (!id) return Astro.redirect(sessionsHref);
 
 const recording = await db.query.recording.findFirst({
   where: eq(schema.recording.id, id),
@@ -27,17 +31,16 @@ const recording = await db.query.recording.findFirst({
   },
 });
 
-if (!recording) return Astro.redirect("/dashboard/sessions");
+if (!recording) return Astro.redirect(sessionsHref);
 const hasAccess = await userCanAccessProgram(db, user.id, recording.programId);
-if (!hasAccess) return Astro.redirect("/dashboard/sessions");
+if (!hasAccess) return Astro.redirect(sessionsHref);
 
 const initialTime = parseTimestampParam(Astro.url.searchParams.get("t"));
-const spaces = await resolveSpacePage(Astro.locals, "sessions");
 ---
 
 <SpacePage context={spaces} title={recording.title}>
   <div class="space-y-6">
-    <a href="/dashboard/sessions" class="text-sm text-primary hover:underline">
+    <a href={sessionsHref} class="text-sm text-primary hover:underline">
       &larr; Back to Sessions
     </a>
 

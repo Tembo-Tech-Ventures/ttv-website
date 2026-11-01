@@ -2,7 +2,7 @@
 import { createCommunityService } from "@/lib/community/service";
 import { hasDiscoveryAccess } from "@/lib/dashboard-presentation";
 import BaseLayout from "./BaseLayout.astro";
-import { qaPathAllowed } from "@/lib/staging-qa-policy";
+import { restrictedHrefs, restrictionsFor } from "@/components/platform/spaces/space-page";
 import DashboardShell, { DASHBOARD_LINKS } from "@/components/shells/DashboardShell";
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
@@ -20,8 +20,8 @@ interface Props {
 
 const { title = "Dashboard", journey: suppliedJourney } = Astro.props;
 const user = Astro.locals.user!;
-const qa = Astro.locals.stagingQa;
-const allowedHrefs = qa ? DASHBOARD_LINKS.filter(link => qaPathAllowed(qa.persona, link.href, "GET")).map(link => link.href) : undefined;
+// QA personas and staging fixtures only see links their allowlists open, so the sidebar offers no dead ends.
+const allowedHrefs = restrictedHrefs(restrictionsFor(Astro.locals), DASHBOARD_LINKS.map(link => link.href));
 const canDiscover = Astro.props.canDiscover ?? hasDiscoveryAccess(await createCommunityService(env.DB, user.id, Astro.locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT).access());
 const journey =
   suppliedJourney ??

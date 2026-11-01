@@ -1,11 +1,13 @@
 ---
 import type { ComponentType } from "react";
+import { PiArrowUpRight } from "react-icons/pi";
 import { CountBadge } from "@/components/platform/ui";
 
 /**
  * One destination in a space's sidebar. `current` marks the page you are on.
  * A count is unread attention unless `countLabel` says what it counts
- * instead; `note` is quiet text such as "1 new".
+ * instead; `note` is quiet text such as "Not open yet". `publicPage` marks a
+ * link that leaves the app for the public website.
  */
 interface Props {
   href: string;
@@ -16,9 +18,10 @@ interface Props {
   /** Read after the number by screen readers. */
   countLabel?: string;
   note?: string;
+  publicPage?: boolean;
 }
 
-const { href, label, icon: Icon, current = false, count = 0, countLabel = "new", note } = Astro.props;
+const { href, label, icon: Icon, current = false, count = 0, countLabel = "new", note, publicPage = false } = Astro.props;
 ---
 
 <li>
@@ -32,7 +35,11 @@ const { href, label, icon: Icon, current = false, count = 0, countLabel = "new",
     ]}
   >
     {Icon && <Icon aria-hidden className="size-5 shrink-0" />}
-    <span class="min-w-0 flex-1 break-words">{label}</span>
+    <span class="min-w-0 flex-1 break-words">
+      {label}
+      {publicPage && <span class="sr-only"> (public website)</span>}
+    </span>
+    {publicPage && <PiArrowUpRight aria-hidden className="size-4 shrink-0 text-ink-muted" />}
     {count > 0 ? <CountBadge count={count} label={countLabel} /> : note && <span class="shrink-0 text-xs font-semibold text-ink-muted">{note}</span>}
   </a>
 </li>

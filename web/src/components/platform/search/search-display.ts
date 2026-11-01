@@ -9,6 +9,20 @@ export interface ScopeOption {
   glyph?: "cohort" | "community";
 }
 
+/** Whether search reaches session moments for this person: only their own cohorts' recordings. */
+export function searchesSessions(me: Me): boolean {
+  return me.spaces.includes("cohort") && me.capabilities.cohortIds.length > 0;
+}
+
+/**
+ * What search covers for this person, in plain words for the box and its
+ * label. It names only what the server searches for them, so nobody is
+ * promised "everything" or sessions they have no cohort for.
+ */
+export function searchCoverage(me: Me): string {
+  return searchesSessions(me) ? "people, projects and your cohort's sessions" : "people and projects";
+}
+
 /**
  * Where a person can search. "Your cohort" only for someone who belongs to
  * one (it searches their own cohort's sessions); messages are not offered
@@ -16,7 +30,7 @@ export interface ScopeOption {
  */
 export function scopesFor(me: Me): ScopeOption[] {
   const options: ScopeOption[] = [{ scope: "all", label: "Everywhere" }];
-  if (me.spaces.includes("cohort") && me.capabilities.cohortIds.length > 0) {
+  if (searchesSessions(me)) {
     options.push({ scope: "cohort", label: "Your cohort", glyph: "cohort" });
   }
   if (me.spaces.includes("community")) options.push({ scope: "community", label: "Community", glyph: "community" });
@@ -56,6 +70,31 @@ export function highlight(text: string, query: string): Highlighted {
     .split(pattern)
     .filter((part) => part.length > 0)
     .map((part) => ({ text: part, match: words.includes(part.toLowerCase()) }));
+}
+
+function shows(texts: readonly string[], query: string): boolean {
+  return texts.some((text) => highlight(text, query).some((part) => part.match));
+}
+
+/**
+ * Why a result is here when the words it shows do not say. People match on
+ * their public name, headline, skills and bio, and projects on their whole
+ * description, but a result shows only the name, the start of the bio or a
+ * summary. Without this, "SQL" could return two people and no visible reason.
+ * Null when the highlighted words already explain it.
+ */
+export function matchReason(entry: SearchItem, query: string): string | null {
+  const q = query.trim();
+  if (!q) return null;
+  switch (entry.group) {
+    case "people":
+      return shows([entry.item.person.name, entry.item.bio], q) ? null : `Matches “${q}” elsewhere in their public profile`;
+    case "projects":
+      return shows([entry.item.title, entry.item.summary], q) ? null : `Matches “${q}” in the project's full description`;
+    default:
+      // A moment's quote is cut around the match, and a message excerpt is the match.
+      return null;
+  }
 }
 
 export type SearchProblem = { message: string; retry: boolean; signIn: boolean };

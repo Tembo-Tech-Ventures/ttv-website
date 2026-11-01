@@ -75,6 +75,24 @@ describe("admin navigation", () => {
   });
 });
 
+describe("admin shell ways in and out", () => {
+  it("offers the way back to the dashboard first", () => {
+    expect(getAdminLinks(false)[0]).toEqual(expect.objectContaining({ href: "/dashboard", label: "Back to dashboard" }));
+  });
+
+  it("starts with a skip link to the main content", () => {
+    const html = renderToStaticMarkup(
+      <AdminShell>
+        <div>Admin content</div>
+      </AdminShell>
+    );
+    const firstLink = html.match(/<a [^>]*>[^<]*<\/a>/)?.[0] ?? "";
+    expect(firstLink).toContain('href="#admin-main"');
+    expect(firstLink).toContain("Skip to content");
+    expect(html).toContain('<main id="admin-main" tabindex="-1"');
+  });
+});
+
 describe("admin shell hydration", () => {
   it("keeps the mobile opener disabled until the client handler is ready", () => {
     const html = renderToStaticMarkup(

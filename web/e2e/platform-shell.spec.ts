@@ -254,7 +254,7 @@ test.describe("the spaces shell harness", () => {
       "Community 1 new",
       "Mentoring 2 new",
       "Profile",
-      "Search everything",
+      "Search",
       "Attention, 3 waiting",
       "Account menu, David Kamau",
       "Requests 2 new",
@@ -543,7 +543,7 @@ test.describe("the spaces shell harness", () => {
   test("asks for search and attention from their triggers and Ctrl K, and gets focus back", async ({ page }) => {
     await open(page, harness("david", "mentoring"));
     const overlay = page.locator("dialog[data-stub-overlay]");
-    const search = page.getByRole("button", { name: "Search everything" });
+    const search = page.getByRole("button", { name: "Search", exact: true });
 
     await search.click();
     await expect(overlay).toHaveAttribute("data-stub-overlay", "search");
@@ -565,7 +565,7 @@ test.describe("the spaces shell harness", () => {
 
   test("shows no search or bell where no overlay is mounted, and Ctrl K stays the browser's", async ({ page }) => {
     await open(page, harness("david", "mentoring", "&overlays=none"));
-    await expect(page.getByRole("button", { name: "Search everything" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Search", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /^Attention/ })).toHaveCount(0);
     const prevented = await page.evaluate(() => {
       const event = new KeyboardEvent("keydown", { key: "k", ctrlKey: true, cancelable: true, bubbles: true });

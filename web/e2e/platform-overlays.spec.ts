@@ -40,14 +40,17 @@ async function open(page: Page, path: string) {
   await routeFonts(page);
   await page.goto(path);
   await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
+  // Hydrated is not listening: wait until the shortcut, the bell and the overlays' listeners are attached.
+  await expect(page.locator(".spaces-shell[data-hydrated]")).toHaveCount(1);
+  await expect(page.locator("[data-search-overlay][data-ready]")).toHaveCount(1);
   await page.evaluate(() => document.fonts.ready);
 }
 
 const wide = (page: Page) => (page.viewportSize()?.width ?? 0) >= WIDE;
 const bell = (page: Page) => page.getByRole("button", { name: /^Attention/ });
 const panel = (page: Page) => page.getByRole("dialog", { name: "Needs your attention" });
-const search = (page: Page) => page.getByRole("dialog", { name: "Search everything" });
-const box = (page: Page) => page.getByRole("combobox", { name: "Search people, projects and your sessions" });
+const search = (page: Page) => page.getByRole("dialog", { name: "Search", exact: true });
+const box = (page: Page) => page.getByRole("combobox", { name: /^Search people/ });
 
 async function runAxe(page: Page, testInfo: TestInfo, name: string) {
   const source = Buffer.from(await (await fetch(AXE_URL)).arrayBuffer());
@@ -144,7 +147,7 @@ test.describe("on a deployed build", () => {
       await expect(page.locator("[data-attention-problem]")).toHaveCount(0);
       await expect(page.locator("[data-attention-item], [data-attention-empty]").first()).toBeVisible();
 
-      await page.getByRole("button", { name: "Search everything" }).click();
+      await page.getByRole("button", { name: "Search", exact: true }).click();
       await page.getByRole("combobox").fill("a");
       await page.getByRole("combobox").fill("session");
       await expect(page.locator('[data-search-status="ready"]')).toBeAttached({ timeout: 15_000 });
@@ -339,14 +342,14 @@ test.describe("the overlays harness", () => {
   test.describe("search", () => {
     async function openSearch(page: Page) {
       if (wide(page)) await page.keyboard.press("Control+k");
-      else await page.getByRole("button", { name: "Search everything" }).click();
+      else await page.getByRole("button", { name: "Search", exact: true }).click();
       await expect(search(page)).toBeVisible();
       await expect(box(page)).toBeFocused();
     }
 
     test("Ctrl K or the button opens it; arrows choose, Enter opens; Escape gives focus back", async ({ page }, testInfo) => {
       await open(page, harness());
-      const trigger = page.getByRole("button", { name: "Search everything" });
+      const trigger = page.getByRole("button", { name: "Search", exact: true });
       await trigger.focus();
       await openSearch(page);
       await box(page).fill("retry webhook");
@@ -502,7 +505,7 @@ test.describe("evidence", () => {
         `search-${width}.png`,
         async (page) => {
           await open(page, harness());
-          await page.getByRole("button", { name: "Search everything" }).click();
+          await page.getByRole("button", { name: "Search", exact: true }).click();
           await box(page).fill("retry webhook");
           await expect(page.locator('[role="option"]')).toHaveCount(3);
         },

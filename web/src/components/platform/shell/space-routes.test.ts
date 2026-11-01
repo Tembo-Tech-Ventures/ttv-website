@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { InternalPath, SPACE_ORDER } from "@/lib/platform/contracts";
 import { canonicalSpacePath, SPACE_PATHS, spaceForPath } from "@/lib/platform/server/space-routes";
-import { ACCOUNT_HREF, SIGN_OUT_HREF, SPACE_HOME, SPACE_LABEL } from "./space-routes";
+import { ACCOUNT_HREF, opensInShell, SIGN_OUT_HREF, SPACE_HOME, SPACE_LABEL } from "./space-routes";
 
 describe("space routes", () => {
   it("names and places every space", () => {
@@ -40,5 +40,15 @@ describe("space routes", () => {
     expect(imports.length).toBeGreaterThan(0);
     for (const statement of imports) expect(statement).toMatch(/^import type\s/);
     expect(source).not.toMatch(/^export\s[^;]*\sfrom\s/m);
+  });
+
+  it("knows which pages open in the shell, so only those finish the sheet transition", () => {
+    for (const path of ["/dashboard", "/dashboard/cohort", "/dashboard/cohort/sessions/r1", "/dashboard/community/", "/dashboard/me/leads", "/dashboard/account", "/dashboard/attention", "/dashboard/feedback", "/dashboard/discover", "/dashboard/mentoring/confirm"]) {
+      expect({ path, opens: opensInShell(path) }).toEqual({ path, opens: true });
+    }
+    // Admin is a space with its own frame; the rest are outside the app or not spaces pages.
+    for (const path of ["/admin", "/admin/users", "/community/members", "/certificate/a1", "/", "/dashboard/sessions-old", "/auth/logout"]) {
+      expect({ path, opens: opensInShell(path) }).toEqual({ path, opens: false });
+    }
   });
 });

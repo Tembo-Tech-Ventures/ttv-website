@@ -13,7 +13,16 @@ import { signInHref } from "@/components/platform/overlays/sign-in";
 import { useModalDialog } from "@/components/platform/overlays/useModalDialog";
 import { askTemboHref } from "./ask-handoff";
 import { clearRecentSearches, onShellSignOut, recentSearchKey } from "./recent-searches";
-import { GROUP_LABEL, highlight, scopesFor, searchProblem, timestamp } from "./search-display";
+import {
+  GROUP_LABEL,
+  highlight,
+  matchReason,
+  scopesFor,
+  searchCoverage,
+  searchesSessions,
+  searchProblem,
+  timestamp,
+} from "./search-display";
 import "./search.css";
 
 function Marked({ text, query }: { text: string; query: string }) {
@@ -44,6 +53,12 @@ function Tile({ children }: { children: ReactNode }) {
   );
 }
 
+/** Why a result matched, when its visible words do not show it. */
+function Why({ entry, query }: { entry: SearchItem; query: string }) {
+  const reason = matchReason(entry, query);
+  return reason ? <span className="search-option__why">{reason}</span> : null;
+}
+
 /** One result: what it is, the words that matched, and who can see it (the server's label, as given). */
 function Option({ entry, query }: { entry: SearchItem; query: string }) {
   switch (entry.group) {
@@ -62,6 +77,7 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
                 <Marked text={bio} query={query} />
               </span>
             )}
+            <Why entry={entry} query={query} />
             <span className="search-option__meta">{visibility.label}</span>
           </span>
         </>
@@ -87,6 +103,7 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
                 </>
               )}
             </span>
+            <Why entry={entry} query={query} />
             <span className="search-option__meta">{visibility.label}</span>
           </span>
         </>
@@ -240,14 +257,14 @@ function Results({ state, listboxId, optionId, onOpen }: ResultsProps) {
 }
 
 /** Everything under the scopes: recent searches, progress, problems, nothing found, or the answers. */
-function Body({ store, state, listboxId, optionId, onOpen, onPick }: ResultsProps & { store: Store; onPick: (query: string) => void }) {
+function Body({ store, state, coverage, listboxId, optionId, onOpen, onPick }: ResultsProps & { store: Store; coverage: string; onPick: (query: string) => void }) {
   const query = state.q.trim();
   const busy = state.status === "debouncing" || state.status === "loading";
   return (
     <div className="search-overlay__results" aria-busy={busy || undefined} data-search-status={state.status}>
       {!query && state.recentQueries.length > 0 && <RecentSearches store={store} recent={state.recentQueries} onPick={onPick} />}
       {!query && state.recentQueries.length === 0 && (
-        <p className="search-overlay__status">Find people, projects, and moments from your own cohort's sessions.</p>
+        <p className="search-overlay__status">Find {coverage}.</p>
       )}
       {query && busy && (
         <p className="search-overlay__status" data-search-loading>
@@ -272,8 +289,8 @@ type SearchOverlayProps = {
 };
 
 /**
- * Search everything (Ctrl K / ⌘ K, or the top bar's search): people,
- * projects and moments from your own sessions, grouped, with the arrow keys
+ * Search (Ctrl K / ⌘ K, or the top bar's search): people, projects and, for
+ * cohort members, moments from their own cohort's sessions, grouped, with the arrow keys
  * to move and Enter to open. Typing waits a beat before searching, and an
  * older answer never replaces a newer question. What you type is kept only in
  * memory; a search is remembered (on this browser, for you) only once you open
@@ -296,7 +313,8 @@ export default function SearchOverlay({ me, client }: SearchOverlayProps) {
   const input = useRef<HTMLInputElement>(null);
   const titleId = useId();
   const listboxId = useId();
-  const canAsk = me.spaces.includes("cohort") && me.capabilities.cohortIds.length > 0;
+  const canAsk = searchesSessions(me);
+  const coverage = searchCoverage(me);
   const query = state.q.trim();
   const shown = state.status === "ready" && state.items.length > 0;
   const optionId = (index: number) => `${listboxId}-option-${index}`;
@@ -312,19 +330,21 @@ export default function SearchOverlay({ me, client }: SearchOverlayProps) {
     });
   }, [store, recentKey]);
 
-  useEffect(
-    () =>
-      onShellOverlay("search", ({ trigger }) => {
-        store.setOpen(true);
-        show(trigger);
-        // After this frame, so a panel closing for search cannot take focus back to its bell.
-        requestAnimationFrame(() => {
-          input.current?.focus();
-          input.current?.select();
-        });
-      }),
-    [store, show],
-  );
+  /** Listening for the shortcut and the trigger: `data-ready` tells tests (and nothing else) a press will land. */
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const stop = onShellOverlay("search", ({ trigger }) => {
+      store.setOpen(true);
+      show(trigger);
+      // After this frame, so a panel closing for search cannot take focus back to its bell.
+      requestAnimationFrame(() => {
+        input.current?.focus();
+        input.current?.select();
+      });
+    });
+    setReady(true);
+    return stop;
+  }, [store, show]);
 
   /* Say what came back, once per answer (the same words again if the same thing happens again). */
   useEffect(() => {
@@ -379,10 +399,10 @@ export default function SearchOverlay({ me, client }: SearchOverlayProps) {
 
   return (
     <>
-      <dialog {...dialog.props} aria-labelledby={titleId} className="search-overlay" data-search-overlay>
+      <dialog {...dialog.props} aria-labelledby={titleId} className="search-overlay" data-search-overlay data-ready={ready || undefined}>
         <div className="search-overlay__sheet">
           <h2 id={titleId} className="sr-only">
-            Search everything
+            Search
           </h2>
           <div className="search-overlay__top">
             <div className="search-overlay__field">
@@ -391,7 +411,7 @@ export default function SearchOverlay({ me, client }: SearchOverlayProps) {
                 ref={input}
                 type="search"
                 role="combobox"
-                aria-label="Search people, projects and your sessions"
+                aria-label={`Search ${coverage}`}
                 aria-expanded={shown}
                 aria-controls={listboxId}
                 aria-autocomplete="list"
@@ -399,7 +419,7 @@ export default function SearchOverlay({ me, client }: SearchOverlayProps) {
                 autoComplete="off"
                 spellCheck={false}
                 enterKeyHint="search"
-                placeholder="Search people, projects and sessions"
+                placeholder={`Search ${coverage}`}
                 value={state.q}
                 onChange={(event) => store.setQuery(event.target.value)}
                 onKeyDown={onKeyDown}
@@ -439,6 +459,7 @@ export default function SearchOverlay({ me, client }: SearchOverlayProps) {
           <Body
             store={store}
             state={state}
+            coverage={coverage}
             listboxId={listboxId}
             optionId={optionId}
             onOpen={open}

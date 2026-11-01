@@ -28,3 +28,10 @@ INSERT OR REPLACE INTO programApplication (id,programId,userId,status,applicatio
  ('ttv-local-persona-app-alumna','ttv-local-persona-cohort-04','ttv-local-persona-alumna','COMPLETED','{}',1780272000,1770000000,1780272000);
 INSERT OR REPLACE INTO studentProfile (id,userId,handle,status,headline,bio,location,country,skills,publishedAt) VALUES
  ('ttv-local-persona-profile-alumna','ttv-local-persona-alumna','achieng-otieno','PUBLISHED','Backend builder','I build payment and ledger tools for small groups.','Kisumu','KE','["TypeScript","SQL"]',1781000000);
+-- One processed cohort-05 session with a short transcript and no media (the player cannot load it locally).
+INSERT OR REPLACE INTO recording (id,programId,title,durationSeconds,recordedAt,processingStatus) VALUES
+ ('ttv-local-persona-recording-05','ttv-local-persona-cohort-05','Week 4: SQL joins and indexes',90,1791800000,'complete');
+INSERT OR REPLACE INTO transcript_segment (id,recordingId,startTime,endTime,speaker,text) VALUES
+ ('ttv-local-persona-segment-1','ttv-local-persona-recording-05',0,4,'Mentor','Welcome back, everyone.'),
+ ('ttv-local-persona-segment-2','ttv-local-persona-recording-05',4,75,NULL,'Today is about joins, and when an index helps.'),
+ ('ttv-local-persona-segment-3','ttv-local-persona-recording-05',75,90,NULL,'Questions before we start?');
