@@ -1,0 +1,68 @@
+---
+/**
+ * One step of onboarding, as `handleWelcome` decided it: S1 (the choices) or
+ * S2 (the request details), in the onboarding frame. The page and the DEV
+ * harness both render this, so they cannot drift apart.
+ *
+ * The h1 is the screen's one Mattone heading and takes focus as the page
+ * opens; after a rejected post the problems take it instead.
+ */
+import { PiArrowLeftBold } from "react-icons/pi";
+import type { PersonSummary } from "@/lib/platform/contracts";
+import type { ShellAccount } from "@/components/platform/shell/AccountMenu";
+import { FOCUS_RING } from "@/components/platform/ui/Button";
+import OnboardingFrame from "./OnboardingFrame.astro";
+import ApprovalScope from "./ApprovalScope.astro";
+import WelcomeChoices, { WELCOME_TITLE_ID } from "./WelcomeChoices";
+import AccessRequestForm from "./AccessRequestForm";
+import { REQUEST, WELCOME } from "./copy";
+import type { WelcomeRoutes, WelcomeView } from "./welcome-flow";
+
+interface Props {
+  view: WelcomeView;
+  routes: WelcomeRoutes;
+  person: PersonSummary;
+  account: ShellAccount;
+  sheetPaths?: readonly string[];
+}
+
+const { view, routes, person, account, sheetPaths } = Astro.props;
+const rejected = view.step === "choose" ? view.error !== null : view.failure !== null || Object.keys(view.errors).length > 0;
+const title = view.step === "choose" ? WELCOME.title : REQUEST.title;
+---
+
+<OnboardingFrame title={title} titlePrefix={rejected ? "Error: " : ""} person={person} account={account} sheetPaths={sheetPaths}>
+  {
+    view.step === "choose" ? (
+      <div class="welcome" data-step="choose">
+        <h1 id={WELCOME_TITLE_ID} tabindex="-1" autofocus={!rejected} class="onboarding-title tracking-heading">
+          {WELCOME.title}
+        </h1>
+        <p class="onboarding-lead">{WELCOME.lead}</p>
+        <WelcomeChoices client:load action={routes.choose} selected={view.selected} statuses={view.statuses} error={view.error} />
+      </div>
+    ) : (
+      <div class="request" data-step="request">
+        <div>
+          <a href={routes.choose} class:list={["request__back", FOCUS_RING]}>
+            <PiArrowLeftBold aria-hidden="true" className="size-4" />
+            {REQUEST.back}
+          </a>
+          <h1 tabindex="-1" autofocus={!rejected} class="onboarding-title tracking-heading">
+            {REQUEST.title}
+          </h1>
+          <p class="onboarding-lead">{REQUEST.lead}</p>
+          {view.roles.includes("INSTITUTION") && <ApprovalScope />}
+        </div>
+        <AccessRequestForm
+          client:load
+          action={routes.request}
+          roles={view.roles}
+          draft={view.draft}
+          errors={view.errors}
+          failure={view.failure}
+        />
+      </div>
+    )
+  }
+</OnboardingFrame>

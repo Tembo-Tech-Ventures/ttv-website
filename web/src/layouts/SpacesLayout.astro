@@ -32,7 +32,9 @@ import SpacesShell from "@/components/platform/shell/SpacesShell";
 import { canRenderSpace } from "@/components/platform/shell/access";
 import type { ShellAccount } from "@/components/platform/shell/AccountMenu";
 import type { ShellOverlay } from "@/components/platform/shell/overlays";
-import { SIGN_OUT_HREF, SPACE_LABEL } from "@/components/platform/shell/space-routes";
+import { SPACE_LABEL } from "@/components/platform/shell/space-routes";
+import { shellAccount } from "@/components/platform/shell/account";
+import SheetTransition from "@/components/platform/shell/SheetTransition.astro";
 import { pageTitle } from "@/lib/seo";
 
 interface Props {
@@ -55,16 +57,7 @@ if (!canRenderSpace(me, space)) {
 }
 
 const signedIn = Boolean(Astro.locals.user);
-const qa = Astro.locals.stagingQa;
-const demo = Astro.locals.stagingDemo;
-const account: ShellAccount = harness?.account ?? {
-  signOut: qa
-    ? { kind: "form", action: "/api/qa/logout", label: "Sign out of this QA persona" }
-    : demo
-      ? { kind: "link", href: "/demo", label: "Demo controls" }
-      : { kind: "link", href: SIGN_OUT_HREF, label: "Sign out" },
-  feedback: signedIn && !qa,
-};
+const account: ShellAccount = harness?.account ?? shellAccount(Astro.locals);
 // Parsed here, on the server: the island gets a SpaceId or null, never the header.
 const lastSpace = readLastSpaceCookie(Astro.request.headers.get("cookie"));
 const shell = {
@@ -88,81 +81,7 @@ const shell = {
     <link rel="icon" type="image/png" href="/favicon.png" />
     <title>{pageTitle(titlePrefix + (title === SPACE_LABEL[space] ? title : `${title} · ${SPACE_LABEL[space]}`))}</title>
     {signedIn && <ClientErrorBuffer />}
-    {
-      /*
-       * Inline, so it ships only with pages that render the shell. Pages that
-       * render the existing dashboard instead still import this layout, and a
-       * bundled stylesheet would opt them into view transitions too.
-       */
-    }
-    <style is:inline>
-      /*
-       * Switching spaces: the card file. The tab row stays put as the anchor while
-       * the chosen space's sheet rises into place over the one you left, the way
-       * the homepage's sheets slide over each other. Quick, under 300ms, because
-       * it is navigation. Only between two spaces pages (both must opt in), and
-       * with reduced motion there is no transition at all: a plain cut.
-       */
-      @media (prefers-reduced-motion: no-preference) {
-        @view-transition {
-          navigation: auto;
-        }
-      }
-
-      .spaces-shell .space-file > .platform-sheet {
-        view-transition-name: spaces-sheet;
-      }
-
-      .spaces-bottom {
-        view-transition-name: spaces-bottom;
-      }
-
-      ::view-transition-old(root),
-      ::view-transition-new(root) {
-        animation: none;
-      }
-
-      /*
-       * The tab row is not named: it stays in the root, which does not animate, so
-       * it simply shows the new state at once, the steady anchor of the gesture.
-       * (Naming it would also make it a stacking context under the sheet.)
-       */
-      ::view-transition-group(spaces-bottom) {
-        animation-duration: 160ms;
-      }
-
-      ::view-transition-old(spaces-bottom),
-      ::view-transition-new(spaces-bottom) {
-        animation-duration: 160ms;
-      }
-
-      ::view-transition-group(spaces-sheet) {
-        animation: none;
-      }
-
-      /* The sheet you leave stays where it is and dims as it falls behind. */
-      ::view-transition-old(spaces-sheet) {
-        animation: 250ms cubic-bezier(0.3, 0, 0.2, 1) both spaces-sheet-recede;
-      }
-
-      /* The chosen sheet is opaque paper, not a fade: it rises over the old one,
-         its lit top edge and shadow leading, and settles under its tab. */
-      ::view-transition-new(spaces-sheet) {
-        animation: 250ms cubic-bezier(0.16, 0.9, 0.3, 1) both spaces-sheet-arrive;
-      }
-
-      @keyframes spaces-sheet-recede {
-        to {
-          filter: brightness(0.62);
-        }
-      }
-
-      @keyframes spaces-sheet-arrive {
-        from {
-          transform: translateY(4.5rem);
-        }
-      }
-    </style>
+    <SheetTransition />
   </head>
   <body class="h-full overflow-hidden overscroll-none bg-ground">
     {

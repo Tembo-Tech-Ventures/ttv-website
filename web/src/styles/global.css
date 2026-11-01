@@ -68,6 +68,8 @@
   --color-sheet-discover: #073B39;
   --color-sheet-admin: #032F2C;
   --color-sheet-profile: #12463F;
+  /* The onboarding welcome sheet: not a space, so between them in tone. */
+  --color-sheet-welcome: #08453F;
   --color-peach-ink: #FFB496;
   --color-ring: #9FD3CA;
   --color-danger-ink: #FFB3A6;

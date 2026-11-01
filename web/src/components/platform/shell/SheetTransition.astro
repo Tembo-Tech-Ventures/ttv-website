@@ -1,0 +1,86 @@
+---
+/**
+ * The card-file transition between pages that show a sheet: the spaces shell
+ * (SpacesLayout) and the onboarding steps (OnboardingFrame). Both name their
+ * sheet `spaces-sheet`, so a step into a space reads as the same gesture as
+ * switching spaces. Each page must render this to opt in.
+ */
+---
+
+{
+  /*
+   * Inline, so it ships only with pages that render a sheet. Pages that render
+   * the existing dashboard instead still import SpacesLayout, and a bundled
+   * stylesheet would opt them into view transitions too.
+   */
+}
+<style is:inline>
+  /*
+   * Switching spaces: the card file. The tab row stays put as the anchor while
+   * the chosen space's sheet rises into place over the one you left, the way
+   * the homepage's sheets slide over each other. Quick, under 300ms, because
+   * it is navigation. Only between two spaces pages (both must opt in), and
+   * with reduced motion there is no transition at all: a plain cut.
+   */
+  @media (prefers-reduced-motion: no-preference) {
+    @view-transition {
+      navigation: auto;
+    }
+  }
+
+  /* A space's sheet, and the welcome sheet a new account starts on. */
+  .spaces-shell .space-file > .platform-sheet,
+  .onboarding-sheet {
+    view-transition-name: spaces-sheet;
+  }
+
+  .spaces-bottom {
+    view-transition-name: spaces-bottom;
+  }
+
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+
+  /*
+   * The tab row is not named: it stays in the root, which does not animate, so
+   * it simply shows the new state at once, the steady anchor of the gesture.
+   * (Naming it would also make it a stacking context under the sheet.)
+   */
+  ::view-transition-group(spaces-bottom) {
+    animation-duration: 160ms;
+  }
+
+  ::view-transition-old(spaces-bottom),
+  ::view-transition-new(spaces-bottom) {
+    animation-duration: 160ms;
+  }
+
+  ::view-transition-group(spaces-sheet) {
+    animation: none;
+  }
+
+  /* The sheet you leave stays where it is and dims as it falls behind. */
+  ::view-transition-old(spaces-sheet) {
+    animation: 250ms cubic-bezier(0.3, 0, 0.2, 1) both spaces-sheet-recede;
+  }
+
+  /* The chosen sheet is opaque paper, not a fade: it rises over the old one,
+     its lit top edge and shadow leading, and settles under its tab. */
+  ::view-transition-new(spaces-sheet) {
+    animation: 250ms cubic-bezier(0.16, 0.9, 0.3, 1) both spaces-sheet-arrive;
+  }
+
+  @keyframes spaces-sheet-recede {
+    to {
+      filter: brightness(0.62);
+    }
+  }
+
+  @keyframes spaces-sheet-arrive {
+    from {
+      transform: translateY(4.5rem);
+    }
+  }
+</style>

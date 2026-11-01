@@ -1,0 +1,31 @@
+---
+/**
+ * "What approval opens", beside an organisation request: what an approved
+ * institution can see, and what it cannot, before anything is sent. The
+ * wording follows the partner page and F-4: saved profiles and shared work only.
+ */
+import { PiCheckCircleBold, PiMinusCircleBold } from "react-icons/pi";
+import { REQUEST } from "./copy";
+---
+
+<section class="request-scope" aria-labelledby="request-scope-title">
+  <h2 id="request-scope-title" class="request-scope__title">{REQUEST.scopeTitle}</h2>
+  <ul class="request-scope__list">
+    {
+      REQUEST.opens.map((line) => (
+        <li class="request-scope__item" data-opens>
+          <PiCheckCircleBold aria-hidden="true" className="request-scope__icon" />
+          <span>{line}</span>
+        </li>
+      ))
+    }
+    {
+      REQUEST.excludes.map((line) => (
+        <li class="request-scope__item" data-excludes>
+          <PiMinusCircleBold aria-hidden="true" className="request-scope__icon" />
+          <span>{line}</span>
+        </li>
+      ))
+    }
+  </ul>
+</section>

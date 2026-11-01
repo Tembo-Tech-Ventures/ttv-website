@@ -1,0 +1,72 @@
+---
+/**
+ * Dev-only harness for the onboarding welcome and request steps (U-O.1).
+ *
+ * Runs the real flow (`handleWelcome`) and the real screen against in-memory
+ * fixture state, so both steps, their form posts and the no-JavaScript path
+ * can be exercised without a session or the onboarding routes:
+ *
+ * - `?persona=wairimu` (new; the default), `mercyAkinyi` (member + mentor
+ *   pending), `josephOchieng` (institution pending), `peter` (mentor declined);
+ * - `&step=request` for S2, `&intent=mentor` for a partner page's hint;
+ * - `&fail=rate|save|conflict` makes the writes fail the way a network does;
+ * - `&reset` restores the persona's fixture state; `&state` answers it as JSON;
+ * - `&run=<id>` gives a test its own copy of the persona, so parallel runs never meet.
+ *
+ * Finishing lands on the spaces shell harness, so the sheet transition into a
+ * space can be watched. Nothing here is reachable outside `astro dev`.
+ * `e2e/platform-onboarding.spec.ts` holds the browser contract.
+ */
+import WelcomeScreen from "@/components/platform/onboarding/WelcomeScreen.astro";
+import {
+  fixtureActions, isHarnessFailure, isOnboardingPersona, resetHarnessState,
+} from "@/components/platform/onboarding/harness/fixture-actions";
+import { handleWelcome } from "@/components/platform/onboarding/welcome-flow";
+import { meByPersona } from "@/lib/platform/fixtures";
+
+if (!import.meta.env.DEV) {
+  return new Response("Not found", { status: 404 });
+}
+
+const params = Astro.url.searchParams;
+const personaParam = params.get("persona");
+const persona = isOnboardingPersona(personaParam) ? personaParam : "wairimu";
+const failParam = params.get("fail");
+const fail = isHarnessFailure(failParam) ? failParam : null;
+const run = params.get("run") ?? "";
+const actions = fixtureActions(persona, fail, run);
+
+const keep = new URLSearchParams({ persona, ...(fail ? { fail } : {}), ...(run ? { run } : {}) });
+const base = `${Astro.url.pathname}?${keep}`;
+
+if (params.has("reset")) {
+  resetHarnessState(persona, run);
+  const next = new URLSearchParams(params);
+  next.delete("reset");
+  return Astro.redirect(`${Astro.url.pathname}?${next}`, 303);
+}
+if (params.has("state")) {
+  return Response.json(await actions.load(), { headers: { "Cache-Control": "no-store" } });
+}
+
+const LANDING = "/dev/platform-shell";
+const routes = { choose: base, request: `${base}&step=request`, landing: `${LANDING}?persona=lucy&space=community` };
+const result = await handleWelcome(Astro.request, routes, actions);
+if (result.kind === "redirect") return Astro.redirect(result.location, 303);
+Astro.response.status = result.status;
+Astro.response.headers.set("Cache-Control", "no-store");
+---
+
+<WelcomeScreen
+  view={result.view}
+  routes={routes}
+  person={meByPersona[persona].user}
+  account={{ signOut: { kind: "link", href: "#signed-out", label: "Sign out" }, feedback: false }}
+  sheetPaths={[LANDING]}
+/>
+
+<style is:global>
+  astro-dev-toolbar {
+    display: none !important;
+  }
+</style>
