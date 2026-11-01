@@ -60,9 +60,16 @@ export type WelcomeView =
 
 export type WelcomeResult =
   | { kind: "redirect"; location: string }
-  | { kind: "view"; status: 200 | 422 | 429 | 503; view: WelcomeView };
+  | { kind: "view"; status: 200 | 409 | 422 | 429 | 503; view: WelcomeView }
+  /** Not a form either step sends (too large): the caller answers with this status and nothing else. */
+  | { kind: "refuse"; status: 413 };
 
 const NOTE_MIN = 20;
+/**
+ * The largest form either step can send, generously: every field at its
+ * maximum, each character percent-encoded as several bytes (about 18 KB).
+ */
+export const MAX_FORM_BYTES = 32 * 1024;
 const NOTE_MAX = 600;
 const ORGANISATION_MAX = 200;
 const CHOICE_ORDER: readonly ChoiceIntent[] = CHOICES.map((choice) => choice.intent);
@@ -138,11 +145,17 @@ export function readDraft(form: FormData): RequestDraft {
   };
 }
 
-/** People type `mto.example` far more often than a full URL. A bare host is read as https. */
+/**
+ * People type `mto.example` far more often than a full URL. A bare host is
+ * read as https, including `mto.example:8080` and `localhost:3000`: a real
+ * scheme has no dot and is not followed by a port number.
+ */
 export function normaliseLink(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
-  return /^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const scheme = /^([a-z][a-z0-9+.-]*):(.*)$/i.exec(trimmed);
+  const hasScheme = scheme !== null && !scheme[1]!.includes(".") && !/^\d/.test(scheme[2]!);
+  return hasScheme ? trimmed : `https://${trimmed}`;
 }
 
 function linkError(link: string | null): string | null {
@@ -257,7 +270,8 @@ async function submitRequests(form: FormData, routes: WelcomeRoutes, actions: We
     try {
       state = await actions.requestAccess(request);
     } catch (error) {
-      // Another tab already sent it, or an administrator granted the role meanwhile: read what is true now.
+      // A conflict may mean another tab sent it or the role was granted, or that
+      // nothing was sent at all: read what is true now and decide below.
       if (statusOf(error) === 409) {
         state = await actions.load();
         continue;
@@ -269,7 +283,41 @@ async function submitRequests(form: FormData, routes: WelcomeRoutes, actions: We
       return { kind: "view", status: failure.status, view: { step: "request", roles: remaining, draft, errors: {}, failure: failure.message } };
     }
   }
+  // Land only when every request is now Pending or its role is held. One that
+  // is still askable was not sent, and saying nothing would leave the person
+  // believing it was.
+  const unsent = requestableRoles(state).filter((role) => requests.some((request) => request.role === role));
+  if (unsent.length > 0) {
+    return { kind: "view", status: 409, view: { step: "request", roles: unsent, draft, errors: {}, failure: FAILURES.unavailable } };
+  }
   return redirect(routes.landing);
+}
+
+/**
+ * The posted form, or null when its body is larger than any step could send.
+ * A declared length is checked first; the body is then read only up to the
+ * limit, since HTTP/2 does not require a length to be declared at all.
+ */
+async function boundedForm(request: Request): Promise<FormData | null> {
+  if (Number(request.headers.get("content-length")) > MAX_FORM_BYTES) return null;
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  const reader = request.body?.getReader();
+  for (let part = await reader?.read(); part && !part.done; part = await reader!.read()) {
+    size += part.value.byteLength;
+    if (size > MAX_FORM_BYTES) {
+      await reader!.cancel();
+      return null;
+    }
+    chunks.push(part.value);
+  }
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new Response(body, { headers: { "content-type": request.headers.get("content-type") ?? "" } }).formData();
 }
 
 /** Runs one request through the flow. Thrown Responses and unexpected 4xx errors are the caller's to return. */
@@ -278,7 +326,8 @@ export async function handleWelcome(request: Request, routes: WelcomeRoutes, act
   const step = url.searchParams.get("step") === "request" ? "request" : "choose";
 
   if (request.method === "POST") {
-    const form = await request.formData();
+    const form = await boundedForm(request);
+    if (!form) return { kind: "refuse", status: 413 };
     return step === "request" ? submitRequests(form, routes, actions) : submitChoices(form, routes, actions);
   }
 

@@ -390,7 +390,7 @@ test.describe("the welcome and request steps (DEV harness)", () => {
     await main(page).getByRole("button", { name: "Send request" }).click();
     await settled(page);
     await expect(main(page).getByRole("alert")).toBeFocused();
-    await expect(main(page).getByRole("alert")).toHaveText("You’ve sent several requests today. Your answers are still here: try again tomorrow.");
+    await expect(main(page).getByRole("alert")).toHaveText("You’ve sent several requests in the last day. Your answers are still here: try again later.");
     await expect(main(page).getByLabel("What kind of work could you review?")).toHaveValue("Data pipelines and the tests around them.");
     expect((await state(page, "peter")).requests[0]?.status).toBe("DECLINED");
   });

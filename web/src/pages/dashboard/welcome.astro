@@ -46,6 +46,7 @@ const result = await handleWelcome(Astro.request, ROUTES, onboardingActions(env.
 if (result.kind === "redirect") {
   return new Response(null, { status: 303, headers: { ...PRIVATE, Location: result.location } });
 }
+if (result.kind === "refuse") return new Response(null, { status: result.status, headers: PRIVATE });
 Astro.response.status = result.status;
 for (const [name, value] of Object.entries(PRIVATE)) Astro.response.headers.set(name, value);
 ---

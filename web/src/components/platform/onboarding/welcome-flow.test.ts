@@ -5,7 +5,7 @@ import {
 import { onboardingByPersona } from "@/lib/platform/fixtures";
 import { FAILURES, FIELD_ERRORS, WELCOME } from "./copy";
 import {
-  EMPTY_DRAFT, choiceStatuses, handleWelcome, initialSelection, normaliseLink, onboardingOpen, parseHint,
+  EMPTY_DRAFT, MAX_FORM_BYTES, choiceStatuses, handleWelcome, initialSelection, normaliseLink, onboardingOpen, parseHint,
   readDraft, requestableRoles, validateRequests, type RequestDraft, type WelcomeActions, type WelcomeResult,
 } from "./welcome-flow";
 
@@ -30,7 +30,8 @@ function server(initial: OnboardingState, failures: { save?: unknown; request?: 
     }),
     requestAccess: vi.fn(async (input: CreateAccessRequest) => {
       const failure = requestFailures.shift();
-      if (failure) throw failure;
+      // `sentAnyway`: the write landed (another tab, a lost response) before the server answered with the error.
+      if (failure && !(failure as { sentAnyway?: boolean }).sentAnyway) throw failure;
       sent += 1;
       const request = AccessRequestSummary.parse({
         id: `request${sent}`, role: input.role, status: "PENDING", note: input.note,
@@ -39,6 +40,7 @@ function server(initial: OnboardingState, failures: { save?: unknown; request?: 
         link: input.link, decisionMessage: null, createdAt: sent, updatedAt: sent, decidedAt: null, seenAt: null,
       });
       current = OnboardingState.parse({ ...current, requests: [...current.requests.filter((r) => r.role !== input.role), request] });
+      if (failure) throw failure;
       return current;
     }),
   } satisfies WelcomeActions;
@@ -144,6 +146,8 @@ describe("normaliseLink", () => {
   it.each([
     ["", null], ["   ", null], ["mto.example", "https://mto.example"], [" https://mto.example/team ", "https://mto.example/team"],
     ["http://mto.example", "http://mto.example"], ["ftp://mto.example", "ftp://mto.example"],
+    ["mto.example:8080/work", "https://mto.example:8080/work"], ["localhost:3000", "https://localhost:3000"],
+    ["mailto:me@mto.example", "mailto:me@mto.example"],
   ])("reads %j as %j", (value, expected) => {
     expect(normaliseLink(value)).toBe(expected);
   });
@@ -314,11 +318,47 @@ describe("handleWelcome: the request step (S2)", () => {
   });
 
   it("reads the server again after a conflict, so a request sent from another tab is not sent twice", async () => {
-    const conflict = Object.assign(new Error("Already pending"), { status: 409 });
-    const { actions } = server(chosen(["MENTOR"]), { request: [conflict] });
+    const conflict = Object.assign(new Error("Already pending"), { status: 409, sentAnyway: true });
+    const { actions, now } = server(chosen(["MENTOR"]), { request: [conflict] });
     const result = await handleWelcome(post(ROUTES.request, requestFields(mentorDraft())), ROUTES, actions);
     expect(result).toEqual({ kind: "redirect", location: ROUTES.landing });
     expect(actions.load).toHaveBeenCalledTimes(2);
+    expect(now().requests.map((r) => r.status)).toEqual(["PENDING"]);
+  });
+
+  it("says so when a conflict means nothing was sent, instead of landing as if it had been", async () => {
+    // The service's "Your access changed while sending" 409: refused, and the role is still askable.
+    const conflict = Object.assign(new Error("Your access changed while sending."), { status: 409 });
+    const { actions, now } = server(chosen(["MENTOR"]), { request: [conflict] });
+    const draft = mentorDraft();
+    const result = view(await handleWelcome(post(ROUTES.request, requestFields(draft)), ROUTES, actions), "request");
+    expect(result.status).toBe(409);
+    expect(result.view).toEqual({ step: "request", roles: ["MENTOR"], draft, errors: {}, failure: FAILURES.unavailable });
+    expect(now().requests).toEqual([]);
+  });
+
+  it("refuses a body larger than any step sends, declared or streamed, without reading it all", async () => {
+    const { actions } = server(chosen(["MENTOR"]));
+    const huge = "mentorNote=" + "x".repeat(MAX_FORM_BYTES);
+    const declared = new Request(`https://ttv.example${ROUTES.request}`, {
+      method: "POST", body: huge, headers: { "content-type": "application/x-www-form-urlencoded", "content-length": String(huge.length) },
+    });
+    expect(await handleWelcome(declared, ROUTES, actions)).toEqual({ kind: "refuse", status: 413 });
+    const streamed = new Request(`https://ttv.example${ROUTES.request}`, {
+      method: "POST", body: huge, headers: { "content-type": "application/x-www-form-urlencoded" },
+    });
+    expect(await handleWelcome(streamed, ROUTES, actions)).toEqual({ kind: "refuse", status: 413 });
+    expect(actions.requestAccess).not.toHaveBeenCalled();
+  });
+
+  it("reads a full-size form, every field at its limit", async () => {
+    const { actions } = server(chosen(["MENTOR", "INSTITUTION"]));
+    const full: RequestDraft = {
+      mentorNote: "é".repeat(600), mentorLink: `https://mto.example/${"p".repeat(2000)}`, organisation: "ü".repeat(200),
+      organisationRole: "ö".repeat(200), institutionNote: "ñ".repeat(600), institutionLink: `https://mto.example/${"q".repeat(2000)}`, scope: true,
+    };
+    const result = await handleWelcome(post(ROUTES.request, requestFields(full)), ROUTES, actions);
+    expect(result).toEqual({ kind: "redirect", location: ROUTES.landing });
   });
 
   it("lands without writing when everything was already sent", async () => {

@@ -53,6 +53,7 @@ const LANDING = "/dev/platform-shell";
 const routes = { choose: base, request: `${base}&step=request`, landing: `${LANDING}?persona=lucy&space=community` };
 const result = await handleWelcome(Astro.request, routes, actions);
 if (result.kind === "redirect") return Astro.redirect(result.location, 303);
+if (result.kind === "refuse") return new Response(null, { status: result.status });
 Astro.response.status = result.status;
 Astro.response.headers.set("Cache-Control", "no-store");
 ---

@@ -103,6 +103,7 @@ export const FIELD_ERRORS = {
 
 /** Why a step could not be saved, when the person's answers were fine. */
 export const FAILURES = {
-  rateLimited: "You’ve sent several requests today. Your answers are still here: try again tomorrow.",
+  // The limit is a rolling day, so no promise of when: "later" is what is true.
+  rateLimited: "You’ve sent several requests in the last day. Your answers are still here: try again later.",
   unavailable: "That didn’t save. Your answers are still here: try again in a moment.",
 } as const;
