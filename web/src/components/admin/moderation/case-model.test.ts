@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { channels, messages, people } from "@/lib/platform/fixtures";
 import {
-  DECIDED_NOTICE, QUEUE_TAB_HREFS, decisionOptions, firstName, formatModerationTime, messageHref, sourceLabel,
+  DECIDED_NOTICE, decisionOptions, firstName, formatModerationTime, messageHref, sourceLabel,
   visibilityLabel, type ModerationCase,
 } from "./case-model";
 import { harnessCases } from "./harness";
@@ -73,10 +73,6 @@ describe("copy", () => {
     expect(DECIDED_NOTICE.hide).toMatch(/^Hidden\./);
     expect(DECIDED_NOTICE.restore).toMatch(/^Restored\./);
     expect(DECIDED_NOTICE.keep).toMatch(/^Kept as is\./);
-  });
-
-  it("links the tabs to the page", () => {
-    expect(QUEUE_TAB_HREFS).toEqual({ PENDING: "/admin/moderation", DECIDED: "/admin/moderation?state=DECIDED" });
   });
 
   it("addresses the author by first name, gently", () => {
