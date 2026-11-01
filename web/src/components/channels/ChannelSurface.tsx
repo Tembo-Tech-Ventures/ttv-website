@@ -170,6 +170,7 @@ export default function ChannelSurface({
       <section aria-label={title} className="channel-view__main">
         {children}
         <MessageList
+          key={channel.id}
           state={state}
           store={store}
           channel={channel}
