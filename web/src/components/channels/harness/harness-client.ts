@@ -20,6 +20,8 @@ export type HarnessClient = {
   api: ApiClient;
   /** Deliver these through the next `since` poll: new messages from others, or changes to cached ones. */
   arrive: (messages: readonly Message[]) => void;
+  /** Every read marker the view sent, oldest first. */
+  reads: () => readonly string[];
 };
 
 type HarnessOptions = {
@@ -57,6 +59,7 @@ export function createHarnessClient({ me, channel, root, shareables, now = Date.
     if (seen) known.set(seen.id, seen);
   }
   const byNonce = new Map<string, Message>();
+  const reads: string[] = [];
   const empty = (thread: string | null, cursor: string): MessageList => ({ items: [], beforeCursor: null, sinceCursor: cursor, thread, removedIds: [] });
 
   function resolveEmbeds(refs: PostMessage["embeds"]): MessageEmbed[] | null {
@@ -154,6 +157,7 @@ export function createHarnessClient({ me, channel, root, shareables, now = Date.
         ...ROUTES.markChannelRead,
         reply: async ({ request, params }) => {
           const { messageId } = (await request.json()) as { messageId: string };
+          reads.push(messageId);
           const read: ChannelRead = { channelId: params.id, lastReadMessageId: messageId, unreadCount: 0 };
           return { data: read };
         },
@@ -163,6 +167,7 @@ export function createHarnessClient({ me, channel, root, shareables, now = Date.
 
   return {
     api,
+    reads: () => [...reads],
     arrive: (messages) => {
       for (const message of messages) known.set(message.id, message);
       queue.push(...messages);

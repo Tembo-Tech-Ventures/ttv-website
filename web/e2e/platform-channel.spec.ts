@@ -221,6 +221,20 @@ test.describe("the channel view", () => {
     await page.screenshot({ path: `${EVIDENCE_DIR}/live-arrivals-390.png` });
   });
 
+  test("messages that arrive while a phone's thread hides the list are not marked read until the list is back", async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await open(page, harness({ channel: "cohort-04" }));
+    await expect.poll(() => atEnd(page)).toBe(true);
+    await page.locator(`[data-thread-trigger="${COHORT_THREAD}"]`).click();
+    await expect(page.locator(".channel-view__main")).toHaveCSS("visibility", "hidden");
+    await arrive(page, 1);
+    await expect(page.locator("[data-channel-announcer]")).toHaveText("1 new message");
+    const reads = () => page.evaluate(() => window.__channelHarness!.reads());
+    expect(await reads()).not.toContain("arrival0001");
+    await page.getByRole("button", { name: "Back to channel" }).click();
+    await expect.poll(reads).toContain("arrival0001");
+  });
+
   test("the mention list shows Tembo's reach and allowance, and is keyboard driven (m4)", async ({ page }, testInfo) => {
     await page.setViewportSize(PHONE);
     await open(page, harness({ thread: COMMUNITY_THREAD }));

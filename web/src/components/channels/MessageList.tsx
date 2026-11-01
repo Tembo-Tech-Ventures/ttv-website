@@ -109,6 +109,11 @@ function ListState({ state, channel, retry }: { state: ChannelState; channel: Ch
   );
 }
 
+/** Whether the reader can see this element: laid out, and not hidden (a phone's open thread hides the list). */
+function isShown(element: HTMLElement): boolean {
+  return element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden";
+}
+
 function scrollToEnd(element: HTMLElement, smooth: boolean) {
   element.scrollTo({ top: element.scrollHeight, behavior: smooth && !prefersReducedMotion() ? "smooth" : "auto" });
 }
@@ -195,11 +200,24 @@ export default function MessageList({
     previous.current = { first, last, height: element.scrollHeight };
   }, [messages, first, last, focusMessageId, firstUnread, viewerId, pinToEnd]);
 
-  // Reading the end of a live channel marks it read.
+  // The tab coming back is a chance to have read what arrived while it was away.
+  const [shownAgain, setShownAgain] = useState(0);
   useEffect(() => {
-    if (!atEnd || !last || !state.live || document.visibilityState !== "visible") return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") setShownAgain((count) => count + 1);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+
+  // Reading the end of a live channel marks it read, but only while the list can actually be seen:
+  // on a phone an open thread hides it, and messages arriving then are not read yet. Closing the
+  // thread (or returning to the tab) looks again.
+  useEffect(() => {
+    const element = scroller.current;
+    if (!atEnd || !last || !state.live || document.visibilityState !== "visible" || !element || !isShown(element)) return;
     void store.markRead(last);
-  }, [atEnd, last, state.live, store]);
+  }, [atEnd, last, state.live, store, openThreadId, shownAgain]);
 
   function onScroll() {
     const element = scroller.current;

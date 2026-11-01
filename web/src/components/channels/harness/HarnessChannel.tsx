@@ -18,6 +18,8 @@ declare global {
   interface Window {
     __channelHarness?: {
       arrive: (count?: number) => void;
+      /** The read markers the view has sent, oldest first. */
+      reads: () => readonly string[];
       /** Refuse the next `count` writes with this HTTP status and error code. */
       refuseWrites: (count: number, status: number, code: string, message: string, retryAfterMs?: number) => void;
     };
@@ -83,6 +85,7 @@ export default function HarnessChannel({ me, channel, initial, initialThread, th
         // The feed polls at once when the window regains focus.
         window.dispatchEvent(new Event("focus"));
       },
+      reads: () => harness.client.reads(),
       refuseWrites(count, status, code, message, retryAfterMs) {
         harness.refusal.next = { count, status, data: { error: { code, message, ...(retryAfterMs === undefined ? {} : { retryAfterMs }) } } };
       },
