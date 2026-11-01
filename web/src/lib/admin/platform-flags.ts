@@ -107,6 +107,17 @@ export function changeNotice(flag: Pick<Flag, "key" | "audience">): string {
   return `${FLAG_DETAILS[flag.key].name} is now ${AUDIENCE_LABELS[flag.audience]}: ${AUDIENCE_MEANINGS[flag.audience].toLowerCase()}.`;
 }
 
+/** How long after a change the page still says the flag "is now" set: long enough for the redirect. */
+export const CHANGE_NOTICE_WINDOW_MS = 60_000;
+
+/**
+ * Whether ?changed=<key> reports a change that just happened. A reload or a bookmark of that
+ * address must not announce a change nobody made. Allows the same window either side for clock skew.
+ */
+export function isFreshChange(flag: Pick<Flag, "updatedAt">, now: number): boolean {
+  return flag.updatedAt > 0 && Math.abs(now - flag.updatedAt) <= CHANGE_NOTICE_WINDOW_MS;
+}
+
 const CHANGED_AT = new Intl.DateTimeFormat("en-GB", {
   day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
   timeZone: "Africa/Nairobi",

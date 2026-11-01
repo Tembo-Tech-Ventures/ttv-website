@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { FlagKey, type Flag, type FlagAudience } from "@/lib/platform/contracts";
 import {
-  CONFIRM_ALL, FLAG_DETAILS, FLAG_ORDER, changeNotice, changedByNames, dependencyWarnings, flagsOverridden, lastChanged, parseFlagForm,
+  CHANGE_NOTICE_WINDOW_MS, CONFIRM_ALL, FLAG_DETAILS, FLAG_ORDER, changeNotice, changedByNames, dependencyWarnings, flagsOverridden, isFreshChange, lastChanged, parseFlagForm,
 } from "./platform-flags";
 
 function form(fields: Record<string, string>): FormData {
@@ -91,6 +91,22 @@ describe("what the page says", () => {
     expect(lastChanged({ updatedAt: at, updatedBy: null }, names)).toBe("Changed 1 Nov 2026, 16:30 Nairobi time. No administrator recorded.");
     expect(lastChanged({ updatedAt: at, updatedBy: "user-unnamed" }, names)).toMatch(/by an administrator with no name on their account\.$/);
     expect(lastChanged({ updatedAt: 0, updatedBy: null }, names)).toBe("Never changed.");
+  });
+});
+
+describe("isFreshChange", () => {
+  const now = Date.UTC(2026, 10, 1, 14, 0);
+
+  it("announces a change made moments ago, allowing for clock skew", () => {
+    expect(isFreshChange({ updatedAt: now - 2_000 }, now)).toBe(true);
+    expect(isFreshChange({ updatedAt: now - CHANGE_NOTICE_WINDOW_MS }, now)).toBe(true);
+    expect(isFreshChange({ updatedAt: now + 1_000 }, now)).toBe(true);
+  });
+
+  it("stays quiet on a reload or bookmark long after, and for a flag never changed", () => {
+    expect(isFreshChange({ updatedAt: now - CHANGE_NOTICE_WINDOW_MS - 1 }, now)).toBe(false);
+    expect(isFreshChange({ updatedAt: now - 86_400_000 }, now)).toBe(false);
+    expect(isFreshChange({ updatedAt: 0 }, now)).toBe(false);
   });
 });
 

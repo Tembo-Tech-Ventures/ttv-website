@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { expect, test, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type BrowserContext, type Locator, type Page } from "@playwright/test";
 import { runAxe } from "./platform-axe";
 import { personaSession, signIn, type PersonaSession } from "./platform-personas";
 
@@ -60,6 +60,16 @@ async function hideDevToolbar(page: Page) {
   await page.addStyleTag({ content: "astro-dev-toolbar { display: none !important; }" });
 }
 
+/**
+ * Presses a control from the keyboard: focus, then Enter. The site-wide Feedback pill is fixed to
+ * the bottom right, so a pointer click on the last row can land on the pill instead (and without
+ * JavaScript the pill is a disabled button). Keyboard activation needs no hit-testing and no script.
+ */
+async function press(control: Locator) {
+  await control.focus();
+  await control.press("Enter");
+}
+
 function row(page: Page, key: string) {
   return page.locator(`[data-flag="${key}"]`);
 }
@@ -68,10 +78,12 @@ function evidence(name: string) {
   return `${EVIDENCE_DIR}/${test.info().project.name}-${name}.png`;
 }
 
-async function stored(request: APIRequestContext): Promise<Record<string, { audience: Audience; updatedBy: string | null }>> {
+type StoredFlag = { key: string; audience: Audience; updatedAt: number; updatedBy: string | null };
+
+async function stored(request: APIRequestContext): Promise<Record<string, StoredFlag>> {
   const response = await request.get(API);
   expect(response.status()).toBe(200);
-  const { flags } = await response.json() as { flags: { key: string; audience: Audience; updatedBy: string | null }[] };
+  const { flags } = await response.json() as { flags: StoredFlag[] };
   return Object.fromEntries(flags.map((flag) => [flag.key, flag]));
 }
 
@@ -124,7 +136,7 @@ test("asks before Everyone, and changes nothing until it is confirmed", async ({
   // Channels is still in development, so Everyone is safe to ask about here.
   test.skip(before.channels.audience === "ALL", "Channels is already Everyone here.");
 
-  await row(page, "channels").getByRole("button", { name: "Set Channels to Everyone" }).click();
+  await press(row(page, "channels").getByRole("button", { name: "Set Channels to Everyone" }));
   await hideDevToolbar(page);
   const confirm = page.locator("[data-flag-confirm='channels']");
   await expect(confirm.getByRole("heading", { name: "Show Channels to everyone?" })).toBeVisible();
@@ -135,7 +147,7 @@ test("asks before Everyone, and changes nothing until it is confirmed", async ({
   await runAxe(page, testInfo, "platform-flags-confirm");
   await page.screenshot({ path: evidence("confirm"), fullPage: true });
 
-  await confirm.getByRole("link", { name: "Cancel" }).click();
+  await press(confirm.getByRole("link", { name: "Cancel" }));
   await expect(page).toHaveURL(new RegExp(`${PAGE}$`));
   await expect(page.locator("[data-flag-confirm]")).toHaveCount(0);
   expect((await stored(page.request)).channels.audience).toBe(before.channels.audience);
@@ -155,6 +167,7 @@ test("an administrator switches Spaces from Off to Staff, and it stays", async (
       "Warning: Onboarding needs Spaces, which is Off. Set Spaces to Staff too, or Onboarding won't work for everyone it is set for."
     );
 
+    // A pointer click here keeps the mouse path covered: the first row is clear of the Feedback pill.
     await row(page, "spaces").getByRole("button", { name: "Set Spaces to Staff" }).click();
     await hideDevToolbar(page);
     await expect(page).toHaveURL(new RegExp(`${PAGE}\\?changed=spaces$`));
@@ -191,14 +204,14 @@ test("works without JavaScript, through the Everyone confirmation and back", asy
     await restore(page, baseURL, { channels: "OFF", mentor_requests: "OFF" });
     await open(page);
 
-    await row(page, "mentor_requests").getByRole("button", { name: "Set Mentor requests to Everyone" }).click();
+    await press(row(page, "mentor_requests").getByRole("button", { name: "Set Mentor requests to Everyone" }));
     const confirm = page.locator("[data-flag-confirm='mentor_requests']");
     await expect(confirm).toContainText("This makes it visible to every signed-in user.");
     // Channels is Off, so the confirmation says what Everyone would leave unusable.
     await expect(confirm).toContainText("Mentor requests needs Channels, which is Off. Set Channels to Everyone too");
     expect((await stored(page.request)).mentor_requests.audience).toBe("OFF");
 
-    await confirm.getByRole("button", { name: "Show Mentor requests to everyone" }).click();
+    await press(confirm.getByRole("button", { name: "Show Mentor requests to everyone" }));
     await expect(page.getByRole("status")).toHaveText(
       "Mentor requests is now Everyone: every signed-in user. Mentor requests needs Channels, which is Off. Set Channels to Everyone too, or Mentor requests won't work for everyone it is set for."
     );
@@ -208,13 +221,25 @@ test("works without JavaScript, through the Everyone confirmation and back", asy
     await page.screenshot({ path: evidence("no-js-everyone"), fullPage: true });
 
     // Off applies at once, with no confirmation.
-    await row(page, "mentor_requests").getByRole("button", { name: "Set Mentor requests to Off" }).click();
+    await press(row(page, "mentor_requests").getByRole("button", { name: "Set Mentor requests to Off" }));
     await expect(page.getByRole("status")).toHaveText("Mentor requests is now Off: no one.");
     expect((await stored(page.request)).mentor_requests.audience).toBe("OFF");
   } finally {
     await restore(page, baseURL, { channels: before.channels.audience, mentor_requests: before.mentor_requests.audience });
     await context.close();
   }
+});
+
+test("says nothing when the change in the address did not just happen", async ({ context, page, baseURL }) => {
+  await as(context, baseURL, staff);
+  await open(page);
+  // Tembo in channels: no test here writes it, so its last change is old (a reload or a bookmark).
+  const { updatedAt } = (await stored(page.request)).tembo_channels;
+  test.skip(Date.now() - updatedAt <= 70_000, "Tembo in channels changed within the last minute here.");
+  await open(page, `${PAGE}?changed=tembo_channels`);
+  await expect(row(page, "tembo_channels")).toBeVisible();
+  await expect(page.locator("[data-flag-notice]")).toHaveCount(0);
+  await expect(page.getByRole("status")).toHaveCount(0);
 });
 
 test("refuses a form posted from another site", async ({ context, page, baseURL }) => {

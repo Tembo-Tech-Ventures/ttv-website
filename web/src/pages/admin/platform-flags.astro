@@ -5,7 +5,7 @@ import AdminLayout from "@/layouts/AdminLayout.astro";
 import Button from "@/components/platform/ui/Button";
 import {
   AUDIENCE_LABELS, AUDIENCE_MEANINGS, CONFIRM_ALL, FLAG_DETAILS, FLAG_ORDER, PLATFORM_FLAGS_PATH,
-  changeNotice, changedByNames, dependencyWarnings, flagsOverridden, lastChanged, parseFlagForm,
+  changeNotice, changedByNames, dependencyWarnings, flagsOverridden, isFreshChange, lastChanged, parseFlagForm,
 } from "@/lib/admin/platform-flags";
 import { listFlags, updateFlag } from "@/lib/platform/server/flag-admin";
 import { FlagAudience, FlagKey } from "@/lib/platform/contracts";
@@ -60,7 +60,9 @@ if (failedKey) {
 }
 
 const changedKey = Astro.request.method === "GET" ? FlagKey.safeParse(Astro.url.searchParams.get("changed")).data : undefined;
-const changed = changedKey ? byKey.get(changedKey) : undefined;
+// Only a change that just happened is announced: reloading this address later says nothing.
+const changedFlag = changedKey ? byKey.get(changedKey) : undefined;
+const changed = changedFlag && isFreshChange(changedFlag, Date.now()) ? changedFlag : undefined;
 const notice = changed
   ? [changeNotice(changed), ...warnings.filter((w) => w.key === changed.key || w.requires === changed.key).map((w) => w.message)].join(" ")
   : undefined;
