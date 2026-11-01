@@ -181,6 +181,24 @@ describe("grantCommunityRole and revokeCommunityRole", () => {
     expect((await getOnboardingState(s.db, "wairimu")).requests.map((request) => request.status)).toEqual(["APPROVED", "PENDING"]);
   });
 
+  it("answers only the pending request, leaving declined and withdrawn history as it was", async () => {
+    const s = setup();
+    const declined = await createAccessRequest(s.db, "wairimu", mentor, T);
+    await s.decide(declined, "decline", T + 1, "Not this time.");
+    const withdrawn = await createAccessRequest(s.db, "wairimu", mentor, T + 2);
+    await withdrawAccessRequest(s.db, "wairimu", withdrawn, T + 3);
+    const pending = await createAccessRequest(s.db, "wairimu", mentor, T + 4);
+    const history = () => s.rows("SELECT id, status, decisionId, decidedBy, decidedAt FROM access_request WHERE id <> ? ORDER BY createdAt", pending);
+    const before = history();
+
+    await grantCommunityRole(s.context, { userId: "wairimu", role: "MENTOR", actorId: "amina" }, T + 10);
+    expect(history()).toEqual(before);
+    expect(s.rows("SELECT status, decidedAt FROM access_request WHERE id = ?", pending)).toEqual([{ status: "APPROVED", decidedAt: T + 10 }]);
+    // One item for the earlier decline and exactly one new item, for the grant.
+    expect(s.rows("SELECT subjectId FROM attention_item WHERE kind = 'access_decided' ORDER BY subjectId").map((row) => row.subjectId))
+      .toEqual([declined, pending].toSorted());
+  });
+
   it("is idempotent and grants without a request", async () => {
     const s = setup();
     await grantCommunityRole(s.context, { userId: "otieno", role: "INSTITUTION", actorId: "amina" }, T);

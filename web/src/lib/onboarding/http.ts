@@ -105,14 +105,14 @@ export function onboardingRequest(operation: RequesterOperation, context: Contex
         return state(201);
       }
       case "withdrawAccessRequest": {
-        const id = requestId(params);
         parse(WithdrawAccessRequest, await readBody(request));
+        const id = requestId(params);
         await withdrawAccessRequest(env.DB, userId, id);
         return state();
       }
       case "dismissAccessRequest": {
-        const id = requestId(params);
         parse(DismissAccessRequest, await readBody(request));
+        const id = requestId(params);
         await markAccessRequestSeen(env.DB, userId, { id });
         return state();
       }
@@ -138,8 +138,8 @@ export function adminAccessRequest(operation: AdminOperation, context: Context, 
       const query = parse(AdminAccessRequestQuery, Object.fromEntries(search));
       return platformJson(ROUTES.listAccessRequests.response.parse(await listAccessRequests(env.DB, query)));
     }
-    const id = requestId(params);
     const decision = parse(AccessDecision, await readBody(request));
+    const id = requestId(params);
     const decided = await decideAccessRequest({ db: env.DB, env }, { id, actorId: locals.user.id, ...decision });
     return platformJson(ROUTES.decideAccessRequest.response.parse(decided));
   });
