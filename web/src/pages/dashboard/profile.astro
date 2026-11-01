@@ -1,7 +1,7 @@
 ---
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { onboardingFor, resolveSpacePage } from "@/components/platform/spaces/space-page";
 import TakingPart from "@/components/platform/onboarding/TakingPart.astro";
 import { ACTION_FIELD, handleAccountAction } from "@/components/platform/onboarding/account-actions";
 import { accountActions } from "@/components/platform/onboarding/server-actions";
@@ -67,14 +67,17 @@ const discardAvatar = async (imageUrl: string | null | undefined) => {
 
 /**
  * The onboarding forms (Account's "How you take part", and the cards on the
- * landing pages, which post here) exist only while onboarding is on for this
- * person: resolveSpacePage loads it only then. Otherwise, as if they did not
- * exist. Each answer is private to this person and never cached.
+ * landing pages, which post here) exist only while onboarding applies to this
+ * person and session; otherwise, as if they did not exist. Whether it applies
+ * is the flag and the session, never a read that can fail: a failed write
+ * returns to the page with "That didn't save". Each answer is private to this
+ * person and never cached.
  */
 async function answerOnboardingForm(form: FormData): Promise<Response> {
   const respond = (status: number, headers: Record<string, string> = {}) =>
     new Response(status === 404 ? "Not found." : null, { status, headers: { "Cache-Control": "no-store", Vary: "Cookie", ...headers } });
-  if (!(await resolveSpacePage(Astro.locals, "account"))?.onboarding) return respond(404);
+  const context = await resolveSpacePage(Astro.locals, "account");
+  if (!context || !onboardingFor(Astro.locals, context.me)) return respond(404);
   const result = await handleAccountAction(form, accountActions(env.DB, user.id));
   return result.kind === "refuse" ? respond(result.status) : respond(303, { Location: result.location });
 }

@@ -64,8 +64,9 @@ export function heldChoices(state: OnboardingState): ChoiceIntent[] {
 export function communityFraming(state: OnboardingState): CommunityFraming {
   const intents = effectiveIntents(state);
   if (intents.includes("MEMBER")) return "member";
-  // A completed onboarding with nothing left reads as exploring too (the service stores EXPLORING then).
-  if (intents.includes("EXPLORING") || (state.stage === "DONE" && intents.length === 0)) return "exploring";
+  // Only a stored choice reads as exploring: the service stores EXPLORING whenever a choice or a withdrawal
+  // leaves nothing. A dismissed one-time card stores nothing, and dismissing must change nothing (S4).
+  if (intents.includes("EXPLORING")) return "exploring";
   if (intents.includes("MENTOR") || intents.includes("INSTITUTION")) return "partner";
   // Neither saved nor inferred: an account from before onboarding keeps the framing it always had.
   return "member";

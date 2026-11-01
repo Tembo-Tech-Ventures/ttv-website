@@ -58,6 +58,17 @@ export async function resolveSpacePage(locals: App.Locals, page: SpacePageKey): 
   return space ? { me, space, page, onboarding: await loadOnboarding(locals, me, space, page) } : null;
 }
 
+/**
+ * Whether onboarding applies to this person and session at all: the flag is on
+ * for them, and they are not a restricted synthetic identity, a personal access
+ * token or an agent's delegated session (none of which chooses for a person).
+ */
+export function onboardingFor(locals: App.Locals, me: Me): boolean {
+  const { qaPersona, demo, fixture } = restrictionsFor(locals);
+  return onboardingOpen(me.flags)
+    && !qaPersona && !demo && !fixture && !locals.personalAccessToken && !isAgentSession(locals.session?.userAgent);
+}
+
 /** The landing pages a person can arrive on, which carry the status cards and the one-time card, and Account. */
 const ONBOARDING_PAGES: ReadonlySet<SpacePageKey> = new Set(["cohort", "journey", "mentoring", "discover", "account"]);
 
@@ -71,9 +82,7 @@ const ONBOARDING_PAGES: ReadonlySet<SpacePageKey> = new Set(["cohort", "journey"
  * the framing it had before onboarding; nothing here grants anything.
  */
 export async function loadOnboarding(locals: App.Locals, me: Me, space: SpaceId, page: SpacePageKey): Promise<OnboardingView | null> {
-  if (!onboardingOpen(me.flags) || (!ONBOARDING_PAGES.has(page) && space !== "community")) return null;
-  const { qaPersona, demo, fixture } = restrictionsFor(locals);
-  if (qaPersona || demo || fixture || locals.personalAccessToken || isAgentSession(locals.session?.userAgent)) return null;
+  if (!onboardingFor(locals, me) || (!ONBOARDING_PAGES.has(page) && space !== "community")) return null;
   try {
     return onboardingView(await getOnboardingState(env.DB, me.user.id), me);
   } catch (error) {

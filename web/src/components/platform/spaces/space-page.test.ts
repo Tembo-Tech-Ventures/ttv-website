@@ -15,6 +15,7 @@ import {
   linkAllowed,
   loadCertificates,
   loadOnboarding,
+  onboardingFor,
   pickSpace,
   resolveSpacePage,
   restrictedHrefs,
@@ -127,6 +128,14 @@ describe("loadOnboarding", () => {
     for (const extra of restricted) {
       expect.soft(await loadOnboarding({ ...locals, ...extra } as unknown as App.Locals, lucy, "community", "journey")).toBeNull();
     }
+    expect(mocks.getOnboardingState).not.toHaveBeenCalled();
+  });
+
+  it("says whether onboarding applies from the flag and the session alone, without reading anything", () => {
+    expect(onboardingFor(locals, lucy)).toBe(true);
+    expect(onboardingFor(locals, flagOff)).toBe(false);
+    expect(onboardingFor({ ...locals, session: { userAgent: "ttv-agent:01EXAMPLE" } } as unknown as App.Locals, lucy)).toBe(false);
+    expect(onboardingFor({ ...locals, personalAccessToken: { id: "pat" } } as unknown as App.Locals, lucy)).toBe(false);
     expect(mocks.getOnboardingState).not.toHaveBeenCalled();
   });
 

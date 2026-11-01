@@ -34,7 +34,7 @@ describe("communityFraming", () => {
     ["a member", state({ intents: ["MEMBER"] }), "member"],
     ["a member who also asked to mentor", state({ intents: ["MEMBER", "MENTOR"] }), "member"],
     ["someone just looking around", state({ intents: ["EXPLORING"] }), "exploring"],
-    ["a completed onboarding left with nothing", state({ intents: [] }), "exploring"],
+    ["a dismissed one-time card with nothing inferred keeps the framing it always had", state({ intents: [] }), "member"],
     ["a mentor only", state({ intents: ["MENTOR"] }), "partner"],
     ["an organisation only", state({ intents: ["INSTITUTION"] }), "partner"],
     ["an alumna from before onboarding (inferred)", state({ stage: "PROMPT", inferred: ["MEMBER"] }), "member"],
@@ -148,6 +148,15 @@ describe("onboardingView on the service", () => {
     view = onboardingView(await getOnboardingState(db, "wairimu"), MENTOR_SPACES);
     expect(view.prompt).toBeNull();
     // Dismissing changes nothing they have: inference still frames them.
+    expect(view.framing).toBe("member");
+  });
+
+  it("changes nothing when a community-only account dismisses the card: no welcome, no new framing", async () => {
+    const { db } = setup();
+    expect(communityFraming(await getOnboardingState(db, "otieno"))).toBe("member");
+    await dismissPrompt(db, "otieno");
+    const view = onboardingView(await getOnboardingState(db, "otieno"), COMMUNITY);
+    expect(view.state.stage).toBe("DONE");
     expect(view.framing).toBe("member");
   });
 
