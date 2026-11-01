@@ -53,7 +53,9 @@ async function submit(form: HTMLFormElement, submitter: HTMLElement | null, fetc
   let outcome: Outcome;
   try {
     const body = new FormData(form, submitter instanceof HTMLButtonElement ? submitter : null);
-    const response = await fetcher(form.action, { method: "POST", body, credentials: "same-origin", headers: { Accept: "text/html" } });
+    // Not form.action: the decision buttons are named "action", and a named control shadows it.
+    const target = new URL(form.getAttribute("action") ?? "", document.baseURI).href;
+    const response = await fetcher(target, { method: "POST", body, credentials: "same-origin", headers: { Accept: "text/html" } });
     outcome = readOutcome(response, await response.text(), parseHtml);
   } catch {
     outcome = { kind: "failed", message: NETWORK_FAILURE };

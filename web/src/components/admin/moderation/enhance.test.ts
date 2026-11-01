@@ -50,7 +50,8 @@ describe("enhanceModerationQueue", () => {
   }
 
   it("posts the decision the admin pressed, then swaps in the server's queue and focuses its banner", async () => {
-    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+    const fetcher = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(url)).toMatch(/\/admin\/moderation$/);
       const body = init?.body as FormData;
       expect(body.get("action")).toBe("hide");
       expect(body.get("reason")).toBe("Off topic");

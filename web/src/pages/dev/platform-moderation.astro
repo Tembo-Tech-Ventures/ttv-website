@@ -17,10 +17,8 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import AdminShell from "@/components/shells/AdminShell";
 import ModerationQueueView from "@/components/admin/moderation/ModerationQueueView.astro";
-import { DECIDED_NOTICE } from "@/components/admin/moderation/case-model";
-import { isDecisionRefusal, parseDecisionForm, refusalMessage, refusalStatus } from "@/components/admin/moderation/decision-form";
 import { decideHarnessCase, harnessQueue, listHarnessCases } from "@/components/admin/moderation/harness";
-import { ModerationActionKind, ModerationQueueState } from "@/lib/platform/contracts";
+import { moderationQueueRequest, queuePaths, type QueuePaths } from "@/components/admin/moderation/page-flow";
 
 if (!import.meta.env.DEV) {
   return new Response("Not found", { status: 404 });
@@ -28,58 +26,32 @@ if (!import.meta.env.DEV) {
 
 const params = Astro.url.searchParams;
 const run = /^[\w-]{1,40}$/.test(params.get("run") ?? "") ? params.get("run")! : "default";
-const state = ModerationQueueState.safeParse(params.get("state")).data ?? "PENDING";
 const failParam = Number(params.get("fail"));
 const failWith = Number.isInteger(failParam) && failParam >= 400 && failParam < 600 ? failParam : null;
 harnessQueue(run, params.has("reset") && Astro.request.method === "GET");
 
-/** A harness address for this run, keeping the failure switch. */
-function here(extra: Record<string, string> = {}): string {
-  const query = new URLSearchParams({ run });
-  if (failWith) query.set("fail", String(failWith));
-  for (const [key, value] of Object.entries(extra)) query.set(key, value);
-  return `/dev/platform-moderation?${query.toString()}`;
-}
-const tabQuery: Record<string, string> = state === "DECIDED" ? { state } : {};
+// The page's addresses, kept on this run and its failure switch.
+const keep = new URLSearchParams({ run, ...(failWith ? { fail: String(failWith) } : {}) }).toString();
+const base = queuePaths("/dev/platform-moderation");
+const withRun = (path: string) => `${path}${path.includes("?") ? "&" : "?"}${keep}`;
+const paths: QueuePaths = {
+  tab: (state) => withRun(base.tab(state)),
+  page: (state, cursor) => withRun(base.page(state, cursor)),
+  decided: (state, action) => withRun(base.decided(state, action)),
+};
 
-let rowError: { id: string; message: string; draft: string } | undefined;
-let failure: string | undefined;
-if (Astro.request.method === "POST") {
-  const parsed = parseDecisionForm(await Astro.request.formData());
-  if (!parsed.ok) {
-    Astro.response.status = 400;
-    if (parsed.messageId) rowError = { id: parsed.messageId, message: parsed.error, draft: parsed.reason };
-    else failure = parsed.error;
-  } else {
-    try {
-      decideHarnessCase(run, parsed, failWith);
-      return Astro.redirect(here({ ...tabQuery, decided: parsed.action }), 303);
-    } catch (error) {
-      if (!isDecisionRefusal(error)) throw error;
-      Astro.response.status = refusalStatus(error);
-      rowError = { id: parsed.messageId, message: refusalMessage(error), draft: parsed.reason };
-    }
-  }
-}
-
-const decided = Astro.request.method === "GET" ? ModerationActionKind.safeParse(params.get("decided")).data : undefined;
-const items = listHarnessCases(run, state);
-const pendingCount = listHarnessCases(run, "PENDING").length;
+const outcome = await moderationQueueRequest(Astro.request, Astro.url, {
+  list: async ({ state }) => ({ items: listHarnessCases(run, state), nextCursor: null }),
+  countPending: async () => listHarnessCases(run, "PENDING").length,
+  decide: async (input) => decideHarnessCase(run, input, failWith),
+  isBadCursor: () => false,
+}, paths);
+if (outcome.kind === "redirect") return Astro.redirect(outcome.location, 303);
+Astro.response.status = outcome.status;
 ---
 
 <BaseLayout title="Moderation harness">
-  <AdminShell client:load currentPath="/admin/moderation" pendingModeration={pendingCount}>
-    <ModerationQueueView
-      state={state}
-      items={items}
-      pendingCount={pendingCount}
-      formAction={here(tabQuery)}
-      tabHrefs={{ PENDING: here(), DECIDED: here({ state: "DECIDED" }) }}
-      nextHref={null}
-      paged={false}
-      notice={decided ? DECIDED_NOTICE[decided] : undefined}
-      failure={failure}
-      rowError={rowError}
-    />
+  <AdminShell client:load currentPath="/admin/moderation" pendingModeration={outcome.props.pendingCount}>
+    <ModerationQueueView {...outcome.props} />
   </AdminShell>
 </BaseLayout>
