@@ -68,7 +68,9 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
 
     {message.deleted ? (
       <p class="rounded-xl bg-ground/50 px-4 py-3 text-[0.9375rem] italic text-ink-muted">
-        The author deleted this message. The text it had is below.
+        {item.evidence.length > 0
+          ? "The author deleted this message. The text it had is under Earlier text."
+          : "The author deleted this message."}
       </p>
     ) : (
       <blockquote class="whitespace-pre-line break-words rounded-xl bg-ground/50 px-4 py-3 text-[0.9375rem] leading-relaxed text-ink-primary" data-moderation-body>
@@ -150,7 +152,7 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
       </div>
     )}
 
-    {pending ? (
+    {options.length === 0 ? null : pending ? (
       <DecisionForm caseId={item.id} action={action} options={options} names={names} error={error} draftReason={draftReason} />
     ) : (
       <details class="rounded-xl border border-hairline" data-moderation-change open={Boolean(error)}>

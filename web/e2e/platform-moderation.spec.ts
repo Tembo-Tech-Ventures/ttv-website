@@ -72,6 +72,9 @@ test.describe("admin moderation queue", () => {
     await open(page, runFor("&reset"));
     await expect(page.getByRole("heading", { level: 2, name: "Moderation" })).toBeVisible();
     await expect(page.getByText("Everything else, contact details included, stays visible until a person decides.")).toBeVisible();
+    // Only a hide's reason reaches the author, and the form says so.
+    await expect(card(page, PETER).getByRole("textbox", { name: "Reason" }))
+      .toHaveAccessibleDescription("Kept with your decision. If you hide the message, its author sees this reason.");
     await expect(page.getByRole("link", { name: /^Needs a decision\s+4 waiting$/ })).toHaveAttribute("aria-current", "page");
     await expect(page.locator("[data-moderation-list=PENDING] > li")).toHaveCount(4);
 
@@ -184,7 +187,7 @@ test.describe("admin moderation queue", () => {
     await press(peter.getByRole("button", { name: /^Hide/ }));
 
     const error = card(page, PETER).locator("[data-moderation-error]");
-    await expect(error).toHaveText(/^Nothing changed\. Someone decided this case/);
+    await expect(error).toHaveText("Nothing changed. An admin has already reviewed this message. The case below is as it stands now.");
     await expect(error).toBeFocused();
     await expect(reason(card(page, PETER))).toHaveValue("Looks like a scam.");
     await expect(reason(card(page, PETER))).toHaveAttribute("aria-invalid", "true");

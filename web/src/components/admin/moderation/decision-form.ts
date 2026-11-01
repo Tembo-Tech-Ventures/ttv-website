@@ -41,15 +41,17 @@ export function isDecisionRefusal(error: unknown): error is DecisionRefusal {
  * queue never shows a decision it did not record.
  */
 export function refusalMessage(refusal: DecisionRefusal): string {
+  // The channel lane's refusals say exactly why ("This message was deleted."); they are written for people.
+  const said = refusal.message?.trim();
   switch (refusal.status) {
     case 400:
-      return `Nothing changed. ${refusal.message ?? "Check the reason and try again."}`;
+      return `Nothing changed. ${said || "Check the reason and try again."}`;
     case 403:
-      return "Nothing changed. Only administrators can decide cases here.";
+      return `Nothing changed. ${said || "Only administrators can decide cases here."}`;
     case 404:
       return "Nothing changed. This message no longer exists, so there is nothing to decide.";
     case 409:
-      return "Nothing changed. Someone decided this case, or the message changed, while you were reading. The case below is as it stands now.";
+      return `Nothing changed. ${said || "Someone decided this case, or the message changed, while you were reading."} The case below is as it stands now.`;
     default:
       return "Nothing changed. The decision could not be saved. Try again.";
   }
