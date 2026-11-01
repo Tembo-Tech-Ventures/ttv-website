@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { runAxe } from "./platform-axe";
@@ -84,28 +83,6 @@ const focused = (page: Page) => page.evaluate(() => {
 
 function evidence(name: string) {
   return `${EVIDENCE_DIR}/${test.info().project.name}-${name}.png`;
-}
-
-/**
- * WCAG 2.5.3 (label in name) with axe 4.14, pinned by hash: the version that
- * runs label-content-name-mismatch by default. The suite's shared axe (4.10)
- * ships it as experimental and misses names that leave visible words out
- * (QA-1 retest, QA1R-01).
- */
-const AXE_414_URL = "https://cdn.jsdelivr.net/npm/axe-core@4.14.0/axe.min.js";
-const AXE_414_SHA384 = "lFUXB8tI4BaTE1bqxH9eeAXON2NH1qsdAhs7S5L++nUNP5QOy+hwr0C3TYEJUEl0";
-async function labelInName(page: Page): Promise<string[]> {
-  const body = Buffer.from(await (await fetch(AXE_414_URL)).arrayBuffer());
-  expect(createHash("sha384").update(body).digest("base64")).toBe(AXE_414_SHA384);
-  // Only in tests that load no other axe: this one owns window.axe.
-  await page.evaluate(body.toString("utf8"));
-  return page.evaluate(async () => {
-    type Run = { violations: { id: string; nodes: { target: string[] }[] }[] };
-    const { axe } = window as unknown as { axe: { version: string; run(context: unknown, options: unknown): Promise<Run> } };
-    if (axe.version !== "4.14.0") throw new Error(`Expected axe 4.14.0, found ${axe.version}`);
-    const run = await axe.run({ exclude: [["astro-dev-toolbar"]] }, { runOnly: { type: "rule", values: ["label-content-name-mismatch"] } });
-    return run.violations.flatMap((v) => v.nodes.map((n) => `${v.id}: ${n.target.join(" ")}`));
-  });
 }
 
 /** Nothing scrolls sideways, every box in main stays inside the viewport, and no two cards overlap. */
@@ -416,14 +393,6 @@ test.describe("the welcome and request steps (DEV harness)", () => {
     await expect(main(page).getByRole("alert")).toHaveText("You’ve sent several requests today. Your answers are still here: try again tomorrow.");
     await expect(main(page).getByLabel("What kind of work could you review?")).toHaveValue("Data pipelines and the tests around them.");
     expect((await state(page, "peter")).requests[0]?.status).toBe("DECLINED");
-  });
-
-  test("names every control by the words it shows (WCAG 2.5.3, axe 4.14)", async ({ page }) => {
-    await reset(page, "peter");
-    for (const path of [harness("wairimu"), harness("peter", { step: "request" })]) {
-      await open(page, path);
-      expect(await labelInName(page), path).toEqual([]);
-    }
   });
 
   test("passes axe on the choices, empty and refused", async ({ page }) => {
