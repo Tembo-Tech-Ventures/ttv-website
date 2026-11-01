@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import SessionViewer from "./SessionViewer";
+import SessionViewer, { RETRY_TIMEOUT_MS } from "./SessionViewer";
 
 const SEGMENTS = [
   { id: "t1", startTime: 0, endTime: 4, text: "Welcome back.", speaker: "Mentor" },
@@ -97,5 +97,37 @@ describe("session viewer", () => {
     expect(video.classList).not.toContain("invisible");
     expect(container.querySelector("[data-video-unavailable]")).toBeNull();
     expect(document.activeElement).toBe(video);
+  });
+
+  it("gives up on a retry that hangs, so Try again comes back instead of sticking", async () => {
+    const video = await mount();
+    await act(async () => video.dispatchEvent(new Event("error")));
+    vi.useFakeTimers();
+    try {
+      const retry = () => Array.from(container.querySelectorAll("button")).find((button) => /Try again|Trying again/.test(button.textContent ?? ""))!;
+      await act(async () => retry().click());
+      expect(retry().textContent).toBe("Trying again…");
+      // The media request neither fails nor loads: a stalled connection.
+      await act(async () => vi.advanceTimersByTime(RETRY_TIMEOUT_MS - 1));
+      expect(retry().textContent).toBe("Trying again…");
+      await act(async () => vi.advanceTimersByTime(1));
+      expect(retry().textContent).toBe("Try again");
+      expect(retry().hasAttribute("aria-disabled")).toBe(false);
+      // And it can be tried again from there.
+      await act(async () => retry().click());
+      expect(retry().textContent).toBe("Trying again…");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("counts the video's metadata arriving as recovered", async () => {
+    const video = await mount();
+    await act(async () => video.dispatchEvent(new Event("error")));
+    const retry = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Try again")!;
+    await act(async () => retry.click());
+    await act(async () => video.dispatchEvent(new Event("loadedmetadata")));
+    expect(container.querySelector("[data-video-unavailable]")).toBeNull();
+    expect(video.classList).not.toContain("invisible");
   });
 });

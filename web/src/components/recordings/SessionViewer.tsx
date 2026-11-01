@@ -5,6 +5,10 @@ import TranscriptPanel, {
 
 /** HTMLMediaElement.NETWORK_NO_SOURCE: the browser gave up on the source. */
 const NETWORK_NO_SOURCE = 3;
+/** HTMLMediaElement.HAVE_NOTHING: nothing about the media is known yet. */
+const HAVE_NOTHING = 0;
+/** How long a retry may hang (a stalled connection answers neither way) before it counts as failed again. */
+export const RETRY_TIMEOUT_MS = 15_000;
 
 export default function SessionViewer({
   videoUrl,
@@ -65,7 +69,16 @@ export default function SessionViewer({
     videoRef.current?.load();
   };
 
-  /* Loaded after all: hand focus from the retry button to the player it brought back. */
+  /* A retry that never hears back must not leave the button stuck on "Trying again…". */
+  useEffect(() => {
+    if (media !== "retrying") return;
+    const timer = setTimeout(() => {
+      if ((videoRef.current?.readyState ?? HAVE_NOTHING) === HAVE_NOTHING) setMedia("failed");
+    }, RETRY_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [media]);
+
+  /* Loaded after all (metadata is enough to play): hand focus from the retry button to the player it brought back. */
   const focusPlayer = useRef(false);
   const loaded = () => {
     if (media === "ok") return;
@@ -93,6 +106,7 @@ export default function SessionViewer({
             className={failed ? "invisible aspect-video w-full bg-black" : "aspect-video w-full bg-black"}
             onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
             onError={() => setMedia("failed")}
+            onLoadedMetadata={loaded}
             onLoadedData={loaded}
           >
             <track kind="captions" srcLang="en" label="English" />
