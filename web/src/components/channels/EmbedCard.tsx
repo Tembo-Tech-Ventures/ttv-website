@@ -41,8 +41,8 @@ export function confirmationText(embed: ProjectEmbed, confirmation: ProjectConfi
 }
 
 function ProjectCard({ embed, compact }: { embed: ProjectEmbed; compact: boolean }) {
-  // Null while the project has no page inside TTV every reader can open (B-2.4, owner decision 6):
-  // then there is no way in to draw. The evidence URL is never shared.
+  // The project's own evidence link (https, screened with the message), or null when it has none
+  // (B-2.4): then there is no way in to draw, since no TTV page is open to every reader yet.
   const link = embed.link;
   const external = link !== null && isExternal(link);
   const confirmations = shownConfirmations(embed);

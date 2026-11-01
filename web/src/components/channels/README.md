@@ -90,7 +90,7 @@ talk to each other, U-2.3's `ChannelFrame` asks; after, the conversation:
 | `MessageList.tsx` | The one scroll surface: day headings, "New", older pages, empty and error states, following, "Jump to latest", read markers |
 | `MessageItem.tsx`, `MessageMenu.tsx`, `MessageEdit.tsx` | A message: author, server role badges, time, (edited), deleted, text reactions, thread link; reply, react, edit and delete |
 | `MessageBody.tsx` | Words, mentions, inline code and plain links. Never Markdown links or markup |
-| `EmbedCard.tsx` | Shared work (U-2.2): a project at the shared revision with one confirmation per mentor and the revision it covers, a session clip at its moment, or "no longer available" with nothing about what it was. "Open" only when the project has a link (none yet: owner decision 6). DEV gallery: `/dev/platform-embeds` |
+| `EmbedCard.tsx` | Shared work (U-2.2): a project at the shared revision with one confirmation per mentor and the revision it covers, a session clip at its moment, or "no longer available" with nothing about what it was. "Open" (a new tab) only when the project has its own evidence link. DEV gallery: `/dev/platform-embeds` |
 | `TemboAnswer.tsx` | First form of Tembo answers. U-3.1 owns their full design |
 | `ThreadRail.tsx` | The thread: beside the list on a wide sheet, in its place on a narrow one |
 | `Composer.tsx`, `ComposerParts.tsx`, `mentions.ts` | Writing, on S-2.2's draft (kept for the tab): `@` suggestions, Share project, Session clip (cohort channels only), Ask Tembo (`tembo_channels` only), the code-of-conduct prompt |

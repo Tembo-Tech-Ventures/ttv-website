@@ -95,8 +95,12 @@ test.describe("shared work", () => {
     await expect(scene(page, "this-revision")).toContainText("Confirmed by Mercy on this revision");
     await expect(scene(page, "unconfirmed").locator("[aria-label='Mentor confirmations']")).toHaveCount(0);
     await expect(scene(page, "several-mentors").getByRole("listitem")).toHaveText(["TypeScript", "Cloudflare Workers", "D1", "Confirmed by Mercy on this revision", "Confirmed by David on revision 2"]);
-    // Shared projects carry no link yet (B-2.4, owner decision 6): no "Open", and no way out of TTV.
-    await expect(scene(page, "earlier-revision").getByRole("link")).toHaveCount(0);
+    // The project's own evidence link opens in a new tab and says so; without one there is no way in.
+    const evidence = scene(page, "earlier-revision").getByRole("link", { name: /^Open Chama ledger/ });
+    await expect(evidence).toHaveAttribute("target", "_blank");
+    await expect(evidence).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(evidence).toHaveAccessibleName("Open Chama ledger: M-Pesa receipt parser (opens in a new tab)");
+    await expect(scene(page, "no-link").getByRole("link")).toHaveCount(0);
     const gone = scene(page, "gone-project");
     await expect(gone).toContainText("This project is no longer available");
     await expect(gone.getByRole("link")).toHaveCount(0);

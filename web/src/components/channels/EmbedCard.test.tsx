@@ -50,7 +50,7 @@ describe("a shared project", () => {
     expect(text(<EmbedCard embed={{ ...ledger, link: "/dashboard/community/projects/x" }} />)).not.toContain("new tab");
   });
 
-  it("draws no way in while the project has no link, as B-2.4 serves every project for now", () => {
+  it("draws no way in when the project has no evidence link", () => {
     const card = html(<EmbedCard embed={{ ...ledger, link: null }} />);
     expect(card).toContain(ledger.title);
     expect(card).not.toContain("<a");
