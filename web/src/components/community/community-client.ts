@@ -211,7 +211,8 @@ export async function loadMentorship(): Promise<MentorReviewRequest[]> {
   const result = await communityRequest(
     "mentorship",
     z.object({
-      entries: z.array(entrySchema.extend({ memberName: z.string(), reviewedByCurrentMentor: z.boolean() })),
+      // Retained QA personas read through a separate handler that predates set-aside.
+      entries: z.array(entrySchema.extend({ memberName: z.string(), reviewedByCurrentMentor: z.boolean(), setAsideByCurrentMentor: z.boolean().default(false) })),
     }),
   );
   return result.entries.map((entry) => ({
@@ -223,7 +224,26 @@ export async function loadMentorship(): Promise<MentorReviewRequest[]> {
     evidence: mapJourney(entry).evidence,
     confirmations: mapJourney(entry).confirmations,
     status: entry.reviewedByCurrentMentor ? "confirmed" : "pending",
+    // A confirmation outranks a set-aside: confirmed work is not waiting either way.
+    setAside: entry.setAsideByCurrentMentor && !entry.reviewedByCurrentMentor,
   }));
+}
+/** "I can't confirm this": private to the mentor, for the revision they saw. */
+export async function setAsideContribution(id: string, expectedRevision: number): Promise<void> {
+  const result = await communityRequest(
+    `journey/${encodeURIComponent(id)}/set-aside`,
+    z.object({ setAside: z.object({ journeyId: z.string(), journeyVersion: z.number().int(), setAside: z.literal(true) }) }),
+    "POST",
+    { expectedRevision },
+  );
+  if (result.setAside.journeyId !== id || result.setAside.journeyVersion !== expectedRevision) throw new UiApiError(502);
+}
+export async function undoSetAside(id: string): Promise<void> {
+  await communityRequest(
+    `journey/${encodeURIComponent(id)}/set-aside`,
+    z.object({ setAside: z.object({ journeyId: z.literal(id), setAside: z.literal(false) }) }),
+    "DELETE",
+  );
 }
 export async function confirmContribution(
   id: string,

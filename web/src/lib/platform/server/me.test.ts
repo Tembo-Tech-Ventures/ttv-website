@@ -32,7 +32,7 @@ const expectedBadges: Record<string, RoleBadge[]> = {
 function setup(fixture: Partial<CapabilityCase> = {}, userId?: string) {
   const result = createCapabilityDatabase(fixture, userId);
   databases.push(result.database);
-  for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql"]) {
+  for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql", "0027_mentor_set_aside.sql"]) {
     result.database.exec(readMigration(migration));
   }
   result.database.exec("UPDATE feature_flag SET audience='ALL' WHERE key='spaces'");

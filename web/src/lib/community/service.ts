@@ -6,7 +6,7 @@ import { grantCommunityRole, revokeCommunityRole } from "@/lib/onboarding/decisi
 import { AccessRole } from "@/lib/platform/contracts";
 import { discoverableMember } from "./eligibility";
 import {
-  CommunityError, profileInput, journeyInput, journeyUpdateInput, confirmationInput, searchInput, parseInput,
+  CommunityError, profileInput, journeyInput, journeyUpdateInput, confirmationInput, setAsideInput, searchInput, parseInput,
   type CommunityProfile, type CommunityJourney, type CommunityConfirmation,
 } from "./model";
 
@@ -94,15 +94,24 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
    * The Confirm page's rows: the 50 newest contributions shared beyond their
    * author, never the mentor's own. One query for the list and its count, so
    * they cannot drift apart. `columns` is an internal constant, never input.
+   * Set-asides are read for this mentor and the current revision only: they
+   * are private to the mentor and nothing else reads them.
    */
   async function mentorshipRows<Row extends { userId: string }>(columns: string) {
+    await requireMentorReview();
+    const scope = fixtureScope("j.userId");
+    const { results } = await db.prepare(`SELECT ${columns},
+        EXISTS (SELECT 1 FROM communityConfirmation ownReview WHERE ownReview.journeyId=j.id AND ownReview.mentorId=? AND ownReview.journeyVersion=j.version) AS reviewedByCurrentMentor,
+        EXISTS (SELECT 1 FROM communitySetAside ownSetAside WHERE ownSetAside.mentorId=? AND ownSetAside.journeyId=j.id AND ownSetAside.journeyVersion=j.version) AS setAsideByCurrentMentor
+      FROM communityJourney j JOIN user u ON u.id=j.userId WHERE j.visibility='institution' AND j.userId<>?${scope.clause} ORDER BY j.createdAt DESC,j.id DESC LIMIT ${MENTORSHIP_WINDOW}`)
+      .bind(actorId,actorId,actorId,...scope.values).all<Row & { reviewedByCurrentMentor: number; setAsideByCurrentMentor: number }>();
+    await Promise.all(results.map(row=>requireFixtureTarget(row.userId)));
+    return results.map(row => ({...row,reviewedByCurrentMentor:Boolean(row.reviewedByCurrentMentor),setAsideByCurrentMentor:Boolean(row.setAsideByCurrentMentor)}));
+  }
+  async function requireMentorReview() {
     const a = await access();
     if (!a.isMentor && !a.isAdmin) throw new CommunityError("Mentor access is required.", 403);
-    const scope = fixtureScope("j.userId");
-    const { results } = await db.prepare(`SELECT ${columns}, EXISTS (SELECT 1 FROM communityConfirmation ownReview WHERE ownReview.journeyId=j.id AND ownReview.mentorId=? AND ownReview.journeyVersion=j.version) AS reviewedByCurrentMentor
-      FROM communityJourney j JOIN user u ON u.id=j.userId WHERE j.visibility='institution' AND j.userId<>?${scope.clause} ORDER BY j.createdAt DESC,j.id DESC LIMIT ${MENTORSHIP_WINDOW}`).bind(actorId,actorId,...scope.values).all<Row & { reviewedByCurrentMentor: number }>();
-    await Promise.all(results.map(row=>requireFixtureTarget(row.userId)));
-    return results.map(row => ({...row,reviewedByCurrentMentor:Boolean(row.reviewedByCurrentMentor)}));
+    return a;
   }
   return {
     access, getProfile, listJourney,
@@ -164,7 +173,8 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
     },
     /**
      * How many of the contributions listMentorship returns still have no
-     * confirmation from this mentor for their current revision: the same rows,
+     * confirmation from this mentor for their current revision, and are not
+     * set aside by them for it: the same rows,
      * read through the same checks, so the number matches the review forms the
      * Confirm page shows. When that window is full and none of it waits,
      * older work beyond it might, so the answer is null (not known) rather
@@ -173,7 +183,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
      */
     async countAwaitingConfirmation(): Promise<number | null> {
       const results = await mentorshipRows<{ userId: string }>("j.userId");
-      const waiting = results.filter((entry) => !entry.reviewedByCurrentMentor).length;
+      const waiting = results.filter((entry) => !entry.reviewedByCurrentMentor && !entry.setAsideByCurrentMentor).length;
       return waiting === 0 && results.length === MENTORSHIP_WINDOW ? null : waiting;
     },
     async setAccess(input: unknown) {
@@ -235,8 +245,7 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
     },
     async confirmJourney(id: string, input: unknown) {
       requireWritable();
-      const a = await access();
-      if (!a.isMentor && !a.isAdmin) throw new CommunityError("Mentor access is required.", 403);
+      const a = await requireMentorReview();
       const p = parseInput(confirmationInput, input);
       const scope = fixtureScope("j.userId");
       const entry = await db.prepare(`SELECT j.userId,j.version FROM communityJourney j WHERE j.id=? AND j.visibility='institution'${scope.clause}`).bind(id,...scope.values).first<{ userId: string; version: number }>();
@@ -253,6 +262,40 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
       if (!result.meta.changes) throw new CommunityError("Contribution no longer available.", 409);
       await workConfirmedAttention({ db, env: { DEPLOYMENT_ENVIRONMENT: environment, PLATFORM_FLAGS_OVERRIDE: flagsOverride } }, confirmationId);
       return { id: confirmationId, journeyId: id, mentorId: actorId, ...p, journeyVersion: entry.version,mentorRole:a.isMentor ? "MENTOR" : "ADMIN" };
+    },
+    /**
+     * "I can't confirm this": takes the revision the mentor saw out of their
+     * own waiting list, under the same checks as confirming it. Nothing else
+     * reads it, so the member, other mentors and institutions see no change.
+     * Setting the same revision aside again is a no-op.
+     */
+    async setAsideJourney(id: string, input: unknown) {
+      requireWritable();
+      await requireMentorReview();
+      const p = parseInput(setAsideInput, input);
+      const scope = fixtureScope("j.userId");
+      const entry = await db.prepare(`SELECT j.userId,j.version,EXISTS (SELECT 1 FROM communityConfirmation c WHERE c.journeyId=j.id AND c.mentorId=? AND c.journeyVersion=j.version) AS confirmed
+        FROM communityJourney j WHERE j.id=? AND j.visibility='institution'${scope.clause}`).bind(actorId,id,...scope.values).first<{ userId: string; version: number; confirmed: number }>();
+      if (!entry) throw new CommunityError("Contribution not found.", 404);
+      await requireFixtureTarget(entry.userId);
+      if (entry.userId === actorId) throw new CommunityError("Your own contributions never wait for your confirmation.", 403);
+      if (entry.version !== p.expectedRevision) throw new CommunityError("Contribution changed. Review the current revision first.",409);
+      if (entry.confirmed) throw new CommunityError("You've already confirmed this revision.",409);
+      // Repeat the predicates in the write so a concurrent edit or retraction cannot be set aside.
+      const writeScope = fixtureScope("userId");
+      await db.prepare(`INSERT INTO communitySetAside (mentorId,journeyId,journeyVersion)
+        SELECT ?,id,version FROM communityJourney WHERE id=? AND visibility='institution' AND userId<>? AND version=?${writeScope.clause}
+        ON CONFLICT DO NOTHING`).bind(actorId,id,actorId,entry.version,...writeScope.values).run();
+      const stored = await db.prepare(`SELECT 1 AS found FROM communitySetAside WHERE mentorId=? AND journeyId=? AND journeyVersion=?`).bind(actorId,id,entry.version).first();
+      if (!stored) throw new CommunityError("Contribution no longer available.", 409);
+      return { journeyId: id, journeyVersion: entry.version, setAside: true as const };
+    },
+    /** Undo: the contribution waits for this mentor again. Only their own set-asides are touched. */
+    async undoSetAside(id: string) {
+      requireWritable();
+      await requireMentorReview();
+      await db.prepare(`DELETE FROM communitySetAside WHERE mentorId=? AND journeyId=?`).bind(actorId,id).run();
+      return { journeyId: id, setAside: false as const };
     },
   };
 }

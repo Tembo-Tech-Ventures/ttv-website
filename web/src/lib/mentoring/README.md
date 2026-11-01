@@ -28,6 +28,48 @@ down with it; and when the Confirm page's 50-row window is full with none of
 it waiting, since older work beyond the window might be. With work in the
 window the number is what the Confirm page shows, a floor rather than a total.
 
+**Set-aside work is not waiting.** A contribution the mentor set aside at its
+current revision (below) is not counted, and the Confirm page lists it apart.
+
+## Private set-aside (F-7, QA1R-02)
+
+Owner decision, 2026-11-01 ("Mentors can privately set aside work they can't
+confirm"): without it the only way to clear the waiting count was to confirm.
+
+- On the spaces Confirm page, each contribution waiting for this mentor has
+  "Set aside: I can't confirm this". It leaves their waiting count and list
+  and moves to a "Set aside (n)" list where they can undo it. The page says
+  "You've set this aside. The member isn't told."
+- `POST /api/community/journey/:id/set-aside` with `{ expectedRevision }`
+  records it (201, `{ setAside: { journeyId, journeyVersion, setAside: true } }`);
+  `DELETE` on the same path undoes it for every revision (200). Repeating
+  either is harmless.
+- Same rules as confirming: MENTOR or ADMIN roles from the database, shared
+  work by someone else, the revision the mentor saw (409 when it changed or
+  they already confirmed it), the demo and staging-fixture scopes, a
+  same-origin write, and `requireBrowser`, so personal access tokens and
+  delegated agent sessions are refused. Retained QA personas cannot write it.
+- One row per mentor and revision in `communitySetAside` (migration 0027),
+  removed with the mentor or the contribution. A new revision, including
+  unpublishing and sharing again, is not covered by an old row, so the work
+  waits again, as revision-bound confirmations do.
+
+**Private by construction.** Only `mentorshipRows` reads the table, for the
+calling mentor, so only their own `GET /api/community/mentorship` and
+`Me.mentoring.awaitingConfirmation` change. The member's journey, other
+mentors' lists, institutional profiles, search, discovery, the evidence
+assessment, chat and MCP read other tables and show nothing. There is no
+attention item, rating, flag or note: missing evidence is not evidence
+against anyone. `src/lib/community/set-aside.test.ts` checks every one of
+those reads before and after, and fails if new code starts reading the table.
+Admin operational counts are not built; add them only if operations need them,
+and never for members or institutions.
+
+**Spaces only.** The routes return 404 while `spaces` is off for the caller,
+and the action is offered only inside the spaces shell. The legacy Confirm page
+says its list "is not a queue of review requests" and shows no waiting count,
+so there is nothing for a set-aside to clear there.
+
 **Why this is not attention.** Mission contract B-1.3 allows attention only
 from real existing events with a real recipient, and forbids inventing a
 matching domain. Nothing in the data records "shared with this mentor":
