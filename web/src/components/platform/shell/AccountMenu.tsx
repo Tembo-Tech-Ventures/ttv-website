@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { PiChatCircleText, PiGear, PiSignOut } from "react-icons/pi";
 import type { PersonSummary } from "@/lib/platform/contracts";
 import { openFeedbackWidget } from "@/components/feedback/feedback-client";
+import { clearOnboardingDrafts } from "@/lib/platform/client/onboarding-drafts";
 import { Avatar, initials, RoleBadge } from "@/components/platform/ui";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
@@ -139,12 +140,13 @@ export default function AccountMenu({ person, account }: { person: PersonSummary
             </li>
           )}
           <li className="mt-1 border-t border-hairline pt-1">
+            {/* Signing out forgets this tab's unsent onboarding requests (S-O.2), for whoever uses it next. */}
             {signOut.kind === "link" ? (
-              <a href={signOut.href} data-shell-sign-out className={ITEM}>
+              <a href={signOut.href} data-shell-sign-out onClick={() => clearOnboardingDrafts()} className={ITEM}>
                 {signOutContent}
               </a>
             ) : (
-              <form method="post" action={signOut.action} data-shell-sign-out>
+              <form method="post" action={signOut.action} data-shell-sign-out onSubmit={() => clearOnboardingDrafts()}>
                 <button type="submit" className={ITEM}>
                   {signOutContent}
                 </button>

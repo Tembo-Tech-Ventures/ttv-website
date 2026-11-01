@@ -1,0 +1,732 @@
+/*
+ * The welcome and request steps (U-O.1). A focused sheet with no space tabs,
+ * resting on a complete Community sheet: the card file the person is about to
+ * enter. Its top edge shows above the welcome sheet; the rest of it is there,
+ * under, the full width of the frame, never a strip.
+ *
+ * Motion is the README's brief: a chosen card lifts as its peach edge draws in
+ * and its check settles, under 180 ms, and nothing else moves. Steps use the
+ * shell's sheet transition (SheetTransition.astro). Reduced motion: a cut.
+ */
+
+[data-space-tone="welcome"] {
+  --space-tone: var(--color-sheet-welcome);
+}
+
+.onboarding {
+  --gutter: 1rem;
+  --peek: 1.125rem;
+  --rear-inset: 2.125rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  min-height: 100dvh;
+  background-color: var(--color-ground);
+}
+
+.onboarding-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem calc(var(--gutter) + 1.75rem);
+}
+
+.onboarding-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  border-radius: 0.5rem;
+  white-space: nowrap;
+}
+
+.onboarding-stack {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  margin-inline: var(--gutter);
+  padding-top: var(--peek);
+}
+
+/*
+ * The Community sheet underneath: complete, as tall as the frame, its tone
+ * pressed back into the ground. Qualified, to outrank .platform-sheet's own
+ * position and tone wherever the bundler orders the two stylesheets.
+ */
+.onboarding-stack > .onboarding-rear {
+  position: absolute;
+  inset: 0 var(--rear-inset);
+  background-color: color-mix(in srgb, var(--color-sheet-community) 78%, var(--color-ground));
+  box-shadow: inset 0 1px 0 rgb(255 248 242 / 0.12);
+}
+
+.onboarding-sheet {
+  flex: 1;
+}
+
+.onboarding-sheet:focus {
+  outline: none;
+}
+
+/* ---- S1: the choices ---- */
+
+.welcome {
+  max-width: 74rem;
+  margin-inline: auto;
+  padding: 3.5rem 3.5rem 4rem;
+}
+
+.onboarding-title {
+  color: var(--color-ink-primary);
+  line-height: 1.02;
+  overflow-wrap: anywhere;
+}
+
+.onboarding-title:focus {
+  outline: none;
+}
+
+.welcome .onboarding-title {
+  font-size: clamp(2.25rem, 1.25rem + 3vw, 3.5rem);
+}
+
+.onboarding-lead {
+  max-width: 62ch;
+  margin-top: 0.75rem;
+  color: var(--color-ink-secondary);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+
+.welcome-choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.125rem;
+  min-width: 0;
+  margin: 2.25rem 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.welcome-error {
+  grid-column: 1 / -1;
+  color: var(--color-danger-ink);
+  font-weight: 600;
+}
+
+.welcome-error:focus {
+  outline: none;
+}
+
+.welcome-choice {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 15.5rem;
+  padding: 1.5rem 1.5rem 1.375rem;
+  border: 1px solid var(--color-hairline);
+  border-radius: 1.375rem;
+  background-color: rgb(255 248 242 / 0.05);
+  cursor: pointer;
+}
+
+/* The real checkbox: out of sight, still focusable and still the thing that is checked. */
+.welcome-choice__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  opacity: 0;
+}
+
+.welcome-choice__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.welcome-choice__seal {
+  display: grid;
+  width: 2.875rem;
+  height: 2.875rem;
+  place-items: center;
+  border: 1px solid var(--color-hairline);
+  border-radius: 999px;
+  background-color: rgb(1 33 31 / 0.55);
+}
+
+.welcome-choice__marker {
+  transform: scale(1.45);
+}
+
+.welcome-choice__title {
+  order: 3;
+  flex-basis: 100%;
+  margin-top: 0.375rem;
+  color: var(--color-ink-primary);
+  font-size: 1.3125rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.welcome-choice__check {
+  position: relative;
+  display: grid;
+  order: 2;
+  width: 1.625rem;
+  height: 1.625rem;
+  margin-inline-start: auto;
+  place-items: center;
+  border: 2px solid rgb(255 248 242 / 0.45);
+  border-radius: 0.5rem;
+  color: var(--color-dark);
+  font-size: 0.9375rem;
+}
+
+/*
+ * The box fills by growing an opaque peach square from its centre, never by
+ * fading: peach part-way over teal reads as brown, not as "on".
+ */
+.welcome-choice__check::before {
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background-color: var(--color-primary);
+  content: "";
+  transform: scale(0);
+}
+
+.welcome-choice__check svg {
+  position: relative;
+  opacity: 0;
+  transform: scale(0.6);
+}
+
+.welcome-choice__body {
+  color: var(--color-ink-secondary);
+  font-size: 0.9688rem;
+  line-height: 1.6;
+}
+
+.welcome-choice__foot {
+  display: flex;
+  margin-top: auto;
+}
+
+@media (hover: hover) {
+  .welcome-choice:hover {
+    border-color: rgb(255 248 242 / 0.24);
+  }
+}
+
+/*
+ * Chosen: drawn up out of the file, peach-edged, ticked. Readable in a still
+ * frame. The card brightens only a little: its chips' words must still clear
+ * 4.5:1 on it (onboarding-contrast.test.ts).
+ */
+.welcome-choice:has(:checked) {
+  border-color: var(--color-primary);
+  background-color: rgb(255 248 242 / 0.065);
+  box-shadow:
+    0 0 0 1px var(--color-primary),
+    0 18px 40px -22px rgb(0 0 0 / 0.7);
+  transform: translateY(-3px);
+}
+
+.welcome-choice:has(:checked) .welcome-choice__seal {
+  border-color: rgb(242 141 104 / 0.4);
+  background-color: var(--color-dark);
+}
+
+.welcome-choice:has(:checked) .welcome-choice__check {
+  border-color: var(--color-primary);
+}
+
+.welcome-choice:has(:checked) .welcome-choice__check::before {
+  transform: none;
+}
+
+.welcome-choice:has(:checked) .welcome-choice__check svg {
+  opacity: 1;
+  transform: none;
+}
+
+/* White, not peach: a chosen card's edge is already peach, and focus must still show on it. */
+.welcome-choice:has(:focus-visible) {
+  outline: 2px solid var(--color-ink-primary);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* The edge leads and the card rises; the check lands a beat later. */
+  .welcome-choice {
+    transition:
+      transform 160ms cubic-bezier(0.2, 0.7, 0.2, 1),
+      border-color 120ms ease-out,
+      box-shadow 160ms ease-out,
+      background-color 160ms ease-out;
+  }
+
+  .welcome-choice__check {
+    transition: border-color 120ms ease-out;
+  }
+
+  .welcome-choice__check::before {
+    transition: transform 100ms cubic-bezier(0.2, 0.7, 0.2, 1) 20ms;
+  }
+
+  .welcome-choice__check svg {
+    transition:
+      transform 100ms cubic-bezier(0.2, 0.7, 0.2, 1) 60ms,
+      opacity 60ms linear 60ms;
+  }
+}
+
+.welcome-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  max-width: 70ch;
+  margin-top: 1.625rem;
+  color: var(--color-ink-secondary);
+  font-size: 0.9063rem;
+  line-height: 1.6;
+}
+
+.welcome-info__icon {
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.125rem;
+  color: var(--color-ring);
+}
+
+.welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 1.125rem;
+  margin-top: 1.625rem;
+}
+
+.welcome-actions__more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.125rem;
+}
+
+.welcome-actions__count {
+  display: none;
+  color: var(--color-ink-muted);
+  font-size: 0.875rem;
+}
+
+.welcome-actions__explore {
+  padding-inline: 0.25rem;
+  color: var(--color-ink-primary);
+  text-decoration: underline;
+  text-decoration-color: rgb(255 248 242 / 0.4);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.3em;
+}
+
+.welcome-actions__explore:hover {
+  text-decoration-color: currentColor;
+}
+
+.welcome-actions__later {
+  color: var(--color-ink-muted);
+  font-size: 0.875rem;
+}
+
+/* ---- S2: the request details ---- */
+
+.request {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 3.5rem;
+  align-items: start;
+  max-width: 74rem;
+  margin-inline: auto;
+  padding: 3rem 3.5rem 4rem;
+}
+
+.request .onboarding-title {
+  font-size: clamp(2.125rem, 1.25rem + 2.2vw, 2.875rem);
+}
+
+.request__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  margin-bottom: 0.625rem;
+  border-radius: 0.5rem;
+  color: var(--color-ink-secondary);
+  font-weight: 600;
+}
+
+.request__back:hover {
+  color: var(--color-ink-primary);
+}
+
+.request-scope {
+  margin-top: 1.75rem;
+  padding: 1.25rem 1.375rem;
+  border: 1px solid var(--color-hairline);
+  border-radius: 1.25rem;
+  background-color: rgb(1 33 31 / 0.35);
+}
+
+.request-scope__title {
+  margin-bottom: 0.625rem;
+  color: var(--color-ink-primary);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.request-scope__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.request-scope__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding-block: 0.4375rem;
+  color: var(--color-ink-secondary);
+  font-size: 0.9063rem;
+  line-height: 1.55;
+}
+
+.request-scope__icon {
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-top: 0.125rem;
+}
+
+.request-scope__item[data-opens] .request-scope__icon {
+  color: var(--color-ring);
+}
+
+.request-scope__item[data-excludes] .request-scope__icon {
+  color: var(--color-peach-ink);
+}
+
+.request-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-width: 0;
+  padding: 1.75rem 1.875rem 1.625rem;
+  border: 1px solid var(--color-hairline);
+  border-radius: 1.5rem;
+  background-color: rgb(255 248 242 / 0.05);
+}
+
+.request-summary {
+  padding: 1rem 1.25rem;
+  border: 1px solid rgb(255 179 166 / 0.5);
+  border-radius: 1rem;
+  background-color: rgb(255 179 166 / 0.08);
+  color: var(--color-ink-primary);
+}
+
+.request-summary:focus {
+  outline: 2px solid var(--color-danger-ink);
+  outline-offset: 2px;
+}
+
+.request-summary__title {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.request-summary__list {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.5rem 0 0;
+  padding-inline-start: 1.25rem;
+  list-style: disc;
+}
+
+.request-summary__list a {
+  color: var(--color-danger-ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.request-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.request-section + .request-section {
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.request-section__title {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  color: var(--color-ink-primary);
+  font-family: var(--font-body);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.request-field__label {
+  display: block;
+  color: var(--color-ink-primary);
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.request-field__optional {
+  color: var(--color-ink-muted);
+  font-weight: 500;
+}
+
+.request-field__hint {
+  margin-top: 0.125rem;
+  color: var(--color-ink-muted);
+  font-size: 0.8438rem;
+}
+
+.request-field__error {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.25rem;
+  color: var(--color-danger-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.request-input {
+  display: block;
+  width: 100%;
+  min-height: 2.875rem;
+  margin-top: 0.5rem;
+  padding: 0.6875rem 0.875rem;
+  border: 1px solid rgb(255 248 242 / 0.22);
+  border-radius: 0.75rem;
+  background-color: rgb(1 33 31 / 0.5);
+  color: var(--color-ink-primary);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.request-input::placeholder {
+  color: var(--color-ink-muted);
+}
+
+.request-input:focus-visible {
+  outline: 2px solid var(--color-peach-ink);
+  outline-offset: 2px;
+}
+
+.request-input--area {
+  min-height: 7rem;
+  resize: vertical;
+}
+
+[data-invalid] > .request-input {
+  border-color: var(--color-danger-ink);
+}
+
+.request-field__counter {
+  margin-top: 0.25rem;
+  color: var(--color-ink-muted);
+  font-size: 0.7813rem;
+  text-align: right;
+}
+
+.request-ack {
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--color-hairline);
+  border-radius: 0.875rem;
+  background-color: rgb(1 33 31 / 0.4);
+}
+
+.request-ack[data-invalid] {
+  border-color: var(--color-danger-ink);
+}
+
+.request-ack__label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  color: var(--color-ink-secondary);
+  font-size: 0.9063rem;
+  line-height: 1.55;
+  cursor: pointer;
+}
+
+.request-ack__input {
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.125rem;
+  accent-color: var(--color-primary);
+}
+
+.request-ack__input:focus-visible {
+  outline: 2px solid var(--color-peach-ink);
+  outline-offset: 2px;
+}
+
+.request-send {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+
+.request-send__privacy {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-ink-muted);
+  font-size: 0.8438rem;
+}
+
+/* ---- Narrower: cards stack, the request step is one column ---- */
+
+@media (max-width: 63.999rem) {
+  .request {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.375rem;
+    padding: 1.375rem 1rem 2.5rem;
+  }
+
+  .request-scope {
+    margin-top: 1.125rem;
+    padding: 1rem;
+  }
+
+  .request-form {
+    padding: 1.25rem 1rem;
+    border-radius: 1.25rem;
+  }
+}
+
+@media (max-width: 59.999rem) {
+  .welcome {
+    padding: 1.75rem 1rem 2rem;
+  }
+
+  .welcome-choices {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+    margin-top: 1.375rem;
+  }
+
+  .welcome-choice {
+    gap: 0.625rem;
+    min-height: 0;
+    padding: 1.125rem 1rem;
+    border-radius: 1.125rem;
+  }
+
+  /* Stacked cards stay put when chosen: a lift would nudge them into each other. */
+  .welcome-choice:has(:checked) {
+    transform: none;
+  }
+
+  .welcome-choice__top {
+    flex-wrap: nowrap;
+  }
+
+  .welcome-choice__seal {
+    flex-shrink: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .welcome-choice__title {
+    flex: 1;
+    flex-basis: auto;
+    order: 2;
+    margin: 0;
+    font-size: 1.125rem;
+  }
+
+  .welcome-choice__check {
+    flex-shrink: 0;
+    order: 3;
+  }
+}
+
+/*
+ * Phones: no space tabs to line up with, so the sheet runs edge to edge, and
+ * the actions ride in a bar at the bottom of the screen while the cards scroll.
+ */
+@media (max-width: 47.999rem) {
+  .onboarding {
+    --gutter: 0px;
+    --peek: 0.625rem;
+    --rear-inset: 1.125rem;
+  }
+
+  .onboarding-bar {
+    padding: 0.625rem 0.875rem;
+  }
+
+  .onboarding-tagline {
+    display: none;
+  }
+
+  .onboarding-lead {
+    font-size: 1rem;
+  }
+
+  .welcome-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    margin: 1.5rem -1rem -2rem;
+    padding: 0.75rem 1rem calc(1rem + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--color-hairline);
+    background-color: color-mix(in srgb, var(--color-sheet-welcome) 88%, var(--color-ground));
+    box-shadow: 0 -16px 30px -18px rgb(0 0 0 / 0.6);
+  }
+
+  .welcome-actions__continue {
+    min-height: 3.125rem;
+  }
+
+  .welcome-actions__more {
+    flex-wrap: nowrap;
+    justify-content: space-between;
+  }
+
+  .welcome-actions__count {
+    display: block;
+  }
+
+  .welcome-actions__explore {
+    margin-inline-start: auto;
+  }
+
+  .welcome-actions__later {
+    display: none;
+  }
+}

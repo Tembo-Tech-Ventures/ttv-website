@@ -1,0 +1,94 @@
+---
+/**
+ * The document around the onboarding steps: the TEMBO mark and the account
+ * menu, with no space tabs (a person who has not chosen yet has no spaces to
+ * switch between), and the welcome sheet resting on the Community sheet.
+ *
+ * Like SpacesLayout it renders SheetTransition, so a step to the next step or
+ * into a space is the same card-file gesture as switching spaces. Only the
+ * person's summary reaches the island; never the session or the request.
+ */
+// oxlint-disable-next-line import/no-unassigned-import -- a document's global stylesheet, as in SpacesLayout
+import "@/styles/global.css";
+// oxlint-disable-next-line import/no-unassigned-import -- the account menu's disclosure styles
+import "@/components/platform/shell/spaces-shell.css";
+// oxlint-disable-next-line import/no-unassigned-import -- the onboarding frame and steps
+import "./onboarding.css";
+import type { PersonSummary } from "@/lib/platform/contracts";
+import ClientErrorBuffer from "@/components/feedback/ClientErrorBuffer.astro";
+import FeedbackWidget from "@/components/feedback/FeedbackWidget";
+import AccountMenu, { type ShellAccount } from "@/components/platform/shell/AccountMenu";
+import SheetTransition from "@/components/platform/shell/SheetTransition.astro";
+import { FOCUS_RING } from "@/components/platform/ui/Button";
+import { pageTitle } from "@/lib/seo";
+
+interface Props {
+  title: string;
+  /** Prepended to the tab title only: "Error: " after a rejected form. */
+  titlePrefix?: string;
+  person: PersonSummary;
+  account: ShellAccount;
+  /**
+   * Paths outside the spaces shell where the sheet transition may finish, for
+   * the DEV harness, whose landing is another harness. Real steps land in a space.
+   */
+  sheetPaths?: readonly string[];
+}
+
+const { title, titlePrefix = "", person, account, sheetPaths = [] } = Astro.props;
+const signedIn = Boolean(Astro.locals.user);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <title>{pageTitle(titlePrefix + title)}</title>
+    {signedIn && <ClientErrorBuffer />}
+    <SheetTransition />
+  </head>
+  <body class="bg-ground" data-sheet-paths={JSON.stringify(sheetPaths)}>
+    <div class="onboarding">
+      <header class="onboarding-bar">
+        {/* Named by the words it shows (WCAG 2.5.3, label in name), with "home" for screen readers. */}
+        <a href="/" class:list={["onboarding-brand", FOCUS_RING]}>
+          <span class="font-heading tracking-subhead text-[1.0625rem] leading-none text-ink-primary">TEMBO</span>
+          <span class="onboarding-tagline font-body text-[0.625rem] font-semibold tracking-[0.32em] text-ink-muted uppercase">
+            Tech · Ventures
+          </span>
+          <span class="sr-only">home</span>
+        </a>
+        <AccountMenu client:load person={person} account={account} />
+      </header>
+      <div class="onboarding-stack">
+        <div class="onboarding-rear platform-sheet" aria-hidden="true"></div>
+        <main class="onboarding-sheet platform-sheet" data-space-tone="welcome">
+          <slot />
+        </main>
+      </div>
+    </div>
+    {account.feedback && <FeedbackWidget client:idle showLauncher={false} />}
+  </body>
+</html>
+
+<script>
+  import { opensInShell } from "@/components/platform/shell/space-routes";
+
+  /*
+   * Only a page that names its sheet can finish the transition: the next
+   * step, a space, or (in DEV) the harness's landing. Leaving for anything
+   * else skips it at once, instead of the browser aborting it with an error.
+   */
+  const extra: unknown = JSON.parse(document.body.dataset.sheetPaths ?? "[]");
+  const allowed = new Set(Array.isArray(extra) ? extra.filter((path): path is string => typeof path === "string") : []);
+  window.addEventListener("pageswap", (event) => {
+    const to = event.activation?.entry.url;
+    const path = to ? new URL(to).pathname : null;
+    if (event.viewTransition && !(path && (opensInShell(path) || allowed.has(path) || path === window.location.pathname))) {
+      event.viewTransition.skipTransition();
+    }
+  });
+</script>
