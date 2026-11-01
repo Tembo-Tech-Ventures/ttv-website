@@ -1,5 +1,7 @@
 import {
+  type AnySQLiteColumn,
   check,
+  foreignKey,
   index,
   integer,
   primaryKey,
@@ -1291,3 +1293,169 @@ export const stagingQaResource = sqliteTable("stagingQaResource", {
   kind: text("kind", {enum:["journey","confirmation"]}).notNull(),
   userId: text("userId").notNull().references(() => user.id),
 }, table => [index("stagingQaResource_run_idx").on(table.runId)]);
+
+// ─── Channels (src/lib/channels/README.md) ─────────────────
+// Timestamps are epoch milliseconds, like attention. Cohort and community
+// membership is derived at read time; channel_member holds DIRECT members and
+// explicit extras only. Access rules live in capabilitiesFor, never here.
+
+const epochMs = (name: string) => integer(name).notNull().default(sql`(unixepoch() * 1000)`);
+const jsonArray = (name: string) => text(name).notNull().default("[]");
+const isJsonArray = (column: AnySQLiteColumn) => sql`json_valid(${column}) AND json_type(${column}) = 'array'`;
+
+export const channel = sqliteTable("channel", {
+  id: cuid("id"),
+  kind: text("kind", { enum: ["COHORT", "COMMUNITY", "DIRECT"] }).notNull(),
+  programId: text("programId").references(() => program.id, { onDelete: "cascade" }),
+  slug: text("slug").notNull(),
+  name: text("name").notNull(),
+  topic: text("topic").notNull().default(""),
+  postingPolicy: text("postingPolicy", { enum: ["ALL", "STAFF"] }).notNull().default("ALL"),
+  /** Display order within a space (cohort channels within their cohort); ties sort by name. */
+  position: integer("position").notNull().default(0),
+  /** Stable identity of a channel the platform created, so seeding never duplicates a renamed channel. */
+  seedKey: text("seedKey"),
+  archivedAt: integer("archivedAt"),
+  createdAt: epochMs("createdAt"),
+  updatedAt: epochMs("updatedAt"),
+}, (table) => [
+  uniqueIndex("channel_slug_idx").on(table.slug).where(sql`${table.kind} <> 'DIRECT'`),
+  uniqueIndex("channel_seedKey_idx").on(table.seedKey),
+  index("channel_kind_idx").on(table.kind, table.programId),
+  index("channel_programId_idx").on(table.programId),
+  check("channel_kind_check", sql`${table.kind} IN ('COHORT','COMMUNITY','DIRECT')`),
+  check("channel_program_check", sql`(${table.kind} = 'COHORT') = (${table.programId} IS NOT NULL)`),
+  check("channel_postingPolicy_check", sql`${table.postingPolicy} IN ('ALL','STAFF')`),
+  check("channel_slug_check", sql`length(${table.slug}) BETWEEN 1 AND 80 AND ${table.slug} GLOB '[a-z0-9]*' AND ${table.slug} NOT GLOB '*[^a-z0-9-]*' AND ${table.slug} NOT GLOB '*-'`),
+  check("channel_name_check", sql`length(trim(${table.name})) > 0 AND length(${table.name}) <= 80`),
+  check("channel_topic_check", sql`length(${table.topic}) <= 280`),
+  check("channel_position_check", sql`${table.position} >= 0`),
+  check("channel_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt} AND (${table.archivedAt} IS NULL OR ${table.archivedAt} >= 0)`),
+]);
+
+export const channelMember = sqliteTable("channel_member", {
+  channelId: text("channelId").notNull().references(() => channel.id, { onDelete: "cascade" }),
+  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  addedBy: text("addedBy").references(() => user.id, { onDelete: "set null" }),
+  createdAt: epochMs("createdAt"),
+}, (table) => [
+  primaryKey({ columns: [table.channelId, table.userId] }),
+  index("channel_member_userId_idx").on(table.userId, table.channelId),
+  check("channel_member_time_check", sql`${table.createdAt} >= 0`),
+]);
+
+/**
+ * seq and changeSeq come from one per-channel counter (MAX(changeSeq) + 1,
+ * assigned inside the writing statement, so D1's serialised writes keep it
+ * strictly increasing): seq is a message's fixed position, changeSeq its
+ * latest change. Paging reads seq; `since` polling reads changeSeq, so edits,
+ * deletions and moderation reach clients that already hold the message.
+ */
+export const channelMessage = sqliteTable("channel_message", {
+  id: cuid("id"),
+  channelId: text("channelId").notNull().references(() => channel.id, { onDelete: "cascade" }),
+  // Threads are one level deep; the composite key below keeps a reply in its parent's channel.
+  parentId: text("parentId"),
+  seq: integer("seq").notNull(),
+  changeSeq: integer("changeSeq").notNull(),
+  authorKind: text("authorKind", { enum: ["USER", "TEMBO"] }).notNull().default("USER"),
+  // Null for Tembo, and for a person whose account was deleted ("Deleted user").
+  authorId: text("authorId").references(() => user.id, { onDelete: "set null" }),
+  clientNonce: text("clientNonce"),
+  body: text("body").notNull(),
+  embeds: jsonArray("embeds"),
+  citations: jsonArray("citations"),
+  moderationState: text("moderationState", { enum: ["VISIBLE", "FLAGGED", "HIDDEN"] }).notNull().default("VISIBLE"),
+  moderationReasons: jsonArray("moderationReasons"),
+  hiddenBy: text("hiddenBy").references(() => user.id, { onDelete: "set null" }),
+  hiddenAt: integer("hiddenAt"),
+  editedAt: integer("editedAt"),
+  deletedAt: integer("deletedAt"),
+  createdAt: epochMs("createdAt"),
+}, (table) => [
+  foreignKey({ columns: [table.parentId, table.channelId], foreignColumns: [table.id, table.channelId] }).onDelete("cascade"),
+  uniqueIndex("channel_message_channel_id_idx").on(table.channelId, table.id),
+  uniqueIndex("channel_message_seq_idx").on(table.channelId, table.seq),
+  uniqueIndex("channel_message_changeSeq_idx").on(table.channelId, table.changeSeq),
+  index("channel_message_thread_idx").on(table.channelId, table.parentId, table.seq),
+  uniqueIndex("channel_message_nonce_idx").on(table.authorId, table.clientNonce),
+  check("channel_message_seq_check", sql`${table.seq} >= 1 AND ${table.changeSeq} >= ${table.seq}`),
+  check("channel_message_authorKind_check", sql`${table.authorKind} IN ('USER','TEMBO')`),
+  // Tembo has no account, and only ever answers inside the thread that asked.
+  check("channel_message_tembo_check", sql`${table.authorKind} = 'USER' OR (${table.authorId} IS NULL AND ${table.parentId} IS NOT NULL)`),
+  check("channel_message_nonce_check", sql`${table.clientNonce} IS NULL OR (length(${table.clientNonce}) BETWEEN 1 AND 128 AND ${table.clientNonce} NOT GLOB '*[^A-Za-z0-9_-]*')`),
+  check("channel_message_body_check", sql`length(${table.body}) <= 10000 AND (${table.deletedAt} IS NOT NULL OR length(trim(${table.body}, ' ' || char(9, 10, 13))) > 0)`),
+  check("channel_message_embeds_check", isJsonArray(table.embeds)),
+  check("channel_message_citations_check", isJsonArray(table.citations)),
+  check("channel_message_moderation_check", sql`${table.moderationState} IN ('VISIBLE','FLAGGED','HIDDEN')`),
+  // Flagging or hiding always says why; only hidden messages carry who and when.
+  check("channel_message_reasons_check", sql`${isJsonArray(table.moderationReasons)} AND (${table.moderationState} = 'VISIBLE' OR json_array_length(${table.moderationReasons}) > 0)`),
+  check("channel_message_hidden_check", sql`(${table.moderationState} = 'HIDDEN') = (${table.hiddenAt} IS NOT NULL) AND (${table.hiddenBy} IS NULL OR ${table.moderationState} = 'HIDDEN')`),
+  check("channel_message_time_check", sql`${table.createdAt} >= 0 AND coalesce(${table.editedAt}, 0) >= 0 AND coalesce(${table.deletedAt}, 0) >= 0 AND coalesce(${table.hiddenAt}, 0) >= 0`),
+]);
+
+/** One read marker per person and channel; unread counts compare seq with the marked message's. */
+export const channelRead = sqliteTable("channel_read", {
+  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  channelId: text("channelId").notNull().references(() => channel.id, { onDelete: "cascade" }),
+  lastReadMessageId: text("lastReadMessageId").notNull(),
+  readAt: integer("readAt").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.channelId] }),
+  // The marked message must belong to the channel it marks.
+  foreignKey({ columns: [table.channelId, table.lastReadMessageId], foreignColumns: [channelMessage.channelId, channelMessage.id] }).onDelete("cascade"),
+  index("channel_read_channelId_idx").on(table.channelId, table.lastReadMessageId),
+  check("channel_read_time_check", sql`${table.readAt} >= 0`),
+]);
+
+/** Desired state, not a toggle: one row per person, message and reaction from the fixed set. */
+export const messageReaction = sqliteTable("message_reaction", {
+  messageId: text("messageId").notNull().references(() => channelMessage.id, { onDelete: "cascade" }),
+  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  kind: text("kind", { enum: ["useful", "learned", "thanks", "agree", "congrats"] }).notNull(),
+  createdAt: epochMs("createdAt"),
+}, (table) => [
+  primaryKey({ columns: [table.messageId, table.userId, table.kind] }),
+  index("message_reaction_userId_idx").on(table.userId),
+  check("message_reaction_kind_check", sql`${table.kind} IN ('useful','learned','thanks','agree','congrats')`),
+  check("message_reaction_time_check", sql`${table.createdAt} >= 0`),
+]);
+
+/** A member's report. One per person and message, so repeated reports never inflate the count. */
+export const messageReport = sqliteTable("message_report", {
+  id: cuid("id"),
+  messageId: text("messageId").notNull().references(() => channelMessage.id, { onDelete: "cascade" }),
+  reporterId: text("reporterId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull(),
+  createdAt: epochMs("createdAt"),
+}, (table) => [
+  uniqueIndex("message_report_message_reporter_idx").on(table.messageId, table.reporterId),
+  index("message_report_reporter_idx").on(table.reporterId, table.createdAt),
+  check("message_report_reason_check", sql`length(trim(${table.reason})) > 0 AND length(${table.reason}) <= 2000`),
+  check("message_report_time_check", sql`${table.createdAt} >= 0`),
+]);
+
+/**
+ * Append-only audit trail: who flagged, hid, restored or kept what, and why.
+ * Automated sources have no actor; a deleted moderator's events keep their source.
+ */
+export const moderationEvent = sqliteTable("moderation_event", {
+  id: cuid("id"),
+  messageId: text("messageId").notNull().references(() => channelMessage.id, { onDelete: "cascade" }),
+  action: text("action", { enum: ["FLAG", "HIDE", "RESTORE", "KEEP"] }).notNull(),
+  source: text("source", { enum: ["DETECTOR", "CLEF", "REPORT", "MENTOR", "ADMIN"] }).notNull(),
+  actorId: text("actorId").references(() => user.id, { onDelete: "set null" }),
+  fromState: text("fromState", { enum: ["VISIBLE", "FLAGGED", "HIDDEN"] }).notNull(),
+  toState: text("toState", { enum: ["VISIBLE", "FLAGGED", "HIDDEN"] }).notNull(),
+  reasons: text("reasons").notNull(),
+  createdAt: epochMs("createdAt"),
+}, (table) => [
+  index("moderation_event_message_idx").on(table.messageId, table.createdAt),
+  index("moderation_event_actor_idx").on(table.actorId, table.createdAt),
+  check("moderation_event_action_check", sql`${table.action} IN ('FLAG','HIDE','RESTORE','KEEP')`),
+  check("moderation_event_source_check", sql`${table.source} IN ('DETECTOR','CLEF','REPORT','MENTOR','ADMIN')`),
+  check("moderation_event_state_check", sql`${table.fromState} IN ('VISIBLE','FLAGGED','HIDDEN') AND ${table.toState} IN ('VISIBLE','FLAGGED','HIDDEN')`),
+  check("moderation_event_actor_check", sql`${table.source} NOT IN ('DETECTOR','CLEF') OR ${table.actorId} IS NULL`),
+  check("moderation_event_reasons_check", sql`${isJsonArray(table.reasons)} AND json_array_length(${table.reasons}) > 0`),
+  check("moderation_event_time_check", sql`${table.createdAt} >= 0`),
+]);

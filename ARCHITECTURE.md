@@ -174,6 +174,11 @@ SQLite via Cloudflare D1, managed with Drizzle ORM. Schema at `web/src/lib/db/sc
 - `feedback_attachment` — screenshots in R2 under `feedback/<feedbackId>/`, type sniffed from the bytes
 - `feedback_theme` — one problem or wish several notes share (publishable title/summary, status COLLECTING → PROPOSED → PLANNED → IN_PROGRESS → SHIPPED/DECLINED, or DORMANT; issue and PR links); `feedback.themeId` and `feedback.sensitive` link and fence notes
 
+**Channels** (flag `channels`, OFF; see `web/src/lib/channels/README.md`)
+- `channel` — COHORT (one program), COMMUNITY or DIRECT; slug, topic, postingPolicy ALL/STAFF, archivedAt. Default community channels and each program's `cohort-NN`, `cNN-help` and `cNN-announcements` are seeded by migration, and a trigger creates a new program's channels
+- `channel_message` — one-level threads, authorKind USER/TEMBO, per-channel `seq`/`changeSeq` for paging and polling, clientNonce unique per author, moderation VISIBLE/FLAGGED/HIDDEN with reasons
+- `channel_member`, `channel_read`, `message_reaction`, `message_report`, `moderation_event` — explicit members, read markers, reactions, member reports and the moderation audit trail
+
 ### Conventions
 
 - All tables use CUID2 for primary keys (via `cuid()` helper)
