@@ -101,6 +101,35 @@ describe("useScrollAnchoring", () => {
     expect(scroller().scrollTop).toBe(700);
   });
 
+  it("opened at an item just above the end, holds there until the reader scrolls", async () => {
+    const onAnchor = vi.fn();
+    // m8's top is 50px from the end: inside the 100px threshold, but not the end.
+    const items = [...range(1, 9), { id: "m10", height: 150 }];
+    await render({ items, initialItemId: "m8", onAnchor });
+    expect(scroller().scrollTop).toBe(700);
+    expect(anchoring.atBottom).toBe(false);
+    expect(onAnchor).toHaveBeenLastCalledWith("m8");
+    // Someone posts: the opening item stays in view, nothing follows to the end.
+    await render({ items: [...items, { id: "m11" }], initialItemId: "m8", onAnchor });
+    expect(firstVisible()).toEqual({ id: "m8", offset: 0 });
+    // A scroll the hook made itself (its event arrives late) changes nothing.
+    await act(async () => scroller().dispatchEvent(new Event("scroll")));
+    expect(anchoring.atBottom).toBe(false);
+    // The reader's own scroll ends the hold: near the end is the bottom again.
+    await act(async () => userScroll(scroller(), 790));
+    expect(anchoring.atBottom).toBe(true);
+    expect(onAnchor).toHaveBeenLastCalledWith(null);
+  });
+
+  it("scrollToBottom ends the hold at the opening item", async () => {
+    const items = [...range(1, 9), { id: "m10", height: 150 }];
+    await render({ items, initialItemId: "m8" });
+    await act(async () => anchoring.scrollToBottom());
+    expect(anchoring.atBottom).toBe(true);
+    await render({ items: [...items, { id: "m11" }], initialItemId: "m8" });
+    expect(scroller().scrollTop).toBe(850);
+  });
+
   it("follows the reader's own new message even when they had scrolled up", async () => {
     const shouldFollow = (appended: readonly Item[]) => appended.some(item => item.mine);
     await render({ items: range(1, 10), shouldFollow });

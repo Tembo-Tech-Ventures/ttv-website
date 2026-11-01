@@ -32,7 +32,10 @@ const { atBottom, scrollToBottom, scrollToItem } = useScrollAnchoring(scroller, 
   keep the reader at the bottom. Away from the bottom, nothing moves the reader,
   except appended items `shouldFollow` accepts (their own message).
 - **First render with items and a box** opens at `initialItemId` (its top), or at
-  the newest end when it is null or not rendered.
+  the newest end when it is null or not rendered. Opened at an item, only the very
+  end counts as the bottom until the reader scrolls or `scrollToBottom()` runs, so a
+  "New" divider that opens just above the end is neither followed away nor read at
+  once.
 - **A hidden list** (no box: `display: none`, a phone's thread replacing the list)
   is never measured. Its position, `atBottom` and anchor stay as they were, so a
   hidden list never reads as "at the bottom" (and never marks messages read), and

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import {
-  appendedSince, captureScroll, DEFAULT_BOTTOM_THRESHOLD_PX, DEFAULT_ITEM_ATTRIBUTE, findItem, isMeasurable, restoreScroll,
+  appendedSince, captureScroll, DEFAULT_BOTTOM_THRESHOLD_PX, DEFAULT_ITEM_ATTRIBUTE, END_PX, findItem, isMeasurable, restoreScroll,
   scrollToBottom as jumpToBottom, scrollToItem as revealItem, type ScrollSnapshot,
 } from "../scrollAnchor";
 
@@ -60,6 +60,10 @@ export function useScrollAnchoring<T extends { id: string }>(
   const reported = useRef<string | null | undefined>(undefined);
   const observer = useRef<ResizeObserver | null>(null);
   const attached = useRef<HTMLElement | null>(null);
+  // Opened at an item (a "New" divider or a link): only the very end counts as the bottom until the
+  // reader scrolls, so an item that opens just above the end is neither followed away nor read at once.
+  const heldAtItem = useRef(false);
+  const ownScrollTop = useRef<number | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   useClientLayoutEffect(() => { latest.current = options; });
 
@@ -72,8 +76,10 @@ export function useScrollAnchoring<T extends { id: string }>(
   const record = useCallback(() => {
     const element = ref.current;
     if (!element || !isMeasurable(element)) return;
-    const { bottomThresholdPx = DEFAULT_BOTTOM_THRESHOLD_PX } = latest.current;
-    const next = captureScroll(element, { attribute: attribute(), bottomThresholdPx });
+    const threshold = heldAtItem.current ? END_PX : latest.current.bottomThresholdPx ?? DEFAULT_BOTTOM_THRESHOLD_PX;
+    const next = captureScroll(element, { attribute: attribute(), bottomThresholdPx: threshold });
+    // Every path but a scroll event moves the list itself: remember where, to tell the reader's scrolls apart.
+    ownScrollTop.current = element.scrollTop;
     snapshot.current = next;
     setAtBottom(next.atBottom);
     const anchor = next.atBottom ? null : next.anchors[0]?.id ?? null;
@@ -88,7 +94,8 @@ export function useScrollAnchoring<T extends { id: string }>(
     if (positioned.current || latest.current.items.length === 0 || !isMeasurable(element)) return false;
     positioned.current = true;
     const { initialItemId } = latest.current;
-    if (!initialItemId || !revealItem(element, initialItemId, { attribute: attribute() })) jumpToBottom(element);
+    heldAtItem.current = initialItemId ? revealItem(element, initialItemId, { attribute: attribute() }) : false;
+    if (!heldAtItem.current) jumpToBottom(element);
     return true;
   }, []);
 
@@ -109,12 +116,19 @@ export function useScrollAnchoring<T extends { id: string }>(
     for (const child of Array.from(element.children)) current.observe(child);
   }, []);
 
+  /** The reader's own scroll (not one this hook made) ends holding at the opening item. */
+  const onScroll = useCallback(() => {
+    const element = ref.current;
+    if (element && heldAtItem.current && element.scrollTop !== ownScrollTop.current) heldAtItem.current = false;
+    record();
+  }, [ref, record]);
+
   const detach = useCallback(() => {
-    attached.current?.removeEventListener("scroll", record);
+    attached.current?.removeEventListener("scroll", onScroll);
     observer.current?.disconnect();
     observer.current = null;
     attached.current = null;
-  }, [record]);
+  }, [onScroll]);
 
   // Follow the scroll element itself: a different node (the list re-mounted) is a new surface.
   useClientLayoutEffect(() => {
@@ -122,11 +136,12 @@ export function useScrollAnchoring<T extends { id: string }>(
     if (element === attached.current) return;
     detach();
     positioned.current = false;
+    heldAtItem.current = false;
     snapshot.current = null;
     if (!element) return;
     attached.current = element;
     element.style.overflowAnchor = "none";
-    element.addEventListener("scroll", record, { passive: true });
+    element.addEventListener("scroll", onScroll, { passive: true });
     if (typeof ResizeObserver !== "undefined") observer.current = new ResizeObserver(settle);
   });
   useEffect(() => detach, [detach]);
@@ -150,6 +165,7 @@ export function useScrollAnchoring<T extends { id: string }>(
   const scrollToBottom = useCallback(() => {
     const element = ref.current;
     if (!element || !isMeasurable(element)) return;
+    heldAtItem.current = false;
     jumpToBottom(element);
     // At the bottom now, so the next render (for example a jump to latest's new page) is followed too.
     record();

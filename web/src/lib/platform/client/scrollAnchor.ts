@@ -15,6 +15,8 @@ export const DEFAULT_BOTTOM_THRESHOLD_PX = 100;
 const ANCHOR_CANDIDATES = 3;
 /** A sliver this thin (sub-pixel rounding, a hairline) is not where the reader is. */
 const VISIBLE_SLIVER_PX = 1;
+/** Within this of the end is the very end, allowing for sub-pixel rounding. */
+export const END_PX = VISIBLE_SLIVER_PX;
 
 export interface ScrollAnchorPoint {
   id: string;
