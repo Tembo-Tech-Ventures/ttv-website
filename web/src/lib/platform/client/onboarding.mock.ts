@@ -27,17 +27,26 @@ const order = (intents: Iterable<Intent>) => {
 
 /**
  * A stateful, in-memory onboarding API over the shared synthetic personas, following SPEC §5: EXPLORING
- * stands alone, one PENDING request per role, at most five requests a day, a request records its intent
- * and a withdraw removes it (leaving EXPLORING when that empties a completed onboarding), only decided
+ * stands alone and an empty save is stored as EXPLORING; one PENDING request per role, at most five a day;
+ * the first request snapshots the inferred intents (nothing saved yet) and records its own, and a
+ * withdraw removes it (leaving EXPLORING when that empties a completed onboarding); inferred intents
+ * show only while nothing is saved; only decided
  * requests can be dismissed, and an unknown id is 404 `not_found`. It mirrors B-O.2's service; that
  * service stays the authority. Nothing here grants anything outside the mock.
  * `options` passes latency and failure injection (409, 429, offline) through to the mock transport.
  */
-export function createOnboardingMock(persona: OnboardingPersona = "wairimu", options: MockOptions = {}): OnboardingMock {
-  let state = OnboardingState.parse(structuredClone(onboardingByPersona[persona]));
+export function createOnboardingMock(seed: OnboardingPersona | OnboardingState = "wairimu", options: MockOptions = {}): OnboardingMock {
+  // A persona key, or any valid state for harness scenarios the fixtures don't cover.
+  let state = OnboardingState.parse(structuredClone(typeof seed === "string" ? onboardingByPersona[seed] : seed));
+  // The persona's footprint (application, profile): what the server infers MEMBER from.
+  const footprint = state.inferred.filter(intent => intent === "MEMBER");
   let sequence = 0;
   let created = 0;
-  const reply = (): MockReply => ({ data: OnboardingState.parse(state) });
+  /** Inferred intents follow the saved ones and the roles held, as getOnboardingState derives them. */
+  const current = () => OnboardingState.parse({
+    ...state, inferred: state.intents.length > 0 ? [] : order([...footprint, ...state.roles]),
+  });
+  const reply = (): MockReply => ({ data: current() });
   const replace = (request: AccessRequestSummary, intents = state.intents) => {
     state = { ...state, intents, requests: [...state.requests.filter(r => r.role !== request.role), request] };
   };
@@ -47,7 +56,8 @@ export function createOnboardingMock(persona: OnboardingPersona = "wairimu", opt
     { ...ROUTES.getOnboarding, reply },
     { ...ROUTES.updateOnboarding, reply: async ({ request }) => {
       const body = UpdateOnboarding.parse(await request.json());
-      state = { ...state, stage: "DONE", intents: "intents" in body ? order(body.intents) : state.intents };
+      const saved = "intents" in body ? (body.intents.length > 0 ? order(body.intents) : ["EXPLORING" as const]) : state.intents;
+      state = { ...state, stage: "DONE", intents: saved };
       return reply();
     } },
     { ...ROUTES.createAccessRequest, reply: async ({ request }) => {
@@ -64,7 +74,7 @@ export function createOnboardingMock(persona: OnboardingPersona = "wairimu", opt
         organisation: body.role === "INSTITUTION" ? body.organisation : null,
         organisationRole: body.role === "INSTITUTION" ? body.organisationRole : null,
         link: body.link, decisionMessage: null, createdAt: now, updatedAt: now, decidedAt: null, seenAt: null,
-      }, order([...state.intents.filter(intent => intent !== "EXPLORING"), body.role]));
+      }, order([...(state.intents.length > 0 ? state.intents : current().inferred).filter(intent => intent !== "EXPLORING"), body.role]));
       return reply();
     } },
     { ...ROUTES.withdrawAccessRequest, reply: ({ params }) => {
@@ -89,7 +99,7 @@ export function createOnboardingMock(persona: OnboardingPersona = "wairimu", opt
 
   return {
     api,
-    state: () => OnboardingState.parse(state),
+    state: current,
     decide(role, decision, message) {
       const request = state.requests.find(r => r.role === role && r.status === "PENDING");
       if (!request) throw new Error(`No pending ${role} request to decide`);

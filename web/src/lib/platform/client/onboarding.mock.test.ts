@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OnboardingState } from "../contracts";
+import { OnboardingState, ROUTES } from "../contracts";
 import { onboardingByPersona } from "../fixtures";
 import { accessStatus, createOnboardingStore } from "./onboarding";
 import { createOnboardingMock, MOCK_DAILY_REQUEST_LIMIT } from "./onboarding.mock";
@@ -95,6 +95,35 @@ describe("onboarding mock mode", () => {
     expect(await racing.withdrawRequest("MENTOR")).toBe(false); // Approved first: the approval is shown, not a withdrawal.
     expect(racing.getState().failure).toMatchObject({ kind: "conflict", error: { status: 409 } });
     expect(accessStatus(racing.getState().server, "MENTOR")).toBe("APPROVED");
+  });
+
+  it("the first request snapshots inferred intents; inferred ones show only while nothing is saved", async () => {
+    // An alumna with a member footprint and nothing saved asks to mentor, and keeps her member framing.
+    const mock = createOnboardingMock({ ...onboardingByPersona.wairimu, stage: "PROMPT", inferred: ["MEMBER"] });
+    const store = createOnboardingStore({ enabled: true, mock: mock.api, initialState: mock.state() });
+    expect(store.getState().selection.intents).toEqual(["MEMBER"]);
+    store.updateDraft("MENTOR", { note });
+    expect(await store.submitRequest("MENTOR")).toBe(true);
+    expect(mock.state()).toMatchObject({ intents: ["MEMBER", "MENTOR"], inferred: [] });
+    // Once something is saved the snapshot isn't repeated: a second role adds only itself.
+    store.updateDraft("INSTITUTION", institution);
+    expect(await store.submitRequest("INSTITUTION")).toBe(true);
+    expect(mock.state().intents).toEqual(["MEMBER", "MENTOR", "INSTITUTION"]);
+  });
+
+  it("inferred intents follow held roles while nothing is saved", () => {
+    const mock = createOnboardingMock({
+      ...onboardingByPersona.mercyAkinyi, stage: "PROMPT", intents: [], inferred: ["MEMBER"],
+    });
+    expect(mock.state().inferred).toEqual(["MEMBER"]);
+    mock.decide("MENTOR", "approve");
+    expect(mock.state()).toMatchObject({ roles: ["MENTOR"], inferred: ["MEMBER", "MENTOR"] });
+  });
+
+  it("an empty save is stored as EXPLORING", async () => {
+    const mock = createOnboardingMock("wairimu");
+    const response = await mock.api.call(ROUTES.updateOnboarding, { body: { intents: [] } });
+    expect(response).toMatchObject({ stage: "DONE", intents: ["EXPLORING"], inferred: [] });
   });
 
   it("answers conflicts with 409, as the server would", async () => {

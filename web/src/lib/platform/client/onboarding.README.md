@@ -103,10 +103,13 @@ A held role always wins over request state.
 
 ## Mock mode
 
-`createOnboardingMock(persona?, mockOptions?)` (from `onboarding.mock.ts`)
-returns `{api, state(), decide(role, "approve" | "decline", message?)}`. It
-starts from `onboardingByPersona` and follows SPEC §5:
-- EXPLORING stands alone;
+`createOnboardingMock(seed?, mockOptions?)` (from `onboarding.mock.ts`)
+returns `{api, state(), decide(role, "approve" | "decline", message?)}`. The seed
+is an `onboardingByPersona` key or any valid `OnboardingState`, for harness
+states the fixtures don't cover. The mock follows SPEC §5 as B-O.2 implements it:
+- EXPLORING stands alone, and an empty save is stored as EXPLORING;
+- inferred intents show only while nothing is saved, and the first request
+  snapshots them before adding its own;
 - one PENDING request per role, with 409 otherwise;
 - five creations a day, with 429 and `retryAfterMs` after that;
 - a request records its intent (replacing EXPLORING), and a withdraw removes it,
