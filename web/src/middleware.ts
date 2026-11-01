@@ -11,7 +11,7 @@ import { isAgentSession } from "@/lib/agent-auth";
 import { isHealthCheckPath } from "@/lib/health";
 import { enforceAdminMutationOrigin } from "@/lib/admin/mutation-security";
 import { userHasAdminRole } from "@/lib/admin/roles";
-import { platformFlagsAdminDenial } from "@/lib/platform/server/http";
+import { platformAdminApiDenial } from "@/lib/platform/server/http";
 import { routeSpaceRequest } from "@/lib/platform/server/space-routing";
 import {
   collapseRoutePattern,
@@ -176,7 +176,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         const response=await routeSpaceRequest(context, next);response.headers.set('Cache-Control','no-store');response.headers.set('Vary','Cookie');
         return response;
       } catch {
-        return platformFlagsAdminDenial(
+        return platformAdminApiDenial(
           new Response('Temporary persona QA access is unavailable or expired.', {status:403,headers:{'Cache-Control':'no-store'}}),
           url.pathname
         );
@@ -188,15 +188,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
     locals.personalAccessToken = authResult.personalAccessToken;
 
     const demoFailure = await enforceDemoBoundary(locals,request,url.pathname);
-    if (demoFailure) return platformFlagsAdminDenial(demoFailure, url.pathname);
+    if (demoFailure) return platformAdminApiDenial(demoFailure, url.pathname);
 
     const fixtureFailure = await enforceStagingFixtureBoundary(locals,url.pathname,request.method);
-    if (fixtureFailure) return platformFlagsAdminDenial(fixtureFailure, url.pathname);
+    if (fixtureFailure) return platformAdminApiDenial(fixtureFailure, url.pathname);
 
     // Community delegation never inherits the owner's unrelated application access.
     // Use Astro's normalized route pathname, as with the admin origin guards.
     const delegationFailure = enforceCommunityDelegation(locals,request,url.pathname);
-    if(delegationFailure) return platformFlagsAdminDenial(delegationFailure, url.pathname);
+    if(delegationFailure) return platformAdminApiDenial(delegationFailure, url.pathname);
 
     // Protect /dashboard/* routes — require authentication
     if (url.pathname.startsWith("/dashboard")) {
@@ -212,7 +212,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
       url.pathname.startsWith("/api/admin")
     ) {
       const guardResponse = await enforceAdminGuards(context, locals);
-      if (guardResponse) return platformFlagsAdminDenial(guardResponse, url.pathname);
+      if (guardResponse) return platformAdminApiDenial(guardResponse, url.pathname);
     }
 
     const response = await routeSpaceRequest(context, next);

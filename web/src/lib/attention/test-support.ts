@@ -1,5 +1,5 @@
 import { readdirSync } from "node:fs";
-import type { SQLInputValue } from "node:sqlite";
+import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import type { CapabilityCase } from "@/lib/platform/server/capabilities.fixtures";
@@ -10,6 +10,20 @@ import { createSqliteD1, readMigration } from "@/test/sqlite-d1";
 export const allSpaces: PlatformCapabilities = {
   spaces: [...SPACE_ORDER], cohortIds: ["cohort-a"], mentorCohortIds: [], isAdmin: false, isMentor: false, isInstitution: false,
 };
+
+/** Adds D1's raw() to the test D1, preserving duplicate column names for Drizzle's joined projections. */
+export function withRaw(database: DatabaseSync, d1: D1Database): D1Database {
+  return Object.assign(Object.create(d1) as D1Database, { prepare(query: string) {
+    const statement = d1.prepare(query);
+    const bind = statement.bind.bind(statement);
+    statement.bind = (...values: unknown[]) => Object.assign(bind(...values), { async raw() {
+      const native = database.prepare(query);
+      native.setReturnArrays(true);
+      return native.all(...values as SQLInputValue[]);
+    } });
+    return statement;
+  } });
+}
 
 export function attentionDatabase(fixture: Partial<CapabilityCase> = {}) {
   const { database, db: d1 } = createSqliteD1();
@@ -31,17 +45,7 @@ export function attentionDatabase(fixture: Partial<CapabilityCase> = {}) {
     "INSERT INTO programRole(id,userId,programId,name) VALUES (?,'synthetic-wanjiku',?,?)",
   ).run("assignment-" + i, assignment.programId, assignment.name);
 
-  // Preserve duplicate column names, just like D1 raw(), for joined projections.
-  const relational = Object.assign(Object.create(d1) as D1Database, { prepare(query: string) {
-    const statement = d1.prepare(query);
-    const bind = statement.bind.bind(statement);
-    statement.bind = (...values: unknown[]) => Object.assign(bind(...values), { async raw() {
-      const native = database.prepare(query);
-      native.setReturnArrays(true);
-      return native.all(...values as SQLInputValue[]);
-    } });
-    return statement;
-  } });
+  const relational = withRaw(database, d1);
   const queries: string[] = [];
   const parameters: SQLInputValue[][] = [];
   const db = drizzle(relational, { schema, logger: { logQuery(query, values) {

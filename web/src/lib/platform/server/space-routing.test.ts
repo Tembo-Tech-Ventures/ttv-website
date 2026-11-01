@@ -14,7 +14,7 @@ let fixture: ReturnType<typeof createCapabilityDatabase>;
 function setup(input: Parameters<typeof createCapabilityDatabase>[0] = {}) {
   fixture?.database.close();
   fixture = createCapabilityDatabase(input);
-  for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql"]) fixture.database.exec(readMigration(migration));
+  for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql"]) fixture.database.exec(readMigration(migration));
   fixture.database.exec("UPDATE feature_flag SET audience='ALL' WHERE key='spaces'");
   Object.assign(mocks.env, { DB: fixture.db.$client, DEPLOYMENT_ENVIRONMENT: "production", PLATFORM_FLAGS_OVERRIDE: undefined });
 }

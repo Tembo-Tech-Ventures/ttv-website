@@ -17,8 +17,9 @@ items remain unread. Counts use one indexed query; marking read uses an
 owner-scoped update followed by the authoritative count. IDs in JSON are never
 URL-decoded. Entity IDs embedded in destination paths are encoded once.
 
-Filters: mentions = mention/reply/tembo_answer; requests = mentor_*; updates =
-the remaining kinds. Category is stored to keep filtered paging indexed.
+Filters: mentions = mention/reply/tembo_answer; requests = mentor_* and
+access_request; updates = the remaining kinds. Category is stored, from one map in
+`producers.ts`, to keep filtered paging indexed.
 
 Existing post-commit producers cover application status changes (including bulk
 admin changes), completed recording processing, mentor contribution confirmation,
@@ -41,6 +42,12 @@ STAFF eligibility checked against recipient database roles. There is no backfill
 Notification failure does not roll back or fail a
 successful primary operation; a generic log records failure without private
 details. This is best-effort delivery, not a durable transactional outbox.
+
+Access requests (`src/lib/onboarding/README.md`): `access_request` fans out to
+every administrator except the requester after the request commits, and is
+visible only while that request is pending. `access_decided` is written inside
+the deciding batch, selected by its `decisionId`, so it exists only if that
+decision committed; it never names an actor, and only the requester sees it.
 
 Shared work waiting for a mentor's confirmation is deliberately not attention:
 sharing has no recipient or event, so the Mentoring space derives that count

@@ -132,6 +132,9 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/api/feedback/attachments/[id]` | Feedback screenshot (author or admin only) | Session |
 | `/api/admin/feedback` | Feedback queue JSON for admins and PAT-holding agents (GET, PATCH `[id]`) | ADMIN |
 | `/api/admin/feedback/themes` | Feedback themes JSON (GET, POST; GET/PATCH `[id]`) | ADMIN |
+| `/api/platform/onboarding` | The caller's onboarding state and intents (GET, PUT); flag `onboarding` | Session, browser only |
+| `/api/platform/access-requests` | Ask for mentor or institution access (POST; `[id]/withdraw`, `[id]/dismiss`); flag `onboarding` | Session, browser only |
+| `/api/admin/access-requests` | Access-request queue (GET) and decisions (POST `[id]/decision`); not flag-gated | ADMIN, browser only |
 
 ## Database
 

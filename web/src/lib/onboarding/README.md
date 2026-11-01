@@ -60,8 +60,62 @@ return nothing; routes reply with `getOnboardingState`.
 - `markAccessRequestSeen`: by id when the card is dismissed (idempotent), or by
   role when the person visits the space it opened.
 
-Nothing here writes `UserRoles`. Granting and deciding belong to B-O.3, which
-approves with a conditional batch keyed on `decisionId` (indexed, unique).
+Nothing in `service.ts` writes `UserRoles`; `decisions.ts` does.
+
+## Decisions (`decisions.ts`)
+
+- `grantCommunityRole` / `revokeCommunityRole`: the only writers of the global
+  `MENTOR` and `INSTITUTION` roles, shared by `setAccess`
+  (`/api/community/access`), the decision endpoint and the admin user page. A
+  grant also approves any request pending for that role in the same batch, so a
+  request never sits pending beside the role it asks for. A revoke leaves the
+  request history alone: role state wins.
+- `decideAccessRequest`: one batch keyed on a fresh `decisionId`. D1 runs every
+  statement of a batch, so only the first one tests the state
+  (`WHERE status = 'PENDING'`); the role insert and the requester's attention
+  item select from the request `WHERE decisionId = ?`, and find nothing if the
+  request was withdrawn, declined or approved first. That case answers
+  `conflict` (409). Approving never happens without the role row.
+- `listAccessRequests`: Pending (oldest first, on the queue index) or Decided
+  (latest decision first; a small table, sorted per page), keyset cursors bound
+  to their list, plus the open-request count for the Admin sidebar. Each item
+  carries the requester, the GitHub login from their student profile, who
+  decided, and up to 20 earlier requests.
+
+`decidedBy` is for the queue and audit only. The requester's state never
+selects it, and their attention item has no actor.
+
+## Attention
+
+- `access_request` (category `requests`, space `admin`): one item per
+  administrator other than the requester, written after the request commits.
+  Administrators see it only while the request is pending, so a decision or a
+  withdrawal clears every bell without a write.
+- `access_decided` (category `updates`, space `community`): written inside the
+  deciding batch, with `actorId` NULL; only the requester sees it.
+- Both follow the recipient's `spaces` audience, like every producer, and copy
+  no request text. The admin home's "Access requests" Attention group lists the
+  pending queue (`src/lib/admin/attention.ts`).
+
+## APIs (`http.ts`)
+
+Same-origin, JSON, browser sessions only: personal access tokens and agent
+sessions get 403 on every route below, even with `admin:read`/`admin:write`,
+because request notes are for human administrators and no agent grants roles.
+
+| Route | Gate | Answers |
+|---|---|---|
+| `GET`/`PUT /api/platform/onboarding` | `onboarding` (404 when off) | `OnboardingState` |
+| `POST /api/platform/access-requests` | `onboarding` | 201 `OnboardingState`; 409 pending or held; 429 with `retryAfterMs` and `Retry-After` |
+| `POST /api/platform/access-requests/:id/withdraw` | `onboarding` | `OnboardingState`; 404 not yours; 409 not pending |
+| `POST /api/platform/access-requests/:id/dismiss` | `onboarding` | `OnboardingState`; 409 not decided |
+| `GET /api/admin/access-requests?status=PENDING\|DECIDED&cursor=` | ADMIN, not flag-gated | `AdminAccessRequestList` |
+| `POST /api/admin/access-requests/:id/decision` | ADMIN, not flag-gated | `AdminAccessRequest`; 404; 409 already decided or withdrawn |
+
+The admin routes stay reachable while onboarding is off, so pending requests are
+never stranded. Middleware answers non-admins on them with the platform 403
+envelope rather than a redirect. Staging personas reach none of these routes:
+their path allowlists do not list them.
 
 ## Sign-up hook (`signup.ts`)
 
