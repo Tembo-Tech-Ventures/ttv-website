@@ -50,11 +50,12 @@ export function createChannelMockClient({ viewer = fixtures.people.wanjiku, now 
     return { items, beforeCursor: null, sinceCursor: `mock-${channelId}-${thread ?? "root"}`, thread, removedIds: [] };
   }
 
-  function own(id: string) {
+  /** As B-2.3: only the author changes a message; editing a deleted one conflicts, deleting again repeats the placeholder. */
+  function own(id: string, { deleting = false } = {}) {
     const message = all.get(id);
     if (!message) return { refusal: refused(404, "not_found", "That message is no longer here.") };
     if (message.author.id !== viewer.id) return { refusal: refused(403, "forbidden", "Only the author can change this message.") };
-    if (message.deleted) return { refusal: refused(409, "conflict", "That message was deleted.") };
+    if (message.deleted && !deleting) return { refusal: refused(409, "conflict", "That message was deleted.") };
     return { message };
   }
 
@@ -103,13 +104,14 @@ export function createChannelMockClient({ viewer = fixtures.people.wanjiku, now 
       return refusal ?? save({ ...message, body, edited: true });
     } },
     { ...ROUTES.deleteMessage, reply: ({ params }) => {
-      const { message, refusal } = own(params.id);
+      const { message, refusal } = own(params.id, { deleting: true });
       return refusal ?? save(applyOverlay(message, { deleted: true }));
     } },
     { ...ROUTES.reactToMessage, reply: async ({ request, params }) => {
       const { kind, active } = ReactToMessage.parse(await request.json());
       const message = all.get(params.id);
-      if (!message || message.deleted) return refused(404, "not_found", "That message is no longer here.");
+      if (!message) return refused(404, "not_found", "That message is no longer here.");
+      if (message.deleted) return refused(409, "conflict", "This message can't take reactions.");
       const { reactions } = save(applyOverlay(message, { reactions: { [kind]: active } })).data;
       return { data: { messageId: message.id, reactions } };
     } },

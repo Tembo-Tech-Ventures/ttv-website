@@ -263,9 +263,16 @@ server applies them as the reader did. Reactions set, never toggle.
   that started before the confirmation does not replace it, because that copy may
   predate the write. It could also follow it, for example someone else's deletion,
   so the store keeps its previous checkpoint and the next poll reads that delta
-  again; that answer is applied. Nothing is lost, and the confirmed copy never
-  flickers back. A latest or thread snapshot is applied as it is: polling from its
-  own checkpoint brings anything it predates.
+  again; that answer is applied. Nothing is lost, and with `since` responses the
+  confirmed copy never flickers back.
+- A latest or thread snapshot that was in flight is applied as it is (no
+  checkpoint can be held), and polling from its own checkpoint brings anything it
+  predates. Until that next poll, an edit or reaction can show its earlier
+  version.
+- **Deletions are terminal.** The ids of the reader's confirmed deletions (the 500
+  newest) are remembered, cached or not, for example a reply in a thread that was
+  closed meanwhile. No server copy, from a snapshot or a poll, shows those messages
+  again.
 
 ### Mentions
 
@@ -273,8 +280,8 @@ server applies them as the reader did. Reactions set, never toggle.
 threadId?)` return `{ tembo, people }`. `tembo` is true only while
 `me.flags.tembo_channels` is on. `people` are the authors seen in the open
 thread (repliers, then its author) and the channel window, newest first, at most
-50, never the reader, Tembo or deleted accounts. A members route would widen this
-once B-2.3 offers one.
+50, never the reader, Tembo or deleted accounts. There is no members route (B-2.3
+has none), so people who haven't posted in view aren't offered yet.
 
 ## Assumptions for B-2.3
 
@@ -290,10 +297,13 @@ readings of them:
    thread feed carries that thread's replies. Replies elsewhere are ignored.
 4. An expired cursor answers 410 (or 400 `validation`).
 5. A repeated `postMessage` with the same author and `clientNonce` returns the
-   original message, and the author receives `clientNonce` on their messages.
+   original message (200; 201 when new), and the author receives `clientNonce` on
+   their messages. A used nonce with other content is 409 `conflict`.
 6. Refusals use the error envelope: 429 `rate_limited` with `retryAfterMs`,
-   `moderation_rejected`, `conduct_required` (proposed; any other 403 reads as
-   "can't post here"), and 404/409 for edits of messages that are gone or deleted.
+   `moderation_rejected`, `conduct_required` (403, until the current code of
+   conduct is agreed; any other 403 reads as "can't post here" or "can't change
+   this message"), and 404/409 for edits of messages that are gone or deleted.
+   Deleting again returns the same placeholder (B-2.3 contract, seq 345).
 
 If B-2.3 needs different semantics, the change belongs in `channelWindow.ts` and
 `channel.ts`.

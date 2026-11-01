@@ -89,6 +89,8 @@ export interface ChannelOptions {
 }
 
 export const CHANNEL_POLL_INTERVAL_MS = 5_000;
+/** Messages the reader's own deletions confirmed, remembered so no older server copy shows them again. */
+const MAX_CONFIRMED_DELETIONS = 500;
 export const CHANNEL_MAX_POLL_INTERVAL_MS = 30_000;
 
 type Scope = "channel" | "thread";
@@ -172,6 +174,8 @@ export function createChannelStore(options: ChannelOptions) {
   // Such a copy may be older or newer than the write, so a delta that carried one is read again.
   let requestSeq = 0;
   const pins = new Map<Id, number>();
+  // The server never undeletes, so these hold whatever a copy's request timing was, cached or not.
+  const deletedIds = new Set<Id>();
   const overlays = new Map<Id, MessageOverlay>();
   const overlaid = new WeakMap<Message, { overlay: MessageOverlay; result: Message }>();
   let channel: Segment | null = null;
@@ -206,6 +210,9 @@ export function createChannelStore(options: ChannelOptions) {
     for (const id of pins.keys()) if (!entities.has(id)) pins.delete(id);
   }
 
+  /** A server copy as it must be shown: a message the reader's deletion was confirmed for stays deleted. */
+  const settled = (item: Message) => !item.deleted && deletedIds.has(item.id) ? applyOverlay(item, { deleted: true }) : item;
+
   /**
    * Cache a server copy, unless a write was confirmed after this request started:
    * then the copy may predate the write, and it is skipped. Returns false when skipped.
@@ -216,12 +223,28 @@ export function createChannelStore(options: ChannelOptions) {
       if (started <= pin) return false;
       pins.delete(item.id);
     }
-    entities.set(item.id, item);
+    entities.set(item.id, settled(item));
     return true;
+  }
+
+  /**
+   * Cache a copy from a snapshot (latest page or thread). It is polled from its own
+   * checkpoint, so whatever it predates arrives next; only a confirmed deletion is
+   * kept meanwhile, because deletion is terminal and can't hide later truth.
+   */
+  function putSnapshot(item: Message) {
+    entities.set(item.id, settled(item));
+  }
+
+  function rememberDeleted(item: Message) {
+    if (!item.deleted || deletedIds.has(item.id)) return;
+    deletedIds.add(item.id);
+    if (deletedIds.size > MAX_CONFIRMED_DELETIONS) deletedIds.delete(deletedIds.values().next().value!);
   }
 
   /** A server copy from a confirmed write: newer than any response to a request already in flight. */
   function confirmWrite(item: Message) {
+    rememberDeleted(item);
     entities.set(item.id, item);
     pins.set(item.id, requestSeq);
   }
@@ -387,8 +410,7 @@ export function createChannelStore(options: ChannelOptions) {
       if (!available() || gen !== windowGen) return false;
       forget(page.removedIds);
       const roots = page.items.filter(item => item.parentId === null);
-      // A snapshot is polled from its own checkpoint, so anything it predates arrives next.
-      for (const item of roots) entities.set(item.id, item);
+      for (const item of roots) putSnapshot(item);
       anchorId = null;
       channel = evict(segmentFromLatest(page, roots), { maxMessages, anchorId: null });
       publish({ status: "ready", error: null, olderError: null });
@@ -483,7 +505,7 @@ export function createChannelStore(options: ChannelOptions) {
       if (!currentThread(cache)) return false;
       forget(page.removedIds);
       const replies = page.items.filter(item => item.parentId === cache.parentId);
-      for (const item of replies) entities.set(item.id, item);
+      for (const item of replies) putSnapshot(item);
       cache.segment = evict(segmentFromLatest(page, replies), { maxMessages: maxThreadMessages, anchorId: null });
       publish();
       // The parent's tombstone arrived while the thread was loading: it stays removed.
@@ -717,7 +739,10 @@ export function createChannelStore(options: ChannelOptions) {
       if (!available()) return;
       let changed = false;
       for (const item of items) {
-        if (item.channelId !== channelId || !entities.has(item.id)) continue;
+        if (item.channelId !== channelId) continue;
+        // A confirmed deletion counts even for a message no longer cached (a closed thread).
+        rememberDeleted(item);
+        if (!entities.has(item.id)) continue;
         confirmWrite(item);
         changed = true;
       }

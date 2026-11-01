@@ -75,9 +75,12 @@ describe("channel mock client", () => {
     expect(edited).toMatchObject({ body: "Updated", edited: true });
     const { reactions } = await api.call(ROUTES.reactToMessage, { params: { id }, body: { kind: "useful", active: false } });
     expect(reactions).toEqual([{ kind: "useful", count: 5, mine: false }, { kind: "learned", count: 4, mine: false }]);
-    expect(await api.call(ROUTES.deleteMessage, { params: { id } })).toMatchObject({ deleted: true, body: "", embeds: [] });
-    await expect(api.call(ROUTES.deleteMessage, { params: { id } })).rejects.toMatchObject({ status: 409 });
-    await expect(api.call(ROUTES.reactToMessage, { params: { id }, body: { kind: "useful", active: true } })).rejects.toMatchObject({ status: 404 });
+    const placeholder = await api.call(ROUTES.deleteMessage, { params: { id } });
+    expect(placeholder).toMatchObject({ deleted: true, body: "", embeds: [] });
+    expect(await api.call(ROUTES.deleteMessage, { params: { id } })).toEqual(placeholder);
+    await expect(api.call(ROUTES.editMessage, { params: { id }, body: { body: "Too late" } })).rejects.toMatchObject({ status: 409 });
+    await expect(api.call(ROUTES.reactToMessage, { params: { id }, body: { kind: "useful", active: true } })).rejects.toMatchObject({ status: 409, code: "conflict" });
+    await expect(api.call(ROUTES.reactToMessage, { params: { id: "missing" }, body: { kind: "useful", active: true } })).rejects.toMatchObject({ status: 404 });
     await expect(api.call(ROUTES.editMessage, { params: { id: messages.mentorReply.id }, body: { body: "Not mine" } })).rejects.toMatchObject({ status: 403 });
     await expect(api.call(ROUTES.editMessage, { params: { id: "missing" }, body: { body: "x" } })).rejects.toMatchObject({ status: 404 });
     const latest = await api.call(ROUTES.listMessages, { params: { id: channels.showYourWork.id }, query: {} });
