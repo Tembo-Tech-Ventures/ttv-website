@@ -16,6 +16,29 @@ export const SPACE_PATHS = {
  */
 export const WELCOME_PATH = "/dashboard/welcome";
 
+/**
+ * Channel pages (B-2.2): `/dashboard/<space>/c/<slug>` for cohort and community channels, and the
+ * code of conduct. They exist only while `channels` is on for the caller, and a channel page exists
+ * only for a channel the caller can read (space-routing.ts).
+ */
+export const CHANNEL_SPACES = ["cohort", "community"] as const satisfies readonly SpaceId[];
+export type ChannelSpace = (typeof CHANNEL_SPACES)[number];
+export const CONDUCT_PATH = "/dashboard/community/conduct";
+
+/** The slug rule the database enforces (channel_slug_check in migration 0028). */
+export const CHANNEL_SLUG = /^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$/;
+
+/** The channel a canonical channel path names. The slug is never decoded: it must be valid as written. */
+export function channelRoute(pathname: string): { space: ChannelSpace; slug: string } | null {
+  const match = /^\/dashboard\/(cohort|community)\/c\/([^/]+)$/.exec(normalizeSpacePath(pathname));
+  return match && CHANNEL_SLUG.test(match[2]) ? { space: match[1] as ChannelSpace, slug: match[2] } : null;
+}
+
+/** Pages that exist only while the `channels` flag is on for the caller. */
+export function isChannelPagePath(pathname: string): boolean {
+  return normalizeSpacePath(pathname) === CONDUCT_PATH || channelRoute(pathname) !== null;
+}
+
 export const SPACE_REDIRECTS = [
   ["/dashboard/apply", "/dashboard/cohort/apply"],
   ["/dashboard/application/:id", "/dashboard/cohort/application/:id"],
@@ -86,5 +109,6 @@ export function isNewSpacePath(pathname: string): boolean {
 export function isAvailableSpacePath(pathname: string): boolean {
   const path = normalizeSpacePath(pathname);
   return Object.values(SPACE_PATHS).some(entry => entry === path)
-    || legacySpacePath(path) !== path;
+    || legacySpacePath(path) !== path
+    || isChannelPagePath(path);
 }

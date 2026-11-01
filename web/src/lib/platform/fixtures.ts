@@ -4,7 +4,8 @@
  * Append-only: add a named scenario rather than changing an existing consumer's data.
  */
 import type {
-  AccessRequestSummary, AdminAccessRequest, AdminAccessRequestList, AttentionCount, AttentionList, AuthorSummary, Channel, ChannelList, FlagsAdmin, Me,
+  AccessRequestSummary, AdminAccessRequest, AdminAccessRequestList, AttentionCount, AttentionList, AuthorSummary, Channel, ChannelList,
+  ConductAcknowledgement, FlagsAdmin, Me,
   MentorAvailability, MentorDirectory, MentorRequest, Message, MessageList,
   ModerationQueue, OnboardingState, PersonSummary, ProjectEmbed, RoleBadge, SearchResults,
   SessionClipEmbed, SpaceId, TemboResponse,
@@ -433,3 +434,12 @@ export const accessAttention = {
     ],
   },
 } satisfies Record<string, AttentionList>;
+
+/**
+ * Code of conduct agreements (B-2.2). `outdated` is an agreement to an earlier version, which asks
+ * the person again; nobody having agreed is null, not a fixture.
+ */
+export const conductAcknowledgements = {
+  current: { version: 1, acknowledgedAt: FIXTURE_NOW - 2 * day, current: true },
+  outdated: { version: 1, acknowledgedAt: FIXTURE_NOW - 30 * day, current: false },
+} satisfies Record<string, ConductAcknowledgement>;

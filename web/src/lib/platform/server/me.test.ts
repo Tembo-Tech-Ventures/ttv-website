@@ -87,10 +87,13 @@ describe("real /me and Astro context adapters", () => {
       expect(queries).not.toHaveBeenCalled();
       return;
     }
-    const { spaces, ...capabilities } = fixture.expected;
+    const { spaces, teachingCohortIds: _teaching, ...capabilities } = fixture.expected;
     expect(response.status).toBe(200);
     const parsed = ROUTES.getMe.response.parse(body);
     expect(parsed).toEqual(body);
+    // Teaching assignments decide channel posting on the server; Me never serializes them.
+    expect(parsed.capabilities).toEqual(capabilities);
+    expect(parsed.capabilities).not.toHaveProperty("teachingCohortIds");
     expect(body).toMatchObject({ spaces, capabilities, unreadCounts: { ...zeroCounts,
       profile: 1, cohort: capabilities.isAdmin ? 2 : capabilities.cohortIds.length,
     },

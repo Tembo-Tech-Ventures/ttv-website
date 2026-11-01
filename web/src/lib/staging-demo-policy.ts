@@ -1,5 +1,5 @@
 import { ROUTES } from "./platform/contracts";
-import { legacySpacePath, SPACE_PATHS, WELCOME_PATH } from "./platform/server/space-routes";
+import { isChannelPagePath, legacySpacePath, SPACE_PATHS, WELCOME_PATH } from "./platform/server/space-routes";
 
 /** Retained fictional records are distinct from disposable verification fixtures. */
 export const DEMO_PREFIX = 'ttv-staging-demo-v1-';
@@ -38,6 +38,15 @@ export function demoEnabled(environment: string | undefined, enabled: string | u
 export const SPACES_READ_PATHS: ReadonlySet<string> = new Set([
   ROUTES.getMe.path, ROUTES.listAttention.path, ROUTES.countAttention.path, "/dashboard/attention", WELCOME_PATH,
 ]);
+/**
+ * GET/HEAD surfaces every restricted identity may open: the Phase 1 reads above, plus the channel
+ * pages and the code of conduct (B-2.2). Only valid channel slugs match. Posting, reacting and
+ * agreeing to the code of conduct stay closed: retained personas have no cleanup. The channels flag,
+ * the caller's channel access and the pages still decide what each one sees.
+ */
+export function spacesReadPathAllowed(path: string): boolean {
+  return SPACES_READ_PATHS.has(path) || isChannelPagePath(path);
+}
 /** The signed-in Apply form. GET only: no QA ledger covers a submitted application. */
 export const SPACES_APPLY_PATH = legacySpacePath(`${SPACE_PATHS.cohort}/apply`);
 /** Marks the caller's own attention rows read; only where cleanup removes those rows. */
@@ -51,6 +60,6 @@ export function demoPathAllowed(path: string, method: string) {
   if (/^\/api\/community\/(profile|journey|profiles|mentorship|chat)(\/|$)/.test(normalized)) return true;
   if (!['GET', 'HEAD'].includes(method)) return false;
   if (/^\/dashboard\/application\/[^/]+$/.test(normalized)) return true;
-  if (SPACES_READ_PATHS.has(normalized) || normalized === SPACES_APPLY_PATH) return true;
+  if (spacesReadPathAllowed(normalized) || normalized === SPACES_APPLY_PATH) return true;
   return ['', '/dashboard/sessions', '/dashboard', '/dashboard/community', '/dashboard/mentorship', '/dashboard/discover', '/community/members', '/community/mentors', '/community/institutions'].includes(normalized) || normalized.startsWith('/_astro/');
 }

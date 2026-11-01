@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ROUTES } from "@/lib/platform/contracts";
-import { SPACE_PATHS, WELCOME_PATH } from "@/lib/platform/server/space-routes";
+import { CONDUCT_PATH, SPACE_PATHS, WELCOME_PATH } from "@/lib/platform/server/space-routes";
 import { ATTENTION_PAGE_HREF } from "@/components/platform/attention/attention-display";
 import {
   DEMO_CUTOFF, DEMO_ORIGIN, demoEnabled, demoPathAllowed,
@@ -47,6 +47,14 @@ const SURFACES: [string, Identity[], Identity[]][] = [
   // Onboarding (B-O.4): partner-page hints must resolve, but no persona chooses or asks for access.
   [WELCOME_PATH, ALL, []],
   [`${WELCOME_PATH}/`, ALL, []],
+  // Channel pages and the code of conduct (B-2.2): read-only. Agreeing, posting and reacting stay
+  // closed, because retained personas have no cleanup. The flag and channel access still decide.
+  ["/dashboard/community/c/introductions", ALL, []],
+  ["/dashboard/community/c/show-your-work/", ALL, []],
+  ["/dashboard/cohort/c/cohort-04", ALL, []],
+  ["/dashboard/cohort/c/c04-announcements", ALL, []],
+  [CONDUCT_PATH, ALL, []],
+  [`${CONDUCT_PATH}/`, ALL, []],
 ];
 
 /** Lookalikes, traversal and surfaces that stay closed to every identity and method. */
@@ -64,6 +72,11 @@ const DENIED = [
   ROUTES.listChannels.path, "/api/channels/x/messages", "/api/messages/x", ROUTES.listMentors.path, ROUTES.createMentorRequest.path,
   ROUTES.getMentorAvailability.path, ROUTES.listModerationQueue.path,
   "/dashboard/mentoring/requests", "/dashboard/mentoring/availability", "/dashboard/community/dm/private",
+  // Channel lookalikes: only valid slugs, one segment, in the cohort and community spaces.
+  "/dashboard/community/c", "/dashboard/community/c/", "/dashboard/community/c/Help", "/dashboard/community/c/help-",
+  "/dashboard/community/c/help/x", "/dashboard/community/c/help/messages", "/dashboard/community/c/..%2fadmin",
+  "/dashboard/community/c/%2e%2e", "/dashboard/cohort/c/cohort-04/../../../admin", "/dashboard/mentoring/c/help",
+  "/dashboard/me/c/help", "/dashboard/c/help", `${CONDUCT_PATH}/x`, `${CONDUCT_PATH}x`, "/dashboard/cohort/conduct",
   // Onboarding writes and lookalikes: retained personas have no cleanup, and agents never decide access.
   `${WELCOME_PATH}/x`, `${WELCOME_PATH}x`, "/dashboard/welcome/../../admin", "/dashboard/welcome%2f..%2fadmin",
   ROUTES.getOnboarding.path, `${ROUTES.getOnboarding.path}/`, "/api/platform/access-requests", "/api/platform/access-requests/x/withdraw",
