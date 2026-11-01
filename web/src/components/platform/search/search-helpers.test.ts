@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { meByPersona } from "@/lib/platform/fixtures";
 import { ApiError } from "@/lib/platform/client/apiError";
 import { askTemboHref, takeAskTemboDraft } from "./ask-handoff";
 import { clearRecentSearches, onShellSignOut, recentSearchKey, RECENT_PREFIX } from "./recent-searches";
-import { highlight, scopesFor, searchProblem, timestamp } from "./search-display";
+import { meByPersona, searchResults } from "@/lib/platform/fixtures";
+import type { SearchItem } from "@/lib/platform/client/search";
+import { highlight, matchReason, scopesFor, searchCoverage, searchProblem, timestamp } from "./search-display";
 
 afterEach(() => {
   localStorage.clear();
@@ -21,6 +22,44 @@ describe("scopesFor", () => {
 
   it("never offers message search before channels exist", () => {
     for (const me of Object.values(meByPersona)) expect(scopesFor(me).map((option) => option.scope)).not.toContain("messages");
+  });
+});
+
+describe("searchCoverage", () => {
+  it("names only what this person's search reaches: sessions for cohort members only", () => {
+    expect(searchCoverage(meByPersona.wanjiku)).toBe("people, projects and your cohort's sessions");
+    expect(searchCoverage(meByPersona.lucy)).toBe("people and projects");
+    expect(searchCoverage(meByPersona.joseph)).toBe("people and projects");
+    // Staff see the Cohort space but search no cohort they do not belong to.
+    expect(searchCoverage(meByPersona.amina)).toBe("people and projects");
+    for (const me of Object.values(meByPersona)) expect(searchCoverage(me)).not.toMatch(/everything/i);
+  });
+});
+
+describe("matchReason", () => {
+  const person: SearchItem = { group: "people", item: searchResults.people[0]! };
+  const project: SearchItem = { group: "projects", item: searchResults.projects[0]! };
+  const moment: SearchItem = { group: "sessionMoments", item: searchResults.sessionMoments[0]! };
+
+  it("says nothing when the highlighted words already show why", () => {
+    expect(matchReason(person, "backend")).toBeNull();
+    expect(matchReason(person, searchResults.people[0]!.person.name.split(" ")[0]!)).toBeNull();
+    expect(matchReason(project, "webhook")).toBeNull();
+  });
+
+  it("explains a match the result does not show", () => {
+    expect(matchReason(person, "SQL")).toBe("Matches “SQL” elsewhere in their public profile");
+    expect(matchReason(project, "  bank reconciliation ")).toBe("Matches “bank reconciliation” in the project's full description");
+  });
+
+  it("does not explain a one-letter search, which matches almost anything", () => {
+    expect(matchReason(person, "a")).toBeNull();
+    expect(matchReason(person, " x ")).toBeNull();
+  });
+
+  it("leaves moments to their quote, which is cut around the match", () => {
+    expect(matchReason(moment, "zzz")).toBeNull();
+    expect(matchReason(person, "   ")).toBeNull();
   });
 });
 

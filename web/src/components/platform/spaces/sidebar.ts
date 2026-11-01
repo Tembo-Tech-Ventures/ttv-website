@@ -59,6 +59,8 @@ export interface SidebarItem {
   countLabel?: string;
   /** Quiet text, for an entry whose page is not open yet. */
   note?: string;
+  /** Leaves the app for a public page of the website, and says so. */
+  publicPage?: boolean;
 }
 
 export interface SidebarGroupModel {
@@ -123,6 +125,9 @@ export const SPACE_PAGE_PATHS = {
   feedback: "/dashboard/feedback",
 } as const satisfies Record<SpacePageKey, string>;
 
+/** What an entry whose page has not opened says, here and on the page it leads to. */
+export const NOT_OPEN_YET = "Not open yet";
+
 /** An entry opens either one of the migrated pages (and is current on it) or a plain path. */
 type Entry = Omit<SidebarItem, "current" | "href"> & ({ page: SpacePageKey; href?: never } | { href: string; page?: never });
 
@@ -164,9 +169,10 @@ function community(facts: SidebarFacts): SidebarModel {
         { key: "journey", page: "journey", label: "Your journey", icon: "journey" },
         noCohort && { key: "ask", page: "ask", label: "Ask Tembo", icon: "tembo" },
       ]),
-      ...group(facts, "Directory", [
-        { key: "members", href: "/community/members", label: "Members", icon: "people" },
-        { key: "mentors", href: "/community/mentors", label: "Mentors", icon: "mentors" },
+      // The directories are the website's public pages, outside the app: say so before the click.
+      ...group(facts, "Public directory", [
+        { key: "members", href: "/community/members", label: "Members", icon: "people", publicPage: true },
+        { key: "mentors", href: "/community/mentors", label: "Mentors", icon: "mentors", publicPage: true },
       ]),
       ...(noCohort ? group(facts, "Cohorts", [{ key: "apply", page: "apply", label: "Apply to a cohort", icon: "apply" }]) : []),
     ],
@@ -185,9 +191,9 @@ function mentoring(facts: SidebarFacts): SidebarModel {
         // Derived from the Confirm page's own rows, not attention (src/lib/mentoring/README.md).
         ...(awaiting > 0 ? { count: awaiting, countLabel: "waiting for your confirmation" } : {}),
       },
-      // Requests and availability arrive with mentor requests; the overview says so.
-      { key: "requests", href: `${SPACE_PATHS.mentoring}#requests`, label: "Requests", icon: "requests", note: "Soon" },
-      { key: "availability", href: `${SPACE_PATHS.mentoring}#availability`, label: "Availability", icon: "availability", note: "Soon" },
+      // Requests and availability arrive with mentor requests; the overview says so, in the same words.
+      { key: "requests", href: `${SPACE_PATHS.mentoring}#requests`, label: "Requests", icon: "requests", note: NOT_OPEN_YET },
+      { key: "availability", href: `${SPACE_PATHS.mentoring}#availability`, label: "Availability", icon: "availability", note: NOT_OPEN_YET },
     ]),
   };
 }

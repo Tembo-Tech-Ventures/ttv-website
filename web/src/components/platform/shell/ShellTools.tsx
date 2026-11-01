@@ -6,7 +6,7 @@ import { cx } from "@/components/platform/ui/cx";
 import { isSearchShortcut, requestShellOverlay } from "./overlays";
 
 /**
- * "Search everything", with its shortcut. Wide screens show the words and the
+ * "Search", with its shortcut. Wide screens show the words and the
  * keys; narrow ones a magnifier, named the same. Ctrl K (⌘ K on a Mac) asks for
  * the same overlay from anywhere on the page.
  */
@@ -30,7 +30,7 @@ export function SearchTrigger() {
     <button
       ref={ref}
       type="button"
-      aria-label="Search everything"
+      aria-label="Search"
       aria-haspopup="dialog"
       aria-keyshortcuts="Control+K Meta+K"
       onClick={() => requestShellOverlay({ overlay: "search", trigger: ref.current, via: "click" })}
@@ -43,7 +43,7 @@ export function SearchTrigger() {
     >
       <PiMagnifyingGlass aria-hidden="true" className="size-[1.125rem] shrink-0" />
       <span className="spaces-search__words">
-        <span className="spaces-search__label text-sm font-medium">Search everything</span>
+        <span className="spaces-search__label text-sm font-medium">Search</span>
         <kbd
           aria-hidden="true"
           className="rounded-md border border-hairline px-1.5 py-0.5 font-body text-[0.6875rem] font-semibold text-ink-muted"

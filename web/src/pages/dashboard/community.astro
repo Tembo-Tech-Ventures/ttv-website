@@ -3,7 +3,7 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 import CommunityApp from "@/components/community/CommunityApp";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import CohortInvitation from "@/components/platform/spaces/CohortInvitation.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { resolveSpacePage, restrictedNextStep, restrictionsFor } from "@/components/platform/spaces/space-page";
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
@@ -15,7 +15,9 @@ import "@/styles/discovery.css";
 const spaces = await resolveSpacePage(Astro.locals, "journey");
 const journey = spaces ? await getStudentJourney(drizzle(env.DB, { schema }), spaces.me.user.id) : undefined;
 // Without a cohort there is no Cohort tab: the way to apply has to be here, on screen.
-const invitation = spaces && !spaces.me.spaces.includes("cohort") ? journey?.nextStep : undefined;
+// A restricted synthetic identity that cannot follow the step gets no invitation (it is already on its journey).
+const step = spaces && !spaces.me.spaces.includes("cohort") ? journey?.nextStep : undefined;
+const invitation = step && restrictedNextStep(restrictionsFor(Astro.locals), step) === step ? step : undefined;
 ---
 {
   spaces ? (

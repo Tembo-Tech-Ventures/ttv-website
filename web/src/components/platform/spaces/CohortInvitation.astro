@@ -10,12 +10,13 @@ import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
 import { RAISED } from "@/components/platform/ui/tones";
 import { canonicalSpacePath } from "@/lib/platform/server/space-routes";
 import type { StudentNextStep } from "@/lib/student/journey";
+import { inSpacesWords } from "./space-page";
 
 interface Props {
   step: StudentNextStep;
 }
 
-const { step } = Astro.props;
+const step = inSpacesWords(Astro.props.step);
 const href = canonicalSpacePath(step.action.href) ?? step.action.href;
 ---
 

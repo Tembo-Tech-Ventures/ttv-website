@@ -23,7 +23,8 @@ export default function DiscoveryShell({
   if (embedded) {
     return (
       <div className="discovery-app" data-embedded="">
-        <div id="main-content" className="discovery-main">
+        {/* No id: the shell's own skip link targets its main landmark. */}
+        <div className="discovery-main">
           {children}
         </div>
       </div>

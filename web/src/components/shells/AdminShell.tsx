@@ -14,10 +14,15 @@ import {
   PiBooksDuotone,
   PiPlugsDuotone,
   PiChatTeardropTextDuotone,
+  PiArrowLeftDuotone,
 } from "react-icons/pi";
 import { PiListBold } from "react-icons/pi";
 
+const MAIN_ID = "admin-main";
+
 const primaryLinks = [
+  // Admin is one of the person's spaces: the way back to the rest of the app comes first.
+  { href: "/dashboard", label: "Back to dashboard", icon: PiArrowLeftDuotone },
   { href: "/admin", label: "Admin Home", icon: PiGaugeDuotone },
   { href: "/admin/users", label: "Users", icon: PiUsersDuotone },
   { href: "/admin/applications", label: "Applications", icon: PiFileTextDuotone },
@@ -76,6 +81,12 @@ export default function AdminShell({
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-surface to-dark">
+      <a
+        href={`#${MAIN_ID}`}
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-dark"
+      >
+        Skip to content
+      </a>
       <Sidebar
         links={links}
         title="TTV Admin"
@@ -107,7 +118,9 @@ export default function AdminShell({
 
         {/* Content */}
         {/* Bottom padding keeps the last control clear of the floating feedback button. */}
-        <main className="min-w-0 flex-1 p-4 pb-24 lg:p-6 lg:pb-24">{children}</main>
+        <main id={MAIN_ID} tabIndex={-1} className="min-w-0 flex-1 p-4 pb-24 focus:outline-none lg:p-6 lg:pb-24">
+          {children}
+        </main>
       </div>
     </div>
   );

@@ -35,5 +35,7 @@ describe("DiscoveryShell", () => {
     expect(html).not.toContain("<main");
     expect(html).not.toContain("discovery-skip");
     expect(html).not.toContain("discovery-footer");
+    // Nothing links to a skip target here: the shell's own skip link goes to its main landmark.
+    expect(html).not.toContain('id="main-content"');
   });
 });

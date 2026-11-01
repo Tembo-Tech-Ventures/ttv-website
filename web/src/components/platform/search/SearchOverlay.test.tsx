@@ -111,6 +111,25 @@ async function key(name: string) {
 }
 
 describe("SearchOverlay", () => {
+  it("promises only what this person can find, and marks when it is listening", async () => {
+    await act(async () => root.render(<SearchOverlay me={meByPersona.lucy} client={backend().client} />));
+    expect(dialog().hasAttribute("data-ready")).toBe(true);
+    expect(input().placeholder).toBe("Search people and projects");
+    expect(input().getAttribute("aria-label")).toBe("Search people and projects");
+    expect(container.querySelector("h2")?.textContent).toBe("Search");
+    expect(container.textContent).toContain("Find people and projects.");
+    await act(async () => root.render(<SearchOverlay me={wanjiku} client={backend().client} />));
+    expect(input().placeholder).toBe("Search people, projects and your cohort's sessions");
+  });
+
+  it("says why a result matched when its words do not show it", async () => {
+    await mount();
+    await type("SQL");
+    await settle(300);
+    const why = Array.from(container.querySelectorAll(".search-option__why")).map((element) => element.textContent);
+    expect(why).toEqual(["Matches “SQL” elsewhere in their public profile", "Matches “SQL” in the project's full description"]);
+  });
+
   it("opens for Ctrl K with focus in the box, and Escape-closing gives focus back", async () => {
     await mount();
     expect(dialog().open).toBe(true);

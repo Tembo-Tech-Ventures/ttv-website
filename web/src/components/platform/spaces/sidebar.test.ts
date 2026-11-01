@@ -1,11 +1,11 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Me } from "@/lib/platform/contracts";
 import { meByPersona } from "@/lib/platform/fixtures";
 import { canonicalSpacePath, isAvailableSpacePath, isNewSpacePath, legacySpacePath } from "@/lib/platform/server/space-routes";
 import { STUDENT_DASHBOARD_LINK_IDS, type StudentDashboardLinkId } from "@/lib/student/journey";
-import { PAGE_SPACES, SPACE_PAGE_PATHS, spaceSidebar, type SidebarFacts, type SidebarModel, type SpacePageKey } from "./sidebar";
+import { NOT_OPEN_YET, PAGE_SPACES, SPACE_PAGE_PATHS, spaceSidebar, type SidebarFacts, type SidebarModel, type SpacePageKey } from "./sidebar";
 
 const EVERY_LINK: StudentDashboardLinkId[] = [...STUDENT_DASHBOARD_LINK_IDS];
 const NEW_SIGN_IN: StudentDashboardLinkId[] = ["home", "apply", "ask", "account", "logout"];
@@ -79,7 +79,7 @@ describe("space sidebars", () => {
 
   it("put the way into a cohort in Community for a member without one", () => {
     const lucy = spaceSidebar("community", facts(meByPersona.lucy, "journey", { visibleLinkIds: NEW_SIGN_IN }));
-    expect(lucy.groups.map((group) => group.label)).toEqual([undefined, "Directory", "Cohorts"]);
+    expect(lucy.groups.map((group) => group.label)).toEqual([undefined, "Public directory", "Cohorts"]);
     expect(lucy.groups.at(-1)!.items).toEqual([
       expect.objectContaining({ label: "Apply to a cohort", href: "/dashboard/cohort/apply", current: false }),
     ]);
@@ -92,15 +92,34 @@ describe("space sidebars", () => {
     expect(labels(wanjiku)).toEqual(["Your journey", "Members", "Mentors"]);
   });
 
-  it("label requests and availability as not open yet", () => {
+  it("say the directories are the public website's pages, before anyone follows them", () => {
+    for (const me of [meByPersona.lucy, meByPersona.wanjiku]) {
+      const directory = spaceSidebar("community", facts(me, "journey")).groups.find((group) => group.label === "Public directory")!;
+      expect(directory.items.map(({ label, href, publicPage }) => ({ label, href, publicPage }))).toEqual([
+        { label: "Members", href: "/community/members", publicPage: true },
+        { label: "Mentors", href: "/community/mentors", publicPage: true },
+      ]);
+    }
+    // Every other entry stays in the app.
+    const inApp = Object.values(meByPersona).flatMap((me) => me.spaces.map((space) => spaceSidebar(space, facts(me, "journey"))))
+      .flatMap((model) => model.groups.flatMap((group) => group.items))
+      .filter((entry) => entry.publicPage);
+    expect(new Set(inApp.map((entry) => entry.href))).toEqual(new Set(["/community/members", "/community/mentors"]));
+  });
+
+  it("label requests and availability as not open yet, in the overview's own words", () => {
     const david = spaceSidebar("mentoring", facts(meByPersona.david, "confirm"));
     expect(david.groups[0]!.items.map(({ label, note, current: isCurrent }) => ({ label, note, current: isCurrent }))).toEqual([
       { label: "Overview", note: undefined, current: false },
       { label: "Confirm work", note: undefined, current: true },
-      { label: "Requests", note: "Soon", current: false },
-      { label: "Availability", note: "Soon", current: false },
+      { label: "Requests", note: "Not open yet", current: false },
+      { label: "Availability", note: "Not open yet", current: false },
     ]);
     expect(hrefs(david).slice(2)).toEqual(["/dashboard/mentoring#requests", "/dashboard/mentoring#availability"]);
+    // The page those entries open says the same thing, so the sidebar and the page never disagree.
+    const overview = readFileSync(resolve(import.meta.dirname, "MentoringOverview.astro"), "utf8");
+    expect(overview).toContain(NOT_OPEN_YET);
+    expect(overview).not.toMatch(/\bSoon\b/);
   });
 
   it("count the shared work waiting for the mentor's confirmation on Confirm work, and nothing when none waits or it is unknown", () => {

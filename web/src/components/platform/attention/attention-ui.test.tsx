@@ -334,6 +334,43 @@ describe("the attention panel", () => {
     bell.remove();
   });
 
+  it("is marked ready once it listens for the bell", async () => {
+    const { api } = server();
+    const bell = await mountPanel(api);
+    expect(container.querySelector("[data-attention-panel]")!.hasAttribute("data-ready")).toBe(true);
+    bell.remove();
+  });
+
+  it("follows the bell as the window resizes, and closes below the wide layout", async () => {
+    const { api } = server();
+    const bell = await mountPanel(api);
+    let rect = { bottom: 60, right: 1300 };
+    vi.spyOn(bell, "getBoundingClientRect").mockImplementation(() => DOMRect.fromRect({ x: rect.right - 40, y: rect.bottom - 40, width: 40, height: 40 }));
+    const dialog = container.querySelector<HTMLDialogElement>("[data-attention-panel]")!;
+    await act(async () => requestShellOverlay({ overlay: "attention", trigger: bell, via: "click" }));
+    await settle();
+    expect([dialog.style.top, dialog.style.right]).toEqual(["70px", "140px"]);
+
+    // Wider: the bell moved, and the sheet hangs from it again.
+    rect = { bottom: 64, right: 1800 };
+    await act(async () => {
+      happyDOM().setViewport({ width: 1920, height: 1080 });
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect([dialog.style.top, dialog.style.right]).toEqual(["74px", "120px"]);
+    expect(dialog.open).toBe(true);
+
+    // Down to a phone: no room for the sheet, so it closes and focus goes back to the bell.
+    await act(async () => {
+      happyDOM().setViewport({ width: 390, height: 844 });
+      window.dispatchEvent(new Event("resize"));
+    });
+    await settle();
+    expect(dialog.open).toBe(false);
+    expect(document.activeElement).toBe(bell);
+    bell.remove();
+  });
+
   it("cycles Tab within the panel", async () => {
     const { api } = server();
     const bell = await mountPanel(api);

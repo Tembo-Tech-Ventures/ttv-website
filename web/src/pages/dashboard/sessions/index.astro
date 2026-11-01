@@ -2,6 +2,7 @@
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
 import Card from "@/components/common/Card.astro";
 import ProcessingStatus from "@/components/recordings/ProcessingStatus.astro";
 import { getAccessibleProgramIds } from "@/lib/recordings/access";
@@ -23,6 +24,8 @@ const recordings =
       })
     : [];
 const spaces = await resolveSpacePage(Astro.locals, "sessions");
+// In the shell, each session opens at its space path instead of through a redirect.
+const sessionsHref = spaces ? SPACE_PAGE_PATHS.sessions : "/dashboard/sessions";
 ---
 
 <SpacePage context={spaces} title="Sessions">
@@ -43,7 +46,7 @@ const spaces = await resolveSpacePage(Astro.locals, "sessions");
     ) : (
       <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {recordings.map((recording) => (
-          <a href={`/dashboard/sessions/${recording.id}`} class="block">
+          <a href={`${sessionsHref}/${recording.id}`} class="block">
             <Card>
               <div class="space-y-4">
                 <div class="flex items-start justify-between gap-3">

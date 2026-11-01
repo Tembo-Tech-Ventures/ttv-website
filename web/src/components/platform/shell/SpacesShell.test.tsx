@@ -131,7 +131,7 @@ describe("SpacesShell on the server", () => {
 describe("SpacesShell overlay triggers", () => {
   it("shows no search or bell unless the page mounts their overlays", async () => {
     await mount();
-    expect(container.querySelector('[aria-label="Search everything"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Search"]')).toBeNull();
     expect(container.querySelector('[aria-label^="Attention"]')).toBeNull();
   });
 
@@ -141,7 +141,7 @@ describe("SpacesShell overlay triggers", () => {
     window.addEventListener(SHELL_OVERLAY_EVENT, listen);
     await mount({ overlays: ["search", "attention"] });
 
-    const search = q<HTMLButtonElement>('[aria-label="Search everything"]');
+    const search = q<HTMLButtonElement>('[aria-label="Search"]');
     const bell = q<HTMLButtonElement>('[aria-label="Attention, 3 waiting"]');
     await act(async () => search.click());
     await act(async () => {
@@ -327,6 +327,25 @@ describe("SpacesShell space preference", () => {
     document.removeEventListener("click", stay);
   });
 
+  it("never remembers Admin, so /dashboard and Admin's way back do not lead back to Admin", async () => {
+    setURL("https://ttv.test/dashboard/community");
+    document.cookie = "ttv-last-space=community; Path=/dashboard";
+    const stay = (event: Event) => event.preventDefault();
+    document.addEventListener("click", stay);
+    await mount({ me: meByPersona.amina, space: "community", persistPreference: true });
+    await act(async () => q<HTMLAnchorElement>('.space-file__nav [data-space="admin"] a').click());
+    expect(document.cookie).toContain("ttv-last-space=community");
+    document.removeEventListener("click", stay);
+
+    // An admin-context page (the mentor review inside Admin) does not save Admin either.
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    setURL("https://ttv.test/dashboard/mentoring/confirm");
+    await mount({ me: meByPersona.amina, space: "admin", persistPreference: true });
+    expect(document.cookie).toContain("ttv-last-space=community");
+    expect(document.cookie).not.toContain("ttv-last-space=admin");
+  });
+
   it("writes nothing from a fixture harness", async () => {
     setURL("https://ttv.test/dashboard/mentoring");
     document.cookie = "ttv-last-space=; Path=/dashboard; Max-Age=0";
@@ -353,5 +372,96 @@ describe("SpacesShell live attention counts", () => {
     expect(container.querySelector('[data-space="community"]')?.textContent).toContain("4 new");
     await act(async () => publishAttentionCounts({ cohort: 0, community: 0, mentoring: 0, discover: 0, admin: 0, profile: 0 }));
     expect(q('[aria-label="Attention"]')).toBeTruthy();
+  });
+});
+
+describe("SpacesShell last-space landing hint", () => {
+  function navigation(redirectCount: number) {
+    vi.spyOn(performance, "getEntriesByType").mockReturnValue([{ redirectCount } as unknown as PerformanceEntry]);
+  }
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    setURL("https://ttv.test/dashboard/mentoring");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const hint = () => container.querySelector(".spaces-shell__landing output")?.textContent ?? null;
+
+  it("says /dashboard reopened the space used last, once per session, and can be dismissed", async () => {
+    navigation(1);
+    await mount({ persistPreference: true, lastSpace: "mentoring" });
+    expect(hint()).toBe("You’re in Mentoring, the space you used last. Switch any time from the tabs.");
+
+    const dismiss = q<HTMLButtonElement>('.spaces-shell__landing button[aria-label="Dismiss"]');
+    await act(async () => dismiss.click());
+    expect(hint()).toBeNull();
+    expect(document.activeElement).toBe(q("#spaces-main"));
+
+    // The next landing in the same session stays quiet.
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount({ persistPreference: true, lastSpace: "mentoring" });
+    expect(hint()).toBeNull();
+  });
+
+  it("keeps an empty status region in place, so the hint is announced when it appears", async () => {
+    navigation(0);
+    await mount({ persistPreference: true, lastSpace: "mentoring" });
+    expect(container.querySelector("#spaces-main output")).not.toBeNull();
+    expect(hint()).toBeNull();
+  });
+
+  it("stays quiet for a tab choice, a reload, a deeper page or a fixture harness", async () => {
+    for (const [overrides, url, redirects] of [
+      [{ lastSpace: "community" as const }, "https://ttv.test/dashboard/mentoring", 1], // chosen from another space's tab
+      [{ lastSpace: "mentoring" as const }, "https://ttv.test/dashboard/mentoring", 0], // a reload or a direct link
+      [{ lastSpace: "mentoring" as const }, "https://ttv.test/dashboard/mentoring/confirm", 1], // a legacy URL's redirect
+    ] as const) {
+      navigation(redirects);
+      setURL(url);
+      await act(async () => root.unmount());
+      root = createRoot(container);
+      await mount({ persistPreference: true, ...overrides });
+      expect({ url, hint: hint() }).toEqual({ url, hint: null });
+    }
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    navigation(1);
+    setURL("https://ttv.test/dashboard/mentoring");
+    await mount({ persistPreference: false, lastSpace: "mentoring" });
+    expect(hint()).toBeNull();
+  });
+});
+
+describe("SpacesShell leaving the shell", () => {
+  function swap(url: string | null) {
+    const skipTransition = vi.fn();
+    const event = Object.assign(new Event("pageswap"), {
+      viewTransition: { skipTransition },
+      activation: url ? { entry: { url } } : null,
+    });
+    window.dispatchEvent(event);
+    return skipTransition;
+  }
+
+  it("skips the sheet transition for a page outside the shell, which cannot finish it", async () => {
+    setURL("https://ttv.test/dashboard/mentoring");
+    await mount();
+    expect(swap("https://ttv.test/admin")).toHaveBeenCalledOnce();
+    expect(swap("https://ttv.test/community/members")).toHaveBeenCalledOnce();
+    expect(swap(null)).toHaveBeenCalledOnce();
+  });
+
+  it("keeps it between space pages, and on the same page", async () => {
+    setURL("https://ttv.test/dev/platform-shell?space=mentoring");
+    await mount();
+    expect(swap("https://ttv.test/dashboard/community")).not.toHaveBeenCalled();
+    expect(swap("https://ttv.test/dashboard/me/portfolio")).not.toHaveBeenCalled();
+    expect(swap("https://ttv.test/dashboard/attention")).not.toHaveBeenCalled();
+    expect(swap("https://ttv.test/dev/platform-shell?space=profile")).not.toHaveBeenCalled();
   });
 });

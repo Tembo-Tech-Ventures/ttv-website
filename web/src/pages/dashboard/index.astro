@@ -1,10 +1,9 @@
 ---
-import { qaPathAllowed } from "@/lib/staging-qa-policy";
 import { createCommunityService } from "@/lib/community/service";
-import { hasDiscoveryAccess, dashboardNextStep, restrictedQaNextStep } from "@/lib/dashboard-presentation";
+import { hasDiscoveryAccess, dashboardNextStep } from "@/lib/dashboard-presentation";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import PageTitle from "@/components/platform/spaces/PageTitle.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { inSpacesWords, resolveSpacePage, restrictedNextStep, restrictionsFor } from "@/components/platform/spaces/space-page";
 import { canonicalSpacePath } from "@/lib/platform/server/space-routes";
 import Card from "@/components/common/Card.astro";
 import Button from "@/components/common/Button.astro";
@@ -20,10 +19,12 @@ const journey = await getStudentJourney(drizzle(env.DB, { schema }), user.id);
 const canDiscover = hasDiscoveryAccess(await createCommunityService(env.DB, user.id, Astro.locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT).access());
 const proposedStep = dashboardNextStep(journey.nextStep, canDiscover);
 const qa = Astro.locals.stagingQa;
-const nextStep = restrictedQaNextStep(proposedStep, !qa || qaPathAllowed(qa.persona, proposedStep.action.href, "GET"));
 const greetingName = getDashboardGreetingName(user.name);
 // With spaces on, this page is the Cohort overview at /dashboard/cohort.
 const spaces = await resolveSpacePage(Astro.locals, "cohort");
+// Restricted synthetic identities (QA personas, staging fixtures) are never offered a step they cannot open.
+const allowedStep = restrictedNextStep(restrictionsFor(Astro.locals), proposedStep);
+const nextStep = spaces ? inSpacesWords(allowedStep) : allowedStep;
 // Link straight to the step's space path rather than through its redirect.
 const nextStepHref = spaces ? canonicalSpacePath(nextStep.action.href) ?? nextStep.action.href : nextStep.action.href;
 const hasVisitedDashboard =

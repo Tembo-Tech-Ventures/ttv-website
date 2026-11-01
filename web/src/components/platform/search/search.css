@@ -1,5 +1,5 @@
 /*
- * Search everything: a sheet that comes forward over the page with the
+ * Search: a sheet that comes forward over the page with the
  * question at its top, the places to look under it, and the answers grouped
  * by kind. On phones it takes the whole screen, so the keyboard and results
  * share it without anything floating.
@@ -333,6 +333,13 @@
   overflow-wrap: anywhere;
 }
 
+.search-option__why {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
 .search-option__meta {
   font-size: 0.8125rem;
   color: var(--color-ink-muted);
@@ -345,11 +352,15 @@
 }
 
 /* Matches: a quiet peach wash, never a colour the text depends on. */
+/* Room around the marked words; the negative margin keeps them in the line's flow. */
 .search-mark {
   border-radius: 0.25rem;
-  padding: 0 0.125rem;
+  margin: 0 -0.0625rem;
+  padding: 0.0625rem 0.1875rem;
   background: rgb(242 141 104 / 0.2);
   color: inherit;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 .search-recent__head {
