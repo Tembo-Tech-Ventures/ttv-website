@@ -22,7 +22,10 @@ const errorOf = (body: unknown) => ErrorEnvelope.parse(body).error;
 /** Flags as production reads them: from the database, no preview override. */
 const DATABASE_FLAGS = { PLATFORM_FLAGS_OVERRIDE: undefined, DEPLOYMENT_ENVIRONMENT: "production" };
 
-/** Every route with a valid request for it, against a message Wanjiku wrote in #help. */
+/** The message routes; the moderation routes have their own tests (moderation/routes.test.ts). */
+type MessagingOperation = Exclude<ChannelOperation, "reportMessage" | "requestModerationReview" | "moderateMessage" | "listModerationQueue">;
+
+/** Every message route with a valid request for it, against a message Wanjiku wrote in #help. */
 function everyRoute(s: ChannelFixture) {
   const help = s.channel("help");
   const own = s.message("help", { author: VIEWER, body: "Mine" });
@@ -30,7 +33,7 @@ function everyRoute(s: ChannelFixture) {
     ["listChannels", {}], ["listMessages", { id: help }], ["listShareables", { id: help }], ["postMessage", { id: help, body: post() }],
     ["markChannelRead", { id: help, body: { messageId: own } }], ["editMessage", { id: own, body: { body: "Changed" } }],
     ["reactToMessage", { id: own, body: { kind: "useful", active: true } }], ["deleteMessage", { id: own }],
-  ] as const satisfies readonly (readonly [ChannelOperation, Parameters<ChannelFixture["call"]>[1]])[];
+  ] as const satisfies readonly (readonly [MessagingOperation, Parameters<ChannelFixture["call"]>[1]])[];
 }
 
 describe("channel APIs: gates", () => {
@@ -201,12 +204,12 @@ describe("channel APIs: contracts", () => {
 
 describe("channel APIs: query budget", () => {
   /** Statements per request with production flags (one flag read) and capabilities read once. */
-  const BUDGET: Record<ChannelOperation, number> = {
+  const BUDGET: Record<MessagingOperation, number> = {
     listChannels: 5, listMessages: 6, listShareables: 6, postMessage: 7, markChannelRead: 8, editMessage: 9, reactToMessage: 10,
     deleteMessage: 9,
   };
 
-  it.each(Object.entries(BUDGET) as [ChannelOperation, number][])("%s issues at most %i statements", async (operation, budget) => {
+  it.each(Object.entries(BUDGET) as [MessagingOperation, number][])("%s issues at most %i statements", async (operation, budget) => {
     const s = setup();
     s.agree();
     s.database.exec("UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'");
@@ -250,7 +253,9 @@ describe("channel APIs: query budget", () => {
     await s.call("postMessage", { id: s.channel("introductions"), body: post(long), env: { ...DATABASE_FLAGS, AI: { run } as unknown as Ai, AI_GATEWAY_NAME: "gw" } });
     prepare.mockClear();
     await s.afterResponse();
-    expect([run.mock.calls.length, prepare.mock.calls.length]).toEqual([1, 3]);
+    // Then attention reads its flags, and stops there while spaces is off.
+    const queries = prepare.mock.calls.map(([query]) => query);
+    expect([run.mock.calls.length, queries.filter((query) => !query.includes("feature_flag")).length]).toEqual([1, 3]);
   });
 
   it("refused writes stay within 10 statements too, flagged edits included", async () => {

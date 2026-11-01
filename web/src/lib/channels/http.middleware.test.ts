@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { APIContext } from "astro";
-import { ChannelList, ChannelShareables, ErrorEnvelope, Message } from "@/lib/platform/contracts";
+import { ChannelList, ChannelShareables, ErrorEnvelope, Message, ModerationQueue } from "@/lib/platform/contracts";
 import { channelDatabase, ORIGIN, post, VIEWER, type ChannelFixture } from "./test-support";
 
 const mocks = vi.hoisted(() => ({
@@ -25,6 +25,10 @@ import { POST as markRead } from "@/pages/api/channels/[id]/read";
 import { GET as listShareables } from "@/pages/api/channels/[id]/shareables";
 import { DELETE as deleteMessage, PATCH as editMessage } from "@/pages/api/messages/[id]";
 import { POST as react } from "@/pages/api/messages/[id]/reactions";
+import { POST as report } from "@/pages/api/messages/[id]/report";
+import { POST as review } from "@/pages/api/messages/[id]/review";
+import { POST as moderate } from "@/pages/api/moderation/[messageId]";
+import { GET as queue } from "@/pages/api/moderation/queue";
 
 let s: ChannelFixture;
 const session = (userId = VIEWER) => ({
@@ -80,6 +84,19 @@ describe("channel API route files through the middleware", () => {
       const response = await call(path, handler, { method, body, params: { id: path.includes("/channels/") ? help : id } });
       expect(response.status, `${method} ${path}`).toBe(200);
     }
+  });
+
+  it("serve the moderation routes, and the queue to admins only", async () => {
+    const theirs = s.message("help", { author: "synthetic-otieno", body: "Theirs" });
+    expect((await call(`/api/messages/${theirs}/report`, report, { method: "POST", params: { id: theirs }, body: { reason: "Spam" } })).status).toBe(201);
+    expect((await call(`/api/moderation/${theirs}`, moderate, { method: "POST", params: { messageId: theirs }, body: { action: "hide", reason: "x" } })).status).toBe(403);
+    const own = s.message("help", { author: VIEWER, state: "HIDDEN" });
+    expect((await call(`/api/messages/${own}/review`, review, { method: "POST", params: { id: own }, body: {} })).status).toBe(201);
+    expect((await call("/api/moderation/queue", queue)).status).toBe(403);
+    s.database.exec(`INSERT INTO UserRoles(id,userId,roleId) SELECT 'viewer-admin','${VIEWER}',id FROM Roles WHERE name = 'ADMIN'`);
+    const listed = await call("/api/moderation/queue", queue);
+    expect(ModerationQueue.parse(await listed.json()).items.map((item) => item.id).toSorted()).toEqual([own, theirs].toSorted());
+    expect((await call("/api/moderation/queue", queue, { scopes: ["admin:read"] })).status).toBe(403);
   });
 
   it("refuse personal access tokens: community tokens at the middleware, admin tokens in the handler", async () => {

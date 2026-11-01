@@ -319,23 +319,47 @@ export type ShareablesQuery = z.infer<typeof ShareablesQuery>;
 export const ChannelShareables = z.object({ projects: z.array(ProjectEmbed).max(50), clips: z.array(SessionClipEmbed).max(20) });
 export type ChannelShareables = z.infer<typeof ChannelShareables>;
 
-export const ModerationSource = z.enum(["AI_FLAG", "REPORT", "MENTOR_HIDE"]);
+/**
+ * What opened a moderation case (src/lib/channels/README.md, "Moderation"): a detector or Clef flag or
+ * hide (AI_FLAG), a member's report, a channel moderator's hide, or an admin's own hide.
+ */
+export const ModerationSource = z.enum(["AI_FLAG", "REPORT", "MENTOR_HIDE", "ADMIN_HIDE"]);
 export type ModerationSource = z.infer<typeof ModerationSource>;
 export const ModerationQueueState = z.enum(["PENDING", "DECIDED"]);
 export type ModerationQueueState = z.infer<typeof ModerationQueueState>;
+export const ModerationActionKind = z.enum(["hide", "restore", "keep"]);
+export type ModerationActionKind = z.infer<typeof ModerationActionKind>;
+/** Why a text was kept: an author's edit or delete replaced it, or it was flagged, reported or hidden as it was. */
+export const MessageVersionCause = z.enum(["EDIT", "DELETE", "FLAG", "REPORT", "HIDE"]);
+export type MessageVersionCause = z.infer<typeof MessageVersionCause>;
+/** An earlier text of a message, kept as moderation evidence. Admins only. */
+export const MessageVersion = z.object({ body: NonEmptyText.max(10_000), cause: MessageVersionCause, capturedAt: Timestamp });
+export type MessageVersion = z.infer<typeof MessageVersion>;
+/** The author's "Ask for review" of their hidden message. */
+export const ModerationReview = z.object({ requestedAt: Timestamp, note: NonEmptyText.max(1000).nullable() });
+export type ModerationReview = z.infer<typeof ModerationReview>;
+/** An admin's decision; `by` is null once that admin's account is deleted. */
+export const ModerationDecision = z.object({
+  action: ModerationActionKind, reason: NonEmptyText, by: PersonSummary.nullable(), decidedAt: Timestamp,
+});
+export type ModerationDecision = z.infer<typeof ModerationDecision>;
+/** One case per message (id = the message's id). evidence is oldest first. */
 export const ModerationQueueItem = z.object({
   id: Id, message: Message, channel: Channel, source: ModerationSource, reasons: z.array(NonEmptyText).min(1),
   state: ModerationQueueState, reportCount: Count, actor: PersonSummary.nullable(), createdAt: Timestamp,
-});
+  evidence: z.array(MessageVersion), review: ModerationReview.nullable(), decision: ModerationDecision.nullable(),
+}).refine((item) => (item.state === "DECIDED") === (item.decision !== null), "Decided exactly when an admin's decision is recorded");
 export type ModerationQueueItem = z.infer<typeof ModerationQueueItem>;
 export const ModerationQueueQuery = z.strictObject({ cursor: Cursor.optional(), state: ModerationQueueState.optional() });
 export type ModerationQueueQuery = z.infer<typeof ModerationQueueQuery>;
 export const ModerationQueue = z.object({ items: z.array(ModerationQueueItem), nextCursor: Cursor.nullable() });
 export type ModerationQueue = z.infer<typeof ModerationQueue>;
-export const ModerationActionKind = z.enum(["hide", "restore", "keep"]);
-export type ModerationActionKind = z.infer<typeof ModerationActionKind>;
+/** Channel moderators may only hide; admins hide, restore or keep ("fine as is", which also allowlists the text). */
 export const ModerationAction = z.strictObject({ action: ModerationActionKind, reason: NonEmptyText.max(2000) });
 export type ModerationAction = z.infer<typeof ModerationAction>;
+/** The author of a hidden message asks an admin to look again. */
+export const RequestModerationReview = z.strictObject({ note: NonEmptyText.max(1000).optional() });
+export type RequestModerationReview = z.infer<typeof RequestModerationReview>;
 export const ModerationParams = z.strictObject({ messageId: Id });
 export type ModerationParams = z.infer<typeof ModerationParams>;
 
@@ -543,6 +567,7 @@ export const ROUTES = {
   markChannelRead: defineRoute({ method: "POST", path: "/api/channels/:id/read", params: IdParams, body: MarkChannelRead, response: ChannelRead, idempotent: true }),
   listModerationQueue: defineRoute({ method: "GET", path: "/api/moderation/queue", query: ModerationQueueQuery, response: ModerationQueue, idempotent: true }),
   moderateMessage: defineRoute({ method: "POST", path: "/api/moderation/:messageId", params: ModerationParams, body: ModerationAction, response: Message, idempotent: false }),
+  requestModerationReview: defineRoute({ method: "POST", path: "/api/messages/:id/review", params: IdParams, body: RequestModerationReview, response: Success, idempotent: true }),
   askTembo: defineRoute({ method: "POST", path: "/api/channels/:id/tembo", params: IdParams, body: TemboAsk, response: TemboResponse, idempotent: true }),
   temboFeedback: defineRoute({ method: "POST", path: "/api/messages/:id/tembo-feedback", params: IdParams, body: TemboFeedback, response: Success, idempotent: true }),
   listMentors: defineRoute({ method: "GET", path: "/api/mentors", query: MentorDirectoryQuery, response: MentorDirectory, idempotent: true }),

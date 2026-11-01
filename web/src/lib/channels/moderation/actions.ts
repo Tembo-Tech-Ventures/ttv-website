@@ -1,0 +1,159 @@
+import { createId } from "@paralleldrive/cuid2";
+import type { Message, ModerationAction, ReportMessage, RequestModerationReview } from "@/lib/platform/contracts";
+import { ChannelError, readMessage } from "../messages";
+import type { MessageTarget, WriteContext } from "../mutations";
+import { detectFindings, textKey } from "./detectors";
+import { mergedReasons } from "./reasons";
+
+/**
+ * What people do about a message (B-2.5; README.md, "Moderation"): members report it, a channel's
+ * moderators hide it, admins have the final say (hide, restore, keep), and the author of a hidden
+ * message asks for a review. Each writes a moderation_event, and the case and evidence triggers
+ * (migration 0032) follow from it. Callers have already resolved the message and its channel for
+ * the caller (a message they cannot see is 404), and own the flag, sign-in and same-origin checks.
+ */
+
+/** Reports per person per rolling day, across channels: enough for real use, too few to flood the queue. */
+export const REPORT_LIMIT = Object.freeze({ count: 20, windowMs: 24 * 60 * 60_000 });
+
+const EVENT = "INSERT INTO moderation_event (id, messageId, action, source, actorId, fromState, toState, reasons, createdAt)";
+/** ?1 is the message's channel: the message moves to its next changeSeq, so pollers see the change. */
+const NEXT_CHANGE = "(SELECT MAX(changeSeq) + 1 FROM channel_message WHERE channelId = ?1)";
+
+const deleted = () => new ChannelError("conflict", "This message was deleted.", 409);
+const decided = () => new ChannelError("conflict", "An admin has already reviewed this message.", 409);
+
+async function current(ctx: WriteContext, id: string): Promise<Message> {
+  const message = await readMessage(ctx, id);
+  if (!message) throw new ChannelError("not_found", "Message not found.", 404);
+  return message;
+}
+
+/**
+ * POST /api/messages/:id/report. Once per person and message: reporting again changes nothing
+ * (created: false). Nobody reports their own message (403) or a deleted one (409). The author sees
+ * no change; the report opens or joins the admin case and keeps the text the reporter saw.
+ */
+export async function reportMessage(ctx: WriteContext, target: MessageTarget, input: ReportMessage): Promise<{ created: boolean }> {
+  if (target.authorKind === "USER" && target.authorId === ctx.viewerId) {
+    throw new ChannelError("forbidden", "You can't report your own message.", 403);
+  }
+  if (target.deletedAt !== null) throw deleted();
+  const now = ctx.now ?? Date.now();
+  const reportId = createId();
+  // ?1 report, ?2 message, ?3 reporter, ?4 reason, ?5 now; then ?6 window start and ?7 limit for the
+  // report, ?6 the event for its audit row, written only with the report.
+  const [report] = await ctx.db.batch([
+    ctx.db.prepare(`INSERT INTO message_report (id, messageId, reporterId, reason, createdAt) SELECT ?1, ?2, ?3, ?4, ?5
+      WHERE EXISTS (SELECT 1 FROM channel_message WHERE id = ?2 AND deletedAt IS NULL)
+        AND (SELECT COUNT(*) FROM message_report WHERE reporterId = ?3 AND createdAt > ?6) < ?7
+      ON CONFLICT (messageId, reporterId) DO NOTHING`)
+      .bind(reportId, target.id, ctx.viewerId, input.reason, now, now - REPORT_LIMIT.windowMs, REPORT_LIMIT.count),
+    ctx.db.prepare(`${EVENT} SELECT ?6, id, 'FLAG', 'REPORT', ?3, moderationState, moderationState, json_array(?4), ?5
+      FROM channel_message WHERE id = ?2 AND EXISTS (SELECT 1 FROM message_report WHERE id = ?1)`)
+      .bind(reportId, target.id, ctx.viewerId, input.reason, now, createId()),
+  ]);
+  if (report?.meta.changes === 1) return { created: true };
+  const why = await ctx.db.prepare(`SELECT
+      EXISTS (SELECT 1 FROM message_report WHERE messageId = ?1 AND reporterId = ?2) AS reported,
+      (SELECT deletedAt IS NOT NULL FROM channel_message WHERE id = ?1) AS gone,
+      (SELECT MIN(createdAt) FROM message_report WHERE reporterId = ?2 AND createdAt > ?3) AS oldest`)
+    .bind(target.id, ctx.viewerId, now - REPORT_LIMIT.windowMs).first<{ reported: number; gone: number; oldest: number | null }>();
+  if (why?.reported) return { created: false };
+  if (why?.gone) throw deleted();
+  throw new ChannelError("rate_limited", "You've sent a lot of reports today. Try again later.", 429,
+    Math.max(1, (why?.oldest ?? now) + REPORT_LIMIT.windowMs - now));
+}
+
+/**
+ * POST /api/moderation/:messageId. A channel's moderators (its cohort's instructors, TAs and mentors;
+ * global mentors in community channels) may hide, with a reason the author sees, but not a message
+ * an admin restored or kept since its last edit (409): admins have the final say. Admins hide (also
+ * upholding a moderator's hide), restore, or keep: fine as is, which makes it visible again and
+ * allowlists its text and each detector finding in it, so neither is flagged again.
+ */
+export async function moderateMessage(
+  ctx: WriteContext, target: MessageTarget, input: ModerationAction, { isAdmin }: { isAdmin: boolean },
+): Promise<Message> {
+  if (!isAdmin && !ctx.channel.capabilities.canModerate) {
+    throw new ChannelError("forbidden", "Only this channel's moderators can do that.", 403);
+  }
+  if (!isAdmin && input.action !== "hide") throw new ChannelError("forbidden", "Only admins can restore or keep a message.", 403);
+  const now = ctx.now ?? Date.now();
+  const eventId = createId();
+  // ?1 channel, ?2 message, ?3 actor, ?4 reason, ?5 now, ?6 event, ?7 source.
+  const params = [ctx.channel.id, target.id, ctx.viewerId, input.reason, now, eventId, isAdmin ? "ADMIN" : "MENTOR"];
+  const written = "EXISTS (SELECT 1 FROM moderation_event WHERE id = ?6)";
+
+  if (input.action === "hide") {
+    if (target.deletedAt !== null) throw deleted();
+    const [event] = await ctx.db.batch([
+      // A moderator's hide needs a message not yet hidden and no admin restore or keep since its last edit.
+      ctx.db.prepare(`${EVENT} SELECT ?6, m.id, 'HIDE', ?7, ?3, m.moderationState, 'HIDDEN', json_array(?4), ?5
+        FROM channel_message m WHERE m.id = ?2 AND m.channelId = ?1 AND m.deletedAt IS NULL
+          AND (?7 = 'ADMIN' OR (m.moderationState <> 'HIDDEN' AND NOT EXISTS (SELECT 1 FROM moderation_case c
+            WHERE c.messageId = m.id AND c.state = 'DECIDED' AND c.decision IN ('RESTORE','KEEP') AND c.decidedAt >= coalesce(m.editedAt, 0))))`)
+        .bind(...params),
+      ctx.db.prepare(`UPDATE channel_message SET moderationState = 'HIDDEN', hiddenBy = ?3, hiddenAt = coalesce(hiddenAt, ?5),
+          moderationReasons = ${mergedReasons("moderationReasons", "json_array(?4)")}, changeSeq = ${NEXT_CHANGE}
+        WHERE id = ?2 AND ${written}`).bind(...params.slice(0, 6)),
+    ]);
+    if (event?.meta.changes !== 1) {
+      const state = await ctx.db.prepare("SELECT moderationState, deletedAt FROM channel_message WHERE id = ?1")
+        .bind(target.id).first<{ moderationState: string; deletedAt: number | null }>();
+      if (state?.deletedAt !== null) throw deleted();
+      // Hiding again is a no-op for a moderator: the message is already hidden.
+      if (state.moderationState !== "HIDDEN") throw decided();
+    }
+    return current(ctx, target.id);
+  }
+
+  const statements = [
+    ctx.db.prepare(`${EVENT} SELECT ?6, id, ?8, 'ADMIN', ?3, moderationState, 'VISIBLE', json_array(?4), ?5
+      FROM channel_message WHERE id = ?2 AND channelId = ?1`).bind(...params, input.action.toUpperCase()),
+    ctx.db.prepare(`UPDATE channel_message SET moderationState = 'VISIBLE', moderationReasons = '[]', hiddenBy = NULL, hiddenAt = NULL,
+        changeSeq = ${NEXT_CHANGE}
+      WHERE id = ?2 AND moderationState <> 'VISIBLE' AND ${written}`).bind(...params.slice(0, 6)),
+  ];
+  if (input.action === "keep" && target.body !== "") {
+    const keys = [await textKey(target.body), ...detectFindings(target.body).flatMap((finding) => finding.key ?? [])];
+    // Only while the message still has the text the admin read.
+    statements.push(ctx.db.prepare(`INSERT INTO moderation_allowlist (key, messageId, createdBy, createdAt)
+      SELECT value, ?2, ?3, ?5 FROM json_each(?7)
+      WHERE ${written} AND EXISTS (SELECT 1 FROM channel_message WHERE id = ?2 AND body = ?8)
+      ON CONFLICT (key) DO NOTHING`).bind(...params.slice(0, 6), JSON.stringify(keys), target.body));
+  }
+  await ctx.db.batch(statements);
+  return current(ctx, target.id);
+}
+
+/**
+ * POST /api/messages/:id/review. The author of a hidden message asks an admin to look again, with an
+ * optional note. Once per case: asking again changes nothing. A hide an admin made or upheld is final
+ * (409), and only a hidden message can be reviewed (409).
+ */
+export async function requestModerationReview(
+  ctx: WriteContext, target: MessageTarget, input: RequestModerationReview,
+): Promise<{ created: boolean }> {
+  if (target.authorKind !== "USER" || target.authorId !== ctx.viewerId) {
+    throw new ChannelError("forbidden", "Only the author can ask for a review.", 403);
+  }
+  if (target.moderationState !== "HIDDEN") throw new ChannelError("conflict", "This message isn't hidden.", 409);
+  const now = ctx.now ?? Date.now();
+  // ?1 message, ?2 author, ?3 now, ?4 note. A hidden message always has a case; the INSERT covers one
+  // that predates the case triggers.
+  const { meta } = await ctx.db.prepare(`INSERT INTO moderation_case
+      (messageId, state, source, reasons, actorId, openedAt, updatedAt, reviewRequestedAt, reviewNote)
+    SELECT id, 'PENDING', CASE WHEN hiddenBy IS NULL THEN 'AI_FLAG' ELSE 'MENTOR_HIDE' END, moderationReasons, hiddenBy, ?3, ?3, ?3, ?4
+    FROM channel_message WHERE id = ?1 AND authorId = ?2 AND moderationState = 'HIDDEN'
+    ON CONFLICT (messageId) DO UPDATE SET reviewRequestedAt = excluded.reviewRequestedAt, reviewNote = excluded.reviewNote,
+      updatedAt = max(updatedAt, excluded.updatedAt)
+    WHERE state = 'PENDING' AND reviewRequestedAt IS NULL`).bind(target.id, ctx.viewerId, now, input.note ?? null).run();
+  if (meta.changes === 1) return { created: true };
+  const found = await ctx.db.prepare(`SELECT c.state, c.reviewRequestedAt, m.moderationState FROM channel_message m
+    LEFT JOIN moderation_case c ON c.messageId = m.id WHERE m.id = ?1`)
+    .bind(target.id).first<{ state: string | null; reviewRequestedAt: number | null; moderationState: string }>();
+  if (found?.moderationState === "HIDDEN" && found.state === "PENDING" && found.reviewRequestedAt !== null) return { created: false };
+  if (found?.moderationState !== "HIDDEN") throw new ChannelError("conflict", "This message isn't hidden.", 409);
+  throw decided();
+}
