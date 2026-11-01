@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { InternalPath, SPACE_ORDER } from "@/lib/platform/contracts";
-import { canonicalSpacePath, SPACE_PATHS, spaceForPath } from "@/lib/platform/server/space-routes";
+import { canonicalSpacePath, SPACE_PATHS, SPACE_REDIRECTS, spaceForPath } from "@/lib/platform/server/space-routes";
 import { ACCOUNT_HREF, opensInShell, SIGN_OUT_HREF, SPACE_HOME, SPACE_LABEL } from "./space-routes";
 
 describe("space routes", () => {
@@ -49,6 +49,13 @@ describe("space routes", () => {
     // Admin is a space with its own frame; the rest are outside the app or not spaces pages.
     for (const path of ["/admin", "/admin/users", "/community/members", "/certificate/a1", "/", "/dashboard/sessions-old", "/auth/logout"]) {
       expect({ path, opens: opensInShell(path) }).toEqual({ path, opens: false });
+    }
+  });
+
+  it("leaves the /dashboard entry as the only redirect onto a space home, which the landing hint relies on", () => {
+    const homes = new Set<string>(Object.values(SPACE_HOME));
+    for (const [legacy, canonical] of SPACE_REDIRECTS) {
+      expect({ legacy, ontoHome: homes.has(canonical) }).toEqual({ legacy, ontoHome: false });
     }
   });
 });

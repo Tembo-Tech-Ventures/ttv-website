@@ -52,6 +52,11 @@ describe("matchReason", () => {
     expect(matchReason(project, "  bank reconciliation ")).toBe("Matches “bank reconciliation” in the project's full description");
   });
 
+  it("does not explain a one-letter search, which matches almost anything", () => {
+    expect(matchReason(person, "a")).toBeNull();
+    expect(matchReason(person, " x ")).toBeNull();
+  });
+
   it("leaves moments to their quote, which is cut around the match", () => {
     expect(matchReason(moment, "zzz")).toBeNull();
     expect(matchReason(person, "   ")).toBeNull();

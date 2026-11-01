@@ -22,7 +22,9 @@ export interface LandingFacts {
  * `/dashboard` opens the space a person used last, which surprised testers who
  * expected the same page every time (QA1-23). Say so when that is what just
  * happened: a redirect landed on the home of the remembered space. Picking a
- * tab, reloading or following a link to a space never shows it.
+ * tab, reloading or following a link to a space never shows it. Only the
+ * /dashboard entry redirects to a space home (every legacy redirect lands on a
+ * deeper page; space-routes.test.ts holds that), so a redirect here means it.
  */
 export function landedOnLastSpace({ space, lastSpace, path, home, redirected, seen }: LandingFacts): boolean {
   return redirected && !seen && lastSpace === space && path.replace(/\/$/, "") === home;

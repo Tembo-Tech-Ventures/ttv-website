@@ -72,7 +72,9 @@ export function highlight(text: string, query: string): Highlighted {
     .map((part) => ({ text: part, match: words.includes(part.toLowerCase()) }));
 }
 
+/** Whether the shown words explain the match. Single letters are not marked, and match nearly anything. */
 function shows(texts: readonly string[], query: string): boolean {
+  if (query.split(/\s+/).every((word) => word.length < 2)) return true;
   return texts.some((text) => highlight(text, query).some((part) => part.match));
 }
 
