@@ -681,12 +681,29 @@
   color: var(--color-dark);
   font-size: 0.8125rem;
   font-weight: 700;
-  transform: translateX(-50%);
+  translate: -50% 0;
 }
 
 @media (pointer: coarse) {
   .channel-jump {
     height: 2.75rem;
+  }
+}
+
+/*
+ * While "Jump to latest" floats over the list, the end of the list makes room for it, so the last
+ * message's reactions can always be scrolled clear of it (U-2.1 review N3).
+ */
+.channel-list[data-jump] .channel-list__scroller {
+  padding-bottom: 4.5rem;
+}
+
+/* On a phone it sits at the end of the line, away from the reactions and thread links under each message. */
+@container channel-view (max-width: 40rem) {
+  .channel-jump {
+    right: var(--channel-gutter);
+    left: auto;
+    translate: none;
   }
 }
 
@@ -1077,6 +1094,6 @@
 @keyframes channel-jump-in {
   from {
     opacity: 0;
-    transform: translate(-50%, 0.375rem);
+    transform: translateY(0.375rem);
   }
 }

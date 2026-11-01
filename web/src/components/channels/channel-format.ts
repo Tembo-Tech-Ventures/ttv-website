@@ -177,7 +177,7 @@ export function mentionsTembo(body: string): boolean {
 
 /**
  * Where the "New" divider goes when a channel opens: before the first message by
- * someone else after the reader's marker. A marker older than everything loaded
+ * someone else (not deleted or hidden) after the reader's marker. A marker older than everything loaded
  * (or none yet) puts it before the last `unreadCount` messages by others. Chosen
  * once per visit, so reading on never moves or removes it.
  */
@@ -186,7 +186,9 @@ export function openingDivider(
   read: { markerId: string | null; unreadCount: number | null },
   viewerId: string | null,
 ): string | null {
-  const byOthers = (message: Message) => !message.deleted && message.author.id !== viewerId;
+  // Unread counts skip deleted and hidden messages (B-2.3), so the divider does too: a moderator
+  // receives hidden ones, and "New" must not open on a message members can't see.
+  const byOthers = (message: Message) => !message.deleted && message.moderation?.state !== "HIDDEN" && message.author.id !== viewerId;
   const marker = read.markerId === null ? -1 : messages.findIndex((message) => message.id === read.markerId);
   if (marker >= 0) return messages.slice(marker + 1).find(byOthers)?.id ?? null;
   const unread = read.unreadCount ?? 0;

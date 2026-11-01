@@ -255,6 +255,73 @@ test.describe("the channel view", () => {
     await expect(divider).toHaveCount(1);
   });
 
+  test("the divider stays where the channel opened it when content above it grows late (U-2.1 review N2)", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 600 });
+    await open(page, harness({ channel: "cohort-04", marker: "s00000000000000000000410" }));
+    const divider = page.locator("[data-new-divider]");
+    await expect(divider).toBeInViewport();
+    // As in Safari, which has no native scroll anchoring: the view itself must hold the divider.
+    await scroller(page).evaluate((el) => {
+      el.style.overflowAnchor = "none";
+    });
+    const top = () => divider.evaluate((el) => Math.round(el.getBoundingClientRect().top));
+    const before = await top();
+    // Something above the divider finishes loading late and grows: an embed, an avatar, a font.
+    await page.locator('[data-message="s00000000000000000000410"]').evaluate((el) => {
+      const late = document.createElement("div");
+      late.style.height = "140px";
+      el.lastElementChild!.appendChild(late);
+    });
+    await expect.poll(top).toBe(before);
+    expect(await page.evaluate(() => window.__channelHarness!.reads())).toEqual([]);
+
+    // Once the reader moves the list, it is theirs: growth above no longer moves it back.
+    await scroller(page).hover();
+    await page.mouse.wheel(0, -40);
+    await expect.poll(top).toBeGreaterThan(before);
+    const moved = await top();
+    await page.locator('[data-message="s00000000000000000000410"]').evaluate((el) => {
+      const late = document.createElement("div");
+      late.style.height = "60px";
+      el.lastElementChild!.appendChild(late);
+    });
+    await expect.poll(top).toBe(moved + 60);
+  });
+
+  test("a divider that opens just above the end is neither followed away nor read at once (U-2.1 review, #276)", async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await open(page, harness({ channel: "cohort-04", marker: "s00000000000000000000410" }));
+    const divider = page.locator("[data-new-divider]");
+    await expect(divider).toBeInViewport();
+    await page.waitForTimeout(600);
+    await expect(divider).toBeInViewport();
+    expect(await page.evaluate(() => window.__channelHarness!.reads())).toEqual([]);
+  });
+
+  test("Jump to latest never covers the last message's reactions on a phone (U-2.1 review N3)", async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await open(page, harness({ channel: "cohort-04" }));
+    await expect.poll(() => atEnd(page)).toBe(true);
+    const lastPill = page.locator("[data-reaction]").last();
+    const jump = page.locator("[data-jump-latest]");
+    const overlaps: number[] = [];
+    const height = await scroller(page).evaluate((el) => el.scrollHeight - el.clientHeight);
+    for (let top = height; top >= 0; top -= 24) {
+      await scroller(page).evaluate((el, y) => el.scrollTo({ top: y }), top);
+      await page.waitForTimeout(30);
+      if (!(await jump.isVisible())) continue;
+      const [pill, button] = [await lastPill.boundingBox(), await jump.boundingBox()];
+      if (!pill || !button) continue;
+      const apart = pill.x + pill.width <= button.x || button.x + button.width <= pill.x
+        || pill.y + pill.height <= button.y || button.y + button.height <= pill.y;
+      if (!apart) overlaps.push(top);
+    }
+    expect(overlaps, "scroll positions where Jump to latest covers the last reaction").toEqual([]);
+    await scroller(page).evaluate((el) => el.scrollTo({ top: el.scrollHeight - el.clientHeight - 160 }));
+    await expect(jump).toBeVisible();
+    await page.screenshot({ path: `${EVIDENCE_DIR}/jump-clear-390.png` });
+  });
+
   test("a linked message opens in view without marking what follows it read", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 600 });
     await open(page, harness({ channel: "cohort-04", message: "s00000000000000000000410" }));

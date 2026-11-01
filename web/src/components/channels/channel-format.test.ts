@@ -139,6 +139,16 @@ describe("the New divider", () => {
     expect(openingDivider(list, { markerId: "older-than-the-page", unreadCount: 2 }, wanjikuId)).toBe(messages.sessionTimeReply.id);
     expect(openingDivider(list, { markerId: null, unreadCount: 99 }, wanjikuId)).toBe(messages.recordingPost.id);
   });
+
+  it("skips messages hidden from members, which a moderator still receives (N1)", () => {
+    const hidden: Message = { ...messages.duplicateQuestion, moderation: { state: "HIDDEN", reasons: ["Harsh, not about the work"] } };
+    const flagged: Message = { ...messages.sessionTime, moderation: { state: "FLAGGED", reasons: ["Contact details"] } };
+    const moderated = [messages.recordingPost, hidden, messages.cohortAsk, flagged, messages.sessionTimeReply, messages.mention];
+    expect(openingDivider(moderated, { markerId: messages.recordingPost.id, unreadCount: 3 }, wanjikuId)).toBe(flagged.id);
+    // Counting back from the end skips it too: the unread count never included it.
+    expect(openingDivider(moderated, { markerId: null, unreadCount: 4 }, wanjikuId)).toBe(messages.recordingPost.id);
+    expect(openingDivider([messages.recordingPost, hidden], { markerId: messages.recordingPost.id, unreadCount: 0 }, wanjikuId)).toBeNull();
+  });
 });
 
 describe("threads", () => {

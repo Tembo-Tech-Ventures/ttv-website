@@ -106,6 +106,16 @@ talk to each other, U-2.3's `ChannelFrame` asks; after, the conversation:
   region. The list is never a live region, and the viewer's own messages are
   not announced. The list follows new messages only when the reader is at the
   end (or sent one); otherwise "Jump to latest" appears.
+- **Scrolling is S-2.3's `useScrollAnchoring`** (`client/scroll.README.md`).
+  The list opens at a linked message or the "New" divider and holds it there,
+  however late content above it loads, until the reader moves; older pages
+  and evictions never move the message being read; the store hears which
+  message is in view (`setAnchor`). `MessageList` is keyed by channel, so a
+  new channel opens fresh. The "New" divider skips deleted and hidden
+  messages, as the unread count does.
+- **"Jump to latest" never covers the end.** While it shows, the list makes
+  room for it below the last message; on a narrow sheet it sits at the end
+  of the line, clear of reactions and thread links.
 - **Role badges come from the server**, worded by the server. Nothing in the
   view infers a role, a trust signal or a confirmation.
 - **Moderation is shown to the people the server tells.** `moderation` reaches
