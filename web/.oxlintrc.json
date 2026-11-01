@@ -93,7 +93,8 @@
         "src/components/platform/shell/SpacesShell.tsx",
         "src/components/platform/attention/AttentionPanel.tsx",
         "src/components/platform/attention/AttentionPage.tsx",
-        "src/components/platform/search/SearchOverlay.tsx"
+        "src/components/platform/search/SearchOverlay.tsx",
+        "src/components/channels/ChannelSurface.tsx"
       ],
       "rules": {
         "import/no-unassigned-import": "off"

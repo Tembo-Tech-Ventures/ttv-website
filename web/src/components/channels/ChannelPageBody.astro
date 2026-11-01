@@ -1,0 +1,51 @@
+---
+/**
+ * The body of a channel page (community or cohort). Before a person has
+ * agreed to how we talk to each other, ChannelFrame asks (U-2.3). After, the
+ * conversation (U-2.1): ChannelView, with ChannelHeader as its children so the
+ * thread rail can run the full height beside both. The page passes `fill`
+ * to SpacePage exactly when the view shows, so the view sizes to the sheet.
+ *
+ * `?thread=` opens a thread (only one this reader can open: the server
+ * answers no thread otherwise) and `?message=` marks a linked message.
+ */
+import type { Channel } from "@/lib/platform/contracts";
+import { getRouteChannelPage } from "@/lib/platform/server/channel-context";
+import type { ChannelsPage } from "./channel-page";
+import ChannelFrame from "./ChannelFrame.astro";
+import ChannelHeader from "./ChannelHeader.astro";
+import ChannelView from "./ChannelView";
+
+interface Props {
+  page: ChannelsPage & { channel: Channel };
+}
+
+const { page } = Astro.props;
+const query = Astro.url.searchParams;
+// The first page, the `?thread=` replies and the read marker (B-2.3), so the channel reads without
+// JavaScript. Only once agreed: the habits come first. It never moves the read marker.
+const first = page.agreed ? await getRouteChannelPage(Astro) : null;
+const threadId = first?.page.thread ? query.get("thread") : null;
+---
+
+{
+  page.agreed ? (
+    <ChannelView
+      client:load
+      me={page.context.me}
+      channel={first?.channel ?? page.channel}
+      initial={first?.page.initial ?? null}
+      initialThread={first?.page.thread ?? null}
+      initialRead={first?.page.read ?? null}
+      now={Date.now()}
+      threadId={threadId}
+      messageId={query.get("message")}
+    >
+      <div class="channel-view__header">
+        <ChannelHeader channel={page.channel} />
+      </div>
+    </ChannelView>
+  ) : (
+    <ChannelFrame channel={page.channel} agreed={page.agreed} canAgree={page.canAgree} action={page.self} />
+  )
+}

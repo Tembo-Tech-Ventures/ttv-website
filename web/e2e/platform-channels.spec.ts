@@ -291,10 +291,10 @@ test.describe("channels on real sessions", () => {
     await openReal(page, "/dashboard/community");
     expect(await channelLinks(page, "Community")).toEqual([...COMMUNITY_CHANNELS, CONDUCT]);
 
-    // Its cohort channel opens in Cohort, with its header and either the habits or the not-open note.
+    // Its cohort channel opens in Cohort, with its header and either the habits or the conversation (U-2.1).
     await openReal(page, `/dashboard/cohort/c/${slugs[0]}`);
     await expect(page.getByRole("heading", { level: 1, name: slugs[0] })).toBeVisible();
-    await expect(page.locator("[data-conduct-gate], [data-channel-not-open]")).toHaveCount(1);
+    await expect(page.locator("[data-conduct-gate], .channel-view")).toHaveCount(1);
     await runAxe(page, testInfo, "student-channel");
     await page.screenshot({ path: `${EVIDENCE_DIR}/real-student-channel-${testInfo.project.name}.png` });
   });
@@ -341,7 +341,9 @@ test.describe("channels on real sessions", () => {
     await openReal(page, "/dashboard/cohort/c/c04-help");
     await expect(page.locator("[data-conduct-gate]")).toBeVisible();
     await page.getByRole("button", { name: "I’ll keep to this" }).click();
-    await expect(page.getByRole("heading", { level: 2, name: "Conversations aren’t open yet" })).toBeVisible();
+    // Agreed: the conversation (U-2.1) opens under the channel's header.
+    await expect(page.locator(".channel-view [data-channel-header]")).toBeVisible();
+    await expect(page.locator("[data-channel-scroller]")).toBeVisible();
     expect(new URL(page.url()).pathname).toBe("/dashboard/cohort/c/c04-help");
 
     // Kept: another channel opens straight away, and the habits page says when.
