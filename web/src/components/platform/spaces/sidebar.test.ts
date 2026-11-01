@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { Me } from "@/lib/platform/contracts";
-import { meByPersona } from "@/lib/platform/fixtures";
+import type { Channel, Me } from "@/lib/platform/contracts";
+import { channelList, channels, meByPersona } from "@/lib/platform/fixtures";
 import { canonicalSpacePath, isAvailableSpacePath, isNewSpacePath, legacySpacePath } from "@/lib/platform/server/space-routes";
 import { STUDENT_DASHBOARD_LINK_IDS, type StudentDashboardLinkId } from "@/lib/student/journey";
 import { NOT_OPEN_YET, PAGE_SPACES, SPACE_PAGE_PATHS, spaceSidebar, type SidebarFacts, type SidebarModel, type SpacePageKey } from "./sidebar";
@@ -12,6 +12,14 @@ const NEW_SIGN_IN: StudentDashboardLinkId[] = ["home", "apply", "ask", "account"
 
 function facts(me: Me, page: SpacePageKey, overrides: Partial<SidebarFacts> = {}): SidebarFacts {
   return { me, page, visibleLinkIds: EVERY_LINK, unreadLeadCount: 0, certificates: [], ...overrides };
+}
+
+/** The channel and conduct pages exist only with channels: give them what they are a page of. */
+const CHANNEL_PAGES: Partial<Record<SpacePageKey, Channel>> = { communityChannel: channels.help, cohortChannel: channels.cohort04, conduct: channels.help };
+
+function pageFacts(me: Me, page: SpacePageKey): SidebarFacts {
+  const open = CHANNEL_PAGES[page];
+  return facts(me, page, open ? { channels: { items: channelList.items, currentId: page === "conduct" ? null : open.id } } : {});
 }
 
 function hrefs(model: SidebarModel): string[] {
@@ -36,12 +44,20 @@ function pageFile(href: string): string | null {
   return candidates.find((file) => existsSync(file)) ?? null;
 }
 
+/** The page file that renders a channel or the habits: their routes are dynamic. */
+function channelPageFile(href: string): string | null {
+  const pages = resolve(import.meta.dirname, "../../../pages");
+  const match = /^\/dashboard\/(community|cohort)\/c\/[^/]+$/.exec(href);
+  const file = match ? `${pages}/dashboard/${match[1]}/c/[slug].astro` : `${pages}${href}.astro`;
+  return existsSync(file) ? file : null;
+}
+
 describe("space sidebars", () => {
   it("mark exactly one entry current for every page, in each space the page opens in", () => {
     for (const page of Object.keys(PAGE_SPACES) as SpacePageKey[]) {
       for (const space of PAGE_SPACES[page]) {
         const me = space === "community" ? meByPersona.lucy : meByPersona.amina;
-        expect(current(spaceSidebar(space, facts(me, page))), `${page} in ${space}`).toHaveLength(1);
+        expect(current(spaceSidebar(space, pageFacts(me, page))), `${page} in ${space}`).toHaveLength(1);
       }
     }
   });
@@ -223,6 +239,102 @@ describe("space sidebars", () => {
         onboarding: { framing: "member", pending: ["MENTOR"] }, allowed: (href) => !href.startsWith("/dashboard/account"),
       }));
       expect(groupLabels(model)).not.toContain("Your requests");
+    });
+  });
+
+  describe("channels", () => {
+    const readable = { items: channelList.items };
+    const group = (model: SidebarModel) => model.groups.find((entry) => entry.label === "Channels");
+    const off = (me: Me): Me => ({ ...me, flags: { ...me.flags, channels: false } });
+
+    it("leave every sidebar exactly as it was while channels is off for the person", () => {
+      // SpacePage passes no channels when the flag is off (sidebar-channels.ts); either way nothing changes.
+      for (const me of Object.values(meByPersona)) {
+        for (const space of me.spaces) {
+          for (const page of Object.keys(PAGE_SPACES) as SpacePageKey[]) {
+            const before = spaceSidebar(space, facts(off(me), page));
+            for (const absent of [undefined, null]) {
+              expect(spaceSidebar(space, facts(off(me), page, { channels: absent })), `${me.user.name} ${space} ${page}`).toEqual(before);
+            }
+            expect(JSON.stringify(before)).not.toMatch(/"channel|conduct/);
+          }
+        }
+      }
+    });
+
+    it("list community channels in Community, in the backend's order, then the way back to the habits", () => {
+      const model = spaceSidebar("community", facts(meByPersona.lucy, "journey", { channels: readable }));
+      expect(model.groups.map((entry) => entry.label)).toEqual([undefined, "Channels", "Public directory", "Cohorts"]);
+      expect(group(model)!.items.map(({ label, href, icon }) => ({ label, href, icon }))).toEqual([
+        { label: "introductions", href: "/dashboard/community/c/introductions", icon: "channel" },
+        { label: "show-your-work", href: "/dashboard/community/c/show-your-work", icon: "channel" },
+        { label: "help", href: "/dashboard/community/c/help", icon: "channel" },
+        { label: "opportunities", href: "/dashboard/community/c/opportunities", icon: "channel" },
+        { label: "design-crit", href: "/dashboard/community/c/design-crit", icon: "channel" },
+        { label: "How we talk to each other", href: "/dashboard/community/conduct", icon: "conduct" },
+      ]);
+    });
+
+    it("list a cohort's channels in Cohort, each with the lock that says only the cohort reads it, and nothing from another space", () => {
+      const model = spaceSidebar("cohort", facts(meByPersona.wanjiku, "cohort", { channels: readable }));
+      expect(model.groups.map((entry) => entry.label)).toEqual([undefined, "Channels"]);
+      expect(group(model)!.items.map(({ label, href, icon }) => ({ label, href, icon }))).toEqual([
+        { label: "cohort-04", href: "/dashboard/cohort/c/cohort-04", icon: "cohortChannel" },
+        { label: "c04-help", href: "/dashboard/cohort/c/c04-help", icon: "cohortChannel" },
+        { label: "c04-announcements", href: "/dashboard/cohort/c/c04-announcements", icon: "cohortChannel" },
+      ]);
+      // The habits page is Community's: no Cohort sidebar link changes space.
+      expect(hrefs(model)).not.toContain("/dashboard/community/conduct");
+    });
+
+    it("keep direct conversations out until mentor requests give them a page", () => {
+      const all = (["community", "cohort"] as const).flatMap((space) => hrefs(spaceSidebar(space, facts(meByPersona.amina, space === "community" ? "journey" : "cohort", { channels: readable }))));
+      expect(all.join(" ")).not.toContain(channels.davidConversation.slug);
+      expect(all.join(" ")).not.toContain("/dm/");
+    });
+
+    it("show no Channels group in a space with no channel the person can read", () => {
+      const communityOnly = { items: [channels.introductions, channels.help] };
+      expect(group(spaceSidebar("cohort", facts(meByPersona.wanjiku, "apply", { channels: communityOnly })))).toBeUndefined();
+      expect(group(spaceSidebar("community", facts(meByPersona.lucy, "journey", { channels: { items: [] } })))).toBeUndefined();
+    });
+
+    it("bolden unread channels with their count, read ones quieter, and mark the open one", () => {
+      const model = spaceSidebar("community", facts(meByPersona.lucy, "communityChannel", { channels: { ...readable, currentId: channels.help.id } }));
+      const items = group(model)!.items;
+      expect(items.find((entry) => entry.label === "help")).toMatchObject({ emphasis: "unread", count: 3, countLabel: "unread messages", current: true });
+      expect(items.find((entry) => entry.label === "introductions")).toMatchObject({ emphasis: "read", current: false });
+      expect(items.find((entry) => entry.label === "introductions")).not.toHaveProperty("count");
+      expect(current(model)).toEqual(["help"]);
+      const one = spaceSidebar("community", facts(meByPersona.lucy, "journey", { channels: { items: [{ ...channels.help, unreadCount: 1 }] } }));
+      expect(group(one)!.items[0]).toMatchObject({ count: 1, countLabel: "unread message" });
+    });
+
+    it("mark the habits current on their own page, in Community only", () => {
+      expect(current(spaceSidebar("community", facts(meByPersona.lucy, "conduct", { channels: readable })))).toEqual(["How we talk to each other"]);
+      expect(current(spaceSidebar("cohort", facts(meByPersona.wanjiku, "cohort", { channels: readable })))).toEqual(["Overview"]);
+    });
+
+    it("say when a channel is archived, and keep it reachable", () => {
+      const archived = { items: [{ ...channels.designCrit, archivedAt: 1 }] };
+      expect(group(spaceSidebar("community", facts(meByPersona.lucy, "journey", { channels: archived })))!.items[0]).toMatchObject({ label: "design-crit", note: "Archived" });
+    });
+
+    it("drop channel links a restricted identity may not follow, the habits with them", () => {
+      const model = spaceSidebar("community", facts(meByPersona.lucy, "journey", { channels: readable, allowed: (href) => !href.includes("/c/") && !href.endsWith("/conduct") }));
+      expect(group(model)).toBeUndefined();
+    });
+
+    it("link only to channel pages the router serves", () => {
+      for (const me of [meByPersona.wanjiku, meByPersona.lucy, meByPersona.amina]) {
+        for (const space of ["community", "cohort"] as const) {
+          if (!me.spaces.includes(space)) continue;
+          for (const href of group(spaceSidebar(space, facts(me, space === "cohort" ? "cohort" : "journey", { channels: readable })))?.items.map((entry) => entry.href) ?? []) {
+            expect(channelPageFile(href), `${href}`).not.toBeNull();
+            expect(isAvailableSpacePath(href), `served: ${href}`).toBe(true);
+          }
+        }
+      }
     });
   });
 });

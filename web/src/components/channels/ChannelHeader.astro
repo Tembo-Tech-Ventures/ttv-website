@@ -1,0 +1,46 @@
+---
+/**
+ * A channel's header: its name, topic, who reads it and who posts. The h1 is
+ * Maven Pro, as in screens 01 and 02: a channel name is a label, not the
+ * screen's display moment. ChannelFrame shows it above the habits or the
+ * not-open note; U-2.1's ChannelView takes it as its children, above the
+ * message list, so the thread rail can run the full height beside it.
+ */
+import type { ComponentType } from "react";
+import { PiArchive, PiLockSimple, PiMegaphone, PiUsersThree } from "react-icons/pi";
+import type { Channel } from "@/lib/platform/contracts";
+import { CHIP_TONES } from "@/components/platform/ui/tones";
+
+interface Props {
+  channel: Channel;
+}
+
+const { channel } = Astro.props;
+type Icon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+const chips: { key: string; icon: Icon; label: string }[] = [
+  channel.kind === "COHORT"
+    ? { key: "audience", icon: PiLockSimple, label: "Cohort only" }
+    : { key: "audience", icon: PiUsersThree, label: "Everyone signed in" },
+  ...(channel.postingPolicy === "STAFF" ? [{ key: "posting", icon: PiMegaphone, label: "Staff post here" }] : []),
+  ...(channel.archivedAt !== null ? [{ key: "archived", icon: PiArchive, label: "Archived" }] : []),
+];
+---
+
+<header data-channel-header class="flex flex-col gap-3 border-b border-hairline pb-5 sm:flex-row sm:items-start sm:justify-between">
+  <div class="min-w-0">
+    <h1 class="font-body text-2xl leading-tight font-bold break-words text-ink-primary">
+      <span aria-hidden="true" class="mr-1 text-ink-muted">#</span>{channel.name}
+    </h1>
+    {channel.topic && <p class="mt-1.5 max-w-2xl text-[0.9375rem] leading-snug text-ink-secondary">{channel.topic}</p>}
+  </div>
+  <ul class="m-0 flex list-none flex-wrap gap-2 p-0 sm:justify-end" aria-label="About this channel">
+    {
+      chips.map(({ key, icon: ChipIcon, label }) => (
+        <li data-channel-chip={key} class:list={["inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.8125rem] font-semibold", CHIP_TONES.neutral]}>
+          <ChipIcon aria-hidden className="size-4 shrink-0" />
+          {label}
+        </li>
+      ))
+    }
+  </ul>
+</header>

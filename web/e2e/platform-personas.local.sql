@@ -1,10 +1,13 @@
 -- Fictional local personas for e2e/platform-personas.spec.ts. Local D1 only: never apply to a deployed database.
 -- npx wrangler d1 execute ttv-database --local --file e2e/platform-personas.local.sql
 INSERT OR REPLACE INTO curriculum (id,title,description) VALUES ('ttv-local-persona-curriculum','Full-stack foundations','Fictional local curriculum');
-INSERT OR REPLACE INTO program (id,name,description,curriculumId,startDate,endDate,applicationsOpen) VALUES
+-- An upsert, not INSERT OR REPLACE: replacing a program deletes it first, and that cascades to its cohort channels and their messages.
+INSERT INTO program (id,name,description,curriculumId,startDate,endDate,applicationsOpen) VALUES
  ('ttv-local-persona-cohort-04','Cohort 04','Fictional completed cohort','ttv-local-persona-curriculum',1772323200,1780272000,0),
  ('ttv-local-persona-cohort-05','Cohort 05','Fictional current cohort','ttv-local-persona-curriculum',1788220800,1797292800,0),
- ('ttv-local-persona-cohort-06','Cohort 06','Fictional next cohort','ttv-local-persona-curriculum',1799971200,1807833600,1);
+ ('ttv-local-persona-cohort-06','Cohort 06','Fictional next cohort','ttv-local-persona-curriculum',1799971200,1807833600,1)
+ON CONFLICT(id) DO UPDATE SET name=excluded.name, description=excluded.description, curriculumId=excluded.curriculumId,
+ startDate=excluded.startDate, endDate=excluded.endDate, applicationsOpen=excluded.applicationsOpen;
 INSERT OR REPLACE INTO user (id,name,email,emailVerified,image,createdAt,updatedAt) VALUES
  ('ttv-local-persona-student','Wanjiku Mwangi','wanjiku@invalid.ttv',1,NULL,1793400000,1793400000),
  ('ttv-local-persona-alumna','Achieng Otieno','achieng@invalid.ttv',1,NULL,1793400000,1793400000),
@@ -153,3 +156,5 @@ INSERT INTO access_request (id,userId,role,status,note,organisation,organisation
  ('ttv-local-persona-request-kevin','ttv-local-persona-onb-kevin','MENTOR','APPROVED','Mobile reviews: Flutter, offline sync and testing.',NULL,NULL,NULL,NULL,'ttv-local-persona-decision-kevin',NULL,1793510000000,NULL,1793500000000,1793510000000),
  ('ttv-local-persona-request-amani','ttv-local-persona-onb-amani','MENTOR','PENDING','Design reviews: accessibility, layout and plain language.',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,1793500000000,1793500000000),
  ('ttv-local-persona-request-baraka','ttv-local-persona-onb-baraka','MENTOR','DECLINED','Data pipelines and SQL reviews for small teams.',NULL,NULL,NULL,NULL,'ttv-local-persona-decision-baraka','Thanks, Baraka. Tell us a little more about the work you could review.',1793510000000,NULL,1793500000000,1793510000000);
+-- U-2.3: every persona meets "How we talk to each other" afresh on each seed (e2e/platform-channels.spec.ts agrees as the alumna).
+DELETE FROM channel_conduct WHERE userId LIKE 'ttv-local-persona-%';

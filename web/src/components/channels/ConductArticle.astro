@@ -1,0 +1,39 @@
+---
+/**
+ * The conduct page's body (CONDUCT_PATH): the screen's one Mattone heading,
+ * the habits, then when this person agreed, or the way to agree if they
+ * have not yet (they may arrive here before opening any channel).
+ */
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { CONDUCT_TITLE, agreedOn } from "./conduct";
+import type { ConductAcknowledgement } from "@/lib/platform/contracts";
+import { conductAgreed } from "./conduct-flow";
+import ConductAgree from "./ConductAgree.astro";
+import ConductHabits from "./ConductHabits.astro";
+
+interface Props {
+  record: ConductAcknowledgement | null;
+  /** This page with its query, where agreeing posts and returns. */
+  action: string;
+  /** False for an agent's delegated session: the habits show, the action does not. */
+  canAgree?: boolean;
+}
+
+const { record, action, canAgree = true } = Astro.props;
+---
+
+<article data-conduct-page>
+  <PageTitle spaces legacyClass="">{CONDUCT_TITLE}</PageTitle>
+  <div class="mt-6">
+    <ConductHabits />
+  </div>
+  {
+    record && conductAgreed(record) ? (
+      <p class="mt-8 text-sm text-ink-muted" data-conduct-agreed>
+        {agreedOn(record.acknowledgedAt)}
+      </p>
+    ) : (
+      <ConductAgree action={action} canAgree={canAgree} />
+    )
+  }
+</article>

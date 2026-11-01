@@ -13,6 +13,10 @@
  *
  * This is the one place space pages mount the search and attention overlays
  * (U-1.3). Only `Me` reaches their island.
+ *
+ * In Community and Cohort, while `channels` is on for the person, the
+ * sidebar lists the channels they can read (U-2.3). A channel page passes
+ * the list it already read, and which channel is open.
  */
 import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
@@ -21,9 +25,13 @@ import DashboardLayout from "@/layouts/DashboardLayout.astro";
 import SpacesLayout from "@/layouts/SpacesLayout.astro";
 import PlatformOverlays from "@/components/platform/overlays/PlatformOverlays";
 import type { ShellOverlay } from "@/components/platform/shell/overlays";
+import type { Channel } from "@/lib/platform/contracts";
+import { recordError } from "@/lib/observability/errors";
 import { getStudentJourney, type StudentJourney } from "@/lib/student/journey";
+import { channelsServer } from "@/components/channels/server";
+import { loadSidebarChannels } from "@/components/channels/sidebar-channels";
 import SpaceSidebar from "./SpaceSidebar.astro";
-import { spaceSidebar } from "./sidebar";
+import { SPACE_PAGE_PATHS, spaceSidebar } from "./sidebar";
 import { linkAllowed, loadCertificates, restrictionsFor, type SpacePageContext } from "./space-page";
 
 interface Props {
@@ -38,18 +46,27 @@ interface Props {
   canDiscover?: boolean;
   /** A full-height view (a chat, a workspace) that sizes itself to the sheet instead of scrolling in it. */
   fill?: boolean;
+  /** The channels this person can read, when the page has already read them (a channel page). */
+  channels?: readonly Channel[];
+  /** The channel this page shows, marked current in the sidebar. */
+  channelId?: string;
 }
 
-const { context, title, legacyTitle = title, titlePrefix = "", journey: suppliedJourney, canDiscover, fill = false } = Astro.props;
+const {
+  context, title, legacyTitle = title, titlePrefix = "", journey: suppliedJourney, canDiscover, fill = false, channels: suppliedChannels, channelId,
+} = Astro.props;
 const overlays: readonly ShellOverlay[] = ["search", "attention"];
 
 let sidebar = null;
 if (context) {
   const db = drizzle(env.DB, { schema });
   const userId = context.me.user.id;
-  const [journey, certificates] = await Promise.all([
+  const listChannels = suppliedChannels ? async () => suppliedChannels : () => channelsServer(env.DB, context.me).list();
+  const reportChannels = (error: unknown) => recordError(env.DB, { source: "request", route: SPACE_PAGE_PATHS[context.page], error, level: "warning" });
+  const [journey, certificates, channels] = await Promise.all([
     suppliedJourney ?? getStudentJourney(db, userId),
     context.space === "profile" ? loadCertificates(db, userId) : [],
+    loadSidebarChannels(context.me, context.space, listChannels, reportChannels, channelId ?? null),
   ]);
   const restrictions = restrictionsFor(Astro.locals);
   sidebar = spaceSidebar(context.space, {
@@ -60,6 +77,7 @@ if (context) {
     certificates,
     allowed: (href) => linkAllowed(restrictions, href),
     onboarding: context.onboarding,
+    channels,
   });
 }
 ---

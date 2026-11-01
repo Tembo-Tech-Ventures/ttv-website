@@ -1,0 +1,25 @@
+---
+/**
+ * The habits of "How we talk to each other" (conduct.ts), as one list. Each
+ * habit leads with the builder's peach dot: these are things people do, not
+ * clauses. The heading and the action belong to the page or card around it.
+ */
+import { CONDUCT_HABITS, CONDUCT_LEAD } from "./conduct";
+---
+
+<div data-conduct-habits>
+  <p class="max-w-2xl text-base leading-relaxed text-ink-secondary sm:text-lg">{CONDUCT_LEAD}</p>
+  <ul class="m-0 mt-6 grid max-w-3xl list-none gap-x-10 gap-y-5 p-0 md:grid-cols-2">
+    {
+      CONDUCT_HABITS.map((habit) => (
+        <li id={`conduct-${habit.key}`} data-conduct-habit={habit.key} class="flex gap-3.5">
+          <span aria-hidden="true" class="mt-[0.5625rem] size-2 shrink-0 rounded-full bg-primary" />
+          <p class="m-0 text-[0.9375rem] leading-relaxed text-ink-secondary">
+            <strong class="block font-bold text-ink-primary">{habit.title}</strong>{" "}
+            {habit.body}
+          </p>
+        </li>
+      ))
+    }
+  </ul>
+</div>

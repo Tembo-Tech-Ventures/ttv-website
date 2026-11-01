@@ -13,7 +13,10 @@ import {
   PiDiamond,
   PiHandshake,
   PiEnvelopeSimple,
+  PiHandHeart,
+  PiHash,
   PiIdentificationCard,
+  PiLockSimple,
   PiNotePencil,
   PiPaperPlaneTilt,
   PiPath,
@@ -60,6 +63,10 @@ const ICONS: Record<SidebarIcon, Icon> = {
   // A request carries its person marker's shape: mentors are rings, institutions diamonds.
   mentorRequest: PiCircle,
   institutionRequest: PiDiamond,
+  // A community channel is a hashtag; a cohort channel carries the lock that says only its cohort reads it.
+  channel: PiHash,
+  cohortChannel: PiLockSimple,
+  conduct: PiHandHeart,
 };
 
 const { model } = Astro.props;
@@ -80,6 +87,7 @@ const { model } = Astro.props;
           note={entry.note}
           noteTone={entry.noteTone}
           publicPage={entry.publicPage}
+          emphasis={entry.emphasis}
         />
       ))}
     </SidebarGroup>

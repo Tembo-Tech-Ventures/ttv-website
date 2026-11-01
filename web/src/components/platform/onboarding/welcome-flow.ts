@@ -331,7 +331,7 @@ export function parseSent(params: URLSearchParams): AccessRole[] {
  * A declared length is checked first; the body is then read only up to the
  * limit, since HTTP/2 does not require a length to be declared at all.
  */
-async function boundedForm(request: Request): Promise<FormData | null> {
+export async function boundedForm(request: Request): Promise<FormData | null> {
   if (Number(request.headers.get("content-length")) > MAX_FORM_BYTES) return null;
   const chunks: Uint8Array[] = [];
   let size = 0;
