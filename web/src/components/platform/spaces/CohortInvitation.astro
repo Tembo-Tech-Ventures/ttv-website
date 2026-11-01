@@ -4,6 +4,9 @@
  * there is no Cohort tab, so Community, where they land, carries it. The copy
  * is the existing journey's next step, so it names a cohort only when one is
  * actually taking applications.
+ *
+ * It sits above Community's h1, so its title names the region rather than
+ * heading it: the page's own h1 comes first in the outline (F-6, QAO-05).
  */
 import { PiPaperPlaneTilt } from "react-icons/pi";
 import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
@@ -29,7 +32,7 @@ const href = canonicalSpacePath(step.action.href) ?? step.action.href;
     <PiPaperPlaneTilt className="size-5" />
   </span>
   <div class="min-w-0 flex-1 basis-64">
-    <h2 id="cohort-invitation-title" class="text-lg leading-snug text-ink-primary">{step.title}</h2>
+    <p id="cohort-invitation-title" class="text-lg leading-snug font-bold text-ink-primary">{step.title}</p>
     <p class="mt-1 text-sm leading-relaxed text-ink-secondary">{step.description}</p>
     {step.detail && <p class="mt-1 text-sm font-semibold text-ink-muted">{step.detail}</p>}
   </div>

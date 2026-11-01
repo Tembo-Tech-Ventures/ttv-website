@@ -38,13 +38,11 @@ type FieldProps = {
   /** Shown only once the script runs: a counter that cannot count is worse than none. */
   counter?: ReactNode;
   children: (control: { id: string; "aria-invalid"?: true; "aria-describedby"?: string }) => ReactNode;
-  /** Read only by assistive tech, beside the hint: the rule a counter shows by eye. */
-  srHint?: string;
 };
 
-function Field({ field, label, optional, hint, srHint, error, counter, children }: FieldProps) {
+function Field({ field, label, optional, hint, error, counter, children }: FieldProps) {
   const id = fieldId(field);
-  const hintId = (hint || srHint) && `${id}-hint`;
+  const hintId = hint && `${id}-hint`;
   const errorId = error && `${id}-error`;
   return (
     <div className="request-field" data-invalid={error ? "" : undefined}>
@@ -55,7 +53,6 @@ function Field({ field, label, optional, hint, srHint, error, counter, children 
       {hintId && (
         <p id={hintId} className="request-field__hint">
           {hint}
-          {srHint && <span className="sr-only">{hint ? ` ${srHint}` : srHint}</span>}
         </p>
       )}
       {error && (
@@ -182,7 +179,7 @@ export default function AccessRequestForm({ action, roles, draft, errors, failur
             <PersonMarker kind="mentor" />
             {REQUEST.sections.MENTOR}
           </h2>
-          <Field field="mentorNote" label={REQUEST.mentorNote} srHint={REQUEST.noteLength} error={errors.mentorNote} counter={counter("mentorNote")}>
+          <Field field="mentorNote" label={REQUEST.mentorNote} hint={REQUEST.noteLength} error={errors.mentorNote} counter={counter("mentorNote")}>
             {(control) => (
               <textarea {...control} name="mentorNote" required rows={4} maxLength={NOTE_MAX} defaultValue={draft.mentorNote}
                 onInput={count("mentorNote")} className="request-input request-input--area" />
@@ -215,7 +212,7 @@ export default function AccessRequestForm({ action, roles, draft, errors, failur
                 defaultValue={draft.organisationRole} className="request-input" />
             )}
           </Field>
-          <Field field="institutionNote" label={REQUEST.institutionNote} hint={REQUEST.institutionNoteHint} srHint={REQUEST.noteLength}
+          <Field field="institutionNote" label={REQUEST.institutionNote} hint={`${REQUEST.institutionNoteHint} ${REQUEST.noteLength}`}
             error={errors.institutionNote} counter={counter("institutionNote")}>
             {(control) => (
               <textarea {...control} name="institutionNote" required rows={4} maxLength={NOTE_MAX} defaultValue={draft.institutionNote}

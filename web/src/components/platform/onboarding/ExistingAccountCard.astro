@@ -8,7 +8,8 @@
  *
  * It is a plain form, so both work without JavaScript. On a phone, with a
  * script, it starts compact (title, one line, Choose / Not now) so the page's
- * own task stays above the fold, and Choose opens the toggles.
+ * own task stays above the fold, and Choose opens the toggles. Its title is
+ * not a heading: the card sits above the page's h1 (OnboardingNotices).
  */
 import { ACCOUNT_PATH, ACTION_FIELD, RETURN_FIELD } from "./account-actions";
 import { CHOICES, PROMPT, WELCOME, type ChoiceIntent } from "./copy";
@@ -37,7 +38,7 @@ function aside(intent: ChoiceIntent, needsApproval: boolean): string {
   <form method="post" action={ACCOUNT_PATH} class="onboarding-prompt__form">
     <input type="hidden" name={RETURN_FIELD} value={returnTo} />
     <div class="onboarding-prompt__head">
-      <h2 id="onboarding-prompt-title" class="text-lg leading-snug font-bold text-ink-primary sm:text-[1.1875rem]">{PROMPT.title}</h2>
+      <p id="onboarding-prompt-title" class="text-lg leading-snug font-bold text-ink-primary sm:text-[1.1875rem]">{PROMPT.title}</p>
       <p class="onboarding-prompt__body mt-1 text-[0.9375rem] leading-relaxed text-ink-secondary">{PROMPT.body}</p>
     </div>
     <div class="onboarding-prompt__actions">
@@ -55,12 +56,19 @@ function aside(intent: ChoiceIntent, needsApproval: boolean): string {
       <legend class="sr-only">{PROMPT.title}</legend>
       {CHOICES.map((choice) => (
         <label class="onboarding-toggle" data-intent={choice.intent.toLowerCase()}>
-          <input type="checkbox" name="intent" value={choice.intent} checked={prompt.selected.includes(choice.intent)} class="onboarding-toggle__input" />
+          <input
+            type="checkbox"
+            name="intent"
+            value={choice.intent}
+            checked={prompt.selected.includes(choice.intent)}
+            aria-label={`${choice.title}, ${aside(choice.intent, choice.needsApproval)}`}
+            class="onboarding-toggle__input"
+          />
           <span aria-hidden="true" class="onboarding-toggle__box">
             <svg viewBox="0 0 16 16" fill="none" class="onboarding-toggle__tick"><path d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" /></svg>
           </span>
           <span class="onboarding-toggle__label">{choice.title}</span>
-          <span class="onboarding-toggle__aside"><span class="sr-only">, </span>{aside(choice.intent, choice.needsApproval)}</span>
+          <span class="onboarding-toggle__aside">{aside(choice.intent, choice.needsApproval)}</span>
         </label>
       ))}
     </fieldset>

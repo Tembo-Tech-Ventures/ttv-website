@@ -89,7 +89,7 @@ INSERT INTO member_intent (userId,intent,createdAt) VALUES
 DELETE FROM access_request WHERE userId LIKE 'ttv-local-persona-onb-%';
 DELETE FROM member_intent WHERE userId LIKE 'ttv-local-persona-onb-%';
 DELETE FROM member_onboarding WHERE userId LIKE 'ttv-local-persona-onb-%';
-DELETE FROM UserRoles WHERE id = 'ttv-local-persona-role-kevin';
+DELETE FROM UserRoles WHERE id IN ('ttv-local-persona-role-kevin','ttv-local-persona-role-wanjiku');
 INSERT OR REPLACE INTO user (id,name,email,emailVerified,image,createdAt,updatedAt) VALUES
  ('ttv-local-persona-onb-otieno','Otieno Barasa','otieno.barasa@invalid.ttv',1,NULL,1793400000,1793400000),
  ('ttv-local-persona-onb-mercy','Mercy Wambui','mercy.wambui@invalid.ttv',1,NULL,1793400000,1793400000),
@@ -100,7 +100,9 @@ INSERT OR REPLACE INTO user (id,name,email,emailVerified,image,createdAt,updated
  ('ttv-local-persona-onb-faith','Faith Chepkoech','faith.chepkoech@invalid.ttv',1,NULL,1793400000,1793400000),
  ('ttv-local-persona-onb-grace','Grace Wanjiru','grace.wanjiru@invalid.ttv',1,NULL,1793400000,1793400000),
  ('ttv-local-persona-onb-zawadi','Zawadi Mutiso','zawadi.mutiso@invalid.ttv',1,NULL,1793400000,1793400000),
- ('ttv-local-persona-onb-amani','Amani Wekesa','amani.wekesa@invalid.ttv',1,NULL,1793400000,1793400000);
+ ('ttv-local-persona-onb-amani','Amani Wekesa','amani.wekesa@invalid.ttv',1,NULL,1793400000,1793400000),
+ ('ttv-local-persona-onb-baraka','Baraka Mwangi','baraka.mwangi@invalid.ttv',1,NULL,1793400000,1793400000),
+ ('ttv-local-persona-onb-wanjiku','Wanjiku Kamau','wanjiku.kamau@invalid.ttv',1,NULL,1793400000,1793400000);
 INSERT OR REPLACE INTO session (id,expiresAt,token,ipAddress,userAgent,userId,createdAt,updatedAt) VALUES
  ('ttv-local-persona-onb-otieno-session',1893456000,'ttv-local-persona-onb-otieno-token',NULL,'local','ttv-local-persona-onb-otieno',1793400000,1793400000),
  ('ttv-local-persona-onb-mercy-session',1893456000,'ttv-local-persona-onb-mercy-token',NULL,'local','ttv-local-persona-onb-mercy',1793400000,1793400000),
@@ -111,10 +113,15 @@ INSERT OR REPLACE INTO session (id,expiresAt,token,ipAddress,userAgent,userId,cr
  ('ttv-local-persona-onb-faith-session',1893456000,'ttv-local-persona-onb-faith-token',NULL,'local','ttv-local-persona-onb-faith',1793400000,1793400000),
  ('ttv-local-persona-onb-grace-session',1893456000,'ttv-local-persona-onb-grace-token',NULL,'local','ttv-local-persona-onb-grace',1793400000,1793400000),
  ('ttv-local-persona-onb-zawadi-session',1893456000,'ttv-local-persona-onb-zawadi-token',NULL,'local','ttv-local-persona-onb-zawadi',1793400000,1793400000),
- ('ttv-local-persona-onb-amani-session',1893456000,'ttv-local-persona-onb-amani-token',NULL,'local','ttv-local-persona-onb-amani',1793400000,1793400000);
+ ('ttv-local-persona-onb-amani-session',1893456000,'ttv-local-persona-onb-amani-token',NULL,'local','ttv-local-persona-onb-amani',1793400000,1793400000),
+ ('ttv-local-persona-onb-baraka-session',1893456000,'ttv-local-persona-onb-baraka-token',NULL,'local','ttv-local-persona-onb-baraka',1793400000,1793400000),
+ ('ttv-local-persona-onb-wanjiku-session',1893456000,'ttv-local-persona-onb-wanjiku-token',NULL,'local','ttv-local-persona-onb-wanjiku',1793400000,1793400000);
 -- Kevin's mentor request was approved and he has not seen it yet; Faith and Grace are alumnae from before onboarding.
+-- Wanjiku has mentored since before onboarding (F-6, QAO-10): her one-time card opens with Mentor already Active.
+-- Baraka's mentor request was declined; he sends a new one from Account (F-6, QAO-02 to QAO-05).
 INSERT OR REPLACE INTO UserRoles (id,userId,roleId,createdAt,updatedAt) VALUES
- ('ttv-local-persona-role-kevin','ttv-local-persona-onb-kevin',(SELECT id FROM Roles WHERE name='MENTOR'),1793400000,1793400000);
+ ('ttv-local-persona-role-kevin','ttv-local-persona-onb-kevin',(SELECT id FROM Roles WHERE name='MENTOR'),1793400000,1793400000),
+ ('ttv-local-persona-role-wanjiku','ttv-local-persona-onb-wanjiku',(SELECT id FROM Roles WHERE name='MENTOR'),1793400000,1793400000);
 INSERT OR REPLACE INTO programApplication (id,programId,userId,status,application,completedAt,createdAt,updatedAt) VALUES
  ('ttv-local-persona-app-faith','ttv-local-persona-cohort-04','ttv-local-persona-onb-faith','COMPLETED','{}',1780272000,1770000000,1780272000),
  ('ttv-local-persona-app-grace','ttv-local-persona-cohort-04','ttv-local-persona-onb-grace','COMPLETED','{}',1780272000,1770000000,1780272000);
@@ -125,7 +132,8 @@ INSERT INTO member_onboarding (userId,stage,completedAt,promptDismissedAt,create
  ('ttv-local-persona-onb-daniel','DONE',1793500000000,NULL,1793500000000,1793500000000),
  ('ttv-local-persona-onb-wairimu','DONE',1793500000000,NULL,1793500000000,1793500000000),
  ('ttv-local-persona-onb-kevin','DONE',1793500000000,NULL,1793500000000,1793500000000),
- ('ttv-local-persona-onb-amani','DONE',1793500000000,NULL,1793500000000,1793500000000);
+ ('ttv-local-persona-onb-amani','DONE',1793500000000,NULL,1793500000000,1793500000000),
+ ('ttv-local-persona-onb-baraka','DONE',1793500000000,NULL,1793500000000,1793500000000);
 INSERT INTO member_intent (userId,intent,createdAt) VALUES
  ('ttv-local-persona-onb-otieno','MENTOR',1793500000000),
  ('ttv-local-persona-onb-mercy','MEMBER',1793500000000),
@@ -135,11 +143,13 @@ INSERT INTO member_intent (userId,intent,createdAt) VALUES
  ('ttv-local-persona-onb-wairimu','EXPLORING',1793500000000),
  ('ttv-local-persona-onb-kevin','MENTOR',1793500000000),
  ('ttv-local-persona-onb-amani','MEMBER',1793500000000),
- ('ttv-local-persona-onb-amani','MENTOR',1793500000000);
+ ('ttv-local-persona-onb-amani','MENTOR',1793500000000),
+ ('ttv-local-persona-onb-baraka','MENTOR',1793500000000);
 INSERT INTO access_request (id,userId,role,status,note,organisation,organisationRole,link,scopeAcknowledgedAt,decisionId,decisionMessage,decidedAt,requesterSeenAt,createdAt,updatedAt) VALUES
  ('ttv-local-persona-request-otieno','ttv-local-persona-onb-otieno','MENTOR','PENDING','Backend reviews: SQL, APIs and tests for small teams.',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,1793500000000,1793500000000),
  ('ttv-local-persona-request-mercy','ttv-local-persona-onb-mercy','MENTOR','PENDING','Android and offline-first apps. I can review Kotlin and sync code.',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,1793500000000,1793500000000),
  ('ttv-local-persona-request-njambi','ttv-local-persona-onb-njambi','INSTITUTION','PENDING','Junior engineers who have built mobile or payments features.','Mto Labs','Engineering lead',NULL,1793500000000,NULL,NULL,NULL,NULL,1793500000000,1793500000000),
  ('ttv-local-persona-request-daniel','ttv-local-persona-onb-daniel','MENTOR','DECLINED','Backend and data work: SQL, APIs, testing.',NULL,NULL,NULL,NULL,'ttv-local-persona-decision-daniel','Thanks for offering, Daniel. <b>We can’t add this right now.</b>',1793510000000,NULL,1793500000000,1793510000000),
  ('ttv-local-persona-request-kevin','ttv-local-persona-onb-kevin','MENTOR','APPROVED','Mobile reviews: Flutter, offline sync and testing.',NULL,NULL,NULL,NULL,'ttv-local-persona-decision-kevin',NULL,1793510000000,NULL,1793500000000,1793510000000),
- ('ttv-local-persona-request-amani','ttv-local-persona-onb-amani','MENTOR','PENDING','Design reviews: accessibility, layout and plain language.',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,1793500000000,1793500000000);
+ ('ttv-local-persona-request-amani','ttv-local-persona-onb-amani','MENTOR','PENDING','Design reviews: accessibility, layout and plain language.',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,1793500000000,1793500000000),
+ ('ttv-local-persona-request-baraka','ttv-local-persona-onb-baraka','MENTOR','DECLINED','Data pipelines and SQL reviews for small teams.',NULL,NULL,NULL,NULL,'ttv-local-persona-decision-baraka','Thanks, Baraka. Tell us a little more about the work you could review.',1793510000000,NULL,1793500000000,1793510000000);

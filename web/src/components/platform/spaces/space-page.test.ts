@@ -97,15 +97,16 @@ describe("loadOnboarding", () => {
   const lucy = meByPersona.lucy;
   const flagOff = { ...lucy, flags: { ...lucy.flags, onboarding: false } };
 
-  it("reads the person's onboarding for the landing pages, Account and every Community page", async () => {
+  it("reads the person's onboarding for the landing pages, Account, the public profile and every Community page", async () => {
     mocks.getOnboardingState.mockResolvedValue(PENDING);
-    for (const [space, page] of [["community", "journey"], ["community", "apply"], ["cohort", "cohort"], ["mentoring", "mentoring"], ["discover", "discover"], ["profile", "account"]] as const) {
+    // The public profile reads it for its framing alone (QAO-07): mentors and organisations are not sent to apply.
+    for (const [space, page] of [["community", "journey"], ["community", "apply"], ["cohort", "cohort"], ["mentoring", "mentoring"], ["discover", "discover"], ["profile", "account"], ["profile", "portfolio"]] as const) {
       expect.soft(await loadOnboarding(locals, lucy, space, page)).toMatchObject({ cards: [{ kind: "pending", role: "MENTOR" }] });
     }
   });
 
   it("reads nothing for other pages, which onboarding does not change", async () => {
-    for (const [space, page] of [["cohort", "sessions"], ["profile", "portfolio"], ["mentoring", "confirm"], ["cohort", "apply"]] as const) {
+    for (const [space, page] of [["cohort", "sessions"], ["profile", "writing"], ["mentoring", "confirm"], ["cohort", "apply"]] as const) {
       await expect(loadOnboarding(locals, lucy, space, page)).resolves.toBeNull();
     }
     expect(mocks.getOnboardingState).not.toHaveBeenCalled();

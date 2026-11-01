@@ -89,11 +89,22 @@ describe("AccessRequestForm, as the server sends it", () => {
     expect(html().querySelector("[autofocus]")).toBeNull();
   });
 
-  it("describes a note's length rule to screen readers, and shows no counter until it can count", () => {
+  it("shows a note's length rule before anything is typed, describes it, and shows no counter until it can count", () => {
     const page = html();
     const note = page.querySelector(`#${fieldId("mentorNote")}`)!;
-    expect(page.querySelector(`#${note.getAttribute("aria-describedby")}`)?.textContent).toContain(REQUEST.noteLength);
+    const hint = page.querySelector(`#${note.getAttribute("aria-describedby")}`)!;
+    // QAO-04: on screen, not only for screen readers, so nobody learns the minimum from an error.
+    expect(hint.textContent).toBe(REQUEST.noteLength);
+    expect(hint.className).toBe("request-field__hint");
+    expect(page.querySelector(".sr-only")).toBeNull();
     expect(page.textContent).not.toContain("/ 600");
+  });
+
+  it("shows the organisation note's rule beside its example", () => {
+    const page = html({ roles: ["INSTITUTION"] });
+    const note = page.querySelector(`#${fieldId("institutionNote")}`)!;
+    expect(page.querySelector(`#${note.getAttribute("aria-describedby")}`)?.textContent)
+      .toBe(`${REQUEST.institutionNoteHint} ${REQUEST.noteLength}`);
   });
 
   it("tells the person who reads their request", () => {

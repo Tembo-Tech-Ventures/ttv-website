@@ -86,6 +86,8 @@ const tabs = [
   { state: "DECIDED", label: "Decided", href: `${ACCESS_REQUESTS_PATH}?status=DECIDED`, count: 0 },
 ] as const;
 const current = tabs.find((tab) => tab.state === state) ?? tabs[0];
+// After a decision the decided card leaves the list, so focus goes to the banner that says what happened (QAO-06).
+const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 const nextHref = list.nextCursor ? `${current.href}${state === "PENDING" ? "?" : "&"}cursor=${encodeURIComponent(list.nextCursor)}` : null;
 ---
 
@@ -102,12 +104,12 @@ const nextHref = list.nextCursor ? `${current.href}${state === "PENDING" ? "?" :
     </header>
 
     {notice && (
-      <p role="status" class="rounded-xl border border-ring/30 bg-ring/8 px-4 py-3 text-sm text-ink-primary" data-access-request-notice>
+      <p role="status" tabindex="-1" autofocus class={`${BANNER} border-ring/30 bg-ring/8`} data-access-request-notice>
         {notice}
       </p>
     )}
     {failure && (
-      <p role="alert" class="rounded-xl border border-danger-ink/40 bg-danger-ink/8 px-4 py-3 text-sm text-ink-primary" data-access-request-failure>
+      <p role="alert" tabindex="-1" autofocus class={`${BANNER} border-danger-ink/40 bg-danger-ink/8`} data-access-request-failure>
         {failure}
       </p>
     )}

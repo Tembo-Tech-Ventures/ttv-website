@@ -15,7 +15,7 @@ import {
 } from "./attention-client";
 import { awaitingConfirmation, awaitingConfirmationText } from "@/components/platform/spaces/awaiting-confirmation";
 import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
-import { ATTENTION_FILTERS, attentionEmpty, groupAttention, unreadTotal, visibleAttention } from "./attention-display";
+import { ATTENTION_FILTERS, attentionEmpty, attentionViewer, groupAttention, unreadTotal, visibleAttention } from "./attention-display";
 import AttentionItemRow from "./AttentionItemRow";
 
 /** How long opening an item waits for its mark-read before following the link anyway. */
@@ -233,7 +233,7 @@ export default function AttentionInbox({ owner, me, headingId, now, initialFocus
   const countProblem = attentionProblem(state.countError);
   const viewer = { id: me.user.id, name: me.user.name, src: me.user.avatarUrl ?? undefined };
   const awaiting = awaitingConfirmation(me);
-  const empty = attentionEmpty(state.filter, awaiting);
+  const empty = attentionEmpty(state.filter, awaiting, attentionViewer(me));
   const settled = state.loaded && !state.listError;
 
   async function retryCounts() {

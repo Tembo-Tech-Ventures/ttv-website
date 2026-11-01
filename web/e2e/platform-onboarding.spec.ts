@@ -171,7 +171,10 @@ test.describe("the real page, /dashboard/welcome", () => {
       await expect(heading(page)).toBeFocused();
       await main(page).getByLabel("What kind of work could you review?").fill("Frontend reviews: accessibility, React and CSS.");
       await main(page).getByRole("button", { name: /^Send requests?$/ }).click();
-      await page.waitForURL((url) => url.pathname.startsWith("/dashboard/") && !url.pathname.startsWith("/dashboard/welcome"));
+      // F-6 (QAO-02, QAO-05): it lands on the request's own card, says it went, and focus is there.
+      await page.waitForURL((url) => url.pathname === "/dashboard/community" && url.search === "?sent=mentor");
+      await expect(page.locator("[data-onboarding-sent]")).toBeFocused();
+      await expect(page.locator("[data-onboarding-status='pending'][data-role='MENTOR']")).toBeVisible();
       await open(page, "/dashboard/welcome");
     }
     await expect(card(page, "mentor")).toContainText("Pending");

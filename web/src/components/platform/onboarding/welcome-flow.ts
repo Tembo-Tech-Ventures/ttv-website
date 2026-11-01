@@ -22,6 +22,12 @@ export interface WelcomeRoutes {
   request: string;
   /** Where a finished person goes: /dashboard picks their space. */
   landing: string;
+  /**
+   * Where a person lands after sending a request: a page that shows its status card, never one the
+   * last-space cookie picks (QAO-02). The flow adds which roles were sent (`sent=`), so that page can
+   * say so and take focus.
+   */
+  sent: string;
 }
 
 /**
@@ -36,6 +42,9 @@ export interface WelcomeActions {
 }
 
 export type ChoiceStatus = "active" | "pending";
+
+/** The roles a request was just sent for (`?sent=mentor,institution`), on the page the person lands on. */
+export const SENT_PARAM = "sent";
 
 export const REQUEST_FIELDS = [
   "mentorNote", "mentorLink", "organisation", "organisationRole", "institutionNote", "institutionLink", "scope",
@@ -298,7 +307,23 @@ async function submitRequests(form: FormData, routes: WelcomeRoutes, actions: We
   if (unsent.length > 0) {
     return { kind: "view", status: 409, view: { step: "request", roles: unsent, draft, errors: {}, failure: FAILURES.unavailable } };
   }
-  return redirect(routes.landing);
+  // Say only what is true now: a role granted meanwhile (another tab, a quick administrator) has no request to confirm.
+  const waiting = requests.map((request) => request.role)
+    .filter((role) => state.requests.some((candidate) => candidate.role === role && candidate.status === "PENDING"));
+  return redirect(waiting.length > 0 ? sentLocation(routes.sent, waiting) : routes.landing);
+}
+
+/** The landing after a request, with the roles just sent: `?sent=mentor,institution`. */
+export function sentLocation(base: string, roles: readonly AccessRole[]): string {
+  const url = new URL(base, "http://landing.invalid");
+  url.searchParams.set(SENT_PARAM, roles.map((role) => role.toLowerCase()).join(","));
+  return `${url.pathname}${url.search}`;
+}
+
+/** The roles `?sent=` names, in role order; anything else in it is ignored. */
+export function parseSent(params: URLSearchParams): AccessRole[] {
+  const named = new Set((params.get(SENT_PARAM) ?? "").toUpperCase().split(","));
+  return AccessRole.options.filter((role) => named.has(role));
 }
 
 /**

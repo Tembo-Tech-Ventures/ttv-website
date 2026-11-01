@@ -46,11 +46,11 @@ describe("returnPath", () => {
 });
 
 describe("the one-time card (S4)", () => {
-  it("Not now hides it for good and changes nothing the person has", async () => {
+  it("Not now hides it for good, says so, and changes nothing the person has", async () => {
     const { db, rows, actions } = alumna();
     expect((await getOnboardingState(db, "wairimu")).stage).toBe("PROMPT");
     expect(await handleAccountAction(form({ onboarding: "dismiss-prompt", return: "/dashboard/cohort" }), actions))
-      .toEqual({ kind: "redirect", location: "/dashboard/cohort" });
+      .toEqual({ kind: "redirect", location: "/dashboard/cohort?onboarding=hidden" });
     const state = await getOnboardingState(db, "wairimu");
     expect(state).toMatchObject({ stage: "DONE", intents: [], inferred: ["MEMBER"] });
     expect(rows("SELECT * FROM member_intent WHERE userId = ?", "wairimu")).toEqual([]);
@@ -59,10 +59,10 @@ describe("the one-time card (S4)", () => {
     expect((await getOnboardingState(db, "wairimu")).stage).toBe("DONE");
   });
 
-  it("Save records the choices and returns, or goes on to the request step for access not held", async () => {
+  it("Save records the choices and returns saying so (QAO-10), or goes on to the request step for access not held", async () => {
     const { db, rows, actions } = alumna();
     expect(await handleAccountAction(form({ onboarding: "save-prompt", intent: ["MEMBER"], return: "/dashboard/cohort" }), actions))
-      .toEqual({ kind: "redirect", location: "/dashboard/cohort" });
+      .toEqual({ kind: "redirect", location: "/dashboard/cohort?onboarding=saved" });
     expect(await getOnboardingState(db, "wairimu")).toMatchObject({ stage: "DONE", intents: ["MEMBER"] });
 
     expect(await handleAccountAction(form({ onboarding: "save-prompt", intent: ["MEMBER", "MENTOR"], return: "/dashboard/cohort" }), actions))
@@ -80,11 +80,12 @@ describe("the one-time card (S4)", () => {
     expect((await getOnboardingState(db, "wairimu")).stage).toBe("PROMPT");
   });
 
-  it("does not offer the request step for access already held", async () => {
+  it("does not offer the request step for access already held, and still says it saved", async () => {
     const { db, grant, actions } = alumna();
     grant("wairimu", "MENTOR");
+    // An existing mentor saving what was already ticked: nothing changed, and the page still says it saved.
     expect(await handleAccountAction(form({ onboarding: "save-prompt", intent: ["MEMBER", "MENTOR"], return: "/dashboard/mentoring" }), actions))
-      .toEqual({ kind: "redirect", location: "/dashboard/mentoring" });
+      .toEqual({ kind: "redirect", location: "/dashboard/mentoring?onboarding=saved" });
     expect((await getOnboardingState(db, "wairimu")).intents).toEqual(["MEMBER", "MENTOR"]);
   });
 });

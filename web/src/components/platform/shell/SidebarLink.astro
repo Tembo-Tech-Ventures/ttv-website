@@ -25,12 +25,21 @@ interface Props {
 }
 
 const { href, label, icon: Icon, current = false, count = 0, countLabel = "new", note, noteTone, publicPage = false } = Astro.props;
+/*
+ * With a note, the link's name is said in one string ("Mentor access, Pending"). The note is a
+ * separate box, and a visually hidden separator between them would be read with a stray space
+ * before its comma (QAO-09). The plain space before the note keeps the visible words apart for
+ * tools that read the text itself (axe's label-in-name check): flex layout does not render it.
+ */
+const noted = count === 0 && note;
+const name = noted ? `${label}${publicPage ? " (public website)" : ""}, ${note}` : undefined;
 ---
 
 <li>
   <a
     href={href}
     aria-current={current ? "page" : undefined}
+    aria-label={name}
     class:list={[
       "flex min-h-10 items-center gap-3 rounded-xl px-2.5 py-2 text-[0.9375rem] leading-snug font-semibold transition-colors duration-150 motion-reduce:transition-none pointer-coarse:min-h-11",
       "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink",
@@ -41,12 +50,10 @@ const { href, label, icon: Icon, current = false, count = 0, countLabel = "new",
     <span class="min-w-0 flex-1 break-words">
       {label}
       {publicPage && <span class="sr-only"> (public website)</span>}
-      {/* The note is a separate box: without a separator its words run into the label's ("Mentor accessPending"). */}
-      {count === 0 && note && <span class="sr-only">, </span>}
     </span>
     {publicPage && <PiArrowUpRight aria-hidden className="size-4 shrink-0 text-ink-muted" />}
     {count > 0 ? <CountBadge count={count} label={countLabel} /> : note && (
-      <span class:list={["shrink-0 text-xs font-semibold", noteTone ? ["rounded-full px-2 py-0.5", CHIP_TONES[noteTone]] : "text-ink-muted"]}>{note}</span>
+      <>{" "}<span class:list={["shrink-0 text-xs font-semibold", noteTone ? ["rounded-full px-2 py-0.5", CHIP_TONES[noteTone]] : "text-ink-muted"]}>{note}</span></>
     )}
   </a>
 </li>

@@ -1,0 +1,25 @@
+---
+/**
+ * The Profile tab's public profile for someone who chose to mentor or find
+ * people, and not to build and learn (QA1-08, QAO-07). A public builder
+ * profile comes with a completed cohort; this says so plainly and points at
+ * Account, where building and learning can be switched on, instead of a lock
+ * and an invitation to apply. It grants nothing and promises nothing.
+ */
+import PersonMarker from "@/components/platform/ui/PersonMarker";
+import { ACCOUNT_PATH, TAKING_PART_ID } from "./account-actions";
+import { PROFILE_PARTNER } from "./copy";
+import { SEAL } from "./styles";
+
+const LINK = "font-semibold text-ink-primary underline underline-offset-3 hover:text-peach-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
+---
+
+<section aria-labelledby="partner-profile-title" data-partner-profile class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 rounded-[1.125rem] border border-hairline bg-ink-primary/4 p-5 sm:items-center sm:gap-x-5 sm:p-6">
+  <span aria-hidden="true" class={SEAL}><PersonMarker kind="builder" className="scale-150" /></span>
+  <div class="min-w-0">
+    <h2 id="partner-profile-title" class="text-lg leading-snug font-bold text-ink-primary">{PROFILE_PARTNER.title}</h2>
+    <p class="mt-1 text-[0.9375rem] leading-relaxed text-ink-secondary">
+      {PROFILE_PARTNER.body} <a href={`${ACCOUNT_PATH}#${TAKING_PART_ID}`} class={LINK}>{PROFILE_PARTNER.account}</a>.
+    </p>
+  </div>
+</section>

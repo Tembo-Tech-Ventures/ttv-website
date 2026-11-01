@@ -69,8 +69,11 @@ export function onboardingFor(locals: App.Locals, me: Me): boolean {
     && !qaPersona && !demo && !fixture && !locals.personalAccessToken && !isAgentSession(locals.session?.userAgent);
 }
 
-/** The landing pages a person can arrive on, which carry the status cards and the one-time card, and Account. */
-const ONBOARDING_PAGES: ReadonlySet<SpacePageKey> = new Set(["cohort", "journey", "mentoring", "discover", "account"]);
+/**
+ * The landing pages a person can arrive on, which carry the status cards and the one-time card, Account,
+ * and the Profile tab's public profile, which frames itself for mentors and organisations (QAO-07).
+ */
+const ONBOARDING_PAGES: ReadonlySet<SpacePageKey> = new Set(["cohort", "journey", "mentoring", "discover", "account", "portfolio"]);
 
 /**
  * The person's onboarding, read for the pages that show it: the landing pages,

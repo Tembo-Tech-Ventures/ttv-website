@@ -1,4 +1,4 @@
-import type { AttentionFilter, AttentionItem, AuthorSummary, SpaceId } from "@/lib/platform/contracts";
+import type { AttentionFilter, AttentionItem, AuthorSummary, Me, SpaceId } from "@/lib/platform/contracts";
 import { SPACE_LABEL } from "@/components/platform/shell/space-routes";
 
 /** Where the phone's attention page lives. The bell leads here below the wide layout. */
@@ -12,13 +12,39 @@ export const ATTENTION_FILTERS: readonly { filter: AttentionFilter; label: strin
 ];
 
 /**
+ * Requests holds requests for a mentor's time and their answers, and, for
+ * administrators, requests for access. A person's own access request is not
+ * one of them: it lives in Account, and its empty tab says so, rather than
+ * reading as if the request were lost (QAO-01). Without onboarding there are
+ * no access requests, and the line stays as it was.
+ */
+function requestsEmpty(viewer: AttentionViewer): string {
+  if (!viewer.onboarding) return "No mentoring requests yet.";
+  return viewer.admin
+    ? "No requests for mentoring time or access yet."
+    : "No requests for mentoring time yet. Your own requests for mentor or organisation access are in Account.";
+}
+
+/** Who is reading the list, as far as its empty lines depend on it. */
+export interface AttentionViewer {
+  admin: boolean;
+  onboarding: boolean;
+}
+
+/**
  * The empty list's line. Attention holds notifications only; shared work
  * waiting for a mentor's confirmation is derived elsewhere (Me.mentoring), so
  * "Nothing needs you" is said only when nothing is known to be waiting there.
  */
-export function attentionEmpty(filter: AttentionFilter, awaiting: number | null): string {
+export function attentionEmpty(filter: AttentionFilter, awaiting: number | null, viewer: AttentionViewer): string {
   if (filter === "all" && awaiting !== 0) return "No new notifications.";
+  if (filter === "requests") return requestsEmpty(viewer);
   return (ATTENTION_FILTERS.find((entry) => entry.filter === filter) ?? ATTENTION_FILTERS[0]!).empty;
+}
+
+/** The viewer from Me: an administrator has the Admin space. */
+export function attentionViewer(me: Pick<Me, "spaces" | "flags">): AttentionViewer {
+  return { admin: me.spaces.includes("admin"), onboarding: me.flags.onboarding };
 }
 
 /** The attention page's summary line, which says "all caught up" only when nothing is known to wait. */
