@@ -15,8 +15,8 @@ describe("EmbedCard", () => {
   it.each([
     ["project", "This project is no longer available"],
     ["sessionClip", "This session clip is no longer available"],
-  ] as const)("shows unavailable %s work neutrally, with no way in", (kind, text) => {
-    const html = renderToString(<EmbedCard embed={{ type: "unavailable", kind }} />);
+  ] as const)("shows unavailable %s work neutrally, with no way in", (was, text) => {
+    const html = renderToString(<EmbedCard embed={{ type: "unavailable", was }} />);
     expect(html).toContain(text);
     expect(html).toContain('data-embed="unavailable"');
     expect(html).not.toContain("<a");

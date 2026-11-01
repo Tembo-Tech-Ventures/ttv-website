@@ -103,7 +103,7 @@ function ClipCard({ embed, compact }: { embed: SessionClipEmbed; compact: boolea
 
 /** Shared work this reader can no longer see: no title, no way in, nothing that was in it. */
 function UnavailableCard({ embed }: { embed: UnavailableEmbed }) {
-  const project = embed.kind === "project";
+  const project = embed.was === "project";
   const Icon = project ? PiFolderSimple : PiVideoCamera;
   return (
     <div className="channel-embed" data-embed="unavailable">
