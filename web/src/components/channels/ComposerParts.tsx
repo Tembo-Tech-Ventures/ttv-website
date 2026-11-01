@@ -84,7 +84,6 @@ type ToolbarProps = PickProps & {
   attachments: boolean;
   thread: boolean;
   canSend: boolean;
-  sending: boolean;
   onMention: () => void;
   onAskTembo: () => void;
 };
@@ -94,7 +93,7 @@ type ToolbarProps = PickProps & {
  * composer both fold under "+". Then @, Ask Tembo (only while
  * `tembo_channels` is on) and Send, which is always visible.
  */
-export function ComposerToolbar({ tools, shareables, attachments, thread, canSend, sending, onMention, onAskTembo, ...pick }: ToolbarProps) {
+export function ComposerToolbar({ tools, shareables, attachments, thread, canSend, onMention, onAskTembo, ...pick }: ToolbarProps) {
   return (
     <div className="channel-composer__bar">
       {attachments && (
@@ -132,7 +131,7 @@ export function ComposerToolbar({ tools, shareables, attachments, thread, canSen
         aria-disabled={!canSend || undefined}
         className={cx("channel-composer__send", canSend && "channel-composer__send--ready", FOCUS_RING)}
       >
-        {sending ? <span className="channel-spinner" aria-hidden="true" /> : <PiPaperPlaneRightFill aria-hidden="true" className="size-4.5" />}
+        <PiPaperPlaneRightFill aria-hidden="true" className="size-4.5" />
       </button>
     </div>
   );

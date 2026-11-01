@@ -2,14 +2,16 @@ import { useEffect, useLayoutEffect, useMemo, useRef, type KeyboardEvent, type R
 import { PiArrowBendUpLeft, PiChatsCircle, PiX } from "react-icons/pi";
 import type { AuthorSummary, Channel, Me, Message } from "@/lib/platform/contracts";
 import type { ChannelThreadState } from "@/lib/platform/client/channel";
+import type { Composer as ChannelComposer } from "@/lib/platform/client/composer";
 import Button, { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
 import IconButton from "@/components/platform/ui/IconButton";
-import type { ChannelActions, Shareables } from "./actions";
+import type { Shareables } from "./actions";
 import { channelTitle, plural } from "./channel-format";
 import Composer from "./Composer";
 import MessageItem from "./MessageItem";
 import { prefersReducedMotion } from "./motion";
+import Outbox from "./Outbox";
 import { PostingNote } from "./PostingNote";
 
 /** What the rail shows: the store's thread, or the server-rendered one before the store has it. */
@@ -20,7 +22,7 @@ type ThreadRailProps = {
   channel: Channel;
   me: Me;
   now: number;
-  actions: ChannelActions | null;
+  composer: ChannelComposer;
   shareables: Shareables | null;
   names: readonly string[];
   people: ReadonlyMap<string, AuthorSummary>;
@@ -38,7 +40,7 @@ type ThreadRailProps = {
  * one it takes the sheet's place, with "Back to channel". Escape closes it.
  */
 export default function ThreadRail({
-  thread, channel, me, now, actions, shareables, names, people, mentionPeople, headingRef, onClose, onLoadOlder,
+  thread, channel, me, now, composer, shareables, names, people, mentionPeople, headingRef, onClose, onLoadOlder,
   onRetry, announce,
 }: ThreadRailProps) {
   const scroller = useRef<HTMLElement>(null);
@@ -107,7 +109,7 @@ export default function ThreadRail({
               people={people}
               variant="parent"
               withDay
-              actions={actions}
+              actions={composer}
               announce={announce}
             />
           </div>
@@ -155,7 +157,7 @@ export default function ThreadRail({
                     people={people}
                     variant="thread"
                     withDay={index === 0 || replies[index - 1].createdAt < reply.createdAt - 6 * 60 * 60 * 1000}
-                    actions={actions}
+                    actions={composer}
                     announce={announce}
                   />
                 </div>
@@ -163,14 +165,15 @@ export default function ThreadRail({
             ))}
           </ol>
         )}
+        <Outbox composer={composer} parentId={thread.parentId} viewer={me.user} names={names} />
       </section>
 
-      {thread.status !== "removed" && (actions && posting ? (
+      {thread.status !== "removed" && (posting ? (
         <Composer
           channel={channel}
           me={me}
           parentId={thread.parentId}
-          actions={actions}
+          composer={composer}
           shareables={shareables}
           people={mentionPeople}
           threadPeople={threadPeople}

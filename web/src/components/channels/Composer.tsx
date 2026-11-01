@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import type { AuthorSummary, Channel, Me, Message, MessageEmbed } from "@/lib/platform/contracts";
-import { ApiError } from "@/lib/platform/client/apiClient";
+import type { AuthorSummary, Channel, Me, MessageEmbed } from "@/lib/platform/contracts";
+import type { Composer as ChannelComposer } from "@/lib/platform/client/composer";
+import { useComposer, useDraft as useStoredDraft } from "@/lib/platform/client/hooks/composer";
 import { CONDUCT_PATH } from "@/lib/platform/server/space-routes";
 import { cx } from "@/components/platform/ui/cx";
-import { embedRef, NO_SHAREABLES, sameEmbed, type ChannelActions, type Shareables } from "./actions";
+import { embedRef, NO_SHAREABLES, sameEmbed, type Shareables } from "./actions";
 import { composerTools, mentionsTembo, temboScope } from "./channel-format";
 import { TEMBO_SEES } from "./TemboAnswer";
 import { AttachedList, ComposerToolbar, MAX_EMBEDS, MentionList } from "./ComposerParts";
@@ -19,7 +20,8 @@ type ComposerProps = {
   me: Me;
   /** A reply goes into this thread; null posts to the channel. */
   parentId: string | null;
-  actions: ChannelActions;
+  /** S-2.2's composer: drafts, optimistic sends and the outbox. */
+  composer: ChannelComposer;
   /** Null: the page cannot list work to share yet, so no attach tools. */
   shareables: Shareables | null;
   /** People `@` can reach (S-2.2 brings the channel's members). */
@@ -29,34 +31,17 @@ type ComposerProps = {
   /** The box's name: "Message #show-your-work". */
   label: string;
   variant?: "channel" | "thread";
-  onSent?: (message: Message) => void;
 };
 
-/** Why a send failed, in words that say what to do next. */
-export function sendError(error: unknown): string {
-  switch (error instanceof ApiError ? error.code : null) {
-    case "conduct_required":
-      return "Agree to how we talk to each other, then send again. Your message is still here.";
-    case "rate_limited":
-      return "You're sending quickly. Wait a moment, then send again.";
-    case "moderation_rejected":
-      return (error as ApiError).message;
-    case "forbidden":
-    case "flag_off":
-      return "You can't post here right now.";
-    case "validation":
-      return "That message couldn't be sent as written. Check it and try again.";
-    default:
-      return "Couldn't send. Your message is still here; try again.";
-  }
-}
-
 /**
- * The text box and its caret: what is typed, where the caret is, and a way
- * to replace the text and put the caret somewhere after React renders it.
+ * The text box and its caret. The words are S-2.2's draft for this channel or
+ * thread, so they survive a reload in this tab; the caret is the box's own.
+ * `replace` puts new text in and the caret somewhere after React renders it.
  */
-function useDraft() {
-  const [text, setText] = useState("");
+function useDraft(composer: ChannelComposer, parentId: string | null) {
+  const [stored, setStored] = useStoredDraft(composer, parentId);
+  const text = stored.body;
+  const setText = useCallback((body: string) => setStored({ body }), [setStored]);
   const [caret, setCaret] = useState(0);
   const box = useRef<HTMLTextAreaElement>(null);
   const pending = useRef<number | null>(null);
@@ -84,10 +69,6 @@ function useDraft() {
       box.current?.focus();
     },
     moveCaret: setCaret,
-    clear() {
-      setText("");
-      setCaret(0);
-    },
   };
 }
 
@@ -124,14 +105,12 @@ function useMentionPicker(text: string, caret: number, options: Parameters<typeo
  * not shrink the layout viewport a fixed element is placed against.
  */
 export default function Composer({
-  channel, me, parentId, actions, shareables, people, threadPeople, label, variant = "channel", onSent,
+  channel, me, parentId, composer, shareables, people, threadPeople, label, variant = "channel",
 }: ComposerProps) {
   const tools = composerTools(channel, me.flags);
-  const draft = useDraft();
+  const draft = useDraft(composer, parentId);
+  const conductRequired = useComposer(composer, (state) => state.conductRequired);
   const [attached, setAttached] = useState<MessageEmbed[]>([]);
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [conduct, setConduct] = useState(false);
   const enterSends = useEnterSends();
   const id = useId();
   const listId = `${id}-mentions`;
@@ -152,11 +131,10 @@ export default function Composer({
 
   const body = draft.text.trim();
   const tooLong = draft.text.length > MAX_BODY;
-  const canSend = body.length > 0 && !tooLong && !sending;
+  const canSend = body.length > 0 && !tooLong;
 
   function replace(next: string, at: number) {
     draft.replace(next, at);
-    setError(null);
   }
 
   function choose(candidate: MentionCandidate) {
@@ -188,22 +166,17 @@ export default function Composer({
     requestAnimationFrame(() => draft.box.current?.focus());
   }
 
-  async function send() {
+  /**
+   * Hand the message to the composer: the box empties at once, the message
+   * waits in the outbox until the server confirms it, and a failure stays
+   * there with what can be done about it (Outbox).
+   */
+  function send() {
     if (!canSend) return;
-    setSending(true);
-    setError(null);
-    try {
-      const message = await actions.send({ body, parentId, embeds: attached.map(embedRef) });
-      draft.clear();
-      setAttached([]);
-      onSent?.(message);
-    } catch (failure) {
-      setError(sendError(failure));
-      setConduct(failure instanceof ApiError && failure.code === "conduct_required");
-    } finally {
-      setSending(false);
-      draft.box.current?.focus();
-    }
+    const embeds = attached.map(embedRef);
+    setAttached([]);
+    composer.send({ body, parentId, embeds }).catch(() => undefined);
+    draft.box.current?.focus();
   }
 
   function pickerKey(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
@@ -222,7 +195,7 @@ export default function Composer({
     if (event.nativeEvent.isComposing || pickerKey(event)) return;
     if (event.key === "Enter" && enterSends && !event.shiftKey) {
       event.preventDefault();
-      void send();
+      send();
     }
   }
 
@@ -243,7 +216,7 @@ export default function Composer({
         className="channel-composer__box"
         onSubmit={(event) => {
           event.preventDefault();
-          void send();
+          send();
         }}
       >
         <label htmlFor={id} className="sr-only">
@@ -259,10 +232,7 @@ export default function Composer({
           aria-describedby={`${id}-hint`}
           aria-controls={picker.open ? listId : undefined}
           aria-activedescendant={picker.open ? `${listId}-${picker.active}` : undefined}
-          onChange={(event) => {
-            draft.type(event.target.value, event.target.selectionStart);
-            setError(null);
-          }}
+          onChange={(event) => draft.type(event.target.value, event.target.selectionStart)}
           onSelect={(event) => draft.moveCaret(event.currentTarget.selectionStart)}
           onKeyDown={onKeyDown}
           onBlur={picker.dismiss}
@@ -276,7 +246,6 @@ export default function Composer({
           attachments={!thread && shareables !== null}
           thread={thread}
           canSend={canSend}
-          sending={sending}
           attached={attached}
           onPick={attach}
           onMention={startMention}
@@ -291,17 +260,12 @@ export default function Composer({
         {picker.open ? `${picker.candidates.length} ${picker.candidates.length === 1 ? "suggestion" : "suggestions"}. Up and down to choose, Enter to insert, Escape to close.` : ""}
       </p>
       {tooLong && <p className="channel-composer__note text-danger-ink">{draft.text.length - MAX_BODY} characters over the limit.</p>}
-      {error && (
-        <p role="alert" className="channel-composer__note text-danger-ink">
-          {error}
-          {conduct && (
-            <>
-              {" "}
-              <a href={CONDUCT_PATH} className="font-semibold text-peach-ink underline underline-offset-2">
-                Read how we talk to each other
-              </a>
-            </>
-          )}
+      {conductRequired && (
+        <p className="channel-composer__note text-ink-secondary" data-conduct-required>
+          Before you post, agree to how we talk to each other.{" "}
+          <a href={CONDUCT_PATH} className="font-semibold text-peach-ink underline underline-offset-2">
+            Read it and agree
+          </a>
         </p>
       )}
       {!thread && tools.askTembo && (

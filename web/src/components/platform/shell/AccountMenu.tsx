@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { PiChatCircleText, PiGear, PiSignOut } from "react-icons/pi";
 import type { PersonSummary } from "@/lib/platform/contracts";
 import { openFeedbackWidget } from "@/components/feedback/feedback-client";
+import { clearChannelDrafts } from "@/lib/platform/client/channel-drafts";
 import { clearOnboardingDrafts } from "@/lib/platform/client/onboarding-drafts";
 import { Avatar, initials, RoleBadge } from "@/components/platform/ui";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
@@ -48,6 +49,12 @@ export function accountMenuName(person: Pick<PersonSummary, "name" | "avatarUrl"
  * Escape and clicking or tabbing away close it, and Feedback appears, because
  * only then is there a widget for it to open.
  */
+/** What this tab keeps for the signed-in person and must not hand to the next one. */
+function forgetDrafts() {
+  clearOnboardingDrafts();
+  clearChannelDrafts();
+}
+
 export default function AccountMenu({ person, account }: { person: PersonSummary; account: ShellAccount }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -140,13 +147,13 @@ export default function AccountMenu({ person, account }: { person: PersonSummary
             </li>
           )}
           <li className="mt-1 border-t border-hairline pt-1">
-            {/* Signing out forgets this tab's unsent onboarding requests (S-O.2), for whoever uses it next. */}
+            {/* Signing out forgets this tab's unsent onboarding requests (S-O.2) and channel drafts (S-2.2), for whoever uses it next. */}
             {signOut.kind === "link" ? (
-              <a href={signOut.href} data-shell-sign-out onClick={() => clearOnboardingDrafts()} className={ITEM}>
+              <a href={signOut.href} data-shell-sign-out onClick={forgetDrafts} className={ITEM}>
                 {signOutContent}
               </a>
             ) : (
-              <form method="post" action={signOut.action} data-shell-sign-out onSubmit={() => clearOnboardingDrafts()}>
+              <form method="post" action={signOut.action} data-shell-sign-out onSubmit={forgetDrafts}>
                 <button type="submit" className={ITEM}>
                   {signOutContent}
                 </button>

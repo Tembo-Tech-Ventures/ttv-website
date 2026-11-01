@@ -38,6 +38,9 @@ async function open(page: Page, path: string) {
   await routeFonts(page);
   await page.goto(path);
   await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
+  // The harness hook is set after the view's own effects (children's run first): the composer has
+  // loaded this tab's drafts, so typing now is not overwritten by them.
+  if (!path.includes("channels=off")) await page.waitForFunction(() => typeof window.__channelHarness?.arrive === "function");
   await page.evaluate(() => document.fonts.ready);
 }
 
@@ -255,6 +258,45 @@ test.describe("the channel view", () => {
     await expect(page.getByRole("menu")).not.toContainText("session clip");
   });
 
+  test("a failed send waits in the outbox, says why, and Try again stores it once", async ({ page }, testInfo) => {
+    await page.setViewportSize(PHONE);
+    await open(page, harness());
+    await page.waitForFunction(() => typeof window.__channelHarness?.refuseWrites === "function");
+    await page.evaluate(() => window.__channelHarness!.refuseWrites(1, 503, "server", "Unavailable"));
+    await composer(page).fill("Will this land?");
+    await page.getByRole("button", { name: "Send message" }).click();
+    const failed = page.locator("[data-outbox-item=failed]");
+    await expect(failed).toContainText("Will this land?");
+    await expect(composer(page)).toHaveValue("");
+    await expect.poll(() => atEnd(page)).toBe(true);
+    await page.screenshot({ path: `${EVIDENCE_DIR}/outbox-failed-390.png` });
+    await runAxe(page, testInfo, "outbox-failed-390");
+    await failed.getByRole("button", { name: "Try again" }).click();
+    await expect(page.locator("[data-outbox]")).toHaveCount(0);
+    await expect(page.locator("[data-own]").filter({ hasText: "Will this land?" })).toHaveCount(1);
+  });
+
+  test("a send refused for the code of conduct points to it, and keeps the words", async ({ page }) => {
+    await open(page, harness());
+    await page.waitForFunction(() => typeof window.__channelHarness?.refuseWrites === "function");
+    await page.evaluate(() => window.__channelHarness!.refuseWrites(1, 403, "conduct_required", "Agree to how we talk to each other first."));
+    await composer(page).fill("Hello everyone");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("[data-conduct-required]").getByRole("link", { name: "Read it and agree" })).toHaveAttribute("href", "/dashboard/community/conduct");
+    await expect(page.locator("[data-outbox-item=failed]")).toContainText("Hello everyone");
+  });
+
+  test("an unsent draft survives a reload of the page", async ({ page }) => {
+    await open(page, harness());
+    await composer(page).fill("Half a thought about the ledger");
+    // Drafts are saved shortly after typing pauses, and on pagehide.
+    await page.waitForTimeout(500);
+    await page.reload();
+    await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
+    await page.waitForFunction(() => typeof window.__channelHarness?.arrive === "function");
+    await expect(composer(page)).toHaveValue("Half a thought about the ledger");
+  });
+
   test("a sent message lands at the end, reacting works, and the author can edit and delete it", async ({ page }) => {
     await page.setViewportSize(DESKTOP);
     await open(page, harness());
@@ -387,7 +429,8 @@ test.describe("on a real channel page", () => {
 
   test("a message makes the round trip, and the server renders it without JavaScript", async ({ page, context, baseURL, browser }, testInfo) => {
     await page.setViewportSize(DESKTOP);
-    await as(page, context, baseURL!, "community");
+    // The institution persona: other specs expect the community member and the alumna not to have agreed yet.
+    await as(page, context, baseURL!, "institution");
     await openChannel(page);
     await runAxe(page, testInfo, "real-channel-1440");
 

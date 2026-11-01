@@ -1,13 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PiArrowDown, PiChatsCircle } from "react-icons/pi";
-import type { AuthorSummary, Channel, Message } from "@/lib/platform/contracts";
+import type { AuthorSummary, Channel, Message, PersonSummary } from "@/lib/platform/contracts";
 import type { ChannelState, ChannelStore } from "@/lib/platform/client/channel";
+import type { Composer } from "@/lib/platform/client/composer";
+import { useOutbox } from "@/lib/platform/client/hooks/composer";
 import Button, { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
-import type { ChannelActions } from "./actions";
 import { channelTitle, groupByDay, postingFor } from "./channel-format";
 import MessageItem from "./MessageItem";
 import { prefersReducedMotion } from "./motion";
+import Outbox from "./Outbox";
 
 /** Within this many pixels of the end counts as reading the latest (docs/chat-full-page-layout.md). */
 export const NEAR_BOTTOM_PX = 100;
@@ -16,9 +18,10 @@ type MessageListProps = {
   state: ChannelState;
   store: ChannelStore;
   channel: Channel;
-  viewerId: string;
+  viewer: PersonSummary;
   now: number;
-  actions: ChannelActions | null;
+  /** S-2.2's composer: changes to messages, and the reader's unconfirmed sends after the list. */
+  composer: Composer;
   names: readonly string[];
   people: ReadonlyMap<string, AuthorSummary>;
   firstUnread: Message | null;
@@ -119,7 +122,7 @@ function scrollToEnd(element: HTMLElement, smooth: boolean) {
  * by this list, so opening a channel does not read it all aloud.
  */
 export default function MessageList({
-  state, store, channel, viewerId, now, actions, names, people, firstUnread, openThreadId, threadHref, onOpenThread,
+  state, store, channel, viewer, now, composer, names, people, firstUnread, openThreadId, threadHref, onOpenThread,
   focusMessageId, retry, announce,
 }: MessageListProps) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -134,6 +137,16 @@ export default function MessageList({
   const first = messages[0]?.id;
   const last = messages.at(-1)?.id;
   const title = channelTitle(channel);
+  const viewerId = viewer.id;
+  const pending = useOutbox(composer, null).length;
+  const pendingBefore = useRef(pending);
+
+  // A message the reader just sent waits at the end: show it there.
+  useLayoutEffect(() => {
+    const element = scroller.current;
+    if (element && pending > pendingBefore.current) scrollToEnd(element, true);
+    pendingBefore.current = pending;
+  }, [pending]);
 
   useLayoutEffect(() => {
     const element = scroller.current;
@@ -217,7 +230,7 @@ export default function MessageList({
                       now={now}
                       names={names}
                       people={people}
-                      actions={actions}
+                      actions={composer}
                       threadOpen={message.id === openThreadId}
                       threadHref={threadHref}
                       onOpenThread={onOpenThread}
@@ -229,6 +242,7 @@ export default function MessageList({
             </ol>
           </section>
         ))}
+        <Outbox composer={composer} parentId={null} viewer={viewer} names={names} />
       </section>
 
       {showJump && (

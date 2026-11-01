@@ -3,48 +3,36 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ROUTES, type Channel, type Me, type Message, type MessageList } from "@/lib/platform/contracts";
-import { ApiError, createApiClient, type ApiClient } from "@/lib/platform/client/apiClient";
+import type { Channel, Me, Message } from "@/lib/platform/contracts";
 import { createChannelStore } from "@/lib/platform/client/channel";
-import { createMockTransport } from "@/lib/platform/client/mockTransport";
+import { createComposer } from "@/lib/platform/client/composer";
+import type { MockOptions } from "@/lib/platform/client/mockTransport";
 import { channels, FIXTURE_NOW, meByPersona, messages, people } from "@/lib/platform/fixtures";
-import { createFixtureActions, type ChannelActions } from "./actions";
 import ChannelSurface from "./ChannelSurface";
 import ChannelView from "./ChannelView";
 import { channelFor, channelPage, shareablesFor, threadPage } from "./harness/fixture-pages";
+import { createHarnessClient } from "./harness/harness-client";
 
 const wanjiku = meByPersona.wanjiku;
 const community = channels.showYourWork;
 const cohort = channelFor("cohort-04", wanjiku)!;
 
-/** A channel API whose `since` polls deliver whatever the test queues. */
-function server(me: Me, channel: Channel) {
-  const queue: Message[] = [];
-  const root = channelPage(channel, me);
-  const fetch = createMockTransport([
-    {
-      ...ROUTES.listMessages,
-      reply: ({ request }) => {
-        const query = new URL(request.url).searchParams;
-        const thread = query.get("thread");
-        if (thread) return { data: threadPage(channel, thread, me) };
-        if (query.has("since")) {
-          const items = queue.splice(0);
-          return { data: { items, beforeCursor: null, sinceCursor: `since-${items.length}-${Math.random()}`, thread: null, removedIds: [] } };
-        }
-        return { data: root };
-      },
-    },
-    { ...ROUTES.markChannelRead, reply: () => ({ data: { channelId: channel.id, lastReadMessageId: root.items.at(-1)!.id, unreadCount: 0 } }) },
-  ]);
-  return { api: createApiClient({ fetch, retry: { maxRetries: 0 } }), root, queue };
+/** The channel store and S-2.2's composer over the fixture API (harness-client), as the harness wires them. */
+function setup(me: Me, channel: Channel, failure?: MockOptions["failure"]) {
+  const initial = channelPage(channel, me);
+  const client = createHarnessClient({ me, channel, root: initial, shareables: shareablesFor(me), now: () => FIXTURE_NOW + 60_000, failure });
+  const store = createChannelStore({ channelId: channel.id, enabled: me.flags.channels, viewerId: me.user.id, initial, api: client.api });
+  const storage = new Map<string, string>();
+  const composer = createComposer({
+    store, me, api: client.api, now: () => FIXTURE_NOW + 60_000,
+    storage: { getItem: (name) => storage.get(name) ?? null, setItem: (name, value) => void storage.set(name, value), removeItem: (name) => void storage.delete(name), key: (i) => [...storage.keys()][i] ?? null, get length() { return storage.size; } },
+  });
+  return { store, composer, client };
 }
 
-function setup(me: Me, channel: Channel, api: ApiClient, initial: MessageList) {
-  const store = createChannelStore({ channelId: channel.id, enabled: me.flags.channels, viewerId: me.user.id, initial, api });
-  const actions = createFixtureActions(store, { author: me.user, shareables: shareablesFor(me), now: () => FIXTURE_NOW });
-  return { store, actions };
-}
+/** Refuse every write with this error, as the server would. */
+const refuseWrites = (status: number, code: string, message: string, retryAfterMs?: number): MockOptions["failure"] =>
+  (request) => (request.method === "GET" || request.url.endsWith("/read") ? undefined : { status, data: { error: { code, message, retryAfterMs } } });
 
 let root: Root;
 let container: HTMLDivElement;
@@ -131,10 +119,9 @@ describe("the channels flag", () => {
 
 describe("reading without JavaScript", () => {
   function serverHtml(me: Me, channel: Channel, extra: Partial<Parameters<typeof ChannelSurface>[0]> = {}) {
-    const { api } = server(me, channel);
-    const { store, actions } = setup(me, channel, api, channelPage(channel, me));
+    const { store, composer } = setup(me, channel);
     container.innerHTML = renderToString(
-      <ChannelSurface me={me} channel={channel} store={store} actions={actions} now={FIXTURE_NOW} shareables={shareablesFor(me)} {...extra}>
+      <ChannelSurface me={me} channel={channel} store={store} composer={composer} now={FIXTURE_NOW} shareables={shareablesFor(me)} {...extra}>
         <header>Frame header</header>
       </ChannelSurface>,
     );
@@ -243,23 +230,26 @@ describe("reading without JavaScript", () => {
 });
 
 describe("live behaviour", () => {
-  async function mount(me = wanjiku, channel: Channel = community, extra: Partial<Parameters<typeof ChannelSurface>[0]> = {}) {
-    const fake = server(me, channel);
-    const { store, actions } = setup(me, channel, fake.api, fake.root);
+  async function mount(me = wanjiku, channel: Channel = community, extra: Partial<Parameters<typeof ChannelSurface>[0]> = {}, failure?: MockOptions["failure"]) {
+    const wired = setup(me, channel, failure);
     await render(
-      <ChannelSurface me={me} channel={channel} store={store} actions={actions} now={FIXTURE_NOW} shareables={shareablesFor(me)} {...extra} />,
+      <ChannelSurface me={me} channel={channel} store={wired.store} composer={wired.composer} now={FIXTURE_NOW} shareables={shareablesFor(me)} {...extra} />,
     );
-    return { ...fake, store, actions };
+    return wired;
   }
 
-  it("announces messages that arrive from others, politely, once per poll", async () => {
-    const { queue } = await mount();
-    const arrival = (n: number): Message => ({ ...messages.firstPr, id: `arrival-${n}`, clientNonce: `a-${n}`, createdAt: FIXTURE_NOW + n, reactions: [] });
-    queue.push(arrival(1), arrival(2));
+  async function poll() {
     await act(async () => {
       window.dispatchEvent(new Event("focus"));
       await tick(10);
     });
+  }
+
+  it("announces messages that arrive from others, politely, once per poll", async () => {
+    const { client } = await mount();
+    const arrival = (n: number): Message => ({ ...messages.firstPr, id: `arrival-${n}`, clientNonce: `a-${n}`, createdAt: FIXTURE_NOW + n, reactions: [] });
+    client.arrive([arrival(1), arrival(2)]);
+    await poll();
     const announcer = $("[data-channel-announcer]")!;
     expect(announcer.getAttribute("aria-live")).toBe("polite");
     expect(announcer.textContent).toBe("2 new messages");
@@ -269,12 +259,9 @@ describe("live behaviour", () => {
   });
 
   it("does not announce the viewer's own messages", async () => {
-    const { queue } = await mount();
-    queue.push({ ...messages.firstPr, id: "own-1", clientNonce: "own-1", author: wanjiku.user, createdAt: FIXTURE_NOW + 5 });
-    await act(async () => {
-      window.dispatchEvent(new Event("focus"));
-      await tick(10);
-    });
+    const { client } = await mount();
+    client.arrive([{ ...messages.firstPr, id: "own-1", clientNonce: "own-1", author: wanjiku.user, createdAt: FIXTURE_NOW + 5 }]);
+    await poll();
     expect(text("[data-channel-announcer]")).toBe("");
   });
 
@@ -370,59 +357,92 @@ describe("live behaviour", () => {
     expect(box.value).toBe("@tembo what changed?");
   });
 
-  it("toggles the viewer's reaction through the actions, as membership, not a flip", async () => {
-    const { actions } = await mount();
-    const react = vi.spyOn(actions, "react");
+  it("toggles the viewer's reaction through the composer, as membership, not a flip", async () => {
+    const { composer } = await mount();
+    const react = vi.spyOn(composer, "react");
     await click($(`[data-message="${messages.projectPost.id}"] [data-reaction='useful']`));
     expect(react).toHaveBeenCalledWith(messages.projectPost.id, "useful", false);
     expect(text(`[data-message="${messages.projectPost.id}"] [data-reaction='useful']`)).toContain("· 5");
   });
 });
 
-describe("refused sends", () => {
-  it("keeps the words and points to the habits when the code of conduct is not agreed", async () => {
-    const fake = server(wanjiku, community);
-    const { store, actions } = setup(wanjiku, community, fake.api, fake.root);
-    vi.spyOn(actions, "send").mockRejectedValue(new ApiError("conduct_required", 403, "Agree first"));
-    await render(<ChannelSurface me={wanjiku} channel={community} store={store} actions={actions} now={FIXTURE_NOW} shareables={null} />);
-    const box = $<HTMLTextAreaElement>("[data-composer=channel] textarea")!;
-    await typeInto(box, "Hello everyone");
+describe("sending through the composer (S-2.2)", () => {
+  async function mount(failure?: MockOptions["failure"], channel: Channel = community) {
+    const wired = setup(wanjiku, channel, failure);
+    await render(<ChannelSurface me={wanjiku} channel={channel} store={wired.store} composer={wired.composer} now={FIXTURE_NOW} shareables={null} />);
+    return wired;
+  }
+
+  async function send(words: string, which: "channel" | "thread" = "channel") {
+    const box = $<HTMLTextAreaElement>(`[data-composer=${which}] textarea`)!;
+    await typeInto(box, words);
     await key(box, "Enter");
-    expect(text("[role=alert]")).toContain("Agree to how we talk to each other, then send again.");
-    expect($<HTMLAnchorElement>("[role=alert] a")?.getAttribute("href")).toBe("/dashboard/community/conduct");
-    expect(box.value).toBe("Hello everyone");
+    await act(() => tick(10));
+    return box;
+  }
+
+  it("keeps the draft in the composer, so it survives a reload of the view", async () => {
+    const { composer } = await mount();
+    await typeInto($<HTMLTextAreaElement>("[data-composer=channel] textarea")!, "Half a thought");
+    expect(composer.draft(null).body).toBe("Half a thought");
   });
 
-  it("says plainly when someone is sending too fast, without a conduct link", async () => {
-    const fake = server(wanjiku, community);
-    const { store, actions } = setup(wanjiku, community, fake.api, fake.root);
-    vi.spyOn(actions, "send").mockRejectedValue(new ApiError("rate_limited", 429, "Slow down", 4000));
-    await render(<ChannelSurface me={wanjiku} channel={community} store={store} actions={actions} now={FIXTURE_NOW} shareables={null} />);
-    const box = $<HTMLTextAreaElement>("[data-composer=channel] textarea")!;
-    await typeInto(box, "Again");
-    await key(box, "Enter");
-    expect(text("[role=alert]")).toBe("You're sending quickly. Wait a moment, then send again.");
-    expect($("[role=alert] a")).toBeNull();
+  it("empties the box at once and shows the confirmed message in the list", async () => {
+    await mount();
+    const box = await send("Hello from the composer");
+    expect(box.value).toBe("");
+    expect($$("[data-own]").at(-1)?.textContent).toContain("Hello from the composer");
+    expect($("[data-outbox]")).toBeNull();
   });
-});
 
-describe("fixture actions", () => {
-  it("count a reply on its parent and redact a deleted message", async () => {
-    const { api, root: page } = server(wanjiku, community);
-    const { store, actions } = setup(wanjiku, community, api, page);
+  it("keeps a failed send in the outbox with why, Try again, Edit and Discard", async () => {
+    const { composer } = await mount(refuseWrites(500, "server", "Boom"));
+    await send("Will this land?");
+    const item = $("[data-outbox-item=failed]")!;
+    expect(item.textContent).toContain("Will this land?");
+    const buttons = [...item.querySelectorAll("button")].map((button) => button.textContent);
+    expect(buttons).toEqual(["Try again", "Edit", "Discard"]);
+    await click([...item.querySelectorAll("button")].find((button) => button.textContent === "Edit")!);
+    expect(composer.draft(null).body).toBe("Will this land?");
+    expect($("[data-outbox]")).toBeNull();
+  });
+
+  it("asks for the code of conduct when the server requires it, and links to it", async () => {
+    await mount(refuseWrites(403, "conduct_required", "Agree to how we talk to each other first."));
+    await send("Hello everyone");
+    expect(text("[data-conduct-required]")).toContain("Before you post, agree to how we talk to each other.");
+    expect($<HTMLAnchorElement>("[data-conduct-required] a")?.getAttribute("href")).toBe("/dashboard/community/conduct");
+    expect($("[data-outbox-item=failed]")).not.toBeNull();
+  });
+
+  it("offers no Try again for a send refused as written", async () => {
+    await mount(refuseWrites(422, "moderation_rejected", "That message can't be posted."));
+    await send("Something refused");
+    const labels = [...$("[data-outbox-item=failed]")!.querySelectorAll("button")].map((button) => button.textContent);
+    expect(labels).toEqual(["Edit", "Discard"]);
+  });
+
+  it("counts a reply on its parent once the server says so, and the author can delete their own", async () => {
+    const { store, composer } = await mount();
     const release = store.retain();
-    await store.openThread(messages.projectPost.id);
-    await (actions as ChannelActions).send({ body: "Nice", parentId: messages.projectPost.id, embeds: [] });
+    await act(async () => {
+      await store.openThread(messages.projectPost.id);
+    });
+    await act(async () => {
+      await composer.send({ body: "Nice", parentId: messages.projectPost.id, embeds: [] });
+    });
+    await poll();
     expect(store.getState().messages.find((m) => m.id === messages.projectPost.id)?.thread.replyCount).toBe(6);
-    const sent = await actions.send({ body: "Mine", parentId: null, embeds: [] });
-    const removed = await actions.remove(sent.id);
+    const sent = await composer.send({ body: "Mine", parentId: null, embeds: [] });
+    const removed = await composer.remove(sent.id);
     expect(removed).toMatchObject({ deleted: true, body: "", embeds: [], reactions: [] });
     release();
   });
 
-  it("refuse work the person has not got to share", async () => {
-    const { api, root: page } = server(wanjiku, community);
-    const { actions } = setup(wanjiku, community, api, page);
-    await expect(actions.send({ body: "x", parentId: null, embeds: [{ type: "project", journeyId: "nope", version: 1 }] })).rejects.toThrow("That work is not available to share.");
-  });
+  async function poll() {
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await tick(10);
+    });
+  }
 });

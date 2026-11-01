@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AuthorSummary, Channel, Me, Message, MessageList as MessagePage } from "@/lib/platform/contracts";
 import { selectFirstUnread, type ChannelStore } from "@/lib/platform/client/channel";
+import type { Composer as ChannelComposer } from "@/lib/platform/client/composer";
 import { useChannel, useChannelFeed } from "@/lib/platform/client/hooks/channel";
-import type { ChannelActions, Shareables } from "./actions";
+import { useComposer } from "@/lib/platform/client/hooks/composer";
+import type { Shareables } from "./actions";
 import { channelTitle } from "./channel-format";
 import Composer from "./Composer";
 import MessageList from "./MessageList";
@@ -14,8 +16,8 @@ export type ChannelSurfaceProps = {
   me: Me;
   channel: Channel;
   store: ChannelStore;
-  /** Null while this person can only read. */
-  actions: ChannelActions | null;
+  /** S-2.2's composer for this channel: sends, drafts and the outbox, and every edit, deletion and reaction. */
+  composer: ChannelComposer;
   /** The server's clock at render, so day names and times hydrate identically. */
   now: number;
   /** Null: no attach tools (see ChannelView). */
@@ -53,11 +55,11 @@ function collectPeople(...lists: ReadonlyArray<readonly (Message | null | undefi
 /**
  * A channel: messages, an optional thread beside them, and the composer.
  * It owns no data itself. The store (S-2.1) holds messages, paging, polling
- * and read markers; `actions` makes changes. Production mounts it through
- * ChannelView; the DEV harness through fixture-backed versions of both.
+ * and read markers; the composer (S-2.2) makes every change. Production mounts
+ * it through ChannelView; the DEV harness with both on a fixture API.
  */
 export default function ChannelSurface({
-  me, channel, store, actions, now, shareables, threadId: initialThreadId = null, initialThread = null, messageId = null, children,
+  me, channel, store, composer, now, shareables, threadId: initialThreadId = null, initialThread = null, messageId = null, children,
 }: ChannelSurfaceProps) {
   const refresh = useChannelFeed(store);
   const state = useChannel(store);
@@ -70,10 +72,15 @@ export default function ChannelSurface({
 
   const announce = useCallback((text: string) => setAnnouncement(text), []);
 
-  // The store's own announcements (new messages and replies, failures) join the same polite region.
+  // The store's announcements (new messages and replies) and the composer's (a send that failed, or was
+  // flagged) join the same polite region.
+  const composerAnnouncement = useComposer(composer, (composerState) => composerState.announcement);
   useEffect(() => {
     if (state.announcement) setAnnouncement(state.announcement);
   }, [state.announcement]);
+  useEffect(() => {
+    if (composerAnnouncement) setAnnouncement(composerAnnouncement);
+  }, [composerAnnouncement]);
 
   // Clear after a while, so the same words can be announced again later.
   useEffect(() => {
@@ -163,9 +170,9 @@ export default function ChannelSurface({
           state={state}
           store={store}
           channel={channel}
-          viewerId={me.user.id}
+          viewer={me.user}
           now={now}
-          actions={actions}
+          composer={composer}
           names={names}
           people={people}
           firstUnread={firstUnread}
@@ -176,12 +183,12 @@ export default function ChannelSurface({
           retry={refresh}
           announce={announce}
         />
-        {actions && posting ? (
+        {posting ? (
           <Composer
             channel={channel}
             me={me}
             parentId={null}
-            actions={actions}
+            composer={composer}
             shareables={shareables}
             people={mentionPeople}
             label={`Message ${title}`}
@@ -197,7 +204,7 @@ export default function ChannelSurface({
           channel={channel}
           me={me}
           now={now}
-          actions={actions}
+          composer={composer}
           shareables={shareables}
           names={names}
           people={people}

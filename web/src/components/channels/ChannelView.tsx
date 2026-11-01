@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
 import type { Channel, Me, MessageList } from "@/lib/platform/contracts";
 import { createChannelStore } from "@/lib/platform/client/channel";
-import { createLiveActions, type Shareables } from "./actions";
+import { createComposer } from "@/lib/platform/client/composer";
+import type { Shareables } from "./actions";
 import ChannelSurface from "./ChannelSurface";
 
 export type ChannelViewProps = {
@@ -28,7 +29,8 @@ export type ChannelViewProps = {
 };
 
 /**
- * The channel view island (U-2.1), mounted by the channel frame at
+ * The channel view island (U-2.1): the channel store (S-2.1) and the composer
+ * (S-2.2) for one channel, mounted by the channel page at
  * /dashboard/{community,cohort}/c/:slug:
  *
  *   <ChannelView client:load me={me} channel={channel} initial={page} now={Date.now()}>
@@ -46,14 +48,14 @@ export default function ChannelView({
     channelId: channel.id, enabled, viewerId: me.user.id, initial: initial ?? undefined,
     initialRead: initialRead ?? { lastReadMessageId: null, unreadCount: channel.unreadCount },
   }));
-  const [actions] = useState(() => createLiveActions(store));
+  const [composer] = useState(() => createComposer({ store, me }));
   if (!enabled) return null;
   return (
     <ChannelSurface
       me={me}
       channel={channel}
       store={store}
-      actions={actions}
+      composer={composer}
       now={now}
       shareables={shareables}
       threadId={threadId}
