@@ -69,8 +69,9 @@ rename is never created again.
 
 ### Cohort numbers
 
-NN is the number in the program's name, read as the homepage reads it
-("Cohort 4" and "Cohort 04" are 04), when no channel uses that number yet.
+NN is the number straight after "cohort" in the program's name ("Cohort 4"
+and "TTV Cohort #04" are 04; "TTV 2025 Cohort 4" is 04 too, where the homepage's
+first-digits rule would read 2025), when no channel uses that number yet.
 Otherwise it is the next number above every cohort number in use, in channel
 slugs or program names. A second "Cohort 4", or a program with no number in
 its name, therefore takes the next free number. Existing programs were
@@ -87,6 +88,21 @@ implementation. The migration's backfill uses that same view.
 The hook cannot make a program insert fail. A program that already has seeded
 channels is skipped, and each insert first checks that its slug is free; a
 slug that is somehow taken leaves that channel out instead. Updating a
-program, including an upsert of an existing id, creates nothing.
+program, including `INSERT … ON CONFLICT(id) DO UPDATE` on an existing id,
+creates nothing.
+
+**Never `INSERT OR REPLACE INTO program`.** REPLACE deletes the existing row
+first, and the cascade deletes the program's channels and every message in
+them. The trigger then creates fresh, empty channels with new ids. Fixtures
+that re-seed programs must use `ON CONFLICT(id) DO UPDATE` (the local persona
+seed, `e2e/platform-personas.local.sql`, still uses REPLACE and needs this
+change before re-seeding a database that holds messages).
+
+**Rebuilding `program` or `channel`.** A migration that rebuilds either table
+(create, copy, drop, rename) must drop and recreate `cohort_channel_request`,
+its INSTEAD OF trigger and `program_cohort_channels`: SQLite refuses the
+rename while the view or trigger names a missing table, and dropping
+`program` silently drops the hook. The migration test applies every
+migration and fails if new programs stop getting their channels.
 
 Tests: `src/lib/db/migrations/channels-migration.test.ts`.

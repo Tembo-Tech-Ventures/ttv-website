@@ -1341,6 +1341,7 @@ export const channelMember = sqliteTable("channel_member", {
 }, (table) => [
   primaryKey({ columns: [table.channelId, table.userId] }),
   index("channel_member_userId_idx").on(table.userId, table.channelId),
+  index("channel_member_addedBy_idx").on(table.addedBy).where(sql`${table.addedBy} IS NOT NULL`),
   check("channel_member_time_check", sql`${table.createdAt} >= 0`),
 ]);
 
@@ -1379,6 +1380,7 @@ export const channelMessage = sqliteTable("channel_message", {
   uniqueIndex("channel_message_changeSeq_idx").on(table.channelId, table.changeSeq),
   index("channel_message_thread_idx").on(table.channelId, table.parentId, table.seq),
   uniqueIndex("channel_message_nonce_idx").on(table.authorId, table.clientNonce),
+  index("channel_message_hiddenBy_idx").on(table.hiddenBy).where(sql`${table.hiddenBy} IS NOT NULL`),
   check("channel_message_seq_check", sql`${table.seq} >= 1 AND ${table.changeSeq} >= ${table.seq}`),
   check("channel_message_authorKind_check", sql`${table.authorKind} IN ('USER','TEMBO')`),
   // Tembo has no account, and only ever answers inside the thread that asked.

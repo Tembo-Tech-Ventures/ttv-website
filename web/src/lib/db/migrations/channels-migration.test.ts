@@ -131,6 +131,25 @@ describe("channels migration", () => {
     } finally { database.close(); }
   });
 
+  it("keeps the hook working after every later migration", async () => {
+    // Later migrations that rebuild program or channel must recreate the view and triggers (README).
+    const { database } = createSqliteD1();
+    try {
+      for (const file of readdirSync(new URL("./", import.meta.url)).filter(n => n.endsWith(".sql")).toSorted()) {
+        database.exec(readMigration(file));
+      }
+      expect(rows(database, "SELECT type, name FROM sqlite_master WHERE name IN ('cohort_channel_request','cohort_channel_request_insert','program_cohort_channels') ORDER BY name"))
+        .toEqual([
+          { type: "view", name: "cohort_channel_request" },
+          { type: "trigger", name: "cohort_channel_request_insert" },
+          { type: "trigger", name: "program_cohort_channels" },
+        ]);
+      database.exec(`INSERT INTO curriculum(id,title,description) VALUES ('web','Web foundations','Synthetic');
+        INSERT INTO program(id,name,description,curriculumId) VALUES ('c4','Cohort 04','Synthetic','web');`);
+      expect(cohortSlugs(database, "c4")).toEqual(cohort("04"));
+    } finally { database.close(); }
+  });
+
   describe("program creation hook", () => {
     const insertProgram = (database: DatabaseSync, id: string, name: string) =>
       database.prepare("INSERT INTO program(id,name,description,curriculumId) VALUES (?,?,'Synthetic','web')").run(id, name);
@@ -369,6 +388,9 @@ describe("channels migration", () => {
       ["SELECT * FROM channel WHERE kind='COMMUNITY' AND archivedAt IS NULL", "channel_kind_idx (kind=?)"],
       ["SELECT * FROM channel WHERE kind='COHORT' AND programId IN ('a','b')", "channel_kind_idx (kind=? AND programId=?)"],
       ["SELECT channelId FROM channel_member WHERE userId='u'", "channel_member_userId_idx (userId=?)"],
+      // Deleting a person nulls these without scanning every message or membership.
+      ["SELECT 1 FROM channel_message WHERE hiddenBy='u'", "channel_message_hiddenBy_idx (hiddenBy=?)"],
+      ["SELECT 1 FROM channel_member WHERE addedBy='u'", "channel_member_addedBy_idx (addedBy=?)"],
       // Reactions, reports and the audit trail for a message.
       ["SELECT kind, count(*) FROM message_reaction WHERE messageId IN ('a','b') GROUP BY kind", "sqlite_autoindex_message_reaction_1 (messageId=?)"],
       ["SELECT count(*) FROM message_report WHERE messageId='m'", "message_report_message_reporter_idx (messageId=?)"],

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3d498407-5082-45a0-853c-d1ce2f645ac7",
+  "id": "8acb70b6-6a44-4899-9139-cbbc6a001af9",
   "prevId": "8785ba49-8eef-4ff6-8f15-4215d45dd2ff",
   "tables": {
     "access_request": {
@@ -944,6 +944,14 @@
             "channelId"
           ],
           "isUnique": false
+        },
+        "channel_member_addedBy_idx": {
+          "name": "channel_member_addedBy_idx",
+          "columns": [
+            "addedBy"
+          ],
+          "isUnique": false,
+          "where": "\"channel_member\".\"addedBy\" IS NOT NULL"
         }
       },
       "foreignKeys": {
@@ -1181,6 +1189,14 @@
             "clientNonce"
           ],
           "isUnique": true
+        },
+        "channel_message_hiddenBy_idx": {
+          "name": "channel_message_hiddenBy_idx",
+          "columns": [
+            "hiddenBy"
+          ],
+          "isUnique": false,
+          "where": "\"channel_message\".\"hiddenBy\" IS NOT NULL"
         }
       },
       "foreignKeys": {

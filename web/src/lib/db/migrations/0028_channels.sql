@@ -3,6 +3,11 @@
 -- new program its own. Additive and safe to reapply: new tables, indexes, a view and
 -- triggers; the only writes insert rows that do not exist yet. Existing programs,
 -- users and flags are never modified, and the channels flag is never switched on.
+--
+-- A later migration that rebuilds `program` or `channel` (create, copy, drop, rename)
+-- must drop and recreate the view `cohort_channel_request` and both triggers below:
+-- dropping `program` silently drops the program hook. channels-migration.test.ts
+-- applies every migration and fails if new programs stop getting channels.
 CREATE TABLE IF NOT EXISTS `channel` (
 	`id` text PRIMARY KEY NOT NULL,
 	`kind` text NOT NULL,
@@ -44,6 +49,7 @@ CREATE TABLE IF NOT EXISTS `channel_member` (
 );
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `channel_member_userId_idx` ON `channel_member` (`userId`,`channelId`);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS `channel_member_addedBy_idx` ON `channel_member` (`addedBy`) WHERE "channel_member"."addedBy" IS NOT NULL;--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `channel_message` (
 	`id` text PRIMARY KEY NOT NULL,
 	`channelId` text NOT NULL,
@@ -85,6 +91,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS `channel_message_seq_idx` ON `channel_message`
 CREATE UNIQUE INDEX IF NOT EXISTS `channel_message_changeSeq_idx` ON `channel_message` (`channelId`,`changeSeq`);--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `channel_message_thread_idx` ON `channel_message` (`channelId`,`parentId`,`seq`);--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS `channel_message_nonce_idx` ON `channel_message` (`authorId`,`clientNonce`);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS `channel_message_hiddenBy_idx` ON `channel_message` (`hiddenBy`) WHERE "channel_message"."hiddenBy" IS NOT NULL;--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `channel_read` (
 	`userId` text NOT NULL,
 	`channelId` text NOT NULL,
@@ -174,8 +181,8 @@ ORDER BY `seed`.`position`;
 -- stay open after the cohort ends. Inserting a program id into this view runs the one
 -- implementation, which both the program hook and the backfill below use.
 --
--- NN is the number in the program's name ("Cohort 4" and "Cohort 04" are 04, as the
--- homepage reads them) when no channel uses that number yet. Otherwise it is the next
+-- NN is the number straight after "cohort" in the program's name ("Cohort 4" and
+-- "TTV Cohort #04" are 04) when no channel uses that number yet. Otherwise it is the next
 -- number above every cohort number in use, in channel slugs or program names.
 --
 -- It cannot make a program insert fail: a program that already has seeded channels is
