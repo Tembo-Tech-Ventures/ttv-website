@@ -1,10 +1,10 @@
 import { PiArrowRight, PiFolderSimple, PiPlayFill, PiVideoCamera } from "react-icons/pi";
-import type { MessageEmbedView, ProjectEmbed, SessionClipEmbed, UnavailableEmbed } from "@/lib/platform/contracts";
+import type { MessageEmbedView, ProjectConfirmation, ProjectEmbed, SessionClipEmbed, UnavailableEmbed } from "@/lib/platform/contracts";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
 import Chip from "@/components/platform/ui/Chip";
 import { cx } from "@/components/platform/ui/cx";
 import PersonMarker from "@/components/platform/ui/PersonMarker";
-import { clipTime } from "./channel-format";
+import { clipTime, firstName } from "./channel-format";
 
 /** Where a session clip plays: the cohort's session page, at the moment. */
 export function clipHref(clip: Pick<SessionClipEmbed, "recordingId" | "startSeconds">): string {
@@ -14,20 +14,38 @@ export function clipHref(clip: Pick<SessionClipEmbed, "recordingId" | "startSeco
 const isExternal = (href: string) => /^https?:/i.test(href);
 
 /**
+ * The confirmations worth showing: one per mentor, the one on this revision
+ * when there is one, otherwise their latest. This revision's come first.
+ * No confirmation shows nothing: missing evidence is not evidence against.
+ */
+export function shownConfirmations(embed: ProjectEmbed): ProjectConfirmation[] {
+  const rank = (confirmation: ProjectConfirmation) => (confirmation.version === embed.version ? Number.POSITIVE_INFINITY : confirmation.version);
+  const best = new Map<string, ProjectConfirmation>();
+  for (const confirmation of embed.confirmations) {
+    const current = best.get(confirmation.mentorId);
+    if (!current || rank(confirmation) > rank(current)) best.set(confirmation.mentorId, confirmation);
+  }
+  return [...best.values()].toSorted((a, b) => rank(b) - rank(a));
+}
+
+/**
  * A mentor's confirmation, exactly as recorded: who, and which revision. When
  * the shared revision is newer, the card says the confirmation is of an
  * earlier one rather than lending it to work the mentor has not seen.
  */
-function confirmationText(embed: ProjectEmbed, confirmation: ProjectEmbed["confirmations"][number]): string {
-  const first = confirmation.mentorName.trim().split(/\s+/)[0];
+export function confirmationText(embed: ProjectEmbed, confirmation: ProjectConfirmation): string {
+  const first = firstName(confirmation.mentorName);
   return confirmation.version === embed.version
     ? `Confirmed by ${first} on this revision`
     : `Confirmed by ${first} on revision ${confirmation.version}`;
 }
 
 function ProjectCard({ embed, compact }: { embed: ProjectEmbed; compact: boolean }) {
+  // Null while the project has no page inside TTV every reader can open (B-2.4, owner decision 6):
+  // then there is no way in to draw. The evidence URL is never shared.
   const link = embed.link;
   const external = link !== null && isExternal(link);
+  const confirmations = shownConfirmations(embed);
   return (
     <div className="channel-embed" data-embed="project">
       <p className="channel-embed__kind">
@@ -45,28 +63,34 @@ function ProjectCard({ embed, compact }: { embed: ProjectEmbed; compact: boolean
           ))}
         </ul>
       )}
-      <div className="channel-embed__foot">
-        {embed.confirmations.length > 0 && (
-          <ul className="flex min-w-0 flex-col gap-1">
-            {embed.confirmations.map((confirmation) => (
-              <li key={`${confirmation.mentorId}-${confirmation.version}`} className="flex items-center gap-2">
-                <PersonMarker kind="mentor" />
-                {confirmationText(embed, confirmation)}
-              </li>
-            ))}
-          </ul>
-        )}
-        {link !== null && (
-          <a
-            href={link}
-            {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-            className={cx("channel-embed__go", FOCUS_RING)}
-          >
-            Open<span className="sr-only"> {embed.title}{external ? " (opens in a new tab)" : ""}</span>
-            <PiArrowRight aria-hidden="true" className="size-3.5" />
-          </a>
-        )}
-      </div>
+      {(confirmations.length > 0 || link !== null) && (
+        <div className="channel-embed__foot">
+          {confirmations.length > 0 && (
+            <ul className="flex min-w-0 flex-col gap-1" aria-label="Mentor confirmations">
+              {confirmations.map((confirmation) => (
+                <li
+                  key={confirmation.mentorId}
+                  className="flex items-center gap-2"
+                  data-confirmation={confirmation.version === embed.version ? "this-revision" : "other-revision"}
+                >
+                  <PersonMarker kind="mentor" />
+                  {confirmationText(embed, confirmation)}
+                </li>
+              ))}
+            </ul>
+          )}
+          {link !== null && (
+            <a
+              href={link}
+              {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+              className={cx("channel-embed__go", FOCUS_RING)}
+            >
+              Open<span className="sr-only"> {embed.title}{external ? " (opens in a new tab)" : ""}</span>
+              <PiArrowRight aria-hidden="true" className="size-3.5" />
+            </a>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -101,24 +125,29 @@ function ClipCard({ embed, compact }: { embed: SessionClipEmbed; compact: boolea
   );
 }
 
-/** Shared work this reader can no longer see: no title, no way in, nothing that was in it. */
+/** Work that was shared here and this reader can no longer open. It says so, and nothing about what it was. */
 function UnavailableCard({ embed }: { embed: UnavailableEmbed }) {
   const project = embed.was === "project";
   const Icon = project ? PiFolderSimple : PiVideoCamera;
   return (
-    <div className="channel-embed" data-embed="unavailable">
+    <div className="channel-embed channel-embed--gone" data-embed="unavailable" data-embed-was={embed.was}>
       <p className="channel-embed__kind">
         <Icon aria-hidden="true" className="size-4 shrink-0" />
-        {project ? "This project is no longer available" : "This session clip is no longer available"}
+        {project ? "Project" : "Session clip"}
       </p>
+      <p className="channel-embed__title">{project ? "This project is no longer available" : "This session clip is no longer available"}</p>
+      <p className="channel-embed__summary">It may have been removed, or it isn't shared with you.</p>
     </div>
   );
 }
 
 /**
- * Work shared in a message. U-2.2 owns the full embed design; this is its
- * first form. `compact` (a thread's first message) keeps the title, the
- * confirmation and the way in, as on the phone prototype (m4).
+ * Work shared in a message: a project at the revision that was shared, with
+ * the mentor confirmations it carries and which revision each covers; a
+ * session clip at its moment, with what was said; or, when the reader can no
+ * longer open it, a quiet card that says so. `compact` (a thread's first
+ * message) keeps the title, the confirmation and the way in, as on the phone
+ * prototype (m4).
  */
 export default function EmbedCard({ embed, compact = false }: { embed: MessageEmbedView; compact?: boolean }) {
   if (embed.type === "unavailable") return <UnavailableCard embed={embed} />;

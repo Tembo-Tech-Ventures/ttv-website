@@ -94,7 +94,8 @@
         "src/components/platform/attention/AttentionPanel.tsx",
         "src/components/platform/attention/AttentionPage.tsx",
         "src/components/platform/search/SearchOverlay.tsx",
-        "src/components/channels/ChannelSurface.tsx"
+        "src/components/channels/ChannelSurface.tsx",
+        "src/components/channels/harness/EmbedGallery.tsx"
       ],
       "rules": {
         "import/no-unassigned-import": "off"

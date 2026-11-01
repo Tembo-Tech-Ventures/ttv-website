@@ -18,8 +18,19 @@ function canModerate(channel: Channel, me: Me): boolean {
   return channel.capabilities.canModerate || me.capabilities.isAdmin;
 }
 
+/**
+ * Shared projects as B-2.4 sends them: with no link, because no project page
+ * yet is open to every reader and the evidence URL is never shared (owner
+ * decision 6). The fixtures keep their synthetic URLs for other consumers.
+ */
+function asServed(message: Message): Message {
+  if (!message.embeds.some((embed) => embed.type === "project")) return message;
+  return { ...message, embeds: message.embeds.map((embed) => (embed.type === "project" ? { ...embed, link: null } : embed)) };
+}
+
 /** One message as this person receives it, or null when they may not see it. */
-export function asSeenBy(message: Message, channel: Channel, me: Me): Message | null {
+export function asSeenBy(original: Message, channel: Channel, me: Me): Message | null {
+  const message = asServed(original);
   if (!message.moderation) return message;
   const privileged = message.author.id === me.user.id || canModerate(channel, me);
   if (privileged) return message;
@@ -68,5 +79,5 @@ export function shareablesFor(me: Me): Shareables {
     (project.journeyId === fixtureIds.chamaLedger && me.user.id === people.achieng.id)
     || (project.journeyId === fixtureIds.fareSplitter && me.user.id === people.wanjiku.id));
   const clips = me.capabilities.cohortIds.includes(fixtureIds.cohort04) ? [sessionClip, session07] : [];
-  return { projects: own, clips };
+  return { projects: own.map((project) => ({ ...project, link: null })), clips };
 }

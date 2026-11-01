@@ -429,6 +429,18 @@
   }
 }
 
+/* Shared work the reader can no longer open: the same footprint, drawn as an outline. */
+.channel-embed--gone {
+  border-style: dashed;
+  background-color: transparent;
+}
+
+.channel-embed--gone .channel-embed__title {
+  color: var(--color-ink-secondary);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
 .channel-embed--clip {
   display: grid;
   grid-template-columns: minmax(0, 13rem) minmax(0, 1fr);
@@ -481,9 +493,14 @@
 }
 
 @container channel-view (max-width: 34rem) {
+  /* On a narrow sheet the moment sits above its words, a wide strip, so neither column is squeezed. */
   .channel-embed--clip {
-    grid-template-columns: 7.5rem minmax(0, 1fr);
-    gap: 0.875rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+
+  .channel-clip__poster {
+    aspect-ratio: 21 / 9;
   }
 
   .channel-clip__quote {

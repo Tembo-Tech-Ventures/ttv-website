@@ -20,8 +20,8 @@ export type ChannelViewProps = {
   messageId?: string | null;
   /**
    * The viewer's own projects and their cohort's session moments, for the
-   * composer. Without them (until B-2.4 resolves embeds) the composer offers
-   * no attach tools rather than claim there is nothing to share.
+   * composer (B-2.4's getRouteChannelShareables). Null where they cannot post:
+   * no attach tools then.
    */
   shareables?: Shareables | null;
   /** The channel frame's header (U-2.3). */
