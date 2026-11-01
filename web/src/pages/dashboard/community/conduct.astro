@@ -14,5 +14,5 @@ if (page instanceof Response) return page;
 ---
 
 <SpacePage context={page.context} title={CONDUCT_TITLE} channels={page.readable}>
-  <ConductArticle record={page.record} action={page.self} />
+  <ConductArticle record={page.record} canAgree={page.canAgree} action={page.self} />
 </SpacePage>

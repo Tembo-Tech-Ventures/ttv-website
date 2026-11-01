@@ -46,7 +46,7 @@ export const CONDUCT_HABITS: readonly ConductHabit[] = [
   {
     key: "audience",
     title: "Know who’s reading.",
-    body: "Community channels are open to everyone signed in to TTV, including people from organisations with approved access. Cohort channels are for that cohort, its instructors and mentors, and TTV staff.",
+    body: "Community channels are open to everyone signed in to TTV, including people from organisations with approved access. Cohort channels are for that cohort, its instructors, TAs and mentors, and TTV staff.",
   },
   {
     key: "limits",
@@ -57,6 +57,9 @@ export const CONDUCT_HABITS: readonly ConductHabit[] = [
 
 /** The one action on the first visit. It records that you read this; it grants nothing. */
 export const CONDUCT_ACCEPT = "I’ll keep to this";
+
+/** Shown instead of the action to an agent acting for someone: agreeing is the person's own act. */
+export const CONDUCT_AGENT_NOTE = "An agent acting for someone can read these habits, but only the person can agree to them.";
 
 /** Shown above the habits on a channel the first time, so the step explains itself. */
 export const CONDUCT_FIRST_VISIT = "Before your first channel, a minute on how this place works.";

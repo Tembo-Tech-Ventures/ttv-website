@@ -25,7 +25,16 @@ import { channelsServer } from "./server";
  */
 
 const PRIVATE = { "Cache-Control": "no-store", Vary: "Cookie" } as const;
-const respond = (status: number, headers: Record<string, string> = {}) => new Response(status === 404 ? "Not found." : null, { status, headers: { ...PRIVATE, ...headers } });
+/** A refusal says what happened in words; a redirect has no body. */
+const REASON: Record<number, string> = {
+  400: "That form could not be read.",
+  403: "Only the person can agree to how we talk to each other.",
+  404: "Not found.",
+  405: "Not allowed.",
+  413: "That form was too large.",
+};
+const respond = (status: number, headers: Record<string, string> = {}) =>
+  new Response(REASON[status] ?? null, { status, headers: { ...PRIVATE, ...(REASON[status] ? { "Content-Type": "text/plain; charset=utf-8" } : {}), ...headers } });
 
 export interface ChannelsPage {
   context: SpacePageContext;
@@ -33,6 +42,8 @@ export interface ChannelsPage {
   readable: readonly Channel[];
   record: ConductAcknowledgement | null;
   agreed: boolean;
+  /** False for an agent's delegated session, which may read the habits but never agree for the person. */
+  canAgree: boolean;
   /** This page with its query: where agreeing posts and returns. */
   self: string;
 }
@@ -51,11 +62,12 @@ async function resolve<T extends object>(
   if (!found) return respond(404);
 
   const self = astro.url.pathname + astro.url.search;
-  if (method === "POST" && isAgentSession(astro.locals.session?.userAgent)) return respond(403);
+  const canAgree = !isAgentSession(astro.locals.session?.userAgent);
+  if (method === "POST" && !canAgree) return respond(403);
   const posted = await handleConductPost(astro.request, server.conduct, self);
   if (posted) return posted.kind === "redirect" ? respond(303, { Location: posted.location }) : respond(posted.status);
   const record = await server.conduct.load();
-  return { context, readable, record, agreed: conductAgreed(record), self, ...found };
+  return { context, readable, record, agreed: conductAgreed(record), canAgree, self, ...found };
 }
 
 /** A channel's page in its space: `/dashboard/community/c/:slug` or `/dashboard/cohort/c/:slug`. */

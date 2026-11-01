@@ -236,6 +236,8 @@ test.describe("channel sidebars and how we talk to each other", () => {
  * agreeing to the habits (a person's own act) is checked locally only.
  */
 test.describe("channels on real sessions", () => {
+  // Several real pages each, every one compiled on first request by a cold dev server.
+  test.describe.configure({ timeout: 90_000 });
   const LOCAL = !process.env.PLAYWRIGHT_BASE_URL;
   const COHORT_SLUG = /^(?:cohort-\d{2,}|c\d{2,}-help|c\d{2,}-announcements)$/;
 
@@ -301,8 +303,6 @@ test.describe("channels on real sessions", () => {
   test("the first channel asks; agreeing is kept, opens the channel and dates the habits page", async ({ page, context, baseURL }) => {
     test.skip(!LOCAL, "Preview personas are agents' delegated sessions, which may read but never agree for a person.");
     test.skip(test.info().project.name !== "chromium", "One project writes; the persona is shared.");
-    // Four pages, one of them a post: a cold dev server compiles each the first time.
-    test.setTimeout(90_000);
     await as(page, context, baseURL!, "alumna");
     await openReal(page, "/dashboard/cohort/c/c04-help");
     await expect(page.locator("[data-conduct-gate]")).toBeVisible();

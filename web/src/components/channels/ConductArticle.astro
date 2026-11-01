@@ -15,9 +15,11 @@ interface Props {
   record: ConductAcknowledgement | null;
   /** This page with its query, where agreeing posts and returns. */
   action: string;
+  /** False for an agent's delegated session: the habits show, the action does not. */
+  canAgree?: boolean;
 }
 
-const { record, action } = Astro.props;
+const { record, action, canAgree = true } = Astro.props;
 ---
 
 <article data-conduct-page>
@@ -31,7 +33,7 @@ const { record, action } = Astro.props;
         {agreedOn(record.acknowledgedAt)}
       </p>
     ) : (
-      <ConductAgree action={action} />
+      <ConductAgree action={action} canAgree={canAgree} />
     )
   }
 </article>

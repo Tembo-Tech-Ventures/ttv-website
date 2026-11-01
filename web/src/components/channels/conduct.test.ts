@@ -26,8 +26,10 @@ describe("how we talk to each other", () => {
     expect(everything).not.toMatch(/\bjoin (?:our|the) WhatsApp\b|wa\.me|chat\.whatsapp\.com/i);
   });
 
-  it("says institutions can read community channels, as the owner decided", () => {
+  it("says who reads each kind of channel: institutions in community ones (owner decision), and each cohort's own people", () => {
     expect(CONDUCT_HABITS.find((habit) => habit.key === "audience")!.body).toMatch(/organisations with approved access/);
+    // Everyone B-2.2's channelAccessFor lets read a cohort channel, by role.
+    expect(CONDUCT_HABITS.find((habit) => habit.key === "audience")!.body).toMatch(/that cohort, its instructors, TAs and mentors, and TTV staff/);
   });
 
   it("keeps each habit addressable once, with a full stop closing each title", () => {

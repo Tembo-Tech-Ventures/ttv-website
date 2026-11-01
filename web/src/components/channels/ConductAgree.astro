@@ -6,29 +6,39 @@
  */
 import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
 import { CONDUCT_VERSION } from "@/lib/channels/conduct";
-import { CONDUCT_ACCEPT } from "./conduct";
+import { CONDUCT_ACCEPT, CONDUCT_AGENT_NOTE } from "./conduct";
 import { CONDUCT_INTENT } from "./conduct-flow";
 
 interface Props {
   /** Where the form posts: the page it is on, with its query, so the person returns to it. */
   action: string;
+  /** False for an agent acting for someone: they see why there is no button. */
+  canAgree?: boolean;
 }
 
-const { action } = Astro.props;
+const { action, canAgree = true } = Astro.props;
 ---
 
-<form method="post" action={action} class="mt-8" data-conduct-agree>
-  <input type="hidden" name="intent" value={CONDUCT_INTENT} />
-  <input type="hidden" name="version" value={CONDUCT_VERSION} />
-  <button
-    type="submit"
-    class:list={[
-      "inline-flex h-11 items-center justify-center rounded-xl px-5 text-sm font-semibold",
-      "transition-colors duration-150 motion-reduce:transition-none",
-      BUTTON_VARIANTS.primary,
-      FOCUS_RING,
-    ]}
-  >
-    {CONDUCT_ACCEPT}
-  </button>
-</form>
+{
+  canAgree ? (
+    <form method="post" action={action} class="mt-8" data-conduct-agree>
+      <input type="hidden" name="intent" value={CONDUCT_INTENT} />
+      <input type="hidden" name="version" value={CONDUCT_VERSION} />
+      <button
+        type="submit"
+        class:list={[
+          "inline-flex h-11 items-center justify-center rounded-xl px-5 text-sm font-semibold",
+          "transition-colors duration-150 motion-reduce:transition-none",
+          BUTTON_VARIANTS.primary,
+          FOCUS_RING,
+        ]}
+      >
+        {CONDUCT_ACCEPT}
+      </button>
+    </form>
+  ) : (
+    <p class="mt-8 max-w-xl text-sm text-ink-muted" data-conduct-agent-note>
+      {CONDUCT_AGENT_NOTE}
+    </p>
+  )
+}

@@ -15,5 +15,5 @@ if (page instanceof Response) return page;
 ---
 
 <SpacePage context={page.context} title={`#${page.channel.name}`} channels={page.readable} channelId={page.channel.id}>
-  <ChannelFrame channel={page.channel} agreed={page.agreed} action={page.self} />
+  <ChannelFrame channel={page.channel} agreed={page.agreed} canAgree={page.canAgree} action={page.self} />
 </SpacePage>
