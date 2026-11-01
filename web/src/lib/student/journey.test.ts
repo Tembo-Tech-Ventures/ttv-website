@@ -313,6 +313,6 @@ describe("student journey", () => {
   });
 
   it("formats dates without an ambiguous numeric month", () => {
-    expect(formatJourneyDate(START_DATE)).toBe("Oct 6, 2026");
+    expect(formatJourneyDate(START_DATE)).toBe("6 Oct 2026");
   });
 });

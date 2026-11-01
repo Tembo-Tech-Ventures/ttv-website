@@ -7,6 +7,7 @@ import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import { CommunityEmbedded } from "../discovery/DiscoveryShell";
 import MentorReview, {
+  evidenceDestination,
   safeMentorEvidenceUrl,
   validateMentorNote,
   validateMentorMethod,
@@ -145,6 +146,44 @@ describe("mentor review validation", () => {
       expect(safeMentorEvidenceUrl(url)).toBe(url);
     },
   );
+});
+
+describe("evidence links", () => {
+  it("name where each goes, so links titled alike can be told apart", () => {
+    const html = render([
+      {
+        ...request,
+        evidence: [
+          { id: "a", title: "Supporting work", url: "https://github.com/achieng/ledger" },
+          { id: "b", title: "Supporting work", url: "https://www.example.org/notes/sql-joins/" },
+        ],
+      },
+    ]);
+    const names = Array.from(html.matchAll(/<a [^>]*>(.*?)<\/a>/g), ([, inner]) => inner!.replace(/<[^>]+>/g, ""));
+    expect(names).toEqual([
+      "Supporting work github.com/achieng/ledger ↗ (opens in a new tab)",
+      "Supporting work example.org/notes/sql-joins ↗ (opens in a new tab)",
+    ]);
+    expect(html).toContain('class="mentor-evidence"');
+    expect(html).toContain('<span aria-hidden="true"> ↗</span>');
+    expect(html).toContain('<span class="sr-only"> (opens in a new tab)</span>');
+  });
+
+  it("always shows the whole host, so a look-alike cannot pass for the real site", () => {
+    const lookAlike = "https://github.com.repos.achieng-ledger-project.portfolio-review.evil.example/login";
+    expect(evidenceDestination(lookAlike)).toBe("github.com.repos.achieng-ledger-project.portfolio-review.evil.example…");
+    expect(evidenceDestination(lookAlike)).toContain("evil.example");
+    expect(evidenceDestination("https://example.org/notes")).toBe("example.org/notes");
+  });
+
+  it("shortens a long address without losing where it goes", () => {
+    expect(evidenceDestination("https://github.com/achieng")).toBe("github.com/achieng");
+    expect(evidenceDestination("https://example.com/")).toBe("example.com");
+    const long = evidenceDestination(`https://example.com/${"a".repeat(80)}`);
+    expect(long).toHaveLength(48);
+    expect(long.startsWith("example.com/aaa")).toBe(true);
+    expect(long.endsWith("…")).toBe(true);
+  });
 });
 
 describe("mentor revision and method contract", () => {

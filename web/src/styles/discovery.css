@@ -752,6 +752,22 @@
   padding-left: 20px;
   font-size: 13px;
 }
+/* Evidence links read as links, and each names where it goes. */
+.mentor-evidence li + li {
+  margin-top: 6px;
+}
+.mentor-evidence a {
+  color: var(--d-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+.mentor-evidence__title {
+  font-weight: 600;
+}
+.mentor-evidence__place {
+  color: var(--d-muted);
+}
 .discovery-panel output {
   display: block;
   font-size: 12px;

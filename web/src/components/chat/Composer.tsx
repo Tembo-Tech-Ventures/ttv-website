@@ -14,6 +14,8 @@ const MAX_HEIGHT_PX = 168;
 
 export interface ComposerHandle {
   focus: () => void;
+  /** Puts words back in the box, unsent, ready to change: a question that failed, say. */
+  fill: (text: string) => void;
 }
 
 interface ComposerProps {
@@ -38,6 +40,10 @@ const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
 
   useImperativeHandle(ref, () => ({
     focus: () => textareaRef.current?.focus(),
+    fill: (text: string) => {
+      setValue(text);
+      textareaRef.current?.focus();
+    },
   }));
 
   // A question handed over from search arrives in the box, unsent: the person decides.

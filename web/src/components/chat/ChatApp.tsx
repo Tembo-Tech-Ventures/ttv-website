@@ -108,6 +108,8 @@ export default function ChatApp({
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState("");
+  /** The question that just failed, and the conversation it was asked in, so it can be asked again. */
+  const [failedQuestion, setFailedQuestion] = useState<{ message: string; history: ChatMessage[] } | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   /** The conversation being fetched, so the tap has visible consequences. */
@@ -213,10 +215,15 @@ export default function ChatApp({
     setActiveSessionId(nextActiveSessionId);
   }
 
+  function clearError() {
+    setError("");
+    setFailedQuestion(null);
+  }
+
   async function selectSession(sessionId: string) {
     setSheetOpen(false);
     if (sessionId === activeSessionId || loading) return;
-    setError("");
+    clearError();
     setHistoryLoading(true);
     pendingSessionIdRef.current = sessionId;
     const announceSlowLoad = setTimeout(() => {
@@ -278,7 +285,7 @@ export default function ChatApp({
   function startNewChat() {
     setActiveSessionId(null);
     setMessages([]);
-    setError("");
+    clearError();
     setSheetOpen(false);
     // Any request still in flight belongs to the conversation being left, so
     // stop reporting it as this one's pending work. Both flags: their owners'
@@ -291,11 +298,11 @@ export default function ChatApp({
     composerRef.current?.focus();
   }
 
-  async function sendMessage(message: string) {
+  async function sendMessage(message: string, history: ChatMessage[] = messages) {
     if (loading) return;
     setLoading(true);
-    setError("");
-    const nextMessages: ChatMessage[] = [...messages, { role: "user", content: message }];
+    clearError();
+    const nextMessages: ChatMessage[] = [...history, { role: "user", content: message }];
     setMessages(nextMessages);
     // The transcript this answer belongs to. If the user starts a new chat or
     // opens a different conversation while it is in flight, the result is stale
@@ -374,12 +381,29 @@ export default function ChatApp({
         { role: "assistant", content: payload.answer, citations: payload.citations },
       ]);
       if (nextSessionId) await refreshSessions(nextSessionId, isStale);
-    } catch (err) {
+    } catch {
       if (isStale()) return;
-      setError(err instanceof Error ? err.message : "Unable to send message");
+      // The server's reason is generic and the question is still on screen: say what
+      // happened to it, and offer to ask again or to change it first.
+      setError("That question didn't get an answer.");
+      setFailedQuestion({ message, history });
     } finally {
       if (!isStale()) setLoading(false);
     }
+  }
+
+  function retryQuestion() {
+    if (!failedQuestion) return;
+    // The button goes away as the question is asked again: keep focus where the next words go.
+    composerRef.current?.focus();
+    void sendMessage(failedQuestion.message, failedQuestion.history);
+  }
+
+  function editQuestion() {
+    if (!failedQuestion) return;
+    setMessages(failedQuestion.history);
+    composerRef.current?.fill(failedQuestion.message);
+    clearError();
   }
 
   const conversationList = (
@@ -514,12 +538,29 @@ export default function ChatApp({
           exactly when it matters.
         */}
         {error && (
-          <p
-            role="alert"
-            className="mx-auto w-full max-w-3xl shrink-0 px-3 pt-2 text-sm text-red-200 sm:px-6"
-          >
-            {error}
-          </p>
+          <div className="mx-auto flex w-full max-w-3xl shrink-0 flex-wrap items-center gap-x-3 gap-y-1 px-3 pt-2 sm:px-6">
+            <p role="alert" className="text-sm text-red-200">
+              {error}
+            </p>
+            {failedQuestion && (
+              <span className="-ml-3 flex gap-1" data-chat-recovery>
+                <button
+                  type="button"
+                  onClick={retryQuestion}
+                  className="min-h-11 rounded-lg px-3 text-sm font-semibold text-primary transition hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-primary"
+                >
+                  Try again
+                </button>
+                <button
+                  type="button"
+                  onClick={editQuestion}
+                  className="min-h-11 rounded-lg px-3 text-sm font-semibold text-ink-secondary transition hover:bg-ink-primary/[0.06] hover:text-ink-primary focus-visible:outline-2 focus-visible:outline-primary"
+                >
+                  Edit question
+                </button>
+              </span>
+            )}
+          </div>
         )}
 
         <Composer

@@ -88,7 +88,7 @@
 .audience-close-mark { font-size: clamp(100px,16vw,210px); line-height: 1; color: transparent; -webkit-text-stroke: 2px #013d39; justify-self: center; }
 .audience-close h2 { max-width: 22ch; }
 .audience-close .audience-button { background: #013d39; color: #fff8f2; margin-top: 28px; box-shadow: 0 16px 36px -18px #013d3977; }
-.audience-close p { color: #16473f; max-width: 38rem; font-size: .875rem; line-height: 1.7; margin: 18px 0 0; }
+.audience-close p { color: #013d39; max-width: 38rem; font-size: .875rem; line-height: 1.7; margin: 18px 0 0; }
 .hp-sheet--peach :is(a,summary):focus-visible { outline-color: #013d39; }
 
 /* Community's opening deck uses the homepage's concentric network and a

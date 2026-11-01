@@ -11,6 +11,7 @@ import { budgetBandLabel } from "@/components/hire/budget-bands";
 import { parseSkillsJson } from "@/lib/talent/profile";
 import { interestNoteSchema, resolveGateState } from "@/components/hire/validation";
 import type { ProfileStatus } from "@/components/hire/validation";
+import { formatMomentDate } from "@/lib/display-date";
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
@@ -114,12 +115,7 @@ if (gateState === "published" && profile) {
 }
 
 function formatDate(date: Date | null): string {
-  if (!date) return "";
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return date ? formatMomentDate(date) : "";
 }
 const spaces = await resolveSpacePage(Astro.locals, "opportunities");
 ---

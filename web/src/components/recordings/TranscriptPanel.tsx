@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import TimestampBadge from "@/components/recordings/TimestampBadge";
+import { formatTimestamp } from "@/lib/recordings/time-utils";
 
 export interface TranscriptSegment {
   id: string;
@@ -39,7 +39,7 @@ export default function TranscriptPanel({
   activeSegmentId: string | null;
   onSeek: (seconds: number) => void;
 }) {
-  const activeRef = useRef<HTMLDivElement | null>(null);
+  const activeRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   /*
@@ -75,33 +75,35 @@ export default function TranscriptPanel({
         <div className="divide-y divide-teal/10">
           {segments.map((segment) => {
             const active = segment.id === activeSegmentId;
+            const time = formatTimestamp(segment.startTime);
+            // One control per line: the time and the words seek to the same moment, so a
+            // keyboard stops here once, and the name says where the video will go.
             return (
-              <div
+              <button
                 key={segment.id}
                 ref={active ? activeRef : undefined}
-                className={`flex gap-3 px-4 py-3 text-left transition-colors ${
+                type="button"
+                aria-current={active || undefined}
+                onClick={() => onSeek(segment.startTime)}
+                className={`group flex w-full gap-3 px-4 py-3 text-left transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${
                   active
                     ? "border-l-4 border-primary bg-teal/25"
                     : "border-l-4 border-transparent hover:bg-teal/10"
                 }`}
               >
-                <TimestampBadge
-                  seconds={segment.startTime}
-                  onClick={() => onSeek(segment.startTime)}
-                />
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 text-left text-sm leading-relaxed text-white/85"
-                  onClick={() => onSeek(segment.startTime)}
-                >
+                <span className="inline-flex h-fit shrink-0 items-center rounded-md bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary group-hover:bg-primary/25">
+                  <span className="sr-only">Play from </span>
+                  {time}
+                </span>
+                <span className="min-w-0 flex-1 text-sm leading-relaxed text-white/85">
                   {segment.speaker && (
                     <span className="mb-1 block text-xs font-semibold uppercase text-ink-muted">
                       {segment.speaker}
                     </span>
                   )}
                   {segment.text}
-                </button>
-              </div>
+                </span>
+              </button>
             );
           })}
         </div>

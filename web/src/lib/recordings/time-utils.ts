@@ -4,9 +4,18 @@ export interface TranscriptSegmentInput {
   text: string;
 }
 
+/** A recording's length: "--" when it is unknown. */
 export function formatDuration(totalSeconds?: number | null) {
   if (!totalSeconds || totalSeconds < 0) return "--";
+  return clock(totalSeconds);
+}
 
+/** A position in a recording. The very start is a real moment, "0:00", not an unknown length. */
+export function formatTimestamp(totalSeconds: number) {
+  return clock(Math.max(0, totalSeconds));
+}
+
+function clock(totalSeconds: number) {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = Math.floor(totalSeconds % 60);
@@ -16,10 +25,6 @@ export function formatDuration(totalSeconds?: number | null) {
   }
 
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
-export function formatTimestamp(totalSeconds: number) {
-  return formatDuration(totalSeconds);
 }
 
 export function secondsToVttTimestamp(totalSeconds: number) {

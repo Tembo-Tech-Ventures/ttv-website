@@ -434,6 +434,34 @@ test.describe("QA-1 polish (F-3)", () => {
     await expect(directory.getByRole("link", { name: "Mentors (public website)" })).toHaveAttribute("href", "/community/mentors");
   });
 
+  test("a session's transcript has one stop per line from 0:00, and an unplayable video says so", async ({ context, page, baseURL }) => {
+    test.skip(Boolean(process.env.PLAYWRIGHT_BASE_URL), "The fictional recording is in the local seed only.");
+    await as("student", { context, page, baseURL });
+    await open(page, "/dashboard/cohort/sessions");
+    const card = page.locator('a[href="/dashboard/cohort/sessions/ttv-local-persona-recording-05"]');
+    await expect(card).toContainText("12 Oct 2026");
+    await card.click();
+    await expect(page).toHaveURL(/\/dashboard\/cohort\/sessions\/ttv-local-persona-recording-05$/);
+    await expect(page.getByRole("link", { name: "← Back to Sessions" })).toHaveAttribute("href", "/dashboard/cohort/sessions");
+
+    const lines = page.locator("[data-transcript-panel] button");
+    await expect(lines).toHaveCount(3);
+    await expect(lines.first()).toHaveAccessibleName("Play from 0:00 Mentor Welcome back, everyone.");
+    await lines.first().focus();
+    await page.keyboard.press("Tab");
+    await expect(lines.nth(1)).toBeFocused();
+
+    // The local seed has no media, so the player fails, and says so instead of sitting at 0:00.
+    await expect(page.locator("[data-video-unavailable]")).toContainText("This recording can’t be played right now.");
+    await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+    // Hidden while it cannot play; its name is the session's title, the page's h1.
+    const labelledBy = await page.locator("video").getAttribute("aria-labelledby");
+    await expect(page.locator(`[id="${labelledBy}"]`)).toHaveText("Week 4: SQL joins and indexes");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveAttribute("id", labelledBy!);
+    await expectNoSidewaysScroll(page, "session viewer");
+    await runAxe(page, test.info(), "student-session-unavailable");
+    await page.screenshot({ path: evidence("student-session-unavailable") });
+  });
   test("sessions open at their space paths, and lead back the same way", async ({ context, page, baseURL }) => {
     test.skip(Boolean(process.env.PLAYWRIGHT_BASE_URL), "The fictional recording is in the local seed only.");
     await as("student", { context, page, baseURL });
