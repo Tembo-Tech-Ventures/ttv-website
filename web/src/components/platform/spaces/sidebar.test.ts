@@ -200,12 +200,12 @@ describe("space sidebars", () => {
       expect(current(model)).toEqual(["Your own work"]);
     });
 
-    it("lists pending requests under Your requests, each opening Account, as a status and never a tab", () => {
+    it("lists pending requests under Your requests, each opening its own row in Account, as a status and never a tab", () => {
       const model = spaceSidebar("community", facts(meByPersona.lucy, "journey", { onboarding: { framing: "member", pending: ["MENTOR", "INSTITUTION"] } }));
       const requests = model.groups.find((group) => group.label === "Your requests")!;
       expect(requests.items).toEqual([
-        expect.objectContaining({ label: "Mentor access", href: "/dashboard/account#taking-part", icon: "mentorRequest", note: "Pending", noteTone: "ring", current: false }),
-        expect.objectContaining({ label: "Organisation access", href: "/dashboard/account#taking-part", icon: "institutionRequest", note: "Pending" }),
+        expect.objectContaining({ label: "Mentor access", href: "/dashboard/account#taking-part-request-mentor", icon: "mentorRequest", note: "Pending", noteTone: "ring", current: false }),
+        expect.objectContaining({ label: "Organisation access", href: "/dashboard/account#taking-part-request-institution", icon: "institutionRequest", note: "Pending" }),
       ]);
       expect(groupLabels(model).at(-1)).toBe("Your requests");
       expect(groupLabels(spaceSidebar("community", facts(meByPersona.lucy, "journey", { onboarding: { framing: "member", pending: [] } })))).not.toContain("Your requests");

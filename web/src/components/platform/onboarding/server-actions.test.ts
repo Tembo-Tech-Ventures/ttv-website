@@ -10,7 +10,7 @@ import { handleWelcome } from "./welcome-flow";
  * way the page runs it: form posts in, redirects or steps out, and nothing
  * but intents and requests written. No role is ever granted here.
  */
-const ROUTES = { choose: "/dashboard/welcome", request: "/dashboard/welcome?step=request", landing: "/dashboard" };
+const ROUTES = { choose: "/dashboard/welcome", request: "/dashboard/welcome?step=request", landing: "/dashboard", sent: "/dashboard/community" };
 const NOTE = "Backend and data work: SQL, APIs and the tests around them.";
 
 const setups: ReturnType<typeof onboardingDatabase>[] = [];
@@ -36,7 +36,7 @@ describe("the welcome flow on the onboarding service", () => {
     expect(await handleWelcome(post(ROUTES.choose, [["intent", "MEMBER"], ["intent", "MENTOR"]]), ROUTES, actions))
       .toEqual({ kind: "redirect", location: ROUTES.request });
     expect(await handleWelcome(post(ROUTES.request, [["mentorNote", NOTE], ["mentorLink", "example.org/work"]]), ROUTES, actions))
-      .toEqual({ kind: "redirect", location: ROUTES.landing });
+      .toEqual({ kind: "redirect", location: "/dashboard/community?sent=mentor" });
 
     const state = await getOnboardingState(db, "wairimu");
     expect(state).toMatchObject({ stage: "DONE", intents: ["MEMBER", "MENTOR"], roles: [] });

@@ -12,7 +12,8 @@
  * - Browser sessions only. A personal access token or an agent's delegated
  *   session never chooses, or asks for access, on a person's behalf.
  * - Choosing grants nothing: mentor and organisation access stay requests an
- *   administrator decides. When the flow finishes, /dashboard picks the space.
+ *   administrator decides. When the flow finishes, /dashboard picks the space;
+ *   after a request is sent, Community shows its status card and says it was sent.
  */
 import { env } from "cloudflare:workers";
 import WelcomeScreen from "@/components/platform/onboarding/WelcomeScreen.astro";
@@ -21,7 +22,7 @@ import { handleWelcome, onboardingOpen, parseRoleFilter, type WelcomeRoutes } fr
 import { shellAccount } from "@/components/platform/shell/account";
 import { isAgentSession } from "@/lib/agent-auth";
 import { getSpaceContext } from "@/lib/platform/server/space-context";
-import { WELCOME_PATH } from "@/lib/platform/server/space-routes";
+import { SPACE_PATHS, WELCOME_PATH } from "@/lib/platform/server/space-routes";
 
 // WELCOME_PATH is where B-O.4 routes new accounts; /dashboard picks the space after it.
 // Account's "Request access" asks about one role (?role=); the request form keeps asking about only that one.
@@ -30,6 +31,8 @@ const ROUTES: WelcomeRoutes = {
   choose: WELCOME_PATH,
   request: `${WELCOME_PATH}?step=request${only ? `&role=${only.toLowerCase()}` : ""}`,
   landing: "/dashboard",
+  // Community shows the status card to everyone signed in, whichever space they used last.
+  sent: SPACE_PATHS.community,
 };
 const PRIVATE = { "Cache-Control": "no-store", Vary: "Cookie" };
 const notFound = () => new Response("Not found.", { status: 404, headers: PRIVATE });

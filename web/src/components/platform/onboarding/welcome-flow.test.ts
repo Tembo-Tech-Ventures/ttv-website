@@ -6,10 +6,10 @@ import { onboardingByPersona } from "@/lib/platform/fixtures";
 import { FAILURES, FIELD_ERRORS, WELCOME } from "./copy";
 import {
   EMPTY_DRAFT, MAX_FORM_BYTES, choiceStatuses, handleWelcome, initialSelection, normaliseLink, onboardingOpen, parseHint,
-  parseRoleFilter, readDraft, requestableRoles, validateRequests, type RequestDraft, type WelcomeActions, type WelcomeResult,
+  parseRoleFilter, parseSent, readDraft, requestableRoles, sentLocation, validateRequests, type RequestDraft, type WelcomeActions, type WelcomeResult,
 } from "./welcome-flow";
 
-const ROUTES = { choose: "/dashboard/welcome", request: "/dashboard/welcome?step=request", landing: "/dashboard" };
+const ROUTES = { choose: "/dashboard/welcome", request: "/dashboard/welcome?step=request", landing: "/dashboard", sent: "/dashboard/community" };
 const NOTE = "Backend and data work: SQL, APIs and tests.";
 const LONG = "x".repeat(601);
 
@@ -168,10 +168,11 @@ describe("the request step for one access (Account's Request access)", () => {
     expect(view(await handleWelcome(get(ONLY), routes, actions), "request").view.roles).toEqual(["INSTITUTION"]);
   });
 
-  it("sends only that request, without asking for the other's note, then lands", async () => {
+  it("sends only that request, without asking for the other's note, then lands on its status card", async () => {
     const { actions, now } = server(peter());
     const result = await handleWelcome(post(ONLY, requestFields(institutionDraft())), routes, actions);
-    expect(result).toEqual({ kind: "redirect", location: ROUTES.landing });
+    // Never /dashboard, whose last-space cookie can pick a page without the card (QAO-02).
+    expect(result).toEqual({ kind: "redirect", location: "/dashboard/community?sent=institution" });
     expect(actions.requestAccess).toHaveBeenCalledTimes(1);
     expect(now().requests.map((request) => request.role)).toEqual(["INSTITUTION"]);
   });
@@ -337,11 +338,11 @@ describe("handleWelcome: the request step (S2)", () => {
     expect(actions.requestAccess).not.toHaveBeenCalled();
   });
 
-  it("sends one request per role and lands, with both Pending and no role granted", async () => {
+  it("sends one request per role and lands where both say they were sent, with both Pending and no role granted", async () => {
     const { actions, now } = server(chosen(["MENTOR", "INSTITUTION"]));
     const draft = { ...institutionDraft(), mentorNote: NOTE };
     const result = await handleWelcome(post(ROUTES.request, requestFields(draft)), ROUTES, actions);
-    expect(result).toEqual({ kind: "redirect", location: ROUTES.landing });
+    expect(result).toEqual({ kind: "redirect", location: "/dashboard/community?sent=mentor%2Cinstitution" });
     expect(actions.requestAccess.mock.calls.map(([input]) => input.role)).toEqual(["MENTOR", "INSTITUTION"]);
     expect(now().requests.map((r) => [r.role, r.status])).toEqual([["MENTOR", "PENDING"], ["INSTITUTION", "PENDING"]]);
     expect(now().roles).toEqual([]);
@@ -361,7 +362,8 @@ describe("handleWelcome: the request step (S2)", () => {
     const conflict = Object.assign(new Error("Already pending"), { status: 409, sentAnyway: true });
     const { actions, now } = server(chosen(["MENTOR"]), { request: [conflict] });
     const result = await handleWelcome(post(ROUTES.request, requestFields(mentorDraft())), ROUTES, actions);
-    expect(result).toEqual({ kind: "redirect", location: ROUTES.landing });
+    // Sent from the other tab, it is Pending all the same: the landing says so.
+    expect(result).toEqual({ kind: "redirect", location: "/dashboard/community?sent=mentor" });
     expect(actions.load).toHaveBeenCalledTimes(2);
     expect(now().requests.map((r) => r.status)).toEqual(["PENDING"]);
   });
@@ -398,7 +400,7 @@ describe("handleWelcome: the request step (S2)", () => {
       organisationRole: "ö".repeat(200), institutionNote: "ñ".repeat(600), institutionLink: `https://mto.example/${"q".repeat(2000)}`, scope: true,
     };
     const result = await handleWelcome(post(ROUTES.request, requestFields(full)), ROUTES, actions);
-    expect(result).toEqual({ kind: "redirect", location: ROUTES.landing });
+    expect(result).toMatchObject({ kind: "redirect", location: expect.stringMatching(/^\/dashboard\/community\?sent=/) });
   });
 
   it("lands without writing when everything was already sent", async () => {
@@ -406,5 +408,29 @@ describe("handleWelcome: the request step (S2)", () => {
     const result = await handleWelcome(post(ROUTES.request, requestFields(mentorDraft())), ROUTES, actions);
     expect(result).toEqual({ kind: "redirect", location: ROUTES.landing });
     expect(actions.requestAccess).not.toHaveBeenCalled();
+  });
+});
+
+describe("the landing after a request (QAO-02)", () => {
+  it("names the roles sent, keeping what the landing already asks for", () => {
+    expect(sentLocation("/dashboard/community", ["MENTOR"])).toBe("/dashboard/community?sent=mentor");
+    expect(sentLocation("/dev/platform-shell?persona=lucy&space=community", ["MENTOR", "INSTITUTION"]))
+      .toBe("/dev/platform-shell?persona=lucy&space=community&sent=mentor%2Cinstitution");
+  });
+
+  it("reads back only roles, in role order, whatever else the parameter holds", () => {
+    expect(parseSent(new URLSearchParams("sent=institution,mentor"))).toEqual(["MENTOR", "INSTITUTION"]);
+    expect(parseSent(new URLSearchParams("sent=admin,<b>,mentor"))).toEqual(["MENTOR"]);
+    expect(parseSent(new URLSearchParams(""))).toEqual([]);
+  });
+
+  it("lands as before, without claiming anything was sent, when the role was granted meanwhile", async () => {
+    // A quick administrator: the second read holds the role, and no request is waiting.
+    const granted = Object.assign(new Error("Already held"), { status: 409 });
+    const mentor = state({ stage: "DONE", intents: ["MENTOR"] });
+    const { actions } = server(mentor, { request: [granted] });
+    actions.load.mockResolvedValueOnce(mentor).mockResolvedValueOnce(state({ stage: "DONE", intents: ["MENTOR"], roles: ["MENTOR"] }));
+    const result = await handleWelcome(post(ROUTES.request, requestFields(mentorDraft())), ROUTES, actions);
+    expect(result).toEqual({ kind: "redirect", location: ROUTES.landing });
   });
 });

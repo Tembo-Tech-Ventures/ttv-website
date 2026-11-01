@@ -18,6 +18,7 @@ import type { AdminAccessRequest } from "@/lib/platform/contracts";
  * One access request in the admin queue (onboarding SPEC S6). Everything the person wrote is
  * untrusted and rendered as text: Astro escapes each expression, and nothing here uses set:html.
  * A pending request carries its decision form; a decided one says what was decided, and by whom.
+ * A refused decision puts focus back on this card's message, beside the reason.
  */
 interface Props {
   request: AdminAccessRequest;
@@ -38,6 +39,9 @@ const ids = {
   error: `access-request-${request.id}-error`,
 };
 const roleLabel = ACCESS_ROLE_LABELS[request.role];
+// Every card has the same two buttons, so each name says whose request it decides (QAO-06).
+// A deleted or unnamed account reads as Admin Home's attention list says it (lib/admin/attention.ts).
+const decides = (verb: string) => `${verb} ${roleLabel.toLowerCase()} access for ${requester.name.trim() || "a member"}`;
 const date = (at: number) => formatMomentDate(new Date(at));
 const HISTORY_SHOWN = 3;
 const earlier = request.earlierRequests.slice(0, HISTORY_SHOWN);
@@ -131,16 +135,17 @@ const icon = "size-4 shrink-0 text-ink-muted";
           maxlength="600"
           aria-describedby={error ? `${ids.error} ${ids.hint}` : ids.hint}
           aria-invalid={error ? "true" : undefined}
+          autofocus={Boolean(error)}
           class="block min-h-11 w-full resize-y rounded-xl border border-hairline bg-ground/60 px-3.5 py-2.5 text-[0.9375rem] text-ink-primary placeholder:text-ink-muted focus-visible:border-peach-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink"
         >{draftMessage}</textarea>
         <p id={ids.hint} class="text-xs text-ink-muted">Sent only if you decline.</p>
         {error && <p id={ids.error} role="alert" class="text-sm text-danger-ink">{error}</p>}
       </div>
       <div class="grid grid-cols-2 gap-3">
-        <Button type="submit" name="decision" value="approve" variant="primary" className="h-11 w-full">
+        <Button type="submit" name="decision" value="approve" variant="primary" aria-label={decides("Approve")} className="h-11 w-full">
           Approve
         </Button>
-        <Button type="submit" name="decision" value="decline" variant="quiet" className="h-11 w-full">
+        <Button type="submit" name="decision" value="decline" variant="quiet" aria-label={decides("Decline")} className="h-11 w-full">
           Decline
         </Button>
       </div>

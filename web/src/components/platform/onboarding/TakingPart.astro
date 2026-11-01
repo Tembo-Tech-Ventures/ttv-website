@@ -10,13 +10,16 @@
  * Every control is a plain form posting to this page (account-actions.ts).
  */
 import { PiHourglassMedium, PiInfo } from "react-icons/pi";
-import type { AccessRole } from "@/lib/platform/contracts";
+import type { AccessRequestSummary, AccessRole } from "@/lib/platform/contracts";
 import PersonMarker from "@/components/platform/ui/PersonMarker";
 import { CHIP_TONES, type ChipTone } from "@/components/platform/ui/tones";
 import { formatMomentDate } from "@/lib/display-date";
-import { ACCOUNT_PATH, ACTION_FIELD, RETURN_FIELD, TAKING_PART_ID, UNSAVED_PARAM, UNSAVED_VALUE } from "./account-actions";
+import {
+  ACCOUNT_PATH, ACTION_FIELD, RETURN_FIELD, TAKING_PART_ID, UNSAVED_PARAM, UNSAVED_VALUE, requestRowId,
+} from "./account-actions";
 import { STATUS, TAKING_PART } from "./copy";
 import { heldChoices, type OnboardingView } from "./framing";
+import SentRequest from "./SentRequest.astro";
 import { SEAL, action } from "./styles";
 // oxlint-disable-next-line import/no-unassigned-import -- Switch stylesheet.
 import "./framing.css";
@@ -31,7 +34,7 @@ const member = held.includes("MEMBER");
 
 type Row =
   | { state: "active" }
-  | { state: "pending"; id: string; sentAt: number }
+  | { state: "pending"; request: AccessRequestSummary }
   | { state: "declined"; chosen: boolean }
   | { state: "none" };
 
@@ -39,7 +42,7 @@ type Row =
 function rowFor(role: AccessRole): Row {
   if (state.roles.includes(role)) return { state: "active" };
   const request = state.requests.find((candidate) => candidate.role === role);
-  if (request?.status === "PENDING") return { state: "pending", id: request.id, sentAt: request.createdAt };
+  if (request?.status === "PENDING") return { state: "pending", request };
   if (request?.status === "DECLINED") return { state: "declined", chosen: held.includes(role) };
   return { state: "none" };
 }
@@ -53,9 +56,10 @@ const CHIPS: Record<Row["state"], { text: string; tone: ChipTone }> = {
   declined: { text: TAKING_PART.chips.declined, tone: "neutral" },
   none: { text: TAKING_PART.chips.none, tone: "neutral" },
 };
-const ROW = "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-3 px-5 py-5 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:px-6";
+const ROW = "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-3 px-5 py-5 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:px-6";
 const ACTS = "col-span-2 flex flex-wrap items-center gap-2 sm:col-span-1 sm:justify-end";
-const subject = (role: AccessRole) => TAKING_PART.rows[role].title.toLowerCase();
+// The whole name in one string: a visually hidden part would be read with a stray space before its colon (QAO-09).
+const named = (visible: string, role: AccessRole) => `${visible}: ${TAKING_PART.rows[role].title.toLowerCase()}`;
 ---
 
 <section id={TAKING_PART_ID} aria-labelledby="taking-part-title" data-taking-part class="scroll-mt-6 overflow-hidden rounded-[1.375rem] border border-hairline bg-ink-primary/4">
@@ -82,16 +86,22 @@ const subject = (role: AccessRole) => TAKING_PART.rows[role].title.toLowerCase()
       </form>
     </li>
     {rows.map(({ role, row }) => (
-      <li class={ROW} data-taking-part-row={role} data-state={row.state}>
+      <li
+        id={requestRowId(role)}
+        class:list={[ROW, "scroll-mt-6", row.state === "pending" ? "sm:items-start" : "sm:items-center"]}
+        data-taking-part-row={role}
+        data-state={row.state}
+      >
         <span aria-hidden="true" class={SEAL}><PersonMarker kind={role === "MENTOR" ? "mentor" : "institution"} className="scale-150" /></span>
         <div class="min-w-0">
           <h3 class="text-base leading-snug font-bold text-ink-primary">{TAKING_PART.rows[role].title}</h3>
           <p class="mt-0.5 text-sm leading-relaxed text-ink-secondary">
             {row.state === "active" ? TAKING_PART.active[role]
-              : row.state === "pending" ? TAKING_PART.sent(formatMomentDate(new Date(row.sentAt)))
+              : row.state === "pending" ? TAKING_PART.sent(formatMomentDate(new Date(row.request.createdAt)))
               : row.state === "declined" ? TAKING_PART.declined(role)
               : TAKING_PART.rows[role].body}
           </p>
+          {row.state === "pending" && <SentRequest request={row.request} />}
         </div>
         <div class={ACTS}>
           <span data-chip={CHIPS[row.state].tone} class:list={["inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold whitespace-nowrap", CHIP_TONES[CHIPS[row.state].tone]]}>
@@ -101,9 +111,9 @@ const subject = (role: AccessRole) => TAKING_PART.rows[role].title.toLowerCase()
           {row.state === "pending" && (
             <form method="post" action={ACCOUNT_PATH}>
               <input type="hidden" name={ACTION_FIELD} value="withdraw" />
-              <input type="hidden" name="id" value={row.id} />
+              <input type="hidden" name="id" value={row.request.id} />
               <input type="hidden" name={RETURN_FIELD} value={ACCOUNT_PATH} />
-              <button type="submit" class:list={action("quiet")}>{TAKING_PART.withdraw}<span class="sr-only">: {subject(role)}</span></button>
+              <button type="submit" aria-label={named(TAKING_PART.withdraw, role)} class:list={action("quiet")}>{TAKING_PART.withdraw}</button>
             </form>
           )}
           {(row.state === "none" || row.state === "declined") && (
@@ -111,8 +121,8 @@ const subject = (role: AccessRole) => TAKING_PART.rows[role].title.toLowerCase()
               <input type="hidden" name={ACTION_FIELD} value="request" />
               <input type="hidden" name="role" value={role} />
               <input type="hidden" name={RETURN_FIELD} value={ACCOUNT_PATH} />
-              <button type="submit" class:list={action("quiet")}>
-                {row.state === "none" ? TAKING_PART.request : TAKING_PART.again}<span class="sr-only">: {subject(role)}</span>
+              <button type="submit" aria-label={named(row.state === "none" ? TAKING_PART.request : TAKING_PART.again, role)} class:list={action("quiet")}>
+                {row.state === "none" ? TAKING_PART.request : TAKING_PART.again}
               </button>
             </form>
           )}
@@ -121,7 +131,7 @@ const subject = (role: AccessRole) => TAKING_PART.rows[role].title.toLowerCase()
               <input type="hidden" name={ACTION_FIELD} value="remove" />
               <input type="hidden" name="role" value={role} />
               <input type="hidden" name={RETURN_FIELD} value={ACCOUNT_PATH} />
-              <button type="submit" class:list={action("ghost")}>{TAKING_PART.remove}<span class="sr-only">: {subject(role)}</span></button>
+              <button type="submit" aria-label={named(TAKING_PART.remove, role)} class:list={action("ghost")}>{TAKING_PART.remove}</button>
             </form>
           )}
         </div>

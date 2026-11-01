@@ -117,18 +117,20 @@ export const STATUS = {
   pending: {
     MENTOR: {
       title: "Your mentor request is with the team",
-      body: "An administrator reads each request. The decision will appear here and under Attention.",
+      body: "An administrator reads each request. The decision will appear here.",
       opens: "Mentoring opens as a new space once approved",
     },
     INSTITUTION: {
       title: "Your organisation request is with the team",
-      body: "An administrator reads each request. The decision will appear here and under Attention.",
+      body: "An administrator reads each request. The decision will appear here.",
       opens: "Discover opens as a new space once approved",
     },
   } satisfies Record<AccessRole, { title: string; body: string; opens: string }>,
   /** The institution version adds where to read about Discover meanwhile. */
   institutionsPage: { before: "Meanwhile, the public ", link: "For institutions", after: " page explains what Discover does." },
   sent: (date: string) => `Sent ${date}`,
+  /** Said, and focused, on the page a person lands on after sending (QAO-02, QAO-05). */
+  justSent: (count: number) => (count > 1 ? "Requests sent." : "Request sent."),
   view: "View request",
   approved: {
     MENTOR: { title: "Mentoring is open", body: "Mentoring is now one of your spaces. Start with Confirm work.", open: "Open Mentoring" },
@@ -170,6 +172,10 @@ export const PROMPT = {
   choose: "Choose",
   notNow: "Not now",
   note: "“Not now” hides this card for good. You can still choose in Account.",
+  /** What the page says once the card has gone, so it never just vanishes (QAO-10). */
+  saved: "Saved. You can change how you take part any time in",
+  hidden: "Card hidden. You can still choose how you take part in",
+  account: "Account",
 } as const;
 
 /** Account → "How you take part" (S5). Choices are revisitable; access stays the team's decision. */
@@ -183,6 +189,8 @@ export const TAKING_PART = {
     INSTITUTION: { title: "Find people for your organisation", body: "Explore saved community profiles and the evidence behind them." },
   } satisfies Record<ChoiceIntent, { title: string; body: string }>,
   sent: (date: string) => `Request sent ${date}. An administrator will review it.`,
+  /** What a pending request said, in the person's own words (QAO-03). The administrator is never named. */
+  yours: "What you sent",
   declined: (role: AccessRole) => STATUS.declined.title[role],
   active: { MENTOR: "Mentoring is one of your spaces.", INSTITUTION: "Discover is one of your spaces." } satisfies Record<AccessRole, string>,
   chips: { none: "Not requested", pending: "Pending", declined: "Not approved", active: "Active" },
@@ -191,4 +199,15 @@ export const TAKING_PART = {
   again: STATUS.declined.again,
   remove: "Remove",
   note: "Access the team has approved stays on until an administrator removes it. To step back, send the team a note through Feedback.",
+} as const;
+
+/**
+ * The Profile tab for someone who chose to mentor or find people, and not to build and learn
+ * (QA1-08, QAO-07): a public builder profile comes with a completed cohort, so it is explained,
+ * not offered as a lock to open by applying.
+ */
+export const PROFILE_PARTNER = {
+  title: "Public profiles come with a cohort",
+  body: "A public builder profile opens when a member completes a cohort. To build and learn as well, choose it in",
+  account: "Account",
 } as const;

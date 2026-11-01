@@ -9,7 +9,7 @@
 import PersonMarker from "@/components/platform/ui/PersonMarker";
 import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
 import { formatMomentDate } from "@/lib/display-date";
-import { ACCOUNT_PATH, ACTION_FIELD, RETURN_FIELD, TAKING_PART_ID } from "./account-actions";
+import { ACCOUNT_PATH, ACTION_FIELD, RETURN_FIELD, requestRowId } from "./account-actions";
 import { REQUEST, STATUS } from "./copy";
 import { ROLE_SPACES, type StatusCard } from "./framing";
 import { SEAL, action } from "./styles";
@@ -31,8 +31,10 @@ const TONES = {
   approved: "border-primary/45 bg-linear-to-r from-primary/12 to-ink-primary/3",
   declined: "border-hairline bg-ink-primary/4",
 } as const;
-// Read with the title: "Dismiss" alone would not say which card it closes.
+// Read with the title: "Dismiss" alone would not say which card it closes. A whole name, in one
+// string: a visually hidden part of it would be read with a stray space before its colon (QAO-09).
 const subject = REQUEST.sections[card.role].toLowerCase();
+const named = (visible: string, detail: string) => `${visible}: ${detail}`;
 ---
 
 <section
@@ -49,7 +51,7 @@ const subject = REQUEST.sections[card.role].toLowerCase();
     <PersonMarker kind={marker} className="scale-150" />
   </span>
   <div class="min-w-0">
-    <h2 id={titleId} class="text-lg leading-snug font-bold text-ink-primary">{title}</h2>
+    <p id={titleId} class="text-lg leading-snug font-bold text-ink-primary">{title}</p>
     {card.kind === "pending" && (
       <>
         <p class="mt-1 text-[0.9375rem] leading-relaxed text-ink-secondary">
@@ -78,8 +80,8 @@ const subject = REQUEST.sections[card.role].toLowerCase();
   </div>
   <div class="col-span-2 flex flex-wrap items-center gap-2 sm:col-span-1 sm:justify-end">
     {card.kind === "pending" && (
-      <a href={`${ACCOUNT_PATH}#${TAKING_PART_ID}`} class:list={[action("quiet"), "max-sm:flex-1"]}>
-        {STATUS.view}<span class="sr-only">: {subject}</span>
+      <a href={`${ACCOUNT_PATH}#${requestRowId(card.role)}`} aria-label={named(STATUS.view, subject)} class:list={[action("quiet"), "max-sm:flex-1"]}>
+        {STATUS.view}
       </a>
     )}
     {card.kind === "approved" && (
@@ -90,7 +92,7 @@ const subject = REQUEST.sections[card.role].toLowerCase();
         <input type="hidden" name={ACTION_FIELD} value="request" />
         <input type="hidden" name="role" value={card.role} />
         <input type="hidden" name={RETURN_FIELD} value={returnTo} />
-        <button type="submit" class:list={action("quiet")}>{STATUS.declined.again}<span class="sr-only">: {subject}</span></button>
+        <button type="submit" aria-label={named(STATUS.declined.again, subject)} class:list={action("quiet")}>{STATUS.declined.again}</button>
       </form>
     )}
     {card.kind !== "pending" && (
@@ -98,7 +100,7 @@ const subject = REQUEST.sections[card.role].toLowerCase();
         <input type="hidden" name={ACTION_FIELD} value="dismiss" />
         <input type="hidden" name="id" value={card.id} />
         <input type="hidden" name={RETURN_FIELD} value={returnTo} />
-        <button type="submit" class:list={action("ghost")}>{STATUS.dismiss}<span class="sr-only">: {title}</span></button>
+        <button type="submit" aria-label={named(STATUS.dismiss, title)} class:list={action("ghost")}>{STATUS.dismiss}</button>
       </form>
     )}
   </div>

@@ -106,3 +106,31 @@ intent alone.
   access goes on to the request step, narrowed with `?role=` to that access
   alone; the request step is what an administrator decides.
 - No analytics: nothing here records or counts choices.
+
+# After the onboarding QA (F-6)
+
+What changed after the fresh-tester QA at `7e749c5` (library
+`/qa/onboarding/7e749c5…/REPORT.md`, findings QAO-01 to QAO-11):
+
+- A pending card says the decision "will appear here", and nothing else:
+  Attention is not named until a decision exists. Attention's Requests tab
+  holds requests for a mentor's time; with onboarding on, its empty line says
+  so and points to Account for the person's own access requests (QAO-01).
+- After a request is sent, the flow lands on Community (`routes.sent`), never
+  on whatever `/dashboard` and the last-space cookie pick, with `?sent=` naming
+  the roles. `OnboardingNotices` then says "Request sent." as a focused status,
+  but only for roles whose request is still pending (QAO-02, QAO-05).
+- "View request" and the sidebar's "Your requests" open the request's own row
+  in Account (`requestRowId`), which shows what was sent (`SentRequest.astro`):
+  the person's own fields, never the administrator or the team's words (QAO-03).
+- The notes' 20 to 600 character rule is a visible hint (QAO-04).
+- Notices and the cohort invitation sit above a page's h1, so their titles
+  name their regions instead of being headings (QAO-05).
+- Names that add context to a visible label are one `aria-label` string, never
+  a visually hidden span: Chrome reads an absolutely positioned span with a
+  space before its punctuation (QAO-09).
+- Saving or hiding the one-time card returns with `?onboarding=saved|hidden`,
+  and the page says so, focused, once the card is gone (QAO-10).
+- The public profile reads onboarding too: someone framed as a partner (chose
+  to mentor or find people, not to build and learn) gets a note that public
+  builder profiles come with a cohort, not a lock and "Browse Programs" (QAO-07).

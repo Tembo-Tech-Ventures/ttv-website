@@ -11,7 +11,9 @@ import { personaSession, signIn, type PersonaSession } from "./platform-personas
  * - approving gives the person their new space tab, and the user page can take it away again;
  * - declining with a message: the person reads the message, never who wrote it, and a second
  *   administrator deciding from a stale page is told it was already decided (409);
- * - members who are not administrators reach none of it.
+ * - members who are not administrators reach none of it;
+ * - F-6 (QAO-06): each Approve and Decline names the person it decides, and after a decision focus
+ *   lands on the banner that says what happened; (QAO-11) Admin home says fresh requests are new.
  *
  * Local seed only (platform-personas.local.sql): previews seed other people, and their staff
  * session is an agent session, which the queue refuses. Run astro dev with
@@ -117,9 +119,14 @@ test("lays the pending queue out as screens/06 does, clean under axe", async ({ 
   await expect(peter.locator("[data-role-badge='MENTOR']")).toHaveText("Mentor");
   await expect(peter).toContainText(/Earlier request declined 12 Sept? 2026/);
   await expect(peter.getByRole("link", { name: "pnjoroge (opens in a new tab)" })).toHaveAttribute("href", "https://github.com/pnjoroge");
-  await expect(peter.getByRole("button", { name: "Approve" })).toBeVisible();
-  await expect(peter.getByRole("button", { name: "Decline" })).toBeVisible();
+  await expect(peter.getByRole("button", { name: "Approve mentor access for Peter Njoroge", exact: true })).toBeVisible();
+  await expect(peter.getByRole("button", { name: "Decline mentor access for Peter Njoroge", exact: true })).toBeVisible();
+  await expect(njambi.getByRole("button", { name: "Approve institution access for Njambi Karanja", exact: true })).toBeVisible();
   await expect(page.getByText("The person sees your message, not your name.")).toBeVisible();
+  // QAO-06: out of context (a screen reader's list of buttons), no two decisions sound the same.
+  const names = await page.locator("[data-access-request-form] button").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label")));
+  expect(names.length).toBeGreaterThanOrEqual(4);
+  expect(new Set(names).size).toBe(names.length);
 
   // Every control is at least 44px tall, and nothing scrolls sideways at 390.
   for (const control of await peter.locator("button, textarea").all()) {
@@ -130,12 +137,21 @@ test("lays the pending queue out as screens/06 does, clean under axe", async ({ 
   // Keyboard order within a request: the message, then Approve, then Decline.
   await peter.getByRole("textbox").focus();
   await page.keyboard.press("Tab");
-  await expect(peter.getByRole("button", { name: "Approve" })).toBeFocused();
+  await expect(peter.getByRole("button", { name: /^Approve/ })).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(peter.getByRole("button", { name: "Decline" })).toBeFocused();
+  await expect(peter.getByRole("button", { name: /^Decline/ })).toBeFocused();
 
   await runAxe(page, testInfo, "access-requests-pending");
   await page.screenshot({ path: evidence("pending"), fullPage: true });
+});
+
+test("Admin home calls fresh access requests new, not overdue (QAO-11)", async ({ context, page, baseURL }, testInfo) => {
+  await as(context, baseURL, staff);
+  await open(page, "/admin");
+  const attention = page.locator("section[aria-labelledby='attention-heading']");
+  await expect(attention).toContainText("New requests and feedback, recent failures, and work that has waited beyond its review window.");
+  await expect(attention.getByRole("heading", { name: "Access requests" })).toBeVisible();
+  await runAxe(page, testInfo, "admin-home");
 });
 
 test("shows an HTML note as the text that was typed", async ({ browser, context, page, baseURL }) => {
@@ -167,8 +183,10 @@ test("declines with a message the person reads without the administrator's name,
   const request = page.locator("[data-access-request]", { hasText: "Wairimu Kamau" });
   const id = await request.getAttribute("data-access-request");
   await request.getByRole("textbox", { name: "Message to Wairimu (optional)" }).fill(DECLINE_MESSAGE);
-  await request.getByRole("button", { name: "Decline" }).click();
+  await request.getByRole("button", { name: "Decline mentor access for Wairimu Kamau", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("Declined. Wairimu will see your message, not your name.");
+  // QAO-06: the card left the list, so focus is on what happened, not lost on the page.
+  await expect(page.locator("[data-access-request-notice]")).toBeFocused();
   await expect(row(page, id!)).toHaveCount(0);
 
   await page.getByRole("link", { name: "Decided" }).click();
@@ -180,9 +198,10 @@ test("declines with a message the person reads without the administrator's name,
 
   // The stale tab still offers Approve. Pressing it changes nothing, and says why.
   const conflict = stale.waitForResponse((response) => response.request().method() === "POST");
-  await row(stale, id!).getByRole("button", { name: "Approve" }).click();
+  await row(stale, id!).getByRole("button", { name: "Approve mentor access for Wairimu Kamau", exact: true }).click();
   expect((await conflict).status()).toBe(409);
   await expect(stale.getByRole("alert")).toHaveText(/^Someone already decided this request, or the person withdrew it, so nothing changed\./);
+  await expect(stale.locator("[data-access-request-failure]")).toBeFocused();
   if (!process.env.PLAYWRIGHT_BASE_URL) await stale.addStyleTag({ content: "astro-dev-toolbar { display: none !important; }" });
   await runAxe(stale, testInfo, "access-requests-conflict");
   await stale.screenshot({ path: evidence("conflict"), fullPage: true });
@@ -221,8 +240,9 @@ test("approving gives the person their new space, and the user page can take it 
 
   await as(context, baseURL, staff);
   await open(page, QUEUE);
-  await row(page, OTIENO_REQUEST).getByRole("button", { name: "Approve" }).click();
+  await row(page, OTIENO_REQUEST).getByRole("button", { name: "Approve mentor access for Otieno Ouma", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("Approved. Otieno Ouma was given mentor access.");
+  await expect(page.locator("[data-access-request-notice]")).toBeFocused();
   await expect(row(page, OTIENO_REQUEST)).toHaveCount(0);
   expect(await tabLabels(his)).toContain("Mentoring");
 
@@ -265,7 +285,7 @@ test("keeps the queue, its decisions and the role controls from members who are 
 
   await as(context, baseURL, staff);
   await open(page, QUEUE);
-  await expect(row(page, PETER_REQUEST).getByRole("button", { name: "Approve" })).toBeVisible();
+  await expect(row(page, PETER_REQUEST).getByRole("button", { name: /^Approve/ })).toBeVisible();
   await open(page, `/admin/users/${OTIENO}`);
   await expect(page.locator("[data-community-role='INSTITUTION']")).toContainText("No institution access.");
 });

@@ -7,6 +7,7 @@ import {
   attentionSummary,
   attentionPlace,
   attentionTime,
+  attentionViewer,
   groupAttention,
   summaryLead,
   unreadTotal,
@@ -36,18 +37,47 @@ describe("attentionActor", () => {
 });
 
 describe("attentionEmpty", () => {
+  const member = { admin: false, onboarding: true };
+  const admin = { admin: true, onboarding: true };
+  const before = { admin: false, onboarding: false };
+
   it("says nothing needs you only when no confirmation is known to be waiting", () => {
-    expect(attentionEmpty("all", 0)).toBe("Nothing needs you right now.");
-    expect(attentionEmpty("all", 3)).toBe("No new notifications.");
-    expect(attentionEmpty("all", null)).toBe("No new notifications.");
+    expect(attentionEmpty("all", 0, member)).toBe("Nothing needs you right now.");
+    expect(attentionEmpty("all", 3, member)).toBe("No new notifications.");
+    expect(attentionEmpty("all", null, member)).toBe("No new notifications.");
   });
 
   it("keeps each filter's own line, which never claims nothing needs you", () => {
     for (const awaiting of [0, 3, null]) {
-      expect(attentionEmpty("mentions", awaiting)).toBe("No mentions, replies or Tembo answers yet.");
-      expect(attentionEmpty("requests", awaiting)).toBe("No mentoring requests yet.");
-      expect(attentionEmpty("updates", awaiting)).toBe("No updates yet.");
+      expect(attentionEmpty("mentions", awaiting, member)).toBe("No mentions, replies or Tembo answers yet.");
+      expect(attentionEmpty("updates", awaiting, member)).toBe("No updates yet.");
     }
+  });
+
+  // QAO-01: a person waiting on their own access request read "No mentoring requests yet" as their request lost.
+  it("says Requests holds requests for mentoring time, and where a person's own access request is", () => {
+    for (const awaiting of [0, 3, null]) {
+      const line = attentionEmpty("requests", awaiting, member);
+      expect(line).toBe("No requests for mentoring time yet. Your own requests for mentor or organisation access are in Account.");
+    }
+  });
+
+  it("tells an administrator the tab also holds access requests, which they decide", () => {
+    expect(attentionEmpty("requests", 0, admin)).toBe("No requests for mentoring time or access yet.");
+  });
+
+  it("is unchanged while onboarding is off, when there are no access requests at all", () => {
+    expect(attentionEmpty("requests", 0, before)).toBe("No mentoring requests yet.");
+    expect(attentionEmpty("requests", 0, { ...before, admin: true })).toBe("No mentoring requests yet.");
+  });
+});
+
+describe("attentionViewer", () => {
+  it("reads an administrator from the Admin space and onboarding from the person's own flag", () => {
+    const flags = { spaces: true, channels: false, tembo_channels: false, mentor_requests: false, onboarding: true };
+    expect(attentionViewer({ spaces: ["community", "admin", "profile"], flags })).toEqual({ admin: true, onboarding: true });
+    expect(attentionViewer({ spaces: ["community", "profile"], flags: { ...flags, onboarding: false } }))
+      .toEqual({ admin: false, onboarding: false });
   });
 });
 

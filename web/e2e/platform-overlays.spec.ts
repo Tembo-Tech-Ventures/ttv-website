@@ -281,7 +281,10 @@ test.describe("the overlays harness", () => {
       await open(page, harness({ page: "attention", scenario: "empty" }));
       await expect(page.locator("[data-attention-empty]")).toHaveText("Nothing needs you right now.");
       await page.locator('[data-attention-filter="requests"]').click();
-      await expect(page.locator("[data-attention-empty]")).toHaveText("No mentoring requests yet.");
+      // F-6 (QAO-01): it says what Requests holds, and where a person's own access request is instead.
+      await expect(page.locator("[data-attention-empty]")).toHaveText(
+        "No requests for mentoring time yet. Your own requests for mentor or organisation access are in Account.",
+      );
 
       await open(page, harness({ page: "attention", scenario: "many" }));
       await expect(page.locator("[data-attention-item]")).toHaveCount(30);

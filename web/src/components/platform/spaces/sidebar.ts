@@ -1,7 +1,7 @@
 import type { AccessRole, Me, SpaceId } from "@/lib/platform/contracts";
 import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
 import type { StudentDashboardLinkId } from "@/lib/student/journey";
-import { ACCOUNT_PATH, TAKING_PART_ID } from "@/components/platform/onboarding/account-actions";
+import { ACCOUNT_PATH, requestRowId } from "@/components/platform/onboarding/account-actions";
 import { PARTNER, REQUEST, TAKING_PART } from "@/components/platform/onboarding/copy";
 import { offersCohort, type OnboardingView } from "@/components/platform/onboarding/framing";
 
@@ -192,7 +192,7 @@ function community(facts: SidebarFacts): SidebarModel {
       // Requests are not tabs: only granted roles get a space. Each opens Account, where it can be withdrawn.
       ...group(facts, "Your requests", (facts.onboarding?.pending ?? []).map((role) => ({
         key: `request-${role.toLowerCase()}`,
-        href: `${ACCOUNT_PATH}#${TAKING_PART_ID}`,
+        href: `${ACCOUNT_PATH}#${requestRowId(role)}`,
         label: REQUEST.sections[role],
         icon: REQUEST_ICONS[role],
         note: TAKING_PART.chips.pending,

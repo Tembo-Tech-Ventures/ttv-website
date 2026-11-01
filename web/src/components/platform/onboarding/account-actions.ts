@@ -22,9 +22,17 @@ export const RETURN_FIELD = "return";
 /** Added to the return path when a write failed, so the page can say so. */
 export const UNSAVED_PARAM = "onboarding";
 export const UNSAVED_VALUE = "unsaved";
+/** The same parameter after the one-time card was saved or hidden, so the page says so instead of just losing it. */
+export const PROMPT_SAVED_VALUE = "saved";
+export const PROMPT_HIDDEN_VALUE = "hidden";
 
 export const ACCOUNT_PATH = "/dashboard/account";
 export const TAKING_PART_ID = "taking-part";
+
+/** One access's row in Account → "How you take part", where "View request" leads. */
+export function requestRowId(access: AccessRole): string {
+  return `${TAKING_PART_ID}-request-${access.toLowerCase()}`;
+}
 
 /** The pages these forms sit on: the landing pages of the spaces, and Account. */
 export const RETURN_PATHS: readonly string[] = [
@@ -52,9 +60,10 @@ export function returnPath(value: FormDataEntryValue | null): string {
   return path === ACCOUNT_PATH ? `${ACCOUNT_PATH}#${TAKING_PART_ID}` : path;
 }
 
-function unsaved(location: string): string {
+/** The return path with what happened to the person's form, for the page to say. */
+function noted(location: string, value: string): string {
   const [path, fragment] = location.split("#", 2);
-  return `${path}?${UNSAVED_PARAM}=${UNSAVED_VALUE}${fragment ? `#${fragment}` : ""}`;
+  return `${path}?${UNSAVED_PARAM}=${value}${fragment ? `#${fragment}` : ""}`;
 }
 
 function isAction(value: FormDataEntryValue | null): value is AccountAction {
@@ -91,11 +100,12 @@ async function perform(action: AccountAction, form: FormData, actions: AccountAc
       const chosen: ChoiceIntent[] = CHOICES.map((choice) => choice.intent).filter((intent) => ticked.has(intent));
       // Nothing ticked: the welcome step asks properly, with "I'm just looking around" beside the cards.
       if (chosen.length === 0) return WELCOME_PATH;
-      return choose(actions, chosen, back);
+      const next = await choose(actions, chosen, back);
+      return next === back ? noted(back, PROMPT_SAVED_VALUE) : next;
     }
     case "dismiss-prompt":
       await actions.dismissPrompt();
-      return back;
+      return noted(back, PROMPT_HIDDEN_VALUE);
     case "member": {
       const on = form.get("value") === "on";
       if (!on && form.get("value") !== "off") return null;
@@ -145,6 +155,6 @@ export async function handleAccountAction(form: FormData, actions: AccountAction
     const location = await perform(action, form, actions, back);
     return location === null ? { kind: "refuse", status: 400 } : { kind: "redirect", location };
   } catch (error) {
-    return { kind: "redirect", location: isStale(error) ? back : unsaved(back) };
+    return { kind: "redirect", location: isStale(error) ? back : noted(back, UNSAVED_VALUE) };
   }
 }
