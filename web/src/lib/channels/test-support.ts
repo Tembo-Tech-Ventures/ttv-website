@@ -7,6 +7,8 @@ import type { CapabilityCase } from "@/lib/platform/server/capabilities.fixtures
 import { createSqliteD1, readMigration } from "@/test/sqlite-d1";
 import { CONDUCT_VERSION } from "./conduct";
 import { channelRequest, type ChannelOperation, type ChannelRequestOptions } from "./http";
+import { textKey } from "./moderation/detectors";
+import type { MessageScreen } from "./moderation/screen";
 
 /**
  * A database with every migration applied, so the seeded community channels and each program's
@@ -73,6 +75,11 @@ export function channelDatabase(fixture: Partial<CapabilityCase> = {}) {
     database.prepare("INSERT OR REPLACE INTO channel_conduct(userId,version,acknowledgedAt) VALUES (?,?,1)").run(userId, version);
 
   const env = { DB: d1, PLATFORM_FLAGS_OVERRIDE: "all" } as Parameters<typeof channelRequest>[2];
+  /** Work the routes leave for after the response (Clef), held until a test runs it with `afterResponse`. */
+  const deferred: (() => Promise<void>)[] = [];
+  async function afterResponse() {
+    for (let task = deferred.shift(); task; task = deferred.shift()) await task();
+  }
   /** Calls a channel API as the caller (or `user`), same-origin unless told otherwise. */
   async function call(operation: ChannelOperation, options: {
     id?: string; query?: string; body?: unknown; user?: string | null; origin?: string | null; locals?: Partial<App.Locals>;
@@ -89,10 +96,11 @@ export function channelDatabase(fixture: Partial<CapabilityCase> = {}) {
     const user = options.user === undefined ? VIEWER : options.user;
     const locals = { user: user === null ? null : { id: user }, personalAccessToken: null, ...options.locals } as App.Locals;
     const context = { request, locals, params: options.id === undefined ? {} : { id: options.id } } as Pick<APIContext, "request" | "locals" | "params">;
-    const response = await channelRequest(operation, context, { ...env, ...options.env }, options);
+    const response = await channelRequest(operation, context, { ...env, ...options.env },
+      { defer: (task) => deferred.push(task), ...options });
     return { status: response.status, body: await response.json() as unknown, response };
   }
-  return { database, d1, db, channel, message, agree, call };
+  return { database, d1, db, channel, message, agree, call, deferred, afterResponse };
 }
 export type ChannelFixture = ReturnType<typeof channelDatabase>;
 
@@ -100,3 +108,10 @@ let nonce = 0;
 /** A valid post body with a fresh nonce. */
 export const post = (body = "Synthetic post", parentId: string | null = null, clientNonce = `nonce-${++nonce}`) =>
   ({ body, clientNonce, parentId, embeds: [] });
+
+/** A moderation hook that flags with these reasons (as findings with no key of their own) when `when` holds. */
+export const flagging = (reasons: string[], when: (body: string) => boolean = () => true): MessageScreen =>
+  async ({ body }) => ({
+    textKey: await textKey(body),
+    findings: when(body) ? reasons.map((reason) => ({ kind: "phone" as const, reason, key: null })) : [],
+  });

@@ -3,7 +3,8 @@ import {
   ChannelShareables, ErrorEnvelope, Message, MessageList, type EmbedRef, type MessageEmbedView, type SessionClipEmbed,
 } from "@/lib/platform/contracts";
 import { CLIP_SECONDS, SHAREABLE_LIMITS } from "./embeds";
-import { channelDatabase, post, VIEWER, type ChannelFixture } from "./test-support";
+import type { MessageScreen } from "./moderation/screen";
+import { channelDatabase, flagging, post, VIEWER, type ChannelFixture } from "./test-support";
 
 vi.mock("@/lib/observability/errors", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/observability/errors")>(),
@@ -117,9 +118,10 @@ describe("sharing a project", () => {
       evidenceUrl: "https://chat.whatsapp.com/InviteCode123" });
     s.journey("plain", { title: "Kiosk", description: "", evidenceUrl: null });
     const screened: string[] = [];
-    const screen = ({ body }: { body: string }) => {
-      screened.push(body);
-      return { reasons: /\d{3} \d{3} \d{3}/.test(body) ? ["Contact details"] : [] };
+    const flag = flagging(["Contact details"], (body) => /\d{3} \d{3} \d{3}/.test(body));
+    const screen: MessageScreen = (input) => {
+      screened.push(input.body);
+      return flag(input);
     };
     const response = await s.call("postMessage", { id: s.channel("help"), screen,
       body: { ...post("Have a look"), embeds: [s.project("contact"), s.project("plain")] } });

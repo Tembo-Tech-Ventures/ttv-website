@@ -46,7 +46,10 @@ export const user = sqliteTable("user", {
     .default(false),
   image: text("image"),
   ...timestamps,
-});
+}, (table) => [
+  // Channel mentions (@Full Name) resolve people by name, case-insensitively (migration 0032).
+  index("user_name_lower_idx").on(sql`lower(${table.name})`),
+]);
 
 export const userRelations = relations(user, ({ many, one }) => ({
   accounts: many(account),
@@ -1492,4 +1495,80 @@ export const channelAction = sqliteTable("channel_action", {
   index("channel_action_channelId_idx").on(table.channelId),
   check("channel_action_kind_check", sql`${table.kind} IN ('EDIT','REACT')`),
   check("channel_action_time_check", sql`${table.at} >= 0`),
+]);
+
+/**
+ * Moderation evidence (B-2.5, migration 0032): texts a message had, kept for moderators only. A trigger
+ * keeps the text each author edit or delete replaces, and the text as it was when the message was
+ * flagged, hidden or reported. Edits and deletes of messages nobody flagged or reported are pruned
+ * after 14 days as new versions arrive; the rest stay with the message.
+ */
+export const channelMessageVersion = sqliteTable("channel_message_version", {
+  id: cuid("id"),
+  messageId: text("messageId").notNull().references(() => channelMessage.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  cause: text("cause", { enum: ["EDIT", "DELETE", "FLAG", "REPORT", "HIDE"] }).notNull(),
+  capturedAt: integer("capturedAt").notNull(),
+  // 1 once the message has any moderation event or report: then nothing of it is pruned.
+  retained: integer("retained").notNull().default(0),
+}, (table) => [
+  index("channel_message_version_message_idx").on(table.messageId, table.capturedAt),
+  // Only what may expire, so pruning never reads retained evidence.
+  index("channel_message_version_expiry_idx").on(table.capturedAt).where(sql`${table.cause} IN ('EDIT','DELETE') AND ${table.retained} = 0`),
+  check("channel_message_version_cause_check", sql`${table.cause} IN ('EDIT','DELETE','FLAG','REPORT','HIDE')`),
+  check("channel_message_version_body_check", sql`length(${table.body}) BETWEEN 1 AND 10000`),
+  check("channel_message_version_time_check", sql`${table.capturedAt} >= 0`),
+  check("channel_message_version_retained_check", sql`${table.retained} IN (0, 1)`),
+]);
+
+/**
+ * The admin moderation queue (B-2.5): one case per message, kept by a trigger on moderation_event.
+ * Flags, reports and moderator hides open or add to a PENDING case; an admin's decision closes it
+ * (DECIDED), and a later signal reopens it as a new case.
+ */
+export const moderationCase = sqliteTable("moderation_case", {
+  messageId: text("messageId").primaryKey().references(() => channelMessage.id, { onDelete: "cascade" }),
+  state: text("state", { enum: ["PENDING", "DECIDED"] }).notNull(),
+  source: text("source", { enum: ["AI_FLAG", "REPORT", "MENTOR_HIDE", "ADMIN_HIDE"] }).notNull(),
+  reasons: text("reasons").notNull(),
+  reportCount: integer("reportCount").notNull().default(0),
+  // The moderator who hid it, for MENTOR_HIDE and ADMIN_HIDE.
+  actorId: text("actorId").references(() => user.id, { onDelete: "set null" }),
+  openedAt: integer("openedAt").notNull(),
+  updatedAt: integer("updatedAt").notNull(),
+  decision: text("decision", { enum: ["HIDE", "RESTORE", "KEEP"] }),
+  decisionReason: text("decisionReason"),
+  decidedBy: text("decidedBy").references(() => user.id, { onDelete: "set null" }),
+  decidedAt: integer("decidedAt"),
+  // The author's "Ask for review" of a hidden message.
+  reviewRequestedAt: integer("reviewRequestedAt"),
+  reviewNote: text("reviewNote"),
+}, (table) => [
+  index("moderation_case_queue_idx").on(table.state, table.openedAt, table.messageId),
+  index("moderation_case_actorId_idx").on(table.actorId).where(sql`${table.actorId} IS NOT NULL`),
+  index("moderation_case_decidedBy_idx").on(table.decidedBy).where(sql`${table.decidedBy} IS NOT NULL`),
+  check("moderation_case_state_check", sql`${table.state} IN ('PENDING','DECIDED')`),
+  check("moderation_case_source_check", sql`${table.source} IN ('AI_FLAG','REPORT','MENTOR_HIDE','ADMIN_HIDE')`),
+  check("moderation_case_reasons_check", sql`${isJsonArray(table.reasons)} AND json_array_length(${table.reasons}) > 0`),
+  check("moderation_case_reportCount_check", sql`${table.reportCount} >= 0`),
+  // Decided exactly when an admin's decision, its reason and its time are recorded.
+  check("moderation_case_decision_check", sql`(${table.decision} IS NULL OR ${table.decision} IN ('HIDE','RESTORE','KEEP')) AND (${table.state} = 'DECIDED') = (${table.decision} IS NOT NULL AND ${table.decisionReason} IS NOT NULL AND ${table.decidedAt} IS NOT NULL)`),
+  check("moderation_case_review_check", sql`${table.reviewNote} IS NULL OR (${table.reviewRequestedAt} IS NOT NULL AND length(trim(${table.reviewNote})) > 0 AND length(${table.reviewNote}) <= 1000)`),
+  check("moderation_case_time_check", sql`${table.openedAt} >= 0 AND ${table.updatedAt} >= ${table.openedAt} AND coalesce(${table.decidedAt}, 0) >= 0 AND coalesce(${table.reviewRequestedAt}, 0) >= 0`),
+]);
+
+/**
+ * What an admin's "fine as is" allowlisted (B-2.5): the whole text (`text:<sha-256>`) and each
+ * detector finding in it (`phone:+254…`, `email:…`, `link:…`), so the same words are not flagged again.
+ */
+export const moderationAllowlist = sqliteTable("moderation_allowlist", {
+  key: text("key").primaryKey(),
+  messageId: text("messageId").references(() => channelMessage.id, { onDelete: "set null" }),
+  createdBy: text("createdBy").references(() => user.id, { onDelete: "set null" }),
+  createdAt: integer("createdAt").notNull(),
+}, (table) => [
+  index("moderation_allowlist_messageId_idx").on(table.messageId).where(sql`${table.messageId} IS NOT NULL`),
+  index("moderation_allowlist_createdBy_idx").on(table.createdBy).where(sql`${table.createdBy} IS NOT NULL`),
+  check("moderation_allowlist_key_check", sql`length(${table.key}) <= 2048 AND (${table.key} GLOB 'text:[0-9a-f]*' OR ${table.key} GLOB 'phone:+[0-9]*' OR ${table.key} GLOB 'phone:0[0-9]*' OR ${table.key} GLOB 'email:?*@?*' OR ${table.key} GLOB 'link:?*')`),
+  check("moderation_allowlist_time_check", sql`${table.createdAt} >= 0`),
 ]);
