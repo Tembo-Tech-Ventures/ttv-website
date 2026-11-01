@@ -276,6 +276,19 @@ test.describe("the channel view", () => {
     await expect(page.locator("[data-own]").filter({ hasText: "Will this land?" })).toHaveCount(1);
   });
 
+  test("a failed reply waits at the end of the thread, its choices in view", async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await open(page, harness({ thread: COMMUNITY_THREAD }));
+    await page.evaluate(() => window.__channelHarness!.refuseWrites(1, 503, "server", "Unavailable"));
+    await composer(page, "thread").fill("Replying from the bus");
+    await page.getByRole("button", { name: "Send reply" }).click();
+    const failed = page.locator("[data-thread-rail] [data-outbox-item=failed]");
+    await expect(failed).toContainText("Replying from the bus");
+    await expect(failed.getByRole("button", { name: "Try again" })).toBeInViewport();
+    await failed.getByRole("button", { name: "Try again" }).click();
+    await expect(page.locator("[data-thread-rail] [data-own]").filter({ hasText: "Replying from the bus" })).toHaveCount(1);
+  });
+
   test("a send refused for the code of conduct points to it, and keeps the words", async ({ page }) => {
     await open(page, harness());
     await page.waitForFunction(() => typeof window.__channelHarness?.refuseWrites === "function");

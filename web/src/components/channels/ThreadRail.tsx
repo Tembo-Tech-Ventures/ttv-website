@@ -1,8 +1,9 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, type KeyboardEvent, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, type KeyboardEvent, type RefObject, type UIEvent } from "react";
 import { PiArrowBendUpLeft, PiChatsCircle, PiX } from "react-icons/pi";
 import type { AuthorSummary, Channel, Me, Message } from "@/lib/platform/contracts";
 import type { ChannelThreadState } from "@/lib/platform/client/channel";
 import type { Composer as ChannelComposer } from "@/lib/platform/client/composer";
+import { useOutbox } from "@/lib/platform/client/hooks/composer";
 import Button, { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
 import IconButton from "@/components/platform/ui/IconButton";
@@ -44,6 +45,8 @@ export default function ThreadRail({
   onRetry, announce,
 }: ThreadRailProps) {
   const scroller = useRef<HTMLElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const nearEnd = useRef(false);
   const lastReply = useRef<string | undefined>(undefined);
   const parent = thread.parent;
   const replies = thread.messages;
@@ -68,7 +71,31 @@ export default function ThreadRail({
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: 0 });
+    nearEnd.current = false;
   }, [thread.parentId]);
+
+  // A reply the reader just sent waits at the end of the thread: show it, and keep following it
+  // there as it changes (sending, then sent or failed with its buttons).
+  const pending = useOutbox(composer, thread.parentId).length;
+  const pendingBefore = useRef(pending);
+  useLayoutEffect(() => {
+    const element = scroller.current;
+    if (element && pending > pendingBefore.current) {
+      nearEnd.current = true;
+      element.scrollTop = element.scrollHeight;
+    }
+    pendingBefore.current = pending;
+  }, [pending]);
+  useEffect(() => {
+    const element = scroller.current;
+    const inner = content.current;
+    if (!element || !inner || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (nearEnd.current) element.scrollTop = element.scrollHeight;
+    });
+    observer.observe(inner);
+    return () => observer.disconnect();
+  }, []);
 
   function onKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key !== "Escape" || event.defaultPrevented) return;
@@ -76,6 +103,11 @@ export default function ThreadRail({
     if ((event.target as HTMLElement).closest("[role=menu], [role=listbox]")) return;
     event.preventDefault();
     onClose();
+  }
+
+  function trackEnd(event: UIEvent<HTMLElement>) {
+    const element = event.currentTarget;
+    nearEnd.current = element.scrollHeight - element.scrollTop - element.clientHeight < 160;
   }
 
   const posting = channel.archivedAt === null && channel.capabilities.canPost;
@@ -98,7 +130,8 @@ export default function ThreadRail({
       </div>
 
       {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scroll container */}
-      <section ref={scroller} tabIndex={0} aria-label="Replies" className={cx("channel-rail__body", FOCUS_RING)} data-focus-home>
+      <section ref={scroller} tabIndex={0} aria-label="Replies" onScroll={trackEnd} className={cx("channel-rail__body", FOCUS_RING)} data-focus-home>
+        <div ref={content}>
         {parent ? (
           <div className="channel-row" data-thread-parent>
             <MessageItem
@@ -166,6 +199,7 @@ export default function ThreadRail({
           </ol>
         )}
         <Outbox composer={composer} parentId={thread.parentId} viewer={me.user} names={names} />
+        </div>
       </section>
 
       {thread.status !== "removed" && (posting ? (

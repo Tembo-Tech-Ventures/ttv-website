@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PiArrowDown, PiChatsCircle } from "react-icons/pi";
 import type { AuthorSummary, Channel, Message, PersonSummary } from "@/lib/platform/contracts";
 import type { ChannelState, ChannelStore } from "@/lib/platform/client/channel";
@@ -140,13 +140,38 @@ export default function MessageList({
   const viewerId = viewer.id;
   const pending = useOutbox(composer, null).length;
   const pendingBefore = useRef(pending);
+  const content = useRef<HTMLDivElement>(null);
+  // Set while the list itself is scrolling to the end, so the frames on the way are not read as
+  // the reader leaving it (which would flash "Jump to latest"). Any input of the reader's clears it.
+  const pinning = useRef(false);
 
-  // A message the reader just sent waits at the end: show it there.
-  useLayoutEffect(() => {
+  const pinToEnd = useCallback((smooth: boolean) => {
     const element = scroller.current;
-    if (element && pending > pendingBefore.current) scrollToEnd(element, true);
+    if (!element) return;
+    following.current = true;
+    pinning.current = true;
+    setAtEnd(true);
+    scrollToEnd(element, smooth);
+  }, []);
+
+  // A message the reader just sent waits at the end: show it there at once.
+  useLayoutEffect(() => {
+    if (pending > pendingBefore.current) pinToEnd(false);
     pendingBefore.current = pending;
-  }, [pending]);
+  }, [pending, pinToEnd]);
+
+  // While the reader follows the end, growth keeps it in view: a send turning into a failure with
+  // its buttons, a reaction row, an embed that loads.
+  useEffect(() => {
+    const element = scroller.current;
+    const inner = content.current;
+    if (!element || !inner || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (following.current) element.scrollTop = element.scrollHeight;
+    });
+    observer.observe(inner);
+    return () => observer.disconnect();
+  }, []);
 
   useLayoutEffect(() => {
     const element = scroller.current;
@@ -164,11 +189,11 @@ export default function MessageList({
         element.scrollTop += element.scrollHeight - before.height;
       } else if (last !== before.last) {
         const sentByViewer = messages.at(-1)?.author.id === viewerId;
-        if (following.current || sentByViewer) scrollToEnd(element, true);
+        if (following.current || sentByViewer) pinToEnd(!sentByViewer);
       }
     }
     previous.current = { first, last, height: element.scrollHeight };
-  }, [messages, first, last, focusMessageId, firstUnread, viewerId]);
+  }, [messages, first, last, focusMessageId, firstUnread, viewerId, pinToEnd]);
 
   // Reading the end of a live channel marks it read.
   useEffect(() => {
@@ -180,18 +205,24 @@ export default function MessageList({
     const element = scroller.current;
     if (!element) return;
     const near = element.scrollHeight - element.scrollTop - element.clientHeight < NEAR_BOTTOM_PX;
+    if (pinning.current) {
+      if (!near) return;
+      pinning.current = false;
+    }
     following.current = near;
     setAtEnd(near);
+  }
+
+  /** The reader is moving the list themselves: their scroll position is theirs again. */
+  function release() {
+    pinning.current = false;
   }
 
   async function jumpToLatest() {
     if (!state.live) await store.jumpToLatest();
     requestAnimationFrame(() => {
-      const element = scroller.current;
-      if (!element) return;
-      following.current = true;
-      scrollToEnd(element, true);
-      element.focus({ preventScroll: true });
+      pinToEnd(true);
+      scroller.current?.focus({ preventScroll: true });
     });
   }
 
@@ -201,8 +232,9 @@ export default function MessageList({
   return (
     <div className="channel-list">
       {/* The transcript scrolls here, so a keyboard must reach and scroll it (WCAG 2.1.1). */}
-      {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scroll container */}
-      <section ref={scroller} tabIndex={0} aria-label={`Messages in ${title}`} onScroll={onScroll} className={cx("channel-list__scroller", FOCUS_RING)} data-channel-scroller data-focus-home>
+      {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions -- a scroll container; wheel, touch and keys only hand scrolling back to the reader */}
+      <section ref={scroller} tabIndex={0} aria-label={`Messages in ${title}`} onScroll={onScroll} onWheel={release} onTouchStart={release} onKeyDown={release} className={cx("channel-list__scroller", FOCUS_RING)} data-channel-scroller data-focus-home>
+        <div ref={content}>
         <OlderControls state={state} store={store} />
         <ListState state={state} channel={channel} retry={retry} />
         {groups.length > 0 && <h2 className="sr-only">Messages</h2>}
@@ -243,6 +275,7 @@ export default function MessageList({
           </section>
         ))}
         <Outbox composer={composer} parentId={null} viewer={viewer} names={names} />
+        </div>
       </section>
 
       {showJump && (
