@@ -115,10 +115,11 @@ test.describe("the spaces shell harness", () => {
    * page failed it. The brand read "TEMBOTech" to it, Search hid "Ctrl K" from
    * its name, and the avatar's name left out the initials it shows.
    */
-  test("names every shell control with the words it shows, for every person in every space, at 1280 and 390px", async ({ page }, testInfo) => {
-    test.slow();
-    const people = { ...SPACES_BY_PERSONA, unbadged: ["Cohort", "Community", "Profile"], confirming: SPACES_BY_PERSONA.david };
-    for (const width of [1280, 390]) {
+  for (const width of [1280, 390]) {
+    test(`names every shell control with the words it shows, for every person in every space, at ${width}px`, async ({ page }, testInfo) => {
+      // About 35 harness pages, each hydrated and checked with axe: a long walk on a dev server.
+      test.setTimeout(240_000);
+      const people = { ...SPACES_BY_PERSONA, unbadged: ["Cohort", "Community", "Profile"], confirming: SPACES_BY_PERSONA.david };
       await page.setViewportSize({ width, height: width > WIDE ? 800 : 844 });
       for (const [persona, spaces] of Object.entries(people)) {
         for (const space of spaces) {
@@ -129,8 +130,8 @@ test.describe("the spaces shell harness", () => {
         await expect(accountMenu(page).panel).toBeVisible();
         await runAxe(page, testInfo, `${persona}-menu-${width}`);
       }
-    }
-  });
+    });
+  }
 
   test("runs an axe that catches the names QA-1 shipped with", async ({ page }) => {
     await open(page, harness("david", "mentoring"));
