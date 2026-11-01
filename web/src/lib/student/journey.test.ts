@@ -39,17 +39,26 @@ type Application = {
   status: "PENDING" | "APPROVED" | "REJECTED" | "AUDIT" | "COMPLETED";
   completedAt: Date | null;
   createdAt: Date;
+  application: string;
   program: typeof PROGRAM;
 };
 
+/** An application imported from the old stack, which carries its own questions. */
+const LEGACY_ANSWERS = JSON.stringify({
+  version: "1",
+  submission: [{ type: "textarea", name: "project", label: "Propose a project.", value: "A chama ledger" }],
+});
+
 function application(
   status: Application["status"],
-  completedAt: Date | null = null
+  completedAt: Date | null = null,
+  answers = "{}"
 ): Application {
   return {
     id: `application-${status.toLowerCase()}`,
     status,
     completedAt,
+    application: answers,
     createdAt: CREATED_AT,
     program: PROGRAM,
   };
@@ -113,9 +122,19 @@ describe("student journey", () => {
       expectedLinks: ["home", "apply", "ask", "account", "logout"],
     },
     {
+      // Self-applications carry no questions, so there is nothing to edit.
       name: "pending applicant",
       expectedState: "pending",
       applications: [application("PENDING")],
+      expectedTitle: "Your application is with the team",
+      expectedAction: "/dashboard/application/application-pending",
+      expectedActionLabel: "View application",
+      expectedLinks: ["home", "apply", "ask", "account", "logout"],
+    },
+    {
+      name: "pending applicant with questions to answer",
+      expectedState: "pending",
+      applications: [application("PENDING", null, LEGACY_ANSWERS)],
       expectedTitle: "Your application is with the team",
       expectedAction: "/dashboard/application/application-pending",
       expectedActionLabel: "Edit answers",

@@ -5,6 +5,7 @@ import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 import { getAccessibleProgramIds } from "@/lib/recordings/access";
 import { hasCompletedCohort, isValidCompletion } from "@/lib/talent/eligibility";
+import { hasEditableAnswers } from "./application-answers";
 
 export const STUDENT_DASHBOARD_LINK_IDS = [
   "home",
@@ -43,6 +44,8 @@ interface JourneyProgram {
 interface JourneyApplication {
   id: string;
   status: ApplicationStatus;
+  /** The stored answers, as JSON text. */
+  application: string;
   completedAt: Date | null;
   createdAt: Date;
   program: JourneyProgram | null;
@@ -259,7 +262,8 @@ function buildPendingNextStep(
     detail: formatApplicationDetail(pending),
     action: {
       href: pending ? `/dashboard/application/${pending.id}` : "/dashboard/apply",
-      label: "Edit answers",
+      // Only applications that carry questions have answers to edit.
+      label: pending && hasEditableAnswers(pending.application, pending.status) ? "Edit answers" : "View application",
     },
   };
 }

@@ -235,7 +235,8 @@ test.describe("a member without a cohort", () => {
     if ((await cohorts.count()) > 0) {
       await expect(cohorts.first().getByRole("button", { name: "Apply", exact: true })).toBeEnabled();
     } else {
-      await expect(page.getByText("No cohorts are accepting applications right now.")).toBeVisible();
+      // Either nothing is open, or they have applied to everything that is.
+      await expect(page.locator("[data-apply-empty]")).toHaveText(/No cohorts are accepting applications right now\.|You've applied to every cohort that's open right now\./);
     }
     await page.screenshot({ path: evidence("community-apply-form") });
   });
