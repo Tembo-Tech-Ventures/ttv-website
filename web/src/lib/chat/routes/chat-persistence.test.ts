@@ -17,7 +17,7 @@ vi.mock("@/lib/chat/tools", async (importOriginal) => ({
   executeTool: mocks.executeTool,
 }));
 
-import { POST } from "./chat";
+import { POST } from "@/pages/api/chat";
 
 type Chat = ReturnType<typeof createChatTestDb>;
 let chat: Chat;

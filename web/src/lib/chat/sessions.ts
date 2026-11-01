@@ -94,6 +94,9 @@ export interface ChatExchange {
  * conversation never exists without its messages and a request that fails
  * before this point leaves nothing behind. Saving a new conversation also
  * removes the user's empty ones, left by failed requests before this was atomic.
+ * (A tab opened before this release could still be asking in such an empty
+ * conversation; if it is removed meanwhile, that request fails its foreign key,
+ * writes nothing, and the next try starts a new conversation.)
  */
 export async function saveChatExchange(
   db: D1Database,
