@@ -53,14 +53,13 @@ const signedIn = Boolean(Astro.locals.user);
   <body class="bg-ground" data-sheet-paths={JSON.stringify(sheetPaths)}>
     <div class="onboarding">
       <header class="onboarding-bar">
-        <a href="/" class:list={["onboarding-brand", FOCUS_RING]} aria-label="Tembo Tech Ventures home">
-          <span aria-hidden="true" class="font-heading tracking-subhead text-[1.0625rem] leading-none text-ink-primary">TEMBO</span>
-          <span
-            aria-hidden="true"
-            class="onboarding-tagline font-body text-[0.625rem] font-semibold tracking-[0.32em] text-ink-muted uppercase"
-          >
+        {/* Named by the words it shows (WCAG 2.5.3, label in name), with "home" for screen readers. */}
+        <a href="/" class:list={["onboarding-brand", FOCUS_RING]}>
+          <span class="font-heading tracking-subhead text-[1.0625rem] leading-none text-ink-primary">TEMBO</span>
+          <span class="onboarding-tagline font-body text-[0.625rem] font-semibold tracking-[0.32em] text-ink-muted uppercase">
             Tech · Ventures
           </span>
+          <span class="sr-only">home</span>
         </a>
         <AccountMenu client:load person={person} account={account} />
       </header>
