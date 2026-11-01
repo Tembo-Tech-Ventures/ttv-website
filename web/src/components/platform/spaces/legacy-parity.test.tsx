@@ -12,6 +12,13 @@ import type { ChatSession } from "@/components/chat/types";
  * written from the components on main before U-1.2 (f3e716f), not from this
  * code, so any change to their default output fails here. Do not update them
  * to make a change pass: a legacy-visible change needs its own review.
+ *
+ * Intentional legacy-visible changes, each reviewed in the PR that made it:
+ * - session-viewer (F-3, QA-1 findings 13 and 14): a fix shared by both
+ *   frames. Each transcript line is one button named "Play from 0:00 …"
+ *   (the first time read "--", and each line took two Tab stops); the video
+ *   is named by the session's title; an empty status region waits to say
+ *   when the recording cannot play.
  */
 const VIEWS: ("journey" | "scout" | "mentor")[] = ["journey", "scout", "mentor"];
 const SESSION: ChatSession = { id: "s1", title: "Synthetic session", updatedAt: 1_790_000_000, messageCount: 2, latestMessage: "In week 3." };

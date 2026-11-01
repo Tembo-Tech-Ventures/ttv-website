@@ -1,4 +1,5 @@
 import { DEMO_PREFIX, isDemoUser } from "@/lib/staging-demo-policy";
+import { formatCalendarDate } from "@/lib/display-date";
 import { and, asc, count, desc, eq } from "drizzle-orm";
 import { resolveGateState } from "@/components/hire/validation";
 import * as schema from "@/lib/db/schema";
@@ -77,12 +78,7 @@ const APPLICATION_STATE_PRIORITY: ApplicationStatus[] = [
 ];
 
 export function formatJourneyDate(date: Date): string {
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  return formatCalendarDate(date);
 }
 
 function formatProgramDates(program: JourneyProgram | null): string | null {

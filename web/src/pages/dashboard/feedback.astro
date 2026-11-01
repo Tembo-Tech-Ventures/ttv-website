@@ -19,17 +19,11 @@ import {
   type FeedbackThemeStatus,
 } from "@/lib/feedback/themes";
 import { OPEN_FEEDBACK_ATTRIBUTE } from "@/components/feedback/feedback-client";
+import { formatMomentDate } from "@/lib/display-date";
 
 const user = Astro.locals.user!;
 const items = await listFeedbackForUser(env.DB, user.id);
 
-const formatDate = (date: Date) =>
-  date.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
 const openFeedback = { [OPEN_FEEDBACK_ATTRIBUTE]: "" };
 // Once a theme closes, the reply's "See the change" link takes over.
 const planLink = (theme: { status: FeedbackThemeStatus; issueUrl: string | null }) =>
@@ -84,7 +78,7 @@ const spaces = await resolveSpacePage(Astro.locals, "feedback");
                     {FEEDBACK_KIND_LABELS[item.kind]}
                   </span>
                   <span class="text-sm text-ink-muted">
-                    {formatDate(item.createdAt)} · on {feedbackPagePath(item.pageUrl)}
+                    {formatMomentDate(item.createdAt)} · on {feedbackPagePath(item.pageUrl)}
                   </span>
                 </div>
 

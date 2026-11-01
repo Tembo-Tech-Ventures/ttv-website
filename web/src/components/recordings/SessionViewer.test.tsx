@@ -6,12 +6,12 @@ const props = { videoUrl: "/api/recordings/synthetic/video", title: "Synthetic s
 
 describe("SessionViewer", () => {
   it("titles the session with an h2 in the existing dashboard", () => {
-    expect(renderToStaticMarkup(<SessionViewer {...props} />)).toContain('<h2 class="text-xl font-semibold text-white">Synthetic session</h2>');
+    expect(renderToStaticMarkup(<SessionViewer {...props} />)).toMatch(/<h2 id="[^"]+" class="text-xl font-semibold text-white">Synthetic session<\/h2>/);
   });
 
   it("makes the title the page's h1 inside the spaces shell", () => {
     const html = renderToStaticMarkup(<SessionViewer {...props} titleAs="h1" />);
-    expect(html).toContain('<h1 class="text-xl font-semibold text-white">Synthetic session</h1>');
+    expect(html).toMatch(/<h1 id="[^"]+" class="text-xl font-semibold text-white">Synthetic session<\/h1>/);
     expect(html).not.toContain("<h2");
   });
 });

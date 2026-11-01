@@ -48,6 +48,17 @@ export function validateMentorMethod(method: string): string | null {
     : null;
 }
 
+/**
+ * Where an evidence link goes, short enough to read: "github.com/achieng/ledger".
+ * Members often leave the default title ("Supporting work"), so the address is
+ * what tells one link from the next.
+ */
+export function evidenceDestination(href: string, max = 48): string {
+  const url = new URL(href);
+  const place = (url.hostname.replace(/^www\./, "") + url.pathname).replace(/\/$/, "");
+  return place.length > max ? `${place.slice(0, max - 1)}…` : place;
+}
+
 export function safeMentorEvidenceUrl(value: string): string | null {
   try {
     const url = new URL(value);
@@ -129,14 +140,17 @@ function ReviewRequest({
       <p>{request.claimDescription}</p>
       <h4>Evidence for this claim</h4>
       {request.evidence.length > 0 ? (
-        <ul>
+        <ul className="mentor-evidence">
           {request.evidence.map((item) => {
             const href = safeMentorEvidenceUrl(item.url);
             return (
               <li key={item.id}>
                 {href ? (
                   <a href={href} target="_blank" rel="noopener noreferrer">
-                    {item.title} (opens in a new tab)
+                    <span className="mentor-evidence__title">{item.title}</span>{" "}
+                    <span className="mentor-evidence__place">{evidenceDestination(href)}</span>
+                    <span aria-hidden="true"> ↗</span>
+                    <span className="sr-only"> (opens in a new tab)</span>
                   </a>
                 ) : (
                   <span>{item.title} — link unavailable</span>

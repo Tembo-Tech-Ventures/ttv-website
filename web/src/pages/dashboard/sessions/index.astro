@@ -7,6 +7,7 @@ import Card from "@/components/common/Card.astro";
 import ProcessingStatus from "@/components/recordings/ProcessingStatus.astro";
 import { getAccessibleProgramIds } from "@/lib/recordings/access";
 import { formatDuration } from "@/lib/recordings/time-utils";
+import { formatMomentDate } from "@/lib/display-date";
 import { drizzle } from "drizzle-orm/d1";
 import { and, inArray } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
@@ -55,7 +56,7 @@ const sessionsHref = spaces ? SPACE_PAGE_PATHS.sessions : "/dashboard/sessions";
                 </div>
                 <p class="text-sm text-ink-muted">{recording.program?.name ?? "Cohort session"}</p>
                 <div class="flex items-center justify-between text-xs text-ink-muted">
-                  <span>{recording.recordedAt ? recording.recordedAt.toISOString().split("T")[0] : "No date"}</span>
+                  <span>{recording.recordedAt ? formatMomentDate(recording.recordedAt) : "No date"}</span>
                   <span>{formatDuration(recording.durationSeconds)}</span>
                 </div>
               </div>
