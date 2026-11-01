@@ -1,12 +1,12 @@
 ---
 /**
  * A cohort channel, in the Cohort space (U-2.3): its header, and the
- * habits on a first visit. The conversation arrives with U-2.1 in
- * ChannelFrame's slot. Not found while `channels` is off for the person, or
+ * habits on a first visit. After agreeing, the conversation
+ * (U-2.1, ChannelPageBody). Not found while `channels` is off for the person, or
  * when the backend does not list this channel as one they can read
  * (channel-page.ts).
  */
-import ChannelFrame from "@/components/channels/ChannelFrame.astro";
+import ChannelPageBody from "@/components/channels/ChannelPageBody.astro";
 import { resolveChannelPage } from "@/components/channels/channel-page";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 
@@ -14,6 +14,6 @@ const page = await resolveChannelPage(Astro, "cohort");
 if (page instanceof Response) return page;
 ---
 
-<SpacePage context={page.context} title={`#${page.channel.name}`} channels={page.readable} channelId={page.channel.id}>
-  <ChannelFrame channel={page.channel} agreed={page.agreed} canAgree={page.canAgree} action={page.self} />
+<SpacePage context={page.context} title={`#${page.channel.name}`} channels={page.readable} channelId={page.channel.id} fill={page.agreed}>
+  <ChannelPageBody page={page} />
 </SpacePage>

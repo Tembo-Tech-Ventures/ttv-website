@@ -1,0 +1,42 @@
+---
+/**
+ * The body of a channel page (community or cohort). Before a person has
+ * agreed to how we talk to each other, ChannelFrame asks (U-2.3). After, the
+ * conversation (U-2.1): ChannelView, with ChannelHeader as its children so the
+ * thread rail can run the full height beside both. The page passes `fill`
+ * to SpacePage exactly when the view shows, so the view sizes to the sheet.
+ *
+ * `?thread=` opens a thread and `?message=` marks a linked message.
+ */
+import type { Channel } from "@/lib/platform/contracts";
+import type { ChannelsPage } from "./channel-page";
+import ChannelFrame from "./ChannelFrame.astro";
+import ChannelHeader from "./ChannelHeader.astro";
+import ChannelView from "./ChannelView";
+
+interface Props {
+  page: ChannelsPage & { channel: Channel };
+}
+
+const { page } = Astro.props;
+const query = Astro.url.searchParams;
+---
+
+{
+  page.agreed ? (
+    <ChannelView
+      client:load
+      me={page.context.me}
+      channel={page.channel}
+      now={Date.now()}
+      threadId={query.get("thread")}
+      messageId={query.get("message")}
+    >
+      <div class="channel-view__header">
+        <ChannelHeader channel={page.channel} />
+      </div>
+    </ChannelView>
+  ) : (
+    <ChannelFrame channel={page.channel} agreed={page.agreed} canAgree={page.canAgree} action={page.self} />
+  )
+}

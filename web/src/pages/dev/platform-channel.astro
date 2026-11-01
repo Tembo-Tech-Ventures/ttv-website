@@ -1,0 +1,114 @@
+---
+/**
+ * Dev-only harness for the channel view (U-2.1).
+ *
+ * The real frame (U-2.3) lives at /dashboard/{community,cohort}/c/:slug and
+ * mounts ChannelView there. This page renders the same ChannelSurface inside
+ * SpacesLayout on fixture data, for any synthetic person and channel:
+ *
+ *   ?persona=wanjiku&channel=show-your-work&thread=<id>&message=<id>
+ *   &tembo=off   tembo_channels off: no Ask Tembo, no @tembo
+ *   &channels=off   the channels flag off: the view renders nothing
+ *
+ * The header is U-2.3's ChannelHeader; the sidebar stands in for U-2.3's. Nothing is reachable
+ * outside `astro dev`; `e2e/platform-channel.spec.ts` holds the contract.
+ */
+import { PiHash, PiLockSimple } from "react-icons/pi";
+import type { Me, SpaceId } from "@/lib/platform/contracts";
+import SpacesLayout from "@/layouts/SpacesLayout.astro";
+import SidebarGroup from "@/components/platform/shell/SidebarGroup.astro";
+import SidebarHeader from "@/components/platform/shell/SidebarHeader.astro";
+import SidebarLink from "@/components/platform/shell/SidebarLink.astro";
+import { HARNESS_PERSONAS, isHarnessPersona } from "@/components/platform/shell/harness/personas";
+import { canRenderSpace } from "@/components/platform/shell/access";
+import { channelTitle } from "@/components/channels/channel-format";
+import ChannelHeader from "@/components/channels/ChannelHeader.astro";
+import HarnessChannel from "@/components/channels/harness/HarnessChannel";
+import { channelFor, channelPage, HARNESS_CHANNELS, threadPage } from "@/components/channels/harness/fixture-pages";
+
+if (!import.meta.env.DEV) {
+  return new Response("Not found", { status: 404 });
+}
+
+const params = Astro.url.searchParams;
+const personaParam = params.get("persona");
+const persona = isHarnessPersona(personaParam) ? personaParam : "wanjiku";
+const base = HARNESS_PERSONAS[persona];
+const me: Me = {
+  ...base,
+  flags: {
+    ...base.flags,
+    channels: params.get("channels") !== "off",
+    tembo_channels: params.get("tembo") !== "off",
+  },
+};
+const channel = channelFor(params.get("channel") ?? "show-your-work", me);
+const space: SpaceId = channel?.kind === "COHORT" ? "cohort" : "community";
+if (!channel || !canRenderSpace(me, space)) {
+  return new Response("Not found", { status: 404 });
+}
+
+const threadId = params.get("thread");
+const messageId = params.get("message");
+const initial = channelPage(channel, me);
+const initialThread = threadId ? threadPage(channel, threadId, me) : null;
+const keep = (slug: string) => {
+  const next = new URLSearchParams({ persona, channel: slug });
+  for (const key of ["tembo", "channels"]) if (params.has(key)) next.set(key, params.get(key)!);
+  return `/dev/platform-channel?${next}`;
+};
+const listed = Object.values(HARNESS_CHANNELS)
+  .map((item) => channelFor(item.slug, me))
+  .filter((item) => item !== null && (item.kind === "COHORT") === (space === "cohort"));
+const spaceHrefs = Object.fromEntries(me.spaces.map((id) => [id, `/dev/platform-shell?persona=${persona}&space=${id}`])) as Record<SpaceId, string>;
+---
+
+<SpacesLayout
+  me={me}
+  space={space}
+  title={channelTitle(channel)}
+  overlays={[]}
+  harness={{ account: { signOut: { kind: "link", href: "#signed-out", label: "Sign out" }, feedback: false }, spaceHrefs }}
+>
+  <Fragment slot="sidebar">
+    <SidebarHeader
+      title={space === "cohort" ? "Cohort 04" : "Community"}
+      description={space === "cohort" ? "Synthetic harness: cohort channels" : "Synthetic harness: community channels"}
+    />
+    <SidebarGroup label="Channels">
+      {
+        listed.map((item) => (
+          <SidebarLink
+            href={keep(item!.slug)}
+            label={item!.slug}
+            icon={item!.kind === "COHORT" ? PiLockSimple : PiHash}
+            current={item!.slug === channel.slug}
+            count={item!.slug === channel.slug ? 0 : item!.unreadCount}
+            countLabel="unread"
+          />
+        ))
+      }
+    </SidebarGroup>
+  </Fragment>
+  <div data-space-fill class="flex min-h-0 flex-1 flex-col">
+    <HarnessChannel
+      client:load
+      me={me}
+      channel={channel}
+      initial={initial}
+      initialThread={initialThread}
+      threadId={threadId}
+      messageId={messageId}
+    >
+      <div class="channel-view__header">
+        <ChannelHeader channel={channel} />
+      </div>
+    </HarnessChannel>
+  </div>
+</SpacesLayout>
+
+<style is:global>
+  astro-dev-toolbar {
+    display: none !important;
+  }
+</style>

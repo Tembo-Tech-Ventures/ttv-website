@@ -42,3 +42,83 @@ backend lane's: `src/lib/channels/README.md`. This module only presents it.
   Then the same journeys on real sessions, set up as in
   `../platform/spaces/README.md`. Locally, the seed resets every persona's
   agreement.
+
+## The conversation (U-2.1)
+
+The conversation inside a channel: the message list, a thread beside it, and
+the composer. Designs: Library `/reports/platform-ux-2026-10-30/` screens 01,
+02, m1 and m4. Layout rules: `docs/chat-full-page-layout.md`.
+
+### Mounting
+
+The channel frame (U-2.3, `/dashboard/{community,cohort}/c/:slug`) mounts the
+island inside `SpacePage … fill`, after its code-of-conduct gate:
+
+```astro
+<ChannelView client:load me={me} channel={channel} initial={page} initialThread={thread}
+  threadId={Astro.url.searchParams.get("thread")} messageId={Astro.url.searchParams.get("message")}
+  now={Date.now()} shareables={shareables}>
+  <ChannelHeader … />   <!-- the frame's header: name, topic, who can read -->
+</ChannelView>
+```
+
+- `children` is the frame's header. It sits above the messages, so on a wide
+  sheet the thread runs the full height beside both (screens 01 and 02).
+- `initial` and `initialThread` are the server's pages (B-2.3). With them the
+  channel and an open thread read without JavaScript; thread links are real
+  `?thread=` URLs.
+- `now` is the server's clock, so day names and times hydrate identically.
+  Times are in Africa/Nairobi, as attention's are.
+- It renders nothing while `channels` is off for the person. The route 404s
+  then (B-2.2); this is the second lock.
+
+### Parts
+
+| File | What it is |
+|---|---|
+| `ChannelView.tsx` | Production island: the S-2.1 store and live actions |
+| `ChannelSurface.tsx` | The view itself, given a store and actions; URL, focus and the live region |
+| `MessageList.tsx` | The one scroll surface: day headings, "New", older pages, empty and error states, following, "Jump to latest", read markers |
+| `MessageItem.tsx`, `MessageMenu.tsx`, `MessageEdit.tsx` | A message: author, server role badges, time, (edited), deleted, text reactions, thread link; reply, react, edit and delete |
+| `MessageBody.tsx` | Words, mentions, inline code and plain links. Never Markdown links or markup |
+| `EmbedCard.tsx`, `TemboAnswer.tsx` | First forms of shared work and Tembo answers. U-2.2 and U-3.1 own their full design |
+| `ThreadRail.tsx` | The thread: beside the list on a wide sheet, in its place on a narrow one |
+| `Composer.tsx`, `ComposerParts.tsx`, `mentions.ts` | Writing: `@` suggestions, Share project, Session clip (cohort channels only), Ask Tembo (`tembo_channels` only) |
+| `actions.ts` | `ChannelActions`: the only way the view changes anything |
+| `channel-format.ts` | Pure rules: days, times, bodies, moderation notices, which tools a channel offers |
+| `harness/` | DEV only: fixture pages, a fixture API and the `/dev/platform-channel` island |
+
+### Rules the view keeps
+
+- **One scroll surface** per column. The document and the sheet never scroll.
+  The composer is a flex child, never `position: fixed`.
+- **Enter sends only with a fine pointer.** On a touch screen Enter adds a
+  line; the send button is always there.
+- **New messages are announced once per poll**, politely, from one offscreen
+  region. The list is never a live region, and the viewer's own messages are
+  not announced. The list follows new messages only when the reader is at the
+  end (or sent one); otherwise "Jump to latest" appears.
+- **Role badges come from the server**, worded by the server. Nothing in the
+  view infers a role, a trust signal or a confirmation.
+- **Moderation is shown to the people the server tells.** `moderation` reaches
+  only the author and moderators. A flag says the message stays up until a
+  person decides; a hidden message tells its author only they can see it.
+  Reporting, hiding and asking for review are U-2.2.
+- **Session clip is offered only in cohort channels** that allow it, never in
+  community channels or conversations, whatever a capability says.
+
+### Interim until S-2.2 and B-2.3
+
+`createLiveActions` calls the contract routes and merges the server's answer
+into the store. S-2.2 replaces it with optimistic sends, drafts and retries,
+and the channel's members as `@` candidates (today: people seen in the view).
+
+### Tests
+
+- `npx vitest run src/components/channels`
+- `npx playwright test e2e/platform-channel.spec.ts --project=chromium` against
+  `astro dev` (see `docs/` for starting it in a SAM workspace). It covers 390
+  and 1440 px, axe, one scroll surface, the keyboard order, focus, the live
+  region, following and "Jump to latest", touch Enter, 44px targets and
+  reduced motion. `?persona=`, `?channel=`, `?thread=`, `?tembo=off` and
+  `?channels=off` select what the harness shows.
