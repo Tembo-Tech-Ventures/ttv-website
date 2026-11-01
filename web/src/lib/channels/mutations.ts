@@ -7,7 +7,9 @@ import { CONDUCT_VERSION } from "./conduct";
 import { refOf, resolveEmbeds, sameRefs, screeningText } from "./embeds";
 import { ChannelError } from "./errors";
 import { readMessage, type ReadContext } from "./messages";
-import { screenMessage, type MessageScreen } from "./moderation";
+import { FINDING_REASONS, REPEAT } from "./moderation/detectors";
+import { mergedReasons } from "./moderation/reasons";
+import { screenMessage, type MessageScreen, type MessageScreening } from "./moderation/screen";
 
 /**
  * Writing messages, reactions and read markers (README.md beside this file, "Writing"). Each
@@ -68,14 +70,29 @@ async function loaded(ctx: ReadContext, id: string): Promise<Message> {
   return message;
 }
 
-/** The pre-insert hook's reasons, trimmed and deduplicated. */
-async function screen(ctx: WriteContext, body: string, parentId: string | null, operation: "post" | "edit") {
-  const { reasons } = await (ctx.screen ?? screenMessage)({
+/** The pre-insert hook's findings, with their reasons trimmed and blank ones dropped. */
+async function screen(ctx: WriteContext, body: string, parentId: string | null, operation: "post" | "edit"): Promise<MessageScreening> {
+  const { findings, textKey } = await (ctx.screen ?? screenMessage)({
     channel: { id: ctx.channel.id, kind: ctx.channel.kind, programId: ctx.channel.programId },
     authorId: ctx.viewerId, body, parentId, operation,
   });
-  return [...new Set(reasons.map((reason) => reason.trim()).filter(Boolean))];
+  return {
+    textKey,
+    findings: findings.map((finding) => ({ ...finding, reason: finding.reason.trim() })).filter((finding) => finding.reason !== ""),
+  };
 }
+
+/**
+ * The reasons a screened text is flagged for, as one SQL value (a JSON array): each finding's reason
+ * (findings is a JSON parameter), unless an admin allowlisted the finding's key or the whole text
+ * (textKey), plus any `extra` reasons (a SELECT of one column). Evaluated inside the write, so the
+ * allowlist an admin just changed is the one that counts.
+ */
+const screenedReasons = (findings: string, textKey: string, extra = "") => `(SELECT json_group_array(reason) FROM (
+    SELECT DISTINCT json_extract(f.value, '$.reason') AS reason FROM json_each(${findings}) f
+    WHERE NOT EXISTS (SELECT 1 FROM moderation_allowlist a
+      WHERE a.key IN (${textKey}, coalesce(json_extract(f.value, '$.key'), ${textKey})))
+    ${extra}))`;
 
 interface NonceRow {
   id: string; channelId: string; parentId: string | null; body: string; embeds: string; editedAt: number | null; deletedAt: number | null;
@@ -170,24 +187,30 @@ export async function postMessage(ctx: WriteContext, input: PostMessage): Promis
 
   const now = ctx.now ?? Date.now();
   // Shared projects are screened with the body: readers see their text too.
-  const reasons = await screen(ctx, screeningText(input.body, embeds), input.parentId, "post");
+  const { findings, textKey } = await screen(ctx, screeningText(input.body, embeds), input.parentId, "post");
   const id = createId();
   const { channel: burst, day } = POST_LIMITS;
+  // The same text in other channels within the hour: ?2 author, ?5 body, ?7 its key, ?15–?18 REPEAT.
+  const repeat = `UNION SELECT ?15 WHERE length(?5) >= ?16 AND NOT EXISTS (SELECT 1 FROM moderation_allowlist WHERE key = ?7)
+    AND (SELECT COUNT(DISTINCT channelId) FROM channel_message WHERE authorId = ?2 AND createdAt > ?17 AND channelId <> ?1
+      AND body = ?5 AND deletedAt IS NULL) >= ?18`;
   const statements = [ctx.db.prepare(`INSERT INTO channel_message
       (id, channelId, parentId, seq, changeSeq, authorKind, authorId, clientNonce, body, embeds, moderationState, moderationReasons, createdAt)
-    SELECT ?9, ?1, ?4, n.next, n.next, 'USER', ?2, ?3, ?5, ?15, ?6, ?7, max(?8, n.lastAt)
+    SELECT ?9, ?1, ?4, n.next, n.next, 'USER', ?2, ?3, ?5, ?19,
+      CASE WHEN json_array_length(r.reasons) > 0 THEN 'FLAGGED' ELSE 'VISIBLE' END, r.reasons, max(?8, n.lastAt)
     FROM (SELECT coalesce(MAX(changeSeq), 0) + 1 AS next,
       coalesce((SELECT createdAt FROM channel_message WHERE channelId = ?1 ORDER BY seq DESC LIMIT 1), 0) AS lastAt
-      FROM channel_message WHERE channelId = ?1) n
+      FROM channel_message WHERE channelId = ?1) n,
+      (SELECT ${screenedReasons("?6", "?7", repeat)} AS reasons) r
     WHERE EXISTS (SELECT 1 FROM channel_conduct WHERE userId = ?2 AND version >= ?10)
       AND (SELECT COUNT(*) FROM channel_message WHERE authorId = ?2 AND createdAt > ?11) < ?12
       AND (SELECT COUNT(*) FROM channel_message WHERE authorId = ?2 AND createdAt > ?13 AND channelId = ?1) < ?14
       AND (?4 IS NULL OR EXISTS (SELECT 1 FROM channel_message p WHERE p.id = ?4 AND p.channelId = ?1
         AND p.parentId IS NULL AND p.deletedAt IS NULL AND p.moderationState <> 'HIDDEN'))
     ON CONFLICT (authorId, clientNonce) DO NOTHING`).bind(
-    ctx.channel.id, ctx.viewerId, input.clientNonce, input.parentId, input.body,
-    reasons.length > 0 ? "FLAGGED" : "VISIBLE", JSON.stringify(reasons), now, id,
-    conductVersion(ctx), now - day.windowMs, day.count, now - burst.windowMs, burst.count, JSON.stringify(embeds),
+    ctx.channel.id, ctx.viewerId, input.clientNonce, input.parentId, input.body, JSON.stringify(findings), textKey, now, id,
+    conductVersion(ctx), now - day.windowMs, day.count, now - burst.windowMs, burst.count,
+    FINDING_REASONS.repeat, REPEAT.minLength, now - REPEAT.windowMs, REPEAT.channels - 1, JSON.stringify(embeds),
   )];
   // The statements after the INSERT act only if it wrote the new id.
   const written = "EXISTS (SELECT 1 FROM channel_message WHERE id = ?3)";
@@ -195,9 +218,11 @@ export async function postMessage(ctx: WriteContext, input: PostMessage): Promis
   if (input.parentId !== null) {
     statements.push(ctx.db.prepare(`${touch("?2")} AND ${written}`).bind(ctx.channel.id, input.parentId, id));
   }
-  if (reasons.length > 0) {
-    statements.push(ctx.db.prepare(`${FLAG_EVENT} SELECT ?2, ?3, 'FLAG', 'DETECTOR', NULL, 'VISIBLE', 'FLAGGED', ?4, ?5
-      WHERE ${written}`).bind(ctx.channel.id, createId(), id, JSON.stringify(reasons), now));
+  // The flag's audit event, when the post could be flagged: a finding, or a text long enough to count
+  // as a repeat. It reads the reasons the INSERT stored.
+  if (findings.length > 0 || [...input.body].length >= REPEAT.minLength) {
+    statements.push(ctx.db.prepare(`${FLAG_EVENT} SELECT ?2, id, 'FLAG', 'DETECTOR', NULL, 'VISIBLE', 'FLAGGED', moderationReasons, createdAt
+      FROM channel_message WHERE id = ?1 AND moderationState = 'FLAGGED'`).bind(id, createId()));
   }
   const [inserted] = await ctx.db.batch(statements);
   if (inserted?.meta.changes === 1) return { message: await loaded(ctx, id), created: true };
@@ -261,22 +286,26 @@ export async function editMessage(ctx: WriteContext, target: MessageTarget, inpu
   if (input.body === target.body) return loaded(ctx, target.id);
 
   const now = ctx.now ?? Date.now();
-  const reasons = JSON.stringify(await screen(ctx, input.body, target.parentId, "edit"));
+  const { findings, textKey } = await screen(ctx, input.body, target.parentId, "edit");
   const action = createId();
   // ?1 channel, ?2 id, ?3 author, ?7 the logged action, which also stands for the current code of
   // conduct. Each statement repeats the guard, so those, and a concurrent delete or hide, win.
   const guard = `id = ?2 AND channelId = ?1 AND authorId = ?3 AND deletedAt IS NULL AND moderationState <> 'HIDDEN' AND ${logged("?7")}`;
+  // ?8 findings, ?9 the text's key.
+  const reasons = screenedReasons("?8", "?9");
+  const params = [ctx.channel.id, target.id, ctx.viewerId, input.body, now, createId(), action, JSON.stringify(findings), textKey];
   const statements = [logAction(ctx, "EDIT", action, now)];
-  if (reasons !== "[]") {
-    statements.push(ctx.db.prepare(`${FLAG_EVENT} SELECT ?4, id, 'FLAG', 'DETECTOR', NULL, moderationState, 'FLAGGED', ?5, ?6
-      FROM channel_message WHERE ${guard}`).bind(ctx.channel.id, target.id, ctx.viewerId, createId(), reasons, now, action));
+  if (findings.length > 0) {
+    statements.push(ctx.db.prepare(`${FLAG_EVENT} SELECT ?6, id, 'FLAG', 'DETECTOR', NULL, moderationState, 'FLAGGED', r.reasons, ?5
+      FROM channel_message, (SELECT ${reasons} AS reasons) r WHERE ${guard} AND json_array_length(r.reasons) > 0`).bind(...params));
   }
   statements.push(ctx.db.prepare(`UPDATE channel_message SET body = ?4, editedAt = ?5,
       changeSeq = (SELECT MAX(changeSeq) + 1 FROM channel_message WHERE channelId = ?1),
-      moderationState = CASE WHEN ?6 = '[]' THEN moderationState ELSE 'FLAGGED' END,
-      moderationReasons = CASE WHEN ?6 = '[]' THEN moderationReasons ELSE (SELECT json_group_array(value)
-        FROM (SELECT value FROM json_each(moderationReasons) UNION SELECT value FROM json_each(?6))) END
-    WHERE ${guard}`).bind(ctx.channel.id, target.id, ctx.viewerId, input.body, now, reasons, action));
+      moderationState = CASE WHEN json_array_length(r.reasons) = 0 THEN moderationState ELSE 'FLAGGED' END,
+      moderationReasons = CASE WHEN json_array_length(r.reasons) = 0 THEN moderationReasons
+        ELSE ${mergedReasons("moderationReasons", "r.reasons")} END
+    FROM (SELECT ${reasons} AS reasons) r
+    WHERE ${guard}`).bind(...params));
   const results = await ctx.db.batch(statements);
   if (results[0]?.meta.changes !== 1) throw await actionRefusal(ctx, "EDIT", now);
   if (results.at(-1)?.meta.changes !== 1) throw new ChannelError("conflict", "This message changed while you were editing it.", 409);

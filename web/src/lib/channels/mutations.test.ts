@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ChannelList, ChannelRead, ErrorEnvelope, Message, MessageList, MessageReactions } from "@/lib/platform/contracts";
 import { CONDUCT_VERSION } from "./conduct";
 import { ACTION_LIMITS, POST_LIMITS } from "./mutations";
-import { channelDatabase, post, VIEWER, type ChannelFixture } from "./test-support";
+import { channelDatabase, flagging, post, VIEWER, type ChannelFixture } from "./test-support";
 
 const fixtures: ChannelFixture[] = [];
 afterEach(() => { fixtures.splice(0).forEach(({ database }) => database.close()); });
@@ -122,7 +122,7 @@ describe("posting", () => {
     const own = (s.database.prepare("SELECT id FROM channel_message LIMIT 1").get() as { id: string }).id;
     await s.call("deleteMessage", { id: own });
     expect((await send(s.channel("design-crit"))).status).toBe(429);
-  });
+  }, 20_000); // A day's worth of posts (300), each screened in SQL: slow under parallel CI load.
 
   it("enforces postingPolicy STAFF: members read announcements, instructors, TAs and admins post", async () => {
     const cases = [
@@ -170,7 +170,7 @@ describe("posting", () => {
   it("stores what the moderation hook flags, with a detector event, and keeps the message visible", async () => {
     const s = setup();
     s.agree();
-    const screen = ({ body }: { body: string }) => ({ reasons: body.includes("07") ? [" Contact details ", "Contact details"] : [] });
+    const screen = flagging([" Contact details ", "Contact details"], (body) => body.includes("07"));
     const flagged = Message.parse((await s.call("postMessage", { id: s.channel("opportunities"), body: post("Call me on 0712 000 000"), screen })).body);
     expect(flagged.moderation).toEqual({ state: "FLAGGED", reasons: ["Contact details"] });
     expect(s.database.prepare("SELECT action, source, actorId, fromState, toState, reasons FROM moderation_event").all()).toEqual([
@@ -251,7 +251,7 @@ describe("editing and deleting", () => {
   it("asks for the current code of conduct before an edit, and treats the same body as no change", async () => {
     const s = setup();
     const id = s.message("help", { author: VIEWER, body: "Original" });
-    const refused = await s.call("editMessage", { id, body: { body: "Rewritten" }, screen: () => ({ reasons: ["Contact details"] }) });
+    const refused = await s.call("editMessage", { id, body: { body: "Rewritten" }, screen: flagging(["Contact details"]) });
     expect([refused.status, errorOf(refused.body).code]).toEqual([403, "conduct_required"]);
     expect(s.database.prepare("SELECT COUNT(*) AS n FROM moderation_event").get()).toEqual({ n: 0 });
     // A refused edit neither changes the message nor uses up the edit limit.
@@ -328,8 +328,8 @@ describe("edit and reaction limits", () => {
     const [first, other] = [s.message("help", { author: VIEWER }), s.message("introductions", { author: VIEWER })];
     const edit = (id: string, i: number) => s.call("editMessage", { id, body: { body: `Edit ${i}` }, now: () => now });
     for (let i = 0; i < ACTION_LIMITS.EDIT.count; i++) { expect((await edit(first, i)).status).toBe(200); now += 1_000; }
-    const flagging = () => ({ reasons: ["Contact details"] });
-    const limited = await s.call("editMessage", { id: first, body: { body: "Edit 99" }, now: () => now, screen: flagging });
+    const flagged = flagging(["Contact details"]);
+    const limited = await s.call("editMessage", { id: first, body: { body: "Edit 99" }, now: () => now, screen: flagged });
     // A refused edit leaves no detector event behind, flagged or not.
     expect(s.database.prepare("SELECT COUNT(*) AS n FROM moderation_event").get()).toEqual({ n: 0 });
     expect([limited.status, errorOf(limited.body).code]).toEqual([429, "rate_limited"]);
@@ -339,6 +339,23 @@ describe("edit and reaction limits", () => {
     expect((await edit(other, 1)).status).toBe(200);
     now = start + ACTION_LIMITS.EDIT.windowMs;
     expect((await edit(first, 100)).status).toBe(200);
+  });
+
+  it("time an edit's wait from the oldest edit in that channel, not from edits elsewhere", async () => {
+    const s = setup();
+    s.agree();
+    const start = 1_800_000_000_000;
+    let now = start;
+    const [here, elsewhere] = [s.message("help", { author: VIEWER }), s.message("introductions", { author: VIEWER })];
+    const edit = (id: string, i: number) => s.call("editMessage", { id, body: { body: `Edit ${i}` }, now: () => now });
+    // The oldest edit of all is in another channel; this channel's oldest comes five seconds later.
+    expect((await edit(elsewhere, 0)).status).toBe(200);
+    now += 5_000;
+    const firstHere = now;
+    for (let i = 0; i < ACTION_LIMITS.EDIT.count; i++) { expect((await edit(here, i)).status).toBe(200); now += 1_000; }
+    const limited = await edit(here, 99);
+    expect([limited.status, errorOf(limited.body).retryAfterMs]).toEqual([429, firstHere + ACTION_LIMITS.EDIT.windowMs - now]);
+    expect(limited.response.headers.get("Retry-After")).toBe(String(Math.ceil((firstHere + ACTION_LIMITS.EDIT.windowMs - now) / 1000)));
   });
 
   it("limit reaction changes per person across channels, and keep the log to the last hour", async () => {

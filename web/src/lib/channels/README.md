@@ -256,10 +256,10 @@ fail; when nothing was written, one read of the same conditions says why.
   which for an edit also checks the code of conduct; everything after it
   acts only when that row was written, so a refusal writes nothing and moves
   nothing. A trigger prunes the log after an hour. A refused edit or
-  reaction, flagged or not, stays within the 10-statement budget. Open for
-  B-2.5: an edit is screened before the batch decides the limit and the code
-  of conduct, so a screen that calls a model should first run a read-only
-  pre-check, or refused edits pay for a model call.
+  reaction, flagged or not, stays within the 10-statement budget. The
+  screen an edit runs first is pure and in-process (see "Moderation" below),
+  and Clef runs only after a write commits, so a refused edit pays for no
+  model call.
 - **Edits and deletes** belong to the author only; moderators hide instead
   (B-2.5), and nobody edits Tembo. Editing needs `canPost` and a current
   agreement; the same body again changes nothing (it answers with the
@@ -273,16 +273,96 @@ fail; when nothing was written, one read of the same conditions says why.
   nothing: a failed attempt cannot leave other readers with the old count. Anyone who reads an open channel reacts,
   announcements included. Archived channels (403), deleted and hidden
   messages (409) take none.
-- **Moderation hook.** `moderation.ts` `screenMessage` runs before every
-  post and edit and is a passthrough today. Reasons it returns are stored as
+- **Moderation hook.** `moderation/screen.ts` `screenMessage` runs before
+  every post and edit (see "Moderation" below). What it finds is stored as
   FLAGGED (the message stays visible) with a DETECTOR `moderation_event`, in
-  the same batch as the write; an edit never clears an earlier flag. B-2.5
-  puts its detectors here.
-- **Open for B-2.5: moderation evidence.** An author's edit overwrites the
-  body and a delete empties it, and `moderation_event` keeps only reasons.
-  Before reports and the moderation queue exist, B-2.5 must keep the text a
-  moderator reviews: snapshot it when a message is flagged or reported, and
-  keep earlier versions across edits and deletes.
+  the same batch as the write; an edit never clears an earlier flag.
+
+## Moderation (B-2.5)
+
+Plan §3 "Moderation pipeline". Contact details are only ever FLAGGED, never
+hidden by a machine: a flagged message stays visible until a person decides
+(owner decision 2, 2026-10-31). Migration `0032_moderation_pipeline.sql`.
+
+### 1. Detectors, before the write
+
+`moderation/detectors.ts` is pure and synchronous. `detectFindings(body)`
+returns findings, each with a plain-language reason and an allowlist key:
+
+| Finding | Reason | Key |
+|---|---|---|
+| Phone numbers: Kenyan 07xx/01xx and landlines, +254/254/00254, spaced, dotted, dashed, bracketed, spelled out in English or Swahili ("double seven" too), mixed, fullwidth or keycap digits; international numbers with + or 00; North American (555) 234-5678 | Shares a phone number | `phone:+254712345678` |
+| Email addresses, also name [at] domain [dot] org, and name at gmail dot com for webmail domains | Shares an email address | `email:…` |
+| WhatsApp and Telegram links: chat.whatsapp.com, wa.me, wa.link, api.whatsapp.com/send, whatsapp.com/channel, t.me, telegram.me, tg:// and whatsapp:// | Links to a WhatsApp or Telegram chat | `link:host/path` |
+| Link shorteners (bit.ly, tinyurl.com, t.co, …) | Uses a shortened link | `link:host/path` |
+| Five or more distinct `@` mentions | Mentions many people at once | none |
+| The same text (20+ characters) by the same person in three channels within an hour | Posted the same message in several channels | none |
+
+A digit run counts as a phone number only when it starts and ends where the
+author's own grouping does, and has a phone number's shape. So years, dates,
+times, prices, cohort numbers, versions (`10.0.19041.1234`: a tight chain of
+digits is one number) and IP addresses are not flagged. The fixture table in
+`detectors.test.ts` measures precision and recall for every kind, and
+`KNOWN_LIMITS` there records what is deliberately missed (a Kenyan number
+without its leading 0, commas between spelled digits) or caught (a
+hyphenated ISBN-10). Clef asks about contact details too, so those are
+covered after the post.
+
+The allowlist and the repeat check are SQL inside the guarded INSERT or
+UPDATE, so a refused write does no extra work. A finding is dropped when
+`moderation_allowlist` holds its key or the whole text's key (`textKey`: a
+SHA-256 of the text with case, Unicode forms and spacing normalised). Admins
+fill the allowlist when they keep a message (the queue, next PR).
+
+### 2. Clef, after the response
+
+`moderation/clef.ts`. After a post is created or an edit changes the text,
+`http.ts` hands Clef flash (`@cf/cloudflare/clef-flash`) to the request's
+`waitUntil`; tests receive it through the `defer` seam. The request goes
+through the AI Gateway with `collectLog: false`. Three questions, adapted
+from the profile check: contact details, unrelated promotion, abuse.
+
+- At or above its threshold (`CHANNEL_CLEF_THRESHOLDS`), a question flags
+  the message with its reason. Abuse at or above `CHANNEL_CLEF_HIDE_THRESHOLD`
+  (0.9) hides it: HIDDEN with no moderator (`hiddenBy` null). Contact
+  details and promotion never hide.
+- The check first reads whether the message still has the screened text,
+  is not deleted or hidden, and is not allowlisted; otherwise Clef is not
+  asked. The verdict is applied only while that still holds, and a verdict
+  that adds no new reason changes nothing.
+- A failure (no AI binding or gateway, a model error, an 8-second timeout,
+  an answer that is not a probability for every question) leaves the
+  message as it is and is logged as a warning (`recordError`), without the
+  message. Fails open.
+- Cost: one read, the model call and, for a verdict, one batch of two.
+
+Refused posts and edits (posting right, code of conduct, rate limits) never
+reach Clef: it runs only for a write that committed.
+
+### 3. Evidence
+
+`channel_message_version` keeps texts a message had, for moderators only
+(the admin queue). Triggers write it, so no write path can skip it and none
+spends a statement:
+
+- an edit or delete keeps the text it replaced (EDIT, DELETE);
+- a message flagged or hidden keeps its text as it was then (FLAG, HIDE),
+  at the time of the moderation event the writer inserts first;
+- a report keeps the text the reporter saw (REPORT).
+
+A text equal to the newest one kept is not kept again. Edits and deletes of
+a message nobody flagged, hid or reported are pruned after 14 days, as new
+versions arrive; everything else stays with the message.
+
+### 4. Cases
+
+`moderation_case` is the admin queue: one row per message, kept by triggers
+on `moderation_event`. A detector or Clef flag or hide (AI_FLAG), a report
+(REPORT) or a channel moderator's hide (MENTOR_HIDE) opens a PENDING case or
+adds to the open one (reasons merge, reports count, the strongest source
+names it). An admin's decision closes it (DECIDED, with the decision, its
+reason and who); an admin's hide with no case opens one already decided
+(ADMIN_HIDE). A signal after a decision opens a new case.
 
 ### Embeds (B-2.4)
 
@@ -367,9 +447,11 @@ is not on their allowlist.
 Statements per request, with flags read from the database (asserted in
 `http.test.ts`): list channels 5, list messages 6 (7 with a thread), list
 shareables 6 (7 where clips can be shared), post 7 (8 for a reply), mark read
-8, edit 9, delete 9, react 10. A post or edit the moderation hook flags adds
-one, for its moderation event, and a post with embeds one, to resolve them;
-embeds on a page add none. Every one is an
+8, edit 9, delete 9, react 10. A post that could be flagged (a finding, or
+20+ characters, which could be a repeat) adds one for its moderation event,
+flagged or not; an edit with a finding adds one; a post with embeds adds one,
+to resolve them; embeds on a page add none. Clef's work after the response is
+outside this budget: one read and one batch of two. Every one is an
 indexed read; the plans are asserted in `messages.test.ts`,
 `mutations.test.ts` and `access.test.ts`.
 
@@ -426,7 +508,12 @@ migration and fails if new programs stop getting their channels.
 
 Tests: `src/lib/db/migrations/channels-migration.test.ts`,
 `channel-conduct-migration.test.ts`, `channel-message-author-migration.test.ts`,
-`channel-action-migration.test.ts`;
+`channel-action-migration.test.ts`, `moderation-pipeline-migration.test.ts`
+(evidence, pruning and case triggers);
+`moderation/detectors.test.ts` (the detector fixture table, precision and
+recall), `moderation/pipeline.test.ts` (detectors in the write path, the
+allowlist, repeats, Clef with a mocked model, its failures and what hidden
+messages show to whom);
 beside this file `access.test.ts`, `conduct.test.ts`, `embeds.test.ts`
 (sharing, refusals, later visibility changes, retries, shareables, plans),
 `messages.test.ts`

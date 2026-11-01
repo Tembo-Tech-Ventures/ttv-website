@@ -4,7 +4,7 @@ import {
 } from "@/lib/platform/contracts";
 import { CHANNEL_ACCESS_MATRIX, type ChannelTarget } from "@/lib/platform/server/capabilities.fixtures";
 import type { ChannelOperation } from "./http";
-import { channelDatabase, post, VIEWER, type ChannelFixture } from "./test-support";
+import { channelDatabase, flagging, post, VIEWER, type ChannelFixture } from "./test-support";
 
 vi.mock("@/lib/observability/errors", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/observability/errors")>(),
@@ -222,7 +222,7 @@ describe("channel APIs: query budget", () => {
     const s = setup();
     s.agree();
     s.database.exec("UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'");
-    const screen = () => ({ reasons: ["Contact details"] });
+    const screen = flagging(["Contact details"]);
     const own = s.message("help", { author: VIEWER });
     const prepare = vi.spyOn(s.d1, "prepare");
     expect((await s.call("editMessage", { id: own, body: { body: "Flag me" }, screen, env: DATABASE_FLAGS })).status).toBe(200);
@@ -233,10 +233,30 @@ describe("channel APIs: query budget", () => {
     expect(Math.max(BUDGET.editMessage, BUDGET.postMessage) + 1).toBeLessThanOrEqual(10);
   });
 
+  it("a post long enough to repeat costs the flag event's statement too, flagged or not", async () => {
+    const s = setup();
+    s.agree();
+    s.database.exec("UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'");
+    const prepare = vi.spyOn(s.d1, "prepare");
+    const long = "A longer question about D1 paging";
+    expect((await s.call("postMessage", { id: s.channel("help"), body: post(long), env: DATABASE_FLAGS })).status).toBe(201);
+    expect(prepare).toHaveBeenCalledTimes(BUDGET.postMessage + 1);
+    // After the response, Clef reads once and writes one batch of two, outside the request's budget.
+    prepare.mockClear();
+    const run = vi.fn(async () => ({ answers: Object.fromEntries(["contact_details", "unrelated_promotion", "abusive"]
+      .map((q) => [q, { type: "noul", noul: 0.99 }])) }));
+    expect(s.deferred).toHaveLength(1);
+    s.deferred.splice(0);
+    await s.call("postMessage", { id: s.channel("introductions"), body: post(long), env: { ...DATABASE_FLAGS, AI: { run } as unknown as Ai, AI_GATEWAY_NAME: "gw" } });
+    prepare.mockClear();
+    await s.afterResponse();
+    expect([run.mock.calls.length, prepare.mock.calls.length]).toEqual([1, 3]);
+  });
+
   it("refused writes stay within 10 statements too, flagged edits included", async () => {
     const s = setup();
     s.database.exec("UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'");
-    const screen = () => ({ reasons: ["Contact details"] });
+    const screen = flagging(["Contact details"]);
     const own = s.message("help", { author: VIEWER });
     const prepare = vi.spyOn(s.d1, "prepare");
     // No code of conduct agreement: the edit and the post are refused.

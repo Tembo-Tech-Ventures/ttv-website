@@ -225,6 +225,13 @@
       "when": 1793547509466,
       "tag": "0031_channel_action",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1793569594833,
+      "tag": "0032_moderation_pipeline",
+      "breakpoints": true
     }
   ]
 }

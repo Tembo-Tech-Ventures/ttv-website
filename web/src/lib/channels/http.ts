@@ -3,9 +3,10 @@ import { drizzle } from "drizzle-orm/d1";
 import type { z } from "zod";
 import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
 import * as schema from "@/lib/db/schema";
-import { recordErrorInBackground } from "@/lib/observability/errors";
+import { recordError, recordErrorInBackground } from "@/lib/observability/errors";
 import {
   EditMessage, IdParams, MarkChannelRead, MessageListQuery, PostMessage, ReactToMessage, ROUTES, ShareablesQuery, type Channel,
+  type Message,
 } from "@/lib/platform/contracts";
 import { requireFlag } from "@/lib/platform/server/flags";
 import { platformError, platformJson } from "@/lib/platform/server/http";
@@ -16,7 +17,8 @@ import { findChannelById, listChannelsFor, readMarker } from "./access";
 import { CursorExpiredError, CursorInvalidError } from "./cursor";
 import { listShareables } from "./embeds";
 import { ChannelError, listMessages } from "./messages";
-import type { MessageScreen } from "./moderation";
+import { ClefCheckError, clefScreen } from "./moderation/clef";
+import type { MessageScreen } from "./moderation/screen";
 import {
   deleteMessage, editMessage, findMessageTarget, markChannelRead, postMessage, reactToMessage,
   type MessageTarget, type WriteContext,
@@ -30,13 +32,20 @@ import {
  * Writes must come from the same origin.
  */
 
-type Env = Pick<Cloudflare.Env, "DB" | "DEPLOYMENT_ENVIRONMENT" | "PLATFORM_FLAGS_OVERRIDE" | "DEPLOYMENT_VERSION">;
+type Env = Pick<Cloudflare.Env, "DB" | "DEPLOYMENT_ENVIRONMENT" | "PLATFORM_FLAGS_OVERRIDE" | "DEPLOYMENT_VERSION">
+  & Partial<Pick<Cloudflare.Env, "AI" | "AI_GATEWAY_NAME">>;
 type Context = Pick<APIContext, "request" | "locals" | "params">;
 export type ChannelOperation = Extract<keyof typeof ROUTES,
   "listChannels" | "listMessages" | "listShareables" | "postMessage" | "editMessage" | "deleteMessage" | "reactToMessage"
   | "markChannelRead">;
-/** Test seams: the moderation hook, the clock and the code of conduct version. */
-export interface ChannelRequestOptions { screen?: MessageScreen; now?: () => number; conductVersion?: number }
+/**
+ * Test seams: the moderation hook, the clock, the code of conduct version, and work after the response
+ * (`defer` receives it instead of the request's waitUntil; `clefTimeoutMs` shortens Clef's limit).
+ */
+export interface ChannelRequestOptions {
+  screen?: MessageScreen; now?: () => number; conductVersion?: number;
+  defer?: (task: () => Promise<void>) => void; clefTimeoutMs?: number;
+}
 
 const READS: ReadonlySet<ChannelOperation> = new Set(["listChannels", "listMessages", "listShareables"]);
 /** The longest legal message (10,000 characters of up to 4 bytes, JSON-escaped) fits; nothing else needs more. */
@@ -91,6 +100,8 @@ interface Admitted {
   db: ReturnType<typeof drizzle<typeof schema>>;
   capabilities: PlatformCapabilities;
   scope: (channel: Channel) => WriteContext;
+  /** Screens a text a post or edit just wrote with Clef, after the response. */
+  screenLater: (message: Message, channel: Channel) => void;
 }
 
 /** The flag, then who is asking, then where from. null when the request may go on. */
@@ -106,7 +117,7 @@ async function refusal(operation: ChannelOperation, { locals, request }: Context
 }
 
 /** /api/channels/:id/…: the channel must be one the caller can read. */
-async function channelRoute({ operation, request, id, user, db, capabilities, scope }: Admitted): Promise<Response> {
+async function channelRoute({ operation, request, id, user, db, capabilities, scope, screenLater }: Admitted): Promise<Response> {
   const channel = await findChannelById(db, user, id, capabilities);
   if (!channel) throw notFound("Channel");
   if (operation === "listMessages") {
@@ -117,6 +128,7 @@ async function channelRoute({ operation, request, id, user, db, capabilities, sc
   }
   if (operation === "postMessage") {
     const { message, created } = await postMessage(scope(channel), parse(PostMessage, await readBody(request, MESSAGE_BYTES)));
+    if (created) screenLater(message, channel);
     return platformJson(ROUTES.postMessage.response.parse(message), created ? 201 : 200);
   }
   const { messageId } = parse(MarkChannelRead, await readBody(request, SMALL_BYTES));
@@ -128,13 +140,15 @@ async function channelRoute({ operation, request, id, user, db, capabilities, sc
  * /api/messages/:id: the message's channel decides, and a hidden message is missing to anyone who
  * could not see it.
  */
-async function messageRoute({ operation, request, id, user, db, capabilities, scope }: Admitted): Promise<Response> {
+async function messageRoute({ operation, request, id, user, db, capabilities, scope, screenLater }: Admitted): Promise<Response> {
   const target = await findMessageTarget(db.$client, id);
   const channel = target && await findChannelById(db, user, target.channelId, capabilities);
   if (!target || !channel || !visibleTo(target, user.id, channel)) throw notFound("Message");
   if (operation === "editMessage") {
     const input = parse(EditMessage, await readBody(request, MESSAGE_BYTES));
-    return platformJson(ROUTES.editMessage.response.parse(await editMessage(scope(channel), target, input)));
+    const message = await editMessage(scope(channel), target, input);
+    if (input.body !== target.body) screenLater(message, channel);
+    return platformJson(ROUTES.editMessage.response.parse(message));
   }
   if (operation === "reactToMessage") {
     const input = parse(ReactToMessage, await readBody(request, SMALL_BYTES));
@@ -148,6 +162,37 @@ function visibleTo(target: MessageTarget, userId: string, channel: Channel): boo
 }
 
 const CHANNEL_ROUTES: ReadonlySet<ChannelOperation> = new Set(["listMessages", "listShareables", "postMessage", "markChannelRead"]);
+
+/**
+ * Clef on a text that was just written, after the response (moderation/clef.ts). It never fails the
+ * request: a failed check leaves the message as it is and is logged as a warning, without the text.
+ */
+function screenAfterResponse(operation: ChannelOperation, context: Context, env: Env, options: ChannelRequestOptions) {
+  return (message: Message, channel: Channel) => {
+    const task = async () => {
+      try {
+        await clefScreen(
+          { db: env.DB, ai: env.AI, gatewayName: env.AI_GATEWAY_NAME, timeoutMs: options.clefTimeoutMs, now: options.now },
+          { id: message.id, channelId: channel.id, channelKind: channel.kind, body: message.body },
+        );
+      } catch (error) {
+        await recordError(env.DB, {
+          source: "request", route: ROUTES[operation].path, version: env.DEPLOYMENT_VERSION,
+          level: error instanceof ClefCheckError ? "warning" : "error",
+          error: error instanceof ClefCheckError ? error : new Error("Channel message check could not be applied."),
+        });
+      }
+    };
+    if (options.defer) options.defer(task);
+    else waitUntil(context.locals.cfContext, task());
+  };
+}
+
+/** Keeps the Worker alive for work after the response; outside a Worker (dev, tests) it just runs. */
+function waitUntil(context: Pick<ExecutionContext, "waitUntil"> | undefined, promise: Promise<void>) {
+  if (context) context.waitUntil(promise);
+  else void promise;
+}
 
 export async function channelRequest(
   operation: ChannelOperation, context: Context, env: Env, options: ChannelRequestOptions = {},
@@ -166,6 +211,7 @@ export async function channelRequest(
     const admitted: Admitted = {
       operation, request: context.request, id: parse(IdParams, { id: context.params.id }).id, user, db, capabilities,
       scope: (channel) => ({ db: env.DB, viewerId: user.id, channel, now, screen, conductVersion }),
+      screenLater: screenAfterResponse(operation, context, env, options),
     };
     return await (CHANNEL_ROUTES.has(operation) ? channelRoute(admitted) : messageRoute(admitted));
   } catch (error) {

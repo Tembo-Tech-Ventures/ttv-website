@@ -101,7 +101,8 @@ interface ClefResponse {
   answers?: Record<string, unknown>;
 }
 
-function isNoulAnswer(value: unknown): value is { type: "noul"; noul: number } {
+/** A Clef "noul" answer: a probability from 0 to 1. Shared with the channel message check. */
+export function isNoulAnswer(value: unknown): value is { type: "noul"; noul: number } {
   if (!value || typeof value !== "object") return false;
   const answer = value as Record<string, unknown>;
   return (
@@ -113,7 +114,8 @@ function isNoulAnswer(value: unknown): value is { type: "noul"; noul: number } {
   );
 }
 
-async function withTimeout<T>(
+/** Rejects when the promise has not settled within timeoutMs. */
+export async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,
 ): Promise<T> {
