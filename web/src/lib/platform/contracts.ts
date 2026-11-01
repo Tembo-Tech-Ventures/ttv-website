@@ -112,18 +112,27 @@ export const AttentionKind = z.enum([
   "mention", "reply", "tembo_answer", "mentor_request", "mentor_accepted", "mentor_redirected",
   "mentor_declined", "mentor_withdrawn", "recording_ready", "application_status",
   "work_confirmed", "visitor_message", "opportunity_match", "moderation_pending", "message_hidden",
+  "access_request", "access_decided",
 ]);
 export type AttentionKind = z.infer<typeof AttentionKind>;
 export const SubjectKind = z.enum([
   "message", "channel", "recording", "journey", "mentorRequest", "application", "visitorMessage", "opportunity",
+  "accessRequest",
 ]);
 export type SubjectKind = z.infer<typeof SubjectKind>;
 export const SubjectRef = z.object({ kind: SubjectKind, id: Id, href: InternalPath, label: NonEmptyText });
 export type SubjectRef = z.infer<typeof SubjectRef>;
+/** Where each access-request kind is delivered (onboarding SPEC §4): to admins, then back to the requester. */
+const ACCESS_ATTENTION_SPACE: Partial<Record<AttentionKind, SpaceId>> = { access_request: "admin", access_decided: "community" };
 export const AttentionItem = z.object({
   id: Id, kind: AttentionKind, space: SpaceId, subject: SubjectRef,
   actor: AuthorSummary.nullable(), summary: NonEmptyText, createdAt: Timestamp, readAt: Timestamp.nullable(),
-});
+}).refine((a) => {
+  const space = ACCESS_ATTENTION_SPACE[a.kind];
+  return space === undefined || (a.space === space && a.subject.kind === "accessRequest");
+}, "Access request items point at the request, in their own space")
+  // Decisions are actor-neutral: the requester is never told which administrator decided.
+  .refine((a) => a.kind !== "access_decided" || a.actor === null, "Access decisions never name an actor");
 export type AttentionItem = z.infer<typeof AttentionItem>;
 export const AttentionFilter = z.enum(["all", "mentions", "requests", "updates"]);
 export type AttentionFilter = z.infer<typeof AttentionFilter>;
@@ -346,6 +355,136 @@ export type UpdateMentorAvailability = z.infer<typeof UpdateMentorAvailability>;
 export const MentorAvailability = UpdateMentorAvailability.extend({ capacity: MentorCapacity });
 export type MentorAvailability = z.infer<typeof MentorAvailability>;
 
+/**
+ * Onboarding (/reports/platform-onboarding-2026-11-01/SPEC.md §5). Intents choose routing and copy only;
+ * capabilities never read them. Mentor and institution access become requests an administrator decides.
+ * "Access request" is deliberately distinct from MentorRequest, which asks a mentor for time.
+ */
+export const Intent = z.enum(["MEMBER", "MENTOR", "INSTITUTION", "EXPLORING"]);
+export type Intent = z.infer<typeof Intent>;
+const unique = (values: readonly unknown[]) => new Set(values).size === values.length;
+/** Saved intents. EXPLORING stands alone; an empty set after onboarding also reads as exploring. */
+export const IntentSet = z.array(Intent).max(Intent.options.length)
+  .refine(unique, "Intents must be unique")
+  .refine((s) => !s.includes("EXPLORING") || s.length === 1, "EXPLORING cannot be combined with other intents");
+export type IntentSet = z.infer<typeof IntentSet>;
+/** Read from roles, applications and cohort membership when nothing is saved. Never written, never EXPLORING. */
+export const InferredIntent = Intent.exclude(["EXPLORING"]);
+export type InferredIntent = z.infer<typeof InferredIntent>;
+/** NEW: sent to the welcome step. PROMPT: an account from before rollout, shown the one-time card. */
+export const OnboardingStage = z.enum(["NEW", "PROMPT", "DONE"]);
+export type OnboardingStage = z.infer<typeof OnboardingStage>;
+/** The global roles a person can ask for. No institution types or categories exist. */
+export const AccessRole = z.enum(["MENTOR", "INSTITUTION"]);
+export type AccessRole = z.infer<typeof AccessRole>;
+export const AccessRequestStatus = z.enum(["PENDING", "APPROVED", "DECLINED", "WITHDRAWN"]);
+export type AccessRequestStatus = z.infer<typeof AccessRequestStatus>;
+const isDecided = (status: AccessRequestStatus) => status === "APPROVED" || status === "DECLINED";
+/** What the person wrote: 20 to 600 characters, untrusted, always rendered as plain text. */
+export const AccessRequestNote = z.string().max(600).refine((s) => s.trim().length >= 20, "Write at least 20 characters");
+export type AccessRequestNote = z.infer<typeof AccessRequestNote>;
+const hasNoCredentials = (s: string) => {
+  try {
+    const url = new URL(s);
+    return url.username === "" && url.password === "";
+  } catch {
+    return false; // Not a URL: the format check has already reported it.
+  }
+};
+/** http(s) without credentials: `https://ttv.example@other.example` reads as one host but opens another. */
+export const ExternalLink = z.url({ protocol: /^https?$/ }).max(2048).refine(hasNoCredentials, "Links cannot carry credentials");
+export type ExternalLink = z.infer<typeof ExternalLink>;
+const OrganisationText = NonEmptyText.max(200);
+/** An administrator's optional message, shown to the requester without the administrator's name. */
+export const DecisionMessage = NonEmptyText.max(600);
+export type DecisionMessage = z.infer<typeof DecisionMessage>;
+
+const CreateMentorAccessRequest = z.strictObject({ role: z.literal("MENTOR"), note: AccessRequestNote, link: ExternalLink.nullable() });
+const CreateInstitutionAccessRequest = z.strictObject({
+  role: z.literal("INSTITUTION"), note: AccessRequestNote, organisation: OrganisationText,
+  organisationRole: OrganisationText.nullable(), link: ExternalLink.nullable(),
+  // The person confirmed approval opens saved profiles and shared contributions only, not introductions.
+  scopeAcknowledged: z.literal(true),
+});
+export const CreateAccessRequest = z.discriminatedUnion("role", [CreateMentorAccessRequest, CreateInstitutionAccessRequest]);
+export type CreateAccessRequest = z.infer<typeof CreateAccessRequest>;
+
+const accessRequestFields = {
+  id: Id, role: AccessRole, status: AccessRequestStatus,
+  note: NonEmptyText.max(600), organisation: OrganisationText.nullable(), organisationRole: OrganisationText.nullable(),
+  link: ExternalLink.nullable(), decisionMessage: DecisionMessage.nullable(),
+  createdAt: Timestamp, updatedAt: Timestamp, decidedAt: Timestamp.nullable(),
+};
+type AccessRequestCore = z.infer<z.ZodObject<typeof accessRequestFields>>;
+const decisionRule = [
+  (r: AccessRequestCore) => isDecided(r.status) === (r.decidedAt !== null) && (r.decisionMessage === null || isDecided(r.status)),
+  "Only approved or declined requests have a decision time or message",
+] as const;
+const organisationRule = [
+  (r: AccessRequestCore) => (r.role === "INSTITUTION") === (r.organisation !== null) && (r.role === "INSTITUTION" || r.organisationRole === null),
+  "Institution requests, and only they, name an organisation",
+] as const;
+/**
+ * The requester's view. It never says which administrator decided: decidedBy stays server-side for audit
+ * and, as an unknown key, parsing strips it. seenAt is set by visiting the new space or dismissing the card.
+ */
+export const AccessRequestSummary = z.object({ ...accessRequestFields, seenAt: Timestamp.nullable() })
+  .refine(...decisionRule).refine(...organisationRule)
+  .refine((r) => r.seenAt === null || isDecided(r.status), "Only decided requests can be marked seen");
+export type AccessRequestSummary = z.infer<typeof AccessRequestSummary>;
+/**
+ * Browser sessions only. requests holds the latest request per role; roles are the access roles held now,
+ * which always win over request state.
+ */
+export const OnboardingState = z.object({
+  stage: OnboardingStage, intents: IntentSet,
+  inferred: z.array(InferredIntent).max(InferredIntent.options.length).refine(unique, "Inferred intents must be unique"),
+  requests: z.array(AccessRequestSummary).max(AccessRole.options.length),
+  roles: z.array(AccessRole).max(AccessRole.options.length).refine(unique, "Roles must be unique"),
+}).refine((s) => unique(s.requests.map((r) => r.role)), "Only the latest request per role is listed")
+  .refine((s) => s.requests.every((r) => r.status !== "PENDING" || !s.roles.includes(r.role)),
+    "A request is never pending beside the role it asks for");
+export type OnboardingState = z.infer<typeof OnboardingState>;
+/** Saving intents finishes the welcome step or card. dismissPrompt is the card's "Not now". */
+export const UpdateOnboarding = z.union([
+  z.strictObject({ intents: IntentSet }),
+  z.strictObject({ dismissPrompt: z.literal(true) }),
+]);
+export type UpdateOnboarding = z.infer<typeof UpdateOnboarding>;
+export const WithdrawAccessRequest = z.strictObject({});
+export type WithdrawAccessRequest = z.infer<typeof WithdrawAccessRequest>;
+export const DismissAccessRequest = z.strictObject({});
+export type DismissAccessRequest = z.infer<typeof DismissAccessRequest>;
+
+/** An earlier request by the same person, for the admin queue's history. */
+export const AccessRequestHistoryItem = z.object({
+  id: Id, role: AccessRole, status: AccessRequestStatus.exclude(["PENDING"]),
+  decisionMessage: DecisionMessage.nullable(), createdAt: Timestamp, decidedAt: Timestamp.nullable(),
+}).refine((r) => isDecided(r.status) === (r.decidedAt !== null), "Only approved or declined requests have a decision time");
+export type AccessRequestHistoryItem = z.infer<typeof AccessRequestHistoryItem>;
+/** The administrator's view: who asked, and who decided. Never sent to the requester. */
+export const AdminAccessRequest = z.object({
+  ...accessRequestFields, requester: PersonSummary, githubLogin: NonEmptyText.max(255).nullable(),
+  scopeAcknowledgedAt: Timestamp.nullable(), decidedBy: PersonSummary.nullable(),
+  earlierRequests: z.array(AccessRequestHistoryItem),
+}).refine(...decisionRule).refine(...organisationRule)
+  .refine((r) => (r.role === "INSTITUTION") === (r.scopeAcknowledgedAt !== null), "Institution requests, and only they, record the scope acknowledgement")
+  // Null after a decision when the deciding account was deleted (decidedBy is ON DELETE SET NULL).
+  .refine((r) => r.decidedBy === null || isDecided(r.status), "Only decided requests have a decider");
+export type AdminAccessRequest = z.infer<typeof AdminAccessRequest>;
+/** PENDING (the default) lists open requests; DECIDED lists approved and declined ones. */
+export const AccessRequestQueueState = z.enum(["PENDING", "DECIDED"]);
+export type AccessRequestQueueState = z.infer<typeof AccessRequestQueueState>;
+export const AdminAccessRequestQuery = z.strictObject({ status: AccessRequestQueueState.optional(), cursor: Cursor.optional() });
+export type AdminAccessRequestQuery = z.infer<typeof AdminAccessRequestQuery>;
+/** pendingCount counts every open request, whichever list was asked for, for the Admin sidebar. */
+export const AdminAccessRequestList = z.object({ items: z.array(AdminAccessRequest), nextCursor: Cursor.nullable(), pendingCount: Count });
+export type AdminAccessRequestList = z.infer<typeof AdminAccessRequestList>;
+export const AccessDecisionKind = z.enum(["approve", "decline"]);
+export type AccessDecisionKind = z.infer<typeof AccessDecisionKind>;
+export const AccessDecision = z.strictObject({ decision: AccessDecisionKind, message: DecisionMessage.optional() });
+export type AccessDecision = z.infer<typeof AccessDecision>;
+
 /** These are contracts for future handlers, not installed API routes. */
 export const ROUTES = {
   getMe: defineRoute({ method: "GET", path: "/api/platform/me", response: Me, idempotent: true }),
@@ -375,4 +514,14 @@ export const ROUTES = {
   updateMentorAvailability: defineRoute({ method: "PUT", path: "/api/mentoring/availability", body: UpdateMentorAvailability, response: MentorAvailability, idempotent: true }),
   getFlags: defineRoute({ method: "GET", path: "/api/admin/platform-flags", response: FlagsAdmin, idempotent: true }),
   updateFlag: defineRoute({ method: "PUT", path: "/api/admin/platform-flags/:key", params: FlagParams, body: UpdateFlag, response: Flag, idempotent: true }),
+  // Onboarding: same-origin browser sessions only; PATs and agent sessions are refused, admin routes included.
+  // Every requester write returns the whole OnboardingState, because a withdraw also removes its intent.
+  getOnboarding: defineRoute({ method: "GET", path: "/api/platform/onboarding", response: OnboardingState, idempotent: true }),
+  updateOnboarding: defineRoute({ method: "PUT", path: "/api/platform/onboarding", body: UpdateOnboarding, response: OnboardingState, idempotent: true }),
+  createAccessRequest: defineRoute({ method: "POST", path: "/api/platform/access-requests", body: CreateAccessRequest, response: OnboardingState, idempotent: false }),
+  withdrawAccessRequest: defineRoute({ method: "POST", path: "/api/platform/access-requests/:id/withdraw", params: IdParams, body: WithdrawAccessRequest, response: OnboardingState, idempotent: false }),
+  dismissAccessRequest: defineRoute({ method: "POST", path: "/api/platform/access-requests/:id/dismiss", params: IdParams, body: DismissAccessRequest, response: OnboardingState, idempotent: true }),
+  // Not flag-gated, so pending requests are never stranded when onboarding is switched off.
+  listAccessRequests: defineRoute({ method: "GET", path: "/api/admin/access-requests", query: AdminAccessRequestQuery, response: AdminAccessRequestList, idempotent: true }),
+  decideAccessRequest: defineRoute({ method: "POST", path: "/api/admin/access-requests/:id/decision", params: IdParams, body: AccessDecision, response: AdminAccessRequest, idempotent: false }),
 };
