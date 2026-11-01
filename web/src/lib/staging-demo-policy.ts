@@ -1,5 +1,5 @@
 import { ROUTES } from "./platform/contracts";
-import { legacySpacePath, SPACE_PATHS } from "./platform/server/space-routes";
+import { legacySpacePath, SPACE_PATHS, WELCOME_PATH } from "./platform/server/space-routes";
 
 /** Retained fictional records are distinct from disposable verification fixtures. */
 export const DEMO_PREFIX = 'ttv-staging-demo-v1-';
@@ -30,9 +30,13 @@ export function demoEnabled(environment: string | undefined, enabled: string | u
  * Phase 1 spaces read surfaces for restricted staging identities, as exact
  * allowlist (legacy) paths. Flags, capabilities and handlers still decide access.
  * Search is absent: its handler refuses fixture and QA identities (no fixture scope).
+ * The onboarding welcome step is read-only here so partner-page links work: a hint
+ * redirects into a space the identity may open (or, while onboarding is off, to its
+ * legacy page), and the page itself refuses agent sessions. Choosing, requesting
+ * access and the onboarding APIs stay closed: retained personas have no cleanup.
  */
 export const SPACES_READ_PATHS: ReadonlySet<string> = new Set([
-  ROUTES.getMe.path, ROUTES.listAttention.path, ROUTES.countAttention.path, "/dashboard/attention",
+  ROUTES.getMe.path, ROUTES.listAttention.path, ROUTES.countAttention.path, "/dashboard/attention", WELCOME_PATH,
 ]);
 /** The signed-in Apply form. GET only: no QA ledger covers a submitted application. */
 export const SPACES_APPLY_PATH = legacySpacePath(`${SPACE_PATHS.cohort}/apply`);

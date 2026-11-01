@@ -10,6 +10,12 @@ export const SPACE_PATHS = {
   profile: "/dashboard/me",
 } as const satisfies Record<SpaceId, string>;
 
+/**
+ * The onboarding welcome step (B-O.4): a page under /dashboard that belongs to no space, so it has no
+ * tabs, never saves the last-space cookie and stays outside isNewSpacePath. Routing is in onboarding-routing.ts.
+ */
+export const WELCOME_PATH = "/dashboard/welcome";
+
 export const SPACE_REDIRECTS = [
   ["/dashboard/apply", "/dashboard/cohort/apply"],
   ["/dashboard/application/:id", "/dashboard/cohort/application/:id"],

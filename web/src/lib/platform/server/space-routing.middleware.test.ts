@@ -223,4 +223,111 @@ describe("space routes through authentication middleware", () => {
     mocks.validateDemoSession.mockResolvedValue({ persona: "mentor" });
     expect((await request("/dashboard/cohort")).response.status).toBe(403);
   });
+
+  describe("onboarding: GET /dashboard sends only a NEW account in its own browser to the welcome step", () => {
+    beforeEach(() => {
+      fixture.database.exec(`DELETE FROM UserRoles; DELETE FROM programRole;
+        UPDATE feature_flag SET audience='ALL' WHERE key='onboarding';
+        INSERT INTO member_onboarding (userId,stage,createdAt,updatedAt) VALUES ('synthetic-wanjiku','NEW',1,1)`);
+    });
+    const grantAdmin = () => fixture.database.exec("INSERT INTO Roles (id,name) VALUES ('ADMIN','ADMIN'); INSERT INTO UserRoles (id,userId,roleId) VALUES ('admin-role','synthetic-wanjiku','ADMIN')");
+
+    it("redirects a person's own browser session (the control case)", async () => {
+      const { response, next } = await request("/dashboard", "ttv-last-space=community");
+      expect(response.status).toBe(302);
+      expect(response.headers.get("Location")).toBe("/dashboard/welcome");
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it("never redirects an admin", async () => {
+      grantAdmin();
+      expect((await request("/dashboard")).response.headers.get("Location")).toBe("/dashboard/cohort");
+    });
+
+    it("never redirects an admin personal access token: the legacy page answers", async () => {
+      fixture.database.exec(readMigration("0008_curvy_purifiers.sql"));
+      grantAdmin();
+      const credential = await createPersonalAccessToken({ db: fixture.db.$client, userId: user.id, label: "Synthetic", durationHours: 8, scopes: ["admin:read"] });
+      for (const method of ["GET", "HEAD", "POST"]) {
+        const { response, next } = await request("/dashboard", "", `Bearer ${credential.token}`, method);
+        expect(response.status).toBe(200);
+        expect(response.headers.has("Location")).toBe(false);
+        expect(next).toHaveBeenCalledExactlyOnceWith();
+      }
+    });
+
+    it("never redirects a community personal access token: delegation refuses it first", async () => {
+      fixture.database.exec(readMigration("0008_curvy_purifiers.sql"));
+      const credential = await createPersonalAccessToken({ db: fixture.db.$client, userId: user.id, label: "Synthetic", durationHours: 8, scopes: ["community:read"] });
+      const { response, next } = await request("/dashboard", "", `Bearer ${credential.token}`);
+      expect(response.status).toBe(403);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it.each(["ttv-agent:synthetic-label", "ttv-agent:isolated-preview:persona"])("never redirects an agent session (%s)", async userAgent => {
+      mocks.getSession.mockResolvedValue({ ...auth, session: { ...auth.session, userAgent } });
+      expect((await request("/dashboard")).response.headers.get("Location")).toBe("/dashboard/community");
+    });
+
+    it.each(["member-noncohort", "mentor", "institution"] as const)("never redirects the QA persona %s", async persona => {
+      mocks.hasQaCookie.mockReturnValue(true);
+      mocks.authenticateQaCookie.mockResolvedValue({ ...auth, qa: { persona } });
+      const { response } = await request("/dashboard");
+      expect(response.status).toBe(302);
+      expect(response.headers.get("Location")).toBe("/dashboard/community");
+    });
+
+    it("never redirects a demo persona", async () => {
+      mocks.validateDemoSession.mockResolvedValue({ persona: "member-noncohort", expiresAt: 123 });
+      expect((await request("/dashboard")).response.headers.get("Location")).toBe("/dashboard/community");
+    });
+
+    it("never redirects a fixture persona", async () => {
+      mocks.resolveStagingFixtureIdentity.mockResolvedValue({ persona: "member" });
+      expect((await request("/dashboard")).response.headers.get("Location")).toBe("/dashboard/community");
+    });
+
+    it.each(["/dashboard/community", "/dashboard/me", "/dashboard/account", "/dashboard/feedback", "/dashboard/profile", "/dashboard/apply"])("never redirects the deep link %s", async path => {
+      const { response } = await request(path);
+      expect(response.headers.get("Location") ?? "").not.toMatch(/welcome/);
+      expect(response.status).toBeLessThan(400);
+    });
+
+    it.each(["POST", "PUT", "DELETE"])("never redirects a %s", async method => {
+      const { response, next } = await request("/dashboard", "", "", method);
+      expect(response.status).toBe(200);
+      expect(next).toHaveBeenCalledExactlyOnceWith();
+    });
+
+    it("sends anonymous visitors to sign in, returning to the welcome step with its hint", async () => {
+      mocks.getSession.mockResolvedValue(null);
+      const { response } = await request("/dashboard/welcome?intent=mentor");
+      expect(response.headers.get("Location")).toBe("/auth/login?next=" + encodeURIComponent("/dashboard/welcome?intent=mentor"));
+    });
+
+    it("lets restricted personas read the welcome step but never post to it", async () => {
+      mocks.resolveStagingFixtureIdentity.mockResolvedValue({ persona: "member" });
+      expect((await request("/dashboard/welcome")).response.status).toBe(200);
+      const post = await request("/dashboard/welcome", "", "", "POST");
+      expect(post.response.status).toBe(403);
+      expect(post.next).not.toHaveBeenCalled();
+      mocks.resolveStagingFixtureIdentity.mockResolvedValue(null);
+      mocks.hasQaCookie.mockReturnValue(true);
+      mocks.authenticateQaCookie.mockResolvedValue({ ...auth, qa: { persona: "member-noncohort" } });
+      expect((await request("/dashboard/welcome")).response.status).toBe(200);
+      expect((await request("/dashboard/welcome", "", "", "POST")).response.status).toBe(403);
+    });
+
+    it("sends a persona's granted hint only to a space its allowlist opens", async () => {
+      fixture.database.exec("INSERT INTO UserRoles (id,userId,roleId) VALUES ('mentor-role','synthetic-wanjiku','MENTOR')");
+      mocks.hasQaCookie.mockReturnValue(true);
+      mocks.authenticateQaCookie.mockResolvedValue({ ...auth, qa: { persona: "mentor" } });
+      expect((await request("/dashboard/welcome?intent=mentor")).response.headers.get("Location")).toBe("/dashboard/mentoring");
+      // The member QA persona's allowlist never opens Mentoring, so the page answers instead.
+      mocks.authenticateQaCookie.mockResolvedValue({ ...auth, qa: { persona: "member-noncohort" } });
+      const { response, next } = await request("/dashboard/welcome?intent=mentor");
+      expect(response.status).toBe(200);
+      expect(next).toHaveBeenCalledOnce();
+    });
+  });
 });

@@ -30,7 +30,7 @@ closed through the existing middleware error observer.
 When ON, recognized legacy GET/HEAD URLs return 301 with their query string
 preserved. `/dashboard` uses a non-cacheable 302 to the authorized last-space
 cookie or first ordered space, filtered through any restricted identity's
-existing allowlist. Explicit authorized URLs win over cookies; forbidden URLs
+existing allowlist (onboarding adds to this choice; see below). Explicit authorized URLs win over cookies; forbidden URLs
 return 403 rather than falling back. Applying at `/dashboard/cohort/apply`
 remains possible before cohort membership, as does signed-in Ask AI at
 `/dashboard/cohort/ask`. These are page eligibility exceptions only: they do not
@@ -48,6 +48,52 @@ Successful canonical visits save the plain validated SpaceId as `ttv-last-space`
 using the shared cookie serializer, so selection works without JavaScript.
 Responses affected by this routing use `Cache-Control: no-store` and `Vary:
 Cookie`; rollout- and identity-dependent 301s must not stick across flag changes.
+
+## Onboarding (B-O.4)
+
+`onboarding-routing.ts` holds the pure rules; `space-routing.ts` applies them
+(onboarding SPEC §3). Intents and requests choose where a person starts and
+never what they may open: every candidate space is already in `Me.spaces`,
+filtered through any restricted identity's allowlist.
+
+- **`/dashboard/welcome` (`WELCOME_PATH`)** belongs to no space: no tabs, no
+  last-space cookie, outside `isNewSpacePath`.
+  - Onboarding off (or `spaces` off): `?intent=mentor|institution|member`
+    302s to `/dashboard/mentorship`, `/dashboard/discover` or `/dashboard`, so
+    the partner-page links never 404. Without a valid hint, and for every
+    POST, it is 404.
+  - On: `?intent=` naming an access role already held 302s to that space.
+    Anything else reaches the page (U-O.1), where the hint only preselects a
+    card; the page refuses PATs and agent sessions itself.
+  - If the space context fails, a hinted GET still takes its legacy route;
+    the step itself fails closed through the error observer.
+- **`GET /dashboard` for a NEW account** (`member_onboarding.stage = 'NEW'`)
+  302s to the welcome step, keeping the query. Never for: admins, accounts
+  holding MENTOR or INSTITUTION, any cohort footprint (an application,
+  membership or assignment), PATs, agent sessions (preview personas
+  included), QA, demo and fixture identities, deep links and non-GET/HEAD
+  requests.
+- **The default space** (`selectLandingSpace`), after an explicit URL, which
+  never reaches the choice:
+  1. an unseen approval (APPROVED, unseen, role still held), mentoring first;
+  2. the last-space cookie, except a stale `admin` whenever another space
+     exists: Admin lives at `/admin`, outside the cookie's `Path=/dashboard`,
+     so nothing there can replace it (#256 review). This holds with onboarding
+     off too;
+  3. `preferredSpace` of the saved intents, or else the inferred ones;
+  4. `SPACE_ORDER`.
+  With onboarding off only 2 and 4 apply, and no onboarding table is read.
+  If the onboarding read fails, the choice falls back to 2 and 4 and the
+  failure is recorded as a warning.
+- **An approval is seen** when its holder opens any page of the space it
+  unlocked (a successful GET; not HEAD, a legacy redirect, an admin without
+  the role, or a delegated or restricted session), via
+  `markAccessRequestSeen` by role. A failed write is recorded as a warning
+  and the page is served; the approval is then preferred once more.
+
+Restricted identities may GET the welcome step (it is in `SPACES_READ_PATHS`)
+so partner-page links resolve for them; POSTs and the onboarding APIs stay
+closed, because retained personas have no cleanup.
 
 ## Bridge to U-1.2
 
@@ -81,7 +127,7 @@ Phase 1 surfaces as exact paths, after `legacySpacePath`. Flags, capabilities an
 handlers still decide what each caller sees.
 
 - GET/HEAD for every identity: `/api/platform/me`, `/api/attention`,
-  `/api/attention/count` and `/dashboard/attention`.
+  `/api/attention/count`, `/dashboard/attention` and `/dashboard/welcome`.
 - GET/HEAD Apply form (`/dashboard/cohort/apply`, alias `/dashboard/apply`): demo,
   fixtures, and only the `member-noncohort` QA persona.
 - Fixtures also get GET/HEAD `/dashboard`, the cohort home and the spaces entry, and
@@ -102,4 +148,4 @@ channels, mentoring requests and availability, admin, PAT, MCP, recordings, chat
 or tokens; existing allowances and handler guards are unchanged. Demo
 and QA are also past their fixed cutoffs, so only fixture identities are live.
 
-Tests: `npx vitest run src/lib/platform/server/space-*.test.ts src/middleware.test.ts src/lib/staging-*.test.ts`.
+Tests: `npx vitest run src/lib/platform/server/space-*.test.ts src/lib/platform/server/onboarding-routing.test.ts src/middleware.test.ts src/lib/staging-*.test.ts`.

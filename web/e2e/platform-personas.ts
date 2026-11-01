@@ -33,7 +33,10 @@ type Environment = Readonly<Record<string, string | undefined>>;
 export type PersonaKey = "student" | "alumna" | "mentor" | "community" | "institution" | "staff";
 
 export interface PersonaExpectation {
-  /** Where /dashboard opens with no preference saved. */
+  /**
+   * Where /dashboard opens with no preference saved. These runs have every flag on, so onboarding's
+   * inferred intents choose: a mentor opens Mentoring and an institution Discover (onboarding SPEC §3).
+   */
   landing: string;
   /** The space tabs, in order. */
   spaces: string[];
@@ -42,9 +45,9 @@ export interface PersonaExpectation {
 export const PERSONA_EXPECTATIONS: Record<PersonaKey, PersonaExpectation> = {
   student: { landing: "/dashboard/cohort", spaces: ["Cohort", "Community", "Profile"] },
   alumna: { landing: "/dashboard/cohort", spaces: ["Cohort", "Community", "Profile"] },
-  mentor: { landing: "/dashboard/community", spaces: ["Community", "Mentoring", "Profile"] },
+  mentor: { landing: "/dashboard/mentoring", spaces: ["Community", "Mentoring", "Profile"] },
   community: { landing: "/dashboard/community", spaces: ["Community", "Profile"] },
-  institution: { landing: "/dashboard/community", spaces: ["Community", "Discover", "Profile"] },
+  institution: { landing: "/dashboard/discover", spaces: ["Community", "Discover", "Profile"] },
   staff: { landing: "/dashboard/cohort", spaces: ["Cohort", "Community", "Discover", "Admin", "Profile"] },
 };
 
