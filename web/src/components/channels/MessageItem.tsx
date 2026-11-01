@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { memo, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { PiEyeSlash, PiFlag } from "react-icons/pi";
 import type { AuthorSummary, Message, ReactionKind } from "@/lib/platform/contracts";
 import Avatar from "@/components/platform/ui/Avatar";
@@ -210,7 +210,7 @@ function permissions(message: Message, viewerId: string | null, actions: Channel
  * (only the badges the server sends), when, the words and shared work, text
  * reactions, the way into its thread, and the author's own edit and delete.
  */
-export default function MessageItem({
+function MessageItem({
   message, viewerId, now, names, people, variant = "channel", withDay = false, actions, threadOpen = false,
   threadHref, onOpenThread, announce,
 }: MessageItemProps) {
@@ -306,3 +306,10 @@ export default function MessageItem({
     </article>
   );
 }
+
+/**
+ * Memoised: the list re-renders whenever the store publishes (each anchor the
+ * reader scrolls past, each poll), and its props are stable between those, so
+ * only messages that changed render again.
+ */
+export default memo(MessageItem);

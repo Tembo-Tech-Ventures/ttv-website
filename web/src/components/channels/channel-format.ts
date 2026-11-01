@@ -247,6 +247,11 @@ export function moderationNotice(message: Message, viewerId: string | null): Mod
       };
 }
 
+/** The first name, for sentences about a person ("Confirmed by David"). */
+export function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] ?? name;
+}
+
 // ---- The composer ----
 
 export type Posting = "open" | "staff" | "archived" | "closed";

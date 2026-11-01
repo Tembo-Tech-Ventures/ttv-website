@@ -58,7 +58,7 @@ talk to each other, U-2.3's `ChannelFrame` asks; after, the conversation:
 ```astro
 <ChannelView client:load me={me} channel={channel} initial={first.page.initial}
   initialThread={first.page.thread} initialRead={first.page.read}
-  threadId={…} messageId={…} now={Date.now()}>
+  shareables={shareables} threadId={…} messageId={…} now={Date.now()}>
   <div class="channel-view__header"><ChannelHeader channel={channel} /></div>
 </ChannelView>
 ```
@@ -72,9 +72,11 @@ talk to each other, U-2.3's `ChannelFrame` asks; after, the conversation:
   the read marker.
 - `now` is the server's clock, so day names and times hydrate identically.
   Times are in Africa/Nairobi, as attention's are.
-- `shareables` (the person's projects and their cohort's session moments) is
-  omitted until B-2.4 resolves embeds. Without it the composer offers no attach
-  tools, rather than claim there is nothing to share.
+- `shareables` comes from B-2.4's `getRouteChannelShareables`: the person's
+  own published projects at their current revision, and, only in their
+  cohort's own channels, a clip from each recent session. It is null where
+  they cannot post, and then the composer offers no attach tools rather than
+  claim there is nothing to share.
 - It renders nothing while `channels` is off for the person. The route 404s
   then (B-2.2); this is the second lock.
 
@@ -88,7 +90,8 @@ talk to each other, U-2.3's `ChannelFrame` asks; after, the conversation:
 | `MessageList.tsx` | The one scroll surface: day headings, "New", older pages, empty and error states, following, "Jump to latest", read markers |
 | `MessageItem.tsx`, `MessageMenu.tsx`, `MessageEdit.tsx` | A message: author, server role badges, time, (edited), deleted, text reactions, thread link; reply, react, edit and delete |
 | `MessageBody.tsx` | Words, mentions, inline code and plain links. Never Markdown links or markup |
-| `EmbedCard.tsx`, `TemboAnswer.tsx` | First forms of shared work and Tembo answers. U-2.2 and U-3.1 own their full design |
+| `EmbedCard.tsx` | Shared work (U-2.2): a project at the shared revision with one confirmation per mentor and the revision it covers, a session clip at its moment, or "no longer available" with nothing about what it was. "Open" (a new tab) only when the project has its own evidence link. DEV gallery: `/dev/platform-embeds` |
+| `TemboAnswer.tsx` | First form of Tembo answers. U-3.1 owns their full design |
 | `ThreadRail.tsx` | The thread: beside the list on a wide sheet, in its place on a narrow one |
 | `Composer.tsx`, `ComposerParts.tsx`, `mentions.ts` | Writing, on S-2.2's draft (kept for the tab): `@` suggestions, Share project, Session clip (cohort channels only), Ask Tembo (`tembo_channels` only), the code-of-conduct prompt |
 | `Outbox.tsx` | The reader's unconfirmed sends after the list or the thread: "Sending…", or why it failed, with Try again (same nonce), Edit and Discard |
@@ -107,6 +110,10 @@ talk to each other, U-2.3's `ChannelFrame` asks; after, the conversation:
   not announced. The list follows new messages only when the reader is at the
   end (or sent one); otherwise "Jump to latest" appears.
 - **Scrolling is S-2.3's `useScrollAnchoring`** (`client/scroll.README.md`).
+  Following the end is instant, never smooth, so it stays exact while
+  messages arrive; the arriving row's own rise is the motion. Messages are
+  memoised, so the store's frequent publishes (each anchor) redraw only what
+  changed.
   The list opens at a linked message or the "New" divider and holds it there,
   however late content above it loads, until the reader moves; older pages
   and evictions never move the message being read; the store hears which

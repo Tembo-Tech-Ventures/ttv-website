@@ -1,0 +1,56 @@
+---
+/**
+ * Dev-only gallery of shared work in channels (U-2.2): every state of the
+ * embed cards on the community and cohort sheets, at the width a message
+ * gives them. The same cards appear inside messages on /dev/platform-channel;
+ * this page also shows the states no fixture message carries (a
+ * confirmation on the shared revision, several mentors, none, and work that
+ * is no longer available). Nothing is reachable outside `astro dev`;
+ * `e2e/platform-channel-embeds.spec.ts` holds the contract.
+ */
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { Sheet } from "@/components/platform/ui";
+import EmbedGallery from "@/components/channels/harness/EmbedGallery";
+
+if (!import.meta.env.DEV) {
+  return new Response("Not found", { status: 404 });
+}
+---
+
+<BaseLayout title="Shared work in channels | TTV" noIndex>
+  <main class="min-h-screen overflow-x-clip bg-ground pb-24">
+    <div class="mx-auto max-w-5xl px-3 pt-12 sm:px-8 sm:pt-16">
+      <header class="max-w-3xl px-2 sm:px-0">
+        <h1 class="text-4xl tracking-heading text-ink-primary sm:text-6xl">Shared work</h1>
+        <p class="mt-5 text-base leading-relaxed text-ink-secondary sm:text-lg">
+          Projects and session clips as they appear in a message. The people and work are fictional, and this page exists
+          only in development.
+        </p>
+      </header>
+
+      {
+        (["community", "cohort"] as const).map((space) => (
+          <section aria-labelledby={`sheet-${space}`} class="mt-14">
+            <h2 id={`sheet-${space}`} class="mb-6 px-2 font-body text-2xl font-bold sm:px-0">
+              On the {space} sheet
+            </h2>
+            <Sheet space={space} className="px-4 pt-6 pb-8 sm:px-8">
+              <EmbedGallery />
+            </Sheet>
+          </section>
+        ))
+      }
+    </div>
+  </main>
+</BaseLayout>
+
+<style is:global>
+  /* The cards answer to the channel view's container, as they do inside a message. */
+  .embed-gallery {
+    container: channel-view / inline-size;
+  }
+
+  astro-dev-toolbar {
+    display: none !important;
+  }
+</style>

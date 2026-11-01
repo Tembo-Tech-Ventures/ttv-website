@@ -10,7 +10,7 @@
  * answers no thread otherwise) and `?message=` marks a linked message.
  */
 import type { Channel } from "@/lib/platform/contracts";
-import { getRouteChannelPage } from "@/lib/platform/server/channel-context";
+import { getRouteChannelPage, getRouteChannelShareables } from "@/lib/platform/server/channel-context";
 import type { ChannelsPage } from "./channel-page";
 import ChannelFrame from "./ChannelFrame.astro";
 import ChannelHeader from "./ChannelHeader.astro";
@@ -25,6 +25,9 @@ const query = Astro.url.searchParams;
 // The first page, the `?thread=` replies and the read marker (B-2.3), so the channel reads without
 // JavaScript. Only once agreed: the habits come first. It never moves the read marker.
 const first = page.agreed ? await getRouteChannelPage(Astro) : null;
+// The work the composer can attach (B-2.4): the person's own projects, and session clips only in their
+// cohort's own channels. Null where they cannot post, and then the composer offers no attach tools.
+const shareables = page.agreed ? await getRouteChannelShareables(Astro) : null;
 const threadId = first?.page.thread ? query.get("thread") : null;
 ---
 
@@ -38,6 +41,7 @@ const threadId = first?.page.thread ? query.get("thread") : null;
       initialThread={first?.page.thread ?? null}
       initialRead={first?.page.read ?? null}
       now={Date.now()}
+      shareables={shareables}
       threadId={threadId}
       messageId={query.get("message")}
     >
