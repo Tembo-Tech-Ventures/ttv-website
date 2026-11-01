@@ -12,6 +12,22 @@ export const ATTENTION_FILTERS: readonly { filter: AttentionFilter; label: strin
 ];
 
 /**
+ * The empty list's line. Attention holds notifications only; shared work
+ * waiting for a mentor's confirmation is derived elsewhere (Me.mentoring), so
+ * "Nothing needs you" is said only when nothing is known to be waiting there.
+ */
+export function attentionEmpty(filter: AttentionFilter, awaiting: number | null): string {
+  if (filter === "all" && awaiting !== 0) return "No new notifications.";
+  return (ATTENTION_FILTERS.find((entry) => entry.filter === filter) ?? ATTENTION_FILTERS[0]!).empty;
+}
+
+/** The attention page's summary line, which says "all caught up" only when nothing is known to wait. */
+export function attentionSummary(total: number, awaiting: number | null): string {
+  if (total > 0) return `${total} new`;
+  return awaiting === 0 ? "You're all caught up." : "Nothing new.";
+}
+
+/**
  * The person to show beside an item, if any. Application decisions are
  * actor-neutral by policy: the deciding admin is never shown to the applicant,
  * even if a future payload carried one. Tembo has its own mark, and an author

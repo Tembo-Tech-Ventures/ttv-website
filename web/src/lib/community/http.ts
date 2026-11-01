@@ -1,7 +1,7 @@
 import { readBoundedJson, RequestJsonError } from "@/lib/request-json";
-import type { StagingFixtureIdentity } from "@/lib/staging-fixtures";
 import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
 import { CommunityError } from "./model";
+import { requireBrowser, type CommunityActor } from "./actor";
 import { createCommunityService, type CommunityService } from "./service";
 import { assessCommunityProfile } from "./assessment-ai";
 import { createAssessmentProvider, type AssessmentOutputReason } from "./assessment-provider";
@@ -15,18 +15,10 @@ import { runCommunityChat } from "./chat";
 export function communityJson(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store", Vary: "Cookie, Authorization" } });
 }
-interface Actor { id: string; scopes: readonly string[] | null; delegatedSession?: boolean; demo?: {persona:string} | null; fixture?: StagingFixtureIdentity | null }
+type Actor = CommunityActor;
 interface RouteContext { request: Request; path: string; actor: Actor; service: CommunityService; body: unknown; db: D1Database; env?: Env }
 type Handler = (ctx: RouteContext) => Promise<Response>;
 
-function requireBrowser(actor: Actor, admin = false) {
-  if (actor.scopes !== null) throw new CommunityError("Use a browser session to manage access or review mentorship.",403);
-  if (!actor.delegatedSession) return;
-  if (!admin && actor.demo?.persona === "mentor") return;
-  const personas = admin ? ["admin"] : ["mentor","admin"];
-  if (actor.fixture && personas.includes(actor.fixture.persona)) return;
-  throw new CommunityError("Use a browser session to manage access or review mentorship.",403);
-}
 async function readBody(request: Request) {
   if (["GET", "HEAD", "DELETE"].includes(request.method)) return undefined;
   try { return await readBoundedJson(request); }

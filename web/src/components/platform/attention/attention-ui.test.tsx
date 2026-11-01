@@ -135,6 +135,29 @@ describe("the attention page on the server", () => {
     expect(html).toContain("You&#x27;re all caught up.");
     expect(html).toContain("Nothing needs you right now.");
   });
+
+  it("never tells a mentor nothing needs them while shared work waits for their confirmation, or when that is unknown", () => {
+    const empty = { ...attention, items: [] };
+    const render = (me: Me) => renderToString(<AttentionPage me={{ ...me, unreadCounts: count([]).unreadCounts }} initialList={empty} />);
+
+    const waiting = render({ ...meByPersona.david, mentoring: { awaitingConfirmation: 4 } });
+    expect(waiting).not.toContain("Nothing needs you right now.");
+    expect(waiting).not.toContain("all caught up");
+    expect(waiting).toContain("Nothing new.");
+    expect(waiting).toContain("No new notifications.");
+    expect(waiting).toContain('data-attention-awaiting="4"');
+    expect(waiting).toContain("4 shared contributions are waiting for your confirmation.");
+    expect(waiting).toContain('href="/dashboard/mentoring/confirm"');
+
+    const unknown = render(meByPersona.david);
+    expect(unknown).not.toContain("Nothing needs you right now.");
+    expect(unknown).not.toContain("data-attention-awaiting");
+
+    const clear = render({ ...meByPersona.david, mentoring: { awaitingConfirmation: 0 } });
+    expect(clear).toContain("Nothing needs you right now.");
+    expect(clear).toContain("You&#x27;re all caught up.");
+    expect(clear).not.toContain("data-attention-awaiting");
+  });
 });
 
 describe("the attention page in the browser", () => {

@@ -103,6 +103,17 @@ describe("space sidebars", () => {
     expect(hrefs(david).slice(2)).toEqual(["/dashboard/mentoring#requests", "/dashboard/mentoring#availability"]);
   });
 
+  it("count the shared work waiting for the mentor's confirmation on Confirm work, and nothing when none waits or it is unknown", () => {
+    const confirm = (me: Me) => spaceSidebar("mentoring", facts(me, "mentoring")).groups[0]!.items.find((item) => item.key === "confirm")!;
+    expect(confirm({ ...meByPersona.david, mentoring: { awaitingConfirmation: 4 } })).toMatchObject({
+      count: 4, countLabel: "waiting for your confirmation", current: false,
+    });
+    for (const me of [{ ...meByPersona.david, mentoring: { awaitingConfirmation: 0 } }, meByPersona.david]) {
+      expect(confirm(me)).not.toHaveProperty("count");
+      expect(confirm(me)).not.toHaveProperty("countLabel");
+    }
+  });
+
   it("keep the admin mentor review in the Admin space", () => {
     const amina = spaceSidebar("admin", facts(meByPersona.amina, "confirm"));
     expect(labels(amina)).toEqual(["Admin home", "Mentor review"]);

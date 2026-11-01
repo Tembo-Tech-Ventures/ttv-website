@@ -321,3 +321,18 @@ describe("discovery corpus authorization",()=>{
     expect((await handleCommunityRequest(req(),"profiles/discover",null,f.db)).status).toBe(401);
   });
 });
+
+it('counts waiting confirmations over exactly the rows the Confirm page lists',async()=>{
+ const f=fixture();
+ const insert=f.sql.prepare("INSERT INTO communityJourney(id,userId,title,description,occurredAt,visibility,createdAt) VALUES(?,?,?,?,?,'institution',?)");
+ for(let i=0;i<55;i++)insert.run(`window-${String(i).padStart(2,'0')}`,'member','Built a tool','Implemented and tested a tool','2026-10-24',i);
+ const newest=await f.mentor.listMentorship();
+ expect(newest).toHaveLength(50);
+ await f.mentor.confirmJourney(newest[0].id,{expectedRevision:1,statement:'I checked the newest change',method:'Review'});
+ await f.mentor.confirmJourney('window-00',{expectedRevision:1,statement:'I checked the oldest change',method:'Review'});
+ const listed=await f.mentor.listMentorship();
+ expect(await f.mentor.countAwaitingConfirmation()).toBe(listed.filter(row=>!row.reviewedByCurrentMentor).length);
+ expect(await f.mentor.countAwaitingConfirmation()).toBe(49);
+ await expect(f.member.countAwaitingConfirmation()).rejects.toMatchObject({status:403});
+ await expect(f.institution.countAwaitingConfirmation()).rejects.toMatchObject({status:403});
+});

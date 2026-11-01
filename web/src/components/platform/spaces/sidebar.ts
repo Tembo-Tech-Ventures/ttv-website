@@ -55,6 +55,8 @@ export interface SidebarItem {
   current: boolean;
   /** Unread attention, shown as a count badge. */
   count?: number;
+  /** What the badge counts, when it is not unread attention ("new"). */
+  countLabel?: string;
   /** Quiet text, for an entry whose page is not open yet. */
   note?: string;
 }
@@ -172,12 +174,17 @@ function community(facts: SidebarFacts): SidebarModel {
 }
 
 function mentoring(facts: SidebarFacts): SidebarModel {
+  const awaiting = facts.me.mentoring?.awaitingConfirmation ?? 0;
   return {
     title: "Mentoring",
     description: "Confirm the work people share with you.",
     groups: group(facts, undefined, [
       { key: "mentoring", page: "mentoring", label: "Overview", icon: "overview" },
-      { key: "confirm", page: "confirm", label: "Confirm work", icon: "confirm" },
+      {
+        key: "confirm", page: "confirm", label: "Confirm work", icon: "confirm",
+        // Derived from the Confirm page's own rows, not attention (src/lib/mentoring/README.md).
+        ...(awaiting > 0 ? { count: awaiting, countLabel: "waiting for your confirmation" } : {}),
+      },
       // Requests and availability arrive with mentor requests; the overview says so.
       { key: "requests", href: `${SPACE_PATHS.mentoring}#requests`, label: "Requests", icon: "requests", note: "Soon" },
       { key: "availability", href: `${SPACE_PATHS.mentoring}#availability`, label: "Availability", icon: "availability", note: "Soon" },

@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/d1";
 import { getAttentionCount } from "@/lib/attention/count";
 import * as schema from "@/lib/db/schema";
+import { awaitingConfirmation } from "@/lib/mentoring/awaiting";
 import { Me, WebLink, type RoleBadge } from "../contracts";
 import { capabilitiesFor } from "./capabilities";
 import { getFlags, requireFlag, type FlagContext } from "./flags";
@@ -10,7 +11,7 @@ import { TEMBO_DAILY_LIMIT } from "./me-config";
 export interface MeContext {
   db: D1Database;
   env: FlagContext["env"];
-  locals: Pick<App.Locals, "user" | "isAdmin" | "personalAccessToken">;
+  locals: Pick<App.Locals, "user" | "isAdmin" | "personalAccessToken" | "session" | "stagingDemo" | "stagingFixture" | "stagingQa">;
 }
 
 /** Shared API/page loader. Denials throw a no-store Response; DB errors propagate. */
@@ -28,6 +29,8 @@ export async function getMe({ db, env, locals }: MeContext): Promise<Me> {
   const canonical = await capabilitiesFor(database, user);
   const { spaces, ...capabilities } = canonical;
   const attention = await getAttentionCount(database, user.id, canonical);
+  // Derived, not attention: see src/lib/mentoring/README.md.
+  const awaiting = spaces.includes("mentoring") ? await awaitingConfirmation({ db, env, locals }) : null;
   // Only display roles established by the canonical capability lookup. Cohort
   // status/labels need richer display metadata; never infer them from cohortIds.
   const roleBadges: RoleBadge[] = [];
@@ -52,5 +55,6 @@ export async function getMe({ db, env, locals }: MeContext): Promise<Me> {
     unreadCounts: attention.unreadCounts,
     // Channel Tembo accounting arrives in Phase 3; not private-chat usage.
     temboUsage: { used: 0, limit: TEMBO_DAILY_LIMIT },
+    ...(awaiting === null ? {} : { mentoring: { awaitingConfirmation: awaiting } }),
   });
 }

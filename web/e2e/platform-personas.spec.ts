@@ -318,7 +318,8 @@ test.describe("a mentor", () => {
     }
     await page.getByRole("link", { name: "Review shared work" }).click();
     await expect(page).toHaveURL(/\/dashboard\/mentoring\/confirm$/);
-    await expect(page.locator("#space-sidebar a[aria-current='page']")).toHaveText("Confirm work");
+    // A count badge follows the label when shared work waits (F-2).
+    await expect(page.locator("#space-sidebar a[aria-current='page']")).toHaveText(/^Confirm work/);
     await expect(page.getByRole("heading", { name: "Confirm what you have personally checked" })).toBeVisible();
     // The old mentor link still works and lands on the review.
     await open(page, "/dashboard/mentorship");

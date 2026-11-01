@@ -1,7 +1,11 @@
+// @vitest-environment happy-dom
 /* oxlint-disable no-script-url -- Deliberately unsafe URL fixtures verify link filtering. */
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
+import { CommunityEmbedded } from "../discovery/DiscoveryShell";
 import MentorReview, {
   safeMentorEvidenceUrl,
   validateMentorNote,
@@ -177,5 +181,77 @@ describe("mentor revision and method contract", () => {
     "Ran the project's tests and reviewed the source",
   ])("accepts a method within the limits", (method) => {
     expect(validateMentorMethod(method)).toBeNull();
+  });
+  describe("in the spaces shell", () => {
+    const confirmed = { ...request, id: "claim-2", claimTitle: "Wrote the docs", status: "confirmed" as const };
+    const embedded = (requests: MentorReviewRequest[]) =>
+      renderToStaticMarkup(
+        <CommunityEmbedded.Provider value>
+          <MentorReview requests={requests} onReview={vi.fn(async () => {})} />
+        </CommunityEmbedded.Provider>,
+      );
+
+    it("says plainly how much waits for confirmation, without implying review requests", () => {
+      const html = embedded([request, { ...request, id: "claim-3" }, confirmed]);
+      expect(html).toContain('data-awaiting-confirmation="2"');
+      expect(html).toContain("2 shared contributions are waiting for your confirmation.");
+      expect(html).toContain("Nobody has sent you a review request");
+      expect(html).toContain("Waiting for your confirmation of this revision.");
+      expect(html).not.toContain("not a queue of review requests");
+    });
+
+    it("says when nothing waits, says nothing about an empty list, and keeps missing evidence neutral", () => {
+      expect(embedded([confirmed])).toContain("Nothing here is waiting for your confirmation.");
+      const empty = embedded([]);
+      expect(empty).not.toContain("data-awaiting-confirmation");
+      expect(empty).toContain("No published contributions are available to review");
+      expect(embedded([{ ...request, evidence: [] }])).toContain(
+        "Missing evidence is not evidence against the member",
+      );
+    });
+
+    it("counts a confirmation saved on the page as no longer waiting", async () => {
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+      const host = document.createElement("div");
+      document.body.appendChild(host);
+      const root = createRoot(host);
+      const onReview = vi.fn(async () => {});
+      await act(async () =>
+        root.render(
+          <CommunityEmbedded.Provider value>
+            <MentorReview requests={[request, { ...request, id: "claim-3" }]} onReview={onReview} />
+          </CommunityEmbedded.Provider>,
+        ),
+      );
+      const count = () => host.querySelector("[data-awaiting-confirmation]")?.getAttribute("data-awaiting-confirmation");
+      expect(count()).toBe("2");
+      const form = host.querySelector("form")!;
+      const set = (selector: string, value: string) => {
+        const field: HTMLElement = form.querySelector<HTMLElement>(selector)!;
+        // React tracks the value setter, so set it the way a browser does.
+        Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field) as object, "value")!.set!.call(field, value);
+        field.dispatchEvent(new Event(field.tagName === "SELECT" ? "change" : "input", { bubbles: true }));
+      };
+      await act(async () => {
+        set("select", "confirmed");
+        set("input", "Read the repository");
+        set("textarea", "I read the API routes and ran their tests locally.");
+      });
+      await act(async () => {
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      });
+      expect(onReview).toHaveBeenCalledWith("claim-1", expect.objectContaining({ decision: "confirmed", expectedRevision: 3 }));
+      expect(count()).toBe("1");
+      expect(host.textContent).toContain("1 shared contribution is waiting for your confirmation.");
+      await act(async () => root.unmount());
+      host.remove();
+    });
+
+    it("leaves the existing dashboard's wording unchanged", () => {
+      const html = render([request]);
+      expect(html).toContain("this list is not a queue of review requests");
+      expect(html).toContain("You can add a confirmation after reviewing this revision.");
+      expect(html).not.toContain("data-awaiting-confirmation");
+    });
   });
 });

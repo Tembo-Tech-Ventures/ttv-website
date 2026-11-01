@@ -7,7 +7,8 @@ import LiveRegions from "@/components/platform/overlays/LiveRegions";
 import type { HarnessScenario } from "@/components/platform/overlays/harness-clients";
 import { useHarnessClients } from "@/components/platform/overlays/harness-loader";
 import { loadAndAnnounce, useAttentionOwner } from "./attention-client";
-import { unreadTotal } from "./attention-display";
+import { awaitingConfirmation } from "@/components/platform/spaces/awaiting-confirmation";
+import { attentionSummary, unreadTotal } from "./attention-display";
 import AttentionInbox, { MarkAll, useNow } from "./AttentionInbox";
 import "./attention.css";
 
@@ -60,7 +61,7 @@ export function AttentionPageView({ me, initialList, api }: { me: Me; initialLis
         </h1>
         <div className="attention-page__summary">
           <p className="attention-page__count" data-attention-total={total}>
-            {total === 0 ? "You're all caught up." : `${total} new`}
+            {attentionSummary(total, awaitingConfirmation(me))}
           </p>
           <MarkAll owner={owner} me={me} />
         </div>

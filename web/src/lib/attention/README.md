@@ -42,6 +42,10 @@ Notification failure does not roll back or fail a
 successful primary operation; a generic log records failure without private
 details. This is best-effort delivery, not a durable transactional outbox.
 
+Shared work waiting for a mentor's confirmation is deliberately not attention:
+sharing has no recipient or event, so the Mentoring space derives that count
+instead (`src/lib/mentoring/README.md`).
+
 `opportunity_match` remains a contract kind without a wired producer. Existing
 `clientProject.MATCHED` is project-wide; `projectInterest` only stores
 INTERESTED/WITHDRAWN and has no selected recipient. The coordinator explicitly

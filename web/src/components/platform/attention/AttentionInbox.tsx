@@ -13,7 +13,9 @@ import {
   type AttentionOwner,
   type AttentionProblem,
 } from "./attention-client";
-import { ATTENTION_FILTERS, groupAttention, unreadTotal, visibleAttention } from "./attention-display";
+import { awaitingConfirmation, awaitingConfirmationText } from "@/components/platform/spaces/awaiting-confirmation";
+import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
+import { ATTENTION_FILTERS, attentionEmpty, groupAttention, unreadTotal, visibleAttention } from "./attention-display";
 import AttentionItemRow from "./AttentionItemRow";
 
 /** How long opening an item waits for its mark-read before following the link anyway. */
@@ -66,6 +68,22 @@ function Problem({ problem, onRetry, what }: { problem: AttentionProblem; onRetr
           Check again
         </Button>
       </span>
+    </div>
+  );
+}
+
+/**
+ * Shared work waiting for a mentor's confirmation. It is derived on the
+ * Mentoring space, not an attention item, so it sits beside the list.
+ */
+function AwaitingNote({ awaiting }: { awaiting: number | null }) {
+  if (awaiting === null || awaiting < 1) return null;
+  return (
+    <div className="attention-note" data-attention-awaiting={awaiting}>
+      <p>{awaitingConfirmationText(awaiting)}</p>
+      <a href={SPACE_PAGE_PATHS.confirm} className={cx("attention-note__link", FOCUS_RING)}>
+        Open Confirm work
+      </a>
     </div>
   );
 }
@@ -214,7 +232,8 @@ export default function AttentionInbox({ owner, me, headingId, now, initialFocus
   const listProblem = attentionProblem(state.listError);
   const countProblem = attentionProblem(state.countError);
   const viewer = { id: me.user.id, name: me.user.name, src: me.user.avatarUrl ?? undefined };
-  const empty = (ATTENTION_FILTERS.find((entry) => entry.filter === state.filter) ?? ATTENTION_FILTERS[0]).empty;
+  const awaiting = awaitingConfirmation(me);
+  const empty = attentionEmpty(state.filter, awaiting);
   const settled = state.loaded && !state.listError;
 
   async function retryCounts() {
@@ -246,6 +265,8 @@ export default function AttentionInbox({ owner, me, headingId, now, initialFocus
         <Problem problem={countProblem} onRetry={() => void retryCounts()} what="Counts stopped updating." />
       )}
       <Failures owner={owner} />
+
+      {state.filter === "all" && <AwaitingNote awaiting={awaiting} />}
 
       <section aria-labelledby={headingId} aria-busy={state.loading || undefined} className="attention-inbox__list">
         {!state.loaded && !state.listError && (
