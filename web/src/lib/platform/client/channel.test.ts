@@ -822,6 +822,27 @@ describe("optimistic layer for the composer (S-2.2)", () => {
     expect(store.getState().messages[2].reactions).toEqual(confirmed.reactions);
   });
 
+  it("keeps a confirmed deletion over a latest snapshot that predates it", async () => {
+    const { fake, store } = setup({ initial: page(range(1, 3), null, "s1") });
+    const latest = deferred<MockReply>();
+    fake.list(() => latest.promise);
+    const jumping = store.jumpToLatest();
+    await vi.waitFor(() => expect(fake.seen).toHaveLength(1));
+    store.update([msg(1, { deleted: true, body: "", embeds: [] }), msg(3, { body: "Edited", edited: true })]);
+    latest.resolve({ data: page(range(1, 3), null, "s2") });
+    await jumping;
+    expect(store.getState().messages[0]).toMatchObject({ deleted: true, body: "" });
+    // An edit isn't terminal: the snapshot shows the earlier version until the next poll brings it.
+    expect(store.getState().messages[2].body).toBe(msg(3).body);
+    fake.list(page([msg(3, { body: "Edited", edited: true })], null, "s3"));
+    await store.poll(signal());
+    expect(store.getState().messages[2].body).toBe("Edited");
+    // A snapshot that starts after the write is truth, even when it disagrees.
+    fake.list(page(range(1, 3), null, "s4"));
+    await store.jumpToLatest();
+    expect(store.getState().messages[0].deleted).toBe(false);
+  });
+
   it("ignores confirmations while the store is released", () => {
     const { store } = setup({ initial: page(range(1, 3), null, "s1"), enabled: false });
     store.update([msg(1, { body: "Not applied" })]);

@@ -778,19 +778,23 @@ describe("review follow-ups (#279)", () => {
     expect(composer.getState().outbox).toEqual([]);
   });
 
-  it("a hung change times out and the next change to that message still goes", async () => {
+  it.each([
+    ["edit", (composer: ReturnType<typeof setup>["composer"]) => composer.edit("m0001", "Stuck edit"), "Your edit wasn't saved."],
+    ["delete", (composer: ReturnType<typeof setup>["composer"]) => composer.remove("m0001"), "Your message wasn't deleted."],
+    ["react", (composer: ReturnType<typeof setup>["composer"]) => composer.react("m0001", "agree", true), "Your reaction wasn't saved."],
+  ] as const)("a hung %s times out and the next change to that message still goes", async (route, start, noun) => {
     vi.useFakeTimers();
     const { composer, channel, server } = setup({ seed: [msg(1, { author: viewer })] });
-    server.intercept("edit", () => new Promise<MockReply>(() => {}));
-    const editing = composer.edit("m0001", "Stuck edit");
-    const failed = editing.catch((error: unknown) => error);
+    server.intercept(route, () => new Promise<MockReply>(() => {}));
+    const failed = start(composer).catch((error: unknown) => error);
     const reacting = composer.react("m0001", "thanks", true);
     // The reaction's own deadline starts only when its request goes out.
     await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS);
     expect(await failed).toMatchObject({ code: "aborted" });
     await reacting;
-    expect(body(channel, "m0001")).toMatchObject({ body: messages.projectPost.body, reactions: [{ kind: "thanks", count: 1, mine: true }] });
-    expect(composer.getState().announcement).toBe("Your edit wasn't saved. TTV didn't answer in time. Try again.");
+    expect(body(channel, "m0001")).toMatchObject({ deleted: false, body: messages.projectPost.body });
+    expect(body(channel, "m0001")?.reactions).toEqual([{ kind: "thanks", count: 1, mine: true }]);
+    expect(composer.getState()).toMatchObject({ busy: [], announcement: `${noun} TTV didn't answer in time. Try again.` });
   });
 
   it("while one change settles, later changes to the message stay shown and busy", async () => {

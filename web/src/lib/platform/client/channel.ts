@@ -220,6 +220,18 @@ export function createChannelStore(options: ChannelOptions) {
     return true;
   }
 
+  /**
+   * Cache a copy from a latest-page snapshot. It is polled from its own
+   * checkpoint, so whatever it predates arrives next; only a confirmed deletion is
+   * kept meanwhile, because deletion is terminal and can't hide later truth.
+   */
+  function putSnapshot(item: Message, started: number) {
+    const pin = pins.get(item.id);
+    const cached = entities.get(item.id);
+    if (pin !== undefined && started <= pin && cached?.deleted && !item.deleted) return;
+    entities.set(item.id, item);
+  }
+
   /** A server copy from a confirmed write: newer than any response to a request already in flight. */
   function confirmWrite(item: Message) {
     entities.set(item.id, item);
@@ -380,6 +392,7 @@ export function createChannelStore(options: ChannelOptions) {
 
   async function fetchLatest(signal: AbortSignal): Promise<boolean> {
     const gen = ++windowGen;
+    const started = ++requestSeq;
     older?.controller.abort();
     if (!channel) publish({ status: "loading", error: null });
     try {
@@ -387,8 +400,7 @@ export function createChannelStore(options: ChannelOptions) {
       if (!available() || gen !== windowGen) return false;
       forget(page.removedIds);
       const roots = page.items.filter(item => item.parentId === null);
-      // A snapshot is polled from its own checkpoint, so anything it predates arrives next.
-      for (const item of roots) entities.set(item.id, item);
+      for (const item of roots) putSnapshot(item, started);
       anchorId = null;
       channel = evict(segmentFromLatest(page, roots), { maxMessages, anchorId: null });
       publish({ status: "ready", error: null, olderError: null });
@@ -483,6 +495,7 @@ export function createChannelStore(options: ChannelOptions) {
       if (!currentThread(cache)) return false;
       forget(page.removedIds);
       const replies = page.items.filter(item => item.parentId === cache.parentId);
+      // A (re)opened pane starts empty, so no confirmed reply can be overwritten here.
       for (const item of replies) entities.set(item.id, item);
       cache.segment = evict(segmentFromLatest(page, replies), { maxMessages: maxThreadMessages, anchorId: null });
       publish();
