@@ -24,8 +24,13 @@ type IconButtonProps = Omit<
   badge?: number | "dot";
   /** What the badge counts, read after the number. */
   badgeLabel?: string;
+  /** Something else behind the control that the badge does not count, read after it. */
+  detail?: string;
   className?: string;
 };
+
+/** The most a badge spells out; above it, "99+". */
+const BADGE_MAX = 99;
 
 const VARIANTS: Record<IconButtonVariant, string> = {
   quiet: "border border-hairline bg-ink-primary/6 text-ink-secondary hover:bg-ink-primary/10 hover:text-ink-primary",
@@ -46,6 +51,7 @@ export default function IconButton({
   pressed,
   badge,
   badgeLabel = "new",
+  detail,
   className,
   type = "button",
   ...rest
@@ -56,7 +62,9 @@ export default function IconButton({
 
   const count = typeof badge === "number" ? Math.floor(badge) : 0;
   const dot = badge === "dot";
-  const name = count > 0 ? `${label}, ${count} ${badgeLabel}` : dot ? `${label}, ${badgeLabel}` : label;
+  // The name reads the number the badge shows, "99+" past 99, so it always holds the visible label (WCAG 2.5.3).
+  const shown = count > BADGE_MAX ? `${BADGE_MAX}+` : String(count);
+  const name = [label, count > 0 ? `${shown} ${badgeLabel}` : dot ? badgeLabel : null, detail].filter(Boolean).join(", ");
 
   return (
     <button
@@ -80,7 +88,7 @@ export default function IconButton({
       {(count > 0 || dot) && (
         <span aria-hidden="true" className="absolute -top-1 -right-1 flex">
           {count > 0 ? (
-            <CountBadge count={count} label={badgeLabel} />
+            <CountBadge count={count} max={BADGE_MAX} label={badgeLabel} />
           ) : (
             <CountBadge dot label={badgeLabel} className="mt-1 mr-1" />
           )}

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { PiChatCircleText, PiGear, PiSignOut } from "react-icons/pi";
 import type { PersonSummary } from "@/lib/platform/contracts";
 import { openFeedbackWidget } from "@/components/feedback/feedback-client";
-import { Avatar, RoleBadge } from "@/components/platform/ui";
+import { Avatar, initials, RoleBadge } from "@/components/platform/ui";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
 import { ACCOUNT_HREF } from "./space-routes";
@@ -27,6 +27,16 @@ const ITEM = cx(
   "hover:bg-ink-primary/8 focus-visible:bg-ink-primary/8 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-peach-ink",
 );
 const ICON = "size-5 shrink-0 text-ink-secondary";
+
+/**
+ * The avatar's name. Without a photo the avatar shows initials, and a voice
+ * user can only say what they see, so the name ends with them too (WCAG 2.5.3,
+ * label in name).
+ */
+export function accountMenuName(person: Pick<PersonSummary, "name" | "avatarUrl">): string {
+  const base = `Account menu, ${person.name}`;
+  return person.avatarUrl ? base : `${base}, ${initials(person.name)}`;
+}
 
 /**
  * The avatar in the top bar, disclosing Account, Feedback and Sign out. Who
@@ -84,7 +94,7 @@ export default function AccountMenu({ person, account }: { person: PersonSummary
   return (
     <details ref={ref} className="spaces-account">
       <summary
-        aria-label={`Account menu, ${person.name}`}
+        aria-label={accountMenuName(person)}
         className={cx(
           "spaces-account__trigger inline-grid size-10 shrink-0 cursor-pointer place-items-center rounded-full pointer-coarse:size-11",
           FOCUS_RING,

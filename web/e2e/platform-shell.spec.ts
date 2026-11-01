@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { runAxe } from "./platform-axe";
+import { AXE_VERSION, axeRun, runAxe } from "./platform-axe";
 import { installTextTracker, sampleText, textReport } from "./text-integrity";
 
 /**
@@ -108,6 +108,63 @@ test.describe("the spaces shell harness", () => {
       await expect(page.getByRole("dialog", { name: "Mentoring menu" })).toBeVisible();
       await runAxe(page, testInfo, "drawer");
     }
+  });
+
+  /*
+   * QA1R-01: axe 4.14 turned label-content-name-mismatch on, and every space
+   * page failed it. The brand read "TEMBOTech" to it, Search hid "Ctrl K" from
+   * its name, and the avatar's name left out the initials it shows.
+   */
+  for (const width of [1280, 390]) {
+    test(`names every shell control with the words it shows, for every person in every space, at ${width}px`, async ({ page }, testInfo) => {
+      // About 35 harness pages, each hydrated and checked with axe: a long walk on a dev server.
+      test.setTimeout(240_000);
+      const people = { ...SPACES_BY_PERSONA, unbadged: ["Cohort", "Community", "Profile"], confirming: SPACES_BY_PERSONA.david };
+      await page.setViewportSize({ width, height: width > WIDE ? 800 : 844 });
+      for (const [persona, spaces] of Object.entries(people)) {
+        for (const space of spaces) {
+          await open(page, harness(persona, space.toLowerCase()));
+          await runAxe(page, testInfo, `${persona}-${space}-${width}`);
+        }
+        await accountMenu(page).summary.click();
+        await expect(accountMenu(page).panel).toBeVisible();
+        await runAxe(page, testInfo, `${persona}-menu-${width}`);
+      }
+    });
+  }
+
+  test("runs an axe that catches the names QA-1 shipped with", async ({ page }) => {
+    await open(page, harness("david", "mentoring"));
+    // The #247 markup, as it was: no space between the mark's words, the shortcut left out of the name.
+    await page.locator("#spaces-main").evaluate((main) => {
+      main.insertAdjacentHTML(
+        "afterbegin",
+        `<div id="qa1r-01">
+          <a id="old-brand" href="/" aria-label="Tembo Tech Ventures home" style="display:flex"><span aria-hidden="true">TEMBO</span><span aria-hidden="true">Tech · Ventures</span></a>
+          <button id="old-search" type="button" aria-label="Search"><span>Search</span><kbd aria-hidden="true">Ctrl K</kbd></button>
+        </div>`,
+      );
+    });
+    const run = await axeRun(page, { rules: ["label-content-name-mismatch"], include: ["#qa1r-01"] });
+    expect(run.version).toBe(AXE_VERSION);
+    expect(run.violations.flatMap((rule) => rule.nodes.map((node) => node.target.join(" ")))).toEqual([
+      "#old-brand",
+      "#old-search",
+    ]);
+  });
+
+  test("signals shared work waiting for a mentor's confirmation on the bell, with a dot and in its name", async ({ page }) => {
+    await open(page, harness("confirming", "community"));
+    const bell = page.getByRole("button", { name: "Attention, 4 shared contributions to confirm" });
+    await expect(bell).toBeVisible();
+    await expect(bell.locator('[data-count-badge="dot"]')).toBeVisible();
+    await expect(bell.locator('[data-count-badge="count"]')).toHaveCount(0);
+    await page.screenshot({ path: `${EVIDENCE_DIR}/bell-confirming-${page.viewportSize()!.width}.png` });
+
+    // David without a count from the server: unknown, so no signal and no 0.
+    await open(page, harness("david", "community"));
+    await expect(page.getByRole("button", { name: /^Attention/ })).not.toHaveAccessibleName(/confirm/);
+    await expect(page.getByRole("button", { name: /^Attention/ }).locator('[data-count-badge="dot"]')).toHaveCount(0);
   });
 
   test("uses Mattone only for the page title, the TEMBO mark and Tembo's T", async ({ page }) => {
@@ -254,9 +311,9 @@ test.describe("the spaces shell harness", () => {
       "Community 1 new",
       "Mentoring 2 new",
       "Profile",
-      "Search",
+      "Search, Ctrl K",
       "Attention, 3 waiting",
-      "Account menu, David Kamau",
+      "Account menu, David Kamau, DK",
       "Requests 2 new",
       "Confirm work",
       "Availability",
@@ -480,7 +537,7 @@ test.describe("the spaces shell harness", () => {
   test("opens the account menu from the keyboard and returns focus when it closes", async ({ page }) => {
     await open(page, harness("wanjiku", "community"));
     const { summary, panel } = accountMenu(page);
-    await expect(summary).toHaveAttribute("aria-label", "Account menu, Wanjiku Mwangi");
+    await expect(summary).toHaveAttribute("aria-label", "Account menu, Wanjiku Mwangi, WM");
     await summary.focus();
     await page.keyboard.press("Enter");
     await expect(panel).toBeVisible();
@@ -543,7 +600,7 @@ test.describe("the spaces shell harness", () => {
   test("asks for search and attention from their triggers and Ctrl K, and gets focus back", async ({ page }) => {
     await open(page, harness("david", "mentoring"));
     const overlay = page.locator("dialog[data-stub-overlay]");
-    const search = page.getByRole("button", { name: "Search", exact: true });
+    const search = page.getByRole("button", { name: "Search, Ctrl K" });
 
     await search.click();
     await expect(overlay).toHaveAttribute("data-stub-overlay", "search");
@@ -565,7 +622,7 @@ test.describe("the spaces shell harness", () => {
 
   test("shows no search or bell where no overlay is mounted, and Ctrl K stays the browser's", async ({ page }) => {
     await open(page, harness("david", "mentoring", "&overlays=none"));
-    await expect(page.getByRole("button", { name: "Search", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Search, Ctrl K" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /^Attention/ })).toHaveCount(0);
     const prevented = await page.evaluate(() => {
       const event = new KeyboardEvent("keydown", { key: "k", ctrlKey: true, cancelable: true, bubbles: true });

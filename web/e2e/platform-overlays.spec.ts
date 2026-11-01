@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { expect, test, type Browser, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Browser, type Page } from "@playwright/test";
+import { runAxe } from "./platform-axe";
 
 /**
  * The browser contract for the attention and search overlays (U-1.3).
@@ -17,8 +17,6 @@ import { expect, test, type Browser, type Page, type TestInfo } from "@playwrigh
  */
 const HARNESS = "/dev/platform-overlays";
 const WIDE = 1024;
-const AXE_URL = "https://cdn.jsdelivr.net/npm/axe-core@4.10.3/axe.min.js";
-const AXE_SHA384 = "17w4i/EfU4m8vRTTBQs69gAb/fjBpQi0/OOcQTspZXbRlDA0OcGoZX3ZUxQpgTYL";
 
 function harness(params: Record<string, string> = {}) {
   return `${HARNESS}?${new URLSearchParams({ persona: "wanjiku", space: "community", ...params })}`;
@@ -51,26 +49,6 @@ const bell = (page: Page) => page.getByRole("button", { name: /^Attention/ });
 const panel = (page: Page) => page.getByRole("dialog", { name: "Needs your attention" });
 const search = (page: Page) => page.getByRole("dialog", { name: "Search", exact: true });
 const box = (page: Page) => page.getByRole("combobox", { name: /^Search people/ });
-
-async function runAxe(page: Page, testInfo: TestInfo, name: string) {
-  const source = Buffer.from(await (await fetch(AXE_URL)).arrayBuffer());
-  expect(createHash("sha384").update(source).digest("base64")).toBe(AXE_SHA384);
-  if (!(await page.evaluate(() => "axe" in window))) await page.addScriptTag({ content: source.toString("utf8") });
-  const result = await page.evaluate(async () => {
-    type Run = { violations: { id: string; nodes: { target: string[] }[] }[]; incomplete: { id: string; nodes: unknown[] }[] };
-    const { axe } = window as unknown as { axe: { run: (context: unknown, options: unknown) => Promise<Run> } };
-    const run = await axe.run(
-      { exclude: [["astro-dev-toolbar"]] },
-      { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"] } },
-    );
-    return {
-      violations: run.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(", ")}`),
-      incomplete: run.incomplete.map((v) => `${v.id} × ${v.nodes.length}`),
-    };
-  });
-  await testInfo.attach(`axe-incomplete-${name}`, { body: result.incomplete.join("\n") || "none", contentType: "text/plain" });
-  expect(result.violations, name).toEqual([]);
-}
 
 /** Nothing scrolls sideways, and every visible box of `selector` stays inside the viewport. */
 async function expectContained(page: Page, selector: string) {
@@ -147,7 +125,7 @@ test.describe("on a deployed build", () => {
       await expect(page.locator("[data-attention-problem]")).toHaveCount(0);
       await expect(page.locator("[data-attention-item], [data-attention-empty]").first()).toBeVisible();
 
-      await page.getByRole("button", { name: "Search", exact: true }).click();
+      await page.getByRole("button", { name: "Search, Ctrl K" }).click();
       await page.getByRole("combobox").fill("a");
       await page.getByRole("combobox").fill("session");
       await expect(page.locator('[data-search-status="ready"]')).toBeAttached({ timeout: 15_000 });
@@ -342,14 +320,14 @@ test.describe("the overlays harness", () => {
   test.describe("search", () => {
     async function openSearch(page: Page) {
       if (wide(page)) await page.keyboard.press("Control+k");
-      else await page.getByRole("button", { name: "Search", exact: true }).click();
+      else await page.getByRole("button", { name: "Search, Ctrl K" }).click();
       await expect(search(page)).toBeVisible();
       await expect(box(page)).toBeFocused();
     }
 
     test("Ctrl K or the button opens it; arrows choose, Enter opens; Escape gives focus back", async ({ page }, testInfo) => {
       await open(page, harness());
-      const trigger = page.getByRole("button", { name: "Search", exact: true });
+      const trigger = page.getByRole("button", { name: "Search, Ctrl K" });
       await trigger.focus();
       await openSearch(page);
       await box(page).fill("retry webhook");
@@ -505,7 +483,7 @@ test.describe("evidence", () => {
         `search-${width}.png`,
         async (page) => {
           await open(page, harness());
-          await page.getByRole("button", { name: "Search", exact: true }).click();
+          await page.getByRole("button", { name: "Search, Ctrl K" }).click();
           await box(page).fill("retry webhook");
           await expect(page.locator('[role="option"]')).toHaveCount(3);
         },

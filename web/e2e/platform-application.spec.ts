@@ -281,6 +281,8 @@ test.describe("a member applying to a cohort that asks no questions", () => {
     await open(page, "/dashboard/apply");
     const cohort = page.locator(`[data-cohort-id="${OPEN_COHORT}"]`);
     await expect(cohort, "Re-apply platform-personas.local.sql: the newcomer has already applied.").toBeVisible();
+    // QA1-20: the one member date format, day first with the month as a word.
+    await expect(cohort).toContainText("Starts 15 Jan 2027 — Ends 16 Apr 2027");
     await cohort.getByRole("button", { name: "Apply" }).click();
 
     await expect(page).toHaveURL(/notice=application-submitted/);
@@ -337,6 +339,10 @@ test.describe("the cohort persona, accepted with no answers recorded", () => {
     const frame = await signedIn(context, page, baseURL!, student);
     await openApplication(page, frame, STUDENT_APPLICATION);
     await expect(page.locator("[data-application-answers-summary]")).toHaveText("No answers were recorded with this application.");
+    // QA1-20: the cohort's dates and the application's, day first with the month as a word, never "9/1/2026".
+    await expect(page.locator("main")).toContainText(/Start Date\s*1 Sept? 2026/);
+    await expect(page.locator("main")).toContainText(/End Date\s*15 Dec 2026/);
+    await expect(page.locator("main")).not.toContainText(/\d{1,2}\/\d{1,2}\/\d{4}/);
     await expect(page.locator("main form, main textarea")).toHaveCount(0);
     await expectNoJson(page);
     await expectNoSidewaysScroll(page);

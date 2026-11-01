@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { runAxe } from "./platform-axe";
 
 /**
  * The browser contract for the platform UI primitives (U-0.1).
@@ -15,14 +15,6 @@ const HARNESS = "/dev/platform-ui";
 const EVIDENCE_DIR = "test-results/evidence/platform-ui";
 const PERSONAS = ["student", "mentor", "staff", "every"] as const;
 const SWEEP = [320, 390, 600, 640, 768, 820, 1024, 1440];
-
-/*
- * axe-core without a dependency: one pinned release, fetched and checked
- * against its sha384 before it is injected (the same digest is served by
- * jsDelivr and unpkg). A changed file fails the hash rather than running.
- */
-const AXE_URL = "https://cdn.jsdelivr.net/npm/axe-core@4.10.3/axe.min.js";
-const AXE_SHA384 = "17w4i/EfU4m8vRTTBQs69gAb/fjBpQi0/OOcQTspZXbRlDA0OcGoZX3ZUxQpgTYL";
 
 test.describe("on a deployed build", () => {
   test.skip(!process.env.PLAYWRIGHT_BASE_URL, "Only deployed builds prove the harness is absent.");
@@ -76,30 +68,10 @@ test.describe("the primitives harness", () => {
 
   test("passes axe at WCAG 2.2 A and AA", async ({ page }, testInfo) => {
     await open(page);
-    const source = Buffer.from(await (await fetch(AXE_URL)).arrayBuffer());
-    expect(createHash("sha384").update(source).digest("base64")).toBe(AXE_SHA384);
-    await page.addScriptTag({ content: source.toString("utf8") });
-
-    const result = await page.evaluate(async () => {
-      type Run = {
-        violations: { id: string; nodes: { target: string[] }[] }[];
-        incomplete: { id: string; nodes: unknown[] }[];
-      };
-      const { axe } = window as unknown as { axe: { run: (context: unknown, options: unknown) => Promise<Run> } };
-      const run = await axe.run(
-        { include: [["main"]] },
-        { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"] } },
-      );
-      return {
-        violations: run.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(", ")}`),
-        incomplete: run.incomplete.map((v) => `${v.id} × ${v.nodes.length}`),
-      };
-    });
     // axe cannot resolve the background behind the active tabs' fillet
     // pseudo-elements and reports those labels as incomplete; the contrast
     // test below measures them directly.
-    await testInfo.attach("axe-incomplete", { body: result.incomplete.join("\n") || "none", contentType: "text/plain" });
-    expect(result.violations).toEqual([]);
+    await runAxe(page, testInfo, "primitives", { include: ["main"] });
   });
 
   test("uses Mattone only for the page title and the Tembo mark", async ({ page }) => {

@@ -14,6 +14,7 @@ import { env } from "cloudflare:workers";
 import { toProgramApplicationBadgeVariant } from "@/lib/admin/program-application";
 import { draftsFor, parseApplicationAnswers, type ApplicationAnswerDrafts } from "@/lib/student/application-answers";
 import { saveApplicationAnswers } from "@/lib/student/save-application-answers";
+import { formatCalendarDate, formatMomentDate } from "@/lib/display-date";
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
@@ -161,23 +162,23 @@ const titlePrefix = Object.keys(unsaved).length === 0 && (error || Object.keys(f
           {application.program?.startDate && (
             <div>
               <span class="text-ink-muted">Start Date</span>
-              <p class="text-white">{application.program.startDate.toLocaleDateString()}</p>
+              <p class="text-white">{formatCalendarDate(application.program.startDate)}</p>
             </div>
           )}
           {application.program?.endDate && (
             <div>
               <span class="text-ink-muted">End Date</span>
-              <p class="text-white">{application.program.endDate.toLocaleDateString()}</p>
+              <p class="text-white">{formatCalendarDate(application.program.endDate)}</p>
             </div>
           )}
           <div>
             <span class="text-ink-muted">Applied</span>
-            <p class="text-white">{application.createdAt.toLocaleDateString()}</p>
+            <p class="text-white">{formatMomentDate(application.createdAt)}</p>
           </div>
           {application.completedAt && (
             <div>
               <span class="text-ink-muted">Completed</span>
-              <p class="text-white">{application.completedAt.toLocaleDateString()}</p>
+              <p class="text-white">{formatMomentDate(application.completedAt)}</p>
             </div>
           )}
         </div>

@@ -16,3 +16,8 @@ export function awaitingConfirmationText(count: number): string {
     ? "1 shared contribution is waiting for your confirmation."
     : `${count} shared contributions are waiting for your confirmation.`;
 }
+
+/** The same, as a phrase for a control's name: "4 shared contributions to confirm". */
+export function awaitingConfirmationShort(count: number): string {
+  return count === 1 ? "1 shared contribution to confirm" : `${count} shared contributions to confirm`;
+}

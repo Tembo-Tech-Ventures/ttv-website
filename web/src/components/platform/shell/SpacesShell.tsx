@@ -3,6 +3,7 @@ import { PiList, PiX } from "react-icons/pi";
 import type { Me, PersonSummary, SpaceId } from "@/lib/platform/contracts";
 import { createSpacesController } from "@/lib/platform/client/spaces";
 import { useSpaces } from "@/lib/platform/client/hooks/spaces";
+import { awaitingConfirmation } from "@/components/platform/spaces/awaiting-confirmation";
 import { Avatar, RoleBadge, SpaceFile, type SpaceTabItem } from "@/components/platform/ui";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
@@ -264,10 +265,15 @@ export default function SpacesShell({
 
   const start = (
     <>
+      {/*
+       * The name holds the words the mark shows, in order (WCAG 2.5.3), so a
+       * voice user can say them. The space between the two parts is what keeps
+       * "TEMBO" and "Tech" two words for anything reading the visible text.
+       */}
       <a href="/" className={cx("spaces-shell__brand", FOCUS_RING)} aria-label="Tembo Tech Ventures home">
         <span aria-hidden="true" data-wordmark className="font-heading tracking-subhead text-[1.0625rem] leading-none text-ink-primary">
           TEMBO
-        </span>
+        </span>{" "}
         <span
           aria-hidden="true"
           className="spaces-shell__tagline font-body text-[0.625rem] font-semibold tracking-[0.32em] text-ink-muted uppercase"
@@ -300,7 +306,7 @@ export default function SpacesShell({
   const tools = (
     <>
       {overlays.includes("search") && <SearchTrigger />}
-      {overlays.includes("attention") && <AttentionBell count={attention} />}
+      {overlays.includes("attention") && <AttentionBell count={attention} awaiting={awaitingConfirmation(me)} />}
       <AccountMenu person={me.user} account={account} />
     </>
   );

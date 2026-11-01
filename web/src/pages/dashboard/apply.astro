@@ -17,6 +17,7 @@ import {
   throwSelfApplicationFailure,
 } from "@/lib/admin/program-application";
 import { applyPageState } from "@/lib/student/apply-page";
+import { formatCalendarDate } from "@/lib/display-date";
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
@@ -164,8 +165,8 @@ const applicationsHref = spaces ? SPACE_PATHS.cohort : "/dashboard";
                 )}
                 {program.startDate && (
                   <p class="text-xs text-ink-muted">
-                    Starts {program.startDate.toLocaleDateString()}
-                    {program.endDate && ` — Ends ${program.endDate.toLocaleDateString()}`}
+                    Starts {formatCalendarDate(program.startDate)}
+                    {program.endDate && ` — Ends ${formatCalendarDate(program.endDate)}`}
                   </p>
                 )}
                 <form method="POST" class="mt-2">
