@@ -1,8 +1,8 @@
 ---
 import { PiInfoDuotone } from "react-icons/pi";
 import ModerationCase from "./ModerationCase.astro";
-import { QUEUE_TABS, type ModerationCase as Case } from "./case-model";
-import type { ModerationQueueState } from "@/lib/platform/contracts";
+import { QUEUE_TABS } from "./case-model";
+import type { QueueViewProps } from "./page-flow";
 
 /**
  * The admin moderation queue (U-2.4, screens/08), as /admin/moderation and its DEV harness render
@@ -10,20 +10,7 @@ import type { ModerationQueueState } from "@/lib/platform/contracts";
  * and swaps this whole region for the one the server renders back, so a decision reads the same
  * either way, and a refused one never looks recorded.
  */
-interface Props {
-  state: ModerationQueueState;
-  items: Case[];
-  pendingCount: number;
-  /** Where each decision form posts: this page, keeping the tab and page the admin is on. */
-  formAction: string;
-  /** Each tab's address: the page's own, or the harness's. */
-  tabHrefs: Record<ModerationQueueState, string>;
-  nextHref: string | null;
-  paged: boolean;
-  notice?: string;
-  failure?: string;
-  rowError?: { id: string; message: string; draft: string };
-}
+type Props = QueueViewProps;
 
 const { state, items, pendingCount, formAction, tabHrefs, nextHref, paged, notice, failure, rowError } = Astro.props;
 const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";

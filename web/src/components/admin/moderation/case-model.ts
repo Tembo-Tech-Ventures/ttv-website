@@ -113,12 +113,6 @@ export const QUEUE_TABS: readonly { state: ModerationQueueState; label: string }
   { state: "DECIDED", label: "Decided" },
 ];
 
-/** The page's own tab addresses. */
-export const QUEUE_TAB_HREFS: Record<ModerationQueueState, string> = {
-  PENDING: MODERATION_PATH,
-  DECIDED: `${MODERATION_PATH}?state=DECIDED`,
-};
-
 /** The first name, for "Dennis asked for a review". Names are free text, so fall back gently. */
 export function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] || "The author";
