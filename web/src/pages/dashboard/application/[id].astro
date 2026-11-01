@@ -6,12 +6,20 @@ import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
 import Badge from "@/components/common/Badge.astro";
 import Card from "@/components/common/Card.astro";
-import Button from "@/components/common/Button.astro";
+import ApplicationAnswers from "@/components/platform/application/ApplicationAnswers.astro";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { toProgramApplicationBadgeVariant } from "@/lib/admin/program-application";
+import {
+  canEditAnswers,
+  draftsFor,
+  parseApplicationAnswers,
+  readAnswerSubmission,
+  writeAnswers,
+  type ApplicationAnswerDrafts,
+} from "@/lib/student/application-answers";
 
 const user = Astro.locals.user!;
 const db = drizzle(env.DB, { schema });
@@ -20,64 +28,68 @@ const { id } = Astro.params;
 let success = "";
 let error = "";
 
-// Fetch the application (must belong to this user)
-const application = await db.query.programApplication.findFirst({
-  where: and(
-    eq(schema.programApplication.id, id!),
-    eq(schema.programApplication.userId, user.id),
-    isDemoUser(user.id) ? eq(schema.programApplication.programId, DEMO_PREFIX + "program") : undefined
-  ),
-  with: { program: { with: { curriculum: true } } },
-});
+// The application, only if it belongs to this user.
+const ownApplication = and(
+  eq(schema.programApplication.id, id!),
+  eq(schema.programApplication.userId, user.id),
+  isDemoUser(user.id) ? eq(schema.programApplication.programId, DEMO_PREFIX + "program") : undefined
+);
+const loadApplication = () =>
+  db.query.programApplication.findFirst({
+    where: ownApplication,
+    with: { program: { with: { curriculum: true } } },
+  });
+
+let application = await loadApplication();
 
 if (!application) {
   return Astro.redirect("/dashboard");
 }
 
-// Handle POST — update application JSON
-if (Astro.request.method === "POST" && application.status === "PENDING") {
-  try {
-    const formData = await Astro.request.formData();
-    const applicationJson = formData.get("application") as string;
+// Members answer the questions their application carries, as plain fields;
+// they never edit the stored JSON. Without questions there is nothing to post.
+let answers = parseApplicationAnswers(application.application);
+let drafts: ApplicationAnswerDrafts = answers.kind === "questions" ? draftsFor(answers.questions) : {};
+let fieldErrors: Readonly<Record<string, string>> = {};
 
-    // Validate it's valid JSON
-    JSON.parse(applicationJson);
+if (Astro.request.method === "POST" && answers.kind === "questions" && canEditAnswers(answers, application.status)) {
+  const formData = await Astro.request.formData().catch(() => null);
+  const submission = formData ? readAnswerSubmission(answers.questions, (field) => formData.get(field)) : null;
+  if (!submission) {
+    error = "Your answers could not be read. Please try again.";
+    Astro.response.status = 400;
+  } else if (!submission.ok) {
+    drafts = submission.drafts;
+    fieldErrors = submission.errors;
+    Astro.response.status = 400;
+  } else {
+    try {
+      const [saved] = await db
+        .update(schema.programApplication)
+        .set({ application: writeAnswers(application.application, submission.values) })
+        .where(and(ownApplication, eq(schema.programApplication.status, "PENDING")))
+        .returning({ application: schema.programApplication.application });
 
-    await db
-      .update(schema.programApplication)
-      .set({ application: applicationJson })
-      .where(
-        and(
-          eq(schema.programApplication.id, id!),
-          eq(schema.programApplication.userId, user.id),
-    isDemoUser(user.id) ? eq(schema.programApplication.programId, DEMO_PREFIX + "program") : undefined
-        )
-      );
-
-    success = "Application saved successfully!";
-
-    // Re-read updated data
-    const updated = await db.query.programApplication.findFirst({
-      where: eq(schema.programApplication.id, id!),
-      columns: { application: true },
-    });
-    if (updated) {
-      application.application = updated.application;
+      if (saved) {
+        application.application = saved.application;
+        answers = parseApplicationAnswers(saved.application);
+        drafts = answers.kind === "questions" ? draftsFor(answers.questions) : {};
+        success = "Your answers are saved.";
+      } else {
+        // The team reviewed it while the form was open: show where it stands now.
+        application = (await loadApplication()) ?? application;
+        answers = parseApplicationAnswers(application.application);
+        error = "The team has already reviewed this application, so its answers can no longer change.";
+        Astro.response.status = 409;
+      }
+    } catch {
+      drafts = submission.drafts;
+      error = "Your answers could not be saved. Please try again.";
+      Astro.response.status = 500;
     }
-  } catch (e) {
-    error = e instanceof SyntaxError
-      ? "Invalid JSON format. Please check your input."
-      : "Something went wrong. Please try again.";
   }
 }
 
-const isPending = application.status === "PENDING";
-let parsedApplication: Record<string, unknown> = {};
-try {
-  parsedApplication = JSON.parse(application.application);
-} catch {
-  parsedApplication = {};
-}
 const spaces = await resolveSpacePage(Astro.locals, "apply");
 ---
 
@@ -93,13 +105,13 @@ const spaces = await resolveSpacePage(Astro.locals, "apply");
     </div>
 
     {success && (
-      <div class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-300">
+      <div role="status" class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-300">
         {success}
       </div>
     )}
 
     {error && (
-      <div class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
+      <div role="alert" class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
         {error}
       </div>
     )}
@@ -156,42 +168,7 @@ const spaces = await resolveSpacePage(Astro.locals, "apply");
     <Card>
       <h3 class="mb-4 text-lg font-semibold text-white">Application Details</h3>
 
-      {isPending ? (
-        <form method="POST" class="space-y-4">
-          <div class="flex flex-col gap-1.5">
-            <label for="application" class="text-sm font-medium text-white/90">
-              Application Data (JSON)
-            </label>
-            <textarea
-              id="application"
-              name="application"
-              rows={10}
-              class="form-control font-mono text-sm placeholder:text-ink-muted"
-            >{JSON.stringify(parsedApplication, null, 2)}</textarea>
-            <p class="text-xs text-ink-muted">
-              Enter your application details as JSON.
-            </p>
-          </div>
-          <Button type="submit">
-            Save Application
-          </Button>
-        </form>
-      ) : (
-        <div>
-          {Object.keys(parsedApplication).length > 0 ? (
-            <dl class="space-y-3">
-              {Object.entries(parsedApplication).map(([key, value]) => (
-                <div>
-                  <dt class="text-sm text-ink-muted">{key}</dt>
-                  <dd class="text-white">{String(value)}</dd>
-                </div>
-              ))}
-            </dl>
-          ) : (
-            <p class="text-ink-muted">No additional details submitted.</p>
-          )}
-        </div>
-      )}
+      <ApplicationAnswers answers={answers} status={application.status} drafts={drafts} errors={fieldErrors} />
     </Card>
   </div>
 </SpacePage>

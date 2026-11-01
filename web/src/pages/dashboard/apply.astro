@@ -22,10 +22,6 @@ const db = drizzle(env.DB, { schema });
 const spaces = await resolveSpacePage(Astro.locals, "apply");
 
 const notice = Astro.url.searchParams.get("notice");
-const success =
-  notice === "application-submitted"
-    ? "Your cohort application was submitted."
-    : "";
 let error = "";
 
 if (Astro.request.method === "POST") {
@@ -106,6 +102,13 @@ const allPrograms = await db.query.program.findMany({
 const availablePrograms = allPrograms.filter(
   (p) => !appliedProgramIds.includes(p.id)
 );
+
+// After a successful post the page confirms the application and nothing else
+// contradicts it: the cohort list only offers the other open cohorts, and the
+// "nothing open" message is left out. The notice is only believed once the
+// person has an application to show.
+const submitted = notice === "application-submitted" && appliedProgramIds.length > 0;
+const applicationsHref = spaces ? SPACE_PATHS.cohort : "/dashboard";
 ---
 
 <SpacePage context={spaces} title="Apply to a Cohort" legacyTitle="Apply">
@@ -117,9 +120,15 @@ const availablePrograms = allPrograms.filter(
       </p>
     </div>
 
-    {success && (
-      <div role="status" class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-300">
-        {success}
+    {submitted && (
+      <div role="status" data-application-submitted class="rounded-md border border-green-500/30 bg-green-500/10 p-4 text-green-300">
+        <p class="font-medium">Your cohort application was submitted.</p>
+        <p class="mt-1 text-sm text-green-200/90">
+          It's with the team now. You can follow its status {spaces ? "on your Cohort page" : "from your dashboard"}.
+        </p>
+        <Button href={applicationsHref} class="mt-3">
+          View your applications
+        </Button>
       </div>
     )}
 
@@ -127,6 +136,10 @@ const availablePrograms = allPrograms.filter(
       <div role="alert" class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-red-300">
         {error}
       </div>
+    )}
+
+    {submitted && availablePrograms.length > 0 && (
+      <h2 class="text-lg font-semibold text-white">Other open cohorts</h2>
     )}
 
     {availablePrograms.length > 0 ? (
@@ -159,15 +172,16 @@ const availablePrograms = allPrograms.filter(
           </div>
         ))}
       </div>
-    ) : (
+    ) : !submitted && (
       <Card>
-        <div class="text-center py-8">
+        <div class="text-center py-8" data-apply-empty>
           <p class="text-ink-secondary">
-            No cohorts are accepting applications right now.
-            {appliedProgramIds.length > 0 && " You may already have applied to every open cohort."}
+            {allPrograms.length > 0
+              ? "You've applied to every cohort that's open right now."
+              : "No cohorts are accepting applications right now."}
           </p>
           {appliedProgramIds.length > 0 && (
-            <Button href={spaces ? SPACE_PATHS.cohort : "/dashboard"} class="mt-4">
+            <Button href={applicationsHref} class="mt-4">
               View your applications
             </Button>
           )}

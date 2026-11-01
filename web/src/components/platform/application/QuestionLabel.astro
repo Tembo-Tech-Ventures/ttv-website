@@ -1,0 +1,27 @@
+---
+/**
+ * An application question's wording. Questions imported from the old stack
+ * hold markdown links ("the free portion of the [HTML/CSS course](https://…)"),
+ * which read as words with links rather than as markdown.
+ */
+import { labelSegments } from "@/lib/student/application-answers";
+
+interface Props {
+  label: string;
+}
+
+const segments = labelSegments(Astro.props.label);
+---
+
+{segments.map((segment) =>
+  segment.href ? (
+    <a
+      href={segment.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="text-primary underline underline-offset-2 hover:text-primary/80"
+    >{segment.text}<span class="sr-only"> (opens in a new tab)</span></a>
+  ) : (
+    segment.text
+  )
+)}

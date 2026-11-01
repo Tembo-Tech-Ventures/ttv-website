@@ -1,0 +1,190 @@
+---
+/**
+ * A member's application answers: plain labelled fields while there are
+ * questions to answer on a pending application, otherwise a read-only account
+ * of what was recorded. Members never see the stored JSON.
+ *
+ * The form is an ordinary POST with no script. Field names are
+ * `answer.<question name>`; the page reads them with readAnswerSubmission and
+ * passes back the drafts and errors, so a rejected form keeps what was typed.
+ */
+import Button from "@/components/common/Button.astro";
+import QuestionLabel from "./QuestionLabel.astro";
+import {
+  ANSWER_LIMITS,
+  canEditAnswers,
+  fieldName,
+  formatAnswer,
+  plainLabel,
+  type ApplicationAnswerDrafts,
+  type ApplicationAnswers,
+  type ApplicationQuestion,
+} from "@/lib/student/application-answers";
+
+interface Props {
+  answers: ApplicationAnswers;
+  /** The application's status: answers can change only while it is PENDING. */
+  status: string;
+  drafts: ApplicationAnswerDrafts;
+  errors: Readonly<Record<string, string>>;
+}
+
+const { answers, status, drafts, errors } = Astro.props;
+const editable = canEditAnswers(answers, status);
+const nothingRecorded =
+  answers.kind === "enrollment"
+    ? "The TTV team added you to this cohort directly, so there were no application questions."
+    : status === "PENDING"
+      ? "This cohort doesn't ask any application questions, so there's nothing to fill in. Your application's status is shown above and changes when the team reviews it."
+      : "No answers were recorded with this application.";
+
+const fieldId = (question: ApplicationQuestion) => `answer-${question.name}`;
+const errorId = (question: ApplicationQuestion) => `${fieldId(question)}-error`;
+const errorFor = (question: ApplicationQuestion) => errors[question.name];
+const describedBy = (question: ApplicationQuestion) => (errorFor(question) ? errorId(question) : undefined);
+const fieldClass = (question: ApplicationQuestion) => [
+  "form-control placeholder:text-ink-muted",
+  errorFor(question) && "border-red-500",
+];
+const questions = answers.kind === "questions" ? answers.questions : [];
+const failed = questions.filter((question) => errorFor(question));
+---
+
+{
+  answers.kind === "questions" && editable ? (
+    <form method="POST" class="space-y-6" data-application-answers-form>
+      {failed.length > 0 && (
+        <div role="alert" class="rounded-md border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+          <p class="font-medium">
+            {failed.length === 1 ? "One answer needs" : `${failed.length} answers need`} another look. Everything you typed is still here.
+          </p>
+          <ul class="mt-2 list-disc space-y-1 pl-5">
+            {failed.map((question) => (
+              <li>
+                <a href={`#${fieldId(question)}`} class="underline underline-offset-2">
+                  {plainLabel(question.label)} {errorFor(question)}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <p class="text-sm text-ink-secondary">You can change your answers until the team reviews your application.</p>
+
+      {questions.map((question) => {
+        const draft = drafts[question.name] ?? "";
+        const error = errorFor(question);
+        const isChoice = question.type === "boolean" || question.type === "requiredBoolean";
+
+        return isChoice ? (
+          <fieldset
+            class="space-y-2"
+            data-answer={question.name}
+            aria-describedby={describedBy(question)}
+          >
+            <legend class="text-sm font-medium text-white/90">
+              <QuestionLabel label={question.label} />
+            </legend>
+            <div class="flex flex-wrap gap-3">
+              {(["yes", "no"] as const).map((choice) => (
+                <label class="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-teal/40 px-4 text-white has-[:checked]:border-primary">
+                  <input
+                    type="radio"
+                    id={choice === "yes" ? fieldId(question) : undefined}
+                    name={fieldName(question)}
+                    value={choice}
+                    checked={draft === choice}
+                    required={question.type === "requiredBoolean"}
+                    aria-invalid={error ? "true" : undefined}
+                    class="size-4 accent-primary"
+                  />
+                  {choice === "yes" ? "Yes" : "No"}
+                </label>
+              ))}
+            </div>
+            {error && <p id={errorId(question)} class="text-sm text-red-400">{error}</p>}
+          </fieldset>
+        ) : (
+          <div class="flex flex-col gap-1.5" data-answer={question.name}>
+            <label for={fieldId(question)} class="text-sm font-medium text-white/90">
+              <QuestionLabel label={question.label} />
+            </label>
+            {question.type === "textarea" ? (
+              <textarea
+                id={fieldId(question)}
+                name={fieldName(question)}
+                rows={5}
+                maxlength={ANSWER_LIMITS.textarea}
+                aria-invalid={error ? "true" : undefined}
+                aria-describedby={describedBy(question)}
+                class:list={fieldClass(question)}
+              >{draft}</textarea>
+            ) : question.type === "string" && question.options.length > 0 ? (
+              <select
+                id={fieldId(question)}
+                name={fieldName(question)}
+                aria-invalid={error ? "true" : undefined}
+                aria-describedby={describedBy(question)}
+                class:list={fieldClass(question)}
+              >
+                <option value="" selected={draft === ""}>Choose one</option>
+                {question.options.map((option) => (
+                  <option value={option.value} selected={draft === option.value}>{option.label}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                id={fieldId(question)}
+                name={fieldName(question)}
+                type={question.type === "date" ? "date" : question.type === "number" ? "number" : "text"}
+                step={question.type === "number" ? "any" : undefined}
+                inputmode={question.type === "number" ? "decimal" : undefined}
+                maxlength={question.type === "string" ? ANSWER_LIMITS.string : undefined}
+                value={draft}
+                aria-invalid={error ? "true" : undefined}
+                aria-describedby={describedBy(question)}
+                class:list={fieldClass(question)}
+              />
+            )}
+            {error && <p id={errorId(question)} class="text-sm text-red-400">{error}</p>}
+          </div>
+        );
+      })}
+
+      <Button type="submit">Save answers</Button>
+    </form>
+  ) : answers.kind === "questions" ? (
+    <dl class="space-y-4" data-application-answers-summary>
+      {questions.map((question) => {
+        const answer = formatAnswer(question);
+        return (
+          <div>
+            <dt class="text-sm text-ink-muted"><QuestionLabel label={question.label} /></dt>
+            <dd class:list={["mt-1 whitespace-pre-line break-words", answer ? "text-white" : "text-ink-muted"]}>
+              {answer ?? "Not answered"}
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
+  ) : answers.kind === "details" ? (
+    <div class="space-y-4" data-application-answers-summary>
+      {answers.details.length > 0 && (
+        <dl class="space-y-3">
+          {answers.details.map((detail) => (
+            <div>
+              <dt class="text-sm text-ink-muted">{detail.label}</dt>
+              <dd class="mt-1 whitespace-pre-line break-words text-white">{detail.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {answers.hidden && (
+        <p class="text-sm text-ink-muted">Some details recorded with this application can't be shown here.</p>
+      )}
+    </div>
+  ) : (
+    <p class="text-ink-secondary" data-application-answers-summary>{nothingRecorded}</p>
+  )
+}
