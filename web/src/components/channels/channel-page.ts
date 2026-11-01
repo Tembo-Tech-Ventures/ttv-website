@@ -34,7 +34,7 @@ const REASON: Record<number, string> = {
   413: "That form was too large.",
 };
 /** Why an agent's delegated session may not post the form, rather than the generic refusal. */
-const AGENT_REFUSAL = "Only the person can agree to how we talk to each other.";
+export const AGENT_REFUSAL = "Only the person can agree to how we talk to each other.";
 const respond = (status: number, headers: Record<string, string> = {}, reason = REASON[status]) =>
   new Response(reason ?? null, { status, headers: { ...PRIVATE, ...(reason ? { "Content-Type": "text/plain; charset=utf-8" } : {}), ...headers } });
 

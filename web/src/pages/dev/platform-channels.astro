@@ -34,6 +34,7 @@ import { spaceSidebar, type SidebarModel, type SpacePageKey } from "@/components
 import ChannelFrame from "@/components/channels/ChannelFrame.astro";
 import ConductArticle from "@/components/channels/ConductArticle.astro";
 import { CONDUCT_TITLE } from "@/components/channels/conduct";
+import { AGENT_REFUSAL } from "@/components/channels/channel-page";
 import { conductAgreed, handleConductPost } from "@/components/channels/conduct-flow";
 import { harnessChannels } from "@/components/channels/harness/fixtures";
 import { channelPath, channelSpace } from "@/components/channels/paths";
@@ -72,7 +73,7 @@ function here(extra: Record<string, string | null>): string {
 let record: ConductAcknowledgement | null = params.has("agreed") ? { version: 1, acknowledgedAt: FIXTURE_NOW, current: true } : null;
 const self = Astro.url.pathname + Astro.url.search;
 const agreeBack = here({ ...(viewing ? { channel: viewing.slug } : { view: "conduct" }), agreed: "" });
-if (agent && Astro.request.method === "POST") return new Response("Only the person can agree to how we talk to each other.", { status: 403 });
+if (agent && Astro.request.method === "POST") return new Response(AGENT_REFUSAL, { status: 403, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 const posted = await handleConductPost(Astro.request, {
   load: async () => record,
   acknowledge: async (version) => { record = { version, acknowledgedAt: FIXTURE_NOW, current: true }; },
