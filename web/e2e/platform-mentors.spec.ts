@@ -76,7 +76,9 @@ test("the keyboard reaches a mentor, opens the drawer, sends, and comes back to 
   await expect(drawer).toBeHidden();
   await expect(button).toBeFocused();
 
-  await page.keyboard.press("Enter");
+  // Space opens it too, as on a button, rather than scrolling the page.
+  await page.keyboard.press(" ");
+  await expect(drawer.getByRole("textbox", NOTE)).toBeFocused();
   await drawer.getByRole("textbox", NOTE).fill("Could you look at how my Android app syncs when it comes back online?");
   await drawer.getByRole("radio", { name: /Written review/ }).check();
   await drawer.getByRole("button", { name: "Send request" }).click();

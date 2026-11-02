@@ -75,6 +75,12 @@ export default function MentorCard({ item, now, open, askHref, onAsk }: Props) {
               event.preventDefault();
               onAsk(item, event.currentTarget);
             }}
+            // It opens a dialog, so Space works as it would on a button (Enter already follows the link's click).
+            onKeyDown={event => {
+              if (event.key !== " ") return;
+              event.preventDefault();
+              onAsk(item, event.currentTarget);
+            }}
             className={cx(ASK, BUTTON_VARIANTS[open ? "primary" : "quiet"])}
             data-ask-mentor={person.id}
           >

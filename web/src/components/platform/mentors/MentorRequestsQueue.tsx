@@ -1,7 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { PiArrowRight, PiCheck, PiPauseCircle } from "react-icons/pi";
-import type {
-  MentorAvailability, MentorDirectoryItem, MentorRequest, MentorRequestList, WorthAnotherLook,
+import {
+  WORTH_ANOTHER_LOOK_LIMIT,
+  type MentorAvailability, type MentorDirectoryItem, type MentorRequest, type MentorRequestList, type WorthAnotherLook,
 } from "@/lib/platform/contracts";
 import type { ApiClient } from "@/lib/platform/client/apiClient";
 import { useMentorRequests } from "@/lib/platform/client/hooks/mentoring";
@@ -308,7 +309,7 @@ function AnotherLook({ items }: { items: WorthAnotherLook["items"] }) {
       </ul>
       {more > 0 && (
         <a href={shown[0]!.href} className={cx("mt-4 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-peach-ink underline-offset-4 hover:underline", FOCUS_RING)}>
-          {more} more on Confirm work <PiArrowRight aria-hidden className="size-4" />
+          {more}{items.length >= WORTH_ANOTHER_LOOK_LIMIT ? "+" : ""} more on Confirm work <PiArrowRight aria-hidden className="size-4" />
         </a>
       )}
     </Card>

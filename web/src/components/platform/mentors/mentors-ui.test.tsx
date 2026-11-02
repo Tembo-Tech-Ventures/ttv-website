@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ROUTES, type MentorDirectoryItem } from "@/lib/platform/contracts";
+import { ROUTES, WORTH_ANOTHER_LOOK_LIMIT, type MentorDirectoryItem } from "@/lib/platform/contracts";
 import { availability, FIXTURE_NOW, meByPersona, mentors, people, pendingMentorRequest, worthAnotherLook } from "@/lib/platform/fixtures";
 import { NO_FILTERS, parseDirectoryUrl } from "@/lib/platform/client/mentor-directory";
 import { createMentoringMock } from "@/lib/platform/client/mentoring.mock";
@@ -276,6 +276,13 @@ describe("a mentor's requests", () => {
     await queue(undefined, { items });
     expect(all("[data-another-look-item]")).toHaveLength(3);
     expect(text("[data-another-look] > a")).toBe("2 more on Confirm work ");
+  });
+
+  it("says the rest is a floor when the server's list is at its cap", async () => {
+    const base = worthAnotherLook.items[0]!;
+    const items = Array.from({ length: WORTH_ANOTHER_LOOK_LIMIT }, (_, n) => ({ ...base, journeyId: `journey-${n}`, title: `Project ${n}` }));
+    await queue(undefined, { items });
+    expect(text("[data-another-look] > a")).toBe(`${WORTH_ANOTHER_LOOK_LIMIT - 3}+ more on Confirm work `);
   });
 
   it("accepts at once and then links the conversation", async () => {

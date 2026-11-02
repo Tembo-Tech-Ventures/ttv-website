@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { CreateMentorRequest } from "@/lib/platform/contracts";
 import { mentors, pendingMentorRequest, projects } from "@/lib/platform/fixtures";
@@ -95,6 +96,11 @@ describe("asking for time without JavaScript", () => {
 });
 
 describe("requestFailure", () => {
+  it("knows B-4.1's member refusal word for word, so a reworded backend copy fails here and not quietly in the drawer", () => {
+    // The backend lane owns the message (lib/mentoring/requests.ts); this lane may not import it into client code.
+    expect(readFileSync("src/lib/mentoring/requests.ts", "utf8")).toContain(JSON.stringify(NEEDS_MEMBER_MESSAGE));
+  });
+
   it("reads only B-4.1's member refusal as needing a member account", () => {
     expect(requestFailure({ status: 403, code: "forbidden", message: NEEDS_MEMBER_MESSAGE })).toBe("notMember");
     expect(requestFailure({ status: 403, code: "forbidden", message: "Same-origin request required." })).toBe("other");
