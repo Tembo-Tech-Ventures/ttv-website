@@ -7,12 +7,13 @@ import { bodyForReader } from "@/lib/channels/moderation/mask";
 import { FLAG_EVENT, screenedReasons } from "@/lib/channels/mutations";
 import {
   MessageEmbed, type MentorRequestListQuery,
-  type Conversation, type CreateMentorRequest, type DeclineMentorRequest, type MentorRequest, type MentorRequestList, type MentorRequestProject,
-  type MentorRequestStatus, type ProjectEmbed, type RedirectMentorRequest,
+  type Conversation, type CreateMentorRequest, type DeclineMentorRequest, type MentorRequest, type MentorRequestCheck, type MentorRequestList,
+  type MentorRequestProject, type MentorRequestStatus, type ProjectEmbed, type RedirectMentorRequest,
 } from "@/lib/platform/contracts";
 import { hasSpot, monthStart } from "./capacity";
 import { personColumns, personRow, personSummary } from "./people";
 import { LISTED } from "./profiles";
+import { HELD, MENTOR_SEES } from "./visibility";
 
 /**
  * Asking a mentor for time (README.md beside this file, "Requests"). Only the person asking and the
@@ -42,7 +43,8 @@ export interface MentoringContext {
   conductVersion?: number;
 }
 
-const notFound = () => new ChannelError("not_found", "Request not found.", 404);
+export const notFound = () => new ChannelError("not_found", "Request not found.", 404);
+const REPORTED = () => new ChannelError("conflict", "You reported this request. TTV is checking it.", 409);
 /**
  * Who may ask a mentor for time (coordinator, 2026-11-02, pending Raph): a member account, meaning
  * a community profile or a cohort membership (an APPROVED, AUDIT or COMPLETED application). Mentor
@@ -55,28 +57,36 @@ export const IS_MEMBER = (userId: string) => `(EXISTS (SELECT 1 FROM communityPr
 const MENTOR_ROLE = (userId: string) =>
   `EXISTS (SELECT 1 FROM UserRoles ur JOIN Roles r ON r.id = ur.roleId WHERE ur.userId = ${userId} AND r.name = 'MENTOR')`;
 
-interface RequestRow extends Record<string, unknown> {
+export interface RequestRow extends Record<string, unknown> {
   id: string; requesterId: string; mentorId: string; status: MentorRequestStatus; format: MentorRequest["format"];
   note: string; noteReasons: string; project: string | null; projectAccess: string | null; channelId: string | null;
   redirectedToId: string | null; responseNote: string | null; createdAt: number; updatedAt: number;
+  caseState: "OPEN" | "DECIDED" | null; caseDecision: "KEEP" | "REMOVE" | null; reported: number;
+  closedRequest: number | null;
 }
 
 /**
- * Every column a MentorRequest needs, from mentor_request `r`. The attached work is checked again on
- * every read with the channel embeds' rule (still the asker's, still published), and carries the
- * mentors' confirmations at or before the attached revision.
+ * Every column a MentorRequest needs, from mentor_request `r`, its check `c` (mentor_request_case)
+ * and the mentor's report `rp`. The attached work is checked again on every read with the channel
+ * embeds' rule (still the asker's, still published), and carries the mentors' confirmations at or
+ * before the attached revision.
  */
-const REQUEST_SELECT = `SELECT r.id, r.requesterId, r.mentorId, r.status, r.format, r.note, r.noteReasons, r.project,
+export const REQUEST_COLUMNS = `r.id, r.requesterId, r.mentorId, r.status, r.format, r.note, r.noteReasons, r.project,
   r.channelId, r.redirectedToId, r.responseNote, r.createdAt, r.updatedAt,
+  c.state AS caseState, c.decision AS caseDecision, rp.requestId IS NOT NULL AS reported,
+  c.closedRequest,
   CASE WHEN r.project IS NOT NULL THEN (SELECT ${confirmationsOf("j.id", "r.journeyVersion")} FROM communityJourney j
     WHERE j.id = r.journeyId AND j.userId = r.requesterId AND j.visibility = 'institution') END AS projectAccess,
   ${personColumns("ru", "r.requesterId", "requester", { cohorts: true })},
   ${personColumns("mu", "r.mentorId", "mentor")},
-  ${personColumns("tu", "r.redirectedToId", "target")}
-FROM mentor_request r JOIN "user" ru ON ru.id = r.requesterId JOIN "user" mu ON mu.id = r.mentorId
-  LEFT JOIN "user" tu ON tu.id = r.redirectedToId`;
+  ${personColumns("tu", "r.redirectedToId", "target")}`;
+/** The joins REQUEST_COLUMNS reads besides `r` and `c`: the people and the report. */
+export const REQUEST_JOINS = `JOIN "user" ru ON ru.id = r.requesterId JOIN "user" mu ON mu.id = r.mentorId
+  LEFT JOIN "user" tu ON tu.id = r.redirectedToId LEFT JOIN mentor_request_report rp ON rp.requestId = r.id`;
+const REQUEST_SELECT = `SELECT ${REQUEST_COLUMNS}
+FROM mentor_request r LEFT JOIN mentor_request_case c ON c.requestId = r.id ${REQUEST_JOINS}`;
 
-function reasonsOf(text: string): string[] {
+export function reasonsOf(text: string): string[] {
   try {
     const value: unknown = JSON.parse(text);
     return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
@@ -102,22 +112,47 @@ function responseFor(row: RequestRow, viewerId: string): string | null {
   return bodyForReader({ body: row.responseNote, moderationState: reasons.length > 0 ? "FLAGGED" : "VISIBLE", reasons }, false);
 }
 
-/** The request as this party sees it: each sees contact details in the other's words masked, as in a channel. */
-function toRequest(row: RequestRow, viewerId: string): MentorRequest {
+/**
+ * What a check means to this party (contracts MentorRequestCheck), only ever what is true: the person
+ * asking waits while it is open, and learns only that a removed request was closed; whether it was
+ * ever sent depends on whether the mentor saw it, which a report says (MENTOR_SEES). The mentor who
+ * reported it sees that, until an admin keeps it.
+ */
+function checkFor(row: RequestRow, viewerId: string): MentorRequestCheck | null {
+  if (row.requesterId === viewerId) {
+    const seen = Boolean(row.reported);
+    if (row.caseState === "OPEN" && row.status === "PENDING") return seen ? "checking" : "waiting";
+    // Only when the removal closed it: a request the asker withdrew first stays theirs ("withdrawn").
+    if (row.closedRequest) return seen ? "closed" : "not_sent";
+    return null;
+  }
+  return row.reported && !(row.caseState === "DECIDED" && row.caseDecision === "KEEP") ? "reported" : null;
+}
+
+/**
+ * The request as this party sees it: each sees contact details in the other's words masked, as in a
+ * channel. An admin checking it (`admin`) reads both texts as written, and no party's check.
+ */
+export function toRequest(row: RequestRow, viewerId: string, { admin = false } = {}): MentorRequest {
   const reasons = reasonsOf(row.noteReasons);
-  const note = bodyForReader({ body: row.note, moderationState: reasons.length > 0 ? "FLAGGED" : "VISIBLE", reasons }, row.requesterId === viewerId);
+  const note = admin ? row.note
+    : bodyForReader({ body: row.note, moderationState: reasons.length > 0 ? "FLAGGED" : "VISIBLE", reasons }, row.requesterId === viewerId);
   return {
     id: row.id, requester: personSummary(row.requesterId, personRow(row, "requester")),
     mentor: personSummary(row.mentorId, personRow(row, "mentor")), note, project: projectFor(row), format: row.format,
     status: row.status, channelId: row.channelId,
     redirectedTo: row.redirectedToId === null ? null : personSummary(row.redirectedToId, personRow(row, "target")),
-    responseNote: responseFor(row, viewerId), createdAt: row.createdAt, updatedAt: row.updatedAt,
+    responseNote: admin ? row.responseNote : responseFor(row, viewerId), check: admin ? null : checkFor(row, viewerId),
+    createdAt: row.createdAt, updatedAt: row.updatedAt,
   };
 }
 
-/** The request if the viewer is one of its two parties; null otherwise, whether or not it exists. One read. */
-async function partyRow(ctx: MentoringContext, id: string): Promise<RequestRow | null> {
-  return ctx.db.prepare(`${REQUEST_SELECT} WHERE r.id = ?1 AND ?2 IN (r.requesterId, r.mentorId)`)
+/**
+ * The request if the viewer is one of its two parties, and the mentor may see it (MENTOR_SEES); null
+ * otherwise, whether or not it exists. One read.
+ */
+export async function partyRow(ctx: MentoringContext, id: string): Promise<RequestRow | null> {
+  return ctx.db.prepare(`${REQUEST_SELECT} WHERE r.id = ?1 AND (r.requesterId = ?2 OR (r.mentorId = ?2 AND ${MENTOR_SEES("r")}))`)
     .bind(id, ctx.viewerId).first<RequestRow>();
 }
 
@@ -151,12 +186,12 @@ export async function getConversation(ctx: MentoringContext, channelId: string):
   };
 }
 
-/** A page boundary: the last request's createdAt and id, base64url JSON. Opaque to clients. */
-function encodeCursor(row: Pick<RequestRow, "createdAt" | "id">): string {
-  return btoa(JSON.stringify([row.createdAt, row.id])).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+/** A page boundary: the last item's time and id, base64url JSON. Opaque to clients. */
+export function encodeCursor(at: number, id: string): string {
+  return btoa(JSON.stringify([at, id])).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
 
-function decodeCursor(cursor: string): [number, string] {
+export function decodeCursor(cursor: string): [number, string] {
   try {
     const value: unknown = JSON.parse(atob(cursor.replaceAll("-", "+").replaceAll("_", "/")));
     if (Array.isArray(value) && value.length === 2 && Number.isSafeInteger(value[0]) && typeof value[1] === "string") {
@@ -167,15 +202,15 @@ function decodeCursor(cursor: string): [number, string] {
 }
 
 /**
- * GET /api/mentor-requests: the requests the caller sent (as=requester) or received (as=mentor),
- * newest first, REQUEST_PAGE_SIZE at a time, optionally of one status. One statement, along
- * mentor_request_requester_idx or mentor_request_mentor_idx.
+ * GET /api/mentor-requests: the requests the caller sent (as=requester) or received (as=mentor, those
+ * MENTOR_SEES lets them see), newest first, REQUEST_PAGE_SIZE at a time, optionally of one status.
+ * One statement, along mentor_request_requester_idx or mentor_request_mentor_idx.
  */
 export async function listRequests(ctx: MentoringContext, query: MentorRequestListQuery): Promise<MentorRequestList> {
   const [beforeAt, beforeId] = query.cursor === undefined ? [null, null] : decodeCursor(query.cursor);
-  const side = query.as === "mentor" ? "r.mentorId" : "r.requesterId";
+  const side = query.as === "mentor" ? `r.mentorId = ?1 AND ${MENTOR_SEES("r")}` : "r.requesterId = ?1";
   const { results } = await ctx.db.prepare(`${REQUEST_SELECT}
-    WHERE ${side} = ?1 AND (?2 IS NULL OR r.status = ?2)
+    WHERE ${side} AND (?2 IS NULL OR r.status = ?2)
       AND (?3 IS NULL OR r.createdAt < ?3 OR (r.createdAt = ?3 AND r.id < ?4))
     ORDER BY r.createdAt DESC, r.id DESC LIMIT ?5`)
     .bind(ctx.viewerId, query.status ?? null, beforeAt, beforeId, REQUEST_PAGE_SIZE + 1).all<RequestRow>();
@@ -183,7 +218,7 @@ export async function listRequests(ctx: MentoringContext, query: MentorRequestLi
   const last = page.at(-1);
   return {
     items: page.map((row) => toRequest(row, ctx.viewerId)),
-    nextCursor: results.length > REQUEST_PAGE_SIZE && last ? encodeCursor(last) : null,
+    nextCursor: results.length > REQUEST_PAGE_SIZE && last ? encodeCursor(last.createdAt, last.id) : null,
   };
 }
 
@@ -272,14 +307,15 @@ export type Transition = "accept" | "redirect" | "decline" | "withdraw";
 
 /** Who may make each move: the mentor answers, the person asking withdraws. */
 const ACTOR: Record<Transition, "mentor" | "requester"> = { accept: "mentor", redirect: "mentor", decline: "mentor", withdraw: "requester" };
-const ALREADY: Record<Exclude<MentorRequestStatus, "PENDING">, string> = {
+export const ALREADY: Record<Exclude<MentorRequestStatus, "PENDING">, string> = {
   ACCEPTED: "This request was already accepted.", REDIRECTED: "This request was already passed on to another mentor.",
   DECLINED: "This request was already declined.", WITHDRAWN: "This request was withdrawn.",
 };
 
 /**
  * The request a move names, once the caller may make it: a party (404 otherwise, as for a missing
- * request), the right party for the move (403), and still PENDING (409).
+ * request), the right party for the move (403), still PENDING (409), and for the mentor, not held by
+ * the check their own report opened (409).
  */
 async function movable(ctx: MentoringContext, id: string, move: Transition): Promise<RequestRow> {
   const row = await partyRow(ctx, id);
@@ -290,14 +326,18 @@ async function movable(ctx: MentoringContext, id: string, move: Transition): Pro
       ? "Only the person who asked can withdraw a request." : "Only the mentor asked can answer this request.", 403);
   }
   if (row.status !== "PENDING") throw new ChannelError("conflict", ALREADY[row.status], 409);
+  if (ACTOR[move] === "mentor" && row.caseState === "OPEN") {
+    throw REPORTED();
+  }
   return row;
 }
 
 /** After a guarded write changed nothing: the request moved on meanwhile (409), or `otherwise`. */
-async function lostRace(ctx: MentoringContext, id: string, otherwise: () => Error): Promise<Error> {
+export async function lostRace(ctx: MentoringContext, id: string, otherwise: () => Error): Promise<Error> {
   const row = await partyRow(ctx, id);
   if (!row) return notFound();
-  return row.status === "PENDING" ? otherwise() : new ChannelError("conflict", ALREADY[row.status], 409);
+  if (row.status !== "PENDING") return new ChannelError("conflict", ALREADY[row.status], 409);
+  return row.caseState === "OPEN" && row.mentorId === ctx.viewerId ? REPORTED() : otherwise();
 }
 
 /** What accepting created: the request, and the opening message (id and stored body) when this acceptance wrote it. */
@@ -342,7 +382,8 @@ export async function acceptRequest(ctx: MentoringContext, id: string): Promise<
   const { findings, key } = await screened(row.note, embeds[0] ?? null);
   const messageId = createId();
   // ?1 request, ?2 mentor: the move is still open to this mentor.
-  const open = `EXISTS (SELECT 1 FROM mentor_request WHERE id = ?1 AND mentorId = ?2 AND status = 'PENDING') AND ${MENTOR_ROLE("?2")}`;
+  const open = `EXISTS (SELECT 1 FROM mentor_request m WHERE m.id = ?1 AND m.mentorId = ?2 AND m.status = 'PENDING' AND NOT ${HELD("m")})
+    AND ${MENTOR_ROLE("?2")}`;
   const statements: D1PreparedStatement[] = [];
   if (existing === null) {
     statements.push(
@@ -356,7 +397,8 @@ export async function acceptRequest(ctx: MentoringContext, id: string): Promise<
   statements.push(
     db.prepare(`UPDATE mentor_request SET status = 'ACCEPTED', channelId = ?3, acceptedAt = ?4, decidedAt = max(?4, createdAt),
         updatedAt = max(?4, createdAt)
-      WHERE id = ?1 AND mentorId = ?2 AND status = 'PENDING' AND ${MENTOR_ROLE("?2")} AND EXISTS (SELECT 1 FROM channel WHERE id = ?3)
+      WHERE id = ?1 AND mentorId = ?2 AND status = 'PENDING' AND NOT ${HELD("mentor_request")} AND ${MENTOR_ROLE("?2")}
+        AND EXISTS (SELECT 1 FROM channel WHERE id = ?3)
       RETURNING id`).bind(id, viewerId, channelId, now),
     // The opening message, only for this acceptance (?4, its time): numbered like any post in the channel.
     db.prepare(`INSERT INTO channel_message
@@ -397,7 +439,7 @@ export async function redirectRequest(ctx: MentoringContext, id: string, input: 
   if (input.mentorId === viewerId || input.mentorId === row.requesterId) throw unsuitable();
   const written = await db.prepare(`UPDATE mentor_request SET status = 'REDIRECTED', redirectedToId = ?3, responseNote = ?4,
       decidedAt = max(?5, createdAt), updatedAt = max(?5, createdAt)
-    WHERE id = ?1 AND mentorId = ?2 AND status = 'PENDING' AND ?3 NOT IN (requesterId, mentorId)
+    WHERE id = ?1 AND mentorId = ?2 AND status = 'PENDING' AND NOT ${HELD("mentor_request")} AND ?3 NOT IN (requesterId, mentorId)
       AND EXISTS (SELECT 1 FROM mentor_profile p WHERE p.userId = ?3 AND ${LISTED})
     RETURNING id`).bind(id, viewerId, input.mentorId, input.note ?? null, now).all<{ id: string }>();
   if (written.results.length !== 1) throw await lostRace(ctx, id, unsuitable);
@@ -410,7 +452,7 @@ export async function declineRequest(ctx: MentoringContext, id: string, input: D
   await movable(ctx, id, "decline");
   const written = await db.prepare(`UPDATE mentor_request SET status = 'DECLINED', responseNote = ?3,
       decidedAt = max(?4, createdAt), updatedAt = max(?4, createdAt)
-    WHERE id = ?1 AND mentorId = ?2 AND status = 'PENDING' RETURNING id`)
+    WHERE id = ?1 AND mentorId = ?2 AND status = 'PENDING' AND NOT ${HELD("mentor_request")} RETURNING id`)
     .bind(id, viewerId, input.note ?? null, now).all<{ id: string }>();
   if (written.results.length !== 1) throw await lostRace(ctx, id, () => new Error("A decline wrote nothing, for no known reason."));
   return getRequest(ctx, id);

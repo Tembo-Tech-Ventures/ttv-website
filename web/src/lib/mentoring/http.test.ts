@@ -33,6 +33,9 @@ async function everyRoute(s: MentoringFixture) {
     ["createMentorRequest", { body: { mentorId: PEOPLE.mercy, note: "Hi", project: null, format: "WRITTEN_REVIEW" } }],
     ["acceptMentorRequest", { id, body: {}, user: PEOPLE.david }], ["redirectMentorRequest", { id, body: { mentorId: PEOPLE.joseph }, user: PEOPLE.david }],
     ["declineMentorRequest", { id, body: {}, user: PEOPLE.david }], ["withdrawMentorRequest", { id, body: {} }],
+    ["reportMentorRequest", { id, body: { reason: "Asks me to pay a fee." }, user: PEOPLE.david }],
+    ["listMentorRequestCases", { user: PEOPLE.amina }],
+    ["decideMentorRequestCase", { id, body: { action: "keep", reason: "Fine." }, user: PEOPLE.amina }],
     ["getMentorAvailability", { user: PEOPLE.david }], ["updateMentorAvailability", { body: AVAILABILITY, user: PEOPLE.david }],
     ["getWorthAnotherLook", { user: PEOPLE.david }],
   ] as const satisfies readonly (readonly [MentoringOperation, Parameters<MentoringFixture["call"]>[1]])[];
@@ -43,7 +46,7 @@ describe("mentoring APIs: gates", () => {
     const s = setup();
     const covered = (await everyRoute(s)).map(([operation]) => operation).toSorted();
     const routes = (Object.keys(ROUTES) as (keyof typeof ROUTES)[])
-      .filter((key) => /^\/api\/(mentors|mentor-requests|mentoring)\b/.test(ROUTES[key].path)).toSorted();
+      .filter((key) => /^\/api\/(mentors|mentor-requests|mentoring|moderation\/mentor-requests)\b/.test(ROUTES[key].path)).toSorted();
     expect(covered).toEqual(routes);
   });
 
@@ -55,7 +58,9 @@ describe("mentoring APIs: gates", () => {
         UPDATE feature_flag SET audience = '${channels}' WHERE key = 'channels'`);
       for (const [operation, options] of routes) {
         const prepare = vi.spyOn(s.d1, "prepare");
-        const response = await s.call(operation, { ...options, env: DATABASE_FLAGS });
+        // The admin routes' caller is Amina, whom STAFF lets in: Mercy (no staff role) stands in.
+        const caller = "user" in options && options.user === PEOPLE.amina ? { user: PEOPLE.mercy } : {};
+        const response = await s.call(operation, { ...options, ...caller, env: DATABASE_FLAGS });
         expect([response.status, errorOf(response.body).code], `${mentorRequests}/${channels} ${operation}`).toEqual([404, "flag_off"]);
         const queries = prepare.mock.calls.map(([query]) => query);
         expect(queries.every((query) => /feature_flag|UserRoles/.test(query)), `${queries.join("\n")}`).toBe(true);

@@ -1,5 +1,7 @@
 import type { MentorRequestFormat, MentorRequestStatus } from "@/lib/platform/contracts";
+import { MENTOR_SEES } from "@/lib/mentoring/visibility";
 import { CONVERSATION_PATH, MENTOR_PAGE_PATHS } from "@/lib/platform/server/space-routes";
+import { MODERATION_QUEUE_HREF } from "./channel-producers";
 import { audienceFor, bestEffort, persist, type AttentionProducerContext, type EventItem } from "./producers";
 
 /**
@@ -9,12 +11,20 @@ import { audienceFor, bestEffort, persist, type AttentionProducerContext, type E
  * best effort like every producer: it reads the committed request and writes only while it is still in
  * the state the move left it in, so a retry adds nothing. Items need `spaces`, `channels` and
  * `mentor_requests` for their recipient. The note and the mentor's reply are never copied here.
+ *
+ * Checks (src/lib/mentoring/README.md, "Checks"): the mentor hears of a request only while they may
+ * see it (MENTOR_SEES), so a request Clef held reaches them only once an admin keeps it ("created"
+ * again, the same notice). A check opening ("checking") tells every admin but the two parties, once
+ * per opening, in the admin space, at the request notes queue, while the request still waits or was reported.
  */
 
-export type MentorRequestEvent = "created" | "accepted" | "redirected" | "declined" | "withdrawn";
+export type MentorRequestEvent = "created" | "accepted" | "redirected" | "declined" | "withdrawn" | "checking";
+
+/** The admin moderation page's request notes tab (U-4.1). */
+export const MENTOR_REQUEST_QUEUE_HREF = `${MODERATION_QUEUE_HREF}?tab=request-notes`;
 
 /** The status each event leaves a request in. */
-const STATUS_AFTER: Record<MentorRequestEvent, MentorRequestStatus> = {
+const STATUS_AFTER: Record<Exclude<MentorRequestEvent, "checking">, MentorRequestStatus> = {
   created: "PENDING", accepted: "ACCEPTED", redirected: "REDIRECTED", declined: "DECLINED", withdrawn: "WITHDRAWN",
 };
 
@@ -27,11 +37,12 @@ const ASKED_FOR: Record<MentorRequestFormat, string> = {
 interface RequestState {
   id: string; requesterId: string; mentorId: string; status: MentorRequestStatus; format: MentorRequestFormat;
   channelId: string | null; requesterName: string | null; mentorName: string | null; targetName: string | null;
+  visible: number; caseState: "OPEN" | "DECIDED" | null; openedAt: number | null; reported: number;
 }
 
 const nameOf = (name: string | null) => name?.trim() || "a member";
 
-function itemFor(event: MentorRequestEvent, request: RequestState): EventItem {
+function itemFor(event: Exclude<MentorRequestEvent, "checking">, request: RequestState): EventItem {
   const subject = (href: string, label: string) => ({ kind: "mentorRequest" as const, id: request.id, href, label });
   const eventKey = JSON.stringify([`mentor_${event}`, request.id]);
   const toMentor = { userId: request.mentorId, actorId: request.requesterId, space: "mentoring" as const, eventKey };
@@ -55,16 +66,37 @@ function itemFor(event: MentorRequestEvent, request: RequestState): EventItem {
   }
 }
 
+/** The open check on a request, for every admin but its two parties. */
+async function checkItems(context: AttentionProducerContext, request: RequestState): Promise<EventItem[]> {
+  // A withdrawn Clef hold is moot; a reported request stays the admins' to decide.
+  if (request.caseState !== "OPEN" || request.openedAt === null || (request.status !== "PENDING" && !request.reported)) return [];
+  const { results: admins } = await context.db.prepare(`SELECT DISTINCT ur.userId FROM UserRoles ur JOIN Roles r ON r.id = ur.roleId
+    WHERE r.name = 'ADMIN' AND ur.userId NOT IN (?1, ?2)`).bind(request.requesterId, request.mentorId).all<{ userId: string }>();
+  const subject = { kind: "mentorRequest" as const, id: request.id, href: MENTOR_REQUEST_QUEUE_HREF, label: "Request notes" };
+  const summary = request.reported ? "A mentor reported the note on a request." : "A request's note is waiting for a check.";
+  return admins.map(({ userId }) => ({ userId, actorId: null, kind: "moderation_pending" as const, space: "admin" as const, subject, summary,
+    eventKey: JSON.stringify(["mentor_request_check", request.id, request.openedAt]) }));
+}
+
 export function mentorRequestAttention(context: AttentionProducerContext, requestId: string, event: MentorRequestEvent) {
   return bestEffort(async () => {
     const audience = await audienceFor(context, "mentor_requests");
     if (audience === "OFF") return;
     const request = await context.db.prepare(`SELECT r.id, r.requesterId, r.mentorId, r.status, r.format, r.channelId,
-        ru.name AS requesterName, mu.name AS mentorName, tu.name AS targetName
+        ru.name AS requesterName, mu.name AS mentorName, tu.name AS targetName, ${MENTOR_SEES("r")} AS visible,
+        c.state AS caseState, c.openedAt, EXISTS (SELECT 1 FROM mentor_request_report rp WHERE rp.requestId = r.id) AS reported
       FROM mentor_request r JOIN "user" ru ON ru.id = r.requesterId JOIN "user" mu ON mu.id = r.mentorId
-        LEFT JOIN "user" tu ON tu.id = r.redirectedToId
+        LEFT JOIN "user" tu ON tu.id = r.redirectedToId LEFT JOIN mentor_request_case c ON c.requestId = r.id
       WHERE r.id = ?1`).bind(requestId).first<RequestState>();
-    if (!request || request.status !== STATUS_AFTER[event] || (event === "accepted" && request.channelId === null)) return;
+    if (!request) return;
+    if (event === "checking") {
+      await persist(context, audience, await checkItems(context, request));
+      return;
+    }
+    if (request.status !== STATUS_AFTER[event] || (event === "accepted" && request.channelId === null)) return;
+    if ((event === "created" || event === "withdrawn") && !request.visible) return;
+    // A mentor who reported the request has read it: no "new request" notice for it.
+    if (event === "created" && request.reported) return;
     await persist(context, audience, [itemFor(event, request)]);
   });
 }

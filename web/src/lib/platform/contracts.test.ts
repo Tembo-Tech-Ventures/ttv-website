@@ -29,6 +29,8 @@ const additionalEndpoints = [
   "POST /api/moderation/:messageId/undo",
   // B-4.2: "Worth another look".
   "GET /api/mentoring/another-look",
+  // B-4.1 follow-up: the mentor reports a request's note, and the admins' checks on request notes.
+  "POST /api/mentor-requests/:id/report", "GET /api/moderation/mentor-requests", "POST /api/moderation/mentor-requests/:id",
 ];
 /** Independent transcription of the onboarding SPEC §5 routes. */
 const onboardingEndpoints = [
@@ -93,6 +95,14 @@ const routeExamples = {
     response: { ...F.pendingMentorRequest, status: "REDIRECTED", redirectedTo: F.people.joseph, responseNote: "Joseph has career review availability." } },
   declineMentorRequest: { params: requestParams, body: {}, response: { ...F.pendingMentorRequest, status: "DECLINED" } },
   withdrawMentorRequest: { params: requestParams, body: {}, response: { ...F.pendingMentorRequest, status: "WITHDRAWN" } },
+  reportMentorRequest: { params: requestParams, body: { reason: "Pressures me to pay outside TTV." },
+    response: { ...F.pendingMentorRequest, check: "reported" } },
+  listMentorRequestCases: { query: { state: "OPEN" }, response: { items: [{ id: F.pendingMentorRequest.id, request: F.pendingMentorRequest,
+    state: "OPEN", clefReasons: ["May be abusive"], report: null, openedAt: 1, decision: null }], nextCursor: null } },
+  decideMentorRequestCase: { params: requestParams, body: { action: "remove", reason: "Abusive note." }, response: {
+    id: F.pendingMentorRequest.id, request: { ...F.pendingMentorRequest, status: "WITHDRAWN" }, state: "DECIDED", clefReasons: [],
+    report: { reason: "Pressures me to pay outside TTV.", reportedAt: 1 }, openedAt: 1,
+    decision: { action: "remove", reason: "Abusive note.", by: F.people.amina, decidedAt: 2 } } },
   getMentorAvailability: { response: F.availability },
   getWorthAnotherLook: { response: F.worthAnotherLook },
   updateMentorAvailability: { body: { headline: "Backend engineer", monthlyCapacity: 3, areas: ["Code review"],
