@@ -20,6 +20,13 @@ describe("masked contact details (QA2-08)", () => {
     expect(markup).not.toContain(MASKED_CONTACT);
   });
 
+  it("shows a marker inside a web address as the note, never as a broken link (#297 follow-up)", () => {
+    const markup = html(`Chat on https://wa.me/${MASKED_CONTACT}?text=hi`);
+    expect(markup).toContain('>https://wa.me/<span class="sr-only"> (opens in a new tab)</span></a>');
+    expect(markup).toContain('<span class="channel-masked" role="note">Contact details hidden until a moderator checks this message</span>?text=hi');
+    expect(markup).not.toContain("[contact");
+  });
+
   it("leaves a body without markers as it was", () => {
     expect(html("Call me after class")).toBe('<div class="channel-body"><p>Call me after class</p></div>');
   });

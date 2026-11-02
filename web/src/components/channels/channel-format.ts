@@ -1,4 +1,4 @@
-import type { Channel, EffectiveFlags, Message, ModerationState } from "@/lib/platform/contracts";
+import { MASKED_CONTACT, type Channel, type EffectiveFlags, type Message, type ModerationState } from "@/lib/platform/contracts";
 
 /*
  * Pure display rules for the channel view (U-2.1): days, times, message
@@ -143,7 +143,7 @@ function parseInline(text: string, names: readonly string[]): BodySegment[] {
       }
     }
     if (boundary) {
-      const link = LINK.exec(rest)?.[0].replace(LINK_TAIL, "");
+      const link = linkAt(rest);
       if (link && link.length > "https://".length) {
         flush();
         segments.push({ kind: "link", text: link, href: link });
@@ -156,6 +156,17 @@ function parseInline(text: string, names: readonly string[]): BodySegment[] {
   }
   flush();
   return segments;
+}
+
+/**
+ * The web address `rest` starts with, if any. A server MASKED_CONTACT marker inside an address ends it there
+ * (the marker holds spaces, so it would otherwise split into a broken link and raw fragments of the marker).
+ */
+function linkAt(rest: string): string | undefined {
+  const raw = LINK.exec(rest)?.[0];
+  if (!raw) return undefined;
+  const marker = rest.indexOf(MASKED_CONTACT);
+  return (marker >= 0 && marker < raw.length ? raw.slice(0, marker) : raw).replace(LINK_TAIL, "");
 }
 
 function matchMention(rest: string, names: readonly string[]): string | null {

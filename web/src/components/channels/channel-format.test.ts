@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { channels, FIXTURE_NOW, messages, meByPersona, people } from "@/lib/platform/fixtures";
-import type { Channel, Message } from "@/lib/platform/contracts";
+import { MASKED_CONTACT, type Channel, type Message } from "@/lib/platform/contracts";
 import {
   messageActionsLabel,
   ago, channelTitle, clipTime, clock, composerTools, dayKey, dayLabel, groupByDay, mentionsTembo, moderationNotice,
@@ -85,6 +85,15 @@ describe("message bodies", () => {
       { kind: "link", text: "https://example.com/synthetic/a?b=1", href: "https://example.com/synthetic/a?b=1" },
       { kind: "text", text: ". Or javascript:alert(1)" },
     ]]);
+  });
+
+  it("ends a link at a masked contact marker, so the marker stays whole text (#297 follow-up)", () => {
+    const [paragraph] = parseBody(`Chat on https://wa.me/${MASKED_CONTACT}?text=hi or https://${MASKED_CONTACT} today`);
+    expect(paragraph).toEqual([
+      { kind: "text", text: "Chat on " },
+      { kind: "link", text: "https://wa.me/", href: "https://wa.me/" },
+      { kind: "text", text: `${MASKED_CONTACT}?text=hi or https://${MASKED_CONTACT} today` },
+    ]);
   });
 
   it("never lets a label hide where a link goes: Markdown links show their address", () => {
