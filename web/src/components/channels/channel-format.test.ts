@@ -3,7 +3,7 @@ import { channels, FIXTURE_NOW, messages, meByPersona, people } from "@/lib/plat
 import type { Channel, Message } from "@/lib/platform/contracts";
 import {
   ago, channelTitle, clipTime, clock, composerTools, dayKey, dayLabel, groupByDay, mentionsTembo, moderationNotice,
-  openingDivider, parseBody, postingFor, temboReach, temboScope, threadSummary,
+  openingDivider, parseBody, postingFor, reviewState, temboReach, temboScope, threadSummary,
 } from "./channel-format";
 
 const MINUTE = 60_000;
@@ -157,6 +157,34 @@ describe("threads", () => {
     const one: Message = { ...messages.firstPr, thread: { replyCount: 1, participantIds: [], lastReplyAt: now - 12 * MINUTE } };
     expect(threadSummary(one, now)).toEqual({ replies: "1 reply", last: "last 12 min ago" });
     expect(threadSummary(messages.firstPr, now).last).toBeNull();
+  });
+});
+
+describe("where a hidden message's review stands", () => {
+  const hidden = (moderation: Partial<NonNullable<Message["moderation"]>>, deleted = false): Message => ({
+    ...messages.hidden, deleted, moderation: { state: "HIDDEN", reasons: ["Harsh"], ...moderation },
+  });
+
+  it.each([
+    [{ reviewable: true }, "available"],
+    [{ reviewable: true, reviewRequested: false }, "available"],
+    [{ reviewable: true, reviewRequested: true }, "requested"],
+    [{ reviewable: false }, "final"],
+    [{ reviewable: false, reviewRequested: false }, "final"],
+    [{ reviewable: false, reviewRequested: true }, "final"],
+    // An admin who is not the author learns only whether a review is open.
+    [{ reviewRequested: true }, "requested"],
+    [{ reviewRequested: false }, null],
+    [{}, null],
+  ] as const)("%j is %s", (moderation, state) => {
+    expect(reviewState(hidden(moderation))).toBe(state);
+  });
+
+  it("is nothing for a deleted, visible, flagged or unmoderated message", () => {
+    expect(reviewState(hidden({ reviewable: true }, true))).toBeNull();
+    expect(reviewState({ ...messages.hidden, moderation: { state: "FLAGGED", reasons: [], reviewable: true } })).toBeNull();
+    expect(reviewState({ ...messages.hidden, moderation: { state: "VISIBLE", reasons: [] } })).toBeNull();
+    expect(reviewState(messages.firstPr)).toBeNull();
   });
 });
 

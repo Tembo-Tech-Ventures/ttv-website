@@ -314,6 +314,26 @@ describe("the author's own flagged and hidden messages", () => {
     expect($("[data-review-requested]", message)).toBeNull();
   });
 
+  it("says an admin's decision is final, with no way to ask, once the server says it is not reviewable", async () => {
+    const { store } = await mount(dennis);
+    const final = store.peek(messages.hidden.id)!;
+    await act(async () => store.update([{ ...final, moderation: { ...final.moderation!, reviewable: false } }]));
+    const message = article(messages.hidden.id);
+    expect($("[data-review-final]", message)?.textContent).toBe("An admin has looked at this, and the decision is final.");
+    expect($("[data-ask-review]", message)).toBeNull();
+    expect($("[data-review-requested]", message)).toBeNull();
+  });
+
+  it("offers no review while the server does not say the message is reviewable", async () => {
+    const { store } = await mount(dennis);
+    const { reviewable: _unknown, ...moderation } = store.peek(messages.hidden.id)!.moderation!;
+    await act(async () => store.update([{ ...store.peek(messages.hidden.id)!, moderation }]));
+    const message = article(messages.hidden.id);
+    expect($("[data-moderation=HIDDEN]", message)).not.toBeNull();
+    expect($("[data-ask-review]", message)).toBeNull();
+    expect($("[data-review-final]", message)).toBeNull();
+  });
+
   it("does not tell a mentor who moderates the channel whether the author asked for a review", async () => {
     await mount(meByPersona.david);
     const message = article(messages.hiddenReviewRequested.id);
@@ -374,7 +394,7 @@ describe("createModerationActions", () => {
   it("reports through B-2.5's route and touches no cached message", async () => {
     const { api, seen } = client(() => ({ data: { ok: true } }));
     const update = vi.fn();
-    await createModerationActions({ store: { update }, api }).report("s00000000000000000000408", "Spam or unrelated promotion");
+    await createModerationActions({ store: { peek: () => undefined, update }, api }).report("s00000000000000000000408", "Spam or unrelated promotion");
     expect(seen).toEqual([{ method: "POST", path: "/api/messages/s00000000000000000000408/report", body: { reason: "Spam or unrelated promotion" } }]);
     expect(update).not.toHaveBeenCalled();
   });
@@ -383,7 +403,7 @@ describe("createModerationActions", () => {
     const hidden: Message = { ...messages.firstPr, moderation: { state: "HIDDEN", reasons: ["Off-topic"] } };
     const { api, seen } = client(() => ({ data: hidden }));
     const update = vi.fn();
-    const result = await createModerationActions({ store: { update }, api }).moderate(messages.firstPr.id, "hide", "Off-topic");
+    const result = await createModerationActions({ store: { peek: () => undefined, update }, api }).moderate(messages.firstPr.id, "hide", "Off-topic");
     expect(seen).toEqual([{ method: "POST", path: `/api/moderation/${messages.firstPr.id}`, body: { action: "hide", reason: "Off-topic" } }]);
     expect(update).toHaveBeenCalledWith([hidden]);
     expect(result).toEqual(hidden);
@@ -392,7 +412,7 @@ describe("createModerationActions", () => {
   it("asks for a review through B-2.5's route, with the note only when there is one", async () => {
     const { api, seen } = client(() => ({ data: { ok: true } }));
     const update = vi.fn();
-    const actions = createModerationActions({ store: { update }, api });
+    const actions = createModerationActions({ store: { peek: () => undefined, update }, api });
     await actions.requestReview(messages.hidden.id, "I was quoting the brief.");
     await actions.requestReview(messages.hidden.id, null);
     expect(seen).toEqual([
@@ -402,10 +422,18 @@ describe("createModerationActions", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it("marks the cached message as asked once the server accepts, so the note survives without a session record", async () => {
+    const { api } = client(() => ({ data: { ok: true } }));
+    const update = vi.fn();
+    const cached: Message = { ...messages.hidden, moderation: { state: "HIDDEN", reasons: ["Harsh, not about the work"], reviewable: true } };
+    await createModerationActions({ store: { peek: (id) => (id === cached.id ? cached : undefined), update }, api }).requestReview(cached.id, null);
+    expect(update).toHaveBeenCalledWith([{ ...cached, moderation: { ...cached.moderation, reviewRequested: true } }]);
+  });
+
   it("rejects with the server's error and changes nothing", async () => {
     const { api } = client(() => ({ status: 409, data: { error: { code: "conflict", message: "Changed" } } }));
     const update = vi.fn();
-    await expect(createModerationActions({ store: { update }, api }).moderate("x", "restore", "Fine")).rejects.toMatchObject({ code: "conflict", status: 409 });
+    await expect(createModerationActions({ store: { peek: () => undefined, update }, api }).moderate("x", "restore", "Fine")).rejects.toMatchObject({ code: "conflict", status: 409 });
     expect(update).not.toHaveBeenCalled();
   });
 
@@ -414,7 +442,7 @@ describe("createModerationActions", () => {
     const hang = vi.spyOn(api, "call").mockImplementation((_route, options) => new Promise((_resolve, reject) => {
       options?.signal?.addEventListener("abort", () => reject(new ApiError("aborted", 0, "Request aborted")));
     }));
-    await expect(createModerationActions({ store: { update: vi.fn() }, api, timeoutMs: 5 }).report("x", "Spam")).rejects.toMatchObject({ code: "aborted" });
+    await expect(createModerationActions({ store: { peek: () => undefined, update: vi.fn() }, api, timeoutMs: 5 }).report("x", "Spam")).rejects.toMatchObject({ code: "aborted" });
     expect(hang).toHaveBeenCalledOnce();
   });
 });

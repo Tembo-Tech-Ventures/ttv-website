@@ -6,7 +6,7 @@ import type { ModerationActions } from "./actions";
 
 type ModerationOptions = {
   /** The open channel's store: a moderated message replaces its cached copy, as an edit's confirmation does. */
-  store: Pick<ChannelStore, "update">;
+  store: Pick<ChannelStore, "peek" | "update">;
   api?: ApiClient;
   timeoutMs?: number;
 };
@@ -34,6 +34,9 @@ export function createModerationActions({ store, api = createApiClient(), timeou
       await api.call(ROUTES.requestModerationReview, {
         params: { id: messageId }, body: note === null ? {} : { note }, signal: AbortSignal.timeout(timeoutMs),
       });
+      // The route answers only "ok"; later reads say the review is open, so the cached copy says so now.
+      const cached = store.peek(messageId);
+      if (cached?.moderation) store.update([{ ...cached, moderation: { ...cached.moderation, reviewRequested: true } }]);
     },
   };
 }

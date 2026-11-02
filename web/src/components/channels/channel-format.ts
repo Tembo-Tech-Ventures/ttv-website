@@ -247,6 +247,21 @@ export function moderationNotice(message: Message, viewerId: string | null): Mod
       };
 }
 
+/**
+ * Where a hidden message's review stands, as the server tells this reader (B-2.7): "final" once an
+ * admin's decision stands (the author only), "requested" while a review is open (the author and
+ * admins), "available" while the author may still ask, and null otherwise. Asking is never offered
+ * unless the server says the message is reviewable.
+ */
+export type ReviewState = "final" | "requested" | "available";
+export function reviewState(message: Message): ReviewState | null {
+  const moderation = message.moderation;
+  if (moderation?.state !== "HIDDEN" || message.deleted) return null;
+  if (moderation.reviewable === false) return "final";
+  if (moderation.reviewRequested === true) return "requested";
+  return moderation.reviewable === true ? "available" : null;
+}
+
 // ---- Reporting, hiding and asking for a review ----
 
 /** Why a member reports a message. The words go to the moderators as the report's reason. */

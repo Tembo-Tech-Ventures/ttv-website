@@ -35,7 +35,8 @@ const servedEmbed = (embed: MessageEmbedView): MessageEmbedView => (embed.type =
 
 /**
  * One message as this person receives it, or null when they may not see it. Only the author and
- * admins learn whether a review was asked for (B-2.5).
+ * admins learn whether a review was asked for (B-2.5), and only the author whether it can still be
+ * (B-2.7): a fixture that does not say is reviewable unless it was deleted.
  */
 export function asSeenBy(fixture: Message, channel: Channel, me: Me): Message | null {
   const message = fixture.embeds.length > 0 ? { ...fixture, embeds: fixture.embeds.map(servedEmbed) } : fixture;
@@ -43,9 +44,9 @@ export function asSeenBy(fixture: Message, channel: Channel, me: Me): Message | 
   if (!moderation) return message;
   const own = message.author.id === me.user.id;
   if (!own && !canModerate(channel, me)) return moderation.state === "HIDDEN" ? null : { ...message, moderation: null };
-  if (own || me.capabilities.isAdmin || moderation.reviewRequested === undefined) return message;
-  const { reviewRequested: _private, ...shown } = moderation;
-  return { ...message, moderation: shown };
+  if (own) return moderation.state === "HIDDEN" ? { ...message, moderation: { ...moderation, reviewable: moderation.reviewable ?? !message.deleted } } : message;
+  const { reviewRequested, reviewable: _authorOnly, ...shown } = moderation;
+  return { ...message, moderation: me.capabilities.isAdmin && reviewRequested !== undefined ? { ...shown, reviewRequested } : shown };
 }
 
 /** The fixture channel this person may open, described as the server would to them; null when they may not. */
