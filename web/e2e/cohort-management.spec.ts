@@ -394,7 +394,7 @@ test.describe("admin cohort management", () => {
     ]);
     expect(forgedStaffRoleResponse.status()).toBe(400);
     expect(await forgedStaffRoleResponse.text()).toContain(
-      "Choose Instructor or TA"
+      "Choose Instructor, TA or Mentor for the cohort role."
     );
 
     const crossCohortResponse = await postForm(programPath, [
