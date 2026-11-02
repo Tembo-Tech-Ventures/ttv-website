@@ -4,7 +4,8 @@
  * "How we talk to each other" on a person's first visit to any channel, or a
  * plain note that conversations are not open yet. Once U-2.1 lands, the page
  * renders its ChannelView (with ChannelHeader as its children) in place of
- * the note, and keeps this frame for the first visit.
+ * the note, and keeps this frame for the first visit. A page with its own
+ * header (a private conversation) passes it in the `header` slot.
  */
 import type { Channel } from "@/lib/platform/contracts";
 import { CONDUCT_FIRST_VISIT, CONDUCT_TITLE } from "./conduct";
@@ -26,7 +27,7 @@ const { channel, agreed, action, canAgree = true } = Astro.props;
 ---
 
 <div class="flex min-h-full flex-col" data-channel-frame={channel.slug} data-channel-kind={channel.kind}>
-  <ChannelHeader channel={channel} />
+  {Astro.slots.has("header") ? <slot name="header" /> : <ChannelHeader channel={channel} />}
   {
     agreed ? (
       <section aria-labelledby="channel-not-open" data-channel-not-open class="mt-8 max-w-xl">

@@ -81,6 +81,17 @@ export async function resolveChannelPage(astro: AstroGlobal, space: ChannelSpace
   });
 }
 
+/**
+ * A private conversation's page, `/dashboard/community/dm/:id` (U-4.1): only a DIRECT channel this
+ * person is a member of; any other id is not found, exactly like one that does not exist.
+ */
+export async function resolveConversationPage(astro: AstroGlobal): Promise<(ChannelsPage & { channel: Channel }) | Response> {
+  return resolve(astro, "conversation", async () => {
+    const channel = await getRouteChannel(astro);
+    return channel?.kind === "DIRECT" ? { channel } : null;
+  });
+}
+
 /** "How we talk to each other" at CONDUCT_PATH. Agreeing here keeps the person on the page, now with the date. */
 export async function resolveConductPage(astro: AstroGlobal): Promise<ChannelsPage | Response> {
   return resolve(astro, "conduct", async () => ({}));

@@ -1,0 +1,35 @@
+---
+/**
+ * A private conversation (U-4.1), under Community: the channel view (U-2.1)
+ * for a DIRECT channel, with its own header. It exists only while `channels`
+ * is on for the person and only for its members; anyone else gets the same
+ * 404 as for one that does not exist (the router and getRouteChannel).
+ * On a first visit to any channel, the habits come first, as in every channel.
+ */
+import { env } from "cloudflare:workers";
+import ChannelPageBody from "@/components/channels/ChannelPageBody.astro";
+import { resolveConversationPage } from "@/components/channels/channel-page";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import ConversationHeader from "@/components/platform/mentors/ConversationHeader.astro";
+import { mentorRequestsOpen } from "@/components/platform/mentors/mentor-display";
+import { mentorsServer } from "@/components/platform/mentors/server";
+
+const page = await resolveConversationPage(Astro);
+if (page instanceof Response) return page;
+const now = Date.now();
+// The other member, and the accepted request that opened it (staff-opened ones have none). The request is
+// mentoring data, shown only while mentor requests are open; otherwise the header names the person alone.
+const conversation = await mentorsServer(Astro, env, page.context.me, now).conversation(page.channel.id).catch((error: unknown) => {
+  console.error("Conversation page: the conversation's header could not be read", error);
+  return null;
+});
+const counterpart = conversation?.counterpart ?? null;
+const request = mentorRequestsOpen(page.context.me) ? conversation?.request ?? null : null;
+const viewerId = page.context.me.user.id;
+---
+
+<SpacePage context={page.context} title={page.channel.name} channels={page.readable} channelId={page.channel.id} fill={page.agreed}>
+  <ChannelPageBody page={page}>
+    <ConversationHeader slot="header" counterpart={counterpart} request={request} viewerId={viewerId} fallbackName={page.channel.name} now={now} />
+  </ChannelPageBody>
+</SpacePage>

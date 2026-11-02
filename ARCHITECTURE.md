@@ -126,8 +126,8 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/admin/platform-flags` | Who sees each platform feature flag (Off, Staff, Everyone); Everyone asks to confirm, and dependency warnings never block. No JavaScript needed | ADMIN |
 | `/dashboard/feedback` | The student's own feedback, status and replies | Session |
 | `/dashboard/cohort/c/[slug]`, `/dashboard/community/c/[slug]` | A channel; 404 unless the caller can read it (flag `channels`) | Session |
-| `/dashboard/community/dm/[id]` | A direct conversation; 404 unless the caller is one of its two members (flag `channels`). Routed; the page ships with U-4.1 | Session |
-| `/dashboard/community/mentors`, `/dashboard/mentoring/requests`, `/dashboard/mentoring/availability` | Mentor directory; a mentor's requests and availability (Mentoring space); flag `mentor_requests`. Routed; the pages ship with U-4.1 | Session |
+| `/dashboard/community/dm/[id]` | A direct conversation; 404 unless the caller is one of its two members (flag `channels`). A mentor conversation opens with the request that started it | Session |
+| `/dashboard/community/mentors`, `/dashboard/mentoring/requests`, `/dashboard/mentoring/availability` | Mentor directory with URL filters, the caller's own requests (withdraw) and the "Ask for time" drawer, which also posts without JavaScript; a mentor's requests (accept, suggest another mentor, not this month) and availability (Mentoring space); asking needs a member account, otherwise the directory only reads; flag `mentor_requests` (see `web/src/components/platform/mentors/README.md`) | Session |
 | `/dashboard/community/conduct` | "How we talk to each other": the channel code of conduct; flag `channels` | Session |
 | `/admin/feedback` | Feedback queue; `/admin/feedback/[id]` to reply, theme and resolve | ADMIN |
 | `/admin/feedback/themes` | Feedback themes with agreement stats; `[id]` to plan, ship or decline | ADMIN |

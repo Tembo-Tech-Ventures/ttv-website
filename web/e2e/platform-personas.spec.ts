@@ -306,16 +306,23 @@ test.describe("a mentor", () => {
   const session = personaSession("mentor");
   test.skip(typeof session === "string", typeof session === "string" ? session : "");
 
-  test("sees confirmations, and requests and availability labelled as not open yet", async ({ context, page, baseURL }) => {
+  test("sees confirmations, and requests and availability as mentor_requests has them: open, or not open yet", async ({ context, page, baseURL }) => {
     if (typeof session === "string") return;
     await routeFonts(page);
     await signIn(context, baseURL!, session);
+    // PLATFORM_FLAGS_OVERRIDE decides this, not stored settings, so the test follows the mentor's effective flag.
+    const me = await page.request.get("/api/platform/me");
+    const requestsOpen = me.ok() && Boolean(((await me.json()) as { flags?: { mentor_requests?: boolean } }).flags?.mentor_requests);
 
     await open(page, "/dashboard/mentoring");
     await expect(page.getByRole("heading", { level: 1, name: "Mentoring" })).toBeVisible();
-    for (const name of ["Requests", "Availability"]) {
-      const section = page.getByRole("region", { name });
-      await expect(section).toContainText("Not open yet");
+    if (requestsOpen) {
+      const cards = page.locator("[data-mentor-requests-overview]");
+      await expect(cards.getByRole("link", { name: "See requests" })).toHaveAttribute("href", "/dashboard/mentoring/requests");
+      await expect(cards.getByRole("link", { name: "Edit availability" })).toHaveAttribute("href", "/dashboard/mentoring/availability");
+      for (const name of ["Requests", "Availability"]) await expect(page.getByRole("region", { name })).not.toContainText("Not open yet");
+    } else {
+      for (const name of ["Requests", "Availability"]) await expect(page.getByRole("region", { name })).toContainText("Not open yet");
     }
     await page.getByRole("link", { name: "Review shared work" }).click();
     await expect(page).toHaveURL(/\/dashboard\/mentoring\/confirm$/);
