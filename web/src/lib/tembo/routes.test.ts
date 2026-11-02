@@ -436,6 +436,23 @@ describe("a run's time and its claim", () => {
     expect(TEMBO_CONFIG.afterResponseMs).toBeLessThanOrEqual(28_000);
   });
 
+  it("asks Clef nothing when the run left no time for it, and logs that the answer went unchecked", async () => {
+    const s = setup();
+    s.message("help", { body: "Budget templates are pinned." });
+    const clock = { now: NOW };
+    const model: TemboModel = async () => {
+      clock.now += TEMBO_CONFIG.afterResponseMs - TEMBO_CONFIG.minClefMs + 1;
+      return { content: NO_TAGS, toolCalls: [], finishReason: "stop" };
+    };
+    const run = vi.fn(() => new Promise(() => {}));
+    await s.ask("help", s.question("help"), { temboModel: model, now: () => clock.now, env: { AI: { run } as unknown as Ai, AI_GATEWAY_NAME: "synthetic-gateway" } });
+    await s.afterResponse();
+    expect(run).not.toHaveBeenCalled();
+    expect(answers(s)).toMatchObject([{ moderationState: "VISIBLE" }]);
+    expect(s.rows("SELECT kind FROM attention_item WHERE kind = 'tembo_answer'")).toEqual([{ kind: "tembo_answer" }]);
+    expect(s.rows("SELECT level, message FROM errorEvent")).toEqual([{ level: "warning", message: "Tembo's answer was posted with no time left for Clef to check it." }]);
+  });
+
   it("tells the asker before Clef, and gives Clef only what is left of the window, so neither is cut off", async () => {
     const s = setup();
     s.message("help", { body: "Budget templates are pinned." });
@@ -445,8 +462,8 @@ describe("a run's time and its claim", () => {
       clock.now += 23_000;
       return { content: NO_TAGS, toolCalls: [], finishReason: "stop" };
     };
-    const hanging = { run: () => new Promise(() => {}) } as unknown as Ai;
-    const env = { AI: hanging, AI_GATEWAY_NAME: "synthetic-gateway" };
+    const clef = vi.fn(() => new Promise(() => {}));
+    const env = { AI: { run: clef } as unknown as Ai, AI_GATEWAY_NAME: "synthetic-gateway" };
     await s.ask("help", s.question("help"), { temboModel: model, now: () => clock.now, env });
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let done = false;
@@ -455,10 +472,12 @@ describe("a run's time and its claim", () => {
         await s.afterResponse();
         done = true;
       })();
-      // The run and the notice need no timers; wait for them on the event loop (setImmediate is not faked).
-      for (let turn = 0; turn < 100 && s.rows("SELECT 1 FROM attention_item").length === 0; turn += 1) {
+      // The run, the notice and the call to Clef need no timers: wait for them on the event loop
+      // (setImmediate is not faked), so Clef's deadline is set before the clock moves.
+      for (let turn = 0; turn < 1_000 && clef.mock.calls.length === 0; turn += 1) {
         await new Promise((resolve) => { setImmediate(resolve); });
       }
+      expect(clef).toHaveBeenCalledTimes(1);
       expect(answers(s)).toHaveLength(1);
       expect(s.rows("SELECT kind FROM attention_item WHERE kind = 'tembo_answer'")).toEqual([{ kind: "tembo_answer" }]);
       await vi.advanceTimersByTimeAsync(TEMBO_CONFIG.afterResponseMs - 23_000 - 1);

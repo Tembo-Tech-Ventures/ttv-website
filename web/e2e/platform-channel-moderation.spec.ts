@@ -162,9 +162,11 @@ test.describe("moderation in a channel", () => {
       await expect(form).toHaveCount(0);
       const note = message(page, FIRST_PR).locator("[data-moderation=HIDDEN]");
       // QA2-11: a moderator who is not an admin reads what comes next.
-      await expect(note).toHaveText(
-        "Hidden from members: Off-topic for this channel. Moderators can still see it. An admin looks at every hide, and Brian can ask for a review unless an admin made or upheld the hide. If an admin restores it, members see it here again.Undo hide",
+      await expect(note.locator("p").first()).toHaveText(
+        "Hidden from members: Off-topic for this channel. Moderators can still see it. An admin looks at every hide, and Brian can ask for a review unless an admin made or upheld the hide. If an admin restores it, members see it here again.",
       );
+      // Until an admin decides, the hide is the mentor's to take back.
+      await expect(note.getByRole("button", { name: "Undo hide" })).toBeVisible();
       await expect(announcer(page)).toHaveText("Message hidden from members. An admin will look at it.");
       await expect(actions(page, FIRST_PR)).toBeFocused();
       await page.screenshot({ path: `${EVIDENCE_DIR}/hidden-${viewport.width}.png` });

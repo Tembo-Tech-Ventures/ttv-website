@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { listAttention } from "@/lib/attention/service";
 import { MODERATION_QUEUE_HREF } from "@/lib/attention/channel-producers";
 import { capabilitiesFor } from "@/lib/platform/server/capabilities";
-import { ErrorEnvelope, Message, MessageList, ModerationQueue, ROUTES } from "@/lib/platform/contracts";
+import { ErrorEnvelope, MASKED_CONTACT, Message, MessageList, ModerationQueue, ROUTES } from "@/lib/platform/contracts";
 import type { CapabilityCase } from "@/lib/platform/server/capabilities.fixtures";
 import type { ChannelOperation } from "../http";
 import { channelDatabase, post, VIEWER, type ChannelFixture } from "../test-support";
@@ -714,6 +714,29 @@ describe("undoing a hide (QA2-11)", () => {
     const reasons = s.database.prepare("SELECT reasons FROM moderation_case WHERE messageId = ?").get(id) as { reasons: string };
     expect(JSON.parse(reasons.reasons)).toEqual([FINDING_REASONS.phone, "Sharing a number"]);
     expect(events(s).at(-1)).toMatchObject({ action: "RESTORE", source: "MENTOR", fromState: "HIDDEN", toState: "FLAGGED" });
+  });
+
+  it("keeps every detector reason, and so the mask, even when the hide's reason has the same words", async () => {
+    const s = mentors();
+    const posted = Message.parse((await s.call("postMessage", {
+      id: s.channel("help"), user: OTIENO, body: post("Call me: 0712 345 678 or see bit.ly/abc123"),
+    })).body);
+    const before = row(s, posted.id) as { moderationReasons: string };
+    expect(JSON.parse(before.moderationReasons)).toEqual([FINDING_REASONS.phone, FINDING_REASONS.shortener]);
+    // The moderator types the words their own note shows them.
+    await s.call("moderateMessage", { id: posted.id, body: hide(FINDING_REASONS.phone) });
+    expect((await undo(s, posted.id)).status).toBe(200);
+    expect(row(s, posted.id)).toMatchObject({ moderationState: "FLAGGED", moderationReasons: before.moderationReasons });
+    // A member who moderates nothing still reads it masked.
+    s.database.prepare('INSERT INTO "user"(id,name,email) VALUES (?,?,?)').run("synthetic-brian", "Brian Kiprop", "b@example.test");
+    const page = MessageList.parse((await s.call("listMessages", { id: s.channel("help"), user: "synthetic-brian" })).body);
+    expect(page.items.find((item) => item.id === posted.id)?.body).toBe(`Call me: ${MASKED_CONTACT} or see bit.ly/abc123`);
+    // A reason only the hide gave goes.
+    const other = Message.parse((await s.call("postMessage", { id: s.channel("help"), user: OTIENO, body: post("Ring 0733 445 566") })).body);
+    await s.call("moderateMessage", { id: other.id, body: hide("Pushy") });
+    expect(JSON.parse((row(s, other.id) as { moderationReasons: string }).moderationReasons)).toEqual([FINDING_REASONS.phone, "Pushy"]);
+    await undo(s, other.id);
+    expect(JSON.parse((row(s, other.id) as { moderationReasons: string }).moderationReasons)).toEqual([FINDING_REASONS.phone]);
   });
 
   it("is only for the moderator who hid it, before any admin decision, on a message still hidden", async () => {

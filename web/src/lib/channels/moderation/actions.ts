@@ -241,12 +241,16 @@ export async function undoModeratorHide(ctx: WriteContext, target: MessageTarget
       WHERE m.id = ?2 AND m.channelId = ?1 AND m.moderationState = 'HIDDEN' AND m.deletedAt IS NULL AND m.hiddenBy = ?3
         AND c.state = 'PENDING' AND NOT ${ADMIN_HID}
       RETURNING id`).bind(...params),
-    // Back as it was: FLAGGED keeps its other reasons (all of them, should the hide's reason be one).
+    // Back as it was. FLAGGED drops only what the hide alone added: a reason a detector or Clef flag
+    // carries stays, even when the moderator typed the same words, so masking never loses its reason.
     ctx.db.prepare(`UPDATE channel_message SET
         moderationState = (SELECT toState FROM moderation_event WHERE id = ?6),
         moderationReasons = CASE (SELECT toState FROM moderation_event WHERE id = ?6) WHEN 'VISIBLE' THEN '[]'
-          ELSE coalesce((SELECT json_group_array(value) FROM json_each(moderationReasons)
-            WHERE value NOT IN (SELECT value FROM json_each(${lastHide("reasons")})) HAVING count(*) > 0), moderationReasons) END,
+          ELSE coalesce((SELECT json_group_array(r.value) FROM json_each(moderationReasons) r
+            WHERE r.value NOT IN (SELECT value FROM json_each(${lastHide("reasons")}))
+              OR EXISTS (SELECT 1 FROM moderation_event f, json_each(f.reasons) fr WHERE f.messageId = ?2
+                AND f.action = 'FLAG' AND f.source IN ('DETECTOR','CLEF') AND fr.value = r.value)
+            HAVING count(*) > 0), moderationReasons) END,
         hiddenBy = NULL, hiddenAt = NULL, changeSeq = ${NEXT_CHANGE}
       WHERE id = ?2 AND ${written}`).bind(...params),
     // The case keeps what else it had, or closes when the hide was all it had.

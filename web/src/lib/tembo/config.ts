@@ -20,6 +20,8 @@ export const TEMBO_CONFIG = Object.freeze({
    * to spare: Clef gets what the run leaves, at most its own limit (channels/http.ts).
    */
   afterResponseMs: 28_000,
+  /** Less of the window than this left for Clef, and it is skipped (and logged) rather than asked in vain. */
+  minClefMs: 500,
   /**
    * The whole run, model calls included: the asker's notice and Clef (up to 8 seconds) follow it
    * within afterResponseMs. Each call may use only what is left, and none starts with less than

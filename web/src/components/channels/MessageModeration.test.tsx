@@ -265,12 +265,12 @@ describe("hiding, for the channel's moderators, and restoring, for admins", () =
     expect(client.moderation()).toEqual([{ kind: "hide", messageId: messages.firstPr.id, reason: "Off-topic for this channel" }]);
     const note = $("[data-moderation=HIDDEN]", article(messages.firstPr.id));
     // What happens next, and where the outcome shows (QA2-11).
-    expect(note?.textContent).toBe(
+    expect(note?.querySelector("p")?.textContent).toBe(
       "Hidden from members: Off-topic for this channel. Moderators can still see it. An admin looks at every hide, and Brian can ask for a review unless an admin made or upheld the hide. "
-      + "If an admin restores it, members see it here again."
-      // Until an admin decides, the hide is the mentor's to take back.
-      + "Undo hide",
+      + "If an admin restores it, members see it here again.",
     );
+    // Until an admin decides, the hide is the mentor's to take back.
+    expect(note?.querySelector("[data-undo-hide]")?.textContent).toBe("Undo hide");
     expect(announcer()).toBe("Message hidden from members. An admin will look at it.");
     expect(document.activeElement?.getAttribute("aria-label")).toMatch(/^Actions for Brian Kiprop's message at /);
     // Hidden messages take no reactions, and a mentor has no way back: that is an admin's decision.

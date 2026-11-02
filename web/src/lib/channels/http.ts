@@ -276,7 +276,15 @@ function afterResponse(operation: ChannelOperation, context: Context, env: Env, 
     // The notice first: a few writes, so it is never left for the end of the window. Clef then gets
     // what is left of the window, at most its own limit; out of time, it fails open and is logged.
     await temboAnswerAttention(attention, answerId);
-    const left = Math.max(0, started + TEMBO_CONFIG.afterResponseMs - clock());
+    const left = started + TEMBO_CONFIG.afterResponseMs - clock();
+    if (left < TEMBO_CONFIG.minClefMs) {
+      // No time for a useful check: a call now would be paid for and thrown away. The answer already
+      // passed the detectors, so it stays, as a Clef failure leaves it.
+      await recordError(env.DB, { source: "request", route: ROUTES.askTembo.path, version: env.DEPLOYMENT_VERSION, level: "warning",
+        error: new Error("Tembo's answer was posted with no time left for Clef to check it.") });
+      if (flagged) await moderationAttention(attention, answerId);
+      return;
+    }
     const outcome = await screen({ id: answerId, body }, channel, Math.min(options.clefTimeoutMs ?? CHANNEL_CLEF_TIMEOUT_MS, left));
     if (flagged || outcome === "flagged" || outcome === "hidden") await moderationAttention(attention, answerId);
   };
