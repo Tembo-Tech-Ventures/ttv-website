@@ -77,6 +77,17 @@
       0 1px 0 rgb(255 248 242 / 0.08) inset,
       0 -24px 60px -24px rgb(0 0 0 / 0.6);
   }
+
+  /*
+   * The plain panel is not in the top layer, so it stands on the space's bottom bar (its 3.75rem
+   * links and hairline) rather than under it, where "Send request" would be out of reach.
+   */
+  .mentor-drawer--static {
+    --bottom-bar: calc(3.75rem + 1px + env(safe-area-inset-bottom));
+
+    bottom: var(--bottom-bar);
+    max-height: calc(100dvh - 3rem - var(--bottom-bar));
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {

@@ -34,7 +34,7 @@ afterEach(async () => {
 const q = <T extends Element = HTMLElement>(selector: string) => container.querySelector<T>(selector);
 const all = (selector: string) => Array.from(container.querySelectorAll<HTMLElement>(selector));
 const text = (selector: string) => q(selector)?.textContent ?? "";
-const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+const settle = () => act(async () => { await new Promise((resolve) => { setTimeout(resolve, 0); }); });
 
 async function directoryProps(options: {
   conductAgreed?: boolean; member?: boolean; failure?: (request: Request) => MockReply | undefined; search?: string;

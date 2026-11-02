@@ -70,6 +70,55 @@ function FilterLink({ href, active, small = false, children }: { href: string; a
   );
 }
 
+/** The directory's filters: plain links that keep the URL, so they work without JavaScript. */
+function FilterBar({ path, base, filters, areas }: { path: string; base: DirectoryFilters; filters: DirectoryUrlState; areas: readonly string[] }) {
+  const howId = useId();
+  return (
+    <nav aria-label="Filter mentors" className="flex flex-col gap-3" data-mentor-filters>
+      <fieldset className="flex flex-wrap items-center gap-x-1 gap-y-2">
+        <legend className="sr-only">Area</legend>
+        <FilterLink href={directoryHref(path, base, { area: null })} active={!filters.area}>All</FilterLink>
+        {areas.map(area => (
+          <FilterLink key={area} href={directoryHref(path, base, { area })} active={Boolean(filters.area && sameArea(filters.area, area))}>{area}</FilterLink>
+        ))}
+      </fieldset>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <fieldset className="flex flex-wrap items-center gap-x-1 gap-y-2" aria-labelledby={howId}>
+          <span id={howId} className="mr-2 text-sm text-ink-secondary">How</span>
+          <FilterLink small href={directoryHref(path, base, { format: null })} active={!filters.format}>Any</FilterLink>
+          {MentorRequestFormat.options.map(format => (
+            <FilterLink small key={format} href={directoryHref(path, base, { format })} active={filters.format === format}>{FORMAT_LABELS[format]}</FilterLink>
+          ))}
+        </fieldset>
+        <a
+          href={directoryHref(path, base, { available: !filters.available })}
+          aria-current={filters.available ? "true" : undefined}
+          className={cx(PILL, "border", filters.available ? "border-transparent bg-ink-primary text-dark" : "border-hairline text-ink-primary hover:bg-ink-primary/7")}
+          data-filter-available
+        >
+          <PiCheck aria-hidden className={cx("size-4", !filters.available && "opacity-40")} />
+          Has open spots
+        </a>
+      </div>
+    </nav>
+  );
+}
+
+function NoMentors({ path, filtered }: { path: string; filtered: boolean }) {
+  return (
+    <div className="mt-8 rounded-[1.125rem] border border-dashed border-hairline p-6 text-ink-secondary" data-mentors-empty>
+      {filtered ? (
+        <p>
+          No mentors match these filters right now.{" "}
+          <a href={path} className={cx("font-semibold text-peach-ink underline underline-offset-4", FOCUS_RING)}>Show every mentor</a>
+        </p>
+      ) : (
+        <p>No mentors are listed yet. Mentors appear here once they've set out their availability.</p>
+      )}
+    </div>
+  );
+}
+
 /**
  * Community → Mentors (screen 05): the directory, its filters (plain links,
  * held in the URL), the requests this person sent, and the "Ask for time"
@@ -145,33 +194,7 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
       )}
       <OwnRequests store={ownRequests} now={now} mentors={mentors} onAsk={ask} />
 
-      <nav aria-label="Filter mentors" className="flex flex-col gap-3" data-mentor-filters>
-        <fieldset className="flex flex-wrap items-center gap-x-1 gap-y-2">
-          <legend className="sr-only">Area</legend>
-          <FilterLink href={directoryHref(path, base, { area: null })} active={!filters.area}>All</FilterLink>
-          {areas.map(area => (
-            <FilterLink key={area} href={directoryHref(path, base, { area })} active={Boolean(filters.area && sameArea(filters.area, area))}>{area}</FilterLink>
-          ))}
-        </fieldset>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <fieldset className="flex flex-wrap items-center gap-x-1 gap-y-2" aria-labelledby={`${headingId}-how`}>
-            <span id={`${headingId}-how`} className="mr-2 text-sm text-ink-secondary">How</span>
-            <FilterLink small href={directoryHref(path, base, { format: null })} active={!filters.format}>Any</FilterLink>
-            {MentorRequestFormat.options.map(format => (
-              <FilterLink small key={format} href={directoryHref(path, base, { format })} active={filters.format === format}>{FORMAT_LABELS[format]}</FilterLink>
-            ))}
-          </fieldset>
-          <a
-            href={directoryHref(path, base, { available: !filters.available })}
-            aria-current={filters.available ? "true" : undefined}
-            className={cx(PILL, "border", filters.available ? "border-transparent bg-ink-primary text-dark" : "border-hairline text-ink-primary hover:bg-ink-primary/7")}
-            data-filter-available
-          >
-            <PiCheck aria-hidden className={cx("size-4", !filters.available && "opacity-40")} />
-            Has open spots
-          </a>
-        </div>
-      </nav>
+      <FilterBar path={path} base={base} filters={filters} areas={areas} />
 
       <h2 className="sr-only">{filtered ? "Mentors matching your filters" : "All mentors"}</h2>
       {shown.length > 0 ? (
@@ -181,16 +204,7 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
           ))}
         </ul>
       ) : (
-        <div className="mt-8 rounded-[1.125rem] border border-dashed border-hairline p-6 text-ink-secondary" data-mentors-empty>
-          {filtered ? (
-            <p>
-              No mentors match these filters right now.{" "}
-              <a href={path} className={cx("font-semibold text-peach-ink underline underline-offset-4", FOCUS_RING)}>Show every mentor</a>
-            </p>
-          ) : (
-            <p>No mentors are listed yet. Mentors appear here once they've set out their availability.</p>
-          )}
-        </div>
+        <NoMentors path={path} filtered={filtered} />
       )}
 
       {!hydrated && shownMentor && form && (

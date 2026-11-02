@@ -140,6 +140,7 @@ const spaceHrefs = Object.fromEntries(me.spaces.map((id) => [id, `/dev/platform-
   me={me}
   space={space}
   title={view === "directory" ? "Mentors" : view === "requests" ? "Requests" : "Availability"}
+  titlePrefix={posted ? "Error: " : ""}
   overlays={[]}
   harness={{ account: { signOut: { kind: "link", href: "#signed-out", label: "Sign out" }, feedback: false }, spaceHrefs }}
 >
