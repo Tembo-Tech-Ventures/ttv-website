@@ -309,7 +309,7 @@ describe("a mentor's requests", () => {
   });
 
   it("keeps the reason when a report doesn't go through, so it can be sent again", async () => {
-    await queue((request) => request.method === "POST" && request.url.endsWith("/report")
+    await queue((http) => http.method === "POST" && http.url.endsWith("/report")
       ? { status: 503, data: { error: { code: "unavailable", message: "Try again." } } } : undefined);
     await act(async () => button(pendingMentorRequest.id, "Report this request").click());
     const reason = request(pendingMentorRequest.id).querySelector<HTMLTextAreaElement>("[data-report-request] textarea")!;
