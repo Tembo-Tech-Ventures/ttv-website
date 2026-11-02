@@ -459,8 +459,9 @@ the rest.
   is nothing left to decide. The signals it decided are the run that ends with
   the last one before that decision, back to the admin event before the run,
   so two decisions in a row (uphold, then restore) keep the case's own source,
-  reasons and actor. A case no signal opened keeps those of the admin hide
-  that opened it.
+  reasons and actor. A moderator's hide they took back before the decision is
+  not one of its signals. A case no signal opened keeps those of the admin
+  hide that opened it.
   Someone else's hide, an automatic one, or an admin's is 403 (admins restore
   instead); a hide an admin made or upheld, or any decided case, is 409, as are
   a message no longer hidden or deleted. `moderation.undoable` says so to that

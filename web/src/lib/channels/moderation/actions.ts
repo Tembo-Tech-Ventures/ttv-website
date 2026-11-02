@@ -225,9 +225,15 @@ const HAS_SIGNALS = `EXISTS (SELECT 1 ${SIGNALS})`;
 const PRIOR = `(SELECT e.id FROM moderation_event e WHERE e.messageId = ?2 AND e.source = 'ADMIN'
   AND moderation_case.reopenedAt IS NOT NULL AND e.createdAt < moderation_case.reopenedAt ORDER BY e.createdAt DESC, e.rowid DESC LIMIT 1)`;
 const prior = (column: "action" | "actorId" | "reasons" | "createdAt") => `(SELECT p.${column} FROM moderation_event p WHERE p.id = ${PRIOR})`;
-/** A people's or detectors' event on this case (?2 the message) since it first opened, alias `alias`. */
+/**
+ * A people's or detectors' event on this case (?2 the message) since it first opened, alias `alias`,
+ * that the decision saw standing: a moderator's hide they took back before the decision (their undo,
+ * the only RESTORE a moderator makes) is not one.
+ */
 const SIGNAL = (alias: string) => `${alias}.messageId = ?2 AND ${alias}.source <> 'ADMIN' AND ${alias}.action IN ('FLAG','HIDE')
-  AND ${alias}.createdAt >= moderation_case.openedAt`;
+  AND ${alias}.createdAt >= moderation_case.openedAt
+  AND NOT (${alias}.action = 'HIDE' AND EXISTS (SELECT 1 FROM moderation_event u WHERE u.messageId = ?2 AND u.source = 'MENTOR'
+    AND u.action = 'RESTORE' AND u.actorId = ${alias}.actorId AND u.createdAt >= ${alias}.createdAt AND u.createdAt <= ${prior("createdAt")}))`;
 /**
  * The signals that case had decided: the run of people's and detectors' events that ends with the
  * last one at or before the decision, back to the admin event before that run. Anchored on the run,

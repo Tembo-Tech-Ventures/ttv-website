@@ -790,6 +790,18 @@ describe("undoing a hide (QA2-11)", () => {
     expect(restored).toMatchObject({ source: "ADMIN_HIDE", reasons: '["Admin hid"]', actorId: ACHIENG, decision: "RESTORE", decidedBy: FAITH });
     await hideAndUndo(admins, second);
     expect(full(admins, second)).toEqual(restored);
+
+    // A report; a mentor's hide they took back before an admin kept it: the case is the report's alone.
+    const undone = mentors();
+    const third = undone.message("help", { author: OTIENO, body: "Spammy" });
+    await undone.call("reportMessage", { id: third, user: FAITH, body: { reason: "Spam" }, now: () => 1_000 });
+    await undone.call("moderateMessage", { id: third, body: hide("Harsh"), now: () => 2_000 });
+    expect((await undone.call("undoModerationHide", { id: third, body: {}, now: () => 3_000 })).status).toBe(200);
+    await undone.call("moderateMessage", { id: third, user: ACHIENG, body: { action: "keep", reason: "Fine" }, now: () => 4_000 });
+    const kept = full(undone, third);
+    expect(kept).toMatchObject({ source: "REPORT", reasons: '["Spam"]', actorId: null, decision: "KEEP" });
+    await hideAndUndo(undone, third);
+    expect(full(undone, third)).toEqual(kept);
   });
 
   it("is only for the moderator who hid it, before any admin decision, on a message still hidden", async () => {
