@@ -77,6 +77,22 @@
       0 1px 0 rgb(255 248 242 / 0.08) inset,
       0 -24px 60px -24px rgb(0 0 0 / 0.6);
   }
+
+  /*
+   * Without JavaScript there is no dialog to lift the sheet above the page, and a fixed panel would sit
+   * under the spaces bar. It joins the page's flow instead, first, where the link to it lands.
+   */
+  .mentor-drawer--static {
+    position: relative;
+    inset: auto;
+    z-index: auto;
+    width: auto;
+    max-height: none;
+    margin-bottom: 2rem;
+    border-width: 1px;
+    border-radius: 1.5rem;
+    box-shadow: none;
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {

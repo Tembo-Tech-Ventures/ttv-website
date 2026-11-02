@@ -4,10 +4,13 @@ import { localPersonaSession, personaSession, signIn, type PersonaKey } from "./
 
 /**
  * U-4.1/S-4.1: mentor connections against the real backend (B-4.1), as the
- * people who use them. A community member asks David for time; David accepts
- * and their private conversation opens with the note as its first message.
- * Then the other ways a request ends: withdrawn, not this month, a suggestion
- * of Samuel (who has one spot a month), and Samuel full once someone waits.
+ * people who use them. Achieng, an alumna with a community profile, asks David
+ * for time; David accepts and their private conversation opens with the note
+ * as its first message. Then the other ways a request ends: withdrawn, not
+ * this month, a suggestion of Samuel (who has one spot a month), and Samuel
+ * full once someone waits. Asking works without JavaScript too. Accounts
+ * without a profile or a cohort place (Lucy, community only; Joseph,
+ * institution only) read the directory with neutral copy and nothing to press.
  *
  * Local seed only (`platform-personas.local.sql`, which also clears every
  * earlier request): agent previews have no browser mentor yet. The desktop
@@ -42,7 +45,7 @@ const queueCard = (page: Page, name: string) => page.locator("[data-mentor-reque
 /** Asks a mentor for time from the directory, agreeing to the habits first if the server asks. */
 async function ask(page: Page, mentor: string, note: string) {
   await visit(page, DIRECTORY);
-  await card(page, mentor).getByRole("button", { name: "Ask for time" }).click();
+  await card(page, mentor).getByRole("link", { name: "Ask for time" }).click();
   const drawer = page.getByRole("dialog", { name: `Ask ${mentor.split(" ")[0]} for time` });
   await expect(drawer).toBeVisible();
   await expect(drawer.getByRole("textbox", { name: "What would you like help with?" })).toBeFocused();
@@ -75,7 +78,7 @@ test.beforeEach(({ baseURL }, testInfo) => {
 });
 
 test("a member asks for time, the mentor accepts, and their conversation opens with the note", async ({ browser, baseURL }, testInfo) => {
-  const member = await as(browser, baseURL!, "community");
+  const member = await as(browser, baseURL!, "alumna");
   const mentor = await as(browser, baseURL!, "mentor");
   const note = `Could you look at how my savings app retries a failed M-Pesa callback? (${Date.now()})`;
 
@@ -86,11 +89,11 @@ test("a member asks for time, the mentor accepts, and their conversation opens w
   await ask(member, "David Kamau", note);
 
   await visit(mentor, REQUESTS);
-  const request = queueCard(mentor, "Lucy Chebet");
+  const request = queueCard(mentor, "Achieng Otieno");
   await expect(request).toContainText(note);
   await runAxe(mentor, testInfo, "requests");
   await request.getByRole("button", { name: "Accept" }).click();
-  const open = request.getByRole("link", { name: /Open conversation with Lucy/ });
+  const open = request.getByRole("link", { name: /Open conversation with Achieng/ });
   await expect(open).toBeVisible();
   await open.click();
   // A first visit compiles the conversation page on a cold dev server.
@@ -98,8 +101,8 @@ test("a member asks for time, the mentor accepts, and their conversation opens w
   // A first visit to any channel shows the habits first.
   const agree = mentor.getByRole("button", { name: "I’ll keep to this" });
   if (await agree.isVisible().catch(() => false)) await agree.click();
-  await expect(mentor.getByRole("heading", { level: 1, name: "Lucy Chebet" })).toBeVisible();
-  await expect(mentor.locator("[data-conversation-context]")).toContainText("You accepted Lucy's request for a written review");
+  await expect(mentor.getByRole("heading", { level: 1, name: "Achieng Otieno" })).toBeVisible();
+  await expect(mentor.locator("[data-conversation-context]")).toContainText("You accepted Achieng's request for a written review");
   await expect(mentor.getByText(note)).toBeVisible();
 
   // The member sees the acceptance, the conversation in Community, and the same first message.
@@ -114,7 +117,7 @@ test("a member asks for time, the mentor accepts, and their conversation opens w
 });
 
 test("the member withdraws a waiting request, and the mentor sees it withdrawn", async ({ browser, baseURL }) => {
-  const member = await as(browser, baseURL!, "community");
+  const member = await as(browser, baseURL!, "alumna");
   const mentor = await as(browser, baseURL!, "mentor");
   await ask(member, "David Kamau", "Would you review my API error messages?");
   await ownRow(member, "David Kamau").getByRole("button", { name: "Withdraw" }).click();
@@ -124,11 +127,11 @@ test("the member withdraws a waiting request, and the mentor sees it withdrawn",
 });
 
 test("not this month is one tap, and reads as the mentor's time, not a verdict", async ({ browser, baseURL }) => {
-  const member = await as(browser, baseURL!, "community");
+  const member = await as(browser, baseURL!, "alumna");
   const mentor = await as(browser, baseURL!, "mentor");
   await ask(member, "David Kamau", "Could we talk about database indexes?");
   await visit(mentor, REQUESTS);
-  const request = queueCard(mentor, "Lucy Chebet");
+  const request = queueCard(mentor, "Achieng Otieno");
   await request.getByRole("button", { name: "Not this month" }).click();
   await expect(request).toHaveAttribute("data-status", "DECLINED");
   await visit(member, DIRECTORY);
@@ -139,14 +142,14 @@ test("not this month is one tap, and reads as the mentor's time, not a verdict",
 });
 
 test("the mentor suggests Samuel, and the member can ask him straight away", async ({ browser, baseURL }) => {
-  const member = await as(browser, baseURL!, "community");
+  const member = await as(browser, baseURL!, "alumna");
   const mentor = await as(browser, baseURL!, "mentor");
   await ask(member, "David Kamau", "How do I test an offline-first Android app?");
   await visit(mentor, REQUESTS);
-  const request = queueCard(mentor, "Lucy Chebet");
+  const request = queueCard(mentor, "Achieng Otieno");
   await request.getByRole("button", { name: "Suggest another mentor" }).click();
   await request.getByRole("radio", { name: "Samuel Otieno" }).check();
-  await request.getByRole("textbox", { name: /A note for Lucy/ }).fill("Samuel ships Android apps for low-end phones.");
+  await request.getByRole("textbox", { name: /A note for Achieng/ }).fill("Samuel ships Android apps for low-end phones.");
   await request.getByRole("button", { name: "Send suggestion" }).click();
   await expect(request).toContainText("Suggested Samuel Otieno");
 
@@ -160,14 +163,14 @@ test("the mentor suggests Samuel, and the member can ask him straight away", asy
 
 test("a full mentor stays listed with no request button, and the directory can show only open spots", async ({ browser, baseURL }) => {
   const student = await as(browser, baseURL!, "student");
-  const member = await as(browser, baseURL!, "community");
+  const member = await as(browser, baseURL!, "alumna");
   const samuel = await as(browser, baseURL!, "mentor-two");
   await ask(student, "Samuel Otieno", "Could you look at my Kotlin sync code?");
 
   await visit(member, DIRECTORY);
   const full = card(member, "Samuel Otieno");
   await expect(full).toContainText("Full this month");
-  await expect(full.getByRole("button", { name: "Ask for time" })).toHaveCount(0);
+  await expect(full.getByRole("link", { name: "Ask for time" })).toHaveCount(0);
   await member.getByRole("link", { name: "Has open spots" }).click();
   await expect(member).toHaveURL(/available=true/);
   await expect(card(member, "Samuel Otieno")).toHaveCount(0);
@@ -177,3 +180,44 @@ test("a full mentor stays listed with no request button, and the directory can s
   await visit(samuel, REQUESTS);
   await expect(samuel.locator("[data-spots-used]")).toHaveText("1 of 1");
 });
+
+test("asking works without JavaScript: the drawer is a form, and the request lands under Your requests", async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, javaScriptEnabled: false });
+  const session = personaSession("alumna");
+  if (typeof session === "string") throw new Error(session);
+  await signIn(context, baseURL!, session);
+  const page = await context.newPage();
+  await page.goto(DIRECTORY);
+  await card(page, "David Kamau").getByRole("link", { name: "Ask for time" }).click();
+  await expect(page).toHaveURL(/ask=/);
+  const drawer = page.locator("[data-mentor-drawer-static]");
+  await expect(drawer.getByRole("heading", { name: "Ask David for time" })).toBeVisible();
+  // Nothing on the phone's bottom bar covers the form's last button.
+  const send = drawer.getByRole("button", { name: "Send request" });
+  await drawer.getByRole("textbox", { name: "What would you like help with?" }).fill("Could you read my README before I share it?");
+  await drawer.getByRole("radio", { name: /Written review/ }).check();
+  await send.scrollIntoViewIfNeeded();
+  await send.click({ trial: true });
+  await send.click();
+  await expect(page).toHaveURL(/sent=/);
+  await expect(page.locator("[data-request-sent-notice]")).toContainText("Request sent to David Kamau.");
+  await expect(ownRow(page, "David Kamau")).toContainText("Waiting for David");
+  await context.close();
+});
+
+for (const who of ["community", "institution"] as const) {
+  test(`an account without a profile or a cohort place (${who}) reads the directory, with nothing to press`, async ({ browser, baseURL }, testInfo) => {
+    const page = await as(browser, baseURL!, who);
+    await visit(page, DIRECTORY);
+    await expect(page.locator("[data-mentors-browse-only]")).toHaveText(
+      "You can read about every mentor here. Asking a mentor for time needs a member profile or a cohort place.",
+    );
+    await expect(card(page, "David Kamau")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Ask for time" })).toHaveCount(0);
+    // A drawer named in the URL does not open for them either.
+    await page.goto(`${DIRECTORY}?ask=ttv-local-persona-mentor`);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.locator("[data-mentor-drawer-static]")).toHaveCount(0);
+    await runAxe(page, testInfo, `directory-${who}`);
+  });
+}

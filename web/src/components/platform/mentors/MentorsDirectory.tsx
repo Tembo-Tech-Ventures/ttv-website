@@ -188,6 +188,19 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
           Request sent to {sentNow.mentor.name}. It's under Your requests while it waits, and you can withdraw it there.
         </output>
       )}
+      {/* Without JavaScript the drawer is a panel: on phones it sits at the top of the page, in the flow. */}
+      {!hydrated && shownMentor && form && (
+        <section aria-labelledby={headingId} className="mentor-drawer mentor-drawer--static" data-mentor-drawer-static>
+          <div className="mentor-drawer__sheet">
+            <RequestForm
+              store={form} mentor={shownMentor} projects={projects} headingId={headingId}
+              conduct={{ ...conduct, action: askHref(path, base, shownMentor.person.id) }}
+              action={askHref(path, base, shownMentor.person.id)} closeHref={directoryHref(path, base)}
+              onClose={() => {}} onSent={sent}
+            />
+          </div>
+        </section>
+      )}
       {!canAsk && (
         <p className="mb-6 max-w-2xl rounded-2xl border border-hairline px-4 py-3 text-[0.9375rem] leading-relaxed text-ink-secondary" data-mentors-browse-only>
           {NOT_MEMBER}
@@ -211,18 +224,6 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
         <EmptyDirectory path={path} filtered={filtered} />
       )}
 
-      {!hydrated && shownMentor && form && (
-        <section aria-labelledby={headingId} className="mentor-drawer mentor-drawer--static" data-mentor-drawer-static>
-          <div className="mentor-drawer__sheet">
-            <RequestForm
-              store={form} mentor={shownMentor} projects={projects} headingId={headingId}
-              conduct={{ ...conduct, action: askHref(path, base, shownMentor.person.id) }}
-              action={askHref(path, base, shownMentor.person.id)} closeHref={directoryHref(path, base)}
-              onClose={() => {}} onSent={sent}
-            />
-          </div>
-        </section>
-      )}
       <dialog {...dialog.props} aria-labelledby={hydrated ? headingId : undefined} className="mentor-drawer" data-mentor-drawer>
         {hydrated && active && form && (
           <div className="mentor-drawer__sheet">
