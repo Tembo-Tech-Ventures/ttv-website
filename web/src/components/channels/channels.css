@@ -608,9 +608,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  /* Brought into view whole when it opens, with room to spare while it is still unfolding, and clear of
-     "Jump to latest" below it. */
-  scroll-margin-block: 0.75rem var(--channel-jump-clearance);
+  /* Brought into view whole when it opens, with room to spare while it is still unfolding. */
+  scroll-margin-block: 0.75rem;
   max-width: 38rem;
   margin-top: 0.625rem;
   padding: 0.875rem 1rem 1rem;
@@ -621,6 +620,11 @@
 
 .channel-panel[data-panel="hide"] {
   border-color: rgb(255 179 166 / 0.4);
+}
+
+/* Where the person decides: always brought into view, even when the whole form cannot be. */
+.channel-panel__actions {
+  scroll-margin-block: 0.75rem;
 }
 
 .channel-panel__title {
@@ -808,6 +812,14 @@
  */
 .channel-list[data-jump] .channel-list__scroller {
   padding-bottom: var(--channel-jump-clearance);
+}
+
+/*
+ * While a form is open in the list, "Jump to latest" stays away: it would float over the form's buttons,
+ * and the person is busy with this message, not the newest.
+ */
+.channel-list:has(.channel-panel) .channel-jump {
+  display: none;
 }
 
 /* On a phone it sits at the end of the line, away from the reactions and thread links under each message. */

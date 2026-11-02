@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { runAxe } from "./platform-axe";
 
 /**
@@ -45,6 +45,35 @@ const message = (page: Page, id: string) => page.locator(`[data-message="${id}"]
 const actions = (page: Page, id: string) => message(page, id).getByRole("button", { name: /^Actions for/ });
 const records = (page: Page) => page.evaluate(() => window.__channelHarness!.moderation());
 const announcer = (page: Page) => page.locator("[data-channel-announcer]");
+
+/** Every named button in the form is hit where a finger or pointer lands: its edges, inset past the rounded corners. */
+async function expectButtonsUncovered(form: Locator, names: readonly string[]) {
+  for (const name of names) {
+    const button = form.getByRole("button", { name });
+    await expect.poll(() => button.evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      const [midX, midY] = [(box.left + box.right) / 2, (box.top + box.bottom) / 2];
+      const edges = [[box.left + 8, midY], [box.right - 8, midY], [midX, box.top + 3], [midX, box.bottom - 3]];
+      return edges.every(([x, y]) => el.contains(document.elementFromPoint(x, y)));
+    }), `${name} is uncovered`).toBe(true);
+  }
+}
+
+/**
+ * Opens a form on Brian's message, the second newest: revealing it leaves the list short of its end,
+ * where "Jump to latest" would show. While the form is open the pill stays away.
+ */
+async function expectFormUncovered(page: Page, kind: "report" | "hide") {
+  await actions(page, FIRST_PR).click();
+  await page.getByRole("menuitem", { name: kind === "report" ? "Report…" : "Hide from members…" }).click();
+  const form = page.locator(`[data-panel=${kind}]`);
+  await expect(form).toBeVisible();
+  // Once it has unfolded (it is revealed again then).
+  await form.evaluate((el) => Promise.all(el.getAnimations().map((animation) => animation.finished)));
+  await expect(page.locator("[data-jump-latest]")).toBeHidden();
+  await expectButtonsUncovered(form, ["Cancel", kind === "report" ? "Send report" : "Hide message"]);
+  return form;
+}
 
 async function horizontalOverflow(page: Page) {
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -196,25 +225,31 @@ test.describe("moderation in a channel", () => {
     test(`a form opened near the end is never under "Jump to latest" at ${viewport.width}px`, async ({ page }) => {
       await page.setViewportSize(viewport);
       await open(page, harness({ persona: "david" }));
-      // Brian's is the second newest: revealing its form leaves the list short of its end, so the pill shows.
-      await actions(page, FIRST_PR).click();
-      await page.getByRole("menuitem", { name: "Hide from members…" }).click();
-      const form = page.locator("[data-panel=hide]");
-      await expect(form).toBeVisible();
-      // Once it has unfolded (it is revealed again then).
-      await form.evaluate((el) => Promise.all(el.getAnimations().map((animation) => animation.finished)));
-      for (const name of ["Cancel", "Hide message"]) {
-        const button = form.getByRole("button", { name });
-        await expect.poll(() => button.evaluate((el) => {
-          const box = el.getBoundingClientRect();
-          // Its edges, inset past the rounded corners (hit testing follows border-radius).
-          const [midX, midY] = [(box.left + box.right) / 2, (box.top + box.bottom) / 2];
-          const edges = [[box.left + 8, midY], [box.right - 8, midY], [midX, box.top + 3], [midX, box.bottom - 3]];
-          return edges.every(([x, y]) => el.contains(document.elementFromPoint(x, y)));
-        }), `${name} is uncovered`).toBe(true);
-      }
+      await expectFormUncovered(page, "hide");
     });
   }
+
+  test.describe("on a touch phone, where controls are larger", () => {
+    test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+    for (const [persona, kind] of [["wanjiku", "report"], ["david", "hide"]] as const) {
+      test(`the ${kind} form's buttons are in view and nothing floats over them`, async ({ page }) => {
+        await open(page, harness({ persona }));
+        await expectFormUncovered(page, kind);
+        await page.screenshot({ path: `${EVIDENCE_DIR}/${kind}-form-touch-390.png` });
+      });
+    }
+
+    test("a refusal pushes the buttons down, and they are brought back into view", async ({ page }) => {
+      await open(page, harness({ persona: "david" }));
+      await page.evaluate(() => window.__channelHarness!.refuseWrites(1, 409, "conflict", "Already changed"));
+      const form = await expectFormUncovered(page, "hide");
+      await form.getByLabel("Why are you hiding it?").fill("Off-topic");
+      await form.getByRole("button", { name: "Hide message" }).click();
+      await expect(form.getByRole("alert")).toBeVisible();
+      await expectButtonsUncovered(form, ["Cancel", "Hide message"]);
+    });
+  });
 
   test("a mentor who hides a thread reply keeps focus on it, at its moderation note", async ({ page }) => {
     await page.setViewportSize(DESKTOP);

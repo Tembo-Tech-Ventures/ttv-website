@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { PiCheckCircle, PiEyeSlash, PiFlag } from "react-icons/pi";
 import type { Message } from "@/lib/platform/contracts";
 import Button from "@/components/platform/ui/Button";
@@ -139,6 +139,7 @@ function Panel({ title, children, error, submitLabel, submitting, canSubmit, dan
 }) {
   const titleId = useId();
   const form = useRef<HTMLFormElement>(null);
+  const buttons = useRef<HTMLDivElement>(null);
 
   // Escape backs out from anywhere in the form, as it does from an edit.
   const cancel = useRef(onCancel);
@@ -156,17 +157,28 @@ function Panel({ title, children, error, submitLabel, submitting, canSubmit, dan
     return () => element.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  // Start where the person decides, the first field, with the whole form (its title too) in view.
+  // The whole form in view (its title too), and in any case its buttons: a form taller than the list
+  // (touch-sized controls on a phone) shows its end, where the person decides.
+  const reveal = useCallback(() => {
+    form.current?.scrollIntoView({ block: "nearest" });
+    buttons.current?.scrollIntoView({ block: "nearest" });
+  }, []);
+
+  // Start where the person decides, the first field.
   useEffect(() => {
     const element = form.current;
     if (!element) return;
     element.querySelector<HTMLElement>("input, textarea")?.focus({ preventScroll: true });
-    const reveal = () => element.scrollIntoView({ block: "nearest" });
     reveal();
     // Measured again once it has unfolded: during the opening it is a little shorter than at rest.
     element.addEventListener("animationend", reveal, { once: true });
     return () => element.removeEventListener("animationend", reveal);
-  }, []);
+  }, [reveal]);
+
+  // A refusal adds its reason above the buttons and pushes them down: bring them back.
+  useEffect(() => {
+    if (error) reveal();
+  }, [error, reveal]);
 
   return (
     <form
@@ -188,7 +200,7 @@ function Panel({ title, children, error, submitLabel, submitting, canSubmit, dan
           {error}
         </p>
       )}
-      <div className="flex flex-wrap items-center gap-2">
+      <div ref={buttons} className="channel-panel__actions flex flex-wrap items-center gap-2">
         <Button type="submit" size="sm" variant={danger ? "danger" : "primary"} loading={submitting} disabled={!canSubmit}>
           {submitLabel}
         </Button>
