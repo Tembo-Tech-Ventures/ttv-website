@@ -1,4 +1,4 @@
-export const PROGRAM_STAFF_ROLES = ["INSTRUCTOR", "TA"] as const;
+export const PROGRAM_STAFF_ROLES = ["INSTRUCTOR", "TA", "MENTOR"] as const;
 
 export type ProgramStaffRole = (typeof PROGRAM_STAFF_ROLES)[number];
 
@@ -83,11 +83,14 @@ const identifier = (
   return value.trim();
 };
 
+const isProgramStaffRole = (value: unknown): value is ProgramStaffRole =>
+  PROGRAM_STAFF_ROLES.some((role) => role === value);
+
 export function parseProgramStaffRole(value: unknown): ProgramStaffRole {
-  if (value !== "INSTRUCTOR" && value !== "TA") {
+  if (!isProgramStaffRole(value)) {
     throw new ProgramManagementError(
       "INVALID_STAFF_ROLE",
-      "Choose Instructor or TA for the cohort staff role."
+      "Choose Instructor, TA or Mentor for the cohort role."
     );
   }
   return value;

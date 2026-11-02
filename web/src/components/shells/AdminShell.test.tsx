@@ -159,3 +159,23 @@ it("exposes staging demo personas only with the server-computed staging gate", (
   expect(getAdminLinks(false,false).some(link=>link.href==="/demo")).toBe(false);
   expect(getAdminLinks(false,false,true)).toContainEqual(expect.objectContaining({href:"/demo",label:"Staging demo personas"}));
 });
+
+describe("moderation in the admin navigation", () => {
+  it("is absent while channels are off for the administrator", () => {
+    expect(getAdminLinks(false).map(({ href }) => href)).not.toContain("/admin/moderation");
+    expect(getAdminLinks(false, false, false, 2, null).map(({ href }) => href)).not.toContain("/admin/moderation");
+  });
+
+  it("comes after access requests, counting the cases waiting for a decision", () => {
+    const links = getAdminLinks(false, false, false, 2, 3);
+    const labels = links.map(({ label }) => label);
+    expect(labels.indexOf("Moderation")).toBe(labels.indexOf("Access requests") + 1);
+    expect(links.find(({ label }) => label === "Moderation")).toMatchObject({
+      href: "/admin/moderation", badge: 3, badgeLabel: "waiting",
+    });
+  });
+
+  it("stays in the navigation when nothing is waiting", () => {
+    expect(getAdminLinks(false, false, false, 0, 0).map(({ label }) => label)).toContain("Moderation");
+  });
+});

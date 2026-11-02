@@ -1,4 +1,5 @@
-import React, { useSyncExternalStore, useState, type ReactNode } from "react";
+import React, { useEffect, useSyncExternalStore, useState, type ReactNode } from "react";
+import { MODERATION_PENDING_EVENT } from "@/components/admin/moderation/case-model";
 import Sidebar from "@/components/common/Sidebar";
 import {
   PiGaugeDuotone,
@@ -17,11 +18,13 @@ import {
   PiArrowLeftDuotone,
   PiUserPlusDuotone,
   PiToggleRightDuotone,
+  PiShieldCheckDuotone,
 } from "react-icons/pi";
 import { PiListBold } from "react-icons/pi";
 
 const MAIN_ID = "admin-main";
 const ACCESS_REQUESTS_HREF = "/admin/access-requests";
+const MODERATION_HREF = "/admin/moderation";
 
 const primaryLinks = [
   // Admin is one of the person's spaces: the way back to the rest of the app comes first.
@@ -46,17 +49,27 @@ const primaryLinks = [
   },
 ];
 
+/**
+ * pendingModeration is null while the `channels` flag is off for this administrator: there is no
+ * moderation queue to link to until channels exist for them.
+ */
 export function getAdminLinks(
   agentAuthEnabled: boolean,
   dataMigrationEnabled = false,
   stagingDemoEnabled = false,
-  pendingAccessRequests = 0
+  pendingAccessRequests = 0,
+  pendingModeration: number | null = null
 ) {
   return [
-    ...primaryLinks.map((link) =>
+    ...primaryLinks.flatMap((link) =>
       link.href === ACCESS_REQUESTS_HREF
-        ? { ...link, badge: pendingAccessRequests, badgeLabel: "pending" }
-        : link
+        ? [
+            { ...link, badge: pendingAccessRequests, badgeLabel: "pending" },
+            ...(pendingModeration === null
+              ? []
+              : [{ href: MODERATION_HREF, label: "Moderation", icon: PiShieldCheckDuotone, badge: pendingModeration, badgeLabel: "waiting" }]),
+          ]
+        : [link]
     ),
     ...(stagingDemoEnabled ? [{ href: "/demo", label: "Staging demo personas", icon: PiUsersDuotone }] : []),
     ...(dataMigrationEnabled
@@ -76,6 +89,7 @@ export default function AdminShell({
   dataMigrationEnabled = false,
   stagingDemoEnabled = false,
   pendingAccessRequests = 0,
+  pendingModeration = null,
 }: {
   children: ReactNode;
   currentPath?: string;
@@ -84,6 +98,8 @@ export default function AdminShell({
   stagingDemoEnabled?: boolean;
   /** Open mentor and institution requests, for the sidebar badge. */
   pendingAccessRequests?: number;
+  /** Moderation cases waiting for a decision, or null while `channels` is off. */
+  pendingModeration?: number | null;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const hydrated = useSyncExternalStore(
@@ -91,7 +107,18 @@ export default function AdminShell({
     () => true,
     () => false
   );
-  const links = getAdminLinks(agentAuthEnabled, dataMigrationEnabled, stagingDemoEnabled, pendingAccessRequests);
+  // A decision made without a page load swaps the queue in place; it reports the new waiting count.
+  const [waiting, setWaiting] = useState(pendingModeration);
+  useEffect(() => {
+    if (pendingModeration === null) return;
+    const onPending = (event: Event) => {
+      const count = (event as CustomEvent<unknown>).detail;
+      if (typeof count === "number") setWaiting(count);
+    };
+    document.addEventListener(MODERATION_PENDING_EVENT, onPending);
+    return () => document.removeEventListener(MODERATION_PENDING_EVENT, onPending);
+  }, [pendingModeration]);
+  const links = getAdminLinks(agentAuthEnabled, dataMigrationEnabled, stagingDemoEnabled, pendingAccessRequests, waiting);
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-surface to-dark">

@@ -104,6 +104,34 @@ describe("chat tool access boundaries", () => {
     });
   });
 
+  describe("get_program_info", () => {
+    function programDatabase() {
+      const program = {
+        id: "cohort-a", name: "Cohort A", description: "", applicationsOpen: false, startDate: null, endDate: null,
+        curriculum: null,
+        programRoles: [
+          { name: "MENTOR", user: { name: "Invited Mentor" } },
+          { name: "TA", user: { name: "Faith Njeri" } },
+          { name: "INSTRUCTOR", user: { name: "Otieno Ouma" } },
+        ],
+      };
+      return { query: { program: { findMany: vi.fn().mockResolvedValue([program]) } } } as unknown as Database;
+    }
+    const staffFor = async (overrides: Partial<ToolContext>) =>
+      JSON.parse(await executeTool("get_program_info", { program_id: "cohort-a" }, createContext({ db: programDatabase(), ...overrides })))
+        .programs[0].staff.map((member: { role: string }) => member.role);
+
+    it("never names a cohort's invited mentors to someone outside that cohort", async () => {
+      expect(await staffFor({ programIds: [] })).toEqual(["TA", "INSTRUCTOR"]);
+      expect(await staffFor({ programIds: ["cohort-b"] })).toEqual(["TA", "INSTRUCTOR"]);
+    });
+
+    it("names them to the cohort's own members and to admins", async () => {
+      expect(await staffFor({ programIds: ["cohort-a"] })).toEqual(["MENTOR", "TA", "INSTRUCTOR"]);
+      expect(await staffFor({ isAdmin: true })).toEqual(["MENTOR", "TA", "INSTRUCTOR"]);
+    });
+  });
+
   describe("allowedTools gate", () => {
     it("refuses a tool the caller did not offer, even if the model asks for it", async () => {
       const { db, captured } = createSelectDatabase([{ id: "rec-1", title: "Leaked", durationSeconds: 1, recordedAt: null, programId: "program-b" }]);
