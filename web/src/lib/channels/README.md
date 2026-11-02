@@ -319,7 +319,7 @@ The allowlist and the repeat check are SQL inside the guarded INSERT or
 UPDATE, so a refused write does no extra work. A finding is dropped when
 `moderation_allowlist` holds its key or the whole text's key (`textKey`: a
 SHA-256 of the text with case, Unicode forms and spacing normalised). Admins
-fill the allowlist when they keep a message (section 5).
+fill the allowlist when they restore or keep a message (section 5).
 
 ### 2. Clef, after the response
 
@@ -390,13 +390,20 @@ the rest.
   cannot read the message (404); a cohort mentor in a community channel, or a
   member, is 403. Hiding a hidden message again changes nothing.
 - **Admins have the final say.** They hide (also upholding a moderator's
-  hide), restore (VISIBLE, reasons cleared) or keep ("fine as is": VISIBLE,
-  and the text's key and each detector finding's key go into
-  `moderation_allowlist`, so neither is flagged again). After an admin
-  restores or keeps a message, a moderator cannot hide it again until its
-  author edits it (409). Restore and keep are admin only (403).
+  hide, or keeping a hidden message hidden: either closes the case), restore
+  or keep ("fine as is", for a message that is not hidden: on a HIDDEN one it
+  is 409, and Restore is the way back). Restore and keep make the message
+  VISIBLE with its reasons cleared, and put into `moderation_allowlist` the
+  key of its text, as written and as screened with its shared work
+  (`screeningText`), and of each detector finding in it, so none is flagged
+  again. After an admin restores or keeps a message, a moderator cannot hide
+  it again until its author edits it (409). Restore and keep are admin only
+  (403).
 - **Ask for review**: the author of a hidden message, once per case, with an
-  optional note. A hide an admin made or upheld is final (409).
+  optional note. A hide an admin made or upheld is final (409). While it is
+  open, `moderation.reviewRequested` is true on that message for its author
+  and admins (false otherwise; absent for everyone else and on any message
+  that is not hidden), so "Review requested" survives a reload.
 - **Queue**: admins only. One case per message (item id = message id),
   newest first, 20 a page with an opaque cursor bound to the state
   (`PENDING` by default, or `DECIDED`). Each item carries the message as an
@@ -404,6 +411,16 @@ the rest.
   moderator who hid it, the evidence (oldest first), the author's review
   request and the decision. One statement for the page; direct
   conversations never appear.
+- **Page functions** (`moderation/queue.ts`, `moderation/actions.ts`), so
+  `/admin/moderation` (U-2.4) needs no self-fetch and refuses exactly what the
+  API refuses: `listModerationQueue(db, viewer, query)` (403 unless admin,
+  400 for a cursor of another state), `countPendingModeration(db)` (the tab
+  and sidebar badge; 0 if the read fails) and
+  `decideModeration({ db, env }, viewer, { messageId, action, reason })`,
+  which the API route also calls. `viewer` is `{ user, capabilities }`
+  (`requestCapabilities`). They throw `ChannelError`; the caller owns the
+  `channels` flag, sign-in and same-origin checks. Without `notifyLater`,
+  `decideModeration` writes the notices before it returns.
 
 ### 6. Attention
 

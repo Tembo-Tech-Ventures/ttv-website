@@ -261,7 +261,11 @@ export const Reaction = z.object({ kind: ReactionKind, count: Count, mine: z.boo
 export type Reaction = z.infer<typeof Reaction>;
 export const ModerationState = z.enum(["VISIBLE", "FLAGGED", "HIDDEN"]);
 export type ModerationState = z.infer<typeof ModerationState>;
-export const MessageModeration = z.object({ state: ModerationState, reasons: z.array(NonEmptyText) });
+/**
+ * reviewRequested: on a HIDDEN message, for its author and admins only, whether the author's "Ask for
+ * review" is still open. Absent for everyone else and on any other state.
+ */
+export const MessageModeration = z.object({ state: ModerationState, reasons: z.array(NonEmptyText), reviewRequested: z.boolean().optional() });
 export type MessageModeration = z.infer<typeof MessageModeration>;
 export const ThreadSummary = z.object({ replyCount: Count, participantIds: z.array(Id), lastReplyAt: Timestamp.nullable() });
 export type ThreadSummary = z.infer<typeof ThreadSummary>;

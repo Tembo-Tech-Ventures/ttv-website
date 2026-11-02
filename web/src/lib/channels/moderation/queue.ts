@@ -1,16 +1,24 @@
+import { drizzle } from "drizzle-orm/d1";
 import { z } from "zod";
+import * as schema from "@/lib/db/schema";
+import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
 import {
   Id, MessageVersion, ModerationQueue, ModerationQueueState, Timestamp, WebLink,
   type Channel, type ModerationQueueQuery, type ModerationSource, type PersonSummary,
 } from "@/lib/platform/contracts";
+import { listChannelsFor } from "../access";
 import { ChannelError, messageColumns, toMessage, type MessageRow } from "../messages";
 
 /**
- * GET /api/moderation/queue (B-2.5): the admin queue, one case per message, newest case first. Admins
- * only (the caller checks). One statement reads a page with each message as an admin sees it, the
- * case, who hid or decided, and the evidence (earlier texts, oldest first). Direct conversations
- * have no moderators and never appear.
+ * The admin moderation queue (B-2.5), for GET /api/moderation/queue and the /admin/moderation page
+ * (U-2.4) alike: one case per message, newest case first. One statement reads a page with each
+ * message as an admin sees it, the case, who hid or decided, and the evidence (earlier texts, oldest
+ * first). Direct conversations have no moderators and never appear. The caller owns the `channels`
+ * flag and sign-in checks.
  */
+
+/** Who is asking, with capabilities already computed for them in this request (requestCapabilities). */
+export interface ModerationViewer { user: { id: string }; capabilities: PlatformCapabilities }
 
 export const QUEUE_PAGE_SIZE = 20;
 
@@ -45,10 +53,32 @@ function evidence(text: string) {
   });
 }
 
+/**
+ * A page of the queue. Admins only (403); a cursor that is not this state's is 400, so a page can
+ * start again at the first page.
+ */
+export async function listModerationQueue(db: D1Database, viewer: ModerationViewer, query: ModerationQueueQuery): Promise<ModerationQueue> {
+  if (!viewer.capabilities.isAdmin) throw new ChannelError("forbidden", "Only admins can see the moderation queue.", 403);
+  return queuePage(db, viewer.user.id, await listChannelsFor(drizzle(db, { schema }), viewer.user, viewer.capabilities), query);
+}
+
+/**
+ * Open cases, for the page's tab and the Admin sidebar badge (queue index). A badge must never take
+ * an admin page down with it, so a failed read counts none.
+ */
+export async function countPendingModeration(db: D1Database): Promise<number> {
+  try {
+    const row = await db.prepare(`SELECT count(*) AS count FROM moderation_case c JOIN channel_message m ON m.id = c.messageId
+      JOIN channel ch ON ch.id = m.channelId WHERE c.state = 'PENDING' AND ch.kind <> 'DIRECT'`).first<{ count: number }>();
+    return row?.count ?? 0;
+  } catch {
+    console.warn("The moderation queue count could not be read.");
+    return 0;
+  }
+}
+
 /** `channels` are the caller's readable channels (listChannelsFor), with the capabilities each message is shown with. */
-export async function listModerationQueue(
-  db: D1Database, viewerId: string, channels: Channel[], query: ModerationQueueQuery,
-): Promise<ModerationQueue> {
+async function queuePage(db: D1Database, viewerId: string, channels: Channel[], query: ModerationQueueQuery): Promise<ModerationQueue> {
   const state = query.state ?? "PENDING";
   const cursor = query.cursor === undefined ? null : decodeCursor(query.cursor);
   if (cursor && cursor.state !== state) throw invalidCursor();

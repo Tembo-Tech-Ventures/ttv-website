@@ -18,13 +18,13 @@ import { findChannelById, listChannelsFor, readMarker } from "./access";
 import { CursorExpiredError, CursorInvalidError } from "./cursor";
 import { listShareables } from "./embeds";
 import { ChannelError, listMessages } from "./messages";
-import { moderateMessage, reportMessage, requestModerationReview } from "./moderation/actions";
+import { decideModeration, reportMessage, requestModerationReview } from "./moderation/actions";
 import { ClefCheckError, clefScreen, type ClefOutcome } from "./moderation/clef";
 import { listModerationQueue } from "./moderation/queue";
 import type { MessageScreen } from "./moderation/screen";
 import {
-  deleteMessage, editMessage, findMessageTarget, markChannelRead, postMessage, reactToMessage,
-  type MessageTarget, type WriteContext,
+  deleteMessage, editMessage, findMessageTarget, markChannelRead, postMessage, reactToMessage, visibleTo,
+  type WriteContext,
 } from "./mutations";
 
 /**
@@ -166,21 +166,11 @@ async function messageRoute({ operation, request, id, user, db, capabilities, sc
     if (created) later.moderated(target.id);
     return platformJson(Success.parse({ ok: true }), created ? 201 : 200);
   }
-  if (operation === "moderateMessage") {
-    const input = parse(ModerationAction, await readBody(request, NOTE_BYTES));
-    const message = await moderateMessage(scope(channel), target, input, { isAdmin: capabilities.isAdmin });
-    later.moderated(target.id);
-    return platformJson(ROUTES.moderateMessage.response.parse(message));
-  }
   if (operation === "reactToMessage") {
     const input = parse(ReactToMessage, await readBody(request, SMALL_BYTES));
     return platformJson(ROUTES.reactToMessage.response.parse(await reactToMessage(scope(channel), target, input)));
   }
   return platformJson(ROUTES.deleteMessage.response.parse(await deleteMessage(scope(channel), target)));
-}
-
-function visibleTo(target: MessageTarget, userId: string, channel: Channel): boolean {
-  return target.moderationState !== "HIDDEN" || target.authorId === userId || channel.capabilities.canModerate;
 }
 
 const CHANNEL_ROUTES: ReadonlySet<ChannelOperation> = new Set(["listMessages", "listShareables", "postMessage", "markChannelRead"]);
@@ -246,20 +236,25 @@ export async function channelRequest(
       return platformJson(ROUTES.listChannels.response.parse({ items: await listChannelsFor(db, user, capabilities) }));
     }
     if (operation === "listModerationQueue") {
-      if (!capabilities.isAdmin) return platformError("forbidden", "Only admins can see the moderation queue.", 403);
-      const query = readQuery(context.request, ModerationQueueQuery);
-      const queue = await listModerationQueue(env.DB, user.id, await listChannelsFor(db, user, capabilities), query);
+      const queue = await listModerationQueue(env.DB, { user, capabilities }, readQuery(context.request, ModerationQueueQuery));
       return platformJson(ROUTES.listModerationQueue.response.parse(queue));
     }
     const { screen, conductVersion } = options;
     const now = options.now?.();
-    const id = operation === "moderateMessage"
-      ? parse(ModerationParams, { messageId: context.params.messageId }).messageId
-      : parse(IdParams, { id: context.params.id }).id;
+    const later = afterResponse(operation, context, env, options);
+    if (operation === "moderateMessage") {
+      const { messageId } = parse(ModerationParams, { messageId: context.params.messageId });
+      const input = parse(ModerationAction, await readBody(context.request, NOTE_BYTES));
+      const message = await decideModeration(
+        { db: env.DB, env, now, notifyLater: later.moderated }, { user, capabilities }, { ...input, messageId },
+      );
+      return platformJson(ROUTES.moderateMessage.response.parse(message));
+    }
+    const id = parse(IdParams, { id: context.params.id }).id;
     const admitted: Admitted = {
       operation, request: context.request, id, user, db, capabilities,
       scope: (channel) => ({ db: env.DB, viewerId: user.id, channel, now, screen, conductVersion }),
-      later: afterResponse(operation, context, env, options),
+      later,
     };
     return await (CHANNEL_ROUTES.has(operation) ? channelRoute(admitted) : messageRoute(admitted));
   } catch (error) {

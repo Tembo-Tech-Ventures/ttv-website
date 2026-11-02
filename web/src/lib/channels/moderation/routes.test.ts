@@ -6,9 +6,10 @@ import { ErrorEnvelope, Message, MessageList, ModerationQueue, ROUTES } from "@/
 import type { CapabilityCase } from "@/lib/platform/server/capabilities.fixtures";
 import type { ChannelOperation } from "../http";
 import { channelDatabase, post, VIEWER, type ChannelFixture } from "../test-support";
-import { REPORT_LIMIT } from "./actions";
+import { ChannelError } from "../errors";
+import { decideModeration, REPORT_LIMIT } from "./actions";
 import { FINDING_REASONS, textKey } from "./detectors";
-import { QUEUE_PAGE_SIZE } from "./queue";
+import { countPendingModeration, listModerationQueue, QUEUE_PAGE_SIZE } from "./queue";
 
 vi.mock("@/lib/observability/errors", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/observability/errors")>(),
@@ -38,7 +39,7 @@ const caseOf = (s: ChannelFixture, id: string) => s.database.prepare(
   "SELECT state, source, reportCount, actorId, decision, decidedBy, reviewRequestedAt IS NOT NULL AS review FROM moderation_case WHERE messageId = ?",
 ).get(id);
 const events = (s: ChannelFixture) => s.database.prepare("SELECT action, source, actorId, fromState, toState, reasons FROM moderation_event ORDER BY createdAt, rowid").all();
-const hide = (reason = "Harsh, not about the work") => ({ action: "hide", reason });
+const hide = (reason = "Harsh, not about the work") => ({ action: "hide" as const, reason });
 async function attentionOf(s: ChannelFixture, userId: string) {
   const { items } = await listAttention(s.db, userId, {}, await capabilitiesFor(s.db, { id: userId }));
   return items.map((item) => ({ kind: item.kind, space: item.space, href: item.subject.href, summary: item.summary, actor: item.actor?.id ?? null }));
@@ -151,7 +152,10 @@ describe("hiding: who may", () => {
       expect(events(s)).toEqual([]);
       return;
     }
-    expect(Message.parse(response.body).moderation).toEqual({ state: "HIDDEN", reasons: ["Harsh, not about the work"] });
+    // An admin also learns whether the author asked for a review.
+    expect(Message.parse(response.body).moderation).toEqual({
+      state: "HIDDEN", reasons: ["Harsh, not about the work"], ...source === "ADMIN" ? { reviewRequested: false } : {},
+    });
     expect(events(s)).toEqual([{ action: "HIDE", source, actorId: VIEWER, fromState: "VISIBLE", toState: "HIDDEN", reasons: '["Harsh, not about the work"]' }]);
     expect(s.database.prepare("SELECT hiddenBy FROM channel_message WHERE id = ?").get(id)).toEqual({ hiddenBy: VIEWER });
     expect(caseOf(s, id)).toMatchObject(source === "ADMIN"
@@ -229,6 +233,29 @@ describe("hiding: what it does", () => {
   });
 });
 
+describe("restoring a hidden message", () => {
+  it("is the way back: keep is refused, restore makes it visible and allowlists its text and findings", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    grant(s, FAITH, "MENTOR");
+    s.agree(OTIENO);
+    const text = "Ring the TTV desk: 0712 345 678";
+    const posted = Message.parse((await s.call("postMessage", { id: s.channel("help"), user: OTIENO, body: post(text) })).body);
+    await s.call("moderateMessage", { id: posted.id, user: FAITH, body: hide() });
+    const kept = await s.call("moderateMessage", { id: posted.id, body: { action: "keep", reason: "Fine" } });
+    expect([kept.status, errorOf(kept.body).message]).toEqual([409, "This message is hidden. Restore it instead."]);
+    expect(caseOf(s, posted.id)).toMatchObject({ state: "PENDING", source: "MENTOR_HIDE" });
+
+    const restored = await s.call("moderateMessage", { id: posted.id, body: { action: "restore", reason: "The desk's public line" } });
+    expect(Message.parse(restored.body).moderation).toEqual({ state: "VISIBLE", reasons: [] });
+    expect(caseOf(s, posted.id)).toMatchObject({ state: "DECIDED", decision: "RESTORE" });
+    expect(s.database.prepare("SELECT key FROM moderation_allowlist ORDER BY key").all()).toEqual([
+      { key: "phone:+254712345678" }, { key: await textKey(text) },
+    ]);
+    const again = Message.parse((await s.call("postMessage", { id: s.channel("introductions"), user: OTIENO, body: post("Desk: +254712345678") })).body);
+    expect(again.moderation).toEqual({ state: "VISIBLE", reasons: [] });
+  });
+});
+
 describe("asking for a review", () => {
   it("lets the author of a hidden message ask once, and reopens nothing an admin decided", async () => {
     const s = setup({ globalRoles: ["MENTOR"] });
@@ -246,6 +273,82 @@ describe("asking for a review", () => {
     expect([final.status, errorOf(final.body).message]).toEqual([409, "An admin has already reviewed this message."]);
     const visible = s.message("help", { author: OTIENO });
     expect(errorOf((await s.call("requestModerationReview", { id: visible, user: OTIENO, body: {} })).body).message).toBe("This message isn't hidden.");
+  });
+});
+
+describe("reviewRequested", () => {
+  it("tells the author and admins, and no other moderator, whether a review is open", async () => {
+    const s = setup({ globalRoles: ["MENTOR"] });
+    grant(s, ACHIENG, "ADMIN");
+    const id = s.message("help", { author: OTIENO });
+    await s.call("moderateMessage", { id, body: hide() });
+    const seen = async () => Promise.all([OTIENO, ACHIENG, VIEWER].map(async (user) => {
+      const { items } = MessageList.parse((await s.call("listMessages", { id: s.channel("help"), user })).body);
+      return items.find((item) => item.id === id)?.moderation?.reviewRequested;
+    }));
+    expect(await seen()).toEqual([false, false, undefined]);
+    await s.call("requestModerationReview", { id, user: OTIENO, body: {} });
+    expect(await seen()).toEqual([true, true, undefined]);
+    // An admin's decision closes the review.
+    await s.call("moderateMessage", { id, user: ACHIENG, body: hide("Upheld") });
+    expect(await seen()).toEqual([false, false, undefined]);
+    // Only on a hidden message.
+    await s.call("moderateMessage", { id, user: ACHIENG, body: { action: "restore", reason: "On reflection, fine" } });
+    expect(await seen()).toEqual([undefined, undefined, undefined]);
+  });
+});
+
+describe("page server functions (U-2.4)", () => {
+  const viewer = async (s: ChannelFixture, id: string) => ({ user: { id }, capabilities: await capabilitiesFor(s.db, { id }) });
+  const refusalOf = (promise: Promise<unknown>) => promise.then(() => null, (error: unknown) => {
+    if (!(error instanceof ChannelError)) throw error;
+    return [error.status, error.code, error.message];
+  });
+
+  it("list, count and decide as the API does, refusing the same things with ChannelError", async () => {
+    const s = setup({ globalRoles: ["MENTOR"] });
+    grant(s, ACHIENG, "ADMIN");
+    const admin = await viewer(s, ACHIENG);
+    const context = { db: s.d1, env: { DEPLOYMENT_ENVIRONMENT: undefined, PLATFORM_FLAGS_OVERRIDE: "all" } };
+    const id = s.message("help", { author: OTIENO, body: "Harsh words" });
+    expect(await countPendingModeration(s.d1)).toBe(0);
+
+    const hidden = await decideModeration(context, await viewer(s, VIEWER), { messageId: id, ...hide() });
+    expect(hidden.moderation?.state).toBe("HIDDEN");
+    // Without notifyLater, the notices are written before it returns.
+    expect((await attentionOf(s, OTIENO)).map((item) => item.kind)).toEqual(["message_hidden"]);
+    expect(await countPendingModeration(s.d1)).toBe(1);
+    const queue = await listModerationQueue(s.d1, admin, {});
+    expect(queue.items.map((item) => [item.id, item.message.body, item.source])).toEqual([[id, "Harsh words", "MENTOR_HIDE"]]);
+
+    expect(await refusalOf(listModerationQueue(s.d1, await viewer(s, VIEWER), {}))).toEqual([403, "forbidden", "Only admins can see the moderation queue."]);
+    expect(await refusalOf(listModerationQueue(s.d1, admin, { cursor: "not-a-cursor" })))
+      .toEqual([400, "validation", "Invalid moderation queue cursor."]);
+    expect(await refusalOf(decideModeration(context, await viewer(s, VIEWER), { messageId: id, action: "restore", reason: "x" })))
+      .toEqual([403, "forbidden", "Only admins can restore or keep a message."]);
+    expect(await refusalOf(decideModeration(context, admin, { messageId: id, action: "keep", reason: "x" })))
+      .toEqual([409, "conflict", "This message is hidden. Restore it instead."]);
+    // Someone who cannot see the hidden message gets the same 404 as for one that does not exist.
+    for (const messageId of [id, "0".repeat(32)]) {
+      expect(await refusalOf(decideModeration(context, await viewer(s, FAITH), { messageId, ...hide() })))
+        .toEqual([404, "not_found", "Message not found."]);
+    }
+
+    await decideModeration(context, admin, { messageId: id, ...hide("Upheld") });
+    expect([await countPendingModeration(s.d1), caseOf(s, id)]).toEqual([0, expect.objectContaining({ state: "DECIDED", decision: "HIDE" })]);
+  });
+
+  it("counts open cases outside direct conversations, and none when the count cannot be read", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    for (const id of [s.message("help", { author: OTIENO }), s.message("introductions", { author: OTIENO })]) {
+      await s.call("reportMessage", { id, body: { reason: "Spam" } });
+    }
+    s.database.prepare("UPDATE channel SET kind = 'DIRECT' WHERE slug = 'introductions'").run();
+    expect(await countPendingModeration(s.d1)).toBe(1);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(s.d1, "prepare").mockImplementation(() => { throw new Error("D1 is down"); });
+    expect(await countPendingModeration(s.d1)).toBe(0);
+    expect(warn).toHaveBeenCalledWith("The moderation queue count could not be read.");
   });
 });
 

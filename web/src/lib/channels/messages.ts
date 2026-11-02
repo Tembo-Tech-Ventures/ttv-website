@@ -40,6 +40,8 @@ export interface MessageRow {
   authorName: string | null; authorImage: string | null; programName: string | null;
   globalRoles: string; programRoles: string; applications: string; reactions: string; thread: string | null;
   embedAccess: string | null;
+  /** 0 or 1 on a HIDDEN message for its author or an admin; null otherwise. */
+  reviewRequested: number | null;
 }
 
 /**
@@ -61,6 +63,10 @@ export const messageColumns = (program: string) => `m.id, m.channelId, m.parentI
   CASE WHEN m.parentId IS NULL THEN (SELECT json_array(COUNT(*), MAX(t.createdAt), json_group_array(DISTINCT t.authorId))
     FROM channel_message t WHERE t.channelId = m.channelId AND t.parentId = m.id
       AND t.deletedAt IS NULL AND t.moderationState <> 'HIDDEN') END AS thread,
+  CASE WHEN m.moderationState = 'HIDDEN' AND (m.authorId = ?2 OR EXISTS (SELECT 1 FROM UserRoles ur JOIN Roles r ON r.id = ur.roleId
+      WHERE ur.userId = ?2 AND r.name = 'ADMIN'))
+    THEN EXISTS (SELECT 1 FROM moderation_case c WHERE c.messageId = m.id AND c.state = 'PENDING' AND c.reviewRequestedAt IS NOT NULL)
+  END AS reviewRequested,
   ${embedAccessColumn(program)}`;
 const MESSAGE_COLUMNS = messageColumns("?3");
 const FROM_MESSAGES = `FROM channel_message m LEFT JOIN "user" u ON u.id = m.authorId`;
@@ -159,7 +165,10 @@ export function toMessage(row: MessageRow, ctx: ReadContext): Message {
     reactions: deleted ? [] : reactions(row.reactions),
     createdAt: row.createdAt, edited: !deleted && row.editedAt !== null, deleted,
     moderation: own || ctx.channel.capabilities.canModerate
-      ? { state: row.moderationState, reasons: parsedArray(NonBlank, row.moderationReasons) }
+      ? {
+        state: row.moderationState, reasons: parsedArray(NonBlank, row.moderationReasons),
+        ...row.reviewRequested === null ? {} : { reviewRequested: row.reviewRequested === 1 },
+      }
       : null,
     thread: row.parentId === null ? threadSummary(row.thread) : { replyCount: 0, participantIds: [], lastReplyAt: null },
     temboScope: row.authorKind === "TEMBO" ? ctx.channel.kind : null,

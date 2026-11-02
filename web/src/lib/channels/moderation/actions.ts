@@ -1,7 +1,16 @@
 import { createId } from "@paralleldrive/cuid2";
-import type { Message, ModerationAction, ReportMessage, RequestModerationReview } from "@/lib/platform/contracts";
+import {
+  MessageEmbed, type Message, type ModerationAction, type ReportMessage, type RequestModerationReview,
+} from "@/lib/platform/contracts";
+import { drizzle } from "drizzle-orm/d1";
+import { moderationAttention } from "@/lib/attention/channel-producers";
+import type { AttentionProducerContext } from "@/lib/attention/producers";
+import * as schema from "@/lib/db/schema";
+import { findChannelById } from "../access";
+import { screeningText } from "../embeds";
 import { ChannelError, readMessage } from "../messages";
-import type { MessageTarget, WriteContext } from "../mutations";
+import { findMessageTarget, visibleTo, type MessageTarget, type WriteContext } from "../mutations";
+import type { ModerationViewer } from "./queue";
 import { detectFindings, textKey } from "./detectors";
 import { mergedReasons } from "./reasons";
 
@@ -22,6 +31,7 @@ const NEXT_CHANGE = "(SELECT MAX(changeSeq) + 1 FROM channel_message WHERE chann
 
 const deleted = () => new ChannelError("conflict", "This message was deleted.", 409);
 const decided = () => new ChannelError("conflict", "An admin has already reviewed this message.", 409);
+const keepHidden = () => new ChannelError("conflict", "This message is hidden. Restore it instead.", 409);
 
 async function current(ctx: WriteContext, id: string): Promise<Message> {
   const message = await readMessage(ctx, id);
@@ -69,8 +79,9 @@ export async function reportMessage(ctx: WriteContext, target: MessageTarget, in
  * POST /api/moderation/:messageId. A channel's moderators (its cohort's instructors, TAs and mentors;
  * global mentors in community channels) may hide, with a reason the author sees, but not a message
  * an admin restored or kept since its last edit (409): admins have the final say. Admins hide (also
- * upholding a moderator's hide), restore, or keep: fine as is, which makes it visible again and
- * allowlists its text and each detector finding in it, so neither is flagged again.
+ * upholding a moderator's hide, which closes the case), restore, or keep: fine as is. Restore and
+ * keep make the message visible again and allowlist its text and each detector finding in it, so
+ * neither is flagged again. Keep is for a message that is not hidden (409): Restore is the way back.
  */
 export async function moderateMessage(
   ctx: WriteContext, target: MessageTarget, input: ModerationAction, { isAdmin }: { isAdmin: boolean },
@@ -79,6 +90,7 @@ export async function moderateMessage(
     throw new ChannelError("forbidden", "Only this channel's moderators can do that.", 403);
   }
   if (!isAdmin && input.action !== "hide") throw new ChannelError("forbidden", "Only admins can restore or keep a message.", 403);
+  if (input.action === "keep" && target.moderationState === "HIDDEN") throw keepHidden();
   const now = ctx.now ?? Date.now();
   const eventId = createId();
   // ?1 channel, ?2 message, ?3 actor, ?4 reason, ?5 now, ?6 event, ?7 source.
@@ -108,23 +120,66 @@ export async function moderateMessage(
     return current(ctx, target.id);
   }
 
-  const statements = [
+  // ?8 the action; keep only while the message is not hidden (it may have been hidden since it was read).
+  const [event] = await ctx.db.batch([
     ctx.db.prepare(`${EVENT} SELECT ?6, id, ?8, 'ADMIN', ?3, moderationState, 'VISIBLE', json_array(?4), ?5
-      FROM channel_message WHERE id = ?2 AND channelId = ?1`).bind(...params, input.action.toUpperCase()),
+      FROM channel_message WHERE id = ?2 AND channelId = ?1 AND (?8 <> 'KEEP' OR moderationState <> 'HIDDEN')`)
+      .bind(...params, input.action.toUpperCase()),
     ctx.db.prepare(`UPDATE channel_message SET moderationState = 'VISIBLE', moderationReasons = '[]', hiddenBy = NULL, hiddenAt = NULL,
         changeSeq = ${NEXT_CHANGE}
       WHERE id = ?2 AND moderationState <> 'VISIBLE' AND ${written}`).bind(...params.slice(0, 6)),
-  ];
-  if (input.action === "keep" && target.body !== "") {
-    const keys = [await textKey(target.body), ...detectFindings(target.body).flatMap((finding) => finding.key ?? [])];
-    // Only while the message still has the text the admin read.
-    statements.push(ctx.db.prepare(`INSERT INTO moderation_allowlist (key, messageId, createdBy, createdAt)
-      SELECT value, ?2, ?3, ?5 FROM json_each(?7)
-      WHERE ${written} AND EXISTS (SELECT 1 FROM channel_message WHERE id = ?2 AND body = ?8)
-      ON CONFLICT (key) DO NOTHING`).bind(...params.slice(0, 6), JSON.stringify(keys), target.body));
-  }
-  await ctx.db.batch(statements);
+    ...await allowlisting(ctx, target, params.slice(0, 6)),
+  ]);
+  // Only a keep can find nothing to write: the message was hidden since it was read.
+  if (event?.meta.changes !== 1) throw keepHidden();
   return current(ctx, target.id);
+}
+
+export interface DecisionContext extends AttentionProducerContext {
+  now?: number;
+  /** Sends the author's and admins' notices after the response (the API). Without it they are awaited (the page). */
+  notifyLater?: (messageId: string) => void;
+}
+
+/**
+ * A moderation decision for /admin/moderation (U-2.4) and POST /api/moderation/:messageId alike, so
+ * both refuse the same things with the same ChannelError: a message the viewer cannot see is 404,
+ * then moderateMessage's rules. The caller owns the `channels` flag, sign-in and same-origin checks.
+ */
+export async function decideModeration(
+  context: DecisionContext, viewer: ModerationViewer, input: ModerationAction & { messageId: string },
+): Promise<Message> {
+  const target = await findMessageTarget(context.db, input.messageId);
+  const channel = target && await findChannelById(drizzle(context.db, { schema }), viewer.user, target.channelId, viewer.capabilities);
+  if (!target || !channel || !visibleTo(target, viewer.user.id, channel)) throw new ChannelError("not_found", "Message not found.", 404);
+  const message = await moderateMessage(
+    { db: context.db, viewerId: viewer.user.id, channel, now: context.now }, target,
+    { action: input.action, reason: input.reason }, { isAdmin: viewer.capabilities.isAdmin },
+  );
+  if (context.notifyLater) context.notifyLater(target.id);
+  else await moderationAttention(context, target.id);
+  return message;
+}
+
+/**
+ * What a restore or keep allowlists, written in its batch only with its event (?6) and only while the
+ * message still has the text the admin read: the text as written and as it was screened (with the
+ * shared work's text, screeningText), and each detector finding in it. A deleted message has none.
+ */
+async function allowlisting(ctx: WriteContext, target: MessageTarget, params: unknown[]): Promise<D1PreparedStatement[]> {
+  if (target.body === "") return [];
+  const screened = screeningText(target.body, storedEmbeds(target.embeds));
+  const keys = new Set([await textKey(target.body), await textKey(screened), ...detectFindings(screened).flatMap((finding) => finding.key ?? [])]);
+  return [ctx.db.prepare(`INSERT INTO moderation_allowlist (key, messageId, createdBy, createdAt)
+    SELECT value, ?2, ?3, ?5 FROM json_each(?7)
+    WHERE EXISTS (SELECT 1 FROM moderation_event WHERE id = ?6) AND EXISTS (SELECT 1 FROM channel_message WHERE id = ?2 AND body = ?8)
+    ON CONFLICT (key) DO NOTHING`).bind(...params, JSON.stringify([...keys]), target.body)];
+}
+
+function storedEmbeds(text: string): MessageEmbed[] {
+  try {
+    return MessageEmbed.array().catch([]).parse(JSON.parse(text));
+  } catch { return []; }
 }
 
 /**

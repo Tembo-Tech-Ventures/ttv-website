@@ -235,6 +235,11 @@ export const messages = {
     "This is a beginner mistake, honestly not worth discussing.", {
       moderation: { state: "HIDDEN", reasons: ["Harsh, not about the work"] },
     }),
+  /** As its author sees it after "Ask for review" (B-2.5). */
+  hiddenReviewRequested: message(424, channels.showYourWork, people.dennis,
+    "Honestly, this whole approach is a waste of everyone's time.", {
+      moderation: { state: "HIDDEN", reasons: ["Harsh, not about the work"], reviewRequested: true },
+    }),
 };
 export const communityMessages: MessageList = {
   items: [messages.projectPost, messages.firstPr, messages.mentorOffer], beforeCursor: "synthetic-community-before",
