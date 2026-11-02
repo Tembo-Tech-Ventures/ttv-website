@@ -393,8 +393,9 @@ the rest.
   member, is 403. Hiding a hidden message again changes nothing.
 - **Admins have the final say.** They hide (also upholding a moderator's
   hide, or keeping a hidden message hidden: either closes the case), restore
-  or keep ("fine as is", for a message that is not hidden: on a HIDDEN one it
-  is 409, and Restore is the way back). Restore and keep make the message
+  (only a HIDDEN message that isn't deleted: otherwise 409) or keep ("fine
+  as is", for a message that is not hidden: on a HIDDEN one it is 409, and
+  Restore is the way back). Restore and keep make the message
   VISIBLE with its reasons cleared, and put into `moderation_allowlist` the
   key of its text, as written and as screened with its shared work
   (`screeningText`), and of each detector finding in it, so none is flagged
@@ -534,6 +535,26 @@ outside this budget: one read and one batch of two. Moderation
 Every one is an
 indexed read; the plans are asserted in `messages.test.ts`,
 `mutations.test.ts` and `access.test.ts`.
+
+### D1 change counts
+
+On D1, `meta.changes` is the connection's `total_changes()` delta, so it
+counts every row the statement's triggers wrote too, and FTS5 shadow-table
+writes. Measured on local workerd D1 (wrangler 4.149, 2026-11-02): an INSERT
+into a table whose AFTER INSERT trigger writes two rows reports 3; a one-row
+UPDATE whose trigger writes a row reports 2. A statement that writes no row
+reports 0 whatever its triggers. `src/test/sqlite-d1.ts` reports the same, so
+the tests see it: there, a new program reports 4, itself and the three
+channels `program_cohort_channels` creates.
+
+So a success check never compares `meta.changes` to a count on a table with
+triggers (`channel_message`, `channel_message_search`,
+`channel_message_version`, `message_report`, `moderation_event`,
+`channel_action`, `program` and the `cohort_channel_request` view). It asks
+the statement for its own rows instead: `INSERT … RETURNING id` (an `ON
+CONFLICT DO NOTHING` returns none), or `UPDATE … RETURNING id`, and checks
+`results.length`. Every write in this directory does, and so does the
+legacy import's count of the rows it inserted.
 
 ## Seeded channels
 

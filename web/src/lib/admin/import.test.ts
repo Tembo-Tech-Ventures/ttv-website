@@ -1,3 +1,4 @@
+import { readdirSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
   LEGACY_IMPORT_PRODUCTION_DISABLED_MESSAGE,
@@ -8,6 +9,7 @@ import {
   legacyImportDisabledMessage,
   preflightLegacyImport,
 } from "./import";
+import { createSqliteD1, readMigration } from "@/test/sqlite-d1";
 
 const DATE = "2026-08-01T12:00:00.000Z";
 
@@ -128,7 +130,7 @@ function mockDatabase({
   });
   const batch = vi.fn(async (statements: unknown[]) =>
     statements.map((_statement, index) => ({
-      meta: { changes: changes[index] ?? 1 },
+      results: Array.from({ length: changes[index] ?? 1 }, () => ({ 1: 1 })),
     }))
   );
 
@@ -480,5 +482,34 @@ describe("legacy import database preflight", () => {
     expect(result.totalChanges).toBe(0);
     expect(result.totalSkipped).toBe(6);
     expect(Object.values(result.imported)).toEqual([0, 0, 0, 0, 0, 0]);
+  });
+});
+
+describe("legacy import against every migration", () => {
+  it("counts the rows it inserted, not the channels a new program's trigger creates", async () => {
+    const { database, db } = createSqliteD1();
+    const migrations = new URL("../db/migrations/", import.meta.url);
+    for (const file of readdirSync(migrations).filter((name) => name.endsWith(".sql")).toSorted()) {
+      database.exec(readMigration(file));
+    }
+
+    const result = await executeLegacyImport(db, validPayload());
+
+    const channels = database.prepare("SELECT COUNT(*) AS n FROM channel WHERE programId = 'program-1'").get();
+    expect(channels).toEqual({ n: 3 });
+    expect(result.imported).toEqual({
+      users: 1,
+      curricula: 1,
+      programPartners: 1,
+      programs: 1,
+      programRoles: 1,
+      programApplications: 1,
+    });
+    expect(result.totalChanges).toBe(6);
+
+    const replay = await executeLegacyImport(db, validPayload());
+    expect(replay.totalChanges).toBe(0);
+    expect(replay.totalSkipped).toBe(6);
+    database.close();
   });
 });

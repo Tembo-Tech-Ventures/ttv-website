@@ -294,7 +294,9 @@ function addStatement(
   sql: string,
   values: SqlValue[]
 ): void {
-  plan.statements.push({ table, sql, values });
+  // RETURNING counts the rows this statement inserted: D1's meta.changes would
+  // also count rows written by triggers (a new program creates its channels).
+  plan.statements.push({ table, sql: `${sql} RETURNING 1`, values });
   plan.attempted[table] += 1;
 }
 
@@ -738,10 +740,10 @@ export async function executeLegacyImport(
     }
 
     for (const [index, result] of results.entries()) {
-      const changes = result.meta.changes;
-      if (!Number.isInteger(changes) || changes < 0) {
-        throw new Error("Legacy import batch returned invalid change metadata.");
+      if (!Array.isArray(result.results)) {
+        throw new TypeError("Legacy import batch returned invalid results.");
       }
+      const changes = result.results.length;
       const table = plan.statements[index].table;
       imported[table] += changes;
       if (changes === 0) skipped[table] += 1;

@@ -3,7 +3,7 @@ import { AGENT_SESSION_PREFIX } from "@/lib/agent-auth";
 
 const mocks = vi.hoisted(() => {
   const all = vi.fn(async () => ({ results: [] }));
-  const batch = vi.fn(async () => [{ meta: { changes: 0 } }]);
+  const batch = vi.fn(async () => [{ results: [] }]);
   const prepare = vi.fn((sql: string) => {
     const statement = {
       sql,
@@ -71,7 +71,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.env.DEPLOYMENT_ENVIRONMENT = "agent-pr-123";
   mocks.all.mockResolvedValue({ results: [] });
-  mocks.batch.mockResolvedValue([{ meta: { changes: 0 } }]);
+  mocks.batch.mockResolvedValue([{ results: [] }]);
 });
 
 describe("POST /api/admin/import", () => {
