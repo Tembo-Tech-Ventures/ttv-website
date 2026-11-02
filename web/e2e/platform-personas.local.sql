@@ -194,3 +194,20 @@ INSERT INTO moderation_event (id, messageId, action, source, actorId, fromState,
  -- Hidden, then deleted by their authors: only keep closes these cases (B-2.7).
  ('ttv-local-moderation-deleted-hidden-event', 'ttv-local-moderation-deleted-hidden', 'HIDE', 'CLEF', NULL, 'VISIBLE', 'HIDDEN', '["Spam"]', 1793577000000),
  ('ttv-local-moderation-gone-event', 'ttv-local-moderation-gone', 'HIDE', 'MENTOR', 'ttv-local-persona-mentor', 'VISIBLE', 'HIDDEN', '["Unkind to another member"]', 1793578000000);
+-- e2e/platform-mentor-requests.spec.ts (U-4.1): two listed mentors. David has three spots a month; Samuel has one,
+-- so a single waiting request fills him. Every earlier request between local personas, and the private
+-- conversations they opened, are cleared first (requests before the conversations they point at), so a re-seed starts over.
+DELETE FROM mentor_request WHERE requesterId LIKE 'ttv-local-persona-%' OR mentorId LIKE 'ttv-local-persona-%';
+DELETE FROM attention_item WHERE kind LIKE 'mentor_%' AND userId LIKE 'ttv-local-persona-%';
+DELETE FROM channel WHERE kind = 'DIRECT' AND id IN (SELECT channelId FROM channel_member WHERE userId LIKE 'ttv-local-persona-%');
+INSERT OR REPLACE INTO user (id,name,email,emailVerified,image,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-mentor-two','Samuel Otieno','samuel@invalid.ttv',1,NULL,1793400000,1793400000);
+INSERT OR REPLACE INTO session (id,expiresAt,token,ipAddress,userAgent,userId,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-mentor-two-session',1893456000,'ttv-local-persona-mentor-two-token',NULL,'local','ttv-local-persona-mentor-two',1793400000,1793400000);
+INSERT OR REPLACE INTO UserRoles (id,userId,roleId,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-role-samuel','ttv-local-persona-mentor-two',(SELECT id FROM Roles WHERE name='MENTOR'),1793400000,1793400000);
+INSERT OR REPLACE INTO mentor_profile (userId,headline,bio,areas,formats,monthlyCapacity,paused,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-mentor','Backend engineer · fintech','Reviews APIs and data models. Cares about what happens when things fail.',
+  '["Code review","API design"]','["WRITTEN_REVIEW","CALL_30_MIN"]',3,0,1793400000000,1793400000000),
+ ('ttv-local-persona-mentor-two','Android engineer','Kotlin, offline-first apps and shipping to low-end devices.',
+  '["Mobile","Kotlin"]','["WRITTEN_REVIEW","QUICK_QUESTION"]',1,0,1793400000000,1793400000000);

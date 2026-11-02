@@ -97,7 +97,7 @@ function RequestCard({ store, request, mentors, now, compact = false }: {
     status: shownStatus(current, request), pending: current.pending[request.id], failed: current.failed[request.id],
   }), (a, b) => a.status === b.status && a.pending === b.pending && a.failed === b.failed);
   const [suggesting, setSuggesting] = useState(false);
-  const statusRef = useRef<HTMLParagraphElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
   const ids = useId();
   const requester = request.requester;
@@ -108,8 +108,9 @@ function RequestCard({ store, request, mentors, now, compact = false }: {
 
   function answered(run: () => Promise<unknown>) {
     void run();
-    // The buttons give way to the answer: keep focus on the request, where the outcome is read.
-    statusRef.current?.focus();
+    // The buttons give way to the answer: focus stays on this request (its heading), and the live
+    // region says how it went. Nothing visible moves when focus leaves it again.
+    headingRef.current?.focus();
   }
 
   return (
@@ -117,7 +118,7 @@ function RequestCard({ store, request, mentors, now, compact = false }: {
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <Avatar id={requester.id} name={requester.name} src={requester.avatarUrl ?? undefined} size={compact ? "md" : "lg"} decorative />
         <div className="min-w-0 flex-1">
-          <h3 id={`${ids}-who`} className="text-lg leading-snug font-bold break-words text-ink-primary">{requester.name}</h3>
+          <h3 ref={headingRef} tabIndex={-1} id={`${ids}-who`} className="text-lg leading-snug font-bold break-words text-ink-primary focus:outline-none" data-request-heading>{requester.name}</h3>
           <p className="text-sm text-ink-secondary">{[context, requestMeta(request, now)].filter(Boolean).join(" · ")}</p>
         </div>
         {!open && <Chip tone={view.tone}>{state.pending ? `${view.label}…` : view.label}</Chip>}
@@ -129,9 +130,6 @@ function RequestCard({ store, request, mentors, now, compact = false }: {
       {request.project && !compact && <div className="max-w-xl"><EmbedCard embed={request.project} /></div>}
       {view.detail && <p className="text-sm text-ink-secondary">{view.detail}</p>}
 
-      <p ref={statusRef} tabIndex={-1} className="sr-only focus:not-sr-only focus:text-sm focus:text-ink-secondary" data-request-outcome>
-        {state.pending ? `${view.label}…` : open ? `Waiting for your answer to ${name}` : view.label}
-      </p>
       {state.failed && !state.failed.stale && (
         <output className="text-sm font-semibold text-danger-ink">That didn't go through, so nothing changed. Try again.</output>
       )}

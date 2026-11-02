@@ -1,0 +1,35 @@
+---
+/**
+ * Mentoring → Requests (U-4.1, screen 06): the people asking for this
+ * mentor's time, with the work attached; accept, suggest another mentor or
+ * "Not this month"; and this month's spots. It exists only while
+ * `mentor_requests` is on for the person and they hold the Mentoring space.
+ * The list reads without JavaScript; answering needs it.
+ */
+import { env } from "cloudflare:workers";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import MentorPageIntro from "@/components/platform/mentors/MentorPageIntro.astro";
+import MentorRequestsQueue from "@/components/platform/mentors/MentorRequestsQueue";
+import { mentorRequestsOpen } from "@/components/platform/mentors/mentor-display";
+import { mentorPageResponse } from "@/components/platform/mentors/page-responses";
+import { mentorsServer } from "@/components/platform/mentors/server";
+
+const context = await resolveSpacePage(Astro.locals, "mentorRequests");
+if (!context || context.space !== "mentoring" || !mentorRequestsOpen(context.me)) return mentorPageResponse(404);
+if (Astro.request.method !== "GET" && Astro.request.method !== "HEAD") return mentorPageResponse(405, { Allow: "GET, HEAD" });
+
+const now = Date.now();
+const server = mentorsServer(Astro, env, context.me, now);
+const [initial, mentors, availability] = await Promise.all([
+  server.requests({ as: "mentor" }),
+  server.directory({}),
+  server.availability(),
+]);
+Astro.response.headers.set("Cache-Control", "no-store");
+---
+
+<SpacePage context={context} title="Requests">
+  <MentorPageIntro page="requests" />
+  <MentorRequestsQueue client:load initial={initial} mentors={mentors.items} availability={availability} now={now} />
+</SpacePage>
