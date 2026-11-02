@@ -1,7 +1,7 @@
 import { and, eq, exists, inArray, or, sql } from "drizzle-orm";
 import {
-  accessRequest, attentionItem, channel, channelMessage, communityJourney, moderationCase, profileContact, programApplication, recording,
-  studentProfile, type Database,
+  accessRequest, attentionItem, channel, channelMember, channelMessage, communityJourney, mentorRequest, moderationCase, profileContact,
+  programApplication, recording, studentProfile, type Database,
 } from "@/lib/db/schema";
 import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
 
@@ -10,8 +10,9 @@ import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
  * Access requests: the requester sees their decision; administrators see a request only while it is
  * still pending, so a request another administrator decided, or its owner withdrew, leaves every bell.
  * Messages (B-2.5): a hidden-message notice while the author's message stays hidden; a moderation
- * notice while its case is pending, for admins; a mention while the message is visible in a channel
- * the person can still read.
+ * notice while its case is pending, for admins; a mention or Tembo's answer while the message is
+ * visible in a channel the person can still read, their own direct conversations included (B-4.1).
+ * Mentor requests (B-4.1): each notice to the party it was for, the mentor or the person asking.
  */
 export function attentionAccess(db: Database, userId: string, capabilities: PlatformCapabilities) {
   return and(
@@ -33,11 +34,18 @@ export function attentionAccess(db: Database, userId: string, capabilities: Plat
           and(eq(attentionItem.kind, "message_hidden"), eq(channelMessage.authorId, userId), eq(channelMessage.moderationState, "HIDDEN")),
           capabilities.isAdmin ? and(eq(attentionItem.kind, "moderation_pending"), exists(db.select({ id: moderationCase.messageId })
             .from(moderationCase).where(and(eq(moderationCase.messageId, channelMessage.id), eq(moderationCase.state, "PENDING"))))) : sql`0`,
-          and(eq(attentionItem.kind, "mention"), sql`${channelMessage.moderationState} <> 'HIDDEN'`, or(
+          and(inArray(attentionItem.kind, ["mention", "tembo_answer"]), sql`${channelMessage.moderationState} <> 'HIDDEN'`, or(
             eq(channel.kind, "COMMUNITY"),
             and(eq(channel.kind, "COHORT"), capabilities.isAdmin ? sql`1`
               : sql`${channel.programId} IN (SELECT value FROM json_each(${JSON.stringify(capabilities.cohortIds)}))`),
+            and(eq(channel.kind, "DIRECT"), exists(db.select({ id: channelMember.userId }).from(channelMember)
+              .where(and(eq(channelMember.channelId, channel.id), eq(channelMember.userId, userId))))),
           )),
+        ))))),
+      and(eq(attentionItem.subjectKind, "mentorRequest"), exists(db.select({ id: mentorRequest.id }).from(mentorRequest)
+        .where(and(eq(mentorRequest.id, attentionItem.subjectId), or(
+          and(inArray(attentionItem.kind, ["mentor_request", "mentor_withdrawn"]), eq(mentorRequest.mentorId, userId)),
+          and(inArray(attentionItem.kind, ["mentor_accepted", "mentor_redirected", "mentor_declined"]), eq(mentorRequest.requesterId, userId)),
         ))))),
       and(eq(attentionItem.subjectKind, "accessRequest"), exists(db.select({ id: accessRequest.id }).from(accessRequest)
         .where(and(eq(accessRequest.id, attentionItem.subjectId), or(

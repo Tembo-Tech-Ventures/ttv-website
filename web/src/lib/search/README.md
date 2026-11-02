@@ -106,9 +106,10 @@ the caller (read from the same request's flags, so it costs no statement); off,
   candidate channels once and keeps those `channelAccessFor` lets the caller
   read: community channels for every signed-in person, institutions included;
   a cohort's channels for its members (alumni too), instructors, TAs, invited
-  mentors and admins; DIRECT conversations for their members only. Direct
-  conversations have no page yet (Phase 4), so none is a result until one
-  exists. Revocation is effective on the next search. Demo identities search
+  mentors and admins; DIRECT conversations for their two members only, never
+  admins or mentors outside them (B-4.1), linked to
+  `/dashboard/community/dm/<id>` and labelled "Private conversation · only the
+  two of you". The community scope includes them. Revocation is effective on the next search. Demo identities search
   exactly the channels their channel pages open (capabilitiesFor already
   confines them to the demo cohort); fixture and QA sessions stay denied.
 - **Queries are text.** Each whitespace-separated term of `q` (at most 16)

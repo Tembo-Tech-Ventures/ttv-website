@@ -68,7 +68,7 @@ describe("asking a mentor for time", () => {
     const id = await s.ask();
     for (const user of [PEOPLE.mercy, PEOPLE.amina, PEOPLE.amani, "synthetic-otieno"]) {
       const read = await s.call("getMentorRequest", { id, user });
-      expect([read.status, errorOf(read.body).code], user).toEqual([404, "not_found"]);
+      expect([read.status, errorOf(read.body).code], `${user}`).toEqual([404, "not_found"]);
       expect(request((await s.call("getMentorRequest", { id, user: VIEWER })).body).id).toBe(id);
       for (const operation of Object.keys(MOVES) as Move[]) {
         expect((await move(s, operation, id, user)).status, `${user} ${operation}`).toBe(404);
@@ -86,7 +86,7 @@ describe("asking a mentor for time", () => {
     ["a format the mentor does not offer", { mentorId: PEOPLE.mercy, format: "CALL_30_MIN" }, 400, "validation"],
   ])("refuses asking %s", async (_, override, status, code) => {
     const s = setup();
-    const response = await s.call("createMentorRequest", { body: { mentorId: PEOPLE.david, note: "Hello", project: null, format: "WRITTEN_REVIEW", ...override } });
+    const response = await s.call("createMentorRequest", { body: { note: "Hello", project: null, format: "WRITTEN_REVIEW", ...override } });
     expect([response.status, errorOf(response.body).code]).toEqual([status, code]);
     expect(s.database.prepare("SELECT COUNT(*) AS n FROM mentor_request").get()).toEqual({ n: 0 });
   });
@@ -108,7 +108,7 @@ describe("asking a mentor for time", () => {
       [{ type: "project", journeyId: "draft", version: 1 }, 400], [{ type: "project", journeyId: "theirs", version: 1 }, 400],
       [{ type: "project", journeyId: "missing", version: 1 }, 400], [{ type: "project", journeyId: "moved-on", version: 2 }, 409],
     ] as const) {
-      expect((await attach(project)).status, JSON.stringify(project)).toBe(status);
+      expect((await attach(project)).status, `${JSON.stringify(project)}`).toBe(status);
     }
     expect(s.database.prepare("SELECT COUNT(*) AS n FROM mentor_request").get()).toEqual({ n: 0 });
   });
@@ -197,7 +197,7 @@ describe("the request state machine", () => {
     const id = await s.ask();
     for (const operation of ["acceptMentorRequest", "redirectMentorRequest", "declineMentorRequest"] as const) {
       const response = await move(s, operation, id, VIEWER);
-      expect([response.status, errorOf(response.body).code], operation).toEqual([403, "forbidden"]);
+      expect([response.status, errorOf(response.body).code], `${operation}`).toEqual([403, "forbidden"]);
     }
     expect((await move(s, "withdrawMentorRequest", id, PEOPLE.david)).status).toBe(403);
     expect(s.database.prepare("SELECT status FROM mentor_request").get()).toEqual({ status: "PENDING" });
@@ -258,7 +258,7 @@ describe("accepting opens a conversation", () => {
       .toEqual([{ userId: PEOPLE.david }, { userId: VIEWER }]);
     for (const user of [VIEWER, PEOPLE.david]) {
       const page = await s.channelCall("listMessages", { id: channelId, user });
-      expect(page.status, user).toBe(200);
+      expect(page.status, `${user}`).toBe(200);
       const [opening] = MessageList.parse(page.body).items;
       expect(opening).toMatchObject({ authorKind: "USER", author: { id: VIEWER }, body: "Here is my fare splitter.",
         embeds: [{ type: "project", journeyId: "fare-splitter", version: 4 }] });

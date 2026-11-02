@@ -16,7 +16,7 @@ let fixture: ReturnType<typeof createCapabilityDatabase>;
 function setup(input: Parameters<typeof createCapabilityDatabase>[0] = {}) {
   fixture?.database.close();
   fixture = createCapabilityDatabase(input);
-  for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql", "0027_mentor_set_aside.sql", "0028_channels.sql", "0032_moderation_pipeline.sql"]) fixture.database.exec(readMigration(migration));
+  for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql", "0027_mentor_set_aside.sql", "0028_channels.sql", "0032_moderation_pipeline.sql", "0036_mentor_requests.sql"]) fixture.database.exec(readMigration(migration));
   fixture.database.exec("UPDATE feature_flag SET audience='ALL' WHERE key='spaces'");
   Object.assign(mocks.env, { DB: fixture.db.$client, DEPLOYMENT_ENVIRONMENT: "production", PLATFORM_FLAGS_OVERRIDE: undefined });
 }
@@ -686,3 +686,78 @@ describe("channel pages (B-2.2)", () => {
   });
 });
 
+
+describe("conversation and mentor pages (B-4.1)", () => {
+  const flag = (key: string, audience: "OFF" | "STAFF" | "ALL") =>
+    fixture.database.prepare("UPDATE feature_flag SET audience=? WHERE key=?").run(audience, key);
+  /** A conversation between the caller and Otieno, and one between two other people. */
+  function setupConversations(input: Parameters<typeof setup>[0] = {}) {
+    setup(input);
+    fixture.database.exec(`INSERT INTO user (id,name,email) VALUES ('synthetic-achieng','Achieng Atieno','a@example.test');
+      INSERT INTO channel (id,kind,slug,name) VALUES ('dm-member','DIRECT','conversation','Mentoring conversation'),
+        ('dm-other','DIRECT','conversation','Mentoring conversation');
+      INSERT INTO channel_member (channelId,userId) VALUES ('dm-member','synthetic-wanjiku'),('dm-member','synthetic-otieno'),
+        ('dm-other','synthetic-otieno'),('dm-other','synthetic-achieng');`);
+    flag("channels", "ALL");
+  }
+  const request = async (path: string, method = "GET") => {
+    const { ctx, next } = context(path, { method });
+    const response = await routeSpaceRequest(ctx, next);
+    return { ctx, next, response, status: response.status, body: await response.clone().text() };
+  };
+
+  it.each(CHANNEL_ACCESS_MATRIX.filter((item) => item.signedIn !== false))("open only $name's own conversation; another's is the same 404 as a missing one", async (item) => {
+    setupConversations(item);
+    const own = await request("/dashboard/community/dm/dm-member");
+    expect(own.status).toBe(200);
+    expect(own.next).toHaveBeenCalledExactlyOnceWith();
+    expect(own.response.headers.get("Set-Cookie")).toMatch(/^ttv-last-space=community;/);
+    expect(await getRouteChannel(own.ctx)).toMatchObject({ id: "dm-member", kind: "DIRECT", name: "Otieno Ouma",
+      capabilities: { canPost: true, canModerate: false, canShareSessionClip: false } });
+    const missing = await request("/dashboard/community/dm/dm-missing");
+    for (const path of ["/dashboard/community/dm/dm-other", "/dashboard/community/c/conversation", "/dashboard/cohort/c/conversation"]) {
+      const result = await request(path);
+      expect({ path, status: result.status, body: result.body, headers: [...result.response.headers] })
+        .toEqual({ path, status: 404, body: missing.body, headers: [...missing.response.headers] });
+      expect(result.next).not.toHaveBeenCalled();
+    }
+  });
+
+  it("are 404 while channels is off for the caller, even for a member", async () => {
+    setupConversations({ globalRoles: ["ADMIN"] });
+    for (const audience of ["OFF", "STAFF"] as const) {
+      flag("channels", audience);
+      const expected = audience === "STAFF" ? 200 : 404;
+      expect((await request("/dashboard/community/dm/dm-member")).status, `${audience}`).toBe(expected);
+    }
+    setupConversations();
+    flag("channels", "STAFF");
+    expect((await request("/dashboard/community/dm/dm-member")).status).toBe(404);
+  });
+
+  it("serve the mentor pages only while mentor_requests is on for the caller, which needs channels", async () => {
+    setupConversations({ globalRoles: ["MENTOR"] });
+    const paths = ["/dashboard/community/mentors", "/dashboard/mentoring/requests", "/dashboard/mentoring/availability"];
+    for (const [mentorRequests, channels, status] of [["OFF", "ALL", 404], ["ALL", "OFF", 404], ["ALL", "ALL", 200]] as const) {
+      flag("mentor_requests", mentorRequests);
+      flag("channels", channels);
+      for (const path of paths) {
+        for (const method of ["GET", "POST"]) {
+          const result = await request(path, method);
+          expect({ path, method, mentorRequests, channels, status: result.status }).toEqual({ path, method, mentorRequests, channels, status });
+        }
+      }
+    }
+  });
+
+  it("keep Mentoring pages to mentors (and admins, as for every Mentoring page) while the directory is everyone's", async () => {
+    for (const [globalRoles, mentoring] of [[[], 403], [["INSTITUTION"], 403], [["ADMIN"], 200], [["MENTOR"], 200]] as const) {
+      setupConversations({ globalRoles: [...globalRoles] });
+      flag("mentor_requests", "ALL");
+      expect((await request("/dashboard/community/mentors")).status, `${globalRoles.join()}`).toBe(200);
+      for (const path of ["/dashboard/mentoring/requests", "/dashboard/mentoring/availability"]) {
+        expect((await request(path)).status, `${globalRoles.join()} ${path}`).toBe(mentoring);
+      }
+    }
+  });
+});

@@ -67,7 +67,7 @@ the parameterised role matrix every surface can reuse.
 |---|---|---|---|
 | COMMUNITY | Every signed-in person, institutions included | Everyone who reads it | Admins and global mentors |
 | COHORT | That program's members (APPROVED, AUDIT and COMPLETED, so alumni stay after the cohort ends), its INSTRUCTOR, TA and MENTOR assignments, and admins | Everyone who reads it | Its instructors, TAs and mentors, and admins |
-| DIRECT | Explicit `channel_member` rows only (Phase 4) | Its members | Nobody in place |
+| DIRECT | Its two `channel_member` rows only: admins and every mentor outside it included get nothing (B-4.1) | Its members | Nobody in place |
 
 - **postingPolicy STAFF** (the `cNN-announcements` channels): only admins,
   and on a cohort channel its instructors and TAs, post. Mentors and members
@@ -80,6 +80,11 @@ the parameterised role matrix every surface can reuse.
   is joined through a per-program MENTOR assignment.
 - A `channel_member` row opens DIRECT conversations only. It never opens
   another cohort's channels.
+- **Direct conversations** (B-4.1) are opened only by a mentor accepting a
+  request (`src/lib/mentoring/README.md`), with the two people as its only
+  members; a later accepted request between the same two people reuses it.
+  Each member sees it named for the other person (`name` in `Channel`); the
+  stored name, "Mentoring conversation", stands in once nobody else is left.
 - `teachingCohortIds` (INSTRUCTOR/TA assignments) is a server-only field of
   `capabilitiesFor`; `Me` never serializes it.
 
@@ -101,18 +106,23 @@ the parameterised role matrix every surface can reuse.
 - `findReadableChannel(db, user, { space, slug })` → `Channel | null`: a
   cohort channel in Cohort, a community channel in Community. A missing slug,
   a channel in the other space and a channel the caller cannot read all give
-  null, through the same queries.
+  null, through the same queries. Direct conversations have no page by slug.
 
 ### Routes
 
-`/dashboard/cohort/c/<slug>`, `/dashboard/community/c/<slug>` and
+`/dashboard/cohort/c/<slug>`, `/dashboard/community/c/<slug>`,
+`/dashboard/community/dm/<id>` (a direct conversation, B-4.1) and
 `/dashboard/community/conduct` (`space-routes.ts`) are 404 for every method
 until `channels` is on for the caller. A channel page is then 404 unless the
-caller can read that channel, whatever the reason, so no slug confirms that
-another cohort's channel exists. Personal access tokens get 403, as on every
-spaces page. The page frontmatter reads the same lookup through
-`getRouteChannel(Astro)` (`src/lib/platform/server/channel-context.ts`),
-once per request. Restricted staging identities may GET these pages only.
+caller can read that channel, whatever the reason, so no slug or id confirms
+that another cohort's channel or someone else's conversation exists. Personal
+access tokens get 403, as on every spaces page. The page frontmatter reads the
+same lookup through `getRouteChannel(Astro)`
+(`src/lib/platform/server/channel-context.ts`), once per request; a
+conversation path opens DIRECT channels only. `channelPagePath(channel)` is
+where each kind of channel opens, for links from search, Tembo and attention.
+Restricted staging identities may GET the channel pages only, not
+conversations: they cannot make the request that opens one.
 
 Capabilities are read once per request through
 `requestCapabilities(db, Astro.locals)`
@@ -385,7 +395,7 @@ after 21 markers the last covers the rest of the body. Attention items never
 carry message text. Embed snapshots (a shared project's own public text) are
 not masked. Only the detectors' spans are masked: a message only Clef flagged
 ("May share contact details") shows whole until a person decides. Admins in
-DIRECT channels (Phase 4) do not moderate them, so they see masks there too.
+DIRECT conversations have no moderators, so their members see masks there too.
 
 ### 3. Evidence
 
