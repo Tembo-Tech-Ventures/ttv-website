@@ -3,7 +3,7 @@ import {
   MentorArea, MentorFormats, MentorRequestFormat,
   type MentorAvailability, type MentorDirectory, type MentorDirectoryItem, type MentorDirectoryQuery, type UpdateMentorAvailability,
 } from "@/lib/platform/contracts";
-import { capacityOf, hasSpot, monthStart, spotColumns } from "./capacity";
+import { capacityOf, monthStart, spotColumns } from "./capacity";
 import { personColumns, personRow, personSummary } from "./people";
 
 /**
@@ -104,14 +104,17 @@ interface DirectoryRow extends Record<string, unknown> {
  * SQLite's lower() folds it.
  */
 export async function listMentors(db: D1Database, viewerId: string, query: MentorDirectoryQuery, now: number): Promise<MentorDirectory> {
-  const { results } = await db.prepare(`SELECT p.userId, p.headline, p.bio, p.areas, p.formats, p.monthlyCapacity,
-      ${personColumns("u", "p.userId", "person")}, ${spotColumns("p.userId", "?2")}
-    FROM mentor_profile p JOIN "user" u ON u.id = p.userId
-    WHERE ${LISTED} AND p.userId <> ?1
-      AND (?3 IS NULL OR EXISTS (SELECT 1 FROM json_each(p.areas) a WHERE lower(trim(a.value)) = lower(trim(?3))))
-      AND (?4 IS NULL OR EXISTS (SELECT 1 FROM json_each(p.formats) f WHERE f.value = ?4))
-      AND (?6 = 0 OR ${hasSpot("p.userId", "?2", "p.monthlyCapacity")})
-    ORDER BY ${hasSpot("p.userId", "?2", "p.monthlyCapacity")} DESC, u.name, p.userId LIMIT ?5`)
+  // The spot counts are read once per listed mentor (two index ranges), then filtered and ordered on.
+  const { results } = await db.prepare(`WITH listed AS (
+      SELECT p.userId, p.headline, p.bio, p.areas, p.formats, p.monthlyCapacity, ${spotColumns("p.userId", "?2")}
+      FROM mentor_profile p
+      WHERE ${LISTED} AND p.userId <> ?1
+        AND (?3 IS NULL OR EXISTS (SELECT 1 FROM json_each(p.areas) a WHERE lower(trim(a.value)) = lower(trim(?3))))
+        AND (?4 IS NULL OR EXISTS (SELECT 1 FROM json_each(p.formats) f WHERE f.value = ?4)))
+    SELECT l.*, ${personColumns("u", "l.userId", "person")}
+    FROM listed l JOIN "user" u ON u.id = l.userId
+    WHERE ?6 = 0 OR l.pendingCount + l.acceptedCount < l.monthlyCapacity
+    ORDER BY l.pendingCount + l.acceptedCount < l.monthlyCapacity DESC, u.name, l.userId LIMIT ?5`)
     .bind(viewerId, monthStart(now), query.area ?? null, query.format ?? null, DIRECTORY_LIMIT, query.available === true ? 1 : 0)
     .all<DirectoryRow>();
   const items = results.map((row): MentorDirectoryItem => ({
