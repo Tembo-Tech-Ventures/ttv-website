@@ -139,6 +139,10 @@ describe("getConversation (the /dm/:id header)", () => {
       expect(await getConversation({ db: s.d1, viewerId: user, now: 0 }, channelId), `${user}`).toBeNull();
     }
     expect(await getConversation({ db: s.d1, viewerId: VIEWER, now: 0 }, s.channel("help"))).toBeNull();
+    // Explicit members of a channel that is not a conversation still get no header.
+    const cohort = s.channel("cohort-04");
+    s.database.prepare("INSERT INTO channel_member(channelId, userId) VALUES (?, ?), (?, ?)").run(cohort, VIEWER, cohort, PEOPLE.mercy);
+    expect(await getConversation({ db: s.d1, viewerId: VIEWER, now: 0 }, cohort)).toBeNull();
     expect(await getConversation({ db: s.d1, viewerId: VIEWER, now: 0 }, "missing")).toBeNull();
   });
 
