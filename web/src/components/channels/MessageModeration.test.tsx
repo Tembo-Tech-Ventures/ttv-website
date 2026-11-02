@@ -266,7 +266,7 @@ describe("hiding, for the channel's moderators, and restoring, for admins", () =
     const note = $("[data-moderation=HIDDEN]", article(messages.firstPr.id));
     // What happens next, and where the outcome shows (QA2-11).
     expect(note?.textContent).toBe(
-      "Hidden from members: Off-topic for this channel. Moderators can still see it. An admin looks at every hide, and Brian can ask for a review. "
+      "Hidden from members: Off-topic for this channel. Moderators can still see it. An admin looks at every hide, and Brian can ask for a review unless an admin made or upheld the hide. "
       + "If an admin restores it, members see it here again.",
     );
     expect(announcer()).toBe("Message hidden from members. An admin will look at it.");

@@ -29,7 +29,7 @@ const KINDS: Partial<Record<SpaceId, readonly Channel["kind"][]>> = {
 const INTRO: Partial<Record<SpaceId, string>> = {
   cohort: "Talk with your cohort: questions about sessions, help with the work, and announcements.",
   community: "Talk with everyone in the community: introduce yourself, share what you're building, ask for help.",
-  mentoring: "Members ask questions and share their work in channels. You can read and reply there.",
+  mentoring: "Members ask questions and share their work in channels. You can read along and join in there.",
 };
 
 /** The card for this space, or null: the flag is off, the list could not be read, or nothing open belongs here. */

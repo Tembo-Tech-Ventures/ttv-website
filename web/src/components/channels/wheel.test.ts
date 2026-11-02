@@ -6,7 +6,7 @@ import { wheelScrollsList } from "./wheel";
 function column() {
   document.body.innerHTML = `
     <section data-column>
-      <header data-header><h1>#help</h1></header>
+      <header data-header><h1>#help</h1><svg data-icon><path d="M0 0h1"></path></svg></header>
       <div data-channel-scroller style="overflow-y: auto"><p data-message>Hello</p></div>
       <form><textarea data-draft style="overflow-y: auto"></textarea></form>
     </section>`;
@@ -16,7 +16,7 @@ function column() {
   return { main: $("[data-column]"), list, header: $("[data-header] h1"), message: $("[data-message]"), draft: $("[data-draft]") };
 }
 
-function wheel(target: HTMLElement, init: WheelEventInit): WheelEvent {
+function wheel(target: Element, init: WheelEventInit): WheelEvent {
   const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, ...init });
   // happy-dom's WheelEvent leaves out the modifier keys of its init.
   Object.defineProperties(event, { target: { value: target }, ctrlKey: { value: init.ctrlKey ?? false } });
@@ -34,6 +34,12 @@ describe("wheelScrollsList (QA2-17)", () => {
     expect(list.scrollTop).toBe(140);
     wheelScrollsList(wheel(header, { deltaY: -3, deltaMode: 1 }), main);
     expect(list.scrollTop).toBe(92);
+  });
+
+  it("scrolls the list when the pointer is over an icon (an SVG, not an HTML element)", () => {
+    const { main, list } = column();
+    wheelScrollsList(wheel(document.querySelector("[data-icon] path")!, { deltaY: 40 }), main);
+    expect(list.scrollTop).toBe(140);
   });
 
   it("leaves the list's own wheel, a zoom and a box that still scrolls itself to the browser", () => {

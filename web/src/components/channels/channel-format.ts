@@ -268,9 +268,15 @@ export function moderationNotice(message: Message, viewerId: string | null, { ad
       };
 }
 
-/** What happens after a channel moderator's hide, said to moderators who are not admins. */
+/**
+ * What happens after a channel moderator's hide, said to moderators who are not admins. Moderators are
+ * not told whether an admin made or upheld the hide (then it is final, and no review can be asked), so
+ * the review is offered with that exception, never promised.
+ */
 export function afterHide(message: Message): string {
-  const review = message.authorKind === "USER" ? `, and ${firstName(message.author.name)} can ask for a review` : "";
+  const review = message.authorKind === "USER"
+    ? `, and ${firstName(message.author.name)} can ask for a review unless an admin made or upheld the hide`
+    : "";
   return `An admin looks at every hide${review}. If an admin restores it, members see it here again.`;
 }
 

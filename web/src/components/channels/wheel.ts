@@ -9,7 +9,7 @@
 const LINE = 16;
 
 /** Whether this element scrolls itself and has room left in the wheel's direction. */
-function scrollsItself(element: HTMLElement, deltaY: number): boolean {
+function scrollsItself(element: Element, deltaY: number): boolean {
   if (!/auto|scroll/.test(getComputedStyle(element).overflowY)) return false;
   return deltaY < 0 ? element.scrollTop > 0 : element.scrollTop + element.clientHeight < element.scrollHeight;
 }
@@ -19,8 +19,9 @@ export function wheelScrollsList(event: WheelEvent, column: HTMLElement): void {
   if (event.defaultPrevented || event.ctrlKey || event.deltaY === 0) return;
   const list = column.querySelector<HTMLElement>("[data-channel-scroller]");
   const target = event.target;
-  if (!list || !(target instanceof HTMLElement) || list.contains(target) || !column.contains(target)) return;
-  for (let element: HTMLElement | null = target; element && element !== column; element = element.parentElement) {
+  // An icon's SVG is often what the pointer is over, so any element counts, not only HTML ones.
+  if (!list || !(target instanceof Element) || list.contains(target) || !column.contains(target)) return;
+  for (let element: Element | null = target; element && element !== column; element = element.parentElement) {
     if (scrollsItself(element, event.deltaY)) return;
   }
   const unit = event.deltaMode === 1 ? LINE : event.deltaMode === 2 ? list.clientHeight : 1;

@@ -233,7 +233,7 @@ describe("moderation notices", () => {
 
   it("tells a moderator who is not an admin what happens after a hide, and an admin only that it is hidden (QA2-11)", () => {
     expect(moderationNotice(messages.hidden, people.david.id)?.detail).toBe(
-      "Moderators can still see it. An admin looks at every hide, and Dennis can ask for a review. If an admin restores it, members see it here again.",
+      "Moderators can still see it. An admin looks at every hide, and Dennis can ask for a review unless an admin made or upheld the hide. If an admin restores it, members see it here again.",
     );
     expect(moderationNotice(messages.hidden, people.amina.id, { admin: true })?.detail).toBe("Moderators can still see it.");
   });
