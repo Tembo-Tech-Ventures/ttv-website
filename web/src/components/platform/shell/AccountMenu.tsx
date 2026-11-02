@@ -3,6 +3,7 @@ import { PiChatCircleText, PiGear, PiSignOut } from "react-icons/pi";
 import type { PersonSummary } from "@/lib/platform/contracts";
 import { openFeedbackWidget } from "@/components/feedback/feedback-client";
 import { clearChannelDrafts } from "@/lib/platform/client/channel-drafts";
+import { clearMentorRequestDrafts } from "@/lib/platform/client/mentor-request-form";
 import { clearOnboardingDrafts } from "@/lib/platform/client/onboarding-drafts";
 import { Avatar, initials, RoleBadge } from "@/components/platform/ui";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
@@ -44,6 +45,7 @@ export function accountMenuName(person: Pick<PersonSummary, "name" | "avatarUrl"
 function forgetDrafts() {
   clearOnboardingDrafts();
   clearChannelDrafts();
+  clearMentorRequestDrafts();
 }
 
 /**
