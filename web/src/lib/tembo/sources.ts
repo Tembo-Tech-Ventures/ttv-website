@@ -118,10 +118,11 @@ const ASKED = `EXISTS (SELECT 1 FROM tembo_ask a WHERE a.messageId = m.id)`;
  */
 const isQuestion = (row: MessageRow) => row.asked === 1 || mentionsTembo(row.body);
 /**
- * No "@tembo" anywhere in m's body, so questions refused for the day can't fill a search's page before
- * the exact check (mentionsTembo) runs. Broader than a mention (name@tembo.org is left out too).
+ * No "@tembo" in m's body, apart from TTV's own addresses (@tembotech…), so questions refused for the
+ * day can't fill a search's page before the exact check (mentionsTembo) runs. Still broader than a
+ * mention: name@tembo.org is left out too.
  */
-const NO_MENTION = `instr(lower(m.body), '@tembo') = 0`;
+const NO_MENTION = `instr(replace(lower(m.body), '@tembotech', ''), '@tembo') = 0`;
 const MESSAGE_COLUMNS = `m.id, m.parentId, m.seq, u.name AS authorName, m.body, m.moderationState, m.moderationReasons, ${ASKED} AS asked`;
 
 /** Characters of a message's own words in its citation's title, so two of one person's messages tell apart. */

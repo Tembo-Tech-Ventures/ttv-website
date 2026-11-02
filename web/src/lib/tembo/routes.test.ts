@@ -510,6 +510,34 @@ describe("what an answer can cite (QA-3)", () => {
     expect(JSON.stringify(after)).not.toMatch(/note [1-4]/);
   });
 
+  it("drops a cited message's words when its author edits it while Tembo is still answering (#310 review 3, S1)", async () => {
+    const s = setup();
+    const cited = s.message("help", { body: "The Mongolia trip gate code is 4471.", author: "synthetic-otieno" });
+    const question = s.question("help", "@tembo what is the Mongolia trip gate code?");
+    const clock = { now: NOW };
+    // Claimed at NOW; the author edits at NOW + 1, after Tembo read the message; the answer posts at NOW + 2.
+    const model: TemboModel = async () => {
+      s.database.prepare("UPDATE channel_message SET body = 'Edited away.', editedAt = ? WHERE id = ?").run(clock.now + 1, cited);
+      clock.now += 2;
+      return { content: "It is in the channel [S1].", toolCalls: [], finishReason: "stop" };
+    };
+    await s.ask("help", question, { temboModel: model, now: () => clock.now });
+    await s.afterResponse();
+    const thread = MessageList.parse((await s.call("listMessages", { id: s.channel("help"), query: `?thread=${question}`, user: "synthetic-achieng" })).body);
+    expect(thread.items.find((item) => item.authorKind === "TEMBO")!.citations).toMatchObject([{ messageId: cited, title: CITED_MESSAGE_CHANGED }]);
+  });
+
+  it("finds a message with TTV's own address, though not a refused @tembo question (#310 review 3, N1)", async () => {
+    const s = setup();
+    s.message("help", { body: "Mongolia trip forms go to admissions@tembotechventures.com by Friday." });
+    s.message("help", { body: "@tembo Mongolia trip forms?", author: "synthetic-achieng" });
+    const question = s.question("help", "Mongolia trip forms?");
+    const { model, calls } = scriptedModel([{ search: [["search_channel", "mongolia trip forms"]] }, { answer: NO_ANSWER_TEXT }]);
+    await s.ask("help", question, { temboModel: model });
+    await s.afterResponse();
+    expect(toolResults(calls).flatMap((result) => result.results.map((found) => found.text))).toEqual([expect.stringContaining("admissions@tembotechventures.com")]);
+  });
+
   it("names a session clip by its moment, so two clips of one session tell apart (QA3-02)", async () => {
     const s = setup();
     s.database.exec(`INSERT INTO recording (id, programId, title, processingStatus) VALUES ('rec-5', 'cohort-a', 'Week 5: REST APIs and pagination', 'complete');

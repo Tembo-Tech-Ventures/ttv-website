@@ -588,7 +588,8 @@
 /* A sentence's marker: its source's number, raised, linking to that source. */
 .channel-cite-ref {
   margin-left: 0.125rem;
-  padding: 0 0.1875rem;
+  /* No right padding: the sentence's stop sits against its marker. */
+  padding: 0 0 0 0.1875rem;
   border-radius: 0.25rem;
   color: var(--color-peach-ink);
   font-weight: 700;

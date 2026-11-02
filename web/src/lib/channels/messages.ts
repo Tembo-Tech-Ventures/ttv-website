@@ -68,14 +68,16 @@ export const CITED_MESSAGE_CHANGED = "A message since edited or removed";
 /**
  * The message citations of Tembo answer `m` whose title must fall back to CITED_MESSAGE_CHANGED: the
  * cited message is missing, deleted, not VISIBLE (a flag masks parts of it), under a hidden root, or
- * edited after the answer. Primary-key reads, in the page's own statement.
+ * edited since the run that wrote the answer claimed its question, before it read any source: an edit
+ * made while Tembo was still answering counts too (#310 review 3, S1). Primary-key and unique-index
+ * reads, in the page's own statement.
  */
 const CITATIONS_GONE = `CASE WHEN m.authorKind = 'TEMBO' AND m.deletedAt IS NULL THEN (
     SELECT json_group_array(json_extract(cite.value, '$.messageId'))
     FROM json_each(CASE WHEN json_valid(m.citations) THEN m.citations ELSE '[]' END) cite
     WHERE json_extract(cite.value, '$.type') = 'message' AND NOT EXISTS (SELECT 1 FROM channel_message cited
       WHERE cited.id = json_extract(cite.value, '$.messageId') AND cited.deletedAt IS NULL AND cited.moderationState = 'VISIBLE'
-        AND (cited.editedAt IS NULL OR cited.editedAt <= m.createdAt)
+        AND (cited.editedAt IS NULL OR cited.editedAt <= coalesce((SELECT a.claimedAt FROM tembo_ask a WHERE a.answerId = m.id), m.createdAt))
         AND NOT EXISTS (SELECT 1 FROM channel_message root WHERE root.id = cited.parentId AND root.moderationState = 'HIDDEN'))
   ) END AS citationsGone`;
 
