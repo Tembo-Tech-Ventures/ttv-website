@@ -24,11 +24,10 @@ export interface DecisionOption { action: ModerationActionKind; label: string }
  */
 export function decisionOptions(item: Pick<ModerationCase, "state" | "message">): DecisionOption[] {
   const hidden = item.message.moderation?.state === "HIDDEN";
-  // A deleted message is gone for everyone: there is nothing to hide, only the case to close. Keep
-  // is refused on a hidden message, so a hidden one closes with Restore, which shows only the placeholder.
-  if (item.message.deleted) {
-    return item.state === "DECIDED" ? [] : [{ action: hidden ? "restore" : "keep", label: "Close the case" }];
-  }
+  // A deleted message is gone for everyone: there is nothing to hide, only the case to close, with
+  // keep. B-2.5 refuses every decision on a deleted message that is still hidden (keep: hidden;
+  // restore and hide: deleted), so that case offers none rather than a button that always fails.
+  if (item.message.deleted) return item.state === "DECIDED" || hidden ? [] : [{ action: "keep", label: "Close the case" }];
   if (item.state === "DECIDED") {
     return hidden ? [{ action: "restore", label: "Restore" }] : [{ action: "hide", label: "Hide" }];
   }
@@ -49,6 +48,13 @@ export function sourceLabel(item: Pick<ModerationCase, "source" | "reportCount" 
     case "ADMIN_HIDE":
       return item.actor ? `Hidden by ${item.actor.name}` : "Hidden by an admin";
   }
+}
+
+/** Why a waiting case offers no decision: its author deleted the message while it was hidden. */
+export function undecidableNote(item: Pick<ModerationCase, "state" | "message">): string | null {
+  return item.state === "PENDING" && decisionOptions(item).length === 0
+    ? "Its author deleted this message while it was hidden, so no one sees it. This case can't be closed from here yet."
+    : null;
 }
 
 /** Where the message stands for the people in its channel right now. */

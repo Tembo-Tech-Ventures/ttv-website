@@ -7,7 +7,8 @@ import { personaSession, signIn, type PersonaKey, type PersonaSession } from "./
  * U-2.4: the real /admin/moderation page over B-2.5's queue and decisions (the DEV harness spec,
  * platform-moderation.spec.ts, holds the interaction contract over fixtures):
  * - only administrators reach it; a channel moderator who is not one does not;
- * - the queue as screens/08 lays it out, axe A/AA clean, at 1440 and 390;
+ * - the queue as screens/08 lays it out, axe A/AA clean, at 1440 and 390, and no button that is
+ *   always refused (a message deleted while hidden);
  * - Fine as is, Keep hidden and Restore, each recorded with who decided and why;
  * - a decision someone else made first is refused, and the page never says it was made;
  * - without JavaScript, a plain form post decides.
@@ -26,6 +27,10 @@ const REPORTED = "ttv-local-moderation-reported"; // reported by a member, still
 const MENTOR_HIDDEN = "ttv-local-moderation-mentor-hidden"; // hidden by David, a cohort mentor
 const TEMBO_HIDDEN = "ttv-local-moderation-tembo-hidden"; // hidden by Tembo as spam
 const STALE = "ttv-local-moderation-stale"; // decided in a second tab while the first one reads it
+// Never decided: the layout check reads these while the desktop project decides the others.
+const WAITING = "ttv-local-moderation-waiting"; // contact details, flagged by the detectors
+const HELD = "ttv-local-moderation-held"; // hidden by David, a cohort mentor
+const DELETED_HIDDEN = "ttv-local-moderation-deleted-hidden"; // hidden by Tembo, then deleted by its author
 
 function local(key: PersonaKey): PersonaSession | string {
   if (process.env.PLAYWRIGHT_BASE_URL) return "These cases are seeded locally only (platform-personas.local.sql).";
@@ -103,15 +108,17 @@ test("lays the queue out as screens/08 does, clean under axe", async ({ page, co
   await as(context, baseURL, staff);
   await open(page);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  for (const id of [FLAGGED, REPORTED, MENTOR_HIDDEN, TEMBO_HIDDEN, STALE]) await expect(card(page, id)).toHaveAttribute("data-state", "PENDING");
+  for (const id of [WAITING, HELD, DELETED_HIDDEN]) await expect(card(page, id)).toHaveAttribute("data-state", "PENDING");
   // Restore only on a hidden message, Fine as is only on one that is not.
-  await expect(card(page, MENTOR_HIDDEN).getByRole("button", { name: /^Restore/ })).toBeVisible();
-  await expect(card(page, MENTOR_HIDDEN).getByRole("button", { name: /^Keep hidden/ })).toBeVisible();
-  await expect(card(page, MENTOR_HIDDEN).getByRole("button", { name: /^Fine as is/ })).toHaveCount(0);
-  await expect(card(page, FLAGGED).getByRole("button", { name: /^Fine as is/ })).toBeVisible();
-  await expect(card(page, FLAGGED).getByRole("button", { name: /^Restore/ })).toHaveCount(0);
-  await expect(card(page, MENTOR_HIDDEN)).toContainText("Hidden by David Kamau");
-  await expect(card(page, REPORTED)).toContainText("Reported by 1 member");
+  await expect(card(page, HELD).getByRole("button", { name: /^Restore/ })).toBeVisible();
+  await expect(card(page, HELD).getByRole("button", { name: /^Keep hidden/ })).toBeVisible();
+  await expect(card(page, HELD).getByRole("button", { name: /^Fine as is/ })).toHaveCount(0);
+  await expect(card(page, HELD)).toContainText("Hidden by David Kamau");
+  await expect(card(page, WAITING).getByRole("button", { name: /^Fine as is/ })).toBeVisible();
+  await expect(card(page, WAITING).getByRole("button", { name: /^Restore/ })).toHaveCount(0);
+  // Every decision is refused on a deleted message that is still hidden: no button, and why.
+  await expect(card(page, DELETED_HIDDEN).getByRole("button")).toHaveCount(0);
+  await expect(card(page, DELETED_HIDDEN).locator("[data-moderation-undecidable]")).toHaveText(/^Its author deleted this message/);
 
   const width = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(width, "no sideways scroll").toBeLessThanOrEqual(page.viewportSize()!.width);
@@ -174,6 +181,7 @@ test.describe("without JavaScript", () => {
     writesOnce();
     await as(context, baseURL, staff);
     await page.goto(QUEUE);
+    await expect(card(page, REPORTED)).toContainText("Reported by 1 member");
     await decide(page, REPORTED, /^Hide/, "Aimed at people rather than their code.");
     await expect(page).toHaveURL(/decided=hide/);
     await expect(notice(page)).toHaveText(/^Hidden\. Members no longer see the message\./);
