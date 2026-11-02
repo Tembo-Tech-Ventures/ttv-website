@@ -1,0 +1,161 @@
+---
+import { PiInfoDuotone } from "react-icons/pi";
+import Avatar from "@/components/platform/ui/Avatar";
+import Button from "@/components/platform/ui/Button";
+import Chip from "@/components/platform/ui/Chip";
+import { FORMAT_LABELS } from "@/components/platform/mentors/mentor-display";
+import ModerationTabs, { type ModerationTab } from "./ModerationTabs.astro";
+import { firstName, formatModerationTime } from "./case-model";
+import { REASON_MAX } from "./decision-form";
+import { caseCause, type RequestNotesViewProps } from "./request-notes";
+
+/**
+ * "Request notes" on /admin/moderation (U-4.1 on B-4.1's checks): one card per mentor request whose
+ * note Tembo's check held or its mentor reported, with the note as written, what raised it, and keep
+ * or remove with a reason for the record. Plain form posts. Everything members wrote is rendered as
+ * text: Astro escapes each expression, and nothing here uses set:html.
+ */
+type Props = RequestNotesViewProps & {
+  /** The message queue's tabs, so the whole page reads as one set of lists. */
+  queueTabs: ModerationTab[];
+  /** The admin reading: one who is party to a request can't decide it (B-4.1), so they get no form for it. */
+  viewerId: string;
+};
+
+const { state, items, formAction, tabHrefs, nextHref, paged, notice, failure, rowError, queueTabs, viewerId } = Astro.props;
+const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
+const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
+const PILL = "inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font-semibold transition-colors motion-reduce:transition-none";
+---
+
+<div class="mx-auto max-w-6xl space-y-8 pt-4 lg:px-6 lg:pt-6" data-request-notes data-state={state}>
+  <header class="space-y-4">
+    <h2 class="text-[2.5rem] leading-[0.95] tracking-display text-ink-primary sm:text-5xl lg:text-6xl">Moderation</h2>
+    <p class="max-w-3xl text-base leading-relaxed text-ink-secondary sm:text-lg">
+      Requests for a mentor's time whose note Tembo's check held, or that a mentor reported. Keeping one sends it
+      to its mentor as it was written; removing it closes it.
+    </p>
+  </header>
+
+  {notice && (
+    <p role="status" tabindex="-1" autofocus class={`${BANNER} border-ring/30 bg-ring/8`} data-request-notes-notice>{notice}</p>
+  )}
+  {failure && (
+    <p role="alert" tabindex="-1" autofocus class={`${BANNER} border-danger-ink/40 bg-danger-ink/8`} data-request-notes-failure>{failure}</p>
+  )}
+
+  <ModerationTabs tabs={queueTabs} />
+
+  <nav aria-label="Request notes" class="-mt-4">
+    <ul class="flex flex-wrap gap-1">
+      {([["OPEN", "Waiting for a decision"], ["DECIDED", "Decided requests"]] as const).map(([value, label]) => (
+        <li>
+          <a
+            href={tabHrefs[value]}
+            aria-current={value === state ? "page" : undefined}
+            class:list={[PILL, FOCUS, value === state ? "bg-ink-primary/12 text-ink-primary" : "text-ink-secondary hover:bg-ink-primary/7 hover:text-ink-primary"]}
+          >{label}</a>
+        </li>
+      ))}
+    </ul>
+  </nav>
+
+  {items.length === 0 ? (
+    <p class="py-6 text-ink-secondary" data-request-notes-empty>
+      {state === "OPEN"
+        ? "Nothing needs a decision. Requests whose note Tembo's check holds, or that a mentor reports, appear here."
+        : "Nothing decided yet. Decisions appear here."}
+    </p>
+  ) : (
+    <ul class="space-y-4" aria-label={state === "OPEN" ? "Request notes waiting for a decision" : "Decided request notes"} data-request-notes-list={state}>
+      {items.map((item) => {
+        const { request, decision } = item;
+        const asker = request.requester;
+        const mentor = request.mentor;
+        const headingId = `request-note-${item.id}`;
+        const error = rowError?.id === item.id ? rowError.message : undefined;
+        const ids = { reason: `request-note-${item.id}-reason`, hint: `request-note-${item.id}-hint`, error: `request-note-${item.id}-error` };
+        return (
+          <li class="rounded-2xl border border-hairline bg-ink-primary/4 p-4 sm:p-5" aria-labelledby={headingId} data-request-note={item.id} data-state={item.state}>
+            <div class="flex flex-wrap items-start gap-x-4 gap-y-2">
+              <Avatar id={asker.id} name={asker.name} src={asker.avatarUrl ?? undefined} size="md" decorative />
+              <div class="min-w-0 flex-1">
+                <h3 id={headingId} class="text-lg leading-snug font-bold break-words text-ink-primary">
+                  {asker.name} asked {mentor.name}
+                </h3>
+                <p class="text-sm text-ink-secondary">
+                  {FORMAT_LABELS[request.format]} · opened {formatModerationTime(item.openedAt)}
+                </p>
+              </div>
+              <div class="order-last basis-full sm:order-none sm:basis-auto">
+                <Chip tone={item.report ? "peach" : "ring"}>{item.report ? "Reported by the mentor" : "Held by Tembo's check"}</Chip>
+              </div>
+            </div>
+
+            <p class="mt-4 text-sm text-ink-secondary" data-request-note-cause>{caseCause(item)}</p>
+            {item.report && (
+              <blockquote class="mt-2 border-l-2 border-primary/60 pl-3 text-sm leading-relaxed break-words text-ink-secondary">
+                <span class="sr-only">{firstName(mentor.name)} wrote: </span>{item.report.reason}
+              </blockquote>
+            )}
+
+            <div class="mt-4 rounded-xl border border-hairline px-4 py-3">
+              <p class="text-xs font-semibold text-ink-muted">The note, as written</p>
+              <p class="mt-1 text-[0.9375rem] leading-relaxed break-words whitespace-pre-line text-ink-primary">{request.note}</p>
+              {request.project && (
+                <p class="mt-2 text-sm text-ink-secondary">
+                  {request.project.type === "project" ? `Attached: ${request.project.title}` : "Attached work that is no longer shared."}
+                </p>
+              )}
+            </div>
+
+            {decision ? (
+              <p class="mt-4 text-sm text-ink-secondary" data-request-note-decision={decision.action}>
+                <span class="font-semibold text-ink-primary">{decision.action === "keep" ? "Kept" : "Removed"}</span>
+                {` by ${decision.by?.name ?? "a former admin"}, ${formatModerationTime(decision.decidedAt)}: `}
+                <span class="break-words">{decision.reason}</span>
+              </p>
+            ) : viewerId === asker.id || viewerId === mentor.id ? (
+              <p class="mt-5 text-sm text-ink-secondary" data-request-note-own>Another admin needs to check a request you're part of.</p>
+            ) : (
+              <form method="POST" action={formAction} class="mt-5 space-y-3" data-request-note-form>
+                <input type="hidden" name="requestId" value={item.id} />
+                <div class="space-y-1.5">
+                  <label for={ids.reason} class="block text-sm font-semibold text-ink-primary">Reason</label>
+                  <textarea
+                    id={ids.reason} name="reason" rows="2" required maxlength={REASON_MAX}
+                    aria-describedby={error ? `${ids.error} ${ids.hint}` : ids.hint}
+                    aria-invalid={error ? "true" : undefined}
+                    class={`block min-h-11 w-full resize-y rounded-xl border border-hairline bg-ground/60 px-3.5 py-2.5 text-[0.9375rem] text-ink-primary placeholder:text-ink-muted focus-visible:border-peach-ink ${FOCUS}`}
+                  >{error ? rowError?.draft : ""}</textarea>
+                  <p id={ids.hint} class="text-xs text-ink-muted">Kept with your decision. Only admins see it.</p>
+                  {error && <p id={ids.error} role="alert" tabindex="-1" autofocus class={`text-sm text-danger-ink ${FOCUS}`}>{error}</p>}
+                </div>
+                <div class="grid gap-3 sm:grid-cols-2">
+                  <Button type="submit" name="action" value="keep" variant="quiet" aria-label={`Keep: send it to ${firstName(mentor.name)}, ${asker.name}'s request`} className="h-11 w-full">
+                    Keep: send it to {firstName(mentor.name)}
+                  </Button>
+                  <Button type="submit" name="action" value="remove" variant="quiet" aria-label={`Remove: close it, ${asker.name}'s request to ${mentor.name}`} className="h-11 w-full">
+                    Remove: close it
+                  </Button>
+                </div>
+              </form>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  )}
+
+  {(nextHref || paged) && (
+    <nav aria-label="More request notes" class="flex flex-wrap gap-4 text-sm">
+      {paged && <a href={tabHrefs[state]} class={`inline-flex min-h-11 items-center text-peach-ink hover:underline ${FOCUS}`}>Back to the start</a>}
+      {nextHref && <a href={nextHref} class={`inline-flex min-h-11 items-center text-peach-ink hover:underline ${FOCUS}`}>More</a>}
+    </nav>
+  )}
+
+  <p class="flex gap-2 text-sm text-ink-secondary">
+    <PiInfoDuotone className="mt-0.5 size-4 shrink-0 text-ink-muted" aria-hidden="true" />
+    The person who asked sees only that their request is being checked, then whether it was sent. They never see who raised it, or why.
+  </p>
+</div>

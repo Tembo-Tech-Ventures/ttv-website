@@ -118,8 +118,24 @@ export interface StatusView {
   detail: string | null;
 }
 
+/**
+ * A check on the note (B-4.1, "Checks"), in the words the README fixes: never naming who opened it, never
+ * "declined". Each applies only to the status the server gives it with (waiting and checking while
+ * PENDING, not_sent and closed once WITHDRAWN), so a withdrawal shown before the server answers reads as one.
+ */
+const REQUESTER_CHECKS: Partial<Record<NonNullable<MentorRequest["check"]>, { status: MentorRequestStatus; view: StatusView }>> = {
+  waiting: { status: "PENDING", view: { label: "Waiting for a check", tone: "neutral", detail: "Waiting for a check before it's sent." } },
+  checking: { status: "PENDING", view: { label: "Being checked", tone: "neutral", detail: "TTV is checking this request." } },
+  not_sent: { status: "WITHDRAWN", view: { label: "Not sent", tone: "neutral", detail: "This request wasn't sent." } },
+  closed: { status: "WITHDRAWN", view: { label: "Closed", tone: "neutral", detail: "This request was closed." } },
+};
+
 /** A request the person asking sent, from their side. */
-export function requesterStatus(request: Pick<MentorRequest, "mentor" | "redirectedTo">, status: MentorRequestStatus): StatusView {
+export function requesterStatus(
+  request: Pick<MentorRequest, "mentor" | "redirectedTo"> & Partial<Pick<MentorRequest, "check">>, status: MentorRequestStatus,
+): StatusView {
+  const checked = request.check ? REQUESTER_CHECKS[request.check] : undefined;
+  if (checked?.status === status) return checked.view;
   const mentor = firstName(request.mentor.name);
   switch (status) {
     case "PENDING":
@@ -144,7 +160,16 @@ export function requesterStatus(request: Pick<MentorRequest, "mentor" | "redirec
 }
 
 /** A request a mentor received, once it has moved on. */
-export function mentorStatus(request: Pick<MentorRequest, "requester" | "redirectedTo">, status: MentorRequestStatus): StatusView {
+export function mentorStatus(
+  request: Pick<MentorRequest, "requester" | "redirectedTo"> & Partial<Pick<MentorRequest, "check">>, status: MentorRequestStatus,
+): StatusView {
+  // A report replaces what the status says, whatever it is. Once closed, it never says who closed it: an
+  // admin's removal and the person withdrawing while TTV checked look the same from here.
+  if (request.check === "reported") {
+    return status === "PENDING"
+      ? { label: "Reported", tone: "neutral", detail: "You reported this request. TTV is checking it, and it stays closed for you unless they send it back." }
+      : { label: "Reported", tone: "neutral", detail: "You reported this request. It's closed." };
+  }
   const requester = firstName(request.requester.name);
   switch (status) {
     case "PENDING":

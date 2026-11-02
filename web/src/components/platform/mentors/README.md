@@ -45,6 +45,18 @@ else, such as an institution-only account, still reads the directory, sees no
 needs a member profile or a cohort place." It does not send anyone to make a
 profile, because a saved profile is discoverable to institutions.
 
+## Checks on a note (B-4.1)
+
+A request whose note Tembo's check held, or that its mentor reported, carries `check`, and
+`mentor-display.ts` shows that instead of its status, in the README's fixed words. The views never
+name who raised it and never say "declined":
+- **The person asking:** "Waiting for a check before it's sent" or "TTV is checking this request" (they can still
+  withdraw), then "This request wasn't sent" or "This request was closed".
+- **The mentor:** "Report this request" (with a reason) sits beside the three answers. A reported request then reads
+  "Reported", with nothing to press. It leaves the waiting count and the month's spots, as an open check holds none.
+- **Admins** keep or remove these on `/admin/moderation?tab=request-notes`
+  (`src/components/admin/moderation/request-notes.ts`, through the API's own handler, so a keep also tells the mentor).
+
 ## Tests
 
 - Unit: `mentor-display.test.ts`, `mentors-ui.test.tsx`, `request-post.test.ts`,
@@ -56,3 +68,5 @@ profile, because a saved profile is discoverable to institutions.
   backend with the local persona seed: request → accept → conversation,
   withdraw, not this month, a suggestion, a full mentor, and an
   institution-only refusal.
+- `e2e/platform-mentor-request-notes.spec.ts`: checks against the real backend, both ways: a Tembo-held note
+  (seeded) that an admin removes, and a reported one an admin keeps.

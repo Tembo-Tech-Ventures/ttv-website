@@ -48,14 +48,16 @@ export default function MentorRequestsQueue({ initial, mentors, availability, an
   const [store] = useState(() => createMentorRequestsStore({ as: "mentor", initial, ...(api ? { api } : {}) }));
   const state = useMentorRequests(store);
   // Grouped as the page arrived, so a request answered here stays where the mentor's eyes are.
-  const [waitingIds] = useState(() => new Set(initial.items.filter(item => item.status === "PENDING").map(item => item.id)));
+  // A request the mentor reported is closed for them (an open check), so it is not waiting for an answer.
+  const [waitingIds] = useState(() => new Set(initial.items.filter(item => item.status === "PENDING" && item.check !== "reported").map(item => item.id)));
   const waiting = state.items.filter(item => waitingIds.has(item.id));
   const earlier = state.items.filter(item => !waitingIds.has(item.id));
-  const stillWaiting = waiting.filter(item => shownStatus(state, item) === "PENDING").length;
+  const stillWaiting = waiting.filter(item => shownStatus(state, item) === "PENDING" && item.check !== "reported").length;
 
   // A spot is held by each waiting request and each one accepted this month: an answer other than
-  // accepting frees one, so the rail follows the answers given here without another read.
-  const freed = waiting.filter(item => item.status !== "PENDING" && FREED.has(item.status)).length;
+  // accepting frees one, and so does a report (an open check holds no spot), so the rail follows the
+  // answers given here without another read.
+  const freed = waiting.filter(item => (item.status !== "PENDING" && FREED.has(item.status)) || item.check === "reported").length;
   const used = Math.max(0, availability.capacity.used - freed);
 
   return (
@@ -99,21 +101,20 @@ function RequestCard({ store, request, mentors, now, compact = false }: {
   const state = useMentorRequests(store, current => ({
     status: shownStatus(current, request), pending: current.pending[request.id], failed: current.failed[request.id],
   }), (a, b) => a.status === b.status && a.pending === b.pending && a.failed === b.failed);
-  const [suggesting, setSuggesting] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const actionsRef = useRef<HTMLDivElement>(null);
   const ids = useId();
   const requester = request.requester;
   const name = firstName(requester.name);
   const context = personContext(requester);
   const view = mentorStatus(request, state.status);
-  const open = state.status === "PENDING" && !state.pending;
+  const open = state.status === "PENDING" && !state.pending && request.check !== "reported";
 
-  function answered(run: () => Promise<unknown>) {
-    void run();
+  function answered<T>(run: () => Promise<T>): Promise<T> {
+    const result = run();
     // The buttons give way to the answer: focus stays on this request (its heading), and the live
     // region says how it went. Nothing visible moves when focus leaves it again.
     headingRef.current?.focus();
+    return result;
   }
 
   return (
@@ -137,25 +138,10 @@ function RequestCard({ store, request, mentors, now, compact = false }: {
         <output className="text-sm font-semibold text-danger-ink">That didn't go through, so nothing changed. Try again.</output>
       )}
 
-      {open && !suggesting && (
-        <div ref={actionsRef} className="flex flex-wrap items-center gap-2">
-          {/* Each answer names whose request it answers, as the list holds several. */}
-          <Button variant="primary" icon={<PiCheck />} aria-describedby={`${ids}-who`} onClick={() => answered(() => store.accept(request.id))}>Accept</Button>
-          <Button aria-describedby={`${ids}-who`} onClick={() => setSuggesting(true)} data-suggest-trigger>Suggest another mentor</Button>
-          <Button variant="ghost" aria-describedby={`${ids}-who`} onClick={() => answered(() => store.decline(request.id))}>Not this month</Button>
-        </div>
-      )}
-      {open && suggesting && (
-        <SuggestMentor
-          request={request}
-          mentors={mentors}
-          now={now}
-          onCancel={() => {
-            setSuggesting(false);
-            requestAnimationFrame(() => actionsRef.current?.querySelector<HTMLElement>("[data-suggest-trigger]")?.focus());
-          }}
-          onSuggest={(choice) => { setSuggesting(false); answered(() => store.redirect(request.id, choice)); }}
-        />
+      {/* Mounted while the server's request waits, and only hidden while an answer is on its way, so a
+          suggestion or report that fails comes back with what the mentor wrote. */}
+      {request.status === "PENDING" && request.check !== "reported" && (
+        <RequestAnswers store={store} request={request} mentors={mentors} now={now} whoId={`${ids}-who`} busy={!open} onAnswer={answered} />
       )}
       {state.status === "ACCEPTED" && request.channelId && (
         <a href={conversationHref(request.channelId)} className={cx(LINK, "w-fit")}>
@@ -163,6 +149,105 @@ function RequestCard({ store, request, mentors, now, compact = false }: {
         </a>
       )}
     </Card>
+  );
+}
+
+const FIELD = cx("w-full rounded-xl border border-hairline bg-ink-primary/4 px-3.5 py-2.5 text-[0.9375rem] text-ink-primary aria-invalid:border-danger-ink", FOCUS_RING);
+
+/** The three answers, and the panels that replace them: suggesting another mentor, or reporting the note. */
+function RequestAnswers({ store, request, mentors, now, whoId, busy, onAnswer }: {
+  store: MentorRequestsStore; request: MentorRequest; mentors: readonly MentorDirectoryItem[]; now: number;
+  /** The request's heading, which every answer names. */
+  whoId: string;
+  /** An answer is on its way: nothing here can be pressed, and the panels keep their drafts. */
+  busy: boolean;
+  onAnswer: <T>(run: () => Promise<T>) => Promise<T>;
+}) {
+  const [panel, setPanel] = useState<"answers" | "suggest" | "report">("answers");
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const name = firstName(request.requester.name);
+  const backToAnswers = (trigger: string) => {
+    setPanel("answers");
+    requestAnimationFrame(() => actionsRef.current?.querySelector<HTMLElement>(`[${trigger}]`)?.focus());
+  };
+
+  return (
+    <div hidden={busy}>
+      {panel === "answers" && (
+        <div ref={actionsRef} className="flex flex-wrap items-center gap-2">
+          {/* Each answer names whose request it answers, as the list holds several. */}
+          <Button variant="primary" icon={<PiCheck />} aria-describedby={whoId} onClick={() => onAnswer(() => store.accept(request.id))}>Accept</Button>
+          <Button aria-describedby={whoId} onClick={() => setPanel("suggest")} data-suggest-trigger>Suggest another mentor</Button>
+          <Button variant="ghost" aria-describedby={whoId} onClick={() => onAnswer(() => store.decline(request.id))}>Not this month</Button>
+          <Button variant="ghost" size="sm" className="sm:ml-auto" aria-describedby={whoId} onClick={() => setPanel("report")} data-report-trigger>
+            Report this request
+          </Button>
+        </div>
+      )}
+      {panel === "suggest" && (
+        <SuggestMentor
+          request={request}
+          mentors={mentors}
+          now={now}
+          onCancel={() => backToAnswers("data-suggest-trigger")}
+          onSuggest={(choice) => { void onAnswer(() => store.redirect(request.id, choice)); }}
+        />
+      )}
+      {panel === "report" && (
+        <ReportRequest
+          name={name}
+          onCancel={() => backToAnswers("data-report-trigger")}
+          onReport={(reason) => { void onAnswer(() => store.report(request.id, reason)); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** How much a report may say: the API's limit. */
+const REPORT_MAX = 2000;
+
+/**
+ * "Report this request" (B-4.1 checks): for a note that shouldn't be here, not for a request the mentor
+ * would rather not take ("Not this month" is that). TTV checks it, and it closes for the mentor meanwhile;
+ * the person asking sees only that it is being checked, never who opened the check.
+ */
+function ReportRequest({ name, onCancel, onReport }: { name: string; onCancel: () => void; onReport: (reason: string) => void }) {
+  const ids = useId();
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { fieldRef.current?.focus(); }, []);
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!reason.trim()) {
+      setError("Say what's wrong with this request, so TTV knows what to check.");
+      fieldRef.current?.focus();
+      return;
+    }
+    onReport(reason);
+  }
+
+  return (
+    <form onSubmit={submit} noValidate className="flex flex-col gap-3 rounded-xl border border-hairline p-4" data-report-request>
+      <label htmlFor={`${ids}-reason`} className="text-[0.9375rem] font-semibold text-ink-primary">What's wrong with this request?</label>
+      <p id={`${ids}-hint`} className="text-sm text-ink-secondary">
+        For a note that breaks how we talk to each other. TTV checks it, and it closes for you meanwhile.
+        {` ${name} sees only that it's being checked, not that you reported it. If you'd just rather not take it, "Not this month" is enough.`}
+      </p>
+      <textarea
+        ref={fieldRef} id={`${ids}-reason`} rows={3} maxLength={REPORT_MAX} value={reason}
+        onChange={event => { setReason(event.target.value); if (error) setError(""); }}
+        aria-describedby={error ? `${ids}-hint ${ids}-error` : `${ids}-hint`} aria-invalid={error ? true : undefined}
+        className={FIELD}
+      />
+      {error && <p id={`${ids}-error`} className="text-sm font-semibold text-danger-ink">{error}</p>}
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" variant="primary">Send report</Button>
+        <Button onClick={onCancel}>Cancel</Button>
+      </div>
+    </form>
   );
 }
 
@@ -224,7 +309,7 @@ function SuggestMentor({ request, mentors, now, onCancel, onSuggest }: {
         </label>
         <textarea
           id={`${ids}-note`} rows={2} value={note} maxLength={2000} onChange={event => setNote(event.target.value)}
-          className={cx("mt-2 w-full rounded-xl border border-hairline bg-ink-primary/4 px-3.5 py-2.5 text-[0.9375rem] text-ink-primary", FOCUS_RING)}
+          className={cx("mt-2", FIELD)}
         />
       </div>
       <div className="flex flex-wrap gap-2">

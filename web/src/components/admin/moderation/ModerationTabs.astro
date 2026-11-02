@@ -1,0 +1,45 @@
+---
+/**
+ * The moderation page's lists as tabs: the message queue's own two, and "Request notes" while mentor
+ * requests are on for this admin. Plain links held in the address, so they work without JavaScript.
+ */
+export interface ModerationTab {
+  label: string;
+  href: string;
+  current: boolean;
+  /** Waiting cases, shown after the label. */
+  count?: number;
+}
+interface Props {
+  tabs: ModerationTab[];
+}
+
+const { tabs } = Astro.props;
+const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
+---
+
+<nav aria-label="Moderation lists">
+  <ul class="flex flex-wrap gap-2">
+    {tabs.map((tab) => (
+      <li>
+        <a
+          href={tab.href}
+          aria-current={tab.current ? "page" : undefined}
+          class:list={[
+            "inline-flex min-h-11 items-center gap-2 rounded-full px-4 text-[0.9375rem] font-semibold transition-colors motion-reduce:transition-none",
+            FOCUS,
+            tab.current ? "bg-ink-primary text-dark" : "text-ink-secondary hover:bg-ink-primary/7 hover:text-ink-primary",
+          ]}
+        >
+          {tab.label}
+          {tab.count !== undefined && tab.count > 0 && (
+            <span class="text-sm font-medium tabular-nums">
+              <span aria-hidden="true">{tab.count}</span>
+              <span class="sr-only">{`${tab.count} waiting`}</span>
+            </span>
+          )}
+        </a>
+      </li>
+    ))}
+  </ul>
+</nav>

@@ -1,6 +1,8 @@
 ---
 import { PiInfoDuotone } from "react-icons/pi";
 import ModerationCase from "./ModerationCase.astro";
+import ModerationTabs from "./ModerationTabs.astro";
+import { REQUEST_NOTES_LABEL } from "./request-notes";
 import { QUEUE_TABS } from "./case-model";
 import type { QueueViewProps } from "./page-flow";
 
@@ -10,9 +12,12 @@ import type { QueueViewProps } from "./page-flow";
  * and swaps this whole region for the one the server renders back, so a decision reads the same
  * either way, and a refused one never looks recorded.
  */
-type Props = QueueViewProps;
+type Props = QueueViewProps & {
+  /** The "Request notes" tab, while mentor requests are on for this admin. */
+  requestNotesHref?: string;
+};
 
-const { state, items, pendingCount, formAction, tabHrefs, nextHref, paged, notice, noticeSubject, failure, rowError } = Astro.props;
+const { state, items, pendingCount, formAction, tabHrefs, nextHref, paged, notice, noticeSubject, failure, rowError, requestNotesHref } = Astro.props;
 const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 ---
@@ -39,31 +44,13 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
     </p>
   )}
 
-  <nav aria-label="Moderation lists">
-    <ul class="flex flex-wrap gap-2">
-      {QUEUE_TABS.map((tab) => (
-        <li>
-          <a
-            href={tabHrefs[tab.state]}
-            aria-current={tab.state === state ? "page" : undefined}
-            class:list={[
-              "inline-flex min-h-11 items-center gap-2 rounded-full px-4 text-[0.9375rem] font-semibold transition-colors motion-reduce:transition-none",
-              FOCUS,
-              tab.state === state ? "bg-ink-primary text-dark" : "text-ink-secondary hover:bg-ink-primary/7 hover:text-ink-primary",
-            ]}
-          >
-            {tab.label}
-            {tab.state === "PENDING" && pendingCount > 0 && (
-              <span class="text-sm font-medium tabular-nums">
-                <span aria-hidden="true">{pendingCount}</span>
-                <span class="sr-only">{`${pendingCount} waiting`}</span>
-              </span>
-            )}
-          </a>
-        </li>
-      ))}
-    </ul>
-  </nav>
+  <ModerationTabs tabs={[
+    ...QUEUE_TABS.map((tab) => ({
+      label: tab.label, href: tabHrefs[tab.state], current: tab.state === state,
+      ...(tab.state === "PENDING" ? { count: pendingCount } : {}),
+    })),
+    ...(requestNotesHref ? [{ label: REQUEST_NOTES_LABEL, href: requestNotesHref, current: false }] : []),
+  ]} />
 
   {items.length === 0 ? (
     <p class="py-6 text-ink-secondary" data-moderation-empty>

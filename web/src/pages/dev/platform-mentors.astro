@@ -10,6 +10,9 @@
  *   &view=requests | availability   the mentor's pages (a persona with Mentoring: david, mercy, samuel)
  *   &conduct=required               the person has not agreed to how we talk to each other yet;
  *                                   agreeing posts here and comes back with the drawer open
+ *   &check=waiting|checking|not_sent|closed|reported
+ *                                   a check on the note of Wanjiku's waiting request to David (B-4.1): as she
+ *                                   sees it, or (reported) as David does
  *   &member=no                      no community profile or cohort place (an institution-only account):
  *                                   the directory reads, and asking is refused
  *   &flag=off                       mentor_requests off: these pages do not exist (404)
@@ -21,9 +24,9 @@
  *
  * Nothing is reachable outside `astro dev`; `e2e/platform-mentors.spec.ts` holds the contract.
  */
-import type { Me, SpaceId } from "@/lib/platform/contracts";
+import { MentorRequestCheck, type Me, type SpaceId } from "@/lib/platform/contracts";
 import { ROUTES } from "@/lib/platform/contracts";
-import { channelList, FIXTURE_NOW, people, worthAnotherLook } from "@/lib/platform/fixtures";
+import { channelList, FIXTURE_NOW, pendingMentorRequest, people, worthAnotherLook } from "@/lib/platform/fixtures";
 import SpacesLayout from "@/layouts/SpacesLayout.astro";
 import { HARNESS_PERSONAS, isHarnessPersona } from "@/components/platform/shell/harness/personas";
 import { canRenderSpace } from "@/components/platform/shell/access";
@@ -42,7 +45,7 @@ if (!import.meta.env.DEV) {
   return new Response("Not found", { status: 404 });
 }
 
-const SETTINGS = ["persona", "conduct", "member", "flag", "view"] as const;
+const SETTINGS = ["persona", "conduct", "member", "flag", "view", "check"] as const;
 const COOKIE = "ttv-dev-mentors";
 const params = new URLSearchParams(Astro.url.searchParams);
 const remember = (overrides: Record<string, string> = {}) => {
@@ -71,6 +74,11 @@ const conductAgreed = params.get("conduct") !== "required";
 const member = params.get("member") !== "no";
 const latency = Math.min(5_000, Math.max(0, Number(params.get("latency") ?? 250) || 0));
 const mock = createMentoringMock({ viewer: me.user, conductAgreed, member });
+const checkParam = MentorRequestCheck.safeParse(params.get("check")).data;
+const check = checkParam
+  ? { requestId: pendingMentorRequest.id, check: checkParam, ...(checkParam === "not_sent" || checkParam === "closed" ? { status: "WITHDRAWN" as const } : {}) }
+  : null;
+if (check) mock.check(check.requestId, check.check, check.status);
 const filters = parseDirectoryUrl(Astro.url.searchParams);
 const directory = { area: filters.area, format: filters.format, available: filters.available };
 
@@ -148,7 +156,7 @@ const spaceHrefs = Object.fromEntries(me.spaces.map((id) => [id, `/dev/platform-
 >
   <SpaceSidebar slot="sidebar" model={sidebar} />
   <MentorPageIntro page={view === "directory" ? "mentors" : view} />
-  <HarnessMentors client:load viewer={me.user} conductAgreed={conductAgreed} member={member} latencyMs={latency} harness={harness} />
+  <HarnessMentors client:load viewer={me.user} conductAgreed={conductAgreed} member={member} check={check} latencyMs={latency} harness={harness} />
 </SpacesLayout>
 
 <style is:global>

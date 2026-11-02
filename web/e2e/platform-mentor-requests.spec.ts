@@ -101,7 +101,7 @@ test("a member asks for time, the mentor accepts, and their conversation opens w
   if (await agree.isVisible().catch(() => false)) await agree.click();
   await expect(mentor.getByRole("heading", { level: 1, name: "Wanjiku Mwangi" })).toBeVisible();
   await expect(mentor.locator("[data-conversation-context]")).toContainText("You accepted Wanjiku's request for a written review");
-  await expect(mentor.getByText(note)).toBeVisible();
+  await expect(mentor.getByRole("region", { name: /^Messages in / }).getByText(note)).toBeVisible();
 
   // The member sees the acceptance, the conversation in Community, and the same first message.
   await visit(member, DIRECTORY);
@@ -110,7 +110,7 @@ test("a member asks for time, the mentor accepts, and their conversation opens w
   await ownRow(member, "David Kamau").getByRole("link", { name: "Open conversation" }).click();
   const memberAgree = member.getByRole("button", { name: "I’ll keep to this" });
   if (await memberAgree.isVisible().catch(() => false)) await memberAgree.click();
-  await expect(member.getByText(note)).toBeVisible();
+  await expect(member.getByRole("region", { name: /^Messages in / }).getByText(note)).toBeVisible();
   await runAxe(member, testInfo, "conversation");
 });
 

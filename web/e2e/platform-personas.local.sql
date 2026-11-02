@@ -211,3 +211,11 @@ INSERT OR REPLACE INTO mentor_profile (userId,headline,bio,areas,formats,monthly
   '["Code review","API design"]','["WRITTEN_REVIEW","CALL_30_MIN"]',3,0,1793400000000,1793400000000),
  ('ttv-local-persona-mentor-two','Android engineer','Kotlin, offline-first apps and shipping to low-end devices.',
   '["Mobile","Kotlin"]','["WRITTEN_REVIEW","QUICK_QUESTION"]',1,0,1793400000000,1793400000000);
+-- e2e/platform-mentor-request-notes.spec.ts (U-4.1 on B-4.1's checks): a request from Achieng that Tembo's check held
+-- before David saw it (Clef doesn't run locally), waiting in the admins' Request notes. Cleared with every other
+-- persona request above, so a re-seed starts it over.
+INSERT OR REPLACE INTO mentor_request (id,requesterId,mentorId,status,format,note,createdAt,updatedAt) VALUES
+ ('ttv-local-mentor-held','ttv-local-persona-alumna','ttv-local-persona-mentor','PENDING','CALL_30_MIN',
+  'Fictional note held for a check: could we talk about my ledger''s reconciliation job?',1793600000000,1793600000000);
+INSERT OR REPLACE INTO mentor_request_case (requestId,state,clefReasons,openedAt,createdAt,updatedAt) VALUES
+ ('ttv-local-mentor-held','OPEN','["Harassment"]',1793600000000,1793600000000,1793600000000);

@@ -200,3 +200,32 @@ describe("against the stateful mock", () => {
     expect(result).toMatchObject({ status: "REDIRECTED", redirectedTo: { id: samuel.id }, responseNote: null });
   });
 });
+
+describe("reporting a note (B-4.1 checks)", () => {
+  it("closes the request for its mentor, frees the spot, and needs a reason", async () => {
+    const mock = createMentoringMock({ viewer: people.david });
+    const store = createMentorRequestsStore({ as: "mentor", initial: { items: mock.requests().filter(r => r.mentor.id === people.david.id), nextCursor: null }, mock: mock.api });
+    expect(canAct("mentor", "report", "PENDING")).toBe(true);
+    expect(canAct("requester", "report", "PENDING")).toBe(false);
+    expect(await store.report(pendingMentorRequest.id, "   ")).toBeNull();
+
+    const before = mock.availability(people.david.id).capacity.used;
+    const reported = await store.report(pendingMentorRequest.id, "  Asked for my phone number.  ");
+    expect(reported).toMatchObject({ status: "PENDING", check: "reported" });
+    expect(store.getState().announcement).toContain("closed for you meanwhile");
+    expect(mock.availability(people.david.id).capacity.used).toBe(before - 1);
+
+    // Nothing more can be done with it here, by the store or the mock.
+    expect(canAct("mentor", "accept", "PENDING", "reported")).toBe(false);
+    expect(await store.accept(pendingMentorRequest.id)).toBeNull();
+    expect(await store.report(pendingMentorRequest.id, "Again")).toBeNull();
+  });
+
+  it("lets the person asking withdraw a request that waits for a check", async () => {
+    const mock = createMentoringMock();
+    mock.check(pendingMentorRequest.id, "waiting");
+    const store = createMentorRequestsStore({ as: "requester", initial: { items: mock.requests(), nextCursor: null }, mock: mock.api });
+    expect(canAct("requester", "withdraw", "PENDING", "waiting")).toBe(true);
+    expect(await store.withdraw(pendingMentorRequest.id)).toMatchObject({ status: "WITHDRAWN" });
+  });
+});

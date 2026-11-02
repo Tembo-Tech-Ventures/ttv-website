@@ -131,6 +131,7 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/dashboard/community/conduct` | "How we talk to each other": the channel code of conduct; flag `channels` | Session |
 | `/admin/feedback` | Feedback queue; `/admin/feedback/[id]` to reply, theme and resolve | ADMIN |
 | `/admin/feedback/themes` | Feedback themes with agreement stats; `[id]` to plan, ship or decline | ADMIN |
+| `/admin/moderation` | The channel moderation queue (`?state=DECIDED` for decided cases), flag `channels`; with flag `mentor_requests`, a "Request notes" tab (`?tab=request-notes`) to keep or remove mentor requests whose note Tembo's check held or a mentor reported, through `/api/moderation/mentor-requests`. Works without JavaScript | ADMIN |
 | `/certificate/[id]` | Certificate display | None |
 | `/api/auth/[...all]` | better-auth API handler | N/A |
 | `/api/chat` | Ask Tembo question (JSON, same-origin); Tembo reads the sessions of the caller's cohorts (`capabilitiesFor`), every cohort's for staff. A new conversation is saved only together with its first answer, in one D1 batch, so a failed request leaves nothing in Recent. Only a signed-out request gets `401` (body `{ "error": "Unauthorized" }`), so clients can offer "sign in again" on the status alone | Session |
