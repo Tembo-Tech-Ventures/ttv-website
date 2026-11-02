@@ -520,6 +520,21 @@ export const MentorAvailability = UpdateMentorAvailability.extend({
   headline: z.string().max(120), listed: z.boolean(), capacity: MentorCapacity,
 });
 export type MentorAvailability = z.infer<typeof MentorAvailability>;
+/** How many items "Worth another look" lists at once. */
+export const WORTH_ANOTHER_LOOK_LIMIT = 20;
+/**
+ * "Worth another look" (B-4.2): shared work this mentor confirmed at an earlier revision that has a
+ * newer revision. confirmedVersion is the latest revision their confirmation covers; currentVersion is
+ * newer. href opens the Confirm page, where the current revision waits for them: only work that page
+ * shows is listed. Newest change first.
+ */
+export const WorthAnotherLookItem = z.object({
+  journeyId: Id, title: NonEmptyText, owner: PersonSummary, confirmedVersion: z.int().positive(), currentVersion: z.int().positive(),
+  href: InternalPath,
+}).refine((item) => item.currentVersion > item.confirmedVersion, "Only work with a newer revision than the one confirmed");
+export type WorthAnotherLookItem = z.infer<typeof WorthAnotherLookItem>;
+export const WorthAnotherLook = z.object({ items: z.array(WorthAnotherLookItem).max(WORTH_ANOTHER_LOOK_LIMIT) });
+export type WorthAnotherLook = z.infer<typeof WorthAnotherLook>;
 /**
  * A direct conversation's header, for its two members only (server function, no route): the other
  * member (null once their account is gone) and the latest accepted request that opened or continued
@@ -688,6 +703,7 @@ export const ROUTES = {
   redirectMentorRequest: defineRoute({ method: "POST", path: "/api/mentor-requests/:id/redirect", params: IdParams, body: RedirectMentorRequest, response: MentorRequest, idempotent: false }),
   declineMentorRequest: defineRoute({ method: "POST", path: "/api/mentor-requests/:id/decline", params: IdParams, body: DeclineMentorRequest, response: MentorRequest, idempotent: false }),
   withdrawMentorRequest: defineRoute({ method: "POST", path: "/api/mentor-requests/:id/withdraw", params: IdParams, body: WithdrawMentorRequest, response: MentorRequest, idempotent: false }),
+  getWorthAnotherLook: defineRoute({ method: "GET", path: "/api/mentoring/another-look", response: WorthAnotherLook, idempotent: true }),
   getMentorAvailability: defineRoute({ method: "GET", path: "/api/mentoring/availability", response: MentorAvailability, idempotent: true }),
   updateMentorAvailability: defineRoute({ method: "PUT", path: "/api/mentoring/availability", body: UpdateMentorAvailability, response: MentorAvailability, idempotent: true }),
   getFlags: defineRoute({ method: "GET", path: "/api/admin/platform-flags", response: FlagsAdmin, idempotent: true }),

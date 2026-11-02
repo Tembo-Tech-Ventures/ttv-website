@@ -213,7 +213,9 @@ describe("mentor private set-aside", () => {
     walk(root);
     const using = (pattern: RegExp) => sources.filter((path) => pattern.test(readFileSync(path, "utf8"))).map((path) => relative(root, path)).toSorted();
     expect(using(/communitySetAside/)).toEqual(["lib/community/service.ts", "lib/db/migrations/0027_mentor_set_aside.sql", "lib/db/schema.ts"]);
-    expect(readFileSync(join(root, "lib/community/service.ts"), "utf8").match(/communitySetAside/g)).toHaveLength(4);
+    // Four for the Confirm page; the fifth is "Worth another look" (B-4.2), the same mentor's own list, with its
+    // privacy test in src/lib/mentoring/another-look.test.ts.
+    expect(readFileSync(join(root, "lib/community/service.ts"), "utf8").match(/communitySetAside/g)).toHaveLength(5);
     expect(using(/setAsideByCurrentMentor/)).toEqual(["components/community/community-client.ts", "lib/community/service.ts"]);
   });
 });

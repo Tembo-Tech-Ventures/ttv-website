@@ -8,7 +8,7 @@ import type {
   ConductAcknowledgement, FlagsAdmin, Me,
   MentorAvailability, MentorDirectory, MentorRequest, Message, MessageList,
   ModerationQueue, OnboardingState, PersonSummary, ProjectEmbed, RoleBadge, SearchResults,
-  SessionClipEmbed, SpaceId, TemboResponse,
+  SessionClipEmbed, SpaceId, TemboResponse, WorthAnotherLook,
 } from "./contracts";
 
 export const FIXTURE_NOTICE = "Synthetic demo: fictional people, work and conversations. Not production data.";
@@ -463,3 +463,11 @@ export const conductAcknowledgements = {
   current: { version: 1, acknowledgedAt: FIXTURE_NOW - 2 * day, current: true },
   outdated: { version: 1, acknowledgedAt: FIXTURE_NOW - 30 * day, current: false },
 } satisfies Record<string, ConductAcknowledgement>;
+
+/** B-4.2, screen 06: Achieng shipped revision 3 of the chama ledger after David confirmed revision 2. */
+export const worthAnotherLook: WorthAnotherLook = {
+  items: [{
+    journeyId: projects.chamaLedger.journeyId, title: projects.chamaLedger.title, owner: { ...people.achieng, roleBadges: [] },
+    confirmedVersion: 2, currentVersion: 3, href: "/dashboard/mentoring/confirm",
+  }],
+};

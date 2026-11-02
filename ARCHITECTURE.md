@@ -154,6 +154,7 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/api/mentors` | Listed mentors with their capacity this Africa/Nairobi month (GET, `?area&format&available`); flag `mentor_requests` (see `web/src/lib/mentoring/README.md`) | Session; no personal access tokens |
 | `/api/mentor-requests` | The caller's requests sent or received (GET `?as=requester\|mentor`); ask a mentor for time (POST; members only: a community profile or a cohort place), one waiting request per mentor, within the mentor's monthly spots; `[id]` (GET) and `[id]/accept`, `/redirect`, `/decline`, `/withdraw` (POST); accepting opens a direct conversation with the note and work in it; flag `mentor_requests` | Session; its two parties only; no personal access tokens |
 | `/api/mentoring/availability` | A mentor's own headline, areas, formats, monthly capacity and pause (GET, PUT); flag `mentor_requests` | MENTOR; no personal access tokens |
+| `/api/mentoring/another-look` | "Worth another look": the caller's confirmed work that has changed revision since (GET); flag `mentor_requests` | MENTOR or ADMIN, browser only |
 | `/api/platform/onboarding` | The caller's onboarding state and intents (GET, PUT); flag `onboarding` | Session, browser only |
 | `/api/platform/access-requests` | Ask for mentor or institution access (POST; `[id]/withdraw`, `[id]/dismiss`); flag `onboarding` | Session, browser only |
 | `/api/admin/access-requests` | Access-request queue (GET) and decisions (POST `[id]/decision`); not flag-gated | ADMIN, browser only |

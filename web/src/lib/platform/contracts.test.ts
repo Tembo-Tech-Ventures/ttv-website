@@ -27,6 +27,8 @@ const additionalEndpoints = [
   "GET /api/mentor-requests", "GET /api/mentor-requests/:id",
   // B-3.2 (QA2-11): the moderator who hid a message takes the hide back while no admin has decided.
   "POST /api/moderation/:messageId/undo",
+  // B-4.2: "Worth another look".
+  "GET /api/mentoring/another-look",
 ];
 /** Independent transcription of the onboarding SPEC §5 routes. */
 const onboardingEndpoints = [
@@ -92,6 +94,7 @@ const routeExamples = {
   declineMentorRequest: { params: requestParams, body: {}, response: { ...F.pendingMentorRequest, status: "DECLINED" } },
   withdrawMentorRequest: { params: requestParams, body: {}, response: { ...F.pendingMentorRequest, status: "WITHDRAWN" } },
   getMentorAvailability: { response: F.availability },
+  getWorthAnotherLook: { response: F.worthAnotherLook },
   updateMentorAvailability: { body: { headline: "Backend engineer", monthlyCapacity: 3, areas: ["Code review"],
     formats: ["WRITTEN_REVIEW"], bio: "API reviews", paused: false }, response: F.availability },
   getFlags: { response: F.flagsAdmin },

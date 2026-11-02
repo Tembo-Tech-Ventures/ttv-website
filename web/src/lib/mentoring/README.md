@@ -241,3 +241,29 @@ the Mentoring space as usual. Restricted staging identities do not get them.
 The page files, and the conversation page, come with U-4.1: until then these
 routes reach Astro's 404, so `mentor_requests` stays OFF on shared environments
 until they ship.
+
+## Worth another look (B-4.2)
+
+`GET /api/mentoring/another-look` (`another-look.ts`) lists shared work the
+caller confirmed at an earlier revision that has a newer revision, so their
+confirmation no longer covers the current one (screen 06, "Worth another
+look"): each item has the work, its owner (name and avatar, no badges), the
+latest revision the caller confirmed and the current one, and a link to the
+Confirm page, where the current revision waits for them. Only work that page
+shows is listed (the service's `confirmWindow`: its 50 newest shared
+contributions), so every item can be confirmed or set aside where its link
+goes. Newest change first, at most 20.
+
+It reads through the Confirm page's own service
+(`createCommunityService(...).listWorthAnotherLook()`), so the same checks
+apply: the browser gate (`requireBrowser`: no personal access tokens, no
+delegated agent sessions except the synthetic mentor personas), MENTOR or
+ADMIN roles from the database (403 otherwise), someone else's shared work
+only, and the demo and staging-fixture scopes. Work the caller has confirmed
+or set aside at the current revision is not listed; a set-aside at an older
+revision does not hide a newer one. The route is 404 while `mentor_requests`
+is off for the caller. It is derived on each read, not attention, for the
+reasons given under "Why this is not attention" above. Cost: the role read,
+then one statement over the caller's confirmations (`communityConfirmation`
+has no mentor index; a mentor's confirmations are few, and the page is not
+polled).
