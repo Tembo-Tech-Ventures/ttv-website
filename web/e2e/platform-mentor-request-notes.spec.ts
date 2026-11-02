@@ -9,6 +9,7 @@ import { personaSession, signIn, type PersonaKey } from "./platform-personas";
  *   unseen by David; an admin removes it from Request notes, and Achieng reads that it wasn't sent.
  * - David reports Wanjiku's note; she reads only that TTV is checking it; an admin keeps it, and it is
  *   back with David to answer.
+ * - David reports another; an admin removes it; Wanjiku reads that it was closed.
  *
  * Local seed only (`platform-personas.local.sql`), desktop project only, in order. Re-seed before
  * running it again.
@@ -62,7 +63,7 @@ test("a note Tembo's check held waits, unseen by its mentor, until an admin remo
   const row = ownRow(achieng, "David Kamau");
   await expect(row).toContainText("Waiting for a check");
   await expect(row).toContainText("Waiting for a check before it's sent.");
-  await expect(row).not.toContainText(/declin|Tembo|Harassment/i);
+  await expect(row).not.toContainText(/declin|Tembo|Harassment|Waiting for David/i);
   await expect(row.getByRole("button", { name: "Withdraw" })).toBeVisible();
   await achieng.screenshot({ path: `${EVIDENCE}/requester-waiting-390.png`, fullPage: true });
 
@@ -94,6 +95,7 @@ test("a note Tembo's check held waits, unseen by its mentor, until an admin remo
 
   await visit(achieng, DIRECTORY);
   await expect(ownRow(achieng, "David Kamau")).toContainText("This request wasn't sent.");
+  await expect(ownRow(achieng, "David Kamau")).not.toContainText(/withdrawn|declin/i);
   await expect(ownRow(achieng, "David Kamau").getByRole("button", { name: "Withdraw" })).toHaveCount(0);
 });
 
@@ -146,4 +148,35 @@ test("a mentor reports a note; the person asking sees only that it's being check
   // Answered, so nothing waits between Wanjiku and David for the specs that run after this one.
   await back.getByRole("button", { name: "Not this month" }).click();
   await expect(back).toContainText("Not this month");
+});
+
+test("a reported note an admin removes reads as closed to the person asking, never as declined", async ({ browser, baseURL }) => {
+  const wanjiku = await as(browser, baseURL!, "student", 390);
+  const note = `Could we look at my offline sync queue? (${Date.now()})`;
+  await visit(wanjiku, `${DIRECTORY}?ask=ttv-local-persona-mentor`);
+  const drawer = wanjiku.getByRole("dialog", { name: "Ask David for time" });
+  await drawer.getByRole("textbox", { name: "What would you like help with?" }).fill(note);
+  await drawer.getByRole("button", { name: "Send request" }).click();
+  await expect(drawer.getByRole("heading", { name: "Request sent" })).toBeVisible();
+
+  const david = await as(browser, baseURL!, "mentor");
+  await visit(david, REQUESTS);
+  const card = david.locator("[data-mentor-request]").filter({ hasText: note });
+  await card.getByRole("button", { name: "Report this request" }).click();
+  await card.getByRole("textbox", { name: "What's wrong with this request?" }).fill("Fictional report, to be removed.");
+  await card.getByRole("button", { name: "Send report" }).click();
+  await expect(card).toContainText("Reported");
+
+  const admin = await as(browser, baseURL!, "staff");
+  await visit(admin, NOTES);
+  const reported = admin.locator("[data-request-note]").filter({ hasText: note });
+  await reported.getByRole("textbox", { name: "Reason" }).fill("Fictional: not how we talk to each other.");
+  await reported.getByRole("button", { name: /^Remove: close it, Wanjiku Mwangi's request/ }).click();
+  await expect(admin.locator("[data-request-notes-notice]")).toContainText("Removed.");
+
+  await visit(wanjiku, DIRECTORY);
+  const row = wanjiku.locator("[data-own-request][data-status=WITHDRAWN]").filter({ hasText: "This request was closed." });
+  await expect(row).toHaveCount(1);
+  await expect(row).not.toContainText(/declin|withdrawn|report|Not this month/i);
+  await expect(row.getByRole("button", { name: "Withdraw" })).toHaveCount(0);
 });
