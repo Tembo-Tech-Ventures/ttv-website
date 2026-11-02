@@ -7,9 +7,10 @@ import { firstName } from "@/components/channels/channel-format";
 import { CONDUCT_INTENT } from "@/components/channels/conduct-flow";
 import { CONDUCT_TITLE } from "@/components/channels/conduct";
 import { Avatar, Button, IconButton } from "@/components/platform/ui";
-import { FOCUS_RING } from "@/components/platform/ui/Button";
+import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
 import { FORMAT_HINTS, FORMAT_LABELS } from "./mentor-display";
+import { projectValue, REQUEST_INTENT } from "./request-post";
 
 /** Where agreeing to the habits posts (this page, drawer open) and where to read them first. */
 export interface ConductPrompt {
@@ -26,6 +27,13 @@ interface Props {
   projects: readonly ProjectEmbed[];
   conduct: ConductPrompt;
   headingId: string;
+  /** Where the form posts without JavaScript: this page, with this drawer open. */
+  action: string;
+  /**
+   * Before the page is interactive (or without JavaScript), the drawer is a plain panel: closing it
+   * is a link back to the directory. Once interactive, it is a dialog and closing is `onClose`.
+   */
+  closeHref?: string | null;
   onClose: () => void;
   onSent: (request: MentorRequest) => void;
 }
@@ -44,6 +52,7 @@ const FAILURES: Record<RequestFailure, (name: string) => string> = {
   conflict: name => `This didn't go through: you may already have a request waiting with ${name}, or their spots for this month have just filled. Your note is kept.`,
   notFound: name => `${name} isn't taking requests through the directory right now. Your note is kept.`,
   signedOut: () => "You've been signed out. Sign in again and your note will still be here in this tab.",
+  limit: () => "You already have several requests waiting, or have asked several times today. Once one is answered, or tomorrow, you can ask again. Your note is kept.",
   other: () => "Your request wasn't sent. Your note is kept; try again in a moment.",
 };
 
@@ -53,7 +62,7 @@ const FAILURES: Record<RequestFailure, (name: string) => string> = {
  * asks for the code of conduct first, the drawer shows that instead, with the
  * draft kept: agreeing posts this page's conduct form and comes back here.
  */
-export default function RequestForm({ store, mentor, projects, conduct, headingId, onClose, onSent }: Props) {
+export default function RequestForm({ store, mentor, projects, conduct, headingId, action, closeHref = null, onClose, onSent }: Props) {
   const state = useRequestForm(store);
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const formatRef = useRef<HTMLInputElement>(null);
@@ -89,7 +98,13 @@ export default function RequestForm({ store, mentor, projects, conduct, headingI
       <h2 id={headingId} className="min-w-0 flex-1 font-body text-xl leading-snug font-bold break-words text-ink-primary">
         Ask {name} for time
       </h2>
-      <IconButton label="Close" icon={<PiX size={18} />} variant="ghost" size="sm" onClick={onClose} />
+      {closeHref ? (
+        <a href={closeHref} aria-label="Close" className={cx("grid size-8 place-items-center rounded-lg text-ink-secondary hover:bg-ink-primary/7 pointer-coarse:size-11", FOCUS_RING)}>
+          <PiX aria-hidden size={18} />
+        </a>
+      ) : (
+        <IconButton label="Close" icon={<PiX size={18} />} variant="ghost" size="sm" onClick={onClose} />
+      )}
     </header>
   );
   // The live region stays put across the drawer's states, so each change is read.
@@ -146,13 +161,15 @@ export default function RequestForm({ store, mentor, projects, conduct, headingI
 
   const noteError = state.errors.note;
   const formatError = state.errors.format;
-  const attached = state.project ? `${state.project.journeyId}@${state.project.version}` : "";
+  const attached = state.project ? projectValue(state.project) : "";
 
   return (
     <>
       {live}
       {header}
-      <form className="mentor-drawer__body" onSubmit={submit} noValidate aria-busy={sending || undefined}>
+      <form method="post" action={action} className="mentor-drawer__body" onSubmit={submit} noValidate aria-busy={sending || undefined}>
+        <input type="hidden" name="intent" value={REQUEST_INTENT} />
+        <input type="hidden" name="mentorId" value={mentor.person.id} />
         <div>
           <label htmlFor={`${ids}-note`} className={LEGEND}>What would you like help with?</label>
           <textarea
@@ -185,10 +202,10 @@ export default function RequestForm({ store, mentor, projects, conduct, headingI
                 Nothing attached
               </label>
               {projects.map(project => (
-                <label key={`${project.journeyId}@${project.version}`} className={OPTION}>
+                <label key={projectValue(project)} className={OPTION}>
                   <input
-                    type="radio" name="project" value={`${project.journeyId}@${project.version}`}
-                    checked={attached === `${project.journeyId}@${project.version}`}
+                    type="radio" name="project" value={projectValue(project)}
+                    checked={attached === projectValue(project)}
                     onChange={() => store.setProject(project)} disabled={sending} className="size-4 accent-peach-ink"
                   />
                   <PiFolderSimple aria-hidden className="size-[1.125rem] shrink-0 text-ink-secondary" />
@@ -229,7 +246,11 @@ export default function RequestForm({ store, mentor, projects, conduct, headingI
 
         <div className="mentor-drawer__actions">
           <Button type="submit" variant="primary" loading={sending} className="flex-1 sm:flex-none">Send request</Button>
-          <Button onClick={onClose}>Cancel</Button>
+          {closeHref ? (
+            <a href={closeHref} className={cx("inline-flex h-10 items-center rounded-xl px-4 text-sm font-semibold pointer-coarse:min-h-11", BUTTON_VARIANTS.quiet, FOCUS_RING)}>Cancel</a>
+          ) : (
+            <Button onClick={onClose}>Cancel</Button>
+          )}
         </div>
       </form>
     </>
