@@ -51,7 +51,7 @@ export interface TemboOptions {
   timeoutMs?: number;
 }
 
-/** Tembo's whole run is bounded at 25 s on the server; polling may take up to 30 s more to bring the answer. */
+/** Tembo's whole run is bounded at 20 s on the server, Clef's check of the answer follows, and polling may take up to 30 s more. */
 export const TEMBO_TIMEOUT_MS = 75_000;
 
 const asApiError = (error: unknown) => error instanceof ApiError ? error

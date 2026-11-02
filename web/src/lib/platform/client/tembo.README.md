@@ -17,7 +17,7 @@ B-3.1's (`src/lib/tembo/README.md`): `POST /api/channels/:id/tembo`
   TEMBO reply newer than the question) or, while the thread is closed, when its
   root's reply count moves: the store asks again and the server returns the
   answer, which joins the channel store through `receive`.
-- `timeout` after `TEMBO_TIMEOUT_MS` (75 s: the server's run is bounded at 25 s,
+- `timeout` after `TEMBO_TIMEOUT_MS` (75 s: the server's run is bounded at 20 s and Clef's check follows,
   and polling may take 30 s more). `retry(messageId)` checks again.
 - `error` keeps the `ApiError`; `exhausted` sets `usage` to every question used,
   with `resetsAt` from `retryAfterMs`.
