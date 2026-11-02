@@ -285,6 +285,36 @@ describe("a mentor's requests", () => {
     expect(text("[data-another-look] > a")).toBe(`${WORTH_ANOTHER_LOOK_LIMIT - 3}+ more on Confirm work `);
   });
 
+  it("reports a note with a reason, after which the request is closed for the mentor and leaves the count", async () => {
+    await queue();
+    expect(q("[data-waiting-count]")!.getAttribute("data-waiting-count")).toBe("2");
+    await act(async () => button(pendingMentorRequest.id, "Report this request").click());
+    const form = request(pendingMentorRequest.id).querySelector<HTMLFormElement>("[data-report-request]")!;
+    expect(document.activeElement?.tagName).toBe("TEXTAREA");
+    // A reason first: TTV needs to know what to check.
+    await act(async () => form.requestSubmit());
+    expect(form.textContent).toContain("Say what's wrong with this request");
+    const reason = form.querySelector("textarea")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(reason, "Asked for my phone number.");
+      reason.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => form.requestSubmit());
+    await settle();
+    const reported = request(pendingMentorRequest.id);
+    expect(reported.textContent).toContain("Reported");
+    expect(reported.textContent).toContain("stays closed for you unless they send it back");
+    expect(Array.from(reported.querySelectorAll("button")).map((b) => b.textContent)).not.toContain("Accept");
+    expect(q("[data-waiting-count]")!.getAttribute("data-waiting-count")).toBe("1");
+  });
+
+  it("shows a request reported earlier as closed, with nothing to press", async () => {
+    const reported = { ...pendingMentorRequest, check: "reported" as const };
+    await act(async () => root.render(<MentorRequestsQueue initial={{ items: [reported], nextCursor: null }} mentors={mentors.items} availability={availability} anotherLook={null} now={FIXTURE_NOW} />));
+    expect(request(pendingMentorRequest.id).querySelectorAll("button")).toHaveLength(0);
+    expect(text("[data-waiting-count]")).toBe("Nothing waiting for you");
+  });
+
   it("accepts at once and then links the conversation", async () => {
     await queue();
     await act(async () => button(pendingMentorRequest.id, "Accept").click());

@@ -1,8 +1,8 @@
 import {
   CreateMentorRequest, DeclineMentorRequest, MentorDirectoryQuery, MentorRequestListQuery, RedirectMentorRequest,
-  ROUTES, UpdateMentorAvailability,
+  ReportMentorRequest, ROUTES, UpdateMentorAvailability,
   type Id, type MentorAvailability, type MentorCapacity, type MentorDirectoryItem, type MentorRequest,
-  type MentorRequestStatus, type PersonSummary, type ProjectEmbed,
+  type MentorRequestCheck, type MentorRequestStatus, type PersonSummary, type ProjectEmbed,
 } from "../contracts";
 import * as fixtures from "../fixtures";
 import { createApiClient, type ApiClient } from "./apiClient";
@@ -39,6 +39,8 @@ export interface MentoringMock {
   availability(mentorId: Id): MentorAvailability;
   /** The viewer agrees to the habits, as the conduct form would record. */
   agreeConduct(): void;
+  /** Puts a check on a request (B-4.1), as Clef or an admin would: `waiting`, `not_sent` and so on. */
+  check(requestId: Id, check: MentorRequestCheck, status?: MentorRequestStatus): void;
   /** Plays the other side: a person withdraws, or a mentor answers, behind the viewer's back. */
   move(requestId: Id, status: Exclude<MentorRequestStatus, "PENDING">): void;
   /** The viewer's own projects, as the drawer offers them. */
@@ -125,6 +127,8 @@ export function createMentoringMock(options: MentoringMockOptions = {}): Mentori
     const actor = by === "mentor" ? request.mentor.id : request.requester.id;
     if (actor !== viewer.id) return failure(403, "forbidden", "Not yours to answer.");
     if (request.status !== "PENDING") return conflict("This request has already moved on.");
+    // A reported request is closed for its mentor while TTV checks it (B-4.1 checks).
+    if (by === "mentor" && request.check === "reported") return conflict("This request is being checked.");
     const next = change(request);
     if ("data" in next) return next as MockReply;
     return { data: update(request.id, next) };
@@ -202,6 +206,11 @@ export function createMentoringMock(options: MentoringMockOptions = {}): Mentori
       release(request);
       return { status: "WITHDRAWN" };
     }) },
+    { ...ROUTES.reportMentorRequest, reply: async ({ params, request: http }) => {
+      ReportMentorRequest.parse(await http.json());
+      // An open check holds no spot.
+      return transition(params.id, "mentor", request => { release(request); return { check: "reported" }; });
+    } },
     { ...ROUTES.getMentorAvailability, reply: () => ({ data: ownAvailability(viewer.id) }) },
     { ...ROUTES.updateMentorAvailability, reply: async ({ request }) => {
       const body = UpdateMentorAvailability.parse(await request.json());
@@ -217,6 +226,9 @@ export function createMentoringMock(options: MentoringMockOptions = {}): Mentori
     requests: () => structuredClone(requests),
     availability: (mentorId: Id) => ownAvailability(mentorId),
     agreeConduct() { conductAgreed = true; },
+    check(requestId, check, status) {
+      if (find(requestId)) update(requestId, { check, ...(status ? { status } : {}) });
+    },
     move(requestId, status) {
       const request = find(requestId);
       if (!request || request.status !== "PENDING") return;

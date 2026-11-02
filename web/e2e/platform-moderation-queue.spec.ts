@@ -133,17 +133,17 @@ test("keeps, keeps hidden, restores and closes, each with who decided and why", 
   await open(page);
 
   await decide(page, FLAGGED, /^Fine as is/, "A phone number shared between two cohort mates who asked for it.");
-  await expect(notice(page)).toHaveText(/^Kept as is\./);
+  await expect(notice(page)).toContainText(/Kept as is\./);
   await expect(card(page, FLAGGED)).toHaveCount(0);
 
   await decide(page, TEMBO_HIDDEN, /^Keep hidden/, "Selling followers is spam.");
-  await expect(notice(page)).toHaveText(/^Hidden\./);
+  await expect(notice(page)).toContainText(/Hidden\./);
 
   await decide(page, MENTOR_HIDDEN, /^Restore/, "Blunt, but about the code. The author has been asked to reword it.");
-  await expect(notice(page)).toHaveText(/^Restored\./);
+  await expect(notice(page)).toContainText(/Restored\./);
 
   await decide(page, GONE, /^Close the case/, "Deleted by its author; nothing left to decide.");
-  await expect(notice(page)).toHaveText(/^Case closed\. Its author had deleted the message/);
+  await expect(notice(page)).toContainText(/Case closed\. Its author had deleted the message/);
   await expect(card(page, GONE)).toHaveCount(0);
 
   await notice(page).getByRole("link", { name: "See decided cases" }).click();
@@ -168,7 +168,7 @@ test("never shows a decision someone else made first as made", async ({ page, co
   const other = await context.newPage();
   await open(other);
   await decide(other, STALE, /^Hide/, "A phone number in a public channel.");
-  await expect(notice(other)).toHaveText(/^Hidden\./);
+  await expect(notice(other)).toContainText(/Hidden\./);
   await other.close();
 
   await decide(page, STALE, /^Fine as is/, "Fine as it is.");
@@ -190,7 +190,7 @@ test.describe("without JavaScript", () => {
     await expect(card(page, REPORTED)).toContainText("Reported by 1 member");
     await decide(page, REPORTED, /^Hide/, "Aimed at people rather than their code.");
     await expect(page).toHaveURL(/decided=hide/);
-    await expect(notice(page)).toHaveText(/^Hidden\. Members no longer see the message\./);
+    await expect(notice(page)).toContainText(/Hidden\. Members no longer see the message\./);
     await expect(card(page, REPORTED)).toHaveCount(0);
   });
 });

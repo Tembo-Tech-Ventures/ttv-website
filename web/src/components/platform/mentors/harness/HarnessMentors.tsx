@@ -6,7 +6,7 @@
  * of a request.
  */
 import { useState } from "react";
-import type { MentorRequestStatus, PersonSummary } from "@/lib/platform/contracts";
+import type { MentorRequestCheck, MentorRequestStatus, PersonSummary } from "@/lib/platform/contracts";
 import { createMentoringMock, type MentoringMock } from "@/lib/platform/client/mentoring.mock";
 import type { MockReply } from "@/lib/platform/client/mockTransport";
 import AvailabilityEditor, { type AvailabilityEditorProps } from "../AvailabilityEditor";
@@ -31,11 +31,13 @@ type Harness =
   | { view: "requests"; props: Omit<MentorRequestsQueueProps, "api"> }
   | { view: "availability"; props: Omit<AvailabilityEditorProps, "api"> };
 
-export default function HarnessMentors({ viewer, conductAgreed, member = true, latencyMs = 250, harness }: {
+export default function HarnessMentors({ viewer, conductAgreed, member = true, check = null, latencyMs = 250, harness }: {
   viewer: PersonSummary;
   conductAgreed: boolean;
   /** A member account (a community profile or a cohort place), which asking needs. */
   member?: boolean;
+  /** The check the page put on Wanjiku's waiting request, mirrored so the island's mock agrees with it. */
+  check?: { requestId: string; check: MentorRequestCheck; status?: MentorRequestStatus } | null;
   latencyMs?: number;
   harness: Harness;
 }) {
@@ -49,6 +51,7 @@ export default function HarnessMentors({ viewer, conductAgreed, member = true, l
         return refusals.reply;
       },
     });
+    if (check) created.check(check.requestId, check.check, check.status);
     if (typeof window !== "undefined") {
       window.__mentorsHarness = {
         refuseWrites: (count, status, code) => { refusals = { count, reply: { status, data: { error: { code, message: "Refused by the harness." } } } }; },

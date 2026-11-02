@@ -103,3 +103,26 @@ describe("listing and routes", () => {
     expect(conversationHref("dm/1?x")).toBe("/dashboard/community/dm/dm%2F1%3Fx");
   });
 });
+
+describe("checks on a note (B-4.1)", () => {
+  it("tells the person asking where their request stands, never naming who raised it or saying declined", () => {
+    const waiting = requesterStatus({ ...request, check: "waiting" }, "PENDING");
+    expect(waiting).toEqual({ label: "Waiting for a check", tone: "neutral", detail: "Waiting for a check before it's sent." });
+    expect(requesterStatus({ ...request, check: "checking" }, "PENDING").detail).toBe("TTV is checking this request.");
+    expect(requesterStatus({ ...request, check: "not_sent" }, "WITHDRAWN").detail).toBe("This request wasn't sent.");
+    expect(requesterStatus({ ...request, check: "closed" }, "WITHDRAWN").detail).toBe("This request was closed.");
+    for (const check of ["waiting", "checking", "not_sent", "closed"] as const) {
+      const view = requesterStatus({ ...request, check }, check === "waiting" || check === "checking" ? "PENDING" : "WITHDRAWN");
+      expect(`${view.label} ${view.detail}`).not.toMatch(/declin|reported|David/i);
+    }
+  });
+
+  it("reads a withdrawal shown before the server answers as a withdrawal, whatever the check", () => {
+    expect(requesterStatus({ ...request, check: "waiting" }, "WITHDRAWN").label).toBe("Withdrawn");
+  });
+
+  it("tells the mentor a request they reported is closed for them while TTV checks it", () => {
+    expect(mentorStatus({ ...request, check: "reported" }, "PENDING")).toMatchObject({ label: "Reported", tone: "neutral" });
+    expect(mentorStatus({ ...request, check: null }, "PENDING").label).toBe("Waiting for you");
+  });
+});

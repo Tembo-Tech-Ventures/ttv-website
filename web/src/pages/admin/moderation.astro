@@ -8,14 +8,27 @@
  * browser (personal access tokens can't use channels yet), the `channels` flag on for this admin,
  * and same-origin decisions. B-2.5's listModerationQueue and decideModeration refuse the rest
  * with the same errors as /api/moderation.
+ *
+ * While mentor requests are on for this admin, a third tab, "Request notes" (`?tab=request-notes`),
+ * lists the mentor requests whose note Tembo's check held or a mentor reported (B-4.1 checks). Its reads
+ * and decisions go through the API's own handler, so a keep also tells the mentor, as the API does.
  */
 import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import AdminLayout from "@/layouts/AdminLayout.astro";
 import ModerationQueueView from "@/components/admin/moderation/ModerationQueueView.astro";
-import { MODERATION_PATH } from "@/components/admin/moderation/case-model";
-import { moderationQueueGate, moderationQueueRequest, queuePaths } from "@/components/admin/moderation/page-flow";
+import RequestNotesView from "@/components/admin/moderation/RequestNotesView.astro";
+import { MODERATION_PATH, QUEUE_TABS } from "@/components/admin/moderation/case-model";
+import {
+  REQUEST_NOTES_LABEL, REQUEST_NOTES_TAB, requestNotesPaths, requestNotesRequest, type RequestNotesViewProps,
+} from "@/components/admin/moderation/request-notes";
+import { mentoringRequest } from "@/lib/mentoring/http";
+import { ROUTES } from "@/lib/platform/contracts";
+import type { ModerationTab } from "@/components/admin/moderation/ModerationTabs.astro";
+import {
+  moderationQueueGate, moderationQueueRequest, queuePaths, type QueueViewProps,
+} from "@/components/admin/moderation/page-flow";
 import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
 import { ChannelError } from "@/lib/channels/errors";
 import { decideModeration } from "@/lib/channels/moderation/actions";
@@ -36,17 +49,58 @@ if (gate === "token") return new Response("Forbidden: personal access tokens can
 if (gate === "not-found") return new Response("Not found", { status: 404 });
 if (gate === "cross-origin") return new Response("Forbidden: same-origin request required.", { status: 403 });
 
-const viewer = { user, capabilities: await requestCapabilities(drizzle(env.DB, { schema }), Astro.locals) };
-const outcome = await moderationQueueRequest(Astro.request, Astro.url, {
-  list: (query) => listModerationQueue(env.DB, viewer, query),
-  countPending: () => countPendingModeration(env.DB),
-  decide: (input) => decideModeration({ db: env.DB, env }, viewer, input),
-  isBadCursor: (error) => error instanceof ChannelError && error.status === 400,
-}, queuePaths(MODERATION_PATH));
-if (outcome.kind === "redirect") return Astro.redirect(outcome.location, 303);
-Astro.response.status = outcome.status;
+const flagContext = { db: env.DB, env, user, isAdmin, locals: Astro.locals };
+const requestNotesOn = await isFlagEnabled(flagContext, "mentor_requests");
+const paths = queuePaths(MODERATION_PATH);
+const notesPaths = requestNotesPaths(MODERATION_PATH);
+
+let notesView: (RequestNotesViewProps & { queueTabs: ModerationTab[] }) | null = null;
+let queueView: (QueueViewProps & { requestNotesHref?: string }) | null = null;
+let pendingCount = 0;
+
+if (requestNotesOn && Astro.url.searchParams.get("tab") === REQUEST_NOTES_TAB) {
+  const api = (operation: "listMentorRequestCases" | "decideMentorRequestCase", request: Request, params: Record<string, string> = {}) =>
+    mentoringRequest(operation, { request, locals: Astro.locals, params }, env);
+  const notes = await requestNotesRequest(Astro.request, Astro.url, {
+    list(query) {
+      const url = new URL(ROUTES.listMentorRequestCases.path, Astro.url);
+      for (const [key, value] of Object.entries(query)) if (value !== undefined) url.searchParams.set(key, value);
+      return api("listMentorRequestCases", new Request(url));
+    },
+    decide(requestId, body) {
+      // The page has already checked its own post is same-origin (the gate above), so this inner request carries that origin.
+      const url = new URL(ROUTES.decideMentorRequestCase.path.replace(":id", encodeURIComponent(requestId)), Astro.url);
+      return api("decideMentorRequestCase", new Request(url, {
+        method: "POST", headers: { "Content-Type": "application/json", Origin: Astro.url.origin }, body: JSON.stringify(body),
+      }), { id: requestId });
+    },
+  }, notesPaths);
+  if (notes.kind === "redirect") return Astro.redirect(notes.location, 303);
+  Astro.response.status = notes.status;
+  pendingCount = await countPendingModeration(env.DB);
+  notesView = {
+    ...notes.props,
+    queueTabs: [
+      ...QUEUE_TABS.map((tab) => ({ label: tab.label, href: paths.tab(tab.state), current: false, ...(tab.state === "PENDING" ? { count: pendingCount } : {}) })),
+      { label: REQUEST_NOTES_LABEL, href: notesPaths.tab("OPEN"), current: true },
+    ],
+  };
+} else {
+  const viewer = { user, capabilities: await requestCapabilities(drizzle(env.DB, { schema }), Astro.locals) };
+  const outcome = await moderationQueueRequest(Astro.request, Astro.url, {
+    list: (query) => listModerationQueue(env.DB, viewer, query),
+    countPending: () => countPendingModeration(env.DB),
+    decide: (input) => decideModeration({ db: env.DB, env }, viewer, input),
+    isBadCursor: (error) => error instanceof ChannelError && error.status === 400,
+  }, paths);
+  if (outcome.kind === "redirect") return Astro.redirect(outcome.location, 303);
+  Astro.response.status = outcome.status;
+  pendingCount = outcome.props.pendingCount;
+  queueView = { ...outcome.props, ...(requestNotesOn ? { requestNotesHref: notesPaths.tab("OPEN") } : {}) };
+}
 ---
 
-<AdminLayout title="Moderation" pendingModeration={outcome.props.pendingCount}>
-  <ModerationQueueView {...outcome.props} />
+<AdminLayout title="Moderation" pendingModeration={pendingCount}>
+  {notesView && <RequestNotesView {...notesView} />}
+  {queueView && <ModerationQueueView {...queueView} />}
 </AdminLayout>

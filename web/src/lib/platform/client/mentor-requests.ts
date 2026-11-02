@@ -20,15 +20,17 @@ import { createStore, type Store } from "./store";
  *   shows what really happened (the person withdrew while the mentor was
  *   reading) rather than a bare error.
  * - Nothing here retries a change: none of these routes is idempotent.
+ * - A mentor may report a waiting request's note instead of answering it (B-4.1 checks). The request
+ *   stays PENDING with `check: "reported"`, and nothing more can be done with it here.
  */
-export type MentorRequestAction = "accept" | "redirect" | "decline" | "withdraw";
+export type MentorRequestAction = "accept" | "redirect" | "decline" | "withdraw" | "report";
 export type MentorRequestSide = "requester" | "mentor";
 
 const TARGET: Record<MentorRequestAction, MentorRequestStatus> = {
-  accept: "ACCEPTED", redirect: "REDIRECTED", decline: "DECLINED", withdraw: "WITHDRAWN",
+  accept: "ACCEPTED", redirect: "REDIRECTED", decline: "DECLINED", withdraw: "WITHDRAWN", report: "PENDING",
 };
 const ACTIONS_FOR: Record<MentorRequestSide, readonly MentorRequestAction[]> = {
-  mentor: ["accept", "redirect", "decline"],
+  mentor: ["accept", "redirect", "decline", "report"],
   requester: ["withdraw"],
 };
 
@@ -82,9 +84,11 @@ export function shownStatus(state: Pick<MentorRequestsState, "pending">, request
   return state.pending[request.id]?.status ?? request.status;
 }
 
-/** Whether `side` may make `action` on a request in this status. */
-export function canAct(side: MentorRequestSide, action: MentorRequestAction, status: MentorRequestStatus): boolean {
-  return status === "PENDING" && ACTIONS_FOR[side].includes(action);
+/** Whether `side` may make `action` on a request in this status. A reported request is closed for its mentor. */
+export function canAct(
+  side: MentorRequestSide, action: MentorRequestAction, status: MentorRequestStatus, check: MentorRequest["check"] = null,
+): boolean {
+  return status === "PENDING" && check !== "reported" && ACTIONS_FOR[side].includes(action);
 }
 
 const asApiError = (error: unknown) => error instanceof ApiError ? error
@@ -103,10 +107,11 @@ function done(side: MentorRequestSide, action: MentorRequestAction, request: Men
     case "redirect": return `Suggested ${details.redirect?.mentorName ?? request.redirectedTo?.name ?? "another mentor"} to ${name}.`;
     case "decline": return `Marked not this month. ${name} can ask again later.`;
     case "withdraw": return `Request to ${name} withdrawn.`;
+    case "report": return `Reported. TTV will check the request from ${name}; it's closed for you meanwhile.`;
   }
 }
 const VERB: Record<MentorRequestAction, string> = {
-  accept: "accept", redirect: "send the suggestion", decline: "save that", withdraw: "withdraw",
+  accept: "accept", redirect: "send the suggestion", decline: "save that", withdraw: "withdraw", report: "send the report",
 };
 const STATUS_WORDS: Record<MentorRequestStatus, string> = {
   PENDING: "still waiting", ACCEPTED: "already accepted", REDIRECTED: "already redirected",
@@ -154,6 +159,7 @@ export function createMentorRequestsStore(options: MentorRequestsOptions) {
       case "redirect": return api.call(ROUTES.redirectMentorRequest, { params, body: { mentorId: details.redirect!.mentorId, ...withNote }, signal });
       case "decline": return api.call(ROUTES.declineMentorRequest, { params, body: withNote, signal });
       case "withdraw": return api.call(ROUTES.withdrawMentorRequest, { params, body: {}, signal });
+      case "report": return api.call(ROUTES.reportMentorRequest, { params, body: { reason: details.note ?? "" }, signal });
     }
   }
 
@@ -170,7 +176,8 @@ export function createMentorRequestsStore(options: MentorRequestsOptions) {
     const state = store.getState();
     const request = find(id);
     if (!request || state.pending[id]) return null;
-    if (!canAct(side, action, request.status)) return null;
+    if (!canAct(side, action, request.status, request.check)) return null;
+    if (action === "report" && !details.note?.trim()) return null;
     const target = details.redirect?.mentorId;
     if (action === "redirect" && (!target || target === request.mentor.id || target === request.requester.id)) return null;
     const { [id]: _failed, ...failed } = state.failed;
@@ -210,6 +217,8 @@ export function createMentorRequestsStore(options: MentorRequestsOptions) {
     /** "Not this month": one tap, no note needed, and it counts against nobody. */
     decline: (id: Id, note?: MentorRequestNote) => act(id, "decline", { note }),
     withdraw: (id: Id) => act(id, "withdraw"),
+    /** The mentor reports the note for a check by TTV, saying why. The request then closes for them. */
+    report: (id: Id, reason: string) => act(id, "report", { note: reason.trim() }),
     /** Adds a request this page did not have yet (one just sent from the drawer), newest first. */
     prepend(request: MentorRequest) {
       if (find(request.id)) replace(request);
