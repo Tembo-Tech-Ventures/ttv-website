@@ -151,6 +151,7 @@ describe("asking Tembo", () => {
 
 /** An answer with no tags: Tembo says it doesn't know. */
 const NO_TAGS = "I am not sure.";
+const NO_ANSWER_TEXT = "NO_ANSWER";
 
 describe("quota: 10 accepted questions per person per Africa/Nairobi day", () => {
   it("accepts ten, refuses the eleventh with the wait until Nairobi midnight, and resets at 21:00 UTC", async () => {
@@ -451,6 +452,21 @@ describe("what an answer can cite (QA-3)", () => {
     expect(conversation).not.toMatch(/\[S\d+\]/);
     expect(seen()).not.toContain("TEMBOANSWER");
     expect(answerTo(s, question)).toMatchObject([{ body: refusal("COMMUNITY"), citations: "[]" }]);
+  });
+
+  it("finds the message that answers it past a burst of questions refused for the day (#310 S1)", async () => {
+    const s = setup();
+    const answer = s.message("help", {
+      body: "The Mongolia trip leaves on 3 March from Jomo Kenyatta airport; bring warm boots, a hat, gloves and a sleeping bag rated for minus ten.",
+    });
+    // Short, so full-text ranking puts every one of them ahead of the longer answer; none was asked.
+    for (let i = 0; i < TEMBO_CONFIG.resultsPerTool * 3; i += 1) s.message("help", { body: `@tembo Mongolia trip? ${i}`, author: "synthetic-achieng" });
+    const question = s.question("help", "Mongolia trip date?");
+    const { model, calls } = scriptedModel([{ search: [["search_channel", "mongolia trip"]] }, { answer: NO_ANSWER_TEXT }]);
+    await s.ask("help", question, { temboModel: model });
+    await s.afterResponse();
+    expect(toolResults(calls).flatMap((result) => result.results.map((found) => found.text))).toEqual([expect.stringContaining("leaves on 3 March")]);
+    expect(answer).toBeTruthy();
   });
 
   it("still cites a person's message that answers it, by the words that tell two of theirs apart (QA3-01, QA3-02)", async () => {

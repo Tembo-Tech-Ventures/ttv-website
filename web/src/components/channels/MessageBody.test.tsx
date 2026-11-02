@@ -42,7 +42,7 @@ describe("a Tembo answer's markers (QA3-02)", () => {
 
   it("links each [n] to the source it names, labelled with it, beside the sentence it supports", () => {
     const markup = cited("Use a cursor [1][2]. Offsets drift [1].");
-    expect(markup).toContain('Use a cursor <a href="/dashboard/sessions/rec-5?t=40"');
+    expect(markup).toContain('Use a cursor\u00A0<a href="/dashboard/sessions/rec-5?t=40"');
     expect(markup).toContain('aria-label="Source 1: Week 5: REST APIs at 0:40"><sup aria-hidden="true">1</sup></a>');
     expect(markup).toContain('aria-label="Source 2: Wanjiku Mwangi: “Page with a cursor”"><sup aria-hidden="true">2</sup></a>.');
     expect(markup.match(/data-cite="1"/g)).toHaveLength(2);
@@ -52,6 +52,13 @@ describe("a Tembo answer's markers (QA3-02)", () => {
   it("leaves a number naming no source, and every bracket in a person's message, as text", () => {
     expect(cited("See [3] and [x].")).toBe('<div class="channel-body"><p>See [3] and [x].</p></div>');
     expect(html("Step [1] then [2]")).toBe('<div class="channel-body"><p>Step [1] then [2]</p></div>');
+  });
+
+  it("links only the markers the server writes: arr[1] in the prose stays text, and a marker never wraps alone (#310 N2, N3)", () => {
+    const markup = cited("Read arr[1] first [2].\n- A list item [1]");
+    expect(markup).toContain("Read arr[1] first\u00A0<a");
+    expect(markup.match(/data-cite=/g)).toHaveLength(2);
+    expect(markup).toContain('A list item\u00A0<a href="/dashboard/sessions/rec-5?t=40"');
   });
 
   it("keeps masked details as the note in a cited sentence", () => {

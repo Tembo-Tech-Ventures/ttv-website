@@ -117,6 +117,11 @@ const ASKED = `EXISTS (SELECT 1 FROM tembo_ask a WHERE a.messageId = m.id)`;
  * asked). It says what someone wants to know, never what is so, so it is context, not a source.
  */
 const isQuestion = (row: MessageRow) => row.asked === 1 || mentionsTembo(row.body);
+/**
+ * No "@tembo" anywhere in m's body, so questions refused for the day can't fill a search's page before
+ * the exact check (mentionsTembo) runs. Broader than a mention (name@tembo.org is left out too).
+ */
+const NO_MENTION = `instr(lower(m.body), '@tembo') = 0`;
 const MESSAGE_COLUMNS = `m.id, m.parentId, m.seq, u.name AS authorName, m.body, m.moderationState, m.moderationReasons, ${ASKED} AS asked`;
 
 /** Characters of a message's own words in its citation's title, so two of one person's messages tell apart. */
@@ -194,7 +199,8 @@ const searchChannel: Search = async ({ db, book, channel, questionId }, terms) =
   const { results } = await db.prepare(`SELECT ${MESSAGE_COLUMNS}
     FROM channel_message_fts f CROSS JOIN channel_message_search s ON s.id = f.rowid
     CROSS JOIN channel_message m ON m.id = s.messageId LEFT JOIN "user" u ON u.id = m.authorId
-    WHERE channel_message_fts MATCH ?2 AND ${READABLE_MESSAGE} AND m.id <> ?4 AND NOT ${ASKED} ORDER BY f.rank LIMIT ?3`)
+    WHERE channel_message_fts MATCH ?2 AND ${READABLE_MESSAGE} AND m.id <> ?4 AND NOT ${ASKED} AND ${NO_MENTION}
+    ORDER BY f.rank LIMIT ?3`)
     .bind(channel.id, anyTermMatch(terms), TEMBO_CONFIG.resultsPerTool * 2, questionId).all<MessageRow>();
   return results.filter((row) => {
     if (isQuestion(row)) return false;

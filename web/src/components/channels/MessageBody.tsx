@@ -54,8 +54,12 @@ function Segment({ segment, citations }: { segment: BodySegment; citations: read
   }
 }
 
-/** The server's numbered markers in a Tembo answer: [1], [2], … matching its stored citations. */
-const MARKER = /\[(\d{1,2})\]/gu;
+/**
+ * The server's numbered markers in a Tembo answer, as grounding.ts writes them: after a space or
+ * another marker, and before another marker, a sentence stop or the end of the line. So `arr[1]` in
+ * the prose stays text.
+ */
+const MARKER = /(?<=\s|\])\[(\d{1,2})\](?=\[\d|[.!?…"”’)]*(?:\s|$))/gu;
 
 /**
  * Text with each `[n]` naming one of `citations` as a link to that source, labelled with it, so a
@@ -69,7 +73,8 @@ function Cited({ text, citations }: { text: string; citations: readonly Citation
     const n = Number(match[1]);
     const citation = citations[n - 1];
     if (!citation) continue;
-    if (match.index > last) pieces.push(text.slice(last, match.index));
+    // The space before a sentence's first marker doesn't break, so a marker never wraps alone onto a line.
+    if (match.index > last) pieces.push(text.slice(last, match.index).replace(/ $/u, "\u00A0"));
     pieces.push(
       <a key={match.index} href={citation.href} className={cx("channel-cite-ref", FOCUS_RING)} data-cite={n} aria-label={`Source ${n}: ${citation.title}`}>
         <sup aria-hidden="true">{n}</sup>
