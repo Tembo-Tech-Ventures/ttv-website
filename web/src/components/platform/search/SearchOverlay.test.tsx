@@ -33,6 +33,7 @@ function backend(): { client: ApiClient; state: Backend } {
             data: SearchResults.parse({
               ...searchResults,
               query,
+              messages: none ? [] : searchResults.messages,
               people: none ? [] : searchResults.people,
               projects: none ? [] : searchResults.projects,
               sessionMoments: none ? [] : searchResults.sessionMoments,
@@ -112,14 +113,17 @@ async function key(name: string) {
 
 describe("SearchOverlay", () => {
   it("promises only what this person can find, and marks when it is listening", async () => {
-    await act(async () => root.render(<SearchOverlay me={meByPersona.lucy} client={backend().client} />));
+    const lucy = { ...meByPersona.lucy, flags: { ...meByPersona.lucy.flags, channels: false } };
+    await act(async () => root.render(<SearchOverlay me={lucy} client={backend().client} />));
     expect(dialog().hasAttribute("data-ready")).toBe(true);
     expect(input().placeholder).toBe("Search people and projects");
     expect(input().getAttribute("aria-label")).toBe("Search people and projects");
     expect(container.querySelector("h2")?.textContent).toBe("Search");
     expect(container.textContent).toContain("Find people and projects.");
+    expect(container.querySelector('[data-search-scope="messages"]')).toBeNull();
     await act(async () => root.render(<SearchOverlay me={wanjiku} client={backend().client} />));
-    expect(input().placeholder).toBe("Search people, projects and your cohort's sessions");
+    expect(input().placeholder).toBe("Search messages, people, projects and your cohort's sessions");
+    expect(container.querySelector('[data-search-scope="messages"]')?.textContent).toBe("Messages");
   });
 
   it("names its close button with the key it shows, and gives Escape as its shortcut (WCAG 2.5.3)", async () => {
@@ -154,8 +158,8 @@ describe("SearchOverlay", () => {
     await settle(300);
     expect(state.calls).toEqual(["/api/search"]);
     const groups = Array.from(container.querySelectorAll('[role="group"]')).map((group) => group.getAttribute("aria-label"));
-    expect(groups).toEqual(["People", "Projects", "Moments in your sessions"]);
-    expect(polite()).toBe("3 results");
+    expect(groups).toEqual(["Messages", "People", "Projects", "Moments in your sessions"]);
+    expect(polite()).toBe("5 results");
     // Visibility labels are the server's, shown as given.
     expect(container.textContent).toContain("Cohort 04 · only you and your cohort see this");
 
@@ -164,7 +168,8 @@ describe("SearchOverlay", () => {
     expect(input().getAttribute("aria-activedescendant")).toBe(options()[1].id);
     expect(options()[1].getAttribute("aria-selected")).toBe("true");
     await key("Enter");
-    expect(assign).toHaveBeenCalledWith(searchResults.projects[0].href);
+    // A message opens where the server says it lives, in its channel or thread.
+    expect(assign).toHaveBeenCalledWith(searchResults.messages[1].href);
     expect(JSON.parse(localStorage.getItem(recentSearchKey(wanjiku.user.id))!)).toEqual(["retry webhook"]);
   });
 
@@ -234,7 +239,7 @@ describe("SearchOverlay", () => {
     const retry = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Try again")!;
     await act(async () => retry.click());
     await settle(300);
-    expect(options()).toHaveLength(3);
+    expect(options()).toHaveLength(5);
   });
 
   it("sends a signed-out person to sign in again rather than showing nothing", async () => {

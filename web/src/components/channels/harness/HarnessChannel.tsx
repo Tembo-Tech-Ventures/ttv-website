@@ -10,9 +10,11 @@ import type { Channel, Me, Message, MessageList } from "@/lib/platform/contracts
 import { createChannelStore } from "@/lib/platform/client/channel";
 import { createComposer } from "@/lib/platform/client/composer";
 import { FIXTURE_NOW, people } from "@/lib/platform/fixtures";
+import type { ModerationActions } from "../actions";
 import ChannelSurface from "../ChannelSurface";
+import { createModerationActions } from "../moderation-actions";
 import { shareablesFor } from "./fixture-pages";
-import { createHarnessClient } from "./harness-client";
+import { createHarnessClient, type ModerationRecord } from "./harness-client";
 
 declare global {
   interface Window {
@@ -20,6 +22,8 @@ declare global {
       arrive: (count?: number) => void;
       /** The read markers the view has sent, oldest first. */
       reads: () => readonly string[];
+      /** Reports, hides, restores and review requests the view has sent, oldest first. */
+      moderation: () => readonly ModerationRecord[];
       /** Refuse the next `count` writes with this HTTP status and error code. */
       refuseWrites: (count: number, status: number, code: string, message: string, retryAfterMs?: number) => void;
     };
@@ -67,7 +71,8 @@ export default function HarnessChannel({ me, channel, initial, initialThread, th
       initialRead: initialRead ?? { lastReadMessageId: null, unreadCount: 0 },
     });
     const composer = createComposer({ store, me, api: client.api, now });
-    return { client, store, composer, now, refusal };
+    const moderation: ModerationActions = createModerationActions({ store, api: client.api });
+    return { client, store, composer, moderation, now, refusal };
   });
 
   useEffect(() => {
@@ -88,6 +93,7 @@ export default function HarnessChannel({ me, channel, initial, initialThread, th
         window.dispatchEvent(new Event("focus"));
       },
       reads: () => harness.client.reads(),
+      moderation: () => harness.client.moderation(),
       refuseWrites(count, status, code, message, retryAfterMs) {
         harness.refusal.next = { count, status, data: { error: { code, message, ...(retryAfterMs === undefined ? {} : { retryAfterMs }) } } };
       },
@@ -106,6 +112,7 @@ export default function HarnessChannel({ me, channel, initial, initialThread, th
       composer={harness.composer}
       now={FIXTURE_NOW}
       shareables={shareablesFor(me)}
+      moderation={harness.moderation}
       threadId={threadId}
       initialThread={initialThread}
       messageId={messageId}

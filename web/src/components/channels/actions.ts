@@ -11,6 +11,22 @@ export interface ChannelActions {
   react(messageId: string, kind: ReactionKind, active: boolean): Promise<unknown>;
 }
 
+/** The two things a moderator does to a message in place. "keep" belongs to the admin queue (U-2.4). */
+export type InPlaceModeration = "hide" | "restore";
+
+/**
+ * Reporting, moderating and asking for a review: one-shot calls, each
+ * resolving when the server has accepted it or rejecting with its ApiError.
+ * A changed message comes back confirmed and replaces the cached copy.
+ * Hiding is for the channel's moderators, restoring for admins, and asking
+ * for a review for the author of a hidden message (B-2.5).
+ */
+export interface ModerationActions {
+  report(messageId: string, reason: string): Promise<void>;
+  moderate(messageId: string, action: InPlaceModeration, reason: string): Promise<Message>;
+  requestReview(messageId: string, note: string | null): Promise<void>;
+}
+
 /** Work a person can attach from the composer, resolved by the page. */
 export type Shareables = { projects: readonly ProjectEmbed[]; clips: readonly SessionClipEmbed[] };
 export const NO_SHAREABLES: Shareables = { projects: [], clips: [] };

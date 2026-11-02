@@ -19,6 +19,8 @@
   min-height: 0;
   height: 100%;
   --channel-gutter: clamp(1rem, 3cqi, 2rem);
+  /* "Jump to latest" floats this far up from the end of the list: its offset, its height and a gap. */
+  --channel-jump-clearance: 4.5rem;
   --channel-surface: var(--sheet, var(--color-sheet-community));
 }
 
@@ -493,7 +495,8 @@
 }
 
 @container channel-view (max-width: 34rem) {
-  /* On a narrow sheet the moment sits above its words, a wide strip, so neither column is squeezed. */
+  /* On a narrow sheet the moment sits above its words, a wide strip, so neither column is squeezed.
+     The quote stays: it is what says which moment this is. */
   .channel-embed--clip {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.75rem;
@@ -501,10 +504,6 @@
 
   .channel-clip__poster {
     aspect-ratio: 21 / 9;
-  }
-
-  .channel-clip__quote {
-    display: none;
   }
 }
 
@@ -566,6 +565,8 @@
 /* ---- Moderation, edit and delete ----------------------------------------- */
 
 .channel-moderation {
+  /* Focus returns here, or inside it, clear of "Jump to latest". */
+  scroll-margin-block: 0.75rem var(--channel-jump-clearance);
   display: flex;
   gap: 0.5rem;
   max-width: 38rem;
@@ -600,6 +601,104 @@
   border: 1px solid rgb(255 179 166 / 0.4);
   border-radius: 0.75rem;
   background-color: rgb(255 179 166 / 0.06);
+}
+
+/* A report, a hide or restore, or a review request: a form that opens in place under the message. */
+.channel-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  /* Brought into view whole when it opens, with room to spare while it is still unfolding. */
+  scroll-margin-block: 0.75rem;
+  max-width: 38rem;
+  margin-top: 0.625rem;
+  padding: 0.875rem 1rem 1rem;
+  border: 1px solid var(--color-hairline);
+  border-radius: 1rem;
+  background-color: rgb(1 33 31 / 0.45);
+}
+
+.channel-panel[data-panel="hide"] {
+  border-color: rgb(255 179 166 / 0.4);
+}
+
+/* Where the person decides: always brought into view, even when the whole form cannot be. */
+.channel-panel__actions {
+  scroll-margin-block: 0.75rem;
+}
+
+.channel-panel__title {
+  color: var(--color-ink-primary);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.channel-panel__error {
+  color: var(--color-danger-ink);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.channel-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-height: 2rem;
+  padding-inline: 0.25rem;
+  border-radius: 0.5rem;
+  color: var(--color-ink-primary);
+  font-size: 0.875rem;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.channel-choice:hover {
+  background-color: rgb(255 248 242 / 0.04);
+}
+
+.channel-choice__input {
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.channel-choice__input:focus-visible {
+  outline: 2px solid var(--color-peach-ink);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .channel-choice {
+    min-height: 2.75rem;
+  }
+}
+
+.channel-reported {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+  color: var(--color-ink-secondary);
+  font-size: 0.8125rem;
+}
+
+.channel-moderation__asked {
+  scroll-margin-block: 0.75rem var(--channel-jump-clearance);
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.375rem;
+  color: var(--color-ink-primary);
+  font-weight: 600;
+}
+
+.channel-moderation__asked:focus-visible {
+  border-radius: 0.375rem;
+  outline: 2px solid var(--color-peach-ink);
+  outline-offset: 2px;
 }
 
 .channel-input {
@@ -712,7 +811,15 @@
  * message's reactions can always be scrolled clear of it (U-2.1 review N3).
  */
 .channel-list[data-jump] .channel-list__scroller {
-  padding-bottom: 4.5rem;
+  padding-bottom: var(--channel-jump-clearance);
+}
+
+/*
+ * While a form is open in the list, "Jump to latest" stays away: it would float over the form's buttons,
+ * and the person is busy with this message, not the newest.
+ */
+.channel-list:has(.channel-panel) .channel-jump {
+  display: none;
 }
 
 /* On a phone it sits at the end of the line, away from the reactions and thread links under each message. */
@@ -1079,6 +1186,12 @@
   .channel-jump {
     animation: channel-jump-in 180ms ease-out both;
   }
+
+  /* The form opens out of the message it is about, rather than arriving from elsewhere. */
+  .channel-panel {
+    transform-origin: top left;
+    animation: channel-panel-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1105,6 +1218,13 @@
   from {
     opacity: 0;
     transform: translateX(1.5rem);
+  }
+}
+
+@keyframes channel-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.25rem) scaleY(0.97);
   }
 }
 

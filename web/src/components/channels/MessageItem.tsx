@@ -1,5 +1,4 @@
-import { memo, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { PiEyeSlash, PiFlag } from "react-icons/pi";
+import { memo, useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import type { AuthorSummary, Message, ReactionKind } from "@/lib/platform/contracts";
 import Avatar from "@/components/platform/ui/Avatar";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
@@ -8,11 +7,12 @@ import RoleBadge from "@/components/platform/ui/RoleBadge";
 import TemboMark from "@/components/platform/ui/TemboMark";
 import TextReaction, { REACTIONS } from "@/components/platform/ui/TextReaction";
 import type { ChannelActions } from "./actions";
-import { clock, dayKey, dayLabel, fullTime, moderationNotice, threadSummary } from "./channel-format";
+import { clock, dayKey, dayLabel, fullTime, threadSummary } from "./channel-format";
 import EmbedCard from "./EmbedCard";
 import MessageBody from "./MessageBody";
 import { DeleteConfirm, EditForm } from "./MessageEdit";
-import MessageMenu from "./MessageMenu";
+import MessageMenu, { hasMenu } from "./MessageMenu";
+import { ModerationNote, ModerationPanel, moderationRights, ReportedNote, useModeration, type ModerationMode, type ReturnFocus } from "./MessageModeration";
 import { citationIcon, TemboAnswerFoot } from "./TemboAnswer";
 
 export type MessageVariant = "channel" | "thread" | "parent";
@@ -54,20 +54,6 @@ function MessageAvatar({ message }: { message: Message }) {
   if (message.deleted || message.author.id === null) return <span aria-hidden="true" className="channel-avatar-blank" />;
   const mentor = message.author.roleBadges.some((badge) => badge.kind === "MENTOR");
   return <Avatar id={message.author.id} name={message.author.name} src={message.author.avatarUrl ?? undefined} mentor={mentor} decorative />;
-}
-
-function ModerationNote({ message, viewerId }: { message: Message; viewerId: string | null }) {
-  const notice = moderationNotice(message, viewerId);
-  if (!notice) return null;
-  const Icon = notice.state === "HIDDEN" ? PiEyeSlash : PiFlag;
-  return (
-    <div className="channel-moderation" data-moderation={notice.state}>
-      <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-      <p>
-        <strong className="font-semibold text-ink-primary">{notice.title}.</strong> {notice.detail}
-      </p>
-    </div>
-  );
 }
 
 function TemboContent({ message, names }: { message: Message; names: readonly string[] }) {
@@ -196,14 +182,19 @@ function permissions(message: Message, viewerId: string | null, actions: Channel
   const own = message.authorKind === "USER" && viewerId !== null && message.author.id === viewerId;
   const root = variant === "channel" && message.parentId === null;
   const live = actions !== null && !message.deleted;
+  const hidden = message.moderation?.state === "HIDDEN";
   return {
     own,
-    react: live && message.moderation?.state !== "HIDDEN",
-    change: live && own,
+    react: live && !hidden,
+    // A hidden message is not edited (the server refuses it), but its author may still delete it.
+    edit: live && own && !hidden,
+    remove: live && own,
     reply: root && canOpen && !message.deleted,
     thread: root && message.thread.replyCount > 0,
   };
 }
+
+type Mode = "read" | "edit" | "delete" | ModerationMode;
 
 /**
  * One message in the channel or a thread: who wrote it and with which role
@@ -214,16 +205,33 @@ function MessageItem({
   message, viewerId, now, names, people, variant = "channel", withDay = false, actions, threadOpen = false,
   threadHref, onOpenThread, announce,
 }: MessageItemProps) {
-  const [mode, setMode] = useState<"read" | "edit" | "delete">("read");
+  const [mode, setMode] = useState<Mode>("read");
   const menuButton = useRef<HTMLButtonElement>(null);
   const article = useRef<HTMLElement>(null);
   const nameId = useId();
-  const can = permissions(message, viewerId, actions, variant, onOpenThread !== undefined);
+  const moderation = useModeration();
+  const can = { ...permissions(message, viewerId, actions, variant, onOpenThread !== undefined), ...moderationRights(message, viewerId, moderation) };
 
-  function backToMenu() {
+  // Where focus goes once the message is back to reading, applied after that render commits: the
+  // actions button, or a part of the moderation note. Falls back to the actions button, and when the
+  // message has none left (a reply a mentor just hid), to its moderation note. Then brought clear of
+  // "Jump to latest", which can float over the end of the list (scroll-margin in channels.css).
+  const [returnFocus, setReturnFocus] = useState<ReturnFocus | null>(null);
+  useEffect(() => {
+    if (returnFocus === null || mode !== "read") return;
+    const target = returnFocus === "menu" ? null : article.current?.querySelector<HTMLElement>(returnFocus);
+    const focused = target ?? menuButton.current ?? article.current?.querySelector<HTMLElement>("[data-moderation]");
+    focused?.focus({ preventScroll: true });
+    focused?.scrollIntoView({ block: "nearest" });
+    setReturnFocus(null);
+  }, [returnFocus, mode]);
+
+  function back(focus: ReturnFocus = "menu") {
     setMode("read");
-    requestAnimationFrame(() => menuButton.current?.focus());
+    setReturnFocus(focus);
   }
+
+  const backToMenu = () => back();
 
   async function react(kind: ReactionKind, active: boolean) {
     try {
@@ -270,7 +278,7 @@ function MessageItem({
       </div>
       <div className="min-w-0">
         <MessageMeta message={message} nameId={nameId} now={now} withDay={withDay}>
-          {mode === "read" && (can.react || can.change || can.reply) && (
+          {mode === "read" && hasMenu(can) && (
             <MessageMenu
               message={message}
               buttonRef={menuButton}
@@ -279,6 +287,8 @@ function MessageItem({
               onReact={(kind, active) => void react(kind, active)}
               onEdit={() => setMode("edit")}
               onDelete={() => setMode("delete")}
+              onReport={() => setMode("report")}
+              onModerate={setMode}
             />
           )}
         </MessageMeta>
@@ -289,8 +299,10 @@ function MessageItem({
           <MessageContent message={message} names={names} compact={variant === "parent"} />
         )}
 
-        <ModerationNote message={message} viewerId={viewerId} />
+        <ModerationNote message={message} viewerId={viewerId} onAskReview={can.review && mode === "read" ? () => setMode("review") : undefined} />
         {mode === "delete" && <DeleteConfirm onDelete={remove} onKeep={backToMenu} />}
+        {mode !== "report" && <ReportedNote message={message} />}
+        <ModerationPanel mode={mode} message={message} announce={announce} onBack={back} />
         <Reactions message={message} onReact={can.react ? (kind, active) => void react(kind, active) : undefined} />
         {can.thread && (
           <ThreadLink

@@ -7,8 +7,8 @@
  * people's would arrive.
  */
 import {
-  EditMessage, PostMessage, ReactToMessage, ROUTES, type Channel, type ChannelRead, type Me, type Message, type MessageEmbed,
-  type MessageList, type ReactionKind,
+  EditMessage, ModerationAction, PostMessage, ReactToMessage, ReportMessage, RequestModerationReview, ROUTES, type Channel, type ChannelRead, type Me, type Message,
+  type MessageEmbed, type MessageList, type ReactionKind,
 } from "@/lib/platform/contracts";
 import { createApiClient, type ApiClient } from "@/lib/platform/client/apiClient";
 import { createMockTransport, type MockOptions, type MockReply } from "@/lib/platform/client/mockTransport";
@@ -22,7 +22,14 @@ export type HarnessClient = {
   arrive: (messages: readonly Message[]) => void;
   /** Every read marker the view sent, oldest first. */
   reads: () => readonly string[];
+  /** Reports and moderation decisions the view sent, oldest first. */
+  moderation: () => readonly ModerationRecord[];
 };
+
+export type ModerationRecord =
+  | { kind: "report"; messageId: string; reason: string }
+  | { kind: "hide" | "restore" | "keep"; messageId: string; reason: string }
+  | { kind: "review"; messageId: string; note: string | null };
 
 type HarnessOptions = {
   me: Me;
@@ -60,6 +67,7 @@ export function createHarnessClient({ me, channel, root, shareables, now = Date.
   }
   const byNonce = new Map<string, Message>();
   const reads: string[] = [];
+  const records: ModerationRecord[] = [];
   const empty = (thread: string | null, cursor: string): MessageList => ({ items: [], beforeCursor: null, sinceCursor: cursor, thread, removedIds: [] });
 
   function resolveEmbeds(refs: PostMessage["embeds"]): MessageEmbed[] | null {
@@ -154,6 +162,57 @@ export function createHarnessClient({ me, channel, root, shareables, now = Date.
         },
       },
       {
+        ...ROUTES.reportMessage,
+        reply: async ({ request, params }) => {
+          const { reason } = ReportMessage.parse(await request.json());
+          const message = known.get(params.id);
+          if (!message) return refuse(404, "not_found", "That message is no longer here.");
+          if (message.deleted) return refuse(409, "conflict", "That message was deleted.");
+          if (message.author.id === me.user.id) return refuse(403, "forbidden", "You can't report your own message.");
+          // One report per person and message: a repeat changes nothing.
+          if (!records.some((record) => record.kind === "report" && record.messageId === message.id)) {
+            records.push({ kind: "report", messageId: message.id, reason });
+          }
+          return { data: { ok: true } };
+        },
+      },
+      {
+        ...ROUTES.moderateMessage,
+        reply: async ({ request, params }) => {
+          const { action, reason } = ModerationAction.parse(await request.json());
+          const message = known.get(params.messageId);
+          if (!message || message.deleted) return refuse(404, "not_found", "That message is no longer here.");
+          if (!channel.capabilities.canModerate) return refuse(403, "forbidden", "You can't moderate this channel.");
+          // Channel moderators hide; admins have the final say (B-2.5).
+          if (action !== "hide" && !me.capabilities.isAdmin) return refuse(403, "forbidden", "Only an admin can do that.");
+          const hidden = message.moderation?.state === "HIDDEN";
+          if ((action === "hide") === hidden) return refuse(409, "conflict", "That message has already changed.");
+          const updated: Message = {
+            ...message,
+            moderation: action === "hide" ? { state: "HIDDEN", reasons: [reason] } : { state: "VISIBLE", reasons: [] },
+          };
+          known.set(message.id, updated);
+          records.push({ kind: action, messageId: message.id, reason });
+          return { data: updated };
+        },
+      },
+      {
+        ...ROUTES.requestModerationReview,
+        reply: async ({ request, params }) => {
+          const { note } = RequestModerationReview.parse(await request.json());
+          const message = known.get(params.id);
+          if (!message || message.deleted) return refuse(404, "not_found", "That message is no longer here.");
+          if (message.author.id !== me.user.id) return refuse(403, "forbidden", "Only the author can ask for a review.");
+          if (message.moderation?.state !== "HIDDEN") return refuse(409, "conflict", "This message isn't hidden.");
+          // Once per case: asking again changes nothing. Later reads say it was asked (B-2.5).
+          if (!message.moderation.reviewRequested) {
+            known.set(message.id, { ...message, moderation: { ...message.moderation, reviewRequested: true } });
+            records.push({ kind: "review", messageId: message.id, note: note ?? null });
+          }
+          return { data: { ok: true } };
+        },
+      },
+      {
         ...ROUTES.markChannelRead,
         reply: async ({ request, params }) => {
           const { messageId } = (await request.json()) as { messageId: string };
@@ -168,6 +227,7 @@ export function createHarnessClient({ me, channel, root, shareables, now = Date.
   return {
     api,
     reads: () => [...reads],
+    moderation: () => [...records],
     arrive: (messages) => {
       for (const message of messages) known.set(message.id, message);
       queue.push(...messages);

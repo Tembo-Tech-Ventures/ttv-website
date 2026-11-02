@@ -14,19 +14,26 @@ export function searchesSessions(me: Me): boolean {
   return me.spaces.includes("cohort") && me.capabilities.cohortIds.length > 0;
 }
 
+/** Whether search reaches channel messages (B-2.6): only while channels are on, and then only channels they can read. */
+export function searchesMessages(me: Me): boolean {
+  return me.flags.channels === true;
+}
+
 /**
  * What search covers for this person, in plain words for the box and its
  * label. It names only what the server searches for them, so nobody is
- * promised "everything" or sessions they have no cohort for.
+ * promised "everything", messages while channels are off, or sessions they
+ * have no cohort for.
  */
 export function searchCoverage(me: Me): string {
-  return searchesSessions(me) ? "people, projects and your cohort's sessions" : "people and projects";
+  const parts = [...(searchesMessages(me) ? ["messages"] : []), "people", "projects", ...(searchesSessions(me) ? ["your cohort's sessions"] : [])];
+  return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
 }
 
 /**
  * Where a person can search. "Your cohort" only for someone who belongs to
- * one (it searches their own cohort's sessions); messages are not offered
- * until channel search exists, so no scope promises results it cannot have.
+ * one (it searches their own cohort's sessions), and "Messages" only while
+ * channels are on, so no scope promises results it cannot have.
  */
 export function scopesFor(me: Me): ScopeOption[] {
   const options: ScopeOption[] = [{ scope: "all", label: "Everywhere" }];
@@ -34,6 +41,7 @@ export function scopesFor(me: Me): ScopeOption[] {
     options.push({ scope: "cohort", label: "Your cohort", glyph: "cohort" });
   }
   if (me.spaces.includes("community")) options.push({ scope: "community", label: "Community", glyph: "community" });
+  if (searchesMessages(me)) options.push({ scope: "messages", label: "Messages" });
   options.push({ scope: "people", label: "People" }, { scope: "projects", label: "Projects" });
   return options;
 }

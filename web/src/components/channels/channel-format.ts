@@ -237,7 +237,7 @@ export function moderationNotice(message: Message, viewerId: string | null): Mod
   return own
     ? {
         state: "HIDDEN",
-        title: reasons ? `Hidden by a moderator: ${reasons}` : "Hidden by a moderator",
+        title: reasons ? `Hidden from the channel: ${reasons}` : "Hidden from the channel",
         detail: "Only you can see this message now.",
       }
     : {
@@ -247,9 +247,56 @@ export function moderationNotice(message: Message, viewerId: string | null): Mod
       };
 }
 
-/** The first name, for sentences about a person ("Confirmed by David"). */
+// ---- Reporting, hiding and asking for a review ----
+
+/** Why a member reports a message. The words go to the moderators as the report's reason. */
+export const REPORT_REASONS = [
+  { key: "unkind", label: "Unkind or disrespectful" },
+  { key: "spam", label: "Spam or unrelated promotion" },
+  { key: "personal", label: "Shares someone's contact or personal details" },
+  { key: "other", label: "Something else" },
+] as const;
+export type ReportReasonKey = (typeof REPORT_REASONS)[number]["key"];
+
+/** Longest reason or note the server takes (ReportMessage, ModerationAction). */
+export const MAX_REASON = 2_000;
+
+/** The report's reason as the moderators read it: the choice, then the reporter's words. "Something else" needs words. */
+export function reportReason(key: ReportReasonKey, details: string): string | null {
+  const words = details.trim();
+  if (key === "other") return words ? words.slice(0, MAX_REASON) : null;
+  const label = REPORT_REASONS.find((reason) => reason.key === key)!.label;
+  return (words ? `${label}: ${words}` : label).slice(0, MAX_REASON);
+}
+
+/** The first name, for sentences about a person ("Dennis will still see it"). */
 export function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? name;
+}
+
+/**
+ * Why a report, a hide or a restore did not go through, in words the person
+ * can act on. Nothing was changed when this shows.
+ */
+export function moderationFailure(error: unknown, kind: "report" | "moderate" | "review"): string {
+  const { code, status, retryAfterMs } = (error ?? {}) as { code?: string; status?: number; retryAfterMs?: number };
+  if (status === 429 || code === "rate_limited") {
+    const seconds = retryAfterMs === undefined ? null : Math.max(1, Math.ceil(retryAfterMs / 1_000));
+    return seconds === null ? "That's a lot at once. Try again in a moment." : `That's a lot at once. Try again in ${seconds} second${seconds === 1 ? "" : "s"}.`;
+  }
+  if (status === 401) return "Your session ended. Sign in again, then try again.";
+  if (status === 404) return "That message is no longer here.";
+  if (status === 409) {
+    if (kind === "report") return "That message has changed since you opened this. Close it and look again.";
+    return kind === "moderate"
+      ? "An admin has already decided on this message, or it has changed. Close this and look again."
+      : "An admin has already decided on this message, or it is no longer hidden. Close this and look again.";
+  }
+  if (status === 403) {
+    return kind === "moderate" ? "You can't moderate this channel." : kind === "review" ? "You can ask for a review of your own messages only." : "You can't report this message.";
+  }
+  if (code === "network_error" || code === "aborted") return "Couldn't reach TTV. Check your connection and try again.";
+  return "Something went wrong on our side. Try again.";
 }
 
 // ---- The composer ----

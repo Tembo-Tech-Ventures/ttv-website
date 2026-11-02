@@ -48,7 +48,7 @@ const wide = (page: Page) => (page.viewportSize()?.width ?? 0) >= WIDE;
 const bell = (page: Page) => page.getByRole("button", { name: /^Attention/ });
 const panel = (page: Page) => page.getByRole("dialog", { name: "Needs your attention" });
 const search = (page: Page) => page.getByRole("dialog", { name: "Search", exact: true });
-const box = (page: Page) => page.getByRole("combobox", { name: /^Search people/ });
+const box = (page: Page) => page.getByRole("combobox", { name: /^Search (?:messages, )?people/ });
 
 /** Nothing scrolls sideways, and every visible box of `selector` stays inside the viewport. */
 async function expectContained(page: Page, selector: string) {
@@ -334,8 +334,8 @@ test.describe("the overlays harness", () => {
       await trigger.focus();
       await openSearch(page);
       await box(page).fill("retry webhook");
-      await expect(page.locator('[role="option"]')).toHaveCount(3);
-      await expect(search(page).locator('[role="listbox"] [role="group"]')).toHaveText([/People/, /Projects/, /Moments in your sessions/]);
+      await expect(page.locator('[role="option"]')).toHaveCount(5);
+      await expect(search(page).locator('[role="listbox"] [role="group"]')).toHaveText([/Messages/, /People/, /Projects/, /Moments in your sessions/]);
       await expectContained(page, "[data-search-overlay]");
       await runAxe(page, testInfo, "search-results");
 
@@ -349,11 +349,12 @@ test.describe("the overlays harness", () => {
 
       await openSearch(page);
       await expect(box(page)).toHaveValue("retry webhook"); // Kept in memory while the page is open, never stored.
-      await expect(page.locator('[role="option"]')).toHaveCount(3);
-      await page.route("**/community/mentors", (route) => route.fulfill({ status: 200, body: "mentors" }));
+      await expect(page.locator('[role="option"]')).toHaveCount(5);
+      // A message opens where the server says it lives.
+      await page.route("**/community/c/show-your-work?*", (route) => route.fulfill({ status: 200, body: "channel" }));
       await page.keyboard.press("ArrowDown");
       await page.keyboard.press("Enter");
-      await expect(page).toHaveURL(/\/dashboard\/community\/mentors$/);
+      await expect(page).toHaveURL(/\/dashboard\/community\/c\/show-your-work\?message=s0+402$/);
     });
 
     test("waits for typing, shows progress, and an older answer never replaces a newer one", async ({ page }) => {
@@ -375,7 +376,7 @@ test.describe("the overlays harness", () => {
       await box(page).fill("webhook");
       await expect(page.locator("[data-search-problem]")).toContainText("Search didn't work this time.");
       await search(page).getByRole("button", { name: "Try again" }).click();
-      await expect(page.locator('[role="option"]')).toHaveCount(3);
+      await expect(page.locator('[role="option"]')).toHaveCount(5);
 
       await open(page, harness({ scenario: "expired" }));
       await openSearch(page);
@@ -407,10 +408,10 @@ test.describe("the overlays harness", () => {
       await open(page, harness());
       await openSearch(page);
       await box(page).fill("webhook");
-      await expect(page.locator('[role="option"]')).toHaveCount(3);
-      await page.route("**/community/mentors", (route) => route.fulfill({ status: 200, body: "mentors" }));
+      await expect(page.locator('[role="option"]')).toHaveCount(5);
+      await page.route("**/community/c/show-your-work?*", (route) => route.fulfill({ status: 200, body: "channel" }));
       await page.keyboard.press("Enter");
-      await expect(page).toHaveURL(/mentors$/);
+      await expect(page).toHaveURL(/show-your-work\?message=s0+402$/);
 
       await open(page, harness());
       await openSearch(page);
@@ -441,7 +442,7 @@ test.describe("the overlays harness", () => {
       await open(page, harness());
       await openSearch(page);
       await box(page).fill("retry webhook");
-      await expect(page.locator('[role="option"]')).toHaveCount(3);
+      await expect(page.locator('[role="option"]')).toHaveCount(5);
       for (const width of [320, 390, 768, 1440]) {
         await page.setViewportSize({ width, height: 844 });
         await expectContained(page, "[data-search-overlay]");
@@ -473,7 +474,7 @@ test.describe("evidence", () => {
       await open(page, harness({ space: "cohort" }));
       await page.keyboard.press("Control+k");
       await box(page).fill("retry webhook");
-      await expect(page.locator('[role="option"]')).toHaveCount(3);
+      await expect(page.locator('[role="option"]')).toHaveCount(5);
       await page.keyboard.press("ArrowDown");
     });
     await shot(browser, 1440, 900, "attention-page-1440.png", async (page) => open(page, harness({ page: "attention" })));
@@ -488,7 +489,7 @@ test.describe("evidence", () => {
           await open(page, harness());
           await page.getByRole("button", { name: "Search, Ctrl K" }).click();
           await box(page).fill("retry webhook");
-          await expect(page.locator('[role="option"]')).toHaveCount(3);
+          await expect(page.locator('[role="option"]')).toHaveCount(5);
         },
         true,
       );

@@ -179,7 +179,7 @@ export function harnessSearchClient(scenario: HarnessScenario): ApiClient {
           return {
             data: SearchResults.parse({
               query,
-              messages: [],
+              messages: has(["all", "messages"]) ? searchResults.messages : [],
               people: has(["all", "people", "community"]) ? searchResults.people : [],
               projects: has(["all", "projects", "community"]) ? searchResults.projects : [],
               sessionMoments: has(["all", "cohort", "sessionMoments"]) ? searchResults.sessionMoments : [],
