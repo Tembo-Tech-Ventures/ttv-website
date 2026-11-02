@@ -251,10 +251,10 @@ describe("asking Tembo from the channel (S-3.1 + U-3.1)", () => {
   });
 
   it("says when Tembo hasn't answered yet, and Check again asks once more", async () => {
-    const { client } = await mount(wanjiku, { timeoutMs: 20 });
+    // Long enough that asking again is still waiting when it is checked, however busy the machine.
+    const { client } = await mount(wanjiku, { timeoutMs: 500 });
     await send("@tembo are you there?");
-    // The 20 ms deadline passes; wait for it however busy the machine is.
-    for (let turn = 0; turn < 100 && !$("[data-tembo-question=timeout]"); turn += 1) await act(() => tick(10));
+    for (let turn = 0; turn < 300 && !$("[data-tembo-question=timeout]"); turn += 1) await act(() => tick(10));
     const line = $("[data-tembo-question=timeout]")!;
     expect(line.textContent).toContain("Tembo hasn't answered yet.");
     const check = line.querySelector("button")!;
