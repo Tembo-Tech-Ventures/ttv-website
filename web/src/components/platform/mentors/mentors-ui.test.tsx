@@ -200,7 +200,7 @@ describe("a mentor's requests", () => {
     await queue();
     await act(async () => button(pendingMentorRequest.id, "Accept").click());
     expect(request(pendingMentorRequest.id).dataset.status).toBe("ACCEPTED");
-    expect(document.activeElement?.hasAttribute("data-request-outcome")).toBe(true);
+    expect(document.activeElement?.hasAttribute("data-request-heading")).toBe(true);
     await settle();
     expect(request(pendingMentorRequest.id).querySelector("a[href^='/dashboard/community/dm/']")!.textContent).toBe("Open conversation with Wanjiku ");
     expect(text("[data-waiting-count]")).toBe("1 request waiting for you");
