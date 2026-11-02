@@ -8,6 +8,9 @@ import { awaitingConfirmation } from "@/components/platform/spaces/awaiting-conf
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import { loadChannelShortcuts } from "@/components/platform/spaces/channel-shortcuts-server";
 import { normalizeSpacePath, SPACE_PATHS } from "@/lib/platform/server/space-routes";
+import { env } from "cloudflare:workers";
+import { mentorRequestsOpen } from "@/components/platform/mentors/mentor-display";
+import { loadMentoringOverview } from "@/components/platform/mentors/overview";
 // oxlint-disable-next-line import/no-unassigned-import -- Workspace stylesheet.
 import "@/styles/discovery.css";
 
@@ -20,12 +23,14 @@ const spaces =
   (await resolveSpacePage(Astro.locals, "confirm"));
 // The landing's way into the channels while `channels` is on (QA2-16).
 const shortcuts = spaces?.page === "mentoring" ? (await loadChannelShortcuts(spaces)).shortcuts : null;
+// Requests waiting and this month's availability while mentor requests are open (U-4.1).
+const requests = spaces?.page === "mentoring" && mentorRequestsOpen(spaces.me) ? await loadMentoringOverview(Astro, env, spaces.me) : null;
 ---
 {
   spaces?.page === "mentoring" ? (
     <SpacePage context={spaces} title="Mentoring">
       {spaces.onboarding && <OnboardingNotices view={spaces.onboarding} space={spaces.space} />}
-      <MentoringOverview awaiting={awaitingConfirmation(spaces.me)} shortcuts={shortcuts} />
+      <MentoringOverview awaiting={awaitingConfirmation(spaces.me)} shortcuts={shortcuts} requests={requests} />
     </SpacePage>
   ) : spaces ? (
     <SpacePage context={spaces} title={spaces.space === "admin" ? "Mentor review" : "Confirm work"}>

@@ -1,0 +1,29 @@
+---
+/**
+ * Mentoring → Availability (U-4.1): the headline, areas, formats, monthly
+ * capacity and pause members' directory reads. It exists only while
+ * `mentor_requests` is on for the person and they hold the Mentoring space.
+ * What is saved reads without JavaScript; editing needs it.
+ */
+import { env } from "cloudflare:workers";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import MentorPageIntro from "@/components/platform/mentors/MentorPageIntro.astro";
+import AvailabilityEditor from "@/components/platform/mentors/AvailabilityEditor";
+import { mentorRequestsOpen } from "@/components/platform/mentors/mentor-display";
+import { mentorPageResponse } from "@/components/platform/mentors/page-responses";
+import { mentorsServer } from "@/components/platform/mentors/server";
+
+const context = await resolveSpacePage(Astro.locals, "mentorAvailability");
+if (!context || context.space !== "mentoring" || !mentorRequestsOpen(context.me)) return mentorPageResponse(404);
+if (Astro.request.method !== "GET" && Astro.request.method !== "HEAD") return mentorPageResponse(405, { Allow: "GET, HEAD" });
+
+const now = Date.now();
+const availability = await mentorsServer(Astro, env, context.me, now).availability();
+Astro.response.headers.set("Cache-Control", "no-store");
+---
+
+<SpacePage context={context} title="Availability">
+  <MentorPageIntro page="availability" />
+  <AvailabilityEditor client:load initial={availability} now={now} />
+</SpacePage>
