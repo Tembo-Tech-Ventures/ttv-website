@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { channels, messages, people } from "@/lib/platform/fixtures";
 import {
   DECIDED_NOTICE, decisionOptions, firstName, formatModerationTime, messageHref, sourceLabel,
-  visibilityLabel, type ModerationCase,
+  undecidableNote, visibilityLabel, type ModerationCase,
 } from "./case-model";
 import { harnessCases } from "./harness";
 
@@ -32,9 +32,19 @@ describe("decisionOptions", () => {
     expect(decisionOptions({ ...gone, state: "DECIDED" })).toEqual([]);
   });
 
-  it("closes a deleted hidden message with restore, because keep is refused on a hidden message", () => {
+  it("offers nothing on a deleted hidden message, which B-2.5 refuses every decision on, and says why", () => {
     const gone = { ...flagged, message: { ...messages.deleted, moderation: { state: "HIDDEN" as const, reasons: [] } } };
-    expect(decisionOptions(gone)).toEqual([{ action: "restore", label: "Close the case" }]);
+    expect(decisionOptions(gone)).toEqual([]);
+    expect(undecidableNote(gone)).toMatch(/^Its author deleted this message while it was hidden/);
+    expect(undecidableNote({ ...gone, state: "DECIDED" })).toBeNull();
+    expect(undecidableNote(flagged)).toBeNull();
+  });
+
+  it("never offers restore on a deleted message", () => {
+    for (const state of ["VISIBLE", "FLAGGED", "HIDDEN"] as const) {
+      const gone = { ...flagged, message: { ...messages.deleted, moderation: { state, reasons: [] } } };
+      expect(decisionOptions(gone).map((option) => option.action)).not.toContain("restore");
+    }
   });
 
   it("offers keep only on a message that is not hidden, and restore only on a hidden one", () => {

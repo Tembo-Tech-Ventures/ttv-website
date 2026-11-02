@@ -172,14 +172,22 @@ WITH help AS (SELECT id FROM channel WHERE seedKey = 'community:help'),
   ('reported', 2, 'ttv-local-persona-community', 'Anyone who still uses var should not be writing JavaScript.', 'VISIBLE', '[]', NULL, 1793571000000),
   ('mentor-hidden', 3, 'ttv-local-persona-alumna', 'This is a beginner mistake. Read the docs before asking.', 'HIDDEN', '["Unkind to another member"]', 'ttv-local-persona-mentor', 1793572000000),
   ('tembo-hidden', 4, 'ttv-local-persona-newcomer', 'Cheap followers for your portfolio, message me for a price list.', 'HIDDEN', '["Spam"]', NULL, 1793573000000),
-  ('stale', 5, 'ttv-local-persona-student', 'Here is my number for the study group: 0722 000 111.', 'FLAGGED', '["Contact details"]', NULL, 1793574000000))
-INSERT INTO channel_message (id, channelId, seq, changeSeq, authorId, body, moderationState, moderationReasons, hiddenBy, hiddenAt, createdAt)
+  ('stale', 5, 'ttv-local-persona-student', 'Here is my number for the study group: 0722 000 111.', 'FLAGGED', '["Contact details"]', NULL, 1793574000000),
+  -- Never decided, so the layout check reads them while the desktop project decides the others.
+  ('waiting', 6, 'ttv-local-persona-applicant', 'Send your CV to my personal email and I will pass it on.', 'FLAGGED', '["Contact details"]', NULL, 1793575000000),
+  ('held', 7, 'ttv-local-persona-reviewee', 'Nobody here reviews properly, so stop asking.', 'HIDDEN', '["Unkind to another member"]', 'ttv-local-persona-mentor', 1793576000000),
+  ('deleted-hidden', 8, 'ttv-local-persona-newcomer', '', 'HIDDEN', '["Spam"]', NULL, 1793577000000))
+INSERT INTO channel_message (id, channelId, seq, changeSeq, authorId, body, moderationState, moderationReasons, hiddenBy, hiddenAt, deletedAt, createdAt)
 SELECT 'ttv-local-moderation-' || key, (SELECT id FROM help), (SELECT seq FROM base) + n, (SELECT seq FROM base) + n,
- authorId, body, state, reasons, hiddenBy, CASE state WHEN 'HIDDEN' THEN at END, at FROM seed;
+ authorId, body, state, reasons, hiddenBy, CASE state WHEN 'HIDDEN' THEN at END, CASE key WHEN 'deleted-hidden' THEN at + 60000 END, at FROM seed;
 -- The signals that open each case (the triggers on moderation_event keep moderation_case).
 INSERT INTO moderation_event (id, messageId, action, source, actorId, fromState, toState, reasons, createdAt) VALUES
  ('ttv-local-moderation-flagged-event', 'ttv-local-moderation-flagged', 'FLAG', 'DETECTOR', NULL, 'VISIBLE', 'FLAGGED', '["Contact details"]', 1793570000000),
  ('ttv-local-moderation-reported-event', 'ttv-local-moderation-reported', 'FLAG', 'REPORT', 'ttv-local-persona-student', 'VISIBLE', 'VISIBLE', '["Unkind to another member"]', 1793571500000),
  ('ttv-local-moderation-mentor-hidden-event', 'ttv-local-moderation-mentor-hidden', 'HIDE', 'MENTOR', 'ttv-local-persona-mentor', 'VISIBLE', 'HIDDEN', '["Unkind to another member"]', 1793572000000),
  ('ttv-local-moderation-tembo-hidden-event', 'ttv-local-moderation-tembo-hidden', 'HIDE', 'CLEF', NULL, 'VISIBLE', 'HIDDEN', '["Spam"]', 1793573000000),
- ('ttv-local-moderation-stale-event', 'ttv-local-moderation-stale', 'FLAG', 'DETECTOR', NULL, 'VISIBLE', 'FLAGGED', '["Contact details"]', 1793574000000);
+ ('ttv-local-moderation-stale-event', 'ttv-local-moderation-stale', 'FLAG', 'DETECTOR', NULL, 'VISIBLE', 'FLAGGED', '["Contact details"]', 1793574000000),
+ ('ttv-local-moderation-waiting-event', 'ttv-local-moderation-waiting', 'FLAG', 'DETECTOR', NULL, 'VISIBLE', 'FLAGGED', '["Contact details"]', 1793575000000),
+ ('ttv-local-moderation-held-event', 'ttv-local-moderation-held', 'HIDE', 'MENTOR', 'ttv-local-persona-mentor', 'VISIBLE', 'HIDDEN', '["Unkind to another member"]', 1793576000000),
+ -- Hidden by Tembo, then deleted by its author: B-2.5 refuses every decision on it, so it stays waiting.
+ ('ttv-local-moderation-deleted-hidden-event', 'ttv-local-moderation-deleted-hidden', 'HIDE', 'CLEF', NULL, 'VISIBLE', 'HIDDEN', '["Spam"]', 1793577000000);
