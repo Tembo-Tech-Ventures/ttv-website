@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { recordError } from "@/lib/observability/errors";
-import { ErrorEnvelope, Message, MessageList } from "@/lib/platform/contracts";
+import { ErrorEnvelope, MASKED_CONTACT, Message, MessageList } from "@/lib/platform/contracts";
 import { findChannelById } from "../access";
 import { loadChannelPage } from "../page";
 import { channelDatabase, post, VIEWER, type ChannelFixture } from "../test-support";
@@ -41,7 +41,7 @@ function clef(response: unknown | (() => Promise<unknown>) = answers()) {
 }
 
 describe("detectors in the write path", () => {
-  it("flag a post with contact details, keep it visible, and keep its text as evidence", async () => {
+  it("flag a post with contact details, keep it visible with the details masked, and keep its text as evidence", async () => {
     const s = setup();
     const help = s.channel("help");
     const sent = await s.call("postMessage", { id: help, body: post("Call me on 0712 345 678 after class") });
@@ -51,7 +51,8 @@ describe("detectors in the write path", () => {
       reasons: JSON.stringify([FINDING_REASONS.phone]) }]);
     expect(evidence(s, message.id)).toEqual([{ body: "Call me on 0712 345 678 after class", cause: "FLAG" }]);
     const seen = MessageList.parse((await s.call("listMessages", { id: help, user: "synthetic-otieno" })).body).items;
-    expect(seen.map((item) => [item.body, item.moderation])).toEqual([["Call me on 0712 345 678 after class", null]]);
+    // Other readers see the rest of the message until a person decides (QA2-08, mask.test.ts).
+    expect(seen.map((item) => [item.body, item.moderation])).toEqual([[`Call me on ${MASKED_CONTACT} after class`, null]]);
   });
 
   it("flag an edit that adds contact details, keeping the text it replaced", async () => {
