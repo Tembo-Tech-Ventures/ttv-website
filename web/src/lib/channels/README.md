@@ -67,7 +67,7 @@ the parameterised role matrix every surface can reuse.
 |---|---|---|---|
 | COMMUNITY | Every signed-in person, institutions included | Everyone who reads it | Admins and global mentors |
 | COHORT | That program's members (APPROVED, AUDIT and COMPLETED, so alumni stay after the cohort ends), its INSTRUCTOR, TA and MENTOR assignments, and admins | Everyone who reads it | Its instructors, TAs and mentors, and admins |
-| DIRECT | Its two `channel_member` rows only: admins and every mentor outside it included get nothing (B-4.1) | Its members | Nobody in place |
+| DIRECT | Its two `channel_member` rows only: admins and every mentor outside it included get nothing (B-4.1) | Its members | Nobody in place: either member reports, and admins outside it decide that message alone (QA4-01) |
 
 - **postingPolicy STAFF** (the `cNN-announcements` channels): only admins,
   and on a cohort channel its instructors and TAs, post. Mentors and members
@@ -436,9 +436,10 @@ the rest.
 - **Report** (any reader of the message): once per person and message
   (`message_report`'s unique key), so repeating changes nothing. Not your own
   message (403), not a deleted or hidden one (409: a hidden message is out of
-  the channel already, and a report must not reopen an admin's decision), not
-  in a direct conversation until those have moderators (403), at most
-  `REPORT_LIMIT` (20) a day (429). The author sees no change: a report only opens or joins the case.
+  the channel already, and a report must not reopen an admin's decision), at
+  most `REPORT_LIMIT` (20) a day (429). The author sees no change: a report only opens or joins the case.
+  In a direct conversation either member reports the other's messages: it has
+  no moderators, so its cases go to the admins (below).
 - **Hide**: a channel's moderators (`canModerate`: the cohort's instructors,
   TAs and mentors; global mentors in community channels) and admins, with a
   reason the author sees. HIDDEN with `hiddenBy`. A mentor of another cohort
@@ -504,13 +505,23 @@ the rest.
   (`PENDING` by default, or `DECIDED`). Each item carries the message as an
   admin sees it, its channel, source, merged reasons, report count, the
   moderator who hid it, the evidence (oldest first), the author's review
-  request and the decision. One statement for the page; direct
-  conversations never appear.
+  request and the decision. One statement for the page.
+- **Direct conversations** (QA4-01, coordinator ruling 2026-11-02): a report,
+  a detector flag or a Clef hide there puts only that message into the queue,
+  with its evidence. Its `channel` is `caseOnlyChannel`: the id and kind, the
+  name "Direct conversation", and nothing else of the conversation; its
+  `message` (`caseOnlyMessage`) has no thread summary or reactions. Admins
+  outside the conversation decide (hide, restore, keep) only a message with a
+  case, and still cannot open the conversation, its threads or its other
+  messages (404). An admin who is one of its two members never sees its cases
+  in the queue, the count or the notices, and deciding one is 403. The author
+  hears of a hide and a decision as anywhere ("in a direct conversation",
+  never naming the other member), and may ask for a review.
 - **Page functions** (`moderation/queue.ts`, `moderation/actions.ts`), so
   `/admin/moderation` (U-2.4) needs no self-fetch and refuses exactly what the
   API refuses: `listModerationQueue(db, viewer, query)` (403 unless admin,
-  400 for a cursor of another state), `countPendingModeration(db)` (the tab
-  and sidebar badge; 0 if the read fails) and
+  400 for a cursor of another state), `countPendingModeration(db, viewerId)`
+  (the tab and sidebar badge: the cases this admin may decide; 0 if the read fails) and
   `decideModeration({ db, env }, viewer, { messageId, action, reason })`,
   which the API route also calls, and `undoHide(context, viewer, { messageId })`
   for the undo route. `viewer` is `{ user, capabilities }`

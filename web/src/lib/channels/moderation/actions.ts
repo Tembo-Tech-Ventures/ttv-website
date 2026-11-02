@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import {
-  MessageEmbed, type Message, type ModerationAction, type ModerationParams, type ReportMessage, type RequestModerationReview,
+  MessageEmbed, type Channel, type Message, type ModerationAction, type ModerationParams, type ReportMessage, type RequestModerationReview,
 } from "@/lib/platform/contracts";
 import { drizzle } from "drizzle-orm/d1";
 import { moderationAttention } from "@/lib/attention/channel-producers";
@@ -10,7 +10,7 @@ import { findChannelById } from "../access";
 import { screeningText } from "../embeds";
 import { ADMIN_HID, ChannelError, readMessage } from "../messages";
 import { findMessageTarget, visibleTo, type MessageTarget, type WriteContext } from "../mutations";
-import type { ModerationViewer } from "./queue";
+import { caseOnlyChannel, caseOnlyMessage, type ModerationViewer } from "./queue";
 import { detectFindings, textKey } from "./detectors";
 import { mergedReasons } from "./reasons";
 
@@ -71,15 +71,15 @@ async function current(ctx: WriteContext, id: string): Promise<Message> {
 /**
  * POST /api/messages/:id/report. Once per person and message: reporting again changes nothing
  * (created: false). Nobody reports their own message (403), a deleted one (409) or a hidden one
- * (409: it is already out of the channel, and a report must not reopen an admin's decision). Direct
- * conversations have no moderators yet, so they take no reports (403). The author sees no change;
- * the report opens or joins the admin case and keeps the text the reporter saw.
+ * (409: it is already out of the channel, and a report must not reopen an admin's decision). In a
+ * direct conversation either member reports the other's message (QA4-01): it has no moderators, so its
+ * case goes to the admins with that message alone. The author sees no change; the report opens or
+ * joins the admin case and keeps the text the reporter saw.
  */
 export async function reportMessage(ctx: WriteContext, target: MessageTarget, input: ReportMessage): Promise<{ created: boolean }> {
   if (target.authorKind === "USER" && target.authorId === ctx.viewerId) {
     throw new ChannelError("forbidden", "You can't report your own message.", 403);
   }
-  if (ctx.channel.kind === "DIRECT") throw new ChannelError("forbidden", "Reports aren't available in direct conversations yet.", 403);
   if (target.deletedAt !== null) throw deleted();
   const now = ctx.now ?? Date.now();
   const reportId = createId();
@@ -184,15 +184,35 @@ export interface DecisionContext extends AttentionProducerContext {
 }
 
 /**
+ * The direct conversation of a message with a case, for an admin who is not one of its members
+ * (QA4-01): the case is all they may see of it (caseOnlyChannel). null for anyone else, for a message
+ * with no case, and for every other kind of channel. One read.
+ */
+async function caseConversation(db: D1Database, viewer: ModerationViewer, target: MessageTarget): Promise<Channel | null> {
+  if (!viewer.capabilities.isAdmin) return null;
+  const found = await db.prepare(`SELECT ch.id FROM channel ch WHERE ch.id = ?1 AND ch.kind = 'DIRECT'
+      AND NOT EXISTS (SELECT 1 FROM channel_member cm WHERE cm.channelId = ch.id AND cm.userId = ?2)
+      AND EXISTS (SELECT 1 FROM moderation_case c WHERE c.messageId = ?3)`)
+    .bind(target.channelId, viewer.user.id, target.id).first<{ id: string }>();
+  return found ? caseOnlyChannel(found.id) : null;
+}
+
+/**
  * A moderation decision for /admin/moderation (U-2.4) and POST /api/moderation/:messageId alike, so
  * both refuse the same things with the same ChannelError: a message the viewer cannot see is 404,
- * then moderateMessage's rules. The caller owns the `channels` flag, sign-in and same-origin checks.
+ * then moderateMessage's rules. In a direct conversation admins decide only a message with a case,
+ * which is all they see of it, and never in a conversation they are a member of (403: nobody judges
+ * their own conversation). The caller owns the `channels` flag, sign-in and same-origin checks.
  */
 export async function decideModeration(
   context: DecisionContext, viewer: ModerationViewer, input: ModerationAction & { messageId: string },
 ): Promise<Message> {
   const target = await findMessageTarget(context.db, input.messageId);
-  const channel = target && await findChannelById(drizzle(context.db, { schema }), viewer.user, target.channelId, viewer.capabilities);
+  const readable = target && await findChannelById(drizzle(context.db, { schema }), viewer.user, target.channelId, viewer.capabilities);
+  if (readable?.kind === "DIRECT") {
+    throw new ChannelError("forbidden", "Another admin needs to decide on a message in a conversation you're in.", 403);
+  }
+  const channel = readable ?? (target && await caseConversation(context.db, viewer, target));
   if (!target || !channel || !visibleTo(target, viewer.user.id, channel)) throw new ChannelError("not_found", "Message not found.", 404);
   const message = await moderateMessage(
     { db: context.db, viewerId: viewer.user.id, channel, now: context.now }, target,
@@ -200,7 +220,7 @@ export async function decideModeration(
   );
   if (context.notifyLater) context.notifyLater(target.id);
   else await moderationAttention(context, target.id);
-  return message;
+  return channel.kind === "DIRECT" ? caseOnlyMessage(message) : message;
 }
 
 /** The reason an undo records: the moderator took back their own hide. */

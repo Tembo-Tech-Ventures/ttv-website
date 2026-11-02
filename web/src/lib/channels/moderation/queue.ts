@@ -4,7 +4,7 @@ import * as schema from "@/lib/db/schema";
 import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
 import {
   Id, MessageVersion, ModerationQueue, ModerationQueueItem, ModerationQueueState, Timestamp, WebLink,
-  type Channel, type ModerationQueueQuery, type ModerationSource, type PersonSummary,
+  type Channel, type Message, type ModerationQueueQuery, type ModerationSource, type PersonSummary,
 } from "@/lib/platform/contracts";
 import { listChannelsFor } from "../access";
 import { ChannelError, messageColumns, toMessage, type MessageRow } from "../messages";
@@ -14,8 +14,9 @@ import { ChannelError, messageColumns, toMessage, type MessageRow } from "../mes
  * (U-2.4) alike: one case per message, newest case first (by when it first opened, so a reopened case
  * keeps its place). One statement reads a page with each
  * message as an admin sees it, the case, who hid or decided, and the evidence (earlier texts, oldest
- * first). Direct conversations have no moderators and never appear. The caller owns the `channels`
- * flag and sign-in checks.
+ * first). A direct conversation has no moderators, so admins decide its cases (QA4-01), but only the
+ * case's own message reaches them (caseOnlyChannel, caseOnlyMessage), and never an admin who is one of
+ * its two members. The caller owns the `channels` flag and sign-in checks.
  */
 
 /** Who is asking, with capabilities already computed for them in this request (requestCapabilities). */
@@ -35,7 +36,7 @@ function decodeCursor(value: string): QueueCursor {
 }
 
 interface QueueRow extends MessageRow {
-  caseState: "PENDING" | "DECIDED"; source: ModerationSource; caseReasons: string; reportCount: number; openedAt: number; reopenedAt: number | null;
+  channelKind: Channel["kind"]; caseState: "PENDING" | "DECIDED"; source: ModerationSource; caseReasons: string; reportCount: number; openedAt: number; reopenedAt: number | null;
   decision: "HIDE" | "RESTORE" | "KEEP" | null; decisionReason: string | null; decidedAt: number | null;
   reviewRequestedAt: number | null; reviewNote: string | null; evidence: string;
   actorId: string | null; actorName: string | null; actorImage: string | null;
@@ -55,6 +56,33 @@ function evidence(text: string) {
 }
 
 /**
+ * A direct conversation as an admin sees it from one of its cases (QA4-01): its id and kind, with no
+ * name, topic, members or counts of its own, so nothing about the rest of the conversation. The admin
+ * decides (canModerate), and cannot post or open it: its page and APIs stay 404 to non-members.
+ */
+export function caseOnlyChannel(id: string): Channel {
+  return {
+    id, kind: "DIRECT", slug: "conversation", name: "Direct conversation", topic: "", postingPolicy: "ALL", programId: null,
+    unreadCount: 0, lastMessageAt: null, archivedAt: null, capabilities: { canPost: false, canModerate: true, canShareSessionClip: false },
+  };
+}
+
+/**
+ * A direct conversation's message as its case shows it to an admin: the message, its embeds and its
+ * moderation state, without the replies and reactions that would describe the rest of the conversation.
+ */
+export function caseOnlyMessage(message: Message): Message {
+  return { ...message, reactions: [], thread: { replyCount: 0, participantIds: [], lastReplyAt: null } };
+}
+
+/**
+ * Direct conversations' cases, in SQL over the channel `ch` and a viewer id expression: never for an
+ * admin who is one of the conversation's members (nobody judges their own conversation).
+ */
+export const NOT_OWN_CONVERSATION = (viewerId: string) => `(ch.kind <> 'DIRECT'
+  OR NOT EXISTS (SELECT 1 FROM channel_member cm WHERE cm.channelId = ch.id AND cm.userId = ${viewerId}))`;
+
+/**
  * A page of the queue. Admins only (403); a cursor that is not this state's is 400, so a page can
  * start again at the first page.
  */
@@ -64,13 +92,14 @@ export async function listModerationQueue(db: D1Database, viewer: ModerationView
 }
 
 /**
- * Open cases, for the page's tab and the Admin sidebar badge (queue index). A badge must never take
- * an admin page down with it, so a failed read counts none.
+ * Open cases this admin may decide, for the page's tab and the Admin sidebar badge (queue index). A
+ * badge must never take an admin page down with it, so a failed read counts none.
  */
-export async function countPendingModeration(db: D1Database): Promise<number> {
+export async function countPendingModeration(db: D1Database, viewerId: string): Promise<number> {
   try {
     const row = await db.prepare(`SELECT count(*) AS count FROM moderation_case c JOIN channel_message m ON m.id = c.messageId
-      JOIN channel ch ON ch.id = m.channelId WHERE c.state = 'PENDING' AND ch.kind <> 'DIRECT'`).first<{ count: number }>();
+      JOIN channel ch ON ch.id = m.channelId WHERE c.state = 'PENDING' AND ${NOT_OWN_CONVERSATION("?1")}`)
+      .bind(viewerId).first<{ count: number }>();
     return row?.count ?? 0;
   } catch {
     console.warn("The moderation queue count could not be read.");
@@ -84,7 +113,7 @@ async function queuePage(db: D1Database, viewerId: string, channels: Channel[], 
   const cursor = query.cursor === undefined ? null : decodeCursor(query.cursor);
   if (cursor && cursor.state !== state) throw invalidCursor();
   // ?1 state, ?2 viewer (message columns), ?3 and ?4 the cursor, ?5 page size and one more.
-  const { results } = await db.prepare(`SELECT ${messageColumns("ch.programId")},
+  const { results } = await db.prepare(`SELECT ${messageColumns("ch.programId")}, ch.kind AS channelKind,
       c.state AS caseState, c.source, c.reasons AS caseReasons, c.reportCount, c.openedAt, c.reopenedAt, c.decision, c.decisionReason, c.decidedAt,
       c.reviewRequestedAt, c.reviewNote,
       a.id AS actorId, a.name AS actorName, a.image AS actorImage, d.id AS deciderId, d.name AS deciderName, d.image AS deciderImage,
@@ -96,7 +125,7 @@ async function queuePage(db: D1Database, viewerId: string, channels: Channel[], 
       LEFT JOIN "user" u ON u.id = m.authorId
       LEFT JOIN "user" a ON a.id = c.actorId
       LEFT JOIN "user" d ON d.id = c.decidedBy
-    WHERE c.state = ?1 AND ch.kind <> 'DIRECT'
+    WHERE c.state = ?1 AND ${NOT_OWN_CONVERSATION("?2")}
       AND (?3 IS NULL OR c.openedAt < ?3 OR (c.openedAt = ?3 AND c.messageId < ?4))
     ORDER BY c.openedAt DESC, c.messageId DESC LIMIT ?5`)
     .bind(state, viewerId, cursor?.openedAt ?? null, cursor?.messageId ?? null, QUEUE_PAGE_SIZE + 1).all<QueueRow>();
@@ -106,11 +135,13 @@ async function queuePage(db: D1Database, viewerId: string, channels: Channel[], 
   return ModerationQueue.parse({
     nextCursor: results.length > QUEUE_PAGE_SIZE && last ? encodeCursor({ v: 1, state, openedAt: last.openedAt, messageId: last.id }) : null,
     items: page.flatMap((row) => {
-      const channel = byId.get(row.channelId);
+      const direct = row.channelKind === "DIRECT";
+      const channel = direct ? caseOnlyChannel(row.channelId) : byId.get(row.channelId);
       if (!channel) return [];
+      const message = toMessage(row, { db, viewerId, channel });
       const decider = person(row.deciderId, row.deciderName, row.deciderImage);
       const item = ModerationQueueItem.safeParse({
-        id: row.id, message: toMessage(row, { db, viewerId, channel }), channel, source: row.source, reasons: strings(row.caseReasons),
+        id: row.id, message: direct ? caseOnlyMessage(message) : message, channel, source: row.source, reasons: strings(row.caseReasons),
         state: row.caseState, reportCount: row.reportCount, actor: person(row.actorId, row.actorName, row.actorImage), createdAt: row.openedAt,
         ...row.reopenedAt === null ? {} : { reopenedAt: row.reopenedAt },
         evidence: evidence(row.evidence),

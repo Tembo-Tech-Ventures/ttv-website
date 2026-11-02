@@ -4,6 +4,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ROUTES, WORTH_ANOTHER_LOOK_LIMIT, type MentorDirectoryItem } from "@/lib/platform/contracts";
+import { acceptedMentorRequest } from "@/lib/platform/fixtures";
+import { ATTENTION_REFRESH_EVENT } from "@/components/platform/shell/overlays";
 import { availability, FIXTURE_NOW, meByPersona, mentors, people, pendingMentorRequest, worthAnotherLook } from "@/lib/platform/fixtures";
 import { NO_FILTERS, parseDirectoryUrl } from "@/lib/platform/client/mentor-directory";
 import { createMentoringMock } from "@/lib/platform/client/mentoring.mock";
@@ -11,7 +13,7 @@ import type { MockReply } from "@/lib/platform/client/mockTransport";
 import AvailabilityEditor from "./AvailabilityEditor";
 import MentorRequestsQueue from "./MentorRequestsQueue";
 import { isRecent, RECENT_DAYS } from "./OwnRequests";
-import MentorsDirectory, { type MentorsDirectoryProps } from "./MentorsDirectory";
+import MentorsDirectory, { standings, type MentorsDirectoryProps } from "./MentorsDirectory";
 
 const PATH = "/dashboard/community/mentors";
 const conduct = { version: 1, habitsHref: "/dashboard/community/conduct", canAgree: true };
@@ -38,10 +40,10 @@ const text = (selector: string) => q(selector)?.textContent ?? "";
 const settle = () => act(async () => { await new Promise((resolve) => { setTimeout(resolve, 0); }); });
 
 async function directoryProps(options: {
-  conductAgreed?: boolean; member?: boolean; failure?: (request: Request) => MockReply | undefined; search?: string;
+  conductAgreed?: boolean; failure?: (request: Request) => MockReply | undefined; search?: string;
 } = {}) {
   const mock = createMentoringMock({
-    conductAgreed: options.conductAgreed, member: options.member, ...(options.failure ? { failure: options.failure } : {}),
+    conductAgreed: options.conductAgreed, ...(options.failure ? { failure: options.failure } : {}),
   });
   const filters = parseDirectoryUrl(new URLSearchParams(options.search ?? ""));
   const [list, own] = await Promise.all([
@@ -50,8 +52,8 @@ async function directoryProps(options: {
   ]);
   const props: MentorsDirectoryProps = {
     me: meByPersona.wanjiku, path: PATH, filters, mentors: list.items, shown: list.items,
-    areas: ["Code review", "Career"], ownRequests: own, projects: mock.projects, conduct, now: FIXTURE_NOW, api: mock.api,
-    canAsk: options.member !== false,
+    areas: ["Code review", "Career"], ownRequests: own, projects: mock.projects, now: FIXTURE_NOW, api: mock.api,
+    conduct: { ...conduct, agreed: options.conductAgreed !== false, agree: vi.fn(async () => { mock.agreeConduct(); }) },
   };
   return { props, mock };
 }
@@ -66,7 +68,12 @@ describe("the mentor directory", () => {
     container.innerHTML = html;
     expect(all("[data-mentor-card]")).toHaveLength(4);
     expect(card(david).textContent).toContain("2 of 3 spots open in November");
-    expect(card(david).querySelector("[data-ask-mentor]")?.textContent).toBe("Ask for time");
+    // Wanjiku's request to David is still waiting, so his card says that where "Ask for time" would be (QA4-12).
+    expect(card(david).querySelector("[data-ask-mentor]")).toBeNull();
+    expect(card(david).querySelector("[data-mentor-standing='waiting']")?.textContent).toBe("Waiting for David");
+    const askJoseph = card(joseph).querySelector("[data-ask-mentor]")!;
+    expect(askJoseph.textContent).toBe("Ask for time");
+    expect(askJoseph.getAttribute("aria-label")).toBe("Ask for time with Joseph Mutua");
     // Mercy is full: the next opening, and no button that does nothing.
     expect(card(mercy).textContent).toContain("Next opening 1 December");
     expect(card(mercy).querySelector("[data-mentor-full]")?.textContent).toBe("Full this month");
@@ -79,15 +86,52 @@ describe("the mentor directory", () => {
     expect(html).not.toContain("<dialog open");
   });
 
-  it("reads for an account without a profile or cohort place, with no way to ask and a neutral reason", async () => {
-    const { props } = await directoryProps({ member: false, search: `?ask=${david.person.id}` });
+  // Owner decision 2026-11-02: anyone signed in asks as themselves; an organisation is told so (QA4-09).
+  it("tells someone in an organisation they can ask as themselves, and offers them the same buttons", async () => {
+    const { props } = await directoryProps();
+    container.innerHTML = renderToString(<MentorsDirectory {...props} me={meByPersona.joseph} />);
+    expect(text("[data-mentors-as-yourself]")).toBe("You can ask a mentor for time as yourself. Requests come from you, not from your organisation.");
+    expect(card(joseph).querySelector("[data-ask-mentor]")).not.toBeNull();
     container.innerHTML = renderToString(<MentorsDirectory {...props} />);
-    expect(all("[data-mentor-card]")).toHaveLength(4);
-    expect(all("[data-ask-mentor]")).toHaveLength(0);
-    expect(card(david).textContent).toContain("2 of 3 spots open in November");
-    expect(text("[data-mentors-need-member]")).toContain("Asking a mentor for time needs a member profile or a cohort place.");
-    // `?ask=` opens nothing: there is nothing this person could send.
-    expect(q("[data-mentor-drawer-static]")).toBeNull();
+    expect(q("[data-mentors-as-yourself]")).toBeNull();
+  });
+
+  it("leads to the conversation for a mentor who accepted, when nothing else is waiting with them", async () => {
+    const { props } = await directoryProps();
+    container.innerHTML = renderToString(<MentorsDirectory {...props} ownRequests={{ items: [acceptedMentorRequest], nextCursor: null }} />);
+    const conversation = card(david).querySelector<HTMLAnchorElement>("[data-mentor-standing='conversation']")!;
+    expect(conversation.textContent).toBe("Open your conversation with David ");
+    expect(conversation.getAttribute("href")).toBe(`/dashboard/community/dm/${acceptedMentorRequest.channelId}`);
+    // Asking again for another time is still fine.
+    expect(card(david).querySelector("[data-ask-mentor]")).not.toBeNull();
+    const state = { items: [acceptedMentorRequest], pending: {} };
+    expect(standings(state).get(david.person.id)).toEqual({ kind: "conversation", href: `/dashboard/community/dm/${acceptedMentorRequest.channelId}` });
+    // A newer request waiting with the same mentor wins, and a held one says so.
+    const held = { ...pendingMentorRequest, check: "waiting" as const };
+    expect(standings({ items: [held, acceptedMentorRequest], pending: {} }).get(david.person.id)).toEqual({ kind: "waiting", label: "Waiting for a check" });
+    // Withdrawn (even while the server decides) frees the card again, back to its conversation.
+    expect(standings({ items: [pendingMentorRequest, acceptedMentorRequest], pending: { [pendingMentorRequest.id]: { action: "withdraw", status: "WITHDRAWN" } } })
+      .get(david.person.id)?.kind).toBe("conversation");
+  });
+
+  it("explains a held request kindly, with what happens next, and a way on once it wasn't sent (QA4-02)", async () => {
+    const { props } = await directoryProps();
+    const held = { ...pendingMentorRequest, check: "waiting" as const };
+    container.innerHTML = renderToString(<MentorsDirectory {...props} ownRequests={{ items: [held], nextCursor: null }} />);
+    const row = q(`[data-own-request="${held.id}"]`)!;
+    expect(row.textContent).toContain("Waiting for a check before it's sent.");
+    expect(row.querySelector("[data-request-next]")!.textContent).toBe(
+      "Some requests get a check from TTV before they reach a mentor. It isn't a judgement on you, and there's nothing you need to do. You'll get a notice when it's done.",
+    );
+    expect(row.textContent).not.toMatch(/declin/i);
+    const unsent = { ...pendingMentorRequest, status: "WITHDRAWN" as const, check: "not_sent" as const };
+    container.innerHTML = renderToString(<MentorsDirectory {...props} ownRequests={{ items: [unsent], nextCursor: null }} />);
+    const next = q(`[data-own-request="${unsent.id}"] [data-request-next]`)!;
+    expect(next.textContent).toContain("You can ask again with a new note, or ask another mentor.");
+    expect(next.querySelector("a")!.getAttribute("href")).toBe("/dashboard/community/conduct");
+    // Withdraw says whose request it withdraws.
+    container.innerHTML = renderToString(<MentorsDirectory {...props} />);
+    expect(q(`[data-own-request="${pendingMentorRequest.id}"] button`)!.getAttribute("aria-label")).toBe("Withdraw request to David Kamau");
   });
 
   it("keeps waiting and recent requests in view, and folds older answers under Earlier", async () => {
@@ -195,9 +239,37 @@ describe("the mentor directory", () => {
     expect(all("[data-own-request]")[0]!.textContent).toContain("Joseph Mutua");
   });
 
-  it("asks for the code of conduct first, keeping the note, with a form that posts back to this drawer", async () => {
-    const { props } = await directoryProps({ conductAgreed: false });
+  // QA4-05: the habits come before Send, and agreeing sends.
+  it("shows the code of conduct before Send to someone who hasn't agreed, and sending agrees and sends", async () => {
+    const { props, mock } = await directoryProps({ conductAgreed: false });
     await act(async () => root.render(<MentorsDirectory {...props} />));
+    await act(async () => card(joseph).querySelector<HTMLButtonElement>("[data-ask-mentor]")!.click());
+    const form = q<HTMLFormElement>("[data-mentor-drawer] form")!;
+    const inline = form.querySelector("[data-request-conduct-inline]")!;
+    expect(inline.textContent).toContain("Before you send: how we talk to each other");
+    expect(inline.querySelector("a")!.getAttribute("href")).toBe("/dashboard/community/conduct");
+    // Without JavaScript the same form carries the agreement, so one post agrees and sends.
+    expect(new FormData(form).get("agree")).toBe("1");
+    const send = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
+    expect(send.textContent).toBe("Agree and send request");
+    // The person's own Send comes after the habits in the drawer.
+    expect(inline.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const textarea = q<HTMLTextAreaElement>("[data-mentor-drawer] textarea")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, "Interview practice?");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => form.requestSubmit());
+    await settle();
+    expect(props.conduct.agree).toHaveBeenCalledTimes(1);
+    expect(q("[data-request-sent]")).not.toBeNull();
+    expect(mock.requests().filter((r) => r.mentor.id === joseph.person.id && r.note === "Interview practice?")).toHaveLength(1);
+  });
+
+  it("still asks for the habits when the server does, keeping the note, and agreeing there sends it", async () => {
+    // The page read the person as agreed; the server has newer words to agree to.
+    const { props, mock } = await directoryProps({ conductAgreed: false });
+    await act(async () => root.render(<MentorsDirectory {...props} conduct={{ ...props.conduct, agreed: true }} />));
     await act(async () => card(joseph).querySelector<HTMLButtonElement>("[data-ask-mentor]")!.click());
     const textarea = q<HTMLTextAreaElement>("[data-mentor-drawer] textarea")!;
     await act(async () => {
@@ -208,13 +280,22 @@ describe("the mentor directory", () => {
     await settle();
     const prompt = q("[data-request-conduct]")!;
     expect(prompt.textContent).toContain("First, how we talk to each other");
+    expect(prompt.textContent).toContain("Your request isn't sent yet.");
     const agree = prompt.querySelector<HTMLFormElement>("form")!;
     expect(agree.getAttribute("method")).toBe("post");
     expect(agree.getAttribute("action")).toBe(`${PATH}?ask=${encodeURIComponent(joseph.person.id)}`);
-    expect(Object.fromEntries(new FormData(agree))).toEqual({ intent: "conduct", version: "1" });
+    // Without JavaScript, agreeing posts the draft too, so it sends in the same post.
+    expect(Object.fromEntries(new FormData(agree))).toEqual({
+      intent: "mentor-request", mentorId: joseph.person.id, note: "Interview practice?", project: "", format: "CALL_30_MIN", agree: "1",
+    });
     expect(prompt.querySelector("a")!.getAttribute("href")).toBe("/dashboard/community/conduct");
-    // The note waits in the tab for the return trip.
+    // The note waits in the tab, in case the person goes to read the habits first.
     expect(Object.values({ ...sessionStorage }).join(" ")).toContain("Interview practice?");
+    await act(async () => agree.requestSubmit());
+    await settle();
+    expect(props.conduct.agree).toHaveBeenCalledTimes(1);
+    expect(q("[data-request-sent]")).not.toBeNull();
+    expect(mock.requests().filter((r) => r.mentor.id === joseph.person.id && r.note === "Interview practice?")).toHaveLength(1);
   });
 
   it("withdraws at once and puts the request back when the server refuses", async () => {
@@ -334,27 +415,68 @@ describe("a mentor's requests", () => {
 
   it("accepts at once and then links the conversation", async () => {
     await queue();
+    const refreshes = vi.fn();
+    window.addEventListener(ATTENTION_REFRESH_EVENT, refreshes);
     await act(async () => button(pendingMentorRequest.id, "Accept").click());
     expect(request(pendingMentorRequest.id).dataset.status).toBe("ACCEPTED");
     expect(document.activeElement?.hasAttribute("data-request-heading")).toBe(true);
     await settle();
     expect(request(pendingMentorRequest.id).querySelector("a[href^='/dashboard/community/dm/']")!.textContent).toBe("Open conversation with Wanjiku ");
     expect(text("[data-waiting-count]")).toBe("1 request waiting for you");
+    // QA4-07: once the server has the answer, the bell and the Mentoring tab count again.
+    expect(refreshes).toHaveBeenCalledTimes(1);
+    window.removeEventListener(ATTENTION_REFRESH_EVENT, refreshes);
   });
 
-  it("declines in one tap, frees the spot, and rolls back when refused", async () => {
+  const declineNote = (id: string) => request(id).querySelector<HTMLFormElement>("[data-decline-request]");
+  const sendDecline = (id: string) => Array.from(declineNote(id)!.querySelectorAll("button")).find((b) => b.textContent === "Send: not this month")!;
+
+  it("says not this month with no note needed, frees the spot, and rolls back when refused", async () => {
     let refuse = true;
+    const refreshes = vi.fn();
+    window.addEventListener(ATTENTION_REFRESH_EVENT, refreshes);
     await queue((r) => r.method === "POST" && refuse ? { status: 503, data: { error: { code: "server", message: "Busy" } } } : undefined);
     const id = pendingMentorRequest.id;
     await act(async () => button(id, "Not this month").click());
+    expect(document.activeElement?.tagName).toBe("TEXTAREA");
+    await act(async () => sendDecline(id).click());
     await settle();
     expect(request(id).dataset.status).toBe("PENDING");
     expect(request(id).textContent).toContain("That didn't go through, so nothing changed.");
+    // A refused answer changed nothing, so nothing is counted again.
+    expect(refreshes).not.toHaveBeenCalled();
     refuse = false;
-    await act(async () => button(id, "Not this month").click());
+    await act(async () => sendDecline(id).click());
     await settle();
     expect(request(id).dataset.status).toBe("DECLINED");
     expect(text("[data-spots-used]")).toBe("0 of 3");
+    expect(refreshes).toHaveBeenCalledTimes(1);
+    window.removeEventListener(ATTENTION_REFRESH_EVENT, refreshes);
+  });
+
+  // QA4-03: a kind word travels with "Not this month" when the mentor adds one.
+  it("sends an optional note with not this month, and cancelling goes back to the answers", async () => {
+    const mock = await queue();
+    const id = pendingMentorRequest.id;
+    await act(async () => button(id, "Not this month").click());
+    await act(async () => Array.from(declineNote(id)!.querySelectorAll("button")).find((b) => b.textContent === "Cancel")!.click());
+    expect(declineNote(id)).toBeNull();
+    await act(async () => button(id, "Not this month").click());
+    const note = declineNote(id)!.querySelector("textarea")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(note, "  I'm travelling this month. Try me in December?  ");
+      note.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => sendDecline(id).click());
+    await settle();
+    expect(mock.requests().find((r) => r.id === id)).toMatchObject({ status: "DECLINED", responseNote: "I'm travelling this month. Try me in December?" });
+  });
+
+  it("tells a paused mentor they're out of the directory, not what members see when full (QA4-15)", async () => {
+    await act(async () => root.render(
+      <MentorRequestsQueue initial={{ items: [], nextCursor: null }} mentors={mentors.items} availability={{ ...availability, paused: true, listed: false }} anotherLook={null} now={FIXTURE_NOW} />,
+    ));
+    expect(text("[data-spots-note]")).toBe("You've paused new requests, so you're not in the mentor directory. Requests already waiting stay with you.");
   });
 
   it("suggests another mentor with an optional note, and needs a choice first", async () => {

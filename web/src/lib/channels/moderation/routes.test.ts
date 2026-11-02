@@ -7,9 +7,7 @@ import type { CapabilityCase } from "@/lib/platform/server/capabilities.fixtures
 import type { ChannelOperation } from "../http";
 import { channelDatabase, post, VIEWER, type ChannelFixture } from "../test-support";
 import { ChannelError } from "../errors";
-import { findChannelById } from "../access";
-import { findMessageTarget } from "../mutations";
-import { decideModeration, REPORT_LIMIT, reportMessage, UNDO_REASON } from "./actions";
+import { decideModeration, REPORT_LIMIT, UNDO_REASON } from "./actions";
 import { FINDING_REASONS, textKey } from "./detectors";
 import { moderationMcpTools } from "./mcp";
 import { countPendingModeration, listModerationQueue, QUEUE_PAGE_SIZE } from "./queue";
@@ -277,18 +275,6 @@ describe("hiding: what it does", () => {
   });
 });
 
-describe("reports in direct conversations", () => {
-  it("are refused until direct conversations have moderators", async () => {
-    const s = setup();
-    const id = s.message("help", { author: OTIENO });
-    const target = await findMessageTarget(s.d1, id);
-    const channel = { ...(await findChannelById(s.db, { id: VIEWER }, s.channel("help")))!, kind: "DIRECT" as const };
-    await expect(reportMessage({ db: s.d1, viewerId: VIEWER, channel }, target!, { reason: "Spam" }))
-      .rejects.toMatchObject({ status: 403, message: "Reports aren't available in direct conversations yet." });
-    expect(s.database.prepare("SELECT COUNT(*) AS n FROM message_report").get()).toEqual({ n: 0 });
-  });
-});
-
 describe("restoring a hidden message", () => {
   it("is refused unless the message is hidden and not deleted, writing nothing", async () => {
     const s = setup({ globalRoles: ["ADMIN"] });
@@ -403,7 +389,7 @@ describe("a case whose message was deleted", () => {
         expect(s.database.prepare("SELECT body, moderationState, deletedAt IS NOT NULL AS deleted FROM channel_message WHERE id = ?").get(id))
           .toEqual({ body: "", moderationState: state, deleted: 1 });
         expect(s.database.prepare("SELECT COUNT(*) AS n FROM moderation_allowlist").get()).toEqual({ n: 0 });
-        expect(await countPendingModeration(s.d1)).toBe(0);
+        expect(await countPendingModeration(s.d1, VIEWER)).toBe(0);
         expect((await listModerationQueue(s.d1, await admin(s), {})).items).toEqual([]);
         expect((await listModerationQueue(s.d1, await admin(s), { state: "DECIDED" })).items.map((item) => [item.id, item.decision?.action]))
           .toEqual([[id, "keep"]]);
@@ -534,13 +520,13 @@ describe("page server functions (U-2.4)", () => {
     const admin = await viewer(s, ACHIENG);
     const context = { db: s.d1, env: { DEPLOYMENT_ENVIRONMENT: undefined, PLATFORM_FLAGS_OVERRIDE: "all" } };
     const id = s.message("help", { author: OTIENO, body: "Harsh words" });
-    expect(await countPendingModeration(s.d1)).toBe(0);
+    expect(await countPendingModeration(s.d1, VIEWER)).toBe(0);
 
     const hidden = await decideModeration(context, await viewer(s, VIEWER), { messageId: id, ...hide() });
     expect(hidden.moderation?.state).toBe("HIDDEN");
     // Without notifyLater, the notices are written before it returns.
     expect((await attentionOf(s, OTIENO)).map((item) => item.kind)).toEqual(["message_hidden"]);
-    expect(await countPendingModeration(s.d1)).toBe(1);
+    expect(await countPendingModeration(s.d1, VIEWER)).toBe(1);
     const queue = await listModerationQueue(s.d1, admin, {});
     expect(queue.items.map((item) => [item.id, item.message.body, item.source])).toEqual([[id, "Harsh words", "MENTOR_HIDE"]]);
 
@@ -558,19 +544,22 @@ describe("page server functions (U-2.4)", () => {
     }
 
     await decideModeration(context, admin, { messageId: id, ...hide("Upheld") });
-    expect([await countPendingModeration(s.d1), caseOf(s, id)]).toEqual([0, expect.objectContaining({ state: "DECIDED", decision: "HIDE" })]);
+    expect([await countPendingModeration(s.d1, VIEWER), caseOf(s, id)]).toEqual([0, expect.objectContaining({ state: "DECIDED", decision: "HIDE" })]);
   });
 
-  it("counts open cases outside direct conversations, and none when the count cannot be read", async () => {
+  it("counts open cases, but not those in the admin's own direct conversations, and none when the count cannot be read", async () => {
     const s = setup({ globalRoles: ["ADMIN"] });
     for (const id of [s.message("help", { author: OTIENO }), s.message("introductions", { author: OTIENO })]) {
       await s.call("reportMessage", { id, body: { reason: "Spam" } });
     }
+    const introductions = s.channel("introductions");
     s.database.prepare("UPDATE channel SET kind = 'DIRECT' WHERE slug = 'introductions'").run();
-    expect(await countPendingModeration(s.d1)).toBe(1);
+    expect(await countPendingModeration(s.d1, VIEWER)).toBe(2);
+    s.database.prepare("INSERT INTO channel_member (channelId, userId, createdAt) VALUES (?, ?, 1)").run(introductions, VIEWER);
+    expect(await countPendingModeration(s.d1, VIEWER)).toBe(1);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     vi.spyOn(s.d1, "prepare").mockImplementation(() => { throw new Error("D1 is down"); });
-    expect(await countPendingModeration(s.d1)).toBe(0);
+    expect(await countPendingModeration(s.d1, VIEWER)).toBe(0);
     expect(warn).toHaveBeenCalledWith("The moderation queue count could not be read.");
   });
 });

@@ -171,6 +171,35 @@ describe("the request form", () => {
     expect(sent).toHaveLength(2);
   });
 
+  // QA4-05: agreeing is part of sending, so one press agrees and sends the same draft.
+  it("agrees first when asked to, then sends the same draft, and says so", async () => {
+    const order: string[] = [];
+    const { form, sent } = store({ reply: () => { order.push("send"); return { status: 201, data: created }; } });
+    form.setNote("Could we talk about interviews?");
+    const announced: string[] = [];
+    form.subscribe(() => { announced.push(form.getState().announcement); });
+    const request = await form.submit({ agree: async () => { order.push("agree"); } });
+    expect(request).toEqual(created);
+    expect(order).toEqual(["agree", "send"]);
+    expect(sent).toHaveLength(1);
+    expect(announced).toContain(`Thanks for agreeing. Sending your request to ${david.person.name}.`);
+    expect(form.getState().announcement).toBe(`Request sent to ${david.person.name}.`);
+  });
+
+  it("checks the draft before agreeing, and sends nothing when the agreement fails", async () => {
+    const agree = vi.fn(async () => {});
+    const { form, sent } = store();
+    await form.submit({ agree });
+    expect(agree).not.toHaveBeenCalled();
+    form.setNote("Could we talk about interviews?");
+    await form.submit({ agree: async () => { throw new Error("offline"); } });
+    expect(sent).toHaveLength(0);
+    expect(form.getState()).toMatchObject({
+      status: "error", failure: "agree", note: "Could we talk about interviews?",
+      announcement: "Your agreement wasn't saved, so your request wasn't sent. Your note is kept.",
+    });
+  });
+
   it.each([
     [409, "conflict", "conflict"],
     [404, "not_found", "notFound"],
@@ -230,6 +259,18 @@ describe("the request form", () => {
     const second = make();
     second.setNote("And again?");
     await second.submit();
-    expect(second.getState().failure).toBe("conflict");
+    // QA4-11: the server's own sentence, which knows which request is in the way.
+    expect(second.getState()).toMatchObject({ failure: "conflict", failureMessage: "You already have a request waiting with Joseph Mutua." });
+  });
+
+  it("says a held earlier request is what's in the way, never that it is waiting with the mentor", async () => {
+    const mock = createMentoringMock();
+    mock.check(mock.requests().find(r => r.mentor.id === david.person.id && r.status === "PENDING")!.id, "waiting");
+    const form = createRequestFormStore({ userId, mentor: david, projects: mock.projects, mock: mock.api, storage: memoryStorage() });
+    form.setNote("Another question?");
+    await form.submit();
+    expect(form.getState().failureMessage).toBe(
+      "Your earlier request to David Kamau is waiting for a check before it's sent. Your requests will show when the check is done.",
+    );
   });
 });

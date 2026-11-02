@@ -297,8 +297,9 @@ function community(facts: SidebarFacts): SidebarModel {
       // The directories are the website's public pages, outside the app: say so before the click.
       ...group(facts, "Public directory", [
         { key: "members", href: "/community/members", label: "Members", icon: "people", publicPage: true },
-        // Kept with mentor requests open too: the in-app page is where time is asked for, the public one is what anyone sees.
-        { key: "mentors-public", href: "/community/mentors", label: "Mentors", icon: "mentors", publicPage: true },
+        // Kept with mentor requests open too: the in-app page is where time is asked for. The public page is for people who
+        // mentor, not a list of them, so it is named for what it is (QA4-19), as the public Community page names it.
+        { key: "mentors-public", href: "/community/mentors", label: "For mentors", icon: "mentors", publicPage: true },
       ]),
       ...(apply ? group(facts, "Cohorts", [{ key: "apply", page: "apply", label: "Apply to a cohort", icon: "apply" }]) : []),
       // Requests are not tabs: only granted roles get a space. Each opens Account, where it can be withdrawn.

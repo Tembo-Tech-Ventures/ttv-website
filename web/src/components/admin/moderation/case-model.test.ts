@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { channels, messages, people } from "@/lib/platform/fixtures";
 import {
-  DECIDED_NOTICE, decisionLabel, decisionOptions, firstName, formatModerationTime, messageHref, sourceLabel,
-  visibilityLabel, type ModerationCase,
+  CHANNEL_KIND_LABEL, DECIDED_NOTICE, DIRECT_CASE_NOTE, caseContext, channelReference, decidedSubject, decisionLabel,
+  decisionOptions, firstName, formatModerationTime, messageHref, sourceLabel, visibilityLabel, type ModerationCase,
 } from "./case-model";
 import { harnessCases } from "./harness";
 
 const [flagged, reported, mentorHidden, reply, decided] = harnessCases();
+const direct = { ...channels.davidConversation, kind: "DIRECT" as const, slug: "conversation", name: "Direct conversation" };
 const withState = (item: ModerationCase, state: "VISIBLE" | "FLAGGED" | "HIDDEN"): ModerationCase => ({
   ...item, message: { ...item.message, moderation: { state, reasons: item.reasons } },
 });
@@ -97,12 +98,35 @@ describe("messageHref", () => {
       .toBe(`/dashboard/cohort/c/cohort-04?thread=${reply.message.parentId}&message=${reply.message.id}`);
   });
 
-  it("has no page for a direct conversation yet", () => {
+  it("never links to a direct conversation: only its two members can open it (QA4-01)", () => {
     expect(messageHref({ kind: "DIRECT", slug: "dm" }, flagged.message)).toBeNull();
+    expect(messageHref(direct, reply.message)).toBeNull();
   });
 
   it("encodes the slug", () => {
     expect(messageHref({ kind: "COMMUNITY", slug: "a b" }, { id: "m", parentId: null })).toBe("/dashboard/community/c/a%20b?message=m");
+  });
+});
+
+describe("a direct conversation's case (QA4-01)", () => {
+  // The queue's stand-in for a conversation an admin isn't in (caseOnlyChannel): no real slug or name.
+  const item: ModerationCase = { ...flagged, channel: direct };
+
+  it("reads as a direct conversation, never as a #channel", () => {
+    expect(channelReference(direct)).toBe("a direct conversation");
+    expect(caseContext(direct, mentorHidden.message)).toBe("Direct conversation · hidden from members");
+    expect(caseContext(direct, flagged.message)).not.toContain("#");
+    expect(decidedSubject(item)).toMatch(new RegExp(`^${flagged.message.author.name}'s message in a direct conversation: “.+”$`));
+  });
+
+  it("says that only this message is shared with admins", () => {
+    expect(DIRECT_CASE_NOTE).toBe("Only this message is shared with admins; the rest of the conversation stays private to its two members.");
+  });
+
+  it("names channels as before", () => {
+    expect(channelReference(channels.opportunities)).toBe("#opportunities");
+    expect(caseContext(channels.opportunities, flagged.message)).toBe("Community · #opportunities · still visible");
+    expect(CHANNEL_KIND_LABEL.COHORT).toBe("Cohort");
   });
 });
 

@@ -21,7 +21,7 @@ export interface EventItem {
 const ATTENTION_CATEGORY: Record<AttentionKind, Exclude<AttentionFilter, "all">> = {
   mention: "mentions", reply: "mentions", tembo_answer: "mentions",
   mentor_request: "requests", mentor_accepted: "requests", mentor_redirected: "requests",
-  mentor_declined: "requests", mentor_withdrawn: "requests", access_request: "requests",
+  mentor_declined: "requests", mentor_withdrawn: "requests", mentor_checked: "requests", access_request: "requests",
   recording_ready: "updates", application_status: "updates", work_confirmed: "updates", visitor_message: "updates",
   opportunity_match: "updates", moderation_pending: "updates", message_hidden: "updates", access_decided: "updates",
   moderation_decided: "updates",

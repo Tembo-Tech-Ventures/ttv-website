@@ -3,6 +3,7 @@ import { askClef } from "@/lib/channels/moderation/clef";
 import type {
   DecideMentorRequestCase, MentorRequest, MentorRequestCase, MentorRequestCaseList, MentorRequestCaseQuery, ReportMentorRequest,
 } from "@/lib/platform/contracts";
+import { capacityOf, monthStart, spotColumns } from "./capacity";
 import { personColumns, personRow, personSummary } from "./people";
 import {
   ALREADY, decodeCursor, encodeCursor, getRequest, lostRace, notFound, partyRow, reasonsOf, REQUEST_COLUMNS, REQUEST_JOINS, toRequest,
@@ -86,17 +87,22 @@ export async function reportRequest(ctx: MentoringContext, id: string, input: Re
 }
 
 interface CaseRow extends RequestRow {
-  clefReasons: string; openedAt: number; reportReason: string | null; reportedAt: number | null;
+  mentorLimit: number | null; pendingCount: number; acceptedCount: number; clefReasons: string; openedAt: number; reportReason: string | null; reportedAt: number | null;
   decisionReason: string | null; decidedAt: number | null; decidedBy: string | null;
 }
 
-/** One check with its request, from mentor_request_case `c`: along its primary key or the queue index. */
-const CASE_SELECT = `SELECT ${REQUEST_COLUMNS}, c.clefReasons, c.openedAt, c.decisionReason, c.decidedAt, c.decidedBy,
-  rp.reason AS reportReason, rp.createdAt AS reportedAt, ${personColumns("du", "c.decidedBy", "decider")}
+/**
+ * One check with its request, from mentor_request_case `c`: along its primary key or the queue index,
+ * with the mentor's spots in the Nairobi month that began at `since` (epoch milliseconds).
+ */
+const caseSelect = (since: number) => `SELECT ${REQUEST_COLUMNS}, c.clefReasons, c.openedAt, c.decisionReason, c.decidedAt, c.decidedBy,
+  rp.reason AS reportReason, rp.createdAt AS reportedAt, ${personColumns("du", "c.decidedBy", "decider")},
+  (SELECT p.monthlyCapacity FROM mentor_profile p WHERE p.userId = r.mentorId) AS mentorLimit,
+  ${spotColumns("r.mentorId", String(Math.trunc(since)))}
 FROM mentor_request_case c JOIN mentor_request r ON r.id = c.requestId ${REQUEST_JOINS}
   LEFT JOIN "user" du ON du.id = c.decidedBy`;
 
-function toCase(row: CaseRow, viewerId: string): MentorRequestCase {
+function toCase(row: CaseRow, viewerId: string, now: number): MentorRequestCase {
   return {
     id: row.id, request: toRequest(row, viewerId, { admin: true }), state: row.caseState ?? "OPEN", clefReasons: reasonsOf(row.clefReasons),
     report: row.reportReason === null || row.reportedAt === null ? null : { reason: row.reportReason, reportedAt: row.reportedAt },
@@ -105,6 +111,8 @@ function toCase(row: CaseRow, viewerId: string): MentorRequestCase {
       action: row.caseDecision === "KEEP" ? "keep" : "remove", reason: row.decisionReason, decidedAt: row.decidedAt,
       by: row.decidedBy === null ? null : personSummary(row.decidedBy, personRow(row, "decider")),
     },
+    mentorCapacity: row.mentorLimit === null ? null
+      : capacityOf({ limit: row.mentorLimit, pending: row.pendingCount, accepted: row.acceptedCount }, now),
   };
 }
 
@@ -118,26 +126,45 @@ export function requireAdmin(isAdmin: boolean) {
  * for DECIDED), oldest opened first, CASE_PAGE_SIZE at a time. An open Clef hold on a request its
  * asker has withdrawn is moot (the mentor never saw it, and nothing is left to send), so the OPEN
  * queue leaves it out; a reported one stays, as the mentor read it and withdrawing must not hide their
- * report. One statement, along mentor_request_case_queue_idx.
+ * report. An admin's own requests' checks are left out: another admin decides them, and the queue
+ * would show them who opened the check. One statement, along mentor_request_case_queue_idx.
  */
 export async function listCases(ctx: MentoringContext, isAdmin: boolean, query: MentorRequestCaseQuery): Promise<MentorRequestCaseList> {
   requireAdmin(isAdmin);
   const [afterAt, afterId] = query.cursor === undefined ? [null, null] : decodeCursor(query.cursor);
-  const { results } = await ctx.db.prepare(`${CASE_SELECT}
-    WHERE c.state = ?1 AND (c.state = 'DECIDED' OR r.status = 'PENDING' OR rp.requestId IS NOT NULL)
+  const { results } = await ctx.db.prepare(`${caseSelect(monthStart(ctx.now))}
+    WHERE c.state = ?1 AND (c.state = 'DECIDED' OR r.status = 'PENDING' OR rp.requestId IS NOT NULL) AND ?5 NOT IN (r.requesterId, r.mentorId)
       AND (?2 IS NULL OR c.openedAt > ?2 OR (c.openedAt = ?2 AND c.requestId > ?3))
     ORDER BY c.openedAt, c.requestId LIMIT ?4`)
-    .bind(query.state ?? "OPEN", afterAt, afterId, CASE_PAGE_SIZE + 1).all<CaseRow>();
+    .bind(query.state ?? "OPEN", afterAt, afterId, CASE_PAGE_SIZE + 1, ctx.viewerId).all<CaseRow>();
   const page = results.slice(0, CASE_PAGE_SIZE);
   const last = page.at(-1);
   return {
-    items: page.map((row) => toCase(row, ctx.viewerId)),
+    items: page.map((row) => toCase(row, ctx.viewerId, ctx.now)),
     nextCursor: results.length > CASE_PAGE_SIZE && last ? encodeCursor(last.openedAt, last.id) : null,
   };
 }
 
+/**
+ * Open checks this admin may decide (not their own requests'), for the Request notes tab, the Admin
+ * sidebar badge and Admin Home (QA4-04): the OPEN queue's rows, along mentor_request_case_queue_idx.
+ * A badge must never take an admin page down with it, so a failed read counts none.
+ */
+export async function countOpenChecks(db: D1Database, viewerId: string): Promise<number> {
+  try {
+    const row = await db.prepare(`SELECT count(*) AS count FROM mentor_request_case c JOIN mentor_request r ON r.id = c.requestId
+      WHERE c.state = 'OPEN' AND ?1 NOT IN (r.requesterId, r.mentorId)
+        AND (r.status = 'PENDING' OR EXISTS (SELECT 1 FROM mentor_request_report rp WHERE rp.requestId = r.id))`)
+      .bind(viewerId).first<{ count: number }>();
+    return row?.count ?? 0;
+  } catch {
+    console.warn("The request notes count could not be read.");
+    return 0;
+  }
+}
+
 async function caseRow(ctx: MentoringContext, id: string): Promise<CaseRow | null> {
-  return ctx.db.prepare(`${CASE_SELECT} WHERE c.requestId = ?1`).bind(id).first<CaseRow>();
+  return ctx.db.prepare(`${caseSelect(monthStart(ctx.now))} WHERE c.requestId = ?1`).bind(id).first<CaseRow>();
 }
 
 /**
@@ -178,5 +205,5 @@ export async function decideCase(
   if (decided?.results.length !== 1) {
     throw new ChannelError("conflict", row.caseState === "DECIDED" ? "An admin already decided this check." : "This request was withdrawn.", 409);
   }
-  return toCase(row, viewerId);
+  return toCase(row, viewerId, now);
 }

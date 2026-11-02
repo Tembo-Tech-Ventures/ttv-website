@@ -210,6 +210,8 @@ async function handle(operation: MentoringOperation, context: Context, env: Env,
       const decided = await decideCase(ctx, admin, requestId, input);
       // A kept request reaches its mentor now, if they had not heard of it (the notice is once per request).
       if (input.action === "keep") later.told(requestId, "created");
+      // The person asking hears what the check changed for them (QA4-02).
+      later.told(requestId, "decided");
       return platformJson(ROUTES.decideMentorRequestCase.response.parse(decided));
     }
   }

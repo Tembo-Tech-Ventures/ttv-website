@@ -212,7 +212,8 @@ export default function ChannelSurface({
     <TemboProvider store={tembo}>
     <ModerationProvider
       actions={moderation}
-      canReport={channel.kind !== "DIRECT"}
+      canReport
+      direct={channel.kind === "DIRECT"}
       canModerate={channel.capabilities.canModerate}
       canRestore={me.capabilities.isAdmin}
     >

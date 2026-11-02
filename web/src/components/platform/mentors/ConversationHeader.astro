@@ -5,12 +5,23 @@
  * h1 is Maven Pro, as a channel's is: a name is a label, not the screen's
  * display moment. The note and the attached work are the conversation's
  * first message, so the header does not repeat them.
+ *
+ * Who reads it is a disclosure, not a label (QA4-08): "Only you and David can
+ * read this" opens to what TTV admins can see. When the request was asked and
+ * accepted is its own line, apart from what was asked for (QA4-16, QA4-17).
+ * On a phone it keeps to a few short lines (channels.css), so the first
+ * message shows.
  */
-import { PiLockSimple } from "react-icons/pi";
+import { PiCaretDown, PiLockSimple } from "react-icons/pi";
 import type { MentorRequest, PersonSummary } from "@/lib/platform/contracts";
 import { Avatar } from "@/components/platform/ui";
 import { CHIP_TONES } from "@/components/platform/ui/tones";
-import { conversationContext, dayPhrase } from "./mentor-display";
+import { FOCUS_RING } from "@/components/platform/ui/Button";
+import { fullTime } from "@/components/channels/channel-format";
+import {
+  CONVERSATION_ADMIN_NOTE, CONVERSATION_READERS_HREF, conversationReaders, conversationTimeline,
+} from "@/components/channels/conversation-privacy";
+import { conversationContext } from "./mentor-display";
 
 interface Props {
   /** The other member, or null when that account is gone. */
@@ -28,27 +39,55 @@ const name = counterpart?.name ?? fallbackName;
 const mentor = counterpart?.roleBadges.some((badge) => badge.kind === "MENTOR") ?? false;
 const badges = counterpart?.roleBadges.filter((badge) => badge.kind !== "AI").map((badge) => badge.label) ?? [];
 const context = request ? conversationContext(request, viewerId) : null;
+const timeline = request ? conversationTimeline(request, now) : null;
+const iso = (timestamp: number) => new Date(timestamp).toISOString();
 ---
 
 <header data-conversation-header class="flex flex-col gap-3 border-b border-hairline pb-5 sm:flex-row sm:items-start sm:justify-between">
-  <div class="flex min-w-0 items-center gap-4">
+  <div class="flex min-w-0 items-center gap-4" data-conversation-who>
     {counterpart && <Avatar id={counterpart.id} name={counterpart.name} src={counterpart.avatarUrl ?? undefined} size="lg" mentor={mentor} decorative />}
-    <div class="min-w-0">
+    <div class="min-w-0" data-conversation-text>
       <h1 class="font-body text-2xl leading-tight font-bold break-words text-ink-primary">{name}</h1>
-      {badges.length > 0 && <p class="mt-0.5 text-sm text-ink-secondary">{badges.join(" · ")}</p>}
+      {badges.length > 0 && <p class="mt-0.5 text-sm text-ink-secondary" data-conversation-badges>{badges.join(" · ")}</p>}
       {
-        context && request && (
+        context && (
           <p class="mt-1.5 max-w-2xl text-[0.9375rem] leading-snug text-ink-secondary" data-conversation-context>
-            {context} <time datetime={new Date(request.updatedAt).toISOString()}>{dayPhrase(request.updatedAt, now)}</time>.
+            {context}.
+          </p>
+        )
+      }
+      {
+        request && timeline && (
+          <p class="mt-0.5 text-sm text-ink-muted" data-conversation-timeline>
+            {timeline.sameDay ? (
+              <time datetime={iso(request.updatedAt)} title={fullTime(request.updatedAt)}>{timeline.text}</time>
+            ) : (
+              <>
+                <time datetime={iso(request.createdAt)} title={fullTime(request.createdAt)}>{timeline.asked}</time>
+                {" · "}
+                <time datetime={iso(request.updatedAt)} title={fullTime(request.updatedAt)}>{timeline.accepted}</time>
+              </>
+            )}
           </p>
         )
       }
     </div>
   </div>
-  <ul class="m-0 flex list-none flex-wrap gap-2 p-0 sm:justify-end" aria-label="About this conversation">
-    <li data-conversation-chip="private" class:list={["inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.8125rem] font-semibold whitespace-nowrap", CHIP_TONES.neutral]}>
+  <details data-conversation-privacy class="group min-w-0 sm:max-w-xs">
+    <summary
+      class:list={[
+        "inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.8125rem] font-semibold [&::-webkit-details-marker]:hidden",
+        CHIP_TONES.neutral,
+        FOCUS_RING,
+      ]}
+    >
       <PiLockSimple aria-hidden className="size-4 shrink-0" />
-      Private conversation
-    </li>
-  </ul>
+      {conversationReaders(counterpart?.name ?? null)}
+      <PiCaretDown aria-hidden className="size-3.5 shrink-0 transition-transform group-open:rotate-180" />
+    </summary>
+    <p class="mt-2 text-[0.8125rem] leading-snug text-ink-secondary" data-conversation-admins>
+      {CONVERSATION_ADMIN_NOTE}{" "}
+      <a href={CONVERSATION_READERS_HREF} class="font-semibold text-peach-ink underline underline-offset-2">Who reads what</a>
+    </p>
+  </details>
 </header>

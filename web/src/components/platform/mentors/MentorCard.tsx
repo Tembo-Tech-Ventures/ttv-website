@@ -1,5 +1,6 @@
-import { PiClock } from "react-icons/pi";
+import { PiArrowRight, PiClock } from "react-icons/pi";
 import type { MentorDirectoryItem } from "@/lib/platform/contracts";
+import { firstName } from "@/components/channels/channel-format";
 import { Avatar, Card, Chip } from "@/components/platform/ui";
 import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
@@ -10,13 +11,19 @@ interface Props {
   now: number;
   /** This mentor's request drawer is open. */
   open: boolean;
-  /**
-   * Where "Ask for time" goes without JavaScript: this page with `?ask=`, which renders the drawer as a
-   * form. Null when this person cannot ask (not a member account): the card then only reads.
-   */
-  askHref: string | null;
+  /** Where "Ask for time" goes without JavaScript: this page with `?ask=`, which renders the drawer as a form. */
+  askHref: string;
   onAsk: (item: MentorDirectoryItem, from: HTMLElement) => void;
+  /**
+   * Where this person already stands with the mentor (QA4-12): a waiting request's status replaces "Ask for
+   * time", as a second would be refused; an accepted one's conversation is offered beside it, since asking
+   * again for another time is fine.
+   */
+  standing?: MentorCardStanding | null;
 }
+
+/** A request already waiting (its status, as Your requests says it), or an accepted one's conversation. */
+export type MentorCardStanding = { kind: "waiting"; label: string } | { kind: "conversation"; href: string };
 
 const ASK = cx(
   "inline-flex h-10 shrink-0 items-center justify-center rounded-xl px-4 text-sm font-semibold whitespace-nowrap",
@@ -29,7 +36,7 @@ const ASK = cx(
  * opening, and the card says "Full this month" where the button would be:
  * there is nothing to press, so nothing pretends to be pressable.
  */
-export default function MentorCard({ item, now, open, askHref, onAsk }: Props) {
+export default function MentorCard({ item, now, open, askHref, onAsk, standing = null }: Props) {
   const { person } = item;
   const capacity = capacityView(item.capacity, now);
   const headingId = `mentor-${person.id}`;
@@ -56,20 +63,33 @@ export default function MentorCard({ item, now, open, askHref, onAsk }: Props) {
           <dd className="inline">{item.formats.map(format => FORMAT_LABELS[format]).join(" · ")}</dd>
         </div>
       </dl>
+      {standing?.kind === "conversation" && (
+        <a
+          href={standing.href}
+          className={cx("inline-flex min-h-11 w-fit items-center gap-1.5 text-sm font-semibold text-peach-ink underline-offset-4 hover:underline", FOCUS_RING)}
+          data-mentor-standing="conversation"
+        >
+          Open your conversation with {firstName(person.name)} <PiArrowRight aria-hidden className="size-4" />
+        </a>
+      )}
       <div className="mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-t border-hairline pt-4">
         <p className="flex min-w-0 items-center gap-2 text-sm text-ink-secondary" data-mentor-capacity>
           <PiClock aria-hidden className="size-[1.125rem] shrink-0" />
           <span>{capacity.text}</span>
         </p>
-        {!capacity.open ? (
+        {standing?.kind === "waiting" ? (
+          // A second request would be refused while one waits; Your requests above holds it, with Withdraw.
+          <p className="text-sm font-semibold text-ink-primary" data-mentor-standing="waiting">{standing.label}</p>
+        ) : !capacity.open ? (
           <p className="text-sm font-semibold text-ink-primary" data-mentor-full>{FULL_THIS_MONTH}</p>
-        ) : askHref !== null && (
+        ) : (
           // A link, so asking works without JavaScript; with it, the drawer opens as a dialog in place.
           <a
             href={askHref}
+            // Several cards each have one, so the name says whose time it asks for (QA4-18).
+            aria-label={`Ask for time with ${person.name}`}
             aria-haspopup="dialog"
             aria-expanded={open}
-            aria-describedby={headingId}
             onClick={event => {
               if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
               event.preventDefault();

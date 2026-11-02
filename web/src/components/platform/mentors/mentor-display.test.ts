@@ -17,11 +17,11 @@ describe("capacity", () => {
     expect(monthName(DEC_1_NAIROBI)).toBe("December");
   });
 
-  it("says how many spots are open this month", () => {
+  it("says how many spots are open this month, always as a share of the month's spots (QA4-13)", () => {
     expect(capacityView({ used: 1, limit: 3, nextOpeningAt: null }, FIXTURE_NOW)).toEqual({ open: true, text: "2 of 3 spots open in November" });
     expect(capacityView({ used: 1, limit: 2, nextOpeningAt: null }, FIXTURE_NOW).text).toBe("1 of 2 spots open in November");
-    expect(capacityView({ used: 0, limit: 3, nextOpeningAt: null }, FIXTURE_NOW).text).toBe("3 spots open in November");
-    expect(capacityView({ used: 0, limit: 1, nextOpeningAt: null }, FIXTURE_NOW).text).toBe("1 spot open in November");
+    expect(capacityView({ used: 0, limit: 3, nextOpeningAt: null }, FIXTURE_NOW).text).toBe("3 of 3 spots open in November");
+    expect(capacityView({ used: 0, limit: 1, nextOpeningAt: null }, FIXTURE_NOW).text).toBe("1 of 1 spot open in November");
   });
 
   it("gives a full mentor's next opening, and promises no date when only waiting requests fill it", () => {
@@ -107,13 +107,29 @@ describe("listing and routes", () => {
 describe("checks on a note (B-4.1)", () => {
   it("tells the person asking where their request stands, never naming who raised it or saying declined", () => {
     const waiting = requesterStatus({ ...request, check: "waiting" }, "PENDING");
-    expect(waiting).toEqual({ label: "Waiting for a check", tone: "neutral", detail: "Waiting for a check before it's sent." });
+    expect(waiting).toMatchObject({ label: "Waiting for a check", tone: "neutral", detail: "Waiting for a check before it's sent." });
     expect(requesterStatus({ ...request, check: "checking" }, "PENDING").detail).toBe("TTV is checking this request.");
     expect(requesterStatus({ ...request, check: "not_sent" }, "WITHDRAWN").detail).toBe("This request wasn't sent.");
     expect(requesterStatus({ ...request, check: "closed" }, "WITHDRAWN").detail).toBe("This request was closed.");
     for (const check of ["waiting", "checking", "not_sent", "closed"] as const) {
       const view = requesterStatus({ ...request, check }, check === "waiting" || check === "checking" ? "PENDING" : "WITHDRAWN");
-      expect(`${view.label} ${view.detail}`).not.toMatch(/declin|reported|David/i);
+      expect(`${view.label} ${view.detail} ${view.next}`).not.toMatch(/declin|reported|David|mentor's report|Tembo/i);
+    }
+  });
+
+  // QA4-02: the owner rule asks for a fixed explanation shown to the person when a check holds their request.
+  it("explains each check kindly, with what happens next, the same whoever opened it", () => {
+    const waiting = requesterStatus({ ...request, check: "waiting" }, "PENDING");
+    expect(waiting.next).toBe(
+      "Some requests get a check from TTV before they reach a mentor. It isn't a judgement on you, and there's nothing you need to do. You'll get a notice when it's done.",
+    );
+    expect(requesterStatus({ ...request, check: "checking" }, "PENDING").next).toBe(
+      "It isn't a judgement on you, and there's nothing you need to do. You'll get a notice when it's done.",
+    );
+    for (const check of ["not_sent", "closed"] as const) {
+      const view = requesterStatus({ ...request, check }, "WITHDRAWN");
+      expect(view.next).toBe("That came from a check by TTV. You can ask again with a new note, or ask another mentor.");
+      expect(view.link).toEqual({ href: "/dashboard/community/conduct", label: "Read how we talk to each other" });
     }
   });
 

@@ -47,10 +47,13 @@ function messagePlace(message: Pick<MessageState, "id" | "parentId" | "channelId
   return { space, subject: { kind: "message", id: message.id, href, label: message.kind === "DIRECT" ? "Conversation" : `#${message.slug}` } };
 }
 
+/** Where a moderation notice says the message is: `#slug`, or a direct conversation, never naming its members. */
+const moderationPlace = (message: Pick<MessageState, "kind" | "slug">) => message.kind === "DIRECT" ? "a direct conversation" : `#${message.slug}`;
+
 const HIDDEN_SUMMARY = {
-  automatic: (slug: string) => `Your message in #${slug} was hidden automatically. You can ask for a review.`,
-  moderator: (slug: string) => `A moderator hid your message in #${slug}. You can ask for a review.`,
-  admin: (slug: string) => `A moderator hid your message in #${slug}.`,
+  automatic: (place: string) => `Your message in ${place} was hidden automatically. You can ask for a review.`,
+  moderator: (place: string) => `A moderator hid your message in ${place}. You can ask for a review.`,
+  admin: (place: string) => `A moderator hid your message in ${place}.`,
 };
 /**
  * An admin's decision, told to the author only when they knew of the case (B-3.2, QA2-11): the
@@ -59,9 +62,9 @@ const HIDDEN_SUMMARY = {
  * hide already has its hidden notice.
  */
 const DECIDED_SUMMARY = {
-  RESTORE: (slug: string) => `An admin reviewed your message in #${slug} and restored it.`,
-  KEEP: (slug: string) => `An admin reviewed your message in #${slug}. It stays as it is.`,
-  HIDE: (slug: string) => `An admin reviewed your message in #${slug}. It stays hidden.`,
+  RESTORE: (place: string) => `An admin reviewed your message in ${place} and restored it.`,
+  KEEP: (place: string) => `An admin reviewed your message in ${place}. It stays as it is.`,
+  HIDE: (place: string) => `An admin reviewed your message in ${place}. It stays hidden.`,
 };
 function decidedNotice(message: MessageState): keyof typeof DECIDED_SUMMARY | null {
   if (message.caseState !== "DECIDED" || message.decision === null || message.decidedAt === null || message.decidedFrom === null) return null;
@@ -69,11 +72,11 @@ function decidedNotice(message: MessageState): keyof typeof DECIDED_SUMMARY | nu
   const knew = message.decidedFrom === "HIDDEN" || (message.decision === "KEEP" && message.decidedFrom === "FLAGGED");
   return knew ? message.decision : null;
 }
-const PENDING_SUMMARY: Record<ModerationSource, (slug: string) => string> = {
-  AI_FLAG: (slug) => `A message in #${slug} was flagged.`,
-  REPORT: (slug) => `A message in #${slug} was reported.`,
-  MENTOR_HIDE: (slug) => `A moderator hid a message in #${slug}.`,
-  ADMIN_HIDE: (slug) => `A message in #${slug} was hidden.`,
+const PENDING_SUMMARY: Record<ModerationSource, (place: string) => string> = {
+  AI_FLAG: (place) => `A message in ${place} was flagged.`,
+  REPORT: (place) => `A message in ${place} was reported.`,
+  MENTOR_HIDE: (place) => `A moderator hid a message in ${place}.`,
+  ADMIN_HIDE: (place) => `A message in ${place} was hidden.`,
 };
 
 /**
@@ -81,38 +84,42 @@ const PENDING_SUMMARY: Record<ModerationSource, (slug: string) => string> = {
  * without who hid it) and what an admin decided about a case they knew of (once per decision,
  * DECIDED_SUMMARY), and every admin but the author hears of an open case (once per case, and again
  * when the author asks for a review). An admin's own hide is final, so its notice offers no review.
- * Direct conversations have no moderators and get none of these.
+ * Direct conversations have no moderators, so their cases go to the admins too (QA4-01), never to an
+ * admin who is one of its members, and no notice names the conversation's members.
  */
 export function moderationAttention(context: AttentionProducerContext, messageId: string) {
   return bestEffort(async () => {
     const audience = await audienceFor(context, "channels");
     if (audience === "OFF") return;
     const message = await messageState(context, messageId);
-    if (!message || message.kind === "DIRECT") return;
+    if (!message) return;
+    const place = moderationPlace(message);
     const items: EventItem[] = [];
     if (message.moderationState === "HIDDEN" && message.authorKind === "USER" && message.authorId !== null
       && message.deletedAt === null && message.hiddenBy !== message.authorId) {
       const by = message.caseState === "DECIDED" && message.decision === "HIDE" ? "admin" : message.hiddenBy === null ? "automatic" : "moderator";
       items.push({ ...messagePlace(message), userId: message.authorId, actorId: null, kind: "message_hidden",
-        eventKey: JSON.stringify(["message_hidden", message.id, message.hiddenAt]), summary: HIDDEN_SUMMARY[by](message.slug) });
+        eventKey: JSON.stringify(["message_hidden", message.id, message.hiddenAt]), summary: HIDDEN_SUMMARY[by](place) });
     }
     const decided = decidedNotice(message);
     if (decided !== null && message.authorId !== null) {
       // access.ts reads decidedAt at $[2] of this key to show only the case's latest decision: keep its place.
       items.push({ ...messagePlace(message), userId: message.authorId, actorId: null, kind: "moderation_decided",
-        eventKey: JSON.stringify(["moderation_decided", message.id, message.decidedAt]), summary: DECIDED_SUMMARY[decided](message.slug) });
+        eventKey: JSON.stringify(["moderation_decided", message.id, message.decidedAt]), summary: DECIDED_SUMMARY[decided](place) });
     }
     if (message.caseState === "PENDING" && message.source !== null) {
       const { results: admins } = await context.db.prepare(`SELECT DISTINCT ur.userId FROM UserRoles ur JOIN Roles r ON r.id = ur.roleId
-        WHERE r.name = 'ADMIN' AND ur.userId IS NOT ?1`).bind(message.authorId).all<{ userId: string }>();
+        WHERE r.name = 'ADMIN' AND ur.userId IS NOT ?1 AND NOT (?3 = 'DIRECT'
+          AND EXISTS (SELECT 1 FROM channel_member cm WHERE cm.channelId = ?2 AND cm.userId = ur.userId))`)
+        .bind(message.authorId, message.channelId, message.kind).all<{ userId: string }>();
       const queue = { kind: "message" as const, id: message.id, href: MODERATION_QUEUE_HREF, label: "Moderation queue" };
       for (const { userId } of admins) {
         items.push({ userId, actorId: null, kind: "moderation_pending", space: "admin", subject: queue,
-          eventKey: JSON.stringify(["moderation_pending", message.id, message.openedAt]), summary: PENDING_SUMMARY[message.source](message.slug) });
+          eventKey: JSON.stringify(["moderation_pending", message.id, message.openedAt]), summary: PENDING_SUMMARY[message.source](place) });
         if (message.reviewRequestedAt !== null) {
           items.push({ userId, actorId: null, kind: "moderation_pending", space: "admin", subject: queue,
             eventKey: JSON.stringify(["moderation_review", message.id, message.reviewRequestedAt]),
-            summary: `The author of a hidden message in #${message.slug} asked for a review.` });
+            summary: `The author of a hidden message in ${place} asked for a review.` });
         }
       }
     }

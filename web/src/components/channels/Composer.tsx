@@ -309,7 +309,7 @@ export default function Composer({
           </a>
         </p>
       )}
-      {!thread && tools.askTembo && <TemboScopeNote scope={scope} usage={usage} />}
+      {!thread && tools.askTembo && <TemboScopeNote scope={scope} reach={temboReach(channel)} usage={usage} />}
     </div>
   );
 }

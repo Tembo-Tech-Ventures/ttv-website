@@ -98,6 +98,6 @@ export function mentoringDatabase(fixture: Partial<CapabilityCase> & { conduct?:
     return (response.body as { id: string }).id;
   }
 
-  return { ...s, channelCall: s.call, project, call, ask, deferred, afterResponse };
+  return { ...s, channelCall: s.call, channelAfterResponse: s.afterResponse, project, call, ask, deferred, afterResponse };
 }
 export type MentoringFixture = ReturnType<typeof mentoringDatabase>;

@@ -4,7 +4,11 @@ import { mentionAttention } from "@/lib/attention/channel-producers";
 import { attentionRequest } from "@/lib/attention/http";
 import { listOwnProjects } from "@/lib/channels/embeds";
 import { post, VIEWER } from "@/lib/channels/test-support";
-import { AttentionList, ChannelList, Conversation, MentorRequest, MessageList, SearchResults } from "@/lib/platform/contracts";
+import { clefScreen, CHANNEL_CLEF_HIDE_THRESHOLD, CHANNEL_CLEF_QUESTIONS } from "@/lib/channels/moderation/clef";
+import { countPendingModeration } from "@/lib/channels/moderation/queue";
+import {
+  AttentionList, ChannelList, Conversation, Message, MentorRequest, MessageList, ModerationQueue, SearchResults,
+} from "@/lib/platform/contracts";
 import { searchRequest } from "@/lib/search/http";
 import { getConversation } from "./requests";
 import { mentoringDatabase, PEOPLE, type MentoringFixture } from "./test-support";
@@ -98,6 +102,113 @@ describe("a conversation opened by a mentor request", () => {
     expect(await mentions()).toEqual([`/dashboard/community/dm/${channelId}`]);
     s.database.prepare("DELETE FROM channel_member WHERE channelId = ? AND userId = ?").run(channelId, VIEWER);
     expect(await mentions()).toEqual([]);
+  });
+});
+
+describe("moderation in a conversation (QA4-01)", () => {
+  /** The admins' queue through the API, as Amina (an admin outside the conversation) unless told otherwise. */
+  async function queue(s: MentoringFixture, { user = PEOPLE.amina as string, state = "PENDING" } = {}) {
+    const response = await s.channelCall("listModerationQueue", { user, query: `?state=${state}` });
+    expect(response.status).toBe(200);
+    return ModerationQueue.parse(response.body).items;
+  }
+  const sent = async (s: MentoringFixture, channelId: string, user: string, body: string, parentId: string | null = null) => {
+    const response = await s.channelCall("postMessage", { id: channelId, user, body: post(body, parentId) });
+    expect(response.status).toBe(201);
+    return Message.parse(response.body).id;
+  };
+
+  it("lets either member report the other's message, and shows admins that message alone", async () => {
+    const { s, channelId } = await conversation();
+    const root = await sent(s, channelId, PEOPLE.david, "Pay me outside TTV and I will rank you first.");
+    await sent(s, channelId, VIEWER, "Kipepeo reply that stays private.", root);
+    const unreported = await sent(s, channelId, PEOPLE.david, "Kipepeo plans for our next session.");
+    await s.channelCall("reactToMessage", { id: root, user: VIEWER, body: { kind: "useful", active: true } });
+    expect(await queue(s)).toEqual([]);
+    const report = await s.channelCall("reportMessage", { id: root, body: { reason: "Asks me to pay outside TTV." } });
+    expect([report.status, report.body]).toEqual([201, { ok: true }]);
+    expect((await s.channelCall("reportMessage", { id: unreported, user: PEOPLE.david, body: { reason: "x" } })).status).toBe(403);
+
+    const items = await queue(s);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id: root, source: "REPORT", reportCount: 1, state: "PENDING",
+      channel: { id: channelId, kind: "DIRECT", name: "Direct conversation", topic: "", unreadCount: 0, lastMessageAt: null,
+        capabilities: { canPost: false, canModerate: true, canShareSessionClip: false } },
+      message: { body: "Pay me outside TTV and I will rank you first.", author: { id: PEOPLE.david }, reactions: [],
+        thread: { replyCount: 0, participantIds: [], lastReplyAt: null }, moderation: { state: "VISIBLE" } },
+      evidence: [{ body: "Pay me outside TTV and I will rank you first.", cause: "REPORT" }],
+    });
+    // Nothing else of the conversation: not the request's note, the reply, the other message, or the asker's name.
+    const shown = JSON.stringify(items);
+    for (const text of ["Kipepeo", "Wanjiku"]) expect(shown).not.toContain(text);
+    expect(await countPendingModeration(s.d1, PEOPLE.amina)).toBe(1);
+    // The admin still cannot open the conversation, its thread or its other messages.
+    for (const [operation, options] of [
+      ["listMessages", { id: channelId }], ["listMessages", { id: channelId, query: `?thread=${root}` }],
+      ["reactToMessage", { id: unreported, body: { kind: "useful", active: true } }],
+    ] as const) {
+      expect((await s.channelCall(operation, { ...options, user: PEOPLE.amina })).status, `${operation}`).toBe(404);
+    }
+    expect(ChannelList.parse((await s.channelCall("listChannels", { user: PEOPLE.amina })).body).items.map((item) => item.id)).not.toContain(channelId);
+  });
+
+  it("lets an admin outside it decide the reported message, and only a message with a case", async () => {
+    const { s, channelId } = await conversation();
+    const root = await sent(s, channelId, PEOPLE.david, "Send me your M-Pesa PIN.");
+    const other = await sent(s, channelId, PEOPLE.david, "Another message nobody reported.");
+    await s.channelCall("reportMessage", { id: root, body: { reason: "Asks for my PIN." } });
+    const refused = await s.channelCall("moderateMessage", { id: other, user: PEOPLE.amina, body: { action: "hide", reason: "Not reported" } });
+    expect(refused.status).toBe(404);
+    const hidden = await s.channelCall("moderateMessage", { id: root, user: PEOPLE.amina, body: { action: "hide", reason: "Asks for a PIN" } });
+    expect(hidden.status).toBe(200);
+    await s.channelAfterResponse();
+    expect(Message.parse(hidden.body)).toMatchObject({ id: root, moderation: { state: "HIDDEN" }, thread: { replyCount: 0, participantIds: [] } });
+    expect(await queue(s)).toEqual([]);
+    expect((await queue(s, { state: "DECIDED" })).map((item) => [item.id, item.decision?.action])).toEqual([[root, "hide"]]);
+    // Its members see the decision as in any channel: hidden from the reporter, kept for its author.
+    const read = async (user: string) => MessageList.parse((await s.channelCall("listMessages", { id: channelId, user })).body).items.map((m) => m.id);
+    expect(await read(VIEWER)).not.toContain(root);
+    expect(await read(PEOPLE.david)).toContain(root);
+    expect(s.database.prepare("SELECT summary FROM attention_item WHERE userId = ? AND kind = 'message_hidden'").all(PEOPLE.david))
+      .toEqual([{ summary: "A moderator hid your message in a direct conversation." }]);
+  });
+
+  it("never shows a case to an admin who is one of its members, or lets them decide it", async () => {
+    const { s, channelId } = await conversation({ globalRoles: ["ADMIN"] });
+    const root = await sent(s, channelId, PEOPLE.david, "Rude words for the asker.");
+    await s.channelCall("reportMessage", { id: root, body: { reason: "Rude" } });
+    await s.channelAfterResponse();
+    expect(await queue(s, { user: VIEWER })).toEqual([]);
+    expect(await countPendingModeration(s.d1, VIEWER)).toBe(0);
+    const own = await s.channelCall("moderateMessage", { id: root, body: { action: "hide", reason: "Rude" } });
+    expect([own.status, (own.body as { error: { message: string } }).error.message])
+      .toEqual([403, "Another admin needs to decide on a message in a conversation you're in."]);
+    // Amina, outside it, is told and decides; the admin in the conversation is not told.
+    const notices = s.database.prepare("SELECT userId, summary, subjectHref FROM attention_item WHERE kind = 'moderation_pending'").all();
+    expect(notices).toEqual([{ userId: PEOPLE.amina, summary: "A message in a direct conversation was reported.", subjectHref: "/admin/moderation" }]);
+    expect((await queue(s)).map((item) => item.id)).toEqual([root]);
+  });
+
+  it("sends a message Clef hid, and one the detectors flagged, to the queue alone", async () => {
+    const { s, channelId } = await conversation();
+    const abusive = await sent(s, channelId, PEOPLE.david, "Something vile about the asker.");
+    const contact = await sent(s, channelId, PEOPLE.david, "Call me on 0722 555 019 tonight.");
+    const answers = Object.fromEntries(Object.keys(CHANNEL_CLEF_QUESTIONS)
+      .map((question) => [question, { type: "noul", noul: question === "abusive" ? CHANNEL_CLEF_HIDE_THRESHOLD : 0.01 }]));
+    const run = vi.fn(async () => ({ answers }));
+    expect(await clefScreen({ db: s.d1, ai: { run } as unknown as Ai, gatewayName: "gw" },
+      { id: abusive, channelId, channelKind: "DIRECT", body: "Something vile about the asker." })).toBe("hidden");
+    const items = await queue(s);
+    expect(items.map((item) => [item.id, item.source, item.message.moderation?.state]).toSorted()).toEqual([
+      [abusive, "AI_FLAG", "HIDDEN"], [contact, "AI_FLAG", "FLAGGED"],
+    ].toSorted());
+    // The admin sees the flagged contact details in full, as in any channel's queue; the asker sees them masked.
+    expect(items.find((item) => item.id === contact)?.message.body).toBe("Call me on 0722 555 019 tonight.");
+    expect(JSON.stringify(items)).not.toContain("Kipepeo");
+    // The author of the hidden message can ask for a review, which reaches the admins.
+    expect((await s.channelCall("requestModerationReview", { id: abusive, user: PEOPLE.david, body: {} })).status).toBe(201);
+    expect((await queue(s)).find((item) => item.id === abusive)?.review).toMatchObject({ note: null });
   });
 });
 

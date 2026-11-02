@@ -7,7 +7,7 @@ import { FORMAT_LABELS } from "@/components/platform/mentors/mentor-display";
 import ModerationTabs, { type ModerationTab } from "./ModerationTabs.astro";
 import { firstName, formatModerationTime } from "./case-model";
 import { REASON_MAX } from "./decision-form";
-import { caseCause, type RequestNotesViewProps } from "./request-notes";
+import { caseCause, decidedStatus, requestNoteChoices, type RequestNotesViewProps } from "./request-notes";
 
 /**
  * "Request notes" on /admin/moderation (U-4.1 on B-4.1's checks): one card per mentor request whose
@@ -33,7 +33,8 @@ const PILL = "inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font
     <h2 class="text-[2.5rem] leading-[0.95] tracking-display text-ink-primary sm:text-5xl lg:text-6xl">Moderation</h2>
     <p class="max-w-3xl text-base leading-relaxed text-ink-secondary sm:text-lg">
       Requests for a mentor's time whose note Tembo's check held, or that a mentor reported. Keeping one sends it
-      to its mentor as it was written; removing it closes it.
+      to its mentor as it was written, and takes one of their spots this month; removing it closes it, and the
+      person who asked can ask again.
     </p>
   </header>
 
@@ -74,7 +75,15 @@ const PILL = "inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font
         const mentor = request.mentor;
         const headingId = `request-note-${item.id}`;
         const error = rowError?.id === item.id ? rowError.message : undefined;
-        const ids = { reason: `request-note-${item.id}-reason`, hint: `request-note-${item.id}-hint`, error: `request-note-${item.id}-error` };
+        const ids = {
+          reason: `request-note-${item.id}-reason`, hint: `request-note-${item.id}-hint`, error: `request-note-${item.id}-error`,
+          choices: `request-note-${item.id}-choices`,
+        };
+        const choices = requestNoteChoices(item);
+        // Every card has the same buttons, so each name says whose request it decides.
+        const whose = `${asker.name}'s request to ${mentor.name}`;
+        // Decided: where the request stands now, not what raised it (QA4-21). Open: what raised it.
+        const status = item.state === "DECIDED" ? decidedStatus(item) : null;
         return (
           <li class="rounded-2xl border border-hairline bg-ink-primary/4 p-4 sm:p-5" aria-labelledby={headingId} data-request-note={item.id} data-state={item.state}>
             <div class="flex flex-wrap items-start gap-x-4 gap-y-2">
@@ -88,7 +97,11 @@ const PILL = "inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font
                 </p>
               </div>
               <div class="order-last basis-full sm:order-none sm:basis-auto">
-                <Chip tone={item.report ? "peach" : "ring"}>{item.report ? "Reported by the mentor" : "Held by Tembo's check"}</Chip>
+                {status ? (
+                  <Chip tone="ring"><span data-request-note-status>{status}</span></Chip>
+                ) : (
+                  <Chip tone={item.report ? "peach" : "ring"}>{item.report ? "Reported by the mentor" : "Held by Tembo's check"}</Chip>
+                )}
               </div>
             </div>
 
@@ -121,9 +134,11 @@ const PILL = "inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font
               <form method="POST" action={formAction} class="mt-5 space-y-3" data-request-note-form>
                 <input type="hidden" name="requestId" value={item.id} />
                 <div class="space-y-1.5">
-                  <label for={ids.reason} class="block text-sm font-semibold text-ink-primary">Reason</label>
+                  <label for={ids.reason} class="block text-sm font-semibold text-ink-primary">
+                    Reason <span class="font-normal text-ink-muted" aria-hidden="true">(required)</span>
+                  </label>
                   <textarea
-                    id={ids.reason} name="reason" rows="2" required maxlength={REASON_MAX}
+                    id={ids.reason} name="reason" rows="2" required aria-required="true" maxlength={REASON_MAX}
                     aria-describedby={error ? `${ids.error} ${ids.hint}` : ids.hint}
                     aria-invalid={error ? "true" : undefined}
                     class={`block min-h-11 w-full resize-y rounded-xl border border-hairline bg-ground/60 px-3.5 py-2.5 text-[0.9375rem] text-ink-primary placeholder:text-ink-muted focus-visible:border-peach-ink ${FOCUS}`}
@@ -131,12 +146,22 @@ const PILL = "inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font
                   <p id={ids.hint} class="text-xs text-ink-muted">Kept with your decision. Only admins see it.</p>
                   {error && <p id={ids.error} role="alert" tabindex="-1" autofocus class={`text-sm text-danger-ink ${FOCUS}`}>{error}</p>}
                 </div>
+                <div id={ids.choices} class="space-y-1 text-sm text-ink-secondary" data-request-note-choices>
+                  <p data-request-note-keep>{choices.keep}</p>
+                  {choices.remove && <p data-request-note-remove>{choices.remove}</p>}
+                </div>
                 <div class="grid gap-3 sm:grid-cols-2">
-                  <Button type="submit" name="action" value="keep" variant="quiet" aria-label={`Keep: send it to ${firstName(mentor.name)}, ${asker.name}'s request`} className="h-11 w-full">
-                    Keep: send it to {firstName(mentor.name)}
+                  <Button
+                    type="submit" name="action" value="keep" variant="quiet" className="h-11 w-full"
+                    aria-label={`${choices.keepLabel}, ${whose}`} aria-describedby={ids.choices}
+                  >
+                    {choices.keepLabel}
                   </Button>
-                  <Button type="submit" name="action" value="remove" variant="quiet" aria-label={`Remove: close it, ${asker.name}'s request to ${mentor.name}`} className="h-11 w-full">
-                    Remove: close it
+                  <Button
+                    type="submit" name="action" value="remove" variant="quiet" className="h-11 w-full"
+                    aria-label={`${choices.removeLabel}, ${whose}`} aria-describedby={ids.choices}
+                  >
+                    {choices.removeLabel}
                   </Button>
                 </div>
               </form>

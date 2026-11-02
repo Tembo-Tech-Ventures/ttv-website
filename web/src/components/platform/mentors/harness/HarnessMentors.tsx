@@ -9,6 +9,7 @@ import { useState } from "react";
 import type { MentorRequestCheck, MentorRequestStatus, PersonSummary } from "@/lib/platform/contracts";
 import { createMentoringMock, type MentoringMock } from "@/lib/platform/client/mentoring.mock";
 import type { MockReply } from "@/lib/platform/client/mockTransport";
+import { agreeToConduct } from "../agree-conduct";
 import AvailabilityEditor, { type AvailabilityEditorProps } from "../AvailabilityEditor";
 import MentorRequestsQueue, { type MentorRequestsQueueProps } from "../MentorRequestsQueue";
 import MentorsDirectory, { type MentorsDirectoryProps } from "../MentorsDirectory";
@@ -31,11 +32,9 @@ type Harness =
   | { view: "requests"; props: Omit<MentorRequestsQueueProps, "api"> }
   | { view: "availability"; props: Omit<AvailabilityEditorProps, "api"> };
 
-export default function HarnessMentors({ viewer, conductAgreed, member = true, check = null, latencyMs = 250, harness }: {
+export default function HarnessMentors({ viewer, conductAgreed, check = null, latencyMs = 250, harness }: {
   viewer: PersonSummary;
   conductAgreed: boolean;
-  /** A member account (a community profile or a cohort place), which asking needs. */
-  member?: boolean;
   /** The check the page put on Wanjiku's waiting request, mirrored so the island's mock agrees with it. */
   check?: { requestId: string; check: MentorRequestCheck; status?: MentorRequestStatus } | null;
   latencyMs?: number;
@@ -44,7 +43,7 @@ export default function HarnessMentors({ viewer, conductAgreed, member = true, c
   const [mock] = useState(() => {
     let refusals: { count: number; reply: MockReply } | null = null;
     const created = createMentoringMock({
-      viewer, conductAgreed, member, latencyMs,
+      viewer, conductAgreed, latencyMs,
       failure: (request) => {
         if (request.method === "GET" || !refusals || refusals.count <= 0) return undefined;
         refusals.count -= 1;
@@ -62,7 +61,15 @@ export default function HarnessMentors({ viewer, conductAgreed, member = true, c
     return created;
   });
 
-  if (harness.view === "directory") return <MentorsDirectory {...harness.props} api={mock.api} />;
+  if (harness.view === "directory") {
+    const { conduct } = harness.props;
+    // Agreeing records it in this island's mock, and in the page's cookie (its own conduct post), as the real page would.
+    const agree = async () => {
+      await agreeToConduct(window.location.pathname + window.location.search, conduct.version);
+      mock.agreeConduct();
+    };
+    return <MentorsDirectory {...harness.props} conduct={{ ...conduct, agree }} api={mock.api} />;
+  }
   if (harness.view === "requests") return <MentorRequestsQueue {...harness.props} api={mock.api} />;
   return <AvailabilityEditor {...harness.props} api={mock.api} />;
 }

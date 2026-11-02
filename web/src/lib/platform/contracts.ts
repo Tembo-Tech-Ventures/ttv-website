@@ -118,7 +118,7 @@ export const AttentionKind = z.enum([
   "mention", "reply", "tembo_answer", "mentor_request", "mentor_accepted", "mentor_redirected",
   "mentor_declined", "mentor_withdrawn", "recording_ready", "application_status",
   "work_confirmed", "visitor_message", "opportunity_match", "moderation_pending", "message_hidden",
-  "access_request", "access_decided", "moderation_decided",
+  "access_request", "access_decided", "moderation_decided", "mentor_checked",
 ]);
 export type AttentionKind = z.infer<typeof AttentionKind>;
 export const SubjectKind = z.enum([
@@ -525,11 +525,13 @@ export type MentorRequestCaseDecision = z.infer<typeof MentorRequestCaseDecision
  * A check on one request (id = the request's id), for admins: the request with its note unmasked,
  * Clef's reasons if Clef held it, the mentor's report if any, and the latest decision. openedAt: when
  * it last opened, the queue's order. A report after a keep opens it again with that decision shown.
+ * mentorCapacity: the mentor's spots this Africa/Nairobi month now (null once they have no availability
+ * saved), because a keep takes one of them (QA4-10).
  */
 export const MentorRequestCase = z.object({
   id: Id, request: MentorRequest, state: MentorRequestCaseState, clefReasons: z.array(NonEmptyText),
   report: z.object({ reason: NonEmptyText, reportedAt: Timestamp }).nullable(), openedAt: Timestamp,
-  decision: MentorRequestCaseDecision.nullable(),
+  decision: MentorRequestCaseDecision.nullable(), mentorCapacity: MentorCapacity.nullable(),
 }).refine((item) => item.state === "OPEN" || item.decision !== null, "Decided cases carry their decision")
   .refine((item) => item.clefReasons.length > 0 || item.report !== null, "A case is opened by Clef or a report");
 export type MentorRequestCase = z.infer<typeof MentorRequestCase>;

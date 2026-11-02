@@ -37,9 +37,9 @@ describe("attentionActor", () => {
 });
 
 describe("attentionEmpty", () => {
-  const member = { admin: false, onboarding: true };
-  const admin = { admin: true, onboarding: true };
-  const before = { admin: false, onboarding: false };
+  const member = { admin: false, onboarding: true, mentor: false };
+  const admin = { admin: true, onboarding: true, mentor: false };
+  const before = { admin: false, onboarding: false, mentor: false };
 
   it("says nothing needs you only when no confirmation is known to be waiting", () => {
     expect(attentionEmpty("all", 0, member)).toBe("Nothing needs you right now.");
@@ -55,29 +55,41 @@ describe("attentionEmpty", () => {
   });
 
   // QAO-01: a person waiting on their own access request read "No mentoring requests yet" as their request lost.
-  it("says Requests holds requests for mentoring time, and where a person's own access request is", () => {
+  // QA4-06: so did people who had just asked a mentor for time: the tab says what it holds, never "no requests".
+  it("says Requests holds answers to the requests a person sends, and where their own access request is", () => {
     for (const awaiting of [0, 3, null]) {
       const line = attentionEmpty("requests", awaiting, member);
-      expect(line).toBe("No requests for mentoring time yet. Your own requests for mentor or organisation access are in Account.");
+      expect(line).toBe("Answers to requests you send to mentors show here. Your own requests for mentor or organisation access are in Account.");
+      expect(line).not.toMatch(/^No /);
     }
   });
 
-  it("tells an administrator the tab also holds access requests, which they decide", () => {
-    expect(attentionEmpty("requests", 0, admin)).toBe("No requests for mentoring time or access yet.");
+  it("tells a mentor that requests for their time arrive here too", () => {
+    expect(attentionEmpty("requests", 0, { ...member, mentor: true })).toBe(
+      "Answers to requests you send to mentors and requests sent to you as a mentor show here. Your own requests for mentor or organisation access are in Account.",
+    );
   });
 
-  it("is unchanged while onboarding is off, when there are no access requests at all", () => {
-    expect(attentionEmpty("requests", 0, before)).toBe("No mentoring requests yet.");
-    expect(attentionEmpty("requests", 0, { ...before, admin: true })).toBe("No mentoring requests yet.");
+  it("tells an administrator the tab also holds access requests, which they decide", () => {
+    expect(attentionEmpty("requests", 0, admin)).toBe("Answers to requests you send to mentors and requests for access show here.");
+    expect(attentionEmpty("requests", 0, { ...admin, mentor: true })).toBe(
+      "Answers to requests you send to mentors, requests sent to you as a mentor and requests for access show here.",
+    );
+  });
+
+  it("names no access requests while onboarding is off, when there are none at all", () => {
+    expect(attentionEmpty("requests", 0, before)).toBe("Answers to requests you send to mentors show here.");
+    expect(attentionEmpty("requests", 0, { ...before, admin: true })).toBe("Answers to requests you send to mentors show here.");
   });
 });
 
 describe("attentionViewer", () => {
   it("reads an administrator from the Admin space and onboarding from the person's own flag", () => {
     const flags = { spaces: true, channels: false, tembo_channels: false, mentor_requests: false, onboarding: true };
-    expect(attentionViewer({ spaces: ["community", "admin", "profile"], flags })).toEqual({ admin: true, onboarding: true });
-    expect(attentionViewer({ spaces: ["community", "profile"], flags: { ...flags, onboarding: false } }))
-      .toEqual({ admin: false, onboarding: false });
+    const capabilities = { cohortIds: [], mentorCohortIds: [], isMentor: false, isInstitution: false, isAdmin: true };
+    expect(attentionViewer({ spaces: ["community", "admin", "profile"], flags, capabilities })).toEqual({ admin: true, onboarding: true, mentor: false });
+    expect(attentionViewer({ spaces: ["community", "profile"], flags: { ...flags, onboarding: false }, capabilities: { ...capabilities, isMentor: true } }))
+      .toEqual({ admin: false, onboarding: false, mentor: true });
   });
 });
 

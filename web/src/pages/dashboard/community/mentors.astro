@@ -6,15 +6,15 @@
  * `channels`); the router answers 404 otherwise, and so does this page.
  *
  * Without JavaScript everything reads, the filters are links, and the drawer
- * is a form that posts here (request-post.ts). Agreeing to how we talk to each
- * other posts here too, and comes back with the drawer open on the same note.
+ * is a form that posts here (request-post.ts). Someone who has not agreed to
+ * how we talk to each other yet agrees as they send, in the same post.
  */
 import { env } from "cloudflare:workers";
 import { isAgentSession } from "@/lib/agent-auth";
 import { CONDUCT_VERSION } from "@/lib/channels/conduct";
 import { CONDUCT_PATH } from "@/lib/platform/server/space-routes";
 import { areaOptions, directoryHref, directoryQuery, parseDirectoryUrl } from "@/lib/platform/client/mentor-directory";
-import { handleConductPost } from "@/components/channels/conduct-flow";
+import { conductAgreed, handleConductPost } from "@/components/channels/conduct-flow";
 import { channelsServer } from "@/components/channels/server";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
@@ -35,12 +35,12 @@ const server = mentorsServer(Astro, env, context.me, now);
 const filters = parseDirectoryUrl(Astro.url.searchParams);
 const base = { area: filters.area, format: filters.format, available: filters.available };
 const filtered = Boolean(filters.area || filters.format || filters.available);
-const [all, matching, ownRequests, projects, canAsk] = await Promise.all([
+const conduct = channelsServer(env.DB, context.me).conduct;
+const [all, matching, ownRequests, projects] = await Promise.all([
   server.directory({}),
   filtered ? server.directory(directoryQuery(filters)) : null,
   server.requests({ as: "requester" }),
   server.projects(),
-  server.canAsk(),
 ]);
 const canAgree = !isAgentSession(Astro.locals.session?.userAgent);
 
@@ -51,6 +51,8 @@ if (method === "POST") {
       mentors: all.items,
       send: (body) => server.create(body),
       sent: (id) => `${directoryHref(MENTORS_PATH, base)}${filtered ? "&" : "?"}sent=${encodeURIComponent(id)}`,
+      // A person's own act, never an agent's delegated session; a version older than the page's records nothing.
+      ...canAgree ? { agree: async (version: number) => { if (version === CONDUCT_VERSION) await conduct.acknowledge(CONDUCT_VERSION); } } : {},
     });
     if (result.kind === "redirect") return mentorPageResponse(303, { Location: result.location });
     if (result.kind === "refuse") return mentorPageResponse(result.status);
@@ -59,12 +61,14 @@ if (method === "POST") {
   } else {
     // Agreeing to the habits from the drawer: a person's own act, never an agent's delegated session.
     if (!canAgree) return mentorPageResponse(403);
-    const agreed = await handleConductPost(Astro.request, channelsServer(env.DB, context.me).conduct, Astro.url.pathname + Astro.url.search);
+    const agreed = await handleConductPost(Astro.request, conduct, Astro.url.pathname + Astro.url.search);
     if (agreed?.kind === "redirect") return mentorPageResponse(303, { Location: agreed.location });
     return mentorPageResponse(agreed?.status ?? 400);
   }
 }
 
+// Read after any post above, so a send that agreed shows the drawer without the habits again.
+const agreedNow = conductAgreed(await conduct.load());
 const sentId = Astro.url.searchParams.get("sent");
 const sent = sentId ? ownRequests.items.find((request) => request.id === sentId) ?? null : null;
 Astro.response.headers.set("Cache-Control", "no-store");
@@ -82,8 +86,7 @@ Astro.response.headers.set("Cache-Control", "no-store");
     areas={areaOptions(all.items, filters.area)}
     ownRequests={ownRequests}
     projects={projects}
-    canAsk={canAsk}
-    conduct={{ version: CONDUCT_VERSION, habitsHref: CONDUCT_PATH, canAgree }}
+    conduct={{ version: CONDUCT_VERSION, habitsHref: CONDUCT_PATH, canAgree, agreed: agreedNow }}
     now={now}
     serverForm={posted ? { mentorId: posted.mentorId, form: posted.form } : null}
     sent={sent}

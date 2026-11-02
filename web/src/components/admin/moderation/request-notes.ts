@@ -1,6 +1,6 @@
 import {
   Cursor, ErrorEnvelope, MentorRequestCase, MentorRequestCaseAction, MentorRequestCaseList, MentorRequestCaseState,
-  type DecideMentorRequestCase, type MentorRequestCaseQuery,
+  type DecideMentorRequestCase, type MentorCapacity, type MentorRequestCaseQuery,
 } from "@/lib/platform/contracts";
 import { boundedForm } from "@/components/platform/onboarding/welcome-flow";
 import { firstName } from "./case-model";
@@ -158,4 +158,83 @@ export function caseCause(item: Pick<MentorRequestCase, "clefReasons" | "report"
   const mentor = firstName(item.request.mentor.name);
   if (item.report) return `${mentor} reported it after reading it.`;
   return `Tembo's check held it before ${mentor} saw it: ${item.clefReasons.join(", ")}.`;
+}
+
+/** "1 request note waiting for a check", "3 request notes waiting for a check". */
+export function requestNotesWaitingText(count: number): string {
+  return `${count} ${count === 1 ? "request note" : "request notes"} waiting for a check`;
+}
+
+/**
+ * Admin Home's line for Request notes (QA4-04): only while the tab exists for this admin
+ * (`channels` and `mentor_requests` on) and something waits in it.
+ */
+export function requestNotesAttention(count: number, on: boolean, paths: Pick<RequestNotesPaths, "tab">): { text: string; href: string } | null {
+  return on && count > 0 ? { text: requestNotesWaitingText(count), href: paths.tab("OPEN") } : null;
+}
+
+const spots = (count: number) => `${count} ${count === 1 ? "spot" : "spots"}`;
+
+/** "David has used 2 of 3 spots this month.", or that he is full. Nothing once he has no availability saved. */
+function capacityLine(mentor: string, capacity: MentorCapacity | null): string | null {
+  if (!capacity) return null;
+  if (capacity.used < capacity.limit) return `${mentor} has used ${capacity.used} of ${spots(capacity.limit)} this month.`;
+  return capacity.limit === 0 ? `${mentor} has no spots this month.` : `${mentor} is full this month: ${capacity.used} of ${spots(capacity.limit)} used.`;
+}
+
+/** The two choices on an open check, each with what it does, so neither is a guess (QA4-10). */
+export interface RequestNoteChoices {
+  keepLabel: string;
+  removeLabel: string;
+  /** What keeping does, the mentor's spots included. */
+  keep: string;
+  /** What removing does for the person asking; null when it changes nothing (they withdrew it). */
+  remove: string | null;
+}
+
+/**
+ * What keep and remove mean for this request. A keep takes one of the mentor's spots this month,
+ * even when they are full (B-4.1: a held or reported request holds none until then). A request the
+ * mentor reported goes back to them; one Tembo's check held is sent for the first time. Removing
+ * closes it, and the person asking reads what their own list says (mentor-display's checks), never
+ * who raised it, and may ask again. A reported request its asker withdrew stays withdrawn either way.
+ */
+export function requestNoteChoices(item: Pick<MentorRequestCase, "request" | "report" | "mentorCapacity">): RequestNoteChoices {
+  const mentor = firstName(item.request.mentor.name);
+  const asker = firstName(item.request.requester.name);
+  if (item.request.status !== "PENDING") {
+    return {
+      keepLabel: "Keep", removeLabel: "Remove",
+      keep: `${asker} withdrew this request, so it stays closed whichever you choose. Your decision is kept for the record.`,
+      remove: null,
+    };
+  }
+  const capacity = item.mentorCapacity;
+  const full = Boolean(capacity && capacity.used >= capacity.limit);
+  const sends = item.report ? `sends it back to ${mentor} to answer` : `sends it to ${mentor} as it was written`;
+  const keep = capacity ? `Keeping ${full ? "still " : ""}${sends} and takes a spot.` : `Keeping ${sends}.`;
+  const seen = item.report ? "“This request was closed”" : "“This request wasn't sent”";
+  return {
+    keepLabel: item.report ? `Keep: back to ${mentor}` : `Keep: send it to ${mentor}`,
+    removeLabel: "Remove: close it",
+    keep: [capacityLine(mentor, capacity), keep].filter(Boolean).join(" "),
+    remove: `Removing closes it${item.report ? "" : `, and ${mentor} never sees it`}. ${asker} sees ${seen} and can ask again with a new note.`,
+  };
+}
+
+/**
+ * Where a decided request stands now (QA4-21): the decision and, after a keep, what happened next.
+ * "Kept: sent to David", "Kept: David accepted it", "Removed: not sent".
+ */
+export function decidedStatus(item: Pick<MentorRequestCase, "request" | "report" | "decision">): string | null {
+  if (!item.decision) return null;
+  const mentor = firstName(item.request.mentor.name);
+  if (item.decision.action === "remove") return item.report ? "Removed: closed" : "Removed: not sent";
+  switch (item.request.status) {
+    case "PENDING": return item.report ? `Kept: back with ${mentor}` : `Kept: sent to ${mentor}`;
+    case "ACCEPTED": return `Kept: ${mentor} accepted it`;
+    case "REDIRECTED": return `Kept: ${mentor} suggested another mentor`;
+    case "DECLINED": return `Kept: ${mentor} said not this month`;
+    case "WITHDRAWN": return `Kept: ${firstName(item.request.requester.name)} withdrew it`;
+  }
 }

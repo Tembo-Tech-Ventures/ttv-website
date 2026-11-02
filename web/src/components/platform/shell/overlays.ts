@@ -70,6 +70,23 @@ export function latestAttentionCounts(): AttentionCounts | null {
   return liveCounts;
 }
 
+/**
+ * Asks the page's attention owner to count again now, rather than at its next poll: another island has
+ * just done something that answers a notice (a mentor answering a request, QA4-07), so the bell and the
+ * space tabs should drop it at once. A page without an owner ignores it.
+ */
+export const ATTENTION_REFRESH_EVENT = "ttv:attention-refresh";
+
+export function requestAttentionRefresh(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(ATTENTION_REFRESH_EVENT));
+}
+
+/** Subscribes the attention owner to refresh requests. Returns the unsubscribe function. */
+export function onAttentionRefresh(handler: () => void): () => void {
+  window.addEventListener(ATTENTION_REFRESH_EVENT, handler);
+  return () => window.removeEventListener(ATTENTION_REFRESH_EVENT, handler);
+}
+
 type ShortcutEvent =Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey" | "isComposing">;
 
 /** Ctrl K, or ⌘ K on a Mac: the one shortcut every platform search uses. */

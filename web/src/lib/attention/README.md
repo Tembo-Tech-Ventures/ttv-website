@@ -76,7 +76,9 @@ reader can read, their own direct conversations included (B-4.1).
 
 Mentor requests (B-4.1, `mentor-producers.ts`; src/lib/mentoring/README.md,
 "Attention"): `mentor_request` and `mentor_withdrawn` to the mentor,
-`mentor_accepted`, `mentor_redirected` and `mentor_declined` to the person
-asking. They follow the narrowest of `spaces`, `channels` and
+`mentor_accepted`, `mentor_redirected`, `mentor_declined` and `mentor_checked`
+(a check held, kept or removed their request, QA4-02) to the person asking. A
+`mentor_request` shows only while its request still waits for the mentor's
+answer, so answering clears it from their panel and counts (QA4-07). They follow the narrowest of `spaces`, `channels` and
 `mentor_requests`, and a `mentorRequest` subject shows only to the party its
 kind was for.

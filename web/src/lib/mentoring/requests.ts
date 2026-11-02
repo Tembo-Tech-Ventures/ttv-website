@@ -10,7 +10,7 @@ import {
   type Conversation, type CreateMentorRequest, type DeclineMentorRequest, type MentorRequest, type MentorRequestCheck, type MentorRequestList,
   type MentorRequestProject, type MentorRequestStatus, type ProjectEmbed, type RedirectMentorRequest,
 } from "@/lib/platform/contracts";
-import { hasSpot, monthStart } from "./capacity";
+import { capacityOf, hasSpot, monthStart, spotColumns } from "./capacity";
 import { personColumns, personRow, personSummary } from "./people";
 import { LISTED } from "./profiles";
 import { HELD, MENTOR_SEES } from "./visibility";
@@ -45,15 +45,6 @@ export interface MentoringContext {
 
 export const notFound = () => new ChannelError("not_found", "Request not found.", 404);
 const REPORTED = () => new ChannelError("conflict", "You reported this request. TTV is checking it.", 409);
-/**
- * Who may ask a mentor for time (coordinator, 2026-11-02, pending Raph): a member account, meaning
- * a community profile or a cohort membership (an APPROVED, AUDIT or COMPLETED application). Mentor
- * time is scarce, so an account with neither, such as an institution-only one, is refused; the
- * directory stays open to every signed-in person. SQL over the asker's id expression.
- */
-export const IS_MEMBER = (userId: string) => `(EXISTS (SELECT 1 FROM communityProfile cp WHERE cp.userId = ${userId})
-  OR EXISTS (SELECT 1 FROM programApplication pa WHERE pa.userId = ${userId} AND pa.programId IS NOT NULL
-    AND pa.status IN ('APPROVED', 'AUDIT', 'COMPLETED')))`;
 const MENTOR_ROLE = (userId: string) =>
   `EXISTS (SELECT 1 FROM UserRoles ur JOIN Roles r ON r.id = ur.roleId WHERE ur.userId = ${userId} AND r.name = 'MENTOR')`;
 
@@ -229,35 +220,50 @@ async function screened(note: string, project: ProjectEmbed | null) {
 }
 
 interface CreateRefusalRow {
-  member: number; listed: number; offersFormat: number; conduct: number; duplicate: number; open: number; day: string; spot: number | null;
+  listed: number; offersFormat: number; conduct: number; duplicate: "WAITING" | "HELD" | "CHECKING" | null; open: number; day: string;
+  spot: number | null; mentorName: string | null; spotLimit: number | null; pendingCount: number; acceptedCount: number;
 }
+
+const capitalised = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+/** "1 December", in Nairobi time, as the directory says when a full mentor's next opening is. */
+const openingDay = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", timeZone: "Africa/Nairobi" });
 
 /**
  * Why a request was not written, from one read of the INSERT's own conditions, in the order a person
- * can act on them: a member account (403), a mentor taking requests in that format, the code of conduct, then their own
- * waiting requests, then the mentor's spots.
+ * can act on them: a mentor taking requests in that format, the code of conduct, then their own waiting requests, then
+ * the mentor's spots.
  */
 async function createRefusal(ctx: MentoringContext, input: CreateMentorRequest): Promise<ChannelError> {
   const { db, viewerId, now } = ctx;
-  const why = await db.prepare(`SELECT ${IS_MEMBER("?1")} AS member,
-      EXISTS (SELECT 1 FROM mentor_profile p WHERE p.userId = ?2 AND ${LISTED}) AS listed,
+  const why = await db.prepare(`SELECT EXISTS (SELECT 1 FROM mentor_profile p WHERE p.userId = ?2 AND ${LISTED}) AS listed,
       EXISTS (SELECT 1 FROM mentor_profile p, json_each(p.formats) f WHERE p.userId = ?2 AND f.value = ?3) AS offersFormat,
       coalesce((SELECT version FROM channel_conduct WHERE userId = ?1), 0) AS conduct,
-      EXISTS (SELECT 1 FROM mentor_request d WHERE d.requesterId = ?1 AND d.mentorId = ?2 AND d.status = 'PENDING') AS duplicate,
+      (SELECT CASE WHEN NOT ${HELD("d")} THEN 'WAITING'
+          WHEN EXISTS (SELECT 1 FROM mentor_request_report dr WHERE dr.requestId = d.id) THEN 'CHECKING' ELSE 'HELD' END
+        FROM mentor_request d WHERE d.requesterId = ?1 AND d.mentorId = ?2 AND d.status = 'PENDING') AS duplicate,
       (SELECT COUNT(*) FROM mentor_request o WHERE o.requesterId = ?1 AND o.status = 'PENDING') AS open,
       (SELECT json_array(COUNT(*), MIN(createdAt)) FROM mentor_request o WHERE o.requesterId = ?1 AND o.createdAt > ?5) AS day,
-      (SELECT ${hasSpot("p.userId", "?4", "p.monthlyCapacity")} FROM mentor_profile p WHERE p.userId = ?2) AS spot`)
+      (SELECT ${hasSpot("p.userId", "?4", "p.monthlyCapacity")} FROM mentor_profile p WHERE p.userId = ?2) AS spot,
+      (SELECT nullif(trim(name), '') FROM "user" WHERE id = ?2) AS mentorName,
+      (SELECT monthlyCapacity FROM mentor_profile WHERE userId = ?2) AS spotLimit, ${spotColumns("?2", "?4")}`)
     .bind(viewerId, input.mentorId, input.format, monthStart(now), now - DAILY_REQUEST_LIMIT.windowMs).first<CreateRefusalRow>();
   if (!why) throw new Error("Could not read the request conditions.");
-  if (!why.member) {
-    return new ChannelError("forbidden", "Asking a mentor for time needs a member profile or a cohort place.", 403);
-  }
   if (!why.listed) return new ChannelError("not_found", "This mentor isn't taking requests right now.", 404);
   if (!why.offersFormat) return new ChannelError("validation", "This mentor doesn't offer that format.", 400);
   if (why.conduct < (ctx.conductVersion ?? CONDUCT_VERSION)) {
     return new ChannelError("conduct_required", "Agree to how we talk to each other before you ask.", 403);
   }
-  if (why.duplicate) return new ChannelError("conflict", "You already have a request waiting with this mentor.", 409);
+  const mentor = why.mentorName ?? "this mentor";
+  // The person asking learns which of their own requests is in the way, and never who opened a check.
+  if (why.duplicate === "WAITING") return new ChannelError("conflict", `You already have a request waiting with ${mentor}.`, 409);
+  if (why.duplicate === "HELD") {
+    return new ChannelError("conflict", `Your earlier request to ${mentor} is waiting for a check before it's sent. `
+      + "Your requests will show when the check is done.", 409);
+  }
+  if (why.duplicate === "CHECKING") {
+    return new ChannelError("conflict", `TTV is checking your earlier request to ${mentor}. `
+      + "Your requests will show when the check is done.", 409);
+  }
   if (why.open >= OPEN_REQUEST_LIMIT) {
     return new ChannelError("rate_limited", `You have ${OPEN_REQUEST_LIMIT} requests waiting. Withdraw one or wait for an answer first.`, 429);
   }
@@ -266,13 +272,21 @@ async function createRefusal(ctx: MentoringContext, input: CreateMentorRequest):
     return new ChannelError("rate_limited", "You've asked for a lot of time today. Try again later.", 429,
       Math.max(1, (oldest ?? now) + DAILY_REQUEST_LIMIT.windowMs - now));
   }
-  if (!why.spot) return new ChannelError("conflict", "This mentor has no spots left this month.", 409);
+  if (!why.spot) {
+    // Like the directory, the next opening is known only when the turn of the month frees a spot.
+    const { nextOpeningAt } = capacityOf({ limit: why.spotLimit ?? 0, pending: why.pendingCount, accepted: why.acceptedCount }, now);
+    return nextOpeningAt === null
+      ? new ChannelError("conflict", `${capitalised(mentor)} has no spots left this month.`, 409)
+      : new ChannelError("conflict", `${capitalised(mentor)} has no spots left this month. The next opening is ${openingDay.format(nextOpeningAt)}.`,
+        409, nextOpeningAt - now);
+  }
   throw new Error("A mentor request insert wrote nothing, for no known reason.");
 }
 
 /**
- * POST /api/mentor-requests: a member (IS_MEMBER) asks a listed mentor for time, in a format they
- * offer, with their own published project at its current revision attached or nothing. Refusals:
+ * POST /api/mentor-requests: a signed-in person asks a listed mentor for time as themselves (owner
+ * decision 2026-11-02, "Mentor requests are personal": an institution affiliation neither grants nor
+ * blocks it), in a format they offer, with their own published project at its current revision attached or nothing. Refusals:
  * asking yourself (400); attached work that cannot be shared (as in a post: 400, or 409 for a stale
  * revision); then createRefusal's, in its order. The note is screened by the channel detectors now,
  * so the mentor sees contact details masked; the conversation it opens is screened again.
@@ -287,7 +301,7 @@ export async function createRequest(ctx: MentoringContext, input: CreateMentorRe
       (id, requesterId, mentorId, status, format, note, noteReasons, journeyId, journeyVersion, project, createdAt, updatedAt)
     SELECT ?1, ?2, ?3, 'PENDING', ?4, ?5, ${screenedReasons("?6", "?7")}, ?8, ?9, ?10, ?11, ?11
     FROM mentor_profile p
-    WHERE p.userId = ?3 AND ${LISTED} AND ${IS_MEMBER("?2")}
+    WHERE p.userId = ?3 AND ${LISTED}
       AND EXISTS (SELECT 1 FROM json_each(p.formats) f WHERE f.value = ?4)
       AND EXISTS (SELECT 1 FROM channel_conduct WHERE userId = ?2 AND version >= ?12)
       AND NOT EXISTS (SELECT 1 FROM mentor_request d WHERE d.requesterId = ?2 AND d.mentorId = ?3 AND d.status = 'PENDING')

@@ -7,6 +7,7 @@ import { isAgentAuthEnabled } from "@/lib/agent-auth";
 import { isLegacyImportEnabled } from "@/lib/admin/import";
 import { countPendingAccessRequests } from "@/lib/admin/access-requests";
 import { countPendingModeration } from "@/lib/channels/moderation/queue";
+import { countOpenChecks } from "@/lib/mentoring/checks";
 import { isFlagEnabled } from "@/lib/platform/server/flags";
 
 interface Props {
@@ -15,6 +16,8 @@ interface Props {
   pendingAccessRequests?: number;
   /** The moderation page (channels on) already holds its waiting count; every other page reads it here. */
   pendingModeration?: number;
+  /** Open checks on request notes, when the page already counted them (moderation, Admin Home). */
+  pendingRequestNotes?: number;
 }
 
 const { title = "Admin" } = Astro.props;
@@ -26,12 +29,18 @@ if (!Astro.locals.isAdmin) {
 
 const pendingAccessRequests = Astro.props.pendingAccessRequests ?? await countPendingAccessRequests(env.DB);
 // No Moderation entry (null) while `channels` is off for this admin: there is no queue to link to.
-// The moderation page has already checked the flag and counted the queue.
-const pendingModeration = Astro.props.pendingModeration ?? (
-  await isFlagEnabled({ db: env.DB, env, user: Astro.locals.user ?? null, isAdmin: true, locals: Astro.locals }, "channels")
-    ? await countPendingModeration(env.DB)
-    : null
-);
+// The moderation page has already checked the flag and counted the queue. Its badge also counts the
+// open request-note checks this admin may decide while `mentor_requests` is on (QA4-04), which the
+// Request notes tab lists; the sidebar adds them, so the queue's in-place count stays its own.
+const viewerId = Astro.locals.user?.id ?? "";
+const flagContext = { db: env.DB, env, user: Astro.locals.user ?? null, isAdmin: true, locals: Astro.locals };
+const channelsOn = Astro.props.pendingModeration !== undefined || await isFlagEnabled(flagContext, "channels");
+const [pendingModeration, pendingRequestNotes] = channelsOn
+  ? await Promise.all([
+    Astro.props.pendingModeration ?? countPendingModeration(env.DB, viewerId),
+    Astro.props.pendingRequestNotes ?? (await isFlagEnabled(flagContext, "mentor_requests") ? countOpenChecks(env.DB, viewerId) : 0),
+  ])
+  : [null, 0];
 ---
 
 <BaseLayout title={`${title} | TTV Admin`}>
@@ -43,6 +52,7 @@ const pendingModeration = Astro.props.pendingModeration ?? (
     dataMigrationEnabled={isLegacyImportEnabled(env.DEPLOYMENT_ENVIRONMENT)}
     pendingAccessRequests={pendingAccessRequests}
     pendingModeration={pendingModeration}
+    pendingRequestNotes={pendingRequestNotes}
   >
     <slot />
   </AdminShell>

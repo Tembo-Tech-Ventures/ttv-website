@@ -9,6 +9,7 @@ import { useMentorRequests } from "@/lib/platform/client/hooks/mentoring";
 import { createMentorRequestsStore, shownStatus, type MentorRequestsStore } from "@/lib/platform/client/mentor-requests";
 import { firstName } from "@/components/channels/channel-format";
 import EmbedCard from "@/components/channels/EmbedCard";
+import { requestAttentionRefresh } from "@/components/platform/shell/overlays";
 import { Avatar, Button, Card, Chip } from "@/components/platform/ui";
 import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
@@ -41,8 +42,10 @@ const FREED = new Set(["REDIRECTED", "DECLINED", "WITHDRAWN"]);
  * Mentoring → Requests (screen 06): who is asking for this mentor's time,
  * with the work attached, and three answers. Accepting opens a conversation
  * in Community; suggesting another mentor hands the person a better-placed
- * name; "Not this month" is one tap and counts against nobody. Every answer
- * shows at once and is put back if the server refuses it.
+ * name; "Not this month" counts against nobody, with a kind word if the mentor
+ * wants to add one. Every answer shows at once and is put back if the server
+ * refuses it, and once the server has it the bell and the Mentoring tab count
+ * again, so the answered request's notice leaves them (QA4-07).
  */
 export default function MentorRequestsQueue({ initial, mentors, availability, anotherLook, now, api }: MentorRequestsQueueProps) {
   const [store] = useState(() => createMentorRequestsStore({ as: "mentor", initial, ...(api ? { api } : {}) }));
@@ -114,6 +117,11 @@ function RequestCard({ store, request, mentors, now, compact = false }: {
     // The buttons give way to the answer: focus stays on this request (its heading), and the live
     // region says how it went. Nothing visible moves when focus leaves it again.
     headingRef.current?.focus();
+    // Answered (or reported), the request's notice no longer counts: the bell and the tab read again.
+    void result.then(done => {
+      if (done) requestAttentionRefresh();
+      return done;
+    }, () => null);
     return result;
   }
 
@@ -163,7 +171,7 @@ function RequestAnswers({ store, request, mentors, now, whoId, busy, onAnswer }:
   busy: boolean;
   onAnswer: <T>(run: () => Promise<T>) => Promise<T>;
 }) {
-  const [panel, setPanel] = useState<"answers" | "suggest" | "report">("answers");
+  const [panel, setPanel] = useState<"answers" | "suggest" | "decline" | "report">("answers");
   const actionsRef = useRef<HTMLDivElement>(null);
   const name = firstName(request.requester.name);
   const backToAnswers = (trigger: string) => {
@@ -178,7 +186,7 @@ function RequestAnswers({ store, request, mentors, now, whoId, busy, onAnswer }:
           {/* Each answer names whose request it answers, as the list holds several. */}
           <Button variant="primary" icon={<PiCheck />} aria-describedby={whoId} onClick={() => onAnswer(() => store.accept(request.id))}>Accept</Button>
           <Button aria-describedby={whoId} onClick={() => setPanel("suggest")} data-suggest-trigger>Suggest another mentor</Button>
-          <Button variant="ghost" aria-describedby={whoId} onClick={() => onAnswer(() => store.decline(request.id))}>Not this month</Button>
+          <Button variant="ghost" aria-describedby={whoId} onClick={() => setPanel("decline")} data-decline-trigger>Not this month</Button>
           <Button variant="ghost" size="sm" className="sm:ml-auto" aria-describedby={whoId} onClick={() => setPanel("report")} data-report-trigger>
             Report this request
           </Button>
@@ -193,6 +201,13 @@ function RequestAnswers({ store, request, mentors, now, whoId, busy, onAnswer }:
           onSuggest={(choice) => { void onAnswer(() => store.redirect(request.id, choice)); }}
         />
       )}
+      {panel === "decline" && (
+        <DeclineRequest
+          name={name}
+          onCancel={() => backToAnswers("data-decline-trigger")}
+          onDecline={(note) => { void onAnswer(() => store.decline(request.id, note || undefined)); }}
+        />
+      )}
       {panel === "report" && (
         <ReportRequest
           name={name}
@@ -201,6 +216,44 @@ function RequestAnswers({ store, request, mentors, now, whoId, busy, onAnswer }:
         />
       )}
     </div>
+  );
+}
+
+/** How much a note may say: the API's limit. */
+const NOTE_MAX = 2000;
+
+/**
+ * "Not this month" (QA4-03): one more press sends it as it is; a kind word is optional, and the person
+ * asking reads it with the answer ("try again in December", or who else might help).
+ */
+function DeclineRequest({ name, onCancel, onDecline }: { name: string; onCancel: () => void; onDecline: (note: string) => void }) {
+  const ids = useId();
+  const [note, setNote] = useState("");
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { fieldRef.current?.focus(); }, []);
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    onDecline(note.trim());
+  }
+
+  return (
+    <form onSubmit={submit} noValidate className="flex flex-col gap-3 rounded-xl border border-hairline p-4" data-decline-request>
+      <label htmlFor={`${ids}-note`} className="text-[0.9375rem] font-semibold text-ink-primary">
+        A note for {name} <span className="font-normal text-ink-secondary">(optional)</span>
+      </label>
+      <p id={`${ids}-hint`} className="text-sm text-ink-secondary">
+        {`${name} sees it with your answer. For example, when you might have time, or who else could help. It's fine to send it without one.`}
+      </p>
+      <textarea
+        ref={fieldRef} id={`${ids}-note`} rows={2} maxLength={NOTE_MAX} value={note}
+        onChange={event => setNote(event.target.value)} aria-describedby={`${ids}-hint`} className={FIELD}
+      />
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" variant="primary">Send: not this month</Button>
+        <Button onClick={onCancel}>Cancel</Button>
+      </div>
+    </form>
   );
 }
 
@@ -337,12 +390,19 @@ function MonthRail({ availability, used, now, anotherLook }: {
         <div className="mentor-meter mt-3" aria-hidden="true">
           <div className="mentor-meter__fill" style={{ width: `${Math.round(usedShare(capacity) * 100)}%` }} />
         </div>
-        <p className="mt-3 text-sm leading-relaxed text-ink-secondary">
-          {full
-            ? opening !== null
-              ? `You're full. Members see "Next opening ${openingDate(opening)}" instead of a request button.`
-              : "You're full while these requests wait for your answer."
-            : `When you're full, members see when your next opening is instead of a request button.`}
+        <p className="mt-3 text-sm leading-relaxed text-ink-secondary" data-spots-note>
+          {availability.paused
+            // Paused, the mentor isn't in the directory at all, so nobody sees an opening date (QA4-15).
+            ? "You've paused new requests, so you're not in the mentor directory. Requests already waiting stay with you."
+            : full
+              ? opening !== null
+                ? `You're full. Members see "Next opening ${openingDate(opening)}" instead of a request button.`
+                : "You're full while these requests wait for your answer."
+              : `When you're full, members see when your next opening is instead of a request button.`}
+        </p>
+        {/* Spots are counted as members see them, so a waiting request already holds one (QA4-13). */}
+        <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
+          Each request waiting for your answer holds a spot, and so does each one you accept this month.
         </p>
       </Card>
       <Card>

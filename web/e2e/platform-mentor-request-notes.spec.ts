@@ -96,6 +96,7 @@ test("a note Tembo's check held waits, unseen by its mentor, until an admin remo
   await expect(noteCase(admin, "Achieng Otieno")).toHaveCount(0);
   await admin.getByRole("link", { name: "Decided requests" }).click();
   await expect(noteCase(admin, "Achieng Otieno").locator("[data-request-note-decision=remove]")).toContainText("Removed by Amina Hassan");
+  await expect(noteCase(admin, "Achieng Otieno").locator("[data-request-note-status]")).toHaveText("Removed: not sent");
 
   await visit(achieng, DIRECTORY);
   await expect(ownRow(achieng, "David Kamau")).toContainText("This request wasn't sent.");
@@ -142,8 +143,11 @@ test("a mentor reports a note; the person asking sees only that it's being check
   const reported = admin.locator("[data-request-note]").filter({ hasText: note });
   await expect(reported).toContainText("Reported by the mentor");
   await expect(reported).toContainText("Fictional report for the e2e run.");
+  // What a keep does, David's spots included, before anyone chooses (QA4-10).
+  await expect(reported.locator("[data-request-note-keep]")).toContainText("Keeping sends it back to David to answer and takes a spot.");
+  await expect(reported.locator("[data-request-note-remove]")).toContainText("Wanjiku sees “This request was closed” and can ask again");
   await reported.getByRole("textbox", { name: "Reason" }).fill("A fair question about the project.");
-  await reported.getByRole("button", { name: /^Keep: send it to David, Wanjiku Mwangi's request/ }).click();
+  await reported.getByRole("button", { name: /^Keep: back to David, Wanjiku Mwangi's request/ }).click();
   await expect(admin.locator("[data-request-notes-notice]")).toContainText("Kept.");
 
   await visit(david, REQUESTS);

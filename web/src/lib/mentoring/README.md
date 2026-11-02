@@ -154,7 +154,7 @@ otherwise: it waits on the mentor answering.
 
 | Route | Who | Does |
 |---|---|---|
-| `POST /api/mentor-requests` | A member: a community profile or a cohort place (APPROVED, AUDIT or COMPLETED) | Asks a listed mentor, in a format they offer, with their own published project at its current revision or nothing |
+| `POST /api/mentor-requests` | Any signed-in person, as themselves | Asks a listed mentor, in a format they offer, with their own published project at its current revision or nothing |
 | `GET /api/mentor-requests?as=requester\|mentor&status&cursor` | Anyone | The requests the caller sent or received, newest first, 20 a page |
 | `GET /api/mentor-requests/:id` | Its two parties | One request |
 | `POST …/:id/accept` | The mentor, still holding the MENTOR role | Opens the conversation (below) |
@@ -165,29 +165,33 @@ otherwise: it waits on the mentor answering.
 - Only the two parties see a request; anyone else, admins included, gets the
   same 404 as for a missing one. The wrong party gets 403; a request that is
   no longer PENDING gets 409, whichever move is tried: the end states are final.
-- **Who may ask** (coordinator, 2026-11-02, pending Raph): a member account,
-  meaning a community profile or a cohort place. Mentor time is scarce, so an
-  account with neither gets 403 with neutral copy ("Asking a mentor for time
-  needs a member profile or a cohort place."); the directory stays open to
-  every signed-in person. Checked inside the INSERT (`IS_MEMBER`). That refuses
-  institution-only accounts, and also MENTOR-only and ADMIN-only accounts
-  without a profile or cohort place: part of the same decision, pending Raph.
-  The copy does not send anyone to make a profile, because a saved community
-  profile is discoverable to institutions.
+- **Who may ask** (owner decision, Raph, 2026-11-02, policy "Mentor requests
+  are personal"): any signed-in person, as themselves: a cohort member, an
+  alumna or alumnus, or a signed-in member of the public. Belonging to an
+  institution neither grants it nor blocks it, and no account asks on an
+  institution's behalf. The code of conduct, the mentor's capacity and the
+  checks below still apply. This replaces #304's interim rule (a community
+  profile or a cohort place).
 - Asking refuses, in this order: asking yourself (400); attached work that
   cannot be shared, with the channel embeds' rules (400, or 409 for a stale
-  revision); no member account (403); a mentor who is not listed (404) or does not offer the format
+  revision); a mentor who is not listed (404) or does not offer the format
   (400); no current agreement to the code of conduct (403 `conduct_required`,
   because the note becomes a message); a PENDING request to the same mentor
-  already (409); 5 requests waiting at once, or 10 made in a rolling day (429,
-  the second with `retryAfterMs`); no spot left (409). Each condition is
-  checked inside the INSERT, so concurrent requests cannot both pass.
+  already (409, saying which: waiting with the mentor, waiting for a check
+  before it's sent, or being checked by TTV, never who opened the check,
+  QA4-11); 5 requests waiting at once, or 10 made in a rolling day (429,
+  the second with `retryAfterMs`); no spot left (409, naming the next
+  opening, with `retryAfterMs` until then, when the turn of the month frees
+  one, QA4-20). Each condition is checked inside the INSERT, so concurrent
+  requests cannot both pass.
 - The note is screened by the channel detectors when it is written. The mentor
   sees contact details in it masked, as a channel reader would; the asker
   sees it whole. The mentor's reply on a redirect or decline is screened the
   same way on each read: the asker sees its contact details masked, the
-  mentor sees it whole. A pending note gets no Clef check and cannot be
-  reported yet; the conversation it opens can be. Attached work is checked again on every read (still the
+  mentor sees it whole. Clef checks the note after the response, and the
+  mentor may report it (Checks, below). In the conversation it opens, either
+  member reports a message, and only that message reaches the admins
+  (`src/lib/channels/README.md`, "Direct conversations"). Attached work is checked again on every read (still the
   asker's, still published) and becomes `{ type: "unavailable" }` otherwise.
 - The mentor sees the asker's cohort and alumni badges as context for the
   request; the asker sees only the mentor's global badges.
@@ -295,6 +299,22 @@ parties, once per opening (`moderation_pending`, admin space, at
 `/admin/moderation?tab=request-notes`). The notice shows while the check is
 open. U-4.1 builds that "Request notes" tab.
 
+- **Finding them** (QA4-04): `countOpenChecks(db, viewerId)` counts the open
+  checks this admin may decide, as the OPEN queue lists them, for the tab,
+  the Admin sidebar badge and Admin Home (0 if the read fails). The queue and
+  the count leave out an admin's own requests: another admin decides them,
+  and listing them would show the admin who opened the check.
+- **What a keep costs** (QA4-10): each check carries `mentorCapacity`, the
+  mentor's spots this Nairobi month now (null without saved availability), so
+  the admin sees that a keep takes one of them, even past full.
+- **What the person asking hears** (QA4-02, owner rule: Clef may hold an
+  item for a human, with a fixed explanation shown): a `mentor_checked`
+  notice for each change a check makes to their request, at the directory:
+  it waits for a check, TTV is checking it, it was checked and sent, or it
+  wasn't sent or was closed and they may ask again. The words are fixed, the
+  same whoever opened the check, and never "declined". A decision on a
+  request they had already withdrawn tells them nothing.
+
 ### Attention (`src/lib/attention/mentor-producers.ts`)
 
 After each move's response, the other party hears once: a new request tells
@@ -303,7 +323,9 @@ tells the asker (`mentor_accepted`, in Community, at the conversation);
 redirecting and declining tell the asker (`mentor_redirected`,
 `mentor_declined`, at the directory); withdrawing tells the mentor
 (`mentor_withdrawn`). The mentor hears only of requests they may see
-(`MENTOR_SEES`): a request Clef holds reaches them only once an admin keeps it. An item is written only while the request is still in
+(`MENTOR_SEES`): a request Clef holds reaches them only once an admin keeps it.
+A new request's notice shows only while it still waits for their answer, so
+answering clears it from their panel, badge and bell (QA4-07). An item is written only while the request is still in
 the state its move left it in, so a request answered before its notice was
 written leaves no stale notice. It needs `spaces`, `channels` and
 `mentor_requests` for the recipient, and never copies the note or the

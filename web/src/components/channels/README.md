@@ -146,7 +146,10 @@ talk to each other, U-2.3's `ChannelFrame` asks; after, the conversation:
   a message, once, with a reason (a choice and their own words); the message
   stays up and the report goes to the admin queue, so the reporter sees
   "You reported this" (after a reload too, from `reportedByMe`) and nothing
-  else changes. The channel's moderators
+  else changes. In a private conversation either member reports the other's
+  message (QA4-01): it has no moderators, so the form and notes name TTV
+  admins, who see that message alone (`direct` on ModerationProvider). Its
+  header says so too (`conversation-privacy.ts`). The channel's moderators
   (`canModerate`) hide with a reason the author reads; only admins restore.
   The author of a hidden message can ask for a review once, and only while
   the server says `moderation.reviewable`; once an admin's decision is final

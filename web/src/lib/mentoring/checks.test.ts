@@ -382,3 +382,101 @@ describe("the admins' queue", () => {
     expect((await s.call("listMentorRequestCases", { user: PEOPLE.amina, query: "?cursor=nope" })).status).toBe(400);
   });
 });
+
+describe("what the person asking hears of a check (QA4-02)", () => {
+  /** The asker's mentor_checked notices, oldest first: what each says, and where it leads. */
+  async function notices(s: MentoringFixture, user: string = VIEWER) {
+    const context = { request: new Request("https://ttv.example/api/attention?filter=requests"), locals: { user: { id: user } } as App.Locals };
+    const response = await attentionRequest("list", context as Pick<APIContext, "request" | "locals">, { DB: s.d1, PLATFORM_FLAGS_OVERRIDE: "all" });
+    return AttentionList.parse(await response.json()).items.filter((item) => item.kind === "mentor_checked").toReversed()
+      .map((item) => [item.subject.label, item.summary, item.subject.href, item.actor]);
+  }
+  const yours = "Your request to David Kamau";
+  const directory = "/dashboard/community/mentors";
+  const WAITING = "Waiting for a check before it's sent. Nothing for you to do: you'll hear here when it's done.";
+  const CHECKING = "TTV is checking your request. Nothing for you to do: you'll hear here when it's done.";
+
+  it("tells them a held request waits, then that it was sent once an admin keeps it", async () => {
+    const s = setup();
+    const id = await ask(s, ABUSE);
+    expect(await notices(s)).toEqual([[yours, WAITING, directory, null]]);
+    await decide(s, id, "keep");
+    expect(await notices(s)).toEqual([[yours, WAITING, directory, null], [yours, "Checked and sent. It's waiting for David Kamau now.", directory, null]]);
+  });
+
+  it("tells them a removed request wasn't sent, or was closed once the mentor had read it, and that they may ask again", async () => {
+    const held = setup();
+    await decide(held, await ask(held, ABUSE), "remove");
+    expect((await notices(held)).at(-1)?.[1]).toBe("It wasn't sent, after a check. You can ask again with a new note.");
+    const read = setup();
+    const id = await ask(read, {});
+    await report(read, id);
+    await decide(read, id, "remove");
+    expect((await notices(read)).map((notice) => notice[1])).toEqual([CHECKING, "It was closed, after a check. You can ask again with a new note."]);
+  });
+
+  it("never says declined, never names who opened the check, and says nothing of a decision on a request they withdrew", async () => {
+    const s = setup();
+    const id = await ask(s, {});
+    await report(s, id);
+    await step(s, s.call("withdrawMentorRequest", { id, body: {} }));
+    await decide(s, id, "remove");
+    const all = await notices(s);
+    expect(all.map((notice) => notice[1])).toEqual([CHECKING]);
+    expect(JSON.stringify(all.map(([label, summary]) => [label, summary]))).not.toMatch(/declin|report|mentor|Clef|Tembo|Amina/i);
+    // Nobody else hears these notices.
+    for (const user of [PEOPLE.david, PEOPLE.amina]) expect(await notices(s, user)).toEqual([]);
+  });
+});
+
+describe("asking again while a request waits (QA4-11)", () => {
+  const again = (s: MentoringFixture) => s.call("createMentorRequest", {
+    env: clef({}).env, body: { mentorId: PEOPLE.david, note: "Asking again", project: null, format: "WRITTEN_REVIEW" },
+  });
+
+  it.each([
+    ["waits with the mentor", async () => undefined, "You already have a request waiting with David Kamau."],
+    ["is held for a check", "held",
+      "Your earlier request to David Kamau is waiting for a check before it's sent. Your requests will show when the check is done."],
+    ["is being checked after the mentor read it", "reported",
+      "TTV is checking your earlier request to David Kamau. Your requests will show when the check is done."],
+  ] as const)("says which of their own requests is in the way when it %s", async (_, state, message) => {
+    const s = setup();
+    const id = await ask(s, state === "held" ? ABUSE : {});
+    if (state === "reported") await report(s, id);
+    const refused = await again(s);
+    expect([refused.status, errorOf(refused.body)]).toEqual([409, { code: "conflict", message }]);
+    expect(s.database.prepare("SELECT COUNT(*) AS n FROM mentor_request").get()).toEqual({ n: 1 });
+  });
+});
+
+describe("finding and deciding checks (QA4-04, QA4-10)", () => {
+  it("counts the open checks an admin may decide, as the queue lists them, and none when the count cannot be read", async () => {
+    const { countOpenChecks } = await import("./checks");
+    const s = setup();
+    await ask(s, ABUSE);
+    const withdrawn = await ask(s, ABUSE, { mentorId: PEOPLE.mercy });
+    await step(s, s.call("withdrawMentorRequest", { id: withdrawn, body: {} }));
+    // Amina's own request, held: another admin decides it, and her queue and count leave it out.
+    s.database.prepare("INSERT INTO communityProfile(userId, headline) VALUES (?, 'Builder')").run(PEOPLE.amina);
+    s.database.prepare("INSERT INTO channel_conduct(userId,version,acknowledgedAt) VALUES (?,1,1) ON CONFLICT DO NOTHING").run(PEOPLE.amina);
+    const own = await ask(s, ABUSE, { user: PEOPLE.amina });
+    expect([await countOpenChecks(s.d1, PEOPLE.amina), (await queue(s)).items.length]).toEqual([1, 1]);
+    expect((await queue(s)).items.map((item) => item.id)).not.toContain(own);
+    s.database.prepare("INSERT INTO UserRoles(id,userId,roleId) SELECT 'role-mercy-admin', ?, id FROM Roles WHERE name = 'ADMIN'").run(PEOPLE.mercy);
+    expect(await countOpenChecks(s.d1, PEOPLE.mercy)).toBe(2);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(s.d1, "prepare").mockImplementation(() => { throw new Error("D1 is down"); });
+    expect(await countOpenChecks(s.d1, PEOPLE.amina)).toBe(0);
+    expect(warn).toHaveBeenCalledWith("The request notes count could not be read.");
+  });
+
+  it("shows the mentor's spots this month, which a keep takes", async () => {
+    const s = setup();
+    s.database.exec(`UPDATE mentor_profile SET monthlyCapacity = 2 WHERE userId = '${PEOPLE.david}'`);
+    const id = await ask(s, ABUSE);
+    await ask(s, {}, { user: PEOPLE.amani });
+    expect((await queue(s)).items.map((item) => item.mentorCapacity)).toEqual([{ used: 1, limit: 2, nextOpeningAt: null }]);
+    expect(MentorRequestCase.parse((await decide(s, id, "keep")).body).mentorCapacity).toEqual({ used: 2, limit: 2, nextOpeningAt: null });
+  });
+});

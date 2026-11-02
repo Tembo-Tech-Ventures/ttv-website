@@ -226,14 +226,26 @@ describe("reporting a message", () => {
     expect(await menuNames(messages.mentorOffer.id)).not.toContain("Report…");
   });
 
-  it("is not offered in a direct conversation, where the server takes no reports yet", async () => {
+  it("is offered in a direct conversation, and says TTV admins see that message alone (QA4-01)", async () => {
     const channel: Channel = { ...showYourWork(wanjiku), kind: "DIRECT" };
     const wired = setup(wanjiku, channel);
     await act(async () => root.render(
       <ChannelSurface me={wanjiku} channel={channel} store={wired.store} composer={wired.composer} now={FIXTURE_NOW} shareables={null} moderation={wired.moderation} />,
     ));
     await act(tick);
-    expect(await menuNames(messages.mentorOffer.id)).not.toContain("Report…");
+    await click(await menuItem(messages.mentorOffer.id, "Report…"));
+    const form = $<HTMLFormElement>("[data-panel=report]")!;
+    expect($("[data-report-direct]", form)?.textContent).toBe("TTV admins will see this message, and only this message. It stays up while they look at it.");
+    // With two people in it, "won't see who reported it" would be no promise, so it goes unsaid.
+    expect(form.textContent).not.toContain("won't see who reported it");
+    await click([...form.querySelectorAll("label")].find((label) => label.textContent === "Something else"));
+    expect(form.querySelector(`label[for="${form.querySelector("textarea")!.id}"]`)?.textContent).toBe("Tell TTV admins what's wrong (required)");
+    await typeInto(form.querySelector("textarea")!, "Asked me to pay for the review.");
+    await click($("button[type=submit]", form));
+    await act(frame);
+    expect(wired.client.moderation()).toEqual([{ kind: "report", messageId: messages.mentorOffer.id, reason: "Asked me to pay for the review." }]);
+    expect($("[data-reported]", article(messages.mentorOffer.id))?.textContent).toBe("You reported this. A TTV admin will look at it.");
+    expect(announcer()).toBe("Reported. A TTV admin will look at it.");
   });
 });
 

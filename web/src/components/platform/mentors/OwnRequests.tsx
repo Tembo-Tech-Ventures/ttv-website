@@ -7,7 +7,7 @@ import { shownStatus, type MentorRequestsStore } from "@/lib/platform/client/men
 import { Avatar, Button, Card, Chip } from "@/components/platform/ui";
 import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
-import { capacityView, conversationHref, requesterStatus, requestMeta } from "./mentor-display";
+import { capacityView, conversationHref, requesterStatus, requestMeta, type StatusView } from "./mentor-display";
 
 interface Props {
   store: MentorRequestsStore;
@@ -72,7 +72,8 @@ export default function OwnRequests({ store, now, mentors, onAsk }: Props) {
           </span>
           <div className="flex flex-wrap gap-2 empty:hidden">
             {status === "PENDING" && !pending && (
-              <Button size="sm" onClick={() => withdraw(request)} aria-describedby={`own-request-${request.id}`}>Withdraw</Button>
+              // Named for whose request it withdraws, as there can be several (QA4-18).
+              <Button size="sm" onClick={() => withdraw(request)} aria-label={`Withdraw request to ${request.mentor.name}`}>Withdraw</Button>
             )}
             {status === "ACCEPTED" && request.channelId && (
               <a href={conversationHref(request.channelId)} className={LINK} aria-describedby={`own-request-${request.id}`}>
@@ -89,6 +90,7 @@ export default function OwnRequests({ store, now, mentors, onAsk }: Props) {
         {(view.detail || request.responseNote || failed) && (
           <div className="flex flex-col gap-1.5 sm:pl-11">
             {view.detail && <p className="text-sm leading-relaxed text-ink-secondary">{view.detail}</p>}
+            <NextStep view={view} />
             {suggested && !hasOpenSpot(suggested) && (
               <p className="text-sm text-ink-secondary">{suggested.person.name}: {capacityView(suggested.capacity, now).text}.</p>
             )}
@@ -124,5 +126,21 @@ export default function OwnRequests({ store, now, mentors, onAsk }: Props) {
         </details>
       ) : more}
     </section>
+  );
+}
+
+/** What a status means for the person and what they can do next, when it says (a check's fixed explanation). */
+function NextStep({ view }: { view: StatusView }) {
+  if (!view.next && !view.link) return null;
+  return (
+    <p className="text-sm leading-relaxed text-ink-secondary" data-request-next>
+      {view.next}
+      {view.link && (
+        <>
+          {view.next ? " " : ""}
+          <a href={view.link.href} className={cx("font-semibold text-peach-ink underline underline-offset-4", FOCUS_RING)}>{view.link.label}</a>
+        </>
+      )}
+    </p>
   );
 }

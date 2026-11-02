@@ -1,10 +1,9 @@
 import type {
-  Me, MentorAvailability, MentorCapacity, MentorRequest, MentorRequestFormat, MentorRequestStatus,
+  Me, MentorAvailability, MentorCapacity, MentorDirectoryItem, MentorRequest, MentorRequestFormat, MentorRequestStatus,
 } from "@/lib/platform/contracts";
-import { CONVERSATION_PATH, MENTOR_PAGE_PATHS } from "@/lib/platform/server/space-routes";
+import { CONDUCT_PATH, CONVERSATION_PATH, MENTOR_PAGE_PATHS } from "@/lib/platform/server/space-routes";
 import { ago, dayLabel, firstName, plural } from "@/components/channels/channel-format";
 import { conversationPath } from "@/components/channels/paths";
-import { NEEDS_MEMBER_MESSAGE } from "@/lib/platform/client/mentor-request-form";
 
 /*
  * Pure display rules for mentor connections (U-4.1): formats, monthly
@@ -80,15 +79,13 @@ export interface CapacityView {
  * How full a mentor is this month, as the directory card says it. A full
  * mentor stays listed, with the next opening when the turn of the month frees
  * a spot; when only waiting requests fill it, there is no date to promise.
+ * One wording whatever is used (QA4-13): "3 of 3 spots open", never "3 spots open" beside "1 of 5 spots open".
  */
 export function capacityView(capacity: MentorCapacity, now: number): CapacityView {
   const open = openSpots(capacity);
   const month = monthName(now);
   if (open > 0) {
-    return {
-      open: true,
-      text: capacity.used === 0 ? `${plural(open, "spot")} open in ${month}` : `${open} of ${plural(capacity.limit, "spot")} open in ${month}`,
-    };
+    return { open: true, text: `${open} of ${plural(capacity.limit, "spot")} open in ${month}` };
   }
   return {
     open: false,
@@ -100,10 +97,19 @@ export function capacityView(capacity: MentorCapacity, now: number): CapacityVie
 export const FULL_THIS_MONTH = "Full this month";
 
 /**
- * Why an account with neither a community profile nor a cohort place cannot ask (B-4.1, #304): the
- * API's own words. It does not send anyone to make a profile, because a saved one is discoverable.
+ * Why a full mentor's request didn't go: as B-4.1's 409 says it, with the next opening when the turn
+ * of the month frees a spot (the no-JavaScript post checks this before asking the API).
  */
-export const NEEDS_MEMBER = NEEDS_MEMBER_MESSAGE;
+export function fullMessage(mentor: Pick<MentorDirectoryItem, "person" | "capacity">): string {
+  const { nextOpeningAt } = mentor.capacity;
+  return `${mentor.person.name} has no spots left this month.${nextOpeningAt !== null ? ` The next opening is ${openingDate(nextOpeningAt)}.` : ""}`;
+}
+
+/**
+ * Said to someone who belongs to an organisation (the INSTITUTION role), so they know what they can do
+ * rather than guess (QA4-09): asking is personal, and an affiliation neither grants nor blocks it.
+ */
+export const AS_YOURSELF = "You can ask a mentor for time as yourself. Requests come from you, not from your organisation.";
 
 /** "Spots used 1 of 3", as a share for the meter. */
 export function usedShare(capacity: MentorCapacity): number {
@@ -116,18 +122,43 @@ export interface StatusView {
   tone: StatusTone;
   /** A sentence under the request, when the label needs one. */
   detail: string | null;
+  /** What it means for the person and what they can do next, after the detail (a check's fixed explanation). */
+  next?: string;
+  /** Where to read more, after `next`. */
+  link?: { href: string; label: string };
 }
+
+/** A check is routine, and says so: what it is, that it isn't about the person, and what happens next (QA4-02). */
+const WHILE_CHECKED = "It isn't a judgement on you, and there's nothing you need to do. You'll get a notice when it's done.";
+const ASK_AGAIN = "That came from a check by TTV. You can ask again with a new note, or ask another mentor.";
+const HABITS_LINK = { href: CONDUCT_PATH, label: "Read how we talk to each other" };
 
 /**
  * A check on the note (B-4.1, "Checks"), in the words the README fixes: never naming who opened it, never
  * "declined". Each applies only to the status the server gives it with (waiting and checking while
  * PENDING, not_sent and closed once WITHDRAWN), so a withdrawal shown before the server answers reads as one.
+ * Each says plainly what a check is and what comes next, the same whoever opened it.
  */
 const REQUESTER_CHECKS: Partial<Record<NonNullable<MentorRequest["check"]>, { status: MentorRequestStatus; view: StatusView }>> = {
-  waiting: { status: "PENDING", view: { label: "Waiting for a check", tone: "neutral", detail: "Waiting for a check before it's sent." } },
-  checking: { status: "PENDING", view: { label: "Being checked", tone: "neutral", detail: "TTV is checking this request." } },
-  not_sent: { status: "WITHDRAWN", view: { label: "Not sent", tone: "neutral", detail: "This request wasn't sent." } },
-  closed: { status: "WITHDRAWN", view: { label: "Closed", tone: "neutral", detail: "This request was closed." } },
+  waiting: {
+    status: "PENDING",
+    view: {
+      label: "Waiting for a check", tone: "neutral", detail: "Waiting for a check before it's sent.",
+      next: `Some requests get a check from TTV before they reach a mentor. ${WHILE_CHECKED}`,
+    },
+  },
+  checking: {
+    status: "PENDING",
+    view: { label: "Being checked", tone: "neutral", detail: "TTV is checking this request.", next: WHILE_CHECKED },
+  },
+  not_sent: {
+    status: "WITHDRAWN",
+    view: { label: "Not sent", tone: "neutral", detail: "This request wasn't sent.", next: ASK_AGAIN, link: HABITS_LINK },
+  },
+  closed: {
+    status: "WITHDRAWN",
+    view: { label: "Closed", tone: "neutral", detail: "This request was closed.", next: ASK_AGAIN, link: HABITS_LINK },
+  },
 };
 
 /** A request the person asking sent, from their side. */

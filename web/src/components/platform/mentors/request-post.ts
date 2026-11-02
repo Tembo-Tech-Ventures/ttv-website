@@ -4,8 +4,11 @@ import {
 } from "@/lib/platform/contracts";
 import { isSameOriginRequest } from "@/lib/agent-auth";
 import { hasOpenSpot } from "@/lib/platform/client/mentor-directory";
-import { requestFailure, validateRequestDraft, type RequestDraft, type ServerRequestForm } from "@/lib/platform/client/mentor-request-form";
+import {
+  failureMessage, requestFailure, validateRequestDraft, type RequestDraft, type ServerRequestForm,
+} from "@/lib/platform/client/mentor-request-form";
 import { boundedForm } from "@/components/platform/onboarding/welcome-flow";
+import { fullMessage } from "./mentor-display";
 
 /**
  * Asking for time without JavaScript (U-4.1). The request drawer is a real
@@ -15,10 +18,17 @@ import { boundedForm } from "@/components/platform/onboarding/welcome-flow";
  * is the API's. The person then lands back on the directory: with the request
  * under Your requests, or with the drawer open again on what they wrote and
  * why it didn't go through.
+ *
+ * A person who has not agreed to how we talk to each other yet agrees as they
+ * send (QA4-05): the form carries `agree` with the version it showed, the
+ * agreement is recorded first, and the request goes in the same post.
  */
 
 /** The form field that marks this post as a mentor request, so the page can carry the conduct form too. */
 export const REQUEST_INTENT = "mentor-request";
+
+/** The form field that agrees to how we talk to each other as the request is sent: the version the drawer showed. */
+export const AGREE_FIELD = "agree";
 
 /** A project radio's value: the work and the revision it was offered at. */
 export const projectValue = (ref: Pick<ProjectEmbedRef, "journeyId" | "version">) => `${ref.journeyId}@${ref.version}`;
@@ -35,6 +45,11 @@ export interface RequestPostOptions {
   send: (body: CreateMentorRequest) => Promise<Response>;
   /** Where to land once sent, naming the new request. */
   sent: (requestId: string) => string;
+  /**
+   * Records the person's agreement to how we talk to each other, at the version the form showed, before the
+   * request is sent. Absent for a session that may not agree for the person (an agent's): the API then asks again.
+   */
+  agree?: (version: number) => Promise<void>;
 }
 
 function readProject(value: FormDataEntryValue | null): ProjectEmbedRef | null {
@@ -76,9 +91,13 @@ export async function handleRequestPost(request: Request, options: RequestPostOp
   const render = (status: number, rest: Omit<ServerRequestForm, keyof RequestDraft>): RequestPostResult =>
     ({ kind: "render", status, mentorId, form: { ...draft, ...rest } });
 
-  if (!hasOpenSpot(mentor)) return render(409, { status: "error", errors: {}, failure: "conflict" });
+  if (!hasOpenSpot(mentor)) {
+    return render(409, { status: "error", errors: {}, failure: "conflict", failureMessage: fullMessage(mentor) });
+  }
   const checked = validateRequestDraft(draft, mentor);
   if (!checked.ok) return render(400, { status: "editing", errors: checked.errors, failure: null });
+  const agreeTo = Number(form.get(AGREE_FIELD));
+  if (options.agree && Number.isInteger(agreeTo) && agreeTo > 0) await options.agree(agreeTo);
 
   const response = await options.send({ mentorId, note: checked.note, project: draft.project, format: checked.format });
   const body: unknown = await response.json().catch(() => null);
@@ -90,5 +109,6 @@ export async function handleRequestPost(request: Request, options: RequestPostOp
   const code = envelope.success ? envelope.data.error.code : "server";
   if (code === "conduct_required") return render(403, { status: "conduct", errors: {}, failure: null });
   const message = envelope.success ? envelope.data.error.message : undefined;
-  return render(response.status, { status: "error", errors: {}, failure: requestFailure({ status: response.status, code, message }) });
+  const failure = requestFailure({ status: response.status, code });
+  return render(response.status, { status: "error", errors: {}, failure, failureMessage: failureMessage(failure, message) });
 }

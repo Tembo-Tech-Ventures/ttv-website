@@ -10,12 +10,12 @@ import {
   askHref, directoryHref, hasOpenSpot, sameArea, type DirectoryFilters, type DirectoryUrlState,
 } from "@/lib/platform/client/mentor-directory";
 import { createRequestFormStore, type ServerRequestForm } from "@/lib/platform/client/mentor-request-form";
-import { createMentorRequestsStore } from "@/lib/platform/client/mentor-requests";
+import { createMentorRequestsStore, shownStatus, type MentorRequestsState } from "@/lib/platform/client/mentor-requests";
 import { useModalDialog } from "@/components/platform/overlays/useModalDialog";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
-import MentorCard from "./MentorCard";
-import { FORMAT_LABELS, NEEDS_MEMBER } from "./mentor-display";
+import MentorCard, { type MentorCardStanding } from "./MentorCard";
+import { AS_YOURSELF, conversationHref, FORMAT_LABELS, requesterStatus } from "./mentor-display";
 import OwnRequests from "./OwnRequests";
 import RequestForm, { type ConductPrompt } from "./RequestForm";
 // oxlint-disable-next-line import/no-unassigned-import -- Mentor connections stylesheet.
@@ -34,11 +34,6 @@ export interface MentorsDirectoryProps {
   areas: readonly string[];
   /** The requests this person sent (first page, newest first). */
   ownRequests: MentorRequestList;
-  /**
-   * The person has a member account (a community profile or a cohort place), which asking needs
-   * (B-4.1, #304). Without one the directory still reads, with no "Ask for time".
-   */
-  canAsk: boolean;
   /** The person's own published projects, at their current revisions. */
   projects: readonly ProjectEmbed[];
   /** The habits' prompt; the drawer posts its agreement back to this page with the drawer open. */
@@ -96,7 +91,8 @@ function FilterBar({ path, base, filters, areas }: { path: string; base: Directo
           className={cx(PILL, "border", filters.available ? "border-transparent bg-ink-primary text-dark" : "border-hairline text-ink-primary hover:bg-ink-primary/7")}
           data-filter-available
         >
-          <PiCheck aria-hidden className={cx("size-4", !filters.available && "opacity-40")} />
+          {/* The check is drawn only while the filter is on, so it never looks on when it is off (QA4-14). */}
+          {filters.available && <PiCheck aria-hidden className="size-4" />}
           Has open spots
         </a>
       </div>
@@ -120,13 +116,41 @@ function NoMentors({ path, filtered }: { path: string; filtered: boolean }) {
 }
 
 /**
+ * Where this person already stands with each mentor, from their own requests (QA4-12): a request still waiting
+ * (or being checked) shows its status where "Ask for time" would be, since a second one would be refused, and
+ * an accepted one leads to its conversation. Newest first, so the latest request to a mentor decides.
+ */
+export function standings(state: Pick<MentorRequestsState, "items" | "pending">): ReadonlyMap<string, MentorCardStanding> {
+  const found = new Map<string, MentorCardStanding>();
+  for (const request of state.items) {
+    const status = shownStatus(state, request);
+    const id = request.mentor.id;
+    if (status === "PENDING") {
+      found.set(id, { kind: "waiting", label: requesterStatus(request, status).label });
+    } else if (status === "ACCEPTED" && request.channelId && !found.has(id)) {
+      found.set(id, { kind: "conversation", href: conversationHref(request.channelId) });
+    }
+  }
+  return found;
+}
+
+/**
  * Community → Mentors (screen 05): the directory, its filters (plain links,
  * held in the URL), the requests this person sent, and the "Ask for time"
  * drawer. Server-rendered, so the directory reads without JavaScript; asking
  * needs it.
  */
+function sameStandings(a: ReadonlyMap<string, MentorCardStanding>, b: ReadonlyMap<string, MentorCardStanding>): boolean {
+  if (a.size !== b.size) return false;
+  for (const [id, value] of a) {
+    const other = b.get(id);
+    if (!other || JSON.stringify(other) !== JSON.stringify(value)) return false;
+  }
+  return true;
+}
+
 export default function MentorsDirectory(props: MentorsDirectoryProps) {
-  const { me, path, filters, mentors, shown, areas, projects, conduct, now, api, canAsk, serverForm = null, sent: sentNow = null } = props;
+  const { me, path, filters, mentors, shown, areas, projects, conduct, now, api, serverForm = null, sent: sentNow = null } = props;
   const headingId = useId();
   // Until the island is interactive (and always without JavaScript) a drawer named by `?ask=` is a plain panel with a real form.
   const [hydrated, setHydrated] = useState(false);
@@ -144,10 +168,11 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
   const dialog = useModalDialog(closed);
   const { show } = dialog;
   const announcement = useMentorRequests(ownRequests, state => state.announcement);
+  const standing = useMentorRequests(ownRequests, standings, sameStandings);
 
   // A full mentor's drawer opens only to say why a send without JavaScript just did not go through.
   const asked = filters.ask
-    ? mentors.find(item => item.person.id === filters.ask && ((canAsk && hasOpenSpot(item)) || serverForm?.mentorId === item.person.id)) ?? null
+    ? mentors.find(item => item.person.id === filters.ask && (hasOpenSpot(item) || serverForm?.mentorId === item.person.id)) ?? null
     : null;
   const shownMentor = hydrated ? active : asked;
   const form = useMemo(() => shownMentor ? createRequestFormStore({
@@ -156,11 +181,11 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
   }) : null, [shownMentor, me.user.id, projects, api, serverForm]);
 
   const ask = useCallback((item: MentorDirectoryItem, from: HTMLElement | null) => {
-    if (!(canAsk && hasOpenSpot(item)) && serverForm?.mentorId !== item.person.id) return;
+    if (!hasOpenSpot(item) && serverForm?.mentorId !== item.person.id) return;
     setActive(item);
     window.history.replaceState(window.history.state, "", askHref(path, base, item.person.id));
     show(from);
-  }, [path, base, show, serverForm, canAsk]);
+  }, [path, base, show, serverForm]);
 
   // Once interactive, `?ask=` opens that mentor's drawer as a dialog: a reload, or the return from agreeing to the habits
   // or from a send that did not go through. A `?sent=` notice has been read by then, so a reload does not repeat it.
@@ -185,11 +210,12 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
       {sentNow && (
         <output className="mb-6 block rounded-2xl border border-ring/40 bg-ring/8 px-4 py-3 text-[0.9375rem] text-ink-primary" data-request-sent-notice>
           Request sent to {sentNow.mentor.name}. It's under Your requests while it waits, and you can withdraw it there.
+          Some requests get a check from TTV before they reach a mentor; if yours does, it says so there.
         </output>
       )}
-      {!canAsk && (
-        <p className="mb-6 rounded-2xl border border-hairline px-4 py-3 text-[0.9375rem] text-ink-secondary" data-mentors-need-member>
-          {NEEDS_MEMBER} You can still read who mentors here and what they help with.
+      {me.capabilities.isInstitution && (
+        <p className="mb-6 rounded-2xl border border-hairline px-4 py-3 text-[0.9375rem] text-ink-secondary" data-mentors-as-yourself>
+          {AS_YOURSELF}
         </p>
       )}
       <OwnRequests store={ownRequests} now={now} mentors={mentors} onAsk={ask} />
@@ -202,7 +228,7 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
           {shown.map(item => (
             <MentorCard
               key={item.person.id} item={item} now={now} open={active?.person.id === item.person.id}
-              askHref={canAsk ? askHref(path, base, item.person.id) : null} onAsk={ask}
+              askHref={askHref(path, base, item.person.id)} onAsk={ask} standing={standing.get(item.person.id) ?? null}
             />
           ))}
         </ul>
