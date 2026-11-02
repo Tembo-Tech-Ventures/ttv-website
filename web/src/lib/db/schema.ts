@@ -1631,3 +1631,86 @@ export const temboFeedback = sqliteTable("tembo_feedback", {
   check("tembo_feedback_kind_check", sql`${table.kind} IN ('helpful','not_quite')`),
   check("tembo_feedback_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt}`),
 ]);
+
+// ─── Mentor connections (B-4.1; src/lib/mentoring/README.md) ─────────────────
+// Epoch milliseconds, like channels. Who may read or act on a row is decided in
+// src/lib/mentoring, never here.
+
+const MENTOR_FORMATS = ["WRITTEN_REVIEW", "CALL_30_MIN", "QUICK_QUESTION"] as const;
+const MENTOR_REQUEST_STATUSES = ["PENDING", "ACCEPTED", "REDIRECTED", "DECLINED", "WITHDRAWN"] as const;
+/** Every format, the offer of a mentor who has not chosen. */
+const ALL_MENTOR_FORMATS = JSON.stringify(MENTOR_FORMATS);
+
+/**
+ * A mentor's availability: one row per person, written only by themselves. Only people with the
+ * MENTOR role are listed, so a row outlives a revoked role without showing anyone.
+ */
+export const mentorProfile = sqliteTable("mentor_profile", {
+  userId: text("userId").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  headline: text("headline").notNull(),
+  bio: text("bio").notNull().default(""),
+  areas: jsonArray("areas"),
+  formats: text("formats").notNull().default(ALL_MENTOR_FORMATS),
+  monthlyCapacity: integer("monthlyCapacity").notNull().default(0),
+  paused: integer("paused", { mode: "boolean" }).notNull().default(sql`0`),
+  createdAt: epochMs("createdAt"),
+  updatedAt: epochMs("updatedAt"),
+}, (table) => [
+  check("mentor_profile_headline_check", sql`length(trim(${table.headline})) > 0 AND length(${table.headline}) <= 120`),
+  check("mentor_profile_bio_check", sql`length(${table.bio}) <= 2000`),
+  check("mentor_profile_areas_check", isJsonArray(table.areas)),
+  check("mentor_profile_formats_check", sql`${isJsonArray(table.formats)} AND json_array_length(${table.formats}) > 0`),
+  check("mentor_profile_capacity_check", sql`${table.monthlyCapacity} BETWEEN 0 AND 20`),
+  check("mentor_profile_paused_check", sql`${table.paused} IN (0, 1)`),
+  check("mentor_profile_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt}`),
+]);
+
+/**
+ * A member asking a mentor for time. PENDING until the mentor accepts, redirects or declines it, or
+ * the person asking withdraws it; only one request per pair is PENDING at a time. project is the
+ * attached work as resolved when asked (a ProjectEmbed), with journeyVersion its revision.
+ * acceptedAt places an accepted request in a month for capacity; channelId is the conversation it
+ * opened. noteReasons are the moderation detectors' findings on the note, which mask contact details
+ * for the mentor as in a channel.
+ */
+export const mentorRequest = sqliteTable("mentor_request", {
+  id: cuid("id"),
+  requesterId: text("requesterId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  mentorId: text("mentorId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  status: text("status", { enum: MENTOR_REQUEST_STATUSES }).notNull().default("PENDING"),
+  format: text("format", { enum: MENTOR_FORMATS }).notNull(),
+  note: text("note").notNull(),
+  noteReasons: jsonArray("noteReasons"),
+  journeyId: text("journeyId").references(() => communityJourney.id, { onDelete: "set null" }),
+  journeyVersion: integer("journeyVersion"),
+  project: text("project"),
+  // A conversation is never deleted while a request points at it.
+  channelId: text("channelId").references(() => channel.id),
+  redirectedToId: text("redirectedToId").references(() => user.id, { onDelete: "set null" }),
+  responseNote: text("responseNote"),
+  acceptedAt: integer("acceptedAt"),
+  decidedAt: integer("decidedAt"),
+  createdAt: epochMs("createdAt"),
+  updatedAt: epochMs("updatedAt"),
+}, (table) => [
+  // No second PENDING request to the same mentor (B-4.1).
+  uniqueIndex("mentor_request_pending_idx").on(table.requesterId, table.mentorId).where(sql`${table.status} = 'PENDING'`),
+  // The mentor's list, newest first, and their spots: pending requests and this month's acceptances.
+  index("mentor_request_mentor_idx").on(table.mentorId, table.createdAt, table.id),
+  index("mentor_request_mentor_status_idx").on(table.mentorId, table.status, table.acceptedAt),
+  index("mentor_request_requester_idx").on(table.requesterId, table.createdAt, table.id),
+  index("mentor_request_channelId_idx").on(table.channelId).where(sql`${table.channelId} IS NOT NULL`),
+  index("mentor_request_journeyId_idx").on(table.journeyId).where(sql`${table.journeyId} IS NOT NULL`),
+  index("mentor_request_redirectedToId_idx").on(table.redirectedToId).where(sql`${table.redirectedToId} IS NOT NULL`),
+  check("mentor_request_parties_check", sql`${table.requesterId} <> ${table.mentorId}`),
+  check("mentor_request_status_check", sql`${table.status} IN ('PENDING','ACCEPTED','REDIRECTED','DECLINED','WITHDRAWN')`),
+  check("mentor_request_format_check", sql`${table.format} IN ('WRITTEN_REVIEW','CALL_30_MIN','QUICK_QUESTION')`),
+  check("mentor_request_note_check", sql`length(trim(${table.note})) > 0 AND length(${table.note}) <= 2000`),
+  check("mentor_request_noteReasons_check", isJsonArray(table.noteReasons)),
+  check("mentor_request_project_check", sql`(${table.project} IS NULL) = (${table.journeyVersion} IS NULL) AND (${table.project} IS NULL OR json_valid(${table.project})) AND coalesce(${table.journeyVersion}, 1) >= 1`),
+  check("mentor_request_accepted_check", sql`(${table.status} = 'ACCEPTED') = (${table.acceptedAt} IS NOT NULL) AND (${table.status} = 'ACCEPTED') = (${table.channelId} IS NOT NULL)`),
+  check("mentor_request_decided_check", sql`(${table.status} = 'PENDING') = (${table.decidedAt} IS NULL)`),
+  check("mentor_request_redirect_check", sql`${table.redirectedToId} IS NULL OR ${table.status} = 'REDIRECTED'`),
+  check("mentor_request_response_check", sql`${table.responseNote} IS NULL OR (${table.status} IN ('REDIRECTED','DECLINED') AND length(trim(${table.responseNote})) > 0 AND length(${table.responseNote}) <= 2000)`),
+  check("mentor_request_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt} AND coalesce(${table.decidedAt}, ${table.createdAt}) >= ${table.createdAt} AND coalesce(${table.acceptedAt}, 0) >= 0`),
+]);

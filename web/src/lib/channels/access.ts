@@ -39,9 +39,17 @@ export function unreadCount(userId: string, channelId: SQL | AnySQLiteColumn, la
     LIMIT ${UNREAD_COUNT_CAP}))`;
 }
 
+/**
+ * A direct conversation is named for the other person in it, as each member sees it (B-4.1); the
+ * stored name stands in once nobody else is left. One read of channel_member's primary key.
+ */
+const counterpart = (userId: string) => sql<string | null>`CASE WHEN ${channel.kind} = 'DIRECT' THEN (SELECT nullif(trim(u.name), '')
+  FROM ${channelMember} other JOIN "user" u ON u.id = other.userId
+  WHERE other.channelId = ${channel.id} AND other.userId <> ${userId} ORDER BY u.name, u.id LIMIT 1) END`;
+
 function selectChannels(db: Database, userId: string, where: SQL | undefined) {
   return db.select({
-    id: channel.id, kind: channel.kind, slug: channel.slug, name: channel.name, topic: channel.topic,
+    id: channel.id, kind: channel.kind, slug: channel.slug, name: sql<string>`coalesce(${counterpart(userId)}, ${channel.name})`, topic: channel.topic,
     postingPolicy: channel.postingPolicy, programId: channel.programId, archivedAt: channel.archivedAt,
     isMember: sql<number>`${channelMember.userId} IS NOT NULL`, lastMessageAt,
     unreadCount: unreadCount(userId, channel.id, channelRead.lastReadMessageId),

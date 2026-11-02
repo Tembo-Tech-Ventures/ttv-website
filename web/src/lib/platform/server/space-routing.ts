@@ -13,8 +13,8 @@ import {
 import { getRouteChannel } from "./channel-context";
 import { getSpaceContext } from "./space-context";
 import {
-  canonicalSpacePath, channelRoute, isAvailableSpacePath, isChannelPagePath, isNewSpacePath, legacySpacePath,
-  normalizeSpacePath, SPACE_PATHS, spaceForPath, WELCOME_PATH,
+  canonicalSpacePath, channelRoute, conversationRoute, isAvailableSpacePath, isChannelPagePath, isMentorPagePath, isNewSpacePath,
+  legacySpacePath, normalizeSpacePath, SPACE_PATHS, spaceForPath, WELCOME_PATH,
 } from "./space-routes";
 
 function privateResponse(response: Response): Response {
@@ -105,14 +105,16 @@ async function acknowledgeApproval({ locals }: APIContext, me: Me, space: SpaceI
 
 /**
  * A page that does not exist for this caller. Channel pages exist only with the flag on, and a channel
- * the caller cannot read is missing whatever the reason (no such slug, another space, another cohort),
- * so no slug confirms that a channel exists.
+ * the caller cannot read is missing whatever the reason (no such slug or id, another space, another
+ * cohort, someone else's conversation), so no slug or id confirms that a channel exists. Mentor
+ * connection pages exist only with `mentor_requests` on.
  */
 async function pageMissing(context: APIContext, me: Me, target: string): Promise<boolean> {
   if (!isAvailableSpacePath(target)) return true;
+  if (isMentorPagePath(target)) return !me.flags.mentor_requests;
   if (!isChannelPagePath(target)) return false;
   if (!me.flags.channels) return true;
-  return channelRoute(target) !== null && !await getRouteChannel(context);
+  return (channelRoute(target) !== null || conversationRoute(target) !== null) && !await getRouteChannel(context);
 }
 
 async function serveSpacePage(context: APIContext, next: MiddlewareNext, me: Me, canonical: string | null): Promise<Response> {

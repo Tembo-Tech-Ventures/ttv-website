@@ -68,14 +68,31 @@ describe("message search: access", () => {
   it.each(CHANNEL_ACCESS_MATRIX.filter((item) => item.signedIn !== false))("$name finds messages only in channels they can read", async (item) => {
     const s = setup(item);
     const targets = seedTargets(s);
-    // Direct conversations have no page yet (Phase 4), so none is a result, not even for its members.
+    // Direct conversations (B-4.1) are results for their members only: never directOther, admins included.
     const readable = (Object.entries(item.channels) as [ChannelTarget, string][])
-      .filter(([target, letters]) => letters.includes("r") && !target.startsWith("direct")).map(([target]) => targets[target]);
+      .filter(([, letters]) => letters.includes("r")).map(([target]) => targets[target]);
     for (const scope of ["messages", "all"]) {
       const hits = await messages(s, "kipepeo", { scope });
       expect({ scope, ids: ids(hits).toSorted() }).toEqual({ scope, ids: readable.toSorted() });
-      expect(JSON.stringify(hits)).not.toMatch(/directMember|directOther/);
+      expect(JSON.stringify(hits)).not.toMatch(/directOther/);
     }
+  });
+
+  it("links a direct conversation's messages to its page, labelled private, for its members only", async () => {
+    const s = setup();
+    direct(s, "direct-member", [VIEWER, "synthetic-otieno"]);
+    messageIn(s, "direct-member", "dm-root", "Mentoring kipepeo root");
+    s.database.prepare(`INSERT INTO channel_message (id, channelId, parentId, seq, changeSeq, authorId, body, createdAt)
+      VALUES ('dm-reply', 'direct-member', 'dm-root', 2, 2, 'synthetic-otieno', 'kipepeo reply', 2)`).run();
+    const hits = await messages(s, "kipepeo", { scope: "community" });
+    expect(hits.map(({ id, href, visibility }) => ({ id, href, visibility }))).toEqual([
+      { id: "dm-reply", href: "/dashboard/community/dm/direct-member?thread=dm-root&message=dm-reply",
+        visibility: { kind: "DIRECT", label: "Private conversation · only the two of you" } },
+      { id: "dm-root", href: "/dashboard/community/dm/direct-member?message=dm-root",
+        visibility: { kind: "DIRECT", label: "Private conversation · only the two of you" } },
+    ]);
+    expect(await messages(s, "kipepeo", { scope: "cohort" })).toEqual([]);
+    expect(await messages(s, "kipepeo", { user: "synthetic-achieng" })).toEqual([]);
   });
 
   it("gives community channels to every signed-in person, institutions included, and nothing signed out", async () => {

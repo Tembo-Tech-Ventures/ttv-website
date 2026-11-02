@@ -1,32 +1,40 @@
 import type { APIContext } from "astro";
 import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
-import { findReadableChannel } from "@/lib/channels/access";
+import { findChannelById, findReadableChannel } from "@/lib/channels/access";
 import { loadChannelPage, loadChannelShareables, type ChannelPage } from "@/lib/channels/page";
 import * as schema from "@/lib/db/schema";
 import type { Channel, ChannelShareables } from "../contracts";
 import { requestCapabilities } from "./request-capabilities";
 import { getSpaceContext } from "./space-context";
-import { channelRoute, normalizeSpacePath } from "./space-routes";
+import { channelRoute, conversationRoute, normalizeSpacePath } from "./space-routes";
 
 const resolved = new WeakMap<App.Locals, { user: App.Locals["user"]; path: string; channel: Promise<Channel | null> }>();
 
 /**
- * The channel a `/dashboard/<space>/c/<slug>` request names, for the router and the page frontmatter
- * alike: null unless `channels` is on for the caller and they can read it. One lookup per request.
- * Like getSpaceContext, it throws that function's Response denials and lets database errors propagate.
+ * The channel a `/dashboard/<space>/c/<slug>` or `/dashboard/community/dm/<id>` request names, for the
+ * router and the page frontmatter alike: null unless `channels` is on for the caller and they can read
+ * it. A conversation path opens direct conversations only. One lookup per request. Like
+ * getSpaceContext, it throws that function's Response denials and lets database errors propagate.
  */
 export async function getRouteChannel(context: Pick<APIContext, "locals" | "url">): Promise<Channel | null> {
   const { locals, url } = context;
   const path = normalizeSpacePath(url.pathname);
   const route = channelRoute(path);
-  if (!route || !locals.user) return null;
+  const conversation = route ? null : conversationRoute(path);
+  if ((!route && !conversation) || !locals.user) return null;
   const me = await getSpaceContext(context);
   if (!me.flags.channels) return null;
   let cached = resolved.get(locals);
   if (!cached || cached.user !== locals.user || cached.path !== path) {
     const db = drizzle(env.DB, { schema });
-    cached = { user: locals.user, path, channel: requestCapabilities(db, locals).then((capabilities) => findReadableChannel(db, locals.user, route, capabilities)) };
+    const user = locals.user;
+    const channel = requestCapabilities(db, locals).then(async (capabilities) => {
+      if (route) return findReadableChannel(db, user, route, capabilities);
+      const found = conversation && await findChannelById(db, user, conversation.id, capabilities);
+      return found?.kind === "DIRECT" ? found : null;
+    });
+    cached = { user, path, channel };
     resolved.set(locals, cached);
   }
   return cached.channel;

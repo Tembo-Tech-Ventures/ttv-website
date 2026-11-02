@@ -23,8 +23,11 @@ const requestFlags = new WeakMap<object, {
   flags: Promise<Flags>;
 }>();
 
-/** A flag listed here is effective only while the flag it builds on is (onboarding SPEC §6). */
-const REQUIRES: Partial<Record<FlagKey, FlagKey>> = { onboarding: "spaces" };
+/**
+ * A flag listed here is effective only while the flag it builds on is: onboarding on spaces
+ * (onboarding SPEC §6), and mentor requests on channels, because accepting one opens a conversation.
+ */
+const REQUIRES: Partial<Record<FlagKey, FlagKey>> = { onboarding: "spaces", mentor_requests: "channels" };
 const FLAG_KEY_PLACEHOLDERS = FlagKey.options.map(() => "?").join(", ");
 
 function uniformFlags(enabled: boolean): Flags {
