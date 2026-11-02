@@ -91,9 +91,10 @@ const NUMBER_MARKS = new Set(["#", "$"]);
 /**
  * The path and query of a link to a named host (example.com/…/0712…?v=0712…): ids, not phone numbers.
  * The host stays, and a "link" whose host is digits (www.0712345678) is no link. Invitation links are
- * their own finding.
+ * their own finding. A host starts only where a run of letters, digits, dots and hyphens starts, so
+ * one long run is scanned once, not once from each of its characters.
  */
-const LINK_PATH = /((?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,24})[/?#][^\s<>"'`)\]|]*/giu;
+const LINK_PATH = /((?:https?:\/\/)?(?<![a-z0-9.-])(?:[a-z0-9-]+\.)+[a-z]{2,24})[/?#][^\s<>"'`)\]|]*/giu;
 /** The longest separator run inside a phone number, such as ") - ". */
 const MAX_SEPARATOR = 4;
 
@@ -142,8 +143,8 @@ function charAtom(char: string): Atom {
 }
 
 /**
- * Some other number: digits written against letters (v2, 10am, KSh500), after $ or a named # (Order
- * #0712…, PR #283), joined to other digits by : , / (times, thousands, dates), or a decimal (0.712345678,
+ * Some other number: digits written against letters (v2, 10am, KSh500), after $ or a named # in one
+ * group (Order #0712…, PR #283), joined to other digits by : , / (times, thousands, dates), or a decimal (0.712345678,
  * a lone "0." and one group: "0.712 345 678" and "0.7.1.2…" stay phone-shaped).
  */
 function excludeOtherNumbers(list: Atom[]): void {
@@ -152,10 +153,17 @@ function excludeOtherNumbers(list: Atom[]): void {
     const at = list[i];
     return at?.kind === "separator" && (text === undefined || at.text === text);
   };
+  // Digits that more groups follow, across separators only: "#0712 345 678" is grouped like a phone number.
+  const grouped = (i: number) => {
+    let next = i + 1;
+    while (isSeparator(next) && next - i <= MAX_SEPARATOR) next += 1;
+    return next > i + 1 && list[next]?.kind === "digits";
+  };
+  // "$100", or a single group numbering something a word names (Order #0712…, PR #283).
   const marked = (i: number) => {
     const mark = list[i - 1];
     if (mark?.kind !== "mark") return false;
-    return mark.text === "$" || (isSeparator(i - 2, " ") && list[i - 3]?.kind === "word");
+    return mark.text === "$" || (isSeparator(i - 2, " ") && list[i - 3]?.kind === "word" && !grouped(i));
   };
   // "0." and one group that ends the number. The zero must not be inside a tight chain (10.0.712…).
   const decimal = (i: number) => {
@@ -251,7 +259,8 @@ function phoneNumber(digits: string, shape: string, plus: boolean): string | nul
     if (digits.startsWith("254")) return /^2540?[1-9]\d{8}$/.test(digits) ? kenyan(digits.replace(/^2540?/, "")) : null;
     return digits.length <= 15 && !digits.startsWith("0") ? `+${digits}` : null;
   }
-  if (/^00[1-9]\d{8,12}$/.test(digits)) return phoneNumber(digits.slice(2), "", true);
+  // 00 and an international number of at least MIN_DIGITS digits.
+  if (/^00[1-9]\d{9,13}$/.test(digits)) return phoneNumber(digits.slice(2), "", true);
   if (/^2540?[1-9]\d{8}$/.test(digits)) return kenyan(digits.replace(/^2540?/, ""));
   // A trunk zero: Kenyan mobiles and landlines (07xx, 01xx, 020), and other national numbers.
   if (/^0[1-9]\d{8}$/.test(digits)) return kenyan(digits.slice(1));

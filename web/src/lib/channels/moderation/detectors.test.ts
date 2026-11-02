@@ -39,6 +39,9 @@ const PHONES: Case[] = [
   ["+ 254 712 345 678", ["phone"]],
   ["(+254) 712345678", ["phone"]],
   ["00254712345678", ["phone"]],
+  // 00 needs a whole international number after it: these are ids, not +712345678.
+  ["00712345678", []],
+  ["id 00123456789", []],
   ["00 254 712 345 678", ["phone"]],
   // Landlines.
   ["Office: 020 2345678", ["phone"]],
@@ -67,6 +70,9 @@ const PHONES: Case[] = [
   ["0044 20 7946 0958", ["phone"]],
   // A one-character prefix does not hide a number.
   ["WhatsApp me www.0712345678", ["phone"]],
+  // A named # numbers one group; a number written in groups after it is still a phone number.
+  ["Call me on #0712 345 678", ["phone"]],
+  ["WhatsApp #0712-345-678", ["phone"]],
   ["call https://0712345678", ["phone"]],
   ["https://me/0712345678", ["phone"]],
   ["link https://ttv.com|0712345678", ["phone"]],
@@ -248,6 +254,7 @@ describe("known limits", () => {
     ["ISBN 0-13-468599-1", ["phone"]],
     // Missed: a number written as a decimal, or as the number of something.
     ["0.712345678", []],
+    // Missed: one group after a named # reads like a ticket or PR number ("call #0712345678" too).
     ["Ticket #0712345678", []],
     // Missed: a number in the path or query of a link to a named host.
     ["example.com/call/0712345678", []],
@@ -260,7 +267,8 @@ describe("known limits", () => {
 describe("finding keys", () => {
   it("gives every spelling of one Kenyan number the same key", () => {
     const spellings = ["0712345678", "0712 345 678", "+254 712 345 678", "254712345678", "+254 (0) 712-345-678",
-      "00254712345678", "zero seven one two three four five six seven eight", "０７１２３４５６７８", "wa . me / 254712345678"];
+      "00254712345678", "zero seven one two three four five six seven eight", "０７１２３４５６７８", "wa . me / 254712345678",
+      "0 0 0712345678"];
     for (const text of spellings) {
       expect(detectFindings(text).filter((f) => f.kind === "phone").map((f) => f.key), `${text}`).toEqual(["phone:+254712345678"]);
     }
@@ -293,7 +301,8 @@ describe("cost", () => {
   };
 
   it("grows linearly on long adversarial texts", () => {
-    for (const unit of ["dot ", "a dot ", "a (dot) ", "x[at]", "0 ", "1 ", "+254 7", "wa . me / ", "@a ", "07 "]) {
+    // One long run with no space too ("a", "ab."): a link's host is looked for once per run, not per character.
+    for (const unit of ["dot ", "a dot ", "a (dot) ", "x[at]", "0 ", "1 ", "+254 7", "wa . me / ", "@a ", "07 ", "a", "ab.", "x-", "0.", "1."]) {
       const text = (length: number) => unit.repeat(Math.ceil(length / unit.length)).slice(0, length);
       const [short, long] = [time(text(2_500)), time(text(10_000))];
       // Four times the text: about four times the work, never the sixteen a quadratic scan costs.
