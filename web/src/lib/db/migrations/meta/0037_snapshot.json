@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "09dfefc3-4b06-4664-a671-1eb092629931",
+  "id": "967d4058-4272-4a18-97e9-c80b91efe847",
   "prevId": "c3dcb4eb-a27d-40f4-972b-1235c38ebbc0",
   "tables": {
     "access_request": {
@@ -3967,6 +3967,14 @@
           "notNull": false,
           "autoincrement": false
         },
+        "closedRequest": {
+          "name": "closedRequest",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
         "createdAt": {
           "name": "createdAt",
           "type": "integer",
@@ -4045,6 +4053,10 @@
         "mentor_request_case_decision_check": {
           "name": "mentor_request_case_decision_check",
           "value": "(\"mentor_request_case\".\"decision\" IS NULL OR \"mentor_request_case\".\"decision\" IN ('KEEP','REMOVE'))\n    AND (\"mentor_request_case\".\"decision\" IS NULL) = (\"mentor_request_case\".\"decidedAt\" IS NULL) AND (\"mentor_request_case\".\"decision\" IS NULL) = (\"mentor_request_case\".\"decisionReason\" IS NULL)\n    AND (\"mentor_request_case\".\"state\" = 'OPEN' OR \"mentor_request_case\".\"decision\" IS NOT NULL)\n    AND (\"mentor_request_case\".\"decisionReason\" IS NULL OR (length(trim(\"mentor_request_case\".\"decisionReason\")) > 0 AND length(\"mentor_request_case\".\"decisionReason\") <= 2000))"
+        },
+        "mentor_request_case_closed_check": {
+          "name": "mentor_request_case_closed_check",
+          "value": "\"mentor_request_case\".\"closedRequest\" IN (0, 1) AND (\"mentor_request_case\".\"closedRequest\" = 0 OR \"mentor_request_case\".\"decision\" = 'REMOVE')"
         },
         "mentor_request_case_time_check": {
           "name": "mentor_request_case_time_check",

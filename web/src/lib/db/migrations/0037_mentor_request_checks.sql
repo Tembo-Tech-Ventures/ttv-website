@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS `mentor_request_case` (
 	`decisionReason` text,
 	`decidedBy` text,
 	`decidedAt` integer,
+	`closedRequest` integer DEFAULT 0 NOT NULL,
 	`createdAt` integer DEFAULT (unixepoch() * 1000) NOT NULL,
 	`updatedAt` integer DEFAULT (unixepoch() * 1000) NOT NULL,
 	FOREIGN KEY (`requestId`) REFERENCES `mentor_request`(`id`) ON UPDATE no action ON DELETE cascade,
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS `mentor_request_case` (
     AND ("mentor_request_case"."decision" IS NULL) = ("mentor_request_case"."decidedAt" IS NULL) AND ("mentor_request_case"."decision" IS NULL) = ("mentor_request_case"."decisionReason" IS NULL)
     AND ("mentor_request_case"."state" = 'OPEN' OR "mentor_request_case"."decision" IS NOT NULL)
     AND ("mentor_request_case"."decisionReason" IS NULL OR (length(trim("mentor_request_case"."decisionReason")) > 0 AND length("mentor_request_case"."decisionReason") <= 2000))),
+	CONSTRAINT "mentor_request_case_closed_check" CHECK("mentor_request_case"."closedRequest" IN (0, 1) AND ("mentor_request_case"."closedRequest" = 0 OR "mentor_request_case"."decision" = 'REMOVE')),
 	CONSTRAINT "mentor_request_case_time_check" CHECK("mentor_request_case"."createdAt" >= 0 AND "mentor_request_case"."updatedAt" >= "mentor_request_case"."createdAt" AND "mentor_request_case"."openedAt" >= 0)
 );
 --> statement-breakpoint

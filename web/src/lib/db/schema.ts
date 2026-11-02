@@ -1722,7 +1722,7 @@ const MENTOR_REQUEST_DECISIONS = ["KEEP", "REMOVE"] as const;
  * A check on a mentor request's note (src/lib/mentoring/README.md, "Checks"), at most one per
  * request. Clef's near-certain abuse or the mentor's report opens it (clefReasons, and a
  * mentor_request_report row), and an admin decides: KEEP releases the request to the mentor, REMOVE
- * closes it (WITHDRAWN, never sent). While OPEN the request holds no spot and the mentor cannot act on
+ * closes it (WITHDRAWN, closedRequest) if it still waits. While OPEN the request holds no spot and the mentor cannot act on
  * it. A report after a KEEP opens it again (openedAt), keeping the earlier decision until the next.
  */
 export const mentorRequestCase = sqliteTable("mentor_request_case", {
@@ -1734,6 +1734,8 @@ export const mentorRequestCase = sqliteTable("mentor_request_case", {
   decisionReason: text("decisionReason"),
   decidedBy: text("decidedBy").references(() => user.id, { onDelete: "set null" }),
   decidedAt: integer("decidedAt"),
+  // 1 when the REMOVE closed a waiting request; 0 when its asker had withdrawn it first.
+  closedRequest: integer("closedRequest").notNull().default(0),
   createdAt: epochMs("createdAt"),
   updatedAt: epochMs("updatedAt"),
 }, (table) => [
@@ -1746,6 +1748,7 @@ export const mentorRequestCase = sqliteTable("mentor_request_case", {
     AND (${table.decision} IS NULL) = (${table.decidedAt} IS NULL) AND (${table.decision} IS NULL) = (${table.decisionReason} IS NULL)
     AND (${table.state} = 'OPEN' OR ${table.decision} IS NOT NULL)
     AND (${table.decisionReason} IS NULL OR (length(trim(${table.decisionReason})) > 0 AND length(${table.decisionReason}) <= 2000))`),
+  check("mentor_request_case_closed_check", sql`${table.closedRequest} IN (0, 1) AND (${table.closedRequest} = 0 OR ${table.decision} = 'REMOVE')`),
   check("mentor_request_case_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt} AND ${table.openedAt} >= 0`),
 ]);
 

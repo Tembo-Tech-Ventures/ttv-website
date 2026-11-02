@@ -129,6 +129,34 @@ describe("Clef on a new request's note", () => {
     expect(await attention(s, PEOPLE.david)).toEqual([]);
   });
 
+  it("lets a held request its asker withdrew go: the mentor never saw it, so the check is moot", async () => {
+    const s = setup();
+    const id = await ask(s, ABUSE);
+    expect((await s.call("withdrawMentorRequest", { id, body: {} })).status).toBe(200);
+    expect((await queue(s)).items).toEqual([]);
+    expect(await attention(s, PEOPLE.amina)).toEqual([]);
+    const moot = await decide(s, id, "remove");
+    expect([moot.status, errorOf(moot.body).message]).toEqual([409, "This request was withdrawn."]);
+    expect(await attention(s, PEOPLE.david)).toEqual([]);
+  });
+
+  it("sends no new-request notice to a mentor who reported before Clef answered, whatever Clef says", async () => {
+    for (const verdict of [{}, new Error("model down")]) {
+      const s = setup();
+      const response = await s.call("createMentorRequest", {
+        env: clef(verdict).env, body: { mentorId: PEOPLE.david, note: "Rude words", project: null, format: "WRITTEN_REVIEW" },
+      });
+      const id = MentorRequest.parse(response.body).id;
+      expect((await s.call("reportMentorRequest", { id, user: PEOPLE.david, body: { reason: "Rude" } })).status).toBe(200);
+      await s.afterResponse();
+      expect(await attention(s, PEOPLE.david), `${String(verdict)}`).toEqual([]);
+      // Kept: they read it already, so still no notice.
+      await decide(s, id, "keep");
+      expect(await attention(s, PEOPLE.david), `${String(verdict)}`).toEqual([]);
+      expect((await asMentor(s)).map((request) => [request.status, request.check])).toEqual([["PENDING", null]]);
+    }
+  });
+
   it("holds only a request still waiting with the note Clef read", async () => {
     const s = setup();
     const response = await s.call("createMentorRequest", {
@@ -273,13 +301,16 @@ describe("the mentor's report", () => {
     // Admins read the note as written; the attention notice names no one and copies nothing.
     expect(items[0]?.request.note).toBe("Could you look at my callback?");
     expect(await attention(s, PEOPLE.amina)).toEqual([["moderation_pending", "/admin/moderation?tab=request-notes"]]);
-    // The person asking can still withdraw while they wait: the check is moot, and leaves the queue and the admins' bell.
+    // The person asking may withdraw, but that never hides the mentor's report: it stays the admins' to decide.
     expect((await s.call("withdrawMentorRequest", { id, body: {} })).status).toBe(200);
-    expect((await queue(s)).items).toEqual([]);
-    expect(await attention(s, PEOPLE.amina)).toEqual([]);
+    expect((await queue(s)).items.map((item) => [item.id, item.request.status])).toEqual([[id, "WITHDRAWN"]]);
+    expect(await attention(s, PEOPLE.amina)).toEqual([["moderation_pending", "/admin/moderation?tab=request-notes"]]);
     expect((await asRequester(s)).map((request) => [request.status, request.check])).toEqual([["WITHDRAWN", null]]);
-    const moot = await decide(s, id, "remove");
-    expect([moot.status, errorOf(moot.body).message]).toEqual([409, "This request was withdrawn."]);
+    const recorded = await decide(s, id, "remove");
+    expect([recorded.status, MentorRequestCase.parse(recorded.body).decision?.action]).toEqual([200, "remove"]);
+    // Still theirs: they withdrew it before anyone removed it.
+    expect((await asRequester(s)).map((request) => [request.status, request.check])).toEqual([["WITHDRAWN", null]]);
+    expect(await attention(s, PEOPLE.amina)).toEqual([]);
   });
 
   it("is the mentor's alone, once, while the request waits", async () => {

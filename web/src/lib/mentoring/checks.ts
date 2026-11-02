@@ -115,15 +115,16 @@ export function requireAdmin(isAdmin: boolean) {
 
 /**
  * GET /api/moderation/mentor-requests: admins only (403). The checks in one state (OPEN unless asked
- * for DECIDED), oldest opened first, CASE_PAGE_SIZE at a time. An open check on a request its asker
- * has withdrawn is moot (nothing is left to send or close), so the OPEN queue leaves it out. One
- * statement, along mentor_request_case_queue_idx.
+ * for DECIDED), oldest opened first, CASE_PAGE_SIZE at a time. An open Clef hold on a request its
+ * asker has withdrawn is moot (the mentor never saw it, and nothing is left to send), so the OPEN
+ * queue leaves it out; a reported one stays, as the mentor read it and withdrawing must not hide their
+ * report. One statement, along mentor_request_case_queue_idx.
  */
 export async function listCases(ctx: MentoringContext, isAdmin: boolean, query: MentorRequestCaseQuery): Promise<MentorRequestCaseList> {
   requireAdmin(isAdmin);
   const [afterAt, afterId] = query.cursor === undefined ? [null, null] : decodeCursor(query.cursor);
   const { results } = await ctx.db.prepare(`${CASE_SELECT}
-    WHERE c.state = ?1 AND (c.state = 'DECIDED' OR r.status = 'PENDING')
+    WHERE c.state = ?1 AND (c.state = 'DECIDED' OR r.status = 'PENDING' OR rp.requestId IS NOT NULL)
       AND (?2 IS NULL OR c.openedAt > ?2 OR (c.openedAt = ?2 AND c.requestId > ?3))
     ORDER BY c.openedAt, c.requestId LIMIT ?4`)
     .bind(query.state ?? "OPEN", afterAt, afterId, CASE_PAGE_SIZE + 1).all<CaseRow>();
@@ -140,12 +141,13 @@ async function caseRow(ctx: MentoringContext, id: string): Promise<CaseRow | nul
 }
 
 /**
- * POST /api/moderation/mentor-requests/:id: an admin (403 otherwise) decides an open check on a
- * waiting request, with a reason kept for the record. Refusals: no check (404); the admin is one of
- * the request's two parties (403: nobody judges their own request); already decided, or the request
- * withdrawn meanwhile (409). keep: the request goes (back) to its mentor as it is, PENDING. remove: it
- * closes as WITHDRAWN; the person asking sees not_sent or closed. One read, then one batch: the
- * decision, then the removal it allows, each guarded as the read was.
+ * POST /api/moderation/mentor-requests/:id: an admin (403 otherwise) decides an open check, with a
+ * reason kept for the record. Refusals: no check (404); the admin is one of the request's two parties
+ * (403: nobody judges their own request); already decided, or a Clef hold whose request was withdrawn
+ * meanwhile (409, moot). keep: a waiting request goes (back) to its mentor as it is, PENDING. remove:
+ * a waiting request closes as WITHDRAWN; the person asking sees not_sent or closed. A reported request
+ * its asker withdrew is still decided, for the record; its status stays as the asker left it. One
+ * read, then one batch: the decision, then the removal it allows, each guarded as the read was.
  */
 export async function decideCase(
   ctx: MentoringContext, isAdmin: boolean, id: string, input: DecideMentorRequestCase,
@@ -159,14 +161,17 @@ export async function decideCase(
   }
   const decision = input.action === "keep" ? "KEEP" : "REMOVE";
   const [decided] = await db.batch([
+    // The decision first, noting whether a removal closes a request that still waits; then that closing.
     db.prepare(`UPDATE mentor_request_case SET state = 'DECIDED', decision = ?2, decisionReason = ?3, decidedBy = ?4,
-        decidedAt = ?5, updatedAt = max(?5, updatedAt)
+        decidedAt = ?5, updatedAt = max(?5, updatedAt),
+        closedRequest = ?2 = 'REMOVE' AND EXISTS (SELECT 1 FROM mentor_request p WHERE p.id = ?1 AND p.status = 'PENDING')
       WHERE requestId = ?1 AND state = 'OPEN' AND EXISTS (SELECT 1 FROM mentor_request r
-        WHERE r.id = ?1 AND r.status = 'PENDING' AND ?4 NOT IN (r.requesterId, r.mentorId))
+        WHERE r.id = ?1 AND ?4 NOT IN (r.requesterId, r.mentorId)
+          AND (r.status = 'PENDING' OR EXISTS (SELECT 1 FROM mentor_request_report rp WHERE rp.requestId = r.id)))
       RETURNING requestId`).bind(id, decision, input.reason, viewerId, now),
     db.prepare(`UPDATE mentor_request SET status = 'WITHDRAWN', decidedAt = max(?2, createdAt), updatedAt = max(?2, createdAt)
       WHERE id = ?1 AND status = 'PENDING' AND EXISTS (SELECT 1 FROM mentor_request_case
-        WHERE requestId = ?1 AND state = 'DECIDED' AND decision = 'REMOVE' AND decidedAt = ?2 AND decidedBy IS ?3)`).bind(id, now, viewerId),
+        WHERE requestId = ?1 AND state = 'DECIDED' AND closedRequest = 1 AND decidedAt = ?2 AND decidedBy IS ?3)`).bind(id, now, viewerId),
   ]);
   const row = await caseRow(ctx, id);
   if (!row) throw new ChannelError("not_found", "This request has no check.", 404);

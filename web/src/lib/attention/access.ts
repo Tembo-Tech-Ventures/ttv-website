@@ -1,6 +1,6 @@
 import { and, eq, exists, inArray, or, sql } from "drizzle-orm";
 import {
-  accessRequest, attentionItem, channel, channelMember, channelMessage, communityJourney, mentorRequest, mentorRequestCase, moderationCase, profileContact,
+  accessRequest, attentionItem, channel, channelMember, channelMessage, communityJourney, mentorRequest, mentorRequestCase, mentorRequestReport, moderationCase, profileContact,
   programApplication, recording, studentProfile, type Database,
 } from "@/lib/db/schema";
 import { MENTOR_SEES } from "@/lib/mentoring/visibility";
@@ -16,7 +16,7 @@ import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
  * visible in a channel the person can still read, their own direct conversations included (B-4.1).
  * Mentor requests (B-4.1): each notice to the party it was for, the mentor or the person asking; the
  * mentor's only while they may see the request (a check can hold it back), and an open check's
- * notice for admins while it stays open on a request still waiting.
+ * notice for admins while it stays open on a request still waiting or reported.
  */
 export function attentionAccess(db: Database, userId: string, capabilities: PlatformCapabilities) {
   return and(
@@ -53,7 +53,8 @@ export function attentionAccess(db: Database, userId: string, capabilities: Plat
           and(inArray(attentionItem.kind, ["mentor_request", "mentor_withdrawn"]), eq(mentorRequest.mentorId, userId),
             sql.raw(MENTOR_SEES(`"mentor_request"`))),
           and(inArray(attentionItem.kind, ["mentor_accepted", "mentor_redirected", "mentor_declined"]), eq(mentorRequest.requesterId, userId)),
-          capabilities.isAdmin ? and(eq(attentionItem.kind, "moderation_pending"), eq(mentorRequest.status, "PENDING"), exists(db.select({ id: mentorRequestCase.requestId })
+          capabilities.isAdmin ? and(eq(attentionItem.kind, "moderation_pending"), or(eq(mentorRequest.status, "PENDING"), exists(db.select({ id: mentorRequestReport.requestId })
+            .from(mentorRequestReport).where(eq(mentorRequestReport.requestId, mentorRequest.id)))), exists(db.select({ id: mentorRequestCase.requestId })
             .from(mentorRequestCase).where(and(eq(mentorRequestCase.requestId, mentorRequest.id), eq(mentorRequestCase.state, "OPEN"))))) : sql`0`,
         ))))),
       and(eq(attentionItem.subjectKind, "accessRequest"), exists(db.select({ id: accessRequest.id }).from(accessRequest)

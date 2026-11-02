@@ -232,8 +232,8 @@ threshold) opens a check, and the check **holds** the request:
   applied in `capacity.ts`).
 - The person asking sees it PENDING with `check: "waiting"`. The UI copy is
   "Waiting for a check before it's sent", never "declined". They may still
-  withdraw it; a withdrawn request's check is moot, and leaves the OPEN queue
-  and the admins' notices.
+  withdraw it. A withdrawn Clef hold is moot (the mentor never saw it): it
+  leaves the OPEN queue and the admins' notices, and deciding it is 409.
 
 Anything short of near-certain abuse changes nothing. Clef runs after the
 response, as for channel posts, so in the moment before it answers the mentor
@@ -254,7 +254,10 @@ The mentor may **report** a waiting request (`POST
   holds no spot.
 - The report opens a check. The person asking sees `check: "checking"`
   ("TTV is checking this request"): the mentor has read it, so "before it's
-  sent" would be false. It never names who opened the check.
+  sent" would be false. It never names who opened the check. Withdrawing never
+  hides a report: the check stays in the OPEN queue (with the request's
+  status) and in the admins' notices until an admin decides it, for the
+  record.
 
 | Table | Holds |
 |---|---|
@@ -280,7 +283,9 @@ Admins decide in their own queue. It is separate from the channel
     never does.
   - It is 404 for a request with no check; 403 for an admin who is one of the
     request's two parties (nobody judges their own request); 409 once the
-    check is decided or the request was withdrawn.
+    check is decided, or for a Clef hold whose request was withdrawn. A
+    removal closes the request only if it still waits (`closedRequest`), so
+    one the asker withdrew first stays theirs, with no check shown.
 
 A report on a request an admin kept opens its check again, showing the earlier
 decision until the next one. Both admin routes are for admins only (403), and

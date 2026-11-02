@@ -24,7 +24,7 @@ describe("mentor request checks migration", () => {
     const after = read("./meta/0037_snapshot.json");
     expect(after.prevId).toBe(before.id);
     expect(Object.keys(after.tables.mentor_request_case.columns)).toEqual(
-      ["requestId", "state", "clefReasons", "openedAt", "decision", "decisionReason", "decidedBy", "decidedAt", "createdAt", "updatedAt"]);
+      ["requestId", "state", "clefReasons", "openedAt", "decision", "decisionReason", "decidedBy", "decidedAt", "closedRequest", "createdAt", "updatedAt"]);
     expect(Object.keys(after.tables.mentor_request_report.columns)).toEqual(["requestId", "reporterId", "reason", "createdAt"]);
     for (const table of ["mentor_request_case", "mentor_request_report"]) delete after.tables[table];
     expect(after.tables).toEqual(before.tables);
@@ -56,6 +56,12 @@ describe("mentor request checks migration", () => {
       expect(insertCase(`('ask','DECIDED','[]',1,'BAN','Abuse','amina',2,1,2)`)).toThrow(/CHECK/);
       expect(insertCase(`('ask','OPEN','[]',1,NULL,NULL,NULL,NULL,2,1)`)).toThrow(/CHECK/);
       expect(insertCase(`('missing','OPEN','[]',1,NULL,NULL,NULL,NULL,1,1)`)).toThrow(/FOREIGN KEY/);
+      // Only a removal closes a request.
+      const closing = (decision: string, closed: number) => () => database.exec(`INSERT INTO mentor_request_case
+        (requestId, state, openedAt, decision, decisionReason, decidedBy, decidedAt, closedRequest, createdAt, updatedAt)
+        VALUES ('ask','DECIDED',1,'${decision}','Why','amina',2,${closed},1,2)`);
+      expect(closing("KEEP", 1)).toThrow(/CHECK/);
+      expect(closing("REMOVE", 2)).toThrow(/CHECK/);
       insertCase(`('ask','DECIDED','["May be abusive"]',1,'KEEP','Fine as written','amina',2,1,2)`)();
       // Reopened after a keep: the earlier decision stays until the next.
       insertCase(`('other','OPEN','[]',3,'KEEP','Fine as written','amina',2,1,3)`)();

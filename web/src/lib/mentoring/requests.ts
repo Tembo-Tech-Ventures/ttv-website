@@ -62,6 +62,7 @@ export interface RequestRow extends Record<string, unknown> {
   note: string; noteReasons: string; project: string | null; projectAccess: string | null; channelId: string | null;
   redirectedToId: string | null; responseNote: string | null; createdAt: number; updatedAt: number;
   caseState: "OPEN" | "DECIDED" | null; caseDecision: "KEEP" | "REMOVE" | null; reported: number;
+  closedRequest: number | null;
 }
 
 /**
@@ -73,6 +74,7 @@ export interface RequestRow extends Record<string, unknown> {
 export const REQUEST_COLUMNS = `r.id, r.requesterId, r.mentorId, r.status, r.format, r.note, r.noteReasons, r.project,
   r.channelId, r.redirectedToId, r.responseNote, r.createdAt, r.updatedAt,
   c.state AS caseState, c.decision AS caseDecision, rp.requestId IS NOT NULL AS reported,
+  c.closedRequest,
   CASE WHEN r.project IS NOT NULL THEN (SELECT ${confirmationsOf("j.id", "r.journeyVersion")} FROM communityJourney j
     WHERE j.id = r.journeyId AND j.userId = r.requesterId AND j.visibility = 'institution') END AS projectAccess,
   ${personColumns("ru", "r.requesterId", "requester", { cohorts: true })},
@@ -120,7 +122,8 @@ function checkFor(row: RequestRow, viewerId: string): MentorRequestCheck | null 
   if (row.requesterId === viewerId) {
     const seen = Boolean(row.reported);
     if (row.caseState === "OPEN" && row.status === "PENDING") return seen ? "checking" : "waiting";
-    if (row.caseDecision === "REMOVE" && row.status === "WITHDRAWN") return seen ? "closed" : "not_sent";
+    // Only when the removal closed it: a request the asker withdrew first stays theirs ("withdrawn").
+    if (row.closedRequest) return seen ? "closed" : "not_sent";
     return null;
   }
   return row.reported && !(row.caseState === "DECIDED" && row.caseDecision === "KEEP") ? "reported" : null;
