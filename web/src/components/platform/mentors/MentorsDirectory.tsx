@@ -15,7 +15,7 @@ import { useModalDialog } from "@/components/platform/overlays/useModalDialog";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
 import MentorCard from "./MentorCard";
-import { FORMAT_LABELS } from "./mentor-display";
+import { FORMAT_LABELS, NEEDS_MEMBER } from "./mentor-display";
 import OwnRequests from "./OwnRequests";
 import RequestForm, { type ConductPrompt } from "./RequestForm";
 // oxlint-disable-next-line import/no-unassigned-import -- Mentor connections stylesheet.
@@ -34,6 +34,11 @@ export interface MentorsDirectoryProps {
   areas: readonly string[];
   /** The requests this person sent (first page, newest first). */
   ownRequests: MentorRequestList;
+  /**
+   * The person has a member account (a community profile or a cohort place), which asking needs
+   * (B-4.1, #304). Without one the directory still reads, with no "Ask for time".
+   */
+  canAsk: boolean;
   /** The person's own published projects, at their current revisions. */
   projects: readonly ProjectEmbed[];
   /** The habits' prompt; the drawer posts its agreement back to this page with the drawer open. */
@@ -72,7 +77,7 @@ function FilterLink({ href, active, small = false, children }: { href: string; a
  * needs it.
  */
 export default function MentorsDirectory(props: MentorsDirectoryProps) {
-  const { me, path, filters, mentors, shown, areas, projects, conduct, now, api, serverForm = null, sent: sentNow = null } = props;
+  const { me, path, filters, mentors, shown, areas, projects, conduct, now, api, canAsk, serverForm = null, sent: sentNow = null } = props;
   const headingId = useId();
   // Until the island is interactive (and always without JavaScript) a drawer named by `?ask=` is a plain panel with a real form.
   const [hydrated, setHydrated] = useState(false);
@@ -93,7 +98,7 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
 
   // A full mentor's drawer opens only to say why a send without JavaScript just did not go through.
   const asked = filters.ask
-    ? mentors.find(item => item.person.id === filters.ask && (hasOpenSpot(item) || serverForm?.mentorId === item.person.id)) ?? null
+    ? mentors.find(item => item.person.id === filters.ask && ((canAsk && hasOpenSpot(item)) || serverForm?.mentorId === item.person.id)) ?? null
     : null;
   const shownMentor = hydrated ? active : asked;
   const form = useMemo(() => shownMentor ? createRequestFormStore({
@@ -102,11 +107,11 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
   }) : null, [shownMentor, me.user.id, projects, api, serverForm]);
 
   const ask = useCallback((item: MentorDirectoryItem, from: HTMLElement | null) => {
-    if (!hasOpenSpot(item) && serverForm?.mentorId !== item.person.id) return;
+    if (!(canAsk && hasOpenSpot(item)) && serverForm?.mentorId !== item.person.id) return;
     setActive(item);
     window.history.replaceState(window.history.state, "", askHref(path, base, item.person.id));
     show(from);
-  }, [path, base, show, serverForm]);
+  }, [path, base, show, serverForm, canAsk]);
 
   // Once interactive, `?ask=` opens that mentor's drawer as a dialog: a reload, or the return from agreeing to the habits
   // or from a send that did not go through. A `?sent=` notice has been read by then, so a reload does not repeat it.
@@ -132,6 +137,11 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
         <output className="mb-6 block rounded-2xl border border-ring/40 bg-ring/8 px-4 py-3 text-[0.9375rem] text-ink-primary" data-request-sent-notice>
           Request sent to {sentNow.mentor.name}. It's under Your requests while it waits, and you can withdraw it there.
         </output>
+      )}
+      {!canAsk && (
+        <p className="mb-6 rounded-2xl border border-hairline px-4 py-3 text-[0.9375rem] text-ink-secondary" data-mentors-need-member>
+          {NEEDS_MEMBER} You can still read who mentors here and what they help with.
+        </p>
       )}
       <OwnRequests store={ownRequests} now={now} mentors={mentors} onAsk={ask} />
 
@@ -167,7 +177,7 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
       {shown.length > 0 ? (
         <ul className="mentor-grid" data-mentor-grid>
           {shown.map(item => (
-            <MentorCard key={item.person.id} item={item} now={now} open={active?.person.id === item.person.id} onAsk={ask} />
+            <MentorCard key={item.person.id} item={item} now={now} open={active?.person.id === item.person.id} canAsk={canAsk} onAsk={ask} />
           ))}
         </ul>
       ) : (

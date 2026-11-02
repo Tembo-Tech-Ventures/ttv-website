@@ -29,7 +29,7 @@ const MAX_STORED = 16_384;
 export type RequestFormStatus = "editing" | "sending" | "sent" | "conduct" | "error";
 export type RequestFormField = "note" | "format";
 /** Why the last send failed, in words the drawer can choose from. `limit`: too many requests waiting or made today. */
-export type RequestFailure = "conflict" | "notFound" | "limit" | "signedOut" | "other";
+export type RequestFailure = "conflict" | "notFound" | "limit" | "signedOut" | "notMember" | "other";
 
 export interface RequestDraft {
   note: string;
@@ -147,6 +147,8 @@ export function requestFailure(error: { status: number; code: string }): Request
   if (error.status === 429 || error.code === "rate_limited") return "limit";
   if (error.status === 404) return "notFound";
   if (error.status === 401) return "signedOut";
+  // B-4.1 (#304): asking needs a member account. conduct_required is a 403 too, and has its own step.
+  if (error.status === 403 && error.code === "forbidden") return "notMember";
   return "other";
 }
 

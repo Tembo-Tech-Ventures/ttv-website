@@ -8,6 +8,8 @@ interface Props {
   now: number;
   /** This mentor's request drawer is open. */
   open: boolean;
+  /** The viewer may ask mentors for time (a member account); otherwise the card only reads. */
+  canAsk: boolean;
   onAsk: (item: MentorDirectoryItem, from: HTMLButtonElement) => void;
 }
 
@@ -17,7 +19,7 @@ interface Props {
  * opening, and the card says "Full this month" where the button would be:
  * there is nothing to press, so nothing pretends to be pressable.
  */
-export default function MentorCard({ item, now, open, onAsk }: Props) {
+export default function MentorCard({ item, now, open, canAsk, onAsk }: Props) {
   const { person } = item;
   const capacity = capacityView(item.capacity, now);
   const headingId = `mentor-${person.id}`;
@@ -49,7 +51,9 @@ export default function MentorCard({ item, now, open, onAsk }: Props) {
           <PiClock aria-hidden className="size-[1.125rem] shrink-0" />
           <span>{capacity.text}</span>
         </p>
-        {capacity.open ? (
+        {!capacity.open ? (
+          <p className="text-sm font-semibold text-ink-primary" data-mentor-full>{FULL_THIS_MONTH}</p>
+        ) : canAsk && (
           <Button
             variant={open ? "primary" : "quiet"}
             aria-haspopup="dialog"
@@ -60,8 +64,6 @@ export default function MentorCard({ item, now, open, onAsk }: Props) {
           >
             Ask for time
           </Button>
-        ) : (
-          <p className="text-sm font-semibold text-ink-primary" data-mentor-full>{FULL_THIS_MONTH}</p>
         )}
       </div>
     </Card>

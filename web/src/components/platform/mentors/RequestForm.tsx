@@ -9,7 +9,7 @@ import { CONDUCT_TITLE } from "@/components/channels/conduct";
 import { Avatar, Button, IconButton } from "@/components/platform/ui";
 import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
-import { FORMAT_HINTS, FORMAT_LABELS } from "./mentor-display";
+import { FORMAT_HINTS, FORMAT_LABELS, NEEDS_MEMBER } from "./mentor-display";
 import { projectValue, REQUEST_INTENT } from "./request-post";
 
 /** Where agreeing to the habits posts (this page, drawer open) and where to read them first. */
@@ -53,6 +53,7 @@ const FAILURES: Record<RequestFailure, (name: string) => string> = {
   notFound: name => `${name} isn't taking requests through the directory right now. Your note is kept.`,
   signedOut: () => "You've been signed out. Sign in again and your note will still be here in this tab.",
   limit: () => "You already have several requests waiting, or have asked several times today. Once one is answered, or tomorrow, you can ask again. Your note is kept.",
+  notMember: () => `${NEEDS_MEMBER} Your request wasn't sent.`,
   other: () => "Your request wasn't sent. Your note is kept; try again in a moment.",
 };
 

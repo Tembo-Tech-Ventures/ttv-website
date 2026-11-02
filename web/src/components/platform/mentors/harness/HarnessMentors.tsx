@@ -31,16 +31,18 @@ type Harness =
   | { view: "requests"; props: Omit<MentorRequestsQueueProps, "api"> }
   | { view: "availability"; props: Omit<AvailabilityEditorProps, "api"> };
 
-export default function HarnessMentors({ viewer, conductAgreed, latencyMs = 250, harness }: {
+export default function HarnessMentors({ viewer, conductAgreed, member = true, latencyMs = 250, harness }: {
   viewer: PersonSummary;
   conductAgreed: boolean;
+  /** A member account (a community profile or a cohort place), which asking needs. */
+  member?: boolean;
   latencyMs?: number;
   harness: Harness;
 }) {
   const [mock] = useState(() => {
     let refusals: { count: number; reply: MockReply } | null = null;
     const created = createMentoringMock({
-      viewer, conductAgreed, latencyMs,
+      viewer, conductAgreed, member, latencyMs,
       failure: (request) => {
         if (request.method === "GET" || !refusals || refusals.count <= 0) return undefined;
         refusals.count -= 1;

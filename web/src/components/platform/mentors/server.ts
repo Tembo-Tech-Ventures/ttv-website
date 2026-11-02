@@ -5,7 +5,8 @@ import type {
 } from "@/lib/platform/contracts";
 import { ROUTES } from "@/lib/platform/contracts";
 import { getAvailability, listMentors } from "@/lib/mentoring/profiles";
-import { listRequests } from "@/lib/mentoring/requests";
+import { IS_MEMBER, listRequests } from "@/lib/mentoring/requests";
+import { listOwnProjects } from "@/lib/channels/embeds";
 import { mentoringRequest } from "@/lib/mentoring/http";
 
 /**
@@ -21,6 +22,8 @@ export interface MentorsServer {
   availability(): Promise<MentorAvailability>;
   /** The caller's own published projects, which the drawer can attach. */
   projects(): Promise<ProjectEmbed[]>;
+  /** Whether the caller may ask for time: a member account, as POST /api/mentor-requests checks it (IS_MEMBER). */
+  canAsk(): Promise<boolean>;
   /**
    * The accepted request that opened a private conversation, newest first, from either side. Null when
    * staff opened it, or when it is older than the first page of this person's accepted requests.
@@ -39,8 +42,11 @@ export function mentorsServer(
     directory: (query) => listMentors(db, me.user.id, query, now),
     requests: (query) => listRequests(ctx, query),
     availability: () => getAvailability(db, me.user.id, now),
-    // Pending B-4.1's channel-free read of a person's own published work (feature.platform-spaces, seq 499).
-    projects: async () => [],
+    projects: () => listOwnProjects(db, me.user.id),
+    async canAsk() {
+      const row = await db.prepare(`SELECT ${IS_MEMBER("?1")} AS member`).bind(me.user.id).first<{ member: number }>();
+      return Boolean(row?.member);
+    },
     async openedBy(channelId) {
       const [asked, answered] = await Promise.all([
         listRequests(ctx, { as: "requester", status: "ACCEPTED" }),

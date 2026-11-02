@@ -4,10 +4,11 @@ import { localPersonaSession, personaSession, signIn, type PersonaKey } from "./
 
 /**
  * U-4.1/S-4.1: mentor connections against the real backend (B-4.1), as the
- * people who use them. A community member asks David for time; David accepts
+ * people who use them. Wanjiku, from a cohort, asks David for time; David accepts
  * and their private conversation opens with the note as its first message.
  * Then the other ways a request ends: withdrawn, not this month, a suggestion
  * of Samuel (who has one spot a month), and Samuel full once someone waits.
+ * Last, an institution-only account reads the directory but cannot ask (#304).
  *
  * Local seed only (`platform-personas.local.sql`, which also clears every
  * earlier request): agent previews have no browser mentor yet. The desktop
@@ -75,7 +76,7 @@ test.beforeEach(({ baseURL }, testInfo) => {
 });
 
 test("a member asks for time, the mentor accepts, and their conversation opens with the note", async ({ browser, baseURL }, testInfo) => {
-  const member = await as(browser, baseURL!, "community");
+  const member = await as(browser, baseURL!, "student");
   const mentor = await as(browser, baseURL!, "mentor");
   const note = `Could you look at how my savings app retries a failed M-Pesa callback? (${Date.now()})`;
 
@@ -86,11 +87,11 @@ test("a member asks for time, the mentor accepts, and their conversation opens w
   await ask(member, "David Kamau", note);
 
   await visit(mentor, REQUESTS);
-  const request = queueCard(mentor, "Lucy Chebet");
+  const request = queueCard(mentor, "Wanjiku Mwangi");
   await expect(request).toContainText(note);
   await runAxe(mentor, testInfo, "requests");
   await request.getByRole("button", { name: "Accept" }).click();
-  const open = request.getByRole("link", { name: /Open conversation with Lucy/ });
+  const open = request.getByRole("link", { name: /Open conversation with Wanjiku/ });
   await expect(open).toBeVisible();
   await open.click();
   // A first visit compiles the conversation page on a cold dev server.
@@ -98,8 +99,8 @@ test("a member asks for time, the mentor accepts, and their conversation opens w
   // A first visit to any channel shows the habits first.
   const agree = mentor.getByRole("button", { name: "I’ll keep to this" });
   if (await agree.isVisible().catch(() => false)) await agree.click();
-  await expect(mentor.getByRole("heading", { level: 1, name: "Lucy Chebet" })).toBeVisible();
-  await expect(mentor.locator("[data-conversation-context]")).toContainText("You accepted Lucy's request for a written review");
+  await expect(mentor.getByRole("heading", { level: 1, name: "Wanjiku Mwangi" })).toBeVisible();
+  await expect(mentor.locator("[data-conversation-context]")).toContainText("You accepted Wanjiku's request for a written review");
   await expect(mentor.getByText(note)).toBeVisible();
 
   // The member sees the acceptance, the conversation in Community, and the same first message.
@@ -114,7 +115,7 @@ test("a member asks for time, the mentor accepts, and their conversation opens w
 });
 
 test("the member withdraws a waiting request, and the mentor sees it withdrawn", async ({ browser, baseURL }) => {
-  const member = await as(browser, baseURL!, "community");
+  const member = await as(browser, baseURL!, "student");
   const mentor = await as(browser, baseURL!, "mentor");
   await ask(member, "David Kamau", "Would you review my API error messages?");
   await ownRow(member, "David Kamau").getByRole("button", { name: "Withdraw" }).click();
@@ -124,11 +125,11 @@ test("the member withdraws a waiting request, and the mentor sees it withdrawn",
 });
 
 test("not this month is one tap, and reads as the mentor's time, not a verdict", async ({ browser, baseURL }) => {
-  const member = await as(browser, baseURL!, "community");
+  const member = await as(browser, baseURL!, "student");
   const mentor = await as(browser, baseURL!, "mentor");
   await ask(member, "David Kamau", "Could we talk about database indexes?");
   await visit(mentor, REQUESTS);
-  const request = queueCard(mentor, "Lucy Chebet");
+  const request = queueCard(mentor, "Wanjiku Mwangi");
   await request.getByRole("button", { name: "Not this month" }).click();
   await expect(request).toHaveAttribute("data-status", "DECLINED");
   await visit(member, DIRECTORY);
@@ -139,14 +140,14 @@ test("not this month is one tap, and reads as the mentor's time, not a verdict",
 });
 
 test("the mentor suggests Samuel, and the member can ask him straight away", async ({ browser, baseURL }) => {
-  const member = await as(browser, baseURL!, "community");
+  const member = await as(browser, baseURL!, "student");
   const mentor = await as(browser, baseURL!, "mentor");
   await ask(member, "David Kamau", "How do I test an offline-first Android app?");
   await visit(mentor, REQUESTS);
-  const request = queueCard(mentor, "Lucy Chebet");
+  const request = queueCard(mentor, "Wanjiku Mwangi");
   await request.getByRole("button", { name: "Suggest another mentor" }).click();
   await request.getByRole("radio", { name: "Samuel Otieno" }).check();
-  await request.getByRole("textbox", { name: /A note for Lucy/ }).fill("Samuel ships Android apps for low-end phones.");
+  await request.getByRole("textbox", { name: /A note for Wanjiku/ }).fill("Samuel ships Android apps for low-end phones.");
   await request.getByRole("button", { name: "Send suggestion" }).click();
   await expect(request).toContainText("Suggested Samuel Otieno");
 
@@ -160,7 +161,7 @@ test("the mentor suggests Samuel, and the member can ask him straight away", asy
 
 test("a full mentor stays listed with no request button, and the directory can show only open spots", async ({ browser, baseURL }) => {
   const student = await as(browser, baseURL!, "student");
-  const member = await as(browser, baseURL!, "community");
+  const member = await as(browser, baseURL!, "alumna");
   const samuel = await as(browser, baseURL!, "mentor-two");
   await ask(student, "Samuel Otieno", "Could you look at my Kotlin sync code?");
 
@@ -176,4 +177,24 @@ test("a full mentor stays listed with no request button, and the directory can s
   // Samuel sees his month as full.
   await visit(samuel, REQUESTS);
   await expect(samuel.locator("[data-spots-used]")).toHaveText("1 of 1");
+});
+
+test("an account without a profile or cohort place reads the directory, and asking is refused in neutral words", async ({ browser, baseURL }, testInfo) => {
+  const institution = await as(browser, baseURL!, "institution");
+  await visit(institution, DIRECTORY);
+  await expect(institution.getByRole("heading", { level: 1, name: "Mentors" })).toBeVisible();
+  await expect(card(institution, "David Kamau")).toBeVisible();
+  await expect(institution.getByRole("button", { name: "Ask for time" })).toHaveCount(0);
+  await expect(institution.locator("[data-mentors-need-member]")).toHaveText(
+    "Asking a mentor for time needs a member profile or a cohort place. You can still read who mentors here and what they help with.",
+  );
+  await runAxe(institution, testInfo, "directory-institution");
+
+  // The API is the authority: a hand-made request gets the same words, and nothing reaches David.
+  const response = await institution.request.post("/api/mentor-requests", {
+    headers: { Origin: new URL(baseURL!).origin },
+    data: { mentorId: "ttv-local-persona-mentor", note: "Could we talk about hiring?", project: null, format: "CALL_30_MIN" },
+  });
+  expect(response.status()).toBe(403);
+  expect((await response.json()).error.message).toBe("Asking a mentor for time needs a member profile or a cohort place.");
 });

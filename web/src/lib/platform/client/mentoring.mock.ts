@@ -24,12 +24,16 @@ export interface MentoringMockOptions extends MockOptions {
   viewer?: PersonSummary;
   /** Whether the viewer has agreed to how we talk to each other. Defaults to true. */
   conductAgreed?: boolean;
+  /** Whether the viewer has a member account (a community profile or a cohort place), which asking needs. Defaults to true. */
+  member?: boolean;
   /** Requests per page of GET /api/mentor-requests. Defaults to 20. */
   pageSize?: number;
 }
 
 export interface MentoringMock {
   api: ApiClient;
+  /** The transport behind `api`, for a page that hands a body to "the API" itself (a send without JavaScript). */
+  fetch: typeof fetch;
   requests(): MentorRequest[];
   availability(mentorId: Id): MentorAvailability;
   /** The viewer agrees to the habits, as the conduct form would record. */
@@ -125,7 +129,7 @@ export function createMentoringMock(options: MentoringMockOptions = {}): Mentori
     return { data: update(request.id, next) };
   }
 
-  const api = createApiClient({ retry: { maxRetries: 0 }, fetch: createMockTransport([
+  const transport = createMockTransport([
     { ...ROUTES.listMentors, reply: ({ request }) => {
       const url = new URL(request.url);
       const query = MentorDirectoryQuery.parse(Object.fromEntries(url.searchParams));
@@ -150,6 +154,7 @@ export function createMentoringMock(options: MentoringMockOptions = {}): Mentori
     } },
     { ...ROUTES.createMentorRequest, reply: async ({ request }) => {
       const body = CreateMentorRequest.parse(await request.json());
+      if (options.member === false) return failure(403, "forbidden", "Asking a mentor for time needs a member profile or a cohort place.");
       if (!conductAgreed) return failure(403, "conduct_required", "Agree to how we talk to each other first.");
       const mentor = directoryItem(body.mentorId);
       if (!mentor || body.mentorId === viewer.id) return notFound();
@@ -202,10 +207,12 @@ export function createMentoringMock(options: MentoringMockOptions = {}): Mentori
       availability.set(viewer.id, { ...body, listed: false, capacity: capacityOf(viewer.id) });
       return { data: ownAvailability(viewer.id) };
     } },
-  ], options) });
+  ], options);
+  const api = createApiClient({ retry: { maxRetries: 0 }, fetch: transport });
 
   return {
     api,
+    fetch: transport,
     requests: () => structuredClone(requests),
     availability: (mentorId: Id) => ownAvailability(mentorId),
     agreeConduct() { conductAgreed = true; },

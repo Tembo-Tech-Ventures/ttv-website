@@ -36,8 +36,12 @@ const all = (selector: string) => Array.from(container.querySelectorAll<HTMLElem
 const text = (selector: string) => q(selector)?.textContent ?? "";
 const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 
-async function directoryProps(options: { conductAgreed?: boolean; failure?: (request: Request) => MockReply | undefined; search?: string } = {}) {
-  const mock = createMentoringMock({ conductAgreed: options.conductAgreed, ...(options.failure ? { failure: options.failure } : {}) });
+async function directoryProps(options: {
+  conductAgreed?: boolean; member?: boolean; failure?: (request: Request) => MockReply | undefined; search?: string;
+} = {}) {
+  const mock = createMentoringMock({
+    conductAgreed: options.conductAgreed, member: options.member, ...(options.failure ? { failure: options.failure } : {}),
+  });
   const filters = parseDirectoryUrl(new URLSearchParams(options.search ?? ""));
   const [list, own] = await Promise.all([
     mock.api.call(ROUTES.listMentors, { query: {} }),
@@ -46,6 +50,7 @@ async function directoryProps(options: { conductAgreed?: boolean; failure?: (req
   const props: MentorsDirectoryProps = {
     me: meByPersona.wanjiku, path: PATH, filters, mentors: list.items, shown: list.items,
     areas: ["Code review", "Career"], ownRequests: own, projects: mock.projects, conduct, now: FIXTURE_NOW, api: mock.api,
+    canAsk: options.member !== false,
   };
   return { props, mock };
 }
@@ -71,6 +76,17 @@ describe("the mentor directory", () => {
     expect(q<HTMLAnchorElement>("[data-filter-available]")!.getAttribute("href")).toBe(`${PATH}?area=Career`);
     expect(all("[data-own-request]").map((row) => row.dataset.status)).toEqual(["PENDING", "ACCEPTED"]);
     expect(html).not.toContain("<dialog open");
+  });
+
+  it("reads for an account without a profile or cohort place, with no way to ask and a neutral reason", async () => {
+    const { props } = await directoryProps({ member: false, search: `?ask=${david.person.id}` });
+    container.innerHTML = renderToString(<MentorsDirectory {...props} />);
+    expect(all("[data-mentor-card]")).toHaveLength(4);
+    expect(all("[data-ask-mentor]")).toHaveLength(0);
+    expect(card(david).textContent).toContain("2 of 3 spots open in November");
+    expect(text("[data-mentors-need-member]")).toContain("Asking a mentor for time needs a member profile or a cohort place.");
+    // `?ask=` opens nothing: there is nothing this person could send.
+    expect(q("[data-mentor-drawer-static]")).toBeNull();
   });
 
   it("says when nothing matches, with the way back to every mentor", async () => {

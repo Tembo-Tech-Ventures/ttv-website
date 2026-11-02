@@ -98,6 +98,12 @@ export function capacityView(capacity: MentorCapacity, now: number): CapacityVie
 /** The full card's footer label, where an open card has its "Ask for time" button. */
 export const FULL_THIS_MONTH = "Full this month";
 
+/**
+ * Why an account with neither a community profile nor a cohort place cannot ask (B-4.1, #304): the
+ * API's own words. It does not send anyone to make a profile, because a saved one is discoverable.
+ */
+export const NEEDS_MEMBER = "Asking a mentor for time needs a member profile or a cohort place.";
+
 /** "Spots used 1 of 3", as a share for the meter. */
 export function usedShare(capacity: MentorCapacity): number {
   return capacity.limit === 0 ? 0 : Math.min(1, capacity.used / capacity.limit);

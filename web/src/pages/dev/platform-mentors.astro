@@ -10,8 +10,14 @@
  *   &view=requests | availability   the mentor's pages (a persona with Mentoring: david, mercy, samuel)
  *   &conduct=required               the person has not agreed to how we talk to each other yet;
  *                                   agreeing posts here and comes back with the drawer open
+ *   &member=no                      no community profile or cohort place (an institution-only account):
+ *                                   the directory reads, and asking is refused
  *   &flag=off                       mentor_requests off: these pages do not exist (404)
  *   &latency=<ms>                   the mock's answer time (default 250)
+ *
+ * The drawer's form posts here without JavaScript, through the real page's `handleRequestPost`, with
+ * the mock standing in for the API. Its action keeps only the directory's own params, so the harness
+ * settings above ride along in a dev-only cookie.
  *
  * Nothing is reachable outside `astro dev`; `e2e/platform-mentors.spec.ts` holds the contract.
  */
@@ -26,7 +32,8 @@ import { spaceSidebar, type SpacePageKey } from "@/components/platform/spaces/si
 import HarnessMentors from "@/components/platform/mentors/harness/HarnessMentors";
 import MentorPageIntro from "@/components/platform/mentors/MentorPageIntro.astro";
 import { mentorRequestsOpen } from "@/components/platform/mentors/mentor-display";
-import { areaOptions, directoryQuery, parseDirectoryUrl } from "@/lib/platform/client/mentor-directory";
+import { handleRequestPost, isRequestPost, type RequestPostResult } from "@/components/platform/mentors/request-post";
+import { areaOptions, directoryHref, directoryQuery, parseDirectoryUrl } from "@/lib/platform/client/mentor-directory";
 import { createMentoringMock } from "@/lib/platform/client/mentoring.mock";
 import { CONDUCT_PATH } from "@/lib/platform/server/space-routes";
 import { CONDUCT_VERSION } from "@/lib/channels/conduct";
@@ -35,12 +42,18 @@ if (!import.meta.env.DEV) {
   return new Response("Not found", { status: 404 });
 }
 
-const params = Astro.url.searchParams;
-// Agreeing to the habits from the drawer: as the real page does, record it and come back, drawer open.
-if (Astro.request.method === "POST") {
-  const back = new URL(Astro.url);
-  back.searchParams.set("conduct", "agreed");
-  return Astro.redirect(back.pathname + back.search, 303);
+const SETTINGS = ["persona", "conduct", "member", "flag", "view"] as const;
+const COOKIE = "ttv-dev-mentors";
+const params = new URLSearchParams(Astro.url.searchParams);
+const remember = (overrides: Record<string, string> = {}) => {
+  const kept = new URLSearchParams(SETTINGS.flatMap((key) => params.has(key) ? [[key, params.get(key)!]] : []));
+  for (const [key, value] of Object.entries(overrides)) kept.set(key, value);
+  Astro.cookies.set(COOKIE, kept.toString(), { path: Astro.url.pathname, httpOnly: true, sameSite: "strict" });
+};
+if (SETTINGS.some((key) => Astro.url.searchParams.has(key))) {
+  remember();
+} else {
+  for (const [key, value] of new URLSearchParams(Astro.cookies.get(COOKIE)?.value ?? "")) params.set(key, value);
 }
 
 const personaParam = params.get("persona");
@@ -55,10 +68,36 @@ if (!mentorRequestsOpen(me) || !canRenderSpace(me, space)) {
 }
 
 const conductAgreed = params.get("conduct") !== "required";
+const member = params.get("member") !== "no";
 const latency = Math.min(5_000, Math.max(0, Number(params.get("latency") ?? 250) || 0));
-const mock = createMentoringMock({ viewer: me.user, conductAgreed });
+const mock = createMentoringMock({ viewer: me.user, conductAgreed, member });
+const filters = parseDirectoryUrl(Astro.url.searchParams);
+const directory = { area: filters.area, format: filters.format, available: filters.available };
+
+let posted: Extract<RequestPostResult, { kind: "render" }> | null = null;
+if (Astro.request.method === "POST") {
+  if (!(await isRequestPost(Astro.request))) {
+    // Agreeing to the habits from the drawer: as the real page does, record it and come back, drawer open.
+    remember({ conduct: "agreed" });
+    const back = new URL(Astro.url);
+    back.searchParams.delete("conduct");
+    return Astro.redirect(back.pathname + back.search, 303);
+  }
+  const { items } = await mock.api.call(ROUTES.listMentors, { query: {} });
+  const result = await handleRequestPost(Astro.request, {
+    mentors: items,
+    send: (body) => mock.fetch(new URL(ROUTES.createMentorRequest.path, Astro.url), {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+    sent: (id) => `${directoryHref(Astro.url.pathname, directory)}${filters.area || filters.format || filters.available ? "&" : "?"}sent=${encodeURIComponent(id)}`,
+  });
+  if (result.kind === "redirect") return Astro.redirect(result.location, 303);
+  if (result.kind === "refuse") return new Response(null, { status: result.status });
+  posted = result;
+  Astro.response.status = result.status;
+}
+
 const now = FIXTURE_NOW;
-const filters = parseDirectoryUrl(params);
 const page: SpacePageKey = view === "directory" ? "mentors" : view === "requests" ? "mentorRequests" : "mentorAvailability";
 const sidebar = spaceSidebar(space, {
   me, page, visibleLinkIds: ["home", "apply", "ask", "account", "logout"], unreadLeadCount: 0, certificates: [],
@@ -74,8 +113,9 @@ const harness = view === "directory"
         mock.api.call(ROUTES.listMentorRequests, { query: { as: "requester" } }),
       ]);
       return {
-        me, path: Astro.url.pathname, filters, mentors: all.items, shown: shown.items, areas: areaOptions(all.items, filters.area),
-        ownRequests: own, projects: mock.projects, now,
+        me, path: Astro.url.pathname, filters: posted ? { ...filters, ask: posted.mentorId } : filters, mentors: all.items, shown: shown.items, areas: areaOptions(all.items, filters.area),
+        ownRequests: own, projects: mock.projects, now, canAsk: member,
+        serverForm: posted ? { mentorId: posted.mentorId, form: posted.form } : null,
         conduct: { version: CONDUCT_VERSION, habitsHref: CONDUCT_PATH, canAgree: true },
       };
     })(),
@@ -105,7 +145,7 @@ const spaceHrefs = Object.fromEntries(me.spaces.map((id) => [id, `/dev/platform-
 >
   <SpaceSidebar slot="sidebar" model={sidebar} />
   <MentorPageIntro page={view === "directory" ? "mentors" : view} />
-  <HarnessMentors client:load viewer={me.user} conductAgreed={conductAgreed} latencyMs={latency} harness={harness} />
+  <HarnessMentors client:load viewer={me.user} conductAgreed={conductAgreed} member={member} latencyMs={latency} harness={harness} />
 </SpacesLayout>
 
 <style is:global>
