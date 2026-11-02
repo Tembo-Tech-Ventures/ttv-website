@@ -245,12 +245,14 @@ until they ship.
 ## Worth another look (B-4.2)
 
 `GET /api/mentoring/another-look` (`another-look.ts`) lists shared work the
-caller confirmed at an earlier revision that has changed since, so their
+caller confirmed at an earlier revision that has a newer revision, so their
 confirmation no longer covers the current one (screen 06, "Worth another
 look"): each item has the work, its owner (name and avatar, no badges), the
 latest revision the caller confirmed and the current one, and a link to the
-Confirm page, where the current revision waits for them. Newest change first,
-at most 20.
+Confirm page, where the current revision waits for them. Only work that page
+shows is listed (the service's `confirmWindow`: its 50 newest shared
+contributions), so every item can be confirmed or set aside where its link
+goes. Newest change first, at most 20.
 
 It reads through the Confirm page's own service
 (`createCommunityService(...).listWorthAnotherLook()`), so the same checks

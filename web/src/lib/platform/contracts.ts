@@ -520,17 +520,20 @@ export const MentorAvailability = UpdateMentorAvailability.extend({
   headline: z.string().max(120), listed: z.boolean(), capacity: MentorCapacity,
 });
 export type MentorAvailability = z.infer<typeof MentorAvailability>;
+/** How many items "Worth another look" lists at once. */
+export const WORTH_ANOTHER_LOOK_LIMIT = 20;
 /**
- * "Worth another look" (B-4.2): shared work this mentor confirmed at an earlier revision that has
- * changed since. confirmedVersion is the latest revision their confirmation covers; currentVersion is
- * newer. href opens the Confirm page, where the current revision waits for them. Newest change first.
+ * "Worth another look" (B-4.2): shared work this mentor confirmed at an earlier revision that has a
+ * newer revision. confirmedVersion is the latest revision their confirmation covers; currentVersion is
+ * newer. href opens the Confirm page, where the current revision waits for them: only work that page
+ * shows is listed. Newest change first.
  */
 export const WorthAnotherLookItem = z.object({
   journeyId: Id, title: NonEmptyText, owner: PersonSummary, confirmedVersion: z.int().positive(), currentVersion: z.int().positive(),
   href: InternalPath,
-}).refine((item) => item.currentVersion > item.confirmedVersion, "Only work that changed since it was confirmed");
+}).refine((item) => item.currentVersion > item.confirmedVersion, "Only work with a newer revision than the one confirmed");
 export type WorthAnotherLookItem = z.infer<typeof WorthAnotherLookItem>;
-export const WorthAnotherLook = z.object({ items: z.array(WorthAnotherLookItem).max(20) });
+export const WorthAnotherLook = z.object({ items: z.array(WorthAnotherLookItem).max(WORTH_ANOTHER_LOOK_LIMIT) });
 export type WorthAnotherLook = z.infer<typeof WorthAnotherLook>;
 /**
  * A direct conversation's header, for its two members only (server function, no route): the other

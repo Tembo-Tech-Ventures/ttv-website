@@ -17,3 +17,7 @@ web/.cloudflare/
 # there rather than from web/.
 .astro/
 .homepage-lab/
+
+# Dependencies and their caches, when a tool runs from the repo root rather
+# than from web/ (vitest writes node_modules/.vitest-cache here).
+node_modules/

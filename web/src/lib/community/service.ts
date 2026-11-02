@@ -1,3 +1,4 @@
+import { WORTH_ANOTHER_LOOK_LIMIT } from "@/lib/platform/contracts";
 import { DEMO_PREFIX, DEMO_USER_IDS, isDemoUser } from "@/lib/staging-demo-policy";
 import { verifySameRunTarget, verifyRetainedProbeTarget, retainedProbeScope, StagingFixtureAccessError, type StagingFixtureIdentity } from "@/lib/staging-fixtures";
 import { createId } from "@paralleldrive/cuid2";
@@ -23,8 +24,6 @@ function profile(row: ProfileRow): CommunityProfile {
 }
 /** How many shared contributions the Confirm page lists, newest first. */
 const MENTORSHIP_WINDOW = 50;
-/** How many changed contributions "Worth another look" lists at once. */
-export const WORTH_ANOTHER_LOOK_LIMIT = 20;
 const PROFILE_SELECT = `SELECT u.id AS userId,u.name,u.image,p.headline,p.bio,p.skills,p.opportunityGoals,p.version,p.updatedAt
   FROM user u LEFT JOIN communityProfile p ON p.userId=u.id`;
 
@@ -101,14 +100,27 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
    */
   async function mentorshipRows<Row extends { userId: string }>(columns: string) {
     await requireMentorReview();
-    const scope = fixtureScope("j.userId");
+    const window = confirmWindow();
     const { results } = await db.prepare(`SELECT ${columns},
         EXISTS (SELECT 1 FROM communityConfirmation ownReview WHERE ownReview.journeyId=j.id AND ownReview.mentorId=? AND ownReview.journeyVersion=j.version) AS reviewedByCurrentMentor,
         EXISTS (SELECT 1 FROM communitySetAside ownSetAside WHERE ownSetAside.mentorId=? AND ownSetAside.journeyId=j.id AND ownSetAside.journeyVersion=j.version) AS setAsideByCurrentMentor
-      FROM communityJourney j JOIN user u ON u.id=j.userId WHERE j.visibility='institution' AND j.userId<>?${scope.clause} ORDER BY j.createdAt DESC,j.id DESC LIMIT ${MENTORSHIP_WINDOW}`)
-      .bind(actorId,actorId,actorId,...scope.values).all<Row & { reviewedByCurrentMentor: number; setAsideByCurrentMentor: number }>();
+      FROM communityJourney j JOIN user u ON u.id=j.userId WHERE j.id IN (${window.sql}) ORDER BY j.createdAt DESC,j.id DESC`)
+      .bind(actorId,actorId,...window.values).all<Row & { reviewedByCurrentMentor: number; setAsideByCurrentMentor: number }>();
     await Promise.all(results.map(row=>requireFixtureTarget(row.userId)));
     return results.map(row => ({...row,reviewedByCurrentMentor:Boolean(row.reviewedByCurrentMentor),setAsideByCurrentMentor:Boolean(row.setAsideByCurrentMentor)}));
+  }
+  /**
+   * The Confirm page's window, as SQL: the ids of the MENTORSHIP_WINDOW newest contributions shared
+   * beyond their author, never the mentor's own, with the values it binds. Everything that sends a
+   * mentor to the Confirm page reads through it, so nothing points at work the page cannot show.
+   */
+  function confirmWindow() {
+    const scope = fixtureScope("w.userId");
+    return {
+      sql: `SELECT w.id FROM communityJourney w WHERE w.visibility='institution' AND w.userId<>?${scope.clause}
+        ORDER BY w.createdAt DESC,w.id DESC LIMIT ${MENTORSHIP_WINDOW}`,
+      values: [actorId, ...scope.values],
+    };
   }
   async function requireMentorReview() {
     const a = await access();
@@ -165,22 +177,23 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
     },
     /**
      * "Worth another look" (B-4.2; src/lib/mentoring/README.md): shared contributions this mentor
-     * confirmed at an earlier revision that have changed since, so the confirmation no longer covers
-     * the current one. The Confirm page's checks (mentor or admin roles, someone else's shared work,
-     * the synthetic-identity scopes), minus what the mentor has already confirmed or set aside at the
-     * current revision. Newest change first, at most WORTH_ANOTHER_LOOK_LIMIT. One read after the roles.
+     * confirmed at an earlier revision that have a newer one, so the confirmation no longer covers the
+     * current one. Only work the Confirm page shows (confirmWindow: someone else's shared work, the
+     * synthetic-identity scopes), since that is where the item sends them, after the page's role
+     * check; minus what the mentor has already confirmed or set aside at the current revision. Newest
+     * change first, at most WORTH_ANOTHER_LOOK_LIMIT. One read after the roles.
      */
     async listWorthAnotherLook() {
       await requireMentorReview();
-      const scope = fixtureScope("j.userId");
+      const window = confirmWindow();
       const { results } = await db.prepare(`SELECT j.id AS journeyId,j.userId,u.name AS memberName,u.image AS memberImage,j.title,
           j.version AS currentVersion,MAX(c.journeyVersion) AS confirmedVersion
         FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=j.userId
-        WHERE c.mentorId=? AND j.visibility='institution' AND j.userId<>?${scope.clause}
+        WHERE c.mentorId=? AND j.id IN (${window.sql})
           AND NOT EXISTS (SELECT 1 FROM communitySetAside s WHERE s.mentorId=? AND s.journeyId=j.id AND s.journeyVersion=j.version)
         GROUP BY j.id HAVING MAX(c.journeyVersion)<j.version
         ORDER BY j.updatedAt DESC,j.id DESC LIMIT ${WORTH_ANOTHER_LOOK_LIMIT}`)
-        .bind(actorId,actorId,...scope.values,actorId)
+        .bind(actorId,...window.values,actorId)
         .all<{ journeyId: string; userId: string; memberName: string | null; memberImage: string | null; title: string; currentVersion: number; confirmedVersion: number }>();
       await Promise.all(results.map(row=>requireFixtureTarget(row.userId)));
       return results;

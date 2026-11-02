@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { VIEWER } from "@/lib/channels/test-support";
-import { ErrorEnvelope, WorthAnotherLook } from "@/lib/platform/contracts";
-import { WORTH_ANOTHER_LOOK_LIMIT } from "@/lib/community/service";
+import { createCommunityService } from "@/lib/community/service";
+import { ErrorEnvelope, WORTH_ANOTHER_LOOK_LIMIT, WorthAnotherLook } from "@/lib/platform/contracts";
 import { mentoringDatabase, PEOPLE, type MentoringFixture } from "./test-support";
 
 vi.mock("@/lib/observability/errors", async (importOriginal) => ({
@@ -29,7 +29,10 @@ function setup() {
     return { status: response.status, body: response.body };
   };
   const items = async (user: string = PEOPLE.david) => WorthAnotherLook.parse((await look(user)).body).items;
-  return { s, confirm, look, items };
+  /** The ids the Confirm page lists for `user`, where every item's link sends them. */
+  const confirmPage = async (user: string = PEOPLE.david) =>
+    (await createCommunityService(s.d1, user).listMentorship()).map((entry) => entry.id);
+  return { s, confirm, look, items, confirmPage };
 }
 
 describe("Worth another look (B-4.2)", () => {
@@ -39,6 +42,23 @@ describe("Worth another look (B-4.2)", () => {
       journeyId: "ledger", title: "Chama ledger", confirmedVersion: 2, currentVersion: 3, href: "/dashboard/mentoring/confirm",
       owner: { id: VIEWER, name: "Wanjiku Njeri", avatarUrl: null, roleBadges: [] },
     }]);
+  });
+
+  it("lists only work the Confirm page shows, so every item can be confirmed or set aside where its link goes", async () => {
+    const t = setup();
+    expect(await t.confirmPage()).toContain("ledger");
+    // Fifty newer shared contributions push the ledger out of the Confirm page's window.
+    t.s.database.prepare("UPDATE communityJourney SET createdAt = 1 WHERE id = 'ledger'").run();
+    for (let i = 0; i < 50; i += 1) {
+      t.s.project(`newer-${String(i).padStart(2, "0")}`);
+      t.s.database.prepare("UPDATE communityJourney SET createdAt = ? WHERE id = ?").run(1_000 + i, `newer-${String(i).padStart(2, "0")}`);
+    }
+    expect(await t.confirmPage()).not.toContain("ledger");
+    expect(await t.items()).toEqual([]);
+    // One fewer, and it is back on both.
+    t.s.database.prepare("DELETE FROM communityJourney WHERE id = 'newer-00'").run();
+    expect(await t.confirmPage()).toContain("ledger");
+    expect((await t.items()).map((item) => item.journeyId)).toEqual(["ledger"]);
   });
 
   it("drops work once the mentor confirms or sets aside its current revision, or it stops being shared", async () => {
@@ -90,6 +110,8 @@ describe("Worth another look (B-4.2)", () => {
     const listed = (await t.items()).map((item) => item.journeyId);
     expect(listed).toHaveLength(WORTH_ANOTHER_LOOK_LIMIT);
     expect(listed[0]).toBe(`work-${WORTH_ANOTHER_LOOK_LIMIT + 1}`);
+    const confirmable = await t.confirmPage();
+    expect(listed.filter((id) => !confirmable.includes(id))).toEqual([]);
   });
 
   it("is for mentors and admins, as the Confirm page is", async () => {
