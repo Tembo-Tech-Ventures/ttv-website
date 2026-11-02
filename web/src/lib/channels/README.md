@@ -452,8 +452,11 @@ the rest.
   trail, so it is never mistaken for an admin's decision (`ADMIN_KEPT` reads
   admin events only). The case keeps only its other signals since it opened,
   flags and reports (source REPORT if there is a report, else AI_FLAG; the
-  hide's moderator and any review request go), or, when the hide was all it
-  had, closes by being removed: there is nothing left to decide.
+  hide's moderator and any review request go). With none left, a case the
+  hide had reopened goes back to the admin's earlier decision as it was
+  (decision, reason, who, when, and the signals it decided), so the Decided
+  queue keeps its history; any other case closes by being removed, as there
+  is nothing left to decide.
   Someone else's hide, an automatic one, or an admin's is 403 (admins restore
   instead); a hide an admin made or upheld, or any decided case, is 409, as are
   a message no longer hidden or deleted. `moderation.undoable` says so to that
@@ -530,7 +533,8 @@ the rest.
   changes nothing the author sees, so a keep after one says nothing either,
   and an admin's own hide already has its `message_hidden`. Neutral words:
   "An admin reviewed your message in #help and restored it." / "… It stays
-  as it is." / "… It stays hidden." It shows while the message is not deleted.
+  as it is." / "… It stays hidden." It shows while the message is not deleted
+  and its case stays decided: a later hide that reopens the case hides it.
 - `moderation_pending` to every admin but the author, once per case and
   again when the author asks for a review. Links to `/admin/moderation`. It
   shows only while the case is pending.

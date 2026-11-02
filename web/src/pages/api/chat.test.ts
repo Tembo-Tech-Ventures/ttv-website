@@ -236,7 +236,9 @@ describe("POST /api/chat", () => {
     const member = await prompt();
     expect(member).toMatch(/^You are Tembo, the assistant at Tembo Tech Ventures/);
     expect(member).not.toMatch(/AI assistant|Ask AI/);
-    expect(member).toContain("You are speaking privately with Test User.");
+    // Only what is true: the conversation is not shared with members (it is not unseen by everyone).
+    expect(member).toContain("You are speaking with Test User in a private conversation: it is not posted in any channel or shown to other members.");
+    expect(member).not.toMatch(/only they see/i);
     expect(member).toContain("You can see only the recorded sessions of the cohorts they belong to, their own application, and TTV's programs.");
     expect(member).toContain("Cite every substantive claim");
 

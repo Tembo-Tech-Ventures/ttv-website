@@ -739,6 +739,27 @@ describe("undoing a hide (QA2-11)", () => {
     expect(JSON.parse((row(s, other.id) as { moderationReasons: string }).moderationReasons)).toEqual([FINDING_REASONS.phone]);
   });
 
+  it("puts a case the hide reopened back to the admin's decision, so the Decided queue keeps it", async () => {
+    const s = mentors();
+    const id = s.message("help", { author: OTIENO, body: "Borderline joke" });
+    await s.call("moderateMessage", { id, body: hide(), now: () => 1_000 });
+    await s.call("moderateMessage", { id, user: ACHIENG, body: { action: "restore", reason: "A joke among friends" }, now: () => 2_000 });
+    const decided = caseOf(s, id);
+    expect(decided).toMatchObject({ state: "DECIDED", source: "MENTOR_HIDE", actorId: VIEWER, decision: "RESTORE", decidedBy: ACHIENG });
+    const queue = async (state: "PENDING" | "DECIDED") =>
+      ModerationQueue.parse((await s.call("listModerationQueue", { user: ACHIENG, query: `?state=${state}` })).body).items.map((item) => item.id);
+    expect(await queue("DECIDED")).toEqual([id]);
+    // The author edits, the mentor hides again (the case reopens), then takes that hide back.
+    expect((await s.call("editMessage", { id, user: OTIENO, body: { body: "Borderline joke, sharper" }, now: () => 3_000 })).status).toBe(200);
+    await s.call("moderateMessage", { id, body: hide("Sharper now"), now: () => 4_000 });
+    expect(caseOf(s, id)).toMatchObject({ state: "PENDING", source: "MENTOR_HIDE" });
+    expect((await s.call("undoModerationHide", { id, body: {}, now: () => 5_000 })).status).toBe(200);
+    expect(caseOf(s, id)).toEqual(decided);
+    expect(s.database.prepare("SELECT reasons, reopenedAt, decidedAt, decisionReason FROM moderation_case WHERE messageId = ?").get(id))
+      .toEqual({ reasons: '["Harsh, not about the work"]', reopenedAt: null, decidedAt: 2_000, decisionReason: "A joke among friends" });
+    expect([await queue("DECIDED"), await queue("PENDING")]).toEqual([[id], []]);
+  });
+
   it("is only for the moderator who hid it, before any admin decision, on a message still hidden", async () => {
     const s = mentors();
     const mine = s.message("help", { author: OTIENO, body: "One" });
@@ -865,6 +886,9 @@ describe("attention", () => {
     expect(await summaries()).toHaveLength(3);
     await s.call("deleteMessage", { id: upheld, user: OTIENO });
     expect(await summaries()).toEqual(["An admin reviewed your message in #help. It stays as it is."]);
+    // A report that reopens the kept message's case takes its "stays as it is" away until an admin decides again.
+    await s.call("reportMessage", { id: flagged.id, user: FAITH, body: { reason: "Still sharing a number" } });
+    expect(await summaries()).toEqual([]);
   });
 
   it("tells admins of a flag, and says an admin's own hide is final", async () => {

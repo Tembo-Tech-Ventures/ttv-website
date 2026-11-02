@@ -273,7 +273,7 @@ describe("hiding, for the channel's moderators, and restoring, for admins", () =
     expect(note?.querySelector("[data-undo-hide]")?.textContent).toBe("Undo hide");
     expect(announcer()).toBe("Message hidden from members. An admin will look at it.");
     expect(document.activeElement?.getAttribute("aria-label")).toMatch(/^Actions for Brian Kiprop's message at /);
-    // Hidden messages take no reactions, and a mentor has no way back: that is an admin's decision.
+    // Hidden messages take no reactions, and restoring is an admin's decision (the mentor's way back is Undo).
     const names = await menuNames(messages.firstPr.id);
     expect(names).not.toContain("Hide from members…");
     expect(names).not.toContain("Restore for members…");

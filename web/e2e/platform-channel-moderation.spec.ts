@@ -169,6 +169,8 @@ test.describe("moderation in a channel", () => {
       await expect(note.getByRole("button", { name: "Undo hide" })).toBeVisible();
       await expect(announcer(page)).toHaveText("Message hidden from members. An admin will look at it.");
       await expect(actions(page, FIRST_PR)).toBeFocused();
+      // The taller note can bring "Jump to latest" in: let its fade finish before the evidence and axe.
+      await page.evaluate(() => Promise.all(document.getAnimations().map((animation) => animation.finished)));
       await page.screenshot({ path: `${EVIDENCE_DIR}/hidden-${viewport.width}.png` });
       await runAxe(page, testInfo, `hidden-${viewport.width}`);
 

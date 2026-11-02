@@ -216,14 +216,28 @@ const lastHide = (column: "fromState" | "reasons") => LAST_HIDE.replace("%s", co
 /** The case's signals since it last opened (?2 the message): flags and reports, never the hide being undone. */
 const SIGNALS = `FROM moderation_event e JOIN moderation_case c ON c.messageId = e.messageId
   WHERE e.messageId = ?2 AND e.action = 'FLAG' AND e.createdAt >= coalesce(c.reopenedAt, c.openedAt)`;
+const HAS_SIGNALS = `EXISTS (SELECT 1 ${SIGNALS})`;
+/**
+ * A reopened case's earlier decision (?2 the message): the last admin event before it reopened. When
+ * the hide being undone was all that reopened it, the case goes back to that decision, so the Decided
+ * queue keeps its history.
+ */
+const PRIOR = `(SELECT e.id FROM moderation_event e WHERE e.messageId = ?2 AND e.source = 'ADMIN'
+  AND moderation_case.reopenedAt IS NOT NULL AND e.createdAt < moderation_case.reopenedAt ORDER BY e.createdAt DESC, e.rowid DESC LIMIT 1)`;
+const prior = (column: "action" | "actorId" | "reasons" | "createdAt") => `(SELECT p.${column} FROM moderation_event p WHERE p.id = ${PRIOR})`;
+/** The signals that case had decided: the people's and detectors' events after any admin event before the decision. */
+const PRIOR_SIGNALS = `FROM moderation_event w WHERE w.messageId = ?2 AND w.source <> 'ADMIN' AND w.action IN ('FLAG','HIDE')
+  AND w.createdAt <= ${prior("createdAt")} AND w.createdAt > coalesce((SELECT max(a.createdAt) FROM moderation_event a
+    WHERE a.messageId = ?2 AND a.source = 'ADMIN' AND a.createdAt < ${prior("createdAt")}), -1)`;
 
 /**
  * POST /api/moderation/:messageId/undo (QA2-11). The channel moderator who hid a message takes it
  * back while its case still waits for an admin: no admin has decided on it, and it is not deleted.
  * The message returns to the state it had before the hide (VISIBLE, or FLAGGED with its earlier
  * reasons), a RESTORE by the moderator (source MENTOR) joins the audit trail, and the case keeps only
- * the signals it had besides the hide: the flags and reports since it opened, or none, which closes
- * it without a decision. Anyone else's hide is 403 (admins restore instead); a hide an admin made or
+ * the signals it had besides the hide: the flags and reports since it opened. With none, a case the
+ * hide reopened goes back to the admin decision it had (Decided keeps its history), and any other
+ * closes without a decision. Anyone else's hide is 403 (admins restore instead); a hide an admin made or
  * upheld, or any decided case, is 409, like a message no longer hidden or deleted.
  */
 export async function undoModeratorHide(ctx: WriteContext, target: MessageTarget): Promise<Message> {
@@ -253,16 +267,32 @@ export async function undoModeratorHide(ctx: WriteContext, target: MessageTarget
             HAVING count(*) > 0), moderationReasons) END,
         hiddenBy = NULL, hiddenAt = NULL, changeSeq = ${NEXT_CHANGE}
       WHERE id = ?2 AND ${written}`).bind(...params),
-    // The case keeps what else it had, or closes when the hide was all it had.
+    // The case keeps what else it had; or, reopened by the hide alone, goes back to the decision it
+    // had; or closes when the hide was all it ever had.
     ctx.db.prepare(`UPDATE moderation_case SET
-        source = CASE WHEN EXISTS (SELECT 1 ${SIGNALS} AND e.source = 'REPORT') THEN 'REPORT' ELSE 'AI_FLAG' END,
-        reasons = (SELECT json_group_array(value) FROM (SELECT DISTINCT j.value FROM moderation_event e
-          JOIN moderation_case c ON c.messageId = e.messageId, json_each(e.reasons) j
-          WHERE e.messageId = ?2 AND e.action = 'FLAG' AND e.createdAt >= coalesce(c.reopenedAt, c.openedAt))),
-        actorId = NULL, reviewRequestedAt = NULL, reviewNote = NULL, updatedAt = max(updatedAt, ?5)
-      WHERE messageId = ?2 AND state = 'PENDING' AND ${written} AND EXISTS (SELECT 1 ${SIGNALS})`).bind(...params),
+        state = CASE WHEN ${HAS_SIGNALS} THEN 'PENDING' ELSE 'DECIDED' END,
+        source = CASE WHEN ${HAS_SIGNALS} THEN CASE WHEN EXISTS (SELECT 1 ${SIGNALS} AND e.source = 'REPORT') THEN 'REPORT' ELSE 'AI_FLAG' END
+          WHEN EXISTS (SELECT 1 ${PRIOR_SIGNALS} AND w.source = 'MENTOR' AND w.action = 'HIDE') THEN 'MENTOR_HIDE'
+          WHEN EXISTS (SELECT 1 ${PRIOR_SIGNALS} AND w.source = 'REPORT') THEN 'REPORT'
+          WHEN EXISTS (SELECT 1 ${PRIOR_SIGNALS}) THEN 'AI_FLAG' ELSE 'ADMIN_HIDE' END,
+        reasons = CASE WHEN ${HAS_SIGNALS} THEN (SELECT json_group_array(value) FROM (SELECT DISTINCT j.value FROM moderation_event e
+            JOIN moderation_case c ON c.messageId = e.messageId, json_each(e.reasons) j
+            WHERE e.messageId = ?2 AND e.action = 'FLAG' AND e.createdAt >= coalesce(c.reopenedAt, c.openedAt)))
+          ELSE coalesce((SELECT json_group_array(value) FROM (SELECT DISTINCT j.value FROM moderation_event w, json_each(w.reasons) j
+            WHERE w.id IN (SELECT w.id ${PRIOR_SIGNALS})) HAVING count(*) > 0), ${prior("reasons")}) END,
+        reportCount = CASE WHEN ${HAS_SIGNALS} THEN reportCount ELSE (SELECT count(*) ${PRIOR_SIGNALS} AND w.source = 'REPORT') END,
+        actorId = CASE WHEN ${HAS_SIGNALS} THEN NULL
+          ELSE coalesce((SELECT w.actorId ${PRIOR_SIGNALS} AND w.source = 'MENTOR' AND w.action = 'HIDE' ORDER BY w.createdAt DESC LIMIT 1),
+            CASE WHEN NOT EXISTS (SELECT 1 ${PRIOR_SIGNALS}) THEN ${prior("actorId")} END) END,
+        decision = CASE WHEN ${HAS_SIGNALS} THEN NULL ELSE ${prior("action")} END,
+        decisionReason = CASE WHEN ${HAS_SIGNALS} THEN NULL ELSE json_extract(${prior("reasons")}, '$[0]') END,
+        decidedBy = CASE WHEN ${HAS_SIGNALS} THEN NULL ELSE ${prior("actorId")} END,
+        decidedAt = CASE WHEN ${HAS_SIGNALS} THEN NULL ELSE ${prior("createdAt")} END,
+        reopenedAt = CASE WHEN ${HAS_SIGNALS} THEN reopenedAt END,
+        reviewRequestedAt = NULL, reviewNote = NULL, updatedAt = max(updatedAt, ?5)
+      WHERE messageId = ?2 AND state = 'PENDING' AND ${written} AND (${HAS_SIGNALS} OR ${PRIOR} IS NOT NULL)`).bind(...params),
     ctx.db.prepare(`DELETE FROM moderation_case WHERE messageId = ?2 AND state = 'PENDING' AND ${written}
-      AND NOT EXISTS (SELECT 1 ${SIGNALS})`).bind(...params),
+      AND NOT ${HAS_SIGNALS} AND ${PRIOR} IS NULL`).bind(...params),
   ]);
   if (event?.results.length !== 1) {
     // Nothing written. An admin's decision says so first (an upheld hide is the admin's own since);

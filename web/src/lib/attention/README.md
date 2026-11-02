@@ -69,7 +69,7 @@ person named in a message, and `tembo_answer` to the person whose question
 Tembo answered (B-3.1). They follow the narrower of `spaces` and `channels` for the
 recipient, read the committed state, and never copy message text. On read,
 a `message` subject shows only while it still applies: the author's message is
-still hidden, or for a decision not deleted; the case still pending (admins);
+still hidden, or for a decision its case still decided; the case still pending (admins);
 or the mentioned message (or Tembo's answer) still visible in a channel the
 reader can read, their own direct conversations included (B-4.1).
 
