@@ -195,6 +195,64 @@ describe("an admin's decision", () => {
   });
 });
 
+describe("who decides", () => {
+  it("never one of the request's two parties, even an admin", async () => {
+    const s = setup();
+    // Amina, an admin with a member profile, asks David, and Clef holds her request.
+    s.database.prepare("INSERT INTO communityProfile(userId, headline) VALUES (?, 'Builder')").run(PEOPLE.amina);
+    s.database.prepare("INSERT INTO channel_conduct(userId,version,acknowledgedAt) VALUES (?,1,1) ON CONFLICT DO NOTHING").run(PEOPLE.amina);
+    const own = await ask(s, ABUSE, { user: PEOPLE.amina });
+    const refused = await decide(s, own, "keep");
+    expect([refused.status, errorOf(refused.body).message]).toEqual([403, "Another admin needs to check a request you're part of."]);
+    expect(s.database.prepare("SELECT state FROM mentor_request_case WHERE requestId = ?").get(own)).toEqual({ state: "OPEN" });
+    expect(await asMentor(s)).toEqual([]);
+    // Another admin may.
+    s.database.prepare("INSERT INTO UserRoles(id,userId,roleId) SELECT 'role-mercy-admin', ?, id FROM Roles WHERE name = 'ADMIN'").run(PEOPLE.mercy);
+    expect((await decide(s, own, "keep", PEOPLE.mercy)).status).toBe(200);
+  });
+});
+
+describe("races", () => {
+  it("a mentor's answer loses to a check opened between its read and its write", async () => {
+    for (const [operation, body, pattern] of [
+      ["declineMentorRequest", {}, /SET status = 'DECLINED'/],
+      ["redirectMentorRequest", { mentorId: PEOPLE.joseph }, /SET status = 'REDIRECTED'/],
+      ["acceptMentorRequest", {}, /INSERT INTO channel \(/],
+    ] as const) {
+      const s = setup();
+      const id = await ask(s, {});
+      const prepare = s.d1.prepare.bind(s.d1);
+      vi.spyOn(s.d1, "prepare").mockImplementation((query: string) => {
+        if (pattern.test(query)) {
+          s.database.prepare(`INSERT OR IGNORE INTO mentor_request_case (requestId, state, clefReasons, openedAt, createdAt, updatedAt)
+            VALUES (?, 'OPEN', '["May be abusive"]', 1, 1, 1)`).run(id);
+        }
+        return prepare(query);
+      });
+      const response = await s.call(operation, { id, user: PEOPLE.david, body });
+      vi.restoreAllMocks();
+      expect(response.status, `${operation}`).toBe(404);
+      expect(s.database.prepare("SELECT status, channelId FROM mentor_request").get(), `${operation}`).toEqual({ status: "PENDING", channelId: null });
+      expect(s.database.prepare("SELECT COUNT(*) AS n FROM channel WHERE kind = 'DIRECT'").get(), `${operation}`).toEqual({ n: 0 });
+    }
+  });
+
+  it("Clef's verdict joins a check the mentor's report opened first, and the mentor gets no new-request notice", async () => {
+    const s = setup();
+    const response = await s.call("createMentorRequest", {
+      env: clef(ABUSE).env, body: { mentorId: PEOPLE.david, note: "Rude words", project: null, format: "WRITTEN_REVIEW" },
+    });
+    const id = MentorRequest.parse(response.body).id;
+    // The mentor reads and reports it before the work after the response runs.
+    expect((await s.call("reportMentorRequest", { id, user: PEOPLE.david, body: { reason: "Rude" } })).status).toBe(200);
+    await s.afterResponse();
+    const [item] = (await queue(s)).items;
+    expect([item?.clefReasons, item?.report?.reason]).toEqual([["May be abusive"], "Rude"]);
+    expect(await attention(s, PEOPLE.david)).toEqual([]);
+    expect(await attention(s, PEOPLE.amina)).toEqual([["moderation_pending", "/admin/moderation?tab=request-notes"]]);
+  });
+});
+
 describe("the mentor's report", () => {
   it("closes the request for the mentor, frees its spot, and opens a check the person asking waits on", async () => {
     const s = setup();
@@ -203,7 +261,8 @@ describe("the mentor's report", () => {
     expect(reported.status).toBe(200);
     expect([MentorRequest.parse(reported.body).status, MentorRequest.parse(reported.body).check]).toEqual(["PENDING", "reported"]);
     expect((await asMentor(s)).map((request) => request.check)).toEqual(["reported"]);
-    expect((await asRequester(s)).map((request) => request.check)).toEqual(["waiting"]);
+    // The mentor has read it, so the person asking is told only that TTV is checking it: true, and names no one.
+    expect((await asRequester(s)).map((request) => request.check)).toEqual(["checking"]);
     expect((await capacityOf(s, PEOPLE.david))?.used).toBe(0);
     for (const operation of ["acceptMentorRequest", "declineMentorRequest"] as const) {
       const moved = await s.call(operation, { id, user: PEOPLE.david, body: {} });
@@ -214,8 +273,13 @@ describe("the mentor's report", () => {
     // Admins read the note as written; the attention notice names no one and copies nothing.
     expect(items[0]?.request.note).toBe("Could you look at my callback?");
     expect(await attention(s, PEOPLE.amina)).toEqual([["moderation_pending", "/admin/moderation?tab=request-notes"]]);
-    // The person asking can still withdraw while they wait.
+    // The person asking can still withdraw while they wait: the check is moot, and leaves the queue and the admins' bell.
     expect((await s.call("withdrawMentorRequest", { id, body: {} })).status).toBe(200);
+    expect((await queue(s)).items).toEqual([]);
+    expect(await attention(s, PEOPLE.amina)).toEqual([]);
+    expect((await asRequester(s)).map((request) => [request.status, request.check])).toEqual([["WITHDRAWN", null]]);
+    const moot = await decide(s, id, "remove");
+    expect([moot.status, errorOf(moot.body).message]).toEqual([409, "This request was withdrawn."]);
   });
 
   it("is the mentor's alone, once, while the request waits", async () => {
@@ -245,7 +309,8 @@ describe("the mentor's report", () => {
     await decide(s, id, "remove");
     // The mentor saw it and reported it: they keep seeing it, closed.
     expect((await asMentor(s)).map((request) => [request.status, request.check])).toEqual([["WITHDRAWN", "reported"]]);
-    expect((await asRequester(s)).map((request) => [request.status, request.check])).toEqual([["WITHDRAWN", "not_sent"]]);
+    // It was sent and read before the report, so "closed", not "wasn't sent".
+    expect((await asRequester(s)).map((request) => [request.status, request.check])).toEqual([["WITHDRAWN", "closed"]]);
     expect((await queue(s, "?state=DECIDED")).items.map((item) => item.decision?.action)).toEqual(["remove"]);
   });
 });

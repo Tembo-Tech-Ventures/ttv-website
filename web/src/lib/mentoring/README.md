@@ -232,9 +232,14 @@ threshold) opens a check, and the check **holds** the request:
   applied in `capacity.ts`).
 - The person asking sees it PENDING with `check: "waiting"`. The UI copy is
   "Waiting for a check before it's sent", never "declined". They may still
-  withdraw it.
+  withdraw it; a withdrawn request's check is moot, and leaves the OPEN queue
+  and the admins' notices.
 
-Anything short of near-certain abuse changes nothing. When Clef fails or is not
+Anything short of near-certain abuse changes nothing. Clef runs after the
+response, as for channel posts, so in the moment before it answers the mentor
+can already list the request. When the mentor's report opened a check first,
+Clef's reasons join it, and the mentor gets no "new request" notice for a
+request they reported. When Clef fails or is not
 configured, the request stays as it is, the failure is logged without the note,
 and the mentor is told as usual (fail open). The attached project is not sent
 to Clef: it is the asker's own published work, which its own check covers.
@@ -247,7 +252,9 @@ The mentor may **report** a waiting request (`POST
 - Reporting closes the request for the mentor. It stays in their list with
   `check: "reported"`, and accepting, redirecting or declining it is 409. It
   holds no spot.
-- The report opens a check the person asking waits on, as above.
+- The report opens a check. The person asking sees `check: "checking"`
+  ("TTV is checking this request"): the mentor has read it, so "before it's
+  sent" would be false. It never names who opened the check.
 
 | Table | Holds |
 |---|---|
@@ -268,8 +275,12 @@ Admins decide in their own queue. It is separate from the channel
     the mentor filled their month meanwhile.
   - **remove** closes a waiting request as WITHDRAWN with the reason recorded.
     The person asking sees `check: "not_sent"` ("This request wasn't sent")
-    and may ask again. A mentor who never saw it never does.
-  - It is 404 for a request with no check, and 409 once the check is decided.
+    when the mentor never saw it, or `check: "closed"` ("This request was
+    closed") when they had, and may ask again. A mentor who never saw it
+    never does.
+  - It is 404 for a request with no check; 403 for an admin who is one of the
+    request's two parties (nobody judges their own request); 409 once the
+    check is decided or the request was withdrawn.
 
 A report on a request an admin kept opens its check again, showing the earlier
 decision until the next one. Both admin routes are for admins only (403), and

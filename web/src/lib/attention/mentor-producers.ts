@@ -15,7 +15,7 @@ import { audienceFor, bestEffort, persist, type AttentionProducerContext, type E
  * Checks (src/lib/mentoring/README.md, "Checks"): the mentor hears of a request only while they may
  * see it (MENTOR_SEES), so a request Clef held reaches them only once an admin keeps it ("created"
  * again, the same notice). A check opening ("checking") tells every admin but the two parties, once
- * per opening, in the admin space, at the request notes queue.
+ * per opening, in the admin space, at the request notes queue, while the request still waits.
  */
 
 export type MentorRequestEvent = "created" | "accepted" | "redirected" | "declined" | "withdrawn" | "checking";
@@ -68,7 +68,7 @@ function itemFor(event: Exclude<MentorRequestEvent, "checking">, request: Reques
 
 /** The open check on a request, for every admin but its two parties. */
 async function checkItems(context: AttentionProducerContext, request: RequestState): Promise<EventItem[]> {
-  if (request.caseState !== "OPEN" || request.openedAt === null) return [];
+  if (request.caseState !== "OPEN" || request.openedAt === null || request.status !== "PENDING") return [];
   const { results: admins } = await context.db.prepare(`SELECT DISTINCT ur.userId FROM UserRoles ur JOIN Roles r ON r.id = ur.roleId
     WHERE r.name = 'ADMIN' AND ur.userId NOT IN (?1, ?2)`).bind(request.requesterId, request.mentorId).all<{ userId: string }>();
   const subject = { kind: "mentorRequest" as const, id: request.id, href: MENTOR_REQUEST_QUEUE_HREF, label: "Request notes" };
@@ -94,6 +94,8 @@ export function mentorRequestAttention(context: AttentionProducerContext, reques
     }
     if (request.status !== STATUS_AFTER[event] || (event === "accepted" && request.channelId === null)) return;
     if ((event === "created" || event === "withdrawn") && !request.visible) return;
+    // A mentor who reported the request has read it: no "new request" notice for it.
+    if (event === "created" && request.reported) return;
     await persist(context, audience, [itemFor(event, request)]);
   });
 }

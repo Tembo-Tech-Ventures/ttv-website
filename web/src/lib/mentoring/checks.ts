@@ -35,20 +35,23 @@ export type ClefHoldOutcome = "skipped" | "clear" | "held" | "unchanged";
 /**
  * After a request is created: Clef reads its note, as a direct conversation's message (the attached
  * work is the asker's own published project, which its own check covers). Near-certain abuse opens a
- * check that holds the request, if it is still PENDING with that note and no check yet; anything less
- * changes nothing, as the detectors already masked contact details. Throws ClefCheckError when the
- * check fails; the caller logs it and the request stays as it is (fail open).
+ * check that holds the request, if it is still PENDING with that note; when the mentor's report opened
+ * one first, Clef's reasons join it. Anything less changes nothing, as the detectors already masked
+ * contact details. Skipped once a check was decided. Throws ClefCheckError when the check fails; the
+ * caller logs it and the request stays as it is (fail open).
  */
 export async function clefHold(ctx: ClefHoldContext, requestId: string): Promise<ClefHoldOutcome> {
   const open = `SELECT id, note FROM mentor_request r WHERE r.id = ?1 AND r.status = 'PENDING'
-    AND NOT EXISTS (SELECT 1 FROM mentor_request_case c WHERE c.requestId = r.id)`;
+    AND NOT EXISTS (SELECT 1 FROM mentor_request_case c WHERE c.requestId = r.id AND c.state = 'DECIDED')`;
   const request = await ctx.db.prepare(open).bind(requestId).first<{ id: string; note: string }>();
   if (!request) return "skipped";
   const verdict = await askClef(ctx.ai, ctx.gatewayName, { body: request.note, channelKind: "DIRECT" }, ctx.timeoutMs);
   if (!verdict.hide) return "clear";
   const held = await ctx.db.prepare(`INSERT INTO mentor_request_case (requestId, state, clefReasons, openedAt, createdAt, updatedAt)
     SELECT r.id, 'OPEN', ?3, ?4, ?4, ?4 FROM mentor_request r WHERE r.id = ?1 AND r.note = ?2 AND r.status = 'PENDING'
-    ON CONFLICT (requestId) DO NOTHING RETURNING requestId`)
+    ON CONFLICT (requestId) DO UPDATE SET clefReasons = excluded.clefReasons, updatedAt = max(excluded.updatedAt, updatedAt)
+      WHERE state = 'OPEN' AND clefReasons = '[]'
+    RETURNING requestId`)
     .bind(requestId, request.note, JSON.stringify(verdict.reasons), ctx.now).all<{ requestId: string }>();
   return held.results.length === 1 ? "held" : "unchanged";
 }
@@ -112,14 +115,16 @@ export function requireAdmin(isAdmin: boolean) {
 
 /**
  * GET /api/moderation/mentor-requests: admins only (403). The checks in one state (OPEN unless asked
- * for DECIDED), oldest opened first, CASE_PAGE_SIZE at a time. One statement, along
- * mentor_request_case_queue_idx.
+ * for DECIDED), oldest opened first, CASE_PAGE_SIZE at a time. An open check on a request its asker
+ * has withdrawn is moot (nothing is left to send or close), so the OPEN queue leaves it out. One
+ * statement, along mentor_request_case_queue_idx.
  */
 export async function listCases(ctx: MentoringContext, isAdmin: boolean, query: MentorRequestCaseQuery): Promise<MentorRequestCaseList> {
   requireAdmin(isAdmin);
   const [afterAt, afterId] = query.cursor === undefined ? [null, null] : decodeCursor(query.cursor);
   const { results } = await ctx.db.prepare(`${CASE_SELECT}
-    WHERE c.state = ?1 AND (?2 IS NULL OR c.openedAt > ?2 OR (c.openedAt = ?2 AND c.requestId > ?3))
+    WHERE c.state = ?1 AND (c.state = 'DECIDED' OR r.status = 'PENDING')
+      AND (?2 IS NULL OR c.openedAt > ?2 OR (c.openedAt = ?2 AND c.requestId > ?3))
     ORDER BY c.openedAt, c.requestId LIMIT ?4`)
     .bind(query.state ?? "OPEN", afterAt, afterId, CASE_PAGE_SIZE + 1).all<CaseRow>();
   const page = results.slice(0, CASE_PAGE_SIZE);
@@ -135,27 +140,38 @@ async function caseRow(ctx: MentoringContext, id: string): Promise<CaseRow | nul
 }
 
 /**
- * POST /api/moderation/mentor-requests/:id: an admin (403 otherwise) decides an open check (404 when
- * the request has none, 409 once decided), with a reason kept for the record. keep: the request goes
- * (back) to its mentor as it is, PENDING. remove: a waiting request closes as WITHDRAWN, never sent;
- * the person asking sees "not_sent". One batch: the decision, then the removal it allows.
+ * POST /api/moderation/mentor-requests/:id: an admin (403 otherwise) decides an open check on a
+ * waiting request, with a reason kept for the record. Refusals: no check (404); the admin is one of
+ * the request's two parties (403: nobody judges their own request); already decided, or the request
+ * withdrawn meanwhile (409). keep: the request goes (back) to its mentor as it is, PENDING. remove: it
+ * closes as WITHDRAWN; the person asking sees not_sent or closed. One read, then one batch: the
+ * decision, then the removal it allows, each guarded as the read was.
  */
 export async function decideCase(
   ctx: MentoringContext, isAdmin: boolean, id: string, input: DecideMentorRequestCase,
 ): Promise<MentorRequestCase> {
   requireAdmin(isAdmin);
   const { db, viewerId, now } = ctx;
+  const before = await caseRow(ctx, id);
+  if (!before) throw new ChannelError("not_found", "This request has no check.", 404);
+  if (viewerId === before.requesterId || viewerId === before.mentorId) {
+    throw new ChannelError("forbidden", "Another admin needs to check a request you're part of.", 403);
+  }
   const decision = input.action === "keep" ? "KEEP" : "REMOVE";
   const [decided] = await db.batch([
     db.prepare(`UPDATE mentor_request_case SET state = 'DECIDED', decision = ?2, decisionReason = ?3, decidedBy = ?4,
         decidedAt = ?5, updatedAt = max(?5, updatedAt)
-      WHERE requestId = ?1 AND state = 'OPEN' RETURNING requestId`).bind(id, decision, input.reason, viewerId, now),
+      WHERE requestId = ?1 AND state = 'OPEN' AND EXISTS (SELECT 1 FROM mentor_request r
+        WHERE r.id = ?1 AND r.status = 'PENDING' AND ?4 NOT IN (r.requesterId, r.mentorId))
+      RETURNING requestId`).bind(id, decision, input.reason, viewerId, now),
     db.prepare(`UPDATE mentor_request SET status = 'WITHDRAWN', decidedAt = max(?2, createdAt), updatedAt = max(?2, createdAt)
       WHERE id = ?1 AND status = 'PENDING' AND EXISTS (SELECT 1 FROM mentor_request_case
         WHERE requestId = ?1 AND state = 'DECIDED' AND decision = 'REMOVE' AND decidedAt = ?2 AND decidedBy IS ?3)`).bind(id, now, viewerId),
   ]);
   const row = await caseRow(ctx, id);
   if (!row) throw new ChannelError("not_found", "This request has no check.", 404);
-  if (decided?.results.length !== 1) throw new ChannelError("conflict", "An admin already decided this check.", 409);
+  if (decided?.results.length !== 1) {
+    throw new ChannelError("conflict", row.caseState === "DECIDED" ? "An admin already decided this check." : "This request was withdrawn.", 409);
+  }
   return toCase(row, viewerId);
 }

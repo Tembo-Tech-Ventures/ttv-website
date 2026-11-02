@@ -471,12 +471,14 @@ export type CreateMentorRequest = z.infer<typeof CreateMentorRequest>;
 export const MentorRequestProject = z.discriminatedUnion("type", [ProjectEmbed, UnavailableEmbed]);
 export type MentorRequestProject = z.infer<typeof MentorRequestProject>;
 /**
- * A check on the note (src/lib/mentoring/README.md, "Checks"), as this party sees it. For the person
- * asking: waiting (TTV checks the note before the mentor can answer: "Waiting for a check before it's
- * sent"), or not_sent (an admin removed it: "This request wasn't sent", with status WITHDRAWN). Never
- * "declined". For the mentor: reported (they reported it; they cannot act on it unless an admin keeps it).
+ * A check on the note (src/lib/mentoring/README.md, "Checks"), as this party sees it, never naming who
+ * opened it and never "declined". For the person asking, before the mentor saw the request (Clef held
+ * it): waiting ("Waiting for a check before it's sent"), then not_sent once an admin removed it ("This
+ * request wasn't sent", status WITHDRAWN). After the mentor saw it (they reported it): checking ("TTV
+ * is checking this request"), then closed once removed ("This request was closed", status WITHDRAWN).
+ * For the mentor: reported (they reported it; they cannot act on it unless an admin keeps it).
  */
-export const MentorRequestCheck = z.enum(["waiting", "not_sent", "reported"]);
+export const MentorRequestCheck = z.enum(["waiting", "not_sent", "checking", "closed", "reported"]);
 export type MentorRequestCheck = z.infer<typeof MentorRequestCheck>;
 /**
  * Seen only by the person asking and the mentor asked. note: the mentor sees contact details in it

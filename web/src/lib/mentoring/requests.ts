@@ -111,14 +111,17 @@ function responseFor(row: RequestRow, viewerId: string): string | null {
 }
 
 /**
- * What a check means to this party (contracts MentorRequestCheck): the person asking waits while it
- * is open and learns only that a removed request wasn't sent; the mentor who reported it sees that,
- * until an admin keeps it.
+ * What a check means to this party (contracts MentorRequestCheck), only ever what is true: the person
+ * asking waits while it is open, and learns only that a removed request was closed; whether it was
+ * ever sent depends on whether the mentor saw it, which a report says (MENTOR_SEES). The mentor who
+ * reported it sees that, until an admin keeps it.
  */
 function checkFor(row: RequestRow, viewerId: string): MentorRequestCheck | null {
   if (row.requesterId === viewerId) {
-    if (row.caseState === "OPEN" && row.status === "PENDING") return "waiting";
-    return row.caseDecision === "REMOVE" ? "not_sent" : null;
+    const seen = Boolean(row.reported);
+    if (row.caseState === "OPEN" && row.status === "PENDING") return seen ? "checking" : "waiting";
+    if (row.caseDecision === "REMOVE" && row.status === "WITHDRAWN") return seen ? "closed" : "not_sent";
+    return null;
   }
   return row.reported && !(row.caseState === "DECIDED" && row.caseDecision === "KEEP") ? "reported" : null;
 }
