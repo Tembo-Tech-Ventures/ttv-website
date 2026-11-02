@@ -1,0 +1,49 @@
+---
+/**
+ * The admin moderation queue (U-2.4, screens/08): one case per message, waiting or decided, with
+ * the evidence and the author's review request. Each case is a plain form post, so it works
+ * without JavaScript; page-flow.ts holds the request flow the DEV harness shares.
+ *
+ * The middleware already requires an admin. This page owns the rest: signed in through the
+ * browser (personal access tokens can't use channels yet), the `channels` flag on for this admin,
+ * and same-origin decisions. B-2.5's listModerationQueue and decideModeration refuse the rest
+ * with the same errors as /api/moderation.
+ */
+import { env } from "cloudflare:workers";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import ModerationQueueView from "@/components/admin/moderation/ModerationQueueView.astro";
+import { MODERATION_PATH } from "@/components/admin/moderation/case-model";
+import { moderationQueueRequest, queuePaths } from "@/components/admin/moderation/page-flow";
+import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
+import { ChannelError } from "@/lib/channels/errors";
+import { decideModeration } from "@/lib/channels/moderation/actions";
+import { countPendingModeration, listModerationQueue } from "@/lib/channels/moderation/queue";
+import { isFlagEnabled } from "@/lib/platform/server/flags";
+import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
+
+const { user, personalAccessToken, isAdmin } = Astro.locals;
+if (!user) return Astro.redirect("/auth/login");
+if (personalAccessToken) return new Response("Forbidden: personal access tokens can't use channels yet.", { status: 403 });
+if (!await isFlagEnabled({ db: env.DB, env, user, isAdmin, locals: Astro.locals }, "channels")) {
+  return new Response("Not found", { status: 404 });
+}
+if (Astro.request.method === "POST" && !hasMatchingRequestOrigin(Astro.request)) {
+  return new Response("Forbidden: same-origin request required.", { status: 403 });
+}
+
+const viewer = { user, capabilities: await requestCapabilities(drizzle(env.DB, { schema }), Astro.locals) };
+const outcome = await moderationQueueRequest(Astro.request, Astro.url, {
+  list: (query) => listModerationQueue(env.DB, viewer, query),
+  countPending: () => countPendingModeration(env.DB),
+  decide: (input) => decideModeration({ db: env.DB, env }, viewer, input),
+  isBadCursor: (error) => error instanceof ChannelError && error.status === 400,
+}, queuePaths(MODERATION_PATH));
+if (outcome.kind === "redirect") return Astro.redirect(outcome.location, 303);
+Astro.response.status = outcome.status;
+---
+
+<AdminLayout title="Moderation" pendingModeration={outcome.props.pendingCount}>
+  <ModerationQueueView {...outcome.props} />
+</AdminLayout>

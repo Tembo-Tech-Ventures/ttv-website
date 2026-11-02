@@ -32,6 +32,22 @@ describe("decisionOptions", () => {
     expect(decisionOptions({ ...gone, state: "DECIDED" })).toEqual([]);
   });
 
+  it("closes a deleted hidden message with restore, because keep is refused on a hidden message", () => {
+    const gone = { ...flagged, message: { ...messages.deleted, moderation: { state: "HIDDEN" as const, reasons: [] } } };
+    expect(decisionOptions(gone)).toEqual([{ action: "restore", label: "Close the case" }]);
+  });
+
+  it("offers keep only on a message that is not hidden, and restore only on a hidden one", () => {
+    for (const state of ["PENDING", "DECIDED"] as const) {
+      for (const moderation of ["VISIBLE", "FLAGGED", "HIDDEN"] as const) {
+        const actions = decisionOptions({ state, message: { ...flagged.message, moderation: { state: moderation, reasons: [] } } })
+          .map((option) => option.action);
+        if (moderation === "HIDDEN") expect(actions).not.toContain("keep");
+        else expect(actions).not.toContain("restore");
+      }
+    }
+  });
+
   it("reads a message without moderation as visible", () => {
     expect(decisionOptions({ ...flagged, message: { ...flagged.message, moderation: null } })[0].action).toBe("keep");
   });

@@ -6,11 +6,15 @@ import { demoEnabled } from "@/lib/staging-demo-policy";
 import { isAgentAuthEnabled } from "@/lib/agent-auth";
 import { isLegacyImportEnabled } from "@/lib/admin/import";
 import { countPendingAccessRequests } from "@/lib/admin/access-requests";
+import { countPendingModeration } from "@/lib/channels/moderation/queue";
+import { isFlagEnabled } from "@/lib/platform/server/flags";
 
 interface Props {
   title?: string;
   /** The queue page already holds the open-request count; every other page reads it here. */
   pendingAccessRequests?: number;
+  /** The moderation page already holds its waiting count; every other page reads it here. */
+  pendingModeration?: number;
 }
 
 const { title = "Admin" } = Astro.props;
@@ -21,6 +25,11 @@ if (!Astro.locals.isAdmin) {
 }
 
 const pendingAccessRequests = Astro.props.pendingAccessRequests ?? await countPendingAccessRequests(env.DB);
+// No Moderation entry (null) while `channels` is off for this admin: there is no queue to link to.
+const channelsOn = await isFlagEnabled(
+  { db: env.DB, env, user: Astro.locals.user ?? null, isAdmin: true, locals: Astro.locals }, "channels",
+);
+const pendingModeration = channelsOn ? Astro.props.pendingModeration ?? await countPendingModeration(env.DB) : null;
 ---
 
 <BaseLayout title={`${title} | TTV Admin`}>
@@ -31,6 +40,7 @@ const pendingAccessRequests = Astro.props.pendingAccessRequests ?? await countPe
     stagingDemoEnabled={demoEnabled(env.DEPLOYMENT_ENVIRONMENT, env.STAGING_DEMO_ENABLED, Astro.url.origin)}
     dataMigrationEnabled={isLegacyImportEnabled(env.DEPLOYMENT_ENVIRONMENT)}
     pendingAccessRequests={pendingAccessRequests}
+    pendingModeration={pendingModeration}
   >
     <slot />
   </AdminShell>
