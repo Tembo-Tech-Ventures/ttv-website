@@ -29,6 +29,13 @@ async function ask(page: Page, words: string) {
   await box.press("Enter");
 }
 
+// The harness exists only in astro dev; deployed builds prove it absent in platform-channel.spec.ts.
+test.skip(Boolean(process.env.PLAYWRIGHT_BASE_URL), "The harness exists only in astro dev.");
+// Each test sets its own viewport, so one project runs them.
+test.beforeEach(({ browserName }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", `covered by the chromium project (${browserName})`);
+});
+
 const horizontalOverflow = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
 for (const viewport of [DESKTOP, PHONE]) {
