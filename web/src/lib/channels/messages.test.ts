@@ -94,7 +94,7 @@ describe("message pages", () => {
     const flagged = s.message("help", { state: "FLAGGED" });
     const own = (await listMessages(reader(s, "help"), {})).items;
     expect(own.map((item) => [item.id, item.moderation])).toEqual([
-      [hidden, { state: "HIDDEN", reasons: ["Synthetic reason"], reviewRequested: false }], [flagged, null],
+      [hidden, { state: "HIDDEN", reasons: ["Synthetic reason"], reviewRequested: false, reviewable: true }], [flagged, null],
     ]);
     const others = (await listMessages(reader(s, "help", false, "synthetic-achieng"), {})).items;
     expect(others.map((item) => [item.id, item.moderation])).toEqual([[flagged, null]]);

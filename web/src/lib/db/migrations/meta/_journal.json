@@ -239,6 +239,13 @@
       "when": 1793576466845,
       "tag": "0033_channel_message_search",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1793586158739,
+      "tag": "0034_moderation_case_reopened",
+      "breakpoints": true
     }
   ]
 }

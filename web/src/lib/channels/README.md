@@ -163,10 +163,24 @@ Every route:
 - is 404 for a channel the caller cannot read, a message in one, and another
   person's hidden message, with the same body as for an id that does not
   exist;
-- refuses personal access tokens (403) until B-2.7 adds channel scopes.
-  Community tokens never get past the middleware. Agent sessions act as their
-  person, under the same rules;
-- needs the same origin for writes (403 otherwise);
+- takes a personal access token with a channels scope (B-2.7), which acts as
+  its owner with the owner's capabilities: `channels:read` for the reads
+  (channels, messages, shareables), `channels:write` (issued with
+  `channels:read`) for the writes (post, edit, delete, react, read marker,
+  report, ask for review). Only the admin token page issues these tokens, and
+  like admin tokens they work only while their owner is an admin (403
+  otherwise), checked on every request. The owner lists and revokes them on
+  that page or, after losing the role, through `/api/community/tokens`. A token
+  sees exactly what its owner's browser session sees, hidden messages and
+  moderation reasons included, since both read the same capabilities; never
+  the evidence (earlier texts), which only the admin queue carries. Any other token is 403, and so is every token on
+  the moderation queue and decisions: admin tokens triage through MCP
+  (below). A channels token can't be combined with admin or community scopes
+  and reaches no other route (403 in the middleware); community tokens never
+  get past the middleware either. Agent sessions act as their person, under
+  the same rules;
+- needs the same origin for browser writes (403 otherwise). A token's
+  writes need no Origin, but one it sends must match;
 - answers in the platform error envelope, and records unexpected failures
   without details (500 `server`).
 
@@ -395,7 +409,10 @@ the rest.
   hide, or keeping a hidden message hidden: either closes the case), restore
   (only a HIDDEN message that isn't deleted: otherwise 409) or keep ("fine
   as is", for a message that is not hidden: on a HIDDEN one it is 409, and
-  Restore is the way back). Restore and keep make the message
+  Restore is the way back). A deleted message can't be hidden or restored
+  (409); keep is how an admin closes its case, whatever its state, HIDDEN
+  included: it records the KEEP decision, leaves the state as it is and
+  allowlists nothing. Otherwise restore and keep make the message
   VISIBLE with its reasons cleared, and put into `moderation_allowlist` the
   key of its text, as written and as screened with its shared work
   (`screeningText`), and of each detector finding in it, so none is flagged
@@ -404,13 +421,20 @@ the rest.
   (403). These rules read the admin's events in `moderation_event`, not the
   case's current state, so a later signal that reopens the case cannot undo
   them.
-- **Ask for review**: the author of a hidden message, once per case, with an
-  optional note. A hide an admin made or upheld is final (409). While it is
-  open, `moderation.reviewRequested` is true on that message for its author
-  and admins (false otherwise; absent for everyone else and on any message
-  that is not hidden), so "Review requested" survives a reload.
+- **Ask for review**: the author of a hidden message that isn't deleted, once
+  per case, with an optional note. A hide an admin made or upheld is final
+  (409), and so is a deletion. While it is open,
+  `moderation.reviewRequested` is true on that message for its author and
+  admins (false otherwise; absent for everyone else and on any message that
+  is not hidden), so "Review requested" survives a reload.
+  `moderation.reviewable`, for the author only on a HIDDEN message, says
+  whether a review can still be asked for or is pending: false once an
+  admin's decision is final or the message is deleted.
 - **Queue**: admins only. One case per message (item id = message id),
-  newest first, 20 a page with an opaque cursor bound to the state
+  newest first by when the case first opened, so a case reopened by a signal
+  after an admin's decision keeps its place while an admin pages, and says
+  when it reopened (`reopenedAt`, migration 0034). 20 a page with an opaque
+  cursor bound to the state
   (`PENDING` by default, or `DECIDED`). Each item carries the message as an
   admin sees it, its channel, source, merged reasons, report count, the
   moderator who hid it, the evidence (oldest first), the author's review
@@ -426,6 +450,13 @@ the rest.
   (`requestCapabilities`). They throw `ChannelError`; the caller owns the
   `channels` flag, sign-in and same-origin checks. Without `notifyLater`,
   `decideModeration` writes the notices before it returns.
+- **MCP** (`moderation/mcp.ts`, on `/api/mcp` beside the community tools):
+  `list_moderation_queue` (`state`, `cursor`) needs `admin:read`, and
+  `moderate_message` (`messageId`, `action`, `reason`) needs `admin:write`;
+  a same-origin browser session needs neither. Both call the page functions,
+  so they refuse what the API refuses, in the same words (as a tool error).
+  They are missing from `tools/list`, and unknown to `tools/call`, unless the
+  caller is an admin with `channels` on, checked on every call.
 
 ### 6. Attention
 

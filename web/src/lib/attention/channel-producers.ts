@@ -18,13 +18,15 @@ interface MessageState {
   id: string; parentId: string | null; authorKind: "USER" | "TEMBO"; authorId: string | null; body: string;
   moderationState: "VISIBLE" | "FLAGGED" | "HIDDEN"; moderationReasons: string; hiddenAt: number | null; hiddenBy: string | null;
   deletedAt: number | null; kind: ChannelKind; slug: string;
-  caseState: "PENDING" | "DECIDED" | null; source: ModerationSource | null; openedAt: number | null;
+  caseState: "PENDING" | "DECIDED" | null; source: ModerationSource | null;
+  /** When the case last opened: its latest reopening, else its first opening. Each opening is a new notice. */
+  openedAt: number | null;
   reviewRequestedAt: number | null; decision: "HIDE" | "RESTORE" | "KEEP" | null;
 }
 
 async function messageState(context: AttentionProducerContext, messageId: string): Promise<MessageState | null> {
   return context.db.prepare(`SELECT m.id, m.parentId, m.authorKind, m.authorId, m.body, m.moderationState, m.moderationReasons,
-      m.hiddenAt, m.hiddenBy, m.deletedAt, ch.kind, ch.slug, c.state AS caseState, c.source, c.openedAt, c.reviewRequestedAt, c.decision
+      m.hiddenAt, m.hiddenBy, m.deletedAt, ch.kind, ch.slug, c.state AS caseState, c.source, coalesce(c.reopenedAt, c.openedAt) AS openedAt, c.reviewRequestedAt, c.decision
     FROM channel_message m JOIN channel ch ON ch.id = m.channelId LEFT JOIN moderation_case c ON c.messageId = m.id
     WHERE m.id = ?1`).bind(messageId).first<MessageState>();
 }

@@ -21,6 +21,7 @@ import {
   authenticatePersonalAccessToken,
   enforcePersonalAccessTokenMutationScope,
   hasPersonalAccessTokenAuthorization,
+  personalAccessTokenFamily,
 } from "@/lib/personal-access-tokens";
 
 type AuthEnv = typeof env;
@@ -111,8 +112,18 @@ async function enforceAdminGuards(
   return null;
 }
 
-function enforceCommunityDelegation(locals:App.Locals,request:Request,pathname:string):Response|null {
-  if(!locals.personalAccessToken || locals.personalAccessToken.scopes.includes("admin:read")) return null;
+/** The channel APIs a channels token may call (src/lib/channels/http.ts checks each scope). */
+const isChannelApi=(pathname:string)=>pathname==="/api/channels" || pathname.startsWith("/api/channels/") || pathname.startsWith("/api/messages/");
+
+/** A community or channels token reaches only its own family's routes; admin tokens are checked by enforceAdminGuards. */
+function enforceTokenDelegation(locals:App.Locals,request:Request,pathname:string):Response|null {
+  if(!locals.personalAccessToken) return null;
+  const family=personalAccessTokenFamily(locals.personalAccessToken.scopes);
+  if(family==="admin") return null;
+  if(family==="channels") {
+    if(isChannelApi(pathname)) return null;
+    return new Response("Forbidden: channels token cannot access this route.",{status:403,headers:{"Cache-Control":"no-store"}});
+  }
   const api=pathname==="/api/community" || pathname.startsWith("/api/community/");
   const probePage=locals.stagingFixture?.retainedReadProbe && request.method==="GET" && pathname==="/dashboard/discover";
   if(pathname==="/api/mcp" || api || probePage) return null;
@@ -193,9 +204,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const fixtureFailure = await enforceStagingFixtureBoundary(locals,url.pathname,request.method);
     if (fixtureFailure) return platformAdminApiDenial(fixtureFailure, url.pathname);
 
-    // Community delegation never inherits the owner's unrelated application access.
+    // Community and channels delegation never inherits the owner's unrelated application access.
     // Use Astro's normalized route pathname, as with the admin origin guards.
-    const delegationFailure = enforceCommunityDelegation(locals,request,url.pathname);
+    const delegationFailure = enforceTokenDelegation(locals,request,url.pathname);
     if(delegationFailure) return platformAdminApiDenial(delegationFailure, url.pathname);
 
     // Protect /dashboard/* routes — require authentication

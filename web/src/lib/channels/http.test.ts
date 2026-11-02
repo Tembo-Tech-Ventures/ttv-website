@@ -19,6 +19,8 @@ function setup(...args: Parameters<typeof channelDatabase>) {
   return fixture;
 }
 const errorOf = (body: unknown) => ErrorEnvelope.parse(body).error;
+/** The locals of a request made with a personal access token of these scopes, owned by the caller. */
+const withToken = (scopes: string[]) => ({ locals: { personalAccessToken: { id: "synthetic-pat", scopes } } as never });
 /** Flags as production reads them: from the database, no preview override. */
 const DATABASE_FLAGS = { PLATFORM_FLAGS_OVERRIDE: undefined, DEPLOYMENT_ENVIRONMENT: "production" };
 
@@ -63,13 +65,15 @@ describe("channel APIs: gates", () => {
     expect((await member.call("listChannels", { env: DATABASE_FLAGS })).status).toBe(200);
   });
 
-  it("are 404 signed out, 403 for personal access tokens, and refuse cross-origin writes", async () => {
+  it("are 404 signed out, 403 for personal access tokens without a channel scope, and refuse cross-origin writes", async () => {
     const s = setup();
     s.agree();
     for (const [operation, options] of everyRoute(s)) {
       expect((await s.call(operation, { ...options, user: null })).status, `${operation}`).toBe(404);
-      const token = await s.call(operation, { ...options, locals: { personalAccessToken: { id: "pat", scopes: ["admin:read"] } } as never });
-      expect([token.status, errorOf(token.body).code], `${operation}`).toEqual([403, "forbidden"]);
+      for (const scopes of [["admin:read"], ["admin:read", "admin:write"], ["community:read", "community:write"]]) {
+        const token = await s.call(operation, { ...options, ...withToken(scopes) });
+        expect([token.status, errorOf(token.body).code], `${operation} ${scopes.join()}`).toEqual([403, "forbidden"]);
+      }
       const write = ROUTES[operation].method !== "GET";
       for (const origin of [null, "https://evil.example"]) {
         const response = await s.call(operation, { ...options, origin });
@@ -78,6 +82,85 @@ describe("channel APIs: gates", () => {
       }
     }
     expect(s.database.prepare("SELECT body FROM channel_message").all()).toEqual([{ body: "Mine" }]);
+  });
+
+  it("let a channels:read token read as its owner, and refuse its writes", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    s.agree();
+    for (const [operation, options] of everyRoute(s)) {
+      const response = await s.call(operation, { ...options, ...withToken(["channels:read"]), origin: null });
+      if (ROUTES[operation].method === "GET") expect(response.status, `${operation}`).toBe(200);
+      else {
+        expect([response.status, errorOf(response.body).message], `${operation}`)
+          .toEqual([403, "This personal access token does not grant channels:write."]);
+      }
+    }
+    expect(s.database.prepare("SELECT body FROM channel_message").all()).toEqual([{ body: "Mine" }]);
+  });
+
+  it("let a channels:write token write as its owner without an Origin, but never from another origin", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    s.agree();
+    const writer = withToken(["channels:read", "channels:write"]);
+    for (const [operation, options] of everyRoute(s)) {
+      if (ROUTES[operation].method === "GET") continue;
+      const crossOrigin = await s.call(operation, { ...options, ...writer, origin: "https://evil.example" });
+      expect([crossOrigin.status, errorOf(crossOrigin.body).message], `${operation}`).toEqual([403, "Same-origin request required."]);
+      const response = await s.call(operation, { ...options, ...writer, origin: null });
+      expect(response.status, `${operation}`).toBe(operation === "postMessage" ? 201 : 200);
+    }
+    expect(s.database.prepare("SELECT authorId, body, deletedAt IS NOT NULL AS deleted FROM channel_message ORDER BY seq").all()).toEqual([
+      { authorId: VIEWER, body: "", deleted: 1 }, { authorId: VIEWER, body: "Synthetic post", deleted: 0 },
+    ]);
+    expect(s.database.prepare("SELECT userId FROM channel_read").all()).toEqual([{ userId: VIEWER }]);
+  });
+
+  it("refuse every personal access token on the moderation decision and queue routes, even an admin's", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    const theirs = s.message("help", { author: "synthetic-otieno", body: "Theirs" });
+    for (const scopes of [["channels:read", "channels:write"], ["admin:read", "admin:write"]]) {
+      const queue = await s.call("listModerationQueue", withToken(scopes));
+      expect([queue.status, errorOf(queue.body).code], `${scopes.join()}`).toEqual([403, "forbidden"]);
+      const hide = await s.call("moderateMessage", { id: theirs, body: { action: "hide", reason: "Synthetic" }, ...withToken(scopes), origin: null });
+      expect([hide.status, errorOf(hide.body).code], `${scopes.join()}`).toEqual([403, "forbidden"]);
+    }
+    expect(s.database.prepare("SELECT moderationState FROM channel_message").all()).toEqual([{ moderationState: "VISIBLE" }]);
+  });
+
+  it("let a channels:write token report a message and ask for a review of its owner's", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    s.agree();
+    const writer = { ...withToken(["channels:read", "channels:write"]), origin: null };
+    const theirs = s.message("help", { author: "synthetic-otieno", body: "Theirs" });
+    expect((await s.call("reportMessage", { id: theirs, body: { reason: "Spam" }, ...withToken(["channels:read"]), origin: null })).status).toBe(403);
+    expect((await s.call("reportMessage", { id: theirs, body: { reason: "Spam" }, ...writer })).status).toBe(201);
+    const own = s.message("help", { author: VIEWER, state: "HIDDEN" });
+    expect((await s.call("requestModerationReview", { id: own, body: {}, ...writer })).status).toBe(201);
+  });
+
+  it("let a channels token see exactly what its owner's session sees, hidden messages included", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    s.message("help", { author: "synthetic-otieno", body: "Visible" });
+    s.message("help", { author: "synthetic-otieno", body: "Hidden from members", state: "HIDDEN" });
+    s.message("help", { author: "synthetic-otieno", body: "Flagged", state: "FLAGGED" });
+    const read = (options: Parameters<ChannelFixture["call"]>[1]) => s.call("listMessages", { id: s.channel("help"), ...options });
+    const session = await read({});
+    const token = await read({ ...withToken(["channels:read"]), origin: null });
+    expect(token).toEqual({ ...session, response: expect.anything() });
+    expect(MessageList.parse(token.body).items.map((item) => [item.body, item.moderation?.state])).toEqual([
+      ["Visible", "VISIBLE"], ["Hidden from members", "HIDDEN"], ["Flagged", "FLAGGED"],
+    ]);
+  });
+
+  it("stop a channels token the moment its owner is no longer an admin", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    const token = { id: s.channel("help"), ...withToken(["channels:read"]), origin: null };
+    expect((await s.call("listMessages", token)).status).toBe(200);
+    s.database.exec("DELETE FROM UserRoles");
+    const refused = await s.call("listMessages", token);
+    expect([refused.status, errorOf(refused.body).message]).toEqual([403, "This personal access token works only while its owner is an admin."]);
+    // The same person's browser session keeps a member's access.
+    expect((await s.call("listMessages", { id: s.channel("help") })).status).toBe(200);
   });
 
   it("let agent sessions act as their person", async () => {

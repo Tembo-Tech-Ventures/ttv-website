@@ -47,12 +47,16 @@ beforeEach(() => {
 afterEach(() => { s.database.close(); vi.restoreAllMocks(); });
 
 type Handler = (context: APIContext) => Response | Promise<Response>;
-async function call(path: string, handler: Handler, options: { method?: string; body?: unknown; params?: Record<string, string>; scopes?: string[] } = {}) {
+/** `scopes` sends a token with them; `rejected`, one that authentication refuses (expired or revoked). */
+async function call(path: string, handler: Handler, options: {
+  method?: string; body?: unknown; params?: Record<string, string>; scopes?: string[]; rejected?: boolean;
+} = {}) {
   const url = new URL(path, ORIGIN);
   const headers = new Headers({ Origin: ORIGIN });
   if (options.scopes) {
     headers.set("Authorization", `Bearer ttv_pat_${"1".repeat(64)}`);
-    mocks.authenticatePersonalAccessToken.mockResolvedValue({ ...session(), token: { id: "synthetic-pat", scopes: options.scopes } });
+    mocks.authenticatePersonalAccessToken.mockResolvedValue(
+      options.rejected ? null : { ...session(), token: { id: "synthetic-pat", scopes: options.scopes } });
   }
   const request = new Request(url, { method: options.method ?? "GET", headers, body: options.body === undefined ? undefined : JSON.stringify(options.body) });
   const ctx = { url, request, params: options.params ?? {}, locals: {},
@@ -107,6 +111,36 @@ describe("channel API route files through the middleware", () => {
     expect([shareables.status, ErrorEnvelope.parse(await shareables.json()).error.code]).toEqual([403, "forbidden"]);
     const admin = await call("/api/channels", listChannels, { scopes: ["admin:read"] });
     expect([admin.status, ErrorEnvelope.parse(await admin.json()).error.code]).toEqual([403, "forbidden"]);
+  });
+
+  it("serve a channels token as its owner, and keep it to the channel APIs", async () => {
+    s.database.exec(`INSERT INTO UserRoles(id,userId,roleId) SELECT 'viewer-admin','${VIEWER}',id FROM Roles WHERE name = 'ADMIN'`);
+    const help = s.channel("help");
+    const read = ["channels:read"];
+    const write = ["channels:read", "channels:write"];
+    expect((await call("/api/channels", listChannels, { scopes: read })).status).toBe(200);
+    expect((await call(`/api/channels/${help}/messages`, listMessages, { params: { id: help }, scopes: read })).status).toBe(200);
+    const refused = await call(`/api/channels/${help}/messages`, postMessage, { method: "POST", params: { id: help }, body: post("Habari"), scopes: read });
+    expect([refused.status, ErrorEnvelope.parse(await refused.json()).error.message])
+      .toEqual([403, "This personal access token does not grant channels:write."]);
+    const created = await call(`/api/channels/${help}/messages`, postMessage, { method: "POST", params: { id: help }, body: post("Habari"), scopes: write });
+    expect(created.status).toBe(201);
+    const { id } = Message.parse(await created.json());
+    expect((await call(`/api/messages/${id}`, editMessage, { method: "PATCH", params: { id }, body: { body: "Habari yako" }, scopes: write })).status).toBe(200);
+    expect(s.database.prepare("SELECT authorId, body FROM channel_message WHERE id = ?").get(id)).toEqual({ authorId: VIEWER, body: "Habari yako" });
+
+    const elsewhere: [string, Handler][] = [
+      ["/api/moderation/queue", queue], ["/api/mcp", listChannels], ["/api/community/profile", listChannels], ["/dashboard", listChannels],
+    ];
+    for (const [path, handler] of elsewhere) {
+      const response = await call(path, handler, { scopes: write });
+      expect([response.status, await response.text()], `${path}`).toEqual([403, "Forbidden: channels token cannot access this route."]);
+    }
+  });
+
+  it("treat an expired or revoked token as no one, never as the cookie session beside it", async () => {
+    const response = await call("/api/channels", listChannels, { scopes: ["channels:read"], rejected: true });
+    expect(response.status).toBe(404);
   });
 
   it("are 404 signed out", async () => {

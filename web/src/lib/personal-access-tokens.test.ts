@@ -14,6 +14,8 @@ import {
   parsePersonalAccessTokenDuration,
   parsePersonalAccessTokenScopes,
   personalAccessTokenCanWrite,
+  personalAccessTokenFamily,
+  type PersonalAccessTokenScope,
   revokePersonalAccessToken,
 } from "./personal-access-tokens";
 
@@ -85,6 +87,11 @@ describe("personal access token input policy", () => {
       "admin:read",
       "admin:write",
     ]);
+    expect(parsePersonalAccessTokenScopes("channels-read")).toEqual(["channels:read"]);
+    expect(parsePersonalAccessTokenScopes("channels-write")).toEqual([
+      "channels:read",
+      "channels:write",
+    ]);
   });
 
   it("rejects unsafe labels, unbounded expiry, and unknown access", () => {
@@ -94,9 +101,11 @@ describe("personal access token input policy", () => {
     expect(() => parsePersonalAccessTokenDuration("87600")).toThrow(
       "supported token duration"
     );
-    expect(() => parsePersonalAccessTokenScopes("owner")).toThrow(
-      "read-only or read/write"
-    );
+    for (const access of ["owner", "community-read", "toString", null]) {
+      expect(() => parsePersonalAccessTokenScopes(access)).toThrow(
+        "read-only or read/write"
+      );
+    }
   });
 });
 
@@ -398,6 +407,40 @@ describe("community personal access token scopes", () => {
   it("refuses mixed admin and community scope grants", async () => {
     const { db } = mockDatabase();
     await expect(createPersonalAccessToken({ db, userId: "member", label: "Mixed agent", durationHours: 8, scopes: ["admin:read", "community:read"], now, cryptoImpl: deterministicCrypto() })).rejects.toThrow("cannot be combined");
+  });
+});
+
+describe("channel personal access token scopes", () => {
+  const create = (scopes: PersonalAccessTokenScope[], db = mockDatabase().db) =>
+    createPersonalAccessToken({ db, userId: "member", label: "Channel agent", durationHours: 720, scopes, now, cryptoImpl: deterministicCrypto() });
+
+  it("stores channel scopes without granting admin writes", async () => {
+    const { db, calls } = mockDatabase();
+    const result = await create(["channels:read", "channels:write"], db);
+    expect(result.scopes).toEqual(["channels:read", "channels:write"]);
+    expect(personalAccessTokenCanWrite(result)).toBe(false);
+    expect(calls.some(call => call.values.includes('["channels:read","channels:write"]'))).toBe(true);
+  });
+
+  it("requires channels:read", async () => {
+    await expect(create(["channels:write"])).rejects.toThrow("Every token must include");
+  });
+
+  it("refuses channel scopes combined with community or admin scopes", async () => {
+    for (const scopes of [
+      ["channels:read", "community:read"], ["channels:read", "channels:write", "community:write"],
+      ["channels:read", "institution:read"], ["channels:read", "admin:read"], ["admin:read", "admin:write", "channels:write"],
+    ] as PersonalAccessTokenScope[][]) {
+      await expect(create(scopes), `${scopes.join()}`).rejects.toThrow("cannot be combined");
+    }
+  });
+
+  it("names each token's one family, and no family for a mix", () => {
+    expect(personalAccessTokenFamily(["admin:read", "admin:write"])).toBe("admin");
+    expect(personalAccessTokenFamily(["community:read", "institution:read"])).toBe("community");
+    expect(personalAccessTokenFamily(["channels:read", "channels:write"])).toBe("channels");
+    expect(personalAccessTokenFamily(["channels:read", "community:read"])).toBeNull();
+    expect(personalAccessTokenFamily([])).toBeNull();
   });
 
 });

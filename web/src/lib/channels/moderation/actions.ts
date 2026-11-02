@@ -8,7 +8,7 @@ import type { AttentionProducerContext } from "@/lib/attention/producers";
 import * as schema from "@/lib/db/schema";
 import { findChannelById } from "../access";
 import { screeningText } from "../embeds";
-import { ChannelError, readMessage } from "../messages";
+import { ADMIN_HID, ChannelError, readMessage } from "../messages";
 import { findMessageTarget, visibleTo, type MessageTarget, type WriteContext } from "../mutations";
 import type { ModerationViewer } from "./queue";
 import { detectFindings, textKey } from "./detectors";
@@ -31,26 +31,30 @@ const NEXT_CHANGE = "(SELECT MAX(changeSeq) + 1 FROM channel_message WHERE chann
 
 const deleted = () => new ChannelError("conflict", "This message was deleted.", 409);
 /**
- * An admin's restore or keep of message `m` since its text last changed, or an admin's hide since it
- * was hidden: from the audit trail, which a later report or flag reopening the case cannot erase.
+ * An admin's restore or keep of message `m` since its text last changed (ADMIN_HID: a hide since it
+ * was hidden): from the audit trail, which a later report or flag reopening the case cannot erase.
  */
 const ADMIN_KEPT = `EXISTS (SELECT 1 FROM moderation_event e WHERE e.messageId = m.id AND e.source = 'ADMIN'
   AND e.action IN ('RESTORE','KEEP') AND e.createdAt >= coalesce(m.editedAt, 0))`;
-const ADMIN_HID = `EXISTS (SELECT 1 FROM moderation_event e WHERE e.messageId = m.id AND e.source = 'ADMIN'
-  AND e.action = 'HIDE' AND e.createdAt >= coalesce(m.hiddenAt, 0))`;
 const decided = () => new ChannelError("conflict", "An admin has already reviewed this message.", 409);
 const keepHidden = () => new ChannelError("conflict", "This message is hidden. Restore it instead.", 409);
 const notHidden = () => new ChannelError("conflict", "This message isn't hidden.", 409);
 
-/** A keep needs a message that isn't hidden; a restore, one that is hidden and not deleted. */
+/**
+ * A keep needs a message that isn't hidden, or one that was deleted (whatever its state: that closes
+ * the case and changes nothing else); a restore, one that is hidden and not deleted.
+ */
 function assertDecidable(target: MessageTarget, action: ModerationAction["action"]): void {
   const hidden = target.moderationState === "HIDDEN";
-  if (action === "keep" && hidden) throw keepHidden();
+  if (action === "keep" && hidden && target.deletedAt === null) throw keepHidden();
   if (action === "restore" && !hidden) throw notHidden();
   if (action === "restore" && target.deletedAt !== null) throw deleted();
 }
 
-/** Why a keep or restore that passed its precheck wrote nothing: the message changed since it was read. */
+/**
+ * Why a keep or restore that passed its precheck wrote nothing: the message changed since it was read.
+ * A keep fails only on a message hidden and not deleted.
+ */
 async function stale(ctx: WriteContext, id: string, action: "keep" | "restore"): Promise<ChannelError> {
   if (action === "keep") return keepHidden();
   const state = await ctx.db.prepare("SELECT deletedAt FROM channel_message WHERE id = ?1")
@@ -113,6 +117,8 @@ export async function reportMessage(ctx: WriteContext, target: MessageTarget, in
  * upholding a moderator's hide, which closes the case), restore, or keep: fine as is. Restore and
  * keep make the message visible again and allowlist its text and each detector finding in it, so
  * neither is flagged again. Keep is for a message that is not hidden (409): Restore is the way back.
+ * On a deleted message only keep is left: it closes the case, whatever the message's state, and
+ * leaves that state as it is and allowlists nothing.
  */
 export async function moderateMessage(
   ctx: WriteContext, target: MessageTarget, input: ModerationAction, { isAdmin }: { isAdmin: boolean },
@@ -150,17 +156,20 @@ export async function moderateMessage(
     return current(ctx, target.id);
   }
 
-  // ?8 the action; keep only while the message is not hidden, restore only while it is hidden and not
-  // deleted (either may have changed since it was read).
+  // ?8 the action; keep only while the message is not hidden or is deleted, restore only while it is
+  // hidden and not deleted (any of which may have changed since it was read). A deleted message keeps
+  // its state.
   const [event] = await ctx.db.batch([
-    ctx.db.prepare(`${EVENT} SELECT ?6, id, ?8, 'ADMIN', ?3, moderationState, 'VISIBLE', json_array(?4), ?5
+    ctx.db.prepare(`${EVENT} SELECT ?6, id, ?8, 'ADMIN', ?3, moderationState,
+        CASE WHEN deletedAt IS NULL THEN 'VISIBLE' ELSE moderationState END, json_array(?4), ?5
       FROM channel_message WHERE id = ?2 AND channelId = ?1
-        AND (CASE ?8 WHEN 'KEEP' THEN moderationState <> 'HIDDEN' ELSE moderationState = 'HIDDEN' AND deletedAt IS NULL END)
+        AND (CASE ?8 WHEN 'KEEP' THEN moderationState <> 'HIDDEN' OR deletedAt IS NOT NULL
+          ELSE moderationState = 'HIDDEN' AND deletedAt IS NULL END)
       RETURNING id`)
       .bind(...params, input.action.toUpperCase()),
     ctx.db.prepare(`UPDATE channel_message SET moderationState = 'VISIBLE', moderationReasons = '[]', hiddenBy = NULL, hiddenAt = NULL,
         changeSeq = ${NEXT_CHANGE}
-      WHERE id = ?2 AND moderationState <> 'VISIBLE' AND ${written}`).bind(...params.slice(0, 6)),
+      WHERE id = ?2 AND moderationState <> 'VISIBLE' AND deletedAt IS NULL AND ${written}`).bind(...params.slice(0, 6)),
     ...await allowlisting(ctx, target, params.slice(0, 6)),
   ]);
   // Nothing written: the message was hidden (keep), or restored or deleted (restore), since it was read.
@@ -218,7 +227,7 @@ function storedEmbeds(text: string): MessageEmbed[] {
 /**
  * POST /api/messages/:id/review. The author of a hidden message asks an admin to look again, with an
  * optional note. Once per case: asking again changes nothing. A hide an admin made or upheld is final
- * (409), and only a hidden message can be reviewed (409).
+ * (409), and only a hidden message that is not deleted can be reviewed (409).
  */
 export async function requestModerationReview(
   ctx: WriteContext, target: MessageTarget, input: RequestModerationReview,
@@ -227,20 +236,22 @@ export async function requestModerationReview(
     throw new ChannelError("forbidden", "Only the author can ask for a review.", 403);
   }
   if (target.moderationState !== "HIDDEN") throw new ChannelError("conflict", "This message isn't hidden.", 409);
+  if (target.deletedAt !== null) throw deleted();
   const now = ctx.now ?? Date.now();
   // ?1 message, ?2 author, ?3 now, ?4 note. A hidden message always has a case; the INSERT covers one
   // that predates the case triggers.
   const { results } = await ctx.db.prepare(`INSERT INTO moderation_case
       (messageId, state, source, reasons, actorId, openedAt, updatedAt, reviewRequestedAt, reviewNote)
     SELECT id, 'PENDING', CASE WHEN hiddenBy IS NULL THEN 'AI_FLAG' ELSE 'MENTOR_HIDE' END, moderationReasons, hiddenBy, ?3, ?3, ?3, ?4
-    FROM channel_message m WHERE id = ?1 AND authorId = ?2 AND moderationState = 'HIDDEN' AND NOT ${ADMIN_HID}
+    FROM channel_message m WHERE id = ?1 AND authorId = ?2 AND moderationState = 'HIDDEN' AND deletedAt IS NULL AND NOT ${ADMIN_HID}
     ON CONFLICT (messageId) DO UPDATE SET reviewRequestedAt = excluded.reviewRequestedAt, reviewNote = excluded.reviewNote,
       updatedAt = max(updatedAt, excluded.updatedAt)
     WHERE state = 'PENDING' AND reviewRequestedAt IS NULL RETURNING messageId`).bind(target.id, ctx.viewerId, now, input.note ?? null).run();
   if (results.length === 1) return { created: true };
-  const found = await ctx.db.prepare(`SELECT c.state, c.reviewRequestedAt, m.moderationState FROM channel_message m
+  const found = await ctx.db.prepare(`SELECT c.state, c.reviewRequestedAt, m.moderationState, m.deletedAt FROM channel_message m
     LEFT JOIN moderation_case c ON c.messageId = m.id WHERE m.id = ?1`)
-    .bind(target.id).first<{ state: string | null; reviewRequestedAt: number | null; moderationState: string }>();
+    .bind(target.id).first<{ state: string | null; reviewRequestedAt: number | null; moderationState: string; deletedAt: number | null }>();
+  if (found && found.deletedAt !== null) throw deleted();
   if (found?.moderationState === "HIDDEN" && found.state === "PENDING" && found.reviewRequestedAt !== null) return { created: false };
   if (found?.moderationState !== "HIDDEN") throw new ChannelError("conflict", "This message isn't hidden.", 409);
   throw decided();

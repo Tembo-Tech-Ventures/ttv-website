@@ -1534,7 +1534,10 @@ export const moderationCase = sqliteTable("moderation_case", {
   reportCount: integer("reportCount").notNull().default(0),
   // The moderator who hid it, for MENTOR_HIDE and ADMIN_HIDE.
   actorId: text("actorId").references(() => user.id, { onDelete: "set null" }),
+  // When the case first opened. A signal after an admin's decision reopens it: reopenedAt is the
+  // latest such signal, and openedAt stays, so the queue's order never moves under a reader (migration 0034).
   openedAt: integer("openedAt").notNull(),
+  reopenedAt: integer("reopenedAt"),
   updatedAt: integer("updatedAt").notNull(),
   decision: text("decision", { enum: ["HIDE", "RESTORE", "KEEP"] }),
   decisionReason: text("decisionReason"),

@@ -42,7 +42,16 @@ export interface MessageRow {
   embedAccess: string | null;
   /** 0 or 1 on a HIDDEN message for its author or an admin; null otherwise. */
   reviewRequested: number | null;
+  /** 0 or 1 on a HIDDEN message for its author; null otherwise. */
+  reviewable: number | null;
 }
+
+/**
+ * An admin's hide of message `m` since it was hidden, from the audit trail, which a later signal
+ * reopening the case cannot erase: it makes the hide final.
+ */
+export const ADMIN_HID = `EXISTS (SELECT 1 FROM moderation_event e WHERE e.messageId = m.id AND e.source = 'ADMIN'
+  AND e.action = 'HIDE' AND e.createdAt >= coalesce(m.hiddenAt, 0))`;
 
 /**
  * Every column a Message needs. Parameters: ?2 viewer id, and `program`, the SQL for the channel's
@@ -67,6 +76,10 @@ export const messageColumns = (program: string) => `m.id, m.channelId, m.parentI
       WHERE ur.userId = ?2 AND r.name = 'ADMIN'))
     THEN EXISTS (SELECT 1 FROM moderation_case c WHERE c.messageId = m.id AND c.state = 'PENDING' AND c.reviewRequestedAt IS NOT NULL)
   END AS reviewRequested,
+  CASE WHEN m.moderationState = 'HIDDEN' AND m.authorKind = 'USER' AND m.authorId = ?2
+    THEN m.deletedAt IS NULL AND NOT ${ADMIN_HID}
+      AND coalesce((SELECT c.state FROM moderation_case c WHERE c.messageId = m.id), 'PENDING') = 'PENDING'
+  END AS reviewable,
   ${embedAccessColumn(program)}`;
 const MESSAGE_COLUMNS = messageColumns("?3");
 const FROM_MESSAGES = `FROM channel_message m LEFT JOIN "user" u ON u.id = m.authorId`;
@@ -168,6 +181,7 @@ export function toMessage(row: MessageRow, ctx: ReadContext): Message {
       ? {
         state: row.moderationState, reasons: parsedArray(NonBlank, row.moderationReasons),
         ...row.reviewRequested === null ? {} : { reviewRequested: row.reviewRequested === 1 },
+        ...row.reviewable === null ? {} : { reviewable: row.reviewable === 1 },
       }
       : null,
     thread: row.parentId === null ? threadSummary(row.thread) : { replyCount: 0, participantIds: [], lastReplyAt: null },

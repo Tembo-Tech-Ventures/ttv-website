@@ -223,8 +223,9 @@ describe("Clef after the response", () => {
     expect(JSON.stringify(page)).not.toContain("Synthetic abusive text");
     expect((await s.call("reactToMessage", { id, user: "synthetic-otieno", body: { kind: "useful", active: true } })).status).toBe(404);
 
-    // The author and the cohort's TA still see it, with why; only the author learns whether a review is open.
-    for (const [user, review] of [[VIEWER, { reviewRequested: false }], ["synthetic-faith", {}]] as const) {
+    // The author and the cohort's TA still see it, with why; only the author learns whether a review is open,
+    // and that one can be asked for.
+    for (const [user, review] of [[VIEWER, { reviewRequested: false, reviewable: true }], ["synthetic-faith", {}]] as const) {
       const [item] = MessageList.parse((await s.call("listMessages", reader(user))).body).items;
       expect([item?.body, item?.moderation], `${user}`)
         .toEqual(["Synthetic abusive text", { state: "HIDDEN", reasons: [CLEF_REASONS.abusive], ...review }]);
