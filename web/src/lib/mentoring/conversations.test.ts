@@ -52,7 +52,7 @@ const OUTSIDERS = {
 describe("a conversation opened by a mentor request", () => {
   it.each([
     ["a community member", {}], ["an approved student", { applications: [{ programId: "cohort-a", status: "APPROVED" as const }] }],
-    ["an institution", { globalRoles: ["INSTITUTION"] }], ["an admin", { globalRoles: ["ADMIN"] }],
+    ["an institution with a member profile", { globalRoles: ["INSTITUTION"] }], ["an admin", { globalRoles: ["ADMIN"] }],
   ])("is read and written by its two members, the asker being %s", async (_, roles) => {
     const { s, channelId } = await conversation(roles);
     for (const user of [VIEWER, PEOPLE.david]) {

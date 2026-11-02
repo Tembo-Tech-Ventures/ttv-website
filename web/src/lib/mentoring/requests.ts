@@ -43,6 +43,15 @@ export interface MentoringContext {
 }
 
 const notFound = () => new ChannelError("not_found", "Request not found.", 404);
+/**
+ * Who may ask a mentor for time (coordinator, 2026-11-02, pending Raph): a member account, meaning
+ * a community profile or a cohort membership (an APPROVED, AUDIT or COMPLETED application). Mentor
+ * time is scarce, so an account with neither, such as an institution-only one, is refused; the
+ * directory stays open to every signed-in person. SQL over the asker's id expression.
+ */
+export const IS_MEMBER = (userId: string) => `(EXISTS (SELECT 1 FROM communityProfile cp WHERE cp.userId = ${userId})
+  OR EXISTS (SELECT 1 FROM programApplication pa WHERE pa.userId = ${userId} AND pa.programId IS NOT NULL
+    AND pa.status IN ('APPROVED', 'AUDIT', 'COMPLETED')))`;
 const MENTOR_ROLE = (userId: string) =>
   `EXISTS (SELECT 1 FROM UserRoles ur JOIN Roles r ON r.id = ur.roleId WHERE ur.userId = ${userId} AND r.name = 'MENTOR')`;
 
@@ -185,17 +194,17 @@ async function screened(note: string, project: ProjectEmbed | null) {
 }
 
 interface CreateRefusalRow {
-  listed: number; offersFormat: number; conduct: number; duplicate: number; open: number; day: string; spot: number | null;
+  member: number; listed: number; offersFormat: number; conduct: number; duplicate: number; open: number; day: string; spot: number | null;
 }
 
 /**
  * Why a request was not written, from one read of the INSERT's own conditions, in the order a person
- * can act on them: a mentor taking requests in that format, the code of conduct, then their own
+ * can act on them: a member account (403), a mentor taking requests in that format, the code of conduct, then their own
  * waiting requests, then the mentor's spots.
  */
 async function createRefusal(ctx: MentoringContext, input: CreateMentorRequest): Promise<ChannelError> {
   const { db, viewerId, now } = ctx;
-  const why = await db.prepare(`SELECT
+  const why = await db.prepare(`SELECT ${IS_MEMBER("?1")} AS member,
       EXISTS (SELECT 1 FROM mentor_profile p WHERE p.userId = ?2 AND ${LISTED}) AS listed,
       EXISTS (SELECT 1 FROM mentor_profile p, json_each(p.formats) f WHERE p.userId = ?2 AND f.value = ?3) AS offersFormat,
       coalesce((SELECT version FROM channel_conduct WHERE userId = ?1), 0) AS conduct,
@@ -205,6 +214,9 @@ async function createRefusal(ctx: MentoringContext, input: CreateMentorRequest):
       (SELECT ${hasSpot("p.userId", "?4", "p.monthlyCapacity")} FROM mentor_profile p WHERE p.userId = ?2) AS spot`)
     .bind(viewerId, input.mentorId, input.format, monthStart(now), now - DAILY_REQUEST_LIMIT.windowMs).first<CreateRefusalRow>();
   if (!why) throw new Error("Could not read the request conditions.");
+  if (!why.member) {
+    return new ChannelError("forbidden", "Asking a mentor for time needs a member profile. Set yours up in Profile, then ask again.", 403);
+  }
   if (!why.listed) return new ChannelError("not_found", "This mentor isn't taking requests right now.", 404);
   if (!why.offersFormat) return new ChannelError("validation", "This mentor doesn't offer that format.", 400);
   if (why.conduct < (ctx.conductVersion ?? CONDUCT_VERSION)) {
@@ -224,9 +236,9 @@ async function createRefusal(ctx: MentoringContext, input: CreateMentorRequest):
 }
 
 /**
- * POST /api/mentor-requests: the caller asks a listed mentor for time, in a format they offer, with
- * their own published project at its current revision attached or nothing. Refusals: asking
- * yourself (400); attached work that cannot be shared (as in a post: 400, or 409 for a stale
+ * POST /api/mentor-requests: a member (IS_MEMBER) asks a listed mentor for time, in a format they
+ * offer, with their own published project at its current revision attached or nothing. Refusals:
+ * asking yourself (400); attached work that cannot be shared (as in a post: 400, or 409 for a stale
  * revision); then createRefusal's, in its order. The note is screened by the channel detectors now,
  * so the mentor sees contact details masked; the conversation it opens is screened again.
  */
@@ -240,7 +252,7 @@ export async function createRequest(ctx: MentoringContext, input: CreateMentorRe
       (id, requesterId, mentorId, status, format, note, noteReasons, journeyId, journeyVersion, project, createdAt, updatedAt)
     SELECT ?1, ?2, ?3, 'PENDING', ?4, ?5, ${screenedReasons("?6", "?7")}, ?8, ?9, ?10, ?11, ?11
     FROM mentor_profile p
-    WHERE p.userId = ?3 AND ${LISTED}
+    WHERE p.userId = ?3 AND ${LISTED} AND ${IS_MEMBER("?2")}
       AND EXISTS (SELECT 1 FROM json_each(p.formats) f WHERE f.value = ?4)
       AND EXISTS (SELECT 1 FROM channel_conduct WHERE userId = ?2 AND version >= ?12)
       AND NOT EXISTS (SELECT 1 FROM mentor_request d WHERE d.requesterId = ?2 AND d.mentorId = ?3 AND d.status = 'PENDING')

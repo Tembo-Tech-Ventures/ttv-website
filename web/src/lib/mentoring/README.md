@@ -154,7 +154,7 @@ otherwise: it waits on the mentor answering.
 
 | Route | Who | Does |
 |---|---|---|
-| `POST /api/mentor-requests` | Any signed-in person, institutions included | Asks a listed mentor, in a format they offer, with their own published project at its current revision or nothing |
+| `POST /api/mentor-requests` | A member: a community profile or a cohort place (APPROVED, AUDIT or COMPLETED) | Asks a listed mentor, in a format they offer, with their own published project at its current revision or nothing |
 | `GET /api/mentor-requests?as=requester\|mentor&status&cursor` | Anyone | The requests the caller sent or received, newest first, 20 a page |
 | `GET /api/mentor-requests/:id` | Its two parties | One request |
 | `POST …/:id/accept` | The mentor, still holding the MENTOR role | Opens the conversation (below) |
@@ -165,9 +165,14 @@ otherwise: it waits on the mentor answering.
 - Only the two parties see a request; anyone else, admins included, gets the
   same 404 as for a missing one. The wrong party gets 403; a request that is
   no longer PENDING gets 409, whichever move is tried: the end states are final.
+- **Who may ask** (coordinator, 2026-11-02, pending Raph): a member account,
+  meaning a community profile or a cohort place. Mentor time is scarce, so an
+  account with neither, such as an institution-only one, gets 403 with neutral
+  copy ("Asking a mentor for time needs a member profile…"); the directory
+  stays open to every signed-in person. Checked inside the INSERT (`IS_MEMBER`).
 - Asking refuses, in this order: asking yourself (400); attached work that
   cannot be shared, with the channel embeds' rules (400, or 409 for a stale
-  revision); a mentor who is not listed (404) or does not offer the format
+  revision); no member account (403); a mentor who is not listed (404) or does not offer the format
   (400); no current agreement to the code of conduct (403 `conduct_required`,
   because the note becomes a message); a PENDING request to the same mentor
   already (409); 5 requests waiting at once, or 10 made in a rolling day (429,
