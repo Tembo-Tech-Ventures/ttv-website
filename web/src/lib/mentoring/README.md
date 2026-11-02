@@ -131,7 +131,8 @@ A conversation cannot be deleted while a request points at it.
   profile stays for if it comes back. Elevated roles grant nothing else here:
   being listed is not talent-directory eligibility.
 - `GET /api/mentors?area&format&available`: listed mentors other than the
-  caller, those with a spot first, then by name, at most 100. Every signed-in
+  caller, those with a spot first, then by name, at most 100, with every
+  filter applied before the limit. Every signed-in
   person sees it, institutions included, like the community. Public fields
   only: the person with global badges (never cohorts), headline, areas,
   formats, bio and capacity. `area` matches one of a mentor's areas ignoring
@@ -174,7 +175,10 @@ otherwise: it waits on the mentor answering.
   checked inside the INSERT, so concurrent requests cannot both pass.
 - The note is screened by the channel detectors when it is written. The mentor
   sees contact details in it masked, as a channel reader would; the asker
-  sees it whole. Attached work is checked again on every read (still the
+  sees it whole. The mentor's reply on a redirect or decline is screened the
+  same way on each read: the asker sees its contact details masked, the
+  mentor sees it whole. A pending note gets no Clef check and cannot be
+  reported yet; the conversation it opens can be. Attached work is checked again on every read (still the
   asker's, still published) and becomes `{ type: "unavailable" }` otherwise.
 - The mentor sees the asker's cohort and alumni badges as context for the
   request; the asker sees only the mentor's global badges.
@@ -189,8 +193,12 @@ otherwise: it waits on the mentor answering.
   request. From there the conversation is an ordinary DIRECT channel
   (`src/lib/channels/README.md`): the channel APIs, the code of conduct,
   detectors, masking, Tembo's DIRECT scope ("this conversation only"),
-  mentions, search for its members, and its page at
-  `/dashboard/community/dm/<id>`.
+  mentions, and search for its members. Its page is routed at
+  `/dashboard/community/dm/<id>`; the page itself is U-4.1's to build.
+- Two people asking each other at the same moment, each accepted at once, can
+  end up with two conversations; later acceptances reuse the oldest. Rare
+  (it needs two mentors asking each other), and both stay readable to the two
+  of them only.
 
 Gates (`http.ts`): every route is 404 `flag_off` while `mentor_requests` is
 off for the caller, before any mentoring data is read. Browser and agent
@@ -218,6 +226,9 @@ was for (`src/lib/attention/access.ts`).
 ### Pages
 
 `/dashboard/community/mentors`, `/dashboard/mentoring/requests` and
-`/dashboard/mentoring/availability` exist only while `mentor_requests` is on
-for the caller (`space-routes.ts`, `space-routing.ts`); Mentoring pages need the
-Mentoring space as usual. Restricted staging identities do not get them.
+`/dashboard/mentoring/availability` are routed only while `mentor_requests` is
+on for the caller (`space-routes.ts`, `space-routing.ts`); Mentoring pages need
+the Mentoring space as usual. Restricted staging identities do not get them.
+The page files, and the conversation page, come with U-4.1: until then these
+routes reach Astro's 404, so `mentor_requests` stays OFF on shared environments
+until they ship.

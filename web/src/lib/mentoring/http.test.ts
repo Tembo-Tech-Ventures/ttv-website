@@ -4,6 +4,7 @@ import { attentionRequest } from "@/lib/attention/http";
 import { VIEWER } from "@/lib/channels/test-support";
 import { AttentionItem, AttentionList, ErrorEnvelope, MentorAvailability, MentorDirectory, MentorRequest, ROUTES } from "@/lib/platform/contracts";
 import { nextMonthStart } from "./capacity";
+import { DIRECTORY_LIMIT } from "./profiles";
 import type { MentoringOperation } from "./http";
 import { mentoringDatabase, NOW, PEOPLE, type MentoringFixture } from "./test-support";
 
@@ -153,6 +154,23 @@ describe("the directory", () => {
     await s.call("acceptMentorRequest", { id: (await s.call("listMentorRequests", { query: "?as=mentor", user: PEOPLE.mercy }).then((r) => (r.body as { items: { id: string }[] }).items[0]!.id)), user: PEOPLE.mercy, body: {} });
     // Accepted this month: the spot comes back when December starts.
     expect((await list()).at(-1)?.capacity).toEqual({ used: 1, limit: 1, nextOpeningAt: nextMonthStart(NOW) });
+  });
+
+  it(`keeps mentors with a spot when more than ${DIRECTORY_LIMIT} are listed, first in the list and under available=true`, async () => {
+    const s = setup();
+    for (let i = 0; i < DIRECTORY_LIMIT; i += 1) {
+      const id = `synthetic-full-${String(i).padStart(3, "0")}`;
+      s.database.prepare('INSERT INTO "user"(id,name,email) VALUES (?,?,?)').run(id, `Aaron ${String(i).padStart(3, "0")}`, `${id}@example.test`);
+      s.database.prepare("INSERT INTO UserRoles(id,userId,roleId) SELECT ?,?,id FROM Roles WHERE name = 'MENTOR'").run(`role-${id}`, id);
+      s.database.prepare("INSERT INTO mentor_profile(userId,headline,monthlyCapacity,createdAt,updatedAt) VALUES (?,'Mentor',1,1,1)").run(id);
+      s.database.prepare("INSERT INTO mentor_request(id,requesterId,mentorId,format,note,createdAt,updatedAt) VALUES (?,?,?,'WRITTEN_REVIEW','Hi',1,1)")
+        .run(`held-${id}`, "synthetic-otieno", id);
+    }
+    const names = async (query = "") => MentorDirectory.parse((await s.call("listMentors", { query })).body).items.map((item) => item.person.name);
+    expect(await names("?available=true")).toEqual(["David Kamau", "Joseph Mutua", "Mercy Wambui"]);
+    const all = await names();
+    expect(all).toHaveLength(DIRECTORY_LIMIT);
+    expect(all.slice(0, 4)).toEqual(["David Kamau", "Joseph Mutua", "Mercy Wambui", "Aaron 000"]);
   });
 
   it.each(["?available=yes", "?format=LUNCH", "?area=", "?area=a&area=b", "?unknown=1"])("refuses %s (400)", async (query) => {

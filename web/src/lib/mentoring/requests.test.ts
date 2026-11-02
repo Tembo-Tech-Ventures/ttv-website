@@ -168,6 +168,19 @@ describe("asking a mentor for time", () => {
     expect(mentorSees).not.toMatch(/0712/);
   });
 
+  it("masks contact details in the mentor's reply for the person asking, not for the mentor", async () => {
+    const s = setup();
+    const id = await s.ask();
+    const reply = "Not this month. WhatsApp me on 0712 345 678 instead.";
+    await s.call("declineMentorRequest", { id, user: PEOPLE.david, body: { note: reply } });
+    expect(request((await s.call("getMentorRequest", { id })).body).responseNote).toBe(`Not this month. WhatsApp me on ${MASKED_CONTACT} instead.`);
+    expect(request((await s.call("getMentorRequest", { id, user: PEOPLE.david })).body).responseNote).toBe(reply);
+    const redirected = await s.ask(PEOPLE.mercy);
+    await s.call("redirectMentorRequest", { id: redirected, user: PEOPLE.mercy, body: { mentorId: PEOPLE.joseph, note: "Email joseph.mutua@gmail.com" } });
+    const listed = MentorRequestList.parse((await s.call("listMentorRequests", { query: "?as=requester" })).body).items;
+    expect(listed.map((item) => item.responseNote).toSorted()).toEqual([`Email ${MASKED_CONTACT}`, `Not this month. WhatsApp me on ${MASKED_CONTACT} instead.`]);
+  });
+
   it("re-checks attached work on every read: unavailable once it is made private", async () => {
     const s = setup();
     const id = await s.ask(PEOPLE.david, { project: s.project("ledger") });

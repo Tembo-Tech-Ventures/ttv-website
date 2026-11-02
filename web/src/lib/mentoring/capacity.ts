@@ -43,6 +43,3 @@ export function capacityOf({ limit, pending, accepted }: { limit: number; pendin
   const full = used >= limit;
   return { used, limit, nextOpeningAt: full && pending < limit ? nextMonthStart(now) : null };
 }
-
-/** Whether a spot is open now. */
-export const hasOpening = (capacity: MentorCapacity) => capacity.used < capacity.limit;

@@ -82,7 +82,18 @@ function projectFor(row: RequestRow): MentorRequestProject | null {
   return view?.type === "project" || view?.type === "unavailable" ? view : { type: "unavailable", was: "project" };
 }
 
-/** The request as this party sees it: the mentor gets contact details in the note masked, as in a channel. */
+/**
+ * The mentor's reply as the person asking sees it: contact details masked, as the asker's own note is
+ * for the mentor. Screened on each read by the same detectors (nothing about it is stored), so a
+ * reply cannot carry a number or a chat invitation out of TTV.
+ */
+function responseFor(row: RequestRow, viewerId: string): string | null {
+  if (row.responseNote === null || row.mentorId === viewerId) return row.responseNote;
+  const reasons = [...new Set(detectFindings(row.responseNote).map((finding) => finding.reason))];
+  return bodyForReader({ body: row.responseNote, moderationState: reasons.length > 0 ? "FLAGGED" : "VISIBLE", reasons }, false);
+}
+
+/** The request as this party sees it: each sees contact details in the other's words masked, as in a channel. */
 function toRequest(row: RequestRow, viewerId: string): MentorRequest {
   const reasons = reasonsOf(row.noteReasons);
   const note = bodyForReader({ body: row.note, moderationState: reasons.length > 0 ? "FLAGGED" : "VISIBLE", reasons }, row.requesterId === viewerId);
@@ -91,7 +102,7 @@ function toRequest(row: RequestRow, viewerId: string): MentorRequest {
     mentor: personSummary(row.mentorId, personRow(row, "mentor")), note, project: projectFor(row), format: row.format,
     status: row.status, channelId: row.channelId,
     redirectedTo: row.redirectedToId === null ? null : personSummary(row.redirectedToId, personRow(row, "target")),
-    responseNote: row.responseNote, createdAt: row.createdAt, updatedAt: row.updatedAt,
+    responseNote: responseFor(row, viewerId), createdAt: row.createdAt, updatedAt: row.updatedAt,
   };
 }
 
