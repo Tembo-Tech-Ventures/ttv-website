@@ -71,6 +71,8 @@ describe("statuses", () => {
     expect(personContext({ roleBadges: [] })).toBeNull();
     expect(waitingText(1)).toBe("1 request waiting for you");
     expect(waitingText(3)).toBe("3 requests waiting for you");
+    // Past one page the count is a floor, and says so.
+    expect(waitingText(20, true)).toBe("20+ requests waiting for you");
   });
 
   it("say what opened a conversation, from each side", () => {

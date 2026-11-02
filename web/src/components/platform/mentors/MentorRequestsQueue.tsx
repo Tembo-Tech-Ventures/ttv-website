@@ -62,7 +62,7 @@ export default function MentorRequestsQueue({ initial, mentors, availability, an
       <output className="sr-only" aria-live="polite">{state.announcement}</output>
       <div className="min-w-0">
         <h2 className="font-body text-xl font-bold text-ink-primary" data-waiting-count={stillWaiting}>
-          {stillWaiting > 0 ? waitingText(stillWaiting) : "Nothing waiting for you"}
+          {stillWaiting > 0 ? waitingText(stillWaiting, state.nextCursor !== null) : "Nothing waiting for you"}
         </h2>
         {waiting.length === 0 ? (
           <p className="mt-3 max-w-2xl text-[0.9375rem] leading-relaxed text-ink-secondary">

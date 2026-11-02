@@ -4,6 +4,7 @@ import type {
 import { CONVERSATION_PATH, MENTOR_PAGE_PATHS } from "@/lib/platform/server/space-routes";
 import { ago, dayLabel, firstName, plural } from "@/components/channels/channel-format";
 import { conversationPath } from "@/components/channels/paths";
+import { NEEDS_MEMBER_MESSAGE } from "@/lib/platform/client/mentor-request-form";
 
 /*
  * Pure display rules for mentor connections (U-4.1): formats, monthly
@@ -102,7 +103,7 @@ export const FULL_THIS_MONTH = "Full this month";
  * Why an account with neither a community profile nor a cohort place cannot ask (B-4.1, #304): the
  * API's own words. It does not send anyone to make a profile, because a saved one is discoverable.
  */
-export const NEEDS_MEMBER = "Asking a mentor for time needs a member profile or a cohort place.";
+export const NEEDS_MEMBER = NEEDS_MEMBER_MESSAGE;
 
 /** "Spots used 1 of 3", as a share for the meter. */
 export function usedShare(capacity: MentorCapacity): number {
@@ -202,6 +203,7 @@ export function listingNote(saved: Pick<MentorAvailability, "listed" | "paused" 
 }
 
 /** "1 request waiting for you". */
-export function waitingText(count: number): string {
-  return `${plural(count, "request")} waiting for you`;
+/** "3 requests waiting for you"; with `more` (only a first page was read), "20+ requests waiting for you". */
+export function waitingText(count: number, more = false): string {
+  return more ? `${count}+ requests waiting for you` : `${plural(count, "request")} waiting for you`;
 }

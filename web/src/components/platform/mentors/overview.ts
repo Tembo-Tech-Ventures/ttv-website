@@ -6,6 +6,8 @@ import { mentorsServer } from "./server";
 export interface MentoringOverviewData {
   /** Requests waiting for this mentor's answer, or null when not known (a floor of a full first page is still a number). */
   waiting: number | null;
+  /** More are waiting than the first page held, so `waiting` is a floor. */
+  waitingMore: boolean;
   availability: MentorAvailability | null;
   now: number;
 }
@@ -17,11 +19,11 @@ export interface MentoringOverviewData {
 export async function loadMentoringOverview(context: Pick<APIContext, "locals" | "url">, env: Env, me: Me): Promise<MentoringOverviewData> {
   const now = Date.now();
   const server = mentorsServer(context, env, me, now);
-  const [waiting, availability] = await Promise.all([
-    server.requests({ as: "mentor", status: "PENDING" }).then((page) => page.items.length, (error: unknown) => report(env, error)),
+  const [page, availability] = await Promise.all([
+    server.requests({ as: "mentor", status: "PENDING" }).catch((error: unknown) => report(env, error)),
     server.availability().catch((error: unknown) => report(env, error)),
   ]);
-  return { waiting, availability, now };
+  return { waiting: page ? page.items.length : null, waitingMore: Boolean(page && page.nextCursor !== null), availability, now };
 }
 
 async function report(env: Env, error: unknown): Promise<null> {

@@ -359,13 +359,16 @@ describe("space sidebars", () => {
     const readable = { items: channelList.items };
     const conversation = { ...channels.davidConversation, unreadCount: 2 };
 
-    it("put Mentors in the app, after the journey, and keep only Members as a public page", () => {
+    it("put Mentors in the app, after the journey, and keep both public pages under Public directory", () => {
       const model = spaceSidebar("community", facts(meByPersona.wanjiku, "mentors"));
       expect(model.groups[0]!.items.map(({ label, href, current: isCurrent }) => ({ label, href, current: isCurrent }))).toEqual([
         { label: "Your journey", href: "/dashboard/community", current: false },
         { label: "Mentors", href: "/dashboard/community/mentors", current: true },
       ]);
-      expect(model.groups.find((entry) => entry.label === "Public directory")!.items.map((entry) => entry.label)).toEqual(["Members"]);
+      expect(model.groups.find((entry) => entry.label === "Public directory")!.items.map(({ label, href }) => ({ label, href }))).toEqual([
+        { label: "Members", href: "/community/members" },
+        { label: "Mentors", href: "/community/mentors" },
+      ]);
     });
 
     it("list private conversations under Conversations, named for the other person, bold while unread", () => {

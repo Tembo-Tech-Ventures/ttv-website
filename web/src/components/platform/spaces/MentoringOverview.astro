@@ -23,7 +23,7 @@ interface Props {
    * Mentor requests, while `mentor_requests` is open to the person (U-4.1): how many wait for an
    * answer (null when not known) and the saved availability. Null keeps the "Not open yet" cards.
    */
-  requests?: { waiting: number | null; availability: MentorAvailability | null; now: number } | null;
+  requests?: { waiting: number | null; waitingMore?: boolean; availability: MentorAvailability | null; now: number } | null;
 }
 
 const { awaiting, shortcuts = null, requests = null } = Astro.props;
@@ -38,7 +38,7 @@ const live = requests
       body: requests.waiting === null
         ? "Members ask for your time with the work they want help on attached. Accept, suggest another mentor, or say not this month."
         : requests.waiting > 0
-          ? `${waitingText(requests.waiting)}.`
+          ? `${waitingText(requests.waiting, requests.waitingMore)}.`
           : "Nothing is waiting for you. When someone asks for your time, their request appears here.",
       strong: (requests.waiting ?? 0) > 0,
     },

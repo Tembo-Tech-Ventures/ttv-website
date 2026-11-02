@@ -10,6 +10,7 @@ import { createMentoringMock } from "@/lib/platform/client/mentoring.mock";
 import type { MockReply } from "@/lib/platform/client/mockTransport";
 import AvailabilityEditor from "./AvailabilityEditor";
 import MentorRequestsQueue from "./MentorRequestsQueue";
+import { isRecent, RECENT_DAYS } from "./OwnRequests";
 import MentorsDirectory, { type MentorsDirectoryProps } from "./MentorsDirectory";
 
 const PATH = "/dashboard/community/mentors";
@@ -89,6 +90,22 @@ describe("the mentor directory", () => {
     expect(q("[data-mentor-drawer-static]")).toBeNull();
   });
 
+  it("keeps waiting and recent requests in view, and folds older answers under Earlier", async () => {
+    const { props } = await directoryProps();
+    const old = { ...pendingMentorRequest, id: "old-declined", status: "DECLINED" as const, createdAt: FIXTURE_NOW - 40 * 86_400_000, updatedAt: FIXTURE_NOW - 30 * 86_400_000 };
+    const oldPending = { ...pendingMentorRequest, id: "old-pending", mentor: people.samuel, createdAt: FIXTURE_NOW - 30 * 86_400_000, updatedAt: FIXTURE_NOW - 30 * 86_400_000 };
+    container.innerHTML = renderToString(<MentorsDirectory {...props} ownRequests={{ items: [...props.ownRequests.items, oldPending, old], nextCursor: null }} />);
+    const earlier = q("[data-own-requests-earlier]")!;
+    expect(earlier.querySelector("summary")!.textContent).toBe("Earlier (1)");
+    expect(earlier.querySelectorAll("[data-own-request]")).toHaveLength(1);
+    expect(earlier.querySelector("[data-own-request='old-declined']")).not.toBeNull();
+    // Still waiting, however long ago it was asked, stays in view with its Withdraw.
+    expect(q("[data-own-requests] > div [data-own-request='old-pending']")).not.toBeNull();
+    expect(isRecent(oldPending, FIXTURE_NOW)).toBe(true);
+    expect(isRecent(old, FIXTURE_NOW)).toBe(false);
+    expect(isRecent({ ...old, updatedAt: FIXTURE_NOW - (RECENT_DAYS - 1) * 86_400_000 }, FIXTURE_NOW)).toBe(true);
+  });
+
   it("says when nothing matches, with the way back to every mentor", async () => {
     const { props } = await directoryProps({ search: "?format=QUICK_QUESTION" });
     await act(async () => root.render(<MentorsDirectory {...props} shown={[]} />));
@@ -146,6 +163,34 @@ describe("the mentor directory", () => {
     await settle();
     expect(q("[data-request-sent]")).not.toBeNull();
     expect(document.activeElement?.textContent).toBe("Request sent");
+    expect(mock.requests().filter((r) => r.mentor.id === joseph.person.id && r.status === "PENDING")).toHaveLength(1);
+    expect(all("[data-own-request]")[0]!.textContent).toContain("Joseph Mutua");
+  });
+
+  it("keeps a send going when the drawer closes mid-send, and lists the request once the server has it", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const { props, mock } = await directoryProps();
+    const slow: typeof props.api = {
+      ...props.api!,
+      call: (async (...args: Parameters<NonNullable<typeof props.api>["call"]>) => {
+        if (args[0] === ROUTES.createMentorRequest) await held;
+        return props.api!.call(...args);
+      }) as NonNullable<typeof props.api>["call"],
+    };
+    await act(async () => root.render(<MentorsDirectory {...props} api={slow} />));
+    await act(async () => card(joseph).querySelector<HTMLElement>("[data-ask-mentor]")!.click());
+    const textarea = q<HTMLTextAreaElement>("[data-mentor-drawer] textarea")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, "Could we talk through two offers I have?");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => q<HTMLFormElement>("[data-mentor-drawer] form")!.requestSubmit());
+    // The person closes the drawer while the request is on its way.
+    await act(async () => q<HTMLButtonElement>("[data-mentor-drawer] button[aria-label^='Close']")!.click());
+    expect(q("[data-mentor-drawer] form")).toBeNull();
+    await act(async () => { release(); await held; });
+    await settle();
     expect(mock.requests().filter((r) => r.mentor.id === joseph.person.id && r.status === "PENDING")).toHaveLength(1);
     expect(all("[data-own-request]")[0]!.textContent).toContain("Joseph Mutua");
   });

@@ -205,21 +205,19 @@ describe("the request form", () => {
     expect(calls).toBe(1);
   });
 
-  it("stops a send in flight when the last holder releases it, and goes back to editing", async () => {
+  it("never stops a send in flight: creating is not idempotent, so it settles even if the drawer has closed", async () => {
+    let finish!: (reply: MockReply) => void;
     const api = createApiClient({ retry: { maxRetries: 0 }, fetch: createMockTransport([
-      { method: "POST", path: "/api/mentor-requests", reply: () => new Promise<MockReply>(() => {}) },
+      { method: "POST", path: "/api/mentor-requests", reply: () => new Promise<MockReply>((resolve) => { finish = resolve; }) },
     ]) });
     const form = createRequestFormStore({ userId, mentor: david, projects: own, api, storage: memoryStorage() });
-    const release = form.retain();
-    const second = form.retain();
-    form.setNote("Will be stopped");
+    expect("retain" in form).toBe(false);
+    form.setNote("Sent while the drawer closes");
     const sending = form.submit();
-    release();
-    release();
-    expect(form.getState().status).toBe("sending");
-    second();
-    await expect(sending).resolves.toBeNull();
-    expect(form.getState()).toMatchObject({ status: "editing", note: "Will be stopped" });
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    finish({ status: 201, data: created });
+    await expect(sending).resolves.toEqual(created);
+    expect(form.getState().status).toBe("sent");
   });
 
   it("works against the stateful mock: a second request to the same mentor is refused", async () => {

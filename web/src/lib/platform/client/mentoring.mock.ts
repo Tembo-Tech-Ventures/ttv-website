@@ -7,6 +7,7 @@ import {
 import * as fixtures from "../fixtures";
 import { createApiClient, type ApiClient } from "./apiClient";
 import { filterDirectoryFixture, hasOpenSpot } from "./mentor-directory";
+import { NEEDS_MEMBER_MESSAGE } from "./mentor-request-form";
 import { createMockTransport, type MockOptions, type MockReply } from "./mockTransport";
 
 /**
@@ -154,7 +155,7 @@ export function createMentoringMock(options: MentoringMockOptions = {}): Mentori
     } },
     { ...ROUTES.createMentorRequest, reply: async ({ request }) => {
       const body = CreateMentorRequest.parse(await request.json());
-      if (options.member === false) return failure(403, "forbidden", "Asking a mentor for time needs a member profile or a cohort place.");
+      if (options.member === false) return failure(403, "forbidden", NEEDS_MEMBER_MESSAGE);
       if (!conductAgreed) return failure(403, "conduct_required", "Agree to how we talk to each other first.");
       const mentor = directoryItem(body.mentorId);
       if (!mentor || body.mentorId === viewer.id) return notFound();

@@ -26,11 +26,7 @@ export function useRequestForm<T = RequestFormState>(
   selector: (state: RequestFormState) => T = whole as (state: RequestFormState) => T,
   isEqual?: (a: T, b: T) => boolean,
 ): T {
-  useEffect(() => {
-    const release = store.retain();
-    store.restore();
-    return release;
-  }, [store]);
+  useEffect(() => { store.restore(); }, [store]);
   return useStore(store, selector, isEqual);
 }
 

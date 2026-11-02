@@ -142,13 +142,19 @@ export function validateRequestDraft(
 }
 
 /** Why a send was refused, from its status and error code; shared with the no-JavaScript post. */
-export function requestFailure(error: { status: number; code: string }): RequestFailure {
+/**
+ * B-4.1's refusal for an account with neither a community profile nor a cohort place (#304), word for word. Other
+ * 403 `forbidden` answers (a cross-origin post, a token) say something else, so only this one reads as "notMember".
+ */
+export const NEEDS_MEMBER_MESSAGE = "Asking a mentor for time needs a member profile or a cohort place.";
+
+export function requestFailure(error: { status: number; code: string; message?: string }): RequestFailure {
   if (error.status === 409 || error.code === "conflict") return "conflict";
   if (error.status === 429 || error.code === "rate_limited") return "limit";
   if (error.status === 404) return "notFound";
   if (error.status === 401) return "signedOut";
   // B-4.1 (#304): asking needs a member account. conduct_required is a 403 too, and has its own step.
-  if (error.status === 403 && error.code === "forbidden") return "notMember";
+  if (error.status === 403 && error.code === "forbidden" && error.message === NEEDS_MEMBER_MESSAGE) return "notMember";
   return "other";
 }
 
@@ -164,8 +170,6 @@ export function createRequestFormStore(options: RequestFormOptions) {
   const store: Store<RequestFormState> = createStore<RequestFormState>(seeded
     ? { ...settle(seeded, options), status: seeded.status, errors: seeded.errors, failure: seeded.failure, error: null, sent: null, announcement: "" }
     : { ...settle(null, options), status: "editing", errors: {}, failure: null, error: null, sent: null, announcement: "" });
-  let controller: AbortController | null = null;
-  let retains = 0;
 
   function edit(change: Partial<RequestDraft>) {
     const state = store.getState();
@@ -202,7 +206,12 @@ export function createRequestFormStore(options: RequestFormOptions) {
     agreed() {
       store.setState(state => state.status === "conduct" ? { ...state, status: "editing", announcement: "" } : state);
     },
-    /** Sends the request. Resolves with the created request, or null when there is something to fix or it failed. */
+    /**
+     * Sends the request. Resolves with the created request, or null when there is something to fix or it failed.
+     * A send is never stopped once started, not even by closing the drawer: creating is not idempotent and the
+     * server may already have the request (counted against the mentor's spots), so it always settles and lands
+     * under Your requests.
+     */
     async submit(): Promise<MentorRequest | null> {
       const state = store.getState();
       if (state.status === "sending" || state.status === "sent") return state.sent;
@@ -211,12 +220,10 @@ export function createRequestFormStore(options: RequestFormOptions) {
         store.setState({ ...state, errors: checked.errors, announcement: "Check the highlighted fields." });
         return null;
       }
-      controller = new AbortController();
       store.setState({ ...state, status: "sending", errors: {}, failure: null, error: null, announcement: "" });
       try {
         const sent = await api.call(ROUTES.createMentorRequest, {
           body: { mentorId, note: checked.note, project: state.project, format: checked.format },
-          signal: controller.signal,
         });
         try { storage?.removeItem(key); } catch { /* Storage is optional. */ }
         store.setState(current => ({
@@ -226,10 +233,6 @@ export function createRequestFormStore(options: RequestFormOptions) {
         return sent;
       } catch (caught) {
         const error = asApiError(caught);
-        if (error.code === "aborted") {
-          store.setState(current => ({ ...current, status: "editing" }));
-          return null;
-        }
         if (error.code === "conduct_required") {
           store.setState(current => ({
             ...current, status: "conduct", error, failure: null,
@@ -243,20 +246,7 @@ export function createRequestFormStore(options: RequestFormOptions) {
           announcement: "Your request wasn't sent. Your note is kept.",
         }));
         return null;
-      } finally {
-        controller = null;
       }
-    },
-    /** Reference-counted by the islands that use this form; the last release stops a send in flight. */
-    retain(): () => void {
-      retains += 1;
-      let released = false;
-      return () => {
-        if (released) return;
-        released = true;
-        retains -= 1;
-        if (retains === 0) controller?.abort();
-      };
     },
   };
 }

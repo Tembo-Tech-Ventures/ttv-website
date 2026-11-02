@@ -89,5 +89,6 @@ export async function handleRequestPost(request: Request, options: RequestPostOp
   const envelope = ErrorEnvelope.safeParse(body);
   const code = envelope.success ? envelope.data.error.code : "server";
   if (code === "conduct_required") return render(403, { status: "conduct", errors: {}, failure: null });
-  return render(response.status, { status: "error", errors: {}, failure: requestFailure({ status: response.status, code }) });
+  const message = envelope.success ? envelope.data.error.message : undefined;
+  return render(response.status, { status: "error", errors: {}, failure: requestFailure({ status: response.status, code, message }) });
 }

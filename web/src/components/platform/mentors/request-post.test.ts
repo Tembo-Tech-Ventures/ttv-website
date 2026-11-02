@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CreateMentorRequest } from "@/lib/platform/contracts";
 import { mentors, pendingMentorRequest, projects } from "@/lib/platform/fixtures";
-import { requestFailure } from "@/lib/platform/client/mentor-request-form";
+import { NEEDS_MEMBER_MESSAGE, requestFailure } from "@/lib/platform/client/mentor-request-form";
 import { handleRequestPost, isRequestPost, projectValue, REQUEST_INTENT, type RequestPostOptions } from "./request-post";
 
 const ORIGIN = "https://ttv.test";
@@ -20,7 +20,7 @@ const askDavid = (extra: Record<string, string> = {}) => post({
 });
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-const refusal = (status: number, code: string) => json(status, { error: { code, message: "Refused." } });
+const refusal = (status: number, code: string, message = "Refused.") => json(status, { error: { code, message } });
 
 function options(reply: Response | (() => Response)): RequestPostOptions & { send: ReturnType<typeof vi.fn<(body: CreateMentorRequest) => Promise<Response>>> } {
   return {
@@ -80,7 +80,8 @@ describe("asking for time without JavaScript", () => {
   it("turns the API's refusals into the drawer's states, the note kept", async () => {
     const cases: [Response, object][] = [
       [refusal(403, "conduct_required"), { status: 403, form: { status: "conduct", failure: null } }],
-      [refusal(403, "forbidden"), { status: 403, form: { status: "error", failure: "notMember" } }],
+      [refusal(403, "forbidden", NEEDS_MEMBER_MESSAGE), { status: 403, form: { status: "error", failure: "notMember" } }],
+      [refusal(403, "forbidden", "Same-origin request required."), { status: 403, form: { status: "error", failure: "other" } }],
       [refusal(409, "conflict"), { status: 409, form: { status: "error", failure: "conflict" } }],
       [refusal(429, "rate_limited"), { status: 429, form: { status: "error", failure: "limit" } }],
       [new Response("not json", { status: 502 }), { status: 502, form: { status: "error", failure: "other" } }],
@@ -94,8 +95,10 @@ describe("asking for time without JavaScript", () => {
 });
 
 describe("requestFailure", () => {
-  it("reads a 403 forbidden as needing a member account, and conduct_required as something else", () => {
-    expect(requestFailure({ status: 403, code: "forbidden" })).toBe("notMember");
+  it("reads only B-4.1's member refusal as needing a member account", () => {
+    expect(requestFailure({ status: 403, code: "forbidden", message: NEEDS_MEMBER_MESSAGE })).toBe("notMember");
+    expect(requestFailure({ status: 403, code: "forbidden", message: "Same-origin request required." })).toBe("other");
+    expect(requestFailure({ status: 403, code: "forbidden" })).toBe("other");
     expect(requestFailure({ status: 403, code: "conduct_required" })).toBe("other");
     expect(requestFailure({ status: 404, code: "not_found" })).toBe("notFound");
     expect(requestFailure({ status: 401, code: "unauthorized" })).toBe("signedOut");
