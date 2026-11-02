@@ -1,7 +1,9 @@
 import type {
   Me, MentorAvailability, MentorCapacity, MentorRequest, MentorRequestFormat, MentorRequestStatus,
 } from "@/lib/platform/contracts";
+import { CONVERSATION_PATH, MENTOR_PAGE_PATHS } from "@/lib/platform/server/space-routes";
 import { ago, dayLabel, firstName, plural } from "@/components/channels/channel-format";
+import { conversationPath } from "@/components/channels/paths";
 
 /*
  * Pure display rules for mentor connections (U-4.1): formats, monthly
@@ -12,13 +14,14 @@ import { ago, dayLabel, firstName, plural } from "@/components/channels/channel-
  * calls it a rejection, and nothing suggests it counts against anyone.
  */
 
-export const MENTORS_PATH = "/dashboard/community/mentors";
-export const MENTOR_REQUESTS_PATH = "/dashboard/mentoring/requests";
-export const MENTOR_AVAILABILITY_PATH = "/dashboard/mentoring/availability";
-/** Private conversations' pages live under this prefix (B-4.1). */
-export const CONVERSATIONS_PREFIX = "/dashboard/community/dm";
-/** A private conversation's page: the channel id, as one opaque path segment. */
-export const conversationPath = (channelId: string) => `${CONVERSATIONS_PREFIX}/${encodeURIComponent(channelId)}`;
+/** The pages (B-4.1's routes, space-routes.ts). */
+export const MENTORS_PATH = MENTOR_PAGE_PATHS.directory;
+export const MENTOR_REQUESTS_PATH = MENTOR_PAGE_PATHS.requests;
+export const MENTOR_AVAILABILITY_PATH = MENTOR_PAGE_PATHS.availability;
+/** Private conversations' pages live under this prefix. */
+export const CONVERSATIONS_PREFIX = CONVERSATION_PATH;
+/** A private conversation's page, by its channel id. */
+export const conversationHref = (channelId: string) => conversationPath({ id: channelId });
 
 /**
  * Whether mentor connections are open to this person: `mentor_requests` is effective only while

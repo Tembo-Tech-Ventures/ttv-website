@@ -7,7 +7,7 @@ import { shownStatus, type MentorRequestsStore } from "@/lib/platform/client/men
 import { Avatar, Button, Card, Chip } from "@/components/platform/ui";
 import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
-import { capacityView, conversationPath, requesterStatus, requestMeta } from "./mentor-display";
+import { capacityView, conversationHref, requesterStatus, requestMeta } from "./mentor-display";
 
 interface Props {
   store: MentorRequestsStore;
@@ -64,7 +64,7 @@ export default function OwnRequests({ store, now, mentors, onAsk }: Props) {
                       <Button size="sm" onClick={() => withdraw(request)} aria-describedby={`own-request-${request.id}`}>Withdraw</Button>
                     )}
                     {status === "ACCEPTED" && request.channelId && (
-                      <a href={conversationPath(request.channelId)} className={LINK} aria-describedby={`own-request-${request.id}`}>
+                      <a href={conversationHref(request.channelId)} className={LINK} aria-describedby={`own-request-${request.id}`}>
                         Open conversation <PiArrowRight aria-hidden className="size-4" />
                       </a>
                     )}
