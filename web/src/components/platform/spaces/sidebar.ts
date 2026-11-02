@@ -5,9 +5,9 @@ import { ACCOUNT_PATH, requestRowId } from "@/components/platform/onboarding/acc
 import { PARTNER, REQUEST, TAKING_PART } from "@/components/platform/onboarding/copy";
 import { offersCohort, type OnboardingView } from "@/components/platform/onboarding/framing";
 import { CONDUCT_TITLE } from "@/components/channels/conduct";
-import { channelPath, channelPathPrefix } from "@/components/channels/paths";
+import { channelPath, channelPathPrefix, conversationPath } from "@/components/channels/paths";
 import {
-  conversationPath, CONVERSATIONS_PREFIX, MENTOR_AVAILABILITY_PATH, MENTOR_REQUESTS_PATH, MENTORS_PATH, mentorRequestsOpen,
+  CONVERSATIONS_PREFIX, MENTOR_AVAILABILITY_PATH, MENTOR_REQUESTS_PATH, MENTORS_PATH, mentorRequestsOpen,
 } from "@/components/platform/mentors/mentor-display";
 
 /**
@@ -246,7 +246,7 @@ function conversations(facts: SidebarFacts): SidebarGroupModel[] {
     const unread = current ? 0 : channel.unreadCount;
     return {
       key: `conversation-${channel.id}`,
-      href: conversationPath(channel.id),
+      href: conversationPath(channel),
       label: channel.name,
       icon: "conversation",
       current,
