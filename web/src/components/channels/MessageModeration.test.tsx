@@ -198,6 +198,16 @@ describe("reporting a message", () => {
     await mount(wanjiku, { moderation: "none" });
     expect(await menuNames(messages.mentorOffer.id)).not.toContain("Report…");
   });
+
+  it("is not offered in a direct conversation, where the server takes no reports yet", async () => {
+    const channel: Channel = { ...showYourWork(wanjiku), kind: "DIRECT" };
+    const wired = setup(wanjiku, channel);
+    await act(async () => root.render(
+      <ChannelSurface me={wanjiku} channel={channel} store={wired.store} composer={wired.composer} now={FIXTURE_NOW} shareables={null} moderation={wired.moderation} />,
+    ));
+    await act(tick);
+    expect(await menuNames(messages.mentorOffer.id)).not.toContain("Report…");
+  });
 });
 
 describe("hiding, for the channel's moderators, and restoring, for admins", () => {

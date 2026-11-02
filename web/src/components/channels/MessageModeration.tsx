@@ -12,6 +12,8 @@ import {
 type ModerationContextValue = {
   /** Null while reporting is not available here (no server, or a read-only harness). */
   actions: ModerationActions | null;
+  /** Reports exist in cohort and community channels, not direct conversations yet (B-2.5). */
+  canReport: boolean;
   /** The channel's capability (B-2.2): global mentors in community channels, a cohort's teachers and mentors, admins. */
   canModerate: boolean;
   /** Admins have the final say: only they restore a hidden message (B-2.5). */
@@ -26,7 +28,7 @@ type ModerationContextValue = {
 
 const EMPTY: ReadonlySet<string> = new Set();
 const ModerationContext = createContext<ModerationContextValue>({
-  actions: null, canModerate: false, canRestore: false, reported: EMPTY, reviewRequested: EMPTY, markReported: () => {}, markReviewRequested: () => {},
+  actions: null, canReport: false, canModerate: false, canRestore: false, reported: EMPTY, reviewRequested: EMPTY, markReported: () => {}, markReviewRequested: () => {},
 });
 
 /**
@@ -35,20 +37,21 @@ const ModerationContext = createContext<ModerationContextValue>({
  * above the list and the thread, so a message keeps its "Reported" when it
  * scrolls away and back, or shows in both.
  */
-export function ModerationProvider({ actions, canModerate, canRestore, children }: {
-  actions: ModerationActions | null; canModerate: boolean; canRestore: boolean; children: ReactNode;
+export function ModerationProvider({ actions, canReport, canModerate, canRestore, children }: {
+  actions: ModerationActions | null; canReport: boolean; canModerate: boolean; canRestore: boolean; children: ReactNode;
 }) {
   const [reported, setReported] = useState<ReadonlySet<string>>(EMPTY);
   const [reviewRequested, setReviewRequested] = useState<ReadonlySet<string>>(EMPTY);
   const value = useMemo<ModerationContextValue>(() => ({
     actions,
+    canReport: canReport && actions !== null,
     canModerate: canModerate && actions !== null,
     canRestore: canModerate && canRestore && actions !== null,
     reported,
     reviewRequested,
     markReported: (id) => setReported((set) => new Set(set).add(id)),
     markReviewRequested: (id) => setReviewRequested((set) => new Set(set).add(id)),
-  }), [actions, canModerate, canRestore, reported, reviewRequested]);
+  }), [actions, canReport, canModerate, canRestore, reported, reviewRequested]);
   return <ModerationContext.Provider value={value}>{children}</ModerationContext.Provider>;
 }
 
@@ -60,7 +63,7 @@ export function moderationRights(message: Message, viewerId: string | null, cont
   const hidden = message.moderation?.state === "HIDDEN";
   const open = context.actions !== null && !message.deleted && viewerId !== null;
   return {
-    report: open && !own && !hidden,
+    report: open && context.canReport && !own && !hidden,
     reported: context.reported.has(message.id),
     hide: open && context.canModerate && !own && !hidden,
     restore: open && context.canRestore && hidden,

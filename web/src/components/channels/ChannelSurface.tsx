@@ -169,7 +169,12 @@ export default function ChannelSurface({
   const posting = channel.archivedAt === null && channel.capabilities.canPost;
 
   return (
-    <ModerationProvider actions={moderation} canModerate={channel.capabilities.canModerate} canRestore={me.capabilities.isAdmin}>
+    <ModerationProvider
+      actions={moderation}
+      canReport={channel.kind !== "DIRECT"}
+      canModerate={channel.capabilities.canModerate}
+      canRestore={me.capabilities.isAdmin}
+    >
       <div className="channel-view" data-channel={channel.slug} data-thread={thread ? "open" : "closed"}>
         <div className="channel-view__grid">
         <section aria-label={title} className="channel-view__main">
