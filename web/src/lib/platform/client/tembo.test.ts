@@ -66,9 +66,14 @@ describe("asking Tembo (S-3.1)", () => {
     expect(off.calls).toEqual([]);
   });
 
-  it("goes pending, takes the server's count, and resolves when the answer shows in the open thread", async () => {
+  it("goes pending, takes the server's count, and takes its answer once a Tembo reply shows in the open thread", async () => {
     let replies: Message[] = [];
-    const { tembo, channel, calls } = setup({ list: (query) => ({ data: page(query.get("thread") ? replies : [], query.get("thread")) }) });
+    const { tembo, channel, calls } = setup({
+      list: (query) => ({ data: page(query.get("thread") ? replies : [], query.get("thread")) }),
+      ask: ({ messageId }) => replies.length > 0
+        ? { data: { status: "answer", message: answer, usage: usage(7) } }
+        : { status: 202, data: { status: "pending", messageId, usage: usage(7) } },
+    });
     const question = await tembo.ask(asking);
     expect(question).toMatchObject({ status: "pending", threadId: asking.id, answerId: null });
     expect(tembo.getState()).toMatchObject({ usage: usage(7), announcement: "Tembo is looking into it" });
@@ -81,9 +86,31 @@ describe("asking Tembo (S-3.1)", () => {
     replies = [answer];
     channel.closeThread();
     await channel.openThread(asking.id);
-    expect(tembo.getState().questions[asking.id]).toMatchObject({ status: "answered", answerId: answer.id });
+    await vi.waitFor(() => expect(tembo.getState().questions[asking.id]).toMatchObject({ status: "answered", answerId: answer.id }));
+    expect(calls).toEqual(["ask ask-1", "ask ask-1"]);
     expect(tembo.getState().announcement).toBe("Tembo answered in the thread");
     expect(tembo.questionsIn(asking.id).map((q) => q.messageId)).toEqual([asking.id]);
+  });
+
+  it("someone else's answer in the same thread is only a reason to check, never this question's answer", async () => {
+    const mine: Message = { ...asking, id: "ask-2", parentId: asking.id, createdAt: asking.createdAt + 1_000 };
+    let replies: Message[] = [];
+    const { tembo, channel, calls } = setup({
+      list: (query) => ({ data: page(query.get("thread") ? replies : [], query.get("thread")) }),
+      // The server has answered the root's question only.
+      ask: ({ messageId }) => messageId === asking.id && replies.length > 0
+        ? { data: { status: "answer", message: answer, usage: usage(8) } }
+        : { status: 202, data: { status: "pending", messageId, usage: usage(8) } },
+    });
+    await channel.openThread(asking.id);
+    await tembo.ask(asking);
+    await tembo.ask(mine);
+    replies = [answer];
+    channel.closeThread();
+    await channel.openThread(asking.id);
+    await vi.waitFor(() => expect(tembo.getState().questions[asking.id].status).toBe("answered"));
+    await vi.waitFor(() => expect(calls.filter((c) => c === "ask ask-2")).toHaveLength(2));
+    expect(tembo.getState().questions[mine.id]).toMatchObject({ status: "pending", answerId: null });
   });
 
   it("checks again when the closed thread's reply count moves, and takes the answer from the server", async () => {
@@ -122,6 +149,19 @@ describe("asking Tembo (S-3.1)", () => {
     expect(tembo.getState().questions[asking.id].status).toBe("pending");
     expect(calls).toEqual(["ask ask-1", "ask ask-1"]);
     expect(TEMBO_TIMEOUT_MS).toBeGreaterThan(55_000);
+  });
+
+  it("keeps the first deadline when a busy thread makes it check again", async () => {
+    vi.useFakeTimers();
+    const { tembo, channel, calls } = setup({}, { timeoutMs: 1_000 });
+    await tembo.ask(asking);
+    await vi.advanceTimersByTimeAsync(600);
+    channel.receive([{ ...asking, thread: { replyCount: 1, participantIds: [], lastReplyAt: asking.createdAt + 1 } }]);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(calls).toEqual(["ask ask-1", "ask ask-1"]);
+    expect(tembo.getState().questions[asking.id].status).toBe("pending");
+    await vi.advanceTimersByTimeAsync(390);
+    expect(tembo.getState().questions[asking.id].status).toBe("timeout");
   });
 
   it("keeps the error, and trying again can succeed", async () => {
@@ -192,7 +232,37 @@ describe("Tembo feedback", () => {
     expect(tembo.getState().feedback).toEqual({ [answer.id]: "helpful" });
   });
 
-  it("a newer choice is not rolled back by an older one failing", async () => {
+  it("sends one choice at a time, so the server ends with the latest one", async () => {
+    let inFlight = 0;
+    let most = 0;
+    const releases: Array<() => void> = [];
+    const { tembo, calls } = setup({
+      feedback: () => {
+        inFlight += 1;
+        most = Math.max(most, inFlight);
+        return new Promise<MockReply>((resolve) => {
+          releases.push(() => {
+            inFlight -= 1;
+            resolve({ data: { ok: true } });
+          });
+        });
+      },
+    });
+    const first = tembo.sendFeedback(answer.id, "helpful");
+    await vi.waitFor(() => expect(releases).toHaveLength(1));
+    const second = tembo.sendFeedback(answer.id, "not_quite");
+    expect(tembo.getState().feedback).toEqual({ [answer.id]: "not_quite" });
+    expect(second).toBe(first);
+    releases[0]();
+    await vi.waitFor(() => expect(releases).toHaveLength(2));
+    releases[1]();
+    await first;
+    expect(most).toBe(1);
+    expect(calls).toEqual([`feedback ${answer.id} helpful`, `feedback ${answer.id} not_quite`]);
+    expect(tembo.getState()).toMatchObject({ feedback: { [answer.id]: "not_quite" }, saving: [], announcement: "Thanks: marked not quite" });
+  });
+
+  it("a newer choice still goes when an older one fails", async () => {
     let first = true;
     let release!: () => void;
     const { tembo } = setup({
@@ -202,9 +272,9 @@ describe("Tembo feedback", () => {
     });
     const older = tembo.sendFeedback(answer.id, "helpful");
     await vi.waitFor(() => expect(release).toBeTypeOf("function"));
-    await tembo.sendFeedback(answer.id, "not_quite");
+    void tembo.sendFeedback(answer.id, "not_quite");
     release();
-    await expect(older).rejects.toMatchObject({ status: 500 });
-    expect(tembo.getState().feedback).toEqual({ [answer.id]: "not_quite" });
+    await older;
+    expect(tembo.getState()).toMatchObject({ feedback: { [answer.id]: "not_quite" }, saving: [] });
   });
 });

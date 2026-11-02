@@ -399,7 +399,6 @@ export function composerTools(channel: Channel, flags: EffectiveFlags): Composer
   };
 }
 
-/** What Tembo reads when asked here (plan §3), in a channel or in one of its threads. */
 /** What Tembo reads to answer in a kind of channel (B-3.1, src/lib/tembo/README.md "What Tembo sees"). */
 export function temboSees(scope: TemboScope): string {
   switch (scope) {

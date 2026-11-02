@@ -56,7 +56,8 @@ for (const viewport of [DESKTOP, PHONE]) {
     await page.keyboard.press("Enter");
     await expect(page.locator("#channel-thread-title")).toBeFocused();
     const answer = page.locator("[data-thread-rail] [data-message]").filter({ has: page.locator(".channel-tembo") }).last();
-    await expect(answer.locator(".channel-ai-badge")).toHaveText("AI");
+    // One AI badge: the server's role badge on Tembo.
+    await expect(answer.locator(".channel-meta").getByText("AI", { exact: true })).toHaveCount(1);
     await expect(answer.locator(".channel-tembo__foot")).toContainText("Sees: this channel, projects shared in it and public builder profiles · You: 7 of 10 today");
     const helpful = answer.locator("[data-tembo-feedback=helpful]");
     await helpful.focus();

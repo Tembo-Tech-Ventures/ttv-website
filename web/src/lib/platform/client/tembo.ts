@@ -70,6 +70,12 @@ export function createTemboStore(options: TemboOptions) {
   // The thread's reply count when Tembo started; a change while the thread is closed means "check".
   const baselines = new Map<Id, number>();
   const asking = new Map<Id, Promise<TemboQuestion>>();
+  // Tembo replies already taken as a hint to check.
+  const hinted = new Set<Id>();
+  // Feedback: what the server holds for each answer, the reader's latest wish, and the one run sending it.
+  const savedFeedback = new Map<Id, TemboFeedbackKind>();
+  const wantedFeedback = new Map<Id, TemboFeedbackKind>();
+  const feedbackRuns = new Map<Id, Promise<void>>();
   const controllers = new Set<AbortController>();
   let retains = 0;
   let unsubscribe: (() => void) | null = null;
@@ -123,9 +129,10 @@ export function createTemboStore(options: TemboOptions) {
           answered(id, response.message.id);
         } else {
           baselines.set(id, channel.peek(question(id)?.threadId ?? id)?.thread.replyCount ?? 0);
-          const wasPending = question(id)?.status === "pending";
-          patch(id, { status: "pending", error: null }, wasPending ? undefined : "Tembo is looking into it");
-          wait(id);
+          const fresh = question(id)?.status === "asking";
+          patch(id, { status: "pending", error: null }, fresh ? "Tembo is looking into it" : undefined);
+          // A re-check keeps the first deadline, so a busy thread can't hold a stuck question off "timeout".
+          if (!timers.has(id)) wait(id);
         }
       } catch (caught) {
         const error = asApiError(caught);
@@ -170,63 +177,82 @@ export function createTemboStore(options: TemboOptions) {
     if (enabled && !stopped && message.authorKind === "USER" && mentionsTembo(message.body)) ask(message).catch(() => undefined);
   }
 
-  // Answers come through the channel's polling: in the open thread as replies, otherwise only as a
-  // newer reply count on the thread's root, which is checked by asking again (it never counts twice).
+  // Answers come through the channel's polling, but nothing in a reply says which question it answers:
+  // another person's question in the same thread may be answered first. So a new Tembo reply in the open
+  // thread, or a newer reply count on a closed thread's root, is only a hint to ask the server again,
+  // which returns this question's own answer (and never counts it twice).
   function observe(state: ChannelState) {
-    const claimed = new Set(Object.values(store.getState().questions).map(q => q.answerId).filter(Boolean));
-    const open = Object.values(store.getState().questions).filter(q => q.status === "pending" || q.status === "timeout")
-      .toSorted((a, b) => a.askedAt - b.askedAt);
+    const open = Object.values(store.getState().questions).filter(q => q.status === "pending" || q.status === "timeout");
+    const replies = state.thread?.messages.filter(m => m.authorKind === "TEMBO" && !hinted.has(m.id)) ?? [];
+    for (const reply of replies) hinted.add(reply.id);
     for (const q of open) {
-      if (state.thread?.parentId === q.threadId) {
-        const reply = state.thread.messages.find(m => m.authorKind === "TEMBO" && m.createdAt >= q.askedAt && !claimed.has(m.id));
-        if (reply) {
-          claimed.add(reply.id);
-          answered(q.messageId, reply.id);
-          continue;
-        }
-      }
+      if (asking.has(q.messageId)) continue;
+      const fresh = state.thread?.parentId === q.threadId && replies.some(m => m.createdAt >= q.askedAt);
       const baseline = baselines.get(q.messageId);
       const root = channel.peek(q.threadId);
-      if (baseline !== undefined && root && root.thread.replyCount > baseline && !asking.has(q.messageId)) {
-        baselines.set(q.messageId, root.thread.replyCount);
-        void request(q.messageId);
-      }
+      const moved = baseline !== undefined && root !== undefined && root.thread.replyCount > baseline;
+      if (!fresh && !moved) continue;
+      if (root) baselines.set(q.messageId, root.thread.replyCount);
+      void request(q.messageId);
     }
   }
 
   /**
-   * Say whether an answer helped. Shows at once; a refusal or failure puts the
-   * earlier choice back and rejects. The server keeps the latest choice.
+   * Say whether an answer helped. Shows at once. One request per answer at a time: a choice made while
+   * one is being saved is sent after it, so the server ends with the latest choice. When saving fails,
+   * the choice the server holds comes back and the promise rejects.
    */
-  async function sendFeedback(answerId: Id, feedback: TemboFeedbackKind): Promise<void> {
-    if (!enabled || stopped) throw new ApiError("flag_off", 0, "Tembo isn't available here");
-    const previous = store.getState().feedback[answerId];
-    if (previous === feedback && !store.getState().saving.includes(answerId)) return;
-    const withChoice = (choice: TemboFeedbackKind | undefined) => (state: TemboState) => {
-      const { [answerId]: _old, ...rest } = state.feedback;
-      return choice === undefined ? rest : { ...rest, [answerId]: choice };
-    };
-    store.setState(state => ({
-      ...state, feedback: withChoice(feedback)(state), saving: [...state.saving.filter(id => id !== answerId), answerId], announcement: "",
+  function sendFeedback(answerId: Id, feedback: TemboFeedbackKind): Promise<void> {
+    if (!enabled || stopped) return Promise.reject(new ApiError("flag_off", 0, "Tembo isn't available here"));
+    const state = store.getState();
+    if (state.feedback[answerId] === feedback && !state.saving.includes(answerId)) return Promise.resolve();
+    wantedFeedback.set(answerId, feedback);
+    store.setState(current => ({
+      ...current, feedback: { ...current.feedback, [answerId]: feedback },
+      saving: current.saving.includes(answerId) ? current.saving : [...current.saving, answerId], announcement: "",
     }));
-    const controller = new AbortController();
-    controllers.add(controller);
+    const running = feedbackRuns.get(answerId);
+    if (running) return running;
+    const run = saveFeedback(answerId);
+    feedbackRuns.set(answerId, run);
+    return run;
+  }
+
+  async function saveFeedback(answerId: Id): Promise<void> {
+    let failure: ApiError | null = null;
     try {
-      await api.call(ROUTES.temboFeedback, { params: { id: answerId }, body: { feedback }, signal: controller.signal });
-      store.setState(state => ({
-        ...state, saving: state.saving.filter(id => id !== answerId),
-        announcement: feedback === "helpful" ? "Thanks: marked helpful" : "Thanks: marked not quite",
-      }));
-    } catch (caught) {
-      // Roll back only while this choice is still the latest one.
-      store.setState(state => state.feedback[answerId] !== feedback ? state : {
-        ...state, feedback: withChoice(previous)(state), saving: state.saving.filter(id => id !== answerId),
-        announcement: stopped ? "" : "Couldn't save that. Try again.",
-      });
-      throw asApiError(caught);
+      for (;;) {
+        const next = wantedFeedback.get(answerId);
+        if (stopped || next === undefined || next === savedFeedback.get(answerId)) break;
+        const controller = new AbortController();
+        controllers.add(controller);
+        try {
+          await api.call(ROUTES.temboFeedback, { params: { id: answerId }, body: { feedback: next }, signal: controller.signal });
+          savedFeedback.set(answerId, next);
+          failure = null;
+        } catch (caught) {
+          failure = asApiError(caught);
+          // A newer choice made meanwhile is still worth sending.
+          if (wantedFeedback.get(answerId) === next) break;
+        } finally {
+          controllers.delete(controller);
+        }
+      }
     } finally {
-      controllers.delete(controller);
+      feedbackRuns.delete(answerId);
+      wantedFeedback.delete(answerId);
     }
+    const saved = savedFeedback.get(answerId);
+    store.setState(current => {
+      const { [answerId]: _shown, ...rest } = current.feedback;
+      const announcement = stopped ? "" : failure ? "Couldn't save that. Try again."
+        : saved === "helpful" ? "Thanks: marked helpful" : "Thanks: marked not quite";
+      return {
+        ...current, feedback: saved === undefined ? rest : { ...rest, [answerId]: saved },
+        saving: current.saving.filter(id => id !== answerId), announcement,
+      };
+    });
+    if (failure) throw failure;
   }
 
   return {

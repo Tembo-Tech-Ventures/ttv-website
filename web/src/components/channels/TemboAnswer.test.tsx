@@ -101,7 +101,10 @@ describe("a Tembo answer (U-3.1)", () => {
       <ChannelSurface me={wanjiku} channel={community} store={store} composer={composer} tembo={tembo} now={FIXTURE_NOW}
         shareables={null} threadId={messages.communityAsk.parentId} initialThread={threadPage(community, messages.communityAsk.parentId!, wanjiku)} />,
     );
-    expect(answer().querySelector(".channel-meta")?.textContent).toMatch(/^TemboAI/);
+    // One AI badge, the server's own role badge on Tembo (not a second one from the view).
+    const meta = answer().querySelector(".channel-meta")!;
+    expect(meta.textContent).toMatch(/^TemboAI\d/);
+    expect([...meta.querySelectorAll("*")].filter((node) => node.children.length === 0 && node.textContent === "AI")).toHaveLength(1);
     expect([...answer().querySelectorAll("[aria-label=Sources] a")].map((a) => a.textContent)).toEqual(["Chama ledger · rev 3", "This thread"]);
     expect(answer().querySelector(".channel-tembo__foot")?.textContent)
       .toBe("Sees: this channel, projects shared in it and public builder profiles · You: 6 of 10 today");

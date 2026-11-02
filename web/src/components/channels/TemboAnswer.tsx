@@ -96,6 +96,7 @@ export function TemboAnswerFoot({ message }: { message: Message }) {
 /* ---- A question still waiting ---- */
 
 function failure(question: TemboQuestion): { text: string; retry: boolean } {
+  if (question.error?.code === "flag_off") return { text: "Tembo isn't available in channels just now.", retry: false };
   switch (question.error?.status) {
     case 403:
       return { text: "Tembo answers your own messages, in channels you can post in.", retry: false };

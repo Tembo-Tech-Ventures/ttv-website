@@ -12,7 +12,7 @@ import {
 } from "@/lib/platform/contracts";
 import { createApiClient, type ApiClient } from "@/lib/platform/client/apiClient";
 import { createMockTransport, type MockOptions, type MockReply } from "@/lib/platform/client/mockTransport";
-import { messages as fixtureMessages } from "@/lib/platform/fixtures";
+import { messages as fixtureMessages, temboAuthor } from "@/lib/platform/fixtures";
 import { sameEmbed, type Shareables } from "../actions";
 import { asSeenBy, threadPage } from "./fixture-pages";
 
@@ -49,7 +49,6 @@ type HarnessOptions = {
   failure?: MockOptions["failure"];
 };
 
-const TEMBO_AUTHOR = { id: null, name: "Tembo", avatarUrl: null, roleBadges: [] } satisfies Message["author"];
 const TEMBO_ANSWER: Record<Channel["kind"], string> = {
   COHORT: "Session 9 covers this from 34:12: the 200 tells the provider the callback arrived, so it stops retrying. [1]",
   COMMUNITY: "Revision 3 logs each callback before parsing it, so a failure can still be replayed. [1]",
@@ -312,7 +311,7 @@ export function createHarnessClient({ me, channel, root, shareables, moments, no
         sequence += 1;
         const answer: Message = {
           id: `harnesstembo${String(sequence).padStart(4, "0")}`, channelId: channel.id, parentId: threadId, clientNonce: null,
-          authorKind: "TEMBO", author: TEMBO_AUTHOR, body: TEMBO_ANSWER[channel.kind], embeds: [], citations: TEMBO_CITATIONS[channel.kind],
+          authorKind: "TEMBO", author: temboAuthor, body: TEMBO_ANSWER[channel.kind], embeds: [], citations: TEMBO_CITATIONS[channel.kind],
           reactions: [], createdAt: now(), edited: false, deleted: false, moderation: null,
           thread: { replyCount: 0, participantIds: [], lastReplyAt: null }, temboScope: channel.kind,
         };
