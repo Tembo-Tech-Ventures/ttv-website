@@ -114,6 +114,7 @@ describe("channel API route files through the middleware", () => {
   });
 
   it("serve a channels token as its owner, and keep it to the channel APIs", async () => {
+    s.database.exec(`INSERT INTO UserRoles(id,userId,roleId) SELECT 'viewer-admin','${VIEWER}',id FROM Roles WHERE name = 'ADMIN'`);
     const help = s.channel("help");
     const read = ["channels:read"];
     const write = ["channels:read", "channels:write"];

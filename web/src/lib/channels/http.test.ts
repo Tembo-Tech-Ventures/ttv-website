@@ -85,7 +85,7 @@ describe("channel APIs: gates", () => {
   });
 
   it("let a channels:read token read as its owner, and refuse its writes", async () => {
-    const s = setup();
+    const s = setup({ globalRoles: ["ADMIN"] });
     s.agree();
     for (const [operation, options] of everyRoute(s)) {
       const response = await s.call(operation, { ...options, ...withToken(["channels:read"]), origin: null });
@@ -99,7 +99,7 @@ describe("channel APIs: gates", () => {
   });
 
   it("let a channels:write token write as its owner without an Origin, but never from another origin", async () => {
-    const s = setup();
+    const s = setup({ globalRoles: ["ADMIN"] });
     s.agree();
     const writer = withToken(["channels:read", "channels:write"]);
     for (const [operation, options] of everyRoute(s)) {
@@ -128,7 +128,7 @@ describe("channel APIs: gates", () => {
   });
 
   it("let a channels:write token report a message and ask for a review of its owner's", async () => {
-    const s = setup();
+    const s = setup({ globalRoles: ["ADMIN"] });
     s.agree();
     const writer = { ...withToken(["channels:read", "channels:write"]), origin: null };
     const theirs = s.message("help", { author: "synthetic-otieno", body: "Theirs" });
@@ -136,6 +136,31 @@ describe("channel APIs: gates", () => {
     expect((await s.call("reportMessage", { id: theirs, body: { reason: "Spam" }, ...writer })).status).toBe(201);
     const own = s.message("help", { author: VIEWER, state: "HIDDEN" });
     expect((await s.call("requestModerationReview", { id: own, body: {}, ...writer })).status).toBe(201);
+  });
+
+  it("let a channels token see exactly what its owner's session sees, hidden messages included", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    s.message("help", { author: "synthetic-otieno", body: "Visible" });
+    s.message("help", { author: "synthetic-otieno", body: "Hidden from members", state: "HIDDEN" });
+    s.message("help", { author: "synthetic-otieno", body: "Flagged", state: "FLAGGED" });
+    const read = (options: Parameters<ChannelFixture["call"]>[1]) => s.call("listMessages", { id: s.channel("help"), ...options });
+    const session = await read({});
+    const token = await read({ ...withToken(["channels:read"]), origin: null });
+    expect(token).toEqual({ ...session, response: expect.anything() });
+    expect(MessageList.parse(token.body).items.map((item) => [item.body, item.moderation?.state])).toEqual([
+      ["Visible", "VISIBLE"], ["Hidden from members", "HIDDEN"], ["Flagged", "FLAGGED"],
+    ]);
+  });
+
+  it("stop a channels token the moment its owner is no longer an admin", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    const token = { id: s.channel("help"), ...withToken(["channels:read"]), origin: null };
+    expect((await s.call("listMessages", token)).status).toBe(200);
+    s.database.exec("DELETE FROM UserRoles");
+    const refused = await s.call("listMessages", token);
+    expect([refused.status, errorOf(refused.body).message]).toEqual([403, "This personal access token works only while its owner is an admin."]);
+    // The same person's browser session keeps a member's access.
+    expect((await s.call("listMessages", { id: s.channel("help") })).status).toBe(200);
   });
 
   it("let agent sessions act as their person", async () => {

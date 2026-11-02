@@ -33,7 +33,7 @@ import {
  * `channels` is off for the caller, and 404 for a channel or message the caller cannot read,
  * whatever the reason. Signed-in sessions, and personal access tokens with a channels scope
  * (B-2.7): channels:read for the reads, channels:write for the writes, each acting as the token's
- * owner with the owner's capabilities. Agent sessions act as their person, under the same rules.
+ * owner with the owner's capabilities, and only while the owner is an admin. Agent sessions act as their person, under the same rules.
  * Browser writes must come from the same origin; a token's need no Origin, but one it sends must
  * match. The moderation routes (B-2.5) follow the same rules, except that no token reaches them
  * (admin tokens triage through MCP, moderation/mcp.ts): the queue is for admins only, and a
@@ -248,6 +248,11 @@ export async function channelRequest(
     if (refused || !user) return refused ?? platformError("forbidden", "Not permitted.", 403);
     const db = drizzle(env.DB, { schema });
     const capabilities = await requestCapabilities(db, context.locals);
+    // Only the admin token page issues channels tokens, and like admin tokens they die with the role:
+    // checked against this request's capabilities, so a demotion takes effect on the very next request.
+    if (context.locals.personalAccessToken && !capabilities.isAdmin) {
+      return platformError("forbidden", "This personal access token works only while its owner is an admin.", 403);
+    }
     if (operation === "listChannels") {
       return platformJson(ROUTES.listChannels.response.parse({ items: await listChannelsFor(db, user, capabilities) }));
     }
