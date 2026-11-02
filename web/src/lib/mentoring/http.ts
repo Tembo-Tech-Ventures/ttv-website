@@ -1,29 +1,33 @@
 import type { APIContext } from "astro";
 import type { z } from "zod";
 import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
+import { userHasAdminRole } from "@/lib/admin/roles";
 import { mentorRequestAttention, type MentorRequestEvent } from "@/lib/attention/mentor-producers";
 import { ChannelError } from "@/lib/channels/errors";
 import { ClefCheckError, clefScreen } from "@/lib/channels/moderation/clef";
 import { recordError, recordErrorInBackground } from "@/lib/observability/errors";
 import {
-  AcceptMentorRequest, CreateMentorRequest, DeclineMentorRequest, IdParams, MentorDirectoryQuery, MentorRequestListQuery,
-  RedirectMentorRequest, ROUTES, UpdateMentorAvailability, WithdrawMentorRequest,
+  AcceptMentorRequest, CreateMentorRequest, DecideMentorRequestCase, DeclineMentorRequest, IdParams, MentorDirectoryQuery,
+  MentorRequestCaseQuery, MentorRequestListQuery, RedirectMentorRequest, ReportMentorRequest, ROUTES, UpdateMentorAvailability,
+  WithdrawMentorRequest,
 } from "@/lib/platform/contracts";
 import { requireFlag } from "@/lib/platform/server/flags";
 import { platformError, platformJson } from "@/lib/platform/server/http";
 import { readBoundedJson, RequestJsonError } from "@/lib/request-json";
 import { worthAnotherLook } from "./another-look";
+import { clefHold, decideCase, listCases, reportRequest, requireAdmin } from "./checks";
 import { getAvailability, listMentors, updateAvailability } from "./profiles";
 import {
   acceptRequest, createRequest, declineRequest, getRequest, listRequests, redirectRequest, withdrawRequest, type MentoringContext,
 } from "./requests";
 
 /**
- * The mentor connection APIs (README.md beside this file). Every route is 404 while `mentor_requests`
- * is off for the caller (it is effective only while `channels` is on). Signed-in sessions only:
- * personal access tokens are refused, channels tokens included (no token scope covers asking a
- * person for their time). Agent sessions act as their person, as on the channel APIs. Writes must
- * come from the same origin.
+ * The mentor connection APIs (README.md beside this file), and the admins' checks on request notes
+ * under /api/moderation/mentor-requests. Every route is 404 while `mentor_requests` is off for the
+ * caller (it is effective only while `channels` is on). Signed-in sessions only: personal access
+ * tokens are refused, channels and admin tokens included (no token scope covers asking a person for
+ * their time, or judging that request). Agent sessions act as their person, as on the channel APIs.
+ * Writes must come from the same origin.
  */
 
 type Env = Pick<Cloudflare.Env, "DB" | "DEPLOYMENT_ENVIRONMENT" | "PLATFORM_FLAGS_OVERRIDE" | "DEPLOYMENT_VERSION">
@@ -31,8 +35,8 @@ type Env = Pick<Cloudflare.Env, "DB" | "DEPLOYMENT_ENVIRONMENT" | "PLATFORM_FLAG
 type Context = Pick<APIContext, "request" | "locals" | "params">;
 export type MentoringOperation = Extract<keyof typeof ROUTES,
   "listMentors" | "listMentorRequests" | "getMentorRequest" | "createMentorRequest" | "acceptMentorRequest"
-  | "redirectMentorRequest" | "declineMentorRequest" | "withdrawMentorRequest" | "getMentorAvailability" | "updateMentorAvailability"
-  | "getWorthAnotherLook">;
+  | "redirectMentorRequest" | "declineMentorRequest" | "withdrawMentorRequest" | "reportMentorRequest" | "getMentorAvailability"
+  | "updateMentorAvailability" | "getWorthAnotherLook" | "listMentorRequestCases" | "decideMentorRequestCase">;
 
 /** Test seams: the clock, the code of conduct version, work after the response, and Clef's time limit. */
 export interface MentoringRequestOptions {
@@ -40,7 +44,7 @@ export interface MentoringRequestOptions {
 }
 
 const READS: ReadonlySet<MentoringOperation> = new Set([
-  "listMentors", "listMentorRequests", "getMentorRequest", "getMentorAvailability", "getWorthAnotherLook",
+  "listMentors", "listMentorRequests", "getMentorRequest", "getMentorAvailability", "getWorthAnotherLook", "listMentorRequestCases",
 ]);
 /** A note of up to 2,000 characters of up to 4 bytes, JSON-escaped, with the other fields. */
 const BODY_BYTES = 16_000;
@@ -91,6 +95,28 @@ function afterResponse(context: Context, env: Env, options: MentoringRequestOpti
   const attention = { db: env.DB, env };
   return {
     told: (requestId: string, event: MentorRequestEvent) => run(() => mentorRequestAttention(attention, requestId, event)),
+    /**
+     * A new request's note gets Clef's check before its mentor hears of it: a hold tells the admins
+     * instead. When Clef fails the request stays as it is, logged, and the mentor hears of it (fail open).
+     */
+    asked: (requestId: string) => run(async () => {
+      try {
+        const outcome = await clefHold({
+          db: env.DB, ai: env.AI, gatewayName: env.AI_GATEWAY_NAME, timeoutMs: options.clefTimeoutMs, now: options.now?.() ?? Date.now(),
+        }, requestId);
+        if (outcome === "held") {
+          await mentorRequestAttention(attention, requestId, "checking");
+          return;
+        }
+      } catch (error) {
+        await recordError(env.DB, {
+          source: "request", route: ROUTES.createMentorRequest.path, version: env.DEPLOYMENT_VERSION,
+          level: error instanceof ClefCheckError ? "warning" : "error",
+          error: error instanceof ClefCheckError ? error : new Error("Mentor request check could not be applied."),
+        });
+      }
+      await mentorRequestAttention(attention, requestId, "created");
+    }),
     /** The note the acceptance posted gets Clef's check after the response, as every post does. */
     opened: (messageId: string, channelId: string, body: string) => run(async () => {
       try {
@@ -107,6 +133,11 @@ function afterResponse(context: Context, env: Env, options: MentoringRequestOpti
       }
     }),
   };
+}
+
+/** Whether the caller is an admin: the middleware's answer, or the roles table's. */
+async function isAdmin({ locals }: Context, env: Env, userId: string): Promise<boolean> {
+  return locals.isAdmin ?? await userHasAdminRole(env.DB, userId);
 }
 
 async function handle(operation: MentoringOperation, context: Context, env: Env, options: MentoringRequestOptions, userId: string) {
@@ -131,7 +162,7 @@ async function handle(operation: MentoringOperation, context: Context, env: Env,
     }
     case "createMentorRequest": {
       const created = await createRequest(ctx, parse(CreateMentorRequest, await readBody(request)));
-      later.told(created.id, "created");
+      later.asked(created.id);
       return platformJson(ROUTES.createMentorRequest.response.parse(created), 201);
     }
     case "acceptMentorRequest": {
@@ -160,6 +191,26 @@ async function handle(operation: MentoringOperation, context: Context, env: Env,
       const withdrawn = await withdrawRequest(ctx, requestId);
       later.told(requestId, "withdrawn");
       return platformJson(ROUTES.withdrawMentorRequest.response.parse(withdrawn));
+    }
+    case "reportMentorRequest": {
+      const requestId = id();
+      const reported = await reportRequest(ctx, requestId, parse(ReportMentorRequest, await readBody(request)));
+      later.told(requestId, "checking");
+      return platformJson(ROUTES.reportMentorRequest.response.parse(reported));
+    }
+    case "listMentorRequestCases": {
+      const cases = await listCases(ctx, await isAdmin(context, env, userId), readQuery(request, MentorRequestCaseQuery));
+      return platformJson(ROUTES.listMentorRequestCases.response.parse(cases));
+    }
+    case "decideMentorRequestCase": {
+      const admin = await isAdmin(context, env, userId);
+      requireAdmin(admin);
+      const requestId = id();
+      const input = parse(DecideMentorRequestCase, await readBody(request));
+      const decided = await decideCase(ctx, admin, requestId, input);
+      // A kept request reaches its mentor now, if they had not heard of it (the notice is once per request).
+      if (input.action === "keep") later.told(requestId, "created");
+      return platformJson(ROUTES.decideMentorRequestCase.response.parse(decided));
     }
   }
 }

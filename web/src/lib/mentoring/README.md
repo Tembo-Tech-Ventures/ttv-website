@@ -218,6 +218,67 @@ time. Writes need the same origin. Statement budget, asserted in
 availability; three for redirect, decline and withdraw; accept is a read, a
 pair lookup, one batch of at most five writes, and two reads back.
 
+### Checks (`checks.ts`, migration `0037_mentor_request_checks.sql`)
+
+A request's note is screened like a channel post. When the request is
+written, the detectors mask contact details for everyone but its author
+(`noteReasons`). After the response, Clef flash reads the note as a direct
+conversation's message (`clefHold`). Near-certain abuse (the channel hide
+threshold) opens a check, and the check **holds** the request:
+
+- The mentor doesn't see it. They aren't told, it isn't in their list, and it
+  is 404 to them, like a missing request.
+- It uses no spot of the mentor's capacity (`HELD` in `visibility.ts`,
+  applied in `capacity.ts`).
+- The person asking sees it PENDING with `check: "waiting"`. The UI copy is
+  "Waiting for a check before it's sent", never "declined". They may still
+  withdraw it.
+
+Anything short of near-certain abuse changes nothing. When Clef fails or is not
+configured, the request stays as it is, the failure is logged without the note,
+and the mentor is told as usual (fail open). The attached project is not sent
+to Clef: it is the asker's own published work, which its own check covers.
+
+The mentor may **report** a waiting request (`POST
+/api/mentor-requests/:id/report`, `{ reason }`):
+
+- Only the mentor may report: the person asking gets 403, anyone else 404.
+- Only while the request is PENDING (409 after). One report per request (409).
+- Reporting closes the request for the mentor. It stays in their list with
+  `check: "reported"`, and accepting, redirecting or declining it is 409. It
+  holds no spot.
+- The report opens a check the person asking waits on, as above.
+
+| Table | Holds |
+|---|---|
+| `mentor_request_case` | At most one per request: OPEN or DECIDED, Clef's reasons when Clef held it, when it last opened, and the latest decision (KEEP or REMOVE, the reason, the admin, when) |
+| `mentor_request_report` | The mentor's report: one per request, with their reason |
+
+Admins decide in their own queue. It is separate from the channel
+`moderation_case` queue, whose contract is unchanged.
+
+- `GET /api/moderation/mentor-requests?state=OPEN|DECIDED&cursor=`: oldest
+  opened first, 20 a page, one statement along `mentor_request_case_queue_idx`.
+  Each item has the request with its note as written, Clef's reasons, the
+  report and the latest decision.
+- `POST /api/moderation/mentor-requests/:id`, `{ action: "keep" | "remove",
+  reason }`:
+  - **keep** releases the request to its mentor as it is (PENDING), and the
+    mentor is told once, if they had not been. It holds a spot again, even if
+    the mentor filled their month meanwhile.
+  - **remove** closes a waiting request as WITHDRAWN with the reason recorded.
+    The person asking sees `check: "not_sent"` ("This request wasn't sent")
+    and may ask again. A mentor who never saw it never does.
+  - It is 404 for a request with no check, and 409 once the check is decided.
+
+A report on a request an admin kept opens its check again, showing the earlier
+decision until the next one. Both admin routes are for admins only (403), and
+follow the gates below: flag, browser sessions only, same origin for the
+decision. Each check that opens tells every admin except the request's two
+parties, once per opening (`moderation_pending`, admin space, at
+`/admin/moderation?tab=request-notes`). The notice shows while the check is
+open. U-4.1 builds that "Request notes" tab.
+
 ### Attention (`src/lib/attention/mentor-producers.ts`)
 
 After each move's response, the other party hears once: a new request tells
@@ -225,7 +286,8 @@ the mentor (`mentor_request`, in Mentoring, at the Requests page); accepting
 tells the asker (`mentor_accepted`, in Community, at the conversation);
 redirecting and declining tell the asker (`mentor_redirected`,
 `mentor_declined`, at the directory); withdrawing tells the mentor
-(`mentor_withdrawn`). An item is written only while the request is still in
+(`mentor_withdrawn`). The mentor hears only of requests they may see
+(`MENTOR_SEES`): a request Clef holds reaches them only once an admin keeps it. An item is written only while the request is still in
 the state its move left it in, so a request answered before its notice was
 written leaves no stale notice. It needs `spaces`, `channels` and
 `mentor_requests` for the recipient, and never copies the note or the

@@ -471,16 +471,25 @@ export type CreateMentorRequest = z.infer<typeof CreateMentorRequest>;
 export const MentorRequestProject = z.discriminatedUnion("type", [ProjectEmbed, UnavailableEmbed]);
 export type MentorRequestProject = z.infer<typeof MentorRequestProject>;
 /**
+ * A check on the note (src/lib/mentoring/README.md, "Checks"), as this party sees it. For the person
+ * asking: waiting (TTV checks the note before the mentor can answer: "Waiting for a check before it's
+ * sent"), or not_sent (an admin removed it: "This request wasn't sent", with status WITHDRAWN). Never
+ * "declined". For the mentor: reported (they reported it; they cannot act on it unless an admin keeps it).
+ */
+export const MentorRequestCheck = z.enum(["waiting", "not_sent", "reported"]);
+export type MentorRequestCheck = z.infer<typeof MentorRequestCheck>;
+/**
  * Seen only by the person asking and the mentor asked. note: the mentor sees contact details in it
  * masked (MASKED_CONTACT), as in a channel. responseNote: what the mentor wrote when redirecting or
  * declining. redirectedTo: null on a redirected request only once the suggested mentor's account is gone.
+ * check: null or absent when no check concerns this party; when set, it replaces what status says.
  */
 export const MentorRequest = z.object({
   id: Id, requester: PersonSummary, mentor: PersonSummary,
   note: z.string().min(1).max(2000 + MAX_CONTACT_MASKS * MASKED_CONTACT.length),
   project: MentorRequestProject.nullable(), format: MentorRequestFormat, status: MentorRequestStatus,
   channelId: Id.nullable(), redirectedTo: PersonSummary.nullable(), responseNote: MentorRequestNote.nullable(),
-  createdAt: Timestamp, updatedAt: Timestamp,
+  check: MentorRequestCheck.nullable().optional(), createdAt: Timestamp, updatedAt: Timestamp,
 }).refine((r) => (r.status === "ACCEPTED") === (r.channelId !== null), "Only accepted requests have a conversation")
   .refine((r) => r.redirectedTo === null || r.status === "REDIRECTED", "Only redirected requests have a target mentor")
   .refine((r) => r.responseNote === null || r.status === "REDIRECTED" || r.status === "DECLINED",
@@ -493,6 +502,38 @@ export const MentorRequestListQuery = z.strictObject({
 export type MentorRequestListQuery = z.infer<typeof MentorRequestListQuery>;
 export const MentorRequestList = z.object({ items: z.array(MentorRequest), nextCursor: Cursor.nullable() });
 export type MentorRequestList = z.infer<typeof MentorRequestList>;
+/** The mentor reports a waiting request's note; it closes for them and goes to the admins' check. */
+export const ReportMentorRequest = z.strictObject({ reason: NonEmptyText.max(2000) });
+export type ReportMentorRequest = z.infer<typeof ReportMentorRequest>;
+export const MentorRequestCaseState = z.enum(["OPEN", "DECIDED"]);
+export type MentorRequestCaseState = z.infer<typeof MentorRequestCaseState>;
+/** keep: the request goes (back) to the mentor, PENDING. remove: it closes, never sent. */
+export const MentorRequestCaseAction = z.enum(["keep", "remove"]);
+export type MentorRequestCaseAction = z.infer<typeof MentorRequestCaseAction>;
+/** An admin's decision; `by` is null once that admin's account is deleted. */
+export const MentorRequestCaseDecision = z.object({
+  action: MentorRequestCaseAction, reason: NonEmptyText, by: PersonSummary.nullable(), decidedAt: Timestamp,
+});
+export type MentorRequestCaseDecision = z.infer<typeof MentorRequestCaseDecision>;
+/**
+ * A check on one request (id = the request's id), for admins: the request with its note unmasked,
+ * Clef's reasons if Clef held it, the mentor's report if any, and the latest decision. openedAt: when
+ * it last opened, the queue's order. A report after a keep opens it again with that decision shown.
+ */
+export const MentorRequestCase = z.object({
+  id: Id, request: MentorRequest, state: MentorRequestCaseState, clefReasons: z.array(NonEmptyText),
+  report: z.object({ reason: NonEmptyText, reportedAt: Timestamp }).nullable(), openedAt: Timestamp,
+  decision: MentorRequestCaseDecision.nullable(),
+}).refine((item) => item.state === "OPEN" || item.decision !== null, "Decided cases carry their decision")
+  .refine((item) => item.clefReasons.length > 0 || item.report !== null, "A case is opened by Clef or a report");
+export type MentorRequestCase = z.infer<typeof MentorRequestCase>;
+/** state: OPEN (the default) or DECIDED. Oldest first. */
+export const MentorRequestCaseQuery = z.strictObject({ state: MentorRequestCaseState.optional(), cursor: Cursor.optional() });
+export type MentorRequestCaseQuery = z.infer<typeof MentorRequestCaseQuery>;
+export const MentorRequestCaseList = z.object({ items: z.array(MentorRequestCase), nextCursor: Cursor.nullable() });
+export type MentorRequestCaseList = z.infer<typeof MentorRequestCaseList>;
+export const DecideMentorRequestCase = z.strictObject({ action: MentorRequestCaseAction, reason: NonEmptyText.max(2000) });
+export type DecideMentorRequestCase = z.infer<typeof DecideMentorRequestCase>;
 export const AcceptMentorRequest = z.strictObject({});
 export type AcceptMentorRequest = z.infer<typeof AcceptMentorRequest>;
 /** Suggest another listed mentor; the person asking decides whether to ask them. */
@@ -703,6 +744,9 @@ export const ROUTES = {
   redirectMentorRequest: defineRoute({ method: "POST", path: "/api/mentor-requests/:id/redirect", params: IdParams, body: RedirectMentorRequest, response: MentorRequest, idempotent: false }),
   declineMentorRequest: defineRoute({ method: "POST", path: "/api/mentor-requests/:id/decline", params: IdParams, body: DeclineMentorRequest, response: MentorRequest, idempotent: false }),
   withdrawMentorRequest: defineRoute({ method: "POST", path: "/api/mentor-requests/:id/withdraw", params: IdParams, body: WithdrawMentorRequest, response: MentorRequest, idempotent: false }),
+  reportMentorRequest: defineRoute({ method: "POST", path: "/api/mentor-requests/:id/report", params: IdParams, body: ReportMentorRequest, response: MentorRequest, idempotent: false }),
+  listMentorRequestCases: defineRoute({ method: "GET", path: "/api/moderation/mentor-requests", query: MentorRequestCaseQuery, response: MentorRequestCaseList, idempotent: true }),
+  decideMentorRequestCase: defineRoute({ method: "POST", path: "/api/moderation/mentor-requests/:id", params: IdParams, body: DecideMentorRequestCase, response: MentorRequestCase, idempotent: false }),
   getWorthAnotherLook: defineRoute({ method: "GET", path: "/api/mentoring/another-look", response: WorthAnotherLook, idempotent: true }),
   getMentorAvailability: defineRoute({ method: "GET", path: "/api/mentoring/availability", response: MentorAvailability, idempotent: true }),
   updateMentorAvailability: defineRoute({ method: "PUT", path: "/api/mentoring/availability", body: UpdateMentorAvailability, response: MentorAvailability, idempotent: true }),

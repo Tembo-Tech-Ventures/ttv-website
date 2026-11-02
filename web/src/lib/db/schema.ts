@@ -1714,3 +1714,48 @@ export const mentorRequest = sqliteTable("mentor_request", {
   check("mentor_request_response_check", sql`${table.responseNote} IS NULL OR (${table.status} IN ('REDIRECTED','DECLINED') AND length(trim(${table.responseNote})) > 0 AND length(${table.responseNote}) <= 2000)`),
   check("mentor_request_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt} AND coalesce(${table.decidedAt}, ${table.createdAt}) >= ${table.createdAt} AND coalesce(${table.acceptedAt}, 0) >= 0`),
 ]);
+
+const MENTOR_REQUEST_CASE_STATES = ["OPEN", "DECIDED"] as const;
+const MENTOR_REQUEST_DECISIONS = ["KEEP", "REMOVE"] as const;
+
+/**
+ * A check on a mentor request's note (src/lib/mentoring/README.md, "Checks"), at most one per
+ * request. Clef's near-certain abuse or the mentor's report opens it (clefReasons, and a
+ * mentor_request_report row), and an admin decides: KEEP releases the request to the mentor, REMOVE
+ * closes it (WITHDRAWN, never sent). While OPEN the request holds no spot and the mentor cannot act on
+ * it. A report after a KEEP opens it again (openedAt), keeping the earlier decision until the next.
+ */
+export const mentorRequestCase = sqliteTable("mentor_request_case", {
+  requestId: text("requestId").primaryKey().references(() => mentorRequest.id, { onDelete: "cascade" }),
+  state: text("state", { enum: MENTOR_REQUEST_CASE_STATES }).notNull().default("OPEN"),
+  clefReasons: jsonArray("clefReasons"),
+  openedAt: integer("openedAt").notNull(),
+  decision: text("decision", { enum: MENTOR_REQUEST_DECISIONS }),
+  decisionReason: text("decisionReason"),
+  decidedBy: text("decidedBy").references(() => user.id, { onDelete: "set null" }),
+  decidedAt: integer("decidedAt"),
+  createdAt: epochMs("createdAt"),
+  updatedAt: epochMs("updatedAt"),
+}, (table) => [
+  // The admin queue: one state, oldest first.
+  index("mentor_request_case_queue_idx").on(table.state, table.openedAt, table.requestId),
+  index("mentor_request_case_decidedBy_idx").on(table.decidedBy).where(sql`${table.decidedBy} IS NOT NULL`),
+  check("mentor_request_case_state_check", sql`${table.state} IN ('OPEN','DECIDED')`),
+  check("mentor_request_case_clefReasons_check", isJsonArray(table.clefReasons)),
+  check("mentor_request_case_decision_check", sql`(${table.decision} IS NULL OR ${table.decision} IN ('KEEP','REMOVE'))
+    AND (${table.decision} IS NULL) = (${table.decidedAt} IS NULL) AND (${table.decision} IS NULL) = (${table.decisionReason} IS NULL)
+    AND (${table.state} = 'OPEN' OR ${table.decision} IS NOT NULL)
+    AND (${table.decisionReason} IS NULL OR (length(trim(${table.decisionReason})) > 0 AND length(${table.decisionReason}) <= 2000))`),
+  check("mentor_request_case_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt} AND ${table.openedAt} >= 0`),
+]);
+
+/** The mentor's report of a request's note: one per request, since only its mentor may report it. */
+export const mentorRequestReport = sqliteTable("mentor_request_report", {
+  requestId: text("requestId").primaryKey().references(() => mentorRequest.id, { onDelete: "cascade" }),
+  reporterId: text("reporterId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull(),
+  createdAt: epochMs("createdAt"),
+}, (table) => [
+  index("mentor_request_report_reporterId_idx").on(table.reporterId),
+  check("mentor_request_report_reason_check", sql`length(trim(${table.reason})) > 0 AND length(${table.reason}) <= 2000`),
+]);

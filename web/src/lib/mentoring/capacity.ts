@@ -1,4 +1,5 @@
 import type { MentorCapacity } from "@/lib/platform/contracts";
+import { HELD } from "./visibility";
 
 /**
  * A mentor's month (README.md beside this file, "Capacity") is the calendar month in Africa/Nairobi:
@@ -20,16 +21,16 @@ export function nextMonthStart(now: number): number {
 
 /**
  * The spots a mentor's requests hold, as two SQL columns over a mentor id expression: PENDING requests
- * (whenever they were made) and requests ACCEPTED since `since`, the month's start (a SQL parameter).
- * Both read mentor_request_mentor_status_idx.
+ * (whenever they were made) that no open check holds back, and requests ACCEPTED since `since`, the
+ * month's start (a SQL parameter). Both read mentor_request_mentor_status_idx.
  */
 export const spotColumns = (mentorId: string, since: string) => `
-  (SELECT COUNT(*) FROM mentor_request s WHERE s.mentorId = ${mentorId} AND s.status = 'PENDING') AS pendingCount,
+  (SELECT COUNT(*) FROM mentor_request s WHERE s.mentorId = ${mentorId} AND s.status = 'PENDING' AND NOT ${HELD("s")}) AS pendingCount,
   (SELECT COUNT(*) FROM mentor_request s WHERE s.mentorId = ${mentorId} AND s.status = 'ACCEPTED' AND s.acceptedAt >= ${since}) AS acceptedCount`;
 
 /** Whether a new request fits, in SQL over the same two index ranges: a spot is free this month. */
 export const hasSpot = (mentorId: string, since: string, limit: string) => `(
-  (SELECT COUNT(*) FROM mentor_request s WHERE s.mentorId = ${mentorId} AND s.status = 'PENDING')
+  (SELECT COUNT(*) FROM mentor_request s WHERE s.mentorId = ${mentorId} AND s.status = 'PENDING' AND NOT ${HELD("s")})
   + (SELECT COUNT(*) FROM mentor_request s WHERE s.mentorId = ${mentorId} AND s.status = 'ACCEPTED' AND s.acceptedAt >= ${since})
   < ${limit})`;
 

@@ -1,8 +1,9 @@
 import { and, eq, exists, inArray, or, sql } from "drizzle-orm";
 import {
-  accessRequest, attentionItem, channel, channelMember, channelMessage, communityJourney, mentorRequest, moderationCase, profileContact,
+  accessRequest, attentionItem, channel, channelMember, channelMessage, communityJourney, mentorRequest, mentorRequestCase, moderationCase, profileContact,
   programApplication, recording, studentProfile, type Database,
 } from "@/lib/db/schema";
+import { MENTOR_SEES } from "@/lib/mentoring/visibility";
 import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
 
 /**
@@ -13,7 +14,9 @@ import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
  * decision on their message for its author while its case stays decided (B-3.2); a moderation
  * notice while its case is pending, for admins; a mention or Tembo's answer while the message is
  * visible in a channel the person can still read, their own direct conversations included (B-4.1).
- * Mentor requests (B-4.1): each notice to the party it was for, the mentor or the person asking.
+ * Mentor requests (B-4.1): each notice to the party it was for, the mentor or the person asking; the
+ * mentor's only while they may see the request (a check can hold it back), and an open check's
+ * notice for admins while it stays open.
  */
 export function attentionAccess(db: Database, userId: string, capabilities: PlatformCapabilities) {
   return and(
@@ -47,8 +50,11 @@ export function attentionAccess(db: Database, userId: string, capabilities: Plat
         ))))),
       and(eq(attentionItem.subjectKind, "mentorRequest"), exists(db.select({ id: mentorRequest.id }).from(mentorRequest)
         .where(and(eq(mentorRequest.id, attentionItem.subjectId), or(
-          and(inArray(attentionItem.kind, ["mentor_request", "mentor_withdrawn"]), eq(mentorRequest.mentorId, userId)),
+          and(inArray(attentionItem.kind, ["mentor_request", "mentor_withdrawn"]), eq(mentorRequest.mentorId, userId),
+            sql.raw(MENTOR_SEES(`"mentor_request"`))),
           and(inArray(attentionItem.kind, ["mentor_accepted", "mentor_redirected", "mentor_declined"]), eq(mentorRequest.requesterId, userId)),
+          capabilities.isAdmin ? and(eq(attentionItem.kind, "moderation_pending"), exists(db.select({ id: mentorRequestCase.requestId })
+            .from(mentorRequestCase).where(and(eq(mentorRequestCase.requestId, mentorRequest.id), eq(mentorRequestCase.state, "OPEN"))))) : sql`0`,
         ))))),
       and(eq(attentionItem.subjectKind, "accessRequest"), exists(db.select({ id: accessRequest.id }).from(accessRequest)
         .where(and(eq(accessRequest.id, attentionItem.subjectId), or(
