@@ -1,4 +1,4 @@
-import { MASKED_CONTACT, type Channel, type EffectiveFlags, type Message, type ModerationState } from "@/lib/platform/contracts";
+import { MASKED_CONTACT, type Channel, type EffectiveFlags, type Message, type ModerationState, type TemboScope } from "@/lib/platform/contracts";
 
 /*
  * Pure display rules for the channel view (U-2.1): days, times, message
@@ -400,21 +400,32 @@ export function composerTools(channel: Channel, flags: EffectiveFlags): Composer
 }
 
 /** What Tembo reads when asked here (plan §3), in a channel or in one of its threads. */
-export function temboReach(channel: Channel, inThread = false): string {
-  switch (channel.kind) {
+/** What Tembo reads to answer in a kind of channel (B-3.1, src/lib/tembo/README.md "What Tembo sees"). */
+export function temboSees(scope: TemboScope): string {
+  switch (scope) {
     case "COHORT":
       return "this cohort's recordings and this channel";
     case "COMMUNITY":
-      return inThread ? "this thread and public projects" : "this channel and public projects";
+      return "this channel, projects shared in it and public builder profiles";
     case "DIRECT":
       return "only this conversation";
   }
 }
 
+export function temboReach(channel: Channel): string {
+  return temboSees(channel.kind);
+}
+
+/** "in about 3 hours": when today's questions to Tembo come back. */
+export function temboResetsIn(resetsAt: number, now: number): string {
+  const minutes = Math.max(1, Math.ceil((resetsAt - now) / MINUTE));
+  return minutes < 60 ? `in ${plural(minutes, "minute")}` : `in about ${plural(Math.round(minutes / 60), "hour")}`;
+}
+
 /** Tembo's reach as a sentence, with what it never reads, said before anyone asks. One source for every line that says it. */
-export function temboScope(channel: Channel, inThread = false): string {
+export function temboScope(channel: Channel): string {
   if (channel.kind === "DIRECT") return "Only this conversation, and only when you ask.";
-  const reach = temboReach(channel, inThread);
+  const reach = temboReach(channel);
   const never = channel.kind === "COHORT" ? "Never private conversations or other cohorts." : "Never cohort recordings or private conversations.";
   return `${reach.charAt(0).toUpperCase()}${reach.slice(1)}. ${never}`;
 }

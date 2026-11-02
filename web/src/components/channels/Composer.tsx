@@ -7,10 +7,11 @@ import { cx } from "@/components/platform/ui/cx";
 import { embedRef, NO_SHAREABLES, sameEmbed, type Shareables } from "./actions";
 import { composerTools, mentionsTembo, temboReach, temboScope } from "./channel-format";
 import ClipFinder, { useClipFinder } from "./ClipFinder";
-import { AttachedList, ComposerToolbar, MAX_EMBEDS, MentionList } from "./ComposerParts";
+import { AttachedList, ComposerToolbar, MAX_EMBEDS, MentionList, TemboScopeNote } from "./ComposerParts";
 import { insertMention, mentionCandidates, mentionQuery, type MentionCandidate } from "./mentions";
 import type { MomentFinder } from "./moment-search";
 import { useEnterSends } from "./useEnterSends";
+import { useTemboUsage } from "./TemboAnswer";
 
 /** About six lines; past that the box scrolls inside itself. */
 const MAX_HEIGHT_PX = 168;
@@ -125,7 +126,8 @@ export default function Composer({
   const finderId = `${id}-clips`;
   const thread = variant === "thread";
   // One source for Tembo's reach: the @tembo option, the line under it and the scope line agree.
-  const scope = temboScope(channel, thread);
+  const scope = temboScope(channel);
+  const usage = useTemboUsage(me.temboUsage);
   const where = useCallback(
     (person: AuthorSummary) => (threadPeople?.has(person.id ?? "") ? "in this thread" : "in this channel"),
     [threadPeople],
@@ -136,7 +138,7 @@ export default function Composer({
     [people, threadPeople],
   );
   const picker = useMentionPicker(draft.text, draft.caret, {
-    people: ranked, tembo: tools.askTembo, temboDescription: `Answers from ${temboReach(channel, thread)}`, where,
+    people: ranked, tembo: tools.askTembo, temboDescription: `Answers from ${temboReach(channel)}`, where,
   });
 
   // The `@` list and the clip finder share the place above the box: the list, opened by typing, wins.
@@ -224,7 +226,7 @@ export default function Composer({
           candidates={picker.candidates}
           active={picker.active}
           scope={scope}
-          usage={me.temboUsage}
+          usage={usage}
           onChoose={choose}
         />
       )}
@@ -302,11 +304,7 @@ export default function Composer({
           </a>
         </p>
       )}
-      {!thread && tools.askTembo && (
-        <p className="channel-composer__scope">
-          <span className="font-semibold text-ink-secondary">Tembo</span> · Sees: {scope} · You: {me.temboUsage.used} of {me.temboUsage.limit} today
-        </p>
-      )}
+      {!thread && tools.askTembo && <TemboScopeNote scope={scope} usage={usage} />}
     </div>
   );
 }

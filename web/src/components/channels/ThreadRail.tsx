@@ -11,6 +11,7 @@ import type { Shareables } from "./actions";
 import { channelTitle, plural } from "./channel-format";
 import Composer from "./Composer";
 import MessageItem from "./MessageItem";
+import { ThreadQuestions } from "./TemboAnswer";
 import { prefersReducedMotion } from "./motion";
 import Outbox from "./Outbox";
 import { PostingNote } from "./PostingNote";
@@ -199,6 +200,7 @@ export default function ThreadRail({
           </ol>
         )}
         <Outbox composer={composer} parentId={thread.parentId} viewer={me.user} names={names} />
+        <ThreadQuestions threadId={thread.parentId} channel={channel} />
         </div>
       </section>
 

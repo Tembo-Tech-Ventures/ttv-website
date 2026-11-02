@@ -180,3 +180,22 @@ the view's one live region. Signing out clears the tab's channel drafts
 - With the local persona seed and `PLATFORM_PERSONAS_LOCAL_SECRET`
   (`../platform/spaces/README.md`), the same spec makes a message's round trip
   on a real channel page: agree, send, react, read without JavaScript, delete.
+
+## Tembo (U-3.1)
+
+Behind `tembo_channels`; the state is S-3.1's Tembo store (`src/lib/platform/client/tembo.README.md`),
+which ChannelView creates beside the composer and hands to ChannelSurface (`tembo`).
+`TemboAnswer.tsx` holds every Tembo piece the view shows:
+
+- an answer: "Tembo" with an AI badge (Tembo is not a person), its citations (session moments,
+  messages, projects and public profiles), and the footer "Sees: … · You: n of 10 today" with
+  Helpful / Not quite (a fieldset of pressed buttons, shown once the island runs);
+- a question on its way: a placeholder card in its thread, and a line under a root question in
+  the channel; "Check again" after a timeout, "Try again" after a failure that may pass, and the
+  reset time when today's questions are used up;
+- `temboSees` / `temboScope` in channel-format: one wording of what Tembo reads in each kind of
+  channel, for the mention picker, the composer line and an answer's footer.
+
+`e2e/platform-channel-tembo.spec.ts` runs ask → pending → answer → feedback and the exhausted
+allowance on the DEV harness (`&tembo-used=10`; `window.__channelHarness.answerTembo()` answers).
+

@@ -9,6 +9,7 @@ import Button, { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
 import { channelTitle, groupByDay, postingFor } from "./channel-format";
 import MessageItem from "./MessageItem";
+import { ChannelQuestion } from "./TemboAnswer";
 import Outbox from "./Outbox";
 import { CHANNEL_MESSAGES_ID } from "./paths";
 
@@ -242,6 +243,7 @@ export default function MessageList({
                       onOpenThread={onOpenThread}
                       announce={announce}
                     />
+                    <ChannelQuestion messageId={message.id} channel={channel} />
                   </div>
                 </li>
               ))}

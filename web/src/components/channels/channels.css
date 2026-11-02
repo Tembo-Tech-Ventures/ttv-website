@@ -583,9 +583,112 @@
 }
 
 .channel-tembo__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
   margin-top: 0.75rem;
   color: var(--color-ink-muted);
   font-size: 0.8125rem;
+}
+
+.channel-tembo__rate {
+  display: inline-flex;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.channel-tembo__choice {
+  min-height: 2rem;
+  padding: 0 0.625rem;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  color: var(--color-ink-secondary);
+  font-weight: 600;
+}
+
+.channel-tembo__choice:hover {
+  color: var(--color-ink-primary);
+}
+
+.channel-tembo__choice[aria-pressed="true"] {
+  border-color: rgb(242 141 104 / 0.45);
+  background-color: rgb(242 141 104 / 0.12);
+  color: var(--color-peach-ink);
+}
+
+@media (pointer: coarse) {
+  .channel-tembo__choice {
+    min-height: 2.75rem;
+  }
+}
+
+/* A question on its way: a placeholder in the thread, a line under the question in the channel. */
+.channel-tembo-wait {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.channel-tembo-wait--thread {
+  padding: 0.5rem 0;
+}
+
+.channel-tembo-wait--channel {
+  margin-top: 0.375rem;
+  padding-left: 3.25rem;
+}
+
+.channel-tembo-wait__text {
+  color: var(--color-ink-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.channel-tembo-wait__card {
+  max-width: 38rem;
+  margin-top: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px dashed rgb(242 141 104 / 0.4);
+  border-radius: 1.125rem;
+  background-color: rgb(1 33 31 / 0.2);
+}
+
+.channel-tembo-wait__dots {
+  display: inline-flex;
+  gap: 0.25rem;
+  margin-right: 0.5rem;
+  vertical-align: 0.15em;
+}
+
+.channel-tembo-wait__dots span {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 9999px;
+  background-color: var(--color-peach-ink);
+  animation: channel-tembo-dot 1.2s ease-in-out infinite;
+}
+
+.channel-tembo-wait__dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.channel-tembo-wait__dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes channel-tembo-dot {
+  0%, 80%, 100% { opacity: 0.3; }
+  40% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .channel-tembo-wait__dots span {
+    animation: none;
+    opacity: 0.7;
+  }
 }
 
 .channel-ai-badge {
@@ -1345,4 +1448,8 @@
     opacity: 0;
     transform: translateY(0.375rem);
   }
+}
+
+.channel-meta .channel-ai-badge {
+  margin-left: 0;
 }

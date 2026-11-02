@@ -4,7 +4,7 @@ import { MASKED_CONTACT, type Channel, type Message } from "@/lib/platform/contr
 import {
   messageActionsLabel,
   ago, channelTitle, clipTime, clock, composerTools, dayKey, dayLabel, fullTime, groupByDay, mentionsTembo, moderationNotice,
-  openingDivider, parseBody, postingFor, reviewState, temboReach, temboScope, threadSummary,
+  openingDivider, parseBody, postingFor, reviewState, temboReach, temboResetsIn, temboScope, temboSees, threadSummary,
 } from "./channel-format";
 
 const MINUTE = 60_000;
@@ -290,11 +290,21 @@ describe("the composer", () => {
     expect(temboScope(channels.davidConversation)).toBe("Only this conversation, and only when you ask.");
   });
 
-  it("says the same reach everywhere it is said, in a channel and in a thread", () => {
-    expect(temboScope(channels.showYourWork)).toBe("This channel and public projects. Never cohort recordings or private conversations.");
-    expect(temboScope(channels.showYourWork, true)).toBe("This thread and public projects. Never cohort recordings or private conversations.");
-    expect(temboReach(channels.showYourWork)).toBe("this channel and public projects");
-    expect(temboReach(channels.cohort04, true)).toBe("this cohort's recordings and this channel");
+  it("says the same reach everywhere, only what B-3.1 reads, and the same for an answer's stored scope", () => {
+    const community = "this channel, projects shared in it and public builder profiles";
+    expect(temboScope(channels.showYourWork)).toBe(`This channel, projects shared in it and public builder profiles. Never cohort recordings or private conversations.`);
+    expect(temboReach(channels.showYourWork)).toBe(community);
+    expect(temboSees("COMMUNITY")).toBe(community);
+    expect(temboReach(channels.cohort04)).toBe(temboSees("COHORT"));
+    expect(temboSees("DIRECT")).toBe("only this conversation");
+  });
+
+  it("says when today's questions to Tembo come back", () => {
+    expect(temboResetsIn(now + 30_000, now)).toBe("in 1 minute");
+    expect(temboResetsIn(now + 59 * 60_000, now)).toBe("in 59 minutes");
+    expect(temboResetsIn(now + 60 * 60_000, now)).toBe("in about 1 hour");
+    expect(temboResetsIn(now + 200 * 60_000, now)).toBe("in about 3 hours");
+    expect(temboResetsIn(now - 1, now)).toBe("in 1 minute");
   });
 
   it("writes channels with a hash and conversations by name", () => {

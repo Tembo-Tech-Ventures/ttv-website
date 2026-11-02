@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { AuthorSummary, Channel, Me, Message, MessageList as MessagePage } from "@/lib/platform/contracts";
 import type { ChannelStore } from "@/lib/platform/client/channel";
 import type { Composer as ChannelComposer } from "@/lib/platform/client/composer";
+import type { TemboState, TemboStore } from "@/lib/platform/client/tembo";
 import { useChannel, useChannelFeed } from "@/lib/platform/client/hooks/channel";
 import { useComposer } from "@/lib/platform/client/hooks/composer";
+import { createStore, useStore } from "@/lib/platform/client/store";
 import type { ModerationActions, Shareables } from "./actions";
 import { channelTitle, openingDivider } from "./channel-format";
 import Composer from "./Composer";
@@ -11,6 +13,7 @@ import MessageList from "./MessageList";
 import { ModerationProvider } from "./MessageModeration";
 import type { MomentFinder } from "./moment-search";
 import { PostingNote } from "./PostingNote";
+import { TemboProvider } from "./TemboAnswer";
 import ThreadRail, { type ThreadView } from "./ThreadRail";
 import { wheelScrollsList } from "./wheel";
 import "./channels.css";
@@ -21,6 +24,8 @@ export type ChannelSurfaceProps = {
   store: ChannelStore;
   /** S-2.2's composer for this channel: sends, drafts and the outbox, and every edit, deletion and reaction. */
   composer: ChannelComposer;
+  /** S-3.1's questions to Tembo, its allowance and feedback; the composer's `onSent` asks. Null: nothing is asked or rated. */
+  tembo?: TemboStore | null;
   /** The server's clock at render, so day names and times hydrate identically. */
   now: number;
   /** Null: no attach tools (see ChannelView). */
@@ -40,6 +45,8 @@ export type ChannelSurfaceProps = {
 };
 
 const ANNOUNCEMENT_MS = 6_000;
+/** Stands in while Tembo is off: never changes. */
+const NO_TEMBO = createStore<TemboState>({ usage: null, questions: {}, feedback: {}, saving: [], announcement: "" });
 
 function threadUrl(threadId: string | null): string {
   const url = new URL(window.location.href);
@@ -66,7 +73,7 @@ function collectPeople(...lists: ReadonlyArray<readonly (Message | null | undefi
  * it through ChannelView; the DEV harness with both on a fixture API.
  */
 export default function ChannelSurface({
-  me, channel, store, composer, now, shareables, findMoments = null, moderation = null, threadId: initialThreadId = null, initialThread = null,
+  me, channel, store, composer, tembo = null, now, shareables, findMoments = null, moderation = null, threadId: initialThreadId = null, initialThread = null,
   messageId = null, children,
 }: ChannelSurfaceProps) {
   const refresh = useChannelFeed(store);
@@ -86,6 +93,12 @@ export default function ChannelSurface({
   // The store's announcements (new messages and replies) and the composer's (a send that failed, or was
   // flagged) join the same polite region.
   const composerAnnouncement = useComposer(composer, (composerState) => composerState.announcement);
+  // Tembo's questions are watched while the view is up; its news (pending, answered, refused) joins too.
+  useEffect(() => tembo?.retain(), [tembo]);
+  const temboAnnouncement = useStore(tembo ?? NO_TEMBO, (temboState) => temboState.announcement);
+  useEffect(() => {
+    if (temboAnnouncement) setAnnouncement(temboAnnouncement);
+  }, [temboAnnouncement]);
   useEffect(() => {
     if (state.announcement) setAnnouncement(state.announcement);
   }, [state.announcement]);
@@ -99,9 +112,10 @@ export default function ChannelSurface({
     const timer = window.setTimeout(() => {
       setAnnouncement("");
       store.clearAnnouncement();
+      tembo?.clearAnnouncement();
     }, ANNOUNCEMENT_MS);
     return () => window.clearTimeout(timer);
-  }, [announcement, store]);
+  }, [announcement, store, tembo]);
 
   // Open the arriving thread once the store is live.
   useEffect(() => {
@@ -195,6 +209,7 @@ export default function ChannelSurface({
   const posting = channel.archivedAt === null && channel.capabilities.canPost;
 
   return (
+    <TemboProvider store={tembo}>
     <ModerationProvider
       actions={moderation}
       canReport={channel.kind !== "DIRECT"}
@@ -264,5 +279,6 @@ export default function ChannelSurface({
         </p>
       </div>
     </ModerationProvider>
+    </TemboProvider>
   );
 }

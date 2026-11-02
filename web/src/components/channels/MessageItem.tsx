@@ -163,6 +163,7 @@ function MessageMeta({ message, nameId, now, withDay, children }: {
       <span id={nameId} className={cx("channel-author", message.deleted && "text-ink-muted")}>
         {message.deleted ? "Deleted message" : message.author.name}
       </span>
+      {message.authorKind === "TEMBO" && !message.deleted && <span className="channel-ai-badge">AI</span>}
       {!message.deleted && message.author.roleBadges.map((badge) => <RoleBadge key={`${badge.kind}-${badge.label}`} badge={badge} />)}
       <TimeStamp at={message.createdAt} now={now} withDay={withDay} />
       {message.edited && !message.deleted && <span>(edited)</span>}
