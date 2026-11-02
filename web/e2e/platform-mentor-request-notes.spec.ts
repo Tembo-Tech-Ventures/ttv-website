@@ -81,6 +81,10 @@ test("a note Tembo's check held waits, unseen by its mentor, until an admin remo
   await expect(held).toContainText("could we talk about my ledger's reconciliation job?");
   await runAxe(admin, testInfo, "request-notes");
   await admin.screenshot({ path: `${EVIDENCE}/admin-request-notes-1440.png`, fullPage: true });
+  await admin.setViewportSize({ width: 390, height: 844 });
+  expect(await admin.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await admin.screenshot({ path: `${EVIDENCE}/admin-request-notes-390.png`, fullPage: true });
+  await admin.setViewportSize({ width: 1440, height: 900 });
 
   // A reason is needed, for the record: the browser asks for it before anything is sent (the server refuses too).
   await held.getByRole("button", { name: /^Remove: close it, Achieng Otieno's request/ }).click();
@@ -179,4 +183,10 @@ test("a reported note an admin removes reads as closed to the person asking, nev
   await expect(row).toHaveCount(1);
   await expect(row).not.toContainText(/declin|withdrawn|report|Not this month/i);
   await expect(row.getByRole("button", { name: "Withdraw" })).toHaveCount(0);
+
+  // David reads that the request he reported is closed, and nothing about Wanjiku withdrawing it.
+  await visit(david, REQUESTS);
+  const closed = david.locator("[data-mentor-request]").filter({ hasText: note });
+  await expect(closed).toContainText("You reported this request. It's closed.");
+  await expect(closed).not.toContainText(/withdr/i);
 });

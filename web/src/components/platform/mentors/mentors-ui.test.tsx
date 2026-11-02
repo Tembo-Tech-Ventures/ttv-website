@@ -308,6 +308,23 @@ describe("a mentor's requests", () => {
     expect(q("[data-waiting-count]")!.getAttribute("data-waiting-count")).toBe("1");
   });
 
+  it("keeps the reason when a report doesn't go through, so it can be sent again", async () => {
+    await queue((request) => request.method === "POST" && request.url.endsWith("/report")
+      ? { status: 503, data: { error: { code: "unavailable", message: "Try again." } } } : undefined);
+    await act(async () => button(pendingMentorRequest.id, "Report this request").click());
+    const reason = request(pendingMentorRequest.id).querySelector<HTMLTextAreaElement>("[data-report-request] textarea")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(reason, "Asked for my phone number.");
+      reason.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => request(pendingMentorRequest.id).querySelector<HTMLFormElement>("[data-report-request]")!.requestSubmit());
+    await settle();
+    const failed = request(pendingMentorRequest.id);
+    expect(failed.textContent).toContain("That didn't go through");
+    expect(failed.querySelector<HTMLTextAreaElement>("[data-report-request] textarea")!.value).toBe("Asked for my phone number.");
+    expect(failed.querySelector("[data-report-request]")!.closest("[hidden]")).toBeNull();
+  });
+
   it("shows a request reported earlier as closed, with nothing to press", async () => {
     const reported = { ...pendingMentorRequest, check: "reported" as const };
     await act(async () => root.render(<MentorRequestsQueue initial={{ items: [reported], nextCursor: null }} mentors={mentors.items} availability={availability} anotherLook={null} now={FIXTURE_NOW} />));

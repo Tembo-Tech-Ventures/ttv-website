@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { MentorRequestCase } from "@/lib/platform/contracts";
 import { FIXTURE_NOW, people, pendingMentorRequest } from "@/lib/platform/fixtures";
-import { caseCause, DECIDED_NOTE_NOTICE, requestNotesPaths, requestNotesRequest, type RequestNotesSource } from "./request-notes";
+import {
+  caseCause, DECIDED_NOTE_NOTICE, moderationView, requestNotesLink, requestNotesPaths, requestNotesRequest, type RequestNotesSource,
+} from "./request-notes";
 
 const paths = requestNotesPaths("/admin/moderation");
 const held: MentorRequestCase = {
@@ -38,6 +40,21 @@ describe("requestNotesPaths", () => {
     expect(paths.tab("DECIDED")).toBe("/admin/moderation?tab=request-notes&state=DECIDED");
     expect(paths.page("OPEN", "c 1")).toBe("/admin/moderation?tab=request-notes&cursor=c+1");
     expect(paths.decided("remove")).toBe("/admin/moderation?tab=request-notes&decided=remove");
+  });
+});
+
+describe("with mentor_requests off", () => {
+  it("shows the message queue whatever ?tab= says, and offers no Request notes link", () => {
+    const asks = new URLSearchParams("tab=request-notes");
+    expect(moderationView(asks, false)).toBe("queue");
+    expect(requestNotesLink(false, paths)).toBeUndefined();
+  });
+
+  it("shows Request notes only when it is on and asked for", () => {
+    expect(moderationView(new URLSearchParams("tab=request-notes"), true)).toBe("request-notes");
+    expect(moderationView(new URLSearchParams("tab=other"), true)).toBe("queue");
+    expect(moderationView(new URLSearchParams(), true)).toBe("queue");
+    expect(requestNotesLink(true, paths)).toBe("/admin/moderation?tab=request-notes");
   });
 });
 

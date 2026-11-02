@@ -18,9 +18,11 @@ import { caseCause, type RequestNotesViewProps } from "./request-notes";
 type Props = RequestNotesViewProps & {
   /** The message queue's tabs, so the whole page reads as one set of lists. */
   queueTabs: ModerationTab[];
+  /** The admin reading: one who is party to a request can't decide it (B-4.1), so they get no form for it. */
+  viewerId: string;
 };
 
-const { state, items, formAction, tabHrefs, nextHref, paged, notice, failure, rowError, queueTabs } = Astro.props;
+const { state, items, formAction, tabHrefs, nextHref, paged, notice, failure, rowError, queueTabs, viewerId } = Astro.props;
 const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 const PILL = "inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font-semibold transition-colors motion-reduce:transition-none";
@@ -85,7 +87,9 @@ const PILL = "inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font
                   {FORMAT_LABELS[request.format]} · opened {formatModerationTime(item.openedAt)}
                 </p>
               </div>
-              <Chip tone={item.report ? "peach" : "ring"}>{item.report ? "Reported by the mentor" : "Held by Tembo's check"}</Chip>
+              <div class="order-last basis-full sm:order-none sm:basis-auto">
+                <Chip tone={item.report ? "peach" : "ring"}>{item.report ? "Reported by the mentor" : "Held by Tembo's check"}</Chip>
+              </div>
             </div>
 
             <p class="mt-4 text-sm text-ink-secondary" data-request-note-cause>{caseCause(item)}</p>
@@ -111,6 +115,8 @@ const PILL = "inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font
                 {` by ${decision.by?.name ?? "a former admin"}, ${formatModerationTime(decision.decidedAt)}: `}
                 <span class="break-words">{decision.reason}</span>
               </p>
+            ) : viewerId === asker.id || viewerId === mentor.id ? (
+              <p class="mt-5 text-sm text-ink-secondary" data-request-note-own>Another admin needs to check a request you're part of.</p>
             ) : (
               <form method="POST" action={formAction} class="mt-5 space-y-3" data-request-note-form>
                 <input type="hidden" name="requestId" value={item.id} />

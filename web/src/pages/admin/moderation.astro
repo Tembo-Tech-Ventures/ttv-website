@@ -21,7 +21,7 @@ import ModerationQueueView from "@/components/admin/moderation/ModerationQueueVi
 import RequestNotesView from "@/components/admin/moderation/RequestNotesView.astro";
 import { MODERATION_PATH, QUEUE_TABS } from "@/components/admin/moderation/case-model";
 import {
-  REQUEST_NOTES_LABEL, REQUEST_NOTES_TAB, requestNotesPaths, requestNotesRequest, type RequestNotesViewProps,
+  moderationView, REQUEST_NOTES_LABEL, requestNotesLink, requestNotesPaths, requestNotesRequest, type RequestNotesViewProps,
 } from "@/components/admin/moderation/request-notes";
 import { mentoringRequest } from "@/lib/mentoring/http";
 import { ROUTES } from "@/lib/platform/contracts";
@@ -54,11 +54,11 @@ const requestNotesOn = await isFlagEnabled(flagContext, "mentor_requests");
 const paths = queuePaths(MODERATION_PATH);
 const notesPaths = requestNotesPaths(MODERATION_PATH);
 
-let notesView: (RequestNotesViewProps & { queueTabs: ModerationTab[] }) | null = null;
+let notesView: (RequestNotesViewProps & { queueTabs: ModerationTab[]; viewerId: string }) | null = null;
 let queueView: (QueueViewProps & { requestNotesHref?: string }) | null = null;
 let pendingCount = 0;
 
-if (requestNotesOn && Astro.url.searchParams.get("tab") === REQUEST_NOTES_TAB) {
+if (moderationView(Astro.url.searchParams, requestNotesOn) === "request-notes") {
   const api = (operation: "listMentorRequestCases" | "decideMentorRequestCase", request: Request, params: Record<string, string> = {}) =>
     mentoringRequest(operation, { request, locals: Astro.locals, params }, env);
   const notes = await requestNotesRequest(Astro.request, Astro.url, {
@@ -80,6 +80,7 @@ if (requestNotesOn && Astro.url.searchParams.get("tab") === REQUEST_NOTES_TAB) {
   pendingCount = await countPendingModeration(env.DB);
   notesView = {
     ...notes.props,
+    viewerId: user.id,
     queueTabs: [
       ...QUEUE_TABS.map((tab) => ({ label: tab.label, href: paths.tab(tab.state), current: false, ...(tab.state === "PENDING" ? { count: pendingCount } : {}) })),
       { label: REQUEST_NOTES_LABEL, href: notesPaths.tab("OPEN"), current: true },
@@ -96,7 +97,8 @@ if (requestNotesOn && Astro.url.searchParams.get("tab") === REQUEST_NOTES_TAB) {
   if (outcome.kind === "redirect") return Astro.redirect(outcome.location, 303);
   Astro.response.status = outcome.status;
   pendingCount = outcome.props.pendingCount;
-  queueView = { ...outcome.props, ...(requestNotesOn ? { requestNotesHref: notesPaths.tab("OPEN") } : {}) };
+  const requestNotesHref = requestNotesLink(requestNotesOn, notesPaths);
+  queueView = { ...outcome.props, ...(requestNotesHref ? { requestNotesHref } : {}) };
 }
 ---
 

@@ -163,8 +163,12 @@ export function requesterStatus(
 export function mentorStatus(
   request: Pick<MentorRequest, "requester" | "redirectedTo"> & Partial<Pick<MentorRequest, "check">>, status: MentorRequestStatus,
 ): StatusView {
-  if (request.check === "reported" && status === "PENDING") {
-    return { label: "Reported", tone: "neutral", detail: "You reported this request. TTV is checking it, and it stays closed for you unless they send it back." };
+  // A report replaces what the status says, whatever it is. Once closed, it never says who closed it: an
+  // admin's removal and the person withdrawing while TTV checked look the same from here.
+  if (request.check === "reported") {
+    return status === "PENDING"
+      ? { label: "Reported", tone: "neutral", detail: "You reported this request. TTV is checking it, and it stays closed for you unless they send it back." }
+      : { label: "Reported", tone: "neutral", detail: "You reported this request. It's closed." };
   }
   const requester = firstName(request.requester.name);
   switch (status) {

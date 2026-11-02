@@ -20,6 +20,19 @@ import { REASON_MAX } from "./decision-form";
 export const REQUEST_NOTES_TAB = "request-notes";
 export const REQUEST_NOTES_LABEL = "Request notes";
 
+/**
+ * Which list /admin/moderation shows: Request notes only while `mentor_requests` is on for this admin and
+ * the address asks for it; otherwise the message queue, whatever `?tab=` says.
+ */
+export function moderationView(search: URLSearchParams, requestNotesOn: boolean): "request-notes" | "queue" {
+  return requestNotesOn && search.get("tab") === REQUEST_NOTES_TAB ? "request-notes" : "queue";
+}
+
+/** The message queue's link to Request notes: none while `mentor_requests` is off. */
+export function requestNotesLink(requestNotesOn: boolean, paths: Pick<RequestNotesPaths, "tab">): string | undefined {
+  return requestNotesOn ? paths.tab("OPEN") : undefined;
+}
+
 /** Sends to the API's own handler, as GET /api/moderation/mentor-requests and POST …/:id would. */
 export interface RequestNotesSource {
   list(query: MentorRequestCaseQuery): Promise<Response>;

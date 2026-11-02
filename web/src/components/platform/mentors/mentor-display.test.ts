@@ -124,5 +124,9 @@ describe("checks on a note (B-4.1)", () => {
   it("tells the mentor a request they reported is closed for them while TTV checks it", () => {
     expect(mentorStatus({ ...request, check: "reported" }, "PENDING")).toMatchObject({ label: "Reported", tone: "neutral" });
     expect(mentorStatus({ ...request, check: null }, "PENDING").label).toBe("Waiting for you");
+    // Closed after a report (an admin removed it, or it was withdrawn meanwhile): never who closed it.
+    const closed = mentorStatus({ ...request, check: "reported" }, "WITHDRAWN");
+    expect(closed).toEqual({ label: "Reported", tone: "neutral", detail: "You reported this request. It's closed." });
+    expect(`${closed.label} ${closed.detail}`).not.toMatch(/withdr|Wanjiku/i);
   });
 });

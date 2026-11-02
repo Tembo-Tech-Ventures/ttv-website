@@ -109,11 +109,12 @@ function RequestCard({ store, request, mentors, now, compact = false }: {
   const view = mentorStatus(request, state.status);
   const open = state.status === "PENDING" && !state.pending && request.check !== "reported";
 
-  function answered(run: () => Promise<unknown>) {
-    void run();
+  function answered<T>(run: () => Promise<T>): Promise<T> {
+    const result = run();
     // The buttons give way to the answer: focus stays on this request (its heading), and the live
     // region says how it went. Nothing visible moves when focus leaves it again.
     headingRef.current?.focus();
+    return result;
   }
 
   return (
@@ -137,7 +138,11 @@ function RequestCard({ store, request, mentors, now, compact = false }: {
         <output className="text-sm font-semibold text-danger-ink">That didn't go through, so nothing changed. Try again.</output>
       )}
 
-      {open && <RequestAnswers store={store} request={request} mentors={mentors} now={now} whoId={`${ids}-who`} onAnswer={answered} />}
+      {/* Mounted while the server's request waits, and only hidden while an answer is on its way, so a
+          suggestion or report that fails comes back with what the mentor wrote. */}
+      {request.status === "PENDING" && request.check !== "reported" && (
+        <RequestAnswers store={store} request={request} mentors={mentors} now={now} whoId={`${ids}-who`} busy={!open} onAnswer={answered} />
+      )}
       {state.status === "ACCEPTED" && request.channelId && (
         <a href={conversationHref(request.channelId)} className={cx(LINK, "w-fit")}>
           Open conversation with {name} <PiArrowRight aria-hidden className="size-4" />
@@ -150,11 +155,13 @@ function RequestCard({ store, request, mentors, now, compact = false }: {
 const FIELD = cx("w-full rounded-xl border border-hairline bg-ink-primary/4 px-3.5 py-2.5 text-[0.9375rem] text-ink-primary aria-invalid:border-danger-ink", FOCUS_RING);
 
 /** The three answers, and the panels that replace them: suggesting another mentor, or reporting the note. */
-function RequestAnswers({ store, request, mentors, now, whoId, onAnswer }: {
+function RequestAnswers({ store, request, mentors, now, whoId, busy, onAnswer }: {
   store: MentorRequestsStore; request: MentorRequest; mentors: readonly MentorDirectoryItem[]; now: number;
   /** The request's heading, which every answer names. */
   whoId: string;
-  onAnswer: (run: () => Promise<unknown>) => void;
+  /** An answer is on its way: nothing here can be pressed, and the panels keep their drafts. */
+  busy: boolean;
+  onAnswer: <T>(run: () => Promise<T>) => Promise<T>;
 }) {
   const [panel, setPanel] = useState<"answers" | "suggest" | "report">("answers");
   const actionsRef = useRef<HTMLDivElement>(null);
@@ -165,7 +172,7 @@ function RequestAnswers({ store, request, mentors, now, whoId, onAnswer }: {
   };
 
   return (
-    <>
+    <div hidden={busy}>
       {panel === "answers" && (
         <div ref={actionsRef} className="flex flex-wrap items-center gap-2">
           {/* Each answer names whose request it answers, as the list holds several. */}
@@ -183,17 +190,17 @@ function RequestAnswers({ store, request, mentors, now, whoId, onAnswer }: {
           mentors={mentors}
           now={now}
           onCancel={() => backToAnswers("data-suggest-trigger")}
-          onSuggest={(choice) => { setPanel("answers"); onAnswer(() => store.redirect(request.id, choice)); }}
+          onSuggest={(choice) => { void onAnswer(() => store.redirect(request.id, choice)); }}
         />
       )}
       {panel === "report" && (
         <ReportRequest
           name={name}
           onCancel={() => backToAnswers("data-report-trigger")}
-          onReport={(reason) => { setPanel("answers"); onAnswer(() => store.report(request.id, reason)); }}
+          onReport={(reason) => { void onAnswer(() => store.report(request.id, reason)); }}
         />
       )}
-    </>
+    </div>
   );
 }
 
@@ -227,7 +234,7 @@ function ReportRequest({ name, onCancel, onReport }: { name: string; onCancel: (
       <label htmlFor={`${ids}-reason`} className="text-[0.9375rem] font-semibold text-ink-primary">What's wrong with this request?</label>
       <p id={`${ids}-hint`} className="text-sm text-ink-secondary">
         For a note that breaks how we talk to each other. TTV checks it, and it closes for you meanwhile.
-        {` ${name} sees only that it's being checked, not who asked. If you'd just rather not take it, "Not this month" is enough.`}
+        {` ${name} sees only that it's being checked, not that you reported it. If you'd just rather not take it, "Not this month" is enough.`}
       </p>
       <textarea
         ref={fieldRef} id={`${ids}-reason`} rows={3} maxLength={REPORT_MAX} value={reason}
