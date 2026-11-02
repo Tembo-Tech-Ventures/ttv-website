@@ -37,7 +37,7 @@ describe("search state", () => {
     expect(store.getState().open).toBe(false); stop();
   });
 
-  it("debounces, validates query encoding once, exposes every group and strips future messages", async () => {
+  it("debounces, validates query encoding once, and exposes every group, messages first", async () => {
     const q = "retry & % /? #";
     const fetch = vi.fn(async () => Response.json(result(q)));
     const { store, stop } = setup(fetch);
@@ -48,9 +48,10 @@ describe("search state", () => {
     expect(new URL(url, "https://test.invalid").searchParams.get("q")).toBe(q);
     expect(init.method).toBe("GET"); expect(init.credentials).toBe("same-origin");
     expect(store.getState().status).toBe("ready");
-    expect(store.getState().results).toMatchObject({ messages: [], people: searchResults.people, projects: searchResults.projects, sessionMoments: searchResults.sessionMoments });
-    expect(store.getState().items.map(x => x.group)).toEqual(["people", "projects", "sessionMoments"]);
-    expect(store.getState().announcement).toBe("3 search results"); stop();
+    expect(store.getState().results).toMatchObject({ messages: searchResults.messages, people: searchResults.people, projects: searchResults.projects, sessionMoments: searchResults.sessionMoments });
+    expect([...new Set(store.getState().items.map(x => x.group))]).toEqual(["messages", "people", "projects", "sessionMoments"]);
+    expect(store.getState().items[0]).toEqual({ group: "messages", item: searchResults.messages[0] });
+    expect(store.getState().announcement).toBe("5 search results"); stop();
   });
 
   it("replaces cohort scope without double-encoding opaque ids and can clear it", async () => {
@@ -121,7 +122,7 @@ describe("search state", () => {
   });
 
   it.each([0, 1])("announces %i results grammatically", async count => {
-    const fetch = vi.fn(async () => Response.json({ ...result("test"), people: searchResults.people.slice(0, count), projects: [], sessionMoments: [] }));
+    const fetch = vi.fn(async () => Response.json({ ...result("test"), messages: [], people: searchResults.people.slice(0, count), projects: [], sessionMoments: [] }));
     const { store, stop } = setup(fetch);
     store.setQuery("test");
     await vi.advanceTimersByTimeAsync(250);
@@ -167,11 +168,13 @@ describe("search state", () => {
 
   it("bounds and deduplicates result groups, resets selection, and returns selected metadata", async () => {
     const people = Array.from({ length: 80 }, (_, i) => ({ ...searchResults.people[0], person: { ...searchResults.people[0].person, id: `synthetic-${i}` } }));
-    const data = { ...result("test"), people: [...people, ...people], projects: [...searchResults.projects, ...searchResults.projects], sessionMoments: [...searchResults.sessionMoments, ...searchResults.sessionMoments] };
+    const data = { ...result("test"), messages: [...searchResults.messages, ...searchResults.messages], people: [...people, ...people], projects: [...searchResults.projects, ...searchResults.projects], sessionMoments: [...searchResults.sessionMoments, ...searchResults.sessionMoments] };
     const { store, stop } = setup(vi.fn(async () => Response.json(data))); store.setQuery("test"); await vi.advanceTimersByTimeAsync(250);
     expect(store.getState().results?.people).toHaveLength(SEARCH_GROUP_LIMIT); expect(store.getState().results?.projects).toHaveLength(1);
-    expect(store.select()).toBeNull(); store.key("Home"); expect(store.select()).toMatchObject({ group: "people", item: { visibility: searchResults.people[0].visibility } });
-    store.key("End"); expect(store.getState().selected).toBe(51); store.key("ArrowDown"); expect(store.getState().selected).toBe(51);
+    // Messages keep the server's href and are unique by id.
+    expect(store.getState().results?.messages).toEqual(searchResults.messages);
+    expect(store.select()).toBeNull(); store.key("Home"); expect(store.select()).toMatchObject({ group: "messages", item: { href: searchResults.messages[0].href } });
+    store.key("End"); expect(store.getState().selected).toBe(53); store.key("ArrowDown"); expect(store.getState().selected).toBe(53);
     store.setQuery("other"); expect(store.getState().selected).toBe(-1); expect(store.select()).toBeNull(); stop();
   });
 
@@ -197,7 +200,7 @@ describe("search state", () => {
     const store = createSearchStore({ enabled: true, mock: true }); const stop = store.connect(); store.setOpen(true); store.setQuery(query.q);
     await vi.advanceTimersByTimeAsync(250); // dynamic module resolution may need one event-loop turn
     await vi.waitFor(() => expect(store.getState().status).toBe("ready"));
-    expect(SearchResults.safeParse(store.getState().results).success).toBe(true); expect(store.getState().results?.messages).toEqual([]);
+    expect(SearchResults.safeParse(store.getState().results).success).toBe(true); expect(store.getState().results?.messages).toEqual(searchResults.messages);
     const { ROUTES } = await import("../../contracts");
     expect((await client.call(ROUTES.search, { query: { ...query, scope: "people" } })).sessionMoments).toEqual([]);
     expect((await client.call(ROUTES.search, { query: { ...query, programId: "unrelated" } })).sessionMoments).toEqual([]); stop();

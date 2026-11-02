@@ -1,8 +1,8 @@
 import type { AstroGlobal } from "astro";
 import { env } from "cloudflare:workers";
-import type { Channel, ConductAcknowledgement } from "@/lib/platform/contracts";
+import type { Channel, ChannelShareables, ConductAcknowledgement } from "@/lib/platform/contracts";
 import { isAgentSession } from "@/lib/agent-auth";
-import { getRouteChannel } from "@/lib/platform/server/channel-context";
+import { getRouteChannel, getRouteChannelShareables } from "@/lib/platform/server/channel-context";
 import type { ChannelSpace } from "@/lib/platform/server/space-routes";
 import { resolveSpacePage, type SpacePageContext } from "@/components/platform/spaces/space-page";
 import type { SpacePageKey } from "@/components/platform/spaces/sidebar";
@@ -83,4 +83,17 @@ export async function resolveChannelPage(astro: AstroGlobal, space: ChannelSpace
 /** "How we talk to each other" at CONDUCT_PATH. Agreeing here keeps the person on the page, now with the date. */
 export async function resolveConductPage(astro: AstroGlobal): Promise<ChannelsPage | Response> {
   return resolve(astro, "conduct", async () => ({}));
+}
+
+/**
+ * What the route channel's composer can attach (B-2.4), or null, which shows no attach tools. The
+ * conversation matters more than the tools: when loading them fails the page still renders, without them.
+ */
+export async function loadRouteShareables(astro: Pick<AstroGlobal, "locals" | "url">): Promise<ChannelShareables | null> {
+  try {
+    return await getRouteChannelShareables(astro);
+  } catch (error) {
+    console.error("Channel page: shareables unavailable, attach tools hidden", error);
+    return null;
+  }
 }

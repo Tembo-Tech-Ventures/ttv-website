@@ -2,9 +2,9 @@
  * DEV harness only: what the server would send each synthetic person for
  * each fixture channel. Messages are read from fixtures.ts; moderation is
  * shaped as the contract promises (state and reasons only for the author and
- * moderators, hidden messages only for them).
+ * moderators, hidden messages only for them) and embeds as B-2.4 builds them.
  */
-import type { Channel, Me, Message, MessageList, SessionClipEmbed } from "@/lib/platform/contracts";
+import type { Channel, Me, Message, MessageEmbedView, MessageList, ProjectEmbed, SessionClipEmbed } from "@/lib/platform/contracts";
 import { channels, fixtureIds, messages, people, projects, sessionClip } from "@/lib/platform/fixtures";
 import type { Shareables } from "../actions";
 
@@ -26,13 +26,26 @@ function canModerate(channel: Channel, me: Me): boolean {
   return channel.kind === "COHORT" && mentorCohortIds.includes(channel.programId ?? "");
 }
 
-/** One message as this person receives it, or null when they may not see it. */
-export function asSeenBy(message: Message, channel: Channel, me: Me): Message | null {
-  if (!message.moderation) return message;
-  const privileged = message.author.id === me.user.id || canModerate(channel, me);
-  if (privileged) return message;
-  if (message.moderation.state === "HIDDEN") return null;
-  return { ...message, moderation: null };
+/**
+ * A project as the server sends it: B-2.4 gives a project no skills of its own (the owner's profile
+ * skills are not this project's), so the fixtures' skills never reach a card.
+ */
+export const served = (project: ProjectEmbed): ProjectEmbed => ({ ...project, skills: [] });
+const servedEmbed = (embed: MessageEmbedView): MessageEmbedView => (embed.type === "project" ? served(embed) : embed);
+
+/**
+ * One message as this person receives it, or null when they may not see it. Only the author and
+ * admins learn whether a review was asked for (B-2.5).
+ */
+export function asSeenBy(fixture: Message, channel: Channel, me: Me): Message | null {
+  const message = fixture.embeds.length > 0 ? { ...fixture, embeds: fixture.embeds.map(servedEmbed) } : fixture;
+  const { moderation } = message;
+  if (!moderation) return message;
+  const own = message.author.id === me.user.id;
+  if (!own && !canModerate(channel, me)) return moderation.state === "HIDDEN" ? null : { ...message, moderation: null };
+  if (own || me.capabilities.isAdmin || moderation.reviewRequested === undefined) return message;
+  const { reviewRequested: _private, ...shown } = moderation;
+  return { ...message, moderation: shown };
 }
 
 /** The fixture channel this person may open, described as the server would to them; null when they may not. */
@@ -76,5 +89,5 @@ export function shareablesFor(me: Me): Shareables {
     (project.journeyId === fixtureIds.chamaLedger && me.user.id === people.achieng.id)
     || (project.journeyId === fixtureIds.fareSplitter && me.user.id === people.wanjiku.id));
   const clips = me.capabilities.cohortIds.includes(fixtureIds.cohort04) ? [sessionClip, session07] : [];
-  return { projects: own, clips };
+  return { projects: own.map(served), clips };
 }

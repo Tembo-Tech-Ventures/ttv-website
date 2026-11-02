@@ -24,16 +24,13 @@ import { createModerationActions } from "./moderation-actions";
 
 const showYourWork = (me: Me) => channelFor("show-your-work", me)!;
 
-function setup(me: Me, channel: Channel, options: { failure?: MockOptions["failure"]; review?: boolean } = {}) {
+function setup(me: Me, channel: Channel, options: { failure?: MockOptions["failure"] } = {}) {
   const initial = channelPage(channel, me);
   const now = () => FIXTURE_NOW + 60_000;
   const client = createHarnessClient({ me, channel, root: initial, shareables: shareablesFor(me), now, failure: options.failure });
   const store = createChannelStore({ channelId: channel.id, enabled: true, viewerId: me.user.id, initial, api: client.api });
   const composer = createComposer({ store, me, api: client.api, now });
-  const moderation: ModerationActions = {
-    ...createModerationActions({ store, api: client.api }),
-    ...(options.review === false ? {} : { requestReview: client.requestReview }),
-  };
+  const moderation: ModerationActions = createModerationActions({ store, api: client.api });
   return { client, store, composer, moderation };
 }
 
@@ -286,9 +283,36 @@ describe("the author's own flagged and hidden messages", () => {
     expect(document.activeElement?.textContent).toBe("Review requested. An admin will look at it again.");
   });
 
-  it("offers deleting a hidden message, not editing it, and no review button until the server takes requests", async () => {
-    await mount(dennis, { review: false });
-    expect($("[data-ask-review]")).toBeNull();
+  it("says a review was asked for after a reload, because the server says so, and offers no second ask", async () => {
+    await mount(dennis);
+    const message = article(messages.hiddenReviewRequested.id);
+    expect($("[data-review-requested]", message)?.textContent).toBe("Review requested. An admin will look at it again.");
+    expect($("[data-ask-review]", message)).toBeNull();
+  });
+
+  it("keeps the form and says why when the server refuses a review, and asks nothing", async () => {
+    const { client } = await mount(dennis, {
+      failure: (request) => (request.url.endsWith("/review") ? { status: 409, data: { error: { code: "conflict", message: "An admin has already reviewed this message." } } } : undefined),
+    });
+    const message = article(messages.hidden.id);
+    await click($("[data-ask-review]", message));
+    const form = $<HTMLFormElement>("[data-panel=review]")!;
+    await click($("button[type=submit]", form));
+    await act(frame);
+    expect($("[role=alert]", form)?.textContent).toBe("An admin has already decided on this message, or it is no longer hidden. Close this and look again.");
+    expect(client.moderation()).toEqual([]);
+    expect($("[data-review-requested]", message)).toBeNull();
+  });
+
+  it("does not tell a mentor who moderates the channel whether the author asked for a review", async () => {
+    await mount(meByPersona.david);
+    const message = article(messages.hiddenReviewRequested.id);
+    expect($("[data-moderation=HIDDEN]", message)).not.toBeNull();
+    expect($("[data-review-requested]", message)).toBeNull();
+  });
+
+  it("offers deleting a hidden message, not editing it", async () => {
+    await mount(dennis);
     const names = await menuNames(messages.hidden.id);
     expect(names).toContain("Delete…");
     expect(names).not.toContain("Edit");
@@ -355,6 +379,19 @@ describe("createModerationActions", () => {
     expect(result).toEqual(hidden);
   });
 
+  it("asks for a review through B-2.5's route, with the note only when there is one", async () => {
+    const { api, seen } = client(() => ({ data: { ok: true } }));
+    const update = vi.fn();
+    const actions = createModerationActions({ store: { update }, api });
+    await actions.requestReview(messages.hidden.id, "I was quoting the brief.");
+    await actions.requestReview(messages.hidden.id, null);
+    expect(seen).toEqual([
+      { method: "POST", path: `/api/messages/${messages.hidden.id}/review`, body: { note: "I was quoting the brief." } },
+      { method: "POST", path: `/api/messages/${messages.hidden.id}/review`, body: {} },
+    ]);
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it("rejects with the server's error and changes nothing", async () => {
     const { api } = client(() => ({ status: 409, data: { error: { code: "conflict", message: "Changed" } } }));
     const update = vi.fn();
@@ -388,6 +425,8 @@ describe("words", () => {
     expect(moderationFailure(new ApiError("forbidden", 403, "x"), "moderate")).toBe("You can't moderate this channel.");
     expect(moderationFailure(new ApiError("forbidden", 403, "x"), "report")).toBe("You can't report this message.");
     expect(moderationFailure(new ApiError("forbidden", 403, "x"), "review")).toBe("You can ask for a review of your own messages only.");
+    expect(moderationFailure(new ApiError("conflict", 409, "x"), "review")).toBe("An admin has already decided on this message, or it is no longer hidden. Close this and look again.");
+    expect(moderationFailure(new ApiError("conflict", 409, "x"), "moderate")).toBe("An admin has already decided on this message, or it has changed. Close this and look again.");
     expect(moderationFailure(new ApiError("network_error", 0, "x"), "report")).toBe("Couldn't reach TTV. Check your connection and try again.");
     expect(moderationFailure(new ApiError("server", 500, "x"), "report")).toBe("Something went wrong on our side. Try again.");
     expect(moderationFailure(new ApiError("unauthorized", 401, "x"), "report")).toBe("Your session ended. Sign in again, then try again.");

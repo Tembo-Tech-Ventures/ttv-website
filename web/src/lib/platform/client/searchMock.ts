@@ -10,7 +10,8 @@ export function createSearchMockClient() {
     reply: ({ request }) => {
       const params = new URL(request.url).searchParams;
       const query = SearchQuery.parse(Object.fromEntries(params));
-      return { data: SearchResults.parse({ ...searchResults, query, messages: [],
+      return { data: SearchResults.parse({ ...searchResults, query,
+        messages: ["all", "messages"].includes(query.scope) ? searchResults.messages : [],
         people: ["all", "people", "community"].includes(query.scope) ? searchResults.people : [],
         projects: ["all", "projects", "community"].includes(query.scope) ? searchResults.projects : [],
         sessionMoments: ["all", "cohort", "sessionMoments"].includes(query.scope)

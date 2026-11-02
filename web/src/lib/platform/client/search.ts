@@ -53,7 +53,8 @@ function boundedResults(data: SearchResults): SearchResults {
     }
     return bounded;
   }
-  return { ...data, messages: [], // Channel search is deferred until B-2.6.
+  return { ...data,
+    messages: unique(data.messages, x => x.id),
     people: unique(data.people, x => x.person.id),
     projects: unique(data.projects, x => JSON.stringify([x.journeyId, x.version])),
     sessionMoments: unique(data.sessionMoments, x => JSON.stringify([x.recordingId, x.startSeconds])),
@@ -123,6 +124,7 @@ export function createSearchStore(options: SearchOptions = {}) {
       if (!sameQuery(raw.query, query)) throw new ApiError("invalid_response", 200, "Search response query mismatch");
       const results = boundedResults(raw);
       const items: SearchItem[] = [
+        ...results.messages.map(item => ({ group: "messages" as const, item })),
         ...results.people.map(item => ({ group: "people" as const, item })),
         ...results.projects.map(item => ({ group: "projects" as const, item })),
         ...results.sessionMoments.map(item => ({ group: "sessionMoments" as const, item })),

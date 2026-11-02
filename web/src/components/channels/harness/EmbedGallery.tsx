@@ -7,10 +7,11 @@
 import { people, projects, sessionClip } from "@/lib/platform/fixtures";
 import type { MessageEmbedView } from "@/lib/platform/contracts";
 import EmbedCard from "../EmbedCard";
+import { served } from "./fixture-pages";
 import "../channels.css";
 
-const ledger = projects.chamaLedger;
-const fare = projects.fareSplitter;
+const ledger = served(projects.chamaLedger);
+const fare = served(projects.fareSplitter);
 
 
 export const EMBED_SCENES: readonly { key: string; title: string; embed: MessageEmbedView; compact?: boolean }[] = [

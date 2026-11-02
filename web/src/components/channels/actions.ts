@@ -18,13 +18,13 @@ export type InPlaceModeration = "hide" | "restore";
  * Reporting, moderating and asking for a review: one-shot calls, each
  * resolving when the server has accepted it or rejecting with its ApiError.
  * A changed message comes back confirmed and replaces the cached copy.
- * Hiding is for the channel's moderators, restoring for admins (B-2.5). `requestReview`
- * is absent until the server offers it, and so is the button.
+ * Hiding is for the channel's moderators, restoring for admins, and asking
+ * for a review for the author of a hidden message (B-2.5).
  */
 export interface ModerationActions {
   report(messageId: string, reason: string): Promise<void>;
   moderate(messageId: string, action: InPlaceModeration, reason: string): Promise<Message>;
-  requestReview?: (messageId: string, note: string | null) => Promise<void>;
+  requestReview(messageId: string, note: string | null): Promise<void>;
 }
 
 /** Work a person can attach from the composer, resolved by the page. */

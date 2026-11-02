@@ -71,7 +71,7 @@ export default function HarnessChannel({ me, channel, initial, initialThread, th
       initialRead: initialRead ?? { lastReadMessageId: null, unreadCount: 0 },
     });
     const composer = createComposer({ store, me, api: client.api, now });
-    const moderation: ModerationActions = { ...createModerationActions({ store, api: client.api }), requestReview: client.requestReview };
+    const moderation: ModerationActions = createModerationActions({ store, api: client.api });
     return { client, store, composer, moderation, now, refusal };
   });
 

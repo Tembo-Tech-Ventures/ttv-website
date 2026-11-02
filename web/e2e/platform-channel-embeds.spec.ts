@@ -76,7 +76,7 @@ test.describe("shared work", () => {
     }
   });
 
-  test("on a phone the clip's moment sits clear of its play button", async ({ page }) => {
+  test("on a phone the clip's moment sits clear of its play button, and its quote still says which moment", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await open(page);
     const clip = scene(page, "clip");
@@ -85,6 +85,7 @@ test.describe("shared work", () => {
       return play && at ? Math.round(at.y - (play.y + play.height)) : null;
     };
     await expect.poll(gap).toBeGreaterThanOrEqual(4);
+    await expect(clip.locator(".channel-clip__quote")).toBeVisible();
     await clip.screenshot({ path: `${EVIDENCE_DIR}/clip-390.png` });
   });
 
@@ -94,7 +95,8 @@ test.describe("shared work", () => {
     await expect(scene(page, "earlier-revision")).toContainText("Confirmed by David on revision 2");
     await expect(scene(page, "this-revision")).toContainText("Confirmed by Mercy on this revision");
     await expect(scene(page, "unconfirmed").locator("[aria-label='Mentor confirmations']")).toHaveCount(0);
-    await expect(scene(page, "several-mentors").getByRole("listitem")).toHaveText(["TypeScript", "Cloudflare Workers", "D1", "Confirmed by Mercy on this revision", "Confirmed by David on revision 2"]);
+    // B-2.4 sends no skills for a project, so a card shows none: only who confirmed which revision.
+    await expect(scene(page, "several-mentors").getByRole("listitem")).toHaveText(["Confirmed by Mercy on this revision", "Confirmed by David on revision 2"]);
     // The project's own evidence link opens in a new tab and says so; without one there is no way in.
     const evidence = scene(page, "earlier-revision").getByRole("link", { name: /^Open Chama ledger/ });
     await expect(evidence).toHaveAttribute("target", "_blank");

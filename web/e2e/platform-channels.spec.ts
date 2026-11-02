@@ -352,4 +352,26 @@ test.describe("channels on real sessions", () => {
     await openReal(page, "/dashboard/community/conduct");
     await expect(page.locator("[data-conduct-agreed]")).toHaveText(/^You agreed to this on \d{1,2} \w{3} \d{4}\.$/);
   });
+  test("the real page gives the composer what B-2.4 says the person can attach: clips only in their cohort's channels", async ({ page, context, baseURL }) => {
+    test.skip(!LOCAL, "Preview personas are agents' delegated sessions, which may read but never agree, so never reach the composer.");
+    test.skip(test.info().project.name !== "chromium", "One project writes; the persona is shared.");
+    await as(page, context, baseURL!, "student");
+    await openReal(page, "/dashboard/cohort/c/cohort-05");
+    const agree = page.getByRole("button", { name: "I’ll keep to this" });
+    if (await agree.isVisible()) await agree.click();
+    await expect(page.locator("[data-channel-scroller]")).toBeVisible();
+
+    // The seeded cohort-05 session is the one moment to share; the student has no published project.
+    await page.getByRole("button", { name: "Session clip" }).click();
+    await expect(page.getByRole("menuitem", { name: /Week 4: SQL joins and indexes/ })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Share project" }).click();
+    await expect(page.getByText("You have no projects to share yet.")).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    // A community channel offers projects, never session clips.
+    await openReal(page, "/dashboard/community/c/help");
+    await expect(page.getByRole("button", { name: "Share project" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Session clip" })).toHaveCount(0);
+  });
 });

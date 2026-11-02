@@ -12,8 +12,8 @@ type ModerationOptions = {
 };
 
 /**
- * Reports and in-place moderation (B-2.5's routes) for one channel view.
- * Neither is optimistic: a report changes nothing the reader sees, and hiding
+ * Reports, in-place moderation and the author's review request (B-2.5's
+ * routes) for one channel view. None is optimistic: a report changes nothing the reader sees, and hiding
  * is a decision a moderator should see confirmed before the message changes.
  * Each call gives up after the composer's write timeout, so a hung request
  * cannot leave a form spinning.
@@ -29,6 +29,11 @@ export function createModerationActions({ store, api = createApiClient(), timeou
       });
       store.update([message]);
       return message;
+    },
+    async requestReview(messageId, note) {
+      await api.call(ROUTES.requestModerationReview, {
+        params: { id: messageId }, body: note === null ? {} : { note }, signal: AbortSignal.timeout(timeoutMs),
+      });
     },
   };
 }

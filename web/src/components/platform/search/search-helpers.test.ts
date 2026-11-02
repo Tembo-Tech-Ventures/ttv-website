@@ -4,6 +4,7 @@ import { ApiError } from "@/lib/platform/client/apiError";
 import { askTemboHref, takeAskTemboDraft } from "./ask-handoff";
 import { clearRecentSearches, onShellSignOut, recentSearchKey, RECENT_PREFIX } from "./recent-searches";
 import { meByPersona, searchResults } from "@/lib/platform/fixtures";
+import type { Me } from "@/lib/platform/contracts";
 import type { SearchItem } from "@/lib/platform/client/search";
 import { highlight, matchReason, scopesFor, searchCoverage, searchProblem, timestamp } from "./search-display";
 
@@ -12,26 +13,32 @@ afterEach(() => {
   history.replaceState(null, "", "/");
 });
 
+const channelsOff = (me: Me): Me => ({ ...me, flags: { ...me.flags, channels: false } });
+
 describe("scopesFor", () => {
   it("offers a cohort search only to someone in a cohort", () => {
-    expect(scopesFor(meByPersona.wanjiku).map((option) => option.scope)).toEqual(["all", "cohort", "community", "people", "projects"]);
-    expect(scopesFor(meByPersona.lucy).map((option) => option.scope)).toEqual(["all", "community", "people", "projects"]);
+    expect(scopesFor(meByPersona.wanjiku).map((option) => option.scope)).toEqual(["all", "cohort", "community", "messages", "people", "projects"]);
+    expect(scopesFor(meByPersona.lucy).map((option) => option.scope)).toEqual(["all", "community", "messages", "people", "projects"]);
     // An admin sees the Cohort space without belonging to a cohort.
     expect(scopesFor(meByPersona.amina).map((option) => option.scope)).not.toContain("cohort");
   });
 
-  it("never offers message search before channels exist", () => {
-    for (const me of Object.values(meByPersona)) expect(scopesFor(me).map((option) => option.scope)).not.toContain("messages");
+  it("offers message search only while channels are on", () => {
+    for (const me of Object.values(meByPersona)) {
+      expect(scopesFor(me).find((option) => option.scope === "messages")?.label).toBe("Messages");
+      expect(scopesFor(channelsOff(me)).map((option) => option.scope)).not.toContain("messages");
+    }
   });
 });
 
 describe("searchCoverage", () => {
-  it("names only what this person's search reaches: sessions for cohort members only", () => {
-    expect(searchCoverage(meByPersona.wanjiku)).toBe("people, projects and your cohort's sessions");
-    expect(searchCoverage(meByPersona.lucy)).toBe("people and projects");
-    expect(searchCoverage(meByPersona.joseph)).toBe("people and projects");
+  it("names only what this person's search reaches: messages while channels are on, sessions for cohort members only", () => {
+    expect(searchCoverage(meByPersona.wanjiku)).toBe("messages, people, projects and your cohort's sessions");
+    expect(searchCoverage(meByPersona.lucy)).toBe("messages, people and projects");
+    expect(searchCoverage(channelsOff(meByPersona.wanjiku))).toBe("people, projects and your cohort's sessions");
+    expect(searchCoverage(channelsOff(meByPersona.joseph))).toBe("people and projects");
     // Staff see the Cohort space but search no cohort they do not belong to.
-    expect(searchCoverage(meByPersona.amina)).toBe("people and projects");
+    expect(searchCoverage(meByPersona.amina)).toBe("messages, people and projects");
     for (const me of Object.values(meByPersona)) expect(searchCoverage(me)).not.toMatch(/everything/i);
   });
 });

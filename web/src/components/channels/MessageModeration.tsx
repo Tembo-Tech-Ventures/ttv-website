@@ -64,7 +64,7 @@ export function moderationRights(message: Message, viewerId: string | null, cont
     reported: context.reported.has(message.id),
     hide: open && context.canModerate && !own && !hidden,
     restore: open && context.canRestore && hidden,
-    review: open && own && hidden && context.actions?.requestReview !== undefined,
+    review: open && own && hidden,
   };
 }
 
@@ -80,7 +80,8 @@ export function ModerationNote({ message, viewerId, onAskReview }: { message: Me
   const notice = moderationNotice(message, viewerId);
   if (!notice) return null;
   const Icon = notice.state === "HIDDEN" ? PiEyeSlash : PiFlag;
-  const asked = context.reviewRequested.has(message.id);
+  // The server says so on every read (B-2.5), so it survives a reload; this visit's request shows at once.
+  const asked = message.moderation?.reviewRequested === true || context.reviewRequested.has(message.id);
   return (
     <div className="channel-moderation" data-moderation={notice.state}>
       <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
@@ -356,7 +357,7 @@ export function ReviewForm({ message, onDone, onCancel, announce }: PanelProps) 
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
-    if (!actions?.requestReview) return;
+    if (!actions) return;
     setSubmitting(true);
     setError(null);
     try {

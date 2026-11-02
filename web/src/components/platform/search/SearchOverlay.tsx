@@ -3,7 +3,7 @@ import { PiChatCircleText, PiFolderSimple, PiMagnifyingGlass, PiSparkle, PiVideo
 import type { Me } from "@/lib/platform/contracts";
 import type { ApiClient } from "@/lib/platform/client/apiClient";
 import { createAnnouncer } from "@/lib/platform/client/announcer";
-import { createSearchStore, useSearch, type SearchItem } from "@/lib/platform/client/search";
+import { createSearchStore, SEARCH_GROUPS, useSearch, type SearchItem } from "@/lib/platform/client/search";
 import { Avatar, Button, SpaceGlyph } from "@/components/platform/ui";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
@@ -212,7 +212,7 @@ type ResultsProps = {
 function Results({ state, listboxId, optionId, onOpen }: ResultsProps) {
   const shown = state.status === "ready" && state.items.length > 0;
   const query = state.results?.query.q ?? state.q.trim();
-  const groups = (["people", "projects", "sessionMoments"] as const)
+  const groups = SEARCH_GROUPS
     .map((group) => ({
       group,
       entries: state.items.map((entry, index) => ({ entry, index })).filter(({ entry }) => entry.group === group),

@@ -287,9 +287,10 @@ export function moderationFailure(error: unknown, kind: "report" | "moderate" | 
   if (status === 401) return "Your session ended. Sign in again, then try again.";
   if (status === 404) return "That message is no longer here.";
   if (status === 409) {
+    if (kind === "report") return "That message has changed since you opened this. Close it and look again.";
     return kind === "moderate"
       ? "An admin has already decided on this message, or it has changed. Close this and look again."
-      : "That message has changed since you opened this. Close it and look again.";
+      : "An admin has already decided on this message, or it is no longer hidden. Close this and look again.";
   }
   if (status === 403) {
     return kind === "moderate" ? "You can't moderate this channel." : kind === "review" ? "You can ask for a review of your own messages only." : "You can't report this message.";

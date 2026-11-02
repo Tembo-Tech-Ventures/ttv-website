@@ -10,8 +10,8 @@
  * answers no thread otherwise) and `?message=` marks a linked message.
  */
 import type { Channel } from "@/lib/platform/contracts";
-import { getRouteChannelPage, getRouteChannelShareables } from "@/lib/platform/server/channel-context";
-import type { ChannelsPage } from "./channel-page";
+import { getRouteChannelPage } from "@/lib/platform/server/channel-context";
+import { loadRouteShareables, type ChannelsPage } from "./channel-page";
 import ChannelFrame from "./ChannelFrame.astro";
 import ChannelHeader from "./ChannelHeader.astro";
 import ChannelView from "./ChannelView";
@@ -26,8 +26,9 @@ const query = Astro.url.searchParams;
 // JavaScript. Only once agreed: the habits come first. It never moves the read marker.
 const first = page.agreed ? await getRouteChannelPage(Astro) : null;
 // The work the composer can attach (B-2.4): the person's own projects, and session clips only in their
-// cohort's own channels. Null where they cannot post, and then the composer offers no attach tools.
-const shareables = page.agreed ? await getRouteChannelShareables(Astro) : null;
+// cohort's own channels. Null where they cannot post or they failed to load, and then the composer
+// offers no attach tools.
+const shareables = page.agreed ? await loadRouteShareables(Astro) : null;
 const threadId = first?.page.thread ? query.get("thread") : null;
 ---
 

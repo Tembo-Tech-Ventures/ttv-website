@@ -15,6 +15,7 @@ const DESKTOP = { width: 1440, height: 900 };
 const FIRST_PR = "s00000000000000000000407"; // Brian's, in #show-your-work
 const MENTOR_OFFER = "s00000000000000000000408"; // Mercy's, the newest in #show-your-work
 const HIDDEN = "s00000000000000000000423"; // Dennis's, hidden with a reason
+const HIDDEN_ASKED = "s00000000000000000000424"; // Dennis's, hidden, and he already asked for a review
 
 function harness(params: Record<string, string>) {
   return `${HARNESS}?${new URLSearchParams({ channel: "show-your-work", ...params })}`;
@@ -204,6 +205,64 @@ test.describe("moderation in a channel", () => {
     await expect(form.getByLabel("Why are you hiding it?")).toHaveValue("Off-topic");
     await expect(message(page, FIRST_PR).locator("[data-moderation]")).toHaveCount(0);
     expect(await records(page)).toEqual([]);
+  });
+
+  test("a refused report says why, keeps the form, and reports nothing", async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await open(page, harness({ persona: "wanjiku" }));
+    await page.evaluate(() => window.__channelHarness!.refuseWrites(1, 429, "rate_limited", "Slow down", 4_000));
+    await actions(page, FIRST_PR).click();
+    await page.getByRole("menuitem", { name: "Report…" }).click();
+    const form = page.locator("[data-panel=report]");
+    await form.getByRole("radio", { name: "Unkind or disrespectful" }).check();
+    await form.getByRole("button", { name: "Send report" }).click();
+    await expect(form.getByRole("alert")).toHaveText("That's a lot at once. Try again in 4 seconds.");
+    await expect(form.getByRole("button", { name: "Send report" })).toBeEnabled();
+    await expect(message(page, FIRST_PR).locator("[data-reported]")).toHaveCount(0);
+    expect(await records(page)).toEqual([]);
+  });
+
+  test("a refused restore says why and leaves the message hidden", async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await open(page, harness({ persona: "amina" }));
+    await page.evaluate(() => window.__channelHarness!.refuseWrites(1, 409, "conflict", "Already decided"));
+    await actions(page, HIDDEN).click();
+    await page.getByRole("menuitem", { name: "Restore for members…" }).click();
+    const form = page.locator("[data-panel=restore]");
+    await form.getByLabel("Why can it come back?").fill("Fine on reflection");
+    await form.getByRole("button", { name: "Restore message" }).click();
+    await expect(form.getByRole("alert")).toHaveText("An admin has already decided on this message, or it has changed. Close this and look again.");
+    await expect(message(page, HIDDEN).locator("[data-moderation=HIDDEN]")).toHaveCount(1);
+    expect(await records(page)).toEqual([]);
+  });
+
+  test("a refused review request says why, from the keyboard, and Cancel returns to the button", async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await open(page, harness({ persona: "dennis" }));
+    await page.evaluate(() => window.__channelHarness!.refuseWrites(1, 409, "conflict", "An admin has already reviewed this message."));
+    const ask = message(page, HIDDEN).getByRole("button", { name: "Ask for review" });
+    await ask.focus();
+    await page.keyboard.press("Enter");
+    const form = page.locator("[data-panel=review]");
+    await expect(form.getByLabel(/Anything the reviewer should know/)).toBeFocused();
+    await form.getByRole("button", { name: "Ask for review" }).press("Enter");
+    await expect(form.getByRole("alert")).toHaveText("An admin has already decided on this message, or it is no longer hidden. Close this and look again.");
+    await form.getByRole("button", { name: "Cancel" }).click();
+    await expect(ask).toBeFocused();
+    await expect(message(page, HIDDEN).locator("[data-review-requested]")).toHaveCount(0);
+    expect(await records(page)).toEqual([]);
+  });
+
+  test("a review already asked for says so on arrival, and is not offered again; a mentor is not told", async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await open(page, harness({ persona: "dennis" }));
+    const asked = message(page, HIDDEN_ASKED);
+    await expect(asked.locator("[data-review-requested]")).toHaveText("Review requested. An admin will look at it again.");
+    await expect(asked.getByRole("button", { name: "Ask for review" })).toHaveCount(0);
+
+    await open(page, harness({ persona: "david" }));
+    await expect(message(page, HIDDEN_ASKED).locator("[data-moderation=HIDDEN]")).toHaveCount(1);
+    await expect(message(page, HIDDEN_ASKED).locator("[data-review-requested]")).toHaveCount(0);
   });
 
   test("members never see Hide, and nobody reports their own message", async ({ page }) => {

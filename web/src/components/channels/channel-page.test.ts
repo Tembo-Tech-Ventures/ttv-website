@@ -3,23 +3,26 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Channel, ConductAcknowledgement, Me } from "@/lib/platform/contracts";
 import { CONDUCT_VERSION } from "@/lib/channels/conduct";
 import { AGENT_SESSION_PREFIX } from "@/lib/agent-auth";
-import { channels, meByPersona } from "@/lib/platform/fixtures";
+import { channels, meByPersona, projects } from "@/lib/platform/fixtures";
 import { CONDUCT_INTENT } from "./conduct-flow";
 
 const mocks = vi.hoisted(() => ({
   resolveSpacePage: vi.fn(),
   getRouteChannel: vi.fn(),
+  getRouteChannelShareables: vi.fn(),
   list: vi.fn(),
   load: vi.fn(),
   acknowledge: vi.fn(),
 }));
 vi.mock("cloudflare:workers", () => ({ env: { DB: "synthetic-d1" } }));
 vi.mock("@/components/platform/spaces/space-page", () => ({ resolveSpacePage: mocks.resolveSpacePage }));
-vi.mock("@/lib/platform/server/channel-context", () => ({ getRouteChannel: mocks.getRouteChannel }));
+vi.mock("@/lib/platform/server/channel-context", () => ({
+  getRouteChannel: mocks.getRouteChannel, getRouteChannelShareables: mocks.getRouteChannelShareables,
+}));
 vi.mock("./server", () => ({
   channelsServer: () => ({ list: mocks.list, conduct: { load: mocks.load, acknowledge: mocks.acknowledge } }),
 }));
-import { resolveChannelPage, resolveConductPage } from "./channel-page";
+import { loadRouteShareables, resolveChannelPage, resolveConductPage } from "./channel-page";
 
 const ORIGIN = "https://ttv.test";
 const off = (me: Me): Me => ({ ...me, flags: { ...me.flags, channels: false } });
@@ -141,6 +144,23 @@ describe("a channel's page", () => {
     expect((response as Response).headers.get("Allow")).toBe("GET, HEAD, POST");
     expect(await (response as Response).text()).toBe("Not allowed.");
     expect(mocks.acknowledge).not.toHaveBeenCalled();
+  });
+});
+
+describe("the composer's attach tools", () => {
+  it("are what B-2.4 says the person can attach", async () => {
+    const shareables = { projects: [projects.chamaLedger], clips: [] };
+    mocks.getRouteChannelShareables.mockResolvedValue(shareables);
+    await expect(loadRouteShareables(astro())).resolves.toEqual(shareables);
+  });
+
+  it("are hidden, not a broken page, when loading them fails", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failure = new Error("D1_ERROR: synthetic");
+    mocks.getRouteChannelShareables.mockRejectedValue(failure);
+    await expect(loadRouteShareables(astro())).resolves.toBeNull();
+    expect(logged).toHaveBeenCalledWith("Channel page: shareables unavailable, attach tools hidden", failure);
+    logged.mockRestore();
   });
 });
 

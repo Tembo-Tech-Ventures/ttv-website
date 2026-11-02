@@ -493,7 +493,8 @@
 }
 
 @container channel-view (max-width: 34rem) {
-  /* On a narrow sheet the moment sits above its words, a wide strip, so neither column is squeezed. */
+  /* On a narrow sheet the moment sits above its words, a wide strip, so neither column is squeezed.
+     The quote stays: it is what says which moment this is. */
   .channel-embed--clip {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.75rem;
@@ -501,10 +502,6 @@
 
   .channel-clip__poster {
     aspect-ratio: 21 / 9;
-  }
-
-  .channel-clip__quote {
-    display: none;
   }
 }
 
