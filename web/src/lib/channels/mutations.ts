@@ -51,6 +51,8 @@ export interface WriteContext extends ReadContext {
 export interface MessageTarget {
   id: string; channelId: string; parentId: string | null; authorKind: "USER" | "TEMBO"; authorId: string | null;
   body: string; moderationState: "VISIBLE" | "FLAGGED" | "HIDDEN"; deletedAt: number | null;
+  /** The stored embeds, as JSON (moderation allowlists the text they were screened with). */
+  embeds: string;
 }
 
 /** Moves a message to the channel's next changeSeq, so `since` polls carry the change. ?1 is the channel. */
@@ -391,8 +393,13 @@ export async function markChannelRead(ctx: ReadContext & { now?: number }, messa
       > coalesce((SELECT seq FROM channel_message WHERE id = channel_read.lastReadMessageId), 0)`).bind(...params).run();
 }
 
+/** Whether a reader of the message's channel may see it: a hidden message is missing to anyone but its author and moderators. */
+export function visibleTo(target: MessageTarget, userId: string, channel: Pick<Channel, "capabilities">): boolean {
+  return target.moderationState !== "HIDDEN" || target.authorId === userId || channel.capabilities.canModerate;
+}
+
 /** The message a /api/messages/:id route names, before any access decision. One primary-key read. */
 export async function findMessageTarget(db: D1Database, messageId: string): Promise<MessageTarget | null> {
-  return db.prepare(`SELECT id, channelId, parentId, authorKind, authorId, body, moderationState, deletedAt
+  return db.prepare(`SELECT id, channelId, parentId, authorKind, authorId, body, moderationState, deletedAt, embeds
     FROM channel_message WHERE id = ?1`).bind(messageId).first<MessageTarget>();
 }

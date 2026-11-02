@@ -151,6 +151,10 @@ deleting your own message and read markers do not.
 | `PATCH /api/messages/:id` | The author edits |
 | `DELETE /api/messages/:id` | The author deletes; a placeholder stays |
 | `POST /api/messages/:id/reactions` | Set one fixed reaction on or off |
+| `POST /api/messages/:id/report` | Report a message (B-2.5): once per person, 201 new, 200 repeat |
+| `POST /api/messages/:id/review` | The author of a hidden message asks for a review (B-2.5) |
+| `POST /api/moderation/:messageId` | Hide (channel moderators and admins), restore or keep (admins) (B-2.5) |
+| `GET /api/moderation/queue?state&cursor` | The admin moderation queue (B-2.5); admins only, 403 otherwise |
 
 Every route:
 
@@ -315,7 +319,7 @@ The allowlist and the repeat check are SQL inside the guarded INSERT or
 UPDATE, so a refused write does no extra work. A finding is dropped when
 `moderation_allowlist` holds its key or the whole text's key (`textKey`: a
 SHA-256 of the text with case, Unicode forms and spacing normalised). Admins
-fill the allowlist when they keep a message (the queue, next PR).
+fill the allowlist when they restore or keep a message (section 5).
 
 ### 2. Clef, after the response
 
@@ -370,6 +374,74 @@ names it). An admin's decision closes it (DECIDED, with the decision, its
 reason and who); an admin's hide with no case opens one already decided
 (ADMIN_HIDE). A signal after a decision opens a new case.
 
+### 5. People: reports, hides and the queue
+
+`moderation/actions.ts` and `moderation/queue.ts`, through the routes above.
+Every action writes a `moderation_event`; the case and evidence triggers do
+the rest.
+
+- **Report** (any reader of the message): once per person and message
+  (`message_report`'s unique key), so repeating changes nothing. Not your own
+  message (403), not a deleted or hidden one (409: a hidden message is out of
+  the channel already, and a report must not reopen an admin's decision), not
+  in a direct conversation until those have moderators (403), at most
+  `REPORT_LIMIT` (20) a day (429). The author sees no change: a report only opens or joins the case.
+- **Hide**: a channel's moderators (`canModerate`: the cohort's instructors,
+  TAs and mentors; global mentors in community channels) and admins, with a
+  reason the author sees. HIDDEN with `hiddenBy`. A mentor of another cohort
+  cannot read the message (404); a cohort mentor in a community channel, or a
+  member, is 403. Hiding a hidden message again changes nothing.
+- **Admins have the final say.** They hide (also upholding a moderator's
+  hide, or keeping a hidden message hidden: either closes the case), restore
+  or keep ("fine as is", for a message that is not hidden: on a HIDDEN one it
+  is 409, and Restore is the way back). Restore and keep make the message
+  VISIBLE with its reasons cleared, and put into `moderation_allowlist` the
+  key of its text, as written and as screened with its shared work
+  (`screeningText`), and of each detector finding in it, so none is flagged
+  again. After an admin restores or keeps a message, a moderator cannot hide
+  it again until its author edits it (409). Restore and keep are admin only
+  (403). These rules read the admin's events in `moderation_event`, not the
+  case's current state, so a later signal that reopens the case cannot undo
+  them.
+- **Ask for review**: the author of a hidden message, once per case, with an
+  optional note. A hide an admin made or upheld is final (409). While it is
+  open, `moderation.reviewRequested` is true on that message for its author
+  and admins (false otherwise; absent for everyone else and on any message
+  that is not hidden), so "Review requested" survives a reload.
+- **Queue**: admins only. One case per message (item id = message id),
+  newest first, 20 a page with an opaque cursor bound to the state
+  (`PENDING` by default, or `DECIDED`). Each item carries the message as an
+  admin sees it, its channel, source, merged reasons, report count, the
+  moderator who hid it, the evidence (oldest first), the author's review
+  request and the decision. One statement for the page; direct
+  conversations never appear.
+- **Page functions** (`moderation/queue.ts`, `moderation/actions.ts`), so
+  `/admin/moderation` (U-2.4) needs no self-fetch and refuses exactly what the
+  API refuses: `listModerationQueue(db, viewer, query)` (403 unless admin,
+  400 for a cursor of another state), `countPendingModeration(db)` (the tab
+  and sidebar badge; 0 if the read fails) and
+  `decideModeration({ db, env }, viewer, { messageId, action, reason })`,
+  which the API route also calls. `viewer` is `{ user, capabilities }`
+  (`requestCapabilities`). They throw `ChannelError`; the caller owns the
+  `channels` flag, sign-in and same-origin checks. Without `notifyLater`,
+  `decideModeration` writes the notices before it returns.
+
+### 6. Attention
+
+`src/lib/attention/channel-producers.ts`, after the response, best effort:
+
+- `message_hidden` to the author, once per hide, never naming who hid it.
+  Clef's and a moderator's hides offer a review; an admin's does not. It
+  shows only while the message stays hidden.
+- `moderation_pending` to every admin but the author, once per case and
+  again when the author asks for a review. Links to `/admin/moderation`. It
+  shows only while the case is pending.
+- `mention` to each person named as `@Full Name` who can read the channel,
+  once per message (an edit tells only the newly mentioned). The longest
+  name that matches wins. Nobody hears of a hidden or deleted message or a
+  mention flood, and a mention shows only while its reader can still read
+  the channel and the message is visible.
+
 ### Embeds (B-2.4)
 
 `embeds.ts`. A post sends references (`EmbedRef`, at most five, each once);
@@ -403,7 +475,7 @@ v1.
   and invite links in attached work are flagged like those in the body. Clip
   quotations are the session's own words and are not screened. Edits change
   only the body, so they screen only the body.
-- **On every read** (`EMBED_ACCESS_COLUMN`, a column of the page's own
+- **On every read** (`embedAccessColumn`, a column of the page's own
   statement, so pages cost no extra statement): a project must still exist,
   belong to the message's author and be published; a recording must still be
   complete and in the channel's cohort. Otherwise the reader, author
@@ -457,7 +529,9 @@ shareables 6 (7 where clips can be shared), post 7 (8 for a reply), mark read
 20+ characters, which could be a repeat) adds one for its moderation event,
 flagged or not; an edit with a finding adds one; a post with embeds adds one,
 to resolve them; embeds on a page add none. Clef's work after the response is
-outside this budget: one read and one batch of two. Every one is an
+outside this budget: one read and one batch of two. Moderation
+(`moderation/routes.test.ts`): report 8, hide 9, keep 10, review 7, queue 6.
+Every one is an
 indexed read; the plans are asserted in `messages.test.ts`,
 `mutations.test.ts` and `access.test.ts`.
 
@@ -526,7 +600,9 @@ Tests: `src/lib/db/migrations/channels-migration.test.ts`,
 `moderation/detectors.test.ts` (the detector fixture table, precision and
 recall), `moderation/pipeline.test.ts` (detectors in the write path, the
 allowlist, repeats, Clef with a mocked model, its failures and what hidden
-messages show to whom);
+messages show to whom), `moderation/routes.test.ts` (gates, reports, the hide
+authorisation matrix, admin final say, keep and the allowlist, review
+requests, the queue, attention, budgets);
 beside this file `access.test.ts`, `conduct.test.ts`, `embeds.test.ts`
 (sharing, refusals, later visibility changes, retries, shareables, plans),
 `messages.test.ts`

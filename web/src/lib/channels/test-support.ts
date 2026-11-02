@@ -3,6 +3,7 @@ import type { APIContext } from "astro";
 import { drizzle } from "drizzle-orm/d1";
 import { withRaw } from "@/lib/attention/test-support";
 import * as schema from "@/lib/db/schema";
+import { ROUTES } from "@/lib/platform/contracts";
 import type { CapabilityCase } from "@/lib/platform/server/capabilities.fixtures";
 import { createSqliteD1, readMigration } from "@/test/sqlite-d1";
 import { CONDUCT_VERSION } from "./conduct";
@@ -85,8 +86,7 @@ export function channelDatabase(fixture: Partial<CapabilityCase> = {}) {
     id?: string; query?: string; body?: unknown; user?: string | null; origin?: string | null; locals?: Partial<App.Locals>;
     env?: Partial<Parameters<typeof channelRequest>[2]>;
   } & ChannelRequestOptions = {}) {
-    const method = { listChannels: "GET", listMessages: "GET", listShareables: "GET", postMessage: "POST", editMessage: "PATCH", deleteMessage: "DELETE",
-      reactToMessage: "POST", markChannelRead: "POST" }[operation];
+    const { method } = ROUTES[operation];
     const headers = new Headers();
     const origin = options.origin === undefined ? ORIGIN : options.origin;
     if (origin) headers.set("Origin", origin);
@@ -95,7 +95,8 @@ export function channelDatabase(fixture: Partial<CapabilityCase> = {}) {
     });
     const user = options.user === undefined ? VIEWER : options.user;
     const locals = { user: user === null ? null : { id: user }, personalAccessToken: null, ...options.locals } as App.Locals;
-    const context = { request, locals, params: options.id === undefined ? {} : { id: options.id } } as Pick<APIContext, "request" | "locals" | "params">;
+    const params = options.id === undefined ? {} : operation === "moderateMessage" ? { messageId: options.id } : { id: options.id };
+    const context = { request, locals, params } as Pick<APIContext, "request" | "locals" | "params">;
     const response = await channelRequest(operation, context, { ...env, ...options.env },
       { defer: (task) => deferred.push(task), ...options });
     return { status: response.status, body: await response.json() as unknown, response };

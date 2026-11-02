@@ -25,7 +25,7 @@ const auth = { user, session: { id: "synthetic-session", userId: user.id, userAg
 beforeEach(() => {
   vi.clearAllMocks();
   fixture = createCapabilityDatabase({ globalRoles: ["MENTOR", "INSTITUTION"], assignments: [{ programId: "cohort-a", name: "MENTOR" }] });
-  for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql"]) fixture.database.exec(readMigration(migration));
+  for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql", "0028_channels.sql", "0032_moderation_pipeline.sql"]) fixture.database.exec(readMigration(migration));
   fixture.database.exec("UPDATE feature_flag SET audience='ALL' WHERE key='spaces'");
   Object.assign(mocks.env, { DB: fixture.db.$client, DEPLOYMENT_ENVIRONMENT: "production", PLATFORM_FLAGS_OVERRIDE: undefined, STAGING_RETAINED_READ_PROBE_ENABLED: undefined });
   mocks.getSession.mockResolvedValue(auth);

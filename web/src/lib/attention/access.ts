@@ -1,11 +1,17 @@
 import { and, eq, exists, inArray, or, sql } from "drizzle-orm";
-import { accessRequest, attentionItem, communityJourney, profileContact, programApplication, recording, studentProfile, type Database } from "@/lib/db/schema";
+import {
+  accessRequest, attentionItem, channel, channelMessage, communityJourney, moderationCase, profileContact, programApplication, recording,
+  studentProfile, type Database,
+} from "@/lib/db/schema";
 import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
 
 /**
  * Shared by list/count/read: historical notification delivery never preserves revoked access.
  * Access requests: the requester sees their decision; administrators see a request only while it is
  * still pending, so a request another administrator decided, or its owner withdrew, leaves every bell.
+ * Messages (B-2.5): a hidden-message notice while the author's message stays hidden; a moderation
+ * notice while its case is pending, for admins; a mention while the message is visible in a channel
+ * the person can still read.
  */
 export function attentionAccess(db: Database, userId: string, capabilities: PlatformCapabilities) {
   return and(
@@ -21,6 +27,18 @@ export function attentionAccess(db: Database, userId: string, capabilities: Plat
       and(eq(attentionItem.subjectKind, "recording"), exists(db.select({ id: recording.id }).from(recording)
         .where(and(eq(recording.id, attentionItem.subjectId), capabilities.isAdmin ? sql`1`
           : sql`${recording.programId} IN (SELECT value FROM json_each(${JSON.stringify(capabilities.cohortIds)}))`)))),
+      and(eq(attentionItem.subjectKind, "message"), exists(db.select({ id: channelMessage.id }).from(channelMessage)
+        .innerJoin(channel, eq(channel.id, channelMessage.channelId))
+        .where(and(eq(channelMessage.id, attentionItem.subjectId), sql`${channelMessage.deletedAt} IS NULL`, or(
+          and(eq(attentionItem.kind, "message_hidden"), eq(channelMessage.authorId, userId), eq(channelMessage.moderationState, "HIDDEN")),
+          capabilities.isAdmin ? and(eq(attentionItem.kind, "moderation_pending"), exists(db.select({ id: moderationCase.messageId })
+            .from(moderationCase).where(and(eq(moderationCase.messageId, channelMessage.id), eq(moderationCase.state, "PENDING"))))) : sql`0`,
+          and(eq(attentionItem.kind, "mention"), sql`${channelMessage.moderationState} <> 'HIDDEN'`, or(
+            eq(channel.kind, "COMMUNITY"),
+            and(eq(channel.kind, "COHORT"), capabilities.isAdmin ? sql`1`
+              : sql`${channel.programId} IN (SELECT value FROM json_each(${JSON.stringify(capabilities.cohortIds)}))`),
+          )),
+        ))))),
       and(eq(attentionItem.subjectKind, "accessRequest"), exists(db.select({ id: accessRequest.id }).from(accessRequest)
         .where(and(eq(accessRequest.id, attentionItem.subjectId), or(
           and(eq(attentionItem.kind, "access_decided"), eq(accessRequest.userId, userId)),

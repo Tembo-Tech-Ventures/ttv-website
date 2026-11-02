@@ -142,6 +142,9 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/api/channels/[id]/shareables` | What the caller can attach here (GET, `?q=` finds session moments): their own published projects, and clips only in that cohort's own channels; flag `channels` | Session; no personal access tokens yet |
 | `/api/channels/[id]/read` | Move the caller's read marker forward (POST); the only thing that moves it; flag `channels` | Session; no personal access tokens yet |
 | `/api/messages/[id]` | The author edits (PATCH) or deletes, leaving a placeholder (DELETE); `/reactions` sets one fixed reaction on or off (POST); flag `channels` | Session; no personal access tokens yet |
+| `/api/messages/[id]/report`, `/review` | Report a message, once per person (POST); the author of a hidden message asks for a review (POST); flag `channels` | Session; no personal access tokens yet |
+| `/api/moderation/[messageId]` | Hide (the channel's moderators and admins), restore or keep "fine as is" (admins) (POST); flag `channels` | Session; no personal access tokens yet |
+| `/api/moderation/queue` | The moderation queue: one case per message, with evidence, review request and decision (GET); flag `channels` | ADMIN; no personal access tokens yet |
 | `/api/platform/onboarding` | The caller's onboarding state and intents (GET, PUT); flag `onboarding` | Session, browser only |
 | `/api/platform/access-requests` | Ask for mentor or institution access (POST; `[id]/withdraw`, `[id]/dismiss`); flag `onboarding` | Session, browser only |
 | `/api/admin/access-requests` | Access-request queue (GET) and decisions (POST `[id]/decision`); not flag-gated | ADMIN, browser only |

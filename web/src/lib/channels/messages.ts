@@ -5,7 +5,7 @@ import {
   type ModerationState, type Reaction, type RoleBadge,
 } from "@/lib/platform/contracts";
 import { CursorExpiredError, decodeCursor, encodeCursor } from "./cursor";
-import { EMBED_ACCESS_COLUMN, embedsForReader } from "./embeds";
+import { embedAccessColumn, embedsForReader } from "./embeds";
 import { ChannelError } from "./errors";
 
 /**
@@ -32,7 +32,7 @@ export interface ReadContext {
   channel: Pick<Channel, "id" | "kind" | "programId" | "capabilities">;
 }
 
-interface MessageRow {
+export interface MessageRow {
   id: string; channelId: string; parentId: string | null; seq: number; changeSeq: number;
   authorKind: "USER" | "TEMBO"; authorId: string | null; clientNonce: string | null; body: string;
   embeds: string; citations: string; moderationState: ModerationState; moderationReasons: string;
@@ -40,28 +40,35 @@ interface MessageRow {
   authorName: string | null; authorImage: string | null; programName: string | null;
   globalRoles: string; programRoles: string; applications: string; reactions: string; thread: string | null;
   embedAccess: string | null;
+  /** 0 or 1 on a HIDDEN message for its author or an admin; null otherwise. */
+  reviewRequested: number | null;
 }
 
 /**
- * Every column a Message needs. Parameters: ?1 channel id, ?2 viewer id, ?3 the channel's program
- * (null outside cohort channels), so cohort roles only ever describe this cohort. The thread summary
- * counts replies everyone can see, so it is the same for every reader. Embeds are checked again
- * here, in the same statement (embeds.ts).
+ * Every column a Message needs. Parameters: ?2 viewer id, and `program`, the SQL for the channel's
+ * program (null outside cohort channels: ?3 for one channel's pages), so cohort roles only ever
+ * describe this cohort. The thread summary counts replies everyone can see, so it is the same for
+ * every reader. Embeds are checked again here, in the same statement (embeds.ts).
  */
-const MESSAGE_COLUMNS = `m.id, m.channelId, m.parentId, m.seq, m.changeSeq, m.authorKind, m.authorId, m.clientNonce,
+export const messageColumns = (program: string) => `m.id, m.channelId, m.parentId, m.seq, m.changeSeq, m.authorKind, m.authorId, m.clientNonce,
   m.body, m.embeds, m.citations, m.moderationState, m.moderationReasons, m.editedAt, m.deletedAt, m.createdAt,
   u.name AS authorName, u.image AS authorImage,
-  (SELECT name FROM program WHERE id = ?3) AS programName,
+  (SELECT name FROM program WHERE id = ${program}) AS programName,
   (SELECT json_group_array(r.name) FROM UserRoles ur JOIN Roles r ON r.id = ur.roleId
     WHERE ur.userId = m.authorId AND r.name IN ('ADMIN', 'MENTOR', 'INSTITUTION')) AS globalRoles,
-  (SELECT json_group_array(pr.name) FROM programRole pr WHERE pr.userId = m.authorId AND pr.programId = ?3) AS programRoles,
-  (SELECT json_group_array(pa.status) FROM programApplication pa WHERE pa.userId = m.authorId AND pa.programId = ?3) AS applications,
+  (SELECT json_group_array(pr.name) FROM programRole pr WHERE pr.userId = m.authorId AND pr.programId = ${program}) AS programRoles,
+  (SELECT json_group_array(pa.status) FROM programApplication pa WHERE pa.userId = m.authorId AND pa.programId = ${program}) AS applications,
   (SELECT json_group_array(json_array(x.kind, x.n, x.mine)) FROM (SELECT kind, COUNT(*) AS n, MAX(userId = ?2) AS mine
     FROM message_reaction WHERE messageId = m.id GROUP BY kind) x) AS reactions,
   CASE WHEN m.parentId IS NULL THEN (SELECT json_array(COUNT(*), MAX(t.createdAt), json_group_array(DISTINCT t.authorId))
     FROM channel_message t WHERE t.channelId = m.channelId AND t.parentId = m.id
       AND t.deletedAt IS NULL AND t.moderationState <> 'HIDDEN') END AS thread,
-  ${EMBED_ACCESS_COLUMN}`;
+  CASE WHEN m.moderationState = 'HIDDEN' AND (m.authorId = ?2 OR EXISTS (SELECT 1 FROM UserRoles ur JOIN Roles r ON r.id = ur.roleId
+      WHERE ur.userId = ?2 AND r.name = 'ADMIN'))
+    THEN EXISTS (SELECT 1 FROM moderation_case c WHERE c.messageId = m.id AND c.state = 'PENDING' AND c.reviewRequestedAt IS NOT NULL)
+  END AS reviewRequested,
+  ${embedAccessColumn(program)}`;
+const MESSAGE_COLUMNS = messageColumns("?3");
 const FROM_MESSAGES = `FROM channel_message m LEFT JOIN "user" u ON u.id = m.authorId`;
 /** Hidden messages reach only their author and the channel's moderators. ?2 viewer, ?4 canModerate. */
 const VISIBLE = `(m.moderationState <> 'HIDDEN' OR m.authorId = ?2 OR ?4)`;
@@ -145,7 +152,7 @@ const isVisible = (row: MessageRow, ctx: ReadContext) =>
  * author and the channel's moderators learn a message's moderation state, and only the author gets
  * the client nonce back (it reconciles their optimistic copy).
  */
-function toMessage(row: MessageRow, ctx: ReadContext): Message {
+export function toMessage(row: MessageRow, ctx: ReadContext): Message {
   const own = row.authorKind === "USER" && row.authorId !== null && row.authorId === ctx.viewerId;
   const deleted = row.deletedAt !== null;
   return {
@@ -158,7 +165,10 @@ function toMessage(row: MessageRow, ctx: ReadContext): Message {
     reactions: deleted ? [] : reactions(row.reactions),
     createdAt: row.createdAt, edited: !deleted && row.editedAt !== null, deleted,
     moderation: own || ctx.channel.capabilities.canModerate
-      ? { state: row.moderationState, reasons: parsedArray(NonBlank, row.moderationReasons) }
+      ? {
+        state: row.moderationState, reasons: parsedArray(NonBlank, row.moderationReasons),
+        ...row.reviewRequested === null ? {} : { reviewRequested: row.reviewRequested === 1 },
+      }
       : null,
     thread: row.parentId === null ? threadSummary(row.thread) : { replyCount: 0, participantIds: [], lastReplyAt: null },
     temboScope: row.authorKind === "TEMBO" ? ctx.channel.kind : null,

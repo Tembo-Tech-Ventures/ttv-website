@@ -136,6 +136,16 @@ describe("sharing a project", () => {
     expect(screened).toEqual(["Watch this"]);
   });
 
+  it("lets an admin's keep allowlist the shared work it was screened with, so the same post is not flagged again", async () => {
+    const s = setup({ ...cohortMember, globalRoles: ["ADMIN"] });
+    s.journey("invite", { title: "Study group", description: "", evidenceUrl: "https://chat.whatsapp.com/InviteCode123" });
+    const share = () => s.call("postMessage", { id: s.channel("help"), body: { ...post("Have a look"), embeds: [s.project("invite")] } });
+    const flagged = sent(await share());
+    expect(flagged.moderation?.state).toBe("FLAGGED");
+    expect((await s.call("moderateMessage", { id: flagged.id, body: { action: "keep", reason: "The group's own link" } })).status).toBe(200);
+    expect(sent(await share()).moderation).toEqual({ state: "VISIBLE", reasons: [] });
+  });
+
   it("refuses a private draft, telling its owner how to share it", async () => {
     const s = setup();
     s.journey("draft", { visibility: "private" });

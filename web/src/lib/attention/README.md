@@ -59,3 +59,13 @@ INTERESTED/WITHDRAWN and has no selected recipient. The coordinator explicitly
 deferred this integration instead of inventing a personal match or broadcasting
 to everyone interested. A future matching flow must define the authorized
 recipient before this producer can be connected.
+
+Channel events (B-2.5, `channel-producers.ts`; src/lib/channels/README.md,
+"Moderation" §6): `message_hidden` to a hidden message's author (never naming
+who hid it), `moderation_pending` to admins for an open moderation case and an
+author's review request, and `mention` to each readable person named in a
+message. They follow the narrower of `spaces` and `channels` for the
+recipient, read the committed state, and never copy message text. On read,
+a `message` subject shows only while it still applies: the author's message is
+still hidden, the case still pending (admins), or the mentioned message still
+visible in a channel the reader can read.

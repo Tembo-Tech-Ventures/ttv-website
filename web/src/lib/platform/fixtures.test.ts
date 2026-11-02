@@ -15,7 +15,7 @@ const schemas = {
   hiddenMessageDelta: C.MessageList,
   attention: C.AttentionList, attentionCount: C.AttentionCount, searchResults: C.SearchResults, mentors: C.MentorDirectory,
   pendingMentorRequest: C.MentorRequest, acceptedMentorRequest: C.MentorRequest, brianMentorRequest: C.MentorRequest,
-  availability: C.MentorAvailability, moderationQueue: C.ModerationQueue,
+  availability: C.MentorAvailability, moderationQueue: C.ModerationQueue, decidedModerationQueue: C.ModerationQueue,
   temboPending: C.TemboResponse, temboAnswer: C.TemboResponse, flagsAdmin: C.FlagsAdmin,
   accessRequests: z.record(z.string(), C.AccessRequestSummary), onboardingByPersona: z.record(z.string(), C.OnboardingState),
   adminAccessRequests: z.record(z.string(), C.AdminAccessRequestList), accessAttention: z.record(z.string(), C.AttentionList),
@@ -109,7 +109,9 @@ describe("synthetic fixtures", () => {
     expect(F.mentors.items[0].capacity).toEqual({ used: 1, limit: 3, nextOpeningAt: null });
     expect(F.mentors.items[1].capacity.used).toBe(F.mentors.items[1].capacity.limit);
     expect(F.mentors.items[1].capacity.nextOpeningAt).toBe(Date.parse("2026-12-01T00:00:00+03:00"));
-    expect(F.moderationQueue.items.map((i) => i.source).toSorted()).toEqual([...C.ModerationSource.options].toSorted());
+    const sources = [...F.moderationQueue.items, ...F.decidedModerationQueue.items].map((i) => i.source);
+    expect([...new Set(sources)].toSorted()).toEqual([...C.ModerationSource.options].toSorted());
+    expect(F.decidedModerationQueue.items.every((i) => i.state === "DECIDED" && i.decision !== null)).toBe(true);
     expect(F.messages.flagged.moderation?.state).toBe("FLAGGED");
     expect(F.messages.flagged.body).not.toBe("");
     expect(F.messages.hidden.moderation?.state).toBe("HIDDEN");
