@@ -1,5 +1,5 @@
 import type {
-  Channel, Message, ModerationActionKind, ModerationQueueItem, ModerationQueueState, PersonSummary,
+  Channel, Message, MessageVersionCause, ModerationActionKind, ModerationQueueItem, ModerationQueueState,
 } from "@/lib/platform/contracts";
 import { channelPath } from "@/components/channels/paths";
 
@@ -7,28 +7,12 @@ import { channelPath } from "@/components/channels/paths";
  * What one case in the admin moderation queue says, and which decisions it offers (U-2.4,
  * PLAN.md §10, screens/08). Pure: the card renders this, and the tests read it without a page.
  *
- * The case shape is B-2.5's contract change (feature.platform-spaces seq 379): evidence, the
- * author's review request and the decision ride on the queue item. Until that lands in
- * contracts.ts, ModerationCase spells the additions out here.
+ * A case is B-2.5's queue item: evidence, the author's review request and the decision ride on it.
  */
 
 export const MODERATION_PATH = "/admin/moderation";
 
-export type MessageVersionCause = "EDIT" | "DELETE" | "FLAG" | "REPORT" | "HIDE";
-export interface MessageVersion { body: string; cause: MessageVersionCause; capturedAt: number }
-export interface ModerationReview { requestedAt: number; note: string | null }
-export interface ModerationDecision {
-  action: ModerationActionKind; reason: string; by: PersonSummary | null; decidedAt: number;
-}
-export type ModerationCaseSource = ModerationQueueItem["source"] | "ADMIN_HIDE";
-export type ModerationCase = Omit<ModerationQueueItem, "source"> & {
-  source: ModerationCaseSource;
-  /** Earlier text, oldest first. Administrators only. */
-  evidence: MessageVersion[];
-  review: ModerationReview | null;
-  /** Non-null exactly when the case is DECIDED. */
-  decision: ModerationDecision | null;
-};
+export type ModerationCase = ModerationQueueItem;
 
 /** One button in a case's decision form. */
 export interface DecisionOption { action: ModerationActionKind; label: string }
@@ -39,9 +23,12 @@ export interface DecisionOption { action: ModerationActionKind; label: string }
  * does not suggest an answer. A decided case can be reversed with the one opposite decision.
  */
 export function decisionOptions(item: Pick<ModerationCase, "state" | "message">): DecisionOption[] {
-  // A deleted message is gone for everyone: there is nothing to hide, only the case to close.
-  if (item.message.deleted) return item.state === "DECIDED" ? [] : [{ action: "keep", label: "Close the case" }];
   const hidden = item.message.moderation?.state === "HIDDEN";
+  // A deleted message is gone for everyone: there is nothing to hide, only the case to close. Keep
+  // is refused on a hidden message, so a hidden one closes with Restore, which shows only the placeholder.
+  if (item.message.deleted) {
+    return item.state === "DECIDED" ? [] : [{ action: hidden ? "restore" : "keep", label: "Close the case" }];
+  }
   if (item.state === "DECIDED") {
     return hidden ? [{ action: "restore", label: "Restore" }] : [{ action: "hide", label: "Hide" }];
   }
