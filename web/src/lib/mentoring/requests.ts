@@ -7,7 +7,7 @@ import { bodyForReader } from "@/lib/channels/moderation/mask";
 import { FLAG_EVENT, screenedReasons } from "@/lib/channels/mutations";
 import {
   MessageEmbed, type MentorRequestListQuery,
-  type CreateMentorRequest, type DeclineMentorRequest, type MentorRequest, type MentorRequestList, type MentorRequestProject,
+  type Conversation, type CreateMentorRequest, type DeclineMentorRequest, type MentorRequest, type MentorRequestList, type MentorRequestProject,
   type MentorRequestStatus, type ProjectEmbed, type RedirectMentorRequest,
 } from "@/lib/platform/contracts";
 import { hasSpot, monthStart } from "./capacity";
@@ -82,7 +82,18 @@ function projectFor(row: RequestRow): MentorRequestProject | null {
   return view?.type === "project" || view?.type === "unavailable" ? view : { type: "unavailable", was: "project" };
 }
 
-/** The request as this party sees it: the mentor gets contact details in the note masked, as in a channel. */
+/**
+ * The mentor's reply as the person asking sees it: contact details masked, as the asker's own note is
+ * for the mentor. Screened on each read by the same detectors (nothing about it is stored), so a
+ * reply cannot carry a number or a chat invitation out of TTV.
+ */
+function responseFor(row: RequestRow, viewerId: string): string | null {
+  if (row.responseNote === null || row.mentorId === viewerId) return row.responseNote;
+  const reasons = [...new Set(detectFindings(row.responseNote).map((finding) => finding.reason))];
+  return bodyForReader({ body: row.responseNote, moderationState: reasons.length > 0 ? "FLAGGED" : "VISIBLE", reasons }, false);
+}
+
+/** The request as this party sees it: each sees contact details in the other's words masked, as in a channel. */
 function toRequest(row: RequestRow, viewerId: string): MentorRequest {
   const reasons = reasonsOf(row.noteReasons);
   const note = bodyForReader({ body: row.note, moderationState: reasons.length > 0 ? "FLAGGED" : "VISIBLE", reasons }, row.requesterId === viewerId);
@@ -91,7 +102,7 @@ function toRequest(row: RequestRow, viewerId: string): MentorRequest {
     mentor: personSummary(row.mentorId, personRow(row, "mentor")), note, project: projectFor(row), format: row.format,
     status: row.status, channelId: row.channelId,
     redirectedTo: row.redirectedToId === null ? null : personSummary(row.redirectedToId, personRow(row, "target")),
-    responseNote: row.responseNote, createdAt: row.createdAt, updatedAt: row.updatedAt,
+    responseNote: responseFor(row, viewerId), createdAt: row.createdAt, updatedAt: row.updatedAt,
   };
 }
 
@@ -106,6 +117,29 @@ export async function getRequest(ctx: MentoringContext, id: string): Promise<Men
   const row = await partyRow(ctx, id);
   if (!row) throw notFound();
   return toRequest(row, ctx.viewerId);
+}
+
+/**
+ * The header of a direct conversation the caller is a member of (U-4.1's /dm/:id page): the other
+ * member, with global badges, and the latest accepted request between them that points at it. null
+ * for anyone else, and for a channel that is not a direct conversation, through the same reads. Two
+ * statements: the membership and counterpart, then the request (only for a member).
+ */
+export async function getConversation(ctx: MentoringContext, channelId: string): Promise<Conversation | null> {
+  const member = await ctx.db.prepare(`SELECT other.userId AS counterpartId, ${personColumns("u", "other.userId", "counterpart")}
+    FROM channel c JOIN channel_member mine ON mine.channelId = c.id AND mine.userId = ?2
+      LEFT JOIN channel_member other ON other.channelId = c.id AND other.userId <> ?2
+      LEFT JOIN "user" u ON u.id = other.userId
+    WHERE c.id = ?1 AND c.kind = 'DIRECT' ORDER BY u.name, other.userId LIMIT 1`)
+    .bind(channelId, ctx.viewerId).first<Record<string, unknown> & { counterpartId: string | null }>();
+  if (!member) return null;
+  const request = await ctx.db.prepare(`${REQUEST_SELECT}
+    WHERE r.channelId = ?1 AND r.status = 'ACCEPTED' AND ?2 IN (r.requesterId, r.mentorId)
+    ORDER BY r.acceptedAt DESC, r.id DESC LIMIT 1`).bind(channelId, ctx.viewerId).first<RequestRow>();
+  return {
+    counterpart: member.counterpartId === null ? null : personSummary(member.counterpartId, personRow(member, "counterpart")),
+    request: request ? toRequest(request, ctx.viewerId) : null,
+  };
 }
 
 /** A page boundary: the last request's createdAt and id, base64url JSON. Opaque to clients. */

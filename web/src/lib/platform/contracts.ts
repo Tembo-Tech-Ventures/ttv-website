@@ -508,6 +508,13 @@ export const MentorAvailability = UpdateMentorAvailability.extend({
   headline: z.string().max(120), listed: z.boolean(), capacity: MentorCapacity,
 });
 export type MentorAvailability = z.infer<typeof MentorAvailability>;
+/**
+ * A direct conversation's header, for its two members only (server function, no route): the other
+ * member (null once their account is gone) and the latest accepted request that opened or continued
+ * it, as this member sees it (null for a conversation no request opened).
+ */
+export const Conversation = z.object({ counterpart: PersonSummary.nullable(), request: MentorRequest.nullable() });
+export type Conversation = z.infer<typeof Conversation>;
 
 /**
  * Onboarding (/reports/platform-onboarding-2026-11-01/SPEC.md §5). Intents choose routing and copy only;
