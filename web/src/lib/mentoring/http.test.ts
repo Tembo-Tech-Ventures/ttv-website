@@ -305,6 +305,16 @@ describe("statement budget", () => {
     expect(prepare.mock.calls.length, `${prepare.mock.calls.map(([query]) => query).join("\n---\n")}`).toBe(budget);
   });
 
+  it("reads each listed mentor's spot counts once in the directory: two index ranges, not again in WHERE or ORDER BY", async () => {
+    const s = setup();
+    const prepare = vi.spyOn(s.d1, "prepare");
+    expect((await s.call("listMentors", { query: "?available=true" })).status).toBe(200);
+    const [query] = prepare.mock.calls.at(-1)!;
+    const plan = s.database.prepare(`EXPLAIN QUERY PLAN ${query}`).all(VIEWER, 0, null, null, 100, 1).map((row) => String(row.detail));
+    expect(plan.filter((detail) => detail.includes("mentor_request_mentor_status_idx"))).toHaveLength(2);
+    expect(plan.some((detail) => /MATERIALIZE listed/.test(detail))).toBe(true);
+  });
+
   it("accept prepares one read, one pair lookup, one batch of at most five writes and two reads back", async () => {
     const s = setup();
     const id = await s.ask(PEOPLE.david, { note: "Call 0712 345 678" });

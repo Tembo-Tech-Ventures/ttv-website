@@ -126,8 +126,8 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/admin/platform-flags` | Who sees each platform feature flag (Off, Staff, Everyone); Everyone asks to confirm, and dependency warnings never block. No JavaScript needed | ADMIN |
 | `/dashboard/feedback` | The student's own feedback, status and replies | Session |
 | `/dashboard/cohort/c/[slug]`, `/dashboard/community/c/[slug]` | A channel; 404 unless the caller can read it (flag `channels`) | Session |
-| `/dashboard/community/dm/[id]` | A direct conversation; 404 unless the caller is one of its two members (flag `channels`) | Session |
-| `/dashboard/community/mentors`, `/dashboard/mentoring/requests`, `/dashboard/mentoring/availability` | Mentor directory; a mentor's requests and availability (Mentoring space); flag `mentor_requests` | Session |
+| `/dashboard/community/dm/[id]` | A direct conversation; 404 unless the caller is one of its two members (flag `channels`). Routed; the page ships with U-4.1 | Session |
+| `/dashboard/community/mentors`, `/dashboard/mentoring/requests`, `/dashboard/mentoring/availability` | Mentor directory; a mentor's requests and availability (Mentoring space); flag `mentor_requests`. Routed; the pages ship with U-4.1 | Session |
 | `/dashboard/community/conduct` | "How we talk to each other": the channel code of conduct; flag `channels` | Session |
 | `/admin/feedback` | Feedback queue; `/admin/feedback/[id]` to reply, theme and resolve | ADMIN |
 | `/admin/feedback/themes` | Feedback themes with agreement stats; `[id]` to plan, ship or decline | ADMIN |
@@ -152,7 +152,7 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/api/moderation/[messageId]/undo` | The moderator who hid a message takes the hide back while no admin has decided; the case keeps its other flags and reports, or closes (POST); flag `channels` | Session; no personal access tokens |
 | `/api/moderation/queue` | The moderation queue: one case per message, with evidence, review request and decision (GET); flag `channels` | ADMIN; no personal access tokens (admin tokens use `/api/mcp`) |
 | `/api/mentors` | Listed mentors with their capacity this Africa/Nairobi month (GET, `?area&format&available`); flag `mentor_requests` (see `web/src/lib/mentoring/README.md`) | Session; no personal access tokens |
-| `/api/mentor-requests` | The caller's requests sent or received (GET `?as=requester\|mentor`); ask a mentor for time (POST), one waiting request per mentor, within the mentor's monthly spots; `[id]` (GET) and `[id]/accept`, `/redirect`, `/decline`, `/withdraw` (POST); accepting opens a direct conversation with the note and work in it; flag `mentor_requests` | Session; its two parties only; no personal access tokens |
+| `/api/mentor-requests` | The caller's requests sent or received (GET `?as=requester\|mentor`); ask a mentor for time (POST; members only: a community profile or a cohort place), one waiting request per mentor, within the mentor's monthly spots; `[id]` (GET) and `[id]/accept`, `/redirect`, `/decline`, `/withdraw` (POST); accepting opens a direct conversation with the note and work in it; flag `mentor_requests` | Session; its two parties only; no personal access tokens |
 | `/api/mentoring/availability` | A mentor's own headline, areas, formats, monthly capacity and pause (GET, PUT); flag `mentor_requests` | MENTOR; no personal access tokens |
 | `/api/platform/onboarding` | The caller's onboarding state and intents (GET, PUT); flag `onboarding` | Session, browser only |
 | `/api/platform/access-requests` | Ask for mentor or institution access (POST; `[id]/withdraw`, `[id]/dismiss`); flag `onboarding` | Session, browser only |

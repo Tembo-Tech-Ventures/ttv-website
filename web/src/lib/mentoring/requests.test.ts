@@ -113,6 +113,30 @@ describe("asking a mentor for time", () => {
     expect(s.database.prepare("SELECT COUNT(*) AS n FROM mentor_request").get()).toEqual({ n: 0 });
   });
 
+  it.each([
+    ["an institution-only account", { globalRoles: ["INSTITUTION"], member: false }],
+    ["an account with no profile or cohort", { member: false }],
+    ["a pending applicant without a profile", { member: false, applications: [{ programId: "cohort-a", status: "PENDING" as const }] }],
+    ["a rejected applicant without a profile", { member: false, applications: [{ programId: "cohort-a", status: "REJECTED" as const }] }],
+  ])("refuses asking from %s (403, neutral), leaving the directory open to them", async (_, fixture) => {
+    const s = setup(fixture);
+    const refused = await s.call("createMentorRequest", { body: { mentorId: PEOPLE.david, note: "Hi", project: null, format: "WRITTEN_REVIEW" } });
+    expect([refused.status, errorOf(refused.body)]).toEqual([403, {
+      code: "forbidden", message: "Asking a mentor for time needs a member profile or a cohort place." }]);
+    expect(s.database.prepare("SELECT COUNT(*) AS n FROM mentor_request").get()).toEqual({ n: 0 });
+    expect((await s.call("listMentors")).status).toBe(200);
+  });
+
+  it.each([
+    ["a community profile", { globalRoles: ["INSTITUTION"] }],
+    ["an approved cohort place", { member: false, applications: [{ programId: "cohort-a", status: "APPROVED" as const }] }],
+    ["an audit place", { member: false, applications: [{ programId: "cohort-a", status: "AUDIT" as const }] }],
+    ["a completed cohort", { member: false, applications: [{ programId: "cohort-a", status: "COMPLETED" as const }] }],
+  ])("lets a member with %s ask", async (_, fixture) => {
+    const s = setup(fixture);
+    expect(await s.ask()).toEqual(expect.any(String));
+  });
+
   it("needs the current code of conduct, because the note opens a conversation", async () => {
     const s = setup({ conduct: false });
     const refused = await s.call("createMentorRequest", { body: { mentorId: PEOPLE.david, note: "Hi", project: null, format: "WRITTEN_REVIEW" } });

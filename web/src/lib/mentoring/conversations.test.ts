@@ -52,7 +52,7 @@ const OUTSIDERS = {
 describe("a conversation opened by a mentor request", () => {
   it.each([
     ["a community member", {}], ["an approved student", { applications: [{ programId: "cohort-a", status: "APPROVED" as const }] }],
-    ["an institution", { globalRoles: ["INSTITUTION"] }], ["an admin", { globalRoles: ["ADMIN"] }],
+    ["an institution with a member profile", { globalRoles: ["INSTITUTION"] }], ["an admin", { globalRoles: ["ADMIN"] }],
   ])("is read and written by its two members, the asker being %s", async (_, roles) => {
     const { s, channelId } = await conversation(roles);
     for (const user of [VIEWER, PEOPLE.david]) {
@@ -139,6 +139,10 @@ describe("getConversation (the /dm/:id header)", () => {
       expect(await getConversation({ db: s.d1, viewerId: user, now: 0 }, channelId), `${user}`).toBeNull();
     }
     expect(await getConversation({ db: s.d1, viewerId: VIEWER, now: 0 }, s.channel("help"))).toBeNull();
+    // Explicit members of a channel that is not a conversation still get no header.
+    const cohort = s.channel("cohort-04");
+    s.database.prepare("INSERT INTO channel_member(channelId, userId) VALUES (?, ?), (?, ?)").run(cohort, VIEWER, cohort, PEOPLE.mercy);
+    expect(await getConversation({ db: s.d1, viewerId: VIEWER, now: 0 }, cohort)).toBeNull();
     expect(await getConversation({ db: s.d1, viewerId: VIEWER, now: 0 }, "missing")).toBeNull();
   });
 
