@@ -66,6 +66,13 @@ function seed(s: TemboFixture) {
   s.database.prepare("UPDATE channel_message SET embeds = ? WHERE id = ?").run(JSON.stringify([{
     type: "project", journeyId: "journey-shared", version: 1, title: "SHAREDPROJECT budgeting canary", summary: "As shared", confirmations: [],
   }]), sharedIn);
+  // Shared here once, then made private by its owner: the channel no longer shows it, and nor does Tembo.
+  s.database.exec(`INSERT INTO communityJourney (id, userId, title, description, occurredAt, visibility) VALUES
+    ('journey-withdrawn', 'synthetic-otieno', 'Withdrawn', 'x', '2026-10-01', 'private')`);
+  const withdrawn = s.message("help", { body: "Another project" });
+  s.database.prepare("UPDATE channel_message SET embeds = ? WHERE id = ?").run(JSON.stringify([{
+    type: "project", journeyId: "journey-withdrawn", version: 1, title: "MADEPRIVATE budgeting canary", summary: "x", confirmations: [],
+  }]), withdrawn);
   // The same, from someone who does not own the project, never counts as sharing it.
   const notOwner = s.message("help", { body: "Their project", author: "synthetic-achieng" });
   s.database.prepare("UPDATE channel_message SET embeds = ? WHERE id = ?").run(JSON.stringify([{
@@ -82,7 +89,7 @@ const ALLOWED: Record<TemboScope, string[]> = {
 const EVERY_LABEL = [
   ...CHANNELS.flatMap((slug) => ["HERE", "HIDDEN", "HIDDENROOT", "UNDERHIDDEN", "TEMBOOLD", "MASKED", "MODNOTE"].map((kind) => `${kind}-${slug.toUpperCase()}`)),
   "OWNSESSION", "OTHERCOHORTSESSION", "DRAFTSESSION", "PUBLICPROFILE", "UNPUBLISHEDPROFILE", "NOTCOMPLETEDPROFILE", "SHAREDPROJECT",
-  "SHAREDNOW", "NOTOWNERSHARE", "UNSHAREDJOURNEY", "PRIVATEJOURNEY", "FEEDBACK", "STAFFNOTE", "REPLY", "PRIVATECHAT", "APPLICATION",
+  "SHAREDNOW", "NOTOWNERSHARE", "MADEPRIVATE", "UNSHAREDJOURNEY", "PRIVATEJOURNEY", "FEEDBACK", "STAFFNOTE", "REPLY", "PRIVATECHAT", "APPLICATION",
 ];
 /** Masked contact details, whoever asks: Tembo is never privileged. */
 const NEVER = ["0712", "345 678", "345678"];

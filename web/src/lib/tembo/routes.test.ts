@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { VIEWER } from "@/lib/channels/test-support";
 import { ErrorEnvelope, MASKED_CONTACT, Message, MessageList, ROUTES, TemboResponse } from "@/lib/platform/contracts";
+import { TEMBO_CONFIG } from "./config";
 import { refusal } from "./grounding";
 import { getMe } from "@/lib/platform/server/me";
 import { temboDay, temboDayEnd } from "./quota";
@@ -382,10 +383,14 @@ describe("a run's time and its claim", () => {
     expect(answers(s)).toHaveLength(1);
   });
 
+  it("leaves room after the run for Clef (8 s) and the notice within work after a response (about 30 s)", () => {
+    expect(TEMBO_CONFIG.runBudgetMs + 8_000).toBeLessThanOrEqual(28_000);
+  });
+
   it("starts no call with less than two seconds of its budget left, and gives the question back", async () => {
     const s = setup();
     const clock = { now: NOW };
-    const { model, calls } = slowModel(clock, 24_000);
+    const { model, calls } = slowModel(clock, TEMBO_CONFIG.runBudgetMs - 1_000);
     await s.ask("help", s.question("help"), { temboModel: model, now: () => clock.now });
     await s.afterResponse();
     expect(calls).toHaveLength(1);
@@ -401,7 +406,7 @@ describe("a run's time and its claim", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       const run = s.afterResponse();
-      await vi.advanceTimersByTimeAsync(25_000);
+      await vi.advanceTimersByTimeAsync(TEMBO_CONFIG.runBudgetMs);
       await run;
     } finally { vi.useRealTimers(); }
     expect(s.rows("SELECT status FROM tembo_ask")).toEqual([{ status: "FAILED" }]);

@@ -15,11 +15,11 @@ export const TEMBO_CONFIG = Object.freeze({
   /** Tool rounds stop this long after the run began; the next call answers with what it has. */
   roundDeadlineMs: 9_000,
   /**
-   * The whole run, model calls included: work after a response gets about 30 seconds. Each call may use
-   * only what is left, and none starts with less than minCallMs left; the run then fails and the
-   * question is given back.
+   * The whole run, model calls included. Work after a response gets about 30 seconds, and Clef (up to
+   * 8 seconds) and the asker's notice follow the run, so it gets 20. Each call may use only what is
+   * left, and none starts with less than minCallMs left; the run then fails and the question is given back.
    */
-  runBudgetMs: 25_000,
+  runBudgetMs: 20_000,
   minCallMs: 2_000,
   /** Tool calls carried out per round; the rest are answered with an error. */
   toolCallsPerRound: 4,
