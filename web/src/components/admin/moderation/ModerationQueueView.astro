@@ -1,0 +1,103 @@
+---
+import { PiInfoDuotone } from "react-icons/pi";
+import ModerationCase from "./ModerationCase.astro";
+import { QUEUE_TABS } from "./case-model";
+import type { QueueViewProps } from "./page-flow";
+
+/**
+ * The admin moderation queue (U-2.4, screens/08), as /admin/moderation and its DEV harness render
+ * it. Plain links and form posts, so it works without JavaScript. enhance.ts posts the same forms
+ * and swaps this whole region for the one the server renders back, so a decision reads the same
+ * either way, and a refused one never looks recorded.
+ */
+type Props = QueueViewProps;
+
+const { state, items, pendingCount, formAction, tabHrefs, nextHref, paged, notice, failure, rowError } = Astro.props;
+const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
+const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
+---
+
+<div class="mx-auto max-w-6xl space-y-8 lg:px-6 lg:pt-6" data-moderation-root data-state={state}>
+  <header class="space-y-4">
+    <h2 class="text-[2.5rem] leading-[0.95] tracking-display text-ink-primary sm:text-5xl lg:text-6xl">Moderation</h2>
+    <p class="max-w-3xl text-base leading-relaxed text-ink-secondary sm:text-lg">
+      Tembo hides only what is clearly abusive. Everything else, contact details included, stays visible until a
+      person decides.
+    </p>
+  </header>
+
+  {notice && (
+    <p role="status" tabindex="-1" autofocus class={`${BANNER} border-ring/30 bg-ring/8`} data-moderation-notice>
+      {notice}
+      {" "}<a href={tabHrefs.DECIDED} class={`font-semibold text-peach-ink underline ${FOCUS}`}>See decided cases</a>
+    </p>
+  )}
+  {failure && (
+    <p role="alert" tabindex="-1" autofocus class={`${BANNER} border-danger-ink/40 bg-danger-ink/8`} data-moderation-failure>
+      {failure}
+    </p>
+  )}
+
+  <nav aria-label="Moderation lists">
+    <ul class="flex flex-wrap gap-2">
+      {QUEUE_TABS.map((tab) => (
+        <li>
+          <a
+            href={tabHrefs[tab.state]}
+            aria-current={tab.state === state ? "page" : undefined}
+            class:list={[
+              "inline-flex min-h-11 items-center gap-2 rounded-full px-4 text-[0.9375rem] font-semibold transition-colors motion-reduce:transition-none",
+              FOCUS,
+              tab.state === state ? "bg-ink-primary text-dark" : "text-ink-secondary hover:bg-ink-primary/7 hover:text-ink-primary",
+            ]}
+          >
+            {tab.label}
+            {tab.state === "PENDING" && pendingCount > 0 && (
+              <span class="text-sm font-medium tabular-nums">
+                <span aria-hidden="true">{pendingCount}</span>
+                <span class="sr-only">{`${pendingCount} waiting`}</span>
+              </span>
+            )}
+          </a>
+        </li>
+      ))}
+    </ul>
+  </nav>
+
+  {items.length === 0 ? (
+    <p class="py-6 text-ink-secondary" data-moderation-empty>
+      {state === "PENDING"
+        ? "Nothing needs a decision. Messages Tembo flags, members report or a mentor hides appear here."
+        : "Nothing decided yet. Decisions appear here, newest first."}
+    </p>
+  ) : (
+    <ul class="-mt-2 space-y-4" aria-label={state === "PENDING" ? "Cases that need a decision" : "Decided cases"} data-moderation-list={state}>
+      {items.map((item) => (
+        <ModerationCase
+          item={item}
+          action={formAction}
+          error={rowError?.id === item.id ? rowError.message : undefined}
+          draftReason={rowError?.id === item.id ? rowError.draft : undefined}
+        />
+      ))}
+    </ul>
+  )}
+
+  {(nextHref || paged) && (
+    <nav aria-label="More cases" class="flex flex-wrap gap-4 text-sm">
+      {paged && <a href={tabHrefs[state]} class={`inline-flex min-h-11 items-center text-peach-ink hover:underline ${FOCUS}`}>Back to the start</a>}
+      {nextHref && <a href={nextHref} class={`inline-flex min-h-11 items-center text-peach-ink hover:underline ${FOCUS}`}>Older cases</a>}
+    </nav>
+  )}
+
+  <p class="flex gap-2 text-sm text-ink-secondary">
+    <PiInfoDuotone className="mt-0.5 size-4 shrink-0 text-ink-muted" aria-hidden="true" />
+    Reports are counted, never named: no one here or in the channel sees who reported a message.
+  </p>
+</div>
+
+<script>
+  import { enhanceModerationQueue } from "./enhance";
+
+  enhanceModerationQueue(document);
+</script>

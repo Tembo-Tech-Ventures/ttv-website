@@ -3,6 +3,8 @@ import AdminLayout from "@/layouts/AdminLayout.astro";
 import Button from "@/components/common/Button.astro";
 import Card from "@/components/common/Card.astro";
 import Badge from "@/components/common/Badge.astro";
+import CohortMentors from "@/components/admin/CohortMentors.astro";
+import { cohortMentorModel, teachingRoles } from "@/components/admin/cohort-mentors";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
@@ -40,12 +42,19 @@ import {
   throwAddProgramRoleFailure,
   throwCohortUpdateFailure,
 } from "@/lib/admin/program-management";
+import { isFlagEnabled } from "@/lib/platform/server/flags";
 
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
 const defaultCompletionDate = formatDateInputValue();
 
 if (!id) return Astro.redirect("/admin/programs");
+
+// Cohort mentors exist for the channels (owner decision 4), so they appear with them.
+const mentorsEnabled = await isFlagEnabled(
+  { db: env.DB, env, user: Astro.locals.user, isAdmin: Astro.locals.isAdmin, locals: Astro.locals },
+  "channels"
+);
 
 let actionError = "";
 let submittedCohortValues: CohortUpdateValues | null = null;
@@ -117,6 +126,12 @@ if (Astro.request.method === "POST") {
     try {
       const userId = parseProgramStaffUserId(formData.get("userId"));
       const role = parseProgramStaffRole(formData.get("roleName"));
+      if (role === "MENTOR" && !mentorsEnabled) {
+        throw new ProgramManagementError(
+          "INVALID_STAFF_ROLE",
+          "Cohort mentors arrive with channels, which are off for you."
+        );
+      }
       const statement = buildAddProgramRoleStatement({
         id: createId(),
         programId: id,
@@ -163,7 +178,9 @@ if (Astro.request.method === "POST") {
         });
       }
 
-      return Astro.redirect(`/admin/programs/${id}?notice=staff-added`);
+      return Astro.redirect(
+        `/admin/programs/${id}?notice=${role === "MENTOR" ? "mentor-added" : "staff-added"}`
+      );
     } catch (error) {
       if (error instanceof ProgramManagementError) {
         actionError = error.message;
@@ -187,7 +204,9 @@ if (Astro.request.method === "POST") {
         .bind(...statement.params)
         .run();
       assertProgramRoleRemoved(result.meta.changes);
-      return Astro.redirect(`/admin/programs/${id}?notice=staff-removed`);
+      // Only the notice depends on which list the row was in.
+      const notice = formData.get("roleKind") === "MENTOR" ? "mentor-removed" : "staff-removed";
+      return Astro.redirect(`/admin/programs/${id}?notice=${notice}`);
     } catch (error) {
       if (error instanceof ProgramManagementError) {
         actionError = error.message;
@@ -334,6 +353,22 @@ const availableEnrollmentUsers = allUsers.filter(
   (user) => !enrolledUserIds.has(user.id)
 );
 
+const approvedMentorIds = new Set(
+  mentorsEnabled
+    ? (
+        await db.query.userRole.findMany({
+          columns: { userId: true },
+          with: { role: { columns: { name: true } } },
+        })
+      )
+        .filter(({ role }) => role.name === "MENTOR")
+        .map(({ userId }) => userId)
+    : []
+);
+const mentorModel = cohortMentorModel(prog.programRoles, allUsers, approvedMentorIds);
+// While channels are off, mentor rows stay in the staff list as they always have.
+const staffRoles = mentorsEnabled ? teachingRoles(prog.programRoles) : prog.programRoles;
+
 const roster = rosterApplications.map((application) => ({
   ...application,
   badgeVariant: toProgramApplicationBadgeVariant(application.status),
@@ -345,22 +380,21 @@ const noticeCount = Number.parseInt(
   Astro.url.searchParams.get("count") ?? "0",
   10
 );
+const SUCCESS_NOTICES = new Map([
+  ["cohort-updated", "Cohort details updated."],
+  ["staff-added", "Cohort staff role added."],
+  ["staff-removed", "Cohort staff role removed."],
+  ["mentor-added", "Mentor added. They can open this cohort's recordings and channels now."],
+  ["mentor-removed", "Mentor removed. Their mentor access to this cohort has ended."],
+  ["current-enrollment", "Current learner enrolled as APPROVED."],
+  ["historical-enrollment", "Historical learner enrolled as COMPLETED; certificate and builder portfolio access is now unlocked."],
+]);
 const actionSuccess =
-  notice === "cohort-updated"
-    ? "Cohort details updated."
-    : notice === "staff-added"
-    ? "Cohort staff role added."
-    : notice === "staff-removed"
-      ? "Cohort staff role removed."
-      : notice === "current-enrollment"
-        ? "Current learner enrolled as APPROVED."
-        : notice === "historical-enrollment"
-          ? "Historical learner enrolled as COMPLETED; certificate and builder portfolio access is now unlocked."
-          : notice === "bulk-approved" && noticeCount > 0
-            ? `${noticeCount} cohort application${noticeCount === 1 ? "" : "s"} approved.`
-            : notice === "bulk-completed" && noticeCount > 0
-              ? `${noticeCount} cohort application${noticeCount === 1 ? "" : "s"} completed; certificate and builder portfolio access is now unlocked.`
-              : "";
+  notice === "bulk-approved" && noticeCount > 0
+    ? `${noticeCount} cohort application${noticeCount === 1 ? "" : "s"} approved.`
+    : notice === "bulk-completed" && noticeCount > 0
+      ? `${noticeCount} cohort application${noticeCount === 1 ? "" : "s"} completed; certificate and builder portfolio access is now unlocked.`
+      : SUCCESS_NOTICES.get(notice ?? "") ?? "";
 
 const formatDate = (date: Date | null) =>
   date ? new Date(date).toISOString().split("T")[0] : "";
@@ -524,7 +558,7 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
 
     <Card>
       <h3 class="mb-4 text-lg font-semibold text-white">Staff</h3>
-      {prog.programRoles.length > 0 ? (
+      {staffRoles.length > 0 ? (
         <div class="mb-4 overflow-x-auto rounded-lg border border-teal/20">
           <table class="w-full text-left text-sm">
             <thead class="bg-teal/30 text-xs uppercase text-white/80">
@@ -535,7 +569,7 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
               </tr>
             </thead>
             <tbody class="divide-y divide-teal/10">
-              {prog.programRoles.map((programRole) => (
+              {staffRoles.map((programRole) => (
                 <tr class="text-white/80">
                   <td class="px-4 py-3">{programRole.user?.name ?? "Unknown"}</td>
                   <td class="px-4 py-3">{programRole.name}</td>
@@ -594,6 +628,8 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
         </Button>
       </form>
     </Card>
+
+    {mentorsEnabled && <CohortMentors model={mentorModel} />}
 
     <Card>
       <div class="mb-5">

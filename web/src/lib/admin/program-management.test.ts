@@ -34,17 +34,17 @@ const expectDomainError = (
 };
 
 describe("cohort staff roles", () => {
-  it.each(["INSTRUCTOR", "TA"] as const)("accepts exact role %s", (role) => {
+  it.each(["INSTRUCTOR", "TA", "MENTOR"] as const)("accepts exact role %s", (role) => {
     expect(parseProgramStaffRole(role)).toBe(role);
   });
 
-  it.each(["instructor", " INSTRUCTOR", "MENTOR", "", null])(
+  it.each(["instructor", " INSTRUCTOR", "mentor", "ADMIN", "INSTITUTION", "", null, ["MENTOR"]])(
     "rejects forged role %j",
     (role) => {
       expectDomainError(
         () => parseProgramStaffRole(role),
         "INVALID_STAFF_ROLE",
-        "Instructor or TA"
+        "Instructor, TA or Mentor"
       );
     }
   );

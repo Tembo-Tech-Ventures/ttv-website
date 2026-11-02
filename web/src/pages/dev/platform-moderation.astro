@@ -1,0 +1,57 @@
+---
+/**
+ * Dev-only harness for the admin moderation queue (U-2.4).
+ *
+ * Renders the real queue (ModerationQueueView) inside the real admin shell, over fixture cases in
+ * B-2.5's queue shape, and decides them through the same form parser the page uses:
+ *
+ * - `?run=<name>`: a separate queue per run, so parallel browsers never share decisions;
+ *   `&reset` starts the run again.
+ * - `&state=DECIDED`: the decided tab.
+ * - `&fail=409` (or any 4xx/5xx): every decision is refused with that status, as the server
+ *   would refuse it.
+ *
+ * Nothing here is reachable outside `astro dev`. `e2e/platform-moderation.spec.ts` holds the
+ * browser contract; the page itself is /admin/moderation.
+ */
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import AdminShell from "@/components/shells/AdminShell";
+import ModerationQueueView from "@/components/admin/moderation/ModerationQueueView.astro";
+import { decideHarnessCase, harnessQueue, listHarnessCases } from "@/components/admin/moderation/harness";
+import { moderationQueueRequest, queuePaths, type QueuePaths } from "@/components/admin/moderation/page-flow";
+
+if (!import.meta.env.DEV) {
+  return new Response("Not found", { status: 404 });
+}
+
+const params = Astro.url.searchParams;
+const run = /^[\w-]{1,40}$/.test(params.get("run") ?? "") ? params.get("run")! : "default";
+const failParam = Number(params.get("fail"));
+const failWith = Number.isInteger(failParam) && failParam >= 400 && failParam < 600 ? failParam : null;
+harnessQueue(run, params.has("reset") && Astro.request.method === "GET");
+
+// The page's addresses, kept on this run and its failure switch.
+const keep = new URLSearchParams({ run, ...(failWith ? { fail: String(failWith) } : {}) }).toString();
+const base = queuePaths("/dev/platform-moderation");
+const withRun = (path: string) => `${path}${path.includes("?") ? "&" : "?"}${keep}`;
+const paths: QueuePaths = {
+  tab: (state) => withRun(base.tab(state)),
+  page: (state, cursor) => withRun(base.page(state, cursor)),
+  decided: (state, action) => withRun(base.decided(state, action)),
+};
+
+const outcome = await moderationQueueRequest(Astro.request, Astro.url, {
+  list: async ({ state }) => ({ items: listHarnessCases(run, state), nextCursor: null }),
+  countPending: async () => listHarnessCases(run, "PENDING").length,
+  decide: async (input) => decideHarnessCase(run, input, failWith),
+  isBadCursor: () => false,
+}, paths);
+if (outcome.kind === "redirect") return Astro.redirect(outcome.location, 303);
+Astro.response.status = outcome.status;
+---
+
+<BaseLayout title="Moderation harness">
+  <AdminShell client:load currentPath="/admin/moderation" pendingModeration={outcome.props.pendingCount}>
+    <ModerationQueueView {...outcome.props} />
+  </AdminShell>
+</BaseLayout>
