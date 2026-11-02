@@ -12,8 +12,15 @@ export const TEMBO_CONFIG = Object.freeze({
   staleClaimMs: 120_000,
   /** Model calls per answer: tool rounds, then one last call without tools. */
   maxRounds: 3,
-  /** No new model call starts this long after the run began: work after a response has about 30 seconds. */
+  /** Tool rounds stop this long after the run began; the next call answers with what it has. */
   roundDeadlineMs: 9_000,
+  /**
+   * The whole run, model calls included: work after a response gets about 30 seconds. Each call may use
+   * only what is left, and none starts with less than minCallMs left; the run then fails and the
+   * question is given back.
+   */
+  runBudgetMs: 25_000,
+  minCallMs: 2_000,
   /** Tool calls carried out per round; the rest are answered with an error. */
   toolCallsPerRound: 4,
   /** Results one tool call returns. */

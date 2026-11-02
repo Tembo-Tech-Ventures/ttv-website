@@ -95,7 +95,10 @@ transcript whoever asks.
 After the response (`ctx.waitUntil`): Gemma 4
 (`@cf/google/gemma-4-26b-a4b-it`) through the AI Gateway binding with
 `collectLog: false` and one attempt (`src/lib/community/native-gateway.ts`), at
-most three calls: tool rounds while under nine seconds, then one without tools.
+most three calls: tool rounds while under nine seconds, then one without tools,
+the whole run within 25 seconds (work after a response gets about 30). Each call
+may use only the time left; with less than two seconds left, or when a call
+outlives it, the run fails and the question is given back.
 At most four tool calls a round, six results a call and 30 sources an answer.
 Prompts treat sources as quoted data, never instructions.
 

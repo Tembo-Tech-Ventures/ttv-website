@@ -4,6 +4,8 @@ import { ErrorEnvelope, MASKED_CONTACT, Message, MessageList, ROUTES, TemboRespo
 import { refusal } from "./grounding";
 import { getMe } from "@/lib/platform/server/me";
 import { temboDay, temboDayEnd } from "./quota";
+import { FINDING_REASONS } from "@/lib/channels/moderation/detectors";
+import type { TemboModel } from "./model";
 import { NOW, scriptedModel, temboDatabase, type TemboFixture } from "./test-support";
 
 const fixtures: TemboFixture[] = [];
@@ -353,5 +355,92 @@ describe("/me", () => {
     const off = await getMe({ db: s.d1, env, locals: { ...(locals as object) } as never });
     expect(off.temboUsage).toEqual({ used: 0, limit: 10, resetsAt: temboDayEnd(NOW) });
     expect(prepare.mock.calls.some(([query]) => query.includes("tembo_usage"))).toBe(false);
+  });
+});
+
+describe("a run's time and its claim", () => {
+  /** A model that moves the clock on by `ms` each call and always asks to search. */
+  function slowModel(clock: { now: number }, ms: number) {
+    const calls: (string[] | undefined)[] = [];
+    const model: TemboModel = async (_, tools) => {
+      calls.push(tools?.map((tool) => tool.function.name));
+      clock.now += ms;
+      if (!tools) return { content: "Pinned [S1].", toolCalls: [], finishReason: "stop" };
+      return { content: null, finishReason: "tool_calls", toolCalls: [{ id: `c${calls.length}`, type: "function", function: { name: "search_channel", arguments: '{"query":"budget"}' } }] };
+    };
+    return { model, calls };
+  }
+
+  it("stops offering tools after nine seconds, and the last call answers", async () => {
+    const s = setup();
+    s.message("help", { body: "Budget templates are pinned." });
+    const clock = { now: NOW };
+    const { model, calls } = slowModel(clock, 10_000);
+    await s.ask("help", s.question("help"), { temboModel: model, now: () => clock.now });
+    await s.afterResponse();
+    expect(calls).toEqual([["search_projects", "search_channel"], undefined]);
+    expect(answers(s)).toHaveLength(1);
+  });
+
+  it("starts no call with less than two seconds of its budget left, and gives the question back", async () => {
+    const s = setup();
+    const clock = { now: NOW };
+    const { model, calls } = slowModel(clock, 24_000);
+    await s.ask("help", s.question("help"), { temboModel: model, now: () => clock.now });
+    await s.afterResponse();
+    expect(calls).toHaveLength(1);
+    expect(s.rows("SELECT status FROM tembo_ask")).toEqual([{ status: "FAILED" }]);
+    expect(s.usage()).toEqual([{ day: "2026-11-02", count: 0 }]);
+    expect(answers(s)).toEqual([]);
+  });
+
+  it("abandons a call that outlives the budget, and gives the question back", async () => {
+    const s = setup();
+    const hanging: TemboModel = () => new Promise(() => {});
+    await s.ask("help", s.question("help"), { temboModel: hanging });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const run = s.afterResponse();
+      await vi.advanceTimersByTimeAsync(25_000);
+      await run;
+    } finally { vi.useRealTimers(); }
+    expect(s.rows("SELECT status FROM tembo_ask")).toEqual([{ status: "FAILED" }]);
+    expect(answers(s)).toEqual([]);
+  });
+
+  it("a run whose claim is taken while it generates posts nothing; the new run answers once", async () => {
+    const s = setup();
+    const question = s.question("help");
+    const second = scriptedModel([{ answer: NO_TAGS }]);
+    const first: TemboModel = async () => {
+      // The first Worker went quiet long enough for a later ask to claim the question again.
+      expect((await s.ask("help", question, { now: () => NOW + 121_000, temboModel: second.model })).status).toBe(202);
+      return { content: "Late answer.", toolCalls: [], finishReason: "stop" };
+    };
+    await s.ask("help", question, { temboModel: first });
+    await s.afterResponse();
+    expect(second.calls).toHaveLength(1);
+    const posted = answers(s);
+    expect(posted).toHaveLength(1);
+    expect(s.rows("SELECT status, answerId FROM tembo_ask")).toEqual([{ status: "ANSWERED", answerId: posted[0]!.id }]);
+    expect(s.usage()).toEqual([{ day: "2026-11-02", count: 1 }]);
+  });
+});
+
+describe("masked contact details", () => {
+  it("are no search oracle: a search matching only inside a masked span finds nothing", async () => {
+    const s = setup();
+    const flagged = s.message("help", { body: "MASKEDONLY call me on 0712 345 678" });
+    s.database.prepare("UPDATE channel_message SET moderationState = 'FLAGGED', moderationReasons = ? WHERE id = ?")
+      .run(JSON.stringify([FINDING_REASONS.phone]), flagged);
+    // Asked in another thread, so the flagged message is not part of the conversation.
+    const question = s.question("help", "@tembo whose number is this?", { parentId: s.message("help", { body: "A different thread" }) });
+    const { model, calls, seen } = scriptedModel([{ search: [["search_channel", "0712"], ["search_channel", "345 678"]] }, { answer: "NO_ANSWER" }]);
+    await s.ask("help", question, { temboModel: model });
+    await s.afterResponse();
+    const results = calls[1]!.messages.filter((message) => message.role === "tool").map((message) => JSON.parse(message.content) as { results: unknown[] });
+    expect(results.map((result) => result.results)).toEqual([[], []]);
+    expect(seen()).not.toContain("MASKEDONLY");
+    expect(answers(s)).toMatchObject([{ citations: "[]" }]);
   });
 });

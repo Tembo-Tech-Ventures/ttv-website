@@ -11,7 +11,8 @@ import { clip, conversationSources, SCOPE_WORDS, SourceBook, toolsFor, visibleBo
 
 /**
  * Answering an accepted question, after the response (README.md beside this file, "Answering"):
- * the conversation and the channel's tools go to the model for at most TEMBO_CONFIG.maxRounds calls;
+ * the conversation and the channel's tools go to the model for at most TEMBO_CONFIG.maxRounds calls,
+ * all within TEMBO_CONFIG.runBudgetMs, so the run ends inside the time work after a response gets;
  * the answer is grounded (grounding.ts) and screened by the same detectors as a person's post; then
  * it is posted as a TEMBO message in the asking message's thread, in one batch that holds only while
  * this run still owns the claim and the thread is open. Any failure gives the question back
@@ -62,13 +63,32 @@ async function readQuestion(db: D1Database, messageId: string): Promise<Question
     LEFT JOIN "user" u ON u.id = a.userId WHERE a.messageId = ?1`).bind(messageId).first<QuestionRow>();
 }
 
-/** The tool loop: tool rounds while time allows, then one call without tools. Returns the model's last text. */
+/** The run had too little time left for another model call. */
+export class TemboTimeoutError extends Error {
+  constructor() { super("Tembo ran out of time to answer."); }
+}
+
+/** The call's result, or TemboTimeoutError after `ms`. A call that outlives it is no longer awaited. */
+function within<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new TemboTimeoutError()), ms); });
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * The tool loop: tool rounds until TEMBO_CONFIG.roundDeadlineMs, then one call without tools, all
+ * within TEMBO_CONFIG.runBudgetMs. Returns the model's last text; throws TemboTimeoutError when time
+ * runs out first.
+ */
 async function generate(ctx: AnswerContext, sources: SourceContext, messages: GatewayMessage[], started: number): Promise<string> {
   const tools = toolsFor(sources);
   const clock = ctx.now ?? Date.now;
   for (let round = 1; round <= TEMBO_CONFIG.maxRounds; round += 1) {
-    const last = round === TEMBO_CONFIG.maxRounds || clock() - started > TEMBO_CONFIG.roundDeadlineMs;
-    const result = await ctx.model(messages, last ? undefined : tools.definitions);
+    const elapsed = clock() - started;
+    const left = TEMBO_CONFIG.runBudgetMs - elapsed;
+    if (left < TEMBO_CONFIG.minCallMs) throw new TemboTimeoutError();
+    const last = round === TEMBO_CONFIG.maxRounds || elapsed > TEMBO_CONFIG.roundDeadlineMs;
+    const result = await within(ctx.model(messages, last ? undefined : tools.definitions), left);
     if (last || result.toolCalls.length === 0) return result.content ?? "";
     messages.push({ role: "assistant", content: result.content, tool_calls: result.toolCalls });
     for (const [i, call] of result.toolCalls.entries()) {
