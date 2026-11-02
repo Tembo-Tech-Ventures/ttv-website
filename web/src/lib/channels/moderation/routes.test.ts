@@ -7,7 +7,9 @@ import type { CapabilityCase } from "@/lib/platform/server/capabilities.fixtures
 import type { ChannelOperation } from "../http";
 import { channelDatabase, post, VIEWER, type ChannelFixture } from "../test-support";
 import { ChannelError } from "../errors";
-import { decideModeration, REPORT_LIMIT } from "./actions";
+import { findChannelById } from "../access";
+import { findMessageTarget } from "../mutations";
+import { decideModeration, REPORT_LIMIT, reportMessage } from "./actions";
 import { FINDING_REASONS, textKey } from "./detectors";
 import { countPendingModeration, listModerationQueue, QUEUE_PAGE_SIZE } from "./queue";
 
@@ -40,7 +42,14 @@ const caseOf = (s: ChannelFixture, id: string) => s.database.prepare(
 ).get(id);
 const events = (s: ChannelFixture) => s.database.prepare("SELECT action, source, actorId, fromState, toState, reasons FROM moderation_event ORDER BY createdAt, rowid").all();
 const hide = (reason = "Harsh, not about the work") => ({ action: "hide" as const, reason });
+/**
+ * listAttention reads a snapshot ending a millisecond before now, and items are stamped with the wall
+ * clock: wait (a millisecond or two) until everything written so far is inside it.
+ */
 async function attentionOf(s: ChannelFixture, userId: string) {
+  const { latest } = s.database.prepare("SELECT max(createdAt) AS latest FROM attention_item").get() as { latest: number | null };
+  const inSnapshot = () => latest === null || Date.now() - 1 >= latest;
+  while (!inSnapshot()) await new Promise((resolve) => { setTimeout(resolve, 1); });
   const { items } = await listAttention(s.db, userId, {}, await capabilitiesFor(s.db, { id: userId }));
   return items.map((item) => ({ kind: item.kind, space: item.space, href: item.subject.href, summary: item.summary, actor: item.actor?.id ?? null }));
 }
@@ -215,6 +224,39 @@ describe("hiding: what it does", () => {
     expect((await s.call("moderateMessage", { id: deleted, user: ACHIENG, body: hide() })).status).toBe(409);
   });
 
+  it("stays final after a report reopens the case: a moderator's report never clears an admin's decision", async () => {
+    const s = setup({ globalRoles: ["MENTOR"] });
+    grant(s, ACHIENG, "ADMIN");
+    const id = s.message("help", { author: OTIENO, body: "Borderline joke" });
+    await s.call("moderateMessage", { id, body: hide() });
+    await s.call("moderateMessage", { id, user: ACHIENG, body: { action: "restore", reason: "A joke among friends" } });
+    expect((await s.call("reportMessage", { id, body: { reason: "Still rude" } })).status).toBe(201);
+    expect(caseOf(s, id)).toMatchObject({ state: "PENDING", source: "REPORT", decision: null });
+    const refused = await s.call("moderateMessage", { id, body: hide() });
+    expect([refused.status, errorOf(refused.body).message]).toEqual([409, "An admin has already reviewed this message."]);
+
+    // An admin's keep stands even with no case before it.
+    const kept = s.message("help", { author: OTIENO, body: "Fine as is" });
+    await s.call("moderateMessage", { id: kept, user: ACHIENG, body: { action: "keep", reason: "Fine" } });
+    expect(caseOf(s, kept)).toBeUndefined();
+    expect((await s.call("moderateMessage", { id: kept, body: hide() })).status).toBe(409);
+  });
+
+  it("keeps an admin's hide final: a hidden message takes no reports, and a reopened case takes no review", async () => {
+    const s = setup({ globalRoles: ["MENTOR"] });
+    grant(s, ACHIENG, "ADMIN");
+    const id = s.message("help", { author: OTIENO, body: "Harsh words" });
+    await s.call("moderateMessage", { id, user: ACHIENG, body: hide() });
+    const reported = await s.call("reportMessage", { id, body: { reason: "Spam" } });
+    expect([reported.status, errorOf(reported.body).message]).toEqual([409, "This message is already hidden."]);
+    // However the case reopens (a later signal), the admin's hide is in the audit trail.
+    s.database.prepare(`UPDATE moderation_case SET state = 'PENDING', decision = NULL, decisionReason = NULL, decidedBy = NULL,
+      decidedAt = NULL WHERE messageId = ?`).run(id);
+    const review = await s.call("requestModerationReview", { id, user: OTIENO, body: {} });
+    expect([review.status, errorOf(review.body).message]).toEqual([409, "An admin has already reviewed this message."]);
+    expect(caseOf(s, id)).toMatchObject({ review: 0 });
+  });
+
   it("keeps a message as fine: visible again, its text and findings allowlisted, never flagged again", async () => {
     const s = setup({ globalRoles: ["ADMIN"] });
     s.agree(OTIENO);
@@ -230,6 +272,18 @@ describe("hiding: what it does", () => {
     const again = Message.parse((await s.call("postMessage", { id: s.channel("introductions"), user: OTIENO, body: post("Call +254712345678") })).body);
     expect(again.moderation).toEqual({ state: "VISIBLE", reasons: [] });
     expect(caseOf(s, flagged.id)).toMatchObject({ state: "DECIDED", decision: "KEEP" });
+  });
+});
+
+describe("reports in direct conversations", () => {
+  it("are refused until direct conversations have moderators", async () => {
+    const s = setup();
+    const id = s.message("help", { author: OTIENO });
+    const target = await findMessageTarget(s.d1, id);
+    const channel = { ...(await findChannelById(s.db, { id: VIEWER }, s.channel("help")))!, kind: "DIRECT" as const };
+    await expect(reportMessage({ db: s.d1, viewerId: VIEWER, channel }, target!, { reason: "Spam" }))
+      .rejects.toMatchObject({ status: 403, message: "Reports aren't available in direct conversations yet." });
+    expect(s.database.prepare("SELECT COUNT(*) AS n FROM message_report").get()).toEqual({ n: 0 });
   });
 });
 
@@ -395,6 +449,17 @@ describe("the queue", () => {
     expect(decided.items).toEqual([expect.objectContaining({
       id: reported, state: "DECIDED", decision: { action: "restore", reason: "Not spam", by: expect.objectContaining({ id: VIEWER }), decidedAt: 6_000 },
     })]);
+  });
+
+  it("leaves out a case the contract cannot describe, and shows the rest", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    const [good, bad] = [s.message("help", { author: OTIENO }), s.message("help", { author: OTIENO })];
+    for (const id of [good, bad]) await s.call("reportMessage", { id, body: { reason: "Spam" } });
+    s.database.prepare(`UPDATE moderation_case SET reasons = '[" "]' WHERE messageId = ?`).run(bad);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const response = await s.call("listModerationQueue");
+    expect([response.status, ModerationQueue.parse(response.body).items.map((item) => item.id)]).toEqual([200, [good]]);
+    expect(warn).toHaveBeenCalledWith("A moderation case could not be shown.", bad);
   });
 
   it("pages with an opaque cursor bound to its state", async () => {

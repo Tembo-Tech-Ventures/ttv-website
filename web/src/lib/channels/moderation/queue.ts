@@ -3,7 +3,7 @@ import { z } from "zod";
 import * as schema from "@/lib/db/schema";
 import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
 import {
-  Id, MessageVersion, ModerationQueue, ModerationQueueState, Timestamp, WebLink,
+  Id, MessageVersion, ModerationQueue, ModerationQueueItem, ModerationQueueState, Timestamp, WebLink,
   type Channel, type ModerationQueueQuery, type ModerationSource, type PersonSummary,
 } from "@/lib/platform/contracts";
 import { listChannelsFor } from "../access";
@@ -108,14 +108,17 @@ async function queuePage(db: D1Database, viewerId: string, channels: Channel[], 
       const channel = byId.get(row.channelId);
       if (!channel) return [];
       const decider = person(row.deciderId, row.deciderName, row.deciderImage);
-      return [{
+      const item = ModerationQueueItem.safeParse({
         id: row.id, message: toMessage(row, { db, viewerId, channel }), channel, source: row.source, reasons: strings(row.caseReasons),
         state: row.caseState, reportCount: row.reportCount, actor: person(row.actorId, row.actorName, row.actorImage), createdAt: row.openedAt,
         evidence: evidence(row.evidence),
         review: row.reviewRequestedAt === null ? null : { requestedAt: row.reviewRequestedAt, note: row.reviewNote },
         decision: row.caseState === "DECIDED" && row.decision !== null && row.decidedAt !== null
           ? { action: row.decision.toLowerCase(), reason: row.decisionReason ?? "", by: decider, decidedAt: row.decidedAt } : null,
-      }];
+      });
+      // One case the contract cannot describe (all its reasons blank, say) must not take the queue down.
+      if (!item.success) console.warn("A moderation case could not be shown.", row.id);
+      return item.success ? [item.data] : [];
     }),
   });
 }

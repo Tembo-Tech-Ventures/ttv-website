@@ -30,6 +30,14 @@ const EVENT = "INSERT INTO moderation_event (id, messageId, action, source, acto
 const NEXT_CHANGE = "(SELECT MAX(changeSeq) + 1 FROM channel_message WHERE channelId = ?1)";
 
 const deleted = () => new ChannelError("conflict", "This message was deleted.", 409);
+/**
+ * An admin's restore or keep of message `m` since its text last changed, or an admin's hide since it
+ * was hidden: from the audit trail, which a later report or flag reopening the case cannot erase.
+ */
+const ADMIN_KEPT = `EXISTS (SELECT 1 FROM moderation_event e WHERE e.messageId = m.id AND e.source = 'ADMIN'
+  AND e.action IN ('RESTORE','KEEP') AND e.createdAt >= coalesce(m.editedAt, 0))`;
+const ADMIN_HID = `EXISTS (SELECT 1 FROM moderation_event e WHERE e.messageId = m.id AND e.source = 'ADMIN'
+  AND e.action = 'HIDE' AND e.createdAt >= coalesce(m.hiddenAt, 0))`;
 const decided = () => new ChannelError("conflict", "An admin has already reviewed this message.", 409);
 const keepHidden = () => new ChannelError("conflict", "This message is hidden. Restore it instead.", 409);
 
@@ -41,13 +49,16 @@ async function current(ctx: WriteContext, id: string): Promise<Message> {
 
 /**
  * POST /api/messages/:id/report. Once per person and message: reporting again changes nothing
- * (created: false). Nobody reports their own message (403) or a deleted one (409). The author sees
- * no change; the report opens or joins the admin case and keeps the text the reporter saw.
+ * (created: false). Nobody reports their own message (403), a deleted one (409) or a hidden one
+ * (409: it is already out of the channel, and a report must not reopen an admin's decision). Direct
+ * conversations have no moderators yet, so they take no reports (403). The author sees no change;
+ * the report opens or joins the admin case and keeps the text the reporter saw.
  */
 export async function reportMessage(ctx: WriteContext, target: MessageTarget, input: ReportMessage): Promise<{ created: boolean }> {
   if (target.authorKind === "USER" && target.authorId === ctx.viewerId) {
     throw new ChannelError("forbidden", "You can't report your own message.", 403);
   }
+  if (ctx.channel.kind === "DIRECT") throw new ChannelError("forbidden", "Reports aren't available in direct conversations yet.", 403);
   if (target.deletedAt !== null) throw deleted();
   const now = ctx.now ?? Date.now();
   const reportId = createId();
@@ -55,7 +66,7 @@ export async function reportMessage(ctx: WriteContext, target: MessageTarget, in
   // report, ?6 the event for its audit row, written only with the report.
   const [report] = await ctx.db.batch([
     ctx.db.prepare(`INSERT INTO message_report (id, messageId, reporterId, reason, createdAt) SELECT ?1, ?2, ?3, ?4, ?5
-      WHERE EXISTS (SELECT 1 FROM channel_message WHERE id = ?2 AND deletedAt IS NULL)
+      WHERE EXISTS (SELECT 1 FROM channel_message WHERE id = ?2 AND deletedAt IS NULL AND moderationState <> 'HIDDEN')
         AND (SELECT COUNT(*) FROM message_report WHERE reporterId = ?3 AND createdAt > ?6) < ?7
       ON CONFLICT (messageId, reporterId) DO NOTHING`)
       .bind(reportId, target.id, ctx.viewerId, input.reason, now, now - REPORT_LIMIT.windowMs, REPORT_LIMIT.count),
@@ -67,10 +78,13 @@ export async function reportMessage(ctx: WriteContext, target: MessageTarget, in
   const why = await ctx.db.prepare(`SELECT
       EXISTS (SELECT 1 FROM message_report WHERE messageId = ?1 AND reporterId = ?2) AS reported,
       (SELECT deletedAt IS NOT NULL FROM channel_message WHERE id = ?1) AS gone,
+      (SELECT moderationState = 'HIDDEN' FROM channel_message WHERE id = ?1) AS hidden,
       (SELECT MIN(createdAt) FROM message_report WHERE reporterId = ?2 AND createdAt > ?3) AS oldest`)
-    .bind(target.id, ctx.viewerId, now - REPORT_LIMIT.windowMs).first<{ reported: number; gone: number; oldest: number | null }>();
+    .bind(target.id, ctx.viewerId, now - REPORT_LIMIT.windowMs)
+    .first<{ reported: number; gone: number; hidden: number; oldest: number | null }>();
   if (why?.reported) return { created: false };
   if (why?.gone) throw deleted();
+  if (why?.hidden) throw new ChannelError("conflict", "This message is already hidden.", 409);
   throw new ChannelError("rate_limited", "You've sent a lot of reports today. Try again later.", 429,
     Math.max(1, (why?.oldest ?? now) + REPORT_LIMIT.windowMs - now));
 }
@@ -103,8 +117,7 @@ export async function moderateMessage(
       // A moderator's hide needs a message not yet hidden and no admin restore or keep since its last edit.
       ctx.db.prepare(`${EVENT} SELECT ?6, m.id, 'HIDE', ?7, ?3, m.moderationState, 'HIDDEN', json_array(?4), ?5
         FROM channel_message m WHERE m.id = ?2 AND m.channelId = ?1 AND m.deletedAt IS NULL
-          AND (?7 = 'ADMIN' OR (m.moderationState <> 'HIDDEN' AND NOT EXISTS (SELECT 1 FROM moderation_case c
-            WHERE c.messageId = m.id AND c.state = 'DECIDED' AND c.decision IN ('RESTORE','KEEP') AND c.decidedAt >= coalesce(m.editedAt, 0))))`)
+          AND (?7 = 'ADMIN' OR (m.moderationState <> 'HIDDEN' AND NOT ${ADMIN_KEPT}))`)
         .bind(...params),
       ctx.db.prepare(`UPDATE channel_message SET moderationState = 'HIDDEN', hiddenBy = ?3, hiddenAt = coalesce(hiddenAt, ?5),
           moderationReasons = ${mergedReasons("moderationReasons", "json_array(?4)")}, changeSeq = ${NEXT_CHANGE}
@@ -200,7 +213,7 @@ export async function requestModerationReview(
   const { meta } = await ctx.db.prepare(`INSERT INTO moderation_case
       (messageId, state, source, reasons, actorId, openedAt, updatedAt, reviewRequestedAt, reviewNote)
     SELECT id, 'PENDING', CASE WHEN hiddenBy IS NULL THEN 'AI_FLAG' ELSE 'MENTOR_HIDE' END, moderationReasons, hiddenBy, ?3, ?3, ?3, ?4
-    FROM channel_message WHERE id = ?1 AND authorId = ?2 AND moderationState = 'HIDDEN'
+    FROM channel_message m WHERE id = ?1 AND authorId = ?2 AND moderationState = 'HIDDEN' AND NOT ${ADMIN_HID}
     ON CONFLICT (messageId) DO UPDATE SET reviewRequestedAt = excluded.reviewRequestedAt, reviewNote = excluded.reviewNote,
       updatedAt = max(updatedAt, excluded.updatedAt)
     WHERE state = 'PENDING' AND reviewRequestedAt IS NULL`).bind(target.id, ctx.viewerId, now, input.note ?? null).run();

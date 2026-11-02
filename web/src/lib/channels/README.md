@@ -382,8 +382,10 @@ the rest.
 
 - **Report** (any reader of the message): once per person and message
   (`message_report`'s unique key), so repeating changes nothing. Not your own
-  message (403), not a deleted one (409), at most `REPORT_LIMIT` (20) a day
-  (429). The author sees no change: a report only opens or joins the case.
+  message (403), not a deleted or hidden one (409: a hidden message is out of
+  the channel already, and a report must not reopen an admin's decision), not
+  in a direct conversation until those have moderators (403), at most
+  `REPORT_LIMIT` (20) a day (429). The author sees no change: a report only opens or joins the case.
 - **Hide**: a channel's moderators (`canModerate`: the cohort's instructors,
   TAs and mentors; global mentors in community channels) and admins, with a
   reason the author sees. HIDDEN with `hiddenBy`. A mentor of another cohort
@@ -398,7 +400,9 @@ the rest.
   (`screeningText`), and of each detector finding in it, so none is flagged
   again. After an admin restores or keeps a message, a moderator cannot hide
   it again until its author edits it (409). Restore and keep are admin only
-  (403).
+  (403). These rules read the admin's events in `moderation_event`, not the
+  case's current state, so a later signal that reopens the case cannot undo
+  them.
 - **Ask for review**: the author of a hidden message, once per case, with an
   optional note. A hide an admin made or upheld is final (409). While it is
   open, `moderation.reviewRequested` is true on that message for its author
