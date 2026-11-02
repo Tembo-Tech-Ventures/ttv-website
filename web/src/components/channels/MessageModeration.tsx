@@ -175,8 +175,14 @@ function Panel({ title, children, error, submitLabel, submitting, canSubmit, dan
     element.querySelector<HTMLElement>("input, textarea")?.focus({ preventScroll: true });
     reveal();
     // Measured again once it has unfolded: during the opening it is a little shorter than at rest.
-    element.addEventListener("animationend", reveal, { once: true });
-    return () => element.removeEventListener("animationend", reveal);
+    // Its own animation only: a field's would otherwise scroll a tall form back past its buttons.
+    const unfolded = (event: AnimationEvent) => {
+      if (event.target !== element) return;
+      element.removeEventListener("animationend", unfolded);
+      reveal();
+    };
+    element.addEventListener("animationend", unfolded);
+    return () => element.removeEventListener("animationend", unfolded);
   }, [reveal]);
 
   // A refusal adds its reason above the buttons and pushes them down: bring them back.
