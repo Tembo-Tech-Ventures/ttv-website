@@ -11,7 +11,8 @@ import { ChannelError, messageColumns, toMessage, type MessageRow } from "../mes
 
 /**
  * The admin moderation queue (B-2.5), for GET /api/moderation/queue and the /admin/moderation page
- * (U-2.4) alike: one case per message, newest case first. One statement reads a page with each
+ * (U-2.4) alike: one case per message, newest case first (by when it first opened, so a reopened case
+ * keeps its place). One statement reads a page with each
  * message as an admin sees it, the case, who hid or decided, and the evidence (earlier texts, oldest
  * first). Direct conversations have no moderators and never appear. The caller owns the `channels`
  * flag and sign-in checks.
@@ -34,7 +35,7 @@ function decodeCursor(value: string): QueueCursor {
 }
 
 interface QueueRow extends MessageRow {
-  caseState: "PENDING" | "DECIDED"; source: ModerationSource; caseReasons: string; reportCount: number; openedAt: number;
+  caseState: "PENDING" | "DECIDED"; source: ModerationSource; caseReasons: string; reportCount: number; openedAt: number; reopenedAt: number | null;
   decision: "HIDE" | "RESTORE" | "KEEP" | null; decisionReason: string | null; decidedAt: number | null;
   reviewRequestedAt: number | null; reviewNote: string | null; evidence: string;
   actorId: string | null; actorName: string | null; actorImage: string | null;
@@ -84,7 +85,7 @@ async function queuePage(db: D1Database, viewerId: string, channels: Channel[], 
   if (cursor && cursor.state !== state) throw invalidCursor();
   // ?1 state, ?2 viewer (message columns), ?3 and ?4 the cursor, ?5 page size and one more.
   const { results } = await db.prepare(`SELECT ${messageColumns("ch.programId")},
-      c.state AS caseState, c.source, c.reasons AS caseReasons, c.reportCount, c.openedAt, c.decision, c.decisionReason, c.decidedAt,
+      c.state AS caseState, c.source, c.reasons AS caseReasons, c.reportCount, c.openedAt, c.reopenedAt, c.decision, c.decisionReason, c.decidedAt,
       c.reviewRequestedAt, c.reviewNote,
       a.id AS actorId, a.name AS actorName, a.image AS actorImage, d.id AS deciderId, d.name AS deciderName, d.image AS deciderImage,
       (SELECT json_group_array(json_array(v.body, v.cause, v.capturedAt)) FROM (SELECT body, cause, capturedAt
@@ -111,6 +112,7 @@ async function queuePage(db: D1Database, viewerId: string, channels: Channel[], 
       const item = ModerationQueueItem.safeParse({
         id: row.id, message: toMessage(row, { db, viewerId, channel }), channel, source: row.source, reasons: strings(row.caseReasons),
         state: row.caseState, reportCount: row.reportCount, actor: person(row.actorId, row.actorName, row.actorImage), createdAt: row.openedAt,
+        ...row.reopenedAt === null ? {} : { reopenedAt: row.reopenedAt },
         evidence: evidence(row.evidence),
         review: row.reviewRequestedAt === null ? null : { requestedAt: row.reviewRequestedAt, note: row.reviewNote },
         decision: row.caseState === "DECIDED" && row.decision !== null && row.decidedAt !== null

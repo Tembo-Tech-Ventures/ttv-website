@@ -22,6 +22,8 @@ export const PERSONAL_ACCESS_TOKEN_SCOPES = [
   "community:read",
   "community:write",
   "institution:read",
+  "channels:read",
+  "channels:write",
 ] as const;
 export const MAX_ACTIVE_PERSONAL_ACCESS_TOKENS = 10;
 export const PERSONAL_ACCESS_TOKEN_WRITE_ERROR =
@@ -35,6 +37,24 @@ export type PersonalAccessTokenDuration =
   (typeof PERSONAL_ACCESS_TOKEN_DURATIONS)[number];
 export type PersonalAccessTokenScope =
   (typeof PERSONAL_ACCESS_TOKEN_SCOPES)[number];
+/**
+ * Every token grants scopes from one family: admin (the admin pages and APIs), community (with
+ * institution:read: the community API and MCP) or channels (the channel APIs, as the token's owner).
+ * Each family's read scope is required.
+ */
+export type PersonalAccessTokenFamily = "admin" | "community" | "channels";
+const FAMILY_READ_SCOPE = {
+  admin: "admin:read",
+  community: "community:read",
+  channels: "channels:read",
+} as const satisfies Record<PersonalAccessTokenFamily, PersonalAccessTokenScope>;
+/** The admin page's access choices, as their scopes. */
+const ADMIN_PAGE_ACCESS = {
+  read: ["admin:read"],
+  write: ["admin:read", "admin:write"],
+  "channels-read": ["channels:read"],
+  "channels-write": ["channels:read", "channels:write"],
+} as const satisfies Record<string, readonly PersonalAccessTokenScope[]>;
 
 interface PersonalAccessTokenRow {
   id: string;
@@ -118,9 +138,25 @@ export function parsePersonalAccessTokenDuration(
 export function parsePersonalAccessTokenScopes(
   value: FormDataEntryValue | null
 ): PersonalAccessTokenScope[] {
-  if (value === "read") return ["admin:read"];
-  if (value === "write") return ["admin:read", "admin:write"];
-  throw new Error("Choose read-only or read/write access.");
+  if (typeof value === "string" && Object.hasOwn(ADMIN_PAGE_ACCESS, value)) {
+    return [...ADMIN_PAGE_ACCESS[value as keyof typeof ADMIN_PAGE_ACCESS]];
+  }
+  throw new Error("Choose read-only or read/write access to admin or channels.");
+}
+
+/** The one family a token's scopes belong to; null when they mix families. */
+export function personalAccessTokenFamily(
+  scopes: readonly PersonalAccessTokenScope[]
+): PersonalAccessTokenFamily | null {
+  const families = new Set(
+    scopes.map((scope): PersonalAccessTokenFamily => {
+      if (scope.startsWith("admin:")) return "admin";
+      if (scope.startsWith("channels:")) return "channels";
+      return "community";
+    })
+  );
+  const [family] = families;
+  return families.size === 1 && family ? family : null;
 }
 
 function parseStoredScopes(value: string): PersonalAccessTokenScope[] | null {
@@ -198,12 +234,13 @@ export async function createPersonalAccessToken({
     throw new Error("Choose a supported token duration.");
   }
   const validatedScopes = parseStoredScopes(JSON.stringify(scopes));
-  if (!validatedScopes || (!validatedScopes.includes("admin:read") && !validatedScopes.includes("community:read"))) {
-    throw new Error("Every token must include admin:read or community:read access.");
+  if (!validatedScopes) throw new Error("Choose supported token scopes.");
+  const family = personalAccessTokenFamily(validatedScopes);
+  if (!family) {
+    throw new Error("Admin, community and channel token scopes cannot be combined.");
   }
-
-  if (validatedScopes.some(scope => scope.startsWith("admin:")) && validatedScopes.some(scope => !scope.startsWith("admin:"))) {
-    throw new Error("Admin and community token scopes cannot be combined.");
+  if (!validatedScopes.includes(FAMILY_READ_SCOPE[family])) {
+    throw new Error("Every token must include admin:read, community:read or channels:read access.");
   }
 
   const nowSeconds = Math.floor(now.getTime() / 1_000);

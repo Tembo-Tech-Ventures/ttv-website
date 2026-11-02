@@ -10,7 +10,9 @@ import {
   listPersonalAccessTokens,
   parsePersonalAccessTokenDuration,
   parsePersonalAccessTokenScopes,
+  personalAccessTokenFamily,
   revokePersonalAccessToken,
+  type PersonalAccessTokenScope,
 } from "@/lib/personal-access-tokens";
 
 Astro.response.headers.set("Cache-Control", "no-store");
@@ -74,6 +76,12 @@ const formatDate = (date: Date) =>
     timeStyle: "short",
     timeZone: "UTC",
   }).format(date);
+const accessLabel = (scopes: PersonalAccessTokenScope[]) => {
+  const family = personalAccessTokenFamily(scopes);
+  if (family === "admin") return scopes.includes("admin:write") ? "Admin, read/write" : "Admin, read only";
+  if (family === "channels") return scopes.includes("channels:write") ? "Channels, read/write" : "Channels, read only";
+  return "Community";
+};
 const tokenState = (expiresAt: Date, revokedAt: Date | null) => {
   if (revokedAt) return "Revoked";
   if (expiresAt <= now) return "Expired";
@@ -146,8 +154,14 @@ const tokenState = (expiresAt: Date, revokedAt: Date | null) => {
             name="access"
             class="form-control"
           >
-            <option value="read" selected>Read only</option>
-            <option value="write">Read and write</option>
+            <optgroup label="Admin">
+              <option value="read" selected>Admin: read only</option>
+              <option value="write">Admin: read and write</option>
+            </optgroup>
+            <optgroup label="Channels">
+              <option value="channels-read">Channels: read only</option>
+              <option value="channels-write">Channels: read and write</option>
+            </optgroup>
           </select>
         </label>
         <PersonalAccessTokenExpiry />
@@ -155,7 +169,10 @@ const tokenState = (expiresAt: Date, revokedAt: Date | null) => {
       </form>
       <p class="mt-3 text-xs text-ink-muted">
         Month options use 30-day periods.
-        Read/write tokens can submit admin changes without a browser Origin header.
+        Admin read/write tokens can submit admin changes without a browser Origin header, and decide
+        moderation cases through MCP.
+        Channel tokens read channels and, with read and write, post, edit, delete, react, report and
+        mark messages read as you; they can't reach admin pages or moderation decisions.
         Prefer read-only unless the automation must perform a specific mutation.
       </p>
     </section>
@@ -186,7 +203,7 @@ const tokenState = (expiresAt: Date, revokedAt: Date | null) => {
                     <td class="py-3 pr-4 font-medium text-white">{token.label}</td>
                     <td class="py-3 pr-4 font-mono text-xs">{token.tokenPrefix}</td>
                     <td class="py-3 pr-4">
-                      {token.scopes.includes("admin:write") ? "Read/write" : "Read only"}
+                      {accessLabel(token.scopes)}
                     </td>
                     <td class="py-3 pr-4">
                       {token.lastUsedAt ? formatDate(token.lastUsedAt) : "Never"}

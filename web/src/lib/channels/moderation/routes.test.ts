@@ -11,6 +11,7 @@ import { findChannelById } from "../access";
 import { findMessageTarget } from "../mutations";
 import { decideModeration, REPORT_LIMIT, reportMessage } from "./actions";
 import { FINDING_REASONS, textKey } from "./detectors";
+import { moderationMcpTools } from "./mcp";
 import { countPendingModeration, listModerationQueue, QUEUE_PAGE_SIZE } from "./queue";
 
 vi.mock("@/lib/observability/errors", async (importOriginal) => ({
@@ -346,6 +347,85 @@ describe("restoring a hidden message", () => {
   });
 });
 
+describe("a case whose message was deleted", () => {
+  /** Otieno's message, hidden by a moderator or flagged as it was posted, then deleted by Otieno: a PENDING case. */
+  async function deletedCase(state: "HIDDEN" | "FLAGGED") {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    grant(s, FAITH, "MENTOR");
+    s.agree(OTIENO);
+    const body = state === "FLAGGED" ? "Ring me: 0712 345 678" : "Harsh words";
+    const { id } = Message.parse((await s.call("postMessage", { id: s.channel("help"), user: OTIENO, body: post(body) })).body);
+    if (state === "HIDDEN") await s.call("moderateMessage", { id, user: FAITH, body: hide() });
+    expect((await s.call("deleteMessage", { id, user: OTIENO })).status).toBe(200);
+    expect(caseOf(s, id)).toMatchObject({ state: "PENDING" });
+    return { s, id };
+  }
+  type Decide = (s: ChannelFixture, input: { messageId: string; action: "hide" | "restore" | "keep"; reason: string }) =>
+    Promise<{ state: string } | { refused: string }>;
+  const admin = async (s: ChannelFixture) => ({ user: { id: VIEWER }, capabilities: await capabilitiesFor(s.db, { id: VIEWER }) });
+  const context = (s: ChannelFixture) => ({ db: s.d1, env: { DEPLOYMENT_ENVIRONMENT: undefined, PLATFORM_FLAGS_OVERRIDE: "all" } });
+  /** The same decision through each way in: the API, the page's server function and the MCP tool. */
+  const ways: Record<string, Decide> = {
+    api: async (s, { messageId, ...body }) => {
+      const response = await s.call("moderateMessage", { id: messageId, body });
+      return response.status === 200 ? { state: Message.parse(response.body).moderation?.state ?? "" } : { refused: errorOf(response.body).message };
+    },
+    decideModeration: async (s, input) => {
+      try {
+        return { state: (await decideModeration(context(s), await admin(s), input)).moderation?.state ?? "" };
+      } catch (error) {
+        if (error instanceof ChannelError) return { refused: error.message };
+        throw error;
+      }
+    },
+    mcp: async (s, args) => {
+      const tools = moderationMcpTools({ ...context(s), locals: { user: { id: VIEWER } } as never, scopes: ["admin:read", "admin:write"] });
+      const outcome = await tools.call("moderate_message", args);
+      if (outcome && "toolError" in outcome) return { refused: outcome.toolError };
+      if (outcome && "result" in outcome) return { state: Message.parse(outcome.result).moderation?.state ?? "" };
+      throw new Error(`Unexpected outcome: ${JSON.stringify(outcome)}`);
+    },
+  };
+
+  for (const [way, decide] of Object.entries(ways)) {
+    for (const state of ["HIDDEN", "FLAGGED"] as const) {
+      it(`${state}, then deleted: only keep decides it (${way}), leaving its state and allowlisting nothing`, async () => {
+        const { s, id } = await deletedCase(state);
+        expect(await decide(s, { messageId: id, ...hide() })).toEqual({ refused: "This message was deleted." });
+        expect(await decide(s, { messageId: id, action: "restore", reason: "Fine" }))
+          .toEqual({ refused: state === "HIDDEN" ? "This message was deleted." : "This message isn't hidden." });
+        expect(caseOf(s, id)).toMatchObject({ state: "PENDING" });
+
+        expect(await decide(s, { messageId: id, action: "keep", reason: "Withdrawn by its author" })).toEqual({ state });
+        expect(caseOf(s, id)).toMatchObject({ state: "DECIDED", decision: "KEEP", decidedBy: VIEWER });
+        expect(events(s).at(-1)).toMatchObject({ action: "KEEP", source: "ADMIN", fromState: state, toState: state });
+        expect(s.database.prepare("SELECT body, moderationState, deletedAt IS NOT NULL AS deleted FROM channel_message WHERE id = ?").get(id))
+          .toEqual({ body: "", moderationState: state, deleted: 1 });
+        expect(s.database.prepare("SELECT COUNT(*) AS n FROM moderation_allowlist").get()).toEqual({ n: 0 });
+        expect(await countPendingModeration(s.d1)).toBe(0);
+        expect((await listModerationQueue(s.d1, await admin(s), {})).items).toEqual([]);
+        expect((await listModerationQueue(s.d1, await admin(s), { state: "DECIDED" })).items.map((item) => [item.id, item.decision?.action]))
+          .toEqual([[id, "keep"]]);
+      });
+    }
+  }
+
+  it("leaves the state of a flagged message deleted after the admin read it, and allowlists nothing", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    const id = s.message("help", { author: OTIENO, state: "FLAGGED" });
+    const batch = s.d1.batch.bind(s.d1);
+    // The author's delete lands between the admin's read and the batch.
+    Object.assign(s.d1, { batch: (statements: D1PreparedStatement[]) => {
+      s.database.prepare("UPDATE channel_message SET body = '', deletedAt = 9 WHERE id = ?").run(id);
+      return batch(statements);
+    } });
+    const kept = await s.call("moderateMessage", { id, body: { action: "keep", reason: "Withdrawn" } });
+    expect([kept.status, Message.parse(kept.body).moderation?.state]).toEqual([200, "FLAGGED"]);
+    expect(events(s).at(-1)).toMatchObject({ action: "KEEP", fromState: "FLAGGED", toState: "FLAGGED" });
+    expect(s.database.prepare("SELECT COUNT(*) AS n FROM moderation_allowlist").get()).toEqual({ n: 0 });
+  });
+});
+
 describe("asking for a review", () => {
   it("lets the author of a hidden message ask once, and reopens nothing an admin decided", async () => {
     const s = setup({ globalRoles: ["MENTOR"] });
@@ -385,6 +465,58 @@ describe("reviewRequested", () => {
     // Only on a hidden message.
     await s.call("moderateMessage", { id, user: ACHIENG, body: { action: "restore", reason: "On reflection, fine" } });
     expect(await seen()).toEqual([undefined, undefined, undefined]);
+  });
+});
+
+describe("reviewable", () => {
+  /** What Otieno (the author), Achieng (an admin) and the caller (a mentor) are told about message `id`. */
+  async function reviewable(s: ChannelFixture, id: string) {
+    return Promise.all([OTIENO, ACHIENG, VIEWER].map(async (user) => {
+      const { items } = MessageList.parse((await s.call("listMessages", { id: s.channel("help"), user })).body);
+      return items.find((item) => item.id === id)?.moderation?.reviewable;
+    }));
+  }
+  function setupCase() {
+    const s = setup({ globalRoles: ["MENTOR"] });
+    grant(s, ACHIENG, "ADMIN");
+    return s;
+  }
+
+  it("tells only the author, while a review can be asked for or is pending, until an admin's decision is final", async () => {
+    const s = setupCase();
+    const id = s.message("help", { author: OTIENO });
+    expect(await reviewable(s, id)).toEqual([undefined, undefined, undefined]);
+    await s.call("moderateMessage", { id, body: hide() });
+    expect(await reviewable(s, id)).toEqual([true, undefined, undefined]);
+    await s.call("requestModerationReview", { id, user: OTIENO, body: {} });
+    expect(await reviewable(s, id)).toEqual([true, undefined, undefined]);
+    await s.call("moderateMessage", { id, user: ACHIENG, body: hide("Upheld") });
+    expect(await reviewable(s, id)).toEqual([false, undefined, undefined]);
+    // However the case reopens, the admin's hide stays final.
+    s.database.prepare(`UPDATE moderation_case SET state = 'PENDING', decision = NULL, decisionReason = NULL, decidedBy = NULL,
+      decidedAt = NULL WHERE messageId = ?`).run(id);
+    expect(await reviewable(s, id)).toEqual([false, undefined, undefined]);
+  });
+
+  it("is true for a hidden message with no case yet, and absent on any other state", async () => {
+    const s = setupCase();
+    const hidden = s.message("help", { author: OTIENO, state: "HIDDEN" });
+    expect(await reviewable(s, hidden)).toEqual([true, undefined, undefined]);
+    const flagged = s.message("help", { author: OTIENO, state: "FLAGGED" });
+    expect(await reviewable(s, flagged)).toEqual([undefined, undefined, undefined]);
+  });
+
+  it("is false once the author deletes the message, whose review is then refused, and after an admin keeps it", async () => {
+    const s = setupCase();
+    const id = s.message("help", { author: OTIENO });
+    await s.call("moderateMessage", { id, body: hide() });
+    expect((await s.call("deleteMessage", { id, user: OTIENO })).status).toBe(200);
+    expect(await reviewable(s, id)).toEqual([false, undefined, undefined]);
+    const asked = await s.call("requestModerationReview", { id, user: OTIENO, body: {} });
+    expect([asked.status, errorOf(asked.body).message]).toEqual([409, "This message was deleted."]);
+    expect(caseOf(s, id)).toMatchObject({ state: "PENDING", review: 0 });
+    await s.call("moderateMessage", { id, user: ACHIENG, body: { action: "keep", reason: "Withdrawn" } });
+    expect(await reviewable(s, id)).toEqual([false, undefined, undefined]);
   });
 });
 
@@ -496,6 +628,18 @@ describe("the queue", () => {
     const response = await s.call("listModerationQueue");
     expect([response.status, ModerationQueue.parse(response.body).items.map((item) => item.id)]).toEqual([200, [good]]);
     expect(warn).toHaveBeenCalledWith("A moderation case could not be shown.", bad);
+  });
+
+  it("keeps a reopened case where it first opened, saying when it reopened", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    const first = s.message("help", { author: OTIENO, body: "Spam" });
+    const second = s.message("help", { author: OTIENO, body: "More spam" });
+    await s.call("reportMessage", { id: first, user: ACHIENG, body: { reason: "Spam" }, now: () => 1_000 });
+    await s.call("reportMessage", { id: second, user: ACHIENG, body: { reason: "Spam" }, now: () => 2_000 });
+    await s.call("moderateMessage", { id: first, body: { action: "keep", reason: "Fine" }, now: () => 3_000 });
+    await s.call("reportMessage", { id: first, user: FAITH, body: { reason: "Still spam" }, now: () => 4_000 });
+    const { items } = ModerationQueue.parse((await s.call("listModerationQueue")).body);
+    expect(items.map((item) => [item.id, item.createdAt, item.reopenedAt])).toEqual([[second, 2_000, undefined], [first, 1_000, 4_000]]);
   });
 
   it("pages with an opaque cursor bound to its state", async () => {

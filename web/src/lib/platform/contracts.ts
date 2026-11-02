@@ -263,9 +263,13 @@ export const ModerationState = z.enum(["VISIBLE", "FLAGGED", "HIDDEN"]);
 export type ModerationState = z.infer<typeof ModerationState>;
 /**
  * reviewRequested: on a HIDDEN message, for its author and admins only, whether the author's "Ask for
- * review" is still open. Absent for everyone else and on any other state.
+ * review" is still open. reviewable: on a HIDDEN message, for its author only, whether a review can
+ * still be asked for or is pending; false once an admin's decision is final, or the message is deleted.
+ * Both are absent for everyone else and on any other state.
  */
-export const MessageModeration = z.object({ state: ModerationState, reasons: z.array(NonEmptyText), reviewRequested: z.boolean().optional() });
+export const MessageModeration = z.object({
+  state: ModerationState, reasons: z.array(NonEmptyText), reviewRequested: z.boolean().optional(), reviewable: z.boolean().optional(),
+});
 export type MessageModeration = z.infer<typeof MessageModeration>;
 export const ThreadSummary = z.object({ replyCount: Count, participantIds: z.array(Id), lastReplyAt: Timestamp.nullable() });
 export type ThreadSummary = z.infer<typeof ThreadSummary>;
@@ -348,9 +352,13 @@ export const ModerationDecision = z.object({
 });
 export type ModerationDecision = z.infer<typeof ModerationDecision>;
 /** One case per message (id = the message's id). evidence is oldest first. */
+/**
+ * createdAt: when the case first opened, the queue's order. reopenedAt: the latest signal that reopened
+ * it after an admin's decision; absent for a case never reopened.
+ */
 export const ModerationQueueItem = z.object({
   id: Id, message: Message, channel: Channel, source: ModerationSource, reasons: z.array(NonEmptyText).min(1),
-  state: ModerationQueueState, reportCount: Count, actor: PersonSummary.nullable(), createdAt: Timestamp,
+  state: ModerationQueueState, reportCount: Count, actor: PersonSummary.nullable(), createdAt: Timestamp, reopenedAt: Timestamp.optional(),
   evidence: z.array(MessageVersion), review: ModerationReview.nullable(), decision: ModerationDecision.nullable(),
 }).refine((item) => (item.state === "DECIDED") === (item.decision !== null), "Decided exactly when an admin's decision is recorded");
 export type ModerationQueueItem = z.infer<typeof ModerationQueueItem>;

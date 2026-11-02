@@ -11,6 +11,7 @@ import {
 } from "@/lib/platform/contracts";
 import { requireFlag } from "@/lib/platform/server/flags";
 import { platformError, platformJson } from "@/lib/platform/server/http";
+import type { PersonalAccessTokenScope } from "@/lib/personal-access-tokens";
 import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
 import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
 import { readBoundedJson, RequestJsonError } from "@/lib/request-json";
@@ -30,10 +31,13 @@ import {
 /**
  * The channel message APIs (README.md beside this file, "APIs"). Every route is 404 while
  * `channels` is off for the caller, and 404 for a channel or message the caller cannot read,
- * whatever the reason. Signed-in browser sessions only: personal access tokens are refused until
- * B-2.7 gives them channel scopes. Agent sessions act as their person, under the same rules.
- * Writes must come from the same origin. The moderation routes (B-2.5) follow the same rules: the
- * queue is for admins only, and a message's moderators hide it (moderation/actions.ts).
+ * whatever the reason. Signed-in sessions, and personal access tokens with a channels scope
+ * (B-2.7): channels:read for the reads, channels:write for the writes, each acting as the token's
+ * owner with the owner's capabilities. Agent sessions act as their person, under the same rules.
+ * Browser writes must come from the same origin; a token's need no Origin, but one it sends must
+ * match. The moderation routes (B-2.5) follow the same rules, except that no token reaches them
+ * (admin tokens triage through MCP, moderation/mcp.ts): the queue is for admins only, and a
+ * message's moderators hide it (moderation/actions.ts).
  */
 
 type Env = Pick<Cloudflare.Env, "DB" | "DEPLOYMENT_ENVIRONMENT" | "PLATFORM_FLAGS_OVERRIDE" | "DEPLOYMENT_VERSION">
@@ -52,6 +56,12 @@ export interface ChannelRequestOptions {
 }
 
 const READS: ReadonlySet<ChannelOperation> = new Set(["listChannels", "listMessages", "listShareables", "listModerationQueue"]);
+/** What a personal access token may do here, and the scope each needs. Moderation decisions are not here. */
+const TOKEN_SCOPES: Partial<Record<ChannelOperation, PersonalAccessTokenScope>> = {
+  listChannels: "channels:read", listMessages: "channels:read", listShareables: "channels:read",
+  postMessage: "channels:write", editMessage: "channels:write", deleteMessage: "channels:write", reactToMessage: "channels:write",
+  markChannelRead: "channels:write", reportMessage: "channels:write", requestModerationReview: "channels:write",
+};
 /** The longest legal message (10,000 characters of up to 4 bytes, JSON-escaped) fits; nothing else needs more. */
 const MESSAGE_BYTES = 64_000;
 const SMALL_BYTES = 1_024;
@@ -114,8 +124,14 @@ async function refusal(operation: ChannelOperation, { locals, request }: Context
   const denied = await requireFlag({ db: env.DB, env, user: locals.user ?? null, isAdmin: locals.isAdmin, locals }, "channels");
   if (denied) return denied;
   if (!locals.user) return platformError("forbidden", "Not permitted.", 403);
-  if (locals.personalAccessToken) return platformError("forbidden", "Personal access tokens can't use channels yet.", 403);
-  if (!READS.has(operation) && !hasMatchingRequestOrigin(request)) {
+  const token = locals.personalAccessToken;
+  if (token) {
+    const scope = TOKEN_SCOPES[operation];
+    if (!scope) return platformError("forbidden", "Personal access tokens can't do this.", 403);
+    if (!token.scopes.includes(scope)) return platformError("forbidden", `This personal access token does not grant ${scope}.`, 403);
+  }
+  const originless = Boolean(token) && !request.headers.has("Origin");
+  if (!READS.has(operation) && !originless && !hasMatchingRequestOrigin(request)) {
     return platformError("forbidden", "Same-origin request required.", 403);
   }
   return null;

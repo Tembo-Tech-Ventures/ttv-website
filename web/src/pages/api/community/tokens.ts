@@ -4,7 +4,7 @@ import { env } from "cloudflare:workers";
 import { isAgentSession } from "@/lib/agent-auth";
 import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
 import { createCommunityService } from "@/lib/community/service";
-import { createPersonalAccessToken, listPersonalAccessTokens, revokePersonalAccessToken } from "@/lib/personal-access-tokens";
+import { createPersonalAccessToken, listPersonalAccessTokens, personalAccessTokenFamily, revokePersonalAccessToken } from "@/lib/personal-access-tokens";
 
 const tokenInput = z.object({ label: z.string(), durationHours: z.union([z.literal(8), z.literal(24), z.literal(168), z.literal(720)]), scopes: z.array(z.enum(["community:read", "community:write", "institution:read"])).refine(scopes => scopes.includes("community:read")) }).strict();
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
@@ -35,7 +35,7 @@ async function readTokenBody(request: Request): Promise<Record<string, unknown> 
 export const ALL: APIRoute = async ({ request, locals }) => {
   if (!locals.user) return json({ error: "Authentication required" }, 401);
   if (request.headers.has("Authorization") || locals.personalAccessToken || isAgentSession(locals.session?.userAgent)) return json({ error: "Browser cookie session required" }, 403);
-  if (request.method === "GET") return json({ tokens: (await listPersonalAccessTokens(env.DB, locals.user.id)).filter(t => !t.scopes.some(s => s.startsWith("admin:"))) });
+  if (request.method === "GET") return json({ tokens: (await listPersonalAccessTokens(env.DB, locals.user.id)).filter(t => personalAccessTokenFamily(t.scopes) === "community") });
   if (!["POST", "DELETE"].includes(request.method)) return new Response(null, { status: 405, headers: { Allow: "GET, POST, DELETE" } });
   if (!hasMatchingRequestOrigin(request)) return json({ error: "Same-origin request required" }, 403);
   const body = await readTokenBody(request);
@@ -44,7 +44,7 @@ export const ALL: APIRoute = async ({ request, locals }) => {
   if (request.method === "DELETE") {
     if (typeof input.id !== "string" || Object.keys(input).some(key => key !== "id")) return json({ error: "Token id required" }, 400);
     const tokens = await listPersonalAccessTokens(env.DB, locals.user.id);
-    if (!tokens.some(t => t.id === input.id && !t.scopes.some(s => s.startsWith("admin:")))) return json({ error: "Token not found" }, 404);
+    if (!tokens.some(t => t.id === input.id && personalAccessTokenFamily(t.scopes) === "community")) return json({ error: "Token not found" }, 404);
     return json({ revoked: await revokePersonalAccessToken(env.DB, locals.user.id, input.id) });
   }
   const parsed = tokenInput.safeParse(input);

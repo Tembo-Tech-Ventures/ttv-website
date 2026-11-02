@@ -38,7 +38,8 @@ vi.mock("@/lib/observability/errors", async (importOriginal) => ({
   recordError: mocks.recordError,
   recordErrorInBackground: mocks.recordErrorInBackground,
 }));
-vi.mock("@/lib/personal-access-tokens", () => ({
+vi.mock("@/lib/personal-access-tokens", async (importOriginal) => ({
+  personalAccessTokenFamily: (await importOriginal<typeof import("@/lib/personal-access-tokens")>()).personalAccessTokenFamily,
   authenticatePersonalAccessToken: mocks.authenticatePersonalAccessToken,
   enforcePersonalAccessTokenMutationScope:
     mocks.enforcePersonalAccessTokenMutationScope,

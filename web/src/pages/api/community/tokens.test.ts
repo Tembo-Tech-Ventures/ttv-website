@@ -20,19 +20,22 @@ describe("community token routes", () => {
   it("guards mutations by origin and refuses admin scopes", async () => {
     expect((await call("POST", valid)).status).toBe(403);
     expect((await call("POST", { ...valid, scopes: ["community:read", "admin:read"] }, { origin: "https://ttv.test" })).status).toBe(400);
+    expect((await call("POST", { ...valid, scopes: ["community:read", "channels:read"] }, { origin: "https://ttv.test" })).status).toBe(400);
   });
   it("revalidates approval before issuing institutional scopes", async () => {
     expect((await call("POST", { ...valid, scopes: ["community:read", "institution:read"] }, { origin: "https://ttv.test" })).status).toBe(403);
     expect(mocks.create).not.toHaveBeenCalled();
   });
-  it("issues bounded member scopes and hides admin tokens", async () => {
+  it("issues bounded member scopes and hides admin and channel tokens", async () => {
     expect((await call("POST", valid, { origin: "https://ttv.test" })).status).toBe(201);
-    mocks.list.mockResolvedValue([{ id: "admin", scopes: ["admin:read"] }, { id: "own", scopes: ["community:read"] }]);
+    mocks.list.mockResolvedValue([{ id: "admin", scopes: ["admin:read"] }, { id: "channels", scopes: ["channels:read"] }, { id: "own", scopes: ["community:read"] }]);
     const result = await (await call("GET")).json();
     expect(result).toEqual({ tokens: [{ id: "own", scopes: ["community:read"] }] });
   });
-  it("cannot revoke another users or admin token", async () => {
+  it("cannot revoke another users, admin or channel token", async () => {
     expect((await call("DELETE", { id: "foreign" }, { origin: "https://ttv.test" })).status).toBe(404);
+    mocks.list.mockResolvedValue([{ id: "channels", scopes: ["channels:read", "channels:write"] }]);
+    expect((await call("DELETE", { id: "channels" }, { origin: "https://ttv.test" })).status).toBe(404);
     expect(mocks.revoke).not.toHaveBeenCalled();
   });
   it("rejects unknown fields and unbounded request bodies", async () => {
