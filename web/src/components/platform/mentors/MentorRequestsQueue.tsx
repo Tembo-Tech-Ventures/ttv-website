@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { PiArrowRight, PiCheck, PiPauseCircle } from "react-icons/pi";
 import type {
-  MentorAvailability, MentorDirectoryItem, MentorRequest, MentorRequestList,
+  MentorAvailability, MentorDirectoryItem, MentorRequest, MentorRequestList, WorthAnotherLook,
 } from "@/lib/platform/contracts";
 import type { ApiClient } from "@/lib/platform/client/apiClient";
 import { useMentorRequests } from "@/lib/platform/client/hooks/mentoring";
@@ -26,6 +26,8 @@ export interface MentorRequestsQueueProps {
   /** Listed mentors this one can suggest instead (the directory never lists the caller). */
   mentors: readonly MentorDirectoryItem[];
   availability: MentorAvailability;
+  /** Work this mentor confirmed at an earlier revision that has a newer one (B-4.2); null when it could not be read. */
+  anotherLook: WorthAnotherLook | null;
   now: number;
   /** A fixture client for the DEV harness. Live pages call the API. */
   api?: ApiClient;
@@ -41,7 +43,7 @@ const FREED = new Set(["REDIRECTED", "DECLINED", "WITHDRAWN"]);
  * name; "Not this month" is one tap and counts against nobody. Every answer
  * shows at once and is put back if the server refuses it.
  */
-export default function MentorRequestsQueue({ initial, mentors, availability, now, api }: MentorRequestsQueueProps) {
+export default function MentorRequestsQueue({ initial, mentors, availability, anotherLook, now, api }: MentorRequestsQueueProps) {
   const [store] = useState(() => createMentorRequestsStore({ as: "mentor", initial, ...(api ? { api } : {}) }));
   const state = useMentorRequests(store);
   // Grouped as the page arrived, so a request answered here stays where the mentor's eyes are.
@@ -85,7 +87,7 @@ export default function MentorRequestsQueue({ initial, mentors, availability, no
         )}
       </div>
 
-      <MonthRail availability={availability} used={used} now={now} />
+      <MonthRail availability={availability} used={used} now={now} anotherLook={anotherLook?.items ?? []} />
     </div>
   );
 }
@@ -232,7 +234,9 @@ function SuggestMentor({ request, mentors, now, onCancel, onSuggest }: {
   );
 }
 
-function MonthRail({ availability, used, now }: { availability: MentorAvailability; used: number; now: number }) {
+function MonthRail({ availability, used, now, anotherLook }: {
+  availability: MentorAvailability; used: number; now: number; anotherLook: WorthAnotherLook["items"];
+}) {
   const { limit } = availability.capacity;
   const full = used >= limit && limit > 0;
   const capacity = { ...availability.capacity, used };
@@ -270,6 +274,43 @@ function MonthRail({ availability, used, now }: { availability: MentorAvailabili
         </p>
         <a href={MENTOR_AVAILABILITY_PATH} className={cx(LINK, "mt-4 w-fit")}>Edit availability</a>
       </Card>
+      {anotherLook.length > 0 && <AnotherLook items={anotherLook} />}
     </aside>
+  );
+}
+
+/** How many "Worth another look" items the rail names before pointing at the Confirm page for the rest. */
+const ANOTHER_LOOK_SHOWN = 3;
+
+/**
+ * "Worth another look" (screen 06, B-4.2): work this mentor confirmed whose owner has shared a newer
+ * revision since, so the confirmation no longer covers what is shared now. Each links to the Confirm
+ * page, where the newer revision waits. Shown only when there is something to look at.
+ */
+function AnotherLook({ items }: { items: WorthAnotherLook["items"] }) {
+  const shown = items.slice(0, ANOTHER_LOOK_SHOWN);
+  const more = items.length - shown.length;
+  return (
+    <Card as="section" aria-labelledby="another-look-title" data-another-look={items.length}>
+      <h3 id="another-look-title" className="text-[0.9375rem] font-bold text-ink-primary">Worth another look</h3>
+      <ul className="mt-3 flex flex-col gap-4">
+        {shown.map(item => (
+          <li key={item.journeyId} className="flex flex-col gap-2.5" data-another-look-item={item.journeyId}>
+            <p className="text-sm leading-relaxed break-words text-ink-secondary">
+              {firstName(item.owner.name)} shared revision {item.currentVersion} of {item.title}.
+              Your confirmation covers revision {item.confirmedVersion}.
+            </p>
+            <a href={item.href} className={cx(LINK, "w-fit")} aria-label={`Review revision ${item.currentVersion} of ${item.title}`}>
+              Review revision {item.currentVersion}
+            </a>
+          </li>
+        ))}
+      </ul>
+      {more > 0 && (
+        <a href={shown[0]!.href} className={cx("mt-4 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-peach-ink underline-offset-4 hover:underline", FOCUS_RING)}>
+          {more} more on Confirm work <PiArrowRight aria-hidden className="size-4" />
+        </a>
+      )}
+    </Card>
   );
 }

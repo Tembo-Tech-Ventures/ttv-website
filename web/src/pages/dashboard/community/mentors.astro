@@ -35,11 +35,12 @@ const server = mentorsServer(Astro, env, context.me, now);
 const filters = parseDirectoryUrl(Astro.url.searchParams);
 const base = { area: filters.area, format: filters.format, available: filters.available };
 const filtered = Boolean(filters.area || filters.format || filters.available);
-const [all, matching, ownRequests, projects] = await Promise.all([
+const [all, matching, ownRequests, projects, canAsk] = await Promise.all([
   server.directory({}),
   filtered ? server.directory(directoryQuery(filters)) : null,
   server.requests({ as: "requester" }),
   server.projects(),
+  server.canAsk(),
 ]);
 const canAgree = !isAgentSession(Astro.locals.session?.userAgent);
 
@@ -81,6 +82,7 @@ Astro.response.headers.set("Cache-Control", "no-store");
     areas={areaOptions(all.items, filters.area)}
     ownRequests={ownRequests}
     projects={projects}
+    canAsk={canAsk}
     conduct={{ version: CONDUCT_VERSION, habitsHref: CONDUCT_PATH, canAgree }}
     now={now}
     serverForm={posted ? { mentorId: posted.mentorId, form: posted.form } : null}

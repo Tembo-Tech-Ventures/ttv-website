@@ -15,7 +15,7 @@ import { useModalDialog } from "@/components/platform/overlays/useModalDialog";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
 import MentorCard from "./MentorCard";
-import { FORMAT_LABELS } from "./mentor-display";
+import { FORMAT_LABELS, NOT_MEMBER } from "./mentor-display";
 import OwnRequests from "./OwnRequests";
 import RequestForm, { type ConductPrompt } from "./RequestForm";
 // oxlint-disable-next-line import/no-unassigned-import -- Mentor connections stylesheet.
@@ -36,6 +36,11 @@ export interface MentorsDirectoryProps {
   ownRequests: MentorRequestList;
   /** The person's own published projects, at their current revisions. */
   projects: readonly ProjectEmbed[];
+  /**
+   * Whether this person may ask for time: a member account (a community profile or a cohort place).
+   * Anyone else reads the directory with a neutral note instead of request buttons.
+   */
+  canAsk: boolean;
   /** The habits' prompt; the drawer posts its agreement back to this page with the drawer open. */
   conduct: Omit<ConductPrompt, "action">;
   now: number;
@@ -65,14 +70,64 @@ function FilterLink({ href, active, small = false, children }: { href: string; a
   );
 }
 
+/** The directory's filters: plain links, so they work without JavaScript and each state has its own URL. */
+function FilterBar({ path, filters, base, areas, howId }: {
+  path: string; filters: DirectoryUrlState; base: DirectoryFilters; areas: readonly string[]; howId: string;
+}) {
+  return (
+    <nav aria-label="Filter mentors" className="flex flex-col gap-3" data-mentor-filters>
+      <fieldset className="flex flex-wrap items-center gap-x-1 gap-y-2">
+        <legend className="sr-only">Area</legend>
+        <FilterLink href={directoryHref(path, base, { area: null })} active={!filters.area}>All</FilterLink>
+        {areas.map(area => (
+          <FilterLink key={area} href={directoryHref(path, base, { area })} active={Boolean(filters.area && sameArea(filters.area, area))}>{area}</FilterLink>
+        ))}
+      </fieldset>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <fieldset className="flex flex-wrap items-center gap-x-1 gap-y-2" aria-labelledby={howId}>
+          <span id={howId} className="mr-2 text-sm text-ink-secondary">How</span>
+          <FilterLink small href={directoryHref(path, base, { format: null })} active={!filters.format}>Any</FilterLink>
+          {MentorRequestFormat.options.map(format => (
+            <FilterLink small key={format} href={directoryHref(path, base, { format })} active={filters.format === format}>{FORMAT_LABELS[format]}</FilterLink>
+          ))}
+        </fieldset>
+        <a
+          href={directoryHref(path, base, { available: !filters.available })}
+          aria-current={filters.available ? "true" : undefined}
+          className={cx(PILL, "border", filters.available ? "border-transparent bg-ink-primary text-dark" : "border-hairline text-ink-primary hover:bg-ink-primary/7")}
+          data-filter-available
+        >
+          <PiCheck aria-hidden className={cx("size-4", !filters.available && "opacity-40")} />
+          Has open spots
+        </a>
+      </div>
+    </nav>
+  );
+}
+
+function EmptyDirectory({ path, filtered }: { path: string; filtered: boolean }) {
+  return (
+    <div className="mt-8 rounded-[1.125rem] border border-dashed border-hairline p-6 text-ink-secondary" data-mentors-empty>
+      {filtered ? (
+        <p>
+          No mentors match these filters right now.{" "}
+          <a href={path} className={cx("font-semibold text-peach-ink underline underline-offset-4", FOCUS_RING)}>Show every mentor</a>
+        </p>
+      ) : (
+        <p>No mentors are listed yet. Mentors appear here once they've set out their availability.</p>
+      )}
+    </div>
+  );
+}
+
 /**
  * Community → Mentors (screen 05): the directory, its filters (plain links,
  * held in the URL), the requests this person sent, and the "Ask for time"
- * drawer. Server-rendered, so the directory reads without JavaScript; asking
- * needs it.
+ * drawer. Server-rendered, so the directory reads without JavaScript, and
+ * "Ask for time" is a link to the drawer as a form that posts to the page.
  */
 export default function MentorsDirectory(props: MentorsDirectoryProps) {
-  const { me, path, filters, mentors, shown, areas, projects, conduct, now, api, serverForm = null, sent: sentNow = null } = props;
+  const { me, path, filters, mentors, shown, areas, projects, canAsk, conduct, now, api, serverForm = null, sent: sentNow = null } = props;
   const headingId = useId();
   // Until the island is interactive (and always without JavaScript) a drawer named by `?ask=` is a plain panel with a real form.
   const [hydrated, setHydrated] = useState(false);
@@ -92,7 +147,7 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
   const announcement = useMentorRequests(ownRequests, state => state.announcement);
 
   // A full mentor's drawer opens only to say why a send without JavaScript just did not go through.
-  const asked = filters.ask
+  const asked = filters.ask && canAsk
     ? mentors.find(item => item.person.id === filters.ask && (hasOpenSpot(item) || serverForm?.mentorId === item.person.id)) ?? null
     : null;
   const shownMentor = hydrated ? active : asked;
@@ -133,54 +188,27 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
           Request sent to {sentNow.mentor.name}. It's under Your requests while it waits, and you can withdraw it there.
         </output>
       )}
+      {!canAsk && (
+        <p className="mb-6 max-w-2xl rounded-2xl border border-hairline px-4 py-3 text-[0.9375rem] leading-relaxed text-ink-secondary" data-mentors-browse-only>
+          {NOT_MEMBER}
+        </p>
+      )}
       <OwnRequests store={ownRequests} now={now} mentors={mentors} onAsk={ask} />
 
-      <nav aria-label="Filter mentors" className="flex flex-col gap-3" data-mentor-filters>
-        <fieldset className="flex flex-wrap items-center gap-x-1 gap-y-2">
-          <legend className="sr-only">Area</legend>
-          <FilterLink href={directoryHref(path, base, { area: null })} active={!filters.area}>All</FilterLink>
-          {areas.map(area => (
-            <FilterLink key={area} href={directoryHref(path, base, { area })} active={Boolean(filters.area && sameArea(filters.area, area))}>{area}</FilterLink>
-          ))}
-        </fieldset>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <fieldset className="flex flex-wrap items-center gap-x-1 gap-y-2" aria-labelledby={`${headingId}-how`}>
-            <span id={`${headingId}-how`} className="mr-2 text-sm text-ink-secondary">How</span>
-            <FilterLink small href={directoryHref(path, base, { format: null })} active={!filters.format}>Any</FilterLink>
-            {MentorRequestFormat.options.map(format => (
-              <FilterLink small key={format} href={directoryHref(path, base, { format })} active={filters.format === format}>{FORMAT_LABELS[format]}</FilterLink>
-            ))}
-          </fieldset>
-          <a
-            href={directoryHref(path, base, { available: !filters.available })}
-            aria-current={filters.available ? "true" : undefined}
-            className={cx(PILL, "border", filters.available ? "border-transparent bg-ink-primary text-dark" : "border-hairline text-ink-primary hover:bg-ink-primary/7")}
-            data-filter-available
-          >
-            <PiCheck aria-hidden className={cx("size-4", !filters.available && "opacity-40")} />
-            Has open spots
-          </a>
-        </div>
-      </nav>
+      <FilterBar path={path} filters={filters} base={base} areas={areas} howId={`${headingId}-how`} />
 
       <h2 className="sr-only">{filtered ? "Mentors matching your filters" : "All mentors"}</h2>
       {shown.length > 0 ? (
         <ul className="mentor-grid" data-mentor-grid>
           {shown.map(item => (
-            <MentorCard key={item.person.id} item={item} now={now} open={active?.person.id === item.person.id} onAsk={ask} />
+            <MentorCard
+              key={item.person.id} item={item} now={now} open={active?.person.id === item.person.id}
+              askHref={canAsk ? askHref(path, base, item.person.id) : null} onAsk={ask}
+            />
           ))}
         </ul>
       ) : (
-        <div className="mt-8 rounded-[1.125rem] border border-dashed border-hairline p-6 text-ink-secondary" data-mentors-empty>
-          {filtered ? (
-            <p>
-              No mentors match these filters right now.{" "}
-              <a href={path} className={cx("font-semibold text-peach-ink underline underline-offset-4", FOCUS_RING)}>Show every mentor</a>
-            </p>
-          ) : (
-            <p>No mentors are listed yet. Mentors appear here once they've set out their availability.</p>
-          )}
-        </div>
+        <EmptyDirectory path={path} filtered={filtered} />
       )}
 
       {!hydrated && shownMentor && form && (

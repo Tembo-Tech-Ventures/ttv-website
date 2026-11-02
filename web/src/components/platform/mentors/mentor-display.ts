@@ -97,6 +97,13 @@ export function capacityView(capacity: MentorCapacity, now: number): CapacityVie
 
 /** The full card's footer label, where an open card has its "Ask for time" button. */
 export const FULL_THIS_MONTH = "Full this month";
+/**
+ * Why a signed-in account without a community profile or a cohort place reads the directory but cannot
+ * ask (B-4.1, #304): neutral, as the API's own refusal is. It does not send anyone off to make a
+ * profile, since a saved community profile is discoverable to institutions.
+ */
+export const NOT_MEMBER_REASON = "Asking a mentor for time needs a member profile or a cohort place.";
+export const NOT_MEMBER = `You can read about every mentor here. ${NOT_MEMBER_REASON}`;
 
 /** "Spots used 1 of 3", as a share for the meter. */
 export function usedShare(capacity: MentorCapacity): number {

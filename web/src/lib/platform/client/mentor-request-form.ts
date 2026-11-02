@@ -28,8 +28,11 @@ const MAX_STORED = 16_384;
 
 export type RequestFormStatus = "editing" | "sending" | "sent" | "conduct" | "error";
 export type RequestFormField = "note" | "format";
-/** Why the last send failed, in words the drawer can choose from. `limit`: too many requests waiting or made today. */
-export type RequestFailure = "conflict" | "notFound" | "limit" | "signedOut" | "other";
+/**
+ * Why the last send failed, in words the drawer can choose from. `limit`: too many requests waiting or
+ * made today. `notMember`: the account has neither a community profile nor a cohort place (403).
+ */
+export type RequestFailure = "conflict" | "notFound" | "limit" | "notMember" | "signedOut" | "other";
 
 export interface RequestDraft {
   note: string;
@@ -147,6 +150,7 @@ export function requestFailure(error: { status: number; code: string }): Request
   if (error.status === 429 || error.code === "rate_limited") return "limit";
   if (error.status === 404) return "notFound";
   if (error.status === 401) return "signedOut";
+  if (error.status === 403 && error.code === "forbidden") return "notMember";
   return "other";
 }
 

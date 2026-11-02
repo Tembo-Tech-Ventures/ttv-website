@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ROUTES, type MentorDirectoryItem } from "@/lib/platform/contracts";
-import { availability, FIXTURE_NOW, meByPersona, mentors, people, pendingMentorRequest } from "@/lib/platform/fixtures";
+import { availability, FIXTURE_NOW, meByPersona, mentors, people, pendingMentorRequest, worthAnotherLook } from "@/lib/platform/fixtures";
 import { NO_FILTERS, parseDirectoryUrl } from "@/lib/platform/client/mentor-directory";
 import { createMentoringMock } from "@/lib/platform/client/mentoring.mock";
 import type { MockReply } from "@/lib/platform/client/mockTransport";
@@ -34,7 +34,7 @@ afterEach(async () => {
 const q = <T extends Element = HTMLElement>(selector: string) => container.querySelector<T>(selector);
 const all = (selector: string) => Array.from(container.querySelectorAll<HTMLElement>(selector));
 const text = (selector: string) => q(selector)?.textContent ?? "";
-const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+const settle = () => act(async () => { await new Promise<void>((resolve) => { setTimeout(resolve, 0); }); });
 
 async function directoryProps(options: { conductAgreed?: boolean; failure?: (request: Request) => MockReply | undefined; search?: string } = {}) {
   const mock = createMentoringMock({ conductAgreed: options.conductAgreed, ...(options.failure ? { failure: options.failure } : {}) });
@@ -45,7 +45,7 @@ async function directoryProps(options: { conductAgreed?: boolean; failure?: (req
   ]);
   const props: MentorsDirectoryProps = {
     me: meByPersona.wanjiku, path: PATH, filters, mentors: list.items, shown: list.items,
-    areas: ["Code review", "Career"], ownRequests: own, projects: mock.projects, conduct, now: FIXTURE_NOW, api: mock.api,
+    areas: ["Code review", "Career"], ownRequests: own, projects: mock.projects, canAsk: true, conduct, now: FIXTURE_NOW, api: mock.api,
   };
   return { props, mock };
 }
@@ -61,6 +61,8 @@ describe("the mentor directory", () => {
     expect(all("[data-mentor-card]")).toHaveLength(4);
     expect(card(david).textContent).toContain("2 of 3 spots open in November");
     expect(card(david).querySelector("[data-ask-mentor]")?.textContent).toBe("Ask for time");
+    // A link to the drawer as a form, so asking works without JavaScript too; the filters stay.
+    expect(card(david).querySelector("[data-ask-mentor]")?.getAttribute("href")).toBe(`${PATH}?area=Career&available=true&ask=${david!.person.id}`);
     // Mercy is full: the next opening, and no button that does nothing.
     expect(card(mercy).textContent).toContain("Next opening 1 December");
     expect(card(mercy).querySelector("[data-mentor-full]")?.textContent).toBe("Full this month");
@@ -71,6 +73,36 @@ describe("the mentor directory", () => {
     expect(q<HTMLAnchorElement>("[data-filter-available]")!.getAttribute("href")).toBe(`${PATH}?area=Career`);
     expect(all("[data-own-request]").map((row) => row.dataset.status)).toEqual(["PENDING", "ACCEPTED"]);
     expect(html).not.toContain("<dialog open");
+  });
+
+  it("reads, without request buttons, for an account that cannot ask, and says why in neutral words", async () => {
+    const { props } = await directoryProps({ search: `?ask=${people.david.id}` });
+    container.innerHTML = renderToString(<MentorsDirectory {...props} canAsk={false} />);
+    expect(text("[data-mentors-browse-only]")).toBe(
+      "You can read about every mentor here. Asking a mentor for time needs a member profile or a cohort place.",
+    );
+    expect(all("[data-mentor-card]")).toHaveLength(4);
+    expect(q("[data-ask-mentor]")).toBeNull();
+    // A drawer named in the URL does not open for them either.
+    expect(q("[data-mentor-drawer-static]")).toBeNull();
+    expect(text("[data-mentors-browse-only]")).not.toMatch(/institution|create|make a profile/i);
+  });
+
+  it("keeps the note and says why when the server refuses a non-member", async () => {
+    const { props } = await directoryProps({
+      failure: (r) => r.method === "POST" ? { status: 403, data: { error: { code: "forbidden", message: "Asking a mentor for time needs a member profile or a cohort place." } } } : undefined,
+    });
+    await act(async () => root.render(<MentorsDirectory {...props} />));
+    await act(async () => q<HTMLAnchorElement>(`[data-ask-mentor="${david!.person.id}"]`)!.click());
+    const note = q<HTMLTextAreaElement>("[data-mentor-drawer] textarea")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(note, "Could you look at my payment callback handling?");
+      note.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => q<HTMLFormElement>("[data-mentor-drawer] form")!.requestSubmit());
+    await settle();
+    expect(text("[data-request-error]")).toBe("Asking a mentor for time needs a member profile or a cohort place. Your note is kept in this tab.");
+    expect(q<HTMLTextAreaElement>("[data-mentor-drawer] textarea")!.value).toBe("Could you look at my payment callback handling?");
   });
 
   it("says when nothing matches, with the way back to every mentor", async () => {
@@ -175,13 +207,13 @@ describe("the mentor directory", () => {
 });
 
 describe("a mentor's requests", () => {
-  async function queue(failure?: (request: Request) => MockReply | undefined) {
+  async function queue(failure?: (request: Request) => MockReply | undefined, anotherLook: typeof worthAnotherLook | null = null) {
     const mock = createMentoringMock({ viewer: people.david, ...(failure ? { failure } : {}) });
     const [initial, list] = await Promise.all([
       mock.api.call(ROUTES.listMentorRequests, { query: { as: "mentor" } }),
       mock.api.call(ROUTES.listMentors, { query: {} }),
     ]);
-    await act(async () => root.render(<MentorRequestsQueue initial={initial} mentors={list.items} availability={availability} now={FIXTURE_NOW} api={mock.api} />));
+    await act(async () => root.render(<MentorRequestsQueue initial={initial} mentors={list.items} availability={availability} anotherLook={anotherLook} now={FIXTURE_NOW} api={mock.api} />));
     return mock;
   }
   const request = (id: string) => q(`[data-mentor-request="${id}"]`)!;
@@ -194,6 +226,27 @@ describe("a mentor's requests", () => {
     expect(text("[data-spots-used]")).toBe("1 of 3");
     expect(q<HTMLMeterElement>("[data-mentoring-rail] meter")!.value).toBe(1);
     expect(button(pendingMentorRequest.id, "Accept").getAttribute("aria-describedby")).toBe(request(pendingMentorRequest.id).getAttribute("aria-labelledby"));
+  });
+
+  it("points at confirmed work with a newer revision, and leaves the card out when there is none", async () => {
+    await queue(undefined, worthAnotherLook);
+    const item = worthAnotherLook.items[0]!;
+    expect(q("[data-another-look]")!.textContent).toContain("Achieng shared revision 3 of Chama ledger: M-Pesa receipt parser. Your confirmation covers revision 2.");
+    const link = q<HTMLAnchorElement>(`[data-another-look-item="${item.journeyId}"] a`)!;
+    expect(link.getAttribute("href")).toBe("/dashboard/mentoring/confirm");
+    expect(link.textContent).toBe("Review revision 3");
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await queue(undefined, { items: [] });
+    expect(q("[data-another-look]")).toBeNull();
+  });
+
+  it("names three pieces of work at most, then points at Confirm work for the rest", async () => {
+    const base = worthAnotherLook.items[0]!;
+    const items = [1, 2, 3, 4, 5].map((n) => ({ ...base, journeyId: `journey-${n}`, title: `Project ${n}` }));
+    await queue(undefined, { items });
+    expect(all("[data-another-look-item]")).toHaveLength(3);
+    expect(text("[data-another-look] > a")).toBe("2 more on Confirm work ");
   });
 
   it("accepts at once and then links the conversation", async () => {

@@ -5,7 +5,7 @@ import { mentors, people, projects } from "../fixtures";
 import { createApiClient } from "./apiClient";
 import {
   clearMentorRequestDrafts, createRequestFormStore, MAX_NOTE, MENTOR_REQUEST_DRAFT_PREFIX, mentorRequestDraftKey,
-  readRequestDraft, validateRequestDraft, writeRequestDraft,
+  readRequestDraft, requestFailure, validateRequestDraft, writeRequestDraft,
 } from "./mentor-request-form";
 import { createMentoringMock } from "./mentoring.mock";
 import { createMockTransport, type MockReply } from "./mockTransport";
@@ -233,5 +233,18 @@ describe("the request form", () => {
     second.setNote("And again?");
     await second.submit();
     expect(second.getState().failure).toBe("conflict");
+  });
+});
+
+describe("requestFailure", () => {
+  it("names each refusal the drawer can explain, and only a plain 403 as not being a member", () => {
+    expect(requestFailure({ status: 409, code: "conflict" })).toBe("conflict");
+    expect(requestFailure({ status: 429, code: "rate_limited" })).toBe("limit");
+    expect(requestFailure({ status: 404, code: "not_found" })).toBe("notFound");
+    expect(requestFailure({ status: 401, code: "unauthorized" })).toBe("signedOut");
+    expect(requestFailure({ status: 403, code: "forbidden" })).toBe("notMember");
+    // conduct_required is its own state, handled before this; any other 403 is not a membership answer.
+    expect(requestFailure({ status: 403, code: "flag_off" })).toBe("other");
+    expect(requestFailure({ status: 500, code: "server" })).toBe("other");
   });
 });

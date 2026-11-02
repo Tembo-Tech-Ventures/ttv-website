@@ -10,6 +10,7 @@
  *   &view=requests | availability   the mentor's pages (a persona with Mentoring: david, mercy, samuel)
  *   &conduct=required               the person has not agreed to how we talk to each other yet;
  *                                   agreeing posts here and comes back with the drawer open
+ *   &member=no                      no community profile or cohort place: the directory reads, nobody can be asked
  *   &flag=off                       mentor_requests off: these pages do not exist (404)
  *   &latency=<ms>                   the mock's answer time (default 250)
  *
@@ -17,7 +18,7 @@
  */
 import type { Me, SpaceId } from "@/lib/platform/contracts";
 import { ROUTES } from "@/lib/platform/contracts";
-import { channelList, FIXTURE_NOW } from "@/lib/platform/fixtures";
+import { channelList, FIXTURE_NOW, people, worthAnotherLook } from "@/lib/platform/fixtures";
 import SpacesLayout from "@/layouts/SpacesLayout.astro";
 import { HARNESS_PERSONAS, isHarnessPersona } from "@/components/platform/shell/harness/personas";
 import { canRenderSpace } from "@/components/platform/shell/access";
@@ -75,7 +76,7 @@ const harness = view === "directory"
       ]);
       return {
         me, path: Astro.url.pathname, filters, mentors: all.items, shown: shown.items, areas: areaOptions(all.items, filters.area),
-        ownRequests: own, projects: mock.projects, now,
+        ownRequests: own, projects: mock.projects, canAsk: params.get("member") !== "no", now,
         conduct: { version: CONDUCT_VERSION, habitsHref: CONDUCT_PATH, canAgree: true },
       };
     })(),
@@ -88,7 +89,9 @@ const harness = view === "directory"
           mock.api.call(ROUTES.listMentors, { query: {} }),
           mock.api.call(ROUTES.getMentorAvailability),
         ]);
-        return { initial, mentors: mentors.items, availability, now };
+        // Screen 06: David confirmed revision 2 of Achieng's chama ledger, and she has shared revision 3 since.
+        const anotherLook = me.user.id === people.david.id ? worthAnotherLook : { items: [] };
+        return { initial, mentors: mentors.items, availability, anotherLook, now };
       })(),
     } as const
     : { view, props: { initial: await mock.api.call(ROUTES.getMentorAvailability), now } } as const;
