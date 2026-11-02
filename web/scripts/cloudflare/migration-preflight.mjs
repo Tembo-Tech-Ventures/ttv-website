@@ -19,7 +19,7 @@ const MIGRATIONS_DIRECTORY = new URL(
 );
 
 const UNIQUE_INDEX_PATTERN =
-  /CREATE\s+UNIQUE\s+INDEX\s+`([^`]+)`\s+ON\s+`([^`]+)`\s*\(([^)]*)\)/gi;
+  /CREATE\s+UNIQUE\s+INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?`([^`]+)`\s+ON\s+`([^`]+)`\s*\(([^)]*)\)(\s*WHERE\b)?/gi;
 
 const SAFE_IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -48,7 +48,12 @@ function quote(identifier) {
 export function parseUniqueIndexConstraints(sql) {
   const constraints = [];
   for (const match of sql.matchAll(UNIQUE_INDEX_PATTERN)) {
-    const [, indexName, table, rawColumns] = match;
+    const [, indexName, table, rawColumns, partial] = match;
+    // A partial index constrains only the rows its WHERE selects, so duplicates
+    // among the other rows are fine; this check cannot express that safely.
+    if (partial) {
+      continue;
+    }
     const columns = rawColumns
       .split(",")
       .map((column) => column.trim().replaceAll("`", ""))

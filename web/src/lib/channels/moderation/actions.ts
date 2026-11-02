@@ -40,6 +40,23 @@ const ADMIN_HID = `EXISTS (SELECT 1 FROM moderation_event e WHERE e.messageId = 
   AND e.action = 'HIDE' AND e.createdAt >= coalesce(m.hiddenAt, 0))`;
 const decided = () => new ChannelError("conflict", "An admin has already reviewed this message.", 409);
 const keepHidden = () => new ChannelError("conflict", "This message is hidden. Restore it instead.", 409);
+const notHidden = () => new ChannelError("conflict", "This message isn't hidden.", 409);
+
+/** A keep needs a message that isn't hidden; a restore, one that is hidden and not deleted. */
+function assertDecidable(target: MessageTarget, action: ModerationAction["action"]): void {
+  const hidden = target.moderationState === "HIDDEN";
+  if (action === "keep" && hidden) throw keepHidden();
+  if (action === "restore" && !hidden) throw notHidden();
+  if (action === "restore" && target.deletedAt !== null) throw deleted();
+}
+
+/** Why a keep or restore that passed its precheck wrote nothing: the message changed since it was read. */
+async function stale(ctx: WriteContext, id: string, action: "keep" | "restore"): Promise<ChannelError> {
+  if (action === "keep") return keepHidden();
+  const state = await ctx.db.prepare("SELECT deletedAt FROM channel_message WHERE id = ?1")
+    .bind(id).first<{ deletedAt: number | null }>();
+  return state && state.deletedAt !== null ? deleted() : notHidden();
+}
 
 async function current(ctx: WriteContext, id: string): Promise<Message> {
   const message = await readMessage(ctx, id);
@@ -68,13 +85,13 @@ export async function reportMessage(ctx: WriteContext, target: MessageTarget, in
     ctx.db.prepare(`INSERT INTO message_report (id, messageId, reporterId, reason, createdAt) SELECT ?1, ?2, ?3, ?4, ?5
       WHERE EXISTS (SELECT 1 FROM channel_message WHERE id = ?2 AND deletedAt IS NULL AND moderationState <> 'HIDDEN')
         AND (SELECT COUNT(*) FROM message_report WHERE reporterId = ?3 AND createdAt > ?6) < ?7
-      ON CONFLICT (messageId, reporterId) DO NOTHING`)
+      ON CONFLICT (messageId, reporterId) DO NOTHING RETURNING id`)
       .bind(reportId, target.id, ctx.viewerId, input.reason, now, now - REPORT_LIMIT.windowMs, REPORT_LIMIT.count),
     ctx.db.prepare(`${EVENT} SELECT ?6, id, 'FLAG', 'REPORT', ?3, moderationState, moderationState, json_array(?4), ?5
       FROM channel_message WHERE id = ?2 AND EXISTS (SELECT 1 FROM message_report WHERE id = ?1)`)
       .bind(reportId, target.id, ctx.viewerId, input.reason, now, createId()),
   ]);
-  if (report?.meta.changes === 1) return { created: true };
+  if (report?.results.length === 1) return { created: true };
   const why = await ctx.db.prepare(`SELECT
       EXISTS (SELECT 1 FROM message_report WHERE messageId = ?1 AND reporterId = ?2) AS reported,
       (SELECT deletedAt IS NOT NULL FROM channel_message WHERE id = ?1) AS gone,
@@ -104,7 +121,7 @@ export async function moderateMessage(
     throw new ChannelError("forbidden", "Only this channel's moderators can do that.", 403);
   }
   if (!isAdmin && input.action !== "hide") throw new ChannelError("forbidden", "Only admins can restore or keep a message.", 403);
-  if (input.action === "keep" && target.moderationState === "HIDDEN") throw keepHidden();
+  assertDecidable(target, input.action);
   const now = ctx.now ?? Date.now();
   const eventId = createId();
   // ?1 channel, ?2 message, ?3 actor, ?4 reason, ?5 now, ?6 event, ?7 source.
@@ -117,13 +134,13 @@ export async function moderateMessage(
       // A moderator's hide needs a message not yet hidden and no admin restore or keep since its last edit.
       ctx.db.prepare(`${EVENT} SELECT ?6, m.id, 'HIDE', ?7, ?3, m.moderationState, 'HIDDEN', json_array(?4), ?5
         FROM channel_message m WHERE m.id = ?2 AND m.channelId = ?1 AND m.deletedAt IS NULL
-          AND (?7 = 'ADMIN' OR (m.moderationState <> 'HIDDEN' AND NOT ${ADMIN_KEPT}))`)
+          AND (?7 = 'ADMIN' OR (m.moderationState <> 'HIDDEN' AND NOT ${ADMIN_KEPT})) RETURNING id`)
         .bind(...params),
       ctx.db.prepare(`UPDATE channel_message SET moderationState = 'HIDDEN', hiddenBy = ?3, hiddenAt = coalesce(hiddenAt, ?5),
           moderationReasons = ${mergedReasons("moderationReasons", "json_array(?4)")}, changeSeq = ${NEXT_CHANGE}
         WHERE id = ?2 AND ${written}`).bind(...params.slice(0, 6)),
     ]);
-    if (event?.meta.changes !== 1) {
+    if (event?.results.length !== 1) {
       const state = await ctx.db.prepare("SELECT moderationState, deletedAt FROM channel_message WHERE id = ?1")
         .bind(target.id).first<{ moderationState: string; deletedAt: number | null }>();
       if (state?.deletedAt !== null) throw deleted();
@@ -133,18 +150,21 @@ export async function moderateMessage(
     return current(ctx, target.id);
   }
 
-  // ?8 the action; keep only while the message is not hidden (it may have been hidden since it was read).
+  // ?8 the action; keep only while the message is not hidden, restore only while it is hidden and not
+  // deleted (either may have changed since it was read).
   const [event] = await ctx.db.batch([
     ctx.db.prepare(`${EVENT} SELECT ?6, id, ?8, 'ADMIN', ?3, moderationState, 'VISIBLE', json_array(?4), ?5
-      FROM channel_message WHERE id = ?2 AND channelId = ?1 AND (?8 <> 'KEEP' OR moderationState <> 'HIDDEN')`)
+      FROM channel_message WHERE id = ?2 AND channelId = ?1
+        AND (CASE ?8 WHEN 'KEEP' THEN moderationState <> 'HIDDEN' ELSE moderationState = 'HIDDEN' AND deletedAt IS NULL END)
+      RETURNING id`)
       .bind(...params, input.action.toUpperCase()),
     ctx.db.prepare(`UPDATE channel_message SET moderationState = 'VISIBLE', moderationReasons = '[]', hiddenBy = NULL, hiddenAt = NULL,
         changeSeq = ${NEXT_CHANGE}
       WHERE id = ?2 AND moderationState <> 'VISIBLE' AND ${written}`).bind(...params.slice(0, 6)),
     ...await allowlisting(ctx, target, params.slice(0, 6)),
   ]);
-  // Only a keep can find nothing to write: the message was hidden since it was read.
-  if (event?.meta.changes !== 1) throw keepHidden();
+  // Nothing written: the message was hidden (keep), or restored or deleted (restore), since it was read.
+  if (event?.results.length !== 1) throw await stale(ctx, target.id, input.action);
   return current(ctx, target.id);
 }
 
@@ -210,14 +230,14 @@ export async function requestModerationReview(
   const now = ctx.now ?? Date.now();
   // ?1 message, ?2 author, ?3 now, ?4 note. A hidden message always has a case; the INSERT covers one
   // that predates the case triggers.
-  const { meta } = await ctx.db.prepare(`INSERT INTO moderation_case
+  const { results } = await ctx.db.prepare(`INSERT INTO moderation_case
       (messageId, state, source, reasons, actorId, openedAt, updatedAt, reviewRequestedAt, reviewNote)
     SELECT id, 'PENDING', CASE WHEN hiddenBy IS NULL THEN 'AI_FLAG' ELSE 'MENTOR_HIDE' END, moderationReasons, hiddenBy, ?3, ?3, ?3, ?4
     FROM channel_message m WHERE id = ?1 AND authorId = ?2 AND moderationState = 'HIDDEN' AND NOT ${ADMIN_HID}
     ON CONFLICT (messageId) DO UPDATE SET reviewRequestedAt = excluded.reviewRequestedAt, reviewNote = excluded.reviewNote,
       updatedAt = max(updatedAt, excluded.updatedAt)
-    WHERE state = 'PENDING' AND reviewRequestedAt IS NULL`).bind(target.id, ctx.viewerId, now, input.note ?? null).run();
-  if (meta.changes === 1) return { created: true };
+    WHERE state = 'PENDING' AND reviewRequestedAt IS NULL RETURNING messageId`).bind(target.id, ctx.viewerId, now, input.note ?? null).run();
+  if (results.length === 1) return { created: true };
   const found = await ctx.db.prepare(`SELECT c.state, c.reviewRequestedAt, m.moderationState FROM channel_message m
     LEFT JOIN moderation_case c ON c.messageId = m.id WHERE m.id = ?1`)
     .bind(target.id).first<{ state: string | null; reviewRequestedAt: number | null; moderationState: string }>();

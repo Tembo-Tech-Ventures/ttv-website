@@ -209,7 +209,7 @@ export async function postMessage(ctx: WriteContext, input: PostMessage): Promis
       AND (SELECT COUNT(*) FROM channel_message WHERE authorId = ?2 AND createdAt > ?13 AND channelId = ?1) < ?14
       AND (?4 IS NULL OR EXISTS (SELECT 1 FROM channel_message p WHERE p.id = ?4 AND p.channelId = ?1
         AND p.parentId IS NULL AND p.deletedAt IS NULL AND p.moderationState <> 'HIDDEN'))
-    ON CONFLICT (authorId, clientNonce) DO NOTHING`).bind(
+    ON CONFLICT (authorId, clientNonce) DO NOTHING RETURNING id`).bind(
     ctx.channel.id, ctx.viewerId, input.clientNonce, input.parentId, input.body, JSON.stringify(findings), textKey, now, id,
     conductVersion(ctx), now - day.windowMs, day.count, now - burst.windowMs, burst.count,
     FINDING_REASONS.repeat, REPEAT.minLength, now - REPEAT.windowMs, REPEAT.channels - 1, JSON.stringify(embeds),
@@ -227,7 +227,7 @@ export async function postMessage(ctx: WriteContext, input: PostMessage): Promis
       FROM channel_message WHERE id = ?1 AND moderationState = 'FLAGGED'`).bind(id, createId()));
   }
   const [inserted] = await ctx.db.batch(statements);
-  if (inserted?.meta.changes === 1) return { message: await loaded(ctx, id), created: true };
+  if (inserted?.results.length === 1) return { message: await loaded(ctx, id), created: true };
 
   // Nothing was written: a repeat of an earlier post, or a refusal.
   const previous = await previousPost(ctx, input);
@@ -238,7 +238,8 @@ export async function postMessage(ctx: WriteContext, input: PostMessage): Promis
 /**
  * The statement that opens an edit or reaction batch: log this action under `id` if the person's
  * window has room. Later statements act only when that row exists (`logged(id)`), so the limit and
- * the write are decided together; its `changes` says which. A trigger prunes rows older than an hour.
+ * the write are decided together; its RETURNING row says which (not `meta.changes`, which also counts
+ * the rows its trigger prunes: older than an hour).
  */
 function logAction(ctx: WriteContext, kind: ActionKind, id: string, now: number): D1PreparedStatement {
   const { count, windowMs, perChannel } = ACTION_LIMITS[kind];
@@ -246,7 +247,8 @@ function logAction(ctx: WriteContext, kind: ActionKind, id: string, now: number)
   const conduct = kind === "EDIT" ? "AND EXISTS (SELECT 1 FROM channel_conduct WHERE userId = ?1 AND version >= ?8)" : "";
   return ctx.db.prepare(`INSERT INTO channel_action (id, userId, channelId, kind, at) SELECT ?4, ?1, ?3, ?2, ?5
     WHERE (SELECT COUNT(*) FROM channel_action WHERE userId = ?1 AND kind = ?2 AND at > ?6 ${perChannel ? "AND channelId = ?3" : ""}) < ?7
-      ${conduct}`)
+      ${conduct}
+    RETURNING id`)
     .bind(ctx.viewerId, kind, ctx.channel.id, id, now, now - windowMs, count, ...kind === "EDIT" ? [conductVersion(ctx)] : []);
 }
 const logged = (param: string) => `EXISTS (SELECT 1 FROM channel_action WHERE id = ${param})`;
@@ -307,10 +309,10 @@ export async function editMessage(ctx: WriteContext, target: MessageTarget, inpu
       moderationReasons = CASE WHEN json_array_length(r.reasons) = 0 THEN moderationReasons
         ELSE ${mergedReasons("moderationReasons", "r.reasons")} END
     FROM (SELECT ${reasons} AS reasons) r
-    WHERE ${guard}`).bind(...params));
+    WHERE ${guard} RETURNING id`).bind(...params));
   const results = await ctx.db.batch(statements);
-  if (results[0]?.meta.changes !== 1) throw await actionRefusal(ctx, "EDIT", now);
-  if (results.at(-1)?.meta.changes !== 1) throw new ChannelError("conflict", "This message changed while you were editing it.", 409);
+  if (results[0]?.results.length !== 1) throw await actionRefusal(ctx, "EDIT", now);
+  if (results.at(-1)?.results.length !== 1) throw new ChannelError("conflict", "This message changed while you were editing it.", 409);
   return loaded(ctx, target.id);
 }
 
@@ -371,7 +373,7 @@ export async function reactToMessage(ctx: WriteContext, target: MessageTarget, i
       WHERE channelId = ?6) WHERE id = ?1 AND channelId = ?6 AND ${open} AND ${input.active ? "" : "NOT "}${mine}`)
     .bind(...params, ctx.channel.id);
   const [log] = await ctx.db.batch([logAction(ctx, "REACT", action, now), change, touched]);
-  if (log?.meta.changes !== 1) throw await actionRefusal(ctx, "REACT", now);
+  if (log?.results.length !== 1) throw await actionRefusal(ctx, "REACT", now);
   const { id, reactions } = await loaded(ctx, target.id);
   return { messageId: id, reactions };
 }

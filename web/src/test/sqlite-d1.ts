@@ -7,9 +7,21 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
  * Covers the subset of the D1 API the app uses: prepare/bind/first/all/run and
  * batch (run inside one transaction, as D1 does). Batches never interleave, as
  * D1 serialises writes: a batch runs synchronously from BEGIN to COMMIT.
+ *
+ * `meta.changes` follows D1, not node:sqlite: on D1 it is the connection's
+ * total_changes() delta, so it INCLUDES rows written by triggers (and FTS5
+ * shadow-table writes, whose number depends on the SQLite build), while node:sqlite's `changes` counts only the outer
+ * statement. Verified on local workerd D1 (wrangler 4.149, 2026-11-02): one
+ * INSERT into a table whose AFTER INSERT trigger writes two rows reports
+ * changes 3; a statement that touches no row reports 0 whatever its triggers.
+ * So a success check must never compare `meta.changes` to an exact count on a
+ * table with triggers; see src/lib/channels/README.md ("D1 change counts").
+ * As on D1, `run()` returns the rows of a `RETURNING` clause in `results`.
  */
 export function createSqliteD1(database = new DatabaseSync(":memory:")) {
   database.exec("PRAGMA foreign_keys = ON");
+  const totalChanges = database.prepare("SELECT total_changes() AS n");
+  const changesSoFar = () => Number((totalChanges.get() as { n: number }).n);
 
   function prepare(sql: string) {
     const statement = {
@@ -31,19 +43,22 @@ export function createSqliteD1(database = new DatabaseSync(":memory:")) {
         return (column ? row[column] : { ...row }) as T;
       },
       async all<T>() {
-        const rows = database.prepare(sql).all(...this.params);
-        return {
-          results: rows.map((row) => ({ ...row })) as T[],
-          success: true,
-          meta: {},
+        return this.runSync() as {
+          results: T[];
+          success: true;
+          meta: { changes: number };
         };
       },
       runSync() {
-        const result = database.prepare(sql).run(...this.params);
+        const prepared = database.prepare(sql);
+        const before = changesSoFar();
+        let rows: Record<string, unknown>[] = [];
+        if (prepared.columns().length > 0) rows = prepared.all(...this.params);
+        else prepared.run(...this.params);
         return {
-          results: [],
-          success: true,
-          meta: { changes: Number(result.changes) },
+          results: rows.map((row) => ({ ...row })),
+          success: true as const,
+          meta: { changes: changesSoFar() - before },
         };
       },
       async run() {

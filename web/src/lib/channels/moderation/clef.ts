@@ -154,7 +154,7 @@ export async function clefScreen(
     ctx.db.prepare(`INSERT INTO moderation_event (id, messageId, action, source, actorId, fromState, toState, reasons, createdAt)
       SELECT ?7, id, CASE WHEN ?6 THEN 'HIDE' ELSE 'FLAG' END, 'CLEF', NULL, moderationState,
         CASE WHEN ?6 THEN 'HIDDEN' ELSE 'FLAGGED' END, ?4, ?5
-      FROM channel_message WHERE ${current} AND ${adds}`).bind(...params.slice(0, 7)),
+      FROM channel_message WHERE ${current} AND ${adds} RETURNING id`).bind(...params.slice(0, 7)),
     ctx.db.prepare(`UPDATE channel_message SET
         moderationState = CASE WHEN ?6 THEN 'HIDDEN' ELSE 'FLAGGED' END,
         moderationReasons = ${mergedReasons("moderationReasons", "?4")},
@@ -162,6 +162,6 @@ export async function clefScreen(
         changeSeq = (SELECT MAX(changeSeq) + 1 FROM channel_message WHERE channelId = ?8)
       WHERE ${current} AND EXISTS (SELECT 1 FROM moderation_event WHERE id = ?7)`).bind(...params),
   ]);
-  if (event?.meta.changes !== 1) return "unchanged";
+  if (event?.results.length !== 1) return "unchanged";
   return verdict.hide ? "hidden" : "flagged";
 }

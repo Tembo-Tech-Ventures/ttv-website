@@ -288,6 +288,42 @@ describe("reports in direct conversations", () => {
 });
 
 describe("restoring a hidden message", () => {
+  it("is refused unless the message is hidden and not deleted, writing nothing", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    for (const [options, message] of [
+      [{}, "This message isn't hidden."],
+      [{ state: "FLAGGED" }, "This message isn't hidden."],
+      [{ state: "HIDDEN", deleted: true }, "This message was deleted."],
+    ] as const) {
+      const id = s.message("help", options);
+      const restored = await s.call("moderateMessage", { id, body: { action: "restore", reason: "Fine" } });
+      expect([restored.status, errorOf(restored.body).message]).toEqual([409, message]);
+      expect(s.database.prepare("SELECT moderationState FROM channel_message WHERE id = ?").get(id))
+        .toEqual({ moderationState: options.state ?? "VISIBLE" });
+    }
+    expect(s.database.prepare("SELECT COUNT(*) AS n FROM moderation_event").get()).toEqual({ n: 0 });
+    expect(s.database.prepare("SELECT COUNT(*) AS n FROM moderation_allowlist").get()).toEqual({ n: 0 });
+  });
+
+  it("is refused when the message was restored or deleted after it was read", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    const batch = s.d1.batch.bind(s.d1);
+    for (const [change, message] of [
+      ["moderationState = 'VISIBLE', moderationReasons = '[]', hiddenAt = NULL", "This message isn't hidden."],
+      ["deletedAt = 9", "This message was deleted."],
+    ] as const) {
+      const id = s.message("help", { state: "HIDDEN" });
+      // The other request lands between this one's read and its batch.
+      Object.assign(s.d1, { batch: (statements: D1PreparedStatement[]) => {
+        s.database.prepare(`UPDATE channel_message SET ${change} WHERE id = ?`).run(id);
+        return batch(statements);
+      } });
+      const restored = await s.call("moderateMessage", { id, body: { action: "restore", reason: "Fine" } });
+      expect([restored.status, errorOf(restored.body).message]).toEqual([409, message]);
+    }
+    expect(s.database.prepare("SELECT COUNT(*) AS n FROM moderation_allowlist").get()).toEqual({ n: 0 });
+  });
+
   it("is the way back: keep is refused, restore makes it visible and allowlists its text and findings", async () => {
     const s = setup({ globalRoles: ["ADMIN"] });
     grant(s, FAITH, "MENTOR");
@@ -444,10 +480,10 @@ describe("the queue", () => {
     expect(last?.evidence).toEqual([{ body: "Write to me at otieno@gmail.com", cause: "FLAG", capturedAt: 1_000 }]);
     expect(last?.message.body).toBe("Write to me here instead");
 
-    await s.call("moderateMessage", { id: reported, body: { action: "restore", reason: "Not spam" }, now: () => 6_000 });
+    await s.call("moderateMessage", { id: reported, body: { action: "keep", reason: "Not spam" }, now: () => 6_000 });
     const decided = ModerationQueue.parse((await s.call("listModerationQueue", { query: "?state=DECIDED" })).body);
     expect(decided.items).toEqual([expect.objectContaining({
-      id: reported, state: "DECIDED", decision: { action: "restore", reason: "Not spam", by: expect.objectContaining({ id: VIEWER }), decidedAt: 6_000 },
+      id: reported, state: "DECIDED", decision: { action: "keep", reason: "Not spam", by: expect.objectContaining({ id: VIEWER }), decidedAt: 6_000 },
     })]);
   });
 

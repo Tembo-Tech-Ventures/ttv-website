@@ -44,6 +44,18 @@ describe("parseUniqueIndexConstraints", () => {
     ]);
   });
 
+  it("reads IF NOT EXISTS unique indexes and skips partial ones", () => {
+    const sql = [
+      "CREATE UNIQUE INDEX IF NOT EXISTS `channel_seedKey_idx` ON `channel` (`seedKey`);",
+      "CREATE UNIQUE INDEX IF NOT EXISTS `channel_slug_idx` ON `channel` (`slug`) WHERE \"channel\".\"kind\" <> 'DIRECT';",
+      "CREATE UNIQUE INDEX `pending_idx` ON `access_request` (`userId`)\nWHERE status = 'PENDING';",
+    ].join("\n");
+
+    expect(parseUniqueIndexConstraints(sql)).toEqual([
+      { columns: ["seedKey"], indexName: "channel_seedKey_idx", table: "channel" },
+    ]);
+  });
+
   it("ignores non-unique indexes and other statements", () => {
     const sql = [
       "ALTER TABLE `program` ADD `applicationsOpen` integer DEFAULT false NOT NULL;",
@@ -78,6 +90,11 @@ describe("collectUniqueIndexConstraints", () => {
       "roleId",
     ]);
     expect(byName.get("user_email_unique")?.table).toBe("user");
+    expect(byName.get("channel_message_nonce_idx")?.columns).toEqual([
+      "authorId",
+      "clientNonce",
+    ]);
+    expect(byName.has("access_request_pending_idx")).toBe(false);
   });
 
   it("deduplicates an index redefined by a later migration", () => {
