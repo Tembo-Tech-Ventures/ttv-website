@@ -128,12 +128,13 @@ function questionCopy(question: TemboQuestion, channel: Channel, usage: TemboUsa
     case "exhausted": {
       const limit = usage?.limit ?? 0;
       const when = usage ? ` You can ask again after midnight East Africa Time, ${temboResetsIn(usage.resetsAt, Date.now())}.` : "";
-      // In channels: the private Ask Tembo page has no daily count (QA3-04).
-      return {
-        text: `You've used all ${limit} of today's questions to Tembo in channels, so this one wasn't asked.${when}`
-          + " Questions on your private Ask Tembo page don't count toward this.",
-        action: null,
-      };
+      // In channels: the private Ask Tembo page has no daily count (QA3-04). Rebuilt after a reload
+      // (no error), the note says what is known, not why: a mention edited in, or posted while Tembo
+      // was off, was never asked either (unaskedForToday).
+      const told = question.error === null
+        ? `Tembo didn't take this question, and you've used all ${limit} of today's questions to Tembo in channels.`
+        : `You've used all ${limit} of today's questions to Tembo in channels, so this one wasn't asked.`;
+      return { text: `${told}${when} Questions on your private Ask Tembo page don't count toward this.`, action: null };
     }
     case "answered":
       return null;

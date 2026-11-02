@@ -234,7 +234,8 @@ describe("asking Tembo from the channel (S-3.1 + U-3.1)", () => {
     const notes = $$("[data-tembo-question=exhausted]");
     expect(notes).toHaveLength(1);
     expect(notes[0]!.closest("li")?.querySelector(`[data-message="${refused.id}"]`)).not.toBeNull();
-    expect(notes[0]!.textContent).toMatch(/^You've used all 10 of today's questions to Tembo in channels, so this one wasn't asked\./);
+    // What is known, not why: the server keeps no reason for an unasked mention (#310 S1).
+    expect(notes[0]!.textContent).toMatch(/^Tembo didn't take this question, and you've used all 10 of today's questions to Tembo in channels\. You can ask again after midnight East Africa Time/);
     // Nothing was asked to show it, and "Ask Tembo here" is gone: it would only post a question nobody answers.
     expect(client.tembo().asked).toEqual([]);
     expect($$("[data-ask-tembo]")).toHaveLength(0);

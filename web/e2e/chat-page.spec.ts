@@ -136,7 +136,7 @@ test("a new chat shows suggested prompts that send on click", async ({ page }, t
   await gotoChat(page);
   await newChatControl(page, testInfo).click();
 
-  await expect(page.getByRole("heading", { name: "Ask across your sessions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ask Tembo privately" })).toBeVisible();
   await shoot(page, testInfo, "empty-state");
 
   await page.getByRole("button", { name: /main action items/ }).click();
@@ -254,7 +254,7 @@ test("a new chat is not overwritten by an answer still in flight", async ({ page
   // Abandon the conversation while the answer is still being fetched.
   await expect(transcript(page).getByText("Thinking…")).toBeVisible();
   await newChatControl(page, testInfo).click();
-  await expect(page.getByRole("heading", { name: "Ask across your sessions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ask Tembo privately" })).toBeVisible();
 
   /*
    * A fixed wait, deliberately: the assertion is that something never happens,
@@ -268,7 +268,7 @@ test("a new chat is not overwritten by an answer still in flight", async ({ page
 
   await expect(transcript(page).getByText("Question A")).toHaveCount(0);
   await expect(transcript(page).getByText("validate the problem with users")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Ask across your sessions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ask Tembo privately" })).toBeVisible();
 });
 
 test("the header title opens the conversation sheet on mobile", async ({ page }, testInfo) => {
@@ -347,14 +347,14 @@ test("a conversation still loading does not replace a new chat", async ({ page }
 
   // Abandon the load before it does.
   await newChatControl(page, testInfo).click();
-  await expect(page.getByRole("heading", { name: "Ask across your sessions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ask Tembo privately" })).toBeVisible();
 
   // Same reasoning as the in-flight send: the assertion is that a late response
   // never lands, so it has to outlast the window in which it could.
   await page.waitForTimeout(SLOW_LOAD_MS * 2);
 
   await expect(transcript(page).getByText("Should we move the retrieval layer")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Ask across your sessions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ask Tembo privately" })).toBeVisible();
 });
 
 test("two quick conversation taps land on the second one", async ({ page }) => {

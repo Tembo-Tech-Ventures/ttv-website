@@ -55,13 +55,16 @@ export interface TemboOptions {
 const DAY_MS = 86_400_000;
 
 /**
- * A question the reader posted today that Tembo never took because today's questions were used up:
- * their own message, mentioning `@tembo`, posted since the allowance last reset, with no ask on the
- * server (`Message.temboAsked`), while `/me`'s usage says none are left. After a reload the store
- * remembers nothing, so the note saying it wasn't asked comes from these instead (QA3-05).
+ * A question the reader posted today that Tembo never took, while none are left: their own message,
+ * mentioning `@tembo`, posted since the allowance last reset, neither deleted nor hidden, with no ask
+ * on the server (`Message.temboAsked`), while `/me`'s usage says none are left. After a reload the
+ * store remembers nothing, so the note comes from these instead (QA3-05). It carries no error: the
+ * server keeps no reason, and a mention edited in or posted while Tembo was off was never asked
+ * either, so the note says what is known rather than blaming the allowance.
  */
 export function unaskedForToday(message: Message, usage: TemboUsage | null): TemboQuestion | null {
   if (usage === null || usage.used < usage.limit || message.temboAsked !== false || message.deleted) return null;
+  if (message.moderation?.state === "HIDDEN") return null;
   if (message.createdAt < usage.resetsAt - DAY_MS || !mentionsTembo(message.body)) return null;
   return {
     messageId: message.id, threadId: message.parentId ?? message.id, askedAt: message.createdAt,

@@ -296,9 +296,10 @@ describe("unaskedForToday (QA3-05)", () => {
     ["no mention", { body: "one more?" }, spent],
     ["posted before today's allowance began", { createdAt: Date.UTC(2026, 10, 2, 20, 59) }, spent],
     ["deleted", { deleted: true, body: "" }, spent],
+    ["hidden", { moderation: { state: "HIDDEN", reasons: ["Synthetic reason"] } }, spent],
     ["questions left", {}, { ...spent, used: 9 }],
     ["Tembo off", {}, null],
-  ] as const)("is nothing when %s", (_, change, today) => {
+  ] satisfies [string, Partial<Message>, TemboUsage | null][])("is nothing when %s", (_, change, today) => {
     expect(unaskedForToday({ ...question, ...change }, today)).toBeNull();
   });
 });

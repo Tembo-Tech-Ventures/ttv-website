@@ -87,10 +87,12 @@ allowance is for channels only: the private Ask Tembo page (`/api/chat`) has no
 daily count, and every refusal says "in channels" (QA3-04).
 
 A mention refused for the day has no `tembo_ask`, so the caller's own messages
-carry `Message.temboAsked`; with `/me`'s usage at its limit, the channel shows
-"so this one wasn't asked" under an own `@tembo` message from today that
-nothing asked, after a reload too (QA3-05, `unaskedForToday` in
-`src/lib/platform/client/tembo.ts`).
+carry `Message.temboAsked`; with `/me`'s usage at its limit, the channel still
+notes, after a reload, that Tembo didn't take an own `@tembo` message from today
+that nothing asked (QA3-05, `unaskedForToday` in
+`src/lib/platform/client/tembo.ts`). That note says what is known, not why: no
+reason is kept, and a mention edited in or posted while Tembo was off was never
+asked either.
 
 ## What Tembo sees (`sources.ts`)
 
@@ -119,13 +121,21 @@ question being answered and every other question to Tembo (a message with a
 `tembo_ask`, or one that mentions `@tembo`), and Tembo's own answers are never
 read at all. Earlier questions in the conversation come as context under
 `[question, not a source]`, with no tag, so no sentence can cite one: a
-question nothing else answers still gets "I don't know".
+question nothing else answers still gets "I don't know". The trade-off is
+deliberate: a person's correction addressed to Tembo ("@tembo that's wrong, demo
+day moved to Friday") is a question too, so it is context and never cited;
+the same fact posted without the mention is a source.
 
 **Sources say what tells them apart (QA3-02, QA3-06).** A message's citation is
 titled with its author and its first words, a session clip with its moment
 (`Week 5 at 0:40`), and a shared project with its builder (`Chama ledger by
 Otieno Ouma`): the owner who shared it here, by the name the channel shows on
-that message, so the name is never more than its readers already see.
+that message, so the name is never more than its readers already see. A
+message's words in a title are shown only while they still stand: once the
+cited message is deleted, hidden, under a hidden root, flagged or edited after
+the answer, every reader sees "A message since edited or removed" instead
+(`CITED_MESSAGE_CHANGED`, resolved in the page's own statement,
+`src/lib/channels/messages.ts`).
 
 `leakage.test.ts` is the matrix: every kind of channel × every role that may
 ask there, a model that calls every tool (offered or not) with every query

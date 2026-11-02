@@ -21,7 +21,8 @@ export default function AboutAskTembo({ scope }: { scope?: PrivateAskScope }) {
         <span className="font-semibold text-ink-secondary">Private</span> · Other members can't see this conversation
         <span className="text-ink-muted"> · What Tembo sees and what's kept</span>
       </summary>
-      <ul className="mt-1.5 grid list-disc gap-1 pb-1 pl-5 leading-relaxed">
+      {/* Its own scroll past a third of the screen, so a short phone with the keyboard open keeps the transcript in view. */}
+      <ul className="mt-1.5 grid max-h-[33dvh] list-disc gap-1 overflow-y-auto overscroll-contain pb-1 pl-5 leading-relaxed">
         {scope && <li>Tembo sees {PRIVATE_ASK_SEES[scope]}. Never channels, other people's messages or their private work.</li>}
         <li>
           Nothing here is posted in a channel, and other members can't see it. In a channel, "Ask Tembo here" posts your

@@ -4,6 +4,7 @@ import { ErrorEnvelope, MASKED_CONTACT, Message, MessageList, ROUTES, TemboRespo
 import { TEMBO_CONFIG } from "./config";
 import { refusal } from "./grounding";
 import { QUESTION_MARK } from "./sources";
+import { CITED_MESSAGE_CHANGED } from "@/lib/channels/messages";
 import { getMe } from "@/lib/platform/server/me";
 import { capabilitiesFor } from "@/lib/platform/server/capabilities";
 import { listAttention } from "@/lib/attention/service";
@@ -466,6 +467,31 @@ describe("what an answer can cite (QA-3)", () => {
       { messageId: first, title: "Otieno Ouma: “The Mongolia trip leaves on 3 March from Nairobi, with a st…”" },
       { messageId: second, title: "Otieno Ouma: “Mongolia trip packing list: boots.”" },
     ]);
+  });
+
+  it("shows a cited message's words only while they still stand: deleted, hidden, flagged or edited, it falls back (#310 B1)", async () => {
+    const s = setup();
+    const body = (n: number) => `Mongolia trip note ${n}: leaves on 3 March.`;
+    const cited = [1, 2, 3, 4, 5].map((n) => s.message("help", { body: body(n), author: "synthetic-otieno" }));
+    const question = s.question("help", "@tembo when does the Mongolia trip leave?");
+    const { model } = scriptedModel([{ answer: "It leaves on 3 March [S1, S2, S3, S4, S5]." }]);
+    await s.ask("help", question, { temboModel: model });
+    await s.afterResponse();
+    const titles = async () => {
+      const thread = MessageList.parse((await s.call("listMessages", { id: s.channel("help"), query: `?thread=${question}`, user: "synthetic-achieng" })).body);
+      return thread.items.find((item) => item.authorKind === "TEMBO")!.citations.map((citation) => citation.title);
+    };
+    expect(await titles()).toEqual([1, 2, 3, 4, 5].map((n) => `Otieno Ouma: “${body(n)}”`));
+
+    // Its author deletes one and edits another; a moderator hides one; a flag masks one; one stands.
+    expect((await s.call("deleteMessage", { id: cited[0], user: "synthetic-otieno" })).status).toBe(200);
+    expect((await s.call("editMessage", { id: cited[1], user: "synthetic-otieno", body: { body: "Changed my mind about this." } })).status).toBe(200);
+    s.database.prepare(`UPDATE channel_message SET moderationState = 'HIDDEN', hiddenAt = 1, moderationReasons = '["Synthetic reason"]' WHERE id = ?`).run(cited[2]);
+    s.database.prepare("UPDATE channel_message SET moderationState = 'FLAGGED', moderationReasons = ? WHERE id = ?")
+      .run(JSON.stringify([FINDING_REASONS.phone]), cited[3]);
+    const after = await titles();
+    expect(after).toEqual([CITED_MESSAGE_CHANGED, CITED_MESSAGE_CHANGED, CITED_MESSAGE_CHANGED, CITED_MESSAGE_CHANGED, `Otieno Ouma: “${body(5)}”`]);
+    expect(JSON.stringify(after)).not.toMatch(/note [1-4]/);
   });
 
   it("names a session clip by its moment, so two clips of one session tell apart (QA3-02)", async () => {

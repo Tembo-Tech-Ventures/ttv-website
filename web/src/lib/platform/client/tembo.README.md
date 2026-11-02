@@ -24,7 +24,8 @@ B-3.1's (`src/lib/tembo/README.md`): `POST /api/channels/:id/tembo`
 - After a reload the store holds no questions. `unaskedForToday(message, usage)`
   rebuilds `exhausted` for the reader's own `@tembo` message from today that the
   server says nothing asked (`Message.temboAsked === false`) while `/me`'s usage
-  is at its limit, so "so this one wasn't asked" stays (QA3-05).
+  is at its limit, so the note stays (QA3-05). It says Tembo didn't take the
+  question and that none are left, not that the allowance was why.
 
 ## Feedback
 

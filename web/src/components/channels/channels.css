@@ -596,7 +596,7 @@
 }
 
 .channel-cite-ref:hover {
-  background-color: rgb(242 141 104 / 0.16);
+  background-color: color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
 
 @media (pointer: coarse) {

@@ -53,7 +53,31 @@ export interface MessageRow {
   temboFeedback: string | null;
   /** On the viewer's own person messages, 1 when Tembo was asked about it, else 0; null otherwise. */
   temboAsked: number | null;
+  /** On a Tembo answer, a JSON array of the cited message ids whose words its titles may no longer show. */
+  citationsGone: string | null;
 }
+
+/**
+ * A cited message's title while its words may no longer be shown. Tembo's answer stores each source
+ * message's first words in the citation's title (src/lib/tembo/sources.ts), as Tembo read them; once
+ * that message is deleted, hidden, under a hidden root, flagged or edited after the answer, readers
+ * see this instead, so a citation never keeps words their author or a moderator took back (#310 B1).
+ */
+export const CITED_MESSAGE_CHANGED = "A message since edited or removed";
+
+/**
+ * The message citations of Tembo answer `m` whose title must fall back to CITED_MESSAGE_CHANGED: the
+ * cited message is missing, deleted, not VISIBLE (a flag masks parts of it), under a hidden root, or
+ * edited after the answer. Primary-key reads, in the page's own statement.
+ */
+const CITATIONS_GONE = `CASE WHEN m.authorKind = 'TEMBO' AND m.deletedAt IS NULL THEN (
+    SELECT json_group_array(json_extract(cite.value, '$.messageId'))
+    FROM json_each(CASE WHEN json_valid(m.citations) THEN m.citations ELSE '[]' END) cite
+    WHERE json_extract(cite.value, '$.type') = 'message' AND NOT EXISTS (SELECT 1 FROM channel_message cited
+      WHERE cited.id = json_extract(cite.value, '$.messageId') AND cited.deletedAt IS NULL AND cited.moderationState = 'VISIBLE'
+        AND (cited.editedAt IS NULL OR cited.editedAt <= m.createdAt)
+        AND NOT EXISTS (SELECT 1 FROM channel_message root WHERE root.id = cited.parentId AND root.moderationState = 'HIDDEN'))
+  ) END AS citationsGone`;
 
 /**
  * An admin's hide of message `m` since it was hidden, from the audit trail, which a later signal
@@ -97,6 +121,7 @@ export const messageColumns = (program: string) => `m.id, m.channelId, m.parentI
   CASE WHEN m.authorKind = 'TEMBO' AND m.deletedAt IS NULL
     THEN (SELECT tf.kind FROM tembo_feedback tf WHERE tf.messageId = m.id AND tf.userId = ?2) END AS temboFeedback,
   CASE WHEN m.authorKind = 'USER' AND m.authorId = ?2 THEN EXISTS (SELECT 1 FROM tembo_ask a WHERE a.messageId = m.id) END AS temboAsked,
+  ${CITATIONS_GONE},
   ${embedAccessColumn(program)}`;
 const MESSAGE_COLUMNS = messageColumns("?3");
 const FROM_MESSAGES = `FROM channel_message m LEFT JOIN "user" u ON u.id = m.authorId`;
@@ -194,7 +219,7 @@ export function toMessage(row: MessageRow, ctx: ReadContext): Message {
     authorKind: row.authorKind, author: author(row, ctx.channel.programId),
     body: deleted ? "" : bodyForReader({ body: row.body, moderationState: row.moderationState, reasons }, privileged),
     embeds: deleted ? [] : embedsForReader(jsonArray(row.embeds), row.embedAccess),
-    citations: deleted ? [] : parsedArray(Citation, row.citations),
+    citations: deleted ? [] : citationsForReader(parsedArray(Citation, row.citations), row.citationsGone),
     reactions: deleted ? [] : reactions(row.reactions),
     createdAt: row.createdAt, edited: !deleted && row.editedAt !== null, deleted,
     moderation: privileged
@@ -210,6 +235,14 @@ export function toMessage(row: MessageRow, ctx: ReadContext): Message {
     reportedByMe: row.reportedByMe === 1,
     ...temboFields(row, own, deleted),
   };
+}
+
+/** Stored citations, with CITED_MESSAGE_CHANGED for each cited message whose words are no longer to be shown. */
+function citationsForReader(citations: Citation[], gone: string | null): Citation[] {
+  const changed = new Set(jsonArray(gone).filter((id): id is string => typeof id === "string"));
+  if (changed.size === 0) return citations;
+  return citations.map((citation) => citation.type === "message" && changed.has(citation.messageId)
+    ? { ...citation, title: CITED_MESSAGE_CHANGED } : citation);
 }
 
 /** On Tembo's answers, the reader's own rating; on the reader's own messages, whether Tembo was asked (QA3-05). */
