@@ -26,17 +26,23 @@ describe("community token routes", () => {
     expect((await call("POST", { ...valid, scopes: ["community:read", "institution:read"] }, { origin: "https://ttv.test" })).status).toBe(403);
     expect(mocks.create).not.toHaveBeenCalled();
   });
-  it("issues bounded member scopes and hides admin and channel tokens", async () => {
+  it("issues bounded member scopes, lists channel tokens and hides admin tokens", async () => {
     expect((await call("POST", valid, { origin: "https://ttv.test" })).status).toBe(201);
     mocks.list.mockResolvedValue([{ id: "admin", scopes: ["admin:read"] }, { id: "channels", scopes: ["channels:read"] }, { id: "own", scopes: ["community:read"] }]);
     const result = await (await call("GET")).json();
-    expect(result).toEqual({ tokens: [{ id: "own", scopes: ["community:read"] }] });
+    expect(result).toEqual({ tokens: [{ id: "channels", scopes: ["channels:read"] }, { id: "own", scopes: ["community:read"] }] });
   });
-  it("cannot revoke another users, admin or channel token", async () => {
+  it("cannot revoke another users or admin token", async () => {
     expect((await call("DELETE", { id: "foreign" }, { origin: "https://ttv.test" })).status).toBe(404);
-    mocks.list.mockResolvedValue([{ id: "channels", scopes: ["channels:read", "channels:write"] }]);
-    expect((await call("DELETE", { id: "channels" }, { origin: "https://ttv.test" })).status).toBe(404);
+    mocks.list.mockResolvedValue([{ id: "admin", scopes: ["admin:read", "admin:write"] }]);
+    expect((await call("DELETE", { id: "admin" }, { origin: "https://ttv.test" })).status).toBe(404);
     expect(mocks.revoke).not.toHaveBeenCalled();
+  });
+  it("lets a former admin revoke their own channels token", async () => {
+    mocks.list.mockResolvedValue([{ id: "channels", scopes: ["channels:read", "channels:write"] }]);
+    mocks.revoke.mockResolvedValue(true);
+    expect((await call("DELETE", { id: "channels" }, { origin: "https://ttv.test" })).status).toBe(200);
+    expect(mocks.revoke).toHaveBeenCalledWith(expect.anything(), expect.any(String), "channels");
   });
   it("rejects unknown fields and unbounded request bodies", async () => {
     expect((await call("POST", { ...valid, userId: "victim" }, { origin: "https://ttv.test" })).status).toBe(400);

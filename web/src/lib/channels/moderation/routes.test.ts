@@ -695,6 +695,23 @@ describe("attention", () => {
       .toEqual([["cohort", "A moderator hid your message in #cohort-04."]]);
   });
 
+  it("tells admins again, unread, each time a decided case reopens", async () => {
+    const s = setup({ globalRoles: ["ADMIN"] });
+    grant(s, ACHIENG, "ADMIN");
+    const id = s.message("help", { author: OTIENO, body: "Spam" });
+    const unread = () => s.database.prepare(`SELECT COUNT(*) AS n FROM attention_item
+      WHERE userId = ? AND kind = 'moderation_pending' AND readAt IS NULL`).get(ACHIENG);
+    await s.call("reportMessage", { id, user: FAITH, body: { reason: "Spam" }, now: () => 1_000 });
+    await s.afterResponse();
+    expect(unread()).toEqual({ n: 1 });
+    s.database.prepare("UPDATE attention_item SET readAt = createdAt WHERE userId = ?").run(ACHIENG);
+    await s.call("moderateMessage", { id, body: { action: "keep", reason: "Fine" }, now: () => 2_000 });
+    await s.call("reportMessage", { id, body: { reason: "Still spam" }, now: () => 3_000 });
+    await s.afterResponse();
+    expect(caseOf(s, id)).toMatchObject({ state: "PENDING" });
+    expect(unread()).toEqual({ n: 1 });
+  });
+
   it("tells each mentioned person who can read the channel, once, naming the author", async () => {
     const s = setup({ applications: [{ programId: "cohort-a", status: "APPROVED" }] });
     s.database.prepare('INSERT INTO "user"(id,name,email) VALUES (?,?,?)').run("synthetic-brian", "Brian Kiprop", "b@example.test");

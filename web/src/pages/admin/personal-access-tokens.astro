@@ -171,8 +171,10 @@ const tokenState = (expiresAt: Date, revokedAt: Date | null) => {
         Month options use 30-day periods.
         Admin read/write tokens can submit admin changes without a browser Origin header, and decide
         moderation cases through MCP.
-        Channel tokens read channels and, with read and write, post, edit, delete, react, report and
-        mark messages read as you; they can't reach admin pages or moderation decisions.
+        Channel tokens read channels as you, including any hidden messages you can see as a moderator,
+        and, with read and write, post, edit, delete, react, report, ask for a review and mark messages
+        read as you. They can't reach admin pages or moderation decisions. You can list and revoke them
+        at /api/community/tokens even if you are no longer an admin.
         Prefer read-only unless the automation must perform a specific mutation.
       </p>
     </section>

@@ -32,10 +32,15 @@ async function readTokenBody(request: Request): Promise<Record<string, unknown> 
     return parsed.data;
   } catch { return json({ error: "Invalid JSON" }, 400); }
 }
+/**
+ * The owner's own tokens, from a browser session: lists and revokes every token but admin ones (so a
+ * former admin can still find and revoke a channels token issued on the admin page), and issues
+ * community tokens only.
+ */
 export const ALL: APIRoute = async ({ request, locals }) => {
   if (!locals.user) return json({ error: "Authentication required" }, 401);
   if (request.headers.has("Authorization") || locals.personalAccessToken || isAgentSession(locals.session?.userAgent)) return json({ error: "Browser cookie session required" }, 403);
-  if (request.method === "GET") return json({ tokens: (await listPersonalAccessTokens(env.DB, locals.user.id)).filter(t => personalAccessTokenFamily(t.scopes) === "community") });
+  if (request.method === "GET") return json({ tokens: (await listPersonalAccessTokens(env.DB, locals.user.id)).filter(t => personalAccessTokenFamily(t.scopes) !== "admin") });
   if (!["POST", "DELETE"].includes(request.method)) return new Response(null, { status: 405, headers: { Allow: "GET, POST, DELETE" } });
   if (!hasMatchingRequestOrigin(request)) return json({ error: "Same-origin request required" }, 403);
   const body = await readTokenBody(request);
@@ -44,7 +49,7 @@ export const ALL: APIRoute = async ({ request, locals }) => {
   if (request.method === "DELETE") {
     if (typeof input.id !== "string" || Object.keys(input).some(key => key !== "id")) return json({ error: "Token id required" }, 400);
     const tokens = await listPersonalAccessTokens(env.DB, locals.user.id);
-    if (!tokens.some(t => t.id === input.id && personalAccessTokenFamily(t.scopes) === "community")) return json({ error: "Token not found" }, 404);
+    if (!tokens.some(t => t.id === input.id && personalAccessTokenFamily(t.scopes) !== "admin")) return json({ error: "Token not found" }, 404);
     return json({ revoked: await revokePersonalAccessToken(env.DB, locals.user.id, input.id) });
   }
   const parsed = tokenInput.safeParse(input);

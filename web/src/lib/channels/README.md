@@ -167,7 +167,11 @@ Every route:
   its owner with the owner's capabilities: `channels:read` for the reads
   (channels, messages, shareables), `channels:write` (issued with
   `channels:read`) for the writes (post, edit, delete, react, read marker,
-  report, ask for review). Any other token is 403, and so is every token on
+  report, ask for review). As its owner, a moderator's token reads the hidden
+  messages and moderation reasons they see in the channel, but no evidence
+  (earlier texts), which only the admin queue carries. Its owner lists and
+  revokes it on the admin token page or, after losing the admin role, through
+  `/api/community/tokens`. Any other token is 403, and so is every token on
   the moderation queue and decisions: admin tokens triage through MCP
   (below). A channels token can't be combined with admin or community scopes
   and reaches no other route (403 in the middleware); community tokens never
