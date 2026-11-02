@@ -86,7 +86,11 @@ export const AuthorSummary = PersonSummary.extend({ id: Id.nullable() });
 export type AuthorSummary = z.infer<typeof AuthorSummary>;
 export const SpaceUnreadCounts = z.record(SpaceId, Count);
 export type SpaceUnreadCounts = z.infer<typeof SpaceUnreadCounts>;
-export const TemboUsage = z.object({ used: Count, limit: Count });
+/**
+ * Questions to Tembo in channels today (B-3.1): `used` of `limit`, the day ending at `resetsAt`, the next
+ * midnight in Africa/Nairobi (src/lib/tembo/README.md, "Quota").
+ */
+export const TemboUsage = z.object({ used: Count, limit: Count, resetsAt: Timestamp });
 export type TemboUsage = z.infer<typeof TemboUsage>;
 /** Serializable subset; channel-dependent capabilities live on Channel. */
 export const Capabilities = z.object({
@@ -253,6 +257,8 @@ export const Citation = z.discriminatedUnion("type", [
   z.object({ type: z.literal("project"), journeyId: Id, version: z.int().positive(), title: NonEmptyText, href: InternalPath }),
   z.object({ type: z.literal("sessionClip"), recordingId: Id, startSeconds: z.number().nonnegative(), title: NonEmptyText, href: InternalPath }),
   z.object({ type: z.literal("message"), messageId: Id, channelId: Id, title: NonEmptyText, href: InternalPath }),
+  /** A public builder profile (/talent/<handle>), which Tembo may cite in community channels. */
+  z.object({ type: z.literal("profile"), userId: Id, title: NonEmptyText, href: InternalPath }),
 ]);
 export type Citation = z.infer<typeof Citation>;
 export const ReactionKind = z.enum(["useful", "learned", "thanks", "agree", "congrats"]);

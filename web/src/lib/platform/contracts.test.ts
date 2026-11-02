@@ -222,7 +222,10 @@ describe("wire invariants", () => {
     ["fractional timestamp", C.Timestamp, 1.5],
     ["negative timestamp", C.Timestamp, -1],
     ["infinite timestamp", C.Timestamp, Infinity],
-    ["negative usage", C.TemboUsage, { used: -1, limit: 10 }],
+    ["negative usage", C.TemboUsage, { used: -1, limit: 10, resetsAt: F.FIXTURE_NOW }],
+    ["usage without its reset time", C.TemboUsage, { used: 1, limit: 10 }],
+    ["external profile citation", C.Citation, { type: "profile", userId: "u", title: "Achieng", href: "https://evil.example/talent" }],
+    ["profile citation without a person", C.Citation, { type: "profile", title: "Achieng", href: "/talent/achieng" }],
     ["invalid feedback", C.TemboFeedback, { feedback: "dislike" }],
     ["forged Tembo scope", C.TemboAsk, { messageId: F.messages.cohortAsk.id, scope: "another-cohort" }],
     ["human Tembo answer", C.TemboAnswer, { status: "answer", message: F.messages.cohortAsk, usage: { used: 1, limit: 10 } }],
@@ -271,6 +274,14 @@ describe("wire invariants", () => {
   it.each(C.ErrorCode.options)("uses the one error envelope for %s", (code) => {
     const error: C.ErrorEnvelope = { error: { code, message: "Synthetic failure", retryAfterMs: 1000 } };
     expect(C.ErrorEnvelope.parse(error)).toEqual(error);
+  });
+});
+
+describe("Tembo contracts (B-3.1)", () => {
+  it("cites a public builder profile by an internal link, and reports when the allowance resets", () => {
+    const profile = { type: "profile", userId: "synthetic-achieng", title: "Achieng Atieno · builder profile", href: "/talent/achieng" } as const;
+    expect(C.Citation.parse(profile)).toEqual(profile);
+    expect(C.TemboUsage.parse({ used: 10, limit: 10, resetsAt: Date.UTC(2026, 10, 2, 21) })).toEqual({ used: 10, limit: 10, resetsAt: Date.UTC(2026, 10, 2, 21) });
   });
 });
 

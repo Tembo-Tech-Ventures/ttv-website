@@ -155,6 +155,8 @@ deleting your own message and read markers do not.
 | `POST /api/messages/:id/review` | The author of a hidden message asks for a review (B-2.5) |
 | `POST /api/moderation/:messageId` | Hide (channel moderators and admins), restore or keep (admins) (B-2.5) |
 | `GET /api/moderation/queue?state&cursor` | The admin moderation queue (B-2.5); admins only, 403 otherwise |
+| `POST /api/channels/:id/tembo` | Ask Tembo about your own message (B-3.1; `src/lib/tembo/README.md`); also needs `tembo_channels` |
+| `POST /api/messages/:id/tembo-feedback` | "helpful" or "not quite" on a Tembo answer (B-3.1); also needs `tembo_channels` |
 
 Every route:
 

@@ -1575,3 +1575,59 @@ export const moderationAllowlist = sqliteTable("moderation_allowlist", {
   check("moderation_allowlist_key_check", sql`length(${table.key}) <= 2048 AND (${table.key} GLOB 'text:[0-9a-f]*' OR ${table.key} GLOB 'phone:+[0-9]*' OR ${table.key} GLOB 'phone:0[0-9]*' OR ${table.key} GLOB 'email:?*@?*' OR ${table.key} GLOB 'link:?*')`),
   check("moderation_allowlist_time_check", sql`${table.createdAt} >= 0`),
 ]);
+
+/**
+ * Tembo in channels (B-3.1, migration 0035; src/lib/tembo/README.md). Accepted questions per person
+ * per day, the day being Africa/Nairobi's calendar date (`YYYY-MM-DD`). Counted when a question is
+ * accepted, and given back when Tembo could not answer it.
+ */
+export const temboUsage = sqliteTable("tembo_usage", {
+  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  day: text("day").notNull(),
+  count: integer("count").notNull().default(0),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.day] }),
+  check("tembo_usage_day_check", sql`${table.day} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
+  check("tembo_usage_count_check", sql`${table.count} >= 0`),
+]);
+
+/**
+ * One question to Tembo per asking message, so asking twice (a mention and the Ask button, or a
+ * retry) answers once. `claim` names the run allowed to post the answer; a run that died leaves a
+ * PENDING row that a later ask may claim again after a while. The answer is a TEMBO message in the
+ * asking message's thread.
+ */
+export const temboAsk = sqliteTable("tembo_ask", {
+  messageId: text("messageId").primaryKey().references(() => channelMessage.id, { onDelete: "cascade" }),
+  channelId: text("channelId").notNull().references(() => channel.id, { onDelete: "cascade" }),
+  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  day: text("day").notNull(),
+  status: text("status", { enum: ["PENDING", "ANSWERED", "FAILED"] }).notNull(),
+  claim: text("claim").notNull(),
+  answerId: text("answerId").references(() => channelMessage.id, { onDelete: "set null" }),
+  claimedAt: integer("claimedAt").notNull(),
+  createdAt: integer("createdAt").notNull(),
+  updatedAt: integer("updatedAt").notNull(),
+}, (table) => [
+  index("tembo_ask_channelId_idx").on(table.channelId),
+  index("tembo_ask_userId_idx").on(table.userId),
+  uniqueIndex("tembo_ask_answerId_idx").on(table.answerId).where(sql`${table.answerId} IS NOT NULL`),
+  check("tembo_ask_status_check", sql`${table.status} IN ('PENDING','ANSWERED','FAILED')`),
+  check("tembo_ask_answer_check", sql`${table.answerId} IS NULL OR ${table.status} = 'ANSWERED'`),
+  check("tembo_ask_day_check", sql`${table.day} GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'`),
+  check("tembo_ask_time_check", sql`${table.claimedAt} >= 0 AND ${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt}`),
+]);
+
+/** "Helpful" or "not quite" on a Tembo answer: one per person and answer, the latest choice kept. */
+export const temboFeedback = sqliteTable("tembo_feedback", {
+  messageId: text("messageId").notNull().references(() => channelMessage.id, { onDelete: "cascade" }),
+  userId: text("userId").notNull().references(() => user.id, { onDelete: "cascade" }),
+  kind: text("kind", { enum: ["helpful", "not_quite"] }).notNull(),
+  createdAt: integer("createdAt").notNull(),
+  updatedAt: integer("updatedAt").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.messageId, table.userId] }),
+  index("tembo_feedback_userId_idx").on(table.userId),
+  check("tembo_feedback_kind_check", sql`${table.kind} IN ('helpful','not_quite')`),
+  check("tembo_feedback_time_check", sql`${table.createdAt} >= 0 AND ${table.updatedAt} >= ${table.createdAt}`),
+]);
