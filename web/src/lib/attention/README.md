@@ -63,7 +63,8 @@ recipient before this producer can be connected.
 Channel events (B-2.5, `channel-producers.ts`; src/lib/channels/README.md,
 "Moderation" §6): `message_hidden` to a hidden message's author (never naming
 who hid it), `moderation_decided` to the author when an admin decides on a
-case they knew of (B-3.2), `moderation_pending` to admins for an open
+case they knew of (B-3.2; only the case's current decision shows),
+`moderation_pending` to admins for an open
 moderation case and an author's review request, `mention` to each readable
 person named in a message, and `tembo_answer` to the person whose question
 Tembo answered (B-3.1). They follow the narrower of `spaces` and `channels` for the

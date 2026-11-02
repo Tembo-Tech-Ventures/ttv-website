@@ -760,6 +760,38 @@ describe("undoing a hide (QA2-11)", () => {
     expect([await queue("DECIDED"), await queue("PENDING")]).toEqual([[id], []]);
   });
 
+  it("puts back the case's own source, reasons and actor after two admin decisions in a row", async () => {
+    const full = (s: ChannelFixture, id: string) => s.database.prepare(`SELECT state, source, reasons, reportCount, actorId, decision,
+      decisionReason, decidedBy, decidedAt, reopenedAt FROM moderation_case WHERE messageId = ?`).get(id);
+    const hideAndUndo = async (s: ChannelFixture, id: string) => {
+      expect((await s.call("editMessage", { id, user: OTIENO, body: { body: "Edited" }, now: () => 5_000 })).status).toBe(200);
+      await s.call("moderateMessage", { id, body: hide("Still harsh"), now: () => 6_000 });
+      expect(caseOf(s, id)).toMatchObject({ state: "PENDING", source: "MENTOR_HIDE" });
+      expect((await s.call("undoModerationHide", { id, body: {}, now: () => 7_000 })).status).toBe(200);
+    };
+    // A mentor hides; an admin upholds the hide, then restores it.
+    const upheld = mentors();
+    const first = upheld.message("help", { author: OTIENO, body: "Harsh words" });
+    await upheld.call("moderateMessage", { id: first, body: hide("Harsh"), now: () => 1_000 });
+    await upheld.call("moderateMessage", { id: first, user: ACHIENG, body: hide("Upheld"), now: () => 2_000 });
+    await upheld.call("moderateMessage", { id: first, user: ACHIENG, body: { action: "restore", reason: "Ok" }, now: () => 3_000 });
+    const decided = full(upheld, first);
+    expect(decided).toMatchObject({ source: "MENTOR_HIDE", reasons: '["Harsh"]', actorId: VIEWER, decision: "RESTORE", decisionReason: "Ok" });
+    await hideAndUndo(upheld, first);
+    expect(full(upheld, first)).toEqual(decided);
+
+    // An admin hides (no signal opened the case); another admin restores it.
+    const admins = mentors();
+    grant(admins, FAITH, "ADMIN");
+    const second = admins.message("help", { author: OTIENO, body: "Off-topic" });
+    await admins.call("moderateMessage", { id: second, user: ACHIENG, body: hide("Admin hid"), now: () => 1_000 });
+    await admins.call("moderateMessage", { id: second, user: FAITH, body: { action: "restore", reason: "Other admin restored" }, now: () => 2_000 });
+    const restored = full(admins, second);
+    expect(restored).toMatchObject({ source: "ADMIN_HIDE", reasons: '["Admin hid"]', actorId: ACHIENG, decision: "RESTORE", decidedBy: FAITH });
+    await hideAndUndo(admins, second);
+    expect(full(admins, second)).toEqual(restored);
+  });
+
   it("is only for the moderator who hid it, before any admin decision, on a message still hidden", async () => {
     const s = mentors();
     const mine = s.message("help", { author: OTIENO, body: "One" });
@@ -880,10 +912,21 @@ describe("attention", () => {
     expect(await summaries()).toHaveLength(2);
     expect((await attentionOf(s, OTIENO)).filter((item) => item.kind === "message_hidden").map((item) => item.summary))
       .toEqual(["A moderator hid your message in #help.", "A moderator hid your message in #help."]);
-    // Each decision is told once, and its notices go with the message when it is deleted.
+    // Each decision is told once, and only the latest shows: a restore replaces "stays hidden".
     await s.call("moderateMessage", { id: upheld, user: ACHIENG, body: { action: "restore", reason: "On reflection, fine" } });
     await s.afterResponse();
-    expect(await summaries()).toHaveLength(3);
+    const restored = "An admin reviewed your message in #help and restored it.";
+    expect((await summaries()).toSorted()).toEqual([restored, "An admin reviewed your message in #help. It stays as it is."]);
+    // Edited, hidden again and upheld: "restored" would now contradict the message, so it goes.
+    const later = (at: number) => () => at;
+    expect((await s.call("editMessage", { id: upheld, user: OTIENO, body: { body: "Harsher words" }, now: later(Date.now() + 1_000) })).status).toBe(200);
+    await s.call("moderateMessage", { id: upheld, body: hide(), now: later(Date.now() + 2_000) });
+    await s.call("moderateMessage", { id: upheld, user: ACHIENG, body: hide("Upheld again"), now: later(Date.now() + 3_000) });
+    await s.afterResponse();
+    expect(await summaries()).not.toContain(restored);
+    expect((await summaries()).toSorted()).toEqual(["An admin reviewed your message in #help. It stays as it is.",
+      "An admin reviewed your message in #help. It stays hidden."]);
+    // Its notices go with the message when it is deleted.
     await s.call("deleteMessage", { id: upheld, user: OTIENO });
     expect(await summaries()).toEqual(["An admin reviewed your message in #help. It stays as it is."]);
     // A report that reopens the kept message's case takes its "stays as it is" away until an admin decides again.
