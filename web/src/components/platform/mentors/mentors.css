@@ -51,8 +51,14 @@
     -24px 0 60px -24px rgb(0 0 0 / 0.6);
 }
 
-.mentor-drawer[open] {
+.mentor-drawer[open],
+.mentor-drawer--static {
   display: flex;
+}
+
+/* The same sheet as a plain panel, before the page is interactive or without JavaScript. */
+.mentor-drawer--static {
+  z-index: 40;
 }
 
 .mentor-drawer::backdrop {
