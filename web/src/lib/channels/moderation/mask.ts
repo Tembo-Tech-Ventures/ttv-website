@@ -48,10 +48,31 @@ export function maskSpans(body: string, spans: readonly Span[]): string {
 }
 
 /**
+ * Masked bodies by their text, most recently used last. Masking is linear but not free (a few
+ * milliseconds for a long body full of numbers), and the same flagged messages are read again and
+ * again by every reader of a channel, so an isolate keeps the latest few. Keyed by the text itself,
+ * an edit can never be served an older mask.
+ */
+export const MASK_CACHE_SIZE = 256;
+const cache = new Map<string, string>();
+
+function masked(body: string): string {
+  let result = cache.get(body);
+  if (result === undefined) {
+    result = maskSpans(body, contactSpans(body));
+    if (cache.size >= MASK_CACHE_SIZE) cache.delete(cache.keys().next().value ?? "");
+  } else {
+    cache.delete(body);
+  }
+  cache.set(body, result);
+  return result;
+}
+
+/**
  * The body this reader may see. `privileged`: the reader wrote the message, moderates its channel or
  * is an admin. Everyone else gets the masked body while the message is FLAGGED for contact details.
  */
 export function bodyForReader(subject: MaskSubject, privileged: boolean): string {
   if (privileged || !masksContactDetails(subject)) return subject.body;
-  return maskSpans(subject.body, contactSpans(subject.body));
+  return masked(subject.body);
 }

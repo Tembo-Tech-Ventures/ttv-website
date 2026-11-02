@@ -303,6 +303,9 @@
   color: var(--color-ink-secondary);
   font-size: 0.875em;
   font-style: italic;
+  /* A note that wraps keeps its border on every line. */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 .channel-code {

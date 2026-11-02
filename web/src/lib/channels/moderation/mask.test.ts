@@ -47,6 +47,20 @@ describe("contactSpans and maskSpans", () => {
     expect(Message.shape.body.safeParse(masked("a@gmail.com x ".repeat(700).slice(0, 10_000))).success).toBe(true);
   });
 
+  it("masks a page of the longest bodies full of numbers quickly, and every later read from the cache", () => {
+    const bodies = Array.from({ length: 50 }, (_, i) => `${i} call 0712 345 678 or a${i}@gmail.com `.repeat(300).slice(0, 10_000));
+    let start = performance.now();
+    const first = bodies.map(masked);
+    const cold = performance.now() - start;
+    start = performance.now();
+    const again = bodies.map(masked);
+    const warm = performance.now() - start;
+    expect(again).toEqual(first);
+    expect(first.every((body) => !body.includes("0712"))).toBe(true);
+    // Generous bounds for slow CI machines: about 0.3 s and well under 1 ms here.
+    expect({ cold: cold < 3000, warm: warm < 50 }).toEqual({ cold: true, warm: true });
+  });
+
   it("masks only FLAGGED messages with a contact reason, for readers without the privilege", () => {
     const body = "Call 0712 345 678";
     expect(bodyForReader(flagged(body), true)).toBe(body);

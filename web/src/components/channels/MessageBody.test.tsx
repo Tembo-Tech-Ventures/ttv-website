@@ -14,6 +14,12 @@ describe("masked contact details (QA2-08)", () => {
     expect(markup).not.toContain(MASKED_CONTACT);
   });
 
+  it("shows a marker inside inline code as the note too", () => {
+    const markup = html(`call \`${MASKED_CONTACT}\` now`);
+    expect(markup).toContain('<code class="channel-code"><span class="channel-masked" role="note">');
+    expect(markup).not.toContain(MASKED_CONTACT);
+  });
+
   it("leaves a body without markers as it was", () => {
     expect(html("Call me after class")).toBe('<div class="channel-body"><p>Call me after class</p></div>');
   });

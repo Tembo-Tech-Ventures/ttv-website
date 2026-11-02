@@ -373,14 +373,17 @@ VISIBLE and whole again; a hide follows the hidden rules.
 channel page, every GET mode including `since` and threads, token reads and
 write responses) and search call it, and Tembo's Phase 3 inputs must too, with
 the asking reader's privilege. The spans are recomputed from the detectors on
-each read rather than stored, so an edit that removes the number unmasks the
-rest at once, and an edit that adds one is masked in the very poll that
-delivers it. Search keeps a match only when every term also matches the masked
-text, and cuts the excerpt from it. Neighbouring details share one marker, and
+each read rather than stored (an isolate keeps the latest 256 masked bodies,
+keyed by their text), so an edit that removes the number unmasks the rest at
+once, and an edit that adds one is masked in the very poll that delivers it.
+Search keeps a match only when every term also matches the masked text, and
+cuts the excerpt from it; such drops happen after the result limit, so a page
+of results can come back short. Neighbouring details share one marker, and
 after 21 markers the last covers the rest of the body. Attention items never
 carry message text. Embed snapshots (a shared project's own public text) are
-not masked. Admins in DIRECT channels (Phase 4) do not moderate them, so they
-see masks there too.
+not masked. Only the detectors' spans are masked: a message only Clef flagged
+("May share contact details") shows whole until a person decides. Admins in
+DIRECT channels (Phase 4) do not moderate them, so they see masks there too.
 
 ### 3. Evidence
 

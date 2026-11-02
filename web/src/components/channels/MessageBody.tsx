@@ -33,11 +33,11 @@ function Segment({ segment }: { segment: BodySegment }) {
     case "mention":
       return (
         <span className="channel-mention" data-mention={segment.tembo ? "tembo" : "person"}>
-          {segment.text}
+          <Masked text={segment.text} />
         </span>
       );
     case "code":
-      return <code className="channel-code">{segment.text}</code>;
+      return <code className="channel-code"><Masked text={segment.text} /></code>;
     case "link":
       return (
         <a href={segment.href} rel="nofollow ugc noopener noreferrer" target="_blank" className={cx("channel-link", FOCUS_RING)}>

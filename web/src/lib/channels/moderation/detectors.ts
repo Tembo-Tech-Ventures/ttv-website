@@ -109,17 +109,20 @@ interface Mapped { text: string; from: number[]; to: number[] }
 
 /**
  * normalise(), one base character and its marks at a time, so each piece of the result maps back to
- * the characters it came from. NFKC only composes a character with the marks after it, so this reads
- * the same as normalising the whole text.
+ * the characters it came from. Composition happens within those pieces, which covers every
+ * character the contact patterns read (rare scripts such as conjoining Hangul jamo may read
+ * differently). A run of ASCII that no mark follows is already normal, so it maps one to one
+ * without normalising: reads recompute this for flagged messages (mask.ts), and most text is ASCII.
  */
 function normaliseMapped(body: string): Mapped {
   const mapped: Mapped = { text: "", from: [], to: [] };
-  for (const { 0: chunk, index } of body.matchAll(/\P{M}\p{M}*|\p{M}+/gu)) {
-    const piece = normalise(chunk);
+  for (const { 0: chunk, index } of body.matchAll(/[\0-\x7F]+(?!\p{M})|[\s\S]\p{M}*/gu)) {
+    const ascii = chunk.charCodeAt(0) < 0x80 && !/\p{M}/u.test(chunk.slice(-1));
+    const piece = ascii ? chunk : normalise(chunk);
     mapped.text += piece;
     for (let unit = 0; unit < piece.length; unit += 1) {
-      mapped.from.push(index);
-      mapped.to.push(index + chunk.length);
+      mapped.from.push(ascii ? index + unit : index);
+      mapped.to.push(ascii ? index + unit + 1 : index + chunk.length);
     }
   }
   return mapped;
