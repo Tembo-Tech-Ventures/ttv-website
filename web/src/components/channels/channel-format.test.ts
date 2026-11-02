@@ -3,7 +3,7 @@ import { channels, FIXTURE_NOW, messages, meByPersona, people } from "@/lib/plat
 import { MASKED_CONTACT, type Channel, type Message } from "@/lib/platform/contracts";
 import {
   messageActionsLabel,
-  ago, channelTitle, clipTime, clock, composerTools, dayKey, dayLabel, groupByDay, mentionsTembo, moderationNotice,
+  ago, channelTitle, clipTime, clock, composerTools, dayKey, dayLabel, fullTime, groupByDay, mentionsTembo, moderationNotice,
   openingDivider, parseBody, postingFor, reviewState, temboReach, temboScope, threadSummary,
 } from "./channel-format";
 
@@ -31,6 +31,8 @@ describe("days and times", () => {
   it("writes the 24-hour clock in Nairobi time", () => {
     expect(clock(now)).toBe("10:00");
     expect(clock(Date.parse("2026-11-03T13:40:00Z"))).toBe("16:40");
+    // The full moment names its zone (QA2-13).
+    expect(fullTime(Date.parse("2026-11-03T13:40:00Z"))).toMatch(/^Tuesday,? 3 November 2026 at 16:40 EAT$/);
   });
 
   it("says how long ago a reply was", () => {
@@ -50,6 +52,23 @@ describe("days and times", () => {
       ["Today", [messages.firstPr.id, messages.mentorOffer.id]],
     ]);
     expect(groupByDay([], now)).toEqual([]);
+  });
+
+  it("starts a group at the New divider, so its day's heading sits right under it (QA2-18)", () => {
+    const list = [messages.projectPost, messages.firstPr, messages.mentorOffer];
+    // Mid-day: today is said again under the divider.
+    expect(groupByDay(list, now, messages.mentorOffer.id).map((group) => [group.label, group.messages.map((m) => m.id)])).toEqual([
+      ["Yesterday", [messages.projectPost.id]],
+      ["Today", [messages.firstPr.id]],
+      ["Today", [messages.mentorOffer.id]],
+    ]);
+    // The first of its day: still one heading for the day, and the keys stay unique.
+    const opening = groupByDay(list, now, messages.firstPr.id);
+    expect(opening.map((group) => [group.label, group.messages.map((m) => m.id)])).toEqual([
+      ["Yesterday", [messages.projectPost.id]],
+      ["Today", [messages.firstPr.id, messages.mentorOffer.id]],
+    ]);
+    expect(new Set(groupByDay(list, now, messages.mentorOffer.id).map((group) => group.key)).size).toBe(3);
   });
 
   it("writes positions in a recording", () => {
@@ -210,6 +229,13 @@ describe("moderation notices", () => {
   it("tells the author their hidden message is theirs alone now", () => {
     expect(moderationNotice(messages.hidden, people.dennis.id)?.title).toBe("Hidden from the channel: Harsh, not about the work");
     expect(moderationNotice(messages.hidden, people.dennis.id)?.detail).toBe("Only you can see this message now.");
+  });
+
+  it("tells a moderator who is not an admin what happens after a hide, and an admin only that it is hidden (QA2-11)", () => {
+    expect(moderationNotice(messages.hidden, people.david.id)?.detail).toBe(
+      "Moderators can still see it. An admin looks at every hide, and Dennis can ask for a review. If an admin restores it, members see it here again.",
+    );
+    expect(moderationNotice(messages.hidden, people.amina.id, { admin: true })?.detail).toBe("Moderators can still see it.");
   });
 
   it("words the same states for a moderator who is not the author", () => {

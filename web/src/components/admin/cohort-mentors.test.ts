@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { MENTORS_OFF, cohortMentorModel, cohortRoleRefusal, teachingRoles, type CohortRoleRow } from "./cohort-mentors";
 
@@ -26,6 +27,15 @@ describe("cohortMentorModel", () => {
     expect(model.otherCandidates.map(({ id }) => id)).toEqual(["u-faith"]);
   });
 
+  it("keeps the cohort's own students out of the other groups and offers them last, apart (QA2-12)", () => {
+    const withRoster = cohortMentorModel(roles, people, new Set(["u-david", "u-otieno"]), new Set(["u-faith", "u-otieno", "u-mercy"]));
+    expect(withRoster.approvedCandidates).toEqual([]);
+    expect(withRoster.otherCandidates).toEqual([]);
+    // Mercy already mentors the cohort, so she is not offered again.
+    expect(withRoster.rosterCandidates.map(({ id }) => id)).toEqual(["u-faith", "u-otieno"]);
+    expect(model.rosterCandidates).toEqual([]);
+  });
+
   it("names a deleted or nameless account plainly", () => {
     const [mentor] = cohortMentorModel([role("r9", "gone", "MENTOR", null)], [], new Set()).mentors;
     expect(mentor).toMatchObject({ name: "Unknown user", email: null });
@@ -46,5 +56,19 @@ describe("cohortRoleRefusal", () => {
       expect(cohortRoleRefusal(teaching, false)).toBeNull();
       expect(cohortRoleRefusal(teaching, true)).toBeNull();
     }
+  });
+});
+
+describe("the admin cohort pages", () => {
+  const page = (name: string) => readFileSync(new URL(`../../pages/admin/programs/${name}`, import.meta.url), "utf8");
+
+  it("leave the cohort's roster out of the mentor picker's other groups (QA2-12)", () => {
+    expect(page("[id].astro")).toContain("cohortMentorModel(prog.programRoles, allUsers, approvedMentorIds, enrolledUserIds)");
+  });
+
+  it("write dates one way, day first with the month as a word, never the browser's locale (QA2-13)", () => {
+    for (const name of ["index.astro", "[id].astro"]) expect(page(name)).not.toMatch(/toLocale(Date)?String\(/);
+    expect(page("index.astro")).toContain("formatCalendarDate(new Date(p.startDate))");
+    expect(page("[id].astro")).toContain("formatMomentDate(application.createdAt)");
   });
 });

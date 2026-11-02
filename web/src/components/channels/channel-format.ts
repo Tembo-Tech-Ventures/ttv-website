@@ -41,9 +41,12 @@ export function clock(timestamp: number): string {
   return clockFormat.format(timestamp);
 }
 
-/** The whole moment, for a time element's title: "Monday 3 November 2026 at 09:40". */
+/** Kenya's zone, said after a time of day wherever one is shown in full (QA2-13). */
+export const ZONE_LABEL = "EAT";
+
+/** The whole moment, for a time element's title: "Monday 3 November 2026 at 09:40 EAT". */
 export function fullTime(timestamp: number): string {
-  return fullFormat.format(timestamp);
+  return `${fullFormat.format(timestamp)} ${ZONE_LABEL}`;
 }
 
 /** "12 min ago", "3 h ago", "yesterday", "on Monday": how long since a reply. */
@@ -58,13 +61,18 @@ export function ago(timestamp: number, now: number): string {
 
 export type DayGroup = { key: string; label: string; messages: Message[] };
 
-/** Messages, oldest first, under one heading per calendar day. */
-export function groupByDay(messages: readonly Message[], now: number): DayGroup[] {
+/**
+ * Messages, oldest first, under one heading per calendar day. The "New" divider's message (`breakAt`)
+ * starts a group of its own, so its day's heading sits right under the divider: a channel opens there,
+ * and older messages must not read as today's (QA2-18). That group's key ends in "-new".
+ */
+export function groupByDay(messages: readonly Message[], now: number, breakAt: string | null = null): DayGroup[] {
   const groups: DayGroup[] = [];
   for (const message of messages) {
     const key = dayKey(message.createdAt);
     const last = groups.at(-1);
-    if (last?.key === key) last.messages.push(message);
+    if (message.id === breakAt) groups.push({ key: `${key}-new`, label: dayLabel(message.createdAt, now), messages: [message] });
+    else if (last?.key.startsWith(key)) last.messages.push(message);
     else groups.push({ key, label: dayLabel(message.createdAt, now), messages: [message] });
   }
   return groups;
@@ -225,9 +233,11 @@ export type ModerationNotice = { state: Exclude<ModerationState, "VISIBLE">; tit
  * `moderation` only to the message's author and to moderators; ordinary
  * readers never receive a flagged state, and never receive a hidden message.
  * Wording follows the owner's rule: a flag keeps the message up until a person
- * decides; only people hide messages.
+ * decides; only people hide messages. A channel moderator who is not an admin
+ * also reads what happens after a hide, and where they will see the outcome
+ * (QA2-11): an admin's restore brings the message back for members here.
  */
-export function moderationNotice(message: Message, viewerId: string | null): ModerationNotice | null {
+export function moderationNotice(message: Message, viewerId: string | null, { admin = false }: { admin?: boolean } = {}): ModerationNotice | null {
   const moderation = message.moderation;
   if (!moderation || moderation.state === "VISIBLE" || message.deleted) return null;
   const own = viewerId !== null && message.author.id === viewerId;
@@ -254,8 +264,14 @@ export function moderationNotice(message: Message, viewerId: string | null): Mod
     : {
         state: "HIDDEN",
         title: reasons ? `Hidden from members: ${reasons}` : "Hidden from members",
-        detail: "Moderators can still see it.",
+        detail: admin ? "Moderators can still see it." : `Moderators can still see it. ${afterHide(message)}`,
       };
+}
+
+/** What happens after a channel moderator's hide, said to moderators who are not admins. */
+export function afterHide(message: Message): string {
+  const review = message.authorKind === "USER" ? `, and ${firstName(message.author.name)} can ask for a review` : "";
+  return `An admin looks at every hide${review}. If an admin restores it, members see it here again.`;
 }
 
 /**
@@ -299,7 +315,7 @@ export function reportReason(key: ReportReasonKey, details: string): string | nu
 const EXCERPT_LENGTH = 48;
 
 /** A message's opening words, plain: markdown marks dropped, cut at a word. Shared work stands in for no words. */
-function excerpt(message: Message): string {
+export function excerpt(message: Pick<Message, "body" | "embeds">): string {
   const words = message.body.replace(/[*_~`>#[\]]/g, "").replace(/\s+/g, " ").trim();
   const text = words || (message.embeds.find((embed) => embed.type !== "unavailable")?.title ?? "");
   if (text.length <= EXCERPT_LENGTH) return text;

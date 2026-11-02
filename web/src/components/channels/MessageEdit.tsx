@@ -30,7 +30,7 @@ export function EditForm({ initial, onSave, onCancel }: { initial: string; onSav
 
   return (
     <form
-      className="mt-1.5 flex flex-col gap-2"
+      className="channel-edit mt-1.5 flex flex-col gap-2"
       onSubmit={(event) => {
         event.preventDefault();
         void save();

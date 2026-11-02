@@ -1,6 +1,7 @@
 import type {
   Channel, Message, MessageVersionCause, ModerationActionKind, ModerationQueueItem, ModerationQueueState,
 } from "@/lib/platform/contracts";
+import { channelTitle, excerpt, ZONE_LABEL } from "@/components/channels/channel-format";
 import { channelPath } from "@/components/channels/paths";
 
 /*
@@ -121,7 +122,16 @@ const nairobiTime = new Intl.DateTimeFormat("en-GB", {
   day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Nairobi",
 });
 
-/** When something happened, in Nairobi time where most members are: "1 Nov 2026, 14:05". */
+/** When something happened, in Nairobi time where most members are, and saying so: "1 Nov 2026, 14:05 EAT" (QA2-13). */
 export function formatModerationTime(at: number): string {
-  return nairobiTime.format(new Date(at));
+  return `${nairobiTime.format(new Date(at))} ${ZONE_LABEL}`;
+}
+
+/**
+ * Which message a decision was about, for the banner after it (QA2-15): the author, the channel and
+ * how the message starts. "Brian Kiprop's message in #show-your-work: “Has anyone…”".
+ */
+export function decidedSubject(item: Pick<ModerationCase, "message" | "channel">): string {
+  const words = item.message.deleted ? "" : excerpt(item.message);
+  return `${item.message.author.name}'s message in ${channelTitle(item.channel)}${words ? `: “${words}”` : ""}`;
 }

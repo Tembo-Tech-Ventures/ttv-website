@@ -12,7 +12,7 @@ import type { QueueViewProps } from "./page-flow";
  */
 type Props = QueueViewProps;
 
-const { state, items, pendingCount, formAction, tabHrefs, nextHref, paged, notice, failure, rowError } = Astro.props;
+const { state, items, pendingCount, formAction, tabHrefs, nextHref, paged, notice, noticeSubject, failure, rowError } = Astro.props;
 const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 ---
@@ -28,6 +28,7 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
 
   {notice && (
     <p role="status" tabindex="-1" autofocus class={`${BANNER} border-ring/30 bg-ring/8`} data-moderation-notice>
+      {noticeSubject && <span class="block font-semibold" data-moderation-notice-subject>{noticeSubject}</span>}
       {notice}
       {" "}<a href={tabHrefs.DECIDED} class={`font-semibold text-peach-ink underline ${FOCUS}`}>See decided cases</a>
     </p>

@@ -193,7 +193,7 @@ export default function MessageList({
   }
 
   const showJump = measured && messages.length > 0 && (!atBottom || !state.live);
-  const groups = groupByDay(messages, now);
+  const groups = groupByDay(messages, now, firstUnreadId);
 
   return (
     <div className="channel-list" data-jump={showJump || undefined}>
@@ -204,11 +204,18 @@ export default function MessageList({
         <OlderControls state={state} store={store} />
         <ListState state={state} channel={channel} retry={retry} />
         {groups.length > 0 && <h2 className="sr-only">Messages</h2>}
-        {groups.map((group) => (
-          <section key={group.key} aria-labelledby={`day-${group.key}`}>
+        {groups.map((group) => {
+          // The channel opens with the "New" divider at the top: its day's heading goes under it, inside
+          // the row the list opens at, so the first thing read says which day it is (QA2-18).
+          const opensHere = group.messages[0]?.id === firstUnreadId;
+          const heading = (
             <h3 id={`day-${group.key}`} className="channel-day">
               {group.label}
             </h3>
+          );
+          return (
+          <section key={group.key} aria-labelledby={`day-${group.key}`}>
+            {!opensHere && heading}
             <ol className="channel-messages">
               {group.messages.map((message) => (
                 <li key={message.id} data-message-row={message.id}>
@@ -217,6 +224,7 @@ export default function MessageList({
                       <span>New</span>
                     </p>
                   )}
+                  {opensHere && message.id === firstUnreadId && heading}
                   <div
                     className="channel-row"
                     data-arrived={(arrivedAfter.current !== null && message.createdAt > arrivedAfter.current) || undefined}
@@ -239,7 +247,8 @@ export default function MessageList({
               ))}
             </ol>
           </section>
-        ))}
+          );
+        })}
         <Outbox composer={composer} parentId={null} viewer={viewer} names={names} />
         </div>
       </section>

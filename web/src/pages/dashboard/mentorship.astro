@@ -6,6 +6,7 @@ import MentoringOverview from "@/components/platform/spaces/MentoringOverview.as
 import OnboardingNotices from "@/components/platform/onboarding/OnboardingNotices.astro";
 import { awaitingConfirmation } from "@/components/platform/spaces/awaiting-confirmation";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { loadChannelShortcuts } from "@/components/platform/spaces/channel-shortcuts-server";
 import { normalizeSpacePath, SPACE_PATHS } from "@/lib/platform/server/space-routes";
 // oxlint-disable-next-line import/no-unassigned-import -- Workspace stylesheet.
 import "@/styles/discovery.css";
@@ -17,12 +18,14 @@ const atLanding = normalizeSpacePath(Astro.originPathname) === SPACE_PATHS.mento
 const spaces =
   (atLanding ? await resolveSpacePage(Astro.locals, "mentoring") : null) ??
   (await resolveSpacePage(Astro.locals, "confirm"));
+// The landing's way into the channels while `channels` is on (QA2-16).
+const shortcuts = spaces?.page === "mentoring" ? (await loadChannelShortcuts(spaces)).shortcuts : null;
 ---
 {
   spaces?.page === "mentoring" ? (
     <SpacePage context={spaces} title="Mentoring">
       {spaces.onboarding && <OnboardingNotices view={spaces.onboarding} space={spaces.space} />}
-      <MentoringOverview awaiting={awaitingConfirmation(spaces.me)} />
+      <MentoringOverview awaiting={awaitingConfirmation(spaces.me)} shortcuts={shortcuts} />
     </SpacePage>
   ) : spaces ? (
     <SpacePage context={spaces} title={spaces.space === "admin" ? "Mentor review" : "Confirm work"}>

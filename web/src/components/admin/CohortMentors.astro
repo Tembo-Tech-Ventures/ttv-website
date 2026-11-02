@@ -13,7 +13,7 @@ interface Props {
 }
 
 const { model } = Astro.props;
-const noCandidates = model.approvedCandidates.length === 0 && model.otherCandidates.length === 0;
+const noCandidates = model.approvedCandidates.length === 0 && model.otherCandidates.length === 0 && model.rosterCandidates.length === 0;
 ---
 
 <Card>
@@ -61,7 +61,13 @@ const noCandidates = model.approvedCandidates.length === 0 && model.otherCandida
         <input type="hidden" name="roleName" value="MENTOR" />
         <div class="flex w-full min-w-0 flex-col gap-1.5 sm:w-auto">
           <label for="mentorUserId" class="text-sm font-medium text-white/90">Person</label>
-          <select id="mentorUserId" name="userId" required class="form-control min-h-11 w-full min-w-0">
+          <select
+            id="mentorUserId"
+            name="userId"
+            required
+            aria-describedby={model.rosterCandidates.length > 0 ? "mentorUserId-roster" : undefined}
+            class="form-control min-h-11 w-full min-w-0"
+          >
             <option value="">Select a person…</option>
             {model.approvedCandidates.length > 0 && (
               <optgroup label="Community mentors">
@@ -73,7 +79,17 @@ const noCandidates = model.approvedCandidates.length === 0 && model.otherCandida
                 {model.otherCandidates.map((person) => <option value={person.id}>{person.name} ({person.email})</option>)}
               </optgroup>
             )}
+            {model.rosterCandidates.length > 0 && (
+              <optgroup label="On this cohort's roster">
+                {model.rosterCandidates.map((person) => <option value={person.id}>{person.name} ({person.email}) · on this cohort's roster</option>)}
+              </optgroup>
+            )}
           </select>
+          {model.rosterCandidates.length > 0 && (
+            <p id="mentorUserId-roster" class="max-w-md text-xs text-ink-secondary" data-cohort-mentors-roster-note>
+              People who applied to or study in this cohort are listed last. As a mentor they could hide their classmates' messages.
+            </p>
+          )}
         </div>
         <Button type="submit" class="min-h-11">Add mentor</Button>
       </form>

@@ -137,6 +137,27 @@ describe("reading without JavaScript", () => {
     expect($("[data-channel-scroller]")?.getAttribute("aria-label")).toBe("Messages in #show-your-work");
   });
 
+  it("says the day right under the New divider, where the channel opens (QA2-18)", () => {
+    const initial = channelPage(community, wanjiku);
+    // Read up to yesterday's post: today's first message by someone else is new.
+    const store = createChannelStore({
+      channelId: community.id, enabled: true, viewerId: wanjiku.user.id, initial,
+      initialRead: { lastReadMessageId: messages.projectPost.id, unreadCount: 1 },
+    });
+    const composer = createComposer({ store, me: wanjiku });
+    container.innerHTML = renderToString(
+      <ChannelSurface me={wanjiku} channel={community} store={store} composer={composer} now={FIXTURE_NOW} shareables={null} />,
+    );
+    const divider = $("[data-new-divider]")!;
+    expect(divider.nextElementSibling?.matches("h3.channel-day")).toBe(true);
+    expect(divider.nextElementSibling?.textContent).toBe("Today");
+    // Still one heading per day, each naming its section.
+    expect($$("h3.channel-day").map((h) => h.textContent)).toEqual(["Yesterday", "Today"]);
+    for (const section of $$("section[aria-labelledby^='day-']")) {
+      expect(section.querySelector(`#${CSS.escape(section.getAttribute("aria-labelledby")!)}`)).not.toBeNull();
+    }
+  });
+
   it("shows only the role badges the server sent, worded by the server", () => {
     serverHtml(wanjiku, community);
     const badges = (id: string) => [...container.querySelectorAll(`[data-message="${id}"] [data-role-badge]`)].map((badge) => badge.textContent);

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode, type Ref } from "react";
 import { PiCheckCircle, PiEyeSlash, PiFlag, PiLockSimple } from "react-icons/pi";
 import type { Message } from "@/lib/platform/contracts";
 import Button from "@/components/platform/ui/Button";
@@ -80,7 +80,8 @@ export function moderationRights(message: Message, viewerId: string | null, cont
  * it was asked, and once an admin's decision is final, that it is.
  */
 export function ModerationNote({ message, viewerId, onAskReview }: { message: Message; viewerId: string | null; onAskReview?: () => void }) {
-  const notice = moderationNotice(message, viewerId);
+  const { canRestore } = useModeration();
+  const notice = moderationNotice(message, viewerId, { admin: canRestore });
   if (!notice) return null;
   const Icon = notice.state === "HIDDEN" ? PiEyeSlash : PiFlag;
   // The server says so on every read, and a confirmed request updates the cached message at once.
@@ -137,9 +138,13 @@ type PanelProps = {
   announce: (text: string) => void;
 };
 
-/** One in-place form under a message: a title, its fields, an error if the server refused, and two buttons. */
-function Panel({ title, children, error, submitLabel, submitting, canSubmit, danger = false, onSubmit, onCancel, kind }: {
-  title: string; children: ReactNode; error: string | null; submitLabel: string; submitting: boolean; canSubmit: boolean;
+/**
+ * One in-place form under a message: a title, its fields, an error if the server refused, and two buttons.
+ * The submit button is never disabled (a disabled one looks like it does nothing, QA2-10): each form
+ * checks its own fields on submit and says beside the field what is missing.
+ */
+function Panel({ title, children, error, submitLabel, submitting, danger = false, onSubmit, onCancel, kind }: {
+  title: string; children: ReactNode; error: string | null; submitLabel: string; submitting: boolean;
   danger?: boolean; onSubmit: () => void; onCancel: () => void; kind: string;
 }) {
   const titleId = useId();
@@ -202,9 +207,10 @@ function Panel({ title, children, error, submitLabel, submitting, canSubmit, dan
       aria-labelledby={titleId}
       className="channel-panel"
       data-panel={kind}
+      noValidate
       onSubmit={(event: FormEvent) => {
         event.preventDefault();
-        if (canSubmit && !submitting) onSubmit();
+        if (!submitting) onSubmit();
       }}
     >
       <p id={titleId} className="channel-panel__title">
@@ -217,7 +223,7 @@ function Panel({ title, children, error, submitLabel, submitting, canSubmit, dan
         </p>
       )}
       <div ref={buttons} className="channel-panel__actions flex flex-wrap items-center gap-2">
-        <Button type="submit" size="sm" variant={danger ? "danger" : "primary"} loading={submitting} disabled={!canSubmit}>
+        <Button type="submit" size="sm" variant={danger ? "danger" : "primary"} loading={submitting}>
           {submitLabel}
         </Button>
         <Button size="sm" variant="ghost" onClick={onCancel}>
@@ -237,16 +243,22 @@ function tallerThanItsList(element: HTMLElement): boolean {
   return element.offsetHeight + parseFloat(scrollMarginTop) + parseFloat(scrollMarginBottom) > visible;
 }
 
-/** A labelled box for a reason or a note, with the server's limit. */
-function ReasonBox({ label, hint, value, onChange, required = false }: {
+/**
+ * A labelled box for a reason or a note, with the server's limit. A required box says so in its label
+ * and to assistive tech; `missing` is what to write when it was left empty, shown under the box once
+ * the person tried to send (the form has `noValidate`, so this is the only message).
+ */
+function ReasonBox({ label, hint, value, onChange, required = false, missing = null, boxRef }: {
   label: string; hint?: string; value: string; onChange: (value: string) => void; required?: boolean;
+  missing?: string | null; boxRef?: Ref<HTMLTextAreaElement>;
 }) {
   const id = useId();
+  const described = [hint && `${id}-hint`, missing && `${id}-missing`].filter(Boolean).join(" ");
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={id} className="text-sm font-semibold text-ink-primary">
         {label}
-        {!required && <span className="font-normal text-ink-secondary"> (optional)</span>}
+        <span className="font-normal text-ink-secondary">{required ? " (required)" : " (optional)"}</span>
       </label>
       {hint && (
         <p id={`${id}-hint`} className="text-[0.8125rem] text-ink-secondary">
@@ -254,17 +266,40 @@ function ReasonBox({ label, hint, value, onChange, required = false }: {
         </p>
       )}
       <textarea
+        ref={boxRef}
         id={id}
         value={value}
         rows={2}
         maxLength={MAX_REASON}
-        required={required}
-        aria-describedby={hint ? `${id}-hint` : undefined}
+        aria-required={required || undefined}
+        aria-invalid={missing ? true : undefined}
+        aria-describedby={described || undefined}
         onChange={(event) => onChange(event.target.value)}
         className="channel-input min-h-16 w-full resize-y rounded-xl px-3 py-2"
       />
+      {missing && (
+        <p id={`${id}-missing`} className="channel-panel__error" data-reason-missing>
+          {missing}
+        </p>
+      )}
     </div>
   );
+}
+
+/** A field left empty: what to say under it once the person tries to send, and where to put them back. */
+function useMissing() {
+  const [tried, setTried] = useState(false);
+  const box = useRef<HTMLTextAreaElement>(null);
+  return {
+    tried,
+    box,
+    /** Call on submit with whether the field is filled; false focuses it and shows the message. */
+    check(filled: boolean): boolean {
+      setTried(!filled);
+      if (!filled) box.current?.focus();
+      return filled;
+    },
+  };
 }
 
 /** Report a message to the moderators: why, in a few choices, and anything they should know. */
@@ -275,10 +310,20 @@ export function ReportForm({ message, onDone, onCancel, announce }: PanelProps) 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const name = useId();
+  const choiceError = useId();
+  const [choiceMissing, setChoiceMissing] = useState(false);
+  const firstChoice = useRef<HTMLInputElement>(null);
+  const words = useMissing();
   const reason = choice === null ? null : reportReason(choice, details);
 
   async function submit() {
-    if (!actions || reason === null) return;
+    if (!actions) return;
+    if (choice === null) {
+      setChoiceMissing(true);
+      firstChoice.current?.focus();
+      return;
+    }
+    if (!words.check(reason !== null) || reason === null) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -292,7 +337,8 @@ export function ReportForm({ message, onDone, onCancel, announce }: PanelProps) 
     }
   }
 
-  const whose = message.authorKind === "TEMBO" ? "Tembo's answer" : `${firstName(message.author.name)}'s message`;
+  const tembo = message.authorKind === "TEMBO";
+  const whose = tembo ? "Tembo's answer" : `${firstName(message.author.name)}'s message`;
   return (
     <Panel
       kind="report"
@@ -300,40 +346,60 @@ export function ReportForm({ message, onDone, onCancel, announce }: PanelProps) 
       error={error}
       submitLabel="Send report"
       submitting={submitting}
-      canSubmit={reason !== null}
       onSubmit={() => void submit()}
       onCancel={onCancel}
     >
-      <fieldset className="flex flex-col gap-1">
+      <fieldset className="flex flex-col gap-1" aria-describedby={choiceMissing ? choiceError : undefined}>
         <legend className="mb-1 text-sm font-semibold text-ink-primary">What's wrong with it?</legend>
-        {REPORT_REASONS.map((option) => (
+        {REPORT_REASONS.map((option, index) => (
           <label key={option.key} className="channel-choice">
             <input
+              ref={index === 0 ? firstChoice : undefined}
               type="radio"
               name={name}
               value={option.key}
               checked={choice === option.key}
-              onChange={() => setChoice(option.key)}
+              onChange={() => {
+                setChoice(option.key);
+                setChoiceMissing(false);
+              }}
               className="channel-choice__input"
             />
             {option.label}
           </label>
         ))}
+        {choiceMissing && (
+          <p id={choiceError} className="channel-panel__error" data-reason-missing>
+            Choose what's wrong with it first.
+          </p>
+        )}
       </fieldset>
       <ReasonBox
         label={choice === "other" ? "Tell the moderators what's wrong" : "Add details"}
         value={details}
         onChange={setDetails}
         required={choice === "other"}
+        missing={words.tried && choice === "other" && !details.trim() ? "Write what's wrong first." : null}
+        boxRef={words.box}
       />
-      <p className="text-[0.8125rem] text-ink-secondary">The message stays up while a moderator looks at it.</p>
+      <p className="text-[0.8125rem] text-ink-secondary">
+        The message stays up while a moderator looks at it.
+        {/* True of the server: a report changes nothing the author can see (reportMessage, B-2.5). */}
+        {!tembo && ` ${firstName(message.author.name)} won't see who reported it.`}
+      </p>
     </Panel>
   );
 }
 
-const MODERATE_COPY: Record<InPlaceModeration, { title: string; label: string; submit: string; done: string }> = {
-  hide: { title: "Hide this message from members", label: "Why are you hiding it?", submit: "Hide message", done: "Message hidden from members." },
-  restore: { title: "Show this message to members again", label: "Why can it come back?", submit: "Restore message", done: "Message restored. Members can see it again." },
+const MODERATE_COPY: Record<InPlaceModeration, { title: string; label: string; submit: string; done: string; missing: string }> = {
+  hide: {
+    title: "Hide this message from members", label: "Why are you hiding it?", submit: "Hide message", done: "Message hidden from members.",
+    missing: "Write why you're hiding it first. The record keeps your reason.",
+  },
+  restore: {
+    title: "Show this message to members again", label: "Why can it come back?", submit: "Restore message", done: "Message restored. Members can see it again.",
+    missing: "Write why it can come back first. The record keeps your reason.",
+  },
 };
 
 /**
@@ -356,16 +422,18 @@ export function ModerateForm({ message, action, onDone, onCancel, announce }: Pa
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const missing = useMissing();
   const copy = MODERATE_COPY[action];
   const hint = moderateHint(message, action, canRestore);
 
   async function submit() {
-    if (!actions || !reason.trim()) return;
+    if (!actions || !missing.check(reason.trim().length > 0)) return;
     setSubmitting(true);
     setError(null);
     try {
       await actions.moderate(message.id, action, reason.trim());
-      announce(copy.done);
+      // A moderator who is not an admin hears what happens next, as the note on the message now says (QA2-11).
+      announce(action === "hide" && !canRestore ? `${copy.done} An admin will look at it.` : copy.done);
       onDone();
     } catch (failure) {
       setError(moderationFailure(failure, "moderate"));
@@ -380,12 +448,19 @@ export function ModerateForm({ message, action, onDone, onCancel, announce }: Pa
       error={error}
       submitLabel={copy.submit}
       submitting={submitting}
-      canSubmit={reason.trim().length > 0}
       danger={action === "hide"}
       onSubmit={() => void submit()}
       onCancel={onCancel}
     >
-      <ReasonBox label={copy.label} hint={hint} value={reason} onChange={setReason} required />
+      <ReasonBox
+        label={copy.label}
+        hint={hint}
+        value={reason}
+        onChange={setReason}
+        required
+        missing={missing.tried && !reason.trim() ? copy.missing : null}
+        boxRef={missing.box}
+      />
     </Panel>
   );
 }
@@ -418,7 +493,6 @@ export function ReviewForm({ message, onDone, onCancel, announce }: PanelProps) 
       error={error}
       submitLabel="Ask for review"
       submitting={submitting}
-      canSubmit
       onSubmit={() => void submit()}
       onCancel={onCancel}
     >

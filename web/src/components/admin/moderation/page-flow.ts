@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Cursor, ModerationActionKind, ModerationQueueState, type ModerationActionKind as ActionKind } from "@/lib/platform/contracts";
-import { DECIDED_NOTICE, type DecidedOutcome, type ModerationCase } from "./case-model";
+import { Id } from "@/lib/platform/contracts";
+import { DECIDED_NOTICE, decidedSubject, type DecidedOutcome, type ModerationCase } from "./case-model";
 import { isDecisionRefusal, parseDecisionForm, refusalMessage, refusalStatus } from "./decision-form";
 
 /*
@@ -26,8 +27,8 @@ export interface QueuePaths {
   tab(state: ModerationQueueState): string;
   /** A page of a tab. */
   page(state: ModerationQueueState, cursor: string): string;
-  /** Where a recorded decision lands: the tab it was made on, announcing it. */
-  decided(state: ModerationQueueState, outcome: DecidedOutcome): string;
+  /** Where a recorded decision lands: the tab it was made on, announcing it and which message it was about. */
+  decided(state: ModerationQueueState, outcome: DecidedOutcome, messageId?: string): string;
 }
 
 export interface QueueViewProps {
@@ -39,6 +40,8 @@ export interface QueueViewProps {
   nextHref: string | null;
   paged: boolean;
   notice?: string;
+  /** Which message the decision in `notice` was about (QA2-15). */
+  noticeSubject?: string;
   failure?: string;
   rowError?: { id: string; message: string; draft: string };
 }
@@ -66,7 +69,7 @@ export async function moderationQueueRequest(request: Request, url: URL, source:
       try {
         const message = await source.decide(parsed);
         const outcome: DecidedOutcome = parsed.action === "keep" && message.deleted ? "closed" : parsed.action;
-        return { kind: "redirect", location: paths.decided(state, outcome) };
+        return { kind: "redirect", location: paths.decided(state, outcome, parsed.messageId) };
       } catch (error) {
         if (!isDecisionRefusal(error)) throw error;
         status = refusalStatus(error);
@@ -88,6 +91,7 @@ export async function moderationQueueRequest(request: Request, url: URL, source:
     rowError = undefined;
   }
   const decided = request.method === "GET" ? DECIDED.safeParse(search.get("decided")).data : undefined;
+  const noticeSubject = decided && !failure ? await decidedMessage(source, page.items, Id.safeParse(search.get("message")).data) : undefined;
 
   return {
     kind: "page",
@@ -101,10 +105,22 @@ export async function moderationQueueRequest(request: Request, url: URL, source:
       nextHref: page.nextCursor ? paths.page(state, page.nextCursor) : null,
       paged: Boolean(cursor),
       notice: decided && !failure ? DECIDED_NOTICE[decided] : undefined,
+      noticeSubject,
       failure,
       rowError,
     },
   };
+}
+
+/**
+ * Which message a decision was about, for its banner: from this page, or else the newest decided cases,
+ * where a decision just made is. Undefined (the banner says only what changed) when it is not found.
+ */
+async function decidedMessage(source: QueueSource, shown: readonly ModerationCase[], messageId: string | undefined): Promise<string | undefined> {
+  if (!messageId) return undefined;
+  const find = (items: readonly ModerationCase[]) => items.find((item) => item.message.id === messageId);
+  const item = find(shown) ?? find((await source.list({ state: "DECIDED" })).items);
+  return item ? decidedSubject(item) : undefined;
 }
 
 /** The page's own addresses. */
@@ -117,7 +133,7 @@ export function queuePaths(base: string): QueuePaths {
   return {
     tab: (state) => at(tabQuery(state)),
     page: (state, cursor) => at({ ...tabQuery(state), cursor }),
-    decided: (state, outcome) => at({ ...tabQuery(state), decided: outcome }),
+    decided: (state, outcome, messageId) => at({ ...tabQuery(state), decided: outcome, ...(messageId ? { message: messageId } : {}) }),
   };
 }
 

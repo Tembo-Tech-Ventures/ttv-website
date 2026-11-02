@@ -1,0 +1,54 @@
+---
+/**
+ * A way into the channels from a space's overview (QA2-16): a few of the person's channels, with
+ * their unread counts, and where the rest are. Renders nothing without a model, so pages pass
+ * channelShortcuts(...) as it is, and nothing shows while `channels` is off.
+ */
+import { PiChatsCircle } from "react-icons/pi";
+import { FOCUS_RING } from "@/components/platform/ui/Button";
+import { RAISED } from "@/components/platform/ui/tones";
+import type { ChannelShortcutsModel } from "./channel-shortcuts";
+
+interface Props {
+  model: ChannelShortcutsModel | null;
+  class?: string;
+}
+
+const { model, class: className } = Astro.props;
+---
+
+{
+  model && (
+    <section
+      aria-labelledby="channel-shortcuts-title"
+      class:list={["rounded-[1.125rem] border border-hairline p-5 sm:p-6", RAISED, className]}
+      data-channel-shortcuts
+    >
+      <div class="flex items-center gap-3">
+        <PiChatsCircle aria-hidden className="size-5 shrink-0 text-peach-ink" />
+        <h2 id="channel-shortcuts-title" class="font-body text-lg font-bold text-ink-primary">Channels</h2>
+      </div>
+      <p class="mt-2 max-w-2xl text-sm leading-relaxed text-ink-secondary">{model.intro}</p>
+      <ul class="mt-3 flex list-none flex-wrap gap-2 p-0">
+        {
+          model.channels.map((channel) => (
+            <li>
+              <a
+                href={channel.href}
+                data-channel-shortcut={channel.id}
+                class:list={[
+                  "inline-flex min-h-11 items-center gap-2 rounded-xl border border-hairline px-4 text-sm font-semibold text-ink-primary hover:bg-ink-primary/7",
+                  FOCUS_RING,
+                ]}
+              >
+                <span><span aria-hidden="true" class="text-ink-muted">#</span>{channel.name}</span>
+                {channel.unread > 0 && <span class="rounded-full bg-primary px-2 py-0.5 text-xs text-dark">{channel.unread} unread</span>}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+      {model.more && <p class="mt-3 text-sm text-ink-secondary">The rest of your channels are in the side menu.</p>}
+    </section>
+  )
+}
