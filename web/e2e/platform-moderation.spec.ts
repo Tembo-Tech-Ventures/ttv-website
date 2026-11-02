@@ -200,7 +200,7 @@ test.describe("admin moderation queue", () => {
     await page.screenshot({ path: evidence("refused") });
   });
 
-  test("says nothing changed when TTV cannot be reached", async ({ page }) => {
+  test("says the decision may not be saved when TTV cannot be reached", async ({ page }) => {
     await open(page, runFor("&reset"));
     await page.route((url) => url.pathname === HARNESS, (route) =>
       route.request().method() === "POST" ? route.abort("internetdisconnected") : route.continue());
@@ -208,7 +208,7 @@ test.describe("admin moderation queue", () => {
     await reason(peter).fill("An email in a jobs post is fine.");
     await press(peter.getByRole("button", { name: /^Fine as is/ }));
     const error = peter.locator("[data-moderation-error]");
-    await expect(error).toHaveText("Nothing changed. TTV could not be reached. Check your connection and try again.");
+    await expect(error).toHaveText(/^TTV could not be reached, so this decision may not have been saved\./);
     await expect(error).toBeFocused();
     await expect(page.locator("[data-moderation-notice]")).toHaveCount(0);
     await expect(peter.getByRole("button", { name: /^Fine as is/ })).not.toHaveAttribute("aria-disabled", "true");
@@ -217,6 +217,28 @@ test.describe("admin moderation queue", () => {
     await page.unrouteAll();
     await press(peter.getByRole("button", { name: /^Fine as is/ }));
     await expect(page.locator("[data-moderation-notice]")).toHaveText(/^Kept as is\./);
+  });
+
+  test("says a decision was saved when only the queue after it fails to load", async ({ page }) => {
+    await open(page, runFor("&reset"));
+    // The decision is recorded; the page the redirect lands on then fails. (Playwright never routes
+    // the request after a redirect, so the redirect itself is sent to a page that fails.)
+    await page.route((url) => url.pathname === HARNESS, async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      const recorded = await route.fetch({ maxRedirects: 0 });
+      expect(recorded.status()).toBe(303);
+      await route.fulfill({ status: 303, headers: { location: "/dev/platform-moderation-missing?decided=keep" } });
+    });
+    const peter = card(page, PETER);
+    await reason(peter).fill("An email in a jobs post is fine.");
+    await press(peter.getByRole("button", { name: /^Fine as is/ }));
+    const error = peter.locator("[data-moderation-error]");
+    await expect(error).toHaveText(/^Saved\. The queue could not be shown afterwards/);
+    await expect(error).toBeFocused();
+    await expect(reason(peter)).not.toHaveAttribute("aria-invalid", "true");
+    await page.unrouteAll();
+    await open(page, runFor());
+    await expect(card(page, PETER)).toHaveCount(0);
   });
 
   test.describe("without JavaScript", () => {

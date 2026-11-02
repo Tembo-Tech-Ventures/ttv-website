@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MODERATION_PENDING_EVENT } from "./case-model";
-import { NETWORK_FAILURE, SIGNED_OUT, UNEXPECTED, enhanceModerationQueue, readOutcome } from "./enhance";
+import { NETWORK_FAILURE, SAVED_UNSHOWN, SIGNED_OUT, UNEXPECTED, enhanceModerationQueue, readOutcome } from "./enhance";
 
 const parse = (html: string) => new DOMParser().parseFromString(html, "text/html");
 
@@ -23,6 +23,13 @@ describe("readOutcome", () => {
 
   it("never treats a sign-in page as a decision", () => {
     expect(readOutcome({ url: "http://x/auth/login", status: 200 }, queue("x"), parse)).toEqual({ kind: "failed", message: SIGNED_OUT });
+  });
+
+  it("says a recorded decision was saved when only the queue after it failed to load", () => {
+    const after = "http://x/admin/moderation?decided=hide";
+    expect(readOutcome({ url: after, status: 500 }, "Server error", parse)).toEqual({ kind: "saved", message: SAVED_UNSHOWN });
+    expect(readOutcome({ url: after, status: 200 }, "<p>Not the queue</p>", parse)).toEqual({ kind: "saved", message: SAVED_UNSHOWN });
+    expect(readOutcome({ url: after, status: 200 }, queue("Hidden."), parse).kind).toBe("queue");
   });
 
   it("never treats an error page as a decision", () => {
@@ -77,7 +84,7 @@ describe("enhanceModerationQueue", () => {
     document.removeEventListener(MODERATION_PENDING_EVENT, listen);
   });
 
-  it("says nothing changed when TTV cannot be reached, keeping the reason", async () => {
+  it("says the decision may not be saved when TTV cannot be reached, keeping the reason", async () => {
     const { form, hide } = setUp((async () => { throw new TypeError("offline"); }) as unknown as typeof fetch);
     press(form, hide);
     const error = form.querySelector<HTMLElement>("[data-moderation-error]")!;

@@ -11,29 +11,36 @@ import { MODERATION_PENDING_EVENT } from "./case-model";
 const ROOT = "[data-moderation-root]";
 const FORM = "form[data-moderation-form]";
 
-export const NETWORK_FAILURE = "Nothing changed. TTV could not be reached. Check your connection and try again.";
+// The post may have reached TTV before the connection dropped, so this never says nothing changed.
+export const NETWORK_FAILURE = "TTV could not be reached, so this decision may not have been saved. Refresh the page to check before deciding again.";
 export const SIGNED_OUT = "Nothing changed. Your session has ended. Sign in again, then decide this case.";
 export const UNEXPECTED = "Nothing changed. The decision could not be saved. Try again.";
+export const SAVED_UNSHOWN = "Saved. The queue could not be shown afterwards: refresh the page to see it.";
 
-/** What a post came back as: the queue to show, or why nothing changed. */
-export type Outcome = { kind: "queue"; root: Element } | { kind: "failed"; message: string };
+/** What a post came back as: the queue to show, a decision saved but not shown, or why nothing changed. */
+export type Outcome =
+  | { kind: "queue"; root: Element }
+  | { kind: "saved"; message: string }
+  | { kind: "failed"; message: string };
 
 /** Read a response to a decision post. Pure apart from parsing, so the tests can drive it. */
 export function readOutcome(response: { url: string; status: number }, html: string, parse: (html: string) => Document): Outcome {
-  const path = new URL(response.url, "http://localhost").pathname;
-  if (path.startsWith("/auth/")) return { kind: "failed", message: SIGNED_OUT };
+  const url = new URL(response.url, "http://localhost");
+  if (url.pathname.startsWith("/auth/")) return { kind: "failed", message: SIGNED_OUT };
   const root = parse(html).querySelector(ROOT);
+  if (root && response.status < 500) return { kind: "queue", root };
+  // The server redirects only once a decision is recorded, so a failed read after it is still a decision.
+  if (url.searchParams.has("decided")) return { kind: "saved", message: SAVED_UNSHOWN };
   // A 4xx with the queue is a refusal the server explains in the card; anything else is not ours.
-  if (!root || response.status >= 500) return { kind: "failed", message: UNEXPECTED };
-  return { kind: "queue", root };
+  return { kind: "failed", message: UNEXPECTED };
 }
 
-function showFailure(form: HTMLFormElement, message: string) {
+function showFailure(form: HTMLFormElement, message: string, { invalid = true } = {}) {
   const error = form.querySelector<HTMLElement>("[data-moderation-error]");
   if (!error) return;
   error.textContent = message;
   error.classList.remove("hidden");
-  form.querySelector("textarea")?.setAttribute("aria-invalid", "true");
+  if (invalid) form.querySelector("textarea")?.setAttribute("aria-invalid", "true");
   error.focus();
 }
 
@@ -64,6 +71,11 @@ async function submit(form: HTMLFormElement, submitter: HTMLElement | null, fetc
   if (outcome.kind === "failed") {
     setBusy(form, false);
     showFailure(form, outcome.message);
+    return;
+  }
+  if (outcome.kind === "saved") {
+    // Recorded: the buttons stay busy, so the same case is not decided twice before a refresh.
+    showFailure(form, outcome.message, { invalid: false });
     return;
   }
   const next = document.importNode(outcome.root, true);
