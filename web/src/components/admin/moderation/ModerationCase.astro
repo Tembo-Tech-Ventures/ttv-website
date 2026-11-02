@@ -4,8 +4,8 @@ import Avatar from "@/components/platform/ui/Avatar";
 import Chip from "@/components/platform/ui/Chip";
 import DecisionForm from "./DecisionForm.astro";
 import {
-  CHANNEL_KIND_LABEL, DECISION_LABEL, EVIDENCE_CAUSE_LABEL, decisionOptions, firstName,
-  formatModerationTime, messageHref, sourceLabel, undecidableNote, visibilityLabel, type ModerationCase,
+  CHANNEL_KIND_LABEL, EVIDENCE_CAUSE_LABEL, decisionLabel, decisionOptions, firstName,
+  formatModerationTime, messageHref, sourceLabel, visibilityLabel, type ModerationCase,
 } from "./case-model";
 
 /**
@@ -31,7 +31,6 @@ const author = message.author;
 const authorName = message.authorKind === "TEMBO" ? "Tembo" : author.name;
 const href = messageHref(channel, message);
 const options = decisionOptions(item);
-const undecidable = undecidableNote(item);
 const pending = item.state === "PENDING";
 const flaggedTone = message.moderation?.state === "HIDDEN" || item.source === "REPORT" ? "peach" : "ring";
 const headingId = `moderation-${item.id}-author`;
@@ -144,7 +143,7 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
     {item.decision && (
       <div class="space-y-1 text-sm" data-moderation-decision>
         <p class="text-ink-primary">
-          <span class="font-semibold">{DECISION_LABEL[item.decision.action]}</span>
+          <span class="font-semibold">{decisionLabel({ ...item, decision: item.decision })}</span>
           <span class="text-ink-secondary">
             {item.decision.by && <> by {item.decision.by.name}</>} · {formatModerationTime(item.decision.decidedAt)}
           </span>
@@ -153,7 +152,6 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
       </div>
     )}
 
-    {undecidable && <p class="text-sm text-ink-secondary" data-moderation-undecidable>{undecidable}</p>}
     {options.length === 0 ? null : pending ? (
       <DecisionForm caseId={item.id} action={action} options={options} names={names} error={error} draftReason={draftReason} />
     ) : (

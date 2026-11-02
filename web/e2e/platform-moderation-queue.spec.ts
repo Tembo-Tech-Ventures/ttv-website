@@ -7,8 +7,8 @@ import { personaSession, signIn, type PersonaKey, type PersonaSession } from "./
  * U-2.4: the real /admin/moderation page over B-2.5's queue and decisions (the DEV harness spec,
  * platform-moderation.spec.ts, holds the interaction contract over fixtures):
  * - only administrators reach it; a channel moderator who is not one does not;
- * - the queue as screens/08 lays it out, axe A/AA clean, at 1440 and 390, and no button that is
- *   always refused (a message deleted while hidden);
+ * - the queue as screens/08 lays it out, axe A/AA clean, at 1440 and 390;
+ * - a message deleted while hidden closes its case with keep (B-2.7);
  * - Fine as is, Keep hidden and Restore, each recorded with who decided and why;
  * - a decision someone else made first is refused, and the page never says it was made;
  * - without JavaScript, a plain form post decides.
@@ -31,6 +31,7 @@ const STALE = "ttv-local-moderation-stale"; // decided in a second tab while the
 const WAITING = "ttv-local-moderation-waiting"; // contact details, flagged by the detectors
 const HELD = "ttv-local-moderation-held"; // hidden by David, a cohort mentor
 const DELETED_HIDDEN = "ttv-local-moderation-deleted-hidden"; // hidden by Tembo, then deleted by its author
+const GONE = "ttv-local-moderation-gone"; // hidden by David, then deleted by its author: closed with keep
 
 function local(key: PersonaKey): PersonaSession | string {
   if (process.env.PLAYWRIGHT_BASE_URL) return "These cases are seeded locally only (platform-personas.local.sql).";
@@ -116,9 +117,9 @@ test("lays the queue out as screens/08 does, clean under axe", async ({ page, co
   await expect(card(page, HELD)).toContainText("Hidden by David Kamau");
   await expect(card(page, WAITING).getByRole("button", { name: /^Fine as is/ })).toBeVisible();
   await expect(card(page, WAITING).getByRole("button", { name: /^Restore/ })).toHaveCount(0);
-  // Every decision is refused on a deleted message that is still hidden: no button, and why.
-  await expect(card(page, DELETED_HIDDEN).getByRole("button")).toHaveCount(0);
-  await expect(card(page, DELETED_HIDDEN).locator("[data-moderation-undecidable]")).toHaveText(/^Its author deleted this message/);
+  // A deleted message, hidden or not, has only its case to close.
+  await expect(card(page, DELETED_HIDDEN).getByRole("button")).toHaveCount(1);
+  await expect(card(page, DELETED_HIDDEN).getByRole("button", { name: /^Close the case/ })).toBeVisible();
 
   const width = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(width, "no sideways scroll").toBeLessThanOrEqual(page.viewportSize()!.width);
@@ -126,7 +127,7 @@ test("lays the queue out as screens/08 does, clean under axe", async ({ page, co
   await page.screenshot({ path: evidence("queue"), fullPage: true });
 });
 
-test("keeps, keeps hidden and restores, each with who decided and why", async ({ page, context, baseURL }) => {
+test("keeps, keeps hidden, restores and closes, each with who decided and why", async ({ page, context, baseURL }) => {
   writesOnce();
   await as(context, baseURL, staff);
   await open(page);
@@ -141,12 +142,17 @@ test("keeps, keeps hidden and restores, each with who decided and why", async ({
   await decide(page, MENTOR_HIDDEN, /^Restore/, "Blunt, but about the code. The author has been asked to reword it.");
   await expect(notice(page)).toHaveText(/^Restored\./);
 
+  await decide(page, GONE, /^Close the case/, "Deleted by its author; nothing left to decide.");
+  await expect(notice(page)).toHaveText(/^Case closed\. Its author had deleted the message/);
+  await expect(card(page, GONE)).toHaveCount(0);
+
   await notice(page).getByRole("link", { name: "See decided cases" }).click();
   const decided = (id: string) => card(page, id).locator("[data-moderation-decision]");
   await expect(decided(FLAGGED)).toContainText("Kept as is by Amina Hassan");
   await expect(decided(TEMBO_HIDDEN)).toContainText("Hidden by Amina Hassan");
   await expect(decided(TEMBO_HIDDEN)).toContainText("Selling followers is spam.");
   await expect(decided(MENTOR_HIDDEN)).toContainText("Restored by Amina Hassan");
+  await expect(decided(GONE)).toContainText("Closed by Amina Hassan");
   await expect(card(page, MENTOR_HIDDEN).locator("[data-moderation-context]")).toContainText("still visible");
   await expect(card(page, TEMBO_HIDDEN).locator("[data-moderation-context]")).toContainText("hidden from members");
   await page.screenshot({ path: evidence("decided"), fullPage: true });

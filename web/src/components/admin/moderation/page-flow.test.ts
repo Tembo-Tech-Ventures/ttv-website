@@ -15,7 +15,7 @@ function source(overrides: Partial<QueueSource> = {}): QueueSource {
   return {
     list: vi.fn(async ({ state }) => ({ items: cases.filter((item) => item.state === state), nextCursor: null })),
     countPending: vi.fn(async () => pending.length),
-    decide: vi.fn(async () => undefined),
+    decide: vi.fn(async () => ({ deleted: false })),
     isBadCursor: (error) => error instanceof BadCursor,
     ...overrides,
   };
@@ -70,6 +70,14 @@ describe("moderationQueueRequest", () => {
 
     const announced = await moderationQueueRequest(...get("?decided=hide"), queue, paths);
     expect(announced).toMatchObject({ props: { notice: expect.stringMatching(/^Hidden\./) } });
+  });
+
+  it("announces a keep on a deleted message as closing its case, not as kept", async () => {
+    const queue = source({ decide: vi.fn(async () => ({ deleted: true })) });
+    const outcome = await moderationQueueRequest(...post({ messageId: pending[0].id, action: "keep", reason: "Deleted" }), queue, paths);
+    expect(outcome).toEqual({ kind: "redirect", location: "/admin/moderation?decided=closed" });
+    const announced = await moderationQueueRequest(...get("?decided=closed"), queue, paths);
+    expect(announced).toMatchObject({ props: { notice: expect.stringMatching(/^Case closed\. Its author had deleted the message/) } });
   });
 
   it("refuses a decision without a reason, keeping the case and nothing decided", async () => {

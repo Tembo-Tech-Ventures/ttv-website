@@ -25,11 +25,10 @@ export interface DecisionOption { action: ModerationActionKind; label: string }
  * does not suggest an answer. A decided case can be reversed with the one opposite decision.
  */
 export function decisionOptions(item: Pick<ModerationCase, "state" | "message">): DecisionOption[] {
+  // A deleted message is gone for everyone: there is nothing to hide or restore, only the case to
+  // close. Keep does that in any state, hidden included, and changes nothing else (B-2.7).
+  if (item.message.deleted) return item.state === "DECIDED" ? [] : [{ action: "keep", label: "Close the case" }];
   const hidden = item.message.moderation?.state === "HIDDEN";
-  // A deleted message is gone for everyone: there is nothing to hide, only the case to close, with
-  // keep. B-2.5 refuses every decision on a deleted message that is still hidden (keep: hidden;
-  // restore and hide: deleted), so that case offers none rather than a button that always fails.
-  if (item.message.deleted) return item.state === "DECIDED" || hidden ? [] : [{ action: "keep", label: "Close the case" }];
   if (item.state === "DECIDED") {
     return hidden ? [{ action: "restore", label: "Restore" }] : [{ action: "hide", label: "Hide" }];
   }
@@ -50,13 +49,6 @@ export function sourceLabel(item: Pick<ModerationCase, "source" | "reportCount" 
     case "ADMIN_HIDE":
       return item.actor ? `Hidden by ${item.actor.name}` : "Hidden by an admin";
   }
-}
-
-/** Why a waiting case offers no decision: its author deleted the message while it was hidden. */
-export function undecidableNote(item: Pick<ModerationCase, "state" | "message">): string | null {
-  return item.state === "PENDING" && decisionOptions(item).length === 0
-    ? "Its author deleted this message while it was hidden, so no one sees it. This case can't be closed from here yet."
-    : null;
 }
 
 /** Where the message stands for the people in its channel right now. */
@@ -98,12 +90,21 @@ export const DECISION_LABEL: Record<ModerationActionKind, string> = {
   keep: "Kept as is",
 };
 
+/** What a decision did: one of the actions, or "closed", a keep on a deleted message, which only closes its case. */
+export type DecidedOutcome = ModerationActionKind | "closed";
+
 /** The banner after a decision. It says what changed for the channel, never more. */
-export const DECIDED_NOTICE: Record<ModerationActionKind, string> = {
+export const DECIDED_NOTICE: Record<DecidedOutcome, string> = {
   hide: "Hidden. Members no longer see the message. Its author is told and can ask for a review.",
   restore: "Restored. Everyone in the channel sees the message again.",
   keep: "Kept as is. Nothing is hidden, and the same text won't be flagged again.",
+  closed: "Case closed. Its author had deleted the message, so nothing else changes.",
 };
+
+/** How the decided tab names a decision: a keep on a deleted message only closed its case. */
+export function decisionLabel(item: Pick<ModerationCase, "message"> & { decision: { action: ModerationActionKind } }): string {
+  return item.message.deleted && item.decision.action === "keep" ? "Closed" : DECISION_LABEL[item.decision.action];
+}
 
 export const QUEUE_TABS: readonly { state: ModerationQueueState; label: string }[] = [
   { state: "PENDING", label: "Needs a decision" },

@@ -1,5 +1,6 @@
+import { z } from "zod";
 import { Cursor, ModerationActionKind, ModerationQueueState, type ModerationActionKind as ActionKind } from "@/lib/platform/contracts";
-import { DECIDED_NOTICE, type ModerationCase } from "./case-model";
+import { DECIDED_NOTICE, type DecidedOutcome, type ModerationCase } from "./case-model";
 import { isDecisionRefusal, parseDecisionForm, refusalMessage, refusalStatus } from "./decision-form";
 
 /*
@@ -9,11 +10,13 @@ import { isDecisionRefusal, parseDecisionForm, refusalMessage, refusalStatus } f
  * decision redirects only once it is recorded, and a refusal renders the case with the reason.
  */
 
+const DECIDED = ModerationActionKind.or(z.literal("closed"));
+
 export interface QueueSource {
   list(input: { state: ModerationQueueState; cursor?: string }): Promise<{ items: ModerationCase[]; nextCursor: string | null }>;
   countPending(): Promise<number>;
-  /** Records the decision, or throws an error carrying the HTTP status it was refused with. */
-  decide(input: { messageId: string; action: ActionKind; reason: string }): Promise<unknown>;
+  /** Records the decision and returns the message as it now is, or throws an error carrying the HTTP status it was refused with. */
+  decide(input: { messageId: string; action: ActionKind; reason: string }): Promise<{ deleted: boolean }>;
   /** True for the error list throws when a cursor is stale or forged. */
   isBadCursor(error: unknown): boolean;
 }
@@ -24,7 +27,7 @@ export interface QueuePaths {
   /** A page of a tab. */
   page(state: ModerationQueueState, cursor: string): string;
   /** Where a recorded decision lands: the tab it was made on, announcing it. */
-  decided(state: ModerationQueueState, action: ActionKind): string;
+  decided(state: ModerationQueueState, outcome: DecidedOutcome): string;
 }
 
 export interface QueueViewProps {
@@ -61,8 +64,9 @@ export async function moderationQueueRequest(request: Request, url: URL, source:
       else failure = parsed.error;
     } else {
       try {
-        await source.decide(parsed);
-        return { kind: "redirect", location: paths.decided(state, parsed.action) };
+        const message = await source.decide(parsed);
+        const outcome: DecidedOutcome = parsed.action === "keep" && message.deleted ? "closed" : parsed.action;
+        return { kind: "redirect", location: paths.decided(state, outcome) };
       } catch (error) {
         if (!isDecisionRefusal(error)) throw error;
         status = refusalStatus(error);
@@ -83,7 +87,7 @@ export async function moderationQueueRequest(request: Request, url: URL, source:
     failure = rowError.message;
     rowError = undefined;
   }
-  const decided = request.method === "GET" ? ModerationActionKind.safeParse(search.get("decided")).data : undefined;
+  const decided = request.method === "GET" ? DECIDED.safeParse(search.get("decided")).data : undefined;
 
   return {
     kind: "page",
@@ -113,7 +117,7 @@ export function queuePaths(base: string): QueuePaths {
   return {
     tab: (state) => at(tabQuery(state)),
     page: (state, cursor) => at({ ...tabQuery(state), cursor }),
-    decided: (state, action) => at({ ...tabQuery(state), decided: action }),
+    decided: (state, outcome) => at({ ...tabQuery(state), decided: outcome }),
   };
 }
 

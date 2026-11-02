@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { channels, messages, people } from "@/lib/platform/fixtures";
 import {
-  DECIDED_NOTICE, decisionOptions, firstName, formatModerationTime, messageHref, sourceLabel,
-  undecidableNote, visibilityLabel, type ModerationCase,
+  DECIDED_NOTICE, decisionLabel, decisionOptions, firstName, formatModerationTime, messageHref, sourceLabel,
+  visibilityLabel, type ModerationCase,
 } from "./case-model";
 import { harnessCases } from "./harness";
 
@@ -32,12 +32,18 @@ describe("decisionOptions", () => {
     expect(decisionOptions({ ...gone, state: "DECIDED" })).toEqual([]);
   });
 
-  it("offers nothing on a deleted hidden message, which B-2.5 refuses every decision on, and says why", () => {
-    const gone = { ...flagged, message: { ...messages.deleted, moderation: { state: "HIDDEN" as const, reasons: [] } } };
-    expect(decisionOptions(gone)).toEqual([]);
-    expect(undecidableNote(gone)).toMatch(/^Its author deleted this message while it was hidden/);
-    expect(undecidableNote({ ...gone, state: "DECIDED" })).toBeNull();
-    expect(undecidableNote(flagged)).toBeNull();
+  it("closes a deleted message's case with keep whatever its state, hidden included (B-2.7)", () => {
+    for (const state of ["VISIBLE", "FLAGGED", "HIDDEN"] as const) {
+      const gone = { ...flagged, message: { ...messages.deleted, moderation: { state, reasons: [] } } };
+      expect(decisionOptions(gone)).toEqual([{ action: "keep", label: "Close the case" }]);
+    }
+  });
+
+  it("names a keep on a deleted message as closing its case", () => {
+    const decision = { action: "keep" as const, reason: "Gone", by: null, decidedAt: 1 };
+    expect(decisionLabel({ message: messages.deleted, decision })).toBe("Closed");
+    expect(decisionLabel({ message: flagged.message, decision })).toBe("Kept as is");
+    expect(decisionLabel({ message: messages.deleted, decision: { ...decision, action: "hide" } })).toBe("Hidden");
   });
 
   it("never offers restore on a deleted message", () => {

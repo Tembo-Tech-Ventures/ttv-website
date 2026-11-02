@@ -82,7 +82,7 @@ export function decideHarnessCase(
   run: string,
   input: { messageId: string; action: ModerationActionKind; reason: string },
   failWith: number | null,
-): void {
+): { deleted: boolean } {
   if (failWith) throw new HarnessRefusal(failWith, failWith === 409 ? "An admin has already reviewed this message." : "The harness refused this decision.");
   const cases = harnessQueue(run);
   const index = cases.findIndex((item) => item.id === input.messageId);
@@ -92,7 +92,9 @@ export function decideHarnessCase(
   cases[index] = {
     ...item,
     state: "DECIDED",
-    message: moderated(item.message, state, state === "HIDDEN" ? item.reasons : []),
+    // A keep on a deleted message only closes its case (B-2.7).
+    message: item.message.deleted ? item.message : moderated(item.message, state, state === "HIDDEN" ? item.reasons : []),
     decision: { action: input.action, reason: input.reason, by: people.amina, decidedAt: Date.now() },
   };
+  return { deleted: item.message.deleted };
 }

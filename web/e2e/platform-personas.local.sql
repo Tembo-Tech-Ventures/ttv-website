@@ -176,10 +176,12 @@ WITH help AS (SELECT id FROM channel WHERE seedKey = 'community:help'),
   -- Never decided, so the layout check reads them while the desktop project decides the others.
   ('waiting', 6, 'ttv-local-persona-applicant', 'Send your CV to my personal email and I will pass it on.', 'FLAGGED', '["Contact details"]', NULL, 1793575000000),
   ('held', 7, 'ttv-local-persona-reviewee', 'Nobody here reviews properly, so stop asking.', 'HIDDEN', '["Unkind to another member"]', 'ttv-local-persona-mentor', 1793576000000),
-  ('deleted-hidden', 8, 'ttv-local-persona-newcomer', '', 'HIDDEN', '["Spam"]', NULL, 1793577000000))
+  ('deleted-hidden', 8, 'ttv-local-persona-newcomer', '', 'HIDDEN', '["Spam"]', NULL, 1793577000000),
+  -- Hidden by David, then deleted by its author: the desktop project closes this one.
+  ('gone', 9, 'ttv-local-persona-applicant', '', 'HIDDEN', '["Unkind to another member"]', 'ttv-local-persona-mentor', 1793578000000))
 INSERT INTO channel_message (id, channelId, seq, changeSeq, authorId, body, moderationState, moderationReasons, hiddenBy, hiddenAt, deletedAt, createdAt)
 SELECT 'ttv-local-moderation-' || key, (SELECT id FROM help), (SELECT seq FROM base) + n, (SELECT seq FROM base) + n,
- authorId, body, state, reasons, hiddenBy, CASE state WHEN 'HIDDEN' THEN at END, CASE key WHEN 'deleted-hidden' THEN at + 60000 END, at FROM seed;
+ authorId, body, state, reasons, hiddenBy, CASE state WHEN 'HIDDEN' THEN at END, CASE WHEN key IN ('deleted-hidden', 'gone') THEN at + 60000 END, at FROM seed;
 -- The signals that open each case (the triggers on moderation_event keep moderation_case).
 INSERT INTO moderation_event (id, messageId, action, source, actorId, fromState, toState, reasons, createdAt) VALUES
  ('ttv-local-moderation-flagged-event', 'ttv-local-moderation-flagged', 'FLAG', 'DETECTOR', NULL, 'VISIBLE', 'FLAGGED', '["Contact details"]', 1793570000000),
@@ -189,5 +191,6 @@ INSERT INTO moderation_event (id, messageId, action, source, actorId, fromState,
  ('ttv-local-moderation-stale-event', 'ttv-local-moderation-stale', 'FLAG', 'DETECTOR', NULL, 'VISIBLE', 'FLAGGED', '["Contact details"]', 1793574000000),
  ('ttv-local-moderation-waiting-event', 'ttv-local-moderation-waiting', 'FLAG', 'DETECTOR', NULL, 'VISIBLE', 'FLAGGED', '["Contact details"]', 1793575000000),
  ('ttv-local-moderation-held-event', 'ttv-local-moderation-held', 'HIDE', 'MENTOR', 'ttv-local-persona-mentor', 'VISIBLE', 'HIDDEN', '["Unkind to another member"]', 1793576000000),
- -- Hidden by Tembo, then deleted by its author: B-2.5 refuses every decision on it, so it stays waiting.
- ('ttv-local-moderation-deleted-hidden-event', 'ttv-local-moderation-deleted-hidden', 'HIDE', 'CLEF', NULL, 'VISIBLE', 'HIDDEN', '["Spam"]', 1793577000000);
+ -- Hidden, then deleted by their authors: only keep closes these cases (B-2.7).
+ ('ttv-local-moderation-deleted-hidden-event', 'ttv-local-moderation-deleted-hidden', 'HIDE', 'CLEF', NULL, 'VISIBLE', 'HIDDEN', '["Spam"]', 1793577000000),
+ ('ttv-local-moderation-gone-event', 'ttv-local-moderation-gone', 'HIDE', 'MENTOR', 'ttv-local-persona-mentor', 'VISIBLE', 'HIDDEN', '["Unkind to another member"]', 1793578000000);
