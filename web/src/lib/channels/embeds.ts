@@ -277,11 +277,20 @@ export async function listShareables(ctx: ReadContext, query: ShareablesQuery = 
   return { projects, clips };
 }
 
-async function shareableProjects(ctx: ReadContext): Promise<ProjectEmbed[]> {
-  const { results } = await ctx.db.prepare(`SELECT j.id, j.version, j.title, j.description, j.evidenceUrl,
+function shareableProjects(ctx: ReadContext): Promise<ProjectEmbed[]> {
+  return listOwnProjects(ctx.db, ctx.viewerId);
+}
+
+/**
+ * The person's own published projects at their current revision, most recently changed first, at
+ * most SHAREABLE_LIMITS.projects: what they can attach anywhere, a channel or a mentor request
+ * (resolveOwnProject checks the pick again). One statement.
+ */
+export async function listOwnProjects(db: D1Database, userId: string): Promise<ProjectEmbed[]> {
+  const { results } = await db.prepare(`SELECT j.id, j.version, j.title, j.description, j.evidenceUrl,
       ${confirmationsOf("j.id", "j.version")} AS confirmations
     FROM communityJourney j WHERE j.userId = ?1 AND j.visibility = 'institution'
-    ORDER BY j.updatedAt DESC, j.id LIMIT ?2`).bind(ctx.viewerId, SHAREABLE_LIMITS.projects).all<JourneyRow>();
+    ORDER BY j.updatedAt DESC, j.id LIMIT ?2`).bind(userId, SHAREABLE_LIMITS.projects).all<JourneyRow>();
   return results.map(projectEmbed);
 }
 

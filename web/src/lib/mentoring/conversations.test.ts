@@ -2,9 +2,11 @@ import type { APIContext } from "astro";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mentionAttention } from "@/lib/attention/channel-producers";
 import { attentionRequest } from "@/lib/attention/http";
+import { listOwnProjects } from "@/lib/channels/embeds";
 import { post, VIEWER } from "@/lib/channels/test-support";
-import { AttentionList, ChannelList, MentorRequest, MessageList, SearchResults } from "@/lib/platform/contracts";
+import { AttentionList, ChannelList, Conversation, MentorRequest, MessageList, SearchResults } from "@/lib/platform/contracts";
 import { searchRequest } from "@/lib/search/http";
+import { getConversation } from "./requests";
 import { mentoringDatabase, PEOPLE, type MentoringFixture } from "./test-support";
 
 vi.mock("@/lib/observability/errors", async (importOriginal) => ({
@@ -115,5 +117,49 @@ describe("Tembo's answers in the attention panel", () => {
     s.database.prepare("UPDATE channel_message SET moderationState = 'HIDDEN', moderationReasons = '[\"Abuse\"]', hiddenAt = 1 WHERE id = ?").run(answers[0]);
     s.database.prepare("DELETE FROM channel_member WHERE channelId = ? AND userId = ?").run(channelId, VIEWER);
     expect(await listed()).toEqual([]);
+  });
+});
+
+describe("getConversation (the /dm/:id header)", () => {
+  it("gives each member the other person and the request that opened it, as that member sees it", async () => {
+    const { s, channelId } = await conversation();
+    const forWanjiku = await getConversation({ db: s.d1, viewerId: VIEWER, now: 0 }, channelId);
+    expect(Conversation.parse(forWanjiku)).toMatchObject({
+      counterpart: { id: PEOPLE.david, name: "David Kamau", roleBadges: [{ kind: "MENTOR" }] },
+      request: { status: "ACCEPTED", channelId, requester: { id: VIEWER }, mentor: { id: PEOPLE.david } },
+    });
+    const forDavid = await getConversation({ db: s.d1, viewerId: PEOPLE.david, now: 0 }, channelId);
+    expect(forDavid?.counterpart?.id).toBe(VIEWER);
+    expect(forDavid?.request?.id).toBe(forWanjiku?.request?.id);
+  });
+
+  it("is null for everyone outside it, and for a channel that is not a conversation", async () => {
+    const { s, channelId } = await conversation();
+    for (const user of Object.values(OUTSIDERS)) {
+      expect(await getConversation({ db: s.d1, viewerId: user, now: 0 }, channelId), `${user}`).toBeNull();
+    }
+    expect(await getConversation({ db: s.d1, viewerId: VIEWER, now: 0 }, s.channel("help"))).toBeNull();
+    expect(await getConversation({ db: s.d1, viewerId: VIEWER, now: 0 }, "missing")).toBeNull();
+  });
+
+  it("shows the latest of several requests, and no counterpart once their account is gone", async () => {
+    const { s, channelId } = await conversation();
+    const later = await s.ask(PEOPLE.david, { note: "A second question.", now: Date.parse("2026-11-20T09:00:00Z") });
+    await s.call("acceptMentorRequest", { id: later, user: PEOPLE.david, body: {}, now: () => Date.parse("2026-11-20T10:00:00Z") });
+    expect((await getConversation({ db: s.d1, viewerId: VIEWER, now: 0 }, channelId))?.request?.id).toBe(later);
+    s.database.exec(`DELETE FROM "user" WHERE id = '${PEOPLE.david}'`);
+    expect(await getConversation({ db: s.d1, viewerId: VIEWER, now: 0 }, channelId)).toEqual({ counterpart: null, request: null });
+  });
+});
+
+describe("listOwnProjects (the request drawer's attach list)", () => {
+  it("lists only the caller's own published projects, at their current revision", async () => {
+    const s = mentoringDatabase();
+    fixtures.push(s);
+    s.project("ledger", { version: 3 });
+    s.project("draft", { visibility: "private" });
+    s.project("theirs", { owner: "synthetic-otieno" });
+    expect((await listOwnProjects(s.d1, VIEWER)).map(({ journeyId, version }) => [journeyId, version])).toEqual([["ledger", 3]]);
+    expect(await listOwnProjects(s.d1, PEOPLE.david)).toEqual([]);
   });
 });
