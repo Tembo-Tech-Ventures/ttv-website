@@ -44,29 +44,43 @@ function againstWhite(name: string): number {
   return 1.05 / (0.2126 * r + 0.7152 * g + 0.0722 * b + 0.05);
 }
 
-/** Every class string (an attribute, or one entry of a class:list or a lookup) with white text on a solid palette background. */
-function whiteOnColour(): { where: string; background: string }[] {
-  return files(ADMIN_PAGES).flatMap((path) => {
-    const source = readFileSync(path, "utf8");
-    return [...source.matchAll(/"([^"\n]*)"/g)]
-      .map((match) => match[1].split(/\s+/))
-      .filter((classes) => classes.includes("text-white"))
-      .flatMap((classes) => classes.flatMap((name) => {
-        const background = /^(?:hover:)?bg-([a-z]+-\d{2,3})$/.exec(name)?.[1];
-        return background ? [{ where: `${relative(ROOT, path)} ${name}`, background }] : [];
-      }));
-  });
+type Use = { where: string; background: string };
+
+/**
+ * Every class set in a page with white text on a solid palette background, at rest and on hover: each
+ * quoted string (an attribute, or a lookup table's entry), and each class:list taken whole, since its
+ * text colour and its background can sit in different entries.
+ */
+function whiteOnColour(where: string, source: string): Use[] {
+  const strings = (text: string) => [...text.matchAll(/"([^"\n]*)"|'([^'\n]*)'/g)].map((match) => match[1] ?? match[2] ?? "");
+  const sets = [
+    ...strings(source).map((text) => text.split(/\s+/)),
+    ...[...source.matchAll(/class:list=\{\[([\s\S]*?)\]\}/g)].map((match) => strings(match[1]).flatMap((text) => text.split(/\s+/))),
+  ];
+  return sets
+    .filter((classes) => classes.includes("text-white"))
+    .flatMap((classes) => classes.flatMap((name) => {
+      const background = /^(?:hover:)?bg-([a-z]+-\d{2,3})$/.exec(name)?.[1];
+      return background ? [{ where: `${where} ${name}`, background }] : [];
+    }));
 }
+
+const adminUses = () => files(ADMIN_PAGES).flatMap((path) => whiteOnColour(relative(ROOT, path), readFileSync(path, "utf8")));
+const failing = (uses: Use[]) => uses
+  .map(({ where, background }) => ({ where, ratio: Number(againstWhite(background).toFixed(2)) }))
+  .filter(({ ratio }) => ratio < AA);
 
 describe("admin buttons with white words on a solid colour", () => {
   it("are found, so this test reads the pages it means to", () => {
-    expect(whiteOnColour().some(({ where }) => where.startsWith("src/pages/admin/programs/[id].astro"))).toBe(true);
+    expect(adminUses().some(({ where }) => where.startsWith("src/pages/admin/programs/[id].astro"))).toBe(true);
+  });
+
+  it("are caught when white and the background sit in different class:list entries", () => {
+    const split = `<button class:list={["px-4 text-white", published ? "bg-red-700" : "bg-green-600 hover:bg-green-700"]}>`;
+    expect(failing(whiteOnColour("fixture", split)).map(({ where }) => where)).toEqual(["fixture bg-green-600"]);
   });
 
   it("clear 4.5:1 at rest and on hover (QA2-07)", () => {
-    const failing = whiteOnColour()
-      .map(({ where, background }) => ({ where, ratio: Number(againstWhite(background).toFixed(2)) }))
-      .filter(({ ratio }) => ratio < AA);
-    expect(failing).toEqual([]);
+    expect(failing(adminUses())).toEqual([]);
   });
 });

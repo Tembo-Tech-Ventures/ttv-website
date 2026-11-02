@@ -60,6 +60,7 @@ const PHONES: Case[] = [
   ["sifuri saba moja mbili, tatu nne tano, sita saba nane", ["phone"]],
   ["0722, double zero zero, 111", ["phone"]],
   ["oh seven two two,double zero zero,one one one", ["phone"]],
+  ["oh seven two two , double zero zero , one one one", ["phone"]],
   ["O712345678", ["phone"]],
   // Disguised characters.
   ["０７１２３４５６７８", ["phone"]],

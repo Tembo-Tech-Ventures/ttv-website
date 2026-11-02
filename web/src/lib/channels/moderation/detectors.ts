@@ -143,11 +143,13 @@ function spelled(lexemes: Lexeme[], i: number): boolean {
 /**
  * A comma beside a spelled digit, as in "oh seven two two, double zero zero, one one one", groups
  * a number read aloud rather than joining the digits of another kind of number (1,500,000), so it
- * separates groups like a space (QA2-09). One look either side: linear however long the text is.
+ * separates groups like a space (QA2-09), with or without spaces around it. One look either side,
+ * across one space: linear however long the text is.
  */
 function spelledComma(lexemes: Lexeme[], i: number): boolean {
+  const previous = lexemes[i - 1]?.kind === "space" ? i - 2 : i - 1;
   const next = lexemes[i + 1]?.kind === "space" ? i + 2 : i + 1;
-  return lexemes[i]?.text === "," && (spelled(lexemes, i - 1) || spelled(lexemes, next));
+  return lexemes[i]?.text === "," && (spelled(lexemes, previous) || spelled(lexemes, next));
 }
 
 function charAtom(char: string): Atom {
@@ -210,6 +212,8 @@ function atoms(text: string): Atom[] {
       result.push({ kind: "digits", text: digits.repeat(repeat), excluded: false });
       repeat = 1;
     } else if (lexeme.kind === "space") {
+      // "double " is one separator, not two: the multiplier already stands for the space after it.
+      if (repeat > 1) continue;
       result.push(lexeme.text.length <= MAX_SEPARATOR ? { kind: "separator", text: " " } : { kind: "break" });
     } else if (lexeme.kind === "word") {
       repeat = multiplier(lexemes, i);

@@ -66,9 +66,9 @@ export function useClipFinder(box: RefObject<HTMLTextAreaElement | null>) {
     opener.current = trigger;
     setOpen(true);
   }, [open, close]);
-  /** A clip was attached: the composer puts focus back in the box itself. */
-  const picked = useCallback(() => setOpen(false), []);
-  return { open, toggle, close, picked };
+  /** Closed without moving focus: a clip was attached (the composer focuses the box), or the `@` list took its place. */
+  const dismiss = useCallback(() => setOpen(false), []);
+  return { open, toggle, close, dismiss };
 }
 
 function FinderPanel({ id, recent, find, attached, full, onPick, onClose }: Omit<ClipFinderProps, "open">) {

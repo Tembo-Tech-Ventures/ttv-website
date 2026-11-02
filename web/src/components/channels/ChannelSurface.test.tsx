@@ -535,6 +535,17 @@ describe("QA-2 fixes", () => {
       expect(document.activeElement).toBe(trigger);
     });
 
+    it("gives way to the @ suggestions, which share its place above the box", async () => {
+      await mount(wanjiku, cohort);
+      await open();
+      expect(finder()).not.toBeNull();
+      const box = $<HTMLTextAreaElement>("[data-composer=channel] textarea")!;
+      await act(async () => box.focus());
+      await typeInto(box, "@");
+      expect($("[role=listbox]")).not.toBeNull();
+      expect(finder()).toBeNull();
+    });
+
     it("posts the found clip with the message", async () => {
       const { client } = await mount(wanjiku, cohort);
       const sent: unknown[] = [];

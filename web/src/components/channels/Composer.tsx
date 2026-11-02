@@ -139,6 +139,12 @@ export default function Composer({
     people: ranked, tembo: tools.askTembo, temboDescription: `Answers from ${temboReach(channel, thread)}`, where,
   });
 
+  // The `@` list and the clip finder share the place above the box: the list, opened by typing, wins.
+  const { dismiss: dismissFinder } = finder;
+  useEffect(() => {
+    if (picker.open) dismissFinder();
+  }, [picker.open, dismissFinder]);
+
   const body = draft.text.trim();
   const tooLong = draft.text.length > MAX_BODY;
   const canSend = hydrated && body.length > 0 && !tooLong;
@@ -173,7 +179,7 @@ export default function Composer({
 
   function attach(embed: MessageEmbed) {
     setAttached((list) => (list.some((item) => sameEmbed(item, embed)) || list.length >= MAX_EMBEDS ? list : [...list, embed]));
-    finder.picked();
+    finder.dismiss();
     requestAnimationFrame(() => draft.box.current?.focus());
   }
 
