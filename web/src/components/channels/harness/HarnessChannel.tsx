@@ -9,13 +9,14 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { Channel, Me, Message, MessageList } from "@/lib/platform/contracts";
 import { createChannelStore } from "@/lib/platform/client/channel";
 import { createComposer } from "@/lib/platform/client/composer";
+import { createTemboStore } from "@/lib/platform/client/tembo";
 import { FIXTURE_NOW, people } from "@/lib/platform/fixtures";
 import type { ModerationActions } from "../actions";
 import ChannelSurface from "../ChannelSurface";
 import { createModerationActions } from "../moderation-actions";
 import { shareablesFinder } from "../moment-search";
 import { momentsFor, shareablesFor } from "./fixture-pages";
-import { createHarnessClient, type ModerationRecord } from "./harness-client";
+import { createHarnessClient, type HarnessClient, type ModerationRecord } from "./harness-client";
 
 declare global {
   interface Window {
@@ -27,6 +28,10 @@ declare global {
       moderation: () => readonly ModerationRecord[];
       /** Refuse the next `count` writes with this HTTP status and error code. */
       refuseWrites: (count: number, status: number, code: string, message: string, retryAfterMs?: number) => void;
+      /** Answer every question Tembo is working on; the answers arrive through the next polls. Returns how many. */
+      answerTembo: () => number;
+      /** Questions asked and feedback given, oldest first. */
+      tembo: () => ReturnType<HarnessClient["tembo"]>;
     };
   }
 }
@@ -71,9 +76,12 @@ export default function HarnessChannel({ me, channel, initial, initialThread, th
       channelId: channel.id, enabled: me.flags.channels, viewerId: me.user.id, initial, api: client.api,
       initialRead: initialRead ?? { lastReadMessageId: null, unreadCount: 0 },
     });
-    const composer = createComposer({ store, me, api: client.api, now });
+    const tembo = createTemboStore({
+      channel: store, usage: me.temboUsage, enabled: me.flags.channels && me.flags.tembo_channels, api: client.api, now,
+    });
+    const composer = createComposer({ store, me, api: client.api, now, onSent: tembo.noticeSent });
     const moderation: ModerationActions = createModerationActions({ store, api: client.api });
-    return { client, store, composer, moderation, findMoments: shareablesFinder(client.api, channel.id), now, refusal };
+    return { client, store, composer, tembo, moderation, findMoments: shareablesFinder(client.api, channel.id), now, refusal };
   });
 
   useEffect(() => {
@@ -94,6 +102,12 @@ export default function HarnessChannel({ me, channel, initial, initialThread, th
         window.dispatchEvent(new Event("focus"));
       },
       reads: () => harness.client.reads(),
+      answerTembo() {
+        const count = harness.client.answerTembo();
+        window.dispatchEvent(new Event("focus"));
+        return count;
+      },
+      tembo: () => harness.client.tembo(),
       moderation: () => harness.client.moderation(),
       refuseWrites(count, status, code, message, retryAfterMs) {
         harness.refusal.next = { count, status, data: { error: { code, message, ...(retryAfterMs === undefined ? {} : { retryAfterMs }) } } };
@@ -111,6 +125,7 @@ export default function HarnessChannel({ me, channel, initial, initialThread, th
       channel={channel}
       store={harness.store}
       composer={harness.composer}
+      tembo={harness.tembo}
       now={FIXTURE_NOW}
       shareables={shareablesFor(me)}
       findMoments={harness.findMoments}

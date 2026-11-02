@@ -8,6 +8,7 @@
  *
  *   ?persona=wanjiku&channel=show-your-work&thread=<id>&message=<id>
  *   &tembo=off   tembo_channels off: no Ask Tembo, no @tembo
+ *   &tembo-used=<n>   questions to Tembo already asked today (of 10): 10 exhausts the allowance
  *   &channels=off   the channels flag off: the view renders nothing
  *   &marker=<id>    the reader's read marker, so the "New" divider and reading are exercised
  *
@@ -42,6 +43,7 @@ const me: Me = {
     channels: params.get("channels") !== "off",
     tembo_channels: params.get("tembo") !== "off",
   },
+  ...(params.has("tembo-used") ? { temboUsage: { ...base.temboUsage, used: Math.min(base.temboUsage.limit, Math.max(0, Number(params.get("tembo-used")) || 0)) } } : {}),
 };
 const channel = channelFor(params.get("channel") ?? "show-your-work", me);
 const space: SpaceId = channel?.kind === "COHORT" ? "cohort" : "community";
@@ -61,7 +63,7 @@ const initialRead = markerAt >= 0
   : undefined;
 const keep = (slug: string) => {
   const next = new URLSearchParams({ persona, channel: slug });
-  for (const key of ["tembo", "channels"]) if (params.has(key)) next.set(key, params.get(key)!);
+  for (const key of ["tembo", "tembo-used", "channels"]) if (params.has(key)) next.set(key, params.get(key)!);
   return `/dev/platform-channel?${next}`;
 };
 const listed = Object.values(HARNESS_CHANNELS)

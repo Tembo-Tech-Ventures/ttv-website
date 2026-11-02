@@ -3,6 +3,7 @@ import type { Channel, Me, MessageList } from "@/lib/platform/contracts";
 import { createApiClient } from "@/lib/platform/client/apiClient";
 import { createChannelStore } from "@/lib/platform/client/channel";
 import { createComposer } from "@/lib/platform/client/composer";
+import { createTemboStore } from "@/lib/platform/client/tembo";
 import type { Shareables } from "./actions";
 import ChannelSurface from "./ChannelSurface";
 import { createModerationActions } from "./moderation-actions";
@@ -51,7 +52,10 @@ export default function ChannelView({
     channelId: channel.id, enabled, viewerId: me.user.id, initial: initial ?? undefined,
     initialRead: initialRead ?? { lastReadMessageId: null, unreadCount: channel.unreadCount },
   }));
-  const [composer] = useState(() => createComposer({ store, me }));
+  const [tembo] = useState(() => createTemboStore({
+    channel: store, usage: me.temboUsage, enabled: enabled && me.flags.tembo_channels === true,
+  }));
+  const [composer] = useState(() => createComposer({ store, me, onSent: tembo.noticeSent }));
   const [moderation] = useState(() => createModerationActions({ store }));
   const [findMoments] = useState(() => shareablesFinder(createApiClient(), channel.id));
   if (!enabled) return null;
@@ -61,6 +65,7 @@ export default function ChannelView({
       channel={channel}
       store={store}
       composer={composer}
+      tembo={tembo}
       now={now}
       shareables={shareables}
       findMoments={findMoments}

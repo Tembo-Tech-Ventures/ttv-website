@@ -239,3 +239,13 @@ export function MentionList({ listId, candidates, active, scope, usage, onChoose
     </div>
   );
 }
+
+/** Under the channel's box: what Tembo reads here, and the reader's questions today (02). */
+export function TemboScopeNote({ scope, usage }: { scope: string; usage: TemboUsage }) {
+  return (
+    <p className="channel-composer__scope">
+      <span className="font-semibold text-ink-secondary">Tembo</span> · Sees: {scope} · You: {usage.used} of {usage.limit} today
+      {usage.used >= usage.limit && <> · No questions left today; more after midnight East Africa Time</>}
+    </p>
+  );
+}

@@ -7,12 +7,12 @@
  * people's would arrive.
  */
 import {
-  EditMessage, ModerationAction, PostMessage, ReactToMessage, ReportMessage, RequestModerationReview, ROUTES, type Channel, type ChannelRead, type Me, type Message,
+  EditMessage, ModerationAction, TemboAsk, TemboFeedback, PostMessage, ReactToMessage, ReportMessage, RequestModerationReview, ROUTES, type Channel, type ChannelRead, type Me, type Message,
   type MessageEmbed, type MessageList, type ReactionKind, type SessionClipEmbed,
 } from "@/lib/platform/contracts";
 import { createApiClient, type ApiClient } from "@/lib/platform/client/apiClient";
 import { createMockTransport, type MockOptions, type MockReply } from "@/lib/platform/client/mockTransport";
-import { messages as fixtureMessages } from "@/lib/platform/fixtures";
+import { messages as fixtureMessages, temboAuthor } from "@/lib/platform/fixtures";
 import { sameEmbed, type Shareables } from "../actions";
 import { asSeenBy, threadPage } from "./fixture-pages";
 
@@ -24,6 +24,10 @@ export type HarnessClient = {
   reads: () => readonly string[];
   /** Reports and moderation decisions the view sent, oldest first. */
   moderation: () => readonly ModerationRecord[];
+  /** Answer every question Tembo is working on, in its thread, through the next polls (as B-3.1's run would). */
+  answerTembo: () => number;
+  /** Questions asked (message ids) and feedback given, oldest first. */
+  tembo: () => { asked: readonly string[]; feedback: readonly { messageId: string; feedback: string }[] };
 };
 
 export type ModerationRecord =
@@ -43,6 +47,17 @@ type HarnessOptions = {
   now?: () => number;
   /** Refuse or fail requests, as MockOptions.failure. */
   failure?: MockOptions["failure"];
+};
+
+const TEMBO_ANSWER: Record<Channel["kind"], string> = {
+  COHORT: "Session 9 covers this from 34:12: the 200 tells the provider the callback arrived, so it stops retrying. [1]",
+  COMMUNITY: "Revision 3 logs each callback before parsing it, so a failure can still be replayed. [1]",
+  DIRECT: "Earlier in this conversation you agreed to replay the failing callback first.",
+};
+const TEMBO_CITATIONS: Record<Channel["kind"], Message["citations"]> = {
+  COHORT: fixtureMessages.cohortAnswer.citations,
+  COMMUNITY: fixtureMessages.communityAnswer.citations,
+  DIRECT: [],
 };
 
 const refuse = (status: number, code: string, message: string): MockReply => ({ status, data: { error: { code, message } } });
@@ -69,6 +84,14 @@ export function createHarnessClient({ me, channel, root, shareables, moments, no
   }
   const byNonce = new Map<string, Message>();
   const reads: string[] = [];
+  // Replies for each thread, delivered by that thread's next `since` poll.
+  const threadQueues = new Map<string, Message[]>();
+  // B-3.1 in miniature: each question counts once against today's allowance, and is answered once.
+  let temboUsed = me.temboUsage.used;
+  const asked: string[] = [];
+  const waiting = new Set<string>();
+  const answers = new Map<string, Message>();
+  const feedback: { messageId: string; feedback: string }[] = [];
   const records: ModerationRecord[] = [];
   const empty = (thread: string | null, cursor: string): MessageList => ({ items: [], beforeCursor: null, sinceCursor: cursor, thread, removedIds: [] });
 
@@ -130,7 +153,16 @@ export function createHarnessClient({ me, channel, root, shareables, moments, no
           if (params.id !== channel.id) return refuse(404, "not_found", "No such channel");
           const query = new URL(request.url).searchParams;
           const thread = query.get("thread");
-          if (thread) return { data: query.has("since") || query.has("before") ? empty(thread, query.get("since") ?? "t") : threadPage(channel, thread, me) };
+          if (thread) {
+            if (query.has("since")) {
+              const items = threadQueues.get(thread)?.splice(0) ?? [];
+              return { data: { ...empty(thread, `${query.get("since")}-${items.length}`), items } };
+            }
+            if (query.has("before")) return { data: empty(thread, "t") };
+            const page = threadPage(channel, thread, me);
+            const added = [...known.values()].filter((m) => m.parentId === thread && !page.items.some((item) => item.id === m.id));
+            return { data: { ...page, items: [...page.items, ...added].toSorted((a, b) => a.createdAt - b.createdAt) } };
+          }
           if (query.has("before")) return { data: empty(null, root.sinceCursor) };
           if (query.has("since")) {
             const items = queue.splice(0);
@@ -141,6 +173,37 @@ export function createHarnessClient({ me, channel, root, shareables, moments, no
         },
       },
       { ...ROUTES.postMessage, reply: async ({ request }) => post(PostMessage.parse(await request.json())) },
+      {
+        ...ROUTES.askTembo,
+        reply: async ({ request }) => {
+          const { messageId } = TemboAsk.parse(await request.json());
+          const message = known.get(messageId);
+          if (!message) return refuse(404, "not_found", "That message is no longer here.");
+          if (message.author.id !== me.user.id) return refuse(403, "forbidden", "You can only ask about your own messages.");
+          const usage = { ...me.temboUsage, used: temboUsed };
+          const answer = answers.get(messageId);
+          if (answer) return { status: 200, data: { status: "answer", message: answer, usage } };
+          if (!waiting.has(messageId)) {
+            if (temboUsed >= usage.limit) {
+              return { status: 429, data: { error: { code: "quota_exhausted", message: "No questions left today.", retryAfterMs: Math.max(1, usage.resetsAt - now()) } } };
+            }
+            temboUsed += 1;
+            waiting.add(messageId);
+            asked.push(messageId);
+          }
+          return { status: 202, data: { status: "pending", messageId, usage: { ...usage, used: temboUsed } } };
+        },
+      },
+      {
+        ...ROUTES.temboFeedback,
+        reply: async ({ request, params }) => {
+          const body = TemboFeedback.parse(await request.json());
+          const message = known.get(params.id);
+          if (message?.authorKind !== "TEMBO") return refuse(404, "not_found", "That answer is no longer here.");
+          feedback.push({ messageId: params.id, feedback: body.feedback });
+          return { data: { ok: true } };
+        },
+      },
       {
         ...ROUTES.editMessage,
         reply: async ({ request, params }) => {
@@ -240,6 +303,33 @@ export function createHarnessClient({ me, channel, root, shareables, moments, no
     api,
     reads: () => [...reads],
     moderation: () => [...records],
+    answerTembo: () => {
+      for (const messageId of waiting) {
+        const question = known.get(messageId);
+        if (!question) continue;
+        const threadId = question.parentId ?? question.id;
+        sequence += 1;
+        const answer: Message = {
+          id: `harnesstembo${String(sequence).padStart(4, "0")}`, channelId: channel.id, parentId: threadId, clientNonce: null,
+          authorKind: "TEMBO", author: temboAuthor, body: TEMBO_ANSWER[channel.kind], embeds: [], citations: TEMBO_CITATIONS[channel.kind],
+          reactions: [], createdAt: now(), edited: false, deleted: false, moderation: null,
+          thread: { replyCount: 0, participantIds: [], lastReplyAt: null }, temboScope: channel.kind,
+        };
+        known.set(answer.id, answer);
+        answers.set(messageId, answer);
+        threadQueues.set(threadId, [...(threadQueues.get(threadId) ?? []), answer]);
+        const parent = known.get(threadId);
+        if (parent) {
+          const updated = { ...parent, thread: { ...parent.thread, replyCount: parent.thread.replyCount + 1, lastReplyAt: answer.createdAt } };
+          known.set(parent.id, updated);
+          queue.push(updated);
+        }
+      }
+      const count = waiting.size;
+      waiting.clear();
+      return count;
+    },
+    tembo: () => ({ asked: [...asked], feedback: [...feedback] }),
     arrive: (messages) => {
       for (const message of messages) known.set(message.id, message);
       queue.push(...messages);

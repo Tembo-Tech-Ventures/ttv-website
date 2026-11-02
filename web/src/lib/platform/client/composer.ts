@@ -79,6 +79,8 @@ export interface ComposerOptions {
   newNonce?: () => string;
   /** A write without an answer by then fails as `timeout`, so it can be retried or discarded. Default 20 s. */
   timeoutMs?: number;
+  /** Every send the server confirmed, retries included: S-3.1 asks Tembo about one that mentions `@tembo`. */
+  onSent?: (message: Message) => void;
 }
 
 export const WRITE_TIMEOUT_MS = 20_000;
@@ -344,6 +346,7 @@ export function createComposer(options: ComposerOptions) {
     sending.set(item.clientNonce, request);
     const settle = () => { if (sending.get(item.clientNonce) === request) sending.delete(item.clientNonce); };
     request.then(settle, settle);
+    if (options.onSent) request.then(options.onSent, () => undefined);
     return request;
   }
 
