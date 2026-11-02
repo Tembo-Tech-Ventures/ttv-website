@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cohortMentorModel, teachingRoles, type CohortRoleRow } from "./cohort-mentors";
+import { MENTORS_OFF, cohortMentorModel, cohortRoleRefusal, teachingRoles, type CohortRoleRow } from "./cohort-mentors";
 
 const people = [
   { id: "u-otieno", name: "Otieno Ouma", email: "otieno@invalid.ttv" },
@@ -35,5 +35,16 @@ describe("cohortMentorModel", () => {
 describe("teachingRoles", () => {
   it("keeps instructors and TAs, not mentors", () => {
     expect(teachingRoles([{ name: "INSTRUCTOR" }, { name: "MENTOR" }, { name: "TA" }])).toEqual([{ name: "INSTRUCTOR" }, { name: "TA" }]);
+  });
+});
+
+describe("cohortRoleRefusal", () => {
+  it("refuses a MENTOR row while channels is off, and only then", () => {
+    expect(cohortRoleRefusal("MENTOR", false)).toBe(MENTORS_OFF);
+    expect(cohortRoleRefusal("MENTOR", true)).toBeNull();
+    for (const teaching of ["INSTRUCTOR", "TA"]) {
+      expect(cohortRoleRefusal(teaching, false)).toBeNull();
+      expect(cohortRoleRefusal(teaching, true)).toBeNull();
+    }
   });
 });

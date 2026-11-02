@@ -13,7 +13,7 @@ interface Props {
   title?: string;
   /** The queue page already holds the open-request count; every other page reads it here. */
   pendingAccessRequests?: number;
-  /** The moderation page already holds its waiting count; every other page reads it here. */
+  /** The moderation page (channels on) already holds its waiting count; every other page reads it here. */
   pendingModeration?: number;
 }
 
@@ -26,10 +26,12 @@ if (!Astro.locals.isAdmin) {
 
 const pendingAccessRequests = Astro.props.pendingAccessRequests ?? await countPendingAccessRequests(env.DB);
 // No Moderation entry (null) while `channels` is off for this admin: there is no queue to link to.
-const channelsOn = await isFlagEnabled(
-  { db: env.DB, env, user: Astro.locals.user ?? null, isAdmin: true, locals: Astro.locals }, "channels",
+// The moderation page has already checked the flag and counted the queue.
+const pendingModeration = Astro.props.pendingModeration ?? (
+  await isFlagEnabled({ db: env.DB, env, user: Astro.locals.user ?? null, isAdmin: true, locals: Astro.locals }, "channels")
+    ? await countPendingModeration(env.DB)
+    : null
 );
-const pendingModeration = channelsOn ? Astro.props.pendingModeration ?? await countPendingModeration(env.DB) : null;
 ---
 
 <BaseLayout title={`${title} | TTV Admin`}>

@@ -116,3 +116,17 @@ export function queuePaths(base: string): QueuePaths {
     decided: (state, action) => at({ ...tabQuery(state), decided: action }),
   };
 }
+
+/** Why /admin/moderation answers before reading the queue, if it does. The middleware already requires an admin. */
+export type QueueGate = "sign-in" | "token" | "not-found" | "cross-origin" | null;
+
+export function moderationQueueGate(input: {
+  signedIn: boolean; personalAccessToken: boolean; channelsOn: boolean; method: string; sameOrigin: boolean;
+}): QueueGate {
+  if (!input.signedIn) return "sign-in";
+  // Channels don't take personal access tokens yet, and the queue is part of them.
+  if (input.personalAccessToken) return "token";
+  if (!input.channelsOn) return "not-found";
+  if (input.method === "POST" && !input.sameOrigin) return "cross-origin";
+  return null;
+}

@@ -152,6 +152,8 @@ test.describe("admin moderation queue", () => {
     await expect(notice).toBeFocused();
     await expect(card(page, COLLINS)).toHaveCount(0);
     await expect(page.getByRole("link", { name: /^Needs a decision\s+3 waiting$/ })).toBeVisible();
+    // The sidebar badge sits outside the swapped queue, and follows it.
+    await expect(page.locator(`a[href="/admin/moderation"]`).filter({ hasText: "waiting" }).first()).toContainText("3 waiting");
     await page.screenshot({ path: evidence("hidden-notice") });
 
     await reason(card(page, PETER)).fill("An email in a jobs post is fine.");

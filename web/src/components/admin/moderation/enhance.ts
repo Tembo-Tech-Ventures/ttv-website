@@ -6,6 +6,7 @@
  * says. If the post never reaches the server, or the answer is not the queue (an expired session,
  * an error page), the card says nothing changed and keeps the reason as typed.
  */
+import { MODERATION_PENDING_EVENT } from "./case-model";
 
 const ROOT = "[data-moderation-root]";
 const FORM = "form[data-moderation-form]";
@@ -67,6 +68,9 @@ async function submit(form: HTMLFormElement, submitter: HTMLElement | null, fetc
   }
   const next = document.importNode(outcome.root, true);
   root.replaceWith(next);
+  // The sidebar badge lives outside the queue: tell it the count the server rendered.
+  const pending = Number(next.getAttribute("data-pending-count"));
+  if (Number.isInteger(pending)) next.ownerDocument.dispatchEvent(new CustomEvent(MODERATION_PENDING_EVENT, { detail: pending }));
   // autofocus does not run for swapped-in content: focus what the server marked, as a load would.
   next.querySelector<HTMLElement>("[autofocus]")?.focus();
 }

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MODERATION_PENDING_EVENT } from "./case-model";
 import { NETWORK_FAILURE, SIGNED_OUT, UNEXPECTED, enhanceModerationQueue, readOutcome } from "./enhance";
 
 const parse = (html: string) => new DOMParser().parseFromString(html, "text/html");
@@ -62,6 +63,18 @@ describe("enhanceModerationQueue", () => {
     await vi.waitFor(() => expect(document.querySelector("[data-moderation-notice]")).not.toBeNull());
     expect(document.activeElement).toBe(document.querySelector("[data-moderation-notice]"));
     expect(document.querySelectorAll("[data-moderation-root]")).toHaveLength(1);
+  });
+
+  it("tells the sidebar the waiting count the server rendered, so its badge never goes stale", async () => {
+    const counts: unknown[] = [];
+    const listen = (event: Event) => counts.push((event as CustomEvent).detail);
+    document.addEventListener(MODERATION_PENDING_EVENT, listen);
+    const fetcher = vi.fn(async () =>
+      new Response('<div data-moderation-root data-pending-count="2"><p data-moderation-notice>Hidden.</p></div>', { status: 200 }));
+    const { form, hide } = setUp(fetcher as unknown as typeof fetch);
+    press(form, hide);
+    await vi.waitFor(() => expect(counts).toEqual([2]));
+    document.removeEventListener(MODERATION_PENDING_EVENT, listen);
   });
 
   it("says nothing changed when TTV cannot be reached, keeping the reason", async () => {

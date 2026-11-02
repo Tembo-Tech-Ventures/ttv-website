@@ -1,4 +1,5 @@
-import React, { useSyncExternalStore, useState, type ReactNode } from "react";
+import React, { useEffect, useSyncExternalStore, useState, type ReactNode } from "react";
+import { MODERATION_PENDING_EVENT } from "@/components/admin/moderation/case-model";
 import Sidebar from "@/components/common/Sidebar";
 import {
   PiGaugeDuotone,
@@ -106,7 +107,18 @@ export default function AdminShell({
     () => true,
     () => false
   );
-  const links = getAdminLinks(agentAuthEnabled, dataMigrationEnabled, stagingDemoEnabled, pendingAccessRequests, pendingModeration);
+  // A decision made without a page load swaps the queue in place; it reports the new waiting count.
+  const [waiting, setWaiting] = useState(pendingModeration);
+  useEffect(() => {
+    if (pendingModeration === null) return;
+    const onPending = (event: Event) => {
+      const count = (event as CustomEvent<unknown>).detail;
+      if (typeof count === "number") setWaiting(count);
+    };
+    document.addEventListener(MODERATION_PENDING_EVENT, onPending);
+    return () => document.removeEventListener(MODERATION_PENDING_EVENT, onPending);
+  }, [pendingModeration]);
+  const links = getAdminLinks(agentAuthEnabled, dataMigrationEnabled, stagingDemoEnabled, pendingAccessRequests, waiting);
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-surface to-dark">

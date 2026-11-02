@@ -53,3 +53,14 @@ export function cohortMentorModel(
 export function teachingRoles<Row extends { name: string }>(roles: readonly Row[]): Row[] {
   return roles.filter((role) => role.name !== "MENTOR");
 }
+
+export const MENTORS_OFF = "Cohort mentors arrive with channels, which are off for you.";
+
+/**
+ * Why a cohort role can't be added here, or null. A MENTOR row opens a cohort's channels, so it
+ * can be added only while `channels` is on for this administrator; the form never offers it
+ * otherwise, and a forged post is refused before anything is written.
+ */
+export function cohortRoleRefusal(role: string, mentorsEnabled: boolean): string | null {
+  return role === "MENTOR" && !mentorsEnabled ? MENTORS_OFF : null;
+}

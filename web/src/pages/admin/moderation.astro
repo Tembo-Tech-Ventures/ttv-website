@@ -15,7 +15,7 @@ import * as schema from "@/lib/db/schema";
 import AdminLayout from "@/layouts/AdminLayout.astro";
 import ModerationQueueView from "@/components/admin/moderation/ModerationQueueView.astro";
 import { MODERATION_PATH } from "@/components/admin/moderation/case-model";
-import { moderationQueueRequest, queuePaths } from "@/components/admin/moderation/page-flow";
+import { moderationQueueGate, moderationQueueRequest, queuePaths } from "@/components/admin/moderation/page-flow";
 import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
 import { ChannelError } from "@/lib/channels/errors";
 import { decideModeration } from "@/lib/channels/moderation/actions";
@@ -24,14 +24,17 @@ import { isFlagEnabled } from "@/lib/platform/server/flags";
 import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
 
 const { user, personalAccessToken, isAdmin } = Astro.locals;
-if (!user) return Astro.redirect("/auth/login");
-if (personalAccessToken) return new Response("Forbidden: personal access tokens can't use channels yet.", { status: 403 });
-if (!await isFlagEnabled({ db: env.DB, env, user, isAdmin, locals: Astro.locals }, "channels")) {
-  return new Response("Not found", { status: 404 });
-}
-if (Astro.request.method === "POST" && !hasMatchingRequestOrigin(Astro.request)) {
-  return new Response("Forbidden: same-origin request required.", { status: 403 });
-}
+const gate = moderationQueueGate({
+  signedIn: Boolean(user),
+  personalAccessToken: Boolean(personalAccessToken),
+  channelsOn: Boolean(user) && await isFlagEnabled({ db: env.DB, env, user: user ?? null, isAdmin, locals: Astro.locals }, "channels"),
+  method: Astro.request.method,
+  sameOrigin: hasMatchingRequestOrigin(Astro.request),
+});
+if (gate === "sign-in" || !user) return Astro.redirect("/auth/login");
+if (gate === "token") return new Response("Forbidden: personal access tokens can't use channels yet.", { status: 403 });
+if (gate === "not-found") return new Response("Not found", { status: 404 });
+if (gate === "cross-origin") return new Response("Forbidden: same-origin request required.", { status: 403 });
 
 const viewer = { user, capabilities: await requestCapabilities(drizzle(env.DB, { schema }), Astro.locals) };
 const outcome = await moderationQueueRequest(Astro.request, Astro.url, {

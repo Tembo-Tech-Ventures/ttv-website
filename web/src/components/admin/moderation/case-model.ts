@@ -11,6 +11,8 @@ import { channelPath } from "@/components/channels/paths";
  */
 
 export const MODERATION_PATH = "/admin/moderation";
+/** Dispatched on the document with the waiting count after a decision swaps the queue in place. */
+export const MODERATION_PENDING_EVENT = "ttv:moderation-pending";
 
 export type ModerationCase = ModerationQueueItem;
 

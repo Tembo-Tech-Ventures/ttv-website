@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { harnessCases } from "./harness";
-import { moderationQueueRequest, queuePaths, type QueueSource } from "./page-flow";
+import { moderationQueueGate, moderationQueueRequest, queuePaths, type QueueSource } from "./page-flow";
 
 const paths = queuePaths("/admin/moderation");
 const cases = harnessCases();
@@ -96,5 +96,30 @@ describe("moderationQueueRequest", () => {
   it("lets unexpected decision failures through", async () => {
     const decide = vi.fn(async () => { throw new TypeError("bug"); });
     await expect(moderationQueueRequest(...post({ messageId: pending[0].id, action: "keep", reason: "x" }), source({ decide }), paths)).rejects.toThrow("bug");
+  });
+});
+
+describe("moderationQueueGate", () => {
+  const open = { signedIn: true, personalAccessToken: false, channelsOn: true, method: "GET", sameOrigin: true };
+
+  it("lets a signed-in browser admin with channels on read and decide", () => {
+    expect(moderationQueueGate(open)).toBeNull();
+    expect(moderationQueueGate({ ...open, method: "POST" })).toBeNull();
+  });
+
+  it("is not found while channels is off, for reads and decisions alike", () => {
+    expect(moderationQueueGate({ ...open, channelsOn: false })).toBe("not-found");
+    expect(moderationQueueGate({ ...open, channelsOn: false, method: "POST" })).toBe("not-found");
+  });
+
+  it("sends a signed-out request to sign in, and refuses personal access tokens", () => {
+    expect(moderationQueueGate({ ...open, signedIn: false })).toBe("sign-in");
+    expect(moderationQueueGate({ ...open, personalAccessToken: true })).toBe("token");
+    expect(moderationQueueGate({ ...open, personalAccessToken: true, channelsOn: false })).toBe("token");
+  });
+
+  it("refuses a decision posted from another origin, but not a read", () => {
+    expect(moderationQueueGate({ ...open, method: "POST", sameOrigin: false })).toBe("cross-origin");
+    expect(moderationQueueGate({ ...open, sameOrigin: false })).toBeNull();
   });
 });

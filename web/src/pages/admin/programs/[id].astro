@@ -4,7 +4,7 @@ import Button from "@/components/common/Button.astro";
 import Card from "@/components/common/Card.astro";
 import Badge from "@/components/common/Badge.astro";
 import CohortMentors from "@/components/admin/CohortMentors.astro";
-import { cohortMentorModel, teachingRoles } from "@/components/admin/cohort-mentors";
+import { cohortMentorModel, cohortRoleRefusal, teachingRoles } from "@/components/admin/cohort-mentors";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
@@ -126,12 +126,8 @@ if (Astro.request.method === "POST") {
     try {
       const userId = parseProgramStaffUserId(formData.get("userId"));
       const role = parseProgramStaffRole(formData.get("roleName"));
-      if (role === "MENTOR" && !mentorsEnabled) {
-        throw new ProgramManagementError(
-          "INVALID_STAFF_ROLE",
-          "Cohort mentors arrive with channels, which are off for you."
-        );
-      }
+      const refused = cohortRoleRefusal(role, mentorsEnabled);
+      if (refused) throw new ProgramManagementError("INVALID_STAFF_ROLE", refused);
       const statement = buildAddProgramRoleStatement({
         id: createId(),
         programId: id,

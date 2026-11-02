@@ -367,6 +367,14 @@ async function getRecordingDetails(recordingId: string, ctx: ToolContext): Promi
   });
 }
 
+/**
+ * Instructors and TAs are a cohort's public staff. A cohort's invited mentors are named only to
+ * that cohort's own members and to admins: any signed-in person can ask about any program.
+ */
+function isListedStaff(role: string, programId: string, ctx: ToolContext): boolean {
+  return role !== "MENTOR" || ctx.isAdmin || ctx.programIds.includes(programId);
+}
+
 async function getProgramInfo(
   programId: string | null,
   ctx: ToolContext
@@ -409,7 +417,7 @@ async function getProgramInfo(
       endDate: p.endDate ? new Date(p.endDate).toISOString().slice(0, 10) : null,
       curriculum: p.curriculum?.title ?? null,
       curriculumDescription: p.curriculum?.description ?? null,
-      staff: p.programRoles?.map((r) => ({
+      staff: p.programRoles?.filter((r) => isListedStaff(r.name, p.id, ctx)).map((r) => ({
         name: r.user?.name ?? "Unknown",
         role: r.name,
       })),
