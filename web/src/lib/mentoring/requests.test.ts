@@ -122,7 +122,7 @@ describe("asking a mentor for time", () => {
     const s = setup(fixture);
     const refused = await s.call("createMentorRequest", { body: { mentorId: PEOPLE.david, note: "Hi", project: null, format: "WRITTEN_REVIEW" } });
     expect([refused.status, errorOf(refused.body)]).toEqual([403, {
-      code: "forbidden", message: "Asking a mentor for time needs a member profile. Set yours up in Profile, then ask again." }]);
+      code: "forbidden", message: "Asking a mentor for time needs a member profile or a cohort place." }]);
     expect(s.database.prepare("SELECT COUNT(*) AS n FROM mentor_request").get()).toEqual({ n: 0 });
     expect((await s.call("listMentors")).status).toBe(200);
   });

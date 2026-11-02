@@ -104,8 +104,9 @@ interface DirectoryRow extends Record<string, unknown> {
  * SQLite's lower() folds it.
  */
 export async function listMentors(db: D1Database, viewerId: string, query: MentorDirectoryQuery, now: number): Promise<MentorDirectory> {
-  // The spot counts are read once per listed mentor (two index ranges), then filtered and ordered on.
-  const { results } = await db.prepare(`WITH listed AS (
+  // MATERIALIZED, or SQLite inlines the CTE and runs the spot counts again in WHERE and ORDER BY: with
+  // it, two index ranges per listed mentor (http.test.ts asserts the plan).
+  const { results } = await db.prepare(`WITH listed AS MATERIALIZED (
       SELECT p.userId, p.headline, p.bio, p.areas, p.formats, p.monthlyCapacity, ${spotColumns("p.userId", "?2")}
       FROM mentor_profile p
       WHERE ${LISTED} AND p.userId <> ?1

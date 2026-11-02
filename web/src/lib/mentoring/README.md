@@ -167,9 +167,13 @@ otherwise: it waits on the mentor answering.
   no longer PENDING gets 409, whichever move is tried: the end states are final.
 - **Who may ask** (coordinator, 2026-11-02, pending Raph): a member account,
   meaning a community profile or a cohort place. Mentor time is scarce, so an
-  account with neither, such as an institution-only one, gets 403 with neutral
-  copy ("Asking a mentor for time needs a member profile…"); the directory
-  stays open to every signed-in person. Checked inside the INSERT (`IS_MEMBER`).
+  account with neither gets 403 with neutral copy ("Asking a mentor for time
+  needs a member profile or a cohort place."); the directory stays open to
+  every signed-in person. Checked inside the INSERT (`IS_MEMBER`). That refuses
+  institution-only accounts, and also MENTOR-only and ADMIN-only accounts
+  without a profile or cohort place: part of the same decision, pending Raph.
+  The copy does not send anyone to make a profile, because a saved community
+  profile is discoverable to institutions.
 - Asking refuses, in this order: asking yourself (400); attached work that
   cannot be shared, with the channel embeds' rules (400, or 409 for a stale
   revision); no member account (403); a mentor who is not listed (404) or does not offer the format

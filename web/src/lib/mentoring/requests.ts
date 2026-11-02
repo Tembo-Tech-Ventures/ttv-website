@@ -215,7 +215,7 @@ async function createRefusal(ctx: MentoringContext, input: CreateMentorRequest):
     .bind(viewerId, input.mentorId, input.format, monthStart(now), now - DAILY_REQUEST_LIMIT.windowMs).first<CreateRefusalRow>();
   if (!why) throw new Error("Could not read the request conditions.");
   if (!why.member) {
-    return new ChannelError("forbidden", "Asking a mentor for time needs a member profile. Set yours up in Profile, then ask again.", 403);
+    return new ChannelError("forbidden", "Asking a mentor for time needs a member profile or a cohort place.", 403);
   }
   if (!why.listed) return new ChannelError("not_found", "This mentor isn't taking requests right now.", 404);
   if (!why.offersFormat) return new ChannelError("validation", "This mentor doesn't offer that format.", 400);
