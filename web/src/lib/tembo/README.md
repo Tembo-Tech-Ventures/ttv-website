@@ -50,7 +50,14 @@ questions can't both take the last place in the allowance:
 Only the run holding the current claim can post the answer. A run that fails
 (the model, a timeout, the database) turns the ask FAILED and gives the
 question back (`failAsk`), logged as a warning without the question, sources
-or model text; asking again runs and counts it again.
+or model text; asking again runs and counts it again. So does a question closed
+(deleted or hidden) before the run read it. A question closed while the model
+was answering posts nothing and **keeps its count**: otherwise deleting a
+question mid-run would buy another, beyond the allowance.
+
+A mention's run and the post's Clef check run side by side after the response.
+If Clef hides the question after Tembo answered, the answer stays: Clef hides
+only near-certain abuse, and moderators can hide the answer too.
 
 ## Quota (`quota.ts`, `config.ts`)
 
@@ -60,7 +67,8 @@ or model text; asking again runs and counts it again.
 year, no daylight saving), where most members are: the allowance resets at
 21:00 UTC. `tembo_usage` holds one row per person and Nairobi date
 (`YYYY-MM-DD`). Asking again about an accepted question never counts. Saying
-"I don't know" counts; a failed run does not. `/me` reports `temboUsage`
+"I don't know" counts; a failed run does not. Closing a question while Tembo answers it does not give it back (above).
+`/me` reports `temboUsage`
 (`used`, `limit`, `resetsAt`), read only while `tembo_channels` is on.
 
 ## What Tembo sees (`sources.ts`)

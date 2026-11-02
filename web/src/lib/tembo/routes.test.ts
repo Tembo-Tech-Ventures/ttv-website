@@ -449,3 +449,53 @@ describe("masked contact details", () => {
     expect(answers(s)).toMatchObject([{ citations: "[]" }]);
   });
 });
+
+describe("questions closed while Tembo answers", () => {
+  /** A model that runs `during` inside its call, then answers. */
+  const closingModel = (during: () => Promise<void> | void): TemboModel => async () => {
+    await during();
+    return { content: "Pinned [S1].", toolCalls: [], finishReason: "stop" };
+  };
+
+  it("deleting a question mid-run keeps its count, so deleting can't buy questions beyond the allowance", async () => {
+    const s = setup();
+    for (let i = 0; i < 10; i += 1) {
+      const question = s.question("help", `@tembo question ${i}`);
+      const model = closingModel(async () => {
+        expect((await s.call("deleteMessage", { id: question })).status).toBe(200);
+      });
+      expect((await s.ask("help", question, { temboModel: model })).status).toBe(202);
+      await s.afterResponse();
+    }
+    expect(answers(s)).toEqual([]);
+    expect(s.usage()).toEqual([{ day: "2026-11-02", count: 10 }]);
+    expect(errorOf((await s.ask("help", s.question("help"))).body).code).toBe("quota_exhausted");
+  });
+
+  it("a question a moderator hides mid-run gets no answer, and keeps its count", async () => {
+    const s = setup();
+    const question = s.question("help");
+    await s.ask("help", question, { temboModel: closingModel(() => {
+      s.database.prepare("UPDATE channel_message SET moderationState = 'HIDDEN', moderationReasons = '[\"Abuse\"]', hiddenAt = 1 WHERE id = ?").run(question);
+    }) });
+    await s.afterResponse();
+    expect(answers(s)).toEqual([]);
+    expect(s.rows("SELECT status FROM tembo_ask")).toEqual([{ status: "FAILED" }]);
+    expect(s.usage()).toEqual([{ day: "2026-11-02", count: 1 }]);
+  });
+
+  it.each(["deleted", "hidden"] as const)("a question %s before the run reads it gets no answer, no model call, and is given back", async (how) => {
+    const s = setup();
+    const root = s.message("help", { body: "Thread root" });
+    const question = s.question("help", "@tembo in a thread", { parentId: root });
+    const { model, calls } = scriptedModel([{ answer: "Pinned [S1]." }]);
+    await s.ask("help", question, { temboModel: model });
+    // Closing the thread's root closes the question too.
+    s.database.prepare(how === "deleted" ? "UPDATE channel_message SET body = '', deletedAt = 5 WHERE id = ?"
+      : "UPDATE channel_message SET moderationState = 'HIDDEN', moderationReasons = '[\"Abuse\"]', hiddenAt = 5 WHERE id = ?").run(root);
+    await s.afterResponse();
+    expect(calls).toHaveLength(0);
+    expect(answers(s)).toEqual([]);
+    expect(s.usage()).toEqual([{ day: "2026-11-02", count: 0 }]);
+  });
+});

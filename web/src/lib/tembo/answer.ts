@@ -15,8 +15,8 @@ import { clip, conversationSources, SCOPE_WORDS, SourceBook, toolsFor, visibleBo
  * all within TEMBO_CONFIG.runBudgetMs, so the run ends inside the time work after a response gets;
  * the answer is grounded (grounding.ts) and screened by the same detectors as a person's post; then
  * it is posted as a TEMBO message in the asking message's thread, in one batch that holds only while
- * this run still owns the claim and the thread is open. Any failure gives the question back
- * (failAsk) and posts nothing. Clef and attention follow, through `after`.
+ * this run still owns the claim and the thread is open. A failure gives the question back (failAsk)
+ * and posts nothing; a question closed while the model answered posts nothing and keeps its count. Clef and attention follow, through `after`.
  */
 
 export interface AnswerContext {
@@ -37,7 +37,9 @@ export type AnswerResult =
 interface QuestionRow {
   userId: string; status: "PENDING" | "ANSWERED" | "FAILED"; claim: string;
   id: string; parentId: string | null; seq: number; body: string; moderationState: "VISIBLE" | "FLAGGED" | "HIDDEN";
-  moderationReasons: string; deletedAt: number | null; askerName: string | null;
+  moderationReasons: string; askerName: string | null;
+  /** 1 while the question and its thread's root are neither deleted nor hidden (OPEN_QUESTION). */
+  open: number;
   channelId: string; kind: ChannelKind; slug: string; programId: string | null;
 }
 
@@ -57,8 +59,8 @@ Rules:
 }
 
 async function readQuestion(db: D1Database, messageId: string): Promise<QuestionRow | null> {
-  return db.prepare(`SELECT a.userId, a.status, a.claim, q.id, q.parentId, q.seq, q.body, q.moderationState, q.moderationReasons, q.deletedAt,
-      u.name AS askerName, c.id AS channelId, c.kind, c.slug, c.programId
+  return db.prepare(`SELECT a.userId, a.status, a.claim, q.id, q.parentId, q.seq, q.body, q.moderationState, q.moderationReasons,
+      ${OPEN_QUESTION} AS open, u.name AS askerName, c.id AS channelId, c.kind, c.slug, c.programId
     FROM tembo_ask a JOIN channel_message q ON q.id = a.messageId JOIN channel c ON c.id = q.channelId
     LEFT JOIN "user" u ON u.id = a.userId WHERE a.messageId = ?1`).bind(messageId).first<QuestionRow>();
 }
@@ -142,8 +144,9 @@ export async function answerAsk(ctx: AnswerContext, { messageId, claim }: { mess
     const question = await readQuestion(ctx.db, messageId);
     if (!question || question.status !== "PENDING" || question.claim !== claim) return { status: "lost" };
     const channel: TemboChannel = { id: question.channelId, kind: question.kind, slug: question.slug, programId: question.programId };
-    if (question.deletedAt !== null || question.moderationState === "HIDDEN") {
-      await failAsk(ctx.db, { messageId, claim, now: clock() });
+    if (question.open !== 1) {
+      // Closed before any model call: nothing was spent, so the question is given back.
+      await failAsk(ctx.db, { messageId, claim, now: clock(), refund: true });
       return { status: "lost" };
     }
     const sources: SourceContext = { db: ctx.db, book: new SourceBook(), channel };
@@ -157,12 +160,14 @@ export async function answerAsk(ctx: AnswerContext, { messageId, claim }: { mess
     const grounded = groundAnswer(await generate(ctx, sources, messages, started), sources.book, channel.kind);
     const posted = await post(ctx, question, claim, grounded, clock());
     if (!posted) {
-      await failAsk(ctx.db, { messageId, claim, now: clock() });
+      // Closed (deleted or hidden) or claimed again while the model answered: the calls were spent,
+      // so the question keeps its count.
+      await failAsk(ctx.db, { messageId, claim, now: clock(), refund: false });
       return { status: "lost" };
     }
     return { status: "answered", ...posted, body: grounded.body, channel, grounded: grounded.grounded };
   } catch (error) {
-    try { await failAsk(ctx.db, { messageId, claim, now: clock() }); } catch { /* the stale claim lets a later ask retry */ }
+    try { await failAsk(ctx.db, { messageId, claim, now: clock(), refund: true }); } catch { /* the stale claim lets a later ask retry */ }
     return { status: "failed", error };
   }
 }

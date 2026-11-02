@@ -75,17 +75,22 @@ export async function acceptAsk(db: D1Database, { messageId, channelId, userId, 
 }
 
 /**
- * A run that could not answer: the ask turns FAILED under a new claim (so a second call refunds
- * nothing), and the question is given back to the asker's allowance for the day it was counted.
+ * A run that did not answer: the ask turns FAILED under a new claim (so a second call changes
+ * nothing). With `refund`, the question is also given back to the asker's allowance for the day it
+ * was counted: only when no model call was spent on it (closed before the run read it), or the run
+ * itself failed (the model, a timeout, the database). A question its asker deleted, or a moderator
+ * hid, while the model was answering keeps its count, so deleting a question can't buy another.
  * Nothing changes when the run no longer holds the claim. Returns whether it did.
  */
-export async function failAsk(db: D1Database, { messageId, claim, now }: { messageId: string; claim: string; now: number }): Promise<boolean> {
+export async function failAsk(
+  db: D1Database, { messageId, claim, now, refund }: { messageId: string; claim: string; now: number; refund: boolean },
+): Promise<boolean> {
   const failed = createId();
   const [update] = await db.batch([
     db.prepare(`UPDATE tembo_ask SET status = 'FAILED', claim = ?3, updatedAt = max(updatedAt, ?4)
       WHERE messageId = ?1 AND claim = ?2 AND status = 'PENDING' RETURNING messageId`).bind(messageId, claim, failed, now),
-    db.prepare(`UPDATE tembo_usage SET count = count - 1 WHERE count > 0 AND (userId, day) IN
-      (SELECT userId, day FROM tembo_ask WHERE messageId = ?1 AND claim = ?2)`).bind(messageId, failed),
+    ...refund ? [db.prepare(`UPDATE tembo_usage SET count = count - 1 WHERE count > 0 AND (userId, day) IN
+      (SELECT userId, day FROM tembo_ask WHERE messageId = ?1 AND claim = ?2)`).bind(messageId, failed)] : [],
   ]);
   return (update?.results.length ?? 0) === 1;
 }
