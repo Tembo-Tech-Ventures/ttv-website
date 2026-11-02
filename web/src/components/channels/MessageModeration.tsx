@@ -86,7 +86,8 @@ export function ModerationNote({ message, viewerId, onAskReview }: { message: Me
   // The server says so on every read (B-2.5), so it survives a reload; this visit's request shows at once.
   const asked = message.moderation?.reviewRequested === true || context.reviewRequested.has(message.id);
   return (
-    <div className="channel-moderation" data-moderation={notice.state}>
+    // Focusable from script only: where focus lands when a moderator's hide leaves the message with no actions.
+    <div className="channel-moderation" data-moderation={notice.state} tabIndex={-1}>
       <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
       <div className="min-w-0">
         <p>

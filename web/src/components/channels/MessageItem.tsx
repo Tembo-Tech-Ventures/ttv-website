@@ -213,12 +213,16 @@ function MessageItem({
   const can = { ...permissions(message, viewerId, actions, variant, onOpenThread !== undefined), ...moderationRights(message, viewerId, moderation) };
 
   // Where focus goes once the message is back to reading, applied after that render commits: the
-  // actions button, or a part of the moderation note. Falls back to the actions button.
+  // actions button, or a part of the moderation note. Falls back to the actions button, and when the
+  // message has none left (a reply a mentor just hid), to its moderation note. Then brought clear of
+  // "Jump to latest", which can float over the end of the list (scroll-margin in channels.css).
   const [returnFocus, setReturnFocus] = useState<ReturnFocus | null>(null);
   useEffect(() => {
     if (returnFocus === null || mode !== "read") return;
     const target = returnFocus === "menu" ? null : article.current?.querySelector<HTMLElement>(returnFocus);
-    (target ?? menuButton.current)?.focus();
+    const focused = target ?? menuButton.current ?? article.current?.querySelector<HTMLElement>("[data-moderation]");
+    focused?.focus({ preventScroll: true });
+    focused?.scrollIntoView({ block: "nearest" });
     setReturnFocus(null);
   }, [returnFocus, mode]);
 

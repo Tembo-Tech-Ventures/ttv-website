@@ -192,6 +192,42 @@ test.describe("moderation in a channel", () => {
     expect(await records(page)).toEqual([{ kind: "report", messageId: FIRST_PR, reason: "Spam or unrelated promotion" }]);
   });
 
+  for (const viewport of [PHONE, { width: 1024, height: 768 }, DESKTOP]) {
+    test(`a form opened near the end is never under "Jump to latest" at ${viewport.width}px`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await open(page, harness({ persona: "david" }));
+      // Brian's is the second newest: revealing its form leaves the list short of its end, so the pill shows.
+      await actions(page, FIRST_PR).click();
+      await page.getByRole("menuitem", { name: "Hide from members…" }).click();
+      const form = page.locator("[data-panel=hide]");
+      await expect(form).toBeVisible();
+      // Once it has unfolded (it is revealed again then).
+      await form.evaluate((el) => Promise.all(el.getAnimations().map((animation) => animation.finished)));
+      for (const name of ["Cancel", "Hide message"]) {
+        const button = form.getByRole("button", { name });
+        await expect.poll(() => button.evaluate((el) => {
+          const box = el.getBoundingClientRect();
+          // Its edges, inset past the rounded corners (hit testing follows border-radius).
+          const [midX, midY] = [(box.left + box.right) / 2, (box.top + box.bottom) / 2];
+          const edges = [[box.left + 8, midY], [box.right - 8, midY], [midX, box.top + 3], [midX, box.bottom - 3]];
+          return edges.every(([x, y]) => el.contains(document.elementFromPoint(x, y)));
+        }), `${name} is uncovered`).toBe(true);
+      }
+    });
+  }
+
+  test("a mentor who hides a thread reply keeps focus on it, at its moderation note", async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await open(page, harness({ persona: "david", thread: "s00000000000000000000401" }));
+    const reply = page.locator('[data-variant="thread"][data-message="s00000000000000000000404"]');
+    await reply.getByRole("button", { name: /^Actions for/ }).click();
+    await page.getByRole("menuitem", { name: "Hide from members…" }).click();
+    const form = reply.locator("[data-panel=hide]");
+    await form.getByLabel("Why are you hiding it?").fill("Off-topic for this thread");
+    await form.getByRole("button", { name: "Hide message" }).click();
+    await expect(reply.locator("[data-moderation=HIDDEN]")).toBeFocused();
+  });
+
   test("a refused hide says why, keeps the reason, and leaves the message as it was", async ({ page }) => {
     await page.setViewportSize(DESKTOP);
     await open(page, harness({ persona: "david" }));
