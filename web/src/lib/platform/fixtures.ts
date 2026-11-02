@@ -307,16 +307,16 @@ export const searchResults: SearchResults = {
 export const mentors: MentorDirectory = {
   items: [
     { person: people.david, headline: "Backend engineer · fintech", areas: ["Code review", "API design"],
-      bio: "Reviews APIs and data models. Cares about what happens when those things fail.",
+      formats: ["WRITTEN_REVIEW", "CALL_30_MIN"], bio: "Reviews APIs and data models. Cares about what happens when those things fail.",
       capacity: { used: 1, limit: 3, nextOpeningAt: null }, paused: false },
     { person: people.mercy, headline: "Product designer", areas: ["Portfolios", "UX critique"],
-      bio: "Portfolio reviews and UX critique for builders who design their own screens.",
+      formats: ["WRITTEN_REVIEW", "QUICK_QUESTION"], bio: "Portfolio reviews and UX critique for builders who design their own screens.",
       capacity: { used: 2, limit: 2, nextOpeningAt: Date.parse("2026-11-30T21:00:00Z") }, paused: false },
     { person: people.joseph, headline: "Engineering manager", areas: ["Career", "Interviews"],
-      bio: "Career conversations, interviewing and the first months in a new job.",
+      formats: ["CALL_30_MIN", "QUICK_QUESTION"], bio: "Career conversations, interviewing and the first months in a new job.",
       capacity: { used: 1, limit: 2, nextOpeningAt: null }, paused: false },
     { person: people.samuel, headline: "Android engineer", areas: ["Mobile", "Kotlin"],
-      bio: "Kotlin, offline-first apps and shipping to low-end devices.",
+      formats: ["WRITTEN_REVIEW", "CALL_30_MIN", "QUICK_QUESTION"], bio: "Kotlin, offline-first apps and shipping to low-end devices.",
       capacity: { used: 0, limit: 3, nextOpeningAt: null }, paused: false },
   ],
 };
@@ -324,7 +324,7 @@ export const pendingMentorRequest: MentorRequest = {
   id: fixtureIds.pendingRequest, requester: people.wanjiku, mentor: people.david,
   note: "I rebuilt my bus fare splitter after Session 9. Could you check how I handle a payment callback that arrives twice?",
   project: projects.fareSplitter, format: "WRITTEN_REVIEW", status: "PENDING", channelId: null, redirectedTo: null,
-  createdAt: FIXTURE_NOW - 120 * minute, updatedAt: FIXTURE_NOW - 120 * minute,
+  responseNote: null, createdAt: FIXTURE_NOW - 120 * minute, updatedAt: FIXTURE_NOW - 120 * minute,
 };
 // An earlier, separate request for the attention panel; not a duplicate pending request.
 export const acceptedMentorRequest: MentorRequest = {
@@ -337,8 +337,8 @@ export const brianMentorRequest: MentorRequest = {
   createdAt: FIXTURE_NOW - day, updatedAt: FIXTURE_NOW - day,
 };
 export const availability: MentorAvailability = {
-  monthlyCapacity: 3, areas: ["Code review", "API design"], bio: mentors.items[0].bio,
-  paused: false, capacity: { used: 1, limit: 3, nextOpeningAt: null },
+  headline: mentors.items[0].headline, monthlyCapacity: 3, areas: ["Code review", "API design"],
+  formats: mentors.items[0].formats, bio: mentors.items[0].bio, paused: false, listed: true, capacity: { used: 1, limit: 3, nextOpeningAt: null },
 };
 export const moderationQueue: ModerationQueue = {
   nextCursor: null,

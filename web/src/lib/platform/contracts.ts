@@ -407,45 +407,106 @@ export type TemboFeedbackKind = z.infer<typeof TemboFeedbackKind>;
 export const TemboFeedback = z.strictObject({ feedback: TemboFeedbackKind });
 export type TemboFeedback = z.infer<typeof TemboFeedback>;
 
+/**
+ * Mentor connections (B-4.1; src/lib/mentoring/README.md). A month is Africa/Nairobi's calendar month.
+ * A spot is held by each PENDING request to the mentor and each request they ACCEPTED this month, so
+ * used counts both and a full mentor takes no new requests. nextOpeningAt is the next Nairobi month's
+ * start when the turn of the month frees a spot (pending requests alone leave room then), else null.
+ */
 export const MentorCapacity = z.object({ used: Count, limit: Count, nextOpeningAt: Timestamp.nullable() });
 export type MentorCapacity = z.infer<typeof MentorCapacity>;
+export const MentorRequestFormat = z.enum(["WRITTEN_REVIEW", "CALL_30_MIN", "QUICK_QUESTION"]);
+export type MentorRequestFormat = z.infer<typeof MentorRequestFormat>;
+/** The formats a mentor offers: at least one, each once. */
+export const MentorFormats = z.array(MentorRequestFormat).min(1).max(MentorRequestFormat.options.length)
+  .refine((formats) => new Set(formats).size === formats.length, "Each format can be listed once");
+export type MentorFormats = z.infer<typeof MentorFormats>;
+/** An area a mentor helps with, as they write it ("Code review"). Filters match it ignoring case. */
+export const MentorArea = NonEmptyText.max(40);
+export type MentorArea = z.infer<typeof MentorArea>;
+/**
+ * A listed mentor: the MENTOR role, availability saved, not paused, a monthly capacity above zero.
+ * Full mentors stay listed with their capacity, so the directory can say when the next opening is.
+ * paused is always false here; it is kept for the shape the directory was designed with.
+ */
 export const MentorDirectoryItem = z.object({
-  person: PersonSummary, headline: NonEmptyText, areas: z.array(NonEmptyText), bio: z.string(),
+  person: PersonSummary, headline: NonEmptyText, areas: z.array(MentorArea), formats: MentorFormats, bio: z.string(),
   capacity: MentorCapacity, paused: z.boolean(),
 });
 export type MentorDirectoryItem = z.infer<typeof MentorDirectoryItem>;
-export const MentorDirectoryQuery = z.strictObject({ area: NonEmptyText.optional(), available: z.boolean().optional() });
+/**
+ * area: one of the mentor's areas, ignoring case. format: mentors who offer it. available: true lists
+ * only mentors with a spot open now; false or absent lists them all. A query string carries it as text.
+ */
+export const MentorDirectoryQuery = z.strictObject({
+  area: MentorArea.optional(), format: MentorRequestFormat.optional(),
+  available: z.union([z.boolean(), z.enum(["true", "false"]).transform((value) => value === "true")]).optional(),
+});
 export type MentorDirectoryQuery = z.infer<typeof MentorDirectoryQuery>;
 export const MentorDirectory = z.object({ items: z.array(MentorDirectoryItem) });
 export type MentorDirectory = z.infer<typeof MentorDirectory>;
-export const MentorRequestFormat = z.enum(["WRITTEN_REVIEW", "CALL_30_MIN", "QUICK_QUESTION"]);
-export type MentorRequestFormat = z.infer<typeof MentorRequestFormat>;
 export const MentorRequestStatus = z.enum(["PENDING", "ACCEPTED", "REDIRECTED", "DECLINED", "WITHDRAWN"]);
 export type MentorRequestStatus = z.infer<typeof MentorRequestStatus>;
+/** What the person asking writes, and what a mentor may write back when they redirect or decline. */
+export const MentorRequestNote = NonEmptyText.max(2000);
+export type MentorRequestNote = z.infer<typeof MentorRequestNote>;
+/** project: the caller's own published project at its current revision, as the channel attach tools offer it. */
 export const CreateMentorRequest = z.strictObject({
-  mentorId: Id, note: NonEmptyText.max(2000), project: ProjectEmbedRef.nullable(), format: MentorRequestFormat,
+  mentorId: Id, note: MentorRequestNote, project: ProjectEmbedRef.nullable(), format: MentorRequestFormat,
 });
 export type CreateMentorRequest = z.infer<typeof CreateMentorRequest>;
+/** The attached work as this reader sees it, checked again on every read, like a message's embed. */
+export const MentorRequestProject = z.discriminatedUnion("type", [ProjectEmbed, UnavailableEmbed]);
+export type MentorRequestProject = z.infer<typeof MentorRequestProject>;
+/**
+ * Seen only by the person asking and the mentor asked. note: the mentor sees contact details in it
+ * masked (MASKED_CONTACT), as in a channel. responseNote: what the mentor wrote when redirecting or
+ * declining. redirectedTo: null on a redirected request only once the suggested mentor's account is gone.
+ */
 export const MentorRequest = z.object({
-  id: Id, requester: PersonSummary, mentor: PersonSummary, note: NonEmptyText,
-  project: ProjectEmbed.nullable(), format: MentorRequestFormat, status: MentorRequestStatus,
-  channelId: Id.nullable(), redirectedTo: PersonSummary.nullable(), createdAt: Timestamp, updatedAt: Timestamp,
+  id: Id, requester: PersonSummary, mentor: PersonSummary,
+  note: z.string().min(1).max(2000 + MAX_CONTACT_MASKS * MASKED_CONTACT.length),
+  project: MentorRequestProject.nullable(), format: MentorRequestFormat, status: MentorRequestStatus,
+  channelId: Id.nullable(), redirectedTo: PersonSummary.nullable(), responseNote: MentorRequestNote.nullable(),
+  createdAt: Timestamp, updatedAt: Timestamp,
 }).refine((r) => (r.status === "ACCEPTED") === (r.channelId !== null), "Only accepted requests have a conversation")
-  .refine((r) => (r.status === "REDIRECTED") === (r.redirectedTo !== null), "Only redirected requests have a target mentor");
+  .refine((r) => r.redirectedTo === null || r.status === "REDIRECTED", "Only redirected requests have a target mentor")
+  .refine((r) => r.responseNote === null || r.status === "REDIRECTED" || r.status === "DECLINED",
+    "Only redirected or declined requests carry the mentor's note");
 export type MentorRequest = z.infer<typeof MentorRequest>;
+/** as: the requests the caller sent (requester) or received (mentor). Newest first. */
+export const MentorRequestListQuery = z.strictObject({
+  as: z.enum(["requester", "mentor"]), status: MentorRequestStatus.optional(), cursor: Cursor.optional(),
+});
+export type MentorRequestListQuery = z.infer<typeof MentorRequestListQuery>;
+export const MentorRequestList = z.object({ items: z.array(MentorRequest), nextCursor: Cursor.nullable() });
+export type MentorRequestList = z.infer<typeof MentorRequestList>;
 export const AcceptMentorRequest = z.strictObject({});
 export type AcceptMentorRequest = z.infer<typeof AcceptMentorRequest>;
-export const RedirectMentorRequest = z.strictObject({ mentorId: Id, note: NonEmptyText.max(2000) });
+/** Suggest another listed mentor; the person asking decides whether to ask them. */
+export const RedirectMentorRequest = z.strictObject({ mentorId: Id, note: MentorRequestNote.optional() });
 export type RedirectMentorRequest = z.infer<typeof RedirectMentorRequest>;
-export const DeclineMentorRequest = z.strictObject({ note: NonEmptyText.max(2000) });
+/** "Not this month": no note needed, and it counts against nobody. */
+export const DeclineMentorRequest = z.strictObject({ note: MentorRequestNote.optional() });
 export type DeclineMentorRequest = z.infer<typeof DeclineMentorRequest>;
 export const WithdrawMentorRequest = z.strictObject({});
 export type WithdrawMentorRequest = z.infer<typeof WithdrawMentorRequest>;
+/** The most requests a mentor can take in one month. */
+export const MAX_MONTHLY_CAPACITY = 20;
 export const UpdateMentorAvailability = z.strictObject({
-  monthlyCapacity: Count, areas: z.array(NonEmptyText).max(20), bio: z.string().max(2000), paused: z.boolean(),
+  headline: NonEmptyText.max(120), monthlyCapacity: Count.max(MAX_MONTHLY_CAPACITY),
+  areas: z.array(MentorArea).max(20).refine((areas) => new Set(areas.map((a) => a.trim().toLowerCase())).size === areas.length,
+    "Each area can be listed once"),
+  formats: MentorFormats, bio: z.string().max(2000), paused: z.boolean(),
 });
 export type UpdateMentorAvailability = z.infer<typeof UpdateMentorAvailability>;
-export const MentorAvailability = UpdateMentorAvailability.extend({ capacity: MentorCapacity });
+/**
+ * The caller's own availability. Before they first save it: an empty headline, no areas, every format,
+ * capacity 0 and listed false. listed: whether the directory shows them now (MentorDirectoryItem).
+ */
+export const MentorAvailability = UpdateMentorAvailability.extend({
+  headline: z.string().max(120), listed: z.boolean(), capacity: MentorCapacity,
+});
 export type MentorAvailability = z.infer<typeof MentorAvailability>;
 
 /**
@@ -600,6 +661,8 @@ export const ROUTES = {
   askTembo: defineRoute({ method: "POST", path: "/api/channels/:id/tembo", params: IdParams, body: TemboAsk, response: TemboResponse, idempotent: true }),
   temboFeedback: defineRoute({ method: "POST", path: "/api/messages/:id/tembo-feedback", params: IdParams, body: TemboFeedback, response: Success, idempotent: true }),
   listMentors: defineRoute({ method: "GET", path: "/api/mentors", query: MentorDirectoryQuery, response: MentorDirectory, idempotent: true }),
+  listMentorRequests: defineRoute({ method: "GET", path: "/api/mentor-requests", query: MentorRequestListQuery, response: MentorRequestList, idempotent: true }),
+  getMentorRequest: defineRoute({ method: "GET", path: "/api/mentor-requests/:id", params: IdParams, response: MentorRequest, idempotent: true }),
   createMentorRequest: defineRoute({ method: "POST", path: "/api/mentor-requests", body: CreateMentorRequest, response: MentorRequest, idempotent: false }),
   acceptMentorRequest: defineRoute({ method: "POST", path: "/api/mentor-requests/:id/accept", params: IdParams, body: AcceptMentorRequest, response: MentorRequest, idempotent: false }),
   redirectMentorRequest: defineRoute({ method: "POST", path: "/api/mentor-requests/:id/redirect", params: IdParams, body: RedirectMentorRequest, response: MentorRequest, idempotent: false }),
