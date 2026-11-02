@@ -23,6 +23,8 @@ function profile(row: ProfileRow): CommunityProfile {
 }
 /** How many shared contributions the Confirm page lists, newest first. */
 const MENTORSHIP_WINDOW = 50;
+/** How many changed contributions "Worth another look" lists at once. */
+export const WORTH_ANOTHER_LOOK_LIMIT = 20;
 const PROFILE_SELECT = `SELECT u.id AS userId,u.name,u.image,p.headline,p.bio,p.skills,p.opportunityGoals,p.version,p.updatedAt
   FROM user u LEFT JOIN communityProfile p ON p.userId=u.id`;
 
@@ -160,6 +162,28 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
         WHERE j.visibility='institution' AND c.journeyVersion=j.version AND j.userId IN (SELECT value FROM json_each(?))${mentor.clause} ORDER BY c.id LIMIT 4001`).bind(ids,...mentor.values).all<CommunityConfirmation>();
       if (entries.length > 2000 || confirmations.length > 4000) throw new CommunityError("Discovery evidence capacity reached.",503);
       return results.map(row => ({profile:profile(row),entries:entries.filter(e=>e.userId===row.userId).map(e=>({...e,confirmations:confirmations.filter(c=>c.journeyId===e.id)}))}));
+    },
+    /**
+     * "Worth another look" (B-4.2; src/lib/mentoring/README.md): shared contributions this mentor
+     * confirmed at an earlier revision that have changed since, so the confirmation no longer covers
+     * the current one. The Confirm page's checks (mentor or admin roles, someone else's shared work,
+     * the synthetic-identity scopes), minus what the mentor has already confirmed or set aside at the
+     * current revision. Newest change first, at most WORTH_ANOTHER_LOOK_LIMIT. One read after the roles.
+     */
+    async listWorthAnotherLook() {
+      await requireMentorReview();
+      const scope = fixtureScope("j.userId");
+      const { results } = await db.prepare(`SELECT j.id AS journeyId,j.userId,u.name AS memberName,u.image AS memberImage,j.title,
+          j.version AS currentVersion,MAX(c.journeyVersion) AS confirmedVersion
+        FROM communityConfirmation c JOIN communityJourney j ON j.id=c.journeyId JOIN user u ON u.id=j.userId
+        WHERE c.mentorId=? AND j.visibility='institution' AND j.userId<>?${scope.clause}
+          AND NOT EXISTS (SELECT 1 FROM communitySetAside s WHERE s.mentorId=? AND s.journeyId=j.id AND s.journeyVersion=j.version)
+        GROUP BY j.id HAVING MAX(c.journeyVersion)<j.version
+        ORDER BY j.updatedAt DESC,j.id DESC LIMIT ${WORTH_ANOTHER_LOOK_LIMIT}`)
+        .bind(actorId,actorId,...scope.values,actorId)
+        .all<{ journeyId: string; userId: string; memberName: string | null; memberImage: string | null; title: string; currentVersion: number; confirmedVersion: number }>();
+      await Promise.all(results.map(row=>requireFixtureTarget(row.userId)));
+      return results;
     },
     async listMentorship() {
       const scope = fixtureScope("j.userId");

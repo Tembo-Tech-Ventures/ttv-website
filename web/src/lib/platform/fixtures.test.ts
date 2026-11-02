@@ -19,7 +19,7 @@ const schemas = {
   temboPending: C.TemboResponse, temboAnswer: C.TemboResponse, flagsAdmin: C.FlagsAdmin,
   accessRequests: z.record(z.string(), C.AccessRequestSummary), onboardingByPersona: z.record(z.string(), C.OnboardingState),
   adminAccessRequests: z.record(z.string(), C.AdminAccessRequestList), accessAttention: z.record(z.string(), C.AttentionList),
-  conductAcknowledgements: z.record(z.string(), C.ConductAcknowledgement),
+  conductAcknowledgements: z.record(z.string(), C.ConductAcknowledgement), worthAnotherLook: C.WorthAnotherLook,
 } satisfies Record<keyof typeof F, z.ZodType>;
 
 describe("synthetic fixtures", () => {

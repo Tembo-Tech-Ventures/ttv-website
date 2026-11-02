@@ -12,6 +12,7 @@ import {
 import { requireFlag } from "@/lib/platform/server/flags";
 import { platformError, platformJson } from "@/lib/platform/server/http";
 import { readBoundedJson, RequestJsonError } from "@/lib/request-json";
+import { worthAnotherLook } from "./another-look";
 import { getAvailability, listMentors, updateAvailability } from "./profiles";
 import {
   acceptRequest, createRequest, declineRequest, getRequest, listRequests, redirectRequest, withdrawRequest, type MentoringContext,
@@ -30,14 +31,17 @@ type Env = Pick<Cloudflare.Env, "DB" | "DEPLOYMENT_ENVIRONMENT" | "PLATFORM_FLAG
 type Context = Pick<APIContext, "request" | "locals" | "params">;
 export type MentoringOperation = Extract<keyof typeof ROUTES,
   "listMentors" | "listMentorRequests" | "getMentorRequest" | "createMentorRequest" | "acceptMentorRequest"
-  | "redirectMentorRequest" | "declineMentorRequest" | "withdrawMentorRequest" | "getMentorAvailability" | "updateMentorAvailability">;
+  | "redirectMentorRequest" | "declineMentorRequest" | "withdrawMentorRequest" | "getMentorAvailability" | "updateMentorAvailability"
+  | "getWorthAnotherLook">;
 
 /** Test seams: the clock, the code of conduct version, work after the response, and Clef's time limit. */
 export interface MentoringRequestOptions {
   now?: () => number; conductVersion?: number; defer?: (task: () => Promise<void>) => void; clefTimeoutMs?: number;
 }
 
-const READS: ReadonlySet<MentoringOperation> = new Set(["listMentors", "listMentorRequests", "getMentorRequest", "getMentorAvailability"]);
+const READS: ReadonlySet<MentoringOperation> = new Set([
+  "listMentors", "listMentorRequests", "getMentorRequest", "getMentorAvailability", "getWorthAnotherLook",
+]);
 /** A note of up to 2,000 characters of up to 4 bytes, JSON-escaped, with the other fields. */
 const BODY_BYTES = 16_000;
 
@@ -117,6 +121,8 @@ async function handle(operation: MentoringOperation, context: Context, env: Env,
       return platformJson(ROUTES.listMentorRequests.response.parse(await listRequests(ctx, readQuery(request, MentorRequestListQuery))));
     case "getMentorRequest":
       return platformJson(ROUTES.getMentorRequest.response.parse(await getRequest(ctx, id())));
+    case "getWorthAnotherLook":
+      return platformJson(ROUTES.getWorthAnotherLook.response.parse(await worthAnotherLook({ db: env.DB, env, locals: context.locals })));
     case "getMentorAvailability":
       return platformJson(ROUTES.getMentorAvailability.response.parse(await getAvailability(env.DB, userId, ctx.now)));
     case "updateMentorAvailability": {

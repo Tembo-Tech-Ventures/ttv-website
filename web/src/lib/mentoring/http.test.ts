@@ -34,6 +34,7 @@ async function everyRoute(s: MentoringFixture) {
     ["acceptMentorRequest", { id, body: {}, user: PEOPLE.david }], ["redirectMentorRequest", { id, body: { mentorId: PEOPLE.joseph }, user: PEOPLE.david }],
     ["declineMentorRequest", { id, body: {}, user: PEOPLE.david }], ["withdrawMentorRequest", { id, body: {} }],
     ["getMentorAvailability", { user: PEOPLE.david }], ["updateMentorAvailability", { body: AVAILABILITY, user: PEOPLE.david }],
+    ["getWorthAnotherLook", { user: PEOPLE.david }],
   ] as const satisfies readonly (readonly [MentoringOperation, Parameters<MentoringFixture["call"]>[1]])[];
 }
 
