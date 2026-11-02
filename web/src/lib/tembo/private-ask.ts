@@ -16,6 +16,16 @@ export function privateAskScope({ cohortIds, isAdmin }: Pick<PlatformCapabilitie
   return cohortIds.length > 0 ? "COHORTS" : "NONE";
 }
 
+/**
+ * What Tembo sees here, in the words the page shows the person (QA3-03): the same scope as the
+ * prompt's, said to them. Client-safe: no server imports.
+ */
+export const PRIVATE_ASK_SEES: Readonly<Record<PrivateAskScope, string>> = Object.freeze({
+  COHORTS: "your cohorts' recorded sessions, your own application and TTV's programs",
+  ALL_COHORTS: "every cohort's recorded sessions (you're TTV staff), your own application and TTV's programs",
+  NONE: "your own application and TTV's programs. Session recordings open once you have a place in a cohort",
+});
+
 /** Whether the session recording tools are offered. */
 export const readsRecordings = (scope: PrivateAskScope) => scope !== "NONE";
 

@@ -3,6 +3,7 @@ import { VIEWER } from "@/lib/channels/test-support";
 import { ErrorEnvelope, MASKED_CONTACT, Message, MessageList, ROUTES, TemboResponse } from "@/lib/platform/contracts";
 import { TEMBO_CONFIG } from "./config";
 import { refusal } from "./grounding";
+import { QUESTION_MARK } from "./sources";
 import { getMe } from "@/lib/platform/server/me";
 import { capabilitiesFor } from "@/lib/platform/server/capabilities";
 import { listAttention } from "@/lib/attention/service";
@@ -62,7 +63,7 @@ describe("asking Tembo", () => {
     const [answer] = answers(s);
     expect(answer).toMatchObject({ parentId: question, body: "They are pinned at the top of this channel [1].", moderationState: "VISIBLE" });
     expect(JSON.parse(answer!.citations)).toEqual([{
-      type: "message", messageId: earlier, channelId: s.channel("help"), title: "Message from Otieno Ouma",
+      type: "message", messageId: earlier, channelId: s.channel("help"), title: "Otieno Ouma: “Budget templates are pinned at the top of this channel.”",
       href: `/dashboard/community/c/help?message=${earlier}`,
     }]);
 
@@ -404,6 +405,126 @@ describe("/me", () => {
     const off = await getMe({ db: s.d1, env, locals: { ...(locals as object) } as never });
     expect(off.temboUsage).toEqual({ used: 0, limit: 10, resetsAt: temboDayEnd(NOW) });
     expect(prepare.mock.calls.some(([query]) => query.includes("tembo_usage"))).toBe(false);
+  });
+
+  it("says Tembo is off, and reads no usage, while channels is off, as every Tembo route is then (QA3-17)", async () => {
+    const s = setup();
+    const locals = { user: { id: VIEWER, name: "Wanjiku Njeri", image: null }, isAdmin: false, personalAccessToken: null } as never;
+    const { env } = databaseFlags(s, { channels: "OFF" });
+    const prepare = vi.spyOn(s.d1, "prepare");
+    const me = await getMe({ db: s.d1, env, locals });
+    expect(me.flags).toMatchObject({ channels: false, tembo_channels: false });
+    expect(prepare.mock.calls.some(([query]) => query.includes("tembo_usage"))).toBe(false);
+    expect((await s.ask("help", s.question("help"), { env })).status).toBe(404);
+  });
+});
+
+describe("what an answer can cite (QA-3)", () => {
+  /** The results of every tool call the model made, parsed. */
+  const toolResults = (calls: ReturnType<typeof scriptedModel>["calls"]) => calls.flatMap((call) => call.messages)
+    .flatMap((message) => message.role === "tool" ? [JSON.parse(message.content) as { results: { source: string; title: string; text: string }[] }] : []);
+  const answerTo = (s: TemboFixture, question: string) => answers(s).filter((answer) => answer.parentId === question);
+
+  it("never offers the question it answers, anyone's question to Tembo or its own answers as sources, so it still doesn't know (QA3-01)", async () => {
+    const s = setup();
+    // Asked about without a mention (the API allows it), then someone else's @tembo question and Tembo's answer to it.
+    const viaApi = s.question("help", "Mongolia trip visas, anyone?");
+    const theirs = s.message("help", { body: "@tembo when is the Mongolia trip?" });
+    s.message("help", { tembo: true, parentId: theirs, body: "TEMBOANSWER Mongolia trip in March" });
+    const { model, calls, seen } = scriptedModel([
+      { answer: NO_TAGS },
+      { search: [["search_channel", "mongolia trip"]] },
+      { answer: "The Mongolia trip is in March [S1]. [S2]" },
+    ]);
+    await s.ask("help", viaApi, { temboModel: model });
+    await s.afterResponse();
+    const question = s.question("help", "@tembo is the Mongolia trip in March?");
+    await s.ask("help", question, { temboModel: model });
+    await s.afterResponse();
+
+    expect(toolResults(calls.slice(1))).toEqual([{ results: [], note: expect.any(String) }]);
+    // Earlier questions are context, under no tag; Tembo's answers are never read.
+    const conversation = calls[1]!.messages[1]!.content as string;
+    expect(conversation).toContain(`${QUESTION_MARK} Otieno Ouma: @tembo when is the Mongolia trip?`);
+    expect(conversation).toContain(`${QUESTION_MARK} Wanjiku Njeri: Mongolia trip visas, anyone?`);
+    expect(conversation).not.toMatch(/\[S\d+\]/);
+    expect(seen()).not.toContain("TEMBOANSWER");
+    expect(answerTo(s, question)).toMatchObject([{ body: refusal("COMMUNITY"), citations: "[]" }]);
+  });
+
+  it("still cites a person's message that answers it, by the words that tell two of theirs apart (QA3-01, QA3-02)", async () => {
+    const s = setup();
+    const first = s.message("help", { body: "The Mongolia trip leaves on 3 March from Nairobi, with a stop in Doha on the way there." });
+    const second = s.message("help", { body: "Mongolia trip packing list: boots." });
+    const question = s.question("help", "@tembo when does the Mongolia trip leave?");
+    const { model } = scriptedModel([{ search: [["search_channel", "mongolia trip"]] }, { answer: "It leaves on 3 March [S1]. Bring boots [S2]." }]);
+    await s.ask("help", question, { temboModel: model });
+    await s.afterResponse();
+    const [answer] = answerTo(s, question);
+    expect(answer!.body).toBe("It leaves on 3 March [1]. Bring boots [2].");
+    expect((JSON.parse(answer!.citations) as { messageId: string; title: string }[]).map(({ messageId, title }) => ({ messageId, title }))).toEqual([
+      { messageId: first, title: "Otieno Ouma: “The Mongolia trip leaves on 3 March from Nairobi, with a st…”" },
+      { messageId: second, title: "Otieno Ouma: “Mongolia trip packing list: boots.”" },
+    ]);
+  });
+
+  it("names a session clip by its moment, so two clips of one session tell apart (QA3-02)", async () => {
+    const s = setup();
+    s.database.exec(`INSERT INTO recording (id, programId, title, processingStatus) VALUES ('rec-5', 'cohort-a', 'Week 5: REST APIs and pagination', 'complete');
+      INSERT INTO transcript_segment (id, recordingId, startTime, endTime, text) VALUES
+        ('seg-0', 'rec-5', 0, 9, 'Cursor pagination keeps pages stable'), ('seg-40', 'rec-5', 40, 49, 'Offset pagination drifts when rows change');`);
+    const question = s.question("cohort-04", "@tembo cursor or offset pagination?");
+    const { model, calls } = scriptedModel([{ search: [["search_sessions", "pagination"]] }, { answer: "Prefer cursors [S1, S2]." }]);
+    await s.ask("cohort-04", question, { temboModel: model });
+    await s.afterResponse();
+    expect(toolResults(calls)[0]!.results.map((result) => result.title)).toEqual(["Week 5: REST APIs and pagination", "Week 5: REST APIs and pagination"]);
+    const [answer] = answerTo(s, question);
+    expect((JSON.parse(answer!.citations) as { title: string }[]).map((citation) => citation.title))
+      .toEqual(["Week 5: REST APIs and pagination at 0:00", "Week 5: REST APIs and pagination at 0:40"]);
+  });
+
+  it("says who built a shared project: its owner, by the name the channel shows on their share (QA3-06)", async () => {
+    const s = setup();
+    s.database.exec(`INSERT INTO communityJourney (id, userId, title, description, occurredAt, visibility) VALUES
+      ('journey-ledger', 'synthetic-otieno', 'Chama ledger', 'Now', '2026-10-01', 'institution')`);
+    const share = (author: "synthetic-otieno" | "synthetic-achieng", title: string) => {
+      const id = s.message("help", { body: "My project", author });
+      s.database.prepare("UPDATE channel_message SET embeds = ? WHERE id = ?").run(JSON.stringify([{
+        type: "project", journeyId: "journey-ledger", version: 1, title, summary: "Tracks chama savings", confirmations: [],
+      }]), id);
+    };
+    // The two sharing messages come first, as the conversation (S1, S2); the project is S3.
+    share("synthetic-otieno", "Chama ledger");
+    // Shared by someone who doesn't own it: never a source, so never named as its builder.
+    share("synthetic-achieng", "Chama ledger copy");
+    const question = s.question("help", "@tembo who built the chama ledger?");
+    const { model, calls } = scriptedModel([{ search: [["search_projects", "chama ledger"]] }, { answer: "Otieno built it [S3]." }]);
+    await s.ask("help", question, { temboModel: model });
+    await s.afterResponse();
+    expect(toolResults(calls)[0]!.results).toEqual([expect.objectContaining({
+      kind: "project", title: "Chama ledger by Otieno Ouma", text: "Chama ledger, built by Otieno Ouma, who shared it here: Tracks chama savings",
+    })]);
+    expect(JSON.stringify(toolResults(calls))).not.toContain("Achieng");
+    expect(JSON.parse(answerTo(s, question)[0]!.citations)).toMatchObject([{ type: "project", title: "Chama ledger by Otieno Ouma" }]);
+  });
+
+  it("tells the asker, on their own messages only, whether Tembo was asked, so a refusal for the day survives a reload (QA3-05)", async () => {
+    const s = setup();
+    s.database.prepare("INSERT INTO tembo_usage (userId, day, count) VALUES (?, ?, 9)").run(VIEWER, temboDay(NOW));
+    const post = (body: string) => s.call("postMessage", {
+      id: s.channel("help"), body: { body, clientNonce: `n-${body.length}`, parentId: null, embeds: [] }, temboModel: scriptedModel([{ answer: NO_TAGS }]).model, now: () => NOW,
+    });
+    const asked = Message.parse((await post("@tembo the tenth question?")).body).id;
+    await s.afterResponse();
+    const refused = Message.parse((await post("@tembo an eleventh?")).body).id;
+    await s.afterResponse();
+    const plain = Message.parse((await post("No question here")).body).id;
+    const list = async (user?: string) => MessageList.parse((await s.call("listMessages", { id: s.channel("help"), user })).body).items;
+    const mine = new Map((await list()).map((message) => [message.id, message.temboAsked]));
+    expect([mine.get(asked), mine.get(refused), mine.get(plain)]).toEqual([true, false, false]);
+    // Tembo's answer, and everyone else's view of the same messages, carry nothing.
+    const theirs = await list("synthetic-otieno");
+    expect(theirs.filter((message) => [asked, refused, plain].includes(message.id)).map((message) => message.temboAsked)).toEqual([undefined, undefined, undefined]);
   });
 });
 

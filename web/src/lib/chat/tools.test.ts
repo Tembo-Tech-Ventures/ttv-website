@@ -162,3 +162,29 @@ describe("chat tool access boundaries", () => {
     });
   });
 });
+
+describe("search_transcripts across one answer (QA3-08)", () => {
+  /** A transcript search whose index always finds the same two passages of one recording. */
+  function searching() {
+    const rows = [
+      { id: "seg-1", recordingId: "rec-1", startTime: 0, endTime: 9, text: "Cursor pagination", recordingTitle: "Week 5", recordingProgramId: "program-a" },
+      { id: "seg-2", recordingId: "rec-1", startTime: 40, endTime: 49, text: "Offset pagination", recordingTitle: "Week 5", recordingProgramId: "program-a" },
+    ];
+    const orderBy = vi.fn().mockResolvedValue(rows);
+    const chain = { from: () => chain, innerJoin: () => chain, where: () => ({ orderBy }) };
+    const env = {
+      AI: { run: vi.fn().mockResolvedValue({ data: [[0.1, 0.2]] }) },
+      VECTORIZE: { query: vi.fn().mockResolvedValue({ matches: rows.map((row) => ({ metadata: { segment_id: row.id, recording_id: row.recordingId, start_time: row.startTime, end_time: row.endTime } })) }) },
+    } as unknown as Env;
+    return createContext({ env, db: { select: () => chain } as unknown as Database, programIds: ["program-a"] });
+  }
+
+  it("lists a passage once however often Tembo searches, giving it back under its first number", async () => {
+    const ctx = searching();
+    const first = JSON.parse(await executeTool("search_transcripts", { query: "pagination" }, ctx)) as { results: { sourceNumber: number }[] };
+    const again = JSON.parse(await executeTool("search_transcripts", { query: "cursor pagination" }, ctx)) as { results: { sourceNumber: number }[] };
+    expect(first.results.map((result) => result.sourceNumber)).toEqual([1, 2]);
+    expect(again.results.map((result) => result.sourceNumber)).toEqual([1, 2]);
+    expect(ctx.sources.map((source) => [source.sourceNumber, source.startTime])).toEqual([[1, 0], [2, 40]]);
+  });
+});

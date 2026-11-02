@@ -200,7 +200,7 @@ export default function ThreadRail({
           </ol>
         )}
         <Outbox composer={composer} parentId={thread.parentId} viewer={me.user} names={names} />
-        <ThreadQuestions threadId={thread.parentId} channel={channel} />
+        <ThreadQuestions threadId={thread.parentId} channel={channel} messages={parent ? [parent, ...replies] : replies} />
         </div>
       </section>
 

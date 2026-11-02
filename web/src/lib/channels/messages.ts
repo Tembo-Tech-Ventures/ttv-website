@@ -51,6 +51,8 @@ export interface MessageRow {
   reportedByMe: number;
   /** On a Tembo answer not deleted, the viewer's own "helpful" or "not quite" (null if none); null otherwise. */
   temboFeedback: string | null;
+  /** On the viewer's own person messages, 1 when Tembo was asked about it, else 0; null otherwise. */
+  temboAsked: number | null;
 }
 
 /**
@@ -94,6 +96,7 @@ export const messageColumns = (program: string) => `m.id, m.channelId, m.parentI
   EXISTS (SELECT 1 FROM message_report rp WHERE rp.messageId = m.id AND rp.reporterId = ?2) AS reportedByMe,
   CASE WHEN m.authorKind = 'TEMBO' AND m.deletedAt IS NULL
     THEN (SELECT tf.kind FROM tembo_feedback tf WHERE tf.messageId = m.id AND tf.userId = ?2) END AS temboFeedback,
+  CASE WHEN m.authorKind = 'USER' AND m.authorId = ?2 THEN EXISTS (SELECT 1 FROM tembo_ask a WHERE a.messageId = m.id) END AS temboAsked,
   ${embedAccessColumn(program)}`;
 const MESSAGE_COLUMNS = messageColumns("?3");
 const FROM_MESSAGES = `FROM channel_message m LEFT JOIN "user" u ON u.id = m.authorId`;
@@ -205,8 +208,14 @@ export function toMessage(row: MessageRow, ctx: ReadContext): Message {
     thread: row.parentId === null ? threadSummary(row.thread) : { replyCount: 0, participantIds: [], lastReplyAt: null },
     temboScope: row.authorKind === "TEMBO" ? ctx.channel.kind : null,
     reportedByMe: row.reportedByMe === 1,
-    ...row.authorKind === "TEMBO" ? { temboFeedback: deleted ? null : TemboFeedbackKind.safeParse(row.temboFeedback).data ?? null } : {},
+    ...temboFields(row, own, deleted),
   };
+}
+
+/** On Tembo's answers, the reader's own rating; on the reader's own messages, whether Tembo was asked (QA3-05). */
+function temboFields(row: MessageRow, own: boolean, deleted: boolean): Pick<Message, "temboFeedback" | "temboAsked"> {
+  if (row.authorKind === "TEMBO") return { temboFeedback: deleted ? null : TemboFeedbackKind.safeParse(row.temboFeedback).data ?? null };
+  return own && !deleted && row.temboAsked !== null ? { temboAsked: row.temboAsked === 1 } : {};
 }
 
 async function pageRows(ctx: ReadContext, sql: string, extra: unknown[]): Promise<{ head: number; rows: MessageRow[] }> {

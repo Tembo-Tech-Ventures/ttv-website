@@ -81,8 +81,9 @@ describe("ChatApp", () => {
     const html = renderToStaticMarkup(<ChatApp mockMode />);
     expect(html).toContain("Back to dashboard");
     expect(html).toContain('aria-label="Site"');
-    // The assistant is Tembo everywhere (owner decision, 31 Oct 2026), not only in the spaces shell.
-    expect(html).toContain(">Ask Tembo</h2>");
+    // The assistant is Tembo everywhere (owner decision, 31 Oct 2026), not only in the spaces shell,
+    // and this page is named apart from a channel's "Ask Tembo here" (QA3-03).
+    expect(html).toContain(">Ask Tembo privately</h2>");
     expect(html).not.toContain("Ask AI");
   });
 
@@ -91,7 +92,7 @@ describe("ChatApp", () => {
     expect(html).not.toContain("Back to dashboard");
     expect(html).not.toContain('aria-label="Site"');
     expect(html).not.toContain('href="/dashboard"');
-    expect(html).toContain(">Ask Tembo</h2>");
+    expect(html).toContain(">Ask Tembo privately</h2>");
     expect(html).not.toContain("Ask AI");
     // The conversations stay reachable on both widths.
     expect(html).toContain('aria-label="Conversations"');

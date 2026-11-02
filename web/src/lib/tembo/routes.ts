@@ -13,7 +13,8 @@ import { acceptAsk } from "./ask";
 /** A run this request must start after the response. */
 export interface TemboRun { messageId: string; claim: string }
 
-const quotaMessage = (limit: number) => `You've asked Tembo ${limit} questions today. You can ask again after midnight, Nairobi time.`;
+// In channels only: the private Ask Tembo page (/api/chat) has no daily count (QA3-04).
+const quotaMessage = (limit: number) => `You've asked Tembo ${limit} questions in channels today. You can ask again after midnight, Nairobi time.`;
 
 /**
  * Asks Tembo about one of the caller's own messages in this channel. Idempotent: the first ask is

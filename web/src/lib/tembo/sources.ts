@@ -6,6 +6,7 @@ import { PUBLIC_PROFILE } from "@/lib/search/service";
 import { resolvePublicProfileIdentity } from "@/lib/talent/public-identity";
 import { formatTimestamp } from "@/lib/recordings/time-utils";
 import { TEMBO_CONFIG } from "./config";
+import { mentionsTembo } from "./mention";
 
 /**
  * What Tembo may read to answer in a channel (README.md beside this file, "What Tembo sees"). The
@@ -88,6 +89,8 @@ export function messageHref(channel: TemboChannel, messageId: string, parentId: 
 export interface MessageRow {
   id: string; parentId: string | null; seq: number; authorName: string | null; body: string;
   moderationState: "VISIBLE" | "FLAGGED"; moderationReasons: string;
+  /** 1 when someone asked Tembo about this message: a question, never evidence (QA3-01). */
+  asked: number;
 }
 
 const reasonsOf = (text: string): string[] => {
@@ -107,21 +110,39 @@ export const visibleBody = (row: Pick<MessageRow, "body" | "moderationState" | "
  */
 export const READABLE_MESSAGE = `m.channelId = ?1 AND m.authorKind = 'USER' AND m.deletedAt IS NULL AND m.moderationState <> 'HIDDEN'
   AND NOT EXISTS (SELECT 1 FROM channel_message p WHERE p.id = m.parentId AND p.channelId = m.channelId AND p.moderationState = 'HIDDEN')`;
-const MESSAGE_COLUMNS = `m.id, m.parentId, m.seq, u.name AS authorName, m.body, m.moderationState, m.moderationReasons`;
+/** Someone asked Tembo about message m. */
+const ASKED = `EXISTS (SELECT 1 FROM tembo_ask a WHERE a.messageId = m.id)`;
+/**
+ * A question to Tembo: asked about, or addressed to @tembo (a mention refused for the day was never
+ * asked). It says what someone wants to know, never what is so, so it is context, not a source.
+ */
+const isQuestion = (row: MessageRow) => row.asked === 1 || mentionsTembo(row.body);
+const MESSAGE_COLUMNS = `m.id, m.parentId, m.seq, u.name AS authorName, m.body, m.moderationState, m.moderationReasons, ${ASKED} AS asked`;
+
+/** Characters of a message's own words in its citation's title, so two of one person's messages tell apart. */
+const EXCERPT_CHARS = 60;
+
+const authorOf = (name: string | null) => name?.trim() || "A former member";
 
 function addMessage(book: SourceBook, channel: TemboChannel, row: MessageRow): { key: string; text: string } | null {
-  const author = row.authorName?.trim() || "A former member";
-  const text = `${author}: ${clip(visibleBody(row))}`;
+  const author = authorOf(row.authorName);
+  const body = visibleBody(row);
+  const text = `${author}: ${clip(body)}`;
   const key = book.add({
     type: "message", messageId: row.id, channelId: channel.id,
-    title: `Message from ${title(author, "a member")}`, href: messageHref(channel, row.id, row.parentId),
+    title: title(`${author}: “${clip(body, EXCERPT_CHARS)}”`, `Message from ${title(author, "a member")}`),
+    href: messageHref(channel, row.id, row.parentId),
   }, text);
   return key ? { key, text } : null;
 }
 
+/** How a question to Tembo appears in the conversation: as context, under no tag, so nothing can cite it. */
+export const QUESTION_MARK = "[question, not a source]";
+
 /**
  * The conversation the question was asked in, oldest first: in a thread, its root and latest replies
  * before the question (the root always); otherwise the channel's latest messages before it. One read.
+ * Earlier questions to Tembo come as context under QUESTION_MARK, never as tagged sources (QA3-01).
  */
 export async function conversationSources(
   { db, book, channel }: SourceContext, question: { id: string; parentId: string | null; seq: number },
@@ -132,6 +153,7 @@ export async function conversationSources(
     .bind(channel.id, question.seq, question.parentId, TEMBO_CONFIG.contextMessages + 1).all<MessageRow>();
   // The thread's root always comes first; then the latest replies, oldest first.
   return results.toSorted((a, b) => a.seq - b.seq).flatMap((row) => {
+    if (isQuestion(row)) return [`${QUESTION_MARK} ${authorOf(row.authorName)}: ${clip(visibleBody(row))}`];
     const added = addMessage(book, channel, row);
     return added ? [`[${added.key}] ${added.text}`] : [];
   });
@@ -155,18 +177,27 @@ function anyTermMatch(terms: readonly string[]): string {
 const score = (text: string, terms: string) => `(SELECT COUNT(*) FROM json_each(${terms}) t WHERE instr(lower(${text}), t.value) > 0)`;
 
 interface ToolResult { source: string; kind: string; title: string; text: string; at?: string }
-/** What a tool reads with: the database, the answer's sources and the channel that decides them. */
-export interface SourceContext { db: D1Database; book: SourceBook; channel: TemboChannel }
+/**
+ * What a tool reads with: the database, the answer's sources, the channel that decides them and the
+ * question being answered, which is never one of its own sources (QA3-01).
+ */
+export interface SourceContext { db: D1Database; book: SourceBook; channel: TemboChannel; questionId: string }
 type Search = (ctx: SourceContext, terms: string[]) => Promise<ToolResult[]>;
 
-const searchChannel: Search = async ({ db, book, channel }, terms) => {
+/**
+ * This channel's messages matching the terms. Questions to Tembo are left out, the one being answered
+ * and everyone else's: a question repeats what someone wants to know, so an answer citing one would
+ * look grounded while saying nothing (QA3-01). Tembo's own answers are never read (READABLE_MESSAGE).
+ */
+const searchChannel: Search = async ({ db, book, channel, questionId }, terms) => {
   // The index holds whole bodies. A message whose terms matched only inside a masked span is dropped.
   const { results } = await db.prepare(`SELECT ${MESSAGE_COLUMNS}
     FROM channel_message_fts f CROSS JOIN channel_message_search s ON s.id = f.rowid
     CROSS JOIN channel_message m ON m.id = s.messageId LEFT JOIN "user" u ON u.id = m.authorId
-    WHERE channel_message_fts MATCH ?2 AND ${READABLE_MESSAGE} ORDER BY f.rank LIMIT ?3`)
-    .bind(channel.id, anyTermMatch(terms), TEMBO_CONFIG.resultsPerTool * 2).all<MessageRow>();
+    WHERE channel_message_fts MATCH ?2 AND ${READABLE_MESSAGE} AND m.id <> ?4 AND NOT ${ASKED} ORDER BY f.rank LIMIT ?3`)
+    .bind(channel.id, anyTermMatch(terms), TEMBO_CONFIG.resultsPerTool * 2, questionId).all<MessageRow>();
   return results.filter((row) => {
+    if (isQuestion(row)) return false;
     const visible = visibleBody(row).toLowerCase();
     return visible === row.body.toLowerCase() || terms.some((term) => visible.includes(term));
   }).slice(0, TEMBO_CONFIG.resultsPerTool).flatMap((row) => {
@@ -193,8 +224,9 @@ const searchSessions: Search = async ({ db, book, channel }, terms) => {
     const start = Math.max(0, Math.floor(row.startTime));
     const name = title(row.title, "Session recording");
     const text = clip(row.text);
+    // The moment is in the title, so two clips of one session tell apart (QA3-02).
     const key = book.add({
-      type: "sessionClip", recordingId: row.recordingId, startSeconds: start, title: name,
+      type: "sessionClip", recordingId: row.recordingId, startSeconds: start, title: title(`${name} at ${formatTimestamp(start)}`, name),
       href: `/dashboard/sessions/${encodeURIComponent(row.recordingId)}?t=${start}`,
     }, text);
     return key ? [{ source: key, kind: "session", title: name, at: formatTimestamp(start), text }] : [];
@@ -202,12 +234,18 @@ const searchSessions: Search = async ({ db, book, channel }, terms) => {
 };
 
 interface ProfileRow { userId: string; handle: string; publicName: string | null; publicAvatarUrl: string | null; doc: string }
-interface SharedRow { journeyId: string; version: number; title: string; summary: string; messageId: string; parentId: string | null }
+interface SharedRow {
+  journeyId: string; version: number; title: string; summary: string; messageId: string; parentId: string | null;
+  /** The owner who shared it, by the name this channel shows on their message. */
+  builderName: string | null;
+}
 
 /**
  * Public builder profiles (the /talent pages: published, after a completed cohort) with their
  * highlighted repositories, and projects their owners shared in this channel as the channel saw them,
- * while the owner still shares them. Institution-shared projects nobody shared here stay out.
+ * while the owner still shares them, with the builder's name as the channel shows it on the sharing
+ * message (QA3-06): only the owner's own share counts, so the name is never more than readers see.
+ * Institution-shared projects nobody shared here stay out.
  */
 const searchProjects: Search = async ({ db, book, channel }, terms) => {
   if (channel.kind !== "COMMUNITY") return [];
@@ -222,9 +260,9 @@ const searchProjects: Search = async ({ db, book, channel }, terms) => {
     .bind(json, TEMBO_CONFIG.sourceChars * 2, TEMBO_CONFIG.resultsPerTool).all<ProfileRow>();
   const { results: shared } = await db.prepare(`SELECT json_extract(e.value, '$.journeyId') AS journeyId,
       json_extract(e.value, '$.version') AS version, json_extract(e.value, '$.title') AS title,
-      coalesce(json_extract(e.value, '$.summary'), '') AS summary, m.id AS messageId, m.parentId
+      coalesce(json_extract(e.value, '$.summary'), '') AS summary, m.id AS messageId, m.parentId, u.name AS builderName
     FROM (SELECT m.id, m.parentId, m.authorId, m.embeds FROM channel_message m WHERE ${READABLE_MESSAGE} AND m.embeds <> '[]'
-      ORDER BY m.seq DESC LIMIT ?3) m
+      ORDER BY m.seq DESC LIMIT ?3) m LEFT JOIN "user" u ON u.id = m.authorId
     CROSS JOIN json_each(CASE WHEN json_valid(m.embeds) THEN m.embeds ELSE '[]' END) e
     WHERE json_extract(e.value, '$.type') = 'project'
       AND EXISTS (SELECT 1 FROM communityJourney j WHERE j.id = json_extract(e.value, '$.journeyId')
@@ -241,10 +279,12 @@ const searchProjects: Search = async ({ db, book, channel }, terms) => {
   for (const row of shared) {
     if (typeof row.journeyId !== "string" || !Number.isInteger(row.version) || row.version < 1) continue;
     const name = title(row.title, "Shared project");
-    const text = `${name}: ${clip(row.summary)}`;
-    const key = book.add({ type: "project", journeyId: row.journeyId, version: row.version, title: name,
+    const builder = authorOf(row.builderName);
+    const label = title(`${name} by ${builder}`, name);
+    const text = `${name}, built by ${builder}, who shared it here: ${clip(row.summary)}`;
+    const key = book.add({ type: "project", journeyId: row.journeyId, version: row.version, title: label,
       href: messageHref(channel, row.messageId, row.parentId) }, text);
-    if (key) found.push({ source: key, kind: "project", title: name, text });
+    if (key) found.push({ source: key, kind: "project", title: label, text });
   }
   return found;
 };

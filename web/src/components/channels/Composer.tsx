@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import type { AuthorSummary, Channel, Me, MessageEmbed } from "@/lib/platform/contracts";
+import type { AuthorSummary, Channel, Me, MessageEmbed, TemboUsage } from "@/lib/platform/contracts";
 import type { Composer as ChannelComposer } from "@/lib/platform/client/composer";
 import { useComposer, useDraft as useStoredDraft } from "@/lib/platform/client/hooks/composer";
 import { CONDUCT_PATH } from "@/lib/platform/server/space-routes";
 import { cx } from "@/components/platform/ui/cx";
 import { embedRef, NO_SHAREABLES, sameEmbed, type Shareables } from "./actions";
-import { composerTools, mentionsTembo, temboReach, temboScope } from "./channel-format";
+import { composerTools, mentionsTembo, temboReach, temboScope, type ComposerTools } from "./channel-format";
 import ClipFinder, { useClipFinder } from "./ClipFinder";
 import { AttachedList, ComposerToolbar, MAX_EMBEDS, MentionList, TemboScopeNote } from "./ComposerParts";
 import { insertMention, mentionCandidates, mentionQuery, type MentionCandidate } from "./mentions";
@@ -74,6 +74,11 @@ function useDraft(composer: ChannelComposer, parentId: string | null) {
     },
     moveCaret: setCaret,
   };
+}
+
+/** Out of questions, "Ask Tembo here" would only post a question nobody answers, so it goes (QA3-05). */
+function toolbarTools(tools: ComposerTools, usage: TemboUsage): ComposerTools {
+  return usage.used < usage.limit ? tools : { ...tools, askTembo: false };
 }
 
 /** The `@` picker: which suggestions show, which is active, and Escape dismissing one mention. */
@@ -275,7 +280,7 @@ export default function Composer({
         />
         <AttachedList attached={attached} onRemove={(embed) => setAttached((list) => list.filter((item) => !sameEmbed(item, embed)))} />
         <ComposerToolbar
-          tools={tools}
+          tools={toolbarTools(tools, usage)}
           shareables={offered}
           attachments={!thread && shareables !== null}
           thread={thread}

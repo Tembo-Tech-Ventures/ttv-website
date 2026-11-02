@@ -1,5 +1,5 @@
 import { Menu, MenuButton, MenuHeading, MenuItem, MenuItems, MenuSection } from "@headlessui/react";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { PiAt, PiFolderSimple, PiPaperPlaneRightFill, PiPlus, PiSparkle, PiVideoCamera, PiX } from "react-icons/pi";
 import type { MessageEmbed, TemboUsage } from "@/lib/platform/contracts";
 import Avatar from "@/components/platform/ui/Avatar";
@@ -12,6 +12,9 @@ import type { MentionCandidate } from "./mentions";
 import { MENU_ITEM } from "./MessageMenu";
 
 export const MAX_EMBEDS = 5;
+
+/** What "Ask Tembo here" does, unlike the private Ask Tembo page (QA3-03, QA3-15). */
+export const ASK_HERE = "Adds @tembo to your message. Everyone who can read this channel sees the question and Tembo's answer.";
 
 const TOOL =
   "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[0.8125rem] font-semibold text-ink-secondary hover:bg-ink-primary/7 hover:text-ink-primary pointer-coarse:h-11 pointer-coarse:min-w-11";
@@ -106,6 +109,7 @@ type ToolbarProps = PickProps & {
  * `tembo_channels` is on) and Send, which is always visible.
  */
 export function ComposerToolbar({ tools, shareables, attachments, thread, canSend, clipFinder, onFindClip, onMention, onAskTembo, ...pick }: ToolbarProps) {
+  const askHereId = useId();
   return (
     <div className="channel-composer__bar">
       {attachments && (
@@ -141,11 +145,20 @@ export function ComposerToolbar({ tools, shareables, attachments, thread, canSen
         <PiAt aria-hidden="true" className="size-4.5" />
       </button>
       {tools.askTembo && (
-        <button type="button" onClick={onAskTembo} className={cx(TOOL, "text-peach-ink hover:text-peach-ink", FOCUS_RING)}>
+        // "here", unlike the private Ask Tembo page: this one posts in the channel (QA3-03).
+        <button
+          type="button"
+          onClick={onAskTembo}
+          title={ASK_HERE}
+          aria-describedby={askHereId}
+          className={cx(TOOL, "text-peach-ink hover:text-peach-ink", FOCUS_RING)}
+          data-ask-tembo
+        >
           <PiSparkle aria-hidden="true" className="size-4.5" />
-          Ask Tembo
+          Ask Tembo here
         </button>
       )}
+      {tools.askTembo && <span id={askHereId} hidden>{ASK_HERE}</span>}
       <button
         type="submit"
         aria-label={thread ? "Send reply" : "Send message"}
@@ -240,12 +253,12 @@ export function MentionList({ listId, candidates, active, scope, usage, onChoose
   );
 }
 
-/** Under the channel's box: what Tembo reads here, and the reader's questions today (02). */
+/** Under the channel's box: what Tembo reads here, and the reader's questions in channels today (02, QA3-04). */
 export function TemboScopeNote({ scope, usage }: { scope: string; usage: TemboUsage }) {
   return (
     <p className="channel-composer__scope">
-      <span className="font-semibold text-ink-secondary">Tembo</span> · Sees: {scope} · You: {usage.used} of {usage.limit} today
-      {usage.used >= usage.limit && <> · No questions left today; more after midnight East Africa Time</>}
+      <span className="font-semibold text-ink-secondary">Tembo</span> · Sees: {scope} · You: {usage.used} of {usage.limit} in channels today
+      {usage.used >= usage.limit && <> · No questions left in channels today; more after midnight East Africa Time</>}
     </p>
   );
 }

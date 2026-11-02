@@ -7,7 +7,7 @@ import { failAsk, OPEN_QUESTION } from "./ask";
 import { TEMBO_CONFIG } from "./config";
 import { groundAnswer, NO_ANSWER, type Grounded } from "./grounding";
 import type { TemboModel } from "./model";
-import { clip, conversationSources, SCOPE_WORDS, SourceBook, toolsFor, visibleBody, type SourceContext, type TemboChannel } from "./sources";
+import { clip, conversationSources, QUESTION_MARK, SCOPE_WORDS, SourceBook, toolsFor, visibleBody, type SourceContext, type TemboChannel } from "./sources";
 
 /**
  * Answering an accepted question, after the response (README.md beside this file, "Answering"):
@@ -50,6 +50,7 @@ You can see only ${SCOPE_WORDS[channel.kind]}. Nothing else.
 
 Rules:
 - Use only the tagged sources: the conversation below and what your tools return. Never use outside knowledge for facts about people, sessions, projects or this community.
+- Lines marked ${QUESTION_MARK} are questions people asked, with no tag: they are not evidence, and the question you answer is never its own source.
 - Search with your tools when the conversation does not already answer the question.
 - After every sentence, put the tags of the sources it relies on, like [S2] or [S2, S5]. A sentence without a tag is removed.
 - If the sources do not answer the question, reply with exactly ${NO_ANSWER}.
@@ -149,7 +150,7 @@ export async function answerAsk(ctx: AnswerContext, { messageId, claim }: { mess
       await failAsk(ctx.db, { messageId, claim, now: clock(), refund: true });
       return { status: "lost" };
     }
-    const sources: SourceContext = { db: ctx.db, book: new SourceBook(), channel };
+    const sources: SourceContext = { db: ctx.db, book: new SourceBook(), channel, questionId: question.id };
     const conversation = await conversationSources(sources, question);
     const asker = question.askerName?.trim().split(/\s+/u)[0] || "A member";
     const messages: GatewayMessage[] = [

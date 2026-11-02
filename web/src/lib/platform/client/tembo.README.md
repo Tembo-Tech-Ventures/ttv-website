@@ -21,6 +21,10 @@ B-3.1's (`src/lib/tembo/README.md`): `POST /api/channels/:id/tembo`
   and polling may take 30 s more). `retry(messageId)` checks again.
 - `error` keeps the `ApiError`; `exhausted` sets `usage` to every question used,
   with `resetsAt` from `retryAfterMs`.
+- After a reload the store holds no questions. `unaskedForToday(message, usage)`
+  rebuilds `exhausted` for the reader's own `@tembo` message from today that the
+  server says nothing asked (`Message.temboAsked === false`) while `/me`'s usage
+  is at its limit, so "so this one wasn't asked" stays (QA3-05).
 
 ## Feedback
 

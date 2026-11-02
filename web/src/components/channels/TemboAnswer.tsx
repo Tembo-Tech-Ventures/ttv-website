@@ -4,7 +4,7 @@ import { cx } from "@/components/platform/ui/cx";
 import Button, { FOCUS_RING } from "@/components/platform/ui/Button";
 import TemboMark from "@/components/platform/ui/TemboMark";
 import type { Channel, Citation, Message, TemboFeedbackKind, TemboUsage } from "@/lib/platform/contracts";
-import type { TemboQuestion, TemboState, TemboStore } from "@/lib/platform/client/tembo";
+import { unaskedForToday, type TemboQuestion, type TemboState, type TemboStore } from "@/lib/platform/client/tembo";
 import { temboReach, temboResetsIn, temboSees } from "./channel-format";
 
 const ICON = "size-3.5 shrink-0 text-peach-ink";
@@ -54,11 +54,12 @@ const FEEDBACK: Record<TemboFeedbackKind, string> = { helpful: "Helpful", not_qu
 
 /**
  * The line under a Tembo answer: what it could see (from the scope the server
- * stored with it), the reader's questions today, and "Helpful / Not quite".
+ * stored with it) and "Helpful / Not quite". Today's questions are not here: a
+ * live count under an old answer read as a fact about that answer (QA3-07); the
+ * composer's line carries it.
  */
 export function TemboAnswerFoot({ message }: { message: Message }) {
   const store = useContext(TemboContext);
-  const usage = useTemboState((state) => state.usage);
   // A choice made here wins; until then, the one the server kept for this reader (after a reload, say).
   const choice = useTemboState((state) => state.feedback[message.id]) ?? message.temboFeedback ?? undefined;
   const saving = useTemboState((state) => state.saving.includes(message.id));
@@ -71,7 +72,6 @@ export function TemboAnswerFoot({ message }: { message: Message }) {
     <div className="channel-tembo__foot">
       <p>
         Sees: {temboSees(message.temboScope)}
-        {usage && <> · You: {usage.used} of {usage.limit} today</>}
       </p>
       {rate && (
         <fieldset aria-busy={saving || undefined} className="channel-tembo__rate">
@@ -128,7 +128,12 @@ function questionCopy(question: TemboQuestion, channel: Channel, usage: TemboUsa
     case "exhausted": {
       const limit = usage?.limit ?? 0;
       const when = usage ? ` You can ask again after midnight East Africa Time, ${temboResetsIn(usage.resetsAt, Date.now())}.` : "";
-      return { text: `You've used all ${limit} of today's questions to Tembo, so this one wasn't asked.${when}`, action: null };
+      // In channels: the private Ask Tembo page has no daily count (QA3-04).
+      return {
+        text: `You've used all ${limit} of today's questions to Tembo in channels, so this one wasn't asked.${when}`
+          + " Questions on your private Ask Tembo page don't count toward this.",
+        action: null,
+      };
     }
     case "answered":
       return null;
@@ -146,20 +151,22 @@ export function TemboWaiting({ question, channel, where }: { question: TemboQues
   const copy = questionCopy(question, channel, usage, where);
   if (!copy) return null;
   const working = question.status === "asking" || question.status === "pending";
+  // Tembo's placeholder only while Tembo has the question: a refusal is a note, not a reply (QA3-13).
+  const asTembo = where === "thread" && question.status !== "exhausted" && question.status !== "error";
   return (
     <div
-      className={cx("channel-tembo-wait", where === "thread" ? "channel-tembo-wait--thread" : "channel-tembo-wait--channel")}
+      className={cx("channel-tembo-wait", asTembo ? "channel-tembo-wait--thread" : "channel-tembo-wait--channel")}
       data-tembo-question={question.status}
     >
-      {where === "thread" && <TemboMark size="md" decorative />}
+      {asTembo && <TemboMark size="md" decorative />}
       <div className="min-w-0">
-        {where === "thread" && (
+        {asTembo && (
           <p className="channel-meta">
             <span className="channel-author">Tembo</span>
             <span className="channel-ai-badge">AI</span>
           </p>
         )}
-        <p className={cx("channel-tembo-wait__text", where === "thread" && "channel-tembo-wait__card")}>
+        <p className={cx("channel-tembo-wait__text", asTembo && "channel-tembo-wait__card")}>
           {working && <span className="channel-tembo-wait__dots" aria-hidden="true"><span /><span /><span /></span>}
           {copy.text}
           {copy.action && store && (
@@ -173,10 +180,18 @@ export function TemboWaiting({ question, channel, where }: { question: TemboQues
   );
 }
 
-/** Every unanswered question in this thread, oldest first, as placeholders under its replies. */
-export function ThreadQuestions({ threadId, channel }: { threadId: string; channel: Channel }) {
+/**
+ * Every unanswered question in this thread, oldest first, as placeholders under its replies: the
+ * store's, and the reader's own `messages` here that today's used-up questions kept from being asked.
+ */
+export function ThreadQuestions({ threadId, channel, messages }: { threadId: string; channel: Channel; messages: readonly Message[] }) {
   const questions = useTemboState((state) => state.questions);
-  const waiting = Object.values(questions).filter((q) => q.threadId === threadId && q.status !== "answered")
+  const usage = useTemboState((state) => state.usage);
+  const unasked = messages.flatMap((message) => {
+    const question = questions[message.id] ? null : unaskedForToday(message, usage);
+    return question?.threadId === threadId ? [question] : [];
+  });
+  const waiting = [...Object.values(questions).filter((q) => q.threadId === threadId && q.status !== "answered"), ...unasked]
     .toSorted((a, b) => a.askedAt - b.askedAt);
   if (waiting.length === 0) return null;
   return (
@@ -192,9 +207,14 @@ export function ThreadQuestions({ threadId, channel }: { threadId: string; chann
   );
 }
 
-/** Under a message in the channel: its own question to Tembo, while the answer is not in yet. */
-export function ChannelQuestion({ messageId, channel }: { messageId: string; channel: Channel }) {
-  const question = useTemboState((state) => state.questions[messageId]);
-  if (!question || question.threadId !== messageId) return null;
+/**
+ * Under a message in the channel: its own question to Tembo, while the answer is not in yet, or,
+ * after a reload, that it wasn't asked because today's questions were used up (QA3-05).
+ */
+export function ChannelQuestion({ message, channel }: { message: Message; channel: Channel }) {
+  const asked = useTemboState((state) => state.questions[message.id]);
+  const usage = useTemboState((state) => state.usage);
+  const question = asked ?? unaskedForToday(message, usage);
+  if (!question || question.threadId !== message.id) return null;
   return <TemboWaiting question={question} channel={channel} where="channel" />;
 }

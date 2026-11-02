@@ -48,7 +48,9 @@ export async function getMe({ db, env, locals }: MeContext): Promise<Me> {
   }
   const avatar = WebLink.safeParse(user.image);
 
-  const flags = await getFlags(flagContext);
+  const stored = await getFlags(flagContext);
+  // Tembo in channels needs channels: without it every Tembo route is 404, so /me says off too (QA3-17).
+  const flags = { ...stored, tembo_channels: stored.tembo_channels && stored.channels };
   const now = Date.now();
   return Me.parse({
     user: { id: user.id, name: user.name.trim() || "Member", avatarUrl: avatar.success ? avatar.data : null, roleBadges },

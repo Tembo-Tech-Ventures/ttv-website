@@ -203,8 +203,12 @@ describe("reading without JavaScript", () => {
   it("offers a session clip only in cohort channels, and Ask Tembo only with tembo_channels on", () => {
     serverHtml(wanjiku, cohort);
     expect($$("[data-composer=channel] button").map((b) => b.textContent)).toEqual(
-      expect.arrayContaining(["Share project", "Session clip", "Ask Tembo"]),
+      expect.arrayContaining(["Share project", "Session clip", "Ask Tembo here"]),
     );
+    // Named apart from the private Ask Tembo page, and saying what it does: it posts here (QA3-03, QA3-15).
+    const ask = $("[data-ask-tembo]")!;
+    expect(container.querySelector(`[id="${ask.getAttribute("aria-describedby")}"]`)?.textContent)
+      .toBe("Adds @tembo to your message. Everyone who can read this channel sees the question and Tembo's answer.");
     serverHtml(wanjiku, community);
     expect($$("[data-composer=channel] button").map((b) => b.textContent)).not.toContain("Session clip");
     const noTembo: Me = { ...wanjiku, flags: { ...wanjiku.flags, tembo_channels: false } };
@@ -225,7 +229,7 @@ describe("reading without JavaScript", () => {
     expect(labels).not.toContain("Share project");
     expect(labels).not.toContain("Session clip");
     expect(labels).not.toContain("Attach work");
-    expect(labels).toEqual(expect.arrayContaining(["Mention someone", "Ask Tembo", "Send message"]));
+    expect(labels).toEqual(expect.arrayContaining(["Mention someone", "Ask Tembo here", "Send message"]));
   });
 
   it("says why a person cannot post, instead of a composer", () => {
@@ -384,7 +388,7 @@ describe("live behaviour", () => {
     await mount();
     const box = $<HTMLTextAreaElement>("[data-composer=channel] textarea")!;
     await typeInto(box, "what changed?");
-    const ask = $$("[data-composer=channel] button").find((b) => b.textContent === "Ask Tembo")!;
+    const ask = $$("[data-composer=channel] button").find((b) => b.textContent === "Ask Tembo here")!;
     await click(ask);
     await click(ask);
     expect(box.value).toBe("@tembo what changed?");

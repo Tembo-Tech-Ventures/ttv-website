@@ -243,7 +243,7 @@ export default function MessageList({
                       onOpenThread={onOpenThread}
                       announce={announce}
                     />
-                    <ChannelQuestion messageId={message.id} channel={channel} />
+                    <ChannelQuestion message={message} channel={channel} />
                   </div>
                 </li>
               ))}
