@@ -10,6 +10,7 @@ import { cx } from "@/components/platform/ui/cx";
 import { channelTitle, groupByDay, postingFor } from "./channel-format";
 import MessageItem from "./MessageItem";
 import Outbox from "./Outbox";
+import { CHANNEL_MESSAGES_ID } from "./paths";
 
 type MessageListProps = {
   state: ChannelState;
@@ -152,6 +153,12 @@ export default function MessageList({
     centred.current = scrollToItem(focusMessageId, "center");
   }, [measured, focusMessageId, scrollToItem]);
 
+  // Back from agreeing to the habits (QA2-03): focus starts in the messages, unless a linked one takes it.
+  useEffect(() => {
+    if (focusMessageId || window.location.hash !== `#${CHANNEL_MESSAGES_ID}`) return;
+    if (document.activeElement === null || document.activeElement === document.body) scroller.current?.focus({ preventScroll: true });
+  }, [focusMessageId]);
+
   // A message the reader just sent waits at the end, in the outbox: show it there at once.
   const pending = useOutbox(composer, null).length;
   const pendingBefore = useRef(pending);
@@ -192,7 +199,7 @@ export default function MessageList({
     <div className="channel-list" data-jump={showJump || undefined}>
       {/* The transcript scrolls here, so a keyboard must reach and scroll it (WCAG 2.1.1). */}
       {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scroll container */}
-      <section ref={scroller} tabIndex={0} aria-label={`Messages in ${title}`} className={cx("channel-list__scroller", FOCUS_RING)} data-channel-scroller data-focus-home>
+      <section ref={scroller} id={CHANNEL_MESSAGES_ID} tabIndex={0} aria-label={`Messages in ${title}`} className={cx("channel-list__scroller", FOCUS_RING)} data-channel-scroller data-focus-home>
         <div>
         <OlderControls state={state} store={store} />
         <ListState state={state} channel={channel} retry={retry} />

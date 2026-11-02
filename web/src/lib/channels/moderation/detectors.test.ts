@@ -54,6 +54,12 @@ const PHONES: Case[] = [
   ["zero-seven-one-two-three-four-five-six-seven-eight", ["phone"]],
   ["zero double seven one 234 567", ["phone"]],
   ["oh seven one two three four five six seven eight", ["phone"]],
+  // Grouped with commas, as a number is read aloud (QA2-09).
+  ["call oh seven two two, double zero zero, one one one", ["phone"]],
+  ["zero, seven, one, two, three, four, five, six, seven, eight", ["phone"]],
+  ["sifuri saba moja mbili, tatu nne tano, sita saba nane", ["phone"]],
+  ["0722, double zero zero, 111", ["phone"]],
+  ["oh seven two two,double zero zero,one one one", ["phone"]],
   ["O712345678", ["phone"]],
   // Disguised characters.
   ["０７１２３４５６７８", ["phone"]],
@@ -131,6 +137,10 @@ const MENTIONS: Case[] = [
 
 /** Everyday text that looks like a number, an address or a link, and must stay unflagged. */
 const ORDINARY: Case[] = [
+  // Spelled numbers and commas in prose (QA2-09 reads commas beside spelled digits as grouping).
+  ["We need two, maybe three, volunteers for Saturday", []],
+  ["Scores were nine, eight, seven and six out of ten", []],
+  ["one, two, three, four: pick the one you like", []],
   // Years, dates and times.
   ["2019 2020 2021 2022", []],
   ["Cohort 04 starts 2025-11-03 at 10:30", []],
@@ -246,8 +256,10 @@ describe("known limits", () => {
   const KNOWN_LIMITS: Case[] = [
     // Missed: a Kenyan number without its trunk zero reads like any list of numbers ("700 800 900").
     ["712 345 678", []],
-    // Missed: commas between spelled digits end the run, like the commas of 1,500,000.
-    ["zero, seven, one, two, three, four, five, six, seven, eight", []],
+    // Missed: commas between written digits end the run, like the commas of 1,500,000; spelled digits beside one do not.
+    ["0722, 000, 111", []],
+    // Flagged although it is not a phone number: counting zero to nine, the digits a trunk-zero number has.
+    ["zero, one, two, three, four, five, six, seven, eight, nine", ["phone"]],
     // Missed: digit words beyond nought to nine.
     ["oh seven twelve three four five six seven eight", []],
     // Flagged although it is not a phone number: a hyphenated ISBN-10 starting with 0.
@@ -302,7 +314,7 @@ describe("cost", () => {
 
   it("grows linearly on long adversarial texts", () => {
     // One long run with no space too ("a", "ab."): a link's host is looked for once per run, not per character.
-    for (const unit of ["dot ", "a dot ", "a (dot) ", "x[at]", "0 ", "1 ", "+254 7", "wa . me / ", "@a ", "07 ", "a", "ab.", "x-", "0.", "1."]) {
+    for (const unit of ["dot ", "a dot ", "a (dot) ", "x[at]", "0 ", "1 ", "+254 7", "wa . me / ", "@a ", "07 ", "a", "ab.", "x-", "0.", "1.", "oh, ", "two, double ", "one,"]) {
       const text = (length: number) => unit.repeat(Math.ceil(length / unit.length)).slice(0, length);
       const [short, long] = [time(text(2_500)), time(text(10_000))];
       // Four times the text: about four times the work, never the sixteen a quadratic scan costs.

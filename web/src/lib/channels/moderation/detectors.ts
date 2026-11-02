@@ -135,6 +135,21 @@ function multiplier(lexemes: Lexeme[], i: number): number {
   return times !== undefined && digitsOf(lexemes, next)?.length === 1 ? times : 1;
 }
 
+/** A digit word, or "double"/"triple" before one: a number someone is spelling out. */
+function spelled(lexemes: Lexeme[], i: number): boolean {
+  return lexemes[i]?.kind === "word" && (digitsOf(lexemes, i) !== null || multiplier(lexemes, i) > 1);
+}
+
+/**
+ * A comma beside a spelled digit, as in "oh seven two two, double zero zero, one one one", groups
+ * a number read aloud rather than joining the digits of another kind of number (1,500,000), so it
+ * separates groups like a space (QA2-09). One look either side: linear however long the text is.
+ */
+function spelledComma(lexemes: Lexeme[], i: number): boolean {
+  const next = lexemes[i + 1]?.kind === "space" ? i + 2 : i + 1;
+  return lexemes[i]?.text === "," && (spelled(lexemes, i - 1) || spelled(lexemes, next));
+}
+
 function charAtom(char: string): Atom {
   if (char === "+") return { kind: "plus" };
   if (SEPARATORS.has(char)) return { kind: "separator", text: char };
@@ -199,6 +214,9 @@ function atoms(text: string): Atom[] {
     } else if (lexeme.kind === "word") {
       repeat = multiplier(lexemes, i);
       result.push(repeat > 1 ? { kind: "separator", text: " " } : { kind: "word" });
+    } else if (spelledComma(lexemes, i)) {
+      repeat = 1;
+      result.push({ kind: "separator", text: "," });
     } else {
       repeat = 1;
       result.push(charAtom(lexeme.text));

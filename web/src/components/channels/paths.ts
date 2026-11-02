@@ -25,3 +25,10 @@ export function channelPath(channel: Pick<Channel, "kind" | "slug">): string | n
   const space = channelSpace(channel);
   return space ? `${channelPathPrefix(space)}/${encodeURIComponent(channel.slug)}` : null;
 }
+
+/**
+ * The message list's id. Agreeing to the habits on a channel's page returns
+ * here, so focus lands on the channel the person came for, not the top of a
+ * new page (QA2-03).
+ */
+export const CHANNEL_MESSAGES_ID = "channel-messages";

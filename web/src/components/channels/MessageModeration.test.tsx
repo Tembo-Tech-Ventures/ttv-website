@@ -24,8 +24,10 @@ import { createModerationActions } from "./moderation-actions";
 
 const showYourWork = (me: Me) => channelFor("show-your-work", me)!;
 
-function setup(me: Me, channel: Channel, options: { failure?: MockOptions["failure"] } = {}) {
-  const initial = channelPage(channel, me);
+function setup(me: Me, channel: Channel, options: { failure?: MockOptions["failure"]; reported?: readonly string[] } = {}) {
+  const page = channelPage(channel, me);
+  // What the server says on every read about the reader's own reports (QA2-06).
+  const initial = { ...page, items: page.items.map((item) => ({ ...item, reportedByMe: options.reported?.includes(item.id) ?? false })) };
   const now = () => FIXTURE_NOW + 60_000;
   const client = createHarnessClient({ me, channel, root: initial, shareables: shareablesFor(me), now, failure: options.failure });
   const store = createChannelStore({ channelId: channel.id, enabled: true, viewerId: me.user.id, initial, api: client.api });
@@ -139,7 +141,15 @@ describe("reporting a message", () => {
     expect($("[data-reported]", article(messages.mentorOffer.id))?.textContent).toBe("You reported this. A moderator will look at it.");
     expect(announcer()).toBe("Reported. A moderator will look at it.");
     // Focus is back on the message's actions, which now say it was reported, and offer nothing more.
-    expect(document.activeElement?.getAttribute("aria-label")).toBe("Actions for Mercy Wambui's message");
+    expect(document.activeElement?.getAttribute("aria-label")).toMatch(/^Actions for Mercy Wambui's message at /);
+    const reported = await menuItem(messages.mentorOffer.id, "Reported");
+    expect(reported?.getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("still says so after a reload, because the server says this reader reported it, and offers no second report", async () => {
+    await mount(wanjiku, { reported: [messages.mentorOffer.id] });
+    expect($("[data-reported]", article(messages.mentorOffer.id))?.textContent).toBe("You reported this. A moderator will look at it.");
+    expect($("[data-reported]", article(messages.firstPr.id))).toBeNull();
     const reported = await menuItem(messages.mentorOffer.id, "Reported");
     expect(reported?.getAttribute("aria-disabled")).toBe("true");
   });
@@ -178,7 +188,7 @@ describe("reporting a message", () => {
     });
     await act(frame);
     expect($("[data-panel=report]")).toBeNull();
-    expect(document.activeElement?.getAttribute("aria-label")).toBe("Actions for Mercy Wambui's message");
+    expect(document.activeElement?.getAttribute("aria-label")).toMatch(/^Actions for Mercy Wambui's message at /);
   });
 
   it("is offered on other people's messages and Tembo's, never on your own, a deleted one, or without the server", async () => {
@@ -229,7 +239,7 @@ describe("hiding, for the channel's moderators, and restoring, for admins", () =
     const note = $("[data-moderation=HIDDEN]", article(messages.firstPr.id));
     expect(note?.textContent).toBe("Hidden from members: Off-topic for this channel. Moderators can still see it.");
     expect(announcer()).toBe("Message hidden from members.");
-    expect(document.activeElement?.getAttribute("aria-label")).toBe("Actions for Brian Kiprop's message");
+    expect(document.activeElement?.getAttribute("aria-label")).toMatch(/^Actions for Brian Kiprop's message at /);
     // Hidden messages take no reactions, and a mentor has no way back: that is an admin's decision.
     const names = await menuNames(messages.firstPr.id);
     expect(names).not.toContain("Hide from members…");

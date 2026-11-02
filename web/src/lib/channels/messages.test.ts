@@ -103,6 +103,20 @@ describe("message pages", () => {
     expect(await readMessage(reader(s, "help", false, "synthetic-achieng"), hidden)).toBeNull();
   });
 
+  it("tells each reader whether they reported a message, and nothing of anyone else's reports (QA2-06)", async () => {
+    const s = setup();
+    const mine = s.message("help");
+    const theirs = s.message("help");
+    const quiet = s.message("help");
+    s.database.exec(`INSERT INTO message_report(id, messageId, reporterId, reason, createdAt) VALUES
+      ('report-1', '${mine}', '${VIEWER}', 'Spam', 1), ('report-2', '${theirs}', 'synthetic-achieng', 'Spam', 1)`);
+    const items = (await listMessages(reader(s, "help"), {})).items;
+    expect(items.map((item) => [item.id, item.reportedByMe])).toEqual([[mine, true], [theirs, false], [quiet, false]]);
+    expect((await readMessage(reader(s, "help"), mine))?.reportedByMe).toBe(true);
+    expect((await readMessage(reader(s, "help", false, "synthetic-achieng"), mine))?.reportedByMe).toBe(false);
+    expect((await readMessage(reader(s, "help", false, "synthetic-achieng"), theirs))?.reportedByMe).toBe(true);
+  });
+
   it("returns the client nonce only to its author, and display badges for this cohort only", async () => {
     const s = setup();
     s.database.exec(`INSERT OR IGNORE INTO Roles(id,name) VALUES ('ADMIN','ADMIN'),('MENTOR','MENTOR');

@@ -7,11 +7,12 @@ import type { Channel, Me, Message } from "@/lib/platform/contracts";
 import { createChannelStore } from "@/lib/platform/client/channel";
 import { createComposer } from "@/lib/platform/client/composer";
 import type { MockOptions } from "@/lib/platform/client/mockTransport";
-import { channels, FIXTURE_NOW, meByPersona, messages, people } from "@/lib/platform/fixtures";
+import { channels, FIXTURE_NOW, fixtureIds, meByPersona, messages, people } from "@/lib/platform/fixtures";
 import ChannelSurface from "./ChannelSurface";
 import ChannelView from "./ChannelView";
-import { channelFor, channelPage, shareablesFor, threadPage } from "./harness/fixture-pages";
+import { channelFor, channelPage, momentsFor, shareablesFor, threadPage } from "./harness/fixture-pages";
 import { createHarnessClient } from "./harness/harness-client";
+import { MOMENT_SEARCH_DEBOUNCE_MS, shareablesFinder } from "./moment-search";
 
 const wanjiku = meByPersona.wanjiku;
 const community = channels.showYourWork;
@@ -20,7 +21,9 @@ const cohort = channelFor("cohort-04", wanjiku)!;
 /** The channel store and S-2.2's composer over the fixture API (harness-client), as the harness wires them. */
 function setup(me: Me, channel: Channel, failure?: MockOptions["failure"]) {
   const initial = channelPage(channel, me);
-  const client = createHarnessClient({ me, channel, root: initial, shareables: shareablesFor(me), now: () => FIXTURE_NOW + 60_000, failure });
+  const client = createHarnessClient({
+    me, channel, root: initial, shareables: shareablesFor(me), moments: (q) => momentsFor(me, q), now: () => FIXTURE_NOW + 60_000, failure,
+  });
   const store = createChannelStore({ channelId: channel.id, enabled: me.flags.channels, viewerId: me.user.id, initial, api: client.api });
   const storage = new Map<string, string>();
   const composer = createComposer({
@@ -454,4 +457,131 @@ describe("sending through the composer (S-2.2)", () => {
       await tick(10);
     });
   }
+});
+
+describe("QA-2 fixes", () => {
+  async function mount(me = wanjiku, channel: Channel = community, extra: Partial<Parameters<typeof ChannelSurface>[0]> = {}) {
+    const wired = setup(me, channel);
+    await render(
+      <ChannelSurface
+        me={me}
+        channel={channel}
+        store={wired.store}
+        composer={wired.composer}
+        now={FIXTURE_NOW}
+        shareables={shareablesFor(me)}
+        findMoments={shareablesFinder(wired.client.api, channel.id)}
+        {...extra}
+      />,
+    );
+    await act(frame);
+    return wired;
+  }
+
+  async function typeSearch(input: HTMLInputElement, value: string) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setter.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  // Each test starts with nothing focused, as a page does when it loads.
+  beforeEach(() => (document.activeElement as HTMLElement | null)?.blur?.());
+
+  describe("the session clip finder (QA2-02)", () => {
+    const finder = () => $("[data-clip-finder]");
+    const clips = () => $$("[data-clip-finder] [data-clip]");
+
+    async function open() {
+      const trigger = $<HTMLButtonElement>("[data-composer=channel] button[data-find-clip]")!;
+      await click(trigger);
+      await act(frame);
+      return trigger;
+    }
+
+    it("finds a moment by the words said in it, and attaches a clip that starts there", async () => {
+      await mount(wanjiku, cohort);
+      const trigger = await open();
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      const input = $<HTMLInputElement>("[data-clip-finder] input[type=search]")!;
+      expect(document.activeElement).toBe(input);
+      // Before any words: the recent sessions, from their start.
+      expect(clips()).toHaveLength(2);
+
+      await typeSearch(input, "join");
+      expect(text("[data-clip-status]")).toBe("Searching the sessions…");
+      await act(() => tick(MOMENT_SEARCH_DEBOUNCE_MS + 20));
+      expect(text("[data-clip-status]")).toBe("1 moment mentions “join”");
+      expect(clips().map((clip) => clip.dataset.clip)).toEqual([`${fixtureIds.session07}@754`]);
+
+      await click(clips()[0]!);
+      await act(frame);
+      expect(finder()).toBeNull();
+      expect($$("[aria-label=Attached] li").map((item) => item.textContent)).toEqual(["Session 7 · Idempotency keys · 12:34"]);
+      expect(document.activeElement).toBe($("[data-composer=channel] textarea"));
+    });
+
+    it("says when nothing mentions the words, and Escape returns focus to the button", async () => {
+      await mount(wanjiku, cohort);
+      const trigger = await open();
+      await typeSearch($<HTMLInputElement>("[data-clip-finder] input[type=search]")!, "kubernetes");
+      await act(() => tick(MOMENT_SEARCH_DEBOUNCE_MS + 20));
+      expect(text("[data-clip-status]")).toBe("No moment mentions “kubernetes”. Try other words.");
+      expect(clips()).toHaveLength(0);
+      await key(finder()!.querySelector("input")!, "Escape");
+      await act(frame);
+      expect(finder()).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    it("posts the found clip with the message", async () => {
+      const { client } = await mount(wanjiku, cohort);
+      const sent: unknown[] = [];
+      const original = client.api.call.bind(client.api);
+      vi.spyOn(client.api, "call").mockImplementation((route, options) => {
+        if (route.method === "POST") sent.push(options?.body);
+        return original(route, options as never);
+      });
+      await open();
+      await typeSearch($<HTMLInputElement>("[data-clip-finder] input[type=search]")!, "join");
+      await act(() => tick(MOMENT_SEARCH_DEBOUNCE_MS + 20));
+      await click(clips()[0]!);
+      const box = $<HTMLTextAreaElement>("[data-composer=channel] textarea")!;
+      await typeInto(box, "This bit, about joins");
+      await key(box, "Enter");
+      await act(() => tick(10));
+      expect(sent).toContainEqual(expect.objectContaining({
+        embeds: [{ type: "sessionClip", recordingId: fixtureIds.session07, startSeconds: 754, durationSeconds: 60 }],
+      }));
+    });
+  });
+
+  it("starts focus in the messages after agreeing to the habits (QA2-03)", async () => {
+    window.history.replaceState(null, "", "/dashboard/community/c/show-your-work#channel-messages");
+    await mount();
+    expect(document.activeElement).toBe($("[data-channel-scroller]"));
+  });
+
+  it("moves focus to a linked message once it shows, as after opening a search result (QA2-04)", async () => {
+    await mount(wanjiku, community, { messageId: messages.firstPr.id });
+    expect(document.activeElement).toBe($(`[data-channel-scroller] [data-message="${messages.firstPr.id}"]`));
+  });
+
+  it("moves focus to a linked reply in the thread the link opened (QA2-04)", async () => {
+    const reply = messages.mentorReply;
+    await mount(wanjiku, community, {
+      threadId: reply.parentId, initialThread: threadPage(community, reply.parentId!, wanjiku), messageId: reply.id,
+    });
+    expect(document.activeElement).toBe($(`[data-thread-rail] [data-message="${reply.id}"]`));
+  });
+
+  it("names each message's actions differently, also when one person wrote several (QA2-05)", async () => {
+    for (const channel of [community, cohort]) {
+      await mount(wanjiku, channel);
+      const names = $$("button[aria-label^='Actions for']").map((button) => button.getAttribute("aria-label"));
+      expect(names.length).toBeGreaterThanOrEqual(3);
+      expect(new Set(names).size).toBe(names.length);
+    }
+  });
 });

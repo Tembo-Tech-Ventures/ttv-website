@@ -9,6 +9,7 @@ import { channelTitle, openingDivider } from "./channel-format";
 import Composer from "./Composer";
 import MessageList from "./MessageList";
 import { ModerationProvider } from "./MessageModeration";
+import type { MomentFinder } from "./moment-search";
 import { PostingNote } from "./PostingNote";
 import ThreadRail, { type ThreadView } from "./ThreadRail";
 import "./channels.css";
@@ -23,6 +24,8 @@ export type ChannelSurfaceProps = {
   now: number;
   /** Null: no attach tools (see ChannelView). */
   shareables: Shareables | null;
+  /** The clip finder's search (GET /api/channels/:id/shareables?q=). Null offers the recent sessions only. */
+  findMoments?: MomentFinder | null;
   /** Reporting and, where the channel says this reader moderates, hiding and restoring. Null offers neither. */
   moderation?: ModerationActions | null;
   /** `?thread=`: the thread open on arrival. */
@@ -62,8 +65,8 @@ function collectPeople(...lists: ReadonlyArray<readonly (Message | null | undefi
  * it through ChannelView; the DEV harness with both on a fixture API.
  */
 export default function ChannelSurface({
-  me, channel, store, composer, now, shareables, moderation = null, threadId: initialThreadId = null, initialThread = null, messageId = null,
-  children,
+  me, channel, store, composer, now, shareables, findMoments = null, moderation = null, threadId: initialThreadId = null, initialThread = null,
+  messageId = null, children,
 }: ChannelSurfaceProps) {
   const refresh = useChannelFeed(store);
   const state = useChannel(store);
@@ -145,6 +148,28 @@ export default function ChannelSurface({
     });
   }, [showThread, threadId]);
 
+  // A linked message (a search result, something that needs attention) takes focus once it shows, so a
+  // keyboard carries on from it rather than from the top of the page (QA2-04): a reply in the thread the
+  // link opened, otherwise the message in the list, which the list has already brought into view.
+  const linked = useRef(messageId);
+  useEffect(() => {
+    const id = linked.current;
+    if (!id) return;
+    // Someone who has already moved on (into the box, say) keeps their place. The list itself is not
+    // somewhere else: arriving on its fragment (after agreeing to the habits) can focus it.
+    const active = document.activeElement;
+    if (active && active !== document.body && !active.matches("[data-channel-scroller]")) {
+      linked.current = null;
+      return;
+    }
+    const reply = threadId !== null && id !== threadId;
+    const target = document.querySelector<HTMLElement>(`${reply ? "[data-thread-rail]" : "[data-channel-scroller]"} [data-message="${CSS.escape(id)}"]`);
+    if (!target) return;
+    linked.current = null;
+    target.tabIndex = -1;
+    target.focus({ preventScroll: !reply });
+  });
+
   const thread: ThreadView | null = useMemo(() => {
     if (!threadId) return null;
     if (state.thread?.parentId === threadId && (state.thread.status !== "loading" || !initialThread)) {
@@ -204,6 +229,7 @@ export default function ChannelSurface({
               parentId={null}
               composer={composer}
               shareables={shareables}
+              findMoments={findMoments}
               people={mentionPeople}
               label={`Message ${title}`}
             />

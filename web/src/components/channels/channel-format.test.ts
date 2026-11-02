@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { channels, FIXTURE_NOW, messages, meByPersona, people } from "@/lib/platform/fixtures";
 import type { Channel, Message } from "@/lib/platform/contracts";
 import {
+  messageActionsLabel,
   ago, channelTitle, clipTime, clock, composerTools, dayKey, dayLabel, groupByDay, mentionsTembo, moderationNotice,
   openingDivider, parseBody, postingFor, reviewState, temboReach, temboScope, threadSummary,
 } from "./channel-format";
@@ -264,5 +265,27 @@ describe("the composer", () => {
   it("writes channels with a hash and conversations by name", () => {
     expect(channelTitle(channels.showYourWork)).toBe("#show-your-work");
     expect(channelTitle(channels.davidConversation)).toBe("David Kamau");
+  });
+});
+
+describe("a message's actions button (QA2-05)", () => {
+  const at = Date.UTC(2026, 10, 2, 6, 5);
+  const from = (body: string, extra: Partial<Message> = {}): Message => ({ ...messages.mentorOffer, body, createdAt: at, ...extra });
+
+  it("says whose message, when, and how it starts, so one person's messages have different names", () => {
+    const first = messageActionsLabel(from("Anyone free to pair on the **webhook** retries?"));
+    const second = messageActionsLabel(from("Thanks, that fixed it."));
+    expect(first).toBe(`Actions for ${messages.mentorOffer.author.name}'s message at 09:05: “Anyone free to pair on the webhook retries?”`);
+    expect(second).not.toBe(first);
+  });
+
+  it("quotes only the opening words, cut at a word", () => {
+    const label = messageActionsLabel(from("If the provider sends the same callback twice, the second one should change nothing at all."));
+    expect(label).toMatch(/: “If the provider sends the same callback twice,…”$/);
+  });
+
+  it("names shared work when there are no words, and a deleted message by its time", () => {
+    expect(messageActionsLabel(from("", { embeds: messages.projectPost.embeds }))).toMatch(/: “.+”$/);
+    expect(messageActionsLabel(from("", { deleted: true, embeds: [] }))).toBe("Actions for the deleted message at 09:05");
   });
 });

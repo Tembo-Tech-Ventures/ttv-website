@@ -194,13 +194,16 @@ function channels(facts: SidebarFacts, space: ChannelSpace): SidebarGroupModel[]
   if (readable.length === 0) return [];
   return group(facts, "Channels", [
     ...readable.map((channel): Entry => {
-      const unread = channel.unreadCount;
+      const current = channel.id === facts.channels?.currentId;
+      // The open channel is being read, and its own "New" divider shows where;
+      // a count rendered before the reader moved their marker would only go stale.
+      const unread = current ? 0 : channel.unreadCount;
       return {
         key: `channel-${channel.id}`,
         href: channelPath(channel)!,
         label: channel.name,
         icon: space === "cohort" ? "cohortChannel" : "channel",
-        current: channel.id === facts.channels?.currentId,
+        current,
         emphasis: unread > 0 ? "unread" : "read",
         ...(unread > 0 ? { count: unread, countLabel: unread === 1 ? "unread message" : "unread messages" } : {}),
         ...(channel.archivedAt !== null ? { note: "Archived" } : {}),

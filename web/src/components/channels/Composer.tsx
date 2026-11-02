@@ -6,8 +6,10 @@ import { CONDUCT_PATH } from "@/lib/platform/server/space-routes";
 import { cx } from "@/components/platform/ui/cx";
 import { embedRef, NO_SHAREABLES, sameEmbed, type Shareables } from "./actions";
 import { composerTools, mentionsTembo, temboReach, temboScope } from "./channel-format";
+import ClipFinder, { useClipFinder } from "./ClipFinder";
 import { AttachedList, ComposerToolbar, MAX_EMBEDS, MentionList } from "./ComposerParts";
 import { insertMention, mentionCandidates, mentionQuery, type MentionCandidate } from "./mentions";
+import type { MomentFinder } from "./moment-search";
 import { useEnterSends } from "./useEnterSends";
 
 /** About six lines; past that the box scrolls inside itself. */
@@ -23,6 +25,8 @@ type ComposerProps = {
   composer: ChannelComposer;
   /** Null: the page cannot list work to share yet, so no attach tools. */
   shareables: Shareables | null;
+  /** Session moments that mention some words, for the clip finder. Null: the recent sessions only. */
+  findMoments?: MomentFinder | null;
   /** People `@` can reach (S-2.2 brings the channel's members). */
   people: readonly AuthorSummary[];
   /** In a thread: who has written in it, so suggestions can say "in this thread". */
@@ -104,10 +108,12 @@ function useMentionPicker(text: string, caret: number, options: Parameters<typeo
  * not shrink the layout viewport a fixed element is placed against.
  */
 export default function Composer({
-  channel, me, parentId, composer, shareables, people, threadPeople, label, variant = "channel",
+  channel, me, parentId, composer, shareables, findMoments = null, people, threadPeople, label, variant = "channel",
 }: ComposerProps) {
   const tools = composerTools(channel, me.flags);
   const draft = useDraft(composer, parentId);
+  const finder = useClipFinder(draft.box);
+  const offered = shareables ?? NO_SHAREABLES;
   const conductRequired = useComposer(composer, (state) => state.conductRequired);
   const [attached, setAttached] = useState<MessageEmbed[]>([]);
   const enterSends = useEnterSends();
@@ -116,6 +122,7 @@ export default function Composer({
   useEffect(() => setHydrated(true), []);
   const id = useId();
   const listId = `${id}-mentions`;
+  const finderId = `${id}-clips`;
   const thread = variant === "thread";
   // One source for Tembo's reach: the @tembo option, the line under it and the scope line agree.
   const scope = temboScope(channel, thread);
@@ -166,6 +173,7 @@ export default function Composer({
 
   function attach(embed: MessageEmbed) {
     setAttached((list) => (list.some((item) => sameEmbed(item, embed)) || list.length >= MAX_EMBEDS ? list : [...list, embed]));
+    finder.picked();
     requestAnimationFrame(() => draft.box.current?.focus());
   }
 
@@ -215,6 +223,17 @@ export default function Composer({
         />
       )}
 
+      <ClipFinder
+        id={finderId}
+        open={finder.open}
+        recent={offered.clips}
+        find={findMoments}
+        attached={attached}
+        full={attached.length >= MAX_EMBEDS}
+        onPick={attach}
+        onClose={finder.close}
+      />
+
       <noscript>
         <p className="channel-composer__note text-ink-secondary">Posting needs JavaScript. Everything here can still be read.</p>
       </noscript>
@@ -249,10 +268,12 @@ export default function Composer({
         <AttachedList attached={attached} onRemove={(embed) => setAttached((list) => list.filter((item) => !sameEmbed(item, embed)))} />
         <ComposerToolbar
           tools={tools}
-          shareables={shareables ?? NO_SHAREABLES}
+          shareables={offered}
           attachments={!thread && shareables !== null}
           thread={thread}
           canSend={canSend}
+          clipFinder={{ open: finder.open, id: finderId }}
+          onFindClip={finder.toggle}
           attached={attached}
           onPick={attach}
           onMention={startMention}

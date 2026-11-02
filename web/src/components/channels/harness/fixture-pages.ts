@@ -84,6 +84,25 @@ const session07: SessionClipEmbed = {
   startSeconds: 1120, durationSeconds: 75, quote: "Store the key before the side effect, not after.",
 };
 
+/** Moments further into the cohort's sessions, which only a search for their words finds (QA2-02). */
+const LATER_MOMENTS: readonly SessionClipEmbed[] = [
+  {
+    type: "sessionClip", recordingId: fixtureIds.session07, title: "Session 7 · Idempotency keys",
+    startSeconds: 754, durationSeconds: 60, quote: "Join the payments to their orders on the key, so a retried payment finds its order.",
+  },
+  {
+    type: "sessionClip", recordingId: fixtureIds.session09, title: "Session 9 · Webhooks and retries",
+    startSeconds: 2410, durationSeconds: 60, quote: "Wait a little longer after each failed delivery, and stop after five tries.",
+  },
+];
+
+/** The cohort's session moments that mention `q`, as B-2.4's search finds them: a member of Cohort 04 only. */
+export function momentsFor(me: Me, q: string): SessionClipEmbed[] {
+  if (!me.capabilities.cohortIds.includes(fixtureIds.cohort04)) return [];
+  const words = q.toLocaleLowerCase();
+  return [sessionClip, session07, ...LATER_MOMENTS].filter((clip) => clip.quote.toLocaleLowerCase().includes(words));
+}
+
 /** The person's own projects, and their cohort's session moments. */
 export function shareablesFor(me: Me): Shareables {
   const own = Object.values(projects).filter((project) =>

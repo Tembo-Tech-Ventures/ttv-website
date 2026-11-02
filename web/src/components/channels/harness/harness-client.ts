@@ -8,7 +8,7 @@
  */
 import {
   EditMessage, ModerationAction, PostMessage, ReactToMessage, ReportMessage, RequestModerationReview, ROUTES, type Channel, type ChannelRead, type Me, type Message,
-  type MessageEmbed, type MessageList, type ReactionKind,
+  type MessageEmbed, type MessageList, type ReactionKind, type SessionClipEmbed,
 } from "@/lib/platform/contracts";
 import { createApiClient, type ApiClient } from "@/lib/platform/client/apiClient";
 import { createMockTransport, type MockOptions, type MockReply } from "@/lib/platform/client/mockTransport";
@@ -38,6 +38,8 @@ type HarnessOptions = {
   root: MessageList;
   /** The person's own work, which posts may attach. */
   shareables?: Shareables;
+  /** The session moments that mention some words (`?q=`); "" gives every moment, which posts may attach too. */
+  moments?: (q: string) => readonly SessionClipEmbed[];
   now?: () => number;
   /** Refuse or fail requests, as MockOptions.failure. */
   failure?: MockOptions["failure"];
@@ -55,7 +57,7 @@ function withReaction(message: Message, kind: ReactionKind, active: boolean): Me
   return { ...message, reactions: reactions.filter((reaction) => reaction.count > 0) };
 }
 
-export function createHarnessClient({ me, channel, root, shareables, now = Date.now, failure }: HarnessOptions): HarnessClient {
+export function createHarnessClient({ me, channel, root, shareables, moments, now = Date.now, failure }: HarnessOptions): HarnessClient {
   const queue: Message[] = [];
   let generation = 0;
   let sequence = 0;
@@ -71,7 +73,7 @@ export function createHarnessClient({ me, channel, root, shareables, now = Date.
   const empty = (thread: string | null, cursor: string): MessageList => ({ items: [], beforeCursor: null, sinceCursor: cursor, thread, removedIds: [] });
 
   function resolveEmbeds(refs: PostMessage["embeds"]): MessageEmbed[] | null {
-    const owned: MessageEmbed[] = [...(shareables?.projects ?? []), ...(shareables?.clips ?? [])];
+    const owned: MessageEmbed[] = [...(shareables?.projects ?? []), ...(shareables?.clips ?? []), ...(moments?.("") ?? [])];
     const resolved = refs.map((ref) => owned.find((embed) => sameEmbed(embed, ref)));
     return resolved.every((embed): embed is MessageEmbed => embed !== undefined) ? resolved : null;
   }
@@ -159,6 +161,15 @@ export function createHarnessClient({ me, channel, root, shareables, now = Date.
           const updated = withReaction(message, kind, active);
           known.set(message.id, updated);
           return { data: { messageId: message.id, reactions: updated.reactions } };
+        },
+      },
+      {
+        ...ROUTES.listShareables,
+        reply: ({ request, params }) => {
+          if (params.id !== channel.id) return refuse(404, "not_found", "No such channel");
+          const q = new URL(request.url).searchParams.get("q")?.trim();
+          const offered = { projects: shareables?.projects ?? [], clips: shareables?.clips ?? [] };
+          return { data: q ? { ...offered, clips: moments?.(q) ?? [] } : offered };
         },
       },
       {

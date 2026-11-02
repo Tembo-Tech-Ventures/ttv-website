@@ -300,14 +300,22 @@ describe("space sidebars", () => {
     });
 
     it("bolden unread channels with their count, read ones quieter, and mark the open one", () => {
-      const model = spaceSidebar("community", facts(meByPersona.lucy, "communityChannel", { channels: { ...readable, currentId: channels.help.id } }));
+      const model = spaceSidebar("community", facts(meByPersona.lucy, "journey", { channels: readable }));
       const items = group(model)!.items;
-      expect(items.find((entry) => entry.label === "help")).toMatchObject({ emphasis: "unread", count: 3, countLabel: "unread messages", current: true });
+      expect(items.find((entry) => entry.label === "help")).toMatchObject({ emphasis: "unread", count: 3, countLabel: "unread messages", current: false });
       expect(items.find((entry) => entry.label === "introductions")).toMatchObject({ emphasis: "read", current: false });
       expect(items.find((entry) => entry.label === "introductions")).not.toHaveProperty("count");
-      expect(current(model)).toEqual(["help"]);
       const one = spaceSidebar("community", facts(meByPersona.lucy, "journey", { channels: { items: [{ ...channels.help, unreadCount: 1 }] } }));
       expect(group(one)!.items[0]).toMatchObject({ count: 1, countLabel: "unread message" });
+    });
+
+    // QA2-01: the count was rendered before the reader's marker moved, so it stayed stale until they left.
+    it("show no unread count on the open channel, which is being read", () => {
+      const model = spaceSidebar("community", facts(meByPersona.lucy, "communityChannel", { channels: { ...readable, currentId: channels.help.id } }));
+      const help = group(model)!.items.find((entry) => entry.label === "help");
+      expect(help).toMatchObject({ emphasis: "read", current: true });
+      expect(help).not.toHaveProperty("count");
+      expect(current(model)).toEqual(["help"]);
     });
 
     it("mark the habits current on their own page, in Community only", () => {

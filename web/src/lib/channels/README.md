@@ -430,6 +430,9 @@ the rest.
   `moderation.reviewable`, for the author only on a HIDDEN message, says
   whether a review can still be asked for or is pending: false once an
   admin's decision is final or the message is deleted.
+- **`reportedByMe`** on every message says whether the caller reported it:
+  their own report only, never anyone else's, so "You reported this"
+  survives a reload (QA2-06).
 - **Queue**: admins only. One case per message (item id = message id),
   newest first by when the case first opened, so a case reopened by a signal
   after an admin's decision keeps its place while an admin pages, and says

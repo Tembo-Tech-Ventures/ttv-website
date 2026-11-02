@@ -5,6 +5,7 @@ import { ReactionKind, type Message } from "@/lib/platform/contracts";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
 import { REACTIONS } from "@/components/platform/ui/TextReaction";
+import { messageActionsLabel } from "./channel-format";
 
 export const MENU_ITEM =
   "flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-primary data-focus:bg-ink-primary/10 data-disabled:text-ink-muted pointer-coarse:min-h-11";
@@ -105,10 +106,9 @@ export function hasMenu(can: MessageMenuProps["can"]): boolean {
  * stays visible on touch screens, which have no hover.
  */
 export default function MessageMenu({ message, buttonRef, can, onReply, onReact, onEdit, onDelete, onReport, onModerate }: MessageMenuProps) {
-  const whose = message.deleted ? "the deleted message" : `${message.author.name}'s message`;
   return (
     <Menu>
-      <MenuButton ref={buttonRef} aria-label={`Actions for ${whose}`} className={cx("channel-message__more", FOCUS_RING)}>
+      <MenuButton ref={buttonRef} aria-label={messageActionsLabel(message)} className={cx("channel-message__more", FOCUS_RING)}>
         <PiDotsThreeBold aria-hidden="true" className="size-5" />
       </MenuButton>
       <MenuItems anchor={{ to: "bottom end", gap: 4 }} className="channel-menu">

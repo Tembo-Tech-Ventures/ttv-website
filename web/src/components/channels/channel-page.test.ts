@@ -108,7 +108,8 @@ describe("a channel's page", () => {
     const response = await resolveChannelPage(astro({ path: "/dashboard/community/c/help?message=m1", method: "POST" }), "community");
     expect(response).toBeInstanceOf(Response);
     expect((response as Response).status).toBe(303);
-    expect((response as Response).headers.get("Location")).toBe("/dashboard/community/c/help?message=m1");
+    // QA2-03: to the messages, which take focus, not the top of a new page.
+    expect((response as Response).headers.get("Location")).toBe("/dashboard/community/c/help?message=m1#channel-messages");
     expect((response as Response).headers.get("Cache-Control")).toBe("no-store");
     expect(mocks.acknowledge).toHaveBeenCalledExactlyOnceWith(CONDUCT_VERSION);
   });

@@ -77,6 +77,15 @@ talk to each other, U-2.3's `ChannelFrame` asks; after, the conversation:
   cohort's own channels, a clip from each recent session. It is null where
   they cannot post, and then the composer offers no attach tools rather than
   claim there is nothing to share.
+- Session clip opens the clip finder (`ClipFinder.tsx`) above the composer:
+  before any words it offers those recent sessions; typed words search the
+  cohort's moments through `?q=` (`moment-search.ts`: one request per pause
+  in the typing, the stale one aborted), and a moment attaches as a clip
+  that starts there. Escape or Close returns focus to the button.
+- A linked message (`?message=`, as a search result opens) takes focus once
+  it shows, in the thread when the link opened one; after agreeing to the
+  habits the page returns to `#channel-messages` and focus starts in the
+  list.
 - The view creates `createModerationActions` (`moderation-actions.ts`) for
   reports and in-place moderation on B-2.5's routes.
 - It renders nothing while `channels` is off for the person. The route 404s
@@ -136,7 +145,8 @@ talk to each other, U-2.3's `ChannelFrame` asks; after, the conversation:
 - **Moderating in place** (U-2.2, B-2.5). Everyone but the author can report
   a message, once, with a reason (a choice and their own words); the message
   stays up and the report goes to the admin queue, so the reporter sees
-  "You reported this" and nothing else changes. The channel's moderators
+  "You reported this" (after a reload too, from `reportedByMe`) and nothing
+  else changes. The channel's moderators
   (`canModerate`) hide with a reason the author reads; only admins restore.
   The author of a hidden message can ask for a review once, and only while
   the server says `moderation.reviewable`; once an admin's decision is final
