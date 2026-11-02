@@ -7,6 +7,7 @@ import {
 import { CursorExpiredError, decodeCursor, encodeCursor } from "./cursor";
 import { embedAccessColumn, embedsForReader } from "./embeds";
 import { ChannelError } from "./errors";
+import { bodyForReader } from "./moderation/mask";
 
 /**
  * Reading messages (README.md beside this file, "Reading messages"). Raw D1 SQL, because one
@@ -166,23 +167,26 @@ const isVisible = (row: MessageRow, ctx: ReadContext) =>
 /**
  * The wire Message for this viewer. Deleted messages keep their place with no content. Only the
  * author and the channel's moderators learn a message's moderation state, and only the author gets
- * the client nonce back (it reconciles their optimistic copy).
+ * the client nonce back (it reconciles their optimistic copy). Everyone else reads a message flagged
+ * for contact details with those details masked (moderation/mask.ts).
  */
 export function toMessage(row: MessageRow, ctx: ReadContext): Message {
   const own = row.authorKind === "USER" && row.authorId !== null && row.authorId === ctx.viewerId;
+  const privileged = own || ctx.channel.capabilities.canModerate;
   const deleted = row.deletedAt !== null;
+  const reasons = parsedArray(NonBlank, row.moderationReasons);
   return {
     id: row.id, channelId: row.channelId, parentId: row.parentId,
     clientNonce: own ? row.clientNonce : null,
     authorKind: row.authorKind, author: author(row, ctx.channel.programId),
-    body: deleted ? "" : row.body,
+    body: deleted ? "" : bodyForReader({ body: row.body, moderationState: row.moderationState, reasons }, privileged),
     embeds: deleted ? [] : embedsForReader(jsonArray(row.embeds), row.embedAccess),
     citations: deleted ? [] : parsedArray(Citation, row.citations),
     reactions: deleted ? [] : reactions(row.reactions),
     createdAt: row.createdAt, edited: !deleted && row.editedAt !== null, deleted,
-    moderation: own || ctx.channel.capabilities.canModerate
+    moderation: privileged
       ? {
-        state: row.moderationState, reasons: parsedArray(NonBlank, row.moderationReasons),
+        state: row.moderationState, reasons,
         ...row.reviewRequested === null ? {} : { reviewRequested: row.reviewRequested === 1 },
         ...row.reviewable === null ? {} : { reviewable: row.reviewable === 1 },
       }

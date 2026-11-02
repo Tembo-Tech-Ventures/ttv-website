@@ -147,8 +147,8 @@ export async function readMarker(
   return { lastReadMessageId: row?.lastReadMessageId ?? null, unreadCount: row?.unreadCount ?? 0 };
 }
 
-/** Just enough of a readable channel to search it and link to it. */
-export type ChannelRef = Pick<Channel, "id" | "kind" | "slug" | "programId">;
+/** Just enough of a readable channel to search it and link to it, and whether the caller moderates it. */
+export type ChannelRef = Pick<Channel, "id" | "kind" | "slug" | "programId"> & { canModerate: boolean };
 
 /**
  * Every channel the caller can read, without the counts the channel list carries: one indexed read,
@@ -165,6 +165,8 @@ export async function readableChannelRefs(
     .from(channel)
     .leftJoin(channelMember, and(eq(channelMember.channelId, channel.id), eq(channelMember.userId, userId)))
     .where(candidateChannels(db, userId, capabilities));
-  return rows.flatMap(({ postingPolicy, archivedAt, isMember, ...ref }) =>
-    channelAccessFor(capabilities, { ...ref, postingPolicy, archivedAt }, { isMember: isMember === 1 }).canRead ? [ref] : []);
+  return rows.flatMap(({ postingPolicy, archivedAt, isMember, ...ref }) => {
+    const access = channelAccessFor(capabilities, { ...ref, postingPolicy, archivedAt }, { isMember: isMember === 1 });
+    return access.canRead ? [{ ...ref, canModerate: access.canModerate }] : [];
+  });
 }

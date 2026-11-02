@@ -61,6 +61,8 @@ const PHONES: Case[] = [
   ["0722, double zero zero, 111", ["phone"]],
   ["oh seven two two,double zero zero,one one one", ["phone"]],
   ["oh seven two two , double zero zero , one one one", ["phone"]],
+  // The comma looks back across a space to the spelled digit before it.
+  ["oh seven two two , 345 678", ["phone"]],
   ["O712345678", ["phone"]],
   // Disguised characters.
   ["０７１２３４５６７８", ["phone"]],

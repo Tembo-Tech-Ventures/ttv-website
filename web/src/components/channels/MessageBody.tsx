@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import { cx } from "@/components/platform/ui/cx";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
+import { MASKED_CONTACT } from "@/lib/platform/contracts";
 import { parseBody, type BodySegment } from "./channel-format";
 
 type MessageBodyProps = {
@@ -45,8 +46,32 @@ function Segment({ segment }: { segment: BodySegment }) {
         </a>
       );
     default:
-      return segment.text;
+      return <Masked text={segment.text} />;
   }
+}
+
+/**
+ * Text with the server's MASKED_CONTACT markers shown as a note, not as the member's words: contact
+ * details a moderator has not checked yet (QA2-08).
+ */
+function Masked({ text }: { text: string }) {
+  if (!text.includes(MASKED_CONTACT)) return text;
+  // Each piece is keyed by where it starts in the text.
+  let offset = 0;
+  return text.split(MASKED_CONTACT).map((part, i) => {
+    const start = offset;
+    offset += part.length + MASKED_CONTACT.length;
+    return (
+      <Fragment key={start}>
+        {i > 0 && (
+          <span className="channel-masked" role="note">
+            Contact details hidden until a moderator checks this message
+          </span>
+        )}
+        {part}
+      </Fragment>
+    );
+  });
 }
 
 /**

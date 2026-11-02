@@ -275,9 +275,18 @@ export const ThreadSummary = z.object({ replyCount: Count, participantIds: z.arr
 export type ThreadSummary = z.infer<typeof ThreadSummary>;
 export const TemboScope = z.enum(["COHORT", "COMMUNITY", "DIRECT"]);
 export type TemboScope = z.infer<typeof TemboScope>;
+/**
+ * Stands in for each phone number, email address or chat invitation in a FLAGGED message, for every
+ * reader except its author, the channel's moderators and admins, until a person decides (QA2-08).
+ * Message bodies and search excerpts carry it as plain text; a UI renders it as a note, not as the
+ * member's words. Neighbouring details share one marker.
+ */
+export const MASKED_CONTACT = "[contact details hidden until a moderator checks this message]";
+/** Markers in one body at most: the last one covers the rest of the body. */
+export const MAX_CONTACT_MASKS = 21;
 export const Message = z.object({
   id: Id, channelId: Id, parentId: Id.nullable(), clientNonce: ClientNonce.nullable(),
-  authorKind: AuthorKind, author: AuthorSummary, body: z.string().max(10_000),
+  authorKind: AuthorKind, author: AuthorSummary, body: z.string().max(10_000 + MAX_CONTACT_MASKS * MASKED_CONTACT.length),
   embeds: z.array(MessageEmbedView), citations: z.array(Citation), reactions: z.array(Reaction),
   createdAt: Timestamp, edited: z.boolean(), deleted: z.boolean(),
   // Null for ordinary readers. Only authors/moderators receive reasons and state.
