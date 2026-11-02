@@ -1,10 +1,12 @@
 import { useState, type ReactNode } from "react";
 import type { Channel, Me, MessageList } from "@/lib/platform/contracts";
+import { createApiClient } from "@/lib/platform/client/apiClient";
 import { createChannelStore } from "@/lib/platform/client/channel";
 import { createComposer } from "@/lib/platform/client/composer";
 import type { Shareables } from "./actions";
 import ChannelSurface from "./ChannelSurface";
 import { createModerationActions } from "./moderation-actions";
+import { shareablesFinder } from "./moment-search";
 
 export type ChannelViewProps = {
   me: Me;
@@ -51,6 +53,7 @@ export default function ChannelView({
   }));
   const [composer] = useState(() => createComposer({ store, me }));
   const [moderation] = useState(() => createModerationActions({ store }));
+  const [findMoments] = useState(() => shareablesFinder(createApiClient(), channel.id));
   if (!enabled) return null;
   return (
     <ChannelSurface
@@ -60,6 +63,7 @@ export default function ChannelView({
       composer={composer}
       now={now}
       shareables={shareables}
+      findMoments={findMoments}
       moderation={moderation}
       threadId={threadId}
       initialThread={initialThread}

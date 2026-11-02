@@ -7,7 +7,7 @@ import type { ChannelSpace } from "@/lib/platform/server/space-routes";
 import { resolveSpacePage, type SpacePageContext } from "@/components/platform/spaces/space-page";
 import type { SpacePageKey } from "@/components/platform/spaces/sidebar";
 import { conductAgreed, handleConductPost } from "./conduct-flow";
-import { channelSpace } from "./paths";
+import { CHANNEL_MESSAGES_ID, channelSpace } from "./paths";
 import { channelsServer } from "./server";
 
 /**
@@ -66,7 +66,8 @@ async function resolve<T extends object>(
   const self = astro.url.pathname + astro.url.search;
   const canAgree = !isAgentSession(astro.locals.session?.userAgent);
   if (method === "POST" && !canAgree) return respond(403, {}, AGENT_REFUSAL);
-  const posted = await handleConductPost(astro.request, server.conduct, self);
+  // From a channel's own gate, back to its messages; from the habits' page, back to the habits.
+  const posted = await handleConductPost(astro.request, server.conduct, "channel" in found ? `${self}#${CHANNEL_MESSAGES_ID}` : self);
   if (posted) return posted.kind === "redirect" ? respond(303, { Location: posted.location }) : respond(posted.status);
   const record = await server.conduct.load();
   return { context, readable, record, agreed: conductAgreed(record), canAgree, self, ...found };

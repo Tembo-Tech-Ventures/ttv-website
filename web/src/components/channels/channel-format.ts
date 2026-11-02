@@ -284,6 +284,31 @@ export function reportReason(key: ReportReasonKey, details: string): string | nu
   return (words ? `${label}: ${words}` : label).slice(0, MAX_REASON);
 }
 
+/** How much of a message its actions button quotes. */
+const EXCERPT_LENGTH = 48;
+
+/** A message's opening words, plain: markdown marks dropped, cut at a word. Shared work stands in for no words. */
+function excerpt(message: Message): string {
+  const words = message.body.replace(/[*_~`>#[\]]/g, "").replace(/\s+/g, " ").trim();
+  const text = words || (message.embeds.find((embed) => embed.type !== "unavailable")?.title ?? "");
+  if (text.length <= EXCERPT_LENGTH) return text;
+  const cut = text.slice(0, EXCERPT_LENGTH);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > EXCERPT_LENGTH / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+/**
+ * The name of a message's actions button: whose message, when, and how it
+ * starts. A screen reader's list of buttons then still says which message
+ * each belongs to, even when one person wrote several (QA2-05, WCAG 2.4.6).
+ */
+export function messageActionsLabel(message: Message): string {
+  const at = clock(message.createdAt);
+  if (message.deleted) return `Actions for the deleted message at ${at}`;
+  const words = excerpt(message);
+  return `Actions for ${message.author.name}'s message at ${at}${words ? `: “${words}”` : ""}`;
+}
+
 /** The first name, for sentences about a person ("Dennis will still see it"). */
 export function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? name;

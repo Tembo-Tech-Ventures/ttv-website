@@ -113,6 +113,11 @@ describe("copy", () => {
     expect(DECIDED_NOTICE.keep).toMatch(/^Kept as is\./);
   });
 
+  it("does not promise a review after an admin hides or keeps hiding a message: that decision is final (QA2-14)", () => {
+    expect(DECIDED_NOTICE.hide).not.toMatch(/review/);
+    expect(DECIDED_NOTICE.hide).toMatch(/an admin's decision is final\.$/);
+  });
+
   it("addresses the author by first name, gently", () => {
     expect(firstName("Dennis Kiprono")).toBe("Dennis");
     expect(firstName("   ")).toBe("The author");

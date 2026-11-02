@@ -13,7 +13,8 @@ import { FIXTURE_NOW, people } from "@/lib/platform/fixtures";
 import type { ModerationActions } from "../actions";
 import ChannelSurface from "../ChannelSurface";
 import { createModerationActions } from "../moderation-actions";
-import { shareablesFor } from "./fixture-pages";
+import { shareablesFinder } from "../moment-search";
+import { momentsFor, shareablesFor } from "./fixture-pages";
 import { createHarnessClient, type ModerationRecord } from "./harness-client";
 
 declare global {
@@ -57,7 +58,7 @@ export default function HarnessChannel({ me, channel, initial, initialThread, th
     const now = () => FIXTURE_NOW + (Date.now() - started);
     const refusal: { next: Refusal | null } = { next: null };
     const client = createHarnessClient({
-      me, channel, root: initial, shareables: shareablesFor(me), now,
+      me, channel, root: initial, shareables: shareablesFor(me), moments: (q) => momentsFor(me, q), now,
       failure: (request) => {
         const write = request.method !== "GET" && !request.url.endsWith("/read");
         const next = refusal.next;
@@ -72,7 +73,7 @@ export default function HarnessChannel({ me, channel, initial, initialThread, th
     });
     const composer = createComposer({ store, me, api: client.api, now });
     const moderation: ModerationActions = createModerationActions({ store, api: client.api });
-    return { client, store, composer, moderation, now, refusal };
+    return { client, store, composer, moderation, findMoments: shareablesFinder(client.api, channel.id), now, refusal };
   });
 
   useEffect(() => {
@@ -112,6 +113,7 @@ export default function HarnessChannel({ me, channel, initial, initialThread, th
       composer={harness.composer}
       now={FIXTURE_NOW}
       shareables={shareablesFor(me)}
+      findMoments={harness.findMoments}
       moderation={harness.moderation}
       threadId={threadId}
       initialThread={initialThread}

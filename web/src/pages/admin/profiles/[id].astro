@@ -383,7 +383,7 @@ const moderationOutcomeLabel = profile.moderationOutcome
                         "shrink-0 rounded-md px-4 py-2 text-sm font-medium text-white transition-colors",
                         post.status === "PUBLISHED"
                           ? "bg-red-600 hover:bg-red-700"
-                          : "bg-green-600 hover:bg-green-700",
+                          : "bg-green-700 hover:bg-green-800",
                       ]}
                     >
                       {post.status === "PUBLISHED" ? "Suspend post" : "Restore post"}
@@ -405,7 +405,7 @@ const moderationOutcomeLabel = profile.moderationOutcome
             <input type="hidden" name="_action" value="moderate-profile" />
             <input type="hidden" name="profileAction" value="publish" />
             <input type="hidden" name="contentVersion" value={profile.contentVersion} />
-            <button type="submit" class="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">
+            <button type="submit" class="rounded-md bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800">
               {profile.status === "SUSPENDED" ? "Republish" : "Publish"}
             </button>
           </form>

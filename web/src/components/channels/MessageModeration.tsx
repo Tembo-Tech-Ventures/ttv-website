@@ -18,7 +18,7 @@ type ModerationContextValue = {
   canModerate: boolean;
   /** Admins have the final say: only they restore a hidden message (B-2.5). */
   canRestore: boolean;
-  /** Messages this reader reported in this visit. A report changes nothing else they can see. */
+  /** Messages this reader reported in this visit, before the server's next copy says so too. */
   reported: ReadonlySet<string>;
   markReported: (messageId: string) => void;
 };
@@ -51,6 +51,12 @@ export function ModerationProvider({ actions, canReport, canModerate, canRestore
 
 export const useModeration = () => useContext(ModerationContext);
 
+/**
+ * Whether this reader has reported the message: in this visit, or before, as the server says on every
+ * read (`reportedByMe`, theirs alone), so it survives a reload (QA2-06).
+ */
+const hasReported = (message: Message, reported: ReadonlySet<string>) => message.reportedByMe === true || reported.has(message.id);
+
 /** What this reader may do about one message. Deleted messages take nothing; nobody reports or hides their own. */
 export function moderationRights(message: Message, viewerId: string | null, context: ModerationContextValue) {
   const own = message.authorKind === "USER" && viewerId !== null && message.author.id === viewerId;
@@ -58,7 +64,7 @@ export function moderationRights(message: Message, viewerId: string | null, cont
   const open = context.actions !== null && !message.deleted && viewerId !== null;
   return {
     report: open && context.canReport && !own && !hidden,
-    reported: context.reported.has(message.id),
+    reported: hasReported(message, context.reported),
     hide: open && context.canModerate && !own && !hidden,
     restore: open && context.canRestore && hidden,
     review: open && own && reviewState(message) === "available",
@@ -109,10 +115,10 @@ export function ModerationNote({ message, viewerId, onAskReview }: { message: Me
   );
 }
 
-/** Under a message this reader reported in this visit. The live region has already said it once. */
+/** Under a message this reader reported. The live region said it once, when they did. */
 export function ReportedNote({ message }: { message: Message }) {
   const { reported } = useModeration();
-  if (!reported.has(message.id)) return null;
+  if (!hasReported(message, reported)) return null;
   return (
     <p className="channel-reported" data-reported>
       <PiFlag aria-hidden="true" className="size-3.5 shrink-0" />

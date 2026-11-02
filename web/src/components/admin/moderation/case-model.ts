@@ -95,7 +95,8 @@ export type DecidedOutcome = ModerationActionKind | "closed";
 
 /** The banner after a decision. It says what changed for the channel, never more. */
 export const DECIDED_NOTICE: Record<DecidedOutcome, string> = {
-  hide: "Hidden. Members no longer see the message. Its author is told and can ask for a review.",
+  // An admin's hide, or one an admin kept, is final: the author's review request is refused (`reviewable` false, QA2-14).
+  hide: "Hidden. Members no longer see the message. Its author still sees it, with your reason, and that an admin's decision is final.",
   restore: "Restored. Everyone in the channel sees the message again.",
   keep: "Kept as is. Nothing is hidden, and the same text won't be flagged again.",
   closed: "Case closed. Its author had deleted the message, so nothing else changes.",

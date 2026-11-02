@@ -59,8 +59,17 @@ function AttachSection({ title, items, empty, attached, onPick }: PickProps & { 
 const ProjectSection = ({ shareables, ...pick }: PickProps & { shareables: Shareables }) => (
   <AttachSection title="Share a project" items={shareables.projects} empty="You have no projects to share yet." {...pick} />
 );
-const ClipSection = ({ shareables, ...pick }: PickProps & { shareables: Shareables }) => (
-  <AttachSection title="Share a session clip" items={shareables.clips} empty="No session moments to share yet." {...pick} />
+/** In the narrow composer's "+" menu: the way to the clip finder, which needs room for its words. */
+const ClipSection = ({ onFindClip }: { onFindClip: () => void }) => (
+  <MenuSection>
+    <MenuHeading className="px-3 pt-1.5 pb-1 text-xs font-semibold text-ink-muted">Share a session clip</MenuHeading>
+    <MenuItem>
+      <button type="button" className={MENU_ITEM} onClick={onFindClip} data-find-clip>
+        <PiVideoCamera aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-ink-muted" />
+        Find a moment…
+      </button>
+    </MenuItem>
+  </MenuSection>
 );
 
 function ToolMenu({ label, icon, children, iconOnly = false }: { label: string; icon: ReactNode; children: ReactNode; iconOnly?: boolean }) {
@@ -84,6 +93,9 @@ type ToolbarProps = PickProps & {
   attachments: boolean;
   thread: boolean;
   canSend: boolean;
+  /** The clip finder is open; it belongs to the box with this id. */
+  clipFinder: { open: boolean; id: string };
+  onFindClip: (trigger: HTMLElement | null) => void;
   onMention: () => void;
   onAskTembo: () => void;
 };
@@ -93,7 +105,7 @@ type ToolbarProps = PickProps & {
  * composer both fold under "+". Then @, Ask Tembo (only while
  * `tembo_channels` is on) and Send, which is always visible.
  */
-export function ComposerToolbar({ tools, shareables, attachments, thread, canSend, onMention, onAskTembo, ...pick }: ToolbarProps) {
+export function ComposerToolbar({ tools, shareables, attachments, thread, canSend, clipFinder, onFindClip, onMention, onAskTembo, ...pick }: ToolbarProps) {
   return (
     <div className="channel-composer__bar">
       {attachments && (
@@ -101,7 +113,8 @@ export function ComposerToolbar({ tools, shareables, attachments, thread, canSen
           <div className="channel-composer__attach">
             <ToolMenu label="Attach work" icon={<PiPlus className="size-4.5" />} iconOnly>
               <ProjectSection shareables={shareables} {...pick} />
-              {tools.sessionClip && <ClipSection shareables={shareables} {...pick} />}
+              {/* The menu item goes with the menu: closing the finder returns focus to the box instead. */}
+              {tools.sessionClip && <ClipSection onFindClip={() => onFindClip(null)} />}
             </ToolMenu>
           </div>
           <div className="channel-composer__wide-tools">
@@ -109,9 +122,17 @@ export function ComposerToolbar({ tools, shareables, attachments, thread, canSen
               <ProjectSection shareables={shareables} {...pick} />
             </ToolMenu>
             {tools.sessionClip && (
-              <ToolMenu label="Session clip" icon={<PiVideoCamera className="size-4.5" />}>
-                <ClipSection shareables={shareables} {...pick} />
-              </ToolMenu>
+              <button
+                type="button"
+                aria-expanded={clipFinder.open}
+                aria-controls={clipFinder.open ? clipFinder.id : undefined}
+                onClick={(event) => onFindClip(event.currentTarget)}
+                className={cx(TOOL, FOCUS_RING)}
+                data-find-clip
+              >
+                <PiVideoCamera aria-hidden="true" className="size-4.5" />
+                Session clip
+              </button>
             )}
           </div>
         </>

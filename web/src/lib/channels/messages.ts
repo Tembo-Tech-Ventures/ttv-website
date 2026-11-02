@@ -44,6 +44,8 @@ export interface MessageRow {
   reviewRequested: number | null;
   /** 0 or 1 on a HIDDEN message for its author; null otherwise. */
   reviewable: number | null;
+  /** 1 when the viewer reported this message (their own report only), else 0. */
+  reportedByMe: number;
 }
 
 /**
@@ -80,6 +82,7 @@ export const messageColumns = (program: string) => `m.id, m.channelId, m.parentI
     THEN m.deletedAt IS NULL AND NOT ${ADMIN_HID}
       AND coalesce((SELECT c.state FROM moderation_case c WHERE c.messageId = m.id), 'PENDING') = 'PENDING'
   END AS reviewable,
+  EXISTS (SELECT 1 FROM message_report rp WHERE rp.messageId = m.id AND rp.reporterId = ?2) AS reportedByMe,
   ${embedAccessColumn(program)}`;
 const MESSAGE_COLUMNS = messageColumns("?3");
 const FROM_MESSAGES = `FROM channel_message m LEFT JOIN "user" u ON u.id = m.authorId`;
@@ -186,6 +189,7 @@ export function toMessage(row: MessageRow, ctx: ReadContext): Message {
       : null,
     thread: row.parentId === null ? threadSummary(row.thread) : { replyCount: 0, participantIds: [], lastReplyAt: null },
     temboScope: row.authorKind === "TEMBO" ? ctx.channel.kind : null,
+    reportedByMe: row.reportedByMe === 1,
   };
 }
 

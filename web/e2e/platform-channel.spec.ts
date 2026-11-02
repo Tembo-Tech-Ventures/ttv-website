@@ -374,7 +374,7 @@ test.describe("the channel view", () => {
     await page.setViewportSize(DESKTOP);
     await open(page, harness({ channel: "cohort-04" }));
     await page.getByRole("button", { name: "Session clip" }).click();
-    await page.getByRole("menuitem", { name: /Webhooks and retries/ }).click();
+    await page.getByRole("button", { name: /Webhooks and retries · 34:12/ }).click();
     await expect(page.locator(".channel-attached")).toContainText("Session 9 · Webhooks and retries · 34:12");
     await open(page, harness());
     await expect(page.getByRole("button", { name: "Session clip" })).toHaveCount(0);
@@ -382,6 +382,28 @@ test.describe("the channel view", () => {
     await page.getByRole("button", { name: "Attach work" }).click();
     await expect(page.getByRole("menu")).not.toContainText("session clip");
   });
+
+  // QA2-02: the moment someone remembers, found by its words, not only each session's start.
+  for (const [name, size] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
+    test(`Session clip finds a moment by its words and attaches it there (${name})`, async ({ page }) => {
+      await page.setViewportSize(size);
+      await open(page, harness({ channel: "cohort-04" }));
+      if (name === "phone") {
+        await page.getByRole("button", { name: "Attach work" }).click();
+        await page.getByRole("menuitem", { name: "Find a moment…" }).click();
+      } else {
+        await page.getByRole("button", { name: "Session clip" }).click();
+      }
+      const words = page.getByRole("searchbox", { name: "Find a moment" });
+      await expect(words).toBeFocused();
+      await words.fill("join");
+      await expect(page.locator("[data-clip-status]")).toHaveText("1 moment mentions “join”");
+      await page.getByRole("button", { name: /Idempotency keys · 12:34/ }).click();
+      await expect(page.locator(".channel-attached")).toContainText("Session 7 · Idempotency keys · 12:34");
+      await expect(composer(page)).toBeFocused();
+      expect(await horizontalOverflow(page)).toBe(0);
+    });
+  }
 
   test("a failed send waits in the outbox, says why, and Try again stores it once", async ({ page }, testInfo) => {
     await page.setViewportSize(PHONE);

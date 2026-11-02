@@ -282,6 +282,8 @@ export const Message = z.object({
   createdAt: Timestamp, edited: z.boolean(), deleted: z.boolean(),
   // Null for ordinary readers. Only authors/moderators receive reasons and state.
   moderation: MessageModeration.nullable(), thread: ThreadSummary, temboScope: TemboScope.nullable(),
+  // The caller's own report only: whether they reported this message, never who else did (QA2-06).
+  reportedByMe: z.boolean().optional(),
 }).refine((m) => !m.deleted || (m.body === "" && m.embeds.length === 0 && m.citations.length === 0),
   "Deleted messages contain no body, embeds or citations")
   .refine((m) => m.authorKind === "TEMBO" ? m.author.id === null && m.temboScope !== null : m.temboScope === null,
