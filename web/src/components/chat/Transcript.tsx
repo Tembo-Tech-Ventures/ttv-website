@@ -186,7 +186,7 @@ export default function Transcript({
   onPickPrompt,
   conversationEpoch,
   suggestions = NO_SUGGESTIONS,
-  assistantName = "Ask AI",
+  assistantName = "Ask Tembo",
 }: TranscriptProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [nearBottom, setNearBottom] = useState(true);

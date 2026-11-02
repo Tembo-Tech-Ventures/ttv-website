@@ -41,7 +41,7 @@ export const DASHBOARD_LINKS: DashboardLink[] = [
     activePrefixes: ["/dashboard/application"],
   },
   { id: "sessions", href: "/dashboard/sessions", label: "Sessions", icon: PiVideoCameraDuotone },
-  { id: "ask", href: "/dashboard/ask", label: "Ask AI", icon: PiChatCircleDotsDuotone },
+  { id: "ask", href: "/dashboard/ask", label: "Ask Tembo", icon: PiChatCircleDotsDuotone },
   { id: "profile", href: "/dashboard/portfolio", label: "Profile", icon: PiSuitcaseSimpleDuotone },
   { id: "writing", href: "/dashboard/writing", label: "Writing", icon: PiArticleDuotone },
   { id: "opportunities", href: "/dashboard/opportunities", label: "Opportunities", icon: PiHandshakeDuotone },

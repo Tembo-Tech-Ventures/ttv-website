@@ -232,7 +232,7 @@ function buildAcceptedNextStep(
   return {
     title: "Start with your cohort sessions",
     description:
-      "You are part of the cohort. Revisit each session and use Ask AI as you build with the community.",
+      "You are part of the cohort. Revisit each session and use Ask Tembo as you build with the community.",
     detail: formatApplicationDetail(accepted),
     action: { href: "/dashboard/sessions", label: "Watch sessions" },
   };

@@ -12,7 +12,9 @@ import EmbedCard from "./EmbedCard";
 import MessageBody from "./MessageBody";
 import { DeleteConfirm, EditForm } from "./MessageEdit";
 import MessageMenu, { hasMenu } from "./MessageMenu";
-import { ModerationNote, ModerationPanel, moderationRights, ReportedNote, useModeration, type ModerationMode, type ReturnFocus } from "./MessageModeration";
+import {
+  ModerationNote, ModerationPanel, moderationRights, ReportedNote, useModeration, useUndoHide, type ModerationMode, type ReturnFocus,
+} from "./MessageModeration";
 import { citationIcon, TemboAnswerFoot } from "./TemboAnswer";
 
 export type MessageVariant = "channel" | "thread" | "parent";
@@ -250,6 +252,8 @@ function MessageItem({
     }
   }
 
+  const undo = useUndoHide(message, viewerId, mode === "read", announce, () => setReturnFocus("menu"));
+
   async function remove() {
     try {
       // The actions go with the message: focus returns to the list it sits in.
@@ -299,7 +303,13 @@ function MessageItem({
           <MessageContent message={message} names={names} compact={variant === "parent"} />
         )}
 
-        <ModerationNote message={message} viewerId={viewerId} onAskReview={can.review && mode === "read" ? () => setMode("review") : undefined} />
+        <ModerationNote
+          message={message}
+          viewerId={viewerId}
+          onAskReview={can.review && mode === "read" ? () => setMode("review") : undefined}
+          onUndo={undo.run}
+          undoing={undo.pending}
+        />
         {mode === "delete" && <DeleteConfirm onDelete={remove} onKeep={backToMenu} />}
         {mode !== "report" && <ReportedNote message={message} />}
         <ModerationPanel mode={mode} message={message} announce={announce} onBack={back} />

@@ -304,6 +304,27 @@ describe("finding keys", () => {
   });
 });
 
+describe("reading text one base character and its marks at a time", () => {
+  /** What the detectors read: the whole text normalised at once, as before the ASCII fast path. */
+  const normalised = (text: string) => text.normalize("NFKC").replace(/[\uFE0F\u20E3\u200B-\u200D\u2060\uFEFF\u00AD]/g, "")
+    .replace(/[\u2010-\u2015\u2212]/g, "-");
+  const keys = (text: string) => detectFindings(text).map((finding) => finding.key);
+
+  it("normalises a chunk that ends in a mark outside the BMP, like any other", () => {
+    // "l", U+0301 then U+1D16D: "ĺ" and a mark. Its last UTF-16 unit is half a surrogate pair, not ASCII.
+    expect(keys("t.me/mgmail\u0301\u{1D16D}")).toEqual(["link:t.me/mgmai"]);
+    expect(keys("t.me/c\u0301\u{1D16D}x")).toEqual([]);
+  });
+
+  it.each([
+    "l\u0301\u{1D16D}", "l\u{1D16D}", "\u{1D16D}", "e\u0301", "1\uFE0F\u20E3", "a\u00AD", "\uFF10", "\u2013", "x\u{1D167}\u{1D16D}",
+  ])("reads %j inside contact details as the whole text normalised at once", (chunk) => {
+    for (const text of [`t.me/mgmai${chunk}`, `wanjiku${chunk}@gmail.com`, `0712${chunk}345678`, `wa.me/2547${chunk}12345678 and more`]) {
+      expect(keys(text), `${JSON.stringify(text)}`).toEqual(keys(normalised(text)));
+    }
+  });
+});
+
 describe("cost", () => {
   /** The fastest of three runs, after a warm-up, in milliseconds. */
   const time = (text: string) => {

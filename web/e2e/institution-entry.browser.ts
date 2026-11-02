@@ -31,7 +31,7 @@ test('member navigation does not gain institution entry', async ({page})=> {
 test('restricted QA navigation omits blocked destinations and retains community', async ({page}) => {
   await page.setViewportSize({width:1440,height:900});
   await page.goto('/institution-entry.html?role=institution&qa=1');
-  for (const name of ['Apply', 'Ask AI', 'Account', 'Logout']) await expect(page.getByRole('link',{name,exact:true})).toHaveCount(0);
+  for (const name of ['Apply', 'Ask Tembo', 'Account', 'Logout']) await expect(page.getByRole('link',{name,exact:true})).toHaveCount(0);
   await expect(page.getByRole('link',{name:'Discover',exact:true})).toBeVisible();
   await expect(page.getByRole('link',{name:'About the community',exact:true})).toHaveAttribute('href','/community/members');
 });

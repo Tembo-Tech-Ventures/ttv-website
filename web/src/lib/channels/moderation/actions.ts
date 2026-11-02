@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import {
-  MessageEmbed, type Message, type ModerationAction, type ReportMessage, type RequestModerationReview,
+  MessageEmbed, type Message, type ModerationAction, type ModerationParams, type ReportMessage, type RequestModerationReview,
 } from "@/lib/platform/contracts";
 import { drizzle } from "drizzle-orm/d1";
 import { moderationAttention } from "@/lib/attention/channel-producers";
@@ -198,6 +198,127 @@ export async function decideModeration(
     { db: context.db, viewerId: viewer.user.id, channel, now: context.now }, target,
     { action: input.action, reason: input.reason }, { isAdmin: viewer.capabilities.isAdmin },
   );
+  if (context.notifyLater) context.notifyLater(target.id);
+  else await moderationAttention(context, target.id);
+  return message;
+}
+
+/** The reason an undo records: the moderator took back their own hide. */
+export const UNDO_REASON = "The moderator who hid it took the hide back.";
+
+/**
+ * The hide being taken back (?2 the message, ?3 the moderator): the latest HIDE of the message, which
+ * a moderator's own hide always is while they are still its hiddenBy.
+ */
+const LAST_HIDE = `(SELECT e.%s FROM moderation_event e WHERE e.messageId = ?2 AND e.action = 'HIDE'
+  ORDER BY e.createdAt DESC, e.rowid DESC LIMIT 1)`;
+const lastHide = (column: "fromState" | "reasons") => LAST_HIDE.replace("%s", column);
+/** The case's signals since it last opened (?2 the message): flags and reports, never the hide being undone. */
+const SIGNALS = `FROM moderation_event e JOIN moderation_case c ON c.messageId = e.messageId
+  WHERE e.messageId = ?2 AND e.action = 'FLAG' AND e.createdAt >= coalesce(c.reopenedAt, c.openedAt)`;
+const HAS_SIGNALS = `EXISTS (SELECT 1 ${SIGNALS})`;
+/**
+ * A reopened case's earlier decision (?2 the message): the last admin event before it reopened. When
+ * the hide being undone was all that reopened it, the case goes back to that decision, so the Decided
+ * queue keeps its history.
+ */
+const PRIOR = `(SELECT e.id FROM moderation_event e WHERE e.messageId = ?2 AND e.source = 'ADMIN'
+  AND moderation_case.reopenedAt IS NOT NULL AND e.createdAt < moderation_case.reopenedAt ORDER BY e.createdAt DESC, e.rowid DESC LIMIT 1)`;
+const prior = (column: "action" | "actorId" | "reasons" | "createdAt") => `(SELECT p.${column} FROM moderation_event p WHERE p.id = ${PRIOR})`;
+/** The signals that case had decided: the people's and detectors' events after any admin event before the decision. */
+const PRIOR_SIGNALS = `FROM moderation_event w WHERE w.messageId = ?2 AND w.source <> 'ADMIN' AND w.action IN ('FLAG','HIDE')
+  AND w.createdAt <= ${prior("createdAt")} AND w.createdAt > coalesce((SELECT max(a.createdAt) FROM moderation_event a
+    WHERE a.messageId = ?2 AND a.source = 'ADMIN' AND a.createdAt < ${prior("createdAt")}), -1)`;
+
+/**
+ * POST /api/moderation/:messageId/undo (QA2-11). The channel moderator who hid a message takes it
+ * back while its case still waits for an admin: no admin has decided on it, and it is not deleted.
+ * The message returns to the state it had before the hide (VISIBLE, or FLAGGED with its earlier
+ * reasons), a RESTORE by the moderator (source MENTOR) joins the audit trail, and the case keeps only
+ * the signals it had besides the hide: the flags and reports since it opened. With none, a case the
+ * hide reopened goes back to the admin decision it had (Decided keeps its history), and any other
+ * closes without a decision. Anyone else's hide is 403 (admins restore instead); a hide an admin made or
+ * upheld, or any decided case, is 409, like a message no longer hidden or deleted.
+ */
+export async function undoModeratorHide(ctx: WriteContext, target: MessageTarget): Promise<Message> {
+  if (!ctx.channel.capabilities.canModerate) throw new ChannelError("forbidden", "Only this channel's moderators can do that.", 403);
+  if (target.deletedAt !== null) throw deleted();
+  if (target.moderationState !== "HIDDEN") throw notHidden();
+  const now = ctx.now ?? Date.now();
+  const eventId = createId();
+  const written = "EXISTS (SELECT 1 FROM moderation_event WHERE id = ?6)";
+  // ?1 channel, ?2 message, ?3 moderator, ?4 reason, ?5 now, ?6 event.
+  const params = [ctx.channel.id, target.id, ctx.viewerId, UNDO_REASON, now, eventId];
+  const [event] = await ctx.db.batch([
+    ctx.db.prepare(`${EVENT} SELECT ?6, m.id, 'RESTORE', 'MENTOR', ?3, 'HIDDEN', coalesce(${lastHide("fromState")}, 'VISIBLE'), json_array(?4), ?5
+      FROM channel_message m JOIN moderation_case c ON c.messageId = m.id
+      WHERE m.id = ?2 AND m.channelId = ?1 AND m.moderationState = 'HIDDEN' AND m.deletedAt IS NULL AND m.hiddenBy = ?3
+        AND c.state = 'PENDING' AND NOT ${ADMIN_HID}
+      RETURNING id`).bind(...params),
+    // Back as it was. FLAGGED drops only what the hide alone added: a reason a detector or Clef flag
+    // carries stays, even when the moderator typed the same words, so masking never loses its reason.
+    ctx.db.prepare(`UPDATE channel_message SET
+        moderationState = (SELECT toState FROM moderation_event WHERE id = ?6),
+        moderationReasons = CASE (SELECT toState FROM moderation_event WHERE id = ?6) WHEN 'VISIBLE' THEN '[]'
+          ELSE coalesce((SELECT json_group_array(r.value) FROM json_each(moderationReasons) r
+            WHERE r.value NOT IN (SELECT value FROM json_each(${lastHide("reasons")}))
+              OR EXISTS (SELECT 1 FROM moderation_event f, json_each(f.reasons) fr WHERE f.messageId = ?2
+                AND f.action = 'FLAG' AND f.source IN ('DETECTOR','CLEF') AND fr.value = r.value)
+            HAVING count(*) > 0), moderationReasons) END,
+        hiddenBy = NULL, hiddenAt = NULL, changeSeq = ${NEXT_CHANGE}
+      WHERE id = ?2 AND ${written}`).bind(...params),
+    // The case keeps what else it had; or, reopened by the hide alone, goes back to the decision it
+    // had; or closes when the hide was all it ever had.
+    ctx.db.prepare(`UPDATE moderation_case SET
+        state = CASE WHEN ${HAS_SIGNALS} THEN 'PENDING' ELSE 'DECIDED' END,
+        source = CASE WHEN ${HAS_SIGNALS} THEN CASE WHEN EXISTS (SELECT 1 ${SIGNALS} AND e.source = 'REPORT') THEN 'REPORT' ELSE 'AI_FLAG' END
+          WHEN EXISTS (SELECT 1 ${PRIOR_SIGNALS} AND w.source = 'MENTOR' AND w.action = 'HIDE') THEN 'MENTOR_HIDE'
+          WHEN EXISTS (SELECT 1 ${PRIOR_SIGNALS} AND w.source = 'REPORT') THEN 'REPORT'
+          WHEN EXISTS (SELECT 1 ${PRIOR_SIGNALS}) THEN 'AI_FLAG' ELSE 'ADMIN_HIDE' END,
+        reasons = CASE WHEN ${HAS_SIGNALS} THEN (SELECT json_group_array(value) FROM (SELECT DISTINCT j.value FROM moderation_event e
+            JOIN moderation_case c ON c.messageId = e.messageId, json_each(e.reasons) j
+            WHERE e.messageId = ?2 AND e.action = 'FLAG' AND e.createdAt >= coalesce(c.reopenedAt, c.openedAt)))
+          ELSE coalesce((SELECT json_group_array(value) FROM (SELECT DISTINCT j.value FROM moderation_event w, json_each(w.reasons) j
+            WHERE w.id IN (SELECT w.id ${PRIOR_SIGNALS})) HAVING count(*) > 0), ${prior("reasons")}) END,
+        reportCount = CASE WHEN ${HAS_SIGNALS} THEN reportCount ELSE (SELECT count(*) ${PRIOR_SIGNALS} AND w.source = 'REPORT') END,
+        actorId = CASE WHEN ${HAS_SIGNALS} THEN NULL
+          ELSE coalesce((SELECT w.actorId ${PRIOR_SIGNALS} AND w.source = 'MENTOR' AND w.action = 'HIDE' ORDER BY w.createdAt DESC LIMIT 1),
+            CASE WHEN NOT EXISTS (SELECT 1 ${PRIOR_SIGNALS}) THEN ${prior("actorId")} END) END,
+        decision = CASE WHEN ${HAS_SIGNALS} THEN NULL ELSE ${prior("action")} END,
+        decisionReason = CASE WHEN ${HAS_SIGNALS} THEN NULL ELSE json_extract(${prior("reasons")}, '$[0]') END,
+        decidedBy = CASE WHEN ${HAS_SIGNALS} THEN NULL ELSE ${prior("actorId")} END,
+        decidedAt = CASE WHEN ${HAS_SIGNALS} THEN NULL ELSE ${prior("createdAt")} END,
+        reopenedAt = CASE WHEN ${HAS_SIGNALS} THEN reopenedAt END,
+        reviewRequestedAt = NULL, reviewNote = NULL, updatedAt = max(updatedAt, ?5)
+      WHERE messageId = ?2 AND state = 'PENDING' AND ${written} AND (${HAS_SIGNALS} OR ${PRIOR} IS NOT NULL)`).bind(...params),
+    ctx.db.prepare(`DELETE FROM moderation_case WHERE messageId = ?2 AND state = 'PENDING' AND ${written}
+      AND NOT ${HAS_SIGNALS} AND ${PRIOR} IS NULL`).bind(...params),
+  ]);
+  if (event?.results.length !== 1) {
+    // Nothing written. An admin's decision says so first (an upheld hide is the admin's own since);
+    // then the message changed since it was read, or the hide was never this moderator's.
+    const state = await ctx.db.prepare(`SELECT m.moderationState, m.deletedAt, m.hiddenBy,
+        ${ADMIN_HID} OR coalesce((SELECT c.state FROM moderation_case c WHERE c.messageId = m.id), 'PENDING') = 'DECIDED' AS final
+      FROM channel_message m WHERE m.id = ?1`)
+      .bind(target.id).first<{ moderationState: string; deletedAt: number | null; hiddenBy: string | null; final: number }>();
+    if (state && state.deletedAt !== null) throw deleted();
+    if (state?.moderationState !== "HIDDEN") throw notHidden();
+    if (state.final) throw decided();
+    throw new ChannelError("forbidden", "Only the moderator who hid it can take the hide back.", 403);
+  }
+  return current(ctx, target.id);
+}
+
+/**
+ * The undo for /api/moderation/:messageId/undo: a message the viewer cannot see is 404, then
+ * undoModeratorHide's rules. Admins' notices follow (the case may have closed). The caller owns the
+ * `channels` flag, sign-in and same-origin checks.
+ */
+export async function undoHide(context: DecisionContext, viewer: ModerationViewer, { messageId }: ModerationParams): Promise<Message> {
+  const target = await findMessageTarget(context.db, messageId);
+  const channel = target && await findChannelById(drizzle(context.db, { schema }), viewer.user, target.channelId, viewer.capabilities);
+  if (!target || !channel || !visibleTo(target, viewer.user.id, channel)) throw new ChannelError("not_found", "Message not found.", 404);
+  const message = await undoModeratorHide({ db: context.db, viewerId: viewer.user.id, channel, now: context.now }, target);
   if (context.notifyLater) context.notifyLater(target.id);
   else await moderationAttention(context, target.id);
   return message;

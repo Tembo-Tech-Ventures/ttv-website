@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
     VECTORIZE: { query: vi.fn() },
   },
   drizzle: vi.fn(),
-  getAccessibleProgramIds: vi.fn(),
+  capabilitiesFor: vi.fn(),
   generateToolCompletion: vi.fn(),
   executeTool: vi.fn(),
   resolveOwnedChatSession: vi.fn(),
@@ -16,8 +16,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("cloudflare:workers", () => ({ env: mocks.env }));
 vi.mock("drizzle-orm/d1", () => ({ drizzle: mocks.drizzle }));
-vi.mock("@/lib/recordings/access", () => ({
-  getAccessibleProgramIds: mocks.getAccessibleProgramIds,
+vi.mock("@/lib/platform/server/capabilities", () => ({
+  capabilitiesFor: mocks.capabilitiesFor,
 }));
 vi.mock("@/lib/ai/gateway", () => ({
   generateToolCompletion: mocks.generateToolCompletion,
@@ -76,10 +76,17 @@ function createDrizzleMock() {
   return { query: {} };
 }
 
+/** What capabilitiesFor says about the caller: their cohorts, and whether they are staff. */
+function scope(cohortIds: string[], isAdmin = false) {
+  mocks.capabilitiesFor.mockResolvedValue({
+    spaces: [], cohortIds, mentorCohortIds: [], teachingCohortIds: [], isMentor: false, isInstitution: false, isAdmin,
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.env.DB = createD1Mock();
-  mocks.getAccessibleProgramIds.mockResolvedValue(["program-1"]);
+  scope(["program-1"]);
   mocks.resolveOwnedChatSession.mockResolvedValue({ kind: "existing", id: "session-1" });
   mocks.saveChatExchange.mockResolvedValue(undefined);
   mocks.generateToolCompletion.mockResolvedValue({
@@ -200,7 +207,7 @@ describe("POST /api/chat", () => {
     expect(mocks.saveChatExchange).not.toHaveBeenCalled();
   });
 
-  it("offers transcript tools when the shared access helper grants cohort access", async () => {
+  it("offers transcript tools when the shared capabilities grant cohort access", async () => {
     const response = await POST(context());
     const body = await json(response);
 
@@ -210,15 +217,52 @@ describe("POST /api/chat", () => {
     expect(body.citations).toEqual([]);
 
     expect(mocks.generateToolCompletion).toHaveBeenCalledTimes(1);
-    expect(mocks.getAccessibleProgramIds).toHaveBeenCalledWith(
-      expect.anything(),
-      "user-1"
-    );
+    expect(mocks.capabilitiesFor).toHaveBeenCalledTimes(1);
+    expect(mocks.capabilitiesFor).toHaveBeenCalledWith(expect.anything(), { id: "user-1" });
     const [, messages, options] = mocks.generateToolCompletion.mock.calls[0];
     expect(messages[0].role).toBe("system");
     expect(messages[0].content).toContain("Test User");
     expect(options.tools).toBeDefined();
     expect(options.tools.length).toBe(5);
+    expect(mocks.executeTool).not.toHaveBeenCalled();
+  });
+
+  it("is Tembo, and tells the model exactly what this person's scope lets it see", async () => {
+    const prompt = async () => {
+      mocks.generateToolCompletion.mockClear();
+      await POST(context());
+      return mocks.generateToolCompletion.mock.calls[0][1][0].content as string;
+    };
+    const member = await prompt();
+    expect(member).toMatch(/^You are Tembo, the assistant at Tembo Tech Ventures/);
+    expect(member).not.toMatch(/AI assistant|Ask AI/);
+    // Only what is true: the conversation is not shared with members (it is not unseen by everyone).
+    expect(member).toContain("You are speaking with Test User in a private conversation: it is not posted in any channel or shown to other members.");
+    expect(member).not.toMatch(/only they see/i);
+    expect(member).toContain("You can see only the recorded sessions of the cohorts they belong to, their own application, and TTV's programs.");
+    expect(member).toContain("Cite every substantive claim");
+
+    scope([], true);
+    expect(await prompt()).toContain("You can see only every cohort's recorded sessions (they are TTV staff)");
+
+    scope([]);
+    const newcomer = await prompt();
+    expect(newcomer).toContain("You can see only their own application and TTV's programs. They do not have access to session recordings yet.");
+    expect(newcomer).not.toContain("Cite every substantive claim");
+  });
+
+  it("passes the caller's cohorts, and only those, to the tools", async () => {
+    scope(["program-1", "program-2"]);
+    mocks.generateToolCompletion
+      .mockResolvedValueOnce({
+        content: null, finishReason: "tool_calls",
+        toolCalls: [{ id: "call-1", type: "function", function: { name: "list_recordings", arguments: "{}" } }],
+      })
+      .mockResolvedValueOnce({ content: "Two sessions.", toolCalls: [], finishReason: "stop" });
+    mocks.executeTool.mockResolvedValue("[]");
+    await POST(context());
+    expect(mocks.executeTool).toHaveBeenCalledWith("list_recordings", {},
+      expect.objectContaining({ userId: "user-1", programIds: ["program-1", "program-2"], isAdmin: false }));
   });
 
   it("runs the agent loop when the model requests tool calls", async () => {
@@ -308,7 +352,7 @@ describe("POST /api/chat", () => {
   });
 
   it("does not block non-enrolled users — gives them limited tools instead", async () => {
-    mocks.getAccessibleProgramIds.mockResolvedValue([]);
+    scope([]);
 
     const response = await POST(context());
     const body = await json(response);
@@ -317,7 +361,7 @@ describe("POST /api/chat", () => {
     expect(body.answer).toBe("Here is your answer based on the transcripts.");
 
     const [, messages, options] = mocks.generateToolCompletion.mock.calls[0];
-    expect(messages[0].content).toContain("does not have access to session recordings");
+    expect(messages[0].content).toContain("They do not have access to session recordings yet.");
     const toolNames = options.tools.map((t: { function: { name: string } }) => t.function.name);
     expect(toolNames).toContain("get_user_context");
     expect(toolNames).toContain("get_program_info");
@@ -326,9 +370,8 @@ describe("POST /api/chat", () => {
     expect(toolNames).not.toContain("get_recording_details");
   });
 
-  it("checks admin status via D1 instead of relying on middleware", async () => {
-    mocks.getAccessibleProgramIds.mockResolvedValue([]);
-    mocks.env.DB = createD1Mock({ id: "admin-role-1" });
+  it("checks admin status through capabilities instead of relying on middleware", async () => {
+    scope([], true);
 
     const response = await POST(context());
     const body = await json(response);
@@ -336,7 +379,7 @@ describe("POST /api/chat", () => {
     // Admin should get all tools even with no program ids
     expect(response.status).toBe(200);
     const [, messages, options] = mocks.generateToolCompletion.mock.calls[0];
-    expect(messages[0].content).not.toContain("does not have access");
+    expect(messages[0].content).not.toContain("do not have access");
     expect(options.tools.length).toBe(5);
     expect(body.answer).toBeTruthy();
   });

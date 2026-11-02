@@ -10,7 +10,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("cloudflare:workers", () => ({ env: mocks.env }));
 vi.mock("drizzle-orm/d1", () => ({ drizzle: () => ({}) }));
-vi.mock("@/lib/recordings/access", () => ({ getAccessibleProgramIds: async () => [] }));
+vi.mock("@/lib/platform/server/capabilities", () => ({
+  capabilitiesFor: async () => ({
+    spaces: [], cohortIds: [], mentorCohortIds: [], teachingCohortIds: [], isMentor: false, isInstitution: false, isAdmin: false,
+  }),
+}));
 vi.mock("@/lib/ai/gateway", () => ({ generateToolCompletion: mocks.generateToolCompletion }));
 vi.mock("@/lib/chat/tools", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),

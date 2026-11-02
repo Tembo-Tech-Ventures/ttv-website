@@ -19,6 +19,9 @@ import type { ChatSession } from "@/components/chat/types";
  *   (the first time read "--", and each line took two Tab stops); the video
  *   is named by the session's title; an empty status region waits to say
  *   when the recording cannot play.
+ * - chat-empty (B-3.2, owner decision 1 of 31 Oct 2026): the assistant is
+ *   Tembo everywhere, so the legacy page's heading reads "Ask Tembo", as the
+ *   spaces shell's already did. Nothing else in the page changed.
  */
 const VIEWS: ("journey" | "scout" | "mentor")[] = ["journey", "scout", "mentor"];
 const SESSION: ChatSession = { id: "s1", title: "Synthetic session", updatedAt: 1_790_000_000, messageCount: 2, latestMessage: "In week 3." };

@@ -96,7 +96,7 @@ export function channelDatabase(fixture: Partial<CapabilityCase> = {}) {
     });
     const user = options.user === undefined ? VIEWER : options.user;
     const locals = { user: user === null ? null : { id: user }, personalAccessToken: null, ...options.locals } as App.Locals;
-    const params = options.id === undefined ? {} : operation === "moderateMessage" ? { messageId: options.id } : { id: options.id };
+    const params = options.id === undefined ? {} : operation === "moderateMessage" || operation === "undoModerationHide" ? { messageId: options.id } : { id: options.id };
     const context = { request, locals, params } as Pick<APIContext, "request" | "locals" | "params">;
     const response = await channelRequest(operation, context, { ...env, ...options.env },
       { defer: (task) => deferred.push(task), ...options });

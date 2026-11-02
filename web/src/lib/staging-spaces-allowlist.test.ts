@@ -82,7 +82,7 @@ const DENIED = [
   "/api/channels/x.y/messages", "/api/channels/../admin/messages", "/api/channelsx", "/api/channels/x/readx", "/api/channels/x/read/y",
   ROUTES.getMentorAvailability.path, ROUTES.listModerationQueue.path,
   // Moderation (B-2.5): restricted identities neither report, hide, ask for review nor read the queue.
-  "/api/messages/x/report", "/api/messages/x/review", "/api/moderation/x", "/api/moderation/queue/x",
+  "/api/messages/x/report", "/api/messages/x/review", "/api/moderation/x", "/api/moderation/queue/x", "/api/moderation/x/undo",
   "/dashboard/mentoring/requests", "/dashboard/mentoring/availability", "/dashboard/community/dm/private",
   // Channel lookalikes: only valid slugs, one segment, in the cohort and community spaces.
   "/dashboard/community/c", "/dashboard/community/c/", "/dashboard/community/c/Help", "/dashboard/community/c/help-",

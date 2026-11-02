@@ -1,6 +1,6 @@
 ---
 /**
- * Ask AI, which the spaces shell calls Ask Tembo.
+ * Ask Tembo: a private conversation with Tembo about the person's cohorts and sessions.
  *
  * A chat needs the whole viewport: the old dashboard shell's header and the
  * page's own scrolling pushed the composer off the bottom of a phone screen.
@@ -33,7 +33,7 @@ const canDiscover = spaces ? false : hasDiscoveryAccess(await createCommunitySer
       <ChatApp client:load variant="space" />
     </SpacePage>
   ) : (
-    <ImmersiveLayout title="Ask AI | Tembo Tech Ventures">
+    <ImmersiveLayout title="Ask Tembo | Tembo Tech Ventures">
       <ChatApp
         client:load
         canDiscover={canDiscover}

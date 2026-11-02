@@ -162,11 +162,15 @@ test.describe("moderation in a channel", () => {
       await expect(form).toHaveCount(0);
       const note = message(page, FIRST_PR).locator("[data-moderation=HIDDEN]");
       // QA2-11: a moderator who is not an admin reads what comes next.
-      await expect(note).toHaveText(
+      await expect(note.locator("p").first()).toHaveText(
         "Hidden from members: Off-topic for this channel. Moderators can still see it. An admin looks at every hide, and Brian can ask for a review unless an admin made or upheld the hide. If an admin restores it, members see it here again.",
       );
+      // Until an admin decides, the hide is the mentor's to take back.
+      await expect(note.getByRole("button", { name: "Undo hide" })).toBeVisible();
       await expect(announcer(page)).toHaveText("Message hidden from members. An admin will look at it.");
       await expect(actions(page, FIRST_PR)).toBeFocused();
+      // The taller note can bring "Jump to latest" in: let its fade finish before the evidence and axe.
+      await page.evaluate(() => Promise.all(document.getAnimations().map((animation) => animation.finished)));
       await page.screenshot({ path: `${EVIDENCE_DIR}/hidden-${viewport.width}.png` });
       await runAxe(page, testInfo, `hidden-${viewport.width}`);
 
@@ -176,6 +180,14 @@ test.describe("moderation in a channel", () => {
       await expect(page.getByRole("menuitem", { name: "Restore for members…" })).toHaveCount(0);
       await page.keyboard.press("Escape");
       expect(await records(page)).toEqual([{ kind: "hide", messageId: FIRST_PR, reason: "Off-topic for this channel" }]);
+
+      // QA2-11: until an admin decides, the mentor can take the hide back.
+      await note.getByRole("button", { name: "Undo hide" }).click();
+      await expect(message(page, FIRST_PR).locator("[data-moderation]")).toHaveCount(0);
+      await expect(announcer(page)).toHaveText("Hide undone. Members can see the message again.");
+      await expect(actions(page, FIRST_PR)).toBeFocused();
+      expect((await records(page)).at(-1)).toEqual({ kind: "undo", messageId: FIRST_PR });
+      await runAxe(page, testInfo, `hide-undone-${viewport.width}`);
     });
 
     test(`an admin restores a hidden message at ${viewport.width}px`, async ({ page }, testInfo) => {

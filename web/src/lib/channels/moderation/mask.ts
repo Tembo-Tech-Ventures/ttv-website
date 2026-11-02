@@ -50,21 +50,33 @@ export function maskSpans(body: string, spans: readonly Span[]): string {
 /**
  * Masked bodies by their text, most recently used last. Masking is linear but not free (a few
  * milliseconds for a long body full of numbers), and the same flagged messages are read again and
- * again by every reader of a channel, so an isolate keeps the latest few. Keyed by the text itself,
- * an edit can never be served an older mask.
+ * again by every reader of a channel, so an isolate keeps the latest ones. Keyed by the text itself,
+ * an edit can never be served an older mask. Bounded by the characters it holds, keys and values
+ * together, not by its entries: a few hundred of the longest bodies would hold about 11 MB of an
+ * isolate's 128, and this keeps it near 4 MB (2 bytes a character at most) whatever the bodies are.
  */
-export const MASK_CACHE_SIZE = 256;
+export const MASK_CACHE_CHARS = 2_000_000;
 const cache = new Map<string, string>();
+let cachedChars = 0;
+
+const charsOf = (body: string, result: string) => body.length + result.length;
 
 function masked(body: string): string {
-  let result = cache.get(body);
-  if (result === undefined) {
-    result = maskSpans(body, contactSpans(body));
-    if (cache.size >= MASK_CACHE_SIZE) cache.delete(cache.keys().next().value ?? "");
-  } else {
+  const hit = cache.get(body);
+  if (hit !== undefined) {
     cache.delete(body);
+    cache.set(body, hit);
+    return hit;
   }
+  const result = maskSpans(body, contactSpans(body));
+  cachedChars += charsOf(body, result);
   cache.set(body, result);
+  // The oldest go first. The newest entry always stays: no body (10,000 characters) outgrows the bound.
+  for (const [key, value] of cache) {
+    if (cachedChars <= MASK_CACHE_CHARS || key === body) break;
+    cache.delete(key);
+    cachedChars -= charsOf(key, value);
+  }
   return result;
 }
 

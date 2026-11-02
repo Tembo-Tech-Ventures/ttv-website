@@ -25,6 +25,8 @@ const additionalEndpoints = [
   "POST /api/messages/:id/review",
   // B-4.1 contract change: the requests a person sent or received, and one request.
   "GET /api/mentor-requests", "GET /api/mentor-requests/:id",
+  // B-3.2 (QA2-11): the moderator who hid a message takes the hide back while no admin has decided.
+  "POST /api/moderation/:messageId/undo",
 ];
 /** Independent transcription of the onboarding SPEC §5 routes. */
 const onboardingEndpoints = [
@@ -73,6 +75,8 @@ const routeExamples = {
     response: { channelId: channelParams.id, lastReadMessageId: F.messages.projectPost.id, unreadCount: 0 } },
   listModerationQueue: { query: { state: "PENDING" }, response: F.moderationQueue },
   moderateMessage: { params: { messageId: F.messages.hidden.id }, body: { action: "hide", reason: "Harsh, not about the work" }, response: F.messages.hidden },
+  undoModerationHide: { params: { messageId: F.messages.hidden.id }, body: {},
+    response: { ...F.messages.hidden, moderation: { state: "VISIBLE", reasons: [] } } },
   requestModerationReview: { params: { id: F.messages.hidden.id }, body: { note: "I was quoting the brief." }, response: { ok: true } },
   askTembo: { params: channelParams, body: { messageId: F.messages.communityAsk.id }, response: F.temboPending },
   temboFeedback: { params: { id: F.messages.communityAnswer.id }, body: { feedback: "helpful" }, response: { ok: true } },
@@ -138,6 +142,7 @@ describe("route registry", () => {
     expect(C.ROUTES.askTembo.idempotent).toBe(true);
     expect(C.ROUTES.createMentorRequest.idempotent).toBe(false);
     expect(C.ROUTES.moderateMessage.idempotent).toBe(false);
+    expect(C.ROUTES.undoModerationHide.idempotent).toBe(false);
     expect(C.ROUTES.reportMessage.idempotent).toBe(false);
   });
 });

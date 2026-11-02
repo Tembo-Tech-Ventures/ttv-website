@@ -19,11 +19,13 @@ export type InPlaceModeration = "hide" | "restore";
  * resolving when the server has accepted it or rejecting with its ApiError.
  * A changed message comes back confirmed and replaces the cached copy.
  * Hiding is for the channel's moderators, restoring for admins, and asking
- * for a review for the author of a hidden message (B-2.5).
+ * for a review for the author of a hidden message (B-2.5). The moderator who
+ * hid a message may take it back until an admin decides (QA2-11).
  */
 export interface ModerationActions {
   report(messageId: string, reason: string): Promise<void>;
   moderate(messageId: string, action: InPlaceModeration, reason: string): Promise<Message>;
+  undoHide(messageId: string): Promise<Message>;
   requestReview(messageId: string, note: string | null): Promise<void>;
 }
 

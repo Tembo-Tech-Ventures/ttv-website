@@ -147,15 +147,6 @@ export function restrictedNextStep({ qaPersona, fixture }: Restrictions, step: S
   };
 }
 
-/**
- * A next step in the spaces shell's words. The shell calls the cohort
- * assistant Ask Tembo (owner decision, 31 Oct 2026); the existing dashboard,
- * whose navigation still says Ask AI, keeps the journey's own wording.
- */
-export function inSpacesWords(step: StudentNextStep): StudentNextStep {
-  return { ...step, description: step.description.replaceAll("Ask AI", "Ask Tembo") };
-}
-
 /** The person's own completed cohorts that have a certificate, newest first. */
 export async function loadCertificates(db: Database, userId: string): Promise<{ id: string; programName: string }[]> {
   const applications = await db.query.programApplication.findMany({

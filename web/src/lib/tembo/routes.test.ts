@@ -4,7 +4,10 @@ import { ErrorEnvelope, MASKED_CONTACT, Message, MessageList, ROUTES, TemboRespo
 import { TEMBO_CONFIG } from "./config";
 import { refusal } from "./grounding";
 import { getMe } from "@/lib/platform/server/me";
+import { capabilitiesFor } from "@/lib/platform/server/capabilities";
+import { listAttention } from "@/lib/attention/service";
 import { temboDay, temboDayEnd } from "./quota";
+import { CHANNEL_CLEF_TIMEOUT_MS } from "@/lib/channels/moderation/clef";
 import { FINDING_REASONS } from "@/lib/channels/moderation/detectors";
 import type { TemboModel } from "./model";
 import { NOW, scriptedModel, temboDatabase, type TemboFixture } from "./test-support";
@@ -27,6 +30,14 @@ function databaseFlags(s: TemboFixture, audiences: Record<string, "OFF" | "STAFF
   s.database.exec("UPDATE feature_flag SET audience = 'ALL'");
   for (const [key, audience] of Object.entries(audiences)) s.database.prepare("UPDATE feature_flag SET audience = ? WHERE key = ?").run(audience, key);
   return { env: { PLATFORM_FLAGS_OVERRIDE: undefined, DEPLOYMENT_ENVIRONMENT: "production" } };
+}
+/** The person's attention list, once everything written so far is inside its snapshot (a millisecond before now). */
+async function attentionOf(s: TemboFixture, userId: string) {
+  const [{ latest } = { latest: null }] = s.rows<{ latest: number | null }>("SELECT max(createdAt) AS latest FROM attention_item");
+  const inSnapshot = () => latest === null || Date.now() - 1 >= latest;
+  while (!inSnapshot()) await new Promise((resolve) => { setTimeout(resolve, 1); });
+  const { items } = await listAttention(s.db, userId, {}, await capabilitiesFor(s.db, { id: userId }));
+  return items.map((item) => ({ kind: item.kind, summary: item.summary }));
 }
 const answers = (s: TemboFixture) => s.rows<{ id: string; parentId: string; body: string; citations: string; moderationState: string }>(
   "SELECT id, parentId, body, citations, moderationState FROM channel_message WHERE authorKind = 'TEMBO' ORDER BY seq");
@@ -243,6 +254,11 @@ describe("Tembo's answers are moderated like a person's post", () => {
     expect(s.rows("SELECT userId, kind, subjectHref, summary FROM attention_item WHERE kind = 'tembo_answer'")).toEqual([{
       userId: VIEWER, kind: "tembo_answer", subjectHref: `/dashboard/community/c/help?thread=${question}`, summary: "Tembo answered your question in #help.",
     }]);
+    // In the asker's Updates while the answer is visible, and gone once it is hidden.
+    expect(await attentionOf(s, VIEWER)).toEqual([{ kind: "tembo_answer", summary: "Tembo answered your question in #help." }]);
+    s.database.prepare(`UPDATE channel_message SET moderationState = 'HIDDEN', hiddenAt = 1, moderationReasons = '["Synthetic reason"]' WHERE id = ?`)
+      .run(answers(s)[0]!.id);
+    expect(await attentionOf(s, VIEWER)).toEqual([]);
   });
 });
 
@@ -264,6 +280,38 @@ describe("feedback on an answer", () => {
       { userId: "synthetic-otieno", kind: "helpful", createdAt: NOW, updatedAt: NOW },
       { userId: VIEWER, kind: "not_quite", createdAt: NOW, updatedAt: NOW + 1 },
     ]);
+  });
+
+  it("comes back on the answer for the person who gave it, theirs alone, after a reload and from the Ask button", async () => {
+    const s = setup();
+    const answer = await answered(s);
+    const [question] = s.rows<{ id: string }>("SELECT parentId AS id FROM channel_message WHERE id = ?", answer);
+    const seen = async (user: string) => {
+      const page = MessageList.parse((await s.call("listMessages", { id: s.channel("help"), query: `?thread=${question!.id}`, user })).body);
+      return page.items.map((item) => [item.authorKind, item.temboFeedback]);
+    };
+    expect(await seen(VIEWER)).toEqual([["TEMBO", null]]);
+    const roots = MessageList.parse((await s.call("listMessages", { id: s.channel("help") })).body).items;
+    expect(roots.find((item) => item.id === question!.id)).not.toHaveProperty("temboFeedback");
+    await s.call("temboFeedback", { id: answer, body: { feedback: "not_quite" }, now: () => NOW });
+    await s.call("temboFeedback", { id: answer, body: { feedback: "helpful" }, user: "synthetic-otieno", now: () => NOW });
+    expect(await seen(VIEWER)).toEqual([["TEMBO", "not_quite"]]);
+    expect(await seen("synthetic-otieno")).toEqual([["TEMBO", "helpful"]]);
+    expect(await seen("synthetic-achieng")).toEqual([["TEMBO", null]]);
+    const again = tembo((await s.ask("help", question!.id)).body);
+    expect(again).toMatchObject({ status: "answer", message: { id: answer, temboFeedback: "not_quite" } });
+    // A deleted answer offers no rating, so it carries none.
+    s.database.prepare("UPDATE channel_message SET deletedAt = 1, body = '' WHERE id = ?").run(answer);
+    expect(await seen(VIEWER)).toEqual([["TEMBO", null]]);
+  });
+
+  it("is never on a person's message, by contract", () => {
+    const base = { id: "m", channelId: "c", parentId: null, clientNonce: null, authorKind: "USER", body: "Hi", embeds: [], citations: [], reactions: [],
+      author: { id: "u", name: "Wanjiku", avatarUrl: null, roleBadges: [] }, createdAt: 1, edited: false, deleted: false, moderation: null,
+      thread: { replyCount: 0, participantIds: [], lastReplyAt: null }, temboScope: null };
+    expect(Message.safeParse(base).success).toBe(true);
+    expect(Message.safeParse({ ...base, temboFeedback: null }).success).toBe(false);
+    expect(Message.safeParse({ ...base, temboFeedback: "helpful" }).success).toBe(false);
   });
 
   it("is only for Tembo answers the caller can see, in valid kinds", async () => {
@@ -383,8 +431,64 @@ describe("a run's time and its claim", () => {
     expect(answers(s)).toHaveLength(1);
   });
 
-  it("leaves room after the run for Clef (8 s) and the notice within work after a response (about 30 s)", () => {
-    expect(TEMBO_CONFIG.runBudgetMs + 8_000).toBeLessThanOrEqual(28_000);
+  it("leaves room after the run for Clef and the notice within work after a response (about 30 s)", () => {
+    expect(TEMBO_CONFIG.runBudgetMs + CHANNEL_CLEF_TIMEOUT_MS).toBeLessThanOrEqual(TEMBO_CONFIG.afterResponseMs);
+    expect(TEMBO_CONFIG.afterResponseMs).toBeLessThanOrEqual(28_000);
+  });
+
+  it("asks Clef nothing when the run left no time for it, and logs that the answer went unchecked", async () => {
+    const s = setup();
+    s.message("help", { body: "Budget templates are pinned." });
+    const clock = { now: NOW };
+    const model: TemboModel = async () => {
+      clock.now += TEMBO_CONFIG.afterResponseMs - TEMBO_CONFIG.minClefMs + 1;
+      return { content: NO_TAGS, toolCalls: [], finishReason: "stop" };
+    };
+    const run = vi.fn(() => new Promise(() => {}));
+    await s.ask("help", s.question("help"), { temboModel: model, now: () => clock.now, env: { AI: { run } as unknown as Ai, AI_GATEWAY_NAME: "synthetic-gateway" } });
+    await s.afterResponse();
+    expect(run).not.toHaveBeenCalled();
+    expect(answers(s)).toMatchObject([{ moderationState: "VISIBLE" }]);
+    expect(s.rows("SELECT kind FROM attention_item WHERE kind = 'tembo_answer'")).toEqual([{ kind: "tembo_answer" }]);
+    expect(s.rows("SELECT level, message FROM errorEvent")).toEqual([{ level: "warning", message: "Tembo's answer was posted with no time left for Clef to check it." }]);
+  });
+
+  it("tells the asker before Clef, and gives Clef only what is left of the window, so neither is cut off", async () => {
+    const s = setup();
+    s.message("help", { body: "Budget templates are pinned." });
+    const clock = { now: NOW };
+    // A run that took 23 s by the clock: 5 s of the window are left for Clef, not its usual 8.
+    const model: TemboModel = async () => {
+      clock.now += 23_000;
+      return { content: NO_TAGS, toolCalls: [], finishReason: "stop" };
+    };
+    const clef = vi.fn(() => new Promise(() => {}));
+    const env = { AI: { run: clef } as unknown as Ai, AI_GATEWAY_NAME: "synthetic-gateway" };
+    await s.ask("help", s.question("help"), { temboModel: model, now: () => clock.now, env });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let done = false;
+    try {
+      const run = (async () => {
+        await s.afterResponse();
+        done = true;
+      })();
+      // The run, the notice and the call to Clef need no timers: wait for them on the event loop
+      // (setImmediate is not faked), so Clef's deadline is set before the clock moves.
+      for (let turn = 0; turn < 1_000 && clef.mock.calls.length === 0; turn += 1) {
+        await new Promise((resolve) => { setImmediate(resolve); });
+      }
+      expect(clef).toHaveBeenCalledTimes(1);
+      expect(answers(s)).toHaveLength(1);
+      expect(s.rows("SELECT kind FROM attention_item WHERE kind = 'tembo_answer'")).toEqual([{ kind: "tembo_answer" }]);
+      await vi.advanceTimersByTimeAsync(TEMBO_CONFIG.afterResponseMs - 23_000 - 1);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await run;
+    } finally { vi.useRealTimers(); }
+    expect(done).toBe(true);
+    // Clef timed out and failed open: the answer stays, and the timeout is a warning.
+    expect(answers(s)).toMatchObject([{ moderationState: "VISIBLE" }]);
+    expect(s.rows("SELECT level FROM errorEvent")).toEqual([{ level: "warning" }]);
   });
 
   it("starts no call with less than two seconds of its budget left, and gives the question back", async () => {

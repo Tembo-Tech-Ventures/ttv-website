@@ -25,7 +25,7 @@ const withToken = (scopes: string[]) => ({ locals: { personalAccessToken: { id: 
 const DATABASE_FLAGS = { PLATFORM_FLAGS_OVERRIDE: undefined, DEPLOYMENT_ENVIRONMENT: "production" };
 
 /** The message routes; the moderation routes have their own tests (moderation/routes.test.ts). */
-type MessagingOperation = Exclude<ChannelOperation, "reportMessage" | "requestModerationReview" | "moderateMessage" | "listModerationQueue"
+type MessagingOperation = Exclude<ChannelOperation, "reportMessage" | "requestModerationReview" | "moderateMessage" | "undoModerationHide" | "listModerationQueue"
   | "askTembo" | "temboFeedback">; // Tembo routes: src/lib/tembo/routes.test.ts
 
 /** Every message route with a valid request for it, against a message Wanjiku wrote in #help. */

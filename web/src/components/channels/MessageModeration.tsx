@@ -68,6 +68,8 @@ export function moderationRights(message: Message, viewerId: string | null, cont
     hide: open && context.canModerate && !own && !hidden,
     restore: open && context.canRestore && hidden,
     review: open && own && reviewState(message) === "available",
+    // The server says so to the moderator who hid it only, until an admin decides (QA2-11).
+    undo: open && context.canModerate && hidden && message.moderation?.undoable === true,
   };
 }
 
@@ -77,9 +79,12 @@ export function moderationRights(message: Message, viewerId: string | null, cont
  * What a flagged or hidden message says about itself, to the people the
  * server tells. The author of a hidden message can ask for a review from
  * here while the server says it is reviewable, once; after that the note says
- * it was asked, and once an admin's decision is final, that it is.
+ * it was asked, and once an admin's decision is final, that it is. The
+ * moderator who hid it can take the hide back from here until an admin decides.
  */
-export function ModerationNote({ message, viewerId, onAskReview }: { message: Message; viewerId: string | null; onAskReview?: () => void }) {
+export function ModerationNote({ message, viewerId, onAskReview, onUndo, undoing = false }: {
+  message: Message; viewerId: string | null; onAskReview?: () => void; onUndo?: () => void; undoing?: boolean;
+}) {
   const { canRestore } = useModeration();
   const notice = moderationNotice(message, viewerId, { admin: canRestore });
   if (!notice) return null;
@@ -111,9 +116,41 @@ export function ModerationNote({ message, viewerId, onAskReview }: { message: Me
             Ask for review
           </Button>
         )}
+        {onUndo && (
+          <Button size="sm" variant="quiet" className="mt-2" onClick={onUndo} loading={undoing} data-undo-hide>
+            Undo hide
+          </Button>
+        )}
       </div>
     </div>
   );
+}
+
+/**
+ * The moderator takes their own hide back (QA2-11). No form: it only undoes what they did, and the
+ * server allows it only until an admin decides. `run` is there only while this reader may, and the
+ * message is being read (`reading`); `onDone` runs once the message is visible again.
+ */
+export function useUndoHide(
+  message: Message, viewerId: string | null, reading: boolean, announce: (text: string) => void, onDone: () => void,
+): { run: (() => void) | undefined; pending: boolean } {
+  const context = useModeration();
+  const [pending, setPending] = useState(false);
+  async function undo() {
+    if (!context.actions || pending) return;
+    setPending(true);
+    try {
+      await context.actions.undoHide(message.id);
+      announce("Hide undone. Members can see the message again.");
+      onDone();
+    } catch (failure) {
+      announce(moderationFailure(failure, "moderate"));
+    } finally {
+      setPending(false);
+    }
+  }
+  const allowed = reading && moderationRights(message, viewerId, context).undo;
+  return { run: allowed ? () => void undo() : undefined, pending };
 }
 
 /** Under a message this reader reported. The live region said it once, when they did. */

@@ -6,6 +6,13 @@ Tembo answers questions inside channels (B-3.1). Shipped dark behind the
 `TemboAsk`, `TemboResponse`, `TemboFeedback`, `TemboUsage` and `Citation` in
 `src/lib/platform/contracts.ts`. Migration `0035_tembo.sql`.
 
+The private Ask Tembo page (`/api/chat`, B-3.2) is the same assistant under the
+same name: `private-ask.ts` builds its prompt, and its scope comes from
+`capabilitiesFor` once, like channel access: the sessions of the person's
+cohorts (`cohortIds`), every cohort's for staff, or none yet. The prompt says
+which, so Tembo can say what it cannot see. The `/api/chat` contract is
+unchanged.
+
 ## Routes
 
 `src/lib/channels/http.ts` serves both, with every rule of the channel APIs
@@ -104,8 +111,11 @@ After the response (`ctx.waitUntil`): Gemma 4
 (`@cf/google/gemma-4-26b-a4b-it`) through the AI Gateway binding with
 `collectLog: false` and one attempt (`src/lib/community/native-gateway.ts`), at
 most three calls: tool rounds while under nine seconds, then one without tools,
-the whole run within 20 seconds (work after a response gets about 30, and Clef's
-check of the answer, up to 8 seconds, and the asker's notice follow it). Each call
+the whole run within 20 seconds. Work after a response gets about 30;
+`afterResponseMs` (28 seconds) bounds everything one answer does then,
+counted from when that work began (a mention's acceptance included): the run,
+the asker's notice, then Clef's check of the answer with what is left, at most
+its own 8 seconds, so neither is ever cut off by the runtime. Each call
 may use only the time left; with less than two seconds left, or when a call
 outlives it, the run fails and the question is given back.
 At most four tool calls a round, six results a call and 30 sources an answer.
@@ -130,10 +140,15 @@ same detectors as a person's post (`screenMessage`, allowlist included): a
 finding stores it FLAGGED with a DETECTOR event, which opens a moderation case
 and masks contact details for other readers. The write is one batch that holds
 only while this run owns the claim and the thread is open: the message, its
-root moved for pollers, the flag event, the ask marked ANSWERED. Then Clef
-checks it like any post (it may flag or hide it; a Clef failure leaves it as it
-is and logs a warning), the asker gets a `tembo_answer` attention item at the
-answer, and admins hear of a flag.
+root moved for pollers, the flag event, the ask marked ANSWERED. Then the asker
+gets a `tembo_answer` attention item at the answer (shown while the answer is
+visible), Clef checks it like any post within what is left of the window (it
+may flag or hide it; a Clef failure or timeout leaves it as it is and logs a
+warning), and admins hear of a flag.
+
+Each reader's own "helpful" or "not quite" comes back on the answer as
+`Message.temboFeedback` (null until they choose; only on Tembo's answers, and
+never anyone else's), so the choice survives a reload.
 
 ## Query budget
 

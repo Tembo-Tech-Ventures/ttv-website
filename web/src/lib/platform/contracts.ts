@@ -118,7 +118,7 @@ export const AttentionKind = z.enum([
   "mention", "reply", "tembo_answer", "mentor_request", "mentor_accepted", "mentor_redirected",
   "mentor_declined", "mentor_withdrawn", "recording_ready", "application_status",
   "work_confirmed", "visitor_message", "opportunity_match", "moderation_pending", "message_hidden",
-  "access_request", "access_decided",
+  "access_request", "access_decided", "moderation_decided",
 ]);
 export type AttentionKind = z.infer<typeof AttentionKind>;
 export const SubjectKind = z.enum([
@@ -271,10 +271,12 @@ export type ModerationState = z.infer<typeof ModerationState>;
  * reviewRequested: on a HIDDEN message, for its author and admins only, whether the author's "Ask for
  * review" is still open. reviewable: on a HIDDEN message, for its author only, whether a review can
  * still be asked for or is pending; false once an admin's decision is final, or the message is deleted.
- * Both are absent for everyone else and on any other state.
+ * Both are absent for everyone else and on any other state. undoable: on a HIDDEN message, for the
+ * moderator who hid it only, whether they can still take the hide back (no admin has decided yet, QA2-11).
  */
 export const MessageModeration = z.object({
   state: ModerationState, reasons: z.array(NonEmptyText), reviewRequested: z.boolean().optional(), reviewable: z.boolean().optional(),
+  undoable: z.boolean().optional(),
 });
 export type MessageModeration = z.infer<typeof MessageModeration>;
 export const ThreadSummary = z.object({ replyCount: Count, participantIds: z.array(Id), lastReplyAt: Timestamp.nullable() });
@@ -290,6 +292,9 @@ export type TemboScope = z.infer<typeof TemboScope>;
 export const MASKED_CONTACT = "[contact details hidden until a moderator checks this message]";
 /** Markers in one body at most: the last one covers the rest of the body. */
 export const MAX_CONTACT_MASKS = 21;
+/** "Helpful" or "not quite" on one of Tembo's answers (POST /api/messages/:id/tembo-feedback). */
+export const TemboFeedbackKind = z.enum(["helpful", "not_quite"]);
+export type TemboFeedbackKind = z.infer<typeof TemboFeedbackKind>;
 export const Message = z.object({
   id: Id, channelId: Id, parentId: Id.nullable(), clientNonce: ClientNonce.nullable(),
   authorKind: AuthorKind, author: AuthorSummary, body: z.string().max(10_000 + MAX_CONTACT_MASKS * MASKED_CONTACT.length),
@@ -299,8 +304,11 @@ export const Message = z.object({
   moderation: MessageModeration.nullable(), thread: ThreadSummary, temboScope: TemboScope.nullable(),
   // The caller's own report only: whether they reported this message, never who else did (QA2-06).
   reportedByMe: z.boolean().optional(),
+  // On Tembo's answers only: the caller's own choice, null until they make one, never anyone else's.
+  temboFeedback: TemboFeedbackKind.nullable().optional(),
 }).refine((m) => !m.deleted || (m.body === "" && m.embeds.length === 0 && m.citations.length === 0),
   "Deleted messages contain no body, embeds or citations")
+  .refine((m) => m.authorKind === "TEMBO" || m.temboFeedback === undefined, "Only Tembo's answers carry the caller's feedback")
   .refine((m) => m.authorKind === "TEMBO" ? m.author.id === null && m.temboScope !== null : m.temboScope === null,
     "Tembo has no user id and must declare its scope");
 export type Message = z.infer<typeof Message>;
@@ -386,6 +394,12 @@ export type ModerationQueue = z.infer<typeof ModerationQueue>;
 /** Channel moderators may only hide; admins hide, restore or keep ("fine as is", which also allowlists the text). */
 export const ModerationAction = z.strictObject({ action: ModerationActionKind, reason: NonEmptyText.max(2000) });
 export type ModerationAction = z.infer<typeof ModerationAction>;
+/**
+ * The channel moderator who hid a message takes the hide back, while its case waits for an admin
+ * (QA2-11). An admin's decision is final; admins restore instead. No body.
+ */
+export const UndoModerationHide = z.strictObject({});
+export type UndoModerationHide = z.infer<typeof UndoModerationHide>;
 /** The author of a hidden message asks an admin to look again. */
 export const RequestModerationReview = z.strictObject({ note: NonEmptyText.max(1000).optional() });
 export type RequestModerationReview = z.infer<typeof RequestModerationReview>;
@@ -402,8 +416,6 @@ export const TemboAnswer = z.object({ status: z.literal("answer"), message: Mess
 export type TemboAnswer = z.infer<typeof TemboAnswer>;
 export const TemboResponse = z.discriminatedUnion("status", [TemboPending, TemboAnswer]);
 export type TemboResponse = z.infer<typeof TemboResponse>;
-export const TemboFeedbackKind = z.enum(["helpful", "not_quite"]);
-export type TemboFeedbackKind = z.infer<typeof TemboFeedbackKind>;
 export const TemboFeedback = z.strictObject({ feedback: TemboFeedbackKind });
 export type TemboFeedback = z.infer<typeof TemboFeedback>;
 
@@ -664,6 +676,7 @@ export const ROUTES = {
   markChannelRead: defineRoute({ method: "POST", path: "/api/channels/:id/read", params: IdParams, body: MarkChannelRead, response: ChannelRead, idempotent: true }),
   listModerationQueue: defineRoute({ method: "GET", path: "/api/moderation/queue", query: ModerationQueueQuery, response: ModerationQueue, idempotent: true }),
   moderateMessage: defineRoute({ method: "POST", path: "/api/moderation/:messageId", params: ModerationParams, body: ModerationAction, response: Message, idempotent: false }),
+  undoModerationHide: defineRoute({ method: "POST", path: "/api/moderation/:messageId/undo", params: ModerationParams, body: UndoModerationHide, response: Message, idempotent: false }),
   requestModerationReview: defineRoute({ method: "POST", path: "/api/messages/:id/review", params: IdParams, body: RequestModerationReview, response: Success, idempotent: true }),
   askTembo: defineRoute({ method: "POST", path: "/api/channels/:id/tembo", params: IdParams, body: TemboAsk, response: TemboResponse, idempotent: true }),
   temboFeedback: defineRoute({ method: "POST", path: "/api/messages/:id/tembo-feedback", params: IdParams, body: TemboFeedback, response: Success, idempotent: true }),

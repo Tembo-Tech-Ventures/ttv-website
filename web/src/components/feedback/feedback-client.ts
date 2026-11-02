@@ -36,7 +36,7 @@ export interface ClientError {
 const PENDING_FEEDBACK_KEY = "__ttvFeedbackRequested";
 
 /**
- * Lets any island (the Ask AI nav, for one) open the widget. The widget
+ * Lets any island (the Ask Tembo nav, for one) open the widget. The widget
  * hydrates on its own schedule (`client:idle`), so a request can arrive before
  * it listens: the request is also left on `window`, and the widget takes it
  * when it mounts. Opening is idempotent, so a request seen twice is harmless.
