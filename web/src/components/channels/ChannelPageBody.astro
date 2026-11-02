@@ -8,6 +8,9 @@
  *
  * `?thread=` opens a thread (only one this reader can open: the server
  * answers no thread otherwise) and `?message=` marks a linked message.
+ *
+ * A page with its own header (a private conversation, U-4.1) passes it in the
+ * `header` slot; otherwise the channel's own ChannelHeader shows.
  */
 import type { Channel } from "@/lib/platform/contracts";
 import { getRouteChannelPage } from "@/lib/platform/server/channel-context";
@@ -30,6 +33,7 @@ const first = page.agreed ? await getRouteChannelPage(Astro) : null;
 // offers no attach tools.
 const shareables = page.agreed ? await loadRouteShareables(Astro) : null;
 const threadId = first?.page.thread ? query.get("thread") : null;
+const ownHeader = Astro.slots.has("header");
 ---
 
 {
@@ -47,9 +51,13 @@ const threadId = first?.page.thread ? query.get("thread") : null;
       messageId={query.get("message")}
     >
       <div class="channel-view__header">
-        <ChannelHeader channel={page.channel} />
+        {ownHeader ? <slot name="header" /> : <ChannelHeader channel={page.channel} />}
       </div>
     </ChannelView>
+  ) : ownHeader ? (
+    <ChannelFrame channel={page.channel} agreed={page.agreed} canAgree={page.canAgree} action={page.self}>
+      <slot name="header" slot="header" />
+    </ChannelFrame>
   ) : (
     <ChannelFrame channel={page.channel} agreed={page.agreed} canAgree={page.canAgree} action={page.self} />
   )

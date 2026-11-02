@@ -273,10 +273,11 @@ describe("SpacesShell account menu", () => {
     expect(details.open).toBe(false);
   });
 
-  it("forgets this tab's unsent onboarding requests and channel drafts when signing out, by link or by form", async () => {
+  it("forgets this tab's unsent onboarding requests, channel drafts and mentor requests when signing out, by link or by form", async () => {
     for (const account of [LINK_OUT, { signOut: { kind: "form", action: "/api/qa/logout", label: "Sign out of this QA persona" }, feedback: false }] as const) {
       sessionStorage.setItem("ttv-onboarding-drafts:someone", JSON.stringify({ MENTOR: { note: "Unsent", link: "" } }));
       sessionStorage.setItem("ttv-channel-drafts:someone:channel", JSON.stringify({ drafts: { root: { body: "Unsent", embeds: [] } }, sends: [] }));
+      sessionStorage.setItem("ttv-mentor-request-draft:someone:mentor", JSON.stringify({ note: "Unsent", project: null, format: null }));
       await mount({ account });
       const control = q<HTMLElement>("[data-shell-sign-out]");
       // The sign-out navigation itself is the browser's; only the clearing is checked here.
@@ -288,6 +289,7 @@ describe("SpacesShell account menu", () => {
       }
       expect(sessionStorage.getItem("ttv-onboarding-drafts:someone")).toBeNull();
       expect(sessionStorage.getItem("ttv-channel-drafts:someone:channel")).toBeNull();
+      expect(sessionStorage.getItem("ttv-mentor-request-draft:someone:mentor")).toBeNull();
       await act(async () => root.unmount());
       root = createRoot(container);
     }

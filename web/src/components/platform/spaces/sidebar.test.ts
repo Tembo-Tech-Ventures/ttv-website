@@ -14,8 +14,13 @@ function facts(me: Me, page: SpacePageKey, overrides: Partial<SidebarFacts> = {}
   return { me, page, visibleLinkIds: EVERY_LINK, unreadLeadCount: 0, certificates: [], ...overrides };
 }
 
-/** The channel and conduct pages exist only with channels: give them what they are a page of. */
-const CHANNEL_PAGES: Partial<Record<SpacePageKey, Channel>> = { communityChannel: channels.help, cohortChannel: channels.cohort04, conduct: channels.help };
+/** The channel, conversation and conduct pages exist only with channels: give them what they are a page of. */
+const CHANNEL_PAGES: Partial<Record<SpacePageKey, Channel>> = {
+  communityChannel: channels.help, cohortChannel: channels.cohort04, conduct: channels.help, conversation: channels.davidConversation,
+};
+
+/** The sidebars as they were before mentor requests (flag `mentor_requests` off). */
+const dark = (me: Me): Me => ({ ...me, flags: { ...me.flags, mentor_requests: false } });
 
 function pageFacts(me: Me, page: SpacePageKey): SidebarFacts {
   const open = CHANNEL_PAGES[page];
@@ -28,6 +33,10 @@ function hrefs(model: SidebarModel): string[] {
 
 function labels(model: SidebarModel): string[] {
   return model.groups.flatMap((group) => group.items.map((item) => item.label));
+}
+
+function groupLabelsOf(model: SidebarModel): (string | undefined)[] {
+  return model.groups.map((group) => group.label);
 }
 
 function current(model: SidebarModel): string[] {
@@ -94,7 +103,7 @@ describe("space sidebars", () => {
   });
 
   it("put the way into a cohort in Community for a member without one", () => {
-    const lucy = spaceSidebar("community", facts(meByPersona.lucy, "journey", { visibleLinkIds: NEW_SIGN_IN }));
+    const lucy = spaceSidebar("community", facts(dark(meByPersona.lucy), "journey", { visibleLinkIds: NEW_SIGN_IN }));
     expect(lucy.groups.map((group) => group.label)).toEqual([undefined, "Public directory", "Cohorts"]);
     expect(lucy.groups.at(-1)!.items).toEqual([
       expect.objectContaining({ label: "Apply to a cohort", href: "/dashboard/cohort/apply", current: false }),
@@ -104,12 +113,12 @@ describe("space sidebars", () => {
     expect(current(spaceSidebar("community", facts(meByPersona.lucy, "ask")))).toEqual(["Ask Tembo"]);
 
     // With a cohort, applying and Ask Tembo live in the Cohort space instead.
-    const wanjiku = spaceSidebar("community", facts(meByPersona.wanjiku, "journey"));
+    const wanjiku = spaceSidebar("community", facts(dark(meByPersona.wanjiku), "journey"));
     expect(labels(wanjiku)).toEqual(["Your journey", "Members", "Mentors"]);
   });
 
   it("say the directories are the public website's pages, before anyone follows them", () => {
-    for (const me of [meByPersona.lucy, meByPersona.wanjiku]) {
+    for (const me of [dark(meByPersona.lucy), dark(meByPersona.wanjiku)]) {
       const directory = spaceSidebar("community", facts(me, "journey")).groups.find((group) => group.label === "Public directory")!;
       expect(directory.items.map(({ label, href, publicPage }) => ({ label, href, publicPage }))).toEqual([
         { label: "Members", href: "/community/members", publicPage: true },
@@ -117,14 +126,14 @@ describe("space sidebars", () => {
       ]);
     }
     // Every other entry stays in the app.
-    const inApp = Object.values(meByPersona).flatMap((me) => me.spaces.map((space) => spaceSidebar(space, facts(me, "journey"))))
+    const inApp = Object.values(meByPersona).map(dark).flatMap((me) => me.spaces.map((space) => spaceSidebar(space, facts(me, "journey"))))
       .flatMap((model) => model.groups.flatMap((group) => group.items))
       .filter((entry) => entry.publicPage);
     expect(new Set(inApp.map((entry) => entry.href))).toEqual(new Set(["/community/members", "/community/mentors"]));
   });
 
-  it("label requests and availability as not open yet, in the overview's own words", () => {
-    const david = spaceSidebar("mentoring", facts(meByPersona.david, "confirm"));
+  it("label requests and availability as not open yet while mentor requests are off, in the overview's own words", () => {
+    const david = spaceSidebar("mentoring", facts(dark(meByPersona.david), "confirm"));
     expect(david.groups[0]!.items.map(({ label, note, current: isCurrent }) => ({ label, note, current: isCurrent }))).toEqual([
       { label: "Overview", note: undefined, current: false },
       { label: "Confirm work", note: undefined, current: true },
@@ -263,7 +272,7 @@ describe("space sidebars", () => {
     });
 
     it("list community channels in Community, in the backend's order, then the way back to the habits", () => {
-      const model = spaceSidebar("community", facts(meByPersona.lucy, "journey", { channels: readable }));
+      const model = spaceSidebar("community", facts(dark(meByPersona.lucy), "journey", { channels: readable }));
       expect(model.groups.map((entry) => entry.label)).toEqual([undefined, "Channels", "Public directory", "Cohorts"]);
       expect(group(model)!.items.map(({ label, href, icon }) => ({ label, href, icon }))).toEqual([
         { label: "introductions", href: "/dashboard/community/c/introductions", icon: "channel" },
@@ -287,8 +296,8 @@ describe("space sidebars", () => {
       expect(hrefs(model)).not.toContain("/dashboard/community/conduct");
     });
 
-    it("keep direct conversations out until mentor requests give them a page", () => {
-      const all = (["community", "cohort"] as const).flatMap((space) => hrefs(spaceSidebar(space, facts(meByPersona.amina, space === "community" ? "journey" : "cohort", { channels: readable }))));
+    it("keep direct conversations out while mentor requests are off", () => {
+      const all = (["community", "cohort"] as const).flatMap((space) => hrefs(spaceSidebar(space, facts(dark(meByPersona.amina), space === "community" ? "journey" : "cohort", { channels: readable }))));
       expect(all.join(" ")).not.toContain(channels.davidConversation.slug);
       expect(all.join(" ")).not.toContain("/dm/");
     });
@@ -341,6 +350,62 @@ describe("space sidebars", () => {
             expect(channelPageFile(href), `${href}`).not.toBeNull();
             expect(isAvailableSpacePath(href), `served: ${href}`).toBe(true);
           }
+        }
+      }
+    });
+  });
+
+  describe("mentor connections (U-4.1)", () => {
+    const readable = { items: channelList.items };
+    const conversation = { ...channels.davidConversation, unreadCount: 2 };
+
+    it("put Mentors in the app, after the journey, and keep only Members as a public page", () => {
+      const model = spaceSidebar("community", facts(meByPersona.wanjiku, "mentors"));
+      expect(model.groups[0]!.items.map(({ label, href, current: isCurrent }) => ({ label, href, current: isCurrent }))).toEqual([
+        { label: "Your journey", href: "/dashboard/community", current: false },
+        { label: "Mentors", href: "/dashboard/community/mentors", current: true },
+      ]);
+      expect(model.groups.find((entry) => entry.label === "Public directory")!.items.map((entry) => entry.label)).toEqual(["Members"]);
+    });
+
+    it("list private conversations under Conversations, named for the other person, bold while unread", () => {
+      const model = spaceSidebar("community", facts(meByPersona.wanjiku, "journey", { channels: { items: [...readable.items.filter((c) => c.kind !== "DIRECT"), conversation] } }));
+      expect(model.groups.map((entry) => entry.label)).toEqual([undefined, "Channels", "Conversations", "Public directory"]);
+      expect(model.groups.find((entry) => entry.label === "Conversations")!.items).toEqual([expect.objectContaining({
+        label: "David Kamau", href: `/dashboard/community/dm/${conversation.id}`, icon: "conversation",
+        emphasis: "unread", count: 2, countLabel: "unread messages", current: false,
+      })]);
+      // The open conversation is current, and its count gives way to the view's own "New" divider.
+      const open = spaceSidebar("community", facts(meByPersona.wanjiku, "conversation", { channels: { items: [conversation], currentId: conversation.id } }));
+      expect(open.groups.find((entry) => entry.label === "Conversations")!.items[0]).toMatchObject({ current: true, emphasis: "read" });
+      expect(open.groups.find((entry) => entry.label === "Conversations")!.items[0]).not.toHaveProperty("count");
+    });
+
+    it("never list a conversation in Cohort, and list none without any", () => {
+      expect(hrefs(spaceSidebar("cohort", facts(meByPersona.wanjiku, "cohort", { channels: { items: [conversation] } }))).join(" ")).not.toContain("/dm/");
+      expect(groupLabelsOf(spaceSidebar("community", facts(meByPersona.wanjiku, "journey", { channels: { items: [] } })))).not.toContain("Conversations");
+    });
+
+    it("open Requests and Availability in Mentoring, around Confirm work", () => {
+      const model = spaceSidebar("mentoring", facts(meByPersona.david, "mentorRequests"));
+      expect(model.description).toBe("Your time, on your terms.");
+      expect(model.groups[0]!.items.map(({ label, href, note }) => ({ label, href, note }))).toEqual([
+        { label: "Overview", href: "/dashboard/mentoring", note: undefined },
+        { label: "Requests", href: "/dashboard/mentoring/requests", note: undefined },
+        { label: "Confirm work", href: "/dashboard/mentoring/confirm", note: undefined },
+        { label: "Availability", href: "/dashboard/mentoring/availability", note: undefined },
+      ]);
+      expect(current(model)).toEqual(["Requests"]);
+      expect(current(spaceSidebar("mentoring", facts(meByPersona.david, "mentorAvailability")))).toEqual(["Availability"]);
+    });
+
+    it("stay dark while channels is off, since mentor requests are effective only with channels", () => {
+      const noChannels = (me: Me): Me => ({ ...me, flags: { ...me.flags, channels: false } });
+      for (const me of Object.values(meByPersona)) {
+        for (const space of me.spaces) {
+          const hidden = JSON.stringify(spaceSidebar(space, facts(noChannels(me), "journey", { channels: readable })));
+          expect(hidden).not.toMatch(/\/dashboard\/community\/mentors|\/dm\/|mentoring\/requests|mentoring\/availability/);
+          expect(hidden).toBe(JSON.stringify(spaceSidebar(space, facts(dark(noChannels(me)), "journey", { channels: readable }))));
         }
       }
     });
