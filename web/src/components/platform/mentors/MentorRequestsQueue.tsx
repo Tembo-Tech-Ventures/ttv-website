@@ -12,7 +12,7 @@ import { Avatar, Button, Card, Chip } from "@/components/platform/ui";
 import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
 import {
-  capacityView, conversationPath, MENTOR_AVAILABILITY_PATH, mentorStatus, monthName, openingDate, personContext,
+  capacityView, conversationHref, MENTOR_AVAILABILITY_PATH, mentorStatus, monthName, openingDate, personContext,
   requestMeta, usedShare, waitingText,
 } from "./mentor-display";
 // oxlint-disable-next-line import/no-unassigned-import -- The embed card's stylesheet (channels.css).
@@ -157,7 +157,7 @@ function RequestCard({ store, request, mentors, now, compact = false }: {
         />
       )}
       {state.status === "ACCEPTED" && request.channelId && (
-        <a href={conversationPath(request.channelId)} className={cx(LINK, "w-fit")}>
+        <a href={conversationHref(request.channelId)} className={cx(LINK, "w-fit")}>
           Open conversation with {name} <PiArrowRight aria-hidden className="size-4" />
         </a>
       )}

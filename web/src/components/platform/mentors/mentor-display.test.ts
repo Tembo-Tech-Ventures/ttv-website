@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MentorRequestStatus, type MentorRequest } from "@/lib/platform/contracts";
 import { availability, FIXTURE_NOW, meByPersona, pendingMentorRequest, people } from "@/lib/platform/fixtures";
 import {
-  capacityView, conversationContext, conversationPath, dayPhrase, listingNote, mentorRequestsOpen, mentorStatus,
+  capacityView, conversationContext, conversationHref, dayPhrase, listingNote, mentorRequestsOpen, mentorStatus,
   monthName, openingDate, personContext, requesterStatus, requestMeta, usedShare, waitingText,
 } from "./mentor-display";
 
@@ -98,6 +98,6 @@ describe("listing and routes", () => {
   });
 
   it("encode a conversation id as one path segment", () => {
-    expect(conversationPath("dm/1?x")).toBe("/dashboard/community/dm/dm%2F1%3Fx");
+    expect(conversationHref("dm/1?x")).toBe("/dashboard/community/dm/dm%2F1%3Fx");
   });
 });
