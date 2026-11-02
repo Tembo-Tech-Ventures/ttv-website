@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ROUTES, type MentorDirectoryItem } from "@/lib/platform/contracts";
-import { availability, FIXTURE_NOW, meByPersona, mentors, people, pendingMentorRequest } from "@/lib/platform/fixtures";
+import { availability, FIXTURE_NOW, meByPersona, mentors, people, pendingMentorRequest, worthAnotherLook } from "@/lib/platform/fixtures";
 import { NO_FILTERS, parseDirectoryUrl } from "@/lib/platform/client/mentor-directory";
 import { createMentoringMock } from "@/lib/platform/client/mentoring.mock";
 import type { MockReply } from "@/lib/platform/client/mockTransport";
@@ -191,13 +191,13 @@ describe("the mentor directory", () => {
 });
 
 describe("a mentor's requests", () => {
-  async function queue(failure?: (request: Request) => MockReply | undefined) {
+  async function queue(failure?: (request: Request) => MockReply | undefined, anotherLook: typeof worthAnotherLook | null = null) {
     const mock = createMentoringMock({ viewer: people.david, ...(failure ? { failure } : {}) });
     const [initial, list] = await Promise.all([
       mock.api.call(ROUTES.listMentorRequests, { query: { as: "mentor" } }),
       mock.api.call(ROUTES.listMentors, { query: {} }),
     ]);
-    await act(async () => root.render(<MentorRequestsQueue initial={initial} mentors={list.items} availability={availability} now={FIXTURE_NOW} api={mock.api} />));
+    await act(async () => root.render(<MentorRequestsQueue initial={initial} mentors={list.items} availability={availability} anotherLook={anotherLook} now={FIXTURE_NOW} api={mock.api} />));
     return mock;
   }
   const request = (id: string) => q(`[data-mentor-request="${id}"]`)!;
@@ -210,6 +210,27 @@ describe("a mentor's requests", () => {
     expect(text("[data-spots-used]")).toBe("1 of 3");
     expect(q<HTMLMeterElement>("[data-mentoring-rail] meter")!.value).toBe(1);
     expect(button(pendingMentorRequest.id, "Accept").getAttribute("aria-describedby")).toBe(request(pendingMentorRequest.id).getAttribute("aria-labelledby"));
+  });
+
+  it("points at confirmed work with a newer revision, and leaves the card out when there is none", async () => {
+    await queue(undefined, worthAnotherLook);
+    const item = worthAnotherLook.items[0]!;
+    expect(q("[data-another-look]")!.textContent).toContain("Achieng shared revision 3 of Chama ledger: M-Pesa receipt parser. Your confirmation covers revision 2.");
+    const link = q<HTMLAnchorElement>(`[data-another-look-item="${item.journeyId}"] a`)!;
+    expect(link.getAttribute("href")).toBe("/dashboard/mentoring/confirm");
+    expect(link.textContent).toBe("Review revision 3");
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await queue(undefined, { items: [] });
+    expect(q("[data-another-look]")).toBeNull();
+  });
+
+  it("names three pieces of work at most, then points at Confirm work for the rest", async () => {
+    const base = worthAnotherLook.items[0]!;
+    const items = [1, 2, 3, 4, 5].map((n) => ({ ...base, journeyId: `journey-${n}`, title: `Project ${n}` }));
+    await queue(undefined, { items });
+    expect(all("[data-another-look-item]")).toHaveLength(3);
+    expect(text("[data-another-look] > a")).toBe("2 more on Confirm work ");
   });
 
   it("accepts at once and then links the conversation", async () => {

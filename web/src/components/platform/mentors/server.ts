@@ -1,12 +1,13 @@
 import type { APIContext } from "astro";
 import type {
-  CreateMentorRequest, Me, MentorAvailability, MentorDirectory, MentorDirectoryQuery, MentorRequest, MentorRequestList,
-  MentorRequestListQuery, ProjectEmbed,
+  Conversation, CreateMentorRequest, Me, MentorAvailability, MentorDirectory, MentorDirectoryQuery, MentorRequestList,
+  MentorRequestListQuery, ProjectEmbed, WorthAnotherLook,
 } from "@/lib/platform/contracts";
 import { ROUTES } from "@/lib/platform/contracts";
-import { getAvailability, listMentors } from "@/lib/mentoring/profiles";
-import { IS_MEMBER, listRequests } from "@/lib/mentoring/requests";
 import { listOwnProjects } from "@/lib/channels/embeds";
+import { worthAnotherLook } from "@/lib/mentoring/another-look";
+import { getAvailability, listMentors } from "@/lib/mentoring/profiles";
+import { getConversation, IS_MEMBER, listRequests } from "@/lib/mentoring/requests";
 import { mentoringRequest } from "@/lib/mentoring/http";
 
 /**
@@ -22,13 +23,15 @@ export interface MentorsServer {
   availability(): Promise<MentorAvailability>;
   /** The caller's own published projects, which the drawer can attach. */
   projects(): Promise<ProjectEmbed[]>;
-  /** Whether the caller may ask for time: a member account, as POST /api/mentor-requests checks it (IS_MEMBER). */
-  canAsk(): Promise<boolean>;
   /**
-   * The accepted request that opened a private conversation, newest first, from either side. Null when
-   * staff opened it, or when it is older than the first page of this person's accepted requests.
+   * Whether this person may ask a mentor for time: a member account, meaning a community profile or a
+   * cohort place (B-4.1's IS_MEMBER, the same condition the API's INSERT checks).
    */
-  openedBy(channelId: string): Promise<MentorRequest | null>;
+  canAsk(): Promise<boolean>;
+  /** A private conversation's header: the other member and the accepted request that opened it. Members only. */
+  conversation(channelId: string): Promise<Conversation | null>;
+  /** Work this mentor confirmed at an earlier revision that has a newer one (B-4.2). */
+  anotherLook(): Promise<WorthAnotherLook>;
   /** Asks for time without JavaScript, through the API's own handler (request-post.ts). */
   create(body: CreateMentorRequest): Promise<Response>;
 }
@@ -47,15 +50,8 @@ export function mentorsServer(
       const row = await db.prepare(`SELECT ${IS_MEMBER("?1")} AS member`).bind(me.user.id).first<{ member: number }>();
       return Boolean(row?.member);
     },
-    async openedBy(channelId) {
-      const [asked, answered] = await Promise.all([
-        listRequests(ctx, { as: "requester", status: "ACCEPTED" }),
-        listRequests(ctx, { as: "mentor", status: "ACCEPTED" }),
-      ]);
-      return [...asked.items, ...answered.items]
-        .filter((request) => request.channelId === channelId)
-        .toSorted((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
-    },
+    conversation: (channelId) => getConversation(ctx, channelId),
+    anotherLook: () => worthAnotherLook({ db, env, locals: context.locals }),
     create(body) {
       // The same handler as POST /api/mentor-requests. The page has already checked its own post is
       // same-origin (request-post.ts), so this inner request carries that origin.

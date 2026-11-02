@@ -50,7 +50,7 @@ for (const viewport of [DESKTOP, PHONE]) {
     await page.screenshot({ path: `${EVIDENCE_DIR}/05-directory-${viewport.width}.png`, fullPage: true });
     await runAxe(page, testInfo, `directory-${viewport.width}`);
 
-    await card(page, "David Kamau").getByRole("button", { name: "Ask for time" }).click();
+    await card(page, "David Kamau").getByRole("link", { name: "Ask for time" }).click();
     const drawer = drawerFor(page, "David");
     await expect(drawer.getByRole("textbox", NOTE)).toBeFocused();
     await expect(page).toHaveURL(new RegExp(`ask=${DAVID}`));
@@ -64,7 +64,7 @@ test("the keyboard reaches a mentor, opens the drawer, sends, and comes back to 
   await page.setViewportSize(DESKTOP);
   await open(page, harness({ view: "directory" }));
   // Wanjiku is already waiting on David in the fixtures, so she asks Samuel.
-  const button = card(page, "Samuel Otieno").getByRole("button", { name: "Ask for time" });
+  const button = card(page, "Samuel Otieno").getByRole("link", { name: "Ask for time" });
   for (let presses = 0; presses < 60 && !(await button.evaluate((el) => el === document.activeElement)); presses += 1) {
     await page.keyboard.press("Tab");
   }
@@ -102,7 +102,7 @@ test("withdrawing shows at once and puts the request back when the server refuse
 test("asking without having agreed to the habits keeps the note and comes back to the drawer", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
   await open(page, harness({ view: "directory", conduct: "required" }));
-  await card(page, "Samuel Otieno").getByRole("button", { name: "Ask for time" }).click();
+  await card(page, "Samuel Otieno").getByRole("link", { name: "Ask for time" }).click();
   const drawer = drawerFor(page, "Samuel");
   await drawer.getByRole("textbox", NOTE).fill("A review of my ledger's data model?");
   await drawer.getByRole("radio", { name: /Written review/ }).check();
@@ -132,6 +132,11 @@ for (const viewport of [DESKTOP, PHONE]) {
     await waiting.first().getByRole("button", { name: "Accept" }).click();
     await expect(page.locator("[data-mentor-request][data-status=ACCEPTED]").first().getByRole("link", { name: /Open conversation/ })).toBeVisible();
     await expect(waiting).toHaveCount(count - 1);
+
+    // The rail ends with work David confirmed that has a newer revision since (B-4.2).
+    const look = page.locator("[data-another-look]");
+    await expect(look).toContainText("Your confirmation covers revision 2.");
+    await expect(look.getByRole("link", { name: /^Review revision 3 of / })).toHaveAttribute("href", "/dashboard/mentoring/confirm");
   });
 
   test(`availability editor at ${viewport.width}px`, async ({ page }, testInfo) => {
@@ -155,7 +160,10 @@ test.describe("without JavaScript", () => {
 
   test("the drawer is a form: a note to fix comes back with what was written, and a send lands on the directory", async ({ page }) => {
     await page.setViewportSize(PHONE);
-    await page.goto(harness({ view: "directory", ask: SAMUEL }));
+    await page.goto(harness({ view: "directory" }));
+    // "Ask for time" is a link to this page with ?ask=, so it works without JavaScript.
+    await card(page, "Samuel Otieno").getByRole("link", { name: "Ask for time" }).click();
+    await expect(page).toHaveURL(new RegExp(`ask=${SAMUEL}`));
     const panel = page.locator("[data-mentor-drawer-static]");
     await expect(panel).toBeVisible();
     // The sheet scrolls inside itself; at its end "Send request" stands clear of the bottom bar (click hit-tests it).
@@ -183,7 +191,7 @@ test("an account without a profile or cohort place reads the directory, with no 
   await page.setViewportSize(PHONE);
   await open(page, harness({ view: "directory", member: "no" }));
   await expect(page.locator("[data-mentor-card]").first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Ask for time" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Ask for time" })).toHaveCount(0);
   await expect(page.locator("[data-mentors-need-member]")).toContainText("Asking a mentor for time needs a member profile or a cohort place.");
   await page.screenshot({ path: `${EVIDENCE_DIR}/05-not-a-member-${PHONE.width}.png`, fullPage: true });
   await runAxe(page, testInfo, "directory-not-a-member");

@@ -1,6 +1,8 @@
 import { PiClock } from "react-icons/pi";
 import type { MentorDirectoryItem } from "@/lib/platform/contracts";
-import { Avatar, Button, Card, Chip } from "@/components/platform/ui";
+import { Avatar, Card, Chip } from "@/components/platform/ui";
+import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
+import { cx } from "@/components/platform/ui/cx";
 import { capacityView, FORMAT_LABELS, FULL_THIS_MONTH } from "./mentor-display";
 
 interface Props {
@@ -8,10 +10,18 @@ interface Props {
   now: number;
   /** This mentor's request drawer is open. */
   open: boolean;
-  /** The viewer may ask mentors for time (a member account); otherwise the card only reads. */
-  canAsk: boolean;
-  onAsk: (item: MentorDirectoryItem, from: HTMLButtonElement) => void;
+  /**
+   * Where "Ask for time" goes without JavaScript: this page with `?ask=`, which renders the drawer as a
+   * form. Null when this person cannot ask (not a member account): the card then only reads.
+   */
+  askHref: string | null;
+  onAsk: (item: MentorDirectoryItem, from: HTMLElement) => void;
 }
+
+const ASK = cx(
+  "inline-flex h-10 shrink-0 items-center justify-center rounded-xl px-4 text-sm font-semibold whitespace-nowrap",
+  "transition-colors duration-150 motion-reduce:transition-none pointer-coarse:min-h-11", FOCUS_RING,
+);
 
 /**
  * One mentor in the directory (screen 05): who they are, what they help with
@@ -19,7 +29,7 @@ interface Props {
  * opening, and the card says "Full this month" where the button would be:
  * there is nothing to press, so nothing pretends to be pressable.
  */
-export default function MentorCard({ item, now, open, canAsk, onAsk }: Props) {
+export default function MentorCard({ item, now, open, askHref, onAsk }: Props) {
   const { person } = item;
   const capacity = capacityView(item.capacity, now);
   const headingId = `mentor-${person.id}`;
@@ -41,9 +51,9 @@ export default function MentorCard({ item, now, open, canAsk, onAsk }: Props) {
             {item.areas.map(area => <dd key={area} className="contents"><Chip>{area}</Chip></dd>)}
           </div>
         )}
-        <div className="flex flex-wrap items-baseline gap-x-1.5 text-[0.8125rem] text-ink-secondary">
-          <dt>Offers</dt>
-          <dd>{item.formats.map(format => FORMAT_LABELS[format]).join(" · ")}</dd>
+        <div className="text-[0.8125rem] leading-snug text-ink-secondary">
+          <dt className="inline">Offers </dt>
+          <dd className="inline">{item.formats.map(format => FORMAT_LABELS[format]).join(" · ")}</dd>
         </div>
       </dl>
       <div className="mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-t border-hairline pt-4">
@@ -53,17 +63,23 @@ export default function MentorCard({ item, now, open, canAsk, onAsk }: Props) {
         </p>
         {!capacity.open ? (
           <p className="text-sm font-semibold text-ink-primary" data-mentor-full>{FULL_THIS_MONTH}</p>
-        ) : canAsk && (
-          <Button
-            variant={open ? "primary" : "quiet"}
+        ) : askHref !== null && (
+          // A link, so asking works without JavaScript; with it, the drawer opens as a dialog in place.
+          <a
+            href={askHref}
             aria-haspopup="dialog"
             aria-expanded={open}
             aria-describedby={headingId}
-            onClick={event => onAsk(item, event.currentTarget)}
+            onClick={event => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+              event.preventDefault();
+              onAsk(item, event.currentTarget);
+            }}
+            className={cx(ASK, BUTTON_VARIANTS[open ? "primary" : "quiet"])}
             data-ask-mentor={person.id}
           >
             Ask for time
-          </Button>
+          </a>
         )}
       </div>
     </Card>

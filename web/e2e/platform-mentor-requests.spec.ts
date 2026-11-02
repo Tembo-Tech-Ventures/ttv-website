@@ -43,7 +43,7 @@ const queueCard = (page: Page, name: string) => page.locator("[data-mentor-reque
 /** Asks a mentor for time from the directory, agreeing to the habits first if the server asks. */
 async function ask(page: Page, mentor: string, note: string) {
   await visit(page, DIRECTORY);
-  await card(page, mentor).getByRole("button", { name: "Ask for time" }).click();
+  await card(page, mentor).getByRole("link", { name: "Ask for time" }).click();
   const drawer = page.getByRole("dialog", { name: `Ask ${mentor.split(" ")[0]} for time` });
   await expect(drawer).toBeVisible();
   await expect(drawer.getByRole("textbox", { name: "What would you like help with?" })).toBeFocused();
@@ -168,7 +168,7 @@ test("a full mentor stays listed with no request button, and the directory can s
   await visit(member, DIRECTORY);
   const full = card(member, "Samuel Otieno");
   await expect(full).toContainText("Full this month");
-  await expect(full.getByRole("button", { name: "Ask for time" })).toHaveCount(0);
+  await expect(full.getByRole("link", { name: "Ask for time" })).toHaveCount(0);
   await member.getByRole("link", { name: "Has open spots" }).click();
   await expect(member).toHaveURL(/available=true/);
   await expect(card(member, "Samuel Otieno")).toHaveCount(0);
@@ -184,7 +184,7 @@ test("an account without a profile or cohort place reads the directory, and aski
   await visit(institution, DIRECTORY);
   await expect(institution.getByRole("heading", { level: 1, name: "Mentors" })).toBeVisible();
   await expect(card(institution, "David Kamau")).toBeVisible();
-  await expect(institution.getByRole("button", { name: "Ask for time" })).toHaveCount(0);
+  await expect(institution.getByRole("link", { name: "Ask for time" })).toHaveCount(0);
   await expect(institution.locator("[data-mentors-need-member]")).toHaveText(
     "Asking a mentor for time needs a member profile or a cohort place. You can still read who mentors here and what they help with.",
   );

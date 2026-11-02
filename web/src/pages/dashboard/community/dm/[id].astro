@@ -17,16 +17,15 @@ import { mentorsServer } from "@/components/platform/mentors/server";
 const page = await resolveConversationPage(Astro);
 if (page instanceof Response) return page;
 const now = Date.now();
-// The request that opened it names who the conversation is with (staff-opened ones have none). Mentoring
-// data is read only while mentor requests are open; otherwise the header has the conversation's name alone.
-const request = mentorRequestsOpen(page.context.me)
-  ? await mentorsServer(Astro, env, page.context.me, now).openedBy(page.channel.id).catch((error: unknown) => {
-    console.error("Conversation page: the request that opened it could not be read", error);
-    return null;
-  })
-  : null;
+// The other member, and the accepted request that opened it (staff-opened ones have none). The request is
+// mentoring data, shown only while mentor requests are open; otherwise the header names the person alone.
+const conversation = await mentorsServer(Astro, env, page.context.me, now).conversation(page.channel.id).catch((error: unknown) => {
+  console.error("Conversation page: the conversation's header could not be read", error);
+  return null;
+});
+const counterpart = conversation?.counterpart ?? null;
+const request = mentorRequestsOpen(page.context.me) ? conversation?.request ?? null : null;
 const viewerId = page.context.me.user.id;
-const counterpart = request ? (request.mentor.id === viewerId ? request.requester : request.mentor) : null;
 ---
 
 <SpacePage context={page.context} title={page.channel.name} channels={page.readable} channelId={page.channel.id} fill={page.agreed}>

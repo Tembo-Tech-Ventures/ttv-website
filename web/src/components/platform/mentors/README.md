@@ -8,9 +8,9 @@ exist only while `mentor_requests` is on for the person (effective only with
 | Page | Space | What it does |
 |---|---|---|
 | `/dashboard/community/mentors` | Community | The directory (screen 05), its filters, the person's own requests with withdraw, and the "Ask for time" drawer |
-| `/dashboard/mentoring/requests` | Mentoring | A mentor's queue (screen 06): accept, suggest another mentor, not this month; this month's spots |
+| `/dashboard/mentoring/requests` | Mentoring | A mentor's queue (screen 06): accept, suggest another mentor, not this month; this month's spots; "Worth another look" (B-4.2) when confirmed work has a newer revision |
 | `/dashboard/mentoring/availability` | Mentoring | Headline, areas, formats, monthly spots, pause |
-| `/dashboard/community/dm/[id]` | Community | A private conversation; one opened by a request starts with that request's context |
+| `/dashboard/community/dm/[id]` | Community | A private conversation, headed by the other member (`getConversation`); one opened by a request starts with that request's context |
 
 ## How the pieces fit
 
@@ -30,7 +30,7 @@ exist only while `mentor_requests` is on for the person (effective only with
 
 ## Without JavaScript
 
-Filters are links. The drawer named by `?ask=` renders as a plain panel with a
+Filters are links, and so is "Ask for time" (`?ask=`). The drawer named by `?ask=` renders as a plain panel with a
 real form that posts to the directory page; `request-post.ts` hands the same
 body to the API's own handler, so every gate is the API's. A send lands on
 `?sent=<id>`; a refusal renders the drawer again on what was written, with the

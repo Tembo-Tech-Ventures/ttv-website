@@ -200,7 +200,10 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
       {shown.length > 0 ? (
         <ul className="mentor-grid" data-mentor-grid>
           {shown.map(item => (
-            <MentorCard key={item.person.id} item={item} now={now} open={active?.person.id === item.person.id} canAsk={canAsk} onAsk={ask} />
+            <MentorCard
+              key={item.person.id} item={item} now={now} open={active?.person.id === item.person.id}
+              askHref={canAsk ? askHref(path, base, item.person.id) : null} onAsk={ask}
+            />
           ))}
         </ul>
       ) : (
