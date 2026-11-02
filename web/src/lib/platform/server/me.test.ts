@@ -32,7 +32,7 @@ const expectedBadges: Record<string, RoleBadge[]> = {
 function setup(fixture: Partial<CapabilityCase> = {}, userId?: string) {
   const result = createCapabilityDatabase(fixture, userId);
   databases.push(result.database);
-  for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql", "0027_mentor_set_aside.sql", "0028_channels.sql", "0032_moderation_pipeline.sql"]) {
+  for (const migration of ["0002_married_microbe.sql", "0003_absurd_argent.sql", "0017_community_discovery.sql", "0021_feature_flags.sql", "0023_attention_items.sql", "0025_onboarding.sql", "0027_mentor_set_aside.sql", "0028_channels.sql", "0032_moderation_pipeline.sql", "0035_tembo.sql"]) {
     result.database.exec(readMigration(migration));
   }
   result.database.exec("UPDATE feature_flag SET audience='ALL' WHERE key='spaces'");
@@ -98,7 +98,7 @@ describe("real /me and Astro context adapters", () => {
       profile: 1, cohort: capabilities.isAdmin ? 2 : capabilities.cohortIds.length,
     },
       flags: { spaces: true, channels: false, tembo_channels: false, mentor_requests: false, onboarding: false },
-      temboUsage: { used: 0, limit: 10 },
+      temboUsage: { used: 0, limit: 10, resetsAt: expect.any(Number) },
       user: { id: context.locals.user!.id, name: "Wanjiku Njeri", avatarUrl: "https://example.test/avatar.png" },
     });
     expect(Object.keys(parsed.user).toSorted()).toEqual(["avatarUrl", "id", "name", "roleBadges"]);
@@ -108,7 +108,8 @@ describe("real /me and Astro context adapters", () => {
     const mentoring = spaces.includes("mentoring");
     // Only the Mentoring space derives its waiting confirmations, and only from the Confirm page's rows.
     expect(parsed.mentoring).toEqual(mentoring ? { awaitingConfirmation: 0 } : undefined);
-    // One flag, three capability and one attention count read; mentors add a role and a row read.
+    // One flag, three capability and one attention count read; mentors add a role and a row read. Tembo's
+    // usage is read only while tembo_channels is on (below).
     const reads = mentoring ? 7 : 5;
     expect(queries).toHaveBeenCalledTimes(reads);
     const fetch = vi.fn(() => { throw new Error("No self-fetch allowed"); });
@@ -188,7 +189,8 @@ describe("real /me and Astro context adapters", () => {
     expect(denial).toBeNull();
     expect(me.flags).toEqual(flags);
     expect(flags).toEqual(Object.fromEntries(FlagKey.options.map(key => [key, true])));
-    expect(queries).toHaveBeenCalledTimes(isAdmin === undefined ? 6 : 5);
+    // tembo_channels is on here, so Tembo's usage is one read more.
+    expect(queries).toHaveBeenCalledTimes(isAdmin === undefined ? 7 : 6);
     expect(queries.mock.calls.filter(([sql]) => sql.includes("FROM feature_flag"))).toHaveLength(1);
   });
 

@@ -6,7 +6,7 @@ import { Me, WebLink, type RoleBadge } from "../contracts";
 import { getFlags, requireFlag, type FlagContext } from "./flags";
 import { platformError } from "./http";
 import { requestCapabilities } from "./request-capabilities";
-import { TEMBO_DAILY_LIMIT } from "./me-config";
+import { readTemboUsage, usageOf } from "@/lib/tembo/quota";
 
 export interface MeContext {
   db: D1Database;
@@ -48,14 +48,16 @@ export async function getMe({ db, env, locals }: MeContext): Promise<Me> {
   }
   const avatar = WebLink.safeParse(user.image);
 
+  const flags = await getFlags(flagContext);
+  const now = Date.now();
   return Me.parse({
     user: { id: user.id, name: user.name.trim() || "Member", avatarUrl: avatar.success ? avatar.data : null, roleBadges },
     capabilities,
     spaces,
-    flags: await getFlags(flagContext),
+    flags,
     unreadCounts: attention.unreadCounts,
-    // Channel Tembo accounting arrives in Phase 3; not private-chat usage.
-    temboUsage: { used: 0, limit: TEMBO_DAILY_LIMIT },
+    // Questions to Tembo in channels today (src/lib/tembo), not private-chat usage; read only while Tembo is on.
+    temboUsage: flags.tembo_channels ? await readTemboUsage(db, user.id, now) : usageOf(0, now),
     ...(awaiting === null ? {} : { mentoring: { awaitingConfirmation: awaiting } }),
   });
 }

@@ -4,17 +4,23 @@ import type { z } from "zod";
 import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
 import * as schema from "@/lib/db/schema";
 import { recordError, recordErrorInBackground } from "@/lib/observability/errors";
-import { moderationAttention, mentionAttention } from "@/lib/attention/channel-producers";
+import { moderationAttention, mentionAttention, temboAnswerAttention } from "@/lib/attention/channel-producers";
 import {
   EditMessage, IdParams, MarkChannelRead, MessageListQuery, ModerationAction, ModerationParams, ModerationQueueQuery, PostMessage,
-  ReactToMessage, ReportMessage, RequestModerationReview, ROUTES, ShareablesQuery, Success, type Channel, type Message,
+  ReactToMessage, ReportMessage, RequestModerationReview, ROUTES, ShareablesQuery, Success, TemboAsk, TemboFeedback,
+  type Channel, type Message,
 } from "@/lib/platform/contracts";
-import { requireFlag } from "@/lib/platform/server/flags";
+import { isFlagEnabled, requireFlag } from "@/lib/platform/server/flags";
 import { platformError, platformJson } from "@/lib/platform/server/http";
 import type { PersonalAccessTokenScope } from "@/lib/personal-access-tokens";
 import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
 import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
 import { readBoundedJson, RequestJsonError } from "@/lib/request-json";
+import { acceptAsk } from "@/lib/tembo/ask";
+import { answerAsk } from "@/lib/tembo/answer";
+import { mentionsTembo } from "@/lib/tembo/mention";
+import { gatewayModel, type TemboModel } from "@/lib/tembo/model";
+import { askTembo, giveTemboFeedback, type TemboRun } from "@/lib/tembo/routes";
 import { findChannelById, listChannelsFor, readMarker } from "./access";
 import { CursorExpiredError, CursorInvalidError } from "./cursor";
 import { listShareables } from "./embeds";
@@ -37,7 +43,8 @@ import {
  * Browser writes must come from the same origin; a token's need no Origin, but one it sends must
  * match. The moderation routes (B-2.5) follow the same rules, except that no token reaches them
  * (admin tokens triage through MCP, moderation/mcp.ts): the queue is for admins only, and a
- * message's moderators hide it (moderation/actions.ts).
+ * message's moderators hide it (moderation/actions.ts). The Tembo routes (B-3.1, src/lib/tembo) also need
+ * `tembo_channels`, and a post that mentions @tembo asks Tembo after the response when it is on.
  */
 
 type Env = Pick<Cloudflare.Env, "DB" | "DEPLOYMENT_ENVIRONMENT" | "PLATFORM_FLAGS_OVERRIDE" | "DEPLOYMENT_VERSION">
@@ -45,14 +52,16 @@ type Env = Pick<Cloudflare.Env, "DB" | "DEPLOYMENT_ENVIRONMENT" | "PLATFORM_FLAG
 type Context = Pick<APIContext, "request" | "locals" | "params">;
 export type ChannelOperation = Extract<keyof typeof ROUTES,
   "listChannels" | "listMessages" | "listShareables" | "postMessage" | "editMessage" | "deleteMessage" | "reactToMessage"
-  | "markChannelRead" | "reportMessage" | "requestModerationReview" | "moderateMessage" | "listModerationQueue">;
+  | "markChannelRead" | "reportMessage" | "requestModerationReview" | "moderateMessage" | "listModerationQueue"
+  | "askTembo" | "temboFeedback">;
 /**
  * Test seams: the moderation hook, the clock, the code of conduct version, and work after the response
- * (`defer` receives it instead of the request's waitUntil; `clefTimeoutMs` shortens Clef's limit).
+ * (`defer` receives it instead of the request's waitUntil; `clefTimeoutMs` shortens Clef's limit;
+ * `temboModel` answers in place of the AI Gateway).
  */
 export interface ChannelRequestOptions {
   screen?: MessageScreen; now?: () => number; conductVersion?: number;
-  defer?: (task: () => Promise<void>) => void; clefTimeoutMs?: number;
+  defer?: (task: () => Promise<void>) => void; clefTimeoutMs?: number; temboModel?: TemboModel;
 }
 
 const READS: ReadonlySet<ChannelOperation> = new Set(["listChannels", "listMessages", "listShareables", "listModerationQueue"]);
@@ -61,7 +70,10 @@ const TOKEN_SCOPES: Partial<Record<ChannelOperation, PersonalAccessTokenScope>> 
   listChannels: "channels:read", listMessages: "channels:read", listShareables: "channels:read",
   postMessage: "channels:write", editMessage: "channels:write", deleteMessage: "channels:write", reactToMessage: "channels:write",
   markChannelRead: "channels:write", reportMessage: "channels:write", requestModerationReview: "channels:write",
+  askTembo: "channels:write", temboFeedback: "channels:write",
 };
+/** Routes that also need `tembo_channels`. */
+const TEMBO: ReadonlySet<ChannelOperation> = new Set(["askTembo", "temboFeedback"]);
 /** The longest legal message (10,000 characters of up to 4 bytes, JSON-escaped) fits; nothing else needs more. */
 const MESSAGE_BYTES = 64_000;
 const SMALL_BYTES = 1_024;
@@ -117,11 +129,14 @@ interface Admitted {
   capabilities: PlatformCapabilities;
   scope: (channel: Channel) => WriteContext;
   later: AfterResponse;
+  /** Whether `tembo_channels` is on for the caller (already read with `channels`, so free). */
+  temboOn: () => Promise<boolean>;
 }
 
 /** The flag, then who is asking, then where from. null when the request may go on. */
 async function refusal(operation: ChannelOperation, { locals, request }: Context, env: Env): Promise<Response | null> {
-  const denied = await requireFlag({ db: env.DB, env, user: locals.user ?? null, isAdmin: locals.isAdmin, locals }, "channels");
+  const flags = { db: env.DB, env, user: locals.user ?? null, isAdmin: locals.isAdmin, locals };
+  const denied = await requireFlag(flags, "channels") ?? (TEMBO.has(operation) ? await requireFlag(flags, "tembo_channels") : null);
   if (denied) return denied;
   if (!locals.user) return platformError("forbidden", "Not permitted.", 403);
   const token = locals.personalAccessToken;
@@ -138,7 +153,7 @@ async function refusal(operation: ChannelOperation, { locals, request }: Context
 }
 
 /** /api/channels/:id/…: the channel must be one the caller can read. */
-async function channelRoute({ operation, request, id, user, db, capabilities, scope, later }: Admitted): Promise<Response> {
+async function channelRoute({ operation, request, id, user, db, capabilities, scope, later, temboOn }: Admitted): Promise<Response> {
   const channel = await findChannelById(db, user, id, capabilities);
   if (!channel) throw notFound("Channel");
   if (operation === "listMessages") {
@@ -149,8 +164,19 @@ async function channelRoute({ operation, request, id, user, db, capabilities, sc
   }
   if (operation === "postMessage") {
     const { message, created } = await postMessage(scope(channel), parse(PostMessage, await readBody(request, MESSAGE_BYTES)));
-    if (created) later.written(message, channel);
+    if (created) {
+      later.written(message, channel);
+      if (mentionsTembo(message.body) && await temboOn()) later.mentioned(message, channel);
+    }
     return platformJson(ROUTES.postMessage.response.parse(message), created ? 201 : 200);
+  }
+  if (operation === "askTembo") {
+    const { messageId } = parse(TemboAsk, await readBody(request, SMALL_BYTES));
+    const target = await findMessageTarget(db.$client, messageId);
+    if (!target || !visibleTo(target, user.id, channel)) throw notFound("Message");
+    const { response, status, run } = await askTembo(scope(channel), target);
+    if (run) later.answer(run);
+    return platformJson(ROUTES.askTembo.response.parse(response), status);
   }
   const { messageId } = parse(MarkChannelRead, await readBody(request, SMALL_BYTES));
   await markChannelRead(scope(channel), messageId);
@@ -182,6 +208,11 @@ async function messageRoute({ operation, request, id, user, db, capabilities, sc
     if (created) later.moderated(target.id);
     return platformJson(Success.parse({ ok: true }), created ? 201 : 200);
   }
+  if (operation === "temboFeedback") {
+    const { feedback } = parse(TemboFeedback, await readBody(request, SMALL_BYTES));
+    await giveTemboFeedback(scope(channel), target, feedback);
+    return platformJson(ROUTES.temboFeedback.response.parse({ ok: true }));
+  }
   if (operation === "reactToMessage") {
     const input = parse(ReactToMessage, await readBody(request, SMALL_BYTES));
     return platformJson(ROUTES.reactToMessage.response.parse(await reactToMessage(scope(channel), target, input)));
@@ -189,7 +220,7 @@ async function messageRoute({ operation, request, id, user, db, capabilities, sc
   return platformJson(ROUTES.deleteMessage.response.parse(await deleteMessage(scope(channel), target)));
 }
 
-const CHANNEL_ROUTES: ReadonlySet<ChannelOperation> = new Set(["listMessages", "listShareables", "postMessage", "markChannelRead"]);
+const CHANNEL_ROUTES: ReadonlySet<ChannelOperation> = new Set(["listMessages", "listShareables", "postMessage", "markChannelRead", "askTembo"]);
 
 /** Work after the response, through the request's waitUntil (or the test seam). */
 interface AfterResponse {
@@ -197,6 +228,10 @@ interface AfterResponse {
   written: (message: Message, channel: Channel) => void;
   /** A moderation change: the author's notice and the admins' queue notice. */
   moderated: (messageId: string) => void;
+  /** A new post mentions @tembo: ask, then answer when this run is the one that asked. */
+  mentioned: (message: Message, channel: Channel) => void;
+  /** Answer an accepted question: Tembo's run, then Clef on the answer and the asker's notice. */
+  answer: (run: TemboRun) => void;
 }
 
 /**
@@ -206,7 +241,7 @@ interface AfterResponse {
 function afterResponse(operation: ChannelOperation, context: Context, env: Env, options: ChannelRequestOptions): AfterResponse {
   const run = (task: () => Promise<void>) => options.defer ? options.defer(task) : waitUntil(context.locals.cfContext, task());
   const attention = { db: env.DB, env };
-  const screen = async (message: Message, channel: Channel): Promise<ClefOutcome | null> => {
+  const screen = async (message: Pick<Message, "id" | "body">, channel: Pick<Channel, "id" | "kind">): Promise<ClefOutcome | null> => {
     try {
       return await clefScreen(
         { db: env.DB, ai: env.AI, gatewayName: env.AI_GATEWAY_NAME, timeoutMs: options.clefTimeoutMs, now: options.now },
@@ -221,7 +256,31 @@ function afterResponse(operation: ChannelOperation, context: Context, env: Env, 
       return null;
     }
   };
+  const answer = async ({ messageId, claim }: TemboRun) => {
+    const model = options.temboModel ?? gatewayModel(env);
+    const result = await answerAsk({ db: env.DB, model, now: options.now, screen: options.screen }, { messageId, claim });
+    if (result.status === "failed") {
+      // Never the question, the sources or the model's text: only that it failed.
+      await recordError(env.DB, { source: "request", route: ROUTES.askTembo.path, version: env.DEPLOYMENT_VERSION, level: "warning",
+        error: new Error("Tembo could not answer a question; it was given back.") });
+      return;
+    }
+    if (result.status !== "answered") return;
+    const { answerId, body, channel, flagged } = result;
+    const outcome = await screen({ id: answerId, body }, channel);
+    await temboAnswerAttention(attention, answerId);
+    if (flagged || outcome === "flagged" || outcome === "hidden") await moderationAttention(attention, answerId);
+  };
   return {
+    mentioned: (message, channel) => run(async () => {
+      const userId = message.author.id;
+      if (userId === null) return;
+      // The same acceptance as the Ask button: idempotent, and counted only if accepted. Out of
+      // questions, a mention is not answered; the client learns why by asking (429).
+      const asked = await acceptAsk(env.DB, { messageId: message.id, channelId: channel.id, userId, now: options.now?.() ?? Date.now() });
+      if (asked.status === "run") await answer({ messageId: message.id, claim: asked.claim });
+    }),
+    answer: (ask) => run(() => answer(ask)),
     written: (message, channel) => run(async () => {
       const outcome = await screen(message, channel);
       if (message.body.includes("@")) await mentionAttention(attention, message.id);
@@ -276,6 +335,7 @@ export async function channelRequest(
       operation, request: context.request, id, user, db, capabilities,
       scope: (channel) => ({ db: env.DB, viewerId: user.id, channel, now, screen, conductVersion }),
       later,
+      temboOn: () => isFlagEnabled({ db: env.DB, env, user, isAdmin: context.locals.isAdmin, locals: context.locals }, "tembo_channels"),
     };
     return await (CHANNEL_ROUTES.has(operation) ? channelRoute(admitted) : messageRoute(admitted));
   } catch (error) {

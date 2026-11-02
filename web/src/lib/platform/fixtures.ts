@@ -57,7 +57,7 @@ function me(user: PersonSummary, spaces: SpaceId[], overrides: Partial<Me> = {})
     user, spaces, unreadCounts: { ...zeroUnread },
     flags: { spaces: true, channels: true, tembo_channels: true, mentor_requests: true, onboarding: true },
     capabilities: { cohortIds: [], mentorCohortIds: [], isMentor: false, isInstitution: false, isAdmin: false },
-    temboUsage: { used: 0, limit: 10 }, ...overrides,
+    temboUsage: { used: 0, limit: 10, resetsAt: Date.UTC(2026, 10, 2, 21) }, ...overrides,
   };
 }
 const cohortCapabilities = {
@@ -65,7 +65,7 @@ const cohortCapabilities = {
 };
 export const meByPersona = {
   wanjiku: me(people.wanjiku, ["cohort", "community", "profile"], {
-    capabilities: cohortCapabilities, unreadCounts: { ...zeroUnread, cohort: 2, community: 2 }, temboUsage: { used: 6, limit: 10 },
+    capabilities: cohortCapabilities, unreadCounts: { ...zeroUnread, cohort: 2, community: 2 }, temboUsage: { used: 6, limit: 10, resetsAt: Date.UTC(2026, 10, 2, 21) },
   }),
   achieng: me(people.achieng, ["cohort", "community", "profile"], {
     capabilities: { ...cohortCapabilities, cohortIds: [fixtureIds.cohort02] },
@@ -366,8 +366,8 @@ export const decidedModerationQueue: ModerationQueue = {
       decision: { action: "keep", reason: "The office line, shared on purpose", by: people.amina, decidedAt: FIXTURE_NOW - 2 * minute } },
   ],
 };
-export const temboPending: TemboResponse = { status: "pending", messageId: messages.communityAsk.id, usage: { used: 6, limit: 10 } };
-export const temboAnswer: TemboResponse = { status: "answer", message: messages.communityAnswer, usage: { used: 6, limit: 10 } };
+export const temboPending: TemboResponse = { status: "pending", messageId: messages.communityAsk.id, usage: { used: 6, limit: 10, resetsAt: Date.UTC(2026, 10, 2, 21) } };
+export const temboAnswer: TemboResponse = { status: "answer", message: messages.communityAnswer, usage: { used: 6, limit: 10, resetsAt: Date.UTC(2026, 10, 2, 21) } };
 export const flagsAdmin: FlagsAdmin = {
   flags: [
     { key: "spaces", audience: "OFF", updatedAt: FIXTURE_NOW, updatedBy: null },

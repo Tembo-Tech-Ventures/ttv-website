@@ -8,7 +8,7 @@ import { audienceFor, bestEffort, persist, type AttentionProducerContext, type E
  * author, the moderation queue's notice to admins, and mentions. Post-commit and best effort, like
  * every producer: they read the committed state, so a retry or a second call adds nothing (each
  * event key is unique per person). Items about channels need both `spaces` and `channels` for their
- * recipient. Message text is never copied into attention.
+ * recipient. Message text is never copied into attention. Tembo's answers (B-3.1) tell the person who asked.
  */
 
 /** Where the admin moderation queue lives (U-2.4). */
@@ -32,7 +32,7 @@ async function messageState(context: AttentionProducerContext, messageId: string
 }
 
 /** The message's space, and its channel page, opened on its thread when it is a reply. Cohort and community channels only. */
-function messagePlace(message: MessageState): Pick<EventItem, "space" | "subject"> {
+function messagePlace(message: Pick<MessageState, "id" | "parentId" | "kind" | "slug">): Pick<EventItem, "space" | "subject"> {
   const space = message.kind === "COHORT" ? "cohort" : "community";
   const thread = message.parentId === null ? "" : `?thread=${encodeURIComponent(message.parentId)}`;
   return { space, subject: { kind: "message", id: message.id, href: `${SPACE_PATHS[space]}/c/${message.slug}${thread}`, label: `#${message.slug}` } };
@@ -138,5 +138,25 @@ export function mentionAttention(context: AttentionProducerContext, messageId: s
       ...messagePlace(message), userId, actorId: message.authorId, kind: "mention",
       eventKey: JSON.stringify(["mention", message.id]), summary: `Mentioned you in #${message.slug}.`,
     })));
+  });
+}
+
+/**
+ * Tembo answered a question (B-3.1): the person who asked hears of it once per answer, at the answer in
+ * its thread, while the answer stays visible. Direct conversations have no page yet and get none.
+ */
+export function temboAnswerAttention(context: AttentionProducerContext, answerId: string) {
+  return bestEffort(async () => {
+    const audience = await audienceFor(context, "channels");
+    if (audience === "OFF") return;
+    const answer = await context.db.prepare(`SELECT a.userId, m.id, m.parentId, ch.kind, ch.slug FROM tembo_ask a
+        JOIN channel_message m ON m.id = a.answerId JOIN channel ch ON ch.id = m.channelId
+      WHERE a.answerId = ?1 AND m.deletedAt IS NULL AND m.moderationState <> 'HIDDEN'`)
+      .bind(answerId).first<{ userId: string } & Pick<MessageState, "id" | "parentId" | "kind" | "slug">>();
+    if (!answer || answer.kind === "DIRECT") return;
+    await persist(context, audience, [{
+      ...messagePlace(answer), userId: answer.userId, actorId: null, kind: "tembo_answer",
+      eventKey: JSON.stringify(["tembo_answer", answer.id]), summary: `Tembo answered your question in #${answer.slug}.`,
+    }]);
   });
 }

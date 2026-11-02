@@ -11,8 +11,8 @@ export const SEARCH_RESULT_LIMIT = 10;
 
 export class SearchScopeError extends Error {}
 
-// Match the public talent page: publication alone does not confer eligibility.
-const PUBLIC_PROFILE = `p.status='PUBLISHED' AND EXISTS (
+// Match the public talent page: publication alone does not confer eligibility. `p` is studentProfile.
+export const PUBLIC_PROFILE = `p.status='PUBLISHED' AND EXISTS (
   SELECT 1 FROM programApplication a WHERE a.userId=p.userId
   AND a.status='COMPLETED' AND a.completedAt IS NOT NULL)`;
 

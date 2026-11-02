@@ -56,9 +56,9 @@ export interface MessageTarget {
 }
 
 /** Moves a message to the channel's next changeSeq, so `since` polls carry the change. ?1 is the channel. */
-const touch = (id: string) => `UPDATE channel_message
+export const touch = (id: string) => `UPDATE channel_message
   SET changeSeq = (SELECT MAX(changeSeq) + 1 FROM channel_message WHERE channelId = ?1) WHERE id = ${id} AND channelId = ?1`;
-const FLAG_EVENT = "INSERT INTO moderation_event (id, messageId, action, source, actorId, fromState, toState, reasons, createdAt)";
+export const FLAG_EVENT = "INSERT INTO moderation_event (id, messageId, action, source, actorId, fromState, toState, reasons, createdAt)";
 
 const conductRequired = () =>
   new ChannelError("conduct_required", "Agree to how we talk to each other before you post.", 403);
@@ -90,7 +90,7 @@ async function screen(ctx: WriteContext, body: string, parentId: string | null, 
  * (textKey), plus any `extra` reasons (a SELECT of one column). Evaluated inside the write, so the
  * allowlist an admin just changed is the one that counts.
  */
-const screenedReasons = (findings: string, textKey: string, extra = "") => `(SELECT json_group_array(reason) FROM (
+export const screenedReasons = (findings: string, textKey: string, extra = "") => `(SELECT json_group_array(reason) FROM (
     SELECT DISTINCT json_extract(f.value, '$.reason') AS reason FROM json_each(${findings}) f
     WHERE NOT EXISTS (SELECT 1 FROM moderation_allowlist a
       WHERE a.key IN (${textKey}, coalesce(json_extract(f.value, '$.key'), ${textKey})))

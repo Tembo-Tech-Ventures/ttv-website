@@ -57,19 +57,20 @@ export function channelDatabase(fixture: Partial<CapabilityCase> = {}) {
   /** A channel id by slug: introductions, help, cohort-04, c04-help, c04-announcements, cohort-05 … */
   const channel = (slug: string) => (database.prepare("SELECT id FROM channel WHERE slug = ? AND kind <> 'DIRECT'").get(slug) as { id: string }).id;
   let counter = 0;
-  /** Writes a message straight to the table, as the API would number it. Returns its id. */
+  /** Writes a message straight to the table, as the API would number it. Returns its id. `id:<channel id>` names any channel. */
   function message(slug: string, options: {
     author?: Person | null; body?: string; parentId?: string | null; state?: "VISIBLE" | "FLAGGED" | "HIDDEN";
     deleted?: boolean; createdAt?: number; tembo?: boolean; nonce?: string;
   } = {}): string {
     const id = `message-${++counter}`;
     const { author = "synthetic-otieno", state = "VISIBLE", deleted = false, tembo = false } = options;
+    const channelId = slug.startsWith("id:") ? slug.slice(3) : channel(slug);
     database.prepare(`INSERT INTO channel_message (id, channelId, parentId, seq, changeSeq, authorKind, authorId, clientNonce, body,
         moderationState, moderationReasons, hiddenAt, deletedAt, createdAt)
       SELECT ?, ?, ?, n, n, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM (SELECT coalesce(MAX(changeSeq), 0) + 1 AS n FROM channel_message WHERE channelId = ?)`)
-      .run(id, channel(slug), options.parentId ?? null, tembo ? "TEMBO" : "USER", tembo ? null : author, options.nonce ?? null,
+      .run(id, channelId, options.parentId ?? null, tembo ? "TEMBO" : "USER", tembo ? null : author, options.nonce ?? null,
         deleted ? "" : options.body ?? `Synthetic message ${counter}`, state, state === "VISIBLE" ? "[]" : '["Synthetic reason"]',
-        state === "HIDDEN" ? 1 : null, deleted ? 2 : null, options.createdAt ?? counter * 1000, channel(slug));
+        state === "HIDDEN" ? 1 : null, deleted ? 2 : null, options.createdAt ?? counter * 1000, channelId);
     return id;
   }
   const agree = (userId: string = VIEWER, version = CONDUCT_VERSION) =>
