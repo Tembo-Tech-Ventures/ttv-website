@@ -1,7 +1,7 @@
 import type { ToolDefinition } from "@/lib/ai/gateway";
 import { bodyForReader } from "@/lib/channels/moderation/mask";
 import { NonEmptyText, type ChannelKind, type Citation, type TemboScope } from "@/lib/platform/contracts";
-import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
+import { channelPagePath } from "@/lib/platform/server/space-routes";
 import { PUBLIC_PROFILE } from "@/lib/search/service";
 import { resolvePublicProfileIdentity } from "@/lib/talent/public-identity";
 import { formatTimestamp } from "@/lib/recordings/time-utils";
@@ -81,10 +81,7 @@ function title(text: string, fallback: string): string {
 /** A message's place: its channel page, opened on its thread when it is a reply. */
 export function messageHref(channel: TemboChannel, messageId: string, parentId: string | null): string {
   const params = new URLSearchParams(parentId === null ? { message: messageId } : { thread: parentId, message: messageId });
-  // Direct conversations have no page of their own yet (Phase 4); they open under Community.
-  const page = channel.kind === "COHORT" ? `${SPACE_PATHS.cohort}/c/${encodeURIComponent(channel.slug)}`
-    : channel.kind === "COMMUNITY" ? `${SPACE_PATHS.community}/c/${encodeURIComponent(channel.slug)}` : SPACE_PATHS.community;
-  return `${page}?${params}`;
+  return `${channelPagePath(channel)}?${params}`;
 }
 
 /** A message as a reader without privileges sees it. */

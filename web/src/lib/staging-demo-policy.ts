@@ -1,5 +1,5 @@
 import { ROUTES } from "./platform/contracts";
-import { isChannelPagePath, legacySpacePath, SPACE_PATHS, WELCOME_PATH } from "./platform/server/space-routes";
+import { conversationRoute, isChannelPagePath, legacySpacePath, SPACE_PATHS, WELCOME_PATH } from "./platform/server/space-routes";
 
 /** Retained fictional records are distinct from disposable verification fixtures. */
 export const DEMO_PREFIX = 'ttv-staging-demo-v1-';
@@ -47,10 +47,11 @@ const CHANNEL_READ_API = new RegExp(`^/api/channels/${CHANNEL_API_ID}/read$`);
  * pages and the code of conduct (B-2.2), and the channel list and message reads those pages poll
  * (B-2.3). Only valid channel slugs and ids match. Posting, editing, reacting and agreeing to the
  * code of conduct stay closed: retained personas have no cleanup. The channels flag, the caller's
- * channel access and the handlers still decide what each one sees.
+ * channel access and the handlers still decide what each one sees. Direct conversations (B-4.1)
+ * stay closed too: only a mentor request opens one, and these identities cannot make one.
  */
 export function spacesReadPathAllowed(path: string): boolean {
-  return SPACES_READ_PATHS.has(path) || isChannelPagePath(path)
+  return SPACES_READ_PATHS.has(path) || (isChannelPagePath(path) && conversationRoute(path) === null)
     || path === ROUTES.listChannels.path || CHANNEL_MESSAGES_API.test(path);
 }
 /** POST: the caller's own channel read marker, which fixture cleanup removes with the user (B-2.3). */

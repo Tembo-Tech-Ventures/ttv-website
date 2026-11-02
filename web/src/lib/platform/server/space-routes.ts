@@ -1,4 +1,4 @@
-import type { SpaceId } from "../contracts";
+import type { Channel, SpaceId } from "../contracts";
 
 /** Canonical entry points shared with the spaces shell. No authority is inferred here. */
 export const SPACE_PATHS = {
@@ -34,9 +34,43 @@ export function channelRoute(pathname: string): { space: ChannelSpace; slug: str
   return match && CHANNEL_SLUG.test(match[2]) ? { space: match[1] as ChannelSpace, slug: match[2] } : null;
 }
 
+/**
+ * Direct conversations (B-4.1): `/dashboard/community/dm/<id>`, under Community. A conversation has
+ * no slug of its own (two may share one), so its page names it by id; only id-shaped segments match.
+ */
+export const CONVERSATION_PATH = "/dashboard/community/dm";
+const CONVERSATION_ID = /^[A-Za-z0-9_-]{1,255}$/;
+
+/** The conversation a canonical conversation path names. The id is never decoded. */
+export function conversationRoute(pathname: string): { id: string } | null {
+  const match = /^\/dashboard\/community\/dm\/([^/]+)$/.exec(normalizeSpacePath(pathname));
+  return match && CONVERSATION_ID.test(match[1]) ? { id: match[1] } : null;
+}
+
+/** Where a channel's page is: its space and slug, or a direct conversation's id. */
+export function channelPagePath(channel: Pick<Channel, "id" | "kind" | "slug">): string {
+  if (channel.kind === "DIRECT") return `${CONVERSATION_PATH}/${encodeURIComponent(channel.id)}`;
+  return `${channel.kind === "COHORT" ? SPACE_PATHS.cohort : SPACE_PATHS.community}/c/${encodeURIComponent(channel.slug)}`;
+}
+
 /** Pages that exist only while the `channels` flag is on for the caller. */
 export function isChannelPagePath(pathname: string): boolean {
-  return normalizeSpacePath(pathname) === CONDUCT_PATH || channelRoute(pathname) !== null;
+  return normalizeSpacePath(pathname) === CONDUCT_PATH || channelRoute(pathname) !== null || conversationRoute(pathname) !== null;
+}
+
+/**
+ * Mentor connection pages (B-4.1): the directory under Community, and a mentor's requests and
+ * availability under Mentoring. They exist only while `mentor_requests` is on for the caller.
+ */
+export const MENTOR_PAGE_PATHS = Object.freeze({
+  directory: `${SPACE_PATHS.community}/mentors`,
+  requests: `${SPACE_PATHS.mentoring}/requests`,
+  availability: `${SPACE_PATHS.mentoring}/availability`,
+});
+const mentorPages: ReadonlySet<string> = new Set(Object.values(MENTOR_PAGE_PATHS));
+
+export function isMentorPagePath(pathname: string): boolean {
+  return mentorPages.has(normalizeSpacePath(pathname));
 }
 
 export const SPACE_REDIRECTS = [
@@ -110,5 +144,6 @@ export function isAvailableSpacePath(pathname: string): boolean {
   const path = normalizeSpacePath(pathname);
   return Object.values(SPACE_PATHS).some(entry => entry === path)
     || legacySpacePath(path) !== path
-    || isChannelPagePath(path);
+    || isChannelPagePath(path)
+    || isMentorPagePath(path);
 }

@@ -4,7 +4,7 @@ import { bodyForReader, masksContactDetails } from "@/lib/channels/moderation/ma
 import type { Database } from "@/lib/db/schema";
 import { MASKED_CONTACT, WebLink, type AuthorSummary, type ChannelKind, type SearchMessage, type SearchQuery, type Visibility } from "@/lib/platform/contracts";
 import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
-import { SPACE_PATHS, type ChannelSpace } from "@/lib/platform/server/space-routes";
+import { channelPagePath } from "@/lib/platform/server/space-routes";
 
 /**
  * Channel messages in search (README.md beside this file, "Messages"). Migration
@@ -21,8 +21,6 @@ export const PREFIX_MIN_LENGTH = 3;
 const EXCERPT_WORDS = 24;
 export const EXCERPT_LENGTH = 280;
 
-/** Where each kind of channel opens. Direct conversations have no page yet (Phase 4). */
-const SPACE_FOR_KIND: Partial<Record<ChannelKind, ChannelSpace>> = { COHORT: "cohort", COMMUNITY: "community" };
 
 /**
  * The FTS5 expression for a search, or null when nothing in it can match. Every term becomes a
@@ -98,9 +96,10 @@ function scopeKinds({ scope, programId }: Pick<SearchQuery, "scope" | "programId
   }
 }
 
-const VISIBILITY: Record<ChannelSpace, (slug: string) => Visibility> = {
-  cohort: (slug) => ({ kind: "COHORT", label: `#${slug} · only this cohort` }),
-  community: (slug) => ({ kind: "COMMUNITY", label: `#${slug} · signed-in members` }),
+const VISIBILITY: Record<ChannelKind, (slug: string) => Visibility> = {
+  COHORT: (slug) => ({ kind: "COHORT", label: `#${slug} · only this cohort` }),
+  COMMUNITY: (slug) => ({ kind: "COMMUNITY", label: `#${slug} · signed-in members` }),
+  DIRECT: () => ({ kind: "DIRECT", label: "Private conversation · only the two of you" }),
 };
 
 interface MessageHit {
@@ -156,9 +155,9 @@ function author(hit: MessageHit): AuthorSummary {
   return { id: hit.authorId, name: hit.authorName?.trim() || "Member", avatarUrl: avatar.success ? avatar.data : null, roleBadges: [] };
 }
 
-function href(channel: ChannelRef & { space: ChannelSpace }, hit: MessageHit): string {
+function href(channel: ChannelRef, hit: MessageHit): string {
   const params = new URLSearchParams(hit.parentId === null ? { message: hit.id } : { thread: hit.parentId, message: hit.id });
-  return `${SPACE_PATHS[channel.space]}/c/${encodeURIComponent(channel.slug)}?${params}`;
+  return `${channelPagePath(channel)}?${params}`;
 }
 
 /**
@@ -174,9 +173,8 @@ export async function searchMessages(
   const match = messageMatchExpression(query.q);
   if (kinds.size === 0 || match === null) return [];
   const channels = new Map((await readableChannelRefs(db, userId, capabilities)).flatMap((channel) => {
-    const space = SPACE_FOR_KIND[channel.kind];
     const inScope = kinds.has(channel.kind) && (query.programId === undefined || channel.programId === query.programId);
-    return space && inScope ? [[channel.id, { ...channel, space }] as const] : [];
+    return inScope ? [[channel.id, channel] as const] : [];
   }));
   if (channels.size === 0) return [];
   const { results } = await d1.prepare(MESSAGE_SEARCH).bind(match, JSON.stringify([...channels.keys()]), limit).all<MessageHit>();
@@ -187,7 +185,7 @@ export async function searchMessages(
     if (excerpt === null) return [];
     return [{
       id: hit.id, channelId: hit.channelId, parentId: hit.parentId, author: author(hit), excerpt,
-      href: href(channel, hit), createdAt: hit.createdAt, visibility: VISIBILITY[channel.space](channel.slug),
+      href: href(channel, hit), createdAt: hit.createdAt, visibility: VISIBILITY[channel.kind](channel.slug),
     }];
   });
 }

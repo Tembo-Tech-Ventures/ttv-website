@@ -126,6 +126,8 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/admin/platform-flags` | Who sees each platform feature flag (Off, Staff, Everyone); Everyone asks to confirm, and dependency warnings never block. No JavaScript needed | ADMIN |
 | `/dashboard/feedback` | The student's own feedback, status and replies | Session |
 | `/dashboard/cohort/c/[slug]`, `/dashboard/community/c/[slug]` | A channel; 404 unless the caller can read it (flag `channels`) | Session |
+| `/dashboard/community/dm/[id]` | A direct conversation; 404 unless the caller is one of its two members (flag `channels`) | Session |
+| `/dashboard/community/mentors`, `/dashboard/mentoring/requests`, `/dashboard/mentoring/availability` | Mentor directory; a mentor's requests and availability (Mentoring space); flag `mentor_requests` | Session |
 | `/dashboard/community/conduct` | "How we talk to each other": the channel code of conduct; flag `channels` | Session |
 | `/admin/feedback` | Feedback queue; `/admin/feedback/[id]` to reply, theme and resolve | ADMIN |
 | `/admin/feedback/themes` | Feedback themes with agreement stats; `[id]` to plan, ship or decline | ADMIN |
@@ -148,6 +150,9 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/api/messages/[id]/report`, `/review` | Report a message, once per person (POST); the author of a hidden message asks for a review (POST); flag `channels` | Session, or a `channels:read` (reads) or `channels:write` (writes) token |
 | `/api/moderation/[messageId]` | Hide (the channel's moderators and admins), restore or keep "fine as is" (admins) (POST); flag `channels` | Session; no personal access tokens (admin tokens use `/api/mcp`) |
 | `/api/moderation/queue` | The moderation queue: one case per message, with evidence, review request and decision (GET); flag `channels` | ADMIN; no personal access tokens (admin tokens use `/api/mcp`) |
+| `/api/mentors` | Listed mentors with their capacity this Africa/Nairobi month (GET, `?area&format&available`); flag `mentor_requests` (see `web/src/lib/mentoring/README.md`) | Session; no personal access tokens |
+| `/api/mentor-requests` | The caller's requests sent or received (GET `?as=requester\|mentor`); ask a mentor for time (POST), one waiting request per mentor, within the mentor's monthly spots; `[id]` (GET) and `[id]/accept`, `/redirect`, `/decline`, `/withdraw` (POST); accepting opens a direct conversation with the note and work in it; flag `mentor_requests` | Session; its two parties only; no personal access tokens |
+| `/api/mentoring/availability` | A mentor's own headline, areas, formats, monthly capacity and pause (GET, PUT); flag `mentor_requests` | MENTOR; no personal access tokens |
 | `/api/platform/onboarding` | The caller's onboarding state and intents (GET, PUT); flag `onboarding` | Session, browser only |
 | `/api/platform/access-requests` | Ask for mentor or institution access (POST; `[id]/withdraw`, `[id]/dismiss`); flag `onboarding` | Session, browser only |
 | `/api/admin/access-requests` | Access-request queue (GET) and decisions (POST `[id]/decision`); not flag-gated | ADMIN, browser only |
@@ -196,7 +201,11 @@ SQLite via Cloudflare D1, managed with Drizzle ORM. Schema at `web/src/lib/db/sc
 - `channel_message_version`, `moderation_case`, `moderation_allowlist` — moderation (B-2.5): earlier texts kept as evidence for moderators, the admin queue (one case per message, kept by triggers on `moderation_event`), and what an admin's "fine as is" allowlisted. Detectors flag contact details and spam before the write; Clef flash checks after the response and hides only near-certain abuse
 - `channel_message_search` + `channel_message_fts` — the FTS5 index over the bodies of messages nobody deleted or hid, kept by triggers (never embeds); `/api/search` reads it for the channels the caller can read (see `web/src/lib/search/README.md`)
 - `tembo_ask`, `tembo_usage`, `tembo_feedback` (flag `tembo_channels`, B-3.1; see `web/src/lib/tembo/README.md`) — one question per asking message (PENDING/ANSWERED/FAILED under a run's claim), accepted questions per person per Africa/Nairobi day, and "helpful"/"not quite" per person and answer. Tembo reads only what the channel allows (a cohort's transcripts, public profiles and projects shared there, or the conversation), never masked contact details, and every sentence it posts cites a source it was given
-- Access: `channelAccessFor` beside `capabilitiesFor` — cohort channels for that program's members (alumni included), instructors, TAs, invited mentors and admins; community channels for every signed-in person; STAFF posting for admins and the cohort's instructors/TAs
+- Access: `channelAccessFor` beside `capabilitiesFor` — cohort channels for that program's members (alumni included), instructors, TAs, invited mentors and admins; community channels for every signed-in person; DIRECT conversations for their two members only (an admin outside one gets nothing); STAFF posting for admins and the cohort's instructors/TAs
+
+**Mentor connections** (flag `mentor_requests`, OFF; see `web/src/lib/mentoring/README.md`)
+- `mentor_profile` — a mentor's own headline, bio, areas, formats offered, monthly capacity and pause; listed only while they hold the MENTOR role
+- `mentor_request` — PENDING → ACCEPTED/REDIRECTED/DECLINED/WITHDRAWN, one PENDING per pair; the note (screened like a post), the attached project at its revision, and the DIRECT conversation an acceptance opened. Spots are counted per Africa/Nairobi month
 
 ### Conventions
 

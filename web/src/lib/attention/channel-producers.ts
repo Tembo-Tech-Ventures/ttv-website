@@ -1,4 +1,4 @@
-import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
+import { channelPagePath } from "@/lib/platform/server/space-routes";
 import type { ChannelKind, ModerationSource } from "@/lib/platform/contracts";
 import { FINDING_REASONS } from "@/lib/channels/moderation/detectors";
 import { audienceFor, bestEffort, persist, type AttentionProducerContext, type EventItem } from "./producers";
@@ -17,7 +17,7 @@ export const MODERATION_QUEUE_HREF = "/admin/moderation";
 interface MessageState {
   id: string; parentId: string | null; authorKind: "USER" | "TEMBO"; authorId: string | null; body: string;
   moderationState: "VISIBLE" | "FLAGGED" | "HIDDEN"; moderationReasons: string; hiddenAt: number | null; hiddenBy: string | null;
-  deletedAt: number | null; kind: ChannelKind; slug: string;
+  deletedAt: number | null; channelId: string; kind: ChannelKind; slug: string;
   caseState: "PENDING" | "DECIDED" | null; source: ModerationSource | null;
   /** When the case last opened: its latest reopening, else its first opening. Each opening is a new notice. */
   openedAt: number | null;
@@ -26,16 +26,20 @@ interface MessageState {
 
 async function messageState(context: AttentionProducerContext, messageId: string): Promise<MessageState | null> {
   return context.db.prepare(`SELECT m.id, m.parentId, m.authorKind, m.authorId, m.body, m.moderationState, m.moderationReasons,
-      m.hiddenAt, m.hiddenBy, m.deletedAt, ch.kind, ch.slug, c.state AS caseState, c.source, coalesce(c.reopenedAt, c.openedAt) AS openedAt, c.reviewRequestedAt, c.decision
+      m.hiddenAt, m.hiddenBy, m.deletedAt, m.channelId, ch.kind, ch.slug, c.state AS caseState, c.source, coalesce(c.reopenedAt, c.openedAt) AS openedAt, c.reviewRequestedAt, c.decision
     FROM channel_message m JOIN channel ch ON ch.id = m.channelId LEFT JOIN moderation_case c ON c.messageId = m.id
     WHERE m.id = ?1`).bind(messageId).first<MessageState>();
 }
 
-/** The message's space, and its channel page, opened on its thread when it is a reply. Cohort and community channels only. */
-function messagePlace(message: Pick<MessageState, "id" | "parentId" | "kind" | "slug">): Pick<EventItem, "space" | "subject"> {
+/** How a summary names a channel: `#slug`, or a direct conversation (B-4.1), which has no slug of its own. */
+const placeName = (message: Pick<MessageState, "kind" | "slug">) => message.kind === "DIRECT" ? "your conversation" : `#${message.slug}`;
+
+/** The message's space, and its channel page, opened on its thread when it is a reply. Conversations are under Community. */
+function messagePlace(message: Pick<MessageState, "id" | "parentId" | "channelId" | "kind" | "slug">): Pick<EventItem, "space" | "subject"> {
   const space = message.kind === "COHORT" ? "cohort" : "community";
   const thread = message.parentId === null ? "" : `?thread=${encodeURIComponent(message.parentId)}`;
-  return { space, subject: { kind: "message", id: message.id, href: `${SPACE_PATHS[space]}/c/${message.slug}${thread}`, label: `#${message.slug}` } };
+  const href = `${channelPagePath({ id: message.channelId, kind: message.kind, slug: message.slug })}${thread}`;
+  return { space, subject: { kind: "message", id: message.id, href, label: message.kind === "DIRECT" ? "Conversation" : `#${message.slug}` } };
 }
 
 const HIDDEN_SUMMARY = {
@@ -107,7 +111,9 @@ export function mentionedNames(body: string): string[][] {
 }
 
 /** Who reads a channel, in SQL over a user id expression and the channel row `ch` (fail-closed again on read). */
-const readsChannel = (userId: string) => `(ch.kind = 'COMMUNITY' OR (ch.kind = 'COHORT' AND (
+const readsChannel = (userId: string) => `(ch.kind = 'COMMUNITY'
+  OR (ch.kind = 'DIRECT' AND EXISTS (SELECT 1 FROM channel_member cm WHERE cm.channelId = ch.id AND cm.userId = ${userId}))
+  OR (ch.kind = 'COHORT' AND (
   EXISTS (SELECT 1 FROM programApplication pa WHERE pa.userId = ${userId} AND pa.programId = ch.programId AND pa.status IN ('APPROVED','AUDIT','COMPLETED'))
   OR EXISTS (SELECT 1 FROM programRole pr WHERE pr.userId = ${userId} AND pr.programId = ch.programId AND pr.name IN ('INSTRUCTOR','TA','MENTOR'))
   OR EXISTS (SELECT 1 FROM UserRoles ur JOIN Roles r ON r.id = ur.roleId WHERE ur.userId = ${userId} AND r.name = 'ADMIN'))))`;
@@ -123,7 +129,7 @@ export function mentionAttention(context: AttentionProducerContext, messageId: s
     const audience = await audienceFor(context, "channels");
     if (audience === "OFF") return;
     const message = await messageState(context, messageId);
-    if (!message || message.kind === "DIRECT" || message.authorId === null || message.deletedAt !== null
+    if (!message || message.authorId === null || message.deletedAt !== null
       || message.moderationState === "HIDDEN" || (JSON.parse(message.moderationReasons) as unknown[]).includes(FINDING_REASONS.mentions)) return;
     const mentions = mentionedNames(message.body);
     if (mentions.length === 0) return;
@@ -136,27 +142,27 @@ export function mentionAttention(context: AttentionProducerContext, messageId: s
     const recipients = [...new Set(results.filter((row) => chosen.has(row.name)).map((row) => row.id))].slice(0, MENTION_RECIPIENTS);
     await persist(context, audience, recipients.map((userId) => ({
       ...messagePlace(message), userId, actorId: message.authorId, kind: "mention",
-      eventKey: JSON.stringify(["mention", message.id]), summary: `Mentioned you in #${message.slug}.`,
+      eventKey: JSON.stringify(["mention", message.id]), summary: `Mentioned you in ${placeName(message)}.`,
     })));
   });
 }
 
 /**
  * Tembo answered a question (B-3.1): the person who asked hears of it once per answer, at the answer in
- * its thread, while the answer stays visible. Direct conversations have no page yet and get none.
+ * its thread, while the answer stays visible. Direct conversations included (B-4.1).
  */
 export function temboAnswerAttention(context: AttentionProducerContext, answerId: string) {
   return bestEffort(async () => {
     const audience = await audienceFor(context, "channels");
     if (audience === "OFF") return;
-    const answer = await context.db.prepare(`SELECT a.userId, m.id, m.parentId, ch.kind, ch.slug FROM tembo_ask a
+    const answer = await context.db.prepare(`SELECT a.userId, m.id, m.parentId, m.channelId, ch.kind, ch.slug FROM tembo_ask a
         JOIN channel_message m ON m.id = a.answerId JOIN channel ch ON ch.id = m.channelId
       WHERE a.answerId = ?1 AND m.deletedAt IS NULL AND m.moderationState <> 'HIDDEN'`)
-      .bind(answerId).first<{ userId: string } & Pick<MessageState, "id" | "parentId" | "kind" | "slug">>();
-    if (!answer || answer.kind === "DIRECT") return;
+      .bind(answerId).first<{ userId: string } & Pick<MessageState, "id" | "parentId" | "channelId" | "kind" | "slug">>();
+    if (!answer) return;
     await persist(context, audience, [{
       ...messagePlace(answer), userId: answer.userId, actorId: null, kind: "tembo_answer",
-      eventKey: JSON.stringify(["tembo_answer", answer.id]), summary: `Tembo answered your question in #${answer.slug}.`,
+      eventKey: JSON.stringify(["tembo_answer", answer.id]), summary: `Tembo answered your question in ${placeName(answer)}.`,
     }]);
   });
 }

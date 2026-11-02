@@ -1,7 +1,7 @@
 import {
   ExternalLink, MessageEmbed,
   type ChannelShareables, type EmbedRef, type MessageEmbedView, type ProjectConfirmation, type ProjectEmbed,
-  type SessionClipEmbed, type ShareablesQuery,
+  type ProjectEmbedRef, type SessionClipEmbed, type ShareablesQuery,
 } from "@/lib/platform/contracts";
 import { ChannelError } from "./errors";
 import type { ReadContext } from "./messages";
@@ -101,7 +101,7 @@ function confirmations(rows: unknown): ProjectConfirmation[] {
 }
 
 /** ?version is the shared revision, `journey` the journey's id column. */
-const confirmationsOf = (journey: string, version: string) => `(SELECT json_group_array(json_array(c.mentorId, cu.name, c.journeyVersion))
+export const confirmationsOf = (journey: string, version: string) => `(SELECT json_group_array(json_array(c.mentorId, cu.name, c.journeyVersion))
   FROM communityConfirmation c JOIN "user" cu ON cu.id = c.mentorId WHERE c.journeyId = ${journey} AND c.journeyVersion <= ${version})`;
 
 interface JourneyRow { id: string; version: number; title: string; description: string; evidenceUrl: string | null; confirmations?: unknown }
@@ -150,9 +150,11 @@ interface ResolvedRow {
   recordingSeconds: number | null; segments: unknown;
 }
 
-function resolveProject(ctx: ReadContext, ref: Extract<EmbedRef, { type: "project" }>, row: ResolvedRow): MessageEmbed {
+type ProjectRow = Pick<ResolvedRow, "ownerId" | "visibility" | "currentVersion" | "journeyTitle" | "description" | "evidenceUrl">;
+
+function resolveProject(ownerId: string, ref: ProjectEmbedRef, row: ProjectRow): ProjectEmbed {
   // A missing project and another person's give the same answer, so neither is confirmed to exist.
-  if (row.ownerId !== ctx.viewerId) throw new ChannelError("validation", PROJECT_REFUSED, 400);
+  if (row.ownerId !== ownerId) throw new ChannelError("validation", PROJECT_REFUSED, 400);
   if (row.visibility !== "institution") {
     throw new ChannelError("validation", "This project is a private draft. Publish it before you share it.", 400);
   }
@@ -216,8 +218,19 @@ export async function resolveEmbeds(ctx: ReadContext, refs: readonly EmbedRef[])
   return refs.map((item, i) => {
     const row = results.find((result) => result.position === i);
     if (!row) throw new Error("An embed reference resolved to no row.");
-    return item.type === "project" ? resolveProject(ctx, item, row) : resolveClip(ctx, item, row);
+    return item.type === "project" ? resolveProject(ctx.viewerId, item, row) : resolveClip(ctx, item, row);
   });
+}
+
+/**
+ * Work its owner attaches outside a channel (a mentor request, src/lib/mentoring): the same checks
+ * and refusals as sharing it in a post, in one read. Readers check it again (embedAccessColumn's
+ * rule: still the owner's, still published).
+ */
+export async function resolveOwnProject(db: D1Database, ownerId: string, ref: ProjectEmbedRef): Promise<ProjectEmbed> {
+  const row = await db.prepare(`SELECT userId AS ownerId, visibility, version AS currentVersion, title AS journeyTitle, description, evidenceUrl
+    FROM communityJourney WHERE id = ?1`).bind(ref.journeyId).first<ProjectRow>();
+  return resolveProject(ownerId, ref, row ?? { ownerId: null, visibility: null, currentVersion: null, journeyTitle: null, description: null, evidenceUrl: null });
 }
 
 /**

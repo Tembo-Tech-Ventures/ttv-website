@@ -26,21 +26,31 @@ const ATTENTION_CATEGORY: Record<AttentionKind, Exclude<AttentionFilter, "all">>
   opportunity_match: "updates", moderation_pending: "updates", message_hidden: "updates", access_decided: "updates",
 };
 
+/** The flags an item about each feature needs, all of them, for its recipient. */
+const AUDIENCE_FLAGS = {
+  spaces: ["spaces"],
+  channels: ["spaces", "channels"],
+  // Mentor requests are effective only while channels is (lib/platform/server/flags.ts).
+  mentor_requests: ["spaces", "channels", "mentor_requests"],
+} as const satisfies Partial<Record<FlagKey, readonly FlagKey[]>>;
+
 /**
  * One audience read per event/bulk operation; OFF never reads the domain sources. Attention follows
- * `spaces`; items about channels also need `channels`, so they take the narrower of the two.
+ * `spaces`; items about channels also need `channels`, and items about mentor requests also need
+ * `mentor_requests`, so they take the narrowest of those.
  */
-export async function audienceFor(context: AttentionProducerContext, flag: Extract<FlagKey, "spaces" | "channels"> = "spaces"): Promise<FlagAudience> {
+export async function audienceFor(context: AttentionProducerContext, flag: keyof typeof AUDIENCE_FLAGS = "spaces"): Promise<FlagAudience> {
   // Keep the production aliases identical to the API flag resolver.
   const environment = (context.env.DEPLOYMENT_ENVIRONMENT ?? "")
     .toLowerCase().replace(/[^a-z0-9-]+/g, "-")
     .replace(/^-+|-+$/g, "").replace(/-{2,}/g, "-");
   if (environment !== "production" && context.env.PLATFORM_FLAGS_OVERRIDE === "all") return "ALL";
-  if (flag === "channels") {
-    const { results } = await context.db.prepare("SELECT audience FROM feature_flag WHERE key IN ('spaces','channels')")
-      .all<{ audience: FlagAudience }>();
+  if (flag !== "spaces") {
+    const keys = AUDIENCE_FLAGS[flag];
+    const { results } = await context.db.prepare(`SELECT audience FROM feature_flag WHERE key IN (SELECT value FROM json_each(?1))`)
+      .bind(JSON.stringify(keys)).all<{ audience: FlagAudience }>();
     const audiences = results.map(row => row.audience);
-    if (audiences.length < 2 || audiences.some(audience => audience !== "ALL" && audience !== "STAFF")) return "OFF";
+    if (audiences.length < keys.length || audiences.some(audience => audience !== "ALL" && audience !== "STAFF")) return "OFF";
     return audiences.includes("STAFF") ? "STAFF" : "ALL";
   }
   const row = await context.db.prepare("SELECT audience FROM feature_flag WHERE key='spaces'")

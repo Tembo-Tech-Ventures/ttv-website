@@ -67,5 +67,13 @@ author's review request, and `mention` to each readable person named in a
 message. They follow the narrower of `spaces` and `channels` for the
 recipient, read the committed state, and never copy message text. On read,
 a `message` subject shows only while it still applies: the author's message is
-still hidden, the case still pending (admins), or the mentioned message still
-visible in a channel the reader can read.
+still hidden, the case still pending (admins), or the mentioned message (or
+Tembo's answer) still visible in a channel the reader can read, their own
+direct conversations included (B-4.1).
+
+Mentor requests (B-4.1, `mentor-producers.ts`; src/lib/mentoring/README.md,
+"Attention"): `mentor_request` and `mentor_withdrawn` to the mentor,
+`mentor_accepted`, `mentor_redirected` and `mentor_declined` to the person
+asking. They follow the narrowest of `spaces`, `channels` and
+`mentor_requests`, and a `mentorRequest` subject shows only to the party its
+kind was for.

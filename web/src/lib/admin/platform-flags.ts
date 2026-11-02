@@ -51,7 +51,7 @@ export const AUDIENCE_MEANINGS: Record<FlagAudience, string> = {
   ALL: "Every signed-in user",
 };
 
-/** The flag each of these builds on. Only onboarding's is enforced by the server; the page warns about all three. */
+/** The flag each of these builds on. Onboarding's and mentor requests' are enforced by the server; the page warns about all three. */
 export const FLAG_DEPENDENCIES: Partial<Record<FlagKey, FlagKey>> = {
   onboarding: "spaces",
   tembo_channels: "channels",

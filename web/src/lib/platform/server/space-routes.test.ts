@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { existsSync } from "node:fs";
 import {
-  canonicalSpacePath, channelRoute, CONDUCT_PATH, isAvailableSpacePath, isChannelPagePath, isNewSpacePath, legacySpacePath,
-  spaceForPath, SPACE_REDIRECTS,
+  canonicalSpacePath, channelPagePath, channelRoute, CONDUCT_PATH, conversationRoute, isAvailableSpacePath, isChannelPagePath,
+  isMentorPagePath, isNewSpacePath, legacySpacePath, MENTOR_PAGE_PATHS, spaceForPath, SPACE_REDIRECTS,
 } from "./space-routes";
 
 const redirects = [
@@ -39,7 +39,7 @@ describe("the complete legacy redirect table", () => {
     expect(canonicalSpacePath(path)).toBeNull();
   });
 
-  it.each(["/dashboard/community/dm/example", "/dashboard/mentoring/requests", "/dashboard/mentoring/availability", "/dashboard/me/certificates", "/dashboard/account/security"])("does not invent unshipped pages: %s", path => {
+  it.each(["/dashboard/community/dm", "/dashboard/community/dm/a/b", "/dashboard/mentoring/conversations", "/dashboard/community/mentors/x", "/dashboard/me/certificates", "/dashboard/account/security"])("does not invent unshipped pages: %s", path => {
     expect(isAvailableSpacePath(path)).toBe(false);
   });
 
@@ -91,3 +91,45 @@ describe("channel pages (B-2.2)", () => {
   });
 });
 
+
+describe("conversation and mentor pages (B-4.1)", () => {
+  it.each(["/dashboard/community/dm/conversation-1", "/dashboard/community/dm/abc_DEF-9/", "/dashboard/community/dm/" + "a".repeat(255)])(
+    "serves %s as a conversation in Community", (path) => {
+      const id = path.replace(/\/$/, "").split("/").at(-1);
+      expect(conversationRoute(path)).toEqual({ id });
+      expect(channelRoute(path)).toBeNull();
+      expect(isChannelPagePath(path)).toBe(true);
+      expect(isAvailableSpacePath(path)).toBe(true);
+      expect(isNewSpacePath(path)).toBe(true);
+      expect(spaceForPath(path)).toBe("community");
+    });
+
+  it.each([
+    "/dashboard/community/dm", "/dashboard/community/dm/", "/dashboard/community/dm/a/b", "/dashboard/community/dm/a%2fb",
+    "/dashboard/community/dm/a.b", "/dashboard/community/dm/" + "a".repeat(256), "/dashboard/cohort/dm/a", "/dashboard/community/dms/a",
+  ])("does not serve %s as a conversation", (path) => {
+    expect(conversationRoute(path)).toBeNull();
+    expect(isChannelPagePath(path)).toBe(false);
+  });
+
+  it("links each kind of channel to its own page", () => {
+    expect(channelPagePath({ id: "c1", kind: "COHORT", slug: "cohort-04" })).toBe("/dashboard/cohort/c/cohort-04");
+    expect(channelPagePath({ id: "c2", kind: "COMMUNITY", slug: "help" })).toBe("/dashboard/community/c/help");
+    expect(channelPagePath({ id: "c 3", kind: "DIRECT", slug: "conversation" })).toBe("/dashboard/community/dm/c%203");
+  });
+
+  it("serves the directory in Community and requests and availability in Mentoring, and nothing near them", () => {
+    expect(spaceForPath(MENTOR_PAGE_PATHS.directory)).toBe("community");
+    expect(spaceForPath(MENTOR_PAGE_PATHS.requests)).toBe("mentoring");
+    expect(spaceForPath(MENTOR_PAGE_PATHS.availability)).toBe("mentoring");
+    for (const path of Object.values(MENTOR_PAGE_PATHS)) {
+      for (const variant of [path, `${path}/`]) {
+        expect(isMentorPagePath(variant)).toBe(true);
+        expect(isAvailableSpacePath(variant)).toBe(true);
+        expect(isChannelPagePath(variant)).toBe(false);
+      }
+      expect(isMentorPagePath(`${path}/x`)).toBe(false);
+      expect(isAvailableSpacePath(`${path}-x`)).toBe(false);
+    }
+  });
+});
