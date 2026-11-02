@@ -127,9 +127,17 @@ describe("reporting a message", () => {
     const form = $<HTMLFormElement>("[data-panel=report]")!;
     expect(form.getAttribute("aria-labelledby")).toBeTruthy();
     expect($(`#${CSS.escape(form.getAttribute("aria-labelledby")!)}`)?.textContent).toBe("Report Mercy's message");
-    // The first choice has focus, and nothing can be sent before a reason is chosen.
+    // The first choice has focus. Sending before a reason is chosen says so there, and sends nothing (QA2-10).
     expect(document.activeElement).toBe(form.querySelector("input[type=radio]"));
-    expect($<HTMLButtonElement>("button[type=submit]", form)!.disabled).toBe(true);
+    expect(form.textContent).toContain("Mercy won't see who reported it.");
+    const send = $<HTMLButtonElement>("button[type=submit]", form)!;
+    expect(send.disabled).toBe(false);
+    await click(send);
+    const missing = $("[data-reason-missing]", form)!;
+    expect(missing.textContent).toBe("Choose what's wrong with it first.");
+    expect(form.querySelector("fieldset")!.getAttribute("aria-describedby")).toBe(missing.id);
+    expect(document.activeElement).toBe(form.querySelector("input[type=radio]"));
+    expect(client.moderation()).toEqual([]);
 
     await click([...form.querySelectorAll("label")].find((label) => label.textContent === "Spam or unrelated promotion"));
     await typeInto(form.querySelector("textarea")!, "  Third time this week.  ");
@@ -159,9 +167,18 @@ describe("reporting a message", () => {
     await click(await menuItem(messages.firstPr.id, "Report…"));
     const form = $<HTMLFormElement>("[data-panel=report]")!;
     await click([...form.querySelectorAll("label")].find((label) => label.textContent === "Something else"));
-    expect(form.textContent).toContain("Tell the moderators what's wrong");
-    expect($<HTMLButtonElement>("button[type=submit]", form)!.disabled).toBe(true);
-    await typeInto(form.querySelector("textarea")!, "Posted my private notes without asking.");
+    // The words become required, visibly and for assistive tech (QA2-19).
+    const box = form.querySelector("textarea")!;
+    expect(form.querySelector(`label[for="${box.id}"]`)?.textContent).toBe("Tell the moderators what's wrong (required)");
+    expect(box.getAttribute("aria-required")).toBe("true");
+    await click($("button[type=submit]", form));
+    expect($("[data-reason-missing]", form)?.textContent).toBe("Write what's wrong first.");
+    expect(box.getAttribute("aria-invalid")).toBe("true");
+    expect(box.getAttribute("aria-describedby")).toContain($("[data-reason-missing]", form)!.id);
+    expect(document.activeElement).toBe(box);
+    expect(client.moderation()).toEqual([]);
+    await typeInto(box, "Posted my private notes without asking.");
+    expect($("[data-reason-missing]", form)).toBeNull();
     await click($("button[type=submit]", form));
     expect(client.moderation()).toEqual([{ kind: "report", messageId: messages.firstPr.id, reason: "Posted my private notes without asking." }]);
   });
@@ -229,16 +246,30 @@ describe("hiding, for the channel's moderators, and restoring, for admins", () =
     await click(await menuItem(messages.firstPr.id, "Hide from members…"));
     const form = $<HTMLFormElement>("[data-panel=hide]")!;
     expect(form.textContent).toContain("Brian will still see it, with your reason, and can ask for a review. An admin looks at every hide and can restore it.");
-    expect(document.activeElement).toBe(form.querySelector("textarea"));
-    expect($<HTMLButtonElement>("button[type=submit]", form)!.disabled).toBe(true);
-    await typeInto(form.querySelector("textarea")!, "Off-topic for this channel");
+    const box = form.querySelector("textarea")!;
+    expect(document.activeElement).toBe(box);
+    // The reason is required, said in the label; trying without one says why under the box (QA2-10).
+    expect(form.querySelector(`label[for="${box.id}"]`)?.textContent).toBe("Why are you hiding it? (required)");
+    expect(box.getAttribute("aria-required")).toBe("true");
+    expect($<HTMLButtonElement>("button[type=submit]", form)!.disabled).toBe(false);
+    await click($("button[type=submit]", form));
+    const missing = $("[data-reason-missing]", form)!;
+    expect(missing.textContent).toBe("Write why you're hiding it first. The record keeps your reason.");
+    expect(box.getAttribute("aria-describedby")?.split(" ")).toContain(missing.id);
+    expect(box.getAttribute("aria-invalid")).toBe("true");
+    expect(client.moderation()).toEqual([]);
+    await typeInto(box, "Off-topic for this channel");
     await click($("button[type=submit]", form));
     await act(frame);
 
     expect(client.moderation()).toEqual([{ kind: "hide", messageId: messages.firstPr.id, reason: "Off-topic for this channel" }]);
     const note = $("[data-moderation=HIDDEN]", article(messages.firstPr.id));
-    expect(note?.textContent).toBe("Hidden from members: Off-topic for this channel. Moderators can still see it.");
-    expect(announcer()).toBe("Message hidden from members.");
+    // What happens next, and where the outcome shows (QA2-11).
+    expect(note?.textContent).toBe(
+      "Hidden from members: Off-topic for this channel. Moderators can still see it. An admin looks at every hide, and Brian can ask for a review unless an admin made or upheld the hide. "
+      + "If an admin restores it, members see it here again.",
+    );
+    expect(announcer()).toBe("Message hidden from members. An admin will look at it.");
     expect(document.activeElement?.getAttribute("aria-label")).toMatch(/^Actions for Brian Kiprop's message at /);
     // Hidden messages take no reactions, and a mentor has no way back: that is an admin's decision.
     const names = await menuNames(messages.firstPr.id);

@@ -43,6 +43,7 @@ import {
   throwCohortUpdateFailure,
 } from "@/lib/admin/program-management";
 import { isFlagEnabled } from "@/lib/platform/server/flags";
+import { formatMomentDate } from "@/lib/display-date";
 
 const db = drizzle(env.DB, { schema });
 const { id } = Astro.params;
@@ -361,7 +362,7 @@ const approvedMentorIds = new Set(
         .map(({ userId }) => userId)
     : []
 );
-const mentorModel = cohortMentorModel(prog.programRoles, allUsers, approvedMentorIds);
+const mentorModel = cohortMentorModel(prog.programRoles, allUsers, approvedMentorIds, enrolledUserIds);
 // While channels are off, mentor rows stay in the staff list as they always have.
 const staffRoles = mentorsEnabled ? teachingRoles(prog.programRoles) : prog.programRoles;
 
@@ -767,7 +768,7 @@ const cohortEditValues: CohortUpdateValues = submittedCohortValues ?? {
                       : "Student application"}
                   </p>
                   <p class="text-xs text-ink-muted">
-                    {application.createdAt.toLocaleDateString()}
+                    {formatMomentDate(application.createdAt)}
                   </p>
                 </div>
 

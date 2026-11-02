@@ -66,16 +66,29 @@ describe("moderationQueueRequest", () => {
     const queue = source();
     const outcome = await moderationQueueRequest(...post({ messageId: pending[0].id, action: "hide", reason: " Scam " }), queue, paths);
     expect(queue.decide).toHaveBeenCalledWith({ ok: true, messageId: pending[0].id, action: "hide", reason: "Scam" });
-    expect(outcome).toEqual({ kind: "redirect", location: "/admin/moderation?decided=hide" });
+    expect(outcome).toEqual({ kind: "redirect", location: `/admin/moderation?decided=hide&message=${pending[0].id}` });
 
     const announced = await moderationQueueRequest(...get("?decided=hide"), queue, paths);
-    expect(announced).toMatchObject({ props: { notice: expect.stringMatching(/^Hidden\./) } });
+    expect(announced).toMatchObject({ props: { notice: expect.stringMatching(/^Hidden\./), noticeSubject: undefined } });
+  });
+
+  it("names the decided message in the banner: its author, channel and opening words (QA2-15)", async () => {
+    const decided = cases.find((item) => item.state === "DECIDED")!;
+    const queue = source();
+    const announced = await moderationQueueRequest(...get(`?decided=keep&message=${decided.message.id}`), queue, paths);
+    expect(queue.list).toHaveBeenCalledWith({ state: "DECIDED" });
+    expect(announced).toMatchObject({
+      props: { notice: expect.stringMatching(/^Kept as is\./), noticeSubject: expect.stringMatching(new RegExp(`^${decided.message.author.name}'s message in #${decided.channel.slug}: “.+”$`)) },
+    });
+    // A message it can't find leaves the banner as it was.
+    const unknown = await moderationQueueRequest(...get("?decided=keep&message=gone"), source(), paths);
+    expect(unknown).toMatchObject({ props: { notice: expect.stringMatching(/^Kept as is\./), noticeSubject: undefined } });
   });
 
   it("announces a keep on a deleted message as closing its case, not as kept", async () => {
     const queue = source({ decide: vi.fn(async () => ({ deleted: true })) });
     const outcome = await moderationQueueRequest(...post({ messageId: pending[0].id, action: "keep", reason: "Deleted" }), queue, paths);
-    expect(outcome).toEqual({ kind: "redirect", location: "/admin/moderation?decided=closed" });
+    expect(outcome).toEqual({ kind: "redirect", location: `/admin/moderation?decided=closed&message=${pending[0].id}` });
     const announced = await moderationQueueRequest(...get("?decided=closed"), queue, paths);
     expect(announced).toMatchObject({ props: { notice: expect.stringMatching(/^Case closed\. Its author had deleted the message/) } });
   });

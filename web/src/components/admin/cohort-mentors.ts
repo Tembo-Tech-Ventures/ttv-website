@@ -21,6 +21,11 @@ export interface CohortMentorModel {
   /** People with community-wide mentor access, offered first. */
   approvedCandidates: CohortPerson[];
   otherCandidates: CohortPerson[];
+  /**
+   * People on this cohort's own roster (any application to it), offered last and under their own
+   * label (QA2-12): a mentor reads and moderates their classmates' messages, so it is never a slip.
+   */
+  rosterCandidates: CohortPerson[];
 }
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, "en");
@@ -29,6 +34,7 @@ export function cohortMentorModel(
   roles: readonly CohortRoleRow[],
   people: readonly CohortPerson[],
   approvedMentorIds: ReadonlySet<string>,
+  rosterIds: ReadonlySet<string> = new Set(),
 ): CohortMentorModel {
   const mentors = roles
     .filter((role) => role.name === "MENTOR")
@@ -42,10 +48,12 @@ export function cohortMentorModel(
     .toSorted(byName);
   const taken = new Set(mentors.map((mentor) => mentor.userId));
   const candidates = people.filter((person) => !taken.has(person.id)).toSorted(byName);
+  const outside = candidates.filter((person) => !rosterIds.has(person.id));
   return {
     mentors,
-    approvedCandidates: candidates.filter((person) => approvedMentorIds.has(person.id)),
-    otherCandidates: candidates.filter((person) => !approvedMentorIds.has(person.id)),
+    approvedCandidates: outside.filter((person) => approvedMentorIds.has(person.id)),
+    otherCandidates: outside.filter((person) => !approvedMentorIds.has(person.id)),
+    rosterCandidates: candidates.filter((person) => rosterIds.has(person.id)),
   };
 }
 

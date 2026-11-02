@@ -103,6 +103,19 @@ test.describe("moderation in a channel", () => {
       await page.screenshot({ path: `${EVIDENCE_DIR}/report-form-${viewport.width}.png` });
       await runAxe(page, testInfo, `report-form-${viewport.width}`);
 
+      // QA2-10 / QA2-19: sent empty, the form says what it needs and takes focus there.
+      const send = form.getByRole("button", { name: "Send report" });
+      await send.click();
+      await expect(form.locator("[data-reason-missing]")).toHaveText("Choose what's wrong with it first.");
+      await expect(form.getByRole("radio").first()).toBeFocused();
+      await form.getByLabel(/Something else/).check();
+      await send.click();
+      const details = form.getByLabel(/Tell the moderators what's wrong/);
+      await expect(details).toBeFocused();
+      await expect(details).toHaveAttribute("aria-required", "true");
+      await expect(form.locator("[data-reason-missing]")).toHaveText("Write what's wrong first.");
+      await runAxe(page, testInfo, `report-form-missing-${viewport.width}`);
+
       await form.getByLabel("Spam or unrelated promotion").check();
       await form.getByLabel(/Add details/).fill("Posted in three channels today.");
       await form.getByRole("button", { name: "Send report" }).click();
@@ -130,18 +143,29 @@ test.describe("moderation in a channel", () => {
       const reason = form.getByLabel("Why are you hiding it?");
       await expect(reason).toBeFocused();
       await expect(form).toContainText("Brian will still see it, with your reason, and can ask for a review. An admin looks at every hide and can restore it.");
-      await expect(form.getByRole("button", { name: "Hide message" })).toBeDisabled();
       await expect(form).toBeInViewport({ ratio: 1 });
       expect(await horizontalOverflow(page)).toBe(0);
       await page.screenshot({ path: `${EVIDENCE_DIR}/hide-form-${viewport.width}.png` });
       await runAxe(page, testInfo, `hide-form-${viewport.width}`);
 
+      // QA2-10: sent empty, the box says what it needs and takes focus back.
+      await form.getByRole("button", { name: "Hide message" }).click();
+      const missing = form.locator("[data-reason-missing]");
+      await expect(missing).toHaveText("Write why you're hiding it first. The record keeps your reason.");
+      await expect(reason).toBeFocused();
+      await expect(reason).toHaveAttribute("aria-invalid", "true");
+      expect((await reason.getAttribute("aria-describedby"))?.split(" ")).toContain(await missing.getAttribute("id"));
+      await runAxe(page, testInfo, `hide-form-missing-${viewport.width}`);
+
       await reason.fill("Off-topic for this channel");
       await form.getByRole("button", { name: "Hide message" }).click();
       await expect(form).toHaveCount(0);
       const note = message(page, FIRST_PR).locator("[data-moderation=HIDDEN]");
-      await expect(note).toHaveText("Hidden from members: Off-topic for this channel. Moderators can still see it.");
-      await expect(announcer(page)).toHaveText("Message hidden from members.");
+      // QA2-11: a moderator who is not an admin reads what comes next.
+      await expect(note).toHaveText(
+        "Hidden from members: Off-topic for this channel. Moderators can still see it. An admin looks at every hide, and Brian can ask for a review unless an admin made or upheld the hide. If an admin restores it, members see it here again.",
+      );
+      await expect(announcer(page)).toHaveText("Message hidden from members. An admin will look at it.");
       await expect(actions(page, FIRST_PR)).toBeFocused();
       await page.screenshot({ path: `${EVIDENCE_DIR}/hidden-${viewport.width}.png` });
       await runAxe(page, testInfo, `hidden-${viewport.width}`);
@@ -250,8 +274,9 @@ test.describe("moderation in a channel", () => {
     });
   });
 
-  // The report form, with touch-sized choices, is taller than the list on these phones: it opens at its start.
-  for (const viewport of [PHONE, SHORT_PHONE]) {
+  // The report form, with touch-sized choices, is taller than the list on a short phone: it opens at its
+  // start. (At 390x844 the compact header (QA2-17) leaves room for all of it.)
+  for (const viewport of [SHORT_PHONE]) {
     const size = `${viewport.width}x${viewport.height}`;
     test.describe(`on a ${size} touch phone`, () => {
       test.use({ viewport, hasTouch: true, isMobile: true });
@@ -283,6 +308,41 @@ test.describe("moderation in a channel", () => {
       });
     });
   }
+
+  test("on a 390x844 phone the whole report form fits in the list, its first choice focused", async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await open(page, harness({ persona: "wanjiku" }));
+    await actions(page, FIRST_PR).click();
+    await page.getByRole("menuitem", { name: "Report…" }).click();
+    const form = page.locator("[data-panel=report]");
+    await form.evaluate((el) => Promise.all(el.getAnimations().map((animation) => animation.finished)));
+    await expect(form.getByRole("radio").first()).toBeFocused();
+    await expect(form.locator(".channel-panel__title")).toBeInViewport({ ratio: 1 });
+    await expectButtonsUncovered(form, ["Cancel", "Send report"]);
+  });
+
+  test("the day's heading sits under the New divider (QA2-18)", async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await open(page, harness({ persona: "wanjiku", marker: "s00000000000000000000401" }));
+    const divider = page.locator("[data-new-divider]");
+    await expect(divider).toHaveCount(1);
+    const next = await divider.evaluate((el) => ({ tag: el.nextElementSibling?.tagName, text: el.nextElementSibling?.textContent }));
+    expect(next.tag).toBe("H3");
+    expect(next.text).toMatch(/\S/);
+  });
+
+  test("a wheel over the channel's header scrolls the messages, not the page (QA2-17)", async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await open(page, harness({ persona: "wanjiku" }));
+    const list = page.locator("[data-channel-scroller]");
+    const before = await list.evaluate((el) => el.scrollTop);
+    expect(before).toBeGreaterThan(0);
+    const header = await page.locator(".channel-view__main > header, .channel-view__main [data-channel-header]").first().boundingBox();
+    await page.mouse.move(header!.x + header!.width / 2, header!.y + header!.height / 2);
+    await page.mouse.wheel(0, -2000);
+    await expect.poll(() => list.evaluate((el) => el.scrollTop)).toBeLessThan(before);
+    expect(await page.evaluate(() => document.scrollingElement!.scrollTop)).toBe(0);
+  });
 
   test("a mentor who hides a thread reply keeps focus on it, at its moderation note", async ({ page }) => {
     await page.setViewportSize(DESKTOP);

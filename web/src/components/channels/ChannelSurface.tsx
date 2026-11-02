@@ -12,6 +12,7 @@ import { ModerationProvider } from "./MessageModeration";
 import type { MomentFinder } from "./moment-search";
 import { PostingNote } from "./PostingNote";
 import ThreadRail, { type ThreadView } from "./ThreadRail";
+import { wheelScrollsList } from "./wheel";
 import "./channels.css";
 
 export type ChannelSurfaceProps = {
@@ -202,7 +203,7 @@ export default function ChannelSurface({
     >
       <div className="channel-view" data-channel={channel.slug} data-thread={thread ? "open" : "closed"}>
         <div className="channel-view__grid">
-        <section aria-label={title} className="channel-view__main">
+        <section aria-label={title} className="channel-view__main" onWheel={(event) => wheelScrollsList(event.nativeEvent, event.currentTarget)}>
           {children}
           <MessageList
             key={channel.id}

@@ -11,12 +11,16 @@ import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
 import { getStudentJourney } from "@/lib/student/journey";
+import ChannelShortcuts from "@/components/platform/spaces/ChannelShortcuts.astro";
+import { loadChannelShortcuts } from "@/components/platform/spaces/channel-shortcuts-server";
 // oxlint-disable-next-line import/no-unassigned-import -- Workspace stylesheet.
 import "@/styles/discovery.css";
 // Authentication is enforced by dashboard middleware; every data API checks access.
 
 const spaces = await resolveSpacePage(Astro.locals, "journey");
 const journey = spaces ? await getStudentJourney(drizzle(env.DB, { schema }), spaces.me.user.id) : undefined;
+// A way into the community's channels while `channels` is on (QA2-16); the sidebar reuses the list.
+const { channels, shortcuts } = spaces ? await loadChannelShortcuts(spaces) : { channels: undefined, shortcuts: null };
 // With onboarding on, how the person said they take part frames this page (onboarding SPEC §3).
 // Without it (null), Community reads exactly as before: member framing for everyone.
 const framing = spaces?.onboarding?.framing;
@@ -28,9 +32,10 @@ const invitation = step && restrictedNextStep(restrictionsFor(Astro.locals), ste
 ---
 {
   spaces ? (
-    <SpacePage context={spaces} title={framing === "partner" ? PARTNER.title : "Your journey"} journey={journey}>
+    <SpacePage context={spaces} title={framing === "partner" ? PARTNER.title : "Your journey"} journey={journey} channels={channels}>
       {spaces.onboarding && <OnboardingNotices view={spaces.onboarding} space={spaces.space} class={invitation ? "mb-4" : "mb-10"} />}
       {invitation && <CohortInvitation step={invitation} />}
+      <ChannelShortcuts model={shortcuts} class="mb-6" />
       <CommunityApp client:load view="journey" embedded framing={framing} />
     </SpacePage>
   ) : (

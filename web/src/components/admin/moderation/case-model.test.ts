@@ -123,7 +123,7 @@ describe("copy", () => {
     expect(firstName("   ")).toBe("The author");
   });
 
-  it("writes times in Nairobi time", () => {
-    expect(formatModerationTime(Date.parse("2026-11-01T11:05:00Z"))).toBe("1 Nov 2026, 14:05");
+  it("writes times in Nairobi time, and says so (QA2-13)", () => {
+    expect(formatModerationTime(Date.parse("2026-11-01T11:05:00Z"))).toBe("1 Nov 2026, 14:05 EAT");
   });
 });

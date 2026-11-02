@@ -69,22 +69,44 @@
   padding: 1.5rem var(--channel-gutter) 0;
 }
 
-/* A phone's top bar already names the channel (m1): the header stays, quieter and shorter. */
+/*
+ * A phone's top bar already names the channel (m1): the header stays, quieter and shorter, so the
+ * messages keep most of a 390px screen (QA2-17). The name and the chips share a line where they fit,
+ * and the topic keeps to one.
+ */
 @container channel-view (max-width: 40rem) {
   .channel-view__header {
-    padding-top: 0.875rem;
+    padding-top: 0.5rem;
   }
 
   .channel-view__header [data-channel-header] {
-    gap: 0.5rem;
-    padding-bottom: 0.75rem;
+    flex-flow: row wrap;
+    align-items: center;
+    gap: 0.25rem 0.75rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .channel-view__header [data-channel-header] > div {
+    display: contents;
   }
 
   .channel-view__header h1 {
-    font-size: 1.125rem;
+    font-size: 1.0625rem;
+  }
+
+  .channel-view__header [data-channel-header] ul {
+    gap: 0.375rem;
+  }
+
+  .channel-view__header [data-channel-chip] {
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
   }
 
   .channel-view__header [data-channel-header] p {
+    order: 1;
+    flex-basis: 100%;
+    margin-top: 0;
     display: -webkit-box;
     overflow: hidden;
     -webkit-box-orient: vertical;
@@ -148,6 +170,11 @@
 
 .channel-rail__divider::before {
   flex: 0 0 0;
+}
+
+/* The day's heading under the "New" divider, where a channel opens (QA2-18). */
+.channel-new + .channel-day {
+  margin-top: 0.25rem;
 }
 
 .channel-new {
@@ -828,10 +855,12 @@
 }
 
 /*
- * While a form is open in the list, "Jump to latest" stays away: it would float over the form's buttons,
- * and the person is busy with this message, not the newest.
+ * While a form is open in the list (a report, a hide, an edit or a delete), "Jump to latest" stays away:
+ * it would float over the form's buttons, and the person is busy with this message, not the newest.
+ * It also stays under the phone's open menu, which it would otherwise float above.
  */
-.channel-list:has(.channel-panel) .channel-jump {
+.channel-list:has(.channel-panel, .channel-edit, .channel-confirm) .channel-jump,
+.spaces-shell[data-drawer="open"] .channel-jump {
   display: none;
 }
 

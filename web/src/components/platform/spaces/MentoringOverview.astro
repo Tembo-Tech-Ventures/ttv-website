@@ -9,13 +9,17 @@ import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
 import { RAISED } from "@/components/platform/ui/tones";
 import { SPACE_PAGE_PATHS } from "./sidebar";
 import { awaitingConfirmationText } from "./awaiting-confirmation";
+import type { ChannelShortcutsModel } from "./channel-shortcuts";
+import ChannelShortcuts from "./ChannelShortcuts.astro";
 
 interface Props {
   /** The server's derived count (Me.mentoring); null when it is not known, so nothing is claimed. */
   awaiting: number | null;
+  /** The channels card (QA2-16); null while `channels` is off for the person. */
+  shortcuts?: ChannelShortcutsModel | null;
 }
 
-const { awaiting } = Astro.props;
+const { awaiting, shortcuts = null } = Astro.props;
 
 const later = [
   {
@@ -75,6 +79,8 @@ const later = [
       </a>
     </div>
   </section>
+
+  <ChannelShortcuts model={shortcuts} class="mt-6" />
 
   <div class="mt-6 grid gap-6 md:grid-cols-2">
     {
