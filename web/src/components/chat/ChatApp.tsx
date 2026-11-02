@@ -7,6 +7,7 @@ import ConversationList, {
 } from "@/components/chat/ConversationList";
 import ConversationSheet from "@/components/chat/ConversationSheet";
 import Transcript from "@/components/chat/Transcript";
+import AboutAskTembo from "@/components/chat/AboutAskTembo";
 import type { ChatMessage, ChatSession } from "@/components/chat/types";
 import { MOCK_LATENCY_MS, MOCK_LOAD_MS } from "@/components/chat/mock-timing";
 import {
@@ -14,6 +15,7 @@ import {
   getDashboardLinks,
 } from "@/components/shells/DashboardShell";
 import type { StudentDashboardLinkId } from "@/lib/student/journey";
+import type { PrivateAskScope } from "@/lib/tembo/private-ask";
 import { openFeedbackWidget } from "@/components/feedback/feedback-client";
 
 /**
@@ -75,6 +77,8 @@ interface ChatAppProps {
    * links and site navigation, and the assistant is Tembo.
    */
   variant?: "immersive" | "space";
+  /** What Tembo reads for this person (privateAskScope), said on the page; omitted by mock pages. */
+  scope?: PrivateAskScope;
 }
 
 /**
@@ -98,6 +102,7 @@ export default function ChatApp({
   unreadLeadCount = 0,
   canDiscover = false,
   variant = "immersive",
+  scope,
 }: ChatAppProps) {
   const inSpace = variant === "space";
   const [sessions, setSessions] = useState<ChatSession[]>(initialSessions);
@@ -528,7 +533,7 @@ export default function ChatApp({
           conversationEpoch={conversationEpoch}
           onPickPrompt={(prompt) => void sendMessage(prompt)}
           suggestions={suggestions}
-          assistantName="Ask Tembo"
+          assistantName="Ask Tembo privately"
         />
 
         {/*
@@ -562,6 +567,8 @@ export default function ChatApp({
             )}
           </div>
         )}
+
+        <AboutAskTembo scope={scope} />
 
         <Composer
           ref={composerRef}

@@ -24,8 +24,8 @@ const memory = () => {
   };
 };
 
-function setup(me: Me, channel: Channel = community, failure?: MockOptions["failure"], timeoutMs?: number) {
-  const initial = channelPage(channel, me);
+function setup(me: Me, channel: Channel = community, failure?: MockOptions["failure"], timeoutMs?: number, page?: (page: MessageList) => MessageList) {
+  const initial = page ? page(channelPage(channel, me)) : channelPage(channel, me);
   const client = createHarnessClient({ me, channel, root: initial, now, failure });
   const store = createChannelStore({ channelId: channel.id, enabled: me.flags.channels, viewerId: me.user.id, initial, api: client.api });
   const tembo = createTemboStore({ channel: store, usage: me.temboUsage, enabled: me.flags.tembo_channels, api: client.api, now, timeoutMs });
@@ -44,8 +44,9 @@ const settle = () => act(() => tick(10));
 
 async function mount(me: Me = wanjiku, options: {
   threadId?: string; failure?: MockOptions["failure"]; timeoutMs?: number; thread?: (page: MessageList) => MessageList;
+  page?: (page: MessageList) => MessageList;
 } = {}) {
-  const wired = setup(me, community, options.failure, options.timeoutMs);
+  const wired = setup(me, community, options.failure, options.timeoutMs, options.page);
   const page = options.threadId ? threadPage(community, options.threadId, me) : null;
   const initialThread = page && options.thread ? options.thread(page) : page;
   await act(async () => root.render(
@@ -108,9 +109,12 @@ describe("a Tembo answer (U-3.1)", () => {
     const meta = answer().querySelector(".channel-meta")!;
     expect(meta.textContent).toMatch(/^TemboAI\d/);
     expect([...meta.querySelectorAll("*")].filter((node) => node.children.length === 0 && node.textContent === "AI")).toHaveLength(1);
-    expect([...answer().querySelectorAll("[aria-label=Sources] a")].map((a) => a.textContent)).toEqual(["Chama ledger · rev 3", "This thread"]);
+    // Numbered as the answer's [n] markers are (QA3-02).
+    expect([...answer().querySelectorAll("[aria-label=Sources] a")].map((a) => a.textContent))
+      .toEqual(["1Source 1: Chama ledger · rev 3", "2Source 2: This thread"]);
+    // No live count under an answer: it read as a fact about that answer (QA3-07).
     expect(answer().querySelector(".channel-tembo__foot")?.textContent)
-      .toBe("Sees: this channel, projects shared in it and public builder profiles · You: 6 of 10 today");
+      .toBe("Sees: this channel, projects shared in it and public builder profiles");
     expect(answer().querySelector("[data-tembo-feedback]")).toBeNull();
   });
 
@@ -177,7 +181,7 @@ describe("asking Tembo from the channel (S-3.1 + U-3.1)", () => {
     expect(line.dataset.temboQuestion).toBe("pending");
     expect(line.textContent).toBe("Tembo is answering in the thread.");
     expect($("[data-channel-announcer]")?.textContent).toBe("Tembo is looking into it");
-    expect($(".channel-composer__scope")?.textContent).toContain("You: 7 of 10 today");
+    expect($(".channel-composer__scope")?.textContent).toContain("You: 7 of 10 in channels today");
 
     expect(client.answerTembo()).toBe(1);
     await poll();
@@ -210,12 +214,47 @@ describe("asking Tembo from the channel (S-3.1 + U-3.1)", () => {
 
   it("says when today's questions are used up, and when they come back", async () => {
     const { client } = await mount({ ...wanjiku, temboUsage: { ...wanjiku.temboUsage, used: 10 } });
-    expect($(".channel-composer__scope")?.textContent).toContain("You: 10 of 10 today · No questions left today; more after midnight East Africa Time");
+    expect($(".channel-composer__scope")?.textContent).toContain("You: 10 of 10 in channels today · No questions left in channels today; more after midnight East Africa Time");
     await send("@tembo one more?");
     expect(client.tembo().asked).toEqual([]);
     const line = $("[data-tembo-question=exhausted]")!;
-    expect(line.textContent).toMatch(/^You've used all 10 of today's questions to Tembo, so this one wasn't asked\. You can ask again after midnight East Africa Time, in (about \d+ hours?|\d+ minutes?)\.$/);
+    // True for both places Tembo answers: only questions in channels count (QA3-04).
+    expect(line.textContent).toMatch(/^You've used all 10 of today's questions to Tembo in channels, so this one wasn't asked\. You can ask again after midnight East Africa Time, in (about \d+ hours?|\d+ minutes?)\. Questions on your private Ask Tembo page don't count toward this\.$/);
     expect(line.querySelector("button")).toBeNull();
+  });
+
+  it("still says a question wasn't asked after a reload, from /me's usage and the server's word that nothing was asked (QA3-05)", async () => {
+    const mine = { ...messages.firstPr, author: { ...messages.firstPr.author, id: wanjiku.user.id, name: wanjiku.user.name } };
+    const refused = { ...mine, id: "synthetic-refused-question", body: "@tembo who reviews pull requests?", createdAt: FIXTURE_NOW, temboAsked: false };
+    const asked = { ...mine, id: "synthetic-asked-question", body: "@tembo and the docs?", createdAt: FIXTURE_NOW + 1, temboAsked: true };
+    const yesterday = { ...refused, id: "synthetic-yesterday-question", createdAt: Date.UTC(2026, 10, 1, 20) };
+    const { client } = await mount({ ...wanjiku, temboUsage: { ...wanjiku.temboUsage, used: 10 } }, {
+      page: (page) => ({ ...page, items: [...page.items, yesterday, refused, asked] }),
+    });
+    const notes = $$("[data-tembo-question=exhausted]");
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.closest("li")?.querySelector(`[data-message="${refused.id}"]`)).not.toBeNull();
+    // What is known, not why: the server keeps no reason for an unasked mention (#310 S1).
+    expect(notes[0]!.textContent).toMatch(/^Tembo didn't take this question, and you've used all 10 of today's questions to Tembo in channels\. You can ask again after midnight East Africa Time/);
+    // Nothing was asked to show it, and "Ask Tembo here" is gone: it would only post a question nobody answers.
+    expect(client.tembo().asked).toEqual([]);
+    expect($$("[data-ask-tembo]")).toHaveLength(0);
+  });
+
+  it("says so in a thread as a note, not as a reply from Tembo (QA3-13)", async () => {
+    await mount({ ...wanjiku, temboUsage: { ...wanjiku.temboUsage, used: 10 } }, { threadId: messages.communityAsk.parentId! });
+    const box = $<HTMLTextAreaElement>("[data-composer=thread] textarea")!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    await act(async () => {
+      setter.call(box, "@tembo and revision 4?");
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => box.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+    await settle();
+    const note = $("[data-thread-rail] [data-tembo-question=exhausted]")!;
+    expect(note.textContent).toContain("so this one wasn't asked");
+    expect(note.querySelector(".channel-meta")).toBeNull();
+    expect(note.classList.contains("channel-tembo-wait--channel")).toBe(true);
   });
 
   it("offers Try again after a failure", async () => {

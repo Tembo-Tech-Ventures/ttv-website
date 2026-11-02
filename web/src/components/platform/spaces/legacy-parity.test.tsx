@@ -22,6 +22,11 @@ import type { ChatSession } from "@/components/chat/types";
  * - chat-empty (B-3.2, owner decision 1 of 31 Oct 2026): the assistant is
  *   Tembo everywhere, so the legacy page's heading reads "Ask Tembo", as the
  *   spaces shell's already did. Nothing else in the page changed.
+ * - chat-empty and chat-conversation (QA-3 findings 03 and 04): the page
+ *   says what it is, in both frames. Its heading reads "Ask Tembo privately",
+ *   apart from a channel's "Ask Tembo here"; a disclosure above the box says
+ *   what Tembo sees, who can see a conversation, how long it is kept and where
+ *   requests go; each answer is labelled "Tembo · AI".
  */
 const VIEWS: ("journey" | "scout" | "mentor")[] = ["journey", "scout", "mentor"];
 const SESSION: ChatSession = { id: "s1", title: "Synthetic session", updatedAt: 1_790_000_000, messageCount: 2, latestMessage: "In week 3." };

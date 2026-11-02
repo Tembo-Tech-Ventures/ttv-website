@@ -5,7 +5,7 @@ import { createApiClient } from "./apiClient";
 import { createChannelStore } from "./channel";
 import { createComposer } from "./composer";
 import { createMockTransport, type MockReply } from "./mockTransport";
-import { createTemboStore, TEMBO_TIMEOUT_MS } from "./tembo";
+import { createTemboStore, TEMBO_TIMEOUT_MS, unaskedForToday } from "./tembo";
 
 const channelId = channels.cohort04.id;
 const resetsAt = FIXTURE_NOW + 3 * 60 * 60 * 1000;
@@ -186,7 +186,7 @@ describe("asking Tembo (S-3.1)", () => {
     const question = await tembo.ask(asking);
     expect(question).toMatchObject({ status: "exhausted", error: { status: 429 } });
     expect(tembo.getState().usage).toEqual({ used: 10, limit: 10, resetsAt: FIXTURE_NOW + 3_600_000 });
-    expect(tembo.getState().announcement).toBe("You've used today's questions to Tembo");
+    expect(tembo.getState().announcement).toBe("You've used today's questions to Tembo in channels");
   });
 
   it("asks about a sent message that mentions @tembo, and only that", async () => {
@@ -276,5 +276,30 @@ describe("Tembo feedback", () => {
     release();
     await older;
     expect(tembo.getState()).toMatchObject({ feedback: { [answer.id]: "not_quite" }, saving: [] });
+  });
+});
+
+describe("unaskedForToday (QA3-05)", () => {
+  const spent = { used: 10, limit: 10, resetsAt: Date.UTC(2026, 10, 3, 21) };
+  const question = { ...messages.firstPr, id: "synthetic-own", body: "@tembo one more?", createdAt: Date.UTC(2026, 10, 3, 6), temboAsked: false };
+
+  it("is a refusal for an own @tembo message posted today that nothing asked, while none are left", () => {
+    expect(unaskedForToday(question, spent)).toEqual({
+      messageId: "synthetic-own", threadId: "synthetic-own", askedAt: question.createdAt, status: "exhausted", answerId: null, error: null,
+    });
+    expect(unaskedForToday({ ...question, parentId: "synthetic-root" }, spent)?.threadId).toBe("synthetic-root");
+  });
+
+  it.each([
+    ["Tembo was asked", { temboAsked: true }, spent],
+    ["not the reader's message (the server says nothing)", { temboAsked: undefined }, spent],
+    ["no mention", { body: "one more?" }, spent],
+    ["posted before today's allowance began", { createdAt: Date.UTC(2026, 10, 2, 20, 59) }, spent],
+    ["deleted", { deleted: true, body: "" }, spent],
+    ["hidden", { moderation: { state: "HIDDEN", reasons: ["Synthetic reason"] } }, spent],
+    ["questions left", {}, { ...spent, used: 9 }],
+    ["Tembo off", {}, null],
+  ] satisfies [string, Partial<Message>, TemboUsage | null][])("is nothing when %s", (_, change, today) => {
+    expect(unaskedForToday({ ...question, ...change }, today)).toBeNull();
   });
 });

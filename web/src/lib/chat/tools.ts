@@ -160,11 +160,20 @@ function buildAccessFilter(
   return and(idFilter, inArray(schema.recording.programId, programIds));
 }
 
+const rangeKey = (recordingId: string, startTime: number, endTime: number) =>
+  `${recordingId}:${Math.floor(startTime)}:${Math.floor(endTime)}`;
+
+/**
+ * This search's sources, one per transcript range. A range an earlier search in the same answer
+ * already returned comes back as that source, under its number, so an answer lists each passage
+ * once however often Tembo searched (QA3-08); only new ranges get new numbers.
+ */
 function deduplicateMatches(
   matches: ParsedMatch[],
   segmentRows: SegmentRow[],
-  baseSourceNumber: number
-): TranscriptSource[] {
+  known: readonly TranscriptSource[]
+): { results: TranscriptSource[]; added: TranscriptSource[] } {
+  const knownByRange = new Map(known.map((source) => [rangeKey(source.recordingId, source.startTime, source.endTime), source]));
   const rowsByRecordingId = new Map<string, SegmentRow[]>();
   for (const row of segmentRows) {
     const existing = rowsByRecordingId.get(row.recordingId) ?? [];
@@ -174,6 +183,7 @@ function deduplicateMatches(
 
   const seenRanges = new Set<string>();
   const sources: TranscriptSource[] = [];
+  const added: TranscriptSource[] = [];
 
   for (const match of matches) {
     const rows = match.recordingId ? rowsByRecordingId.get(match.recordingId) ?? [] : segmentRows;
@@ -186,23 +196,30 @@ function deduplicateMatches(
 
     const first = matched[0];
     const last = matched.at(-1) ?? first;
-    const dedup = `${first.recordingId}:${Math.floor(first.startTime)}:${Math.floor(last.endTime)}`;
+    const dedup = rangeKey(first.recordingId, first.startTime, last.endTime);
     if (seenRanges.has(dedup)) continue;
     seenRanges.add(dedup);
 
-    sources.push({
-      sourceNumber: baseSourceNumber + sources.length + 1,
-      recordingId: first.recordingId,
-      title: first.recordingTitle,
-      startTime: first.startTime,
-      endTime: last.endTime,
-      text: matched.map((r) => r.text).join(" "),
-    });
+    const earlier = knownByRange.get(dedup);
+    if (earlier) {
+      sources.push(earlier);
+    } else {
+      const source = {
+        sourceNumber: known.length + added.length + 1,
+        recordingId: first.recordingId,
+        title: first.recordingTitle,
+        startTime: first.startTime,
+        endTime: last.endTime,
+        text: matched.map((r) => r.text).join(" "),
+      };
+      added.push(source);
+      sources.push(source);
+    }
 
     if (sources.length >= 8) break;
   }
 
-  return sources;
+  return { results: sources, added };
 }
 
 async function searchTranscripts(query: string, scopeRecordingId: string | null, ctx: ToolContext): Promise<string> {
@@ -256,11 +273,11 @@ async function searchTranscripts(query: string, scopeRecordingId: string | null,
     .where(buildAccessFilter(ctx.isAdmin, recordingIds, segmentIds, ctx.programIds))
     .orderBy(asc(schema.transcriptSegment.startTime))) as SegmentRow[];
 
-  const newSources = deduplicateMatches(matches, segmentRows, ctx.sources.length);
-  ctx.sources.push(...newSources);
+  const { results: found, added } = deduplicateMatches(matches, segmentRows, ctx.sources);
+  ctx.sources.push(...added);
 
   return JSON.stringify({
-    results: newSources.map((s) => ({
+    results: found.map((s) => ({
       sourceNumber: s.sourceNumber,
       title: s.title,
       timecode: `${formatTimestamp(s.startTime)}-${formatTimestamp(s.endTime)}`,

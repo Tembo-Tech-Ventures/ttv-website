@@ -175,8 +175,8 @@ test.describe("the channel view", () => {
     expect(at("thread-link")).toBeLessThan(at("composer"));
     expect(at("composer")).toBeLessThan(at("Share project"));
     expect(at("Share project")).toBeLessThan(at("Session clip"));
-    expect(at("Session clip")).toBeLessThan(at("Ask Tembo"));
-    expect(at("Ask Tembo")).toBeLessThan(at("Send message"));
+    expect(at("Session clip")).toBeLessThan(at("Ask Tembo here"));
+    expect(at("Ask Tembo here")).toBeLessThan(at("Send message"));
   });
 
   test("Escape closes a thread and returns focus to its link; Back closes it too", async ({ page }) => {

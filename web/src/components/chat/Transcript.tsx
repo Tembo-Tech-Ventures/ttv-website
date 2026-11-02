@@ -104,6 +104,11 @@ function MessageRow({ message, index }: { message: ChatMessage; index: number })
           <p className="whitespace-pre-wrap">{message.content}</p>
         ) : (
           <>
+            {/* Every answer says who wrote it: an AI (QA3-03). */}
+            <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-ink-secondary" data-chat-author>
+              Tembo
+              <span className="rounded px-1.5 py-px text-[0.6875rem] font-bold tracking-subhead text-peach-ink ring-1 ring-peach-ink/40">AI</span>
+            </p>
             <MarkdownMessage content={message.content} />
             {message.citations && message.citations.length > 0 && (
               <Citations citations={message.citations} />
@@ -121,7 +126,8 @@ function EmptyState({ onPick, suggestions, name }: { onPick: (prompt: string) =>
     <div className="mx-auto flex max-w-2xl flex-col items-center pt-6 text-center">
       <h2 className="text-2xl tracking-display text-ink-primary">{name}</h2>
       <p className="mt-2 text-sm text-ink-secondary">
-        Ask about your sessions, your program, or anything you need help with.
+        Ask about your sessions, your program, or anything you need help with. Just you and Tembo: nothing here is
+        posted in a channel.
       </p>
       <div className="mt-6 grid w-full gap-2">
         {prompts.map((prompt) => (
@@ -159,7 +165,7 @@ interface TranscriptProps {
   conversationEpoch: number;
   /** Contextual prompts from the API, based on the user's actual recordings. */
   suggestions?: string[];
-  /** The assistant's name on the empty state: "Ask Tembo" in the spaces shell. */
+  /** The page's name on the empty state: "Ask Tembo privately", unlike a channel's "Ask Tembo here". */
   assistantName?: string;
 }
 

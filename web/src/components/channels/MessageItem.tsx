@@ -61,18 +61,21 @@ function MessageAvatar({ message }: { message: Message }) {
 function TemboContent({ message, names }: { message: Message; names: readonly string[] }) {
   return (
     <div className="channel-tembo">
-      <MessageBody body={message.body} names={names} />
+      <MessageBody body={message.body} names={names} citations={message.citations} />
       {message.citations.length > 0 && (
-        <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Sources">
-          {message.citations.map((citation) => (
+        // Numbered as the answer's markers are, so each sentence's [n] names its chip (QA3-02).
+        <ol className="mt-3 flex flex-wrap gap-1.5" aria-label="Sources">
+          {message.citations.map((citation, index) => (
             <li key={citation.href}>
-              <a href={citation.href} className={cx("channel-cite", FOCUS_RING)}>
+              <a href={citation.href} className={cx("channel-cite", FOCUS_RING)} data-cite={index + 1}>
+                <span className="channel-cite__n" aria-hidden="true">{index + 1}</span>
+                <span className="sr-only">Source {index + 1}: </span>
                 {citationIcon(citation)}
                 {citation.title}
               </a>
             </li>
           ))}
-        </ul>
+        </ol>
       )}
       <TemboAnswerFoot message={message} />
     </div>

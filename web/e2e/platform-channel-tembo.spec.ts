@@ -42,7 +42,7 @@ for (const viewport of [DESKTOP, PHONE]) {
   test(`ask → pending → answer → feedback at ${viewport.width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport);
     await open(page, harness());
-    await expect(page.locator(".channel-composer__scope")).toContainText("You: 6 of 10 today");
+    await expect(page.locator(".channel-composer__scope")).toContainText("You: 6 of 10 in channels today");
 
     await ask(page, "@tembo what changed between revisions 2 and 3?");
     const waiting = page.locator("[data-tembo-question=pending]");
@@ -65,7 +65,14 @@ for (const viewport of [DESKTOP, PHONE]) {
     const answer = page.locator("[data-thread-rail] [data-message]").filter({ has: page.locator(".channel-tembo") }).last();
     // One AI badge: the server's role badge on Tembo.
     await expect(answer.locator(".channel-meta").getByText("AI", { exact: true })).toHaveCount(1);
-    await expect(answer.locator(".channel-tembo__foot")).toContainText("Sees: this channel, projects shared in it and public builder profiles · You: 7 of 10 today");
+    // No live count under an answer (QA3-07): the composer's line carries it.
+    await expect(answer.locator(".channel-tembo__foot")).toHaveText(/^Sees: this channel, projects shared in it and public builder profiles/);
+    await expect(answer.locator(".channel-tembo__foot")).not.toContainText("You:");
+    await expect(page.locator(".channel-composer__scope")).toContainText("You: 7 of 10 in channels today");
+    // Each [n] links to the source it names, and the chips carry the same numbers (QA3-02).
+    const marker = answer.locator(".channel-tembo .channel-body a.channel-cite-ref[data-cite='1']");
+    await expect(marker).toHaveAccessibleName(/^Source 1: /);
+    await expect(answer.locator("[aria-label=Sources] a[data-cite='1'] .channel-cite__n")).toHaveText("1");
     const helpful = answer.locator("[data-tembo-feedback=helpful]");
     await helpful.focus();
     await page.keyboard.press("Enter");
@@ -102,9 +109,12 @@ for (const viewport of [DESKTOP, PHONE]) {
     await open(page, harness({ "tembo-used": "10" }));
     await ask(page, "@tembo one more?");
     const line = page.locator("[data-tembo-question=exhausted]");
-    await expect(line).toContainText("You've used all 10 of today's questions to Tembo, so this one wasn't asked.");
+    await expect(line).toContainText("You've used all 10 of today's questions to Tembo in channels, so this one wasn't asked.");
+    await expect(line).toContainText("Questions on your private Ask Tembo page don't count toward this.");
     await expect(line).toContainText("You can ask again after midnight East Africa Time, in");
-    await expect(page.locator("[data-channel-announcer]")).toHaveText("You've used today's questions to Tembo");
+    await expect(page.locator("[data-channel-announcer]")).toHaveText("You've used today's questions to Tembo in channels");
+    // At the limit, "Ask Tembo here" is gone: it would only post a question nobody answers (QA3-05).
+    await expect(page.locator("[data-ask-tembo]")).toHaveCount(0);
     expect(await page.evaluate(() => window.__channelHarness!.tembo().asked)).toEqual([]);
     expect(await horizontalOverflow(page)).toBe(0);
     await page.screenshot({ path: `${EVIDENCE_DIR}/04-exhausted-${viewport.width}.png` });

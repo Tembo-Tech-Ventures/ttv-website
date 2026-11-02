@@ -306,9 +306,13 @@ export const Message = z.object({
   reportedByMe: z.boolean().optional(),
   // On Tembo's answers only: the caller's own choice, null until they make one, never anyone else's.
   temboFeedback: TemboFeedbackKind.nullable().optional(),
+  // On the caller's own messages only: whether Tembo was asked about it. A mention refused because the
+  // day's questions were used up was never asked, so the note saying so survives a reload (QA3-05).
+  temboAsked: z.boolean().optional(),
 }).refine((m) => !m.deleted || (m.body === "" && m.embeds.length === 0 && m.citations.length === 0),
   "Deleted messages contain no body, embeds or citations")
   .refine((m) => m.authorKind === "TEMBO" || m.temboFeedback === undefined, "Only Tembo's answers carry the caller's feedback")
+  .refine((m) => m.authorKind === "USER" || m.temboAsked === undefined, "Only a person's own messages say whether Tembo was asked")
   .refine((m) => m.authorKind === "TEMBO" ? m.author.id === null && m.temboScope !== null : m.temboScope === null,
     "Tembo has no user id and must declare its scope");
 export type Message = z.infer<typeof Message>;

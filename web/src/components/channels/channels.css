@@ -576,6 +576,29 @@
   color: var(--color-ink-primary);
 }
 
+/* A chip's number, the one its sentences carry (QA3-02). */
+.channel-cite__n {
+  min-width: 1.125rem;
+  color: var(--color-peach-ink);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* A sentence's marker: its source's number, raised, linking to that source. */
+.channel-cite-ref {
+  margin-left: 0.125rem;
+  padding: 0 0.1875rem;
+  border-radius: 0.25rem;
+  color: var(--color-peach-ink);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.channel-cite-ref:hover {
+  background-color: color-mix(in srgb, var(--color-primary) 16%, transparent);
+}
+
 @media (pointer: coarse) {
   .channel-cite {
     min-height: 2.75rem;

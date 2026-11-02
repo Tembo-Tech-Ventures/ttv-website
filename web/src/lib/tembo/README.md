@@ -6,11 +6,16 @@ Tembo answers questions inside channels (B-3.1). Shipped dark behind the
 `TemboAsk`, `TemboResponse`, `TemboFeedback`, `TemboUsage` and `Citation` in
 `src/lib/platform/contracts.ts`. Migration `0035_tembo.sql`.
 
-The private Ask Tembo page (`/api/chat`, B-3.2) is the same assistant under the
-same name: `private-ask.ts` builds its prompt, and its scope comes from
-`capabilitiesFor` once, like channel access: the sessions of the person's
-cohorts (`cohortIds`), every cohort's for staff, or none yet. The prompt says
-which, so Tembo can say what it cannot see. The `/api/chat` contract is
+The private Ask Tembo page (`/api/chat`, B-3.2) is the same assistant, named
+"Ask Tembo privately" apart from a channel's "Ask Tembo here" button, which
+posts for the channel (QA3-03): `private-ask.ts` builds its prompt, and its
+scope comes from `capabilitiesFor` once, like channel access: the sessions of
+the person's cohorts (`cohortIds`), every cohort's for staff, or none yet. The
+prompt says which, so Tembo can say what it cannot see, and the page says it too
+(`PRIVATE_ASK_SEES`, `src/components/chat/AboutAskTembo.tsx`), with who can see
+a conversation, that conversations are kept with the account with no deleting
+yet, and that its requests go through the AI Gateway without opting out of its
+logs (unlike channel Tembo's `collectLog: false`). The `/api/chat` contract is
 unchanged.
 
 ## Routes
@@ -76,7 +81,18 @@ year, no daylight saving), where most members are: the allowance resets at
 (`YYYY-MM-DD`). Asking again about an accepted question never counts. Saying
 "I don't know" counts; a failed run does not. Closing a question while Tembo answers it does not give it back (above).
 `/me` reports `temboUsage`
-(`used`, `limit`, `resetsAt`), read only while `tembo_channels` is on.
+(`used`, `limit`, `resetsAt`), read only while `tembo_channels` is on, and
+`/me` reports `tembo_channels` off while `channels` is off (QA3-17). The
+allowance is for channels only: the private Ask Tembo page (`/api/chat`) has no
+daily count, and every refusal says "in channels" (QA3-04).
+
+A mention refused for the day has no `tembo_ask`, so the caller's own messages
+carry `Message.temboAsked`; with `/me`'s usage at its limit, the channel still
+notes, after a reload, that Tembo didn't take an own `@tembo` message from today
+that nothing asked (QA3-05, `unaskedForToday` in
+`src/lib/platform/client/tembo.ts`). That note says what is known, not why: no
+reason is kept, and a mention edited in or posted while Tembo was off was never
+asked either.
 
 ## What Tembo sees (`sources.ts`)
 
@@ -99,6 +115,27 @@ dropped. Nothing reads staff notes, feedback, applications, moderation events
 or evidence, private chats, other channels, or institution-shared projects
 nobody shared here. With the question come the thread so far (its root and
 latest replies) or, for a root message, the channel's latest messages.
+
+**A question is never evidence (QA3-01).** `search_channel` leaves out the
+question being answered and every other question to Tembo (a message with a
+`tembo_ask`, or one that mentions `@tembo`), and Tembo's own answers are never
+read at all. Earlier questions in the conversation come as context under
+`[question, not a source]`, with no tag, so no sentence can cite one: a
+question nothing else answers still gets "I don't know". The trade-off is
+deliberate: a person's correction addressed to Tembo ("@tembo that's wrong, demo
+day moved to Friday") is a question too, so it is context and never cited;
+the same fact posted without the mention is a source.
+
+**Sources say what tells them apart (QA3-02, QA3-06).** A message's citation is
+titled with its author and its first words, a session clip with its moment
+(`Week 5 at 0:40`), and a shared project with its builder (`Chama ledger by
+Otieno Ouma`): the owner who shared it here, by the name the channel shows on
+that message, so the name is never more than its readers already see. A
+message's words in a title are shown only while they still stand: once the
+cited message is deleted, hidden, under a hidden root, flagged or edited after
+the answer, every reader sees "A message since edited or removed" instead
+(`CITED_MESSAGE_CHANGED`, resolved in the page's own statement,
+`src/lib/channels/messages.ts`).
 
 `leakage.test.ts` is the matrix: every kind of channel × every role that may
 ask there, a model that calls every tool (offered or not) with every query
@@ -127,8 +164,10 @@ The model tags each sentence with the sources it used (`[S2]`, `[S2, S5]`). On
 the server, a tag naming no source this answer was given cites nothing; a
 sentence left without a valid tag is dropped; when nothing is left, or the
 model answered `NO_ANSWER`, Tembo says it doesn't know, in words that name what
-it can see there. Kept tags become `[1]`, `[2]`, … in order of first use, and the
-matching `Citation`s are stored with the message: `message`, `sessionClip`,
+it can see there. Kept tags become `[1]`, `[2]`, … in order of first use, right
+after the sentence they support, and the matching `Citation`s are stored with
+the message (the card links each `[n]` to `citations[n - 1]` and numbers its
+chips to match, QA3-02): `message`, `sessionClip`,
 `project` or `profile` (a public `/talent/<handle>` page). Answers stop at
 2,000 characters, at a whole sentence.
 

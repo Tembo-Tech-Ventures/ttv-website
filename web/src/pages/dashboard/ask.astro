@@ -1,6 +1,7 @@
 ---
 /**
- * Ask Tembo: a private conversation with Tembo about the person's cohorts and sessions.
+ * Ask Tembo privately: a private conversation with Tembo about the person's cohorts and sessions.
+ * Named apart from a channel's "Ask Tembo here", which posts for the channel (QA3-03).
  *
  * A chat needs the whole viewport: the old dashboard shell's header and the
  * page's own scrolling pushed the composer off the bottom of a phone screen.
@@ -20,22 +21,28 @@ import { drizzle } from "drizzle-orm/d1";
 import { env } from "cloudflare:workers";
 import * as schema from "@/lib/db/schema";
 import { getStudentJourney } from "@/lib/student/journey";
+import { capabilitiesFor } from "@/lib/platform/server/capabilities";
+import { privateAskScope } from "@/lib/tembo/private-ask";
 
 const user = Astro.locals.user!;
 const spaces = await resolveSpacePage(Astro.locals, "ask");
-const journey = await getStudentJourney(drizzle(env.DB, { schema }), user.id);
+const db = drizzle(env.DB, { schema });
+const journey = await getStudentJourney(db, user.id);
+// The scope /api/chat gives Tembo, said on the page (QA3-03).
+const scope = privateAskScope(await capabilitiesFor(db, { id: user.id }));
 const canDiscover = spaces ? false : hasDiscoveryAccess(await createCommunityService(env.DB, user.id, Astro.locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT).access());
 ---
 
 {
   spaces ? (
-    <SpacePage context={spaces} title="Ask Tembo" journey={journey} fill>
-      <ChatApp client:load variant="space" />
+    <SpacePage context={spaces} title="Ask Tembo privately" journey={journey} fill>
+      <ChatApp client:load variant="space" scope={scope} />
     </SpacePage>
   ) : (
-    <ImmersiveLayout title="Ask Tembo | Tembo Tech Ventures">
+    <ImmersiveLayout title="Ask Tembo privately | Tembo Tech Ventures">
       <ChatApp
         client:load
+        scope={scope}
         canDiscover={canDiscover}
         visibleLinkIds={journey.visibleLinkIds}
         unreadLeadCount={journey.unreadLeadCount}
