@@ -456,7 +456,12 @@ the rest.
   hide had reopened goes back to the admin's earlier decision as it was
   (decision, reason, who, when, and the signals it decided), so the Decided
   queue keeps its history; any other case closes by being removed, as there
-  is nothing left to decide.
+  is nothing left to decide. The signals it decided are the run that ends with
+  the last one before that decision, back to the admin event before the run,
+  so two decisions in a row (uphold, then restore) keep the case's own source,
+  reasons and actor. A moderator's hide they took back before the decision is
+  not one of its signals. A case no signal opened keeps those of the admin
+  hide that opened it.
   Someone else's hide, an automatic one, or an admin's is 403 (admins restore
   instead); a hide an admin made or upheld, or any decided case, is 409, as are
   a message no longer hidden or deleted. `moderation.undoable` says so to that
@@ -534,7 +539,9 @@ the rest.
   and an admin's own hide already has its `message_hidden`. Neutral words:
   "An admin reviewed your message in #help and restored it." / "… It stays
   as it is." / "… It stays hidden." It shows while the message is not deleted
-  and its case stays decided: a later hide that reopens the case hides it.
+  and it is still the case's decision (the case is decided, at the decidedAt
+  its eventKey carries): a later hide that reopens the case hides it, and a
+  later decision replaces it, so an old "restored" never contradicts a hide.
 - `moderation_pending` to every admin but the author, once per case and
   again when the author asks for a review. Links to `/admin/moderation`. It
   shows only while the case is pending.

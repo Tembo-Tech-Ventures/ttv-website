@@ -225,10 +225,34 @@ const HAS_SIGNALS = `EXISTS (SELECT 1 ${SIGNALS})`;
 const PRIOR = `(SELECT e.id FROM moderation_event e WHERE e.messageId = ?2 AND e.source = 'ADMIN'
   AND moderation_case.reopenedAt IS NOT NULL AND e.createdAt < moderation_case.reopenedAt ORDER BY e.createdAt DESC, e.rowid DESC LIMIT 1)`;
 const prior = (column: "action" | "actorId" | "reasons" | "createdAt") => `(SELECT p.${column} FROM moderation_event p WHERE p.id = ${PRIOR})`;
-/** The signals that case had decided: the people's and detectors' events after any admin event before the decision. */
-const PRIOR_SIGNALS = `FROM moderation_event w WHERE w.messageId = ?2 AND w.source <> 'ADMIN' AND w.action IN ('FLAG','HIDE')
-  AND w.createdAt <= ${prior("createdAt")} AND w.createdAt > coalesce((SELECT max(a.createdAt) FROM moderation_event a
-    WHERE a.messageId = ?2 AND a.source = 'ADMIN' AND a.createdAt < ${prior("createdAt")}), -1)`;
+/**
+ * A people's or detectors' event on this case (?2 the message) since it first opened, alias `alias`,
+ * that the decision saw standing: a moderator's hide they took back before the decision is not one.
+ * An undo (the only RESTORE a moderator makes) takes back the latest hide before it, as LAST_HIDE
+ * reads it, and only that one: an earlier hide by the same moderator that an admin decided stands.
+ */
+const SIGNAL = (alias: string) => `${alias}.messageId = ?2 AND ${alias}.source <> 'ADMIN' AND ${alias}.action IN ('FLAG','HIDE')
+  AND ${alias}.createdAt >= moderation_case.openedAt
+  AND NOT (${alias}.action = 'HIDE' AND EXISTS (SELECT 1 FROM moderation_event u WHERE u.messageId = ?2 AND u.source = 'MENTOR'
+    AND u.action = 'RESTORE' AND u.actorId = ${alias}.actorId AND u.createdAt <= ${prior("createdAt")}
+    AND ${alias}.id = (SELECT h.id FROM moderation_event h WHERE h.messageId = ?2 AND h.action = 'HIDE'
+      AND h.createdAt <= u.createdAt AND h.rowid < u.rowid ORDER BY h.createdAt DESC, h.rowid DESC LIMIT 1)))`;
+/**
+ * The signals that case had decided: the run of people's and detectors' events that ends with the
+ * last one at or before the decision, back to the admin event before that run. Anchored on the run,
+ * not on the decision, because an admin may decide twice in a row (uphold, then restore): the second
+ * decision's previous admin event is the first decision, after which no signal came. The signal
+ * trigger (0034) resets the case's reasons on each reopening, which this window matches.
+ */
+const PRIOR_SIGNALS = `FROM moderation_event w WHERE ${SIGNAL("w")} AND w.createdAt <= ${prior("createdAt")}
+  AND w.createdAt > coalesce((SELECT max(a.createdAt) FROM moderation_event a WHERE a.messageId = ?2 AND a.source = 'ADMIN'
+    AND a.createdAt < (SELECT max(l.createdAt) FROM moderation_event l WHERE ${SIGNAL("l")} AND l.createdAt <= ${prior("createdAt")})), -1)`;
+/**
+ * A case no signal opened was opened by an admin's hide (source ADMIN_HIDE): its reasons and actor are
+ * that hide's, the earliest since the case opened, whatever later decisions said.
+ */
+const opener = (column: "actorId" | "reasons") => `(SELECT o.${column} FROM moderation_event o WHERE o.messageId = ?2
+  AND o.source = 'ADMIN' AND o.action = 'HIDE' AND o.createdAt >= moderation_case.openedAt ORDER BY o.createdAt, o.rowid LIMIT 1)`;
 
 /**
  * POST /api/moderation/:messageId/undo (QA2-11). The channel moderator who hid a message takes it
@@ -279,11 +303,11 @@ export async function undoModeratorHide(ctx: WriteContext, target: MessageTarget
             JOIN moderation_case c ON c.messageId = e.messageId, json_each(e.reasons) j
             WHERE e.messageId = ?2 AND e.action = 'FLAG' AND e.createdAt >= coalesce(c.reopenedAt, c.openedAt)))
           ELSE coalesce((SELECT json_group_array(value) FROM (SELECT DISTINCT j.value FROM moderation_event w, json_each(w.reasons) j
-            WHERE w.id IN (SELECT w.id ${PRIOR_SIGNALS})) HAVING count(*) > 0), ${prior("reasons")}) END,
+            WHERE w.id IN (SELECT w.id ${PRIOR_SIGNALS})) HAVING count(*) > 0), ${opener("reasons")}, ${prior("reasons")}) END,
         reportCount = CASE WHEN ${HAS_SIGNALS} THEN reportCount ELSE (SELECT count(*) ${PRIOR_SIGNALS} AND w.source = 'REPORT') END,
         actorId = CASE WHEN ${HAS_SIGNALS} THEN NULL
           ELSE coalesce((SELECT w.actorId ${PRIOR_SIGNALS} AND w.source = 'MENTOR' AND w.action = 'HIDE' ORDER BY w.createdAt DESC LIMIT 1),
-            CASE WHEN NOT EXISTS (SELECT 1 ${PRIOR_SIGNALS}) THEN ${prior("actorId")} END) END,
+            CASE WHEN NOT EXISTS (SELECT 1 ${PRIOR_SIGNALS}) THEN coalesce(${opener("actorId")}, ${prior("actorId")}) END) END,
         decision = CASE WHEN ${HAS_SIGNALS} THEN NULL ELSE ${prior("action")} END,
         decisionReason = CASE WHEN ${HAS_SIGNALS} THEN NULL ELSE json_extract(${prior("reasons")}, '$[0]') END,
         decidedBy = CASE WHEN ${HAS_SIGNALS} THEN NULL ELSE ${prior("actorId")} END,

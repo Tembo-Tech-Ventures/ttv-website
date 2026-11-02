@@ -265,6 +265,15 @@ describe("races", () => {
     }
   });
 
+  it("admins hear of a report even when its asker withdraws before the notice is written", async () => {
+    const s = setup();
+    const id = await ask(s, {});
+    expect((await s.call("reportMentorRequest", { id, user: PEOPLE.david, body: { reason: "Rude" } })).status).toBe(200);
+    expect((await s.call("withdrawMentorRequest", { id, body: {} })).status).toBe(200);
+    await s.afterResponse();
+    expect(await attention(s, PEOPLE.amina)).toEqual([["moderation_pending", "/admin/moderation?tab=request-notes"]]);
+  });
+
   it("Clef's verdict joins a check the mentor's report opened first, and the mentor gets no new-request notice", async () => {
     const s = setup();
     const response = await s.call("createMentorRequest", {
