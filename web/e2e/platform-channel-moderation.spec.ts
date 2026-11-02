@@ -6,11 +6,12 @@ import { runAxe } from "./platform-axe";
  * DEV-only channel harness, whose fixture API answers as B-2.5's routes are
  * specified in contracts.ts. Unit tests cover the rules and copy; this covers
  * what a browser shows: the flows by pointer and by keyboard, focus, the live
- * region, axe, and the forms at 390 and 1440 px.
+ * region, axe, and the forms at 360, 390 and 1440 px.
  */
 const HARNESS = "/dev/platform-channel";
 const EVIDENCE_DIR = "test-results/evidence/platform-channel-moderation";
 const PHONE = { width: 390, height: 844 };
+const SHORT_PHONE = { width: 360, height: 640 };
 const DESKTOP = { width: 1440, height: 900 };
 const FIRST_PR = "s00000000000000000000407"; // Brian's, in #show-your-work
 const MENTOR_OFFER = "s00000000000000000000408"; // Mercy's, the newest in #show-your-work
@@ -232,13 +233,11 @@ test.describe("moderation in a channel", () => {
   test.describe("on a touch phone, where controls are larger", () => {
     test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
 
-    for (const [persona, kind] of [["wanjiku", "report"], ["david", "hide"]] as const) {
-      test(`the ${kind} form's buttons are in view and nothing floats over them`, async ({ page }) => {
-        await open(page, harness({ persona }));
-        await expectFormUncovered(page, kind);
-        await page.screenshot({ path: `${EVIDENCE_DIR}/${kind}-form-touch-390.png` });
-      });
-    }
+    test("the hide form's buttons are in view and nothing floats over them", async ({ page }) => {
+      await open(page, harness({ persona: "david" }));
+      await expectFormUncovered(page, "hide");
+      await page.screenshot({ path: `${EVIDENCE_DIR}/hide-form-touch-390.png` });
+    });
 
     test("a refusal pushes the buttons down, and they are brought back into view", async ({ page }) => {
       await open(page, harness({ persona: "david" }));
@@ -250,6 +249,40 @@ test.describe("moderation in a channel", () => {
       await expectButtonsUncovered(form, ["Cancel", "Hide message"]);
     });
   });
+
+  // The report form, with touch-sized choices, is taller than the list on these phones: it opens at its start.
+  for (const viewport of [PHONE, SHORT_PHONE]) {
+    const size = `${viewport.width}x${viewport.height}`;
+    test.describe(`on a ${size} touch phone`, () => {
+      test.use({ viewport, hasTouch: true, isMobile: true });
+
+      test("the report form opens at its start, with its first field focused", async ({ page }, testInfo) => {
+        await open(page, harness({ persona: "wanjiku" }));
+        await actions(page, FIRST_PR).click();
+        await page.getByRole("menuitem", { name: "Report…" }).click();
+        const form = page.locator("[data-panel=report]");
+        // Once it has unfolded (it is revealed again then).
+        await form.evaluate((el) => Promise.all(el.getAnimations().map((animation) => animation.finished)));
+
+        const fit = await form.evaluate((el) => {
+          const list = el.closest("[data-channel-scroller]")!.getBoundingClientRect();
+          const box = el.getBoundingClientRect();
+          return { taller: box.height > list.height, startsAtTheTop: box.top >= list.top && box.top - list.top <= 16 };
+        });
+        expect(fit).toEqual({ taller: true, startsAtTheTop: true });
+        await expect(form.locator(".channel-panel__title")).toBeInViewport({ ratio: 1 });
+        await expect(form.getByRole("radio").first()).toBeFocused();
+        await expect(form.getByRole("radio").first()).toBeInViewport({ ratio: 1 });
+        expect(await horizontalOverflow(page)).toBe(0);
+        await page.screenshot({ path: `${EVIDENCE_DIR}/report-form-touch-${size}.png` });
+        await runAxe(page, testInfo, `report-form-touch-${size}`);
+
+        // The buttons are a scroll away, and nothing floats over them there.
+        await form.getByRole("button", { name: "Send report" }).scrollIntoViewIfNeeded();
+        await expectButtonsUncovered(form, ["Cancel", "Send report"]);
+      });
+    });
+  }
 
   test("a mentor who hides a thread reply keeps focus on it, at its moderation note", async ({ page }) => {
     await page.setViewportSize(DESKTOP);

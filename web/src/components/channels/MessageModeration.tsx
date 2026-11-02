@@ -1,10 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { PiCheckCircle, PiEyeSlash, PiFlag } from "react-icons/pi";
+import { PiCheckCircle, PiEyeSlash, PiFlag, PiLockSimple } from "react-icons/pi";
 import type { Message } from "@/lib/platform/contracts";
 import Button from "@/components/platform/ui/Button";
 import type { InPlaceModeration, ModerationActions } from "./actions";
 import {
-  firstName, MAX_REASON, moderationFailure, moderationNotice, REPORT_REASONS, reportReason, type ReportReasonKey,
+  firstName, MAX_REASON, moderationFailure, moderationNotice, REPORT_REASONS, reportReason, reviewState, type ReportReasonKey,
 } from "./channel-format";
 
 // ---- Who may do what, for the messages of one channel view ----
@@ -20,15 +20,12 @@ type ModerationContextValue = {
   canRestore: boolean;
   /** Messages this reader reported in this visit. A report changes nothing else they can see. */
   reported: ReadonlySet<string>;
-  /** The reader's own messages they asked to have reviewed in this visit. */
-  reviewRequested: ReadonlySet<string>;
   markReported: (messageId: string) => void;
-  markReviewRequested: (messageId: string) => void;
 };
 
 const EMPTY: ReadonlySet<string> = new Set();
 const ModerationContext = createContext<ModerationContextValue>({
-  actions: null, canReport: false, canModerate: false, canRestore: false, reported: EMPTY, reviewRequested: EMPTY, markReported: () => {}, markReviewRequested: () => {},
+  actions: null, canReport: false, canModerate: false, canRestore: false, reported: EMPTY, markReported: () => {},
 });
 
 /**
@@ -41,17 +38,14 @@ export function ModerationProvider({ actions, canReport, canModerate, canRestore
   actions: ModerationActions | null; canReport: boolean; canModerate: boolean; canRestore: boolean; children: ReactNode;
 }) {
   const [reported, setReported] = useState<ReadonlySet<string>>(EMPTY);
-  const [reviewRequested, setReviewRequested] = useState<ReadonlySet<string>>(EMPTY);
   const value = useMemo<ModerationContextValue>(() => ({
     actions,
     canReport: canReport && actions !== null,
     canModerate: canModerate && actions !== null,
     canRestore: canModerate && canRestore && actions !== null,
     reported,
-    reviewRequested,
     markReported: (id) => setReported((set) => new Set(set).add(id)),
-    markReviewRequested: (id) => setReviewRequested((set) => new Set(set).add(id)),
-  }), [actions, canReport, canModerate, canRestore, reported, reviewRequested]);
+  }), [actions, canReport, canModerate, canRestore, reported]);
   return <ModerationContext.Provider value={value}>{children}</ModerationContext.Provider>;
 }
 
@@ -67,7 +61,7 @@ export function moderationRights(message: Message, viewerId: string | null, cont
     reported: context.reported.has(message.id),
     hide: open && context.canModerate && !own && !hidden,
     restore: open && context.canRestore && hidden,
-    review: open && own && hidden,
+    review: open && own && reviewState(message) === "available",
   };
 }
 
@@ -76,15 +70,15 @@ export function moderationRights(message: Message, viewerId: string | null, cont
 /**
  * What a flagged or hidden message says about itself, to the people the
  * server tells. The author of a hidden message can ask for a review from
- * here, once; after that the note says it was asked.
+ * here while the server says it is reviewable, once; after that the note says
+ * it was asked, and once an admin's decision is final, that it is.
  */
 export function ModerationNote({ message, viewerId, onAskReview }: { message: Message; viewerId: string | null; onAskReview?: () => void }) {
-  const context = useModeration();
   const notice = moderationNotice(message, viewerId);
   if (!notice) return null;
   const Icon = notice.state === "HIDDEN" ? PiEyeSlash : PiFlag;
-  // The server says so on every read (B-2.5), so it survives a reload; this visit's request shows at once.
-  const asked = message.moderation?.reviewRequested === true || context.reviewRequested.has(message.id);
+  // The server says so on every read, and a confirmed request updates the cached message at once.
+  const review = reviewState(message);
   return (
     // Focusable from script only: where focus lands when a moderator's hide leaves the message with no actions.
     <div className="channel-moderation" data-moderation={notice.state} tabIndex={-1}>
@@ -93,17 +87,22 @@ export function ModerationNote({ message, viewerId, onAskReview }: { message: Me
         <p>
           <strong className="font-semibold text-ink-primary">{notice.title}.</strong> {notice.detail}
         </p>
-        {asked ? (
+        {review === "final" && (
+          <p className="channel-moderation__asked" data-review-final>
+            <PiLockSimple aria-hidden="true" className="size-4 shrink-0" />
+            An admin has looked at this, and the decision is final.
+          </p>
+        )}
+        {review === "requested" && (
           <p className="channel-moderation__asked" tabIndex={-1} data-review-requested>
             <PiCheckCircle aria-hidden="true" className="size-4 shrink-0" />
             Review requested. An admin will look at it again.
           </p>
-        ) : (
-          onAskReview && (
-            <Button size="sm" variant="quiet" className="mt-2" onClick={onAskReview} data-ask-review>
-              Ask for review
-            </Button>
-          )
+        )}
+        {review === "available" && onAskReview && (
+          <Button size="sm" variant="quiet" className="mt-2" onClick={onAskReview} data-ask-review>
+            Ask for review
+          </Button>
         )}
       </div>
     </div>
@@ -157,12 +156,17 @@ function Panel({ title, children, error, submitLabel, submitting, canSubmit, dan
     return () => element.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  // The whole form in view (its title too), and in any case its buttons: a form taller than the list
-  // (touch-sized controls on a phone) shows its end, where the person decides.
-  const reveal = useCallback(() => {
+  // The whole form in view, with its buttons. A form taller than the list it scrolls in (touch-sized
+  // controls on a short phone) shows its start instead, where focus is: its title and first field.
+  const showButtons = useCallback(() => {
     form.current?.scrollIntoView({ block: "nearest" });
     buttons.current?.scrollIntoView({ block: "nearest" });
   }, []);
+  const reveal = useCallback(() => {
+    const element = form.current;
+    if (element && tallerThanItsList(element)) element.scrollIntoView({ block: "start" });
+    else showButtons();
+  }, [showButtons]);
 
   // Start where the person decides, the first field.
   useEffect(() => {
@@ -177,8 +181,8 @@ function Panel({ title, children, error, submitLabel, submitting, canSubmit, dan
 
   // A refusal adds its reason above the buttons and pushes them down: bring them back.
   useEffect(() => {
-    if (error) reveal();
-  }, [error, reveal]);
+    if (error) showButtons();
+  }, [error, showButtons]);
 
   return (
     <form
@@ -210,6 +214,15 @@ function Panel({ title, children, error, submitLabel, submitting, canSubmit, dan
       </div>
     </form>
   );
+}
+
+/** Whether the form, with its scroll margins, cannot fit in the nearest box that scrolls it (or the window). */
+function tallerThanItsList(element: HTMLElement): boolean {
+  let scroller = element.parentElement;
+  while (scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+  const visible = scroller?.clientHeight ?? window.innerHeight;
+  const { scrollMarginTop, scrollMarginBottom } = getComputedStyle(element);
+  return element.offsetHeight + parseFloat(scrollMarginTop) + parseFloat(scrollMarginBottom) > visible;
 }
 
 /** A labelled box for a reason or a note, with the server's limit. */
@@ -367,7 +380,7 @@ export function ModerateForm({ message, action, onDone, onCancel, announce }: Pa
 
 /** The author asks an admin to look again at their hidden message. */
 export function ReviewForm({ message, onDone, onCancel, announce }: PanelProps) {
-  const { actions, markReviewRequested } = useModeration();
+  const { actions } = useModeration();
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -378,7 +391,6 @@ export function ReviewForm({ message, onDone, onCancel, announce }: PanelProps) 
     setError(null);
     try {
       await actions.requestReview(message.id, note.trim() || null);
-      markReviewRequested(message.id);
       announce("Review requested. An admin will look at it again.");
       onDone();
     } catch (failure) {

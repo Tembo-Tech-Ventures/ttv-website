@@ -204,6 +204,7 @@ export function createHarnessClient({ me, channel, root, shareables, now = Date.
           if (!message || message.deleted) return refuse(404, "not_found", "That message is no longer here.");
           if (message.author.id !== me.user.id) return refuse(403, "forbidden", "Only the author can ask for a review.");
           if (message.moderation?.state !== "HIDDEN") return refuse(409, "conflict", "This message isn't hidden.");
+          if (message.moderation.reviewable === false) return refuse(409, "conflict", "An admin's decision on this message is final.");
           // Once per case: asking again changes nothing. Later reads say it was asked (B-2.5).
           if (!message.moderation.reviewRequested) {
             known.set(message.id, { ...message, moderation: { ...message.moderation, reviewRequested: true } });

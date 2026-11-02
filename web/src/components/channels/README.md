@@ -138,11 +138,14 @@ talk to each other, U-2.3's `ChannelFrame` asks; after, the conversation:
   stays up and the report goes to the admin queue, so the reporter sees
   "You reported this" and nothing else changes. The channel's moderators
   (`canModerate`) hide with a reason the author reads; only admins restore.
-  The author of a hidden message can ask for a review once (session-only
-  "Review requested" until the server reports it). Each opens as a form
-  under its message, takes focus, closes on Escape, and returns focus to the
-  message's actions. Nothing is optimistic: a refused step says why and
-  changes nothing.
+  The author of a hidden message can ask for a review once, and only while
+  the server says `moderation.reviewable`; once an admin's decision is final
+  the note says so and offers nothing. An accepted request marks the cached
+  message `reviewRequested`, as later reads do. Each opens as a form under
+  its message, takes focus, closes on Escape, and returns focus to the
+  message's actions; a form taller than its list (touch-sized controls on a
+  short phone) opens at its start. Nothing is optimistic: a refused step
+  says why and changes nothing.
 - **Session clip is offered only in cohort channels** that allow it, never in
   community channels or conversations, whatever a capability says.
 
