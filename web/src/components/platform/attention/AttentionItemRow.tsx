@@ -38,6 +38,7 @@ const KIND_ICON: Record<AttentionKind, IconType> = {
   message_hidden: PiEyeSlash,
   access_request: PiUserPlus,
   access_decided: PiKey,
+  moderation_decided: PiShieldCheck,
 };
 
 type Viewer = { id: string; name: string; src?: string };

@@ -81,7 +81,9 @@ describe("ChatApp", () => {
     const html = renderToStaticMarkup(<ChatApp mockMode />);
     expect(html).toContain("Back to dashboard");
     expect(html).toContain('aria-label="Site"');
-    expect(html).toContain(">Ask AI</h2>");
+    // The assistant is Tembo everywhere (owner decision, 31 Oct 2026), not only in the spaces shell.
+    expect(html).toContain(">Ask Tembo</h2>");
+    expect(html).not.toContain("Ask AI");
   });
 
   it("leaves navigation to the spaces shell and introduces itself as Ask Tembo there", () => {
@@ -121,7 +123,7 @@ describe("ChatApp", () => {
   it("offers example prompts and a capability-led heading when empty", () => {
     const html = renderToStaticMarkup(<ChatApp mockMode />);
 
-    expect(html).toContain("Ask AI");
+    expect(html).toContain("Ask Tembo");
     expect(html).toContain("Ask about your sessions, your program, or anything you need help with.");
     expect(html).toContain("What were the main action items from mentor hours?");
     expect(html).toContain("Your saved chats will appear here");

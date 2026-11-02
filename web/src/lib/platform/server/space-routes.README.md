@@ -32,7 +32,7 @@ preserved. `/dashboard` uses a non-cacheable 302 to the authorized last-space
 cookie or first ordered space, filtered through any restricted identity's
 existing allowlist (onboarding adds to this choice; see below). Explicit authorized URLs win over cookies; forbidden URLs
 return 403 rather than falling back. Applying at `/dashboard/cohort/apply`
-remains possible before cohort membership, as does signed-in Ask AI at
+remains possible before cohort membership, as does signed-in Ask Tembo at
 `/dashboard/cohort/ask`. These are page eligibility exceptions only: they do not
 grant cohort membership, recording access or AI retrieval scope. Existing API
 and data permissions remain authoritative (coordinator decision, 2026-10-31).

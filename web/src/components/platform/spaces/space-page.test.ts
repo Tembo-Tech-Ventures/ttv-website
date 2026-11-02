@@ -11,7 +11,6 @@ vi.mock("@/lib/observability/errors", () => ({ recordError: mocks.recordError })
 import { DASHBOARD_LINKS } from "@/components/shells/DashboardShell";
 import type { StudentNextStep } from "@/lib/student/journey";
 import {
-  inSpacesWords,
   linkAllowed,
   loadCertificates,
   loadOnboarding,
@@ -179,7 +178,7 @@ describe("restricted identities", () => {
   const qa = { qaPersona: "member-noncohort" as keyof typeof DEMO_PERSONAS };
   const sessions: StudentNextStep = {
     title: "Start with your cohort sessions",
-    description: "You are part of the cohort. Revisit each session and use Ask AI as you build with the community.",
+    description: "You are part of the cohort. Revisit each session and use Ask Tembo as you build with the community.",
     detail: "Cohort 05",
     action: { href: "/dashboard/sessions", label: "Watch sessions" },
   };
@@ -206,19 +205,6 @@ describe("restricted identities", () => {
     expect(forFixture).not.toContain("/dashboard/profile");
     expect(forFixture.every((href) => linkAllowed(fixture, href))).toBe(true);
     expect(restrictedHrefs(qa, hrefs)!.every((href) => linkAllowed(qa, href))).toBe(true);
-  });
-});
-
-describe("inSpacesWords", () => {
-  it("calls the assistant Ask Tembo, as the shell does, and changes nothing else", () => {
-    const step: StudentNextStep = {
-      title: "Start with your cohort sessions",
-      description: "Revisit each session and use Ask AI as you build with the community.",
-      detail: null,
-      action: { href: "/dashboard/sessions", label: "Watch sessions" },
-    };
-    expect(inSpacesWords(step)).toEqual({ ...step, description: "Revisit each session and use Ask Tembo as you build with the community." });
-    expect(step.description).toContain("Ask AI");
   });
 });
 

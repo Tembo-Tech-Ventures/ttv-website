@@ -4,7 +4,7 @@ import { hasDiscoveryAccess, dashboardNextStep } from "@/lib/dashboard-presentat
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
 import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import OnboardingNotices from "@/components/platform/onboarding/OnboardingNotices.astro";
-import { inSpacesWords, resolveSpacePage, restrictedNextStep, restrictionsFor } from "@/components/platform/spaces/space-page";
+import { resolveSpacePage, restrictedNextStep, restrictionsFor } from "@/components/platform/spaces/space-page";
 import { canonicalSpacePath } from "@/lib/platform/server/space-routes";
 import Card from "@/components/common/Card.astro";
 import Button from "@/components/common/Button.astro";
@@ -29,7 +29,7 @@ const spaces = await resolveSpacePage(Astro.locals, "cohort");
 const { channels, shortcuts } = spaces ? await loadChannelShortcuts(spaces) : { channels: undefined, shortcuts: null };
 // Restricted synthetic identities (QA personas, staging fixtures) are never offered a step they cannot open.
 const allowedStep = restrictedNextStep(restrictionsFor(Astro.locals), proposedStep);
-const nextStep = spaces ? inSpacesWords(allowedStep) : allowedStep;
+const nextStep = allowedStep;
 // Link straight to the step's space path rather than through its redirect.
 const nextStepHref = spaces ? canonicalSpacePath(nextStep.action.href) ?? nextStep.action.href : nextStep.action.href;
 const hasVisitedDashboard =

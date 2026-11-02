@@ -21,13 +21,18 @@ interface MessageState {
   caseState: "PENDING" | "DECIDED" | null; source: ModerationSource | null;
   /** When the case last opened: its latest reopening, else its first opening. Each opening is a new notice. */
   openedAt: number | null;
-  reviewRequestedAt: number | null; decision: "HIDE" | "RESTORE" | "KEEP" | null;
+  reviewRequestedAt: number | null; decision: "HIDE" | "RESTORE" | "KEEP" | null; decidedAt: number | null;
+  /** The decision's own audit row (the case's latest admin event): the state it found, and who made it. */
+  decidedFrom: "VISIBLE" | "FLAGGED" | "HIDDEN" | null; decidedBy: string | null;
 }
 
 async function messageState(context: AttentionProducerContext, messageId: string): Promise<MessageState | null> {
   return context.db.prepare(`SELECT m.id, m.parentId, m.authorKind, m.authorId, m.body, m.moderationState, m.moderationReasons,
-      m.hiddenAt, m.hiddenBy, m.deletedAt, m.channelId, ch.kind, ch.slug, c.state AS caseState, c.source, coalesce(c.reopenedAt, c.openedAt) AS openedAt, c.reviewRequestedAt, c.decision
+      m.hiddenAt, m.hiddenBy, m.deletedAt, m.channelId, ch.kind, ch.slug, c.state AS caseState, c.source, coalesce(c.reopenedAt, c.openedAt) AS openedAt,
+      c.reviewRequestedAt, c.decision, c.decidedAt, d.fromState AS decidedFrom, d.actorId AS decidedBy
     FROM channel_message m JOIN channel ch ON ch.id = m.channelId LEFT JOIN moderation_case c ON c.messageId = m.id
+      LEFT JOIN moderation_event d ON d.id = (SELECT e.id FROM moderation_event e WHERE e.messageId = m.id AND e.source = 'ADMIN'
+        AND e.createdAt = c.decidedAt ORDER BY e.rowid DESC LIMIT 1)
     WHERE m.id = ?1`).bind(messageId).first<MessageState>();
 }
 
@@ -47,6 +52,23 @@ const HIDDEN_SUMMARY = {
   moderator: (slug: string) => `A moderator hid your message in #${slug}. You can ask for a review.`,
   admin: (slug: string) => `A moderator hid your message in #${slug}.`,
 };
+/**
+ * An admin's decision, told to the author only when they knew of the case (B-3.2, QA2-11): the
+ * message was hidden (restored, or kept hidden) or flagged where they could see it (kept as fine). A
+ * report alone changes nothing the author sees, so its outcome stays unsaid too, and an admin's own
+ * hide already has its hidden notice.
+ */
+const DECIDED_SUMMARY = {
+  RESTORE: (slug: string) => `An admin reviewed your message in #${slug} and restored it.`,
+  KEEP: (slug: string) => `An admin reviewed your message in #${slug}. It stays as it is.`,
+  HIDE: (slug: string) => `An admin reviewed your message in #${slug}. It stays hidden.`,
+};
+function decidedNotice(message: MessageState): keyof typeof DECIDED_SUMMARY | null {
+  if (message.caseState !== "DECIDED" || message.decision === null || message.decidedAt === null || message.decidedFrom === null) return null;
+  if (message.authorKind !== "USER" || message.authorId === null || message.deletedAt !== null || message.decidedBy === message.authorId) return null;
+  const knew = message.decidedFrom === "HIDDEN" || (message.decision === "KEEP" && message.decidedFrom === "FLAGGED");
+  return knew ? message.decision : null;
+}
 const PENDING_SUMMARY: Record<ModerationSource, (slug: string) => string> = {
   AI_FLAG: (slug) => `A message in #${slug} was flagged.`,
   REPORT: (slug) => `A message in #${slug} was reported.`,
@@ -56,9 +78,10 @@ const PENDING_SUMMARY: Record<ModerationSource, (slug: string) => string> = {
 
 /**
  * After any moderation change to a message: its author hears that it was hidden (once per hide,
- * without who hid it), and every admin but the author hears of an open case (once per case, and
- * again when the author asks for a review). An admin's own hide is final, so its notice offers no
- * review. Direct conversations have no moderators and get neither.
+ * without who hid it) and what an admin decided about a case they knew of (once per decision,
+ * DECIDED_SUMMARY), and every admin but the author hears of an open case (once per case, and again
+ * when the author asks for a review). An admin's own hide is final, so its notice offers no review.
+ * Direct conversations have no moderators and get none of these.
  */
 export function moderationAttention(context: AttentionProducerContext, messageId: string) {
   return bestEffort(async () => {
@@ -72,6 +95,11 @@ export function moderationAttention(context: AttentionProducerContext, messageId
       const by = message.caseState === "DECIDED" && message.decision === "HIDE" ? "admin" : message.hiddenBy === null ? "automatic" : "moderator";
       items.push({ ...messagePlace(message), userId: message.authorId, actorId: null, kind: "message_hidden",
         eventKey: JSON.stringify(["message_hidden", message.id, message.hiddenAt]), summary: HIDDEN_SUMMARY[by](message.slug) });
+    }
+    const decided = decidedNotice(message);
+    if (decided !== null && message.authorId !== null) {
+      items.push({ ...messagePlace(message), userId: message.authorId, actorId: null, kind: "moderation_decided",
+        eventKey: JSON.stringify(["moderation_decided", message.id, message.decidedAt]), summary: DECIDED_SUMMARY[decided](message.slug) });
     }
     if (message.caseState === "PENDING" && message.source !== null) {
       const { results: admins } = await context.db.prepare(`SELECT DISTINCT ur.userId FROM UserRoles ur JOIN Roles r ON r.id = ur.roleId

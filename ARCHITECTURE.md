@@ -133,7 +133,7 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/admin/feedback/themes` | Feedback themes with agreement stats; `[id]` to plan, ship or decline | ADMIN |
 | `/certificate/[id]` | Certificate display | None |
 | `/api/auth/[...all]` | better-auth API handler | N/A |
-| `/api/chat` | Ask Tembo question (JSON, same-origin). A new conversation is saved only together with its first answer, in one D1 batch, so a failed request leaves nothing in Recent. Only a signed-out request gets `401` (body `{ "error": "Unauthorized" }`), so clients can offer "sign in again" on the status alone | Session |
+| `/api/chat` | Ask Tembo question (JSON, same-origin); Tembo reads the sessions of the caller's cohorts (`capabilitiesFor`), every cohort's for staff. A new conversation is saved only together with its first answer, in one D1 batch, so a failed request leaves nothing in Recent. Only a signed-out request gets `401` (body `{ "error": "Unauthorized" }`), so clients can offer "sign in again" on the status alone | Session |
 | `/api/admin/import` | Data import API | ADMIN |
 | `/api/feedback` | Feedback widget submission (multipart, same-origin) | Session |
 | `/api/feedback/attachments/[id]` | Feedback screenshot (author or admin only) | Session |
@@ -149,6 +149,7 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/api/messages/[id]/tembo-feedback` | "helpful" or "not quite" on a Tembo answer (POST), one per person and answer; flags `channels` and `tembo_channels` | Session, or a `channels:write` token |
 | `/api/messages/[id]/report`, `/review` | Report a message, once per person (POST); the author of a hidden message asks for a review (POST); flag `channels` | Session, or a `channels:read` (reads) or `channels:write` (writes) token |
 | `/api/moderation/[messageId]` | Hide (the channel's moderators and admins), restore or keep "fine as is" (admins) (POST); flag `channels` | Session; no personal access tokens (admin tokens use `/api/mcp`) |
+| `/api/moderation/[messageId]/undo` | The moderator who hid a message takes the hide back while no admin has decided; the case keeps its other flags and reports, or closes (POST); flag `channels` | Session; no personal access tokens |
 | `/api/moderation/queue` | The moderation queue: one case per message, with evidence, review request and decision (GET); flag `channels` | ADMIN; no personal access tokens (admin tokens use `/api/mcp`) |
 | `/api/mentors` | Listed mentors with their capacity this Africa/Nairobi month (GET, `?area&format&available`); flag `mentor_requests` (see `web/src/lib/mentoring/README.md`) | Session; no personal access tokens |
 | `/api/mentor-requests` | The caller's requests sent or received (GET `?as=requester\|mentor`); ask a mentor for time (POST), one waiting request per mentor, within the mentor's monthly spots; `[id]` (GET) and `[id]/accept`, `/redirect`, `/decline`, `/withdraw` (POST); accepting opens a direct conversation with the note and work in it; flag `mentor_requests` | Session; its two parties only; no personal access tokens |

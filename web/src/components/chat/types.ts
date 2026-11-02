@@ -1,4 +1,4 @@
-/** Shared shapes for the Ask AI chat UI and the endpoints that feed it. */
+/** Shared shapes for the Ask Tembo chat UI and the endpoints that feed it. */
 
 export interface Citation {
   sourceNumber?: number;

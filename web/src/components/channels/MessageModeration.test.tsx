@@ -267,7 +267,9 @@ describe("hiding, for the channel's moderators, and restoring, for admins", () =
     // What happens next, and where the outcome shows (QA2-11).
     expect(note?.textContent).toBe(
       "Hidden from members: Off-topic for this channel. Moderators can still see it. An admin looks at every hide, and Brian can ask for a review unless an admin made or upheld the hide. "
-      + "If an admin restores it, members see it here again.",
+      + "If an admin restores it, members see it here again."
+      // Until an admin decides, the hide is the mentor's to take back.
+      + "Undo hide",
     );
     expect(announcer()).toBe("Message hidden from members. An admin will look at it.");
     expect(document.activeElement?.getAttribute("aria-label")).toMatch(/^Actions for Brian Kiprop's message at /);
@@ -276,6 +278,56 @@ describe("hiding, for the channel's moderators, and restoring, for admins", () =
     expect(names).not.toContain("Hide from members…");
     expect(names).not.toContain("Restore for members…");
     expect(names).not.toContain("Congrats");
+  });
+
+  /** Hide firstPr as the mounted moderator, with a reason. */
+  async function hideFirstPr() {
+    await click(await menuItem(messages.firstPr.id, "Hide from members…"));
+    await typeInto($<HTMLTextAreaElement>("[data-panel=hide] textarea")!, "Off-topic for this channel");
+    await click($("[data-panel=hide] button[type=submit]"));
+    await act(frame);
+  }
+
+  it("lets the mentor who hid a message take it back, until an admin decides (QA2-11)", async () => {
+    const { client } = await mount(david);
+    await hideFirstPr();
+    const undo = $<HTMLButtonElement>("[data-moderation=HIDDEN] [data-undo-hide]", article(messages.firstPr.id))!;
+    expect(undo.textContent).toBe("Undo hide");
+    await click(undo);
+    await act(frame);
+    expect(client.moderation()).toEqual([
+      { kind: "hide", messageId: messages.firstPr.id, reason: "Off-topic for this channel" },
+      { kind: "undo", messageId: messages.firstPr.id },
+    ]);
+    expect($("[data-moderation]", article(messages.firstPr.id))).toBeNull();
+    expect(announcer()).toBe("Hide undone. Members can see the message again.");
+    expect(document.activeElement?.getAttribute("aria-label")).toMatch(/^Actions for Brian Kiprop's message at /);
+    // Visible again, so it can be hidden again.
+    expect(await menuNames(messages.firstPr.id)).toContain("Hide from members…");
+  });
+
+  it("offers no undo where the server says the hide can't be taken back: an admin's own hide, or someone else's", async () => {
+    await mount(amina);
+    await hideFirstPr();
+    expect($("[data-undo-hide]", article(messages.firstPr.id))).toBeNull();
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await mount(david);
+    // The fixture's hidden message was hidden by someone else: the server says nothing about undoing it.
+    expect($("[data-moderation=HIDDEN]", article(messages.hidden.id))).not.toBeNull();
+    expect($("[data-undo-hide]", article(messages.hidden.id))).toBeNull();
+  });
+
+  it("keeps the message hidden and says why when the server refuses the undo", async () => {
+    let refuse = false;
+    await mount(david, {
+      failure: (request) => (refuse && request.url.endsWith("/undo") ? { status: 409, data: { error: { code: "conflict", message: "No" } } } : undefined),
+    });
+    await hideFirstPr();
+    refuse = true;
+    await click($("[data-undo-hide]", article(messages.firstPr.id)));
+    expect(announcer()).toBe("An admin has already decided on this message, or it has changed. Close this and look again.");
+    expect($("[data-moderation=HIDDEN] [data-undo-hide]", article(messages.firstPr.id))).not.toBeNull();
   });
 
   it("lets an admin restore a hidden message with a reason", async () => {
@@ -448,6 +500,16 @@ describe("createModerationActions", () => {
     expect(seen).toEqual([{ method: "POST", path: `/api/moderation/${messages.firstPr.id}`, body: { action: "hide", reason: "Off-topic" } }]);
     expect(update).toHaveBeenCalledWith([hidden]);
     expect(result).toEqual(hidden);
+  });
+
+  it("takes a hide back through its own route, with no body, and replaces the cached copy with the confirmed one", async () => {
+    const visible: Message = { ...messages.firstPr, moderation: { state: "VISIBLE", reasons: [] } };
+    const { api, seen } = client(() => ({ data: visible }));
+    const update = vi.fn();
+    const result = await createModerationActions({ store: { peek: () => undefined, update }, api }).undoHide(messages.firstPr.id);
+    expect(seen).toEqual([{ method: "POST", path: `/api/moderation/${messages.firstPr.id}/undo`, body: {} }]);
+    expect(update).toHaveBeenCalledWith([visible]);
+    expect(result).toEqual(visible);
   });
 
   it("asks for a review through B-2.5's route, with the note only when there is one", async () => {

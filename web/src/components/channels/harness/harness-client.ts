@@ -33,7 +33,8 @@ export type HarnessClient = {
 export type ModerationRecord =
   | { kind: "report"; messageId: string; reason: string }
   | { kind: "hide" | "restore" | "keep"; messageId: string; reason: string }
-  | { kind: "review"; messageId: string; note: string | null };
+  | { kind: "review"; messageId: string; note: string | null }
+  | { kind: "undo"; messageId: string };
 
 type HarnessOptions = {
   me: Me;
@@ -263,10 +264,24 @@ export function createHarnessClient({ me, channel, root, shareables, moments, no
           if ((action === "hide") === hidden) return refuse(409, "conflict", "That message has already changed.");
           const updated: Message = {
             ...message,
-            moderation: action === "hide" ? { state: "HIDDEN", reasons: [reason] } : { state: "VISIBLE", reasons: [] },
+            // A moderator's own hide stays theirs to take back until an admin decides; an admin's is final.
+            moderation: action === "hide" ? { state: "HIDDEN", reasons: [reason], undoable: !me.capabilities.isAdmin } : { state: "VISIBLE", reasons: [] },
           };
           known.set(message.id, updated);
           records.push({ kind: action, messageId: message.id, reason });
+          return { data: updated };
+        },
+      },
+      {
+        ...ROUTES.undoModerationHide,
+        reply: ({ params }) => {
+          const message = known.get(params.messageId);
+          if (!message || message.deleted) return refuse(404, "not_found", "That message is no longer here.");
+          if (message.moderation?.state !== "HIDDEN") return refuse(409, "conflict", "This message isn't hidden.");
+          if (message.moderation.undoable !== true) return refuse(403, "forbidden", "Only the moderator who hid it can take the hide back.");
+          const updated: Message = { ...message, moderation: { state: "VISIBLE", reasons: [] } };
+          known.set(message.id, updated);
+          records.push({ kind: "undo", messageId: message.id });
           return { data: updated };
         },
       },

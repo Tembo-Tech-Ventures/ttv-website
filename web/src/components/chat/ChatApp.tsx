@@ -29,7 +29,7 @@ const DESKTOP_QUERY = "(min-width: 64rem)";
 /**
  * Links back into the rest of the dashboard. Taken from the shell this route no
  * longer renders, so nothing — Logout in particular — becomes unreachable just
- * because the user is on the chat page. "Ask AI" is dropped as the current page.
+ * because the user is on the chat page. "Ask Tembo" is dropped as the current page.
  */
 export function getAppNav(
   visibleLinkIds: StudentDashboardLinkId[],
@@ -78,7 +78,7 @@ interface ChatAppProps {
 }
 
 /**
- * The Ask AI page.
+ * The Ask Tembo page.
  *
  * Layout contract, which the rest of the components depend on: this renders
  * inside `ImmersiveLayout`, a container of definite height that cannot scroll. The
@@ -528,7 +528,7 @@ export default function ChatApp({
           conversationEpoch={conversationEpoch}
           onPickPrompt={(prompt) => void sendMessage(prompt)}
           suggestions={suggestions}
-          assistantName={inSpace ? "Ask Tembo" : "Ask AI"}
+          assistantName="Ask Tembo"
         />
 
         {/*

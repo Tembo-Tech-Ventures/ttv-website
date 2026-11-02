@@ -164,6 +164,7 @@ deleting your own message and read markers do not.
 | `POST /api/messages/:id/report` | Report a message (B-2.5): once per person, 201 new, 200 repeat |
 | `POST /api/messages/:id/review` | The author of a hidden message asks for a review (B-2.5) |
 | `POST /api/moderation/:messageId` | Hide (channel moderators and admins), restore or keep (admins) (B-2.5) |
+| `POST /api/moderation/:messageId/undo` | The moderator who hid a message takes the hide back while no admin has decided (B-3.2, QA2-11); body `{}` |
 | `GET /api/moderation/queue?state&cursor` | The admin moderation queue (B-2.5); admins only, 403 otherwise |
 | `POST /api/channels/:id/tembo` | Ask Tembo about your own message (B-3.1; `src/lib/tembo/README.md`); also needs `tembo_channels` |
 | `POST /api/messages/:id/tembo-feedback` | "helpful" or "not quite" on a Tembo answer (B-3.1); also needs `tembo_channels` |
@@ -385,8 +386,9 @@ VISIBLE and whole again; a hide follows the hidden rules.
 channel page, every GET mode including `since` and threads, token reads and
 write responses) and search call it, and Tembo's Phase 3 inputs must too, with
 the asking reader's privilege. The spans are recomputed from the detectors on
-each read rather than stored (an isolate keeps the latest 256 masked bodies,
-keyed by their text), so an edit that removes the number unmasks the rest at
+each read rather than stored (an isolate keeps the latest masked bodies, keyed
+by their text, up to `MASK_CACHE_CHARS` characters of keys and values together,
+about 4 MB), so an edit that removes the number unmasks the rest at
 once, and an edit that adds one is masked in the very poll that delivers it.
 Search keeps a match only when every term also matches the masked text, and
 cuts the excerpt from it; such drops happen after the result limit, so a page
@@ -442,6 +444,22 @@ the rest.
   reason the author sees. HIDDEN with `hiddenBy`. A mentor of another cohort
   cannot read the message (404); a cohort mentor in a community channel, or a
   member, is 403. Hiding a hidden message again changes nothing.
+- **Undo** (`POST /api/moderation/:messageId/undo`, B-3.2, QA2-11): the
+  moderator who hid a message (its `hiddenBy`, while they still moderate the
+  channel) takes the hide back while its case waits for an admin. The message
+  returns to the state the hide found (VISIBLE, or FLAGGED with its earlier
+  reasons); a RESTORE with source MENTOR and a fixed reason joins the audit
+  trail, so it is never mistaken for an admin's decision (`ADMIN_KEPT` reads
+  admin events only). The case keeps only its other signals since it opened,
+  flags and reports (source REPORT if there is a report, else AI_FLAG; the
+  hide's moderator and any review request go), or, when the hide was all it
+  had, closes by being removed: there is nothing left to decide.
+  Someone else's hide, an automatic one, or an admin's is 403 (admins restore
+  instead); a hide an admin made or upheld, or any decided case, is 409, as are
+  a message no longer hidden or deleted. `moderation.undoable` says so to that
+  moderator alone on a HIDDEN message (false once it is final). It is 11
+  statements: the four writes go in one batch (SQLite cannot update or delete
+  a case in one statement), and the route is never polled.
 - **Admins have the final say.** They hide (also upholding a moderator's
   hide, or keeping a hidden message hidden: either closes the case), restore
   (only a HIDDEN message that isn't deleted: otherwise 409) or keep ("fine
@@ -486,7 +504,8 @@ the rest.
   400 for a cursor of another state), `countPendingModeration(db)` (the tab
   and sidebar badge; 0 if the read fails) and
   `decideModeration({ db, env }, viewer, { messageId, action, reason })`,
-  which the API route also calls. `viewer` is `{ user, capabilities }`
+  which the API route also calls, and `undoHide(context, viewer, { messageId })`
+  for the undo route. `viewer` is `{ user, capabilities }`
   (`requestCapabilities`). They throw `ChannelError`; the caller owns the
   `channels` flag, sign-in and same-origin checks. Without `notifyLater`,
   `decideModeration` writes the notices before it returns.
@@ -505,6 +524,13 @@ the rest.
 - `message_hidden` to the author, once per hide, never naming who hid it.
   Clef's and a moderator's hides offer a review; an admin's does not. It
   shows only while the message stays hidden.
+- `moderation_decided` to the author, once per admin decision, never naming
+  the admin, only about a case they knew of: a restore or an upheld hide of
+  their hidden message, or a keep of their FLAGGED one. A report alone
+  changes nothing the author sees, so a keep after one says nothing either,
+  and an admin's own hide already has its `message_hidden`. Neutral words:
+  "An admin reviewed your message in #help and restored it." / "… It stays
+  as it is." / "… It stays hidden." It shows while the message is not deleted.
 - `moderation_pending` to every admin but the author, once per case and
   again when the author asks for a review. Links to `/admin/moderation`. It
   shows only while the case is pending.

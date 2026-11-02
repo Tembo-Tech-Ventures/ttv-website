@@ -5,7 +5,7 @@ import { MOCK_LATENCY_MS } from "../src/components/chat/mock-timing";
 const SLOW_LOAD_MS = 1_500;
 
 /**
- * Layout and interaction guarantees for the Ask AI page.
+ * Layout and interaction guarantees for the Ask Tembo page.
  *
  * These run against `/dev/chat-ui`, which renders the real `ChatApp` in the
  * real `ImmersiveLayout` with fixed data — the authenticated `/dashboard/ask` route

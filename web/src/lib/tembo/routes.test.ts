@@ -34,7 +34,8 @@ function databaseFlags(s: TemboFixture, audiences: Record<string, "OFF" | "STAFF
 /** The person's attention list, once everything written so far is inside its snapshot (a millisecond before now). */
 async function attentionOf(s: TemboFixture, userId: string) {
   const [{ latest } = { latest: null }] = s.rows<{ latest: number | null }>("SELECT max(createdAt) AS latest FROM attention_item");
-  while (latest !== null && Date.now() - 1 < latest) await new Promise((resolve) => { setTimeout(resolve, 1); });
+  const inSnapshot = () => latest === null || Date.now() - 1 >= latest;
+  while (!inSnapshot()) await new Promise((resolve) => { setTimeout(resolve, 1); });
   const { items } = await listAttention(s.db, userId, {}, await capabilitiesFor(s.db, { id: userId }));
   return items.map((item) => ({ kind: item.kind, summary: item.summary }));
 }
@@ -450,10 +451,13 @@ describe("a run's time and its claim", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let done = false;
     try {
-      const run = s.afterResponse().then(() => { done = true; });
+      const run = (async () => {
+        await s.afterResponse();
+        done = true;
+      })();
       // The run and the notice need no timers; wait for them on the event loop (setImmediate is not faked).
       for (let turn = 0; turn < 100 && s.rows("SELECT 1 FROM attention_item").length === 0; turn += 1) {
-        await new Promise((resolve) => setImmediate(resolve));
+        await new Promise((resolve) => { setImmediate(resolve); });
       }
       expect(answers(s)).toHaveLength(1);
       expect(s.rows("SELECT kind FROM attention_item WHERE kind = 'tembo_answer'")).toEqual([{ kind: "tembo_answer" }]);

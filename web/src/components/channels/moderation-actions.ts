@@ -30,6 +30,11 @@ export function createModerationActions({ store, api = createApiClient(), timeou
       store.update([message]);
       return message;
     },
+    async undoHide(messageId) {
+      const message = await api.call(ROUTES.undoModerationHide, { params: { messageId }, body: {}, signal: AbortSignal.timeout(timeoutMs) });
+      store.update([message]);
+      return message;
+    },
     async requestReview(messageId, note) {
       await api.call(ROUTES.requestModerationReview, {
         params: { id: messageId }, body: note === null ? {} : { note }, signal: AbortSignal.timeout(timeoutMs),

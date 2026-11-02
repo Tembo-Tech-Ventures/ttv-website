@@ -9,7 +9,7 @@ import { channelDatabase, post, VIEWER, type ChannelFixture } from "../test-supp
 import { ChannelError } from "../errors";
 import { findChannelById } from "../access";
 import { findMessageTarget } from "../mutations";
-import { decideModeration, REPORT_LIMIT, reportMessage } from "./actions";
+import { decideModeration, REPORT_LIMIT, reportMessage, UNDO_REASON } from "./actions";
 import { FINDING_REASONS, textKey } from "./detectors";
 import { moderationMcpTools } from "./mcp";
 import { countPendingModeration, listModerationQueue, QUEUE_PAGE_SIZE } from "./queue";
@@ -62,6 +62,7 @@ function everyRoute(s: ChannelFixture) {
   return [
     ["reportMessage", { id: theirs, body: { reason: "Spam" } }],
     ["moderateMessage", { id: theirs, body: hide() }],
+    ["undoModerationHide", { id: theirs, body: {} }],
     ["requestModerationReview", { id: own, body: {} }],
     ["listModerationQueue", {}],
   ] as const satisfies readonly (readonly [ChannelOperation, Parameters<ChannelFixture["call"]>[1]])[];
@@ -162,9 +163,9 @@ describe("hiding: who may", () => {
       expect(events(s)).toEqual([]);
       return;
     }
-    // An admin also learns whether the author asked for a review.
+    // An admin also learns whether the author asked for a review; whoever hid it, whether they can take it back.
     expect(Message.parse(response.body).moderation).toEqual({
-      state: "HIDDEN", reasons: ["Harsh, not about the work"], ...source === "ADMIN" ? { reviewRequested: false } : {},
+      state: "HIDDEN", reasons: ["Harsh, not about the work"], ...source === "ADMIN" ? { reviewRequested: false } : {}, undoable: source !== "ADMIN",
     });
     expect(events(s)).toEqual([{ action: "HIDE", source, actorId: VIEWER, fromState: "VISIBLE", toState: "HIDDEN", reasons: '["Harsh, not about the work"]' }]);
     expect(s.database.prepare("SELECT hiddenBy FROM channel_message WHERE id = ?").get(id)).toEqual({ hiddenBy: VIEWER });
@@ -660,6 +661,125 @@ describe("the queue", () => {
   });
 });
 
+describe("undoing a hide (QA2-11)", () => {
+  /** A global mentor (the caller) moderates community channels; Faith is another. */
+  function mentors() {
+    const s = setup({ globalRoles: ["MENTOR"] });
+    grant(s, FAITH, "MENTOR");
+    grant(s, ACHIENG, "ADMIN");
+    s.agree(OTIENO);
+    return s;
+  }
+  const undo = (s: ChannelFixture, id: string, user: string = VIEWER) => s.call("undoModerationHide", { id, user, body: {} });
+  const row = (s: ChannelFixture, id: string) => s.database.prepare(
+    "SELECT moderationState, moderationReasons, hiddenBy, hiddenAt FROM channel_message WHERE id = ?").get(id);
+
+  it("puts a visible message back for everyone, records the undo, and closes a case the hide alone opened", async () => {
+    const s = mentors();
+    const id = s.message("help", { author: OTIENO, body: "A sharp joke" });
+    const hidden = Message.parse((await s.call("moderateMessage", { id, body: hide() })).body);
+    expect(hidden.moderation).toEqual({ state: "HIDDEN", reasons: ["Harsh, not about the work"], undoable: true });
+    await s.afterResponse();
+    const response = await undo(s, id);
+    expect(response.status).toBe(200);
+    expect(Message.parse(response.body).moderation).toEqual({ state: "VISIBLE", reasons: [] });
+    expect(row(s, id)).toEqual({ moderationState: "VISIBLE", moderationReasons: "[]", hiddenBy: null, hiddenAt: null });
+    expect(events(s)).toEqual([
+      { action: "HIDE", source: "MENTOR", actorId: VIEWER, fromState: "VISIBLE", toState: "HIDDEN", reasons: '["Harsh, not about the work"]' },
+      { action: "RESTORE", source: "MENTOR", actorId: VIEWER, fromState: "HIDDEN", toState: "VISIBLE", reasons: JSON.stringify([UNDO_REASON]) },
+    ]);
+    expect(caseOf(s, id)).toBeUndefined();
+    await s.afterResponse();
+    // Members read it again; the author's notice and the admins' queue notice are gone.
+    const page = MessageList.parse((await s.call("listMessages", { id: s.channel("help"), user: FAITH })).body);
+    expect(page.items.find((item) => item.id === id)?.body).toBe("A sharp joke");
+    expect([await attentionOf(s, OTIENO), await attentionOf(s, ACHIENG)]).toEqual([[], []]);
+    // Taking it back is not a decision: the same moderator may hide it again, and that opens a new case.
+    expect((await s.call("moderateMessage", { id, body: hide("Thought again") })).status).toBe(200);
+    expect(caseOf(s, id)).toMatchObject({ state: "PENDING", source: "MENTOR_HIDE", actorId: VIEWER });
+  });
+
+  it("puts a flagged message back as it was, and keeps the case for the flags and reports it had", async () => {
+    const s = mentors();
+    const posted = Message.parse((await s.call("postMessage", { id: s.channel("help"), user: OTIENO, body: post("Call me: 0712 345 678") })).body);
+    const id = posted.id;
+    await s.call("reportMessage", { id, user: ACHIENG, body: { reason: "Sharing a number" } });
+    const before = row(s, id) as { moderationReasons: string };
+    await s.call("moderateMessage", { id, body: hide() });
+    await s.call("requestModerationReview", { id, user: OTIENO, body: { note: "It's my work line." } });
+    expect(caseOf(s, id)).toMatchObject({ source: "MENTOR_HIDE", actorId: VIEWER, review: 1 });
+    expect((await undo(s, id)).status).toBe(200);
+    expect(row(s, id)).toEqual({ moderationState: "FLAGGED", moderationReasons: before.moderationReasons, hiddenBy: null, hiddenAt: null });
+    expect(caseOf(s, id)).toEqual({ state: "PENDING", source: "REPORT", reportCount: 1, actorId: null, decision: null, decidedBy: null, review: 0 });
+    const reasons = s.database.prepare("SELECT reasons FROM moderation_case WHERE messageId = ?").get(id) as { reasons: string };
+    expect(JSON.parse(reasons.reasons)).toEqual([FINDING_REASONS.phone, "Sharing a number"]);
+    expect(events(s).at(-1)).toMatchObject({ action: "RESTORE", source: "MENTOR", fromState: "HIDDEN", toState: "FLAGGED" });
+  });
+
+  it("is only for the moderator who hid it, before any admin decision, on a message still hidden", async () => {
+    const s = mentors();
+    const mine = s.message("help", { author: OTIENO, body: "One" });
+    await s.call("moderateMessage", { id: mine, body: hide() });
+    const refused = async (id: string, user: string, status: number, message: string) => {
+      const response = await undo(s, id, user);
+      expect([response.status, errorOf(response.body).message], `${user} ${id}`).toEqual([status, message]);
+    };
+    // Another moderator, or the admin (who restores instead): not their hide. A member who can't see it: 404.
+    await refused(mine, FAITH, 403, "Only the moderator who hid it can take the hide back.");
+    await refused(mine, ACHIENG, 403, "Only the moderator who hid it can take the hide back.");
+    await refused(mine, OTIENO, 403, "Only this channel's moderators can do that.");
+    await refused(mine, "synthetic-wanjiru", 404, "Message not found.");
+    // An automatic hide has no moderator to take it back.
+    const automatic = s.message("help", { author: OTIENO, state: "HIDDEN" });
+    await refused(automatic, VIEWER, 403, "Only the moderator who hid it can take the hide back.");
+    // An admin upheld it: final.
+    const upheld = s.message("help", { author: OTIENO, body: "Two" });
+    await s.call("moderateMessage", { id: upheld, body: hide() });
+    await s.call("moderateMessage", { id: upheld, user: ACHIENG, body: hide("Upheld") });
+    await refused(upheld, VIEWER, 409, "An admin has already reviewed this message.");
+    // An admin restored it, or the author deleted it.
+    const restored = s.message("help", { author: OTIENO, body: "Three" });
+    await s.call("moderateMessage", { id: restored, body: hide() });
+    await s.call("moderateMessage", { id: restored, user: ACHIENG, body: { action: "restore", reason: "Fine" } });
+    await refused(restored, VIEWER, 409, "This message isn't hidden.");
+    const gone = s.message("help", { author: OTIENO, body: "Four" });
+    await s.call("moderateMessage", { id: gone, body: hide() });
+    await s.call("deleteMessage", { id: gone, user: OTIENO });
+    await refused(gone, VIEWER, 409, "This message was deleted.");
+    // A body is refused, and nothing above wrote an undo.
+    expect((await s.call("undoModerationHide", { id: mine, body: { reason: "x" } })).status).toBe(400);
+    expect(events(s).filter((event) => (event as { action: string }).action === "RESTORE" && (event as { source: string }).source === "MENTOR")).toEqual([]);
+    expect(row(s, mine)).toMatchObject({ moderationState: "HIDDEN", hiddenBy: VIEWER });
+  });
+
+  it("tells only the moderator who hid it whether they still can", async () => {
+    const s = mentors();
+    const id = s.message("help", { author: OTIENO, body: "One" });
+    await s.call("moderateMessage", { id, body: hide() });
+    const moderationFor = async (user: string) =>
+      MessageList.parse((await s.call("listMessages", { id: s.channel("help"), user })).body).items.find((item) => item.id === id)?.moderation;
+    expect(await moderationFor(VIEWER)).toMatchObject({ undoable: true });
+    for (const user of [FAITH, ACHIENG, OTIENO]) expect(await moderationFor(user), `${user}`).not.toHaveProperty("undoable");
+    // Upheld, the hide is the admin's, and final: the moderator can no longer take it back, nor can the admin.
+    await s.call("moderateMessage", { id, user: ACHIENG, body: hide("Upheld") });
+    expect(await moderationFor(VIEWER)).not.toHaveProperty("undoable");
+    expect(await moderationFor(ACHIENG)).toMatchObject({ undoable: false });
+  });
+
+  it("costs 11 statements: the reads every moderation route makes, its four writes in one batch, and the reply", async () => {
+    // Flags, capabilities (3), the message and its channel; the audit row, the message, the case kept
+    // or closed (two statements: SQLite cannot update or delete in one); the message as it is now. A
+    // moderator's own undo, rare and never polled, so one over the routes' usual 10.
+    const s = mentors();
+    s.database.exec("UPDATE feature_flag SET audience = 'ALL' WHERE key = 'channels'");
+    const id = s.message("help", { author: OTIENO, body: "One" });
+    await s.call("moderateMessage", { id, body: hide() });
+    const prepare = vi.spyOn(s.d1, "prepare");
+    expect((await s.call("undoModerationHide", { id, body: {}, env: DATABASE_FLAGS })).status).toBe(200);
+    expect(prepare).toHaveBeenCalledTimes(11);
+  });
+});
+
 describe("attention", () => {
   it("tells the author their message was hidden, offers review, and drops the notice once it is restored", async () => {
     const s = setup({ globalRoles: ["MENTOR"] });
@@ -679,7 +799,49 @@ describe("attention", () => {
     expect((await attentionOf(s, ACHIENG)).map((item) => item.summary)).toContain("The author of a hidden message in #help asked for a review.");
     await s.call("moderateMessage", { id, user: ACHIENG, body: { action: "restore", reason: "Fine" } });
     await s.afterResponse();
-    expect([await attentionOf(s, OTIENO), await attentionOf(s, ACHIENG)]).toEqual([[], []]);
+    // The hidden notice goes; the author hears the outcome instead, without who decided.
+    expect([await attentionOf(s, OTIENO), await attentionOf(s, ACHIENG)]).toEqual([[{ kind: "moderation_decided", space: "community", actor: null,
+      href: `/dashboard/community/c/help?thread=${root}`, summary: "An admin reviewed your message in #help and restored it." }], []]);
+  });
+
+  it("tells the author what an admin decided about a case they knew of, once, and nothing about a report", async () => {
+    const s = setup({ globalRoles: ["MENTOR"] });
+    grant(s, ACHIENG, "ADMIN");
+    s.agree(OTIENO);
+    const decided = async (id: string, action: "hide" | "keep" | "restore", reason = "Checked") => {
+      expect((await s.call("moderateMessage", { id, user: ACHIENG, body: { action, reason } })).status).toBe(200);
+      await s.afterResponse();
+    };
+    const summaries = async () => (await attentionOf(s, OTIENO)).filter((item) => item.kind === "moderation_decided").map((item) => item.summary);
+
+    // Upheld: the moderator's hide stands.
+    const upheld = s.message("help", { author: OTIENO, body: "Harsh words" });
+    await s.call("moderateMessage", { id: upheld, body: hide() });
+    await decided(upheld, "hide", "Upheld");
+    expect(await summaries()).toEqual(["An admin reviewed your message in #help. It stays hidden."]);
+
+    // Kept: flagged where the author could see it.
+    const flagged = Message.parse((await s.call("postMessage", { id: s.channel("help"), user: OTIENO, body: post("Call me: 0712 345 678") })).body);
+    await s.afterResponse();
+    await decided(flagged.id, "keep", "Fine to share here");
+    expect(await summaries()).toEqual(["An admin reviewed your message in #help. It stays as it is.",
+      "An admin reviewed your message in #help. It stays hidden."]);
+
+    // A report the author never saw, then kept: nothing. An admin's own hide: the hidden notice only.
+    const reported = s.message("help", { author: OTIENO, body: "Ordinary words" });
+    await s.call("reportMessage", { id: reported, user: FAITH, body: { reason: "Spam" } });
+    await decided(reported, "keep");
+    const direct = s.message("help", { author: OTIENO, body: "More words" });
+    await decided(direct, "hide", "Off-topic");
+    expect(await summaries()).toHaveLength(2);
+    expect((await attentionOf(s, OTIENO)).filter((item) => item.kind === "message_hidden").map((item) => item.summary))
+      .toEqual(["A moderator hid your message in #help.", "A moderator hid your message in #help."]);
+    // Each decision is told once, and its notices go with the message when it is deleted.
+    await s.call("moderateMessage", { id: upheld, user: ACHIENG, body: { action: "restore", reason: "On reflection, fine" } });
+    await s.afterResponse();
+    expect(await summaries()).toHaveLength(3);
+    await s.call("deleteMessage", { id: upheld, user: OTIENO });
+    expect(await summaries()).toEqual(["An admin reviewed your message in #help. It stays as it is."]);
   });
 
   it("tells admins of a flag, and says an admin's own hide is final", async () => {

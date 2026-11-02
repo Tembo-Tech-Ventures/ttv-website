@@ -118,7 +118,7 @@ export const AttentionKind = z.enum([
   "mention", "reply", "tembo_answer", "mentor_request", "mentor_accepted", "mentor_redirected",
   "mentor_declined", "mentor_withdrawn", "recording_ready", "application_status",
   "work_confirmed", "visitor_message", "opportunity_match", "moderation_pending", "message_hidden",
-  "access_request", "access_decided",
+  "access_request", "access_decided", "moderation_decided",
 ]);
 export type AttentionKind = z.infer<typeof AttentionKind>;
 export const SubjectKind = z.enum([
@@ -271,10 +271,12 @@ export type ModerationState = z.infer<typeof ModerationState>;
  * reviewRequested: on a HIDDEN message, for its author and admins only, whether the author's "Ask for
  * review" is still open. reviewable: on a HIDDEN message, for its author only, whether a review can
  * still be asked for or is pending; false once an admin's decision is final, or the message is deleted.
- * Both are absent for everyone else and on any other state.
+ * Both are absent for everyone else and on any other state. undoable: on a HIDDEN message, for the
+ * moderator who hid it only, whether they can still take the hide back (no admin has decided yet, QA2-11).
  */
 export const MessageModeration = z.object({
   state: ModerationState, reasons: z.array(NonEmptyText), reviewRequested: z.boolean().optional(), reviewable: z.boolean().optional(),
+  undoable: z.boolean().optional(),
 });
 export type MessageModeration = z.infer<typeof MessageModeration>;
 export const ThreadSummary = z.object({ replyCount: Count, participantIds: z.array(Id), lastReplyAt: Timestamp.nullable() });
@@ -392,6 +394,12 @@ export type ModerationQueue = z.infer<typeof ModerationQueue>;
 /** Channel moderators may only hide; admins hide, restore or keep ("fine as is", which also allowlists the text). */
 export const ModerationAction = z.strictObject({ action: ModerationActionKind, reason: NonEmptyText.max(2000) });
 export type ModerationAction = z.infer<typeof ModerationAction>;
+/**
+ * The channel moderator who hid a message takes the hide back, while its case waits for an admin
+ * (QA2-11). An admin's decision is final; admins restore instead. No body.
+ */
+export const UndoModerationHide = z.strictObject({});
+export type UndoModerationHide = z.infer<typeof UndoModerationHide>;
 /** The author of a hidden message asks an admin to look again. */
 export const RequestModerationReview = z.strictObject({ note: NonEmptyText.max(1000).optional() });
 export type RequestModerationReview = z.infer<typeof RequestModerationReview>;
@@ -668,6 +676,7 @@ export const ROUTES = {
   markChannelRead: defineRoute({ method: "POST", path: "/api/channels/:id/read", params: IdParams, body: MarkChannelRead, response: ChannelRead, idempotent: true }),
   listModerationQueue: defineRoute({ method: "GET", path: "/api/moderation/queue", query: ModerationQueueQuery, response: ModerationQueue, idempotent: true }),
   moderateMessage: defineRoute({ method: "POST", path: "/api/moderation/:messageId", params: ModerationParams, body: ModerationAction, response: Message, idempotent: false }),
+  undoModerationHide: defineRoute({ method: "POST", path: "/api/moderation/:messageId/undo", params: ModerationParams, body: UndoModerationHide, response: Message, idempotent: false }),
   requestModerationReview: defineRoute({ method: "POST", path: "/api/messages/:id/review", params: IdParams, body: RequestModerationReview, response: Success, idempotent: true }),
   askTembo: defineRoute({ method: "POST", path: "/api/channels/:id/tembo", params: IdParams, body: TemboAsk, response: TemboResponse, idempotent: true }),
   temboFeedback: defineRoute({ method: "POST", path: "/api/messages/:id/tembo-feedback", params: IdParams, body: TemboFeedback, response: Success, idempotent: true }),

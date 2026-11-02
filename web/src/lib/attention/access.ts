@@ -9,7 +9,8 @@ import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
  * Shared by list/count/read: historical notification delivery never preserves revoked access.
  * Access requests: the requester sees their decision; administrators see a request only while it is
  * still pending, so a request another administrator decided, or its owner withdrew, leaves every bell.
- * Messages (B-2.5): a hidden-message notice while the author's message stays hidden; a moderation
+ * Messages (B-2.5): a hidden-message notice while the author's message stays hidden; an admin's
+ * decision on their message for its author while it is not deleted (B-3.2); a moderation
  * notice while its case is pending, for admins; a mention or Tembo's answer while the message is
  * visible in a channel the person can still read, their own direct conversations included (B-4.1).
  * Mentor requests (B-4.1): each notice to the party it was for, the mentor or the person asking.
@@ -32,6 +33,7 @@ export function attentionAccess(db: Database, userId: string, capabilities: Plat
         .innerJoin(channel, eq(channel.id, channelMessage.channelId))
         .where(and(eq(channelMessage.id, attentionItem.subjectId), sql`${channelMessage.deletedAt} IS NULL`, or(
           and(eq(attentionItem.kind, "message_hidden"), eq(channelMessage.authorId, userId), eq(channelMessage.moderationState, "HIDDEN")),
+          and(eq(attentionItem.kind, "moderation_decided"), eq(channelMessage.authorId, userId)),
           capabilities.isAdmin ? and(eq(attentionItem.kind, "moderation_pending"), exists(db.select({ id: moderationCase.messageId })
             .from(moderationCase).where(and(eq(moderationCase.messageId, channelMessage.id), eq(moderationCase.state, "PENDING"))))) : sql`0`,
           and(inArray(attentionItem.kind, ["mention", "tembo_answer"]), sql`${channelMessage.moderationState} <> 'HIDDEN'`, or(

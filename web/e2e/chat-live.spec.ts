@@ -30,7 +30,7 @@ async function gotoAsk(page: Page) {
   await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
 }
 
-test.describe("authenticated Ask AI page", () => {
+test.describe("authenticated Ask Tembo page", () => {
   const token = process.env.PLAYWRIGHT_AGENT_TOKEN;
   test.skip(!token, "No agent bearer token is configured for this environment.");
   test.use({

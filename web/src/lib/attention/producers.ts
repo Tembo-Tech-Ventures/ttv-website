@@ -24,6 +24,7 @@ const ATTENTION_CATEGORY: Record<AttentionKind, Exclude<AttentionFilter, "all">>
   mentor_declined: "requests", mentor_withdrawn: "requests", access_request: "requests",
   recording_ready: "updates", application_status: "updates", work_confirmed: "updates", visitor_message: "updates",
   opportunity_match: "updates", moderation_pending: "updates", message_hidden: "updates", access_decided: "updates",
+  moderation_decided: "updates",
 };
 
 /** The flags an item about each feature needs, all of them, for its recipient. */

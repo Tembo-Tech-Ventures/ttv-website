@@ -7,7 +7,7 @@ import { recordError, recordErrorInBackground } from "@/lib/observability/errors
 import { moderationAttention, mentionAttention, temboAnswerAttention } from "@/lib/attention/channel-producers";
 import {
   EditMessage, IdParams, MarkChannelRead, MessageListQuery, ModerationAction, ModerationParams, ModerationQueueQuery, PostMessage,
-  ReactToMessage, ReportMessage, RequestModerationReview, ROUTES, ShareablesQuery, Success, TemboAsk, TemboFeedback,
+  ReactToMessage, ReportMessage, RequestModerationReview, ROUTES, ShareablesQuery, Success, TemboAsk, TemboFeedback, UndoModerationHide,
   type Channel, type Message,
 } from "@/lib/platform/contracts";
 import { isFlagEnabled, requireFlag } from "@/lib/platform/server/flags";
@@ -26,7 +26,7 @@ import { findChannelById, listChannelsFor, readMarker } from "./access";
 import { CursorExpiredError, CursorInvalidError } from "./cursor";
 import { listShareables } from "./embeds";
 import { ChannelError, listMessages } from "./messages";
-import { decideModeration, reportMessage, requestModerationReview } from "./moderation/actions";
+import { decideModeration, reportMessage, requestModerationReview, undoHide } from "./moderation/actions";
 import { CHANNEL_CLEF_TIMEOUT_MS, ClefCheckError, clefScreen, type ClefOutcome } from "./moderation/clef";
 import { listModerationQueue } from "./moderation/queue";
 import type { MessageScreen } from "./moderation/screen";
@@ -44,7 +44,8 @@ import {
  * Browser writes must come from the same origin; a token's need no Origin, but one it sends must
  * match. The moderation routes (B-2.5) follow the same rules, except that no token reaches them
  * (admin tokens triage through MCP, moderation/mcp.ts): the queue is for admins only, and a
- * message's moderators hide it (moderation/actions.ts). The Tembo routes (B-3.1, src/lib/tembo) also need
+ * message's moderators hide it, and the one who hid it may take that back until an admin decides
+ * (moderation/actions.ts). The Tembo routes (B-3.1, src/lib/tembo) also need
  * `tembo_channels`, and a post that mentions @tembo asks Tembo after the response when it is on.
  */
 
@@ -53,7 +54,7 @@ type Env = Pick<Cloudflare.Env, "DB" | "DEPLOYMENT_ENVIRONMENT" | "PLATFORM_FLAG
 type Context = Pick<APIContext, "request" | "locals" | "params">;
 export type ChannelOperation = Extract<keyof typeof ROUTES,
   "listChannels" | "listMessages" | "listShareables" | "postMessage" | "editMessage" | "deleteMessage" | "reactToMessage"
-  | "markChannelRead" | "reportMessage" | "requestModerationReview" | "moderateMessage" | "listModerationQueue"
+  | "markChannelRead" | "reportMessage" | "requestModerationReview" | "moderateMessage" | "undoModerationHide" | "listModerationQueue"
   | "askTembo" | "temboFeedback">;
 /**
  * Test seams: the moderation hook, the clock, the code of conduct version, and work after the response
@@ -338,6 +339,12 @@ export async function channelRequest(
         { db: env.DB, env, now, notifyLater: later.moderated }, { user, capabilities }, { ...input, messageId },
       );
       return platformJson(ROUTES.moderateMessage.response.parse(message));
+    }
+    if (operation === "undoModerationHide") {
+      const params = parse(ModerationParams, { messageId: context.params.messageId });
+      parse(UndoModerationHide, await readBody(context.request, SMALL_BYTES));
+      const message = await undoHide({ db: env.DB, env, now, notifyLater: later.moderated }, { user, capabilities }, params);
+      return platformJson(ROUTES.undoModerationHide.response.parse(message));
     }
     const id = parse(IdParams, { id: context.params.id }).id;
     const admitted: Admitted = {

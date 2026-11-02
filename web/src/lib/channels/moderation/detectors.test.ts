@@ -320,7 +320,7 @@ describe("reading text one base character and its marks at a time", () => {
     "l\u0301\u{1D16D}", "l\u{1D16D}", "\u{1D16D}", "e\u0301", "1\uFE0F\u20E3", "a\u00AD", "\uFF10", "\u2013", "x\u{1D167}\u{1D16D}",
   ])("reads %j inside contact details as the whole text normalised at once", (chunk) => {
     for (const text of [`t.me/mgmai${chunk}`, `wanjiku${chunk}@gmail.com`, `0712${chunk}345678`, `wa.me/2547${chunk}12345678 and more`]) {
-      expect(keys(text), JSON.stringify(text)).toEqual(keys(normalised(text)));
+      expect(keys(text), `${JSON.stringify(text)}`).toEqual(keys(normalised(text)));
     }
   });
 });

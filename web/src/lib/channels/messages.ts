@@ -45,6 +45,8 @@ export interface MessageRow {
   reviewRequested: number | null;
   /** 0 or 1 on a HIDDEN message for its author; null otherwise. */
   reviewable: number | null;
+  /** 0 or 1 on a HIDDEN message for the moderator who hid it; null otherwise. */
+  undoable: number | null;
   /** 1 when the viewer reported this message (their own report only), else 0. */
   reportedByMe: number;
   /** On a Tembo answer not deleted, the viewer's own "helpful" or "not quite" (null if none); null otherwise. */
@@ -85,6 +87,10 @@ export const messageColumns = (program: string) => `m.id, m.channelId, m.parentI
     THEN m.deletedAt IS NULL AND NOT ${ADMIN_HID}
       AND coalesce((SELECT c.state FROM moderation_case c WHERE c.messageId = m.id), 'PENDING') = 'PENDING'
   END AS reviewable,
+  CASE WHEN m.moderationState = 'HIDDEN' AND m.hiddenBy = ?2
+    THEN m.deletedAt IS NULL AND NOT ${ADMIN_HID}
+      AND EXISTS (SELECT 1 FROM moderation_case c WHERE c.messageId = m.id AND c.state = 'PENDING')
+  END AS undoable,
   EXISTS (SELECT 1 FROM message_report rp WHERE rp.messageId = m.id AND rp.reporterId = ?2) AS reportedByMe,
   CASE WHEN m.authorKind = 'TEMBO' AND m.deletedAt IS NULL
     THEN (SELECT tf.kind FROM tembo_feedback tf WHERE tf.messageId = m.id AND tf.userId = ?2) END AS temboFeedback,
@@ -193,6 +199,7 @@ export function toMessage(row: MessageRow, ctx: ReadContext): Message {
         state: row.moderationState, reasons,
         ...row.reviewRequested === null ? {} : { reviewRequested: row.reviewRequested === 1 },
         ...row.reviewable === null ? {} : { reviewable: row.reviewable === 1 },
+        ...row.undoable === null || !ctx.channel.capabilities.canModerate ? {} : { undoable: row.undoable === 1 },
       }
       : null,
     thread: row.parentId === null ? threadSummary(row.thread) : { replyCount: 0, participantIds: [], lastReplyAt: null },

@@ -6,8 +6,8 @@ import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "@/lib/db/schema";
 import { resolveOwnedChatSession, saveChatExchange } from "@/lib/chat/sessions";
-import { getAccessibleProgramIds } from "@/lib/recordings/access";
-import { userHasAdminRole } from "@/lib/admin/roles";
+import { capabilitiesFor } from "@/lib/platform/server/capabilities";
+import { privateAskPrompt, privateAskScope, readsRecordings } from "@/lib/tembo/private-ask";
 import { generateToolCompletion, type GatewayMessage } from "@/lib/ai/gateway";
 import { TOOL_DEFINITIONS, executeTool, type ToolContext, type TranscriptSource } from "@/lib/chat/tools";
 
@@ -28,36 +28,6 @@ const MAX_ANSWER_TOKENS = 1200;
 
 function sanitizeModelAnswer(answer: string) {
   return answer.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
-}
-
-function buildSystemPrompt(userName: string, hasRecordings: boolean): string {
-  const base = `You are TTV's AI assistant, helping students, mentors, and staff at Tembo Tech Ventures, a tech training platform focused on developing Africa's tech ecosystem.
-
-You are speaking with ${userName}.
-
-You have tools to look up information. Use them before answering — do not guess.`;
-
-  const transcriptGuidance = hasRecordings
-    ? `
-When answering from session recordings:
-- Cite every substantive claim with inline source markers like [1] or [2] that match the sourceNumber from search results.
-- Synthesize — do not just restate raw transcript snippets.
-- Transcript text may contain speech-to-text errors. Clean up obvious typos in your explanations.
-- If sources lack enough information, say what is missing.
-
-For questions about recent, latest, or specific sessions: call list_recordings first to identify the right recording by date, then use search_transcripts with that recording_id or get_recording_details to read it. Do not rely on search_transcripts alone for time-based questions — semantic search does not understand recency.
-
-When a question goes beyond what the recordings cover (e.g. general programming help), you may answer from your own knowledge but clearly say "This is general guidance, not from your sessions" so the user knows the difference.`
-    : `
-This user does not have access to session recordings yet. You can still help them with:
-- Questions about their application status (use the get_user_context tool)
-- Information about TTV programs (use the get_program_info tool)
-- General programming questions (clearly marked as general knowledge)`;
-
-  return `${base}
-${transcriptGuidance}
-
-Keep answers concise unless the question asks for depth.`;
 }
 
 function buildCitations(sources: TranscriptSource[]) {
@@ -105,13 +75,11 @@ const handleChat: APIRoute = async ({ request, locals }) => {
     message
   );
 
-  const [programIds, isAdmin] = await Promise.all([
-    getAccessibleProgramIds(db, user.id),
-    userHasAdminRole(env.DB, user.id),
-  ]);
-
-  const hasRecordings = programIds.length > 0 || isAdmin;
-  const systemPrompt = buildSystemPrompt(user.name, hasRecordings);
+  // One scope for every read Tembo makes here, the one channels and recordings share (B-3.2).
+  const { cohortIds: programIds, isAdmin } = await capabilitiesFor(db, { id: user.id });
+  const scope = privateAskScope({ cohortIds: programIds, isAdmin });
+  const hasRecordings = readsRecordings(scope);
+  const systemPrompt = privateAskPrompt(user.name, scope);
 
   const toolCtx: ToolContext = {
     env,
