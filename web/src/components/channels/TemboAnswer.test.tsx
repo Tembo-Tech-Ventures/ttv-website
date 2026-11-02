@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Channel, Me } from "@/lib/platform/contracts";
+import type { Channel, Me, MessageList, TemboFeedbackKind } from "@/lib/platform/contracts";
 import { createChannelStore } from "@/lib/platform/client/channel";
 import { createComposer } from "@/lib/platform/client/composer";
 import type { MockOptions } from "@/lib/platform/client/mockTransport";
@@ -24,11 +24,11 @@ const memory = () => {
   };
 };
 
-function setup(me: Me, channel: Channel = community, failure?: MockOptions["failure"]) {
+function setup(me: Me, channel: Channel = community, failure?: MockOptions["failure"], timeoutMs?: number) {
   const initial = channelPage(channel, me);
   const client = createHarnessClient({ me, channel, root: initial, now, failure });
   const store = createChannelStore({ channelId: channel.id, enabled: me.flags.channels, viewerId: me.user.id, initial, api: client.api });
-  const tembo = createTemboStore({ channel: store, usage: me.temboUsage, enabled: me.flags.tembo_channels, api: client.api, now });
+  const tembo = createTemboStore({ channel: store, usage: me.temboUsage, enabled: me.flags.tembo_channels, api: client.api, now, timeoutMs });
   const composer = createComposer({ store, me, api: client.api, now, storage: memory(), onSent: tembo.noticeSent });
   return { client, store, tembo, composer };
 }
@@ -42,9 +42,12 @@ const $ = <T extends Element = HTMLElement>(selector: string) => container.query
 const $$ = (selector: string) => [...container.querySelectorAll<HTMLElement>(selector)];
 const settle = () => act(() => tick(10));
 
-async function mount(me: Me = wanjiku, options: { threadId?: string; failure?: MockOptions["failure"] } = {}) {
-  const wired = setup(me, community, options.failure);
-  const initialThread = options.threadId ? threadPage(community, options.threadId, me) : null;
+async function mount(me: Me = wanjiku, options: {
+  threadId?: string; failure?: MockOptions["failure"]; timeoutMs?: number; thread?: (page: MessageList) => MessageList;
+} = {}) {
+  const wired = setup(me, community, options.failure, options.timeoutMs);
+  const page = options.threadId ? threadPage(community, options.threadId, me) : null;
+  const initialThread = page && options.thread ? options.thread(page) : page;
   await act(async () => root.render(
     <ChannelSurface
       me={me} channel={community} store={wired.store} composer={wired.composer} tembo={wired.tembo} now={FIXTURE_NOW}
@@ -134,6 +137,29 @@ describe("a Tembo answer (U-3.1)", () => {
     expect($("[data-channel-announcer]")?.textContent).toBe("Couldn't save that. Try again.");
   });
 
+  it.each<TemboFeedbackKind>(["helpful", "not_quite"])("starts from the choice the reader saved before (%s), and changes from there", async (saved) => {
+    const threadId = messages.communityAsk.parentId!;
+    const seeded = (page: MessageList) => ({
+      ...page, items: page.items.map((item) => item.id === messages.communityAnswer.id ? { ...item, temboFeedback: saved } : item),
+    });
+    const { client } = await mount(wanjiku, {
+      threadId, thread: seeded,
+      // The thread as the server reads it again, with the reader's saved choice on the answer.
+      failure: (request) => {
+        const query = new URL(request.url).searchParams;
+        return request.method === "GET" && query.get("thread") === threadId && !query.has("since") && !query.has("before")
+          ? { status: 200, data: seeded(threadPage(community, threadId, wanjiku)) } : undefined;
+      },
+    });
+    const pressed = () => answer().querySelector("[aria-pressed=true]")?.getAttribute("data-tembo-feedback");
+    expect(pressed()).toBe(saved);
+    const other = saved === "helpful" ? "not_quite" : "helpful";
+    await act(async () => answer().querySelector<HTMLButtonElement>(`[data-tembo-feedback=${other}]`)!.click());
+    await settle();
+    expect(pressed()).toBe(other);
+    expect(client.tembo().feedback).toEqual([{ messageId: messages.communityAnswer.id, feedback: other }]);
+  });
+
   it("offers no rating while tembo_channels is off", async () => {
     await mount({ ...wanjiku, flags: { ...wanjiku.flags, tembo_channels: false } }, { threadId: messages.communityAsk.parentId! });
     expect(answer()).not.toBeNull();
@@ -203,6 +229,39 @@ describe("asking Tembo from the channel (S-3.1 + U-3.1)", () => {
     fail = false;
     await act(async () => line.querySelector("button")!.click());
     await settle();
+    expect($("[data-tembo-question]")?.dataset.temboQuestion).toBe("pending");
+    expect(client.tembo().asked).toHaveLength(1);
+  });
+
+  it.each([
+    ["Tembo is off in channels", { status: 404, data: { error: { code: "flag_off", message: "Off" } } }, "Tembo isn't available in channels just now."],
+    ["someone else's message, or a read-only channel", { status: 403, data: { error: { code: "forbidden", message: "No" } } },
+      "Tembo answers your own messages, in channels you can post in."],
+    ["a message gone from view", { status: 404, data: { error: { code: "not_found", message: "Gone" } } },
+      "Tembo can't answer this message: it was deleted or hidden, or the thread is closed."],
+    ["a closed thread", { status: 409, data: { error: { code: "conflict", message: "Closed" } } },
+      "Tembo can't answer this message: it was deleted or hidden, or the thread is closed."],
+  ] as const)("refuses %s for good: it says why and offers no Try again", async (_, refusal, copy) => {
+    await mount(wanjiku, { failure: (request) => request.url.endsWith("/tembo") ? refusal : undefined });
+    await send("@tembo are you there?");
+    const line = $("[data-tembo-question=error]")!;
+    expect(line.textContent).toContain(copy);
+    expect(line.textContent).not.toContain("Try again");
+    expect(line.querySelector("button")).toBeNull();
+  });
+
+  it("says when Tembo hasn't answered yet, and Check again asks once more", async () => {
+    const { client } = await mount(wanjiku, { timeoutMs: 20 });
+    await send("@tembo are you there?");
+    await act(() => tick(40));
+    await settle();
+    const line = $("[data-tembo-question=timeout]")!;
+    expect(line.textContent).toContain("Tembo hasn't answered yet.");
+    const check = line.querySelector("button")!;
+    expect(check.textContent).toBe("Check again");
+    await act(async () => check.click());
+    await settle();
+    // Asked once more: the same question, waiting again.
     expect($("[data-tembo-question]")?.dataset.temboQuestion).toBe("pending");
     expect(client.tembo().asked).toHaveLength(1);
   });

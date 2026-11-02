@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { findReadableChannel } from "@/lib/channels/access";
 import { loadChannelPage } from "@/lib/channels/page";
 import { MASKED_CONTACT, MAX_CONTACT_MASKS, Message, MessageList, SearchQuery } from "@/lib/platform/contracts";
@@ -6,7 +6,14 @@ import { capabilitiesFor } from "@/lib/platform/server/capabilities";
 import { searchMessages } from "@/lib/search/messages";
 import { channelDatabase, post, type ChannelFixture } from "../test-support";
 import { contactSpans, FINDING_REASONS } from "./detectors";
-import { bodyForReader, maskSpans } from "./mask";
+import { bodyForReader, MASK_CACHE_CHARS, maskSpans } from "./mask";
+
+// The real detectors, counted: a read served from the mask cache never computes spans again.
+vi.mock("./detectors", async (actual) => {
+  const detectors = await actual<typeof import("./detectors")>();
+  return { ...detectors, contactSpans: vi.fn(detectors.contactSpans) };
+});
+const spansComputed = vi.mocked(contactSpans);
 
 const M = MASKED_CONTACT;
 const flagged = (body: string, reasons: string[] = [FINDING_REASONS.phone]) => ({ body, moderationState: "FLAGGED" as const, reasons });
@@ -47,18 +54,34 @@ describe("contactSpans and maskSpans", () => {
     expect(Message.shape.body.safeParse(masked("a@gmail.com x ".repeat(700).slice(0, 10_000))).success).toBe(true);
   });
 
-  it("masks a page of the longest bodies full of numbers quickly, and every later read from the cache", () => {
+  it("masks a page of the longest bodies full of numbers once, and serves every later read from the cache", () => {
     const bodies = Array.from({ length: 50 }, (_, i) => `${i} call 0712 345 678 or a${i}@gmail.com `.repeat(300).slice(0, 10_000));
-    let start = performance.now();
+    spansComputed.mockClear();
     const first = bodies.map(masked);
-    const cold = performance.now() - start;
-    start = performance.now();
-    const again = bodies.map(masked);
-    const warm = performance.now() - start;
-    expect(again).toEqual(first);
+    expect(spansComputed).toHaveBeenCalledTimes(50);
     expect(first.every((body) => !body.includes("0712"))).toBe(true);
-    // Generous bounds for slow CI machines: about 0.3 s and well under 1 ms here.
-    expect({ cold: cold < 3000, warm: warm < 50 }).toEqual({ cold: true, warm: true });
+    spansComputed.mockClear();
+    expect(bodies.map(masked)).toEqual(first);
+    expect(spansComputed).not.toHaveBeenCalled();
+  });
+
+  it("holds at most MASK_CACHE_CHARS characters, keys and values together, dropping the least recently read", () => {
+    // Each entry is 20,000 characters or more (a 10,000 character body and its mask), so the bound fits fewer than this many.
+    const fits = Math.floor(MASK_CACHE_CHARS / 20_000);
+    const bodies = Array.from({ length: fits + 20 }, (_, i) => `bound ${i} 0712 345 678 `.padEnd(10_000, "x"));
+    const [oldest = "", kept = ""] = bodies;
+    masked(oldest);
+    masked(kept);
+    for (const body of bodies.slice(2)) {
+      masked(body);
+      masked(kept); // Read again and again, so it stays.
+    }
+    spansComputed.mockClear();
+    masked(kept);
+    masked(bodies.at(-1) ?? "");
+    expect(spansComputed).not.toHaveBeenCalled();
+    masked(oldest);
+    expect(spansComputed).toHaveBeenCalledTimes(1);
   });
 
   it("masks only FLAGGED messages with a contact reason, for readers without the privilege", () => {

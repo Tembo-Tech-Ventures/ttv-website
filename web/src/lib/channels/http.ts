@@ -20,13 +20,14 @@ import { acceptAsk } from "@/lib/tembo/ask";
 import { answerAsk } from "@/lib/tembo/answer";
 import { mentionsTembo } from "@/lib/tembo/mention";
 import { gatewayModel, type TemboModel } from "@/lib/tembo/model";
+import { TEMBO_CONFIG } from "@/lib/tembo/config";
 import { askTembo, giveTemboFeedback, type TemboRun } from "@/lib/tembo/routes";
 import { findChannelById, listChannelsFor, readMarker } from "./access";
 import { CursorExpiredError, CursorInvalidError } from "./cursor";
 import { listShareables } from "./embeds";
 import { ChannelError, listMessages } from "./messages";
 import { decideModeration, reportMessage, requestModerationReview } from "./moderation/actions";
-import { ClefCheckError, clefScreen, type ClefOutcome } from "./moderation/clef";
+import { CHANNEL_CLEF_TIMEOUT_MS, ClefCheckError, clefScreen, type ClefOutcome } from "./moderation/clef";
 import { listModerationQueue } from "./moderation/queue";
 import type { MessageScreen } from "./moderation/screen";
 import {
@@ -230,7 +231,7 @@ interface AfterResponse {
   moderated: (messageId: string) => void;
   /** A new post mentions @tembo: ask, then answer when this run is the one that asked. */
   mentioned: (message: Message, channel: Channel) => void;
-  /** Answer an accepted question: Tembo's run, then Clef on the answer and the asker's notice. */
+  /** Answer an accepted question: Tembo's run, then the asker's notice and Clef on the answer. */
   answer: (run: TemboRun) => void;
 }
 
@@ -240,11 +241,14 @@ interface AfterResponse {
  */
 function afterResponse(operation: ChannelOperation, context: Context, env: Env, options: ChannelRequestOptions): AfterResponse {
   const run = (task: () => Promise<void>) => options.defer ? options.defer(task) : waitUntil(context.locals.cfContext, task());
+  const clock = options.now ?? Date.now;
   const attention = { db: env.DB, env };
-  const screen = async (message: Pick<Message, "id" | "body">, channel: Pick<Channel, "id" | "kind">): Promise<ClefOutcome | null> => {
+  const screen = async (
+    message: Pick<Message, "id" | "body">, channel: Pick<Channel, "id" | "kind">, timeoutMs = options.clefTimeoutMs,
+  ): Promise<ClefOutcome | null> => {
     try {
       return await clefScreen(
-        { db: env.DB, ai: env.AI, gatewayName: env.AI_GATEWAY_NAME, timeoutMs: options.clefTimeoutMs, now: options.now },
+        { db: env.DB, ai: env.AI, gatewayName: env.AI_GATEWAY_NAME, timeoutMs, now: options.now },
         { id: message.id, channelId: channel.id, channelKind: channel.kind, body: message.body },
       );
     } catch (error) {
@@ -256,7 +260,8 @@ function afterResponse(operation: ChannelOperation, context: Context, env: Env, 
       return null;
     }
   };
-  const answer = async ({ messageId, claim }: TemboRun) => {
+  /** `started`: when this work after the response began, which TEMBO_CONFIG.afterResponseMs counts from. */
+  const answer = async ({ messageId, claim }: TemboRun, started: number) => {
     const model = options.temboModel ?? gatewayModel(env);
     const result = await answerAsk({ db: env.DB, model, now: options.now, screen: options.screen }, { messageId, claim });
     if (result.status === "failed") {
@@ -267,20 +272,24 @@ function afterResponse(operation: ChannelOperation, context: Context, env: Env, 
     }
     if (result.status !== "answered") return;
     const { answerId, body, channel, flagged } = result;
-    const outcome = await screen({ id: answerId, body }, channel);
+    // The notice first: a few writes, so it is never left for the end of the window. Clef then gets
+    // what is left of the window, at most its own limit; out of time, it fails open and is logged.
     await temboAnswerAttention(attention, answerId);
+    const left = Math.max(0, started + TEMBO_CONFIG.afterResponseMs - clock());
+    const outcome = await screen({ id: answerId, body }, channel, Math.min(options.clefTimeoutMs ?? CHANNEL_CLEF_TIMEOUT_MS, left));
     if (flagged || outcome === "flagged" || outcome === "hidden") await moderationAttention(attention, answerId);
   };
   return {
     mentioned: (message, channel) => run(async () => {
+      const started = clock();
       const userId = message.author.id;
       if (userId === null) return;
       // The same acceptance as the Ask button: idempotent, and counted only if accepted. Out of
       // questions, a mention is not answered; the client learns why by asking (429).
-      const asked = await acceptAsk(env.DB, { messageId: message.id, channelId: channel.id, userId, now: options.now?.() ?? Date.now() });
-      if (asked.status === "run") await answer({ messageId: message.id, claim: asked.claim });
+      const asked = await acceptAsk(env.DB, { messageId: message.id, channelId: channel.id, userId, now: clock() });
+      if (asked.status === "run") await answer({ messageId: message.id, claim: asked.claim }, started);
     }),
-    answer: (ask) => run(() => answer(ask)),
+    answer: (ask) => run(() => answer(ask, clock())),
     written: (message, channel) => run(async () => {
       const outcome = await screen(message, channel);
       if (message.body.includes("@")) await mentionAttention(attention, message.id);

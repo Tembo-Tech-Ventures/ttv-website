@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  Citation, ReactionKind, WebLink,
+  Citation, ReactionKind, TemboFeedbackKind, WebLink,
   type AuthorSummary, type Channel, type Message, type MessageList, type MessageListQuery,
   type ModerationState, type Reaction, type RoleBadge,
 } from "@/lib/platform/contracts";
@@ -47,6 +47,8 @@ export interface MessageRow {
   reviewable: number | null;
   /** 1 when the viewer reported this message (their own report only), else 0. */
   reportedByMe: number;
+  /** On a Tembo answer not deleted, the viewer's own "helpful" or "not quite" (null if none); null otherwise. */
+  temboFeedback: string | null;
 }
 
 /**
@@ -84,6 +86,8 @@ export const messageColumns = (program: string) => `m.id, m.channelId, m.parentI
       AND coalesce((SELECT c.state FROM moderation_case c WHERE c.messageId = m.id), 'PENDING') = 'PENDING'
   END AS reviewable,
   EXISTS (SELECT 1 FROM message_report rp WHERE rp.messageId = m.id AND rp.reporterId = ?2) AS reportedByMe,
+  CASE WHEN m.authorKind = 'TEMBO' AND m.deletedAt IS NULL
+    THEN (SELECT tf.kind FROM tembo_feedback tf WHERE tf.messageId = m.id AND tf.userId = ?2) END AS temboFeedback,
   ${embedAccessColumn(program)}`;
 const MESSAGE_COLUMNS = messageColumns("?3");
 const FROM_MESSAGES = `FROM channel_message m LEFT JOIN "user" u ON u.id = m.authorId`;
@@ -194,6 +198,7 @@ export function toMessage(row: MessageRow, ctx: ReadContext): Message {
     thread: row.parentId === null ? threadSummary(row.thread) : { replyCount: 0, participantIds: [], lastReplyAt: null },
     temboScope: row.authorKind === "TEMBO" ? ctx.channel.kind : null,
     reportedByMe: row.reportedByMe === 1,
+    ...row.authorKind === "TEMBO" ? { temboFeedback: deleted ? null : TemboFeedbackKind.safeParse(row.temboFeedback).data ?? null } : {},
   };
 }
 

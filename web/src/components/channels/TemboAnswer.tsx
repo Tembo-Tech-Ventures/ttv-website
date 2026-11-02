@@ -59,7 +59,8 @@ const FEEDBACK: Record<TemboFeedbackKind, string> = { helpful: "Helpful", not_qu
 export function TemboAnswerFoot({ message }: { message: Message }) {
   const store = useContext(TemboContext);
   const usage = useTemboState((state) => state.usage);
-  const choice = useTemboState((state) => state.feedback[message.id]);
+  // A choice made here wins; until then, the one the server kept for this reader (after a reload, say).
+  const choice = useTemboState((state) => state.feedback[message.id]) ?? message.temboFeedback ?? undefined;
   const saving = useTemboState((state) => state.saving.includes(message.id));
   // Rating needs the island: without JavaScript the buttons would do nothing.
   const [hydrated, setHydrated] = useState(false);

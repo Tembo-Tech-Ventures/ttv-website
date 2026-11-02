@@ -113,11 +113,13 @@ interface Mapped { text: string; from: number[]; to: number[] }
  * character the contact patterns read (rare scripts such as conjoining Hangul jamo may read
  * differently). A run of ASCII that no mark follows is already normal, so it maps one to one
  * without normalising: reads recompute this for flagged messages (mask.ts), and most text is ASCII.
+ * Which alternative matched decides it, never the chunk's last UTF-16 unit, which for a mark outside
+ * the BMP (U+1D16D) is half a surrogate pair.
  */
 function normaliseMapped(body: string): Mapped {
   const mapped: Mapped = { text: "", from: [], to: [] };
-  for (const { 0: chunk, index } of body.matchAll(/[\0-\x7F]+(?!\p{M})|[\s\S]\p{M}*/gu)) {
-    const ascii = chunk.charCodeAt(0) < 0x80 && !/\p{M}/u.test(chunk.slice(-1));
+  for (const { 0: chunk, 1: asciiRun, index } of body.matchAll(/([\0-\x7F]+)(?!\p{M})|[\s\S]\p{M}*/gu)) {
+    const ascii = asciiRun !== undefined;
     const piece = ascii ? chunk : normalise(chunk);
     mapped.text += piece;
     for (let unit = 0; unit < piece.length; unit += 1) {

@@ -290,6 +290,9 @@ export type TemboScope = z.infer<typeof TemboScope>;
 export const MASKED_CONTACT = "[contact details hidden until a moderator checks this message]";
 /** Markers in one body at most: the last one covers the rest of the body. */
 export const MAX_CONTACT_MASKS = 21;
+/** "Helpful" or "not quite" on one of Tembo's answers (POST /api/messages/:id/tembo-feedback). */
+export const TemboFeedbackKind = z.enum(["helpful", "not_quite"]);
+export type TemboFeedbackKind = z.infer<typeof TemboFeedbackKind>;
 export const Message = z.object({
   id: Id, channelId: Id, parentId: Id.nullable(), clientNonce: ClientNonce.nullable(),
   authorKind: AuthorKind, author: AuthorSummary, body: z.string().max(10_000 + MAX_CONTACT_MASKS * MASKED_CONTACT.length),
@@ -299,8 +302,11 @@ export const Message = z.object({
   moderation: MessageModeration.nullable(), thread: ThreadSummary, temboScope: TemboScope.nullable(),
   // The caller's own report only: whether they reported this message, never who else did (QA2-06).
   reportedByMe: z.boolean().optional(),
+  // On Tembo's answers only: the caller's own choice, null until they make one, never anyone else's.
+  temboFeedback: TemboFeedbackKind.nullable().optional(),
 }).refine((m) => !m.deleted || (m.body === "" && m.embeds.length === 0 && m.citations.length === 0),
   "Deleted messages contain no body, embeds or citations")
+  .refine((m) => m.authorKind === "TEMBO" || m.temboFeedback === undefined, "Only Tembo's answers carry the caller's feedback")
   .refine((m) => m.authorKind === "TEMBO" ? m.author.id === null && m.temboScope !== null : m.temboScope === null,
     "Tembo has no user id and must declare its scope");
 export type Message = z.infer<typeof Message>;
@@ -402,8 +408,6 @@ export const TemboAnswer = z.object({ status: z.literal("answer"), message: Mess
 export type TemboAnswer = z.infer<typeof TemboAnswer>;
 export const TemboResponse = z.discriminatedUnion("status", [TemboPending, TemboAnswer]);
 export type TemboResponse = z.infer<typeof TemboResponse>;
-export const TemboFeedbackKind = z.enum(["helpful", "not_quite"]);
-export type TemboFeedbackKind = z.infer<typeof TemboFeedbackKind>;
 export const TemboFeedback = z.strictObject({ feedback: TemboFeedbackKind });
 export type TemboFeedback = z.infer<typeof TemboFeedback>;
 
