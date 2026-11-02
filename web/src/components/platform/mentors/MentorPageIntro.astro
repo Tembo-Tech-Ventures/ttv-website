@@ -1,0 +1,32 @@
+---
+/**
+ * The title and one-line purpose of each mentor connections page: the
+ * screen's one Mattone heading (h1), then what the page is for, in the
+ * community's voice.
+ */
+interface Props {
+  page: "mentors" | "requests" | "availability";
+}
+
+const COPY = {
+  mentors: {
+    title: "Mentors",
+    intro: "Working engineers and alumni who give a little time each month. Ask about something specific: they can accept, point you to someone better placed, or say not this month.",
+  },
+  requests: {
+    title: "Requests",
+    intro: "People asking for your time. Accepting opens a private conversation in Community with the work attached.",
+  },
+  availability: {
+    title: "Availability",
+    intro: "What members read about you, and how much time you give each month. Change it whenever you like.",
+  },
+} as const;
+
+const { title, intro } = COPY[Astro.props.page];
+---
+
+<header class="mb-8 max-w-3xl" data-mentor-page-intro>
+  <h1 class="text-3xl tracking-heading break-words text-ink-primary sm:text-4xl lg:text-5xl">{title}</h1>
+  <p class="mt-3 text-base leading-relaxed text-ink-secondary sm:text-lg">{intro}</p>
+</header>

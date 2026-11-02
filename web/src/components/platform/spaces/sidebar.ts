@@ -6,6 +6,9 @@ import { PARTNER, REQUEST, TAKING_PART } from "@/components/platform/onboarding/
 import { offersCohort, type OnboardingView } from "@/components/platform/onboarding/framing";
 import { CONDUCT_TITLE } from "@/components/channels/conduct";
 import { channelPath, channelPathPrefix } from "@/components/channels/paths";
+import {
+  conversationPath, CONVERSATIONS_PREFIX, MENTOR_AVAILABILITY_PATH, MENTOR_REQUESTS_PATH, MENTORS_PATH, mentorRequestsOpen,
+} from "@/components/platform/mentors/mentor-display";
 
 /**
  * What each space's sidebar lists, as data. The links are the existing pages
@@ -32,7 +35,11 @@ export type SpacePageKey =
   | "feedback"
   | "communityChannel"
   | "cohortChannel"
-  | "conduct";
+  | "conduct"
+  | "mentors"
+  | "mentorRequests"
+  | "mentorAvailability"
+  | "conversation";
 
 export type SidebarIcon =
   | "overview"
@@ -58,7 +65,8 @@ export type SidebarIcon =
   | "institutionRequest"
   | "channel"
   | "cohortChannel"
-  | "conduct";
+  | "conduct"
+  | "conversation";
 
 export interface SidebarItem {
   key: string;
@@ -109,7 +117,10 @@ export interface SidebarFacts {
 }
 
 export interface SidebarChannels {
-  /** Readable channels, in the server's order. Each space lists its own kind; direct conversations wait for Phase 4. */
+  /**
+   * Readable channels, in the server's order. Each space lists its own kind; private conversations
+   * (DIRECT) are listed in Community while mentor requests are open (they are where an accepted request goes).
+   */
   items: readonly Channel[];
   /** The channel being read, marked current. */
   currentId?: string | null;
@@ -137,6 +148,10 @@ export const PAGE_SPACES: Readonly<Record<SpacePageKey, readonly SpaceId[]>> = {
   communityChannel: ["community"],
   cohortChannel: ["cohort"],
   conduct: ["community"],
+  mentors: ["community"],
+  mentorRequests: ["mentoring"],
+  mentorAvailability: ["mentoring"],
+  conversation: ["community"],
 };
 
 export const SPACE_PAGE_PATHS = {
@@ -158,6 +173,11 @@ export const SPACE_PAGE_PATHS = {
   communityChannel: channelPathPrefix("community"),
   cohortChannel: channelPathPrefix("cohort"),
   conduct: CONDUCT_PATH,
+  mentors: MENTORS_PATH,
+  mentorRequests: MENTOR_REQUESTS_PATH,
+  mentorAvailability: MENTOR_AVAILABILITY_PATH,
+  // A conversation page is one of many under this prefix; its own path is conversationPath(channel.id).
+  conversation: CONVERSATIONS_PREFIX,
 } as const satisfies Record<SpacePageKey, string>;
 
 /** What an entry whose page has not opened says, here and on the page it leads to. */
@@ -214,6 +234,28 @@ function channels(facts: SidebarFacts, space: ChannelSpace): SidebarGroupModel[]
   ]);
 }
 
+/**
+ * Private conversations (B-4.1), in Community, while mentor requests are open: each one opened when
+ * a mentor accepted a request, named for the other person. Unread ones are bold with their count.
+ */
+function conversations(facts: SidebarFacts): SidebarGroupModel[] {
+  if (!mentorRequestsOpen(facts.me)) return [];
+  const direct = facts.channels?.items.filter((channel) => channel.kind === "DIRECT") ?? [];
+  return group(facts, "Conversations", direct.map((channel): Entry => {
+    const current = channel.id === facts.channels?.currentId;
+    const unread = current ? 0 : channel.unreadCount;
+    return {
+      key: `conversation-${channel.id}`,
+      href: conversationPath(channel.id),
+      label: channel.name,
+      icon: "conversation",
+      current,
+      emphasis: unread > 0 ? "unread" : "read",
+      ...(unread > 0 ? { count: unread, countLabel: unread === 1 ? "unread message" : "unread messages" } : {}),
+    };
+  }));
+}
+
 function cohort(facts: SidebarFacts): SidebarModel {
   const visible = new Set(facts.visibleLinkIds);
   return {
@@ -239,19 +281,23 @@ function community(facts: SidebarFacts): SidebarModel {
   const framing = facts.onboarding?.framing;
   // Mentors and organisations who did not choose to build and learn are not offered a cohort (onboarding SPEC §3).
   const apply = noCohort && offersCohort(framing);
+  // With mentor requests open, Mentors is the in-app directory, where time can be asked for.
+  const mentors = mentorRequestsOpen(facts.me);
   return {
     title: "Community",
     description: "Builders, alumni and mentors across every cohort.",
     groups: [
       ...group(facts, undefined, [
         { key: "journey", page: "journey", label: framing === "partner" ? PARTNER.ownWork : "Your journey", icon: "journey" },
+        mentors && { key: "mentors", page: "mentors", label: "Mentors", icon: "mentors" },
         noCohort && { key: "ask", page: "ask", label: "Ask Tembo", icon: "tembo" },
       ]),
       ...channels(facts, "community"),
+      ...conversations(facts),
       // The directories are the website's public pages, outside the app: say so before the click.
       ...group(facts, "Public directory", [
         { key: "members", href: "/community/members", label: "Members", icon: "people", publicPage: true },
-        { key: "mentors", href: "/community/mentors", label: "Mentors", icon: "mentors", publicPage: true },
+        !mentors && { key: "mentors", href: "/community/mentors", label: "Mentors", icon: "mentors", publicPage: true },
       ]),
       ...(apply ? group(facts, "Cohorts", [{ key: "apply", page: "apply", label: "Apply to a cohort", icon: "apply" }]) : []),
       // Requests are not tabs: only granted roles get a space. Each opens Account, where it can be withdrawn.
@@ -269,16 +315,29 @@ function community(facts: SidebarFacts): SidebarModel {
 
 function mentoring(facts: SidebarFacts): SidebarModel {
   const awaiting = facts.me.mentoring?.awaitingConfirmation ?? 0;
+  const confirm: Entry = {
+    key: "confirm", page: "confirm", label: "Confirm work", icon: "confirm",
+    // Derived from the Confirm page's own rows, not attention (src/lib/mentoring/README.md).
+    ...(awaiting > 0 ? { count: awaiting, countLabel: "waiting for your confirmation" } : {}),
+  };
+  if (mentorRequestsOpen(facts.me)) {
+    return {
+      title: "Mentoring",
+      description: "Your time, on your terms.",
+      groups: group(facts, undefined, [
+        { key: "mentoring", page: "mentoring", label: "Overview", icon: "overview" },
+        { key: "requests", page: "mentorRequests", label: "Requests", icon: "requests" },
+        confirm,
+        { key: "availability", page: "mentorAvailability", label: "Availability", icon: "availability" },
+      ]),
+    };
+  }
   return {
     title: "Mentoring",
     description: "Confirm the work people share with you.",
     groups: group(facts, undefined, [
       { key: "mentoring", page: "mentoring", label: "Overview", icon: "overview" },
-      {
-        key: "confirm", page: "confirm", label: "Confirm work", icon: "confirm",
-        // Derived from the Confirm page's own rows, not attention (src/lib/mentoring/README.md).
-        ...(awaiting > 0 ? { count: awaiting, countLabel: "waiting for your confirmation" } : {}),
-      },
+      confirm,
       // Requests and availability arrive with mentor requests; the overview says so, in the same words.
       { key: "requests", href: `${SPACE_PATHS.mentoring}#requests`, label: "Requests", icon: "requests", note: NOT_OPEN_YET },
       { key: "availability", href: `${SPACE_PATHS.mentoring}#availability`, label: "Availability", icon: "availability", note: NOT_OPEN_YET },

@@ -1,0 +1,115 @@
+---
+/**
+ * Dev-only harness for mentor connections (U-4.1/S-4.1).
+ *
+ * The real pages are /dashboard/community/mentors, /dashboard/mentoring/requests and
+ * /dashboard/mentoring/availability. This page renders the same islands inside SpacesLayout,
+ * with the real sidebar model, over the stateful mentoring mock, for any synthetic person:
+ *
+ *   ?persona=wanjiku&view=directory&area=Career&format=CALL_30_MIN&available=true&ask=<mentorId>
+ *   &view=requests | availability   the mentor's pages (a persona with Mentoring: david, mercy, samuel)
+ *   &conduct=required               the person has not agreed to how we talk to each other yet;
+ *                                   agreeing posts here and comes back with the drawer open
+ *   &flag=off                       mentor_requests off: these pages do not exist (404)
+ *   &latency=<ms>                   the mock's answer time (default 250)
+ *
+ * Nothing is reachable outside `astro dev`; `e2e/platform-mentors.spec.ts` holds the contract.
+ */
+import type { Me, SpaceId } from "@/lib/platform/contracts";
+import { ROUTES } from "@/lib/platform/contracts";
+import { channelList, FIXTURE_NOW } from "@/lib/platform/fixtures";
+import SpacesLayout from "@/layouts/SpacesLayout.astro";
+import { HARNESS_PERSONAS, isHarnessPersona } from "@/components/platform/shell/harness/personas";
+import { canRenderSpace } from "@/components/platform/shell/access";
+import SpaceSidebar from "@/components/platform/spaces/SpaceSidebar.astro";
+import { spaceSidebar, type SpacePageKey } from "@/components/platform/spaces/sidebar";
+import HarnessMentors from "@/components/platform/mentors/harness/HarnessMentors";
+import MentorPageIntro from "@/components/platform/mentors/MentorPageIntro.astro";
+import { mentorRequestsOpen } from "@/components/platform/mentors/mentor-display";
+import { areaOptions, directoryQuery, parseDirectoryUrl } from "@/lib/platform/client/mentor-directory";
+import { createMentoringMock } from "@/lib/platform/client/mentoring.mock";
+import { CONDUCT_PATH } from "@/lib/platform/server/space-routes";
+import { CONDUCT_VERSION } from "@/lib/channels/conduct";
+
+if (!import.meta.env.DEV) {
+  return new Response("Not found", { status: 404 });
+}
+
+const params = Astro.url.searchParams;
+// Agreeing to the habits from the drawer: as the real page does, record it and come back, drawer open.
+if (Astro.request.method === "POST") {
+  const back = new URL(Astro.url);
+  back.searchParams.set("conduct", "agreed");
+  return Astro.redirect(back.pathname + back.search, 303);
+}
+
+const personaParam = params.get("persona");
+const persona = isHarnessPersona(personaParam) ? personaParam : "wanjiku";
+const base = HARNESS_PERSONAS[persona];
+const me: Me = { ...base, flags: { ...base.flags, mentor_requests: params.get("flag") !== "off" } };
+const view = (["directory", "requests", "availability"] as const).find((v) => v === params.get("view"))
+  ?? (me.spaces.includes("mentoring") ? "requests" : "directory");
+const space: SpaceId = view === "directory" ? "community" : "mentoring";
+if (!mentorRequestsOpen(me) || !canRenderSpace(me, space)) {
+  return new Response("Not found", { status: 404 });
+}
+
+const conductAgreed = params.get("conduct") !== "required";
+const latency = Math.min(5_000, Math.max(0, Number(params.get("latency") ?? 250) || 0));
+const mock = createMentoringMock({ viewer: me.user, conductAgreed });
+const now = FIXTURE_NOW;
+const filters = parseDirectoryUrl(params);
+const page: SpacePageKey = view === "directory" ? "mentors" : view === "requests" ? "mentorRequests" : "mentorAvailability";
+const sidebar = spaceSidebar(space, {
+  me, page, visibleLinkIds: ["home", "apply", "ask", "account", "logout"], unreadLeadCount: 0, certificates: [],
+  channels: { items: channelList.items },
+});
+
+const harness = view === "directory"
+  ? {
+    view, props: await (async () => {
+      const [all, shown, own] = await Promise.all([
+        mock.api.call(ROUTES.listMentors, { query: {} }),
+        mock.api.call(ROUTES.listMentors, { query: directoryQuery(filters) }),
+        mock.api.call(ROUTES.listMentorRequests, { query: { as: "requester" } }),
+      ]);
+      return {
+        me, path: Astro.url.pathname, filters, mentors: all.items, shown: shown.items, areas: areaOptions(all.items, filters.area),
+        ownRequests: own, projects: mock.projects, now,
+        conduct: { version: CONDUCT_VERSION, habitsHref: CONDUCT_PATH, canAgree: true },
+      };
+    })(),
+  } as const
+  : view === "requests"
+    ? {
+      view, props: await (async () => {
+        const [initial, mentors, availability] = await Promise.all([
+          mock.api.call(ROUTES.listMentorRequests, { query: { as: "mentor" } }),
+          mock.api.call(ROUTES.listMentors, { query: {} }),
+          mock.api.call(ROUTES.getMentorAvailability),
+        ]);
+        return { initial, mentors: mentors.items, availability, now };
+      })(),
+    } as const
+    : { view, props: { initial: await mock.api.call(ROUTES.getMentorAvailability), now } } as const;
+
+const spaceHrefs = Object.fromEntries(me.spaces.map((id) => [id, `/dev/platform-shell?persona=${persona}&space=${id}`])) as Record<SpaceId, string>;
+---
+
+<SpacesLayout
+  me={me}
+  space={space}
+  title={view === "directory" ? "Mentors" : view === "requests" ? "Requests" : "Availability"}
+  overlays={[]}
+  harness={{ account: { signOut: { kind: "link", href: "#signed-out", label: "Sign out" }, feedback: false }, spaceHrefs }}
+>
+  <SpaceSidebar slot="sidebar" model={sidebar} />
+  <MentorPageIntro page={view === "directory" ? "mentors" : view} />
+  <HarnessMentors client:load viewer={me.user} conductAgreed={conductAgreed} latencyMs={latency} harness={harness} />
+</SpacesLayout>
+
+<style is:global>
+  astro-dev-toolbar {
+    display: none !important;
+  }
+</style>

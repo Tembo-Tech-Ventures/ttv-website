@@ -1,0 +1,54 @@
+---
+/**
+ * A private conversation's header (U-4.1): who it is with, that only the two
+ * of them read it, and, when a mentor request opened it, which request. The
+ * h1 is Maven Pro, as a channel's is: a name is a label, not the screen's
+ * display moment. The note and the attached work are the conversation's
+ * first message, so the header does not repeat them.
+ */
+import { PiLockSimple } from "react-icons/pi";
+import type { MentorRequest, PersonSummary } from "@/lib/platform/contracts";
+import { Avatar } from "@/components/platform/ui";
+import { CHIP_TONES } from "@/components/platform/ui/tones";
+import { conversationContext, dayPhrase } from "./mentor-display";
+
+interface Props {
+  /** The other member, or null when that account is gone. */
+  counterpart: PersonSummary | null;
+  /** The accepted request that opened it, or null when staff opened it. */
+  request: MentorRequest | null;
+  viewerId: string;
+  /** The conversation's own name, for when the other account is gone. */
+  fallbackName: string;
+  now: number;
+}
+
+const { counterpart, request, viewerId, fallbackName, now } = Astro.props;
+const name = counterpart?.name ?? fallbackName;
+const mentor = counterpart?.roleBadges.some((badge) => badge.kind === "MENTOR") ?? false;
+const badges = counterpart?.roleBadges.filter((badge) => badge.kind !== "AI").map((badge) => badge.label) ?? [];
+const context = request ? conversationContext(request, viewerId) : null;
+---
+
+<header data-conversation-header class="flex flex-col gap-3 border-b border-hairline pb-5 sm:flex-row sm:items-start sm:justify-between">
+  <div class="flex min-w-0 items-center gap-4">
+    {counterpart && <Avatar id={counterpart.id} name={counterpart.name} src={counterpart.avatarUrl ?? undefined} size="lg" mentor={mentor} decorative />}
+    <div class="min-w-0">
+      <h1 class="font-body text-2xl leading-tight font-bold break-words text-ink-primary">{name}</h1>
+      {badges.length > 0 && <p class="mt-0.5 text-sm text-ink-secondary">{badges.join(" · ")}</p>}
+      {
+        context && request && (
+          <p class="mt-1.5 max-w-2xl text-[0.9375rem] leading-snug text-ink-secondary" data-conversation-context>
+            {context} <time datetime={new Date(request.updatedAt).toISOString()}>{dayPhrase(request.updatedAt, now)}</time>.
+          </p>
+        )
+      }
+    </div>
+  </div>
+  <ul class="m-0 flex list-none flex-wrap gap-2 p-0 sm:justify-end" aria-label="About this conversation">
+    <li data-conversation-chip="private" class:list={["inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.8125rem] font-semibold whitespace-nowrap", CHIP_TONES.neutral]}>
+      <PiLockSimple aria-hidden className="size-4 shrink-0" />
+      Private conversation
+    </li>
+  </ul>
+</header>
