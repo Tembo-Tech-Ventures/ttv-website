@@ -98,6 +98,7 @@ export function moderationAttention(context: AttentionProducerContext, messageId
     }
     const decided = decidedNotice(message);
     if (decided !== null && message.authorId !== null) {
+      // access.ts reads decidedAt at $[2] of this key to show only the case's latest decision: keep its place.
       items.push({ ...messagePlace(message), userId: message.authorId, actorId: null, kind: "moderation_decided",
         eventKey: JSON.stringify(["moderation_decided", message.id, message.decidedAt]), summary: DECIDED_SUMMARY[decided](message.slug) });
     }

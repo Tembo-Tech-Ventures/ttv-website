@@ -802,6 +802,22 @@ describe("undoing a hide (QA2-11)", () => {
     expect(kept).toMatchObject({ source: "REPORT", reasons: '["Spam"]', actorId: null, decision: "KEEP" });
     await hideAndUndo(undone, third);
     expect(full(undone, third)).toEqual(kept);
+
+    // An undo takes back only its own hide: the mentor's earlier hide, which an admin decided, stands.
+    const earlier = mentors();
+    const fourth = earlier.message("help", { author: OTIENO, body: "Harsh again" });
+    const step = (body: unknown, at: number, user?: string) => earlier.call("moderateMessage", { id: fourth, user, body, now: () => at });
+    await step(hide("H1"), 1_000);
+    await step({ action: "restore", reason: "D1" }, 2_000, ACHIENG);
+    expect((await earlier.call("editMessage", { id: fourth, user: OTIENO, body: { body: "Edited once" }, now: () => 2_500 })).status).toBe(200);
+    await step(hide("H2"), 3_000);
+    expect((await earlier.call("undoModerationHide", { id: fourth, body: {}, now: () => 3_500 })).status).toBe(200);
+    await step(hide("AdminH"), 4_000, ACHIENG);
+    await step({ action: "restore", reason: "D3" }, 4_500, ACHIENG);
+    const twice = full(earlier, fourth);
+    expect(twice).toMatchObject({ source: "MENTOR_HIDE", reasons: '["H1"]', actorId: VIEWER, decision: "RESTORE", decisionReason: "D3" });
+    await hideAndUndo(earlier, fourth);
+    expect(full(earlier, fourth)).toEqual(twice);
   });
 
   it("is only for the moderator who hid it, before any admin decision, on a message still hidden", async () => {

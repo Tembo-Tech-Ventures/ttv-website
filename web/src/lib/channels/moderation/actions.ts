@@ -227,13 +227,16 @@ const PRIOR = `(SELECT e.id FROM moderation_event e WHERE e.messageId = ?2 AND e
 const prior = (column: "action" | "actorId" | "reasons" | "createdAt") => `(SELECT p.${column} FROM moderation_event p WHERE p.id = ${PRIOR})`;
 /**
  * A people's or detectors' event on this case (?2 the message) since it first opened, alias `alias`,
- * that the decision saw standing: a moderator's hide they took back before the decision (their undo,
- * the only RESTORE a moderator makes) is not one.
+ * that the decision saw standing: a moderator's hide they took back before the decision is not one.
+ * An undo (the only RESTORE a moderator makes) takes back the latest hide before it, as LAST_HIDE
+ * reads it, and only that one: an earlier hide by the same moderator that an admin decided stands.
  */
 const SIGNAL = (alias: string) => `${alias}.messageId = ?2 AND ${alias}.source <> 'ADMIN' AND ${alias}.action IN ('FLAG','HIDE')
   AND ${alias}.createdAt >= moderation_case.openedAt
   AND NOT (${alias}.action = 'HIDE' AND EXISTS (SELECT 1 FROM moderation_event u WHERE u.messageId = ?2 AND u.source = 'MENTOR'
-    AND u.action = 'RESTORE' AND u.actorId = ${alias}.actorId AND u.createdAt >= ${alias}.createdAt AND u.createdAt <= ${prior("createdAt")}))`;
+    AND u.action = 'RESTORE' AND u.actorId = ${alias}.actorId AND u.createdAt <= ${prior("createdAt")}
+    AND ${alias}.id = (SELECT h.id FROM moderation_event h WHERE h.messageId = ?2 AND h.action = 'HIDE'
+      AND h.createdAt <= u.createdAt AND h.rowid < u.rowid ORDER BY h.createdAt DESC, h.rowid DESC LIMIT 1)))`;
 /**
  * The signals that case had decided: the run of people's and detectors' events that ends with the
  * last one at or before the decision, back to the admin event before that run. Anchored on the run,
