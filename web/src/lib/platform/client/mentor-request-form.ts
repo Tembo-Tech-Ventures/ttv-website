@@ -28,8 +28,8 @@ const MAX_STORED = 16_384;
 
 export type RequestFormStatus = "editing" | "sending" | "sent" | "conduct" | "error";
 export type RequestFormField = "note" | "format";
-/** Why the last send failed, in words the drawer can choose from. */
-export type RequestFailure = "conflict" | "notFound" | "signedOut" | "other";
+/** Why the last send failed, in words the drawer can choose from. `limit`: too many requests waiting or made today. */
+export type RequestFailure = "conflict" | "notFound" | "limit" | "signedOut" | "other";
 
 export interface RequestDraft {
   note: string;
@@ -57,6 +57,18 @@ export interface RequestFormOptions {
   mock?: ApiClient;
   /** Defaults to the tab's sessionStorage, when there is one. */
   storage?: DraftStorage;
+  /**
+   * What the server rendered after a send without JavaScript did not go through: the posted draft
+   * and why. It wins over a draft kept in the tab, since it is what the person last sent.
+   */
+  initial?: ServerRequestForm | null;
+}
+
+/** A request form as the server renders it after a post (request-post.ts). */
+export interface ServerRequestForm extends RequestDraft {
+  status: Extract<RequestFormStatus, "editing" | "conduct" | "error">;
+  errors: Partial<Record<RequestFormField, string>>;
+  failure: RequestFailure | null;
 }
 
 const StoredDraft = z.object({
@@ -129,8 +141,10 @@ export function validateRequestDraft(
   return errors.note || errors.format ? { ok: false, errors } : { ok: true, note, format: draft.format! };
 }
 
-function failureOf(error: ApiError): RequestFailure {
+/** Why a send was refused, from its status and error code; shared with the no-JavaScript post. */
+export function requestFailure(error: { status: number; code: string }): RequestFailure {
   if (error.status === 409 || error.code === "conflict") return "conflict";
+  if (error.status === 429 || error.code === "rate_limited") return "limit";
   if (error.status === 404) return "notFound";
   if (error.status === 401) return "signedOut";
   return "other";
@@ -144,9 +158,10 @@ export function createRequestFormStore(options: RequestFormOptions) {
   const storage = options.storage ?? sessionDraftStorage();
   const mentorId = options.mentor.person.id;
   const key = mentorRequestDraftKey(options.userId, mentorId);
-  const store: Store<RequestFormState> = createStore<RequestFormState>({
-    ...settle(null, options), status: "editing", errors: {}, failure: null, error: null, sent: null, announcement: "",
-  });
+  const seeded = options.initial ?? null;
+  const store: Store<RequestFormState> = createStore<RequestFormState>(seeded
+    ? { ...settle(seeded, options), status: seeded.status, errors: seeded.errors, failure: seeded.failure, error: null, sent: null, announcement: "" }
+    : { ...settle(null, options), status: "editing", errors: {}, failure: null, error: null, sent: null, announcement: "" });
   let controller: AbortController | null = null;
   let retains = 0;
 
@@ -167,6 +182,7 @@ export function createRequestFormStore(options: RequestFormOptions) {
     mentorId,
     /** Reads the tab's kept draft. Call once the island is in the browser, so SSR and hydration match. */
     restore() {
+      if (seeded) return;
       const kept = readRequestDraft(storage, key);
       if (!kept) return;
       store.setState(state => state.status === "editing" ? { ...state, ...settle(kept, options) } : state);
@@ -219,7 +235,7 @@ export function createRequestFormStore(options: RequestFormOptions) {
           }));
           return null;
         }
-        const failure = failureOf(error);
+        const failure = requestFailure(error);
         store.setState(current => ({
           ...current, status: "error", error, failure,
           announcement: "Your request wasn't sent. Your note is kept.",

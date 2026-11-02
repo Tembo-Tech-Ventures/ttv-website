@@ -9,7 +9,7 @@ import { useMentorRequests } from "@/lib/platform/client/hooks/mentoring";
 import {
   askHref, directoryHref, hasOpenSpot, sameArea, type DirectoryFilters, type DirectoryUrlState,
 } from "@/lib/platform/client/mentor-directory";
-import { createRequestFormStore } from "@/lib/platform/client/mentor-request-form";
+import { createRequestFormStore, type ServerRequestForm } from "@/lib/platform/client/mentor-request-form";
 import { createMentorRequestsStore } from "@/lib/platform/client/mentor-requests";
 import { useModalDialog } from "@/components/platform/overlays/useModalDialog";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
@@ -39,6 +39,10 @@ export interface MentorsDirectoryProps {
   /** The habits' prompt; the drawer posts its agreement back to this page with the drawer open. */
   conduct: Omit<ConductPrompt, "action">;
   now: number;
+  /** After a send without JavaScript that did not go through: whose drawer, what was written and why. */
+  serverForm?: { mentorId: string; form: ServerRequestForm } | null;
+  /** After a send without JavaScript that did: the new request, named by `?sent=`. */
+  sent?: MentorRequest | null;
   /** A fixture client for the DEV harness. Live pages call the API. */
   api?: ApiClient;
 }
@@ -68,8 +72,10 @@ function FilterLink({ href, active, small = false, children }: { href: string; a
  * needs it.
  */
 export default function MentorsDirectory(props: MentorsDirectoryProps) {
-  const { me, path, filters, mentors, shown, areas, projects, conduct, now, api } = props;
+  const { me, path, filters, mentors, shown, areas, projects, conduct, now, api, serverForm = null, sent: sentNow = null } = props;
   const headingId = useId();
+  // Until the island is interactive (and always without JavaScript) a drawer named by `?ask=` is a plain panel with a real form.
+  const [hydrated, setHydrated] = useState(false);
   // The filters alone: following a filter, or closing the drawer, drops `?ask=`.
   const base: DirectoryFilters = useMemo(
     () => ({ area: filters.area, format: filters.format, available: filters.available }),
@@ -85,21 +91,31 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
   const { show } = dialog;
   const announcement = useMentorRequests(ownRequests, state => state.announcement);
 
-  const form = useMemo(() => active ? createRequestFormStore({
-    userId: me.user.id, mentor: active, projects, ...(api ? { api } : {}),
-  }) : null, [active, me.user.id, projects, api]);
+  // A full mentor's drawer opens only to say why a send without JavaScript just did not go through.
+  const asked = filters.ask
+    ? mentors.find(item => item.person.id === filters.ask && (hasOpenSpot(item) || serverForm?.mentorId === item.person.id)) ?? null
+    : null;
+  const shownMentor = hydrated ? active : asked;
+  const form = useMemo(() => shownMentor ? createRequestFormStore({
+    userId: me.user.id, mentor: shownMentor, projects, ...(api ? { api } : {}),
+    initial: serverForm?.mentorId === shownMentor.person.id ? serverForm.form : null,
+  }) : null, [shownMentor, me.user.id, projects, api, serverForm]);
 
   const ask = useCallback((item: MentorDirectoryItem, from: HTMLElement | null) => {
-    if (!hasOpenSpot(item)) return;
+    if (!hasOpenSpot(item) && serverForm?.mentorId !== item.person.id) return;
     setActive(item);
     window.history.replaceState(window.history.state, "", askHref(path, base, item.person.id));
     show(from);
-  }, [path, base, show]);
+  }, [path, base, show, serverForm]);
 
-  // `?ask=` opens that mentor's drawer once the page is interactive: a reload, or the return from agreeing to the habits.
+  // Once interactive, `?ask=` opens that mentor's drawer as a dialog: a reload, or the return from agreeing to the habits
+  // or from a send that did not go through. A `?sent=` notice has been read by then, so a reload does not repeat it.
   useEffect(() => {
-    const wanted = filters.ask ? mentors.find(item => item.person.id === filters.ask) : undefined;
-    if (wanted && hasOpenSpot(wanted)) ask(wanted, null);
+    setHydrated(true);
+    if (asked) ask(asked, null);
+    else if (new URLSearchParams(window.location.search).has("sent")) {
+      window.history.replaceState(window.history.state, "", directoryHref(path, base) + window.location.hash);
+    }
     // Only on arrival: later changes come from the person's own clicks.
   }, []); // oxlint-disable-line react-hooks/exhaustive-deps
 
@@ -112,6 +128,11 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
   return (
     <div className="mentors-directory" data-mentors-directory>
       <output className="sr-only" aria-live="polite">{announcement}</output>
+      {sentNow && (
+        <output className="mb-6 block rounded-2xl border border-ring/40 bg-ring/8 px-4 py-3 text-[0.9375rem] text-ink-primary" data-request-sent-notice>
+          Request sent to {sentNow.mentor.name}. It's under Your requests while it waits, and you can withdraw it there.
+        </output>
+      )}
       <OwnRequests store={ownRequests} now={now} mentors={mentors} onAsk={ask} />
 
       <nav aria-label="Filter mentors" className="flex flex-col gap-3" data-mentor-filters>
@@ -162,8 +183,20 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
         </div>
       )}
 
-      <dialog {...dialog.props} aria-labelledby={headingId} className="mentor-drawer" data-mentor-drawer>
-        {active && form && (
+      {!hydrated && shownMentor && form && (
+        <section aria-labelledby={headingId} className="mentor-drawer mentor-drawer--static" data-mentor-drawer-static>
+          <div className="mentor-drawer__sheet">
+            <RequestForm
+              store={form} mentor={shownMentor} projects={projects} headingId={headingId}
+              conduct={{ ...conduct, action: askHref(path, base, shownMentor.person.id) }}
+              action={askHref(path, base, shownMentor.person.id)} closeHref={directoryHref(path, base)}
+              onClose={() => {}} onSent={sent}
+            />
+          </div>
+        </section>
+      )}
+      <dialog {...dialog.props} aria-labelledby={hydrated ? headingId : undefined} className="mentor-drawer" data-mentor-drawer>
+        {hydrated && active && form && (
           <div className="mentor-drawer__sheet">
             <RequestForm
               key={active.person.id}
@@ -171,6 +204,7 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
               mentor={active}
               projects={projects}
               conduct={{ ...conduct, action: askHref(path, base, active.person.id) }}
+              action={askHref(path, base, active.person.id)}
               headingId={headingId}
               onClose={dialog.hide}
               onSent={sent}
