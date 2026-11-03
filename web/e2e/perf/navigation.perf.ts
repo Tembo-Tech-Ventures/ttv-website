@@ -207,9 +207,12 @@ async function seedThread(page: Page, baseURL: string): Promise<string | null> {
   const channel = items.find(c => c.kind === "COHORT" && !c.slug.endsWith("announcements")) ?? items.find(c => c.kind === "COMMUNITY");
   if (!channel) return null;
   const href = `/dashboard/${channel.kind === "COHORT" ? "cohort" : "community"}/c/${channel.slug}`;
-  await page.goto(href);
-  const agree = page.getByRole("button", { name: "I’ll keep to this" });
-  if (await agree.isVisible().catch(() => false)) { await agree.click(); await page.waitForLoadState("load"); }
+  // Agree to the code of conduct through its own form, wherever the page offers it.
+  for (const path of [href, "/dashboard/community/conduct"]) {
+    await page.goto(path);
+    const agree = page.locator("form[data-conduct-agree] button[type='submit'], form[data-conduct-agree] button").first();
+    if (await agree.isVisible().catch(() => false)) { await agree.click(); await page.waitForLoadState("load"); break; }
+  }
   const post = (body: string, parentId: string | null) => page.request.post(`/api/channels/${channel.id}/messages`, {
     headers: { origin: new URL(baseURL).origin }, data: { body, clientNonce: `perf-${Date.now()}-${Math.random().toString(36).slice(2)}`, parentId, embeds: [] },
   });
@@ -263,11 +266,13 @@ for (const profile of SELECTED) {
           await j.step("users", () => j.click('a[href="/admin/users"]', "/admin/users"));
           await j.step("user detail", () => j.click('main a[href^="/admin/users/"]'));
           await j.step("applications", () => j.click('a[href="/admin/applications"]', "/admin/applications"));
-          await j.step("application detail", () => j.click('main a[href^="/admin/applications/"]:not([href$="/applications/"])'));
+          // A pending application, so it has a status form to post (any application otherwise).
+          await j.step("application detail", () => j.click('main tr:has-text("PENDING") a[href^="/admin/applications/"], main a[href^="/admin/applications/"]:not([href$="/applications/"])'));
           await j.step("status post", async () => {
             // A stale expectedStatus: the full POST pipeline (guards, form, reads, render) runs and the
             // page answers "changed, refresh", so the preview's applications stay as the e2e suite left them.
             const form = page.locator("form:has(input[name='expectedStatus'])").first();
+            if (!await form.count()) throw new Error("No status form on this application");
             await form.locator("input[name='expectedStatus']").evaluate((input: HTMLInputElement) => {
               input.value = input.value === "PENDING" ? "REJECTED" : "PENDING";
             });
