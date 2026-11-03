@@ -11,20 +11,7 @@ const GALLERY = "/dev/platform-embeds";
 const EVIDENCE_DIR = "test-results/evidence/platform-channel-embeds";
 const SWEEP = [320, 360, 390, 414, 600, 768, 1024, 1280, 1440];
 
-/** Chromium in the dev container cannot reach Google Fonts itself; Node can. */
-async function routeFonts(page: Page) {
-  await page.route(/fonts\.(googleapis|gstatic)\.com/, async (route) => {
-    try {
-      const response = await fetch(route.request().url());
-      await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
-    } catch {
-      await route.abort();
-    }
-  });
-}
-
 async function open(page: Page) {
-  await routeFonts(page);
   await page.goto(GALLERY);
   await page.evaluate(() => document.fonts.ready);
 }

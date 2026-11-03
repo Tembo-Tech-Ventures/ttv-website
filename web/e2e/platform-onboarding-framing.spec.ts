@@ -43,24 +43,11 @@ function evidence(name: string) {
   return `${EVIDENCE_DIR}/${test.info().project.name}-${name}.png`;
 }
 
-/** Chromium in the dev container cannot reach Google Fonts itself; Node can. */
-async function routeFonts(page: Page) {
-  await page.route(/fonts\.(googleapis|gstatic)\.com/, async (route) => {
-    try {
-      const response = await fetch(route.request().url());
-      await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
-    } catch {
-      await route.abort();
-    }
-  });
-}
-
 /** Signs in as a local persona, or skips with the reason there is none here. */
 async function as(page: Page, baseURL: string | undefined, name: string) {
   const session = localPersonaSession(name);
   test.skip(typeof session === "string", typeof session === "string" ? session : "");
   if (typeof session === "string") return;
-  await routeFonts(page);
   await signIn(page.context(), baseURL!, session);
   const me = await page.request.get("/api/platform/me");
   const on = me.status() === 200 && ((await me.json()) as { flags: { onboarding?: boolean } }).flags.onboarding === true;
@@ -220,7 +207,6 @@ test.describe("landings, as SPEC §3 maps them", () => {
     await expect(page.locator("[data-onboarding-status]")).toHaveCount(0);
     const context = await page.context().browser()!.newContext();
     const fresh = await context.newPage();
-    await routeFonts(fresh);
     await signIn(context, baseURL!, localPersonaSession("onb-kevin") as { token: string; secret: string });
     await fresh.goto("/dashboard");
     expect(new URL(fresh.url()).pathname).toBe("/dashboard/mentoring");
@@ -235,7 +221,6 @@ test.describe("landings, as SPEC §3 maps them", () => {
       const session = personaSession(persona);
       test.skip(typeof session === "string" || PREVIEW, "The local seed's browser sessions only.");
       if (typeof session === "string") return;
-      await routeFonts(page);
       await signIn(page.context(), baseURL!, session);
       await open(page, "/dashboard/community");
       test.skip(await page.locator("[data-onboarding-spaces]").count() === 0 && !(await (await page.request.get("/api/platform/me")).json()).flags.onboarding, "Onboarding is off here.");
@@ -255,7 +240,6 @@ test.describe("the one-time card for existing accounts (S4)", () => {
     const session = personaSession("alumna");
     test.skip(typeof session === "string" || PREVIEW, "The local seed's browser sessions only.");
     if (typeof session === "string") return;
-    await routeFonts(page);
     await signIn(page.context(), baseURL!, session);
     await open(page, "/dashboard");
     expect(new URL(page.url()).pathname).toBe("/dashboard/cohort");
@@ -584,7 +568,6 @@ test.describe("F-6: what the onboarding QA found (QAO-01 to QAO-10)", () => {
         const session = personaSession(persona);
         test.skip(typeof session === "string" || PREVIEW, "The local seed's browser sessions only.");
         if (typeof session === "string") return;
-        await routeFonts(page);
         await signIn(page.context(), baseURL!, session);
       }
       // The Overview (T01) and the editor both frame the profile for them.

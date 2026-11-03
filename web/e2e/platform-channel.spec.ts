@@ -22,20 +22,7 @@ function harness(params: Record<string, string> = {}) {
   return `${HARNESS}?${new URLSearchParams({ persona: "wanjiku", channel: "show-your-work", ...params })}`;
 }
 
-/** Chromium in the dev container cannot reach Google Fonts itself; Node can. */
-async function routeFonts(page: Page) {
-  await page.route(/fonts\.(googleapis|gstatic)\.com/, async (route) => {
-    try {
-      const response = await fetch(route.request().url());
-      await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
-    } catch {
-      await route.abort();
-    }
-  });
-}
-
 async function open(page: Page, path: string) {
-  await routeFonts(page);
   await page.goto(path);
   await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
   // The harness hook is set after the view's own effects (children's run first): the composer has
@@ -566,7 +553,6 @@ test.describe("on a real channel page", () => {
     const session = personaSession(key);
     test.skip(typeof session === "string", typeof session === "string" ? session : "");
     if (typeof session === "string") return;
-    await routeFonts(page);
     await signIn(context, baseURL, session);
     const me = await page.request.get("/api/platform/me");
     const flags = me.ok() ? ((await me.json()) as { flags?: { channels?: boolean } }).flags : undefined;

@@ -35,18 +35,6 @@ function harness(persona: Persona, extra: Record<string, string> = {}) {
   return `${HARNESS}?${new URLSearchParams({ persona, run, ...extra })}`;
 }
 
-/** Chromium in the dev container cannot reach Google Fonts itself; Node can. */
-async function routeFonts(page: Page) {
-  await page.route(/fonts\.(googleapis|gstatic)\.com/, async (route) => {
-    try {
-      const response = await fetch(route.request().url());
-      await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
-    } catch {
-      await route.abort();
-    }
-  });
-}
-
 /** Each test owns its persona's state: start from the fixture. */
 async function reset(page: Page, persona: Persona) {
   expect((await page.request.get(harness(persona, { reset: "" }), { maxRedirects: 0 })).status()).toBe(303);
@@ -65,7 +53,6 @@ async function settled(page: Page, scripted = true) {
 }
 
 async function open(page: Page, path: string, scripted = true) {
-  await routeFonts(page);
   await page.goto(path);
   await settled(page, scripted);
 }

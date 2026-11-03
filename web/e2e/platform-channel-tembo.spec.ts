@@ -17,7 +17,6 @@ function harness(params: Record<string, string> = {}) {
 }
 
 async function open(page: Page, path: string) {
-  await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
   await page.goto(path);
   await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
   await page.waitForFunction(() => typeof window.__channelHarness?.answerTembo === "function");

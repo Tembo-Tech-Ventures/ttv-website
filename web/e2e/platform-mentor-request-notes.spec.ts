@@ -30,7 +30,6 @@ async function as(browser: Browser, baseURL: string, who: PersonaKey, width = 14
   const context = await browser.newContext({ viewport: { width, height: width > 500 ? 900 : 844 } });
   await signIn(context, baseURL, session);
   const page = await context.newPage();
-  await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
   // astro dev's toolbar sits over the bottom bar in local evidence.
   await page.addInitScript({
     content: `document.addEventListener("DOMContentLoaded", () => {
