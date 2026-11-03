@@ -212,31 +212,72 @@ describe("real R2 adapter teardown boundary", () => {
   function setup(payload, status = 200) {
     vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "fictional-account");
     vi.stubEnv("CLOUDFLARE_API_TOKEN", "fictional-test-token");
-    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status }));
+    const body = typeof payload === "string" ? payload : JSON.stringify(payload);
+    const fetcher = vi.fn().mockResolvedValue(new Response(body, { status }));
     vi.stubGlobal("fetch", fetcher);
     return Object.fromEntries(mutators.map(name => [name, vi.fn().mockResolvedValue(true)]));
   }
+  // What Cloudflare returned for every empty agent-pr bucket from 2026-10-24
+  // (e.g. PR #321's close run): HTTP 200, success true, no result_info at all.
+  const observedEmptyListing = { success: true, errors: [], messages: [], result: [] };
+
   it.each([
-    undefined, {}, { is_truncated: "true" }, { is_truncated: true },
+    null, [], "complete", { is_truncated: "true" }, { is_truncated: "false" }, { is_truncated: true },
+    { is_truncated: true, cursor: "" },
     { is_truncated: false, cursor: "more" },
     { is_truncated: false, cursor: 42 },
+    { cursor: "more" },
     { is_truncated: false, delimited: ["hidden-prefix/"] },
-  ])("blocks every mutation on missing/malformed/truncated raw metadata %j", async result_info => {
-    const dependencies = setup({ success: true, result: [], result_info });
+    { delimited: ["hidden-prefix/"] },
+    { is_truncated: false, delimited: "hidden-prefix/" },
+  ])("blocks every mutation on malformed, truncated or continued metadata %j", async result_info => {
+    const dependencies = setup({ ...observedEmptyListing, result_info });
+    await expect(destroyEnvironment(context, dependencies)).rejects.toThrow("R2 listing completion metadata could not be verified");
+    for (const fn of Object.values(dependencies)) expect(fn).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["objects without metadata", { success: true, result: [{ key: "private-key-not-for-logs" }] }],
+    ["objects without is_truncated", { success: true, result: [{ key: "private-key-not-for-logs" }], result_info: {} }],
+  ])("requires explicit completion metadata for %s", async (_shape, payload) => {
+    const dependencies = setup(payload);
+    await expect(destroyEnvironment(context, dependencies)).rejects.toThrow("R2 listing completion metadata could not be verified");
+    for (const fn of Object.values(dependencies)) expect(fn).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["no success flag", { result: [] }],
+    ["a non-boolean success flag", { success: "true", result: [] }],
+    ["a missing result", { success: true }],
+    ["a non-array result", { success: true, result: { objects: [] } }],
+    ["an empty body", ""],
+    ["a non-JSON body", "<html>bad gateway</html>"],
+  ])("blocks every mutation on a 200 response with %s", async (_shape, payload) => {
+    const dependencies = setup(payload);
     await expect(destroyEnvironment(context, dependencies)).rejects.toThrow("Failed to safely delete R2 bucket");
     for (const fn of Object.values(dependencies)) expect(fn).not.toHaveBeenCalled();
   });
-  it.each([401, 403, 500, 404])("does not treat HTTP %i as verified missing bucket", async status => {
+  it("blocks every mutation when a complete listing still holds objects, without logging their keys", async () => {
+    const dependencies = setup({ success: true, result: [{ key: "private-key-not-for-logs" }], result_info: { is_truncated: false } });
+    const refusal = destroyEnvironment(context, dependencies);
+    await expect(refusal).rejects.toThrow("R2 bucket is nonempty or emptiness could not be verified");
+    await expect(refusal).rejects.not.toThrow("private-key-not-for-logs");
+    for (const fn of Object.values(dependencies)) expect(fn).not.toHaveBeenCalled();
+  });
+  it.each([200, 401, 403, 500, 404])("does not treat HTTP %i with success false as verified empty or missing", async status => {
     const dependencies = setup({ success: false, errors: [{ code: 9999 }] }, status);
     await expect(destroyEnvironment(context, dependencies)).rejects.toThrow("Failed to safely delete R2 bucket");
     for (const fn of Object.values(dependencies)) expect(fn).not.toHaveBeenCalled();
   });
   it.each([
-    [200, { success: true, result: [], result_info: { is_truncated: false, cursor: "", delimited: [] } }],
-    [404, { success: false, errors: [{ code: 10006 }] }],
-  ])("permits verified empty or bucket-not-found response %i", async (status, payload) => {
+    ["the observed empty listing without result_info", 200, observedEmptyListing],
+    ["an empty listing without is_truncated", 200, { ...observedEmptyListing, result_info: {} }],
+    ["an empty listing with explicit metadata", 200, { success: true, result: [], result_info: { is_truncated: false, cursor: "", delimited: [] } }],
+    ["a bucket-not-found 404", 404, { success: false, errors: [{ code: 10006 }] }],
+  ])("tears the whole stack down, R2 first, for %s", async (_shape, status, payload) => {
     const dependencies = setup(payload, status);
+    const order = [];
+    for (const name of mutators) dependencies[name].mockImplementation(async () => { order.push(name); return true; });
     await expect(destroyEnvironment(context, dependencies)).resolves.toMatchObject({ bucketObjectsDeleted: 0 });
-    for (const fn of Object.values(dependencies)) expect(fn).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(mutators);
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

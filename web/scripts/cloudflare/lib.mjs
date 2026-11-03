@@ -178,6 +178,25 @@ export async function cfApi(resourcePath, options) {
   return payload?.result ?? null;
 }
 
+// Teardown deletes a bucket only after one listing proves it complete. Cloudflare
+// omits result_info entirely for an empty bucket (HTTP 200, success true), so a
+// successful first page with zero objects counts as complete without it (owner
+// decision 2026-11-03). Any other page must say is_truncated false itself, and
+// no page may carry a cursor or delimited prefixes.
+function isCompleteR2Listing(payload) {
+  if (payload.success !== true) return false;
+  const info = payload.result_info;
+  const empty = payload.result.length === 0;
+  if (info === undefined) return empty;
+  if (info === null || typeof info !== "object" || Array.isArray(info)) return false;
+  return (
+    (info.is_truncated === false || (info.is_truncated === undefined && empty)) &&
+    (info.cursor === undefined || info.cursor === "") &&
+    (info.delimited === undefined ||
+      (Array.isArray(info.delimited) && info.delimited.length === 0))
+  );
+}
+
 export async function listR2BucketObjectsPage(name, cursor, { requireCompleteMetadata = false } = {}) {
   const query = new URLSearchParams({ per_page: "1000" });
   if (cursor) query.set("cursor", cursor);
@@ -193,15 +212,8 @@ export async function listR2BucketObjectsPage(name, cursor, { requireCompleteMet
     );
   }
 
-  if (requireCompleteMetadata) {
-    const info = payload.result_info;
-    if (payload.success !== true || !info ||
-        typeof info.is_truncated !== "boolean" ||
-        (info.cursor !== undefined && typeof info.cursor !== "string") ||
-        (info.delimited !== undefined &&
-          (!Array.isArray(info.delimited) || info.delimited.length > 0))) {
-      throw new Error("R2 listing completion metadata could not be verified.");
-    }
+  if (requireCompleteMetadata && !isCompleteR2Listing(payload)) {
+    throw new Error("R2 listing completion metadata could not be verified.");
   }
   const nextCursor = payload.result_info?.cursor;
   return {
