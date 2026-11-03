@@ -588,6 +588,8 @@
 /* A sentence's marker: its source's number, raised, linking to that source. */
 .channel-cite-ref {
   margin-left: 0.125rem;
+  /* Symmetric padding for the hover tint, pulled back on the right so the sentence's stop sits against its marker. */
+  margin-right: -0.1875rem;
   padding: 0 0.1875rem;
   border-radius: 0.25rem;
   color: var(--color-peach-ink);

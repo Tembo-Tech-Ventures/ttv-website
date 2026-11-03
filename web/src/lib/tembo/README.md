@@ -132,8 +132,9 @@ titled with its author and its first words, a session clip with its moment
 Otieno Ouma`): the owner who shared it here, by the name the channel shows on
 that message, so the name is never more than its readers already see. A
 message's words in a title are shown only while they still stand: once the
-cited message is deleted, hidden, under a hidden root, flagged or edited after
-the answer, every reader sees "A message since edited or removed" instead
+cited message is deleted, hidden, under a hidden root, flagged or edited since
+the run that wrote the answer claimed its question (an edit while Tembo was
+still answering counts), every reader sees "A message since edited or removed" instead
 (`CITED_MESSAGE_CHANGED`, resolved in the page's own statement,
 `src/lib/channels/messages.ts`).
 
