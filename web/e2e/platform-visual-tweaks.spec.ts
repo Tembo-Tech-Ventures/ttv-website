@@ -2,9 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { runAxe } from "./platform-axe";
 
 /**
- * The prototype-vs-live visual tweaks whose behaviour a browser has to see (T03, T04, T05, T06, T09, T10, T12;
+ * The prototype-vs-live visual tweaks whose behaviour a browser has to see (T03, T04, T05, T06, T09, T10, T12, T13;
  * Library /reports/platform-visual-review-2026-11-03/), on the DEV-only harnesses: a masked contact
- * marker in a mentor's request card, the directory's filter menus, the accepted request's notice, where a thread opens, where
+ * marker in a mentor's request card, the directory's filter menus, a failed send's reason in the drawer, the accepted request's notice, where a thread opens, where
  * "Jump to latest" stands, and the phone's bar on the attention page. Unit tests cover the markup.
  */
 test.skip(Boolean(process.env.PLAYWRIGHT_BASE_URL), "The harnesses are dev-only and unavailable on deployed environments.");
@@ -120,6 +120,132 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     });
   }
 }
+
+// T13 (#317's late B1): a send that fails says why just above Send, in the pinned footer, so the person who
+// pressed it sees it whether the drawer sits at its start or its end, and nothing covers it.
+for (const viewport of [{ width: 1440, height: 900 }, { width: 1366, height: 768 }, { width: 390, height: 844 }]) {
+  for (const conduct of ["required", "agreed"] as const) {
+    test(`T13: a failed send's reason is in view and uncovered above Send (${viewport.width}x${viewport.height}, conduct ${conduct})`, async ({ page }, testInfo) => {
+      await page.setViewportSize(viewport);
+      const path = `/dev/platform-mentors?persona=wanjiku&view=directory${conduct === "required" ? "&conduct=required" : ""}`;
+      await open(page, path);
+      // Agreeing posts the page's own conduct form; sending once agreed goes to the harness's API. Both fail.
+      await page.route((url) => url.pathname === "/dev/platform-mentors", (route) =>
+        route.request().method() === "POST" ? route.fulfill({ status: 500, body: "" }) : route.continue());
+      await page.waitForFunction(() => typeof window.__mentorsHarness?.refuseWrites === "function");
+      await page.evaluate(() => window.__mentorsHarness!.refuseWrites(1, 503, "server"));
+      await page.locator("[data-mentor-card]", { hasText: "Joseph Mutua" }).getByRole("link", { name: "Ask for time" }).click();
+      const drawer = page.locator("dialog[data-mentor-drawer]");
+      const note = drawer.getByRole("textbox", { name: "What would you like help with?" });
+      await note.fill("Could you look at how my route planner saves trips when the phone is offline?");
+      const send = drawer.getByRole("button", { name: conduct === "required" ? "Agree and send request" : "Send request" });
+      await send.click();
+
+      const error = drawer.locator("[data-request-error]");
+      await expect(error).toHaveText(conduct === "required"
+        ? "Your agreement wasn't saved, so your request wasn't sent. Try again in a moment. Your note is kept."
+        : "Your request wasn't sent. Try again in a moment. Your note is kept.");
+      const uncovered = () => error.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        return hit !== null && el.contains(hit);
+      });
+      for (const at of ["start", "end"] as const) {
+        await drawer.locator(".mentor-drawer__sheet").evaluate((el, end) => el.scrollTo({ top: end ? el.scrollHeight : 0 }), at === "end");
+        await expect(error, at).toBeInViewport({ ratio: 1 });
+        expect(await uncovered(), `the point at the error's centre is the error (${at})`).toBe(true);
+        await expect(send, at).toBeInViewport();
+      }
+      // It is read out as it appears.
+      await expect(error).toHaveRole("alert");
+      // The note is kept, and Send has focus and is ready for a retry.
+      await expect(note).toHaveValue("Could you look at how my route planner saves trips when the phone is offline?");
+      await expect(send).toBeFocused();
+      await expect(send).toBeEnabled();
+      await expect(send).not.toHaveAttribute("aria-disabled", "true");
+      await runAxe(page, testInfo, `drawer-error-${viewport.width}-${conduct}`);
+    });
+  }
+}
+
+// On a short screen the footer scrolls with the form, so the drawer brings the reason and Send back into view.
+for (const viewport of [{ width: 844, height: 390 }, { width: 640, height: 360 }]) {
+  for (const conduct of ["required", "agreed"] as const) {
+    test(`T13: on a short screen (${viewport.width}x${viewport.height}, conduct ${conduct}) a failed send's reason and Send are both in view`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await open(page, `/dev/platform-mentors?persona=wanjiku&view=directory${conduct === "required" ? "&conduct=required" : ""}`);
+      await page.route((url) => url.pathname === "/dev/platform-mentors", (route) =>
+        route.request().method() === "POST" ? route.fulfill({ status: 500, body: "" }) : route.continue());
+      await page.waitForFunction(() => typeof window.__mentorsHarness?.refuseWrites === "function");
+      await page.evaluate(() => window.__mentorsHarness!.refuseWrites(1, 503, "server"));
+      await page.locator("[data-mentor-card]", { hasText: "Joseph Mutua" }).getByRole("link", { name: "Ask for time" }).click();
+      const drawer = page.locator("dialog[data-mentor-drawer]");
+      await drawer.getByRole("textbox", { name: "What would you like help with?" }).fill("Could you look at how my route planner saves trips when the phone is offline?");
+      const send = drawer.getByRole("button", { name: conduct === "required" ? "Agree and send request" : "Send request" });
+      await send.click();
+      const error = drawer.locator("[data-request-error]");
+      await expect(error).toBeVisible();
+      await expect(error).toBeInViewport({ ratio: 1 });
+      await expect(send).toBeInViewport({ ratio: 1 });
+      await expect(send).toBeFocused();
+    });
+  }
+}
+
+// The server asks for the habits after all (their words changed), and agreeing from that step fails: the step,
+// and the button that had focus, give way to the form, and Send takes focus back with the reason in view.
+for (const viewport of [{ width: 1440, height: 900 }, { width: 640, height: 360 }]) {
+  test(`T13: agreeing from the habits step fails, and Send has focus again beside the reason (${viewport.width}x${viewport.height})`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await open(page, "/dev/platform-mentors?persona=wanjiku&view=directory");
+    await page.route((url) => url.pathname === "/dev/platform-mentors", (route) =>
+      route.request().method() === "POST" ? route.fulfill({ status: 500, body: "" }) : route.continue());
+    await page.waitForFunction(() => typeof window.__mentorsHarness?.refuseWrites === "function");
+    await page.evaluate(() => window.__mentorsHarness!.refuseWrites(1, 403, "conduct_required"));
+    await page.locator("[data-mentor-card]", { hasText: "Joseph Mutua" }).getByRole("link", { name: "Ask for time" }).click();
+    const drawer = page.locator("dialog[data-mentor-drawer]");
+    await drawer.getByRole("textbox", { name: "What would you like help with?" }).fill("Could you look at how my route planner saves trips when the phone is offline?");
+    await drawer.getByRole("button", { name: "Send request" }).click();
+    await drawer.getByRole("button", { name: "I agree, send my request" }).click();
+    const error = drawer.locator("[data-request-error]");
+    await expect(error).toHaveText("Your agreement wasn't saved, so your request wasn't sent. Try again in a moment. Your note is kept.");
+    await expect(error).toBeInViewport({ ratio: 1 });
+    const send = drawer.locator("[data-request-send]");
+    await expect(send).toBeFocused();
+    await expect(send).toBeInViewport({ ratio: 1 });
+  });
+}
+
+// A refusal the page arrived with (posted before the island hydrated, or without JavaScript) opens on the note,
+// focused and in view: the drawer only scrolls to Send after a send it made itself.
+test("T13: on a short screen, a refusal the page arrived with keeps the focused note in view", async ({ page }) => {
+  await page.setViewportSize({ width: 640, height: 360 });
+  await open(page, "/dev/platform-mentors?persona=wanjiku&view=directory");
+  // David already has a waiting request from Wanjiku, so asking him again is refused.
+  const david = await page.locator("[data-mentor-card]", { hasText: "David Kamau" }).getAttribute("data-mentor-card");
+  await Promise.all([
+    page.waitForURL(/platform-mentors/),
+    page.evaluate((mentorId) => {
+      const form = document.createElement("form");
+      form.method = "post";
+      form.action = window.location.href;
+      for (const [name, value] of Object.entries({ intent: "mentor-request", mentorId, note: "Could you look at my API's error responses?", format: "CALL_30_MIN" })) {
+        const input = document.createElement("input");
+        Object.assign(input, { type: "hidden", name, value });
+        form.appendChild(input);
+      }
+      document.body.appendChild(form);
+      form.submit();
+    }, david!),
+  ]);
+  await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
+  const drawer = page.locator("dialog[data-mentor-drawer]");
+  await expect(drawer.locator("[data-request-error]")).toBeVisible();
+  const note = drawer.getByRole("textbox", { name: "What would you like help with?" });
+  await expect(note).toHaveValue("Could you look at my API's error responses?");
+  await expect(note).toBeFocused();
+  await expect(note).toBeInViewport();
+});
 
 test("T04: an accepted request leads with the mentor and shows Open conversation, on the panel and the page", async ({ page }, testInfo) => {
   const accepted = (scope: ReturnType<Page["locator"]>) => scope.locator("[data-attention-item]").filter({ has: page.locator("[data-attention-action]") });
