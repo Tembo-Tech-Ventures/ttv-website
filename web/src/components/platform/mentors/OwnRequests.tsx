@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { PiArrowRight, PiCaretDown } from "react-icons/pi";
 import type { MentorDirectoryItem, MentorRequest } from "@/lib/platform/contracts";
 import { useMentorRequests } from "@/lib/platform/client/hooks/mentoring";
@@ -8,7 +8,7 @@ import { Avatar, Button, Card, Chip } from "@/components/platform/ui";
 import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
 import MaskedText from "@/components/channels/MaskedText";
-import { capacityView, conversationHref, requesterStatus, requestMeta, requestsSummary, type StatusView } from "./mentor-display";
+import { capacityView, conversationHref, requesterStatus, requestHasNews, requestMeta, requestsSummary, type StatusView } from "./mentor-display";
 
 interface Props {
   store: MentorRequestsStore;
@@ -39,6 +39,8 @@ const LINK = cx("inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[0.81
 export default function OwnRequests({ store, now, mentors, onAsk }: Props) {
   const state = useMentorRequests(store);
   const statusRefs = useRef(new Map<string, HTMLElement>());
+  // Decided on arrival only, so a change while the person reads never folds the list away under them.
+  const [newsOnArrival] = useState(() => state.items.some(request => isRecent(request, now) && requestHasNews({ ...request, status: shownStatus(state, request) })));
   if (state.items.length === 0) return null;
   // Waiting requests and what changed lately stay in view; older answers fold under "Earlier", so the directory
   // stays near the top for someone who has asked for months.
@@ -109,14 +111,18 @@ export default function OwnRequests({ store, now, mentors, onAsk }: Props) {
     );
   }
 
-  const summary = [requestsSummary(recent.map(request => ({ ...request, status: shownStatus(state, request) }))),
-    earlier.length > 0 && `${earlier.length}${state.nextCursor !== null ? "+" : ""} earlier`].filter(Boolean).join(" · ");
+  const shown = recent.map(request => ({ ...request, status: shownStatus(state, request) }));
+  const summary = [requestsSummary(shown), earlier.length > 0 && `${earlier.length}${state.nextCursor !== null ? "+" : ""} earlier`]
+    .filter(Boolean).join(" · ");
 
   return (
-    <section aria-labelledby="own-requests-title" className="mb-5" data-own-requests>
-      <details className="own-requests group" data-own-requests-fold>
+    <section aria-labelledby="own-requests-title" className="own-requests mb-5" data-own-requests>
+      {/* The heading stays outside the summary, which some screen readers read as a button (S3 review nit). */}
+      <h2 id="own-requests-title" className="own-requests__title font-body text-[0.9375rem] font-bold text-ink-primary">Your requests</h2>
+      {/* Open on arrival when a request has news the person came here for: a suggestion, not this month, a check (S3). */}
+      <details className="group" open={newsOnArrival || undefined} data-own-requests-fold>
         <summary className={cx("own-requests__summary", FOCUS_RING)}>
-          <h2 id="own-requests-title" className="font-body text-[0.9375rem] font-bold text-ink-primary">Your requests</h2>
+          <span className="sr-only">Your requests: </span>
           {summary && <span className="min-w-0 text-sm text-ink-secondary" data-own-requests-summary>{summary}</span>}
           <span className="own-requests__toggle" aria-hidden="true">
             <span className="group-open:hidden">Show</span>

@@ -153,12 +153,13 @@ const MEMBER_STATUSES = Object.keys(COHORT_APPLICATION_NOTE) as CohortApplicatio
 /**
  * The cohort the Cohort space is named for (T07): among the cohorts this person reads (capabilitiesFor's
  * cohortIds), those they were accepted onto or hold a role in. Null when they are in none of them.
+ * An application of theirs still waiting, to any cohort, keeps Apply where it is (S2).
  */
 export async function loadCohortHeading(db: Database, me: Pick<Me, "user" | "capabilities">, now = Date.now()): Promise<CohortHeading | null> {
   const ids = me.capabilities.cohortIds;
   if (ids.length === 0) return null;
   const program = { columns: { name: true, startDate: true, endDate: true }, with: { curriculum: { columns: { title: true } } } } as const;
-  const [applications, roles] = await Promise.all([
+  const [applications, roles, waiting] = await Promise.all([
     db.query.programApplication.findMany({
       where: and(eq(schema.programApplication.userId, me.user.id), inArray(schema.programApplication.programId, ids),
         inArray(schema.programApplication.status, MEMBER_STATUSES)),
@@ -167,6 +168,10 @@ export async function loadCohortHeading(db: Database, me: Pick<Me, "user" | "cap
     db.query.programRole.findMany({
       where: and(eq(schema.programRole.userId, me.user.id), inArray(schema.programRole.programId, ids)),
       columns: { programId: true }, with: { program },
+    }),
+    db.query.programApplication.findFirst({
+      where: and(eq(schema.programApplication.userId, me.user.id), eq(schema.programApplication.status, "PENDING")),
+      columns: { id: true },
     }),
   ]);
   const memberships = new Map<string, CohortMembership>();
@@ -183,7 +188,7 @@ export async function loadCohortHeading(db: Database, me: Pick<Me, "user" | "cap
       startDate: row.program.startDate, endDate: row.program.endDate, application,
     });
   }
-  return chooseCohort([...memberships.values()], now);
+  return chooseCohort([...memberships.values()], now, { applying: waiting !== undefined });
 }
 
 /** The person's own completed cohorts that have a certificate, newest first. */

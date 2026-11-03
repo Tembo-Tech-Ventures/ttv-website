@@ -83,14 +83,30 @@ export function splitAreas(areas: readonly string[], chosen: string | null): { s
 }
 
 /**
+ * Which edge of its button a menu's list hangs from, so it stays inside the filter row (B1): its
+ * start edge, unless that would run past the row's end, then its end edge if that fits.
+ */
+export function menuAlignment(button: { left: number; right: number }, width: number, row: { left: number; right: number }): "start" | "end" {
+  if (button.left + width <= row.right) return "start";
+  return button.right - width >= row.left ? "end" : "start";
+}
+
+/**
  * A filter's further choices, dropping under it (details/summary, so it opens without JavaScript).
- * With JavaScript, Escape or a click elsewhere closes it, and Escape returns to its button.
+ * With JavaScript, the list hangs from whichever edge keeps it inside the row; Escape or a click
+ * elsewhere closes it, and Escape returns to its button.
  */
 function FilterMenu({ label, active, end = false, children }: { label: ReactNode; active: boolean; end?: boolean; children: ReactNode }) {
   const menu = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     const details = menu.current;
     if (!details) return;
+    const align = () => {
+      const list = details.querySelector<HTMLElement>(".mentor-filter-menu__list");
+      const row = details.closest<HTMLElement>("[data-mentor-filters]");
+      if (!details.open || !list || !row) return;
+      details.dataset.align = menuAlignment(details.getBoundingClientRect(), list.offsetWidth, row.getBoundingClientRect());
+    };
     const away = (event: PointerEvent) => {
       if (details.open && !details.contains(event.target as Node)) details.open = false;
     };
@@ -101,9 +117,11 @@ function FilterMenu({ label, active, end = false, children }: { label: ReactNode
     };
     document.addEventListener("pointerdown", away);
     details.addEventListener("keydown", escape);
+    details.addEventListener("toggle", align);
     return () => {
       document.removeEventListener("pointerdown", away);
       details.removeEventListener("keydown", escape);
+      details.removeEventListener("toggle", align);
     };
   }, []);
   return (
@@ -140,15 +158,12 @@ function FilterBar({ path, base, filters, areas }: { path: string; base: Directo
         )}
       </fieldset>
       <div className="flex flex-wrap items-center gap-2">
-        <fieldset className="contents">
-          <legend className="sr-only">How</legend>
-          <FilterMenu end active={filters.format !== null} label={filters.format ? FORMAT_LABELS[filters.format] : "Any format"}>
-            <li><FilterLink small href={directoryHref(path, base, { format: null })} active={!filters.format}>Any format</FilterLink></li>
-            {MentorRequestFormat.options.map(format => (
-              <li key={format}><FilterLink small href={directoryHref(path, base, { format })} active={filters.format === format}>{FORMAT_LABELS[format]}</FilterLink></li>
-            ))}
-          </FilterMenu>
-        </fieldset>
+        <FilterMenu end active={filters.format !== null} label={filters.format ? FORMAT_LABELS[filters.format] : "Any format"}>
+          <li><FilterLink small href={directoryHref(path, base, { format: null })} active={!filters.format}>Any format</FilterLink></li>
+          {MentorRequestFormat.options.map(format => (
+            <li key={format}><FilterLink small href={directoryHref(path, base, { format })} active={filters.format === format}>{FORMAT_LABELS[format]}</FilterLink></li>
+          ))}
+        </FilterMenu>
         <a
           href={toResults(directoryHref(path, base, { available: !filters.available }))}
           aria-current={filters.available ? "true" : undefined}

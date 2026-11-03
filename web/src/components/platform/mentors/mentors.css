@@ -30,13 +30,28 @@
  * "Your requests", folded to one line above the directory (T06): where the person's requests stand,
  * and the way to open them. Open, the rows follow under the line.
  */
+/* The heading sits in the line's start, over the summary, which every click on the line toggles. */
+.own-requests {
+  position: relative;
+}
+
+.own-requests__title {
+  position: absolute;
+  top: 0;
+  left: 1rem;
+  display: flex;
+  align-items: center;
+  height: 2.75rem;
+  pointer-events: none;
+}
+
 .own-requests__summary {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.25rem 0.75rem;
   min-height: 2.75rem;
-  padding: 0.375rem 0.75rem 0.375rem 1rem;
+  padding: 0.375rem 0.75rem 0.375rem 8.25rem;
   border: 1px solid var(--color-hairline);
   border-radius: 0.875rem;
   cursor: pointer;
@@ -98,7 +113,24 @@
   box-shadow: 0 18px 40px -16px rgb(0 0 0 / 0.65);
 }
 
-.mentor-filter-menu--end .mentor-filter-menu__list {
+/*
+ * Without JavaScript the format menu, at the row's end on a wide screen, hangs from its end edge; on a
+ * narrow one the row wraps and puts it first on its line, so it hangs from its start edge (B1). With
+ * JavaScript, data-align says which edge keeps the open list inside the row.
+ */
+@media (min-width: 64rem) {
+  .mentor-filter-menu--end .mentor-filter-menu__list {
+    right: 0;
+    left: auto;
+  }
+}
+
+.mentor-filter-menu[data-align="start"] .mentor-filter-menu__list {
+  right: auto;
+  left: 0;
+}
+
+.mentor-filter-menu[data-align="end"] .mentor-filter-menu__list {
   right: 0;
   left: auto;
 }

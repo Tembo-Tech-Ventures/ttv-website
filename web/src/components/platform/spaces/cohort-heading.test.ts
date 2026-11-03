@@ -35,6 +35,10 @@ describe("chooseCohort (T07)", () => {
     expect(chooseCohort([ended, next], NOW)).toMatchObject({ id: "cohort-06", detail: "Full-stack foundations" });
   });
 
+  it("keeps applying in place while an application waits (S2)", () => {
+    expect(chooseCohort([cohort({ application: "COMPLETED" })], NOW, { applying: true })).toMatchObject({ id: "cohort-05", application: null });
+  });
+
   it("keeps a role without an application, and the general name when there is no cohort", () => {
     expect(chooseCohort([cohort({ application: null, curriculum: null, endDate: null })], NOW)).toEqual({
       id: "cohort-05", name: "Cohort 05", detail: null, application: null,

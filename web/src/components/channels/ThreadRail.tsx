@@ -38,8 +38,11 @@ type ThreadRailProps = {
   announce: (text: string) => void;
 };
 
-/** Whether the thread's replies are there to place the rail by: loaded, or rendered by the server. */
-const hasReplies = (thread: ThreadView) => thread.status !== "loading" || thread.messages.length > 0;
+/**
+ * Whether the thread's replies are there to place the rail by: loaded, or rendered by the server. A
+ * thread that failed (or is gone) is not, so a retry that loads it still opens at its reply (S5).
+ */
+const hasReplies = (thread: ThreadView) => thread.status === "ready" || thread.messages.length > 0;
 
 /**
  * One thread beside the channel: its first message, the replies, and a reply

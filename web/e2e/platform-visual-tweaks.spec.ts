@@ -2,9 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { runAxe } from "./platform-axe";
 
 /**
- * The prototype-vs-live visual tweaks whose behaviour a browser has to see (T03, T04, T09, T10, T12;
+ * The prototype-vs-live visual tweaks whose behaviour a browser has to see (T03, T04, T06, T09, T10, T12;
  * Library /reports/platform-visual-review-2026-11-03/), on the DEV-only harnesses: a masked contact
- * marker in a mentor's request card, the accepted request's notice, where a thread opens, where
+ * marker in a mentor's request card, the directory's filter menus, the accepted request's notice, where a thread opens, where
  * "Jump to latest" stands, and the phone's bar on the attention page. Unit tests cover the markup.
  */
 test.skip(Boolean(process.env.PLAYWRIGHT_BASE_URL), "The harnesses are dev-only and unavailable on deployed environments.");
@@ -28,6 +28,23 @@ test("T03: a mentor's request card shows masked contact details as the channels'
   await expect(quote.locator(".channel-masked[role=note]")).toHaveText(NOTE);
   await expect(quote).not.toContainText(MARKER);
   await runAxe(page, testInfo, "request-masked");
+});
+
+test("T06: both filter menus open inside the screen and the filter row, from 320 to 1440 px (B1)", async ({ page }) => {
+  await open(page, "/dev/platform-mentors?persona=wanjiku&view=directory");
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const menu of await page.locator("[data-mentor-filters] details[data-filter-menu]").all()) {
+      await menu.locator("summary").click();
+      const list = menu.locator(".mentor-filter-menu__list");
+      await expect(list).toBeVisible();
+      const [box, row] = [await list.boundingBox(), await page.locator("[data-mentor-filters]").boundingBox()];
+      expect(box!.x, `${width}px`).toBeGreaterThanOrEqual(Math.max(0, row!.x - 1));
+      expect(box!.x + box!.width, `${width}px`).toBeLessThanOrEqual(Math.min(width, row!.x + row!.width + 1));
+      await page.keyboard.press("Escape");
+      await expect(list).toBeHidden();
+    }
+  }
 });
 
 test("T04: an accepted request leads with the mentor and shows Open conversation, on the panel and the page", async ({ page }, testInfo) => {

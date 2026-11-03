@@ -18,6 +18,8 @@ import { getSpaceContext } from "@/lib/platform/server/space-context";
 import SpacesLayout from "@/layouts/SpacesLayout.astro";
 import AttentionPage from "@/components/platform/attention/AttentionPage";
 import { attentionPageData } from "@/components/platform/attention/attention-page-data";
+import { ATTENTION_PAGE_HREF } from "@/components/platform/attention/attention-display";
+import { recordError } from "@/lib/observability/errors";
 import PlatformOverlays from "@/components/platform/overlays/PlatformOverlays";
 import { cohortSearchLabel } from "@/components/platform/spaces/cohort-heading";
 import { loadCohortHeading } from "@/components/platform/spaces/space-page";
@@ -34,7 +36,10 @@ if (data.kind === "missing") return new Response(null, { status: 404 });
 const { me, space, initialList } = data;
 // Search names the person's one cohort here too, as on every space page (T07).
 const cohortLabel = me.spaces.includes("cohort")
-  ? cohortSearchLabel(me, await loadCohortHeading(drizzle(env.DB, { schema }), me).catch(() => null))
+  ? cohortSearchLabel(me, await loadCohortHeading(drizzle(env.DB, { schema }), me).catch((error: unknown) => {
+    void recordError(env.DB, { source: "request", route: ATTENTION_PAGE_HREF, error, level: "warning" });
+    return null;
+  }))
   : null;
 ---
 

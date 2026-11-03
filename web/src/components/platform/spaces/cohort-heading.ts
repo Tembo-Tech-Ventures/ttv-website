@@ -43,15 +43,17 @@ export function cohortWeek(startDate: Date | null, endDate: Date | null, now: nu
 /**
  * The cohort to name: the one running now that started last, else the one that started last. Null
  * when the person belongs to none (an admin sees every cohort without being in one), so the space
- * keeps its general name rather than naming a cohort that isn't theirs.
+ * keeps its general name rather than naming a cohort that isn't theirs. While they have an
+ * application still waiting (`applying`), applying is not behind them, so no application is
+ * folded under "Earlier" (S2).
  */
-export function chooseCohort(memberships: readonly CohortMembership[], now: number): CohortHeading | null {
+export function chooseCohort(memberships: readonly CohortMembership[], now: number, { applying = false } = {}): CohortHeading | null {
   const started = (membership: CohortMembership) => membership.startDate?.getTime() ?? Number.NEGATIVE_INFINITY;
   const byStart = memberships.toSorted((a, b) => started(b) - started(a));
   const chosen = byStart.find((membership) => cohortWeek(membership.startDate, membership.endDate, now) !== null) ?? byStart[0];
   if (!chosen) return null;
   const detail = [chosen.curriculum?.trim() || null, cohortWeek(chosen.startDate, chosen.endDate, now)].filter(Boolean).join(" · ");
-  return { id: chosen.programId, name: chosen.name.trim() || "Cohort", detail: detail || null, application: chosen.application };
+  return { id: chosen.programId, name: chosen.name.trim() || "Cohort", detail: detail || null, application: applying ? null : chosen.application };
 }
 
 /**

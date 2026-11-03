@@ -14,7 +14,7 @@ import { MASKED_NOTE } from "@/components/channels/MaskedText";
 import AvailabilityEditor from "./AvailabilityEditor";
 import MentorRequestsQueue from "./MentorRequestsQueue";
 import { isRecent, RECENT_DAYS } from "./OwnRequests";
-import MentorsDirectory, { splitAreas, standings, TOP_AREAS, type MentorsDirectoryProps } from "./MentorsDirectory";
+import MentorsDirectory, { menuAlignment, splitAreas, standings, TOP_AREAS, type MentorsDirectoryProps } from "./MentorsDirectory";
 
 const PATH = "/dashboard/community/mentors";
 const conduct = { version: 1, habitsHref: "/dashboard/community/conduct", canAgree: true };
@@ -160,12 +160,33 @@ describe("the mentor directory", () => {
     expect(splitAreas(areas.slice(0, 3), null)).toEqual({ shown: areas.slice(0, 3), more: [] });
   });
 
+  it("hangs a filter menu from whichever edge keeps it inside the row (B1)", () => {
+    const row = { left: 20, right: 370 };
+    // First on a wrapped line: from its start, never past the row's start.
+    expect(menuAlignment({ left: 20, right: 158 }, 208, row)).toBe("start");
+    // At the row's end: from its end edge.
+    expect(menuAlignment({ left: 250, right: 370 }, 208, row)).toBe("end");
+    // Neither fits: its start, where the reading begins.
+    expect(menuAlignment({ left: 100, right: 200 }, 400, row)).toBe("start");
+  });
+
+  it("opens Your requests on arrival when a request has news: a suggestion, not this month or a check (S3)", async () => {
+    const { props } = await directoryProps();
+    const redirected = { ...pendingMentorRequest, id: "redirected", status: "REDIRECTED" as const, redirectedTo: people.joseph, updatedAt: FIXTURE_NOW };
+    container.innerHTML = renderToString(<MentorsDirectory {...props} ownRequests={{ items: [redirected, ...props.ownRequests.items.slice(1)], nextCursor: null }} />);
+    expect(q<HTMLDetailsElement>("[data-own-requests-fold]")!.open).toBe(true);
+    expect(text("[data-own-requests-summary]")).toBe("1 with a suggestion · 1 accepted");
+    // The heading is its own, outside the summary.
+    expect(q("[data-own-requests] > h2")!.textContent).toBe("Your requests");
+    expect(q("[data-own-requests-fold] summary h2")).toBeNull();
+  });
+
   it("folds Your requests to one line that says where they stand, and opens on request (T06)", async () => {
     const { props } = await directoryProps();
     await act(async () => root.render(<MentorsDirectory {...props} />));
     const fold = q<HTMLDetailsElement>("[data-own-requests-fold]")!;
     expect(fold.open).toBe(false);
-    expect(fold.querySelector("summary h2")!.textContent).toBe("Your requests");
+    expect(fold.querySelector("summary")!.textContent).toContain("Your requests: ");
     expect(text("[data-own-requests-summary]")).toBe("1 waiting · 1 accepted");
     await act(async () => { fold.querySelector("summary")!.click(); });
     expect(fold.open).toBe(true);

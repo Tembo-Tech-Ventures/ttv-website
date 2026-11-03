@@ -1058,9 +1058,13 @@
   display: none;
 }
 
-/* On a phone it is only its arrow, in a round button the size of a fingertip; its words stay its name. */
+/*
+ * On a phone it is only its arrow, in a round button the size of a fingertip; its words stay its name.
+ * It sits lower, mostly over the composer's empty corner, so less of the last line is under it (S4).
+ */
 @container channel-view (max-width: 40rem) {
   .channel-jump {
+    bottom: -1.75rem;
     width: 2.75rem;
     height: 2.75rem;
     padding: 0;
