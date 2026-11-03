@@ -25,12 +25,14 @@ describe("the complete legacy redirect table", () => {
   });
 
   it("every render target exists, including dynamic routes and root aliases", () => {
-    const targets = [...SPACE_REDIRECTS.map(([legacy]) => legacy), "/dashboard", "/dashboard/community", "/dashboard/discover"];
+    const targets = [...SPACE_REDIRECTS.map(([legacy]) => legacy), "/dashboard", "/dashboard/community", "/dashboard/discover", "/dashboard/me"];
     for (const target of targets) {
       const file = `src/pages${target.replace(":id", "[id]")}`;
       expect(existsSync(`${file}.astro`) || existsSync(`${file}/index.astro`)).toBe(true);
     }
-    expect(legacySpacePath("/dashboard/me")).toBe("/dashboard/portfolio");
+    // The Profile space opens on its own Overview page (T01); the editor is /dashboard/me/portfolio.
+    expect(legacySpacePath("/dashboard/me")).toBe("/dashboard/me");
+    expect(legacySpacePath("/dashboard/me/portfolio")).toBe("/dashboard/portfolio");
     expect(legacySpacePath("/dashboard/cohort")).toBe("/dashboard");
     expect(legacySpacePath("/dashboard/mentoring")).toBe("/dashboard/mentorship");
   });

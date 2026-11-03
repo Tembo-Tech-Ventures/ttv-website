@@ -1,0 +1,27 @@
+---
+/**
+ * /dashboard/me: the Profile space's Overview (T01). It exists only in the spaces shell: the
+ * middleware answers 404 while `spaces` is off for the caller (it is a new space path), and a
+ * caller without the Profile space never gets here. The editor is /dashboard/me/portfolio.
+ */
+import { drizzle } from "drizzle-orm/d1";
+import { env } from "cloudflare:workers";
+import * as schema from "@/lib/db/schema";
+import { getStudentJourney } from "@/lib/student/journey";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import ProfileOverview from "@/components/platform/profile/ProfileOverview.astro";
+import { profileOverview } from "@/components/platform/profile/overview";
+import { loadProfileOverview } from "@/components/platform/profile/overview-server";
+
+const spaces = await resolveSpacePage(Astro.locals, "profile");
+if (!spaces) return new Response("Not found.", { status: 404, headers: { "Cache-Control": "no-store" } });
+
+const db = drizzle(env.DB, { schema });
+const journey = await getStudentJourney(db, spaces.me.user.id);
+const model = profileOverview(await loadProfileOverview(Astro.locals, db, spaces, journey));
+---
+
+<SpacePage context={spaces} title={model.title} journey={journey}>
+  <ProfileOverview model={model} />
+</SpacePage>

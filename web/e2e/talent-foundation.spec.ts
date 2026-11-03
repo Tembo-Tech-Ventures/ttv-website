@@ -108,7 +108,9 @@ test.describe("authenticated talent foundation", () => {
       // Spaces on: the same destinations live in the Profile space's sidebar.
       await page.goto("/dashboard/me");
       const sidebar = page.locator("#space-sidebar");
-      await expect(sidebar.locator("a", { hasText: "Public profile" })).toHaveAttribute("href", "/dashboard/me");
+      // The space opens on its Overview; the editor is its own entry (T01).
+      await expect(sidebar.locator("a", { hasText: "Overview" })).toHaveAttribute("href", "/dashboard/me");
+      await expect(sidebar.locator("a", { hasText: "Public profile" })).toHaveAttribute("href", "/dashboard/me/portfolio");
       await expect(sidebar.locator("a", { hasText: "Visitor messages" })).toHaveAttribute("href", "/dashboard/me/leads");
       await expect(sidebar.locator("a", { hasText: "Opportunities" })).toHaveCount(0);
     } else {

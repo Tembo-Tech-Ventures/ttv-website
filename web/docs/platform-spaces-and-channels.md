@@ -75,6 +75,16 @@ sends people to the last space they used (a `ttv-last-space` cookie), or to
 the first space they have. A path never grants access: the space router checks
 it, and each page and API still makes its own checks.
 
+Each space has a home: `/dashboard/cohort`, `/dashboard/community`,
+`/dashboard/mentoring`, `/dashboard/discover`, `/admin` and, for `profile`,
+`/dashboard/me`. The Profile space's home is its Overview: the public builder
+profile as visitors see it, the work shared on Your journey with where each
+mentor confirmation stands, what needs the person (unopened visitor messages,
+newer revisions nobody has confirmed, drafts), the client projects open to
+them and their certificates. The editor is `/dashboard/me/portfolio`
+("Public profile"). The Overview only reads; every row links to the page that
+does the work.
+
 ### Attention
 
 An `attention_item` is one thing that needs one person, in one space. Its

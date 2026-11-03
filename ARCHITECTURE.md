@@ -124,6 +124,7 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/auth/logout` | Sign out | Session |
 | `/dashboard` | User dashboard home; with flag `spaces`, a 302 to the last-used space (`ttv-last-space` cookie) or the first one the caller has | Session |
 | `/dashboard/cohort`, `/dashboard/community`, `/dashboard/mentoring`, `/dashboard/discover`, `/dashboard/me`, `/dashboard/account` | Space homes (flag `spaces`). The old pages live under them (`/dashboard/apply` → `/dashboard/cohort/apply`, `/dashboard/ask` → `/dashboard/cohort/ask`, `/dashboard/mentorship` → `/dashboard/mentoring/confirm`, `/dashboard/portfolio` → `/dashboard/me/portfolio`, `/dashboard/profile` → `/dashboard/account`, …), and the old URLs 301 there (`SPACE_REDIRECTS` in `src/lib/platform/server/space-routes.ts`) | Session; each space needs its capability |
+| `/dashboard/me` | The Profile space's Overview (flag `spaces`): the public profile card with "View public page" and "Edit", shared work with its mentor confirmation and revision state, "Needs you" (unopened visitor messages, unconfirmed newer revisions, drafts), opportunities and certificates. Read-only; the editor is `/dashboard/me/portfolio` | Session |
 | `/dashboard/attention` | Everything that needs the caller (the bell's page on mobile); flag `spaces` | Session |
 | `/dashboard/ask` | Ask Tembo privately: the sessions of the caller's cohorts (with `spaces`, a 301 to `/dashboard/cohort/ask`) | Session |
 | `/dashboard/apply` | Program application form | Session |

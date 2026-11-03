@@ -133,4 +133,4 @@ What changed after the fresh-tester QA at `7e749c5` (library
   and the page says so, focused, once the card is gone (QAO-10).
 - The public profile reads onboarding too: someone framed as a partner (chose
   to mentor or find people, not to build and learn) gets a note that public
-  builder profiles come with a cohort, not a lock and "Browse Programs" (QAO-07).
+  builder profiles come with a cohort, not a lock and "Browse programs" (QAO-07).

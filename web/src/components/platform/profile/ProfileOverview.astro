@@ -1,0 +1,232 @@
+---
+/**
+ * The Profile space's landing (T01, prototype screens/07): the public builder profile as visitors
+ * see it, the work shared on Your journey with where each mentor confirmation stands, what needs
+ * the person, the client projects open to them, and their certificates. The editor is its own
+ * page ("Public profile"). Every row links to the page that does the work; nothing here writes.
+ * Members wrote the text shown here, so it is rendered as text: Astro escapes each expression.
+ */
+import {
+  PiArrowRight, PiArrowSquareOut, PiCertificate, PiEnvelopeSimple, PiIdentificationCard, PiNotePencil, PiPencilSimple, PiShieldCheck,
+} from "react-icons/pi";
+import Avatar from "@/components/platform/ui/Avatar";
+import Chip from "@/components/platform/ui/Chip";
+import PersonMarker from "@/components/platform/ui/PersonMarker";
+import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
+import { RAISED } from "@/components/platform/ui/tones";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import PartnerProfileNote from "@/components/platform/onboarding/PartnerProfileNote.astro";
+import { SPACE_PAGE_PATHS } from "@/components/platform/spaces/sidebar";
+import type { NeedIcon, ProfileOverviewModel } from "./overview";
+
+interface Props {
+  model: ProfileOverviewModel;
+}
+
+const { model } = Astro.props;
+const { card, noProfile, projects, needs, opportunities, certificates, actions } = model;
+
+const SECTION = `rounded-[1.125rem] border border-hairline p-5 sm:p-6 ${RAISED}`;
+/* Card headings stay in Maven Pro: the page title is the screen's one Mattone heading. */
+const HEADING = "font-body text-lg leading-snug font-bold text-ink-primary";
+const ROW_ACTION = `inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-semibold text-ink-primary underline-offset-3 hover:bg-ink-primary/7 hover:underline ${FOCUS_RING}`;
+const BUTTON = "inline-flex h-11 shrink-0 items-center gap-2 rounded-xl px-5 text-sm font-semibold transition-colors";
+const NEED_ICONS: Record<NeedIcon, typeof PiEnvelopeSimple> = {
+  message: PiEnvelopeSimple,
+  revision: PiShieldCheck,
+  draft: PiNotePencil,
+  profile: PiIdentificationCard,
+};
+---
+
+<div class="max-w-6xl" data-profile-overview>
+  <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+    <div class="min-w-0 basis-96 grow">
+      <PageTitle spaces legacyClass="">{model.title}</PageTitle>
+      <p class="mt-3 max-w-2xl text-base leading-relaxed text-ink-secondary sm:text-lg">{model.lead}</p>
+    </div>
+    {(actions.view || actions.edit) && (
+      <div class="flex flex-wrap gap-3">
+        {actions.view && (
+          <a href={actions.view} class:list={[BUTTON, BUTTON_VARIANTS.quiet, FOCUS_RING]} data-profile-view>
+            <PiArrowSquareOut aria-hidden="true" className="size-4" />
+            View public page
+          </a>
+        )}
+        {actions.edit && (
+          <a href={actions.edit.href} class:list={[BUTTON, BUTTON_VARIANTS.primary, FOCUS_RING]} data-profile-edit>
+            <PiPencilSimple aria-hidden="true" className="size-4" />
+            {actions.edit.label}
+          </a>
+        )}
+      </div>
+    )}
+  </div>
+
+  {/*
+    Three blocks: the profile, what needs the person, their work. On a phone they stack in that
+    order, so what needs them comes before a long list of work; from lg the work sits under the
+    profile and the right column spans both rows (the extra height goes to the second row).
+  */}
+  <div class="mt-8 grid items-start gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:grid-rows-[auto_1fr]">
+    <div class="min-w-0 space-y-6 lg:col-start-1">
+      {card && (
+        <section aria-labelledby="profile-card-name" class={SECTION} data-profile-card>
+          <div class="flex items-start gap-4">
+            <Avatar id={card.avatar.id} name={card.name} src={card.avatar.src ?? undefined} size="lg" className="sm:size-16 sm:text-[1.375rem]" decorative />
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <h2 id="profile-card-name" class="font-body text-xl leading-snug font-bold break-words text-ink-primary sm:text-2xl">{card.name}</h2>
+                <Chip tone={card.status.tone} className="sm:ml-auto">{card.status.label}</Chip>
+              </div>
+              {card.meta.length > 0 && (
+                <p class="mt-1 text-sm break-words text-ink-secondary sm:text-base" data-profile-meta>
+                  {card.meta.map((part, index) => <>{index > 0 && " · "}<span class="whitespace-nowrap">{part}</span></>)}
+                </p>
+              )}
+            </div>
+          </div>
+          {card.bio && <p class="mt-4 text-base leading-relaxed break-words text-ink-primary">{card.bio}</p>}
+          {card.skills.length > 0 && (
+            <ul class="mt-4 flex flex-wrap gap-2" aria-label="Skills">
+              {card.skills.map((skill) => <li class="max-w-full"><Chip>{skill}</Chip></li>)}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {noProfile?.kind === "partner" && <PartnerProfileNote />}
+      {noProfile && noProfile.kind !== "partner" && (
+        <section aria-labelledby="profile-card-title" class={SECTION} data-profile-card={noProfile.kind}>
+          <div class="flex items-start gap-4">
+            <span aria-hidden="true" class="grid size-11 shrink-0 place-items-center rounded-full bg-primary/10">
+              <PersonMarker kind="builder" className="scale-150" />
+            </span>
+            <div class="min-w-0">
+              <h2 id="profile-card-title" class={HEADING}>{noProfile.title}</h2>
+              <p class="mt-2 text-[0.9375rem] leading-relaxed text-ink-secondary">{noProfile.body}</p>
+              {noProfile.action && (
+                <a href={noProfile.action.href} class:list={["mt-4", BUTTON, noProfile.kind === "create" ? BUTTON_VARIANTS.primary : BUTTON_VARIANTS.quiet, FOCUS_RING]}>
+                  {noProfile.action.label}
+                  <PiArrowRight aria-hidden="true" className="size-4" />
+                </a>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+    </div>
+
+    <div class="min-w-0 space-y-6 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+      <section aria-labelledby="profile-needs-title" class={SECTION} data-profile-needs>
+        <h2 id="profile-needs-title" class={HEADING}>Needs you</h2>
+        {needs.length === 0 ? (
+          <p class="mt-3 text-sm leading-relaxed text-ink-secondary">Nothing needs you right now.</p>
+        ) : (
+          <ul class="mt-2 divide-y divide-hairline">
+            {needs.map((need) => {
+              const Icon = NEED_ICONS[need.icon];
+              return (
+                <li class="flex items-center gap-3 py-1.5" data-profile-need={need.icon}>
+                  <Icon aria-hidden="true" className="size-4 shrink-0 text-ink-muted" />
+                  <span class="min-w-0 flex-1 text-sm break-words text-ink-primary">{need.text}</span>
+                  <a href={need.action.href} aria-label={need.action.name} class:list={[ROW_ACTION, "-mr-3"]}>{need.action.label}</a>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      {opportunities && (
+        <section aria-labelledby="profile-opportunities-title" class={SECTION} data-profile-opportunities>
+          <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 id="profile-opportunities-title" class={HEADING}>Opportunities for you</h2>
+            {opportunities.more && <a href={SPACE_PAGE_PATHS.opportunities} class:list={[ROW_ACTION, "-mr-3"]}>See all</a>}
+          </div>
+          {opportunities.items.length === 0 ? (
+            <p class="mt-3 text-sm leading-relaxed text-ink-secondary">No approved projects right now.</p>
+          ) : (
+            <ul class="mt-2 divide-y divide-hairline">
+              {opportunities.items.map((item) => (
+                <li class="flex items-center gap-3 py-1.5" data-profile-opportunity>
+                  <span class="min-w-0 flex-1 text-sm break-words">
+                    <span class="block text-ink-primary">{item.title}</span>
+                    <span class="block text-ink-secondary">{item.organization}</span>
+                  </span>
+                  {item.interested
+                    ? <Chip tone="ring">Hand raised</Chip>
+                    : <a href={SPACE_PAGE_PATHS.opportunities} aria-label={`Raise hand for ${item.title}`} class:list={[ROW_ACTION, "-mr-3"]}>Raise hand</a>}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p class="mt-3 text-sm leading-relaxed text-ink-secondary">If there's a fit, the TTV team makes the introduction.</p>
+        </section>
+      )}
+
+      {certificates.length > 0 && (
+        <section aria-labelledby="profile-certificates-title" class={SECTION} data-profile-certificates>
+          <h2 id="profile-certificates-title" class={HEADING}>Certificates</h2>
+          <ul class="mt-2 divide-y divide-hairline">
+            {certificates.map((certificate) => (
+              <li class="flex items-center gap-3 py-1.5">
+                <PiCertificate aria-hidden="true" className="size-4 shrink-0 text-ink-muted" />
+                <span class="min-w-0 flex-1 text-sm break-words text-ink-primary">{certificate.programName}</span>
+                <a href={certificate.href} aria-label={`View your ${certificate.programName} certificate`} class:list={[ROW_ACTION, "-mr-3"]}>View</a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+
+    <div class="min-w-0 lg:col-start-1">
+      <section aria-labelledby="profile-projects-title" class={SECTION} data-profile-projects>
+        <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 id="profile-projects-title" class={HEADING}>Your work</h2>
+          {projects.total > 0 && (
+            <a href={SPACE_PAGE_PATHS.journey} class:list={[ROW_ACTION, "-mr-3"]}>
+              {projects.total > projects.items.length ? `See all ${projects.total} on Your journey` : "Open Your journey"}
+            </a>
+          )}
+        </div>
+        {!projects.available && (
+          <p class="mt-3 text-sm leading-relaxed text-ink-secondary" data-profile-projects-unavailable>
+            Your work couldn't be loaded just now. It's still on <a href={SPACE_PAGE_PATHS.journey} class={`font-semibold text-ink-primary underline underline-offset-3 ${FOCUS_RING}`}>Your journey</a>.
+          </p>
+        )}
+        {projects.available && projects.items.length === 0 && (
+          <p class="mt-3 text-sm leading-relaxed text-ink-secondary">
+            Nothing shared yet. Add what you've built on <a href={SPACE_PAGE_PATHS.journey} class={`font-semibold text-ink-primary underline underline-offset-3 ${FOCUS_RING}`}>Your journey</a>, and mentors can confirm the part that was yours.
+          </p>
+        )}
+        {projects.items.length > 0 && (
+          <ul class="mt-2 divide-y divide-hairline">
+            {projects.items.map((project) => (
+              <li class="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 py-3" data-profile-project={project.state.kind}>
+                <div class="min-w-0 basis-56 grow">
+                  <h3 class="text-base leading-snug break-words text-ink-primary">{project.title}</h3>
+                  <p class="mt-0.5 text-sm break-words text-ink-secondary">
+                    {project.summary}{project.revision > 1 && <span class="text-ink-muted"> · revision {project.revision}</span>}
+                  </p>
+                </div>
+                <p
+                  class:list={[
+                    "flex items-center gap-2 text-sm",
+                    project.state.kind === "confirmed" ? "font-semibold text-ring" : project.state.kind === "newer" ? "text-ring" : "text-ink-muted",
+                  ]}
+                  data-profile-project-state
+                >
+                  {(project.state.kind === "confirmed" || project.state.kind === "newer") && <PersonMarker kind="mentor" />}
+                  {project.state.text}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  </div>
+</div>

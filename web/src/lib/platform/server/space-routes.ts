@@ -116,7 +116,6 @@ export function legacySpacePath(pathname: string): string {
   const path = normalizeSpacePath(pathname);
   if (path === SPACE_PATHS.cohort) return "/dashboard";
   if (path === SPACE_PATHS.mentoring) return "/dashboard/mentorship";
-  if (path === SPACE_PATHS.profile) return "/dashboard/portfolio";
   for (const [legacy, canonical] of SPACE_REDIRECTS) {
     const match = mappedPath(path, canonical, legacy);
     if (match) return match;
