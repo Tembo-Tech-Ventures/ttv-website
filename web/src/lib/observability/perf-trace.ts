@@ -159,3 +159,13 @@ function finish(trace: Trace, response: Response): Response {
   });
   return new Response(response.body.pipeThrough(tail), { status: response.status, statusText: response.statusText, headers });
 }
+
+/**
+ * PERF-1 prototypes switched per request, so one preview compares them under the same conditions:
+ * the `ttv-perf` cookie holds dot-separated tokens (`mpa`, …). Never in production.
+ */
+export function perfVariant(environment: string | undefined, request: Request): ReadonlySet<string> {
+  if (!perfTraceEnabled(environment)) return new Set();
+  const value = request.headers.get("cookie")?.split(";").map(part => part.trim()).find(part => part.startsWith("ttv-perf="));
+  return new Set(value ? value.slice("ttv-perf=".length).split(".") : []);
+}

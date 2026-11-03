@@ -36,6 +36,9 @@ import { SPACE_LABEL } from "@/components/platform/shell/space-routes";
 import { shellAccount } from "@/components/platform/shell/account";
 import SheetTransition from "@/components/platform/shell/SheetTransition.astro";
 import { pageTitle } from "@/lib/seo";
+import { ClientRouter } from "astro:transitions";
+import { env } from "cloudflare:workers";
+import { perfVariant } from "@/lib/observability/perf-trace";
 
 interface Props {
   me: Me;
@@ -62,6 +65,10 @@ const signedIn = Boolean(Astro.locals.user);
 const account: ShellAccount = harness?.account ?? shellAccount(Astro.locals);
 // Parsed here, on the server: the island gets a SpaceId or null, never the header.
 const lastSpace = readLastSpaceCookie(Astro.request.headers.get("cookie"));
+// PERF-1 (3): Astro's ClientRouter between spaces pages: links and form posts load the next page with
+// fetch and swap the body, keeping the document, its JS heap and module cache. Pages outside the shell
+// lack the router, so going there is a full load. On by default on this branch; `ttv-perf=mpa` turns it off.
+const clientRouter = !perfVariant(env.DEPLOYMENT_ENVIRONMENT, Astro.request).has("mpa");
 const shell = {
   me,
   space,
@@ -85,6 +92,18 @@ const shell = {
     <title>{pageTitle(titlePrefix + (title === SPACE_LABEL[space] ? title : `${title} · ${SPACE_LABEL[space]}`))}</title>
     {signedIn && <ClientErrorBuffer />}
     <SheetTransition />
+    {clientRouter && <ClientRouter />}
+    <script>
+      // PERF-1 (3): the router announces the new title but leaves focus on <body>. Move it to the
+      // page's heading, as a full load's "skip to content" would, so keyboard and screen reader
+      // users start at the new page instead of the top of the document.
+      document.addEventListener("astro:after-swap", () => {
+        const heading = document.querySelector<HTMLElement>("main h1, h1");
+        if (!heading) return;
+        heading.setAttribute("tabindex", "-1");
+        heading.focus({ preventScroll: true });
+      });
+    </script>
   </head>
   <body class="h-full overflow-hidden overscroll-none bg-ground">
     {

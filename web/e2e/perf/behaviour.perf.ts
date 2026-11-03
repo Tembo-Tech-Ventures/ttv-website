@@ -1,0 +1,73 @@
+/** PERF-1 (investigation only): what ClientRouter keeps and loses between spaces pages. Writes test-results/perf/behaviour-*.json. */
+import { mkdirSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { test } from "@playwright/test";
+import { personaSession, signIn } from "../platform-personas";
+
+test("client router behaviours", async ({ browser, baseURL }) => {
+  test.setTimeout(120_000);
+  const out: Record<string, unknown> = {};
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const variant = process.env.PERF_VARIANTS ?? "base";
+  out.variant = variant;
+  const session = personaSession("student");
+  test.skip(typeof session === "string", String(session));
+  if (typeof session === "string") return;
+  await signIn(context, baseURL!, session);
+  await context.addCookies([{ name: "ttv-perf", value: variant, url: baseURL! }]);
+  const page = await context.newPage();
+  page.setDefaultTimeout(8000);
+  const polls: string[] = [];
+  page.on("request", r => { if (r.resourceType() === "fetch") polls.push(`${new URL(r.url()).pathname}${new URL(r.url()).search.slice(0, 24)}`); });
+  const errors: string[] = []; page.on("pageerror", e => errors.push(String(e).slice(0, 200)));
+  const channels = await (await page.request.get("/api/channels")).json() as { items: { slug: string; kind: string }[] };
+  const channel = channels.items.find(c => c.kind === "COHORT") ?? channels.items[0];
+  const href = `/dashboard/${channel.kind === "COHORT" ? "cohort" : "community"}/c/${channel.slug}`;
+  await page.goto(href);
+  await page.waitForFunction(() => !document.querySelector("astro-island[ssr][client='load']"));
+  const agree = page.getByRole("button", { name: "I’ll keep to this" });
+  if (await agree.isVisible().catch(() => false)) { await agree.click(); await page.waitForLoadState("load"); }
+  out.channel = href;
+  const composer = page.locator("textarea").first();
+  out.composer = await composer.count();
+  await composer.fill("draft that should survive", { timeout: 4000 }).catch(e => { out.composerError = String(e).slice(0, 120); });
+  const menu = page.getByRole("button", { name: /account/i }).first();
+  await menu.click({ timeout: 4000 }).catch(e => { out.menuError = String(e).slice(0, 120); });
+  out.menuExpandedBefore = await menu.getAttribute("aria-expanded", { timeout: 2000 }).catch(() => null);
+  out.windowMarker = await page.evaluate(() => {
+    (window as unknown as { __marker: number }).__marker = 42;
+    const shell = document.querySelector("astro-island[component-url*='SpacesShell']") as (Element & { __keep?: number }) | null;
+    if (shell) shell.__keep = 1;
+    return true;
+  });
+  await page.waitForTimeout(6000);
+  const pollsOnChannel = polls.length;
+  await page.locator('a[href="/dashboard/community"]').first().click({ timeout: 4000 });
+  await page.waitForURL("**/dashboard/community");
+  await page.waitForTimeout(1500);
+  out.softNavigation = await page.evaluate(() => (window as unknown as { __marker?: number }).__marker === 42);
+  out.shellIslandKept = await page.evaluate(() => (document.querySelector("astro-island[component-url*='SpacesShell']") as (Element & { __keep?: number }) | null)?.__keep === 1);
+  out.menuExpandedAfter = await page.getByRole("button", { name: /account/i }).first().getAttribute("aria-expanded").catch(() => null);
+  out.focusAfterNav = await page.evaluate(() => ({ tag: document.activeElement?.tagName, label: document.activeElement?.getAttribute("aria-label"), text: document.activeElement?.textContent?.trim().slice(0, 40) }));
+  out.announcer = await page.evaluate(() => { const a = document.querySelector(".astro-route-announcer"); return a ? { live: a.getAttribute("aria-live"), text: a.textContent } : null; });
+  out.title = await page.title();
+  await page.waitForTimeout(20000);
+  out.fetchesOnChannel = polls.slice(0, pollsOnChannel);
+  out.fetchesAfterLeaving = polls.slice(pollsOnChannel);
+  await page.goBack();
+  await page.waitForURL(`**${href}`);
+  await page.waitForTimeout(1500);
+  out.draftAfterBack = await page.locator("textarea").first().inputValue().catch(() => null);
+  out.feedbackReachable = await (async () => {
+    await page.getByRole("button", { name: /account/i }).first().click().catch(() => {});
+    const item = page.getByRole("menuitem", { name: /feedback/i });
+    if (!await item.count()) return "no menu item";
+    await item.click().catch(() => {});
+    return await page.getByRole("dialog").filter({ hasText: /feedback/i }).isVisible().catch(() => false);
+  })();
+  out.errors = errors;
+  const dir = fileURLToPath(new URL("../../test-results/perf", import.meta.url));
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(`${dir}/behaviour-${Date.now()}.json`, JSON.stringify(out, null, 1));
+  await context.close();
+});
