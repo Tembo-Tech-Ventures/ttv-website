@@ -23,6 +23,7 @@ import {
   undoSetAside,
   askProfile,
   type CommunityAccess,
+  type JourneyInitial,
 } from "./community-client";
 
 import { assessProfile } from "./assessment-client";
@@ -41,20 +42,26 @@ export default function CommunityApp({
   view,
   embedded = false,
   framing,
+  initial,
 }: {
   view: View;
   /** Rendered inside the spaces shell, which supplies the frame and navigation. */
   embedded?: boolean;
   /** How onboarding frames the journey, when it is on for this person; member framing otherwise. */
   framing?: CommunityFraming;
+  /** The journey view's data, read while the page rendered; the view then starts on it instead of loading. */
+  initial?: JourneyInitial | null;
 }) {
-  const [access, setAccess] = useState<CommunityAccess | null>(null);
-  const [profile, setProfile] = useState<CommunityProfile | null>(null);
+  const preloaded = view === "journey" ? initial ?? undefined : undefined;
+  const [access, setAccess] = useState<CommunityAccess | null>(preloaded?.access ?? null);
+  const [profile, setProfile] = useState<CommunityProfile | null>(preloaded?.profile ?? null);
   const [requests, setRequests] = useState<MentorReviewRequest[]>([]);
-  const [busy, setBusy] = useState(true);
+  const [busy, setBusy] = useState(!preloaded);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    // Rendered with the page's own data: nothing to load until the person asks again.
+    if (preloaded && attempt === 0) return;
     let active = true;
     async function load() {
       setBusy(true);
@@ -97,7 +104,7 @@ export default function CommunityApp({
     return () => {
       active = false;
     };
-  }, [view, attempt]);
+  }, [view, attempt, preloaded]);
   const navigation = useMemo(() => {
     const views: View[] = ["journey"];
     if (access?.isAdmin || access?.isInstitution) views.push("scout");
