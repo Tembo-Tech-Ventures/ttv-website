@@ -7,7 +7,7 @@ import {
   AttentionList, ErrorEnvelope, MentorDirectory, MentorRequest, MentorRequestCase, MentorRequestCaseList, MentorRequestList,
 } from "@/lib/platform/contracts";
 import { CASE_PAGE_SIZE } from "./checks";
-import { mentoringDatabase, PEOPLE, type MentoringFixture } from "./test-support";
+import { mentoringDatabase, NOW, PEOPLE, type MentoringFixture } from "./test-support";
 
 const fixtures: MentoringFixture[] = [];
 afterEach(() => { fixtures.splice(0).forEach(({ database }) => database.close()); vi.restoreAllMocks(); });
@@ -430,6 +430,19 @@ describe("what the person asking hears of a check (QA4-02)", () => {
     expect(JSON.stringify(all.map(([label, summary]) => [label, summary]))).not.toMatch(/declin|report|mentor|Clef|Tembo|Amina/i);
     // Nobody else hears these notices.
     for (const user of [PEOPLE.david, PEOPLE.amina]) expect(await notices(s, user)).toEqual([]);
+  });
+  it("shows only what describes the check now when a kept request is reported and its check opens again", async () => {
+    const s = setup();
+    const id = await ask(s, ABUSE);
+    // Each step a minute after the one before, as in real use.
+    const at = (minutes: number) => ({ now: () => NOW + minutes * 60_000 });
+    const admin = (action: "keep" | "remove", minutes: number) =>
+      step(s, s.call("decideMentorRequestCase", { id, user: PEOPLE.amina, body: { action, reason: "Checked." }, ...at(minutes) }));
+    await admin("keep", 1);
+    await step(s, s.call("reportMentorRequest", { id, user: PEOPLE.david, body: { reason: "Insults me." }, ...at(2) }));
+    expect((await notices(s)).map((notice) => notice[1])).toEqual([CHECKING]);
+    await admin("remove", 3);
+    expect((await notices(s)).map((notice) => notice[1])).toEqual(["It was closed, after a check. You can ask again with a new note."]);
   });
 });
 
