@@ -142,12 +142,17 @@ export default function RequestForm({
   }, []);
 
   // Focus follows the drawer's state: the thank-you once sent, the habits prompt when it appears.
+  const lastStatus = useRef(state.status);
   useEffect(() => {
     if (state.status === "sent") sentRef.current?.focus();
     if (state.status === "conduct") conductRef.current?.focus();
     // On a short screen the footer scrolls with the form, so the reason that just appeared above Send can push
-    // it past the sheet's edge: bring it back, with the reason. Pinned, both are in view already (T13).
-    if (state.status === "error") formRef.current?.querySelector("button[type=submit]")?.scrollIntoView({ block: "nearest" });
+    // it past the sheet's edge: bring it back, with the reason. Pinned, both are in view already (T13). Only
+    // after a send from this drawer: one the page arrived with keeps the note it focuses in view.
+    if (state.status === "error" && lastStatus.current === "sending") {
+      formRef.current?.querySelector("[data-request-send]")?.scrollIntoView({ block: "nearest" });
+    }
+    lastStatus.current = state.status;
   }, [state.status]);
 
   async function submit(event: FormEvent) {
@@ -392,7 +397,7 @@ function SendActions({ agreement, failure, sending, closeHref, onClose }: {
     <div className="mentor-drawer__actions mentor-drawer__actions--sticky">
       {agreement}
       {failure}
-      <Button type="submit" variant="primary" loading={sending} className="flex-1 sm:flex-none">
+      <Button type="submit" variant="primary" loading={sending} className="flex-1 sm:flex-none" data-request-send>
         {agreement ? "Agree and send request" : "Send request"}
       </Button>
       <CancelControl closeHref={closeHref} onClose={onClose} />
