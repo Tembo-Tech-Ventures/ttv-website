@@ -5,7 +5,7 @@ import { ACCOUNT_PATH, requestRowId } from "@/components/platform/onboarding/acc
 import { PARTNER, REQUEST, TAKING_PART } from "@/components/platform/onboarding/copy";
 import { offersCohort, type OnboardingView } from "@/components/platform/onboarding/framing";
 import { CONDUCT_TITLE } from "@/components/channels/conduct";
-import { ADMIN_HOME_HREF, adminSpaceEntries, MODERATION_HREF, NO_ADMIN_FACTS, type AdminNavFacts, type AdminNavKey } from "@/components/admin/admin-nav";
+import { ADMIN_PAGE_HREFS, adminSpaceEntries, NO_ADMIN_FACTS, type AdminNavFacts, type AdminNavKey, type AdminPageNavKey } from "@/components/admin/admin-nav";
 import { channelPath, channelPathPrefix, conversationPath } from "@/components/channels/paths";
 import { COHORT_APPLICATION_NOTE, type CohortHeading } from "./cohort-heading";
 import {
@@ -43,8 +43,42 @@ export type SpacePageKey =
   | "mentorRequests"
   | "mentorAvailability"
   | "conversation"
-  | "adminHome"
-  | "moderation";
+  | AdminSpacePageKey;
+
+/**
+ * The admin pages drawn in the Admin space, by their admin navigation entry (T02, T14). A page under
+ * one (a user, a new cohort, feedback themes) uses its section's key, so that entry is marked current.
+ */
+export const ADMIN_SPACE_PAGES = {
+  home: "adminHome",
+  accessRequests: "adminAccessRequests",
+  moderation: "moderation",
+  users: "adminUsers",
+  applications: "adminApplications",
+  profiles: "adminProfiles",
+  feedback: "adminFeedback",
+  projects: "adminProjects",
+  curricula: "adminCurricula",
+  cohorts: "adminCohorts",
+  recordings: "adminRecordings",
+  integrations: "adminIntegrations",
+  flags: "adminFlags",
+  tokens: "adminTokens",
+  migration: "adminMigration",
+  agentAccess: "adminAgentAccess",
+} as const satisfies Record<AdminPageNavKey, string>;
+
+export type AdminSpacePageKey = (typeof ADMIN_SPACE_PAGES)[AdminPageNavKey];
+
+function isAdminPage(key: AdminNavKey): key is AdminPageNavKey {
+  return Object.hasOwn(ADMIN_SPACE_PAGES, key);
+}
+
+/** One value for each admin page in the Admin space, keyed by its page key. */
+function byAdminPage<T>(value: (key: AdminPageNavKey) => T): Record<AdminSpacePageKey, T> {
+  const keys = Object.keys(ADMIN_SPACE_PAGES) as AdminPageNavKey[];
+  return Object.fromEntries(keys.map((key) => [ADMIN_SPACE_PAGES[key], value(key)])) as Record<AdminSpacePageKey, T>;
+}
 
 export type SidebarIcon =
   | "overview"
@@ -172,8 +206,7 @@ export const PAGE_SPACES: Readonly<Record<SpacePageKey, readonly SpaceId[]>> = {
   mentorRequests: ["mentoring"],
   mentorAvailability: ["mentoring"],
   conversation: ["community"],
-  adminHome: ["admin"],
-  moderation: ["admin"],
+  ...byAdminPage((): readonly SpaceId[] => ["admin"]),
 };
 
 export const SPACE_PAGE_PATHS = {
@@ -202,8 +235,7 @@ export const SPACE_PAGE_PATHS = {
   mentorAvailability: MENTOR_AVAILABILITY_PATH,
   // A conversation page is one of many under this prefix; its own path is conversationPath(channel.id).
   conversation: CONVERSATIONS_PREFIX,
-  adminHome: ADMIN_HOME_HREF,
-  moderation: MODERATION_HREF,
+  ...byAdminPage((key) => ADMIN_PAGE_HREFS[key]),
 } as const satisfies Record<SpacePageKey, string>;
 
 /** What an entry whose page has not opened says, here and on the page it leads to. */
@@ -413,9 +445,6 @@ const ADMIN_ICONS: Record<AdminNavKey, SidebarIcon> = {
   logout: "account",
 };
 
-/** The admin pages already drawn in the spaces shell, so their entries are marked current there. */
-const ADMIN_PAGES: Partial<Record<AdminNavKey, SpacePageKey>> = { home: "adminHome", moderation: "moderation" };
-
 /**
  * The existing admin navigation (admin-nav.ts) as the Admin space's sidebar, with the mentor review
  * page admins keep beside Moderation. Its counts come from the page (facts.admin); without them the
@@ -428,7 +457,7 @@ function admin(facts: SidebarFacts): SidebarModel {
   // Mentor review sits with the other queues: after Moderation, or Access requests while channels are off.
   const reviewAfter: AdminNavKey = nav.some((entry) => entry.key === "moderation") ? "moderation" : "accessRequests";
   const entries = nav.flatMap((entry): Entry[] => {
-    const page = ADMIN_PAGES[entry.key];
+    const page = isAdminPage(entry.key) ? ADMIN_SPACE_PAGES[entry.key] : undefined;
     const base = {
       key: `admin-${entry.key}`, label: entry.label, icon: ADMIN_ICONS[entry.key],
       ...(entry.badge ? { count: entry.badge, countLabel: entry.badgeLabel } : {}),

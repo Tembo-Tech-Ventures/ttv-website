@@ -2,6 +2,7 @@
 import { env } from "cloudflare:workers";
 import { PiInfoDuotone } from "react-icons/pi";
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import AccessRequestCard from "@/components/admin/AccessRequestCard.astro";
 import {
   ACCESS_REQUESTS_PATH, decisionFailure, decisionNotice, isDelegatedCredential, isOwnRepeatDecision, parseDecisionForm,
@@ -89,14 +90,18 @@ const current = tabs.find((tab) => tab.state === state) ?? tabs[0];
 // After a decision the decided card leaves the list, so focus goes to the banner that says what happened (QAO-06).
 const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 const nextHref = list.nextCursor ? `${current.href}${state === "PENDING" ? "?" : "&"}cursor=${encodeURIComponent(list.nextCursor)}` : null;
+// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
+const spaces = await resolveSpacePage(Astro.locals, "adminAccessRequests");
+// The page title is the screen's one display heading in the spaces shell.
+const Title = spaces ? "h1" : "h2";
 ---
 
-<AdminLayout title="Access requests" pendingAccessRequests={list.pendingCount}>
+<AdminLayout title="Access requests" pendingAccessRequests={list.pendingCount} spaces={spaces}>
   <div class="mx-auto max-w-6xl space-y-8 lg:px-6 lg:pt-6">
     <header class="space-y-4">
-      <h2 class="text-[2.5rem] leading-[0.95] tracking-display text-ink-primary sm:text-5xl lg:text-6xl">
+      <Title class="text-[2.5rem] leading-[0.95] tracking-display text-ink-primary sm:text-5xl lg:text-6xl">
         Access requests
-      </h2>
+      </Title>
       <p class="max-w-3xl text-base leading-relaxed text-ink-secondary sm:text-lg">
         People asking for mentor or organisation access. Approving adds the role. Declining leaves them a
         member, with your message if you write one.

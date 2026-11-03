@@ -1,5 +1,7 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import Card from "@/components/common/Card.astro";
 import FeedbackStatusPill from "@/components/feedback/FeedbackStatusPill.astro";
 import { env } from "cloudflare:workers";
@@ -72,9 +74,11 @@ const formatDate = (date: Date) =>
   date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const field =
   "w-full rounded-md border border-teal/40 bg-dark px-3 py-2 text-sm text-ink-primary";
+// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
+const spaces = await resolveSpacePage(Astro.locals, "adminFeedback");
 ---
 
-<AdminLayout title="Feedback theme">
+<AdminLayout title="Feedback theme" spaces={spaces}>
   <div class="space-y-6">
     <a href="/admin/feedback/themes" class="text-sm text-primary hover:underline">
       &larr; Back to Themes
@@ -96,7 +100,7 @@ const field =
     }
 
     <div class="flex flex-wrap items-center gap-3">
-      <h2 class="text-2xl font-bold text-white">{theme.title}</h2>
+      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">{theme.title}</PageTitle>
       <FeedbackStatusPill theme={theme.status} />
     </div>
 

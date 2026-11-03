@@ -5,7 +5,10 @@ import type { Channel, Me } from "@/lib/platform/contracts";
 import { channelList, channels, meByPersona } from "@/lib/platform/fixtures";
 import { canonicalSpacePath, isAvailableSpacePath, isNewSpacePath, legacySpacePath } from "@/lib/platform/server/space-routes";
 import { STUDENT_DASHBOARD_LINK_IDS, type StudentDashboardLinkId } from "@/lib/student/journey";
-import { NOT_OPEN_YET, PAGE_SPACES, SPACE_PAGE_PATHS, spaceSidebar, type SidebarFacts, type SidebarModel, type SpacePageKey } from "./sidebar";
+import { adminSpaceEntries, type AdminNavFacts } from "@/components/admin/admin-nav";
+import {
+  ADMIN_SPACE_PAGES, NOT_OPEN_YET, PAGE_SPACES, SPACE_PAGE_PATHS, spaceSidebar, type SidebarFacts, type SidebarModel, type SpacePageKey,
+} from "./sidebar";
 
 const EVERY_LINK: StudentDashboardLinkId[] = [...STUDENT_DASHBOARD_LINK_IDS];
 const NEW_SIGN_IN: StudentDashboardLinkId[] = ["home", "apply", "ask", "account", "logout"];
@@ -22,9 +25,15 @@ const CHANNEL_PAGES: Partial<Record<SpacePageKey, Channel>> = {
 /** The sidebars as they were before mentor requests (flag `mentor_requests` off). */
 const dark = (me: Me): Me => ({ ...me, flags: { ...me.flags, mentor_requests: false } });
 
+/** The Admin space's optional tools are listed where they exist: its pages get all of them. */
+const ADMIN_TOOLS: AdminNavFacts = { agentAuthEnabled: true, dataMigrationEnabled: true, stagingDemoEnabled: true, pendingAccessRequests: 0, pendingModeration: 0 };
+
 function pageFacts(me: Me, page: SpacePageKey): SidebarFacts {
   const open = CHANNEL_PAGES[page];
-  return facts(me, page, open ? { channels: { items: channelList.items, currentId: page === "conduct" ? null : open.id } } : {});
+  return facts(me, page, {
+    ...(open ? { channels: { items: channelList.items, currentId: page === "conduct" ? null : open.id } } : {}),
+    ...(PAGE_SPACES[page].includes("admin") ? { admin: ADMIN_TOOLS } : {}),
+  });
 }
 
 function hrefs(model: SidebarModel): string[] {
@@ -196,6 +205,16 @@ describe("space sidebars", () => {
     expect(labels(tools).slice(-3)).toEqual(["Staging demo personas", "Data migration", "Agent access"]);
     expect(current(tools)).toEqual(["Admin home"]);
     expect(tools.groups.flatMap((group) => group.items).filter((entry) => entry.count)).toEqual([]);
+  });
+
+  it("mark each admin page's own entry current, at the path the admin navigation gives it (T14)", () => {
+    const entries = adminSpaceEntries(ADMIN_TOOLS);
+    for (const [key, page] of Object.entries(ADMIN_SPACE_PAGES)) {
+      const entry = entries.find((candidate) => candidate.key === key)!;
+      expect(SPACE_PAGE_PATHS[page], `${page} path`).toBe(entry.href);
+      expect(PAGE_SPACES[page], `${page} space`).toEqual(["admin"]);
+      expect(current(spaceSidebar("admin", pageFacts(meByPersona.amina, page))), `${page} current`).toEqual([entry.label]);
+    }
   });
 
   it("keep the admin mentor review in the Admin space, after Access requests while channels are off", () => {

@@ -1,5 +1,7 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import Button from "@/components/common/Button.astro";
 import Card from "@/components/common/Card.astro";
 import { drizzle } from "drizzle-orm/d1";
@@ -47,16 +49,18 @@ if (Astro.request.method === "POST") {
 const programs = await db.query.program.findMany({
   orderBy: (program, { desc }) => [desc(program.createdAt)],
 });
+// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
+const spaces = await resolveSpacePage(Astro.locals, "adminRecordings");
 ---
 
-<AdminLayout title="Upload Recording">
+<AdminLayout title="Upload Recording" spaces={spaces}>
   <div class="mx-auto max-w-3xl space-y-6">
     <a href="/admin/recordings" class="text-sm text-primary hover:underline">
       &larr; Back to Recordings
     </a>
 
     <Card>
-      <h2 class="text-xl font-semibold text-white">Upload Recording</h2>
+      <PageTitle spaces={Boolean(spaces)} legacyClass="text-xl font-semibold text-white" size="card">Upload Recording</PageTitle>
       <p class="mt-1 text-sm text-ink-muted">
         The video is stored in R2 and queued for audio extraction, transcription, and indexing.
       </p>

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { meByPersona } from "@/lib/platform/fixtures";
 import { createCapabilityDatabase } from "@/lib/platform/server/capabilities.test-support";
 import { DEMO_PERSONAS } from "@/lib/staging-demo-policy";
+import { ADMIN_SPACE_PAGES } from "./sidebar";
 
 const mocks = vi.hoisted(() => ({ getSpaceContext: vi.fn(), getOnboardingState: vi.fn(), recordError: vi.fn() }));
 vi.mock("cloudflare:workers", () => ({ env: { DB: "synthetic-d1" } }));
@@ -93,16 +94,18 @@ describe("resolveSpacePage", () => {
   });
 });
 
-describe("resolveSpacePage for the admin pages in the spaces shell (T02)", () => {
-  it("opens Admin home and Moderation in the Admin space for an admin with spaces on", async () => {
+describe("resolveSpacePage for the admin pages in the spaces shell (T02, T14)", () => {
+  const ADMIN_PAGES = Object.values(ADMIN_SPACE_PAGES);
+
+  it("opens every admin page in the Admin space for an admin with spaces on", async () => {
     mocks.getSpaceContext.mockResolvedValue(meByPersona.amina);
-    for (const page of ["adminHome", "moderation"] as const) {
+    for (const page of ADMIN_PAGES) {
       await expect(resolveSpacePage(locals, page)).resolves.toMatchObject({ space: "admin", page });
     }
   });
 
   it("keeps the existing admin shell (null) with spaces off, on a denial, for a non-admin, or when the context fails", async () => {
-    for (const page of ["adminHome", "moderation"] as const) {
+    for (const page of ADMIN_PAGES) {
       mocks.getSpaceContext.mockResolvedValueOnce(off);
       await expect(resolveSpacePage(locals, page)).resolves.toBeNull();
       mocks.getSpaceContext.mockRejectedValueOnce(new Response(null, { status: 403 }));
