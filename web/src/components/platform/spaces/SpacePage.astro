@@ -83,7 +83,7 @@ if (context) {
     loadSidebarChannels(context.me, context.space, listChannels, reportChannels, channelId ?? null),
     loadCohort(),
     // The Admin space's sidebar is the admin navigation, with its counts (the mentor review page reads them here).
-    context.space === "admin" ? suppliedAdmin ?? loadAdminNavFacts(Astro.locals, Astro.url.origin) : null,
+    context.space === "admin" ? suppliedAdmin ?? loadAdminNavFacts(Astro.locals, Astro.url) : null,
   ]);
   cohortLabel = cohortSearchLabel(context.me, cohort);
   const restrictions = restrictionsFor(Astro.locals);

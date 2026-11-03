@@ -16,7 +16,7 @@ vi.mock("@/lib/observability/errors", () => ({ recordError: mocks.recordError })
 const { loadAdminNavFacts } = await import("./admin-nav-server");
 
 const locals = { user: { id: "admin-1" } } as unknown as App.Locals;
-const ORIGIN = "https://tembotechventures.com";
+const URL_ = new URL("https://tembotechventures.com/dashboard/mentoring/confirm");
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -28,19 +28,19 @@ beforeEach(() => {
 
 describe("loadAdminNavFacts", () => {
   it("counts the queues, with the request notes on the Moderation badge and separately for the existing shell", async () => {
-    await expect(loadAdminNavFacts(locals, ORIGIN)).resolves.toMatchObject({
+    await expect(loadAdminNavFacts(locals, URL_)).resolves.toMatchObject({
       pendingAccessRequests: 7, pendingModeration: 10, pendingCases: 9, pendingRequestNotes: 1,
     });
   });
 
   it("lists no Moderation entry while channels are off, and reads no queue for it", async () => {
     mocks.isFlagEnabled.mockResolvedValue(false);
-    await expect(loadAdminNavFacts(locals, ORIGIN)).resolves.toMatchObject({ pendingModeration: null, pendingCases: null, pendingRequestNotes: 0 });
+    await expect(loadAdminNavFacts(locals, URL_)).resolves.toMatchObject({ pendingModeration: null, pendingCases: null, pendingRequestNotes: 0 });
     expect(mocks.countPendingModeration).not.toHaveBeenCalled();
   });
 
   it("reuses the counts the page already holds", async () => {
-    await loadAdminNavFacts(locals, ORIGIN, { pendingAccessRequests: 2, pendingModeration: 3, pendingRequestNotes: 0 });
+    await loadAdminNavFacts(locals, URL_, { pendingAccessRequests: 2, pendingModeration: 3, pendingRequestNotes: 0 });
     expect(mocks.countPendingAccessRequests).not.toHaveBeenCalled();
     expect(mocks.countPendingModeration).not.toHaveBeenCalled();
     expect(mocks.countOpenChecks).not.toHaveBeenCalled();
@@ -49,9 +49,9 @@ describe("loadAdminNavFacts", () => {
   it("never takes its page down: a failed read lists the entries bare and is recorded", async () => {
     const failure = new Error("moderation_case unavailable");
     mocks.countPendingModeration.mockRejectedValue(failure);
-    await expect(loadAdminNavFacts(locals, ORIGIN)).resolves.toMatchObject({
+    await expect(loadAdminNavFacts(locals, URL_)).resolves.toMatchObject({
       pendingAccessRequests: 0, pendingModeration: null, pendingCases: null, pendingRequestNotes: 0, dataMigrationEnabled: false,
     });
-    expect(mocks.recordError).toHaveBeenCalledWith("synthetic-d1", expect.objectContaining({ error: failure, level: "warning" }));
+    expect(mocks.recordError).toHaveBeenCalledWith("synthetic-d1", expect.objectContaining({ route: "/dashboard/mentoring/confirm", error: failure, level: "warning" }));
   });
 });

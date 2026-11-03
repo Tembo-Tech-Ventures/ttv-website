@@ -40,7 +40,7 @@ if (!Astro.locals.isAdmin) {
   return Astro.redirect(Astro.locals.user ? "/dashboard" : "/auth/login");
 }
 
-const nav = await loadAdminNavFacts(Astro.locals, Astro.url.origin, {
+const nav = await loadAdminNavFacts(Astro.locals, Astro.url, {
   pendingAccessRequests: Astro.props.pendingAccessRequests,
   pendingModeration: Astro.props.pendingModeration,
   pendingRequestNotes: Astro.props.pendingRequestNotes,

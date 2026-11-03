@@ -24,14 +24,14 @@ export interface AdminNavCounts {
  * off for them: there is no queue to link to. Its badge also counts the open request-note checks
  * this admin may decide while `mentor_requests` is on (QA4-04), which the Request notes tab lists.
  */
-export async function loadAdminNavFacts(locals: App.Locals, origin: string, counts: AdminNavCounts = {}): Promise<LoadedAdminNav> {
+export async function loadAdminNavFacts(locals: App.Locals, url: URL, counts: AdminNavCounts = {}): Promise<LoadedAdminNav> {
   try {
-    return await readAdminNavFacts(locals, origin, counts);
+    return await readAdminNavFacts(locals, url.origin, counts);
   } catch (error) {
     // The navigation must never take its page down: the entries are listed bare, without counts,
     // and the failure is recorded. recordError never throws; it reports its own ledger failures.
-    await recordError(env.DB, { source: "request", route: "/admin", error, level: "warning" });
-    return { ...NO_ADMIN_FACTS, ...tools(origin), pendingCases: null, pendingRequestNotes: 0 };
+    await recordError(env.DB, { source: "request", route: url.pathname, error, level: "warning" });
+    return { ...NO_ADMIN_FACTS, ...tools(url.origin), pendingCases: null, pendingRequestNotes: 0 };
   }
 }
 
