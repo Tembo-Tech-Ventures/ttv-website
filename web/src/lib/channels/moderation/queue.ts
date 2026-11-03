@@ -8,6 +8,7 @@ import {
 } from "@/lib/platform/contracts";
 import { listChannelsFor } from "../access";
 import { ChannelError, messageColumns, toMessage, type MessageRow } from "../messages";
+import { requestScoped } from "@/lib/platform/server/request-scope";
 
 /**
  * The admin moderation queue (B-2.5), for GET /api/moderation/queue and the /admin/moderation page
@@ -94,8 +95,13 @@ export async function listModerationQueue(db: D1Database, viewer: ModerationView
 /**
  * Open cases this admin may decide, for the page's tab and the Admin sidebar badge (queue index). A
  * badge must never take an admin page down with it, so a failed read counts none.
+ * Read once per GET for the page and its admin navigation (request-scope.ts).
  */
-export async function countPendingModeration(db: D1Database, viewerId: string): Promise<number> {
+export function countPendingModeration(db: D1Database, viewerId: string): Promise<number> {
+  return requestScoped(`moderation-pending:${viewerId}`, () => readCountPendingModeration(db, viewerId));
+}
+
+async function readCountPendingModeration(db: D1Database, viewerId: string): Promise<number> {
   try {
     const row = await db.prepare(`SELECT count(*) AS count FROM moderation_case c JOIN channel_message m ON m.id = c.messageId
       JOIN channel ch ON ch.id = m.channelId WHERE c.state = 'PENDING' AND ${NOT_OWN_CONVERSATION("?1")}`)

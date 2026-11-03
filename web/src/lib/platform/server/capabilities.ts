@@ -5,6 +5,7 @@ import {
   SPACE_ORDER, type Capabilities, type ChannelCapabilities, type ChannelKind, type PostingPolicy, type SpaceId,
 } from "../contracts";
 import { DEMO_PREFIX, isDemoUser } from "@/lib/staging-demo-policy";
+import { requestScoped } from "./request-scope";
 
 export const COHORT_ACCESS_STATUSES = ["APPROVED", "AUDIT", "COMPLETED"] as const;
 const cohortStatuses: ReadonlySet<string> = new Set(COHORT_ACCESS_STATUSES);
@@ -24,16 +25,23 @@ export type PlatformCapabilities = Capabilities & { spaces: SpaceId[]; teachingC
  * An applicant can enter the cohort space without receiving private content.
  * Admin authority is explicit in isAdmin; cohortIds never invent memberships.
  * Channel-specific membership/posting rules belong to the channel adapter.
- * No cross-request cache: revoked assignments must take effect immediately.
+ * No cross-request cache: revoked assignments must take effect immediately. Within one GET or HEAD
+ * request every caller shares one read per user (request-scope.ts); the result is frozen, since
+ * they all hold the same object.
  */
-export async function capabilitiesFor(
+export function capabilitiesFor(
   db: Database,
   user: CapabilityUser,
 ): Promise<PlatformCapabilities> {
   if (!user?.id) {
-    return { spaces: [], cohortIds: [], mentorCohortIds: [], teachingCohortIds: [], isMentor: false, isInstitution: false, isAdmin: false };
+    return Promise.resolve({ spaces: [], cohortIds: [], mentorCohortIds: [], teachingCohortIds: [], isMentor: false, isInstitution: false, isAdmin: false });
   }
+  const userId = user.id;
+  return requestScoped(`capabilities:${userId}`, () => readCapabilities(db, userId));
+}
 
+async function readCapabilities(db: Database, userId: string): Promise<PlatformCapabilities> {
+  const user = { id: userId };
   const demoProgramId = isDemoUser(user.id) ? DEMO_PREFIX + "program" : undefined;
   const [globalRoles, applications, assignments] = await Promise.all([
     db.query.userRole.findMany({
@@ -80,10 +88,13 @@ export async function capabilitiesFor(
     admin: isAdmin,
     profile: true,
   };
-  return {
-    spaces: SPACE_ORDER.filter((space) => available[space]),
-    cohortIds, mentorCohortIds, teachingCohortIds, isMentor, isInstitution, isAdmin,
-  };
+  return Object.freeze({
+    spaces: Object.freeze(SPACE_ORDER.filter((space) => available[space])) as SpaceId[],
+    cohortIds: Object.freeze(cohortIds) as string[],
+    mentorCohortIds: Object.freeze(mentorCohortIds) as string[],
+    teachingCohortIds: Object.freeze(teachingCohortIds) as string[],
+    isMentor, isInstitution, isAdmin,
+  });
 }
 
 /** The channel facts access depends on. Slugs, names and topics never grant anything. */

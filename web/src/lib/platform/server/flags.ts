@@ -1,6 +1,10 @@
+import { drizzle } from "drizzle-orm/d1";
 import { userHasAdminRole } from "@/lib/admin/roles";
+import * as schema from "@/lib/db/schema";
 import { FlagKey, type FlagAudience } from "@/lib/platform/contracts";
+import { capabilitiesFor } from "./capabilities";
 import { platformError } from "./http";
+import { requestScopeActive } from "./request-scope";
 
 export type { FlagKey, FlagAudience } from "@/lib/platform/contracts";
 export type Flags = Record<FlagKey, boolean>;
@@ -49,7 +53,7 @@ async function resolveFlags(ctx: FlagContext): Promise<Flags> {
     `SELECT key, audience FROM feature_flag WHERE key IN (${FLAG_KEY_PLACEHOLDERS})`
   ).bind(...FlagKey.options).all<{ key: FlagKey; audience: FlagAudience }>();
   const isAdmin = results.some((flag) => flag.audience === "STAFF")
-    ? ctx.isAdmin ?? await userHasAdminRole(ctx.db, ctx.user.id)
+    ? ctx.isAdmin ?? await staffAudience(ctx.db, ctx.user.id)
     : false;
   const flags = uniformFlags(false);
   for (const flag of results) {
@@ -60,6 +64,16 @@ async function resolveFlags(ctx: FlagContext): Promise<Flags> {
     if (required) flags[key] &&= flags[required];
   }
   return Object.freeze(flags);
+}
+
+/**
+ * Whether a STAFF audience includes this person: the ADMIN role, read fresh for this request. A
+ * read-only request takes it from the capabilities its helpers share (request-scope.ts).
+ */
+async function staffAudience(db: D1Database, userId: string): Promise<boolean> {
+  return requestScopeActive()
+    ? (await capabilitiesFor(drizzle(db, { schema }), { id: userId })).isAdmin
+    : userHasAdminRole(db, userId);
 }
 
 /** Reuse ctx/locals after authentication. Auth changes invalidate an early read. */

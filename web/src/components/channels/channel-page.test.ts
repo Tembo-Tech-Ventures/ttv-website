@@ -15,7 +15,12 @@ const mocks = vi.hoisted(() => ({
   acknowledge: vi.fn(),
 }));
 vi.mock("cloudflare:workers", () => ({ env: { DB: "synthetic-d1" } }));
-vi.mock("@/components/platform/spaces/space-page", () => ({ resolveSpacePage: mocks.resolveSpacePage }));
+vi.mock("@/components/platform/spaces/space-page", () => ({
+  resolveSpacePageWith: async (locals: unknown, page: unknown, load: (me: Me) => Promise<unknown>) => {
+    const context = await mocks.resolveSpacePage(locals, page);
+    return context ? [context, await load(context.me)] : null;
+  },
+}));
 vi.mock("@/lib/platform/server/channel-context", () => ({
   getRouteChannel: mocks.getRouteChannel, getRouteChannelShareables: mocks.getRouteChannelShareables,
 }));
@@ -101,6 +106,23 @@ describe("a channel's page", () => {
       channel: channels.help, readable: [channels.introductions, channels.help], record: agreement, agreed: true, canAgree: true,
       self: "/dashboard/community/c/help?message=m1",
     });
+  });
+
+  it("reads the agreement beside the channel on a GET, and never before a POST's own write (PERF-2)", async () => {
+    given();
+    let release!: (channel: Channel) => void;
+    mocks.getRouteChannel.mockReturnValue(new Promise<Channel>((resolve) => { release = resolve; }));
+    const page = resolveChannelPage(astro(), "community");
+    await new Promise((resolve) => { setImmediate(resolve); });
+    // The channel is still being looked up, and the person's own agreement is already being read.
+    expect(mocks.load).toHaveBeenCalledOnce();
+    release(channels.help);
+    expect(await page).toMatchObject({ channel: channels.help, record: null });
+
+    mocks.load.mockClear();
+    await resolveChannelPage(astro({ method: "POST" }), "community");
+    expect(mocks.acknowledge).toHaveBeenCalledOnce();
+    expect(mocks.load).not.toHaveBeenCalled();
   });
 
   it("records a person's agreement and returns them to the page they asked for", async () => {

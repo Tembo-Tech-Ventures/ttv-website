@@ -7,6 +7,7 @@ import type { Database } from "@/lib/db/schema";
 import { getAccessibleProgramIds } from "@/lib/recordings/access";
 import { hasCompletedCohort, isValidCompletion } from "@/lib/talent/eligibility";
 import { hasEditableAnswers } from "./application-answers";
+import { requestScoped } from "@/lib/platform/server/request-scope";
 
 export const STUDENT_DASHBOARD_LINK_IDS = [
   "home",
@@ -301,7 +302,12 @@ function buildNoApplicationNextStep(
   };
 }
 
-export async function getStudentJourney(
+/** The person's journey; a GET page and its frame share one read (request-scope.ts). */
+export function getStudentJourney(db: Database, userId: string): Promise<StudentJourney> {
+  return requestScoped(`journey:${userId}`, () => readStudentJourney(db, userId));
+}
+
+async function readStudentJourney(
   db: Database,
   userId: string
 ): Promise<StudentJourney> {

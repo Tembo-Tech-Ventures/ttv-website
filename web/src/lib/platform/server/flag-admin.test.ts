@@ -36,6 +36,9 @@ beforeEach(() => {
   setup.database.exec(MINIMAL_AUTH_SCHEMA);
   setup.database.exec(readMigration("0021_feature_flags.sql"));
   setup.database.exec(readMigration("0025_onboarding.sql"));
+  // The program tables capabilitiesFor reads; the admin guard of a GET shares that read (PERF-2).
+  setup.database.exec(`CREATE TABLE programApplication (id text PRIMARY KEY, userId text, programId text, status text);
+    CREATE TABLE programRole (id text PRIMARY KEY, userId text, programId text, name text);`);
   setup.database.exec(`
     INSERT INTO user(id,name,email) VALUES ('amina','Amina Hassan','amina@example.test');
     INSERT INTO Roles(id,name) VALUES ('admin','ADMIN');

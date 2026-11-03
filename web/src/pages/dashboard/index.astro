@@ -18,13 +18,16 @@ import ChannelShortcuts from "@/components/platform/spaces/ChannelShortcuts.astr
 import { loadChannelShortcuts } from "@/components/platform/spaces/channel-shortcuts-server";
 
 const user = Astro.locals.user!;
-const journey = await getStudentJourney(drizzle(env.DB, { schema }), user.id);
-const canDiscover = hasDiscoveryAccess(await createCommunityService(env.DB, user.id, Astro.locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT).access());
+// Independent reads, started together. With spaces on, this page is the Cohort overview at /dashboard/cohort.
+const [journey, access, spaces] = await Promise.all([
+  getStudentJourney(drizzle(env.DB, { schema }), user.id),
+  createCommunityService(env.DB, user.id, Astro.locals.stagingFixture, env.DEPLOYMENT_ENVIRONMENT).access(),
+  resolveSpacePage(Astro.locals, "cohort"),
+]);
+const canDiscover = hasDiscoveryAccess(access);
 const proposedStep = dashboardNextStep(journey.nextStep, canDiscover);
 const qa = Astro.locals.stagingQa;
 const greetingName = getDashboardGreetingName(user.name);
-// With spaces on, this page is the Cohort overview at /dashboard/cohort.
-const spaces = await resolveSpacePage(Astro.locals, "cohort");
 // A way into the cohort's channels while `channels` is on (QA2-16); the sidebar reuses the list.
 const { channels, shortcuts } = spaces ? await loadChannelShortcuts(spaces) : { channels: undefined, shortcuts: null };
 // Restricted synthetic identities (QA personas, staging fixtures) are never offered a step they cannot open.

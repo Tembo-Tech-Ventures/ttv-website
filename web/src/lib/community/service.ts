@@ -5,6 +5,10 @@ import { createId } from "@paralleldrive/cuid2";
 import { workConfirmedAttention } from "@/lib/attention/producers";
 import { grantCommunityRole, revokeCommunityRole } from "@/lib/onboarding/decisions";
 import { AccessRole } from "@/lib/platform/contracts";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { capabilitiesFor } from "@/lib/platform/server/capabilities";
+import { requestScopeActive } from "@/lib/platform/server/request-scope";
 import { discoverableMember } from "./eligibility";
 import {
   CommunityError, profileInput, journeyInput, journeyUpdateInput, confirmationInput, setAsideInput, searchInput, parseInput,
@@ -54,6 +58,12 @@ export function createCommunityService(db: D1Database, actorId: string, fixture?
   function requireWritable() { if (fixture?.retainedReadProbe) throw new CommunityError("Read-only synthetic probe.",403); }
   async function access() {
     await requireFixtureTarget(actorId);
+    // A read-only request takes the roles from the capabilities its helpers share (request-scope.ts);
+    // any other reads them itself, so a handler that changes roles reads them back.
+    if (requestScopeActive()) {
+      const { isAdmin, isMentor, isInstitution } = await capabilitiesFor(drizzle(db, { schema }), { id: actorId });
+      return { isAdmin, isMentor, isInstitution };
+    }
     const { results } = await db.prepare(`SELECT r.name FROM "Roles" r JOIN "UserRoles" ur ON ur.roleId=r.id WHERE ur.userId=?`).bind(actorId).all<{ name: string }>();
     const roles = new Set(results.map((r) => r.name));
     return { isAdmin: roles.has("ADMIN"), isMentor: roles.has("MENTOR"), isInstitution: roles.has("INSTITUTION") };

@@ -3,6 +3,7 @@ import type { Channel, Me } from "@/lib/platform/contracts";
 import * as schema from "@/lib/db/schema";
 import { listChannelsFor } from "@/lib/channels/access";
 import { acknowledgeConduct, getConductAcknowledgement } from "@/lib/channels/conduct";
+import { requestScoped } from "@/lib/platform/server/request-scope";
 import type { ConductActions } from "./conduct-flow";
 
 /**
@@ -17,10 +18,11 @@ export interface ChannelsServer {
   conduct: ConductActions;
 }
 
-export function channelsServer(db: D1Database, me: Me): ChannelsServer {
+export function channelsServer(db: D1Database, me: { user: Pick<Me["user"], "id"> }): ChannelsServer {
   const user = { id: me.user.id };
   return {
-    list: () => listChannelsFor(drizzle(db, { schema }), user),
+    // A GET page, its shortcuts and its sidebar share one read (request-scope.ts).
+    list: () => requestScoped(`channels:${user.id}`, () => listChannelsFor(drizzle(db, { schema }), user)),
     conduct: {
       load: () => getConductAcknowledgement(db, user.id),
       acknowledge: (version) => acknowledgeConduct(db, user.id, version),

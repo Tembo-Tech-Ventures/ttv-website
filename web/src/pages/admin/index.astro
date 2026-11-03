@@ -15,30 +15,26 @@ import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 
 const db = drizzle(env.DB, { schema });
 
-const [usersResult] = await db.select({ value: count() }).from(schema.user);
-const [programsResult] = await db.select({ value: count() }).from(schema.program);
-
-const statusCounts = await db
-  .select({ status: schema.programApplication.status, value: count() })
-  .from(schema.programApplication)
-  .groupBy(schema.programApplication.status);
+// Independent counts, read together (PERF-2).
+const [[usersResult], [programsResult], statusCounts, [flaggedProfiles], [pendingProjects], adminAttention] = await Promise.all([
+  db.select({ value: count() }).from(schema.user),
+  db.select({ value: count() }).from(schema.program),
+  db.select({ status: schema.programApplication.status, value: count() })
+    .from(schema.programApplication)
+    .groupBy(schema.programApplication.status),
+  db.select({ value: count() })
+    .from(schema.studentProfile)
+    .where(eq(schema.studentProfile.moderationReviewRequired, true)),
+  db.select({ value: count() })
+    .from(schema.clientProject)
+    .where(eq(schema.clientProject.status, "PENDING")),
+  getAdminAttention(env.DB),
+]);
 
 const totalApps = statusCounts.reduce((sum, r) => sum + r.value, 0);
 const byStatus = Object.fromEntries(statusCounts.map((r) => [r.status, r.value]));
 
-const [flaggedProfiles] = await db
-  .select({ value: count() })
-  .from(schema.studentProfile)
-  .where(eq(schema.studentProfile.moderationReviewRequired, true));
-
-const [pendingProjects] = await db
-  .select({ value: count() })
-  .from(schema.clientProject)
-  .where(eq(schema.clientProject.status, "PENDING"));
-
-const attentionGroups = (await getAdminAttention(env.DB)).filter(
-  (group) => group.items.length > 0
-);
+const attentionGroups = adminAttention.filter((group) => group.items.length > 0);
 
 // Request notes waiting for a check (QA4-04): they live under /admin/moderation, which needs
 // `channels`, and the tab needs `mentor_requests`. Counted once here, for the sidebar badge too
