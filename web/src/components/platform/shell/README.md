@@ -62,7 +62,10 @@ overlays are `components/platform/overlays/PlatformOverlays` (see its README).
 Switching spaces is a cross-document view transition between two spaces
 pages: the tab row (not named, so it cuts to its new state) stays as the anchor while the chosen sheet, opaque, rises
 4.5rem into place over the dimmed old one (250ms). With reduced motion the
-pages do not opt in, so it is a plain cut. The drawer slides in 220ms and is
+pages do not opt in, so it is a plain cut. It plays only when the sheet
+changes (another space, or the next onboarding step): a form that posts back,
+or another page of the same space, skips it in `pagereveal`, so nothing moves
+under the reader's next click (`sheet-transition.ts`). The drawer slides in 220ms and is
 static under reduced motion.
 
 ## Tests
@@ -71,4 +74,5 @@ static under reduced motion.
 - `npx playwright test e2e/platform-shell.spec.ts` against `astro dev`
   (`/dev/platform-shell?persona=<fixture>&space=<space>`, DEV only; 404 on
   deployed builds). It sweeps 320–1440px, runs axe, checks focus order, the
-  drawer, the menu, no-JS use, the transition's length, and the cookie boundary.
+  drawer, the menu, no-JS use, the transition's length (and that a post-back
+  or a page in the same space skips it), and the cookie boundary.
