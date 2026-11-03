@@ -208,8 +208,8 @@ async function seedThread(page: Page, baseURL: string): Promise<string | null> {
   if (!channel) return null;
   const href = `/dashboard/${channel.kind === "COHORT" ? "cohort" : "community"}/c/${channel.slug}`;
   // Agree to the code of conduct through its own form, wherever the page offers it.
-  for (const path of [href, "/dashboard/community/conduct"]) {
-    await page.goto(path);
+  for (const target of [href, "/dashboard/community/conduct"]) {
+    await page.goto(target);
     const agree = page.locator("form[data-conduct-agree] button[type='submit'], form[data-conduct-agree] button").first();
     if (await agree.isVisible().catch(() => false)) { await agree.click(); await page.waitForLoadState("load"); break; }
   }
