@@ -108,10 +108,10 @@ therefore still resolve through the redirect table.
 U-1.2 must replace the rendering rewrite in `serveSpacePage` when moving a page
 to its canonical path, while preserving legacy redirects, OFF behavior and
 the same access guards. Keep the pure alias map for restricted allowlists;
-do not turn it into a broad prefix allowlist. Direct-message, mentor-request,
-availability and certificate page routes remain 404 until their owning phase
-supplies a real page and its guards. Existing public certificate URLs are
-unchanged.
+do not turn it into a broad prefix allowlist. Direct-message, mentor-request
+and availability pages arrived with their phases (channels and mentor
+requests), each behind its flag and guards. Certificates have no space route;
+existing public certificate URLs are unchanged.
 
 U-1.2 also owns browser error-page composition: routing currently returns minimal
 403/404 responses. Keep their status and no-store policy when adding styled errors;

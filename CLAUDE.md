@@ -1,18 +1,20 @@
 # CLAUDE.md
 
-TTV Website is an Astro 6 SSR application for Tembo Tech Ventures, a tech training platform. Deployed on Cloudflare Workers with D1 (SQLite) and R2 (object storage). The main application code lives in `web/`.
+TTV Website is an Astro 7 SSR application for Tembo Tech Ventures, a tech training platform. Deployed on Cloudflare Workers with D1 (SQLite) and R2 (object storage). The main application code lives in `web/`.
 
 ## Quick Reference
 
 ```bash
 cd web
-npm install                   # Install deps
+npm ci --legacy-peer-deps     # Install deps (as CI does)
 npm run dev                   # Start Astro dev server (port 4321)
 npm run build                 # Build for production
 npm run preview               # Preview production build locally
 npm run db:generate           # Generate Drizzle migration from schema changes
 npm run db:migrate:local      # Apply migrations to local D1
-npm run lint                  # ESLint
+npm run lint                  # oxlint + ESLint
+npm run typecheck             # tsc --noEmit
+npm run typecheck:astro       # astro check
 npm test                      # Run Vitest tests
 ```
 
@@ -23,6 +25,7 @@ npm test                      # Run Vitest tests
 - **Path alias**: Use `@/` for `src/`. Example: `import * as schema from "@/lib/db/schema"`
 - **Astro components by default**: Only use React (`.tsx`) with `client:visible` or `client:load` when the component needs browser APIs, hooks, or event handlers
 - **Middleware for auth**: Auth guards are in `src/middleware.ts`, not per-page. Dashboard requires login, admin requires ADMIN role.
+- **Feature flags**: Platform features (spaces, onboarding, channels, Tembo in channels, mentor requests) ship dark behind DB-backed flags; a page or API whose flag is off for the caller returns 404. Access comes from `capabilitiesFor` / `channelAccessFor`. See `web/docs/platform-spaces-and-channels.md`.
 - **Astro pages**: All pages are `.astro` files in `src/pages/`. Forms use standard HTML `<form method="POST">` with server-side handling in frontmatter.
 - **Styling**: Tailwind CSS 4 with custom theme in `src/styles/global.css`. Colors: orange primary (#F28D68), dark teal (#013D39), lighter teal (#2C6964)
 - **Fonts**: Mattone Black (h1/h2 headings only, self-hosted from `src/assets/fonts/`, OFL 1.1), Maven Pro (body + h3-h6). Display tracking comes from the `--tracking-display` / `--tracking-heading` / `--tracking-subhead` theme tokens — use `tracking-*` utilities, not inline `letter-spacing`.
