@@ -21,8 +21,8 @@ works as before.
 
 ## Feature flags
 
-The flags live in the `feature_flag` table (migration `0021`, every row seeded
-`OFF`). Each one has an audience: `OFF`, `STAFF` (admins only) or `ALL`. An
+The flags live in the `feature_flag` table (migrations `0021` and `0025`, every
+row seeded `OFF`). Each one has an audience: `OFF`, `STAFF` (admins only) or `ALL`. An
 admin sets the audience at `/admin/platform-flags`, which works without
 JavaScript, asks to confirm before `ALL`, and warns about dependencies without
 blocking. Moving a flag to `ALL` needs Raph's explicit approval. Preview and
@@ -33,7 +33,7 @@ change takes effect on the next request.
 
 | Flag | Turns on | Depends on |
 |---|---|---|
-| `spaces` | The spaces shell (`SpacesLayout`): the space tabs, the attention bell and panel, search (⌘K / Ctrl K), `/api/platform/me`, `/api/attention*`, `/api/search`, and the canonical `/dashboard/{cohort,community,mentoring,me,account}` routes, with 301s from the old URLs | none |
+| `spaces` | The spaces shell (`SpacesLayout`): the space tabs, the attention bell and panel, search (⌘K / Ctrl K), `/api/platform/me`, `/api/attention*`, `/api/search`, and the canonical `/dashboard/{cohort,community,mentoring,discover,me,account}` routes, with 301s from the old URLs | none |
 | `onboarding` | `/dashboard/welcome` ("How will you take part?"), the landing choice for new accounts, `/api/platform/onboarding` and `/api/platform/access-requests` | `spaces` (enforced in `flags.ts`) |
 | `channels` | Channel and conversation pages, the code of conduct, the channel and message APIs, moderation (`/admin/moderation`, `/api/moderation/*`, the MCP moderation tools) and channel messages in search | The APIs need only `channels`. The pages are spaces pages, so they also need `spaces` |
 | `tembo_channels` | Tembo in channels: `@tembo` mentions, "Ask Tembo here", `/api/channels/:id/tembo`, `/api/messages/:id/tembo-feedback` and the daily allowance in `/me` | `channels`. Every Tembo route checks both flags, and `/me` reports `tembo_channels` off while `channels` is off |
@@ -96,7 +96,7 @@ cleanup.
 | `tembo_answer` | The person who asked | Tembo answers their question |
 | `message_hidden` | The author | Their message is hidden (never naming who hid it) |
 | `moderation_decided` | The author | An admin decides a case the author knew of |
-| `moderation_pending` | Admins, except the author or the request's parties | A moderation case or a request-note check opens, or an author asks for review |
+| `moderation_pending` | Admins, except the author, the request's parties, and a direct conversation's members | A moderation case or a request-note check opens, or an author asks for review |
 | `mentor_request`, `mentor_withdrawn` | The mentor | A request arrives (or is released by a check), or is withdrawn |
 | `mentor_accepted`, `mentor_redirected`, `mentor_declined` | The person asking | The mentor answers |
 | `mentor_checked` | The person asking | A check holds, sends or closes their request |
@@ -308,7 +308,8 @@ opens the case again, and it keeps its place in the queue with "reopened".
      and allowlists the text and its findings, so the same details are not
      flagged again. **Hide** shows your reason to the author. **Restore**
      brings a hidden message back for every reader and allowlists it too.
-- `moderation_pending` notices go to every admin except the author. The
+- `moderation_pending` notices go to every admin except the author and, for a
+  direct conversation, its members. The
   author hears the outcome of a case they knew of in neutral words, never
   naming the admin ("An admin reviewed your message in #help and restored
   it.").
