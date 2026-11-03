@@ -141,13 +141,41 @@ export async function communityRequest<T>(
   }
 }
 
+const ownProfileSchema = z.object({ profile: profileSchema });
+const journeySchema = z.object({ entries: z.array(entrySchema) });
+
 export const loadAccess = () => communityRequest("access", accessSchema);
 export async function loadOwnProfile() {
   const [profile, entries] = await Promise.all([
-    communityRequest("profile", z.object({ profile: profileSchema })),
-    communityRequest("journey", z.object({ entries: z.array(entrySchema) })),
+    communityRequest("profile", ownProfileSchema),
+    communityRequest("journey", journeySchema),
   ]);
   return mapProfile(profile.profile, entries.entries);
+}
+
+/** What the journey view first shows: the caller's access and own profile with its journey. */
+export interface JourneyInitial {
+  access: CommunityAccess;
+  profile: CommunityProfile;
+}
+/**
+ * The journey view's first data from the bodies of GET access, profile and
+ * journey, validated and mapped as loadAccess and loadOwnProfile do. Null when
+ * any body does not match, so the view falls back to loading them itself.
+ */
+export function parseJourneyInitial(
+  access: unknown,
+  profile: unknown,
+  journey: unknown,
+): JourneyInitial | null {
+  const parsedAccess = accessSchema.safeParse(access);
+  const parsedProfile = ownProfileSchema.safeParse(profile);
+  const parsedJourney = journeySchema.safeParse(journey);
+  if (!parsedAccess.success || !parsedProfile.success || !parsedJourney.success) return null;
+  return {
+    access: parsedAccess.data,
+    profile: mapProfile(parsedProfile.data.profile, parsedJourney.data.entries),
+  };
 }
 export async function loadProfile(id: string) {
   const data = await communityRequest(

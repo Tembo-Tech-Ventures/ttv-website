@@ -429,6 +429,23 @@ test.describe("QA-1 polish (F-3)", () => {
     await expect(directory.getByRole("link", { name: "Mentors (public website)" })).toHaveAttribute("href", "/community/mentors");
   });
 
+  // PERF-3: the journey view arrives with the page instead of three API calls after hydration.
+  test("Community arrives with its journey, and hydrates without asking for it again", async ({ context, page, baseURL }) => {
+    await as("community", { context, page, baseURL });
+    const html = await (await page.request.get("/dashboard/community")).text();
+    expect(html).toContain("Edit your profile");
+    expect(html).not.toContain("Loading your workspace");
+    const communityCalls: string[] = [];
+    const reactErrors: string[] = [];
+    page.on("request", (request) => { if (new URL(request.url()).pathname.startsWith("/api/community/")) communityCalls.push(request.url()); });
+    page.on("pageerror", (error) => reactErrors.push(error.message));
+    page.on("console", (message) => { if (message.type() === "error" && /hydrat|#418|#423|#425/i.test(message.text())) reactErrors.push(message.text()); });
+    await open(page, "/dashboard/community");
+    await expect(page.getByRole("button", { name: "Edit your profile" })).toBeEnabled();
+    expect(reactErrors).toEqual([]);
+    expect(communityCalls).toEqual([]);
+  });
+
   test("a session's transcript has one stop per line from 0:00, and an unplayable video says so", async ({ context, page, baseURL }) => {
     test.skip(Boolean(process.env.PLAYWRIGHT_BASE_URL), "The fictional recording is in the local seed only.");
     await as("student", { context, page, baseURL });

@@ -13,11 +13,14 @@ import * as schema from "@/lib/db/schema";
 import { getStudentJourney } from "@/lib/student/journey";
 import ChannelShortcuts from "@/components/platform/spaces/ChannelShortcuts.astro";
 import { loadChannelShortcuts } from "@/components/platform/spaces/channel-shortcuts-server";
+import { loadJourneyInitial } from "@/components/community/journey-initial-server";
 // oxlint-disable-next-line import/no-unassigned-import -- Workspace stylesheet.
 import "@/styles/discovery.css";
 // Authentication is enforced by dashboard middleware; every data API checks access.
 
 const spaces = await resolveSpacePage(Astro.locals, "journey");
+// The journey view's own data, read alongside the rest instead of after hydration (PERF-1 §3.8).
+const communityData = spaces ? loadJourneyInitial(Astro.request, Astro.locals, env) : null;
 const journey = spaces ? await getStudentJourney(drizzle(env.DB, { schema }), spaces.me.user.id) : undefined;
 // A way into the community's channels while `channels` is on (QA2-16); the sidebar reuses the list.
 const { channels, shortcuts } = spaces ? await loadChannelShortcuts(spaces) : { channels: undefined, shortcuts: null };
@@ -29,6 +32,7 @@ const framing = spaces?.onboarding?.framing;
 // A restricted synthetic identity that cannot follow the step gets no invitation (it is already on its journey).
 const step = spaces && !spaces.me.spaces.includes("cohort") && offersCohort(framing) ? journey?.nextStep : undefined;
 const invitation = step && restrictedNextStep(restrictionsFor(Astro.locals), step) === step ? step : undefined;
+const initial = await communityData;
 ---
 {
   spaces ? (
@@ -36,7 +40,7 @@ const invitation = step && restrictedNextStep(restrictionsFor(Astro.locals), ste
       {spaces.onboarding && <OnboardingNotices view={spaces.onboarding} space={spaces.space} class={invitation ? "mb-4" : "mb-10"} />}
       {invitation && <CohortInvitation step={invitation} />}
       <ChannelShortcuts model={shortcuts} class="mb-6" />
-      <CommunityApp client:load view="journey" embedded framing={framing} />
+      <CommunityApp client:load view="journey" embedded framing={framing} initial={initial} />
     </SpacePage>
   ) : (
     <BaseLayout title="Your community journey | TTV" noIndex>
