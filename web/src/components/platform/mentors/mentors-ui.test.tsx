@@ -150,7 +150,7 @@ describe("the mentor directory", () => {
     expect(row).toEqual(["All", ...areas.slice(0, TOP_AREAS), "Kotlin"]);
     const menus = Array.from(nav.querySelectorAll<HTMLDetailsElement>("details[data-filter-menu]"));
     expect(menus.map((menu) => menu.querySelector("summary")!.textContent)).toEqual(["More areas", "Any format"]);
-    expect(Array.from(menus[0]!.querySelectorAll("a")).map((link) => link.textContent)).toEqual(["CSS", "Data modelling"]);
+    expect(Array.from(menus[0]!.querySelectorAll("a")).map((link) => link.textContent)).toEqual(areas.slice(TOP_AREAS, -1));
     // Closed until asked, and still plain links that land on the results.
     expect(menus.every((menu) => !menu.open)).toBe(true);
     expect(Array.from(menus[1]!.querySelectorAll("a")).map((link) => link.getAttribute("href"))).toEqual([

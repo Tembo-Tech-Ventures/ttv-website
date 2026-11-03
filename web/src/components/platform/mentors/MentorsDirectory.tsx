@@ -69,7 +69,7 @@ function FilterLink({ href, active, small = false, children }: { href: string; a
 }
 
 /** How many areas the filter row shows before "More areas": the ones most mentors offer. */
-export const TOP_AREAS = 5;
+export const TOP_AREAS = 4;
 
 /**
  * The areas shown on the filter row, and the rest under "More areas": the TOP_AREAS most mentors
@@ -314,7 +314,7 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
       {/* Filter links land here (`#mentor-results`), so the next Tab reaches the first mentor (QA4-18). */}
       <h2
         id={MENTOR_RESULTS_ID} tabIndex={-1}
-        className={cx("mt-6 mb-3 w-fit scroll-mt-40 rounded-sm font-body text-[0.9375rem] font-semibold text-ink-secondary", FOCUS_RING)}
+        className={cx("mt-5 mb-0 w-fit scroll-mt-40 rounded-sm font-body text-[0.9375rem] font-semibold text-ink-secondary", FOCUS_RING)}
         data-mentor-results
       >
         {resultsHeading(shown.length, filters, areas)}
