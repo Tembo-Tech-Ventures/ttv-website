@@ -21,7 +21,7 @@
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint . --fix",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && vitest run -c vitest.render.config.ts",
     "test:watch": "vitest",
     "test:e2e": "node ./scripts/cloudflare/run-live-e2e.mjs",
     "test:e2e:list": "node ./scripts/cloudflare/run-live-e2e.mjs --list",
