@@ -2,6 +2,7 @@ import type { APIContext } from "astro";
 import { env } from "cloudflare:workers";
 import type { Me } from "../contracts";
 import { getMe } from "./me";
+import { perfPhase } from "@/lib/observability/perf-trace";
 
 const contexts = new WeakMap<App.Locals, { user: App.Locals["user"]; token: App.Locals["personalAccessToken"]; me: Promise<Me> }>();
 
@@ -14,7 +15,7 @@ const contexts = new WeakMap<App.Locals, { user: App.Locals["user"]; token: App.
 export function getSpaceContext({ locals }: Pick<APIContext, "locals">): Promise<Me> {
   let cached = contexts.get(locals);
   if (!cached || cached.user !== locals.user || cached.token !== locals.personalAccessToken) {
-    cached = { user: locals.user, token: locals.personalAccessToken, me: getMe({ db: env.DB, env, locals }) };
+    cached = { user: locals.user, token: locals.personalAccessToken, me: perfPhase("space", () => getMe({ db: env.DB, env, locals })) };
     contexts.set(locals, cached);
   }
   return cached.me;

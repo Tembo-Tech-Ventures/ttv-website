@@ -339,3 +339,20 @@ describe("GitHub delivery contracts", () => {
     expect(playwright).toContain('name: "mobile-chromium"');
   });
 });
+
+describe("navigation measurements", () => {
+  it("run only on agent-pr previews, only when the PR asks with the perf label, and never fail the job", async () => {
+    const environment = await readRepositoryFile(".github/workflows/cloudflare-environment.yml");
+    const steps = environment.split("\n      - ").filter((step) => step.includes("name: Measure navigation performance"));
+    expect(steps).toHaveLength(2);
+    for (const step of steps) {
+      expect(step).toContain("inputs.measure_navigation && inputs.action == 'deploy' && startsWith(inputs.environment_name, 'agent-pr-')");
+      expect(step).toContain("continue-on-error: true");
+    }
+    const preview = await readRepositoryFile(".github/workflows/cloudflare-staging-pr.yml");
+    expect(preview).toContain("measure_navigation: ${{ contains(github.event.pull_request.labels.*.name, 'perf') }}");
+    for (const name of ["cloudflare-production.yml", "cloudflare-staging.yml", "cloudflare-manual.yml"]) {
+      expect(await readRepositoryFile(`.github/workflows/${name}`)).not.toContain("measure_navigation");
+    }
+  });
+});
