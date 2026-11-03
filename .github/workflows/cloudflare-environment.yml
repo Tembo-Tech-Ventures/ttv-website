@@ -65,12 +65,17 @@ on:
         required: false
         type: string
         default: ""
+      measure_navigation:
+        description: Run the navigation perf harness (e2e/perf) after the e2e suite; agent-pr previews only
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   cloudflare-with-environment:
     if: ${{ inputs.github_environment != '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: ${{ inputs.measure_navigation && 45 || 30 }}
     environment: ${{ inputs.github_environment }}
     permissions:
       contents: read
@@ -168,6 +173,24 @@ jobs:
           sleep 3
           npm run test:e2e
 
+      # Navigation timings and the server trace (web/docs/performance.md), alone after the e2e suite.
+      # Only on agent-pr previews and only when asked (the PR's `perf` label): it adds ~4 minutes.
+      - if: ${{ always() && inputs.measure_navigation && inputs.action == 'deploy' && startsWith(inputs.environment_name, 'agent-pr-') && steps.browser_install.outcome == 'success' }}
+        name: Measure navigation performance
+        continue-on-error: true
+        timeout-minutes: 12
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.deploy.outputs.better_auth_url }}
+          EXPECTED_DEPLOYMENT_ENVIRONMENT: ${{ inputs.environment_name }}
+          EXPECTED_DEPLOYMENT_VERSION: ${{ github.sha }}
+          PERF_REPS: "3"
+        shell: bash
+        run: |
+          set -uo pipefail
+          node scripts/cloudflare/run-live-e2e.mjs -c e2e/perf/perf.config.ts
+          mkdir -p test-results/perf
+          node scripts/perf/summarize.mjs test-results/perf | tee test-results/perf/summary.md >> "$GITHUB_STEP_SUMMARY"
+
       - if: ${{ always() && inputs.action == 'deploy' && inputs.environment_name == 'production' && (steps.smoke.outcome == 'failure' || steps.browser_install.outcome == 'failure' || steps.browser.outcome == 'failure') }}
         id: rollback
         name: Roll back failed production verification
@@ -234,7 +257,7 @@ jobs:
   cloudflare:
     if: ${{ inputs.github_environment == '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: ${{ inputs.measure_navigation && 45 || 30 }}
     permissions:
       contents: read
     defaults:
@@ -330,6 +353,24 @@ jobs:
           trap cleanup EXIT
           sleep 3
           npm run test:e2e
+
+      # Navigation timings and the server trace (web/docs/performance.md), alone after the e2e suite.
+      # Only on agent-pr previews and only when asked (the PR's `perf` label): it adds ~4 minutes.
+      - if: ${{ always() && inputs.measure_navigation && inputs.action == 'deploy' && startsWith(inputs.environment_name, 'agent-pr-') && steps.browser_install.outcome == 'success' }}
+        name: Measure navigation performance
+        continue-on-error: true
+        timeout-minutes: 12
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.deploy.outputs.better_auth_url }}
+          EXPECTED_DEPLOYMENT_ENVIRONMENT: ${{ inputs.environment_name }}
+          EXPECTED_DEPLOYMENT_VERSION: ${{ github.sha }}
+          PERF_REPS: "3"
+        shell: bash
+        run: |
+          set -uo pipefail
+          node scripts/cloudflare/run-live-e2e.mjs -c e2e/perf/perf.config.ts
+          mkdir -p test-results/perf
+          node scripts/perf/summarize.mjs test-results/perf | tee test-results/perf/summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - if: ${{ always() && inputs.action == 'deploy' && inputs.environment_name == 'production' && (steps.smoke.outcome == 'failure' || steps.browser_install.outcome == 'failure' || steps.browser.outcome == 'failure') }}
         id: rollback

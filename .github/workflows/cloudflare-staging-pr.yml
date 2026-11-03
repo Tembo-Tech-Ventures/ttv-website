@@ -25,4 +25,6 @@ jobs:
       agent_auth_enabled: true
       workers_subdomain: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
       protected_environments: production,prod,staging
+      # Label a PR `perf` (then push) to time its preview's navigation: web/docs/performance.md.
+      measure_navigation: ${{ contains(github.event.pull_request.labels.*.name, 'perf') }}
     secrets: inherit
