@@ -431,6 +431,18 @@ describe("what the person asking hears of a check (QA4-02)", () => {
     // Nobody else hears these notices.
     for (const user of [PEOPLE.david, PEOPLE.amina]) expect(await notices(s, user)).toEqual([]);
   });
+  it.each([
+    ["accepts", "acceptMentorRequest", {}], ["declines", "declineMentorRequest", {}],
+    ["suggests another mentor", "redirectMentorRequest", { mentorId: PEOPLE.mercy }],
+  ] as const)("drops \"Checked and sent\" once the mentor %s, and the asker hears the answer instead", async (_, operation, body) => {
+    const s = setup();
+    const id = await ask(s, ABUSE);
+    await decide(s, id, "keep");
+    expect((await notices(s)).map((notice) => notice[1])).toEqual(["Checked and sent. It's waiting for David Kamau now."]);
+    expect((await step(s, s.call(operation, { id, user: PEOPLE.david, body }))).status).toBe(200);
+    expect(await notices(s)).toEqual([]);
+  });
+
   it("shows only what describes the check now when a kept request is reported and its check opens again", async () => {
     const s = setup();
     const id = await ask(s, ABUSE);

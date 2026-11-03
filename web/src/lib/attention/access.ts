@@ -60,13 +60,15 @@ export function attentionAccess(db: Database, userId: string, capabilities: Plat
           and(inArray(attentionItem.kind, ["mentor_accepted", "mentor_redirected", "mentor_declined"]), eq(mentorRequest.requesterId, userId)),
           // A check's notice only while it still describes the check (mentor-producers.ts keys the notice at $[2] and
           // its time at $[3]): "waiting" or "checking" while that very opening is open on a waiting request, and a
-          // decision while it is the check's latest.
+          // decision while it is the check's latest ("sent" also only while the request waits for the mentor).
           and(eq(attentionItem.kind, "mentor_checked"), eq(mentorRequest.requesterId, userId), exists(db.select({ id: mentorRequestCase.requestId })
             .from(mentorRequestCase).where(and(eq(mentorRequestCase.requestId, mentorRequest.id), or(
               and(sql`json_extract(${attentionItem.eventKey}, '$[2]') IN ('waiting', 'checking')`, eq(mentorRequestCase.state, "OPEN"),
                 eq(mentorRequest.status, "PENDING"), sql`json_extract(${attentionItem.eventKey}, '$[3]') = ${mentorRequestCase.openedAt}`),
+              // "sent" says it waits for the mentor now, so only while it still does.
               and(sql`json_extract(${attentionItem.eventKey}, '$[2]') NOT IN ('waiting', 'checking')`, eq(mentorRequestCase.state, "DECIDED"),
-                sql`json_extract(${attentionItem.eventKey}, '$[3]') = ${mentorRequestCase.decidedAt}`),
+                sql`json_extract(${attentionItem.eventKey}, '$[3]') = ${mentorRequestCase.decidedAt}`,
+                or(sql`json_extract(${attentionItem.eventKey}, '$[2]') <> 'sent'`, eq(mentorRequest.status, "PENDING"))),
             ))))),
           capabilities.isAdmin ? and(eq(attentionItem.kind, "moderation_pending"), or(eq(mentorRequest.status, "PENDING"), exists(db.select({ id: mentorRequestReport.requestId })
             .from(mentorRequestReport).where(eq(mentorRequestReport.requestId, mentorRequest.id)))), exists(db.select({ id: mentorRequestCase.requestId })
