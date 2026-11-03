@@ -37,6 +37,7 @@ import { countPendingModeration, listModerationQueue } from "@/lib/channels/mode
 import { countOpenChecks } from "@/lib/mentoring/checks";
 import { isFlagEnabled } from "@/lib/platform/server/flags";
 import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 
 const { user, personalAccessToken, isAdmin } = Astro.locals;
 const gate = moderationQueueGate({
@@ -104,9 +105,12 @@ if (moderationView(Astro.url.searchParams, requestNotesOn) === "request-notes") 
   if (requestNotesHref) openChecks = await countOpenChecks(env.DB, user.id);
   queueView = { ...outcome.props, ...(requestNotesHref ? { requestNotesHref, requestNotesCount: openChecks } : {}) };
 }
+// In the Admin space while `spaces` is on for this admin (T02); the existing admin shell otherwise.
+const spaces = await resolveSpacePage(Astro.locals, "moderation");
+const titleTag = spaces ? "h1" : "h2";
 ---
 
-<AdminLayout title="Moderation" pendingModeration={pendingCount} pendingRequestNotes={openChecks}>
-  {notesView && <RequestNotesView {...notesView} />}
-  {queueView && <ModerationQueueView {...queueView} />}
+<AdminLayout title="Moderation" pendingModeration={pendingCount} pendingRequestNotes={openChecks} spaces={spaces}>
+  {notesView && <RequestNotesView {...notesView} titleTag={titleTag} />}
+  {queueView && <ModerationQueueView {...queueView} titleTag={titleTag} />}
 </AdminLayout>

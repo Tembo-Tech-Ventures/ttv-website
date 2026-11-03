@@ -1,14 +1,25 @@
 ---
+/**
+ * The frame around an admin page.
+ *
+ * A page that has moved into the spaces shell resolves its context and hands it in
+ * (`spaces`): while the `spaces` flag is on for this admin, it renders inside the Admin space,
+ * with the space tabs, search and the bell, and the admin navigation as the space's sidebar
+ * (T02). Without a context (the flag is off for them, a personal access token, a failed context
+ * load, or a page that has not moved yet) it renders in the existing admin shell exactly as
+ * before. The middleware's ADMIN guard runs first either way, and is unchanged.
+ *
+ *   const spaces = await resolveSpacePage(Astro.locals, "moderation");
+ *   <AdminLayout title="Moderation" spaces={spaces}>…</AdminLayout>
+ *
+ * The page draws its own title: an h1 in the spaces shell (its one display heading), the h2 it
+ * always had in the existing shell.
+ */
 import BaseLayout from "./BaseLayout.astro";
 import AdminShell from "@/components/shells/AdminShell";
-import { env } from "cloudflare:workers";
-import { demoEnabled } from "@/lib/staging-demo-policy";
-import { isAgentAuthEnabled } from "@/lib/agent-auth";
-import { isLegacyImportEnabled } from "@/lib/admin/import";
-import { countPendingAccessRequests } from "@/lib/admin/access-requests";
-import { countPendingModeration } from "@/lib/channels/moderation/queue";
-import { countOpenChecks } from "@/lib/mentoring/checks";
-import { isFlagEnabled } from "@/lib/platform/server/flags";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import type { SpacePageContext } from "@/components/platform/spaces/space-page";
+import { loadAdminNavFacts } from "@/components/admin/admin-nav-server";
 
 interface Props {
   title?: string;
@@ -18,42 +29,54 @@ interface Props {
   pendingModeration?: number;
   /** Open checks on request notes, when the page already counted them (moderation, Admin Home). */
   pendingRequestNotes?: number;
+  /** The Admin space, for a page drawn in the spaces shell; null or absent keeps the existing admin shell. */
+  spaces?: SpacePageContext | null;
 }
 
-const { title = "Admin" } = Astro.props;
+const { title = "Admin", spaces = null } = Astro.props;
 
 // Defense-in-depth: redirect if middleware didn't set isAdmin
 if (!Astro.locals.isAdmin) {
   return Astro.redirect(Astro.locals.user ? "/dashboard" : "/auth/login");
 }
 
-const pendingAccessRequests = Astro.props.pendingAccessRequests ?? await countPendingAccessRequests(env.DB);
-// No Moderation entry (null) while `channels` is off for this admin: there is no queue to link to.
-// The moderation page has already checked the flag and counted the queue. Its badge also counts the
-// open request-note checks this admin may decide while `mentor_requests` is on (QA4-04), which the
-// Request notes tab lists; the sidebar adds them, so the queue's in-place count stays its own.
-const viewerId = Astro.locals.user?.id ?? "";
-const flagContext = { db: env.DB, env, user: Astro.locals.user ?? null, isAdmin: true, locals: Astro.locals };
-const channelsOn = Astro.props.pendingModeration !== undefined || await isFlagEnabled(flagContext, "channels");
-const [pendingModeration, pendingRequestNotes] = channelsOn
-  ? await Promise.all([
-    Astro.props.pendingModeration ?? countPendingModeration(env.DB, viewerId),
-    Astro.props.pendingRequestNotes ?? (await isFlagEnabled(flagContext, "mentor_requests") ? countOpenChecks(env.DB, viewerId) : 0),
-  ])
-  : [null, 0];
+const nav = await loadAdminNavFacts(Astro.locals, Astro.url.origin, {
+  pendingAccessRequests: Astro.props.pendingAccessRequests,
+  pendingModeration: Astro.props.pendingModeration,
+  pendingRequestNotes: Astro.props.pendingRequestNotes,
+});
+const inSpaces = spaces?.space === "admin";
 ---
 
-<BaseLayout title={`${title} | TTV Admin`}>
-  <AdminShell
-    client:load
-    currentPath={Astro.url.pathname}
-    agentAuthEnabled={isAgentAuthEnabled(env.AGENT_AUTH_ENABLED)}
-    stagingDemoEnabled={demoEnabled(env.DEPLOYMENT_ENVIRONMENT, env.STAGING_DEMO_ENABLED, Astro.url.origin)}
-    dataMigrationEnabled={isLegacyImportEnabled(env.DEPLOYMENT_ENVIRONMENT)}
-    pendingAccessRequests={pendingAccessRequests}
-    pendingModeration={pendingModeration}
-    pendingRequestNotes={pendingRequestNotes}
-  >
-    <slot />
-  </AdminShell>
-</BaseLayout>
+{
+  inSpaces ? (
+    <SpacePage context={spaces} title={title} admin={nav}>
+      <div class="pb-16" data-admin-space data-request-notes={nav.pendingRequestNotes}>
+        <slot />
+      </div>
+    </SpacePage>
+  ) : (
+    <BaseLayout title={`${title} | TTV Admin`}>
+      <AdminShell
+        client:load
+        currentPath={Astro.url.pathname}
+        agentAuthEnabled={nav.agentAuthEnabled}
+        stagingDemoEnabled={nav.stagingDemoEnabled}
+        dataMigrationEnabled={nav.dataMigrationEnabled}
+        pendingAccessRequests={nav.pendingAccessRequests}
+        pendingModeration={nav.pendingCases}
+        pendingRequestNotes={nav.pendingRequestNotes}
+      >
+        <slot />
+      </AdminShell>
+    </BaseLayout>
+  )
+}
+
+<script>
+  import { followModerationBadge } from "@/components/admin/moderation/sidebar-badge";
+
+  // Only in the spaces shell: the existing admin shell follows the count in its own state.
+  const space = document.querySelector<HTMLElement>("[data-admin-space]");
+  if (space) followModerationBadge(document, Number(space.dataset.requestNotes) || 0);
+</script>

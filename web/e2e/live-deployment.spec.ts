@@ -63,7 +63,8 @@ test.describe("authenticated delivery agent", () => {
 
     await page.goto("/admin");
     await expect(page).toHaveURL(/\/admin\/?$/);
-    await expect(page.getByRole("heading", { name: "TTV Admin" })).toBeVisible();
+    // The existing admin shell, or the Admin space where the spaces flag is on for this session (T02).
+    await expect(page.getByRole("heading", { name: /^(TTV Admin|Admin home)$/ }).locator("visible=true").first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "Attention" })).toBeVisible();
     await expect(page.getByText("Preview recording needing attention")).toBeVisible();
     await expect(page.getByText("Preview Drive source needing attention")).toBeVisible();

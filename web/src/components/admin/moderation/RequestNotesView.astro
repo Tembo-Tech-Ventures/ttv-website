@@ -16,13 +16,15 @@ import { caseCause, decidedStatus, requestNoteChoices, type RequestNotesViewProp
  * text: Astro escapes each expression, and nothing here uses set:html.
  */
 type Props = RequestNotesViewProps & {
+  /** The page title's level: h1 in the spaces shell, where it is the screen's one display heading. */
+  titleTag?: "h1" | "h2";
   /** The message queue's tabs, so the whole page reads as one set of lists. */
   queueTabs: ModerationTab[];
   /** The admin reading: one who is party to a request can't decide it (B-4.1), so they get no form for it. */
   viewerId: string;
 };
 
-const { state, items, formAction, tabHrefs, nextHref, paged, notice, failure, rowError, queueTabs, viewerId } = Astro.props;
+const { titleTag: Title = "h2", state, items, formAction, tabHrefs, nextHref, paged, notice, failure, rowError, queueTabs, viewerId } = Astro.props;
 const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 const PILL = "inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font-semibold transition-colors motion-reduce:transition-none";
@@ -30,7 +32,7 @@ const PILL = "inline-flex min-h-11 items-center rounded-full px-3.5 text-sm font
 
 <div class="mx-auto max-w-6xl space-y-8 pt-4 lg:px-6 lg:pt-6" data-request-notes data-state={state}>
   <header class="space-y-4">
-    <h2 class="text-[2.5rem] leading-[0.95] tracking-display text-ink-primary sm:text-5xl lg:text-6xl">Moderation</h2>
+    <Title class="text-[2.5rem] leading-[0.95] tracking-display text-ink-primary sm:text-5xl lg:text-6xl">Moderation</Title>
     <p class="max-w-3xl text-base leading-relaxed text-ink-secondary sm:text-lg">
       Requests for a mentor's time whose note Tembo's check held, or that a mentor reported. Keeping one sends it
       to its mentor as it was written, and takes one of their spots this month; removing it closes it, and the

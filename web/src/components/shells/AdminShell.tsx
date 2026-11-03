@@ -21,37 +21,37 @@ import {
   PiShieldCheckDuotone,
 } from "react-icons/pi";
 import { PiListBold } from "react-icons/pi";
+import type { IconType } from "react-icons";
+import { adminNavEntries, type AdminNavKey } from "@/components/admin/admin-nav";
 
 const MAIN_ID = "admin-main";
-const ACCESS_REQUESTS_HREF = "/admin/access-requests";
-const MODERATION_HREF = "/admin/moderation";
 
-const primaryLinks = [
-  // Admin is one of the person's spaces: the way back to the rest of the app comes first.
-  { href: "/dashboard", label: "Back to dashboard", icon: PiArrowLeftDuotone },
-  { href: "/admin", label: "Admin Home", icon: PiGaugeDuotone },
-  // People waiting on a decision come straight after home, with how many are waiting.
-  { href: ACCESS_REQUESTS_HREF, label: "Access requests", icon: PiUserPlusDuotone },
-  { href: "/admin/users", label: "Users", icon: PiUsersDuotone },
-  { href: "/admin/applications", label: "Applications", icon: PiFileTextDuotone },
-  { href: "/admin/profiles", label: "Profiles", icon: PiIdentificationCardDuotone },
-  { href: "/admin/feedback", label: "Feedback", icon: PiChatTeardropTextDuotone },
-  { href: "/admin/projects", label: "Client Projects", icon: PiBriefcaseDuotone },
-  { href: "/admin/curricula", label: "Curricula", icon: PiBooksDuotone },
-  { href: "/admin/programs", label: "Cohorts", icon: PiBookOpenDuotone },
-  { href: "/admin/recordings", label: "Recordings", icon: PiVideoCameraDuotone },
-  { href: "/admin/settings/integrations", label: "Integrations", icon: PiPlugsDuotone },
-  { href: "/admin/platform-flags", label: "Feature flags", icon: PiToggleRightDuotone },
-  {
-    href: "/admin/personal-access-tokens",
-    label: "Personal Access Tokens",
-    icon: PiKeyDuotone,
-  },
-];
+const ICONS: Record<AdminNavKey, IconType> = {
+  back: PiArrowLeftDuotone,
+  home: PiGaugeDuotone,
+  accessRequests: PiUserPlusDuotone,
+  moderation: PiShieldCheckDuotone,
+  users: PiUsersDuotone,
+  applications: PiFileTextDuotone,
+  profiles: PiIdentificationCardDuotone,
+  feedback: PiChatTeardropTextDuotone,
+  projects: PiBriefcaseDuotone,
+  curricula: PiBooksDuotone,
+  cohorts: PiBookOpenDuotone,
+  recordings: PiVideoCameraDuotone,
+  integrations: PiPlugsDuotone,
+  flags: PiToggleRightDuotone,
+  tokens: PiKeyDuotone,
+  demo: PiUsersDuotone,
+  migration: PiDatabaseDuotone,
+  agentAccess: PiKeyDuotone,
+  logout: PiSignOutDuotone,
+};
 
 /**
- * pendingModeration is null while the `channels` flag is off for this administrator: there is no
- * moderation queue to link to until channels exist for them.
+ * The existing admin shell's links (admin-nav.ts, with this shell's icons). pendingModeration is
+ * null while the `channels` flag is off for this administrator: there is no moderation queue to
+ * link to until channels exist for them.
  */
 export function getAdminLinks(
   agentAuthEnabled: boolean,
@@ -60,26 +60,8 @@ export function getAdminLinks(
   pendingAccessRequests = 0,
   pendingModeration: number | null = null
 ) {
-  return [
-    ...primaryLinks.flatMap((link) =>
-      link.href === ACCESS_REQUESTS_HREF
-        ? [
-            { ...link, badge: pendingAccessRequests, badgeLabel: "pending" },
-            ...(pendingModeration === null
-              ? []
-              : [{ href: MODERATION_HREF, label: "Moderation", icon: PiShieldCheckDuotone, badge: pendingModeration, badgeLabel: "waiting" }]),
-          ]
-        : [link]
-    ),
-    ...(stagingDemoEnabled ? [{ href: "/demo", label: "Staging demo personas", icon: PiUsersDuotone }] : []),
-    ...(dataMigrationEnabled
-      ? [{ href: "/admin/data-migration", label: "Data Migration", icon: PiDatabaseDuotone }]
-      : []),
-    ...(agentAuthEnabled
-      ? [{ href: "/admin/agent-access", label: "Agent Access", icon: PiKeyDuotone }]
-      : []),
-    { href: "/auth/logout", label: "Logout", icon: PiSignOutDuotone },
-  ];
+  return adminNavEntries({ agentAuthEnabled, dataMigrationEnabled, stagingDemoEnabled, pendingAccessRequests, pendingModeration })
+    .map(({ key, ...link }) => ({ ...link, icon: ICONS[key] }));
 }
 
 export default function AdminShell({

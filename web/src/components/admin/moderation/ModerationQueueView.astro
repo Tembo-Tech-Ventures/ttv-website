@@ -17,16 +17,18 @@ type Props = QueueViewProps & {
   requestNotesHref?: string;
   /** Open checks on request notes this admin may decide, shown on that tab. */
   requestNotesCount?: number;
+  /** The page title's level: h1 in the spaces shell, where it is the screen's one display heading. */
+  titleTag?: "h1" | "h2";
 };
 
-const { state, items, pendingCount, formAction, tabHrefs, nextHref, paged, notice, noticeSubject, failure, rowError, requestNotesHref, requestNotesCount } = Astro.props;
+const { titleTag: Title = "h2", state, items, pendingCount, formAction, tabHrefs, nextHref, paged, notice, noticeSubject, failure, rowError, requestNotesHref, requestNotesCount } = Astro.props;
 const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 ---
 
 <div class="mx-auto max-w-6xl space-y-8 pt-4 lg:px-6 lg:pt-6" data-moderation-root data-state={state} data-pending-count={pendingCount}>
   <header class="space-y-4">
-    <h2 class="text-[2.5rem] leading-[0.95] tracking-display text-ink-primary sm:text-5xl lg:text-6xl">Moderation</h2>
+    <Title class="text-[2.5rem] leading-[0.95] tracking-display text-ink-primary sm:text-5xl lg:text-6xl">Moderation</Title>
     <p class="max-w-3xl text-base leading-relaxed text-ink-secondary sm:text-lg">
       Tembo hides only what is clearly abusive. Contact details are hidden from other members until you decide;
       everything else stays visible.
