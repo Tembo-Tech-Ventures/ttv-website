@@ -156,8 +156,10 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
   const { me, path, filters, mentors, shown, areas, projects, conduct, now, api, serverForm = null, sent: sentNow = null } = props;
   const headingId = useId();
   const root = useRef<HTMLDivElement>(null);
-  // The request a send just made: once its drawer closes, focus goes to where it now shows (QA4-18).
+  // The request the open drawer just sent: once it closes, focus goes to where the request now shows (QA4-18).
+  // Only the open drawer's own send counts, so a send that settles after its drawer closed moves nothing.
   const justSent = useRef<MentorRequest | null>(null);
+  const drawerFor = useRef<string | null>(null);
   // Until the island is interactive (and always without JavaScript) a drawer named by `?ask=` is a plain panel with a real form.
   const [hydrated, setHydrated] = useState(false);
   // The filters alone: following a filter, or closing the drawer, drops `?ask=`.
@@ -175,6 +177,7 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
     window.history.replaceState(window.history.state, "", directoryHref(path, base) + window.location.hash);
     const request = justSent.current;
     justSent.current = null;
+    drawerFor.current = null;
     // "Ask for time" gave way to the request's status on the card: focus that, or the request under Your requests.
     if (request) {
       const where = root.current?.querySelector<HTMLElement>(`[data-mentor-card="${CSS.escape(request.mentor.id)}"] [data-mentor-standing='waiting']`)
@@ -199,8 +202,7 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
 
   const ask = useCallback((item: MentorDirectoryItem, from: HTMLElement | null) => {
     if (!hasOpenSpot(item) && serverForm?.mentorId !== item.person.id) return;
-    // A send that finished after its drawer closed left no close to move focus for: a new drawer starts clean.
-    justSent.current = null;
+    drawerFor.current = item.person.id;
     setActive(item);
     window.history.replaceState(window.history.state, "", askHref(path, base, item.person.id));
     show(from);
@@ -222,7 +224,7 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
   }, []); // oxlint-disable-line react-hooks/exhaustive-deps
 
   function sent(request: MentorRequest) {
-    justSent.current = request;
+    if (drawerFor.current === request.mentor.id) justSent.current = request;
     ownRequests.prepend(request);
   }
 
@@ -249,7 +251,7 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
       {/* Filter links land here (`#mentor-results`), so the next Tab reaches the first mentor (QA4-18). */}
       <h2
         id={MENTOR_RESULTS_ID} tabIndex={-1}
-        className="mt-6 mb-3 scroll-mt-40 font-body text-[0.9375rem] font-semibold text-ink-secondary focus:outline-none"
+        className={cx("mt-6 mb-3 w-fit scroll-mt-40 rounded-sm font-body text-[0.9375rem] font-semibold text-ink-secondary", FOCUS_RING)}
         data-mentor-results
       >
         {resultsHeading(shown.length, filters, areas)}

@@ -59,7 +59,7 @@ async function directoryProps(options: {
 }
 
 const card = (item: MentorDirectoryItem) => q(`[data-mentor-card="${item.person.id}"]`)!;
-const [david, mercy, joseph] = mentors.items;
+const [david, mercy, joseph, samuel] = mentors.items;
 
 describe("the mentor directory", () => {
   it("reads without JavaScript: cards, capacity, filters and the person's own requests", async () => {
@@ -252,10 +252,21 @@ describe("the mentor directory", () => {
     // The person closes the drawer while the request is on its way.
     await act(async () => q<HTMLButtonElement>("[data-mentor-drawer] button[aria-label^='Close']")!.click());
     expect(q("[data-mentor-drawer] form")).toBeNull();
+    // Another drawer is open when Joseph's request lands: closing it moves focus to its own button only (#314 review).
+    const askSamuel = card(samuel).querySelector<HTMLElement>("[data-ask-mentor]")!;
+    askSamuel.focus();
+    await act(async () => askSamuel.click());
     await act(async () => { release(); await held; });
     await settle();
     expect(mock.requests().filter((r) => r.mentor.id === joseph.person.id && r.status === "PENDING")).toHaveLength(1);
     expect(all("[data-own-request]")[0]!.textContent).toContain("Joseph Mutua");
+    const focused = vi.spyOn(HTMLElement.prototype, "focus");
+    await act(async () => q<HTMLDialogElement>("[data-mentor-drawer]")!.close());
+    const josephStatus = card(joseph).querySelector("[data-mentor-standing='waiting']");
+    expect(josephStatus).not.toBeNull();
+    expect(focused.mock.contexts).not.toContain(josephStatus);
+    expect(document.activeElement).toBe(askSamuel);
+    focused.mockRestore();
   });
 
   // QA4-05: the habits come before Send, and agreeing sends.
