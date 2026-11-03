@@ -46,7 +46,7 @@ export const CONDUCT_HABITS: readonly ConductHabit[] = [
   {
     key: "audience",
     title: "Know who’s reading.",
-    body: "Community channels are open to everyone signed in to TTV, including people from organisations with approved access. Cohort channels are for that cohort, its instructors, TAs and mentors, and TTV staff.",
+    body: "Community channels are open to everyone signed in to TTV, including people from organisations with approved access. Cohort channels are for that cohort, its instructors, TAs and mentors, and TTV staff. A private conversation is for its two people alone: TTV admins see a message in one only if one of you reports it or our checks flag it, and then only that message.",
   },
   {
     key: "limits",

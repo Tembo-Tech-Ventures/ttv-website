@@ -114,27 +114,30 @@ describe("asking a mentor for time", () => {
   });
 
   it.each([
-    ["an institution-only account", { globalRoles: ["INSTITUTION"], member: false }],
+    ["an institution account with no profile or cohort", { globalRoles: ["INSTITUTION"], member: false }],
     ["an account with no profile or cohort", { member: false }],
     ["a pending applicant without a profile", { member: false, applications: [{ programId: "cohort-a", status: "PENDING" as const }] }],
     ["a rejected applicant without a profile", { member: false, applications: [{ programId: "cohort-a", status: "REJECTED" as const }] }],
-  ])("refuses asking from %s (403, neutral), leaving the directory open to them", async (_, fixture) => {
-    const s = setup(fixture);
-    const refused = await s.call("createMentorRequest", { body: { mentorId: PEOPLE.david, note: "Hi", project: null, format: "WRITTEN_REVIEW" } });
-    expect([refused.status, errorOf(refused.body)]).toEqual([403, {
-      code: "forbidden", message: "Asking a mentor for time needs a member profile or a cohort place." }]);
-    expect(s.database.prepare("SELECT COUNT(*) AS n FROM mentor_request").get()).toEqual({ n: 0 });
-    expect((await s.call("listMentors")).status).toBe(200);
-  });
-
-  it.each([
-    ["a community profile", { globalRoles: ["INSTITUTION"] }],
+    ["a community profile and an institution", { globalRoles: ["INSTITUTION"] }],
     ["an approved cohort place", { member: false, applications: [{ programId: "cohort-a", status: "APPROVED" as const }] }],
     ["an audit place", { member: false, applications: [{ programId: "cohort-a", status: "AUDIT" as const }] }],
     ["a completed cohort", { member: false, applications: [{ programId: "cohort-a", status: "COMPLETED" as const }] }],
-  ])("lets a member with %s ask", async (_, fixture) => {
+    ["the MENTOR role only", { globalRoles: ["MENTOR"], member: false }],
+    ["the ADMIN role only", { globalRoles: ["ADMIN"], member: false }],
+  ])("lets a signed-in person with %s ask, as themselves (owner decision: mentor requests are personal)", async (_, fixture) => {
     const s = setup(fixture);
-    expect(await s.ask()).toEqual(expect.any(String));
+    const id = await s.ask();
+    expect(request((await s.call("getMentorRequest", { id })).body)).toMatchObject({ status: "PENDING", requester: { id: VIEWER } });
+  });
+
+  it("still needs the code of conduct and a spot from someone with no profile, cohort or role", async () => {
+    const s = setup({ member: false, conduct: false });
+    const body = { mentorId: PEOPLE.david, note: "Hi", project: null, format: "WRITTEN_REVIEW" };
+    expect(errorOf((await s.call("createMentorRequest", { body })).body).code).toBe("conduct_required");
+    s.agree();
+    s.database.exec(`UPDATE mentor_profile SET monthlyCapacity = 0 WHERE userId = '${PEOPLE.david}'`);
+    expect((await s.call("createMentorRequest", { body })).status).toBe(404);
+    expect(s.database.prepare("SELECT COUNT(*) AS n FROM mentor_request").get()).toEqual({ n: 0 });
   });
 
   it("needs the current code of conduct, because the note opens a conversation", async () => {
@@ -364,7 +367,10 @@ describe("capacity, counted per Africa/Nairobi month", () => {
     await s.call("acceptMentorRequest", { id, user: PEOPLE.david, body: {}, now: () => lastMinute });
     const full = await s.call("createMentorRequest", { user: "synthetic-otieno", now: () => lastMinute,
       body: { mentorId: PEOPLE.david, note: "Me too?", project: null, format: "WRITTEN_REVIEW" } });
-    expect([full.status, errorOf(full.body).code, errorOf(full.body).message]).toEqual([409, "conflict", "This mentor has no spots left this month."]);
+    // QA4-20: the refusal says when the next opening is, as the directory does, and when to try again.
+    expect([full.status, errorOf(full.body)]).toEqual([409, {
+      code: "conflict", message: "David Kamau has no spots left this month. The next opening is 1 December.", retryAfterMs: 60_000 }]);
+    expect(full.response.headers.get("Retry-After")).toBe("60");
     const december = nairobi("2026-12-01T00:00:00");
     expect(await s.ask(PEOPLE.david, { user: "synthetic-otieno", now: december })).toEqual(expect.any(String));
   });
@@ -375,7 +381,8 @@ describe("capacity, counted per Africa/Nairobi month", () => {
     await s.ask(PEOPLE.david, { now: nairobi("2026-11-30T12:00:00") });
     const december = await s.call("createMentorRequest", { user: "synthetic-otieno", now: () => nairobi("2026-12-02T00:00:00"),
       body: { mentorId: PEOPLE.david, note: "Me too?", project: null, format: "WRITTEN_REVIEW" } });
-    expect(december.status).toBe(409);
+    // No next opening is known: it waits on the mentor answering, so the refusal names no date.
+    expect([december.status, errorOf(december.body)]).toEqual([409, { code: "conflict", message: "David Kamau has no spots left this month." }]);
   });
 
   it("frees a spot when a request is declined, redirected or withdrawn, and accepting needs none of its own", async () => {

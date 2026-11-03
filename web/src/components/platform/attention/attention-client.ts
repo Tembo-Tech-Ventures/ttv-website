@@ -3,7 +3,7 @@ import type { AttentionList, MarkAttentionRead, Me } from "@/lib/platform/contra
 import { createAttentionStore, type AttentionState, type AttentionStore } from "@/lib/platform/client/attention";
 import type { ApiClient } from "@/lib/platform/client/apiClient";
 import { createAnnouncer } from "@/lib/platform/client/announcer";
-import { publishAttentionCounts } from "@/components/platform/shell/overlays";
+import { onAttentionRefresh, publishAttentionCounts } from "@/components/platform/shell/overlays";
 import { unreadTotal } from "./attention-display";
 
 export type Announcer = ReturnType<typeof createAnnouncer>;
@@ -39,6 +39,11 @@ export function useAttentionOwner(me: Me, options: { initialList?: AttentionList
     const stop = store.subscribe(publish);
     return () => stop();
   }, [owner]);
+
+  /* Another island answered something a notice was about: count again now (QA4-07). */
+  useEffect(() => onAttentionRefresh(() => {
+    owner.store.refreshCounts().catch(() => { /* The store keeps the error; the next poll tries again. */ });
+  }), [owner]);
 
   useNewAttentionAnnouncements(owner);
   return owner;

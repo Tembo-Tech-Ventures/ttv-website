@@ -429,8 +429,11 @@ test.describe("F-6: what the onboarding QA found (QAO-01 to QAO-10)", () => {
     await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
     await main(page).locator("[data-attention-filter='requests']").click();
     await expect(main(page).locator("[data-attention-filter='requests']")).toHaveAttribute("aria-pressed", "true");
-    await expect(main(page)).toContainText("No requests for mentoring time yet. Your own requests for mentor or organisation access are in Account.");
+    // QA4-06: what the tab holds, never "no requests", which read as a request lost.
+    await expect(main(page)).toContainText("Answers to requests you send to mentors");
+    await expect(main(page)).toContainText("Your own requests for mentor or organisation access are in Account.");
     await expect(main(page)).not.toContainText("No mentoring requests yet.");
+    await expect(main(page)).not.toContainText("No requests for mentoring time yet.");
     await noSideways(page);
     await page.screenshot({ path: evidence("f6-attention-requests-empty") });
     await runAxe(page, test.info(), "attention, requests, empty");

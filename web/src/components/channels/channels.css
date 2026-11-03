@@ -112,6 +112,55 @@
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 1;
   }
+
+  /*
+   * A private conversation's header, the same way (QA4-08): a smaller face, the name and its badges on
+   * one line, what was asked for on one (two at most), when on one, and who reads it as a chip that opens.
+   */
+  .channel-view__header [data-conversation-header] {
+    gap: 0.375rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .channel-view__header [data-conversation-who] {
+    align-items: flex-start;
+    gap: 0.625rem;
+  }
+
+  .channel-view__header [data-conversation-who] [data-avatar] {
+    width: 2rem;
+    height: 2rem;
+    font-size: 0.75rem;
+  }
+
+  .channel-view__header [data-conversation-text] {
+    display: flex;
+    flex-flow: row wrap;
+    align-items: baseline;
+    column-gap: 0.5rem;
+  }
+
+  .channel-view__header [data-conversation-text] > p {
+    margin-top: 0;
+    font-size: 0.8125rem;
+  }
+
+  .channel-view__header [data-conversation-context],
+  .channel-view__header [data-conversation-timeline] {
+    flex-basis: 100%;
+  }
+
+  .channel-view__header [data-conversation-context] {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .channel-view__header [data-conversation-privacy] > summary {
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+  }
 }
 
 /* ---- The message list --------------------------------------------------- */
@@ -1135,18 +1184,35 @@
   font-size: 0.8125rem;
 }
 
+/*
+ * What Tembo reads here. A narrow composer says it shorter, but still says it, so "Ask Tembo" never
+ * addresses a question with no word on what it sees (QA4-08).
+ */
 .channel-composer__scope {
-  display: none;
-  margin-top: 0.5rem;
+  margin-top: 0.375rem;
   padding-inline: 0.5rem;
   color: var(--color-ink-muted);
-  font-size: 0.8125rem;
-  line-height: 1.45;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.channel-composer__scope-wide {
+  display: none;
 }
 
 @container channel-view (min-width: 40rem) {
   .channel-composer__scope {
-    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+  }
+
+  .channel-composer__scope-wide {
+    display: inline;
+  }
+
+  .channel-composer__scope-narrow {
+    display: none;
   }
 }
 

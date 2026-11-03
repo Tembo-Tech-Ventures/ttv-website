@@ -16,15 +16,18 @@ import { audienceFor, bestEffort, persist, type AttentionProducerContext, type E
  * see it (MENTOR_SEES), so a request Clef held reaches them only once an admin keeps it ("created"
  * again, the same notice). A check opening ("checking") tells every admin but the two parties, once
  * per opening, in the admin space, at the request notes queue, while the request still waits or was reported.
+ * The person asking hears of each change a check makes to their request (QA4-02, `mentor_checked`): it
+ * waits for a check, TTV is checking it, it went to the mentor, or it was not sent or closed. The
+ * notices say what happens next, are the same whoever opened the check, and never say "declined".
  */
 
-export type MentorRequestEvent = "created" | "accepted" | "redirected" | "declined" | "withdrawn" | "checking";
+export type MentorRequestEvent = "created" | "accepted" | "redirected" | "declined" | "withdrawn" | "checking" | "decided";
 
 /** The admin moderation page's request notes tab (U-4.1). */
 export const MENTOR_REQUEST_QUEUE_HREF = `${MODERATION_QUEUE_HREF}?tab=request-notes`;
 
 /** The status each event leaves a request in. */
-const STATUS_AFTER: Record<Exclude<MentorRequestEvent, "checking">, MentorRequestStatus> = {
+const STATUS_AFTER: Record<Exclude<MentorRequestEvent, "checking" | "decided">, MentorRequestStatus> = {
   created: "PENDING", accepted: "ACCEPTED", redirected: "REDIRECTED", declined: "DECLINED", withdrawn: "WITHDRAWN",
 };
 
@@ -38,11 +41,47 @@ interface RequestState {
   id: string; requesterId: string; mentorId: string; status: MentorRequestStatus; format: MentorRequestFormat;
   channelId: string | null; requesterName: string | null; mentorName: string | null; targetName: string | null;
   visible: number; caseState: "OPEN" | "DECIDED" | null; openedAt: number | null; reported: number;
+  decision: "KEEP" | "REMOVE" | null; decidedAt: number | null; closedRequest: number | null;
+}
+
+/**
+ * Where a check leaves the request, as the person asking sees it (requests.ts checkFor): waiting (Clef
+ * held it, the mentor never saw it), checking (the mentor had read it), sent (an admin kept it, so it
+ * waits for the mentor again), not_sent or closed (an admin removed it). null when nothing changed for
+ * them: no check, or a decision on a request they had already withdrawn.
+ */
+type CheckNotice = "waiting" | "checking" | "sent" | "not_sent" | "closed";
+function checkNotice(request: RequestState): CheckNotice | null {
+  if (request.caseState === "OPEN") return request.status === "PENDING" ? request.reported ? "checking" : "waiting" : null;
+  if (request.caseState !== "DECIDED") return null;
+  if (request.decision === "KEEP") return request.status === "PENDING" ? "sent" : null;
+  return request.closedRequest ? request.reported ? "closed" : "not_sent" : null;
+}
+
+/** What each notice tells the person asking: a fixed, kind explanation and what happens next (QA4-02). */
+const CHECK_SUMMARY: Record<CheckNotice, (mentor: string) => string> = {
+  waiting: () => "Waiting for a check before it's sent. Nothing for you to do: you'll hear here when it's done.",
+  checking: () => "TTV is checking your request. Nothing for you to do: you'll hear here when it's done.",
+  sent: (mentor) => `Checked and sent. It's waiting for ${mentor} now.`,
+  not_sent: () => "It wasn't sent, after a check. You can ask again with a new note.",
+  closed: () => "It was closed, after a check. You can ask again with a new note.",
+};
+
+function checkItem(request: RequestState): EventItem | null {
+  const notice = checkNotice(request);
+  if (notice === null) return null;
+  const at = notice === "waiting" || notice === "checking" ? request.openedAt : request.decidedAt;
+  return {
+    userId: request.requesterId, actorId: null, space: "community", kind: "mentor_checked",
+    subject: { kind: "mentorRequest", id: request.id, href: MENTOR_PAGE_PATHS.directory, label: `Your request to ${nameOf(request.mentorName)}` },
+    // access.ts reads the notice at $[2] and its time at $[3] of this key, to show each only while it describes the check: keep them in place.
+    summary: CHECK_SUMMARY[notice](nameOf(request.mentorName)), eventKey: JSON.stringify(["mentor_checked", request.id, notice, at]),
+  };
 }
 
 const nameOf = (name: string | null) => name?.trim() || "a member";
 
-function itemFor(event: Exclude<MentorRequestEvent, "checking">, request: RequestState): EventItem {
+function itemFor(event: Exclude<MentorRequestEvent, "checking" | "decided">, request: RequestState): EventItem {
   const subject = (href: string, label: string) => ({ kind: "mentorRequest" as const, id: request.id, href, label });
   const eventKey = JSON.stringify([`mentor_${event}`, request.id]);
   const toMentor = { userId: request.mentorId, actorId: request.requesterId, space: "mentoring" as const, eventKey };
@@ -84,13 +123,15 @@ export function mentorRequestAttention(context: AttentionProducerContext, reques
     if (audience === "OFF") return;
     const request = await context.db.prepare(`SELECT r.id, r.requesterId, r.mentorId, r.status, r.format, r.channelId,
         ru.name AS requesterName, mu.name AS mentorName, tu.name AS targetName, ${MENTOR_SEES("r")} AS visible,
-        c.state AS caseState, c.openedAt, EXISTS (SELECT 1 FROM mentor_request_report rp WHERE rp.requestId = r.id) AS reported
+        c.state AS caseState, c.openedAt, EXISTS (SELECT 1 FROM mentor_request_report rp WHERE rp.requestId = r.id) AS reported,
+        c.decision, c.decidedAt, c.closedRequest
       FROM mentor_request r JOIN "user" ru ON ru.id = r.requesterId JOIN "user" mu ON mu.id = r.mentorId
         LEFT JOIN "user" tu ON tu.id = r.redirectedToId LEFT JOIN mentor_request_case c ON c.requestId = r.id
       WHERE r.id = ?1`).bind(requestId).first<RequestState>();
     if (!request) return;
-    if (event === "checking") {
-      await persist(context, audience, await checkItems(context, request));
+    if (event === "checking" || event === "decided") {
+      const asker = checkItem(request);
+      await persist(context, audience, [...event === "checking" ? await checkItems(context, request) : [], ...asker ? [asker] : []]);
       return;
     }
     if (request.status !== STATUS_AFTER[event] || (event === "accepted" && request.channelId === null)) return;

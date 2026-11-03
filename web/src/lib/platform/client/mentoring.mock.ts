@@ -7,7 +7,6 @@ import {
 import * as fixtures from "../fixtures";
 import { createApiClient, type ApiClient } from "./apiClient";
 import { filterDirectoryFixture, hasOpenSpot } from "./mentor-directory";
-import { NEEDS_MEMBER_MESSAGE } from "./mentor-request-form";
 import { createMockTransport, type MockOptions, type MockReply } from "./mockTransport";
 
 /**
@@ -25,8 +24,6 @@ export interface MentoringMockOptions extends MockOptions {
   viewer?: PersonSummary;
   /** Whether the viewer has agreed to how we talk to each other. Defaults to true. */
   conductAgreed?: boolean;
-  /** Whether the viewer has a member account (a community profile or a cohort place), which asking needs. Defaults to true. */
-  member?: boolean;
   /** Requests per page of GET /api/mentor-requests. Defaults to 20. */
   pageSize?: number;
 }
@@ -159,15 +156,22 @@ export function createMentoringMock(options: MentoringMockOptions = {}): Mentori
     } },
     { ...ROUTES.createMentorRequest, reply: async ({ request }) => {
       const body = CreateMentorRequest.parse(await request.json());
-      if (options.member === false) return failure(403, "forbidden", NEEDS_MEMBER_MESSAGE);
       if (!conductAgreed) return failure(403, "conduct_required", "Agree to how we talk to each other first.");
       const mentor = directoryItem(body.mentorId);
       if (!mentor || body.mentorId === viewer.id) return notFound();
       if (!mentor.formats.includes(body.format)) return failure(400, "validation_error", "That mentor doesn't offer this format.");
-      if (requests.some(item => item.status === "PENDING" && item.requester.id === viewer.id && item.mentor.id === body.mentorId)) {
-        return conflict("You already have a request waiting with this mentor.");
+      // B-4.1's own words: which of the viewer's requests is in the way, or when the next spot opens.
+      const waiting = requests.find(item => item.status === "PENDING" && item.requester.id === viewer.id && item.mentor.id === body.mentorId);
+      if (waiting) {
+        const name = mentor.person.name;
+        return conflict(waiting.check === "waiting" ? `Your earlier request to ${name} is waiting for a check before it's sent. Your requests will show when the check is done.`
+          : waiting.check === "checking" ? `TTV is checking your earlier request to ${name}. Your requests will show when the check is done.`
+            : `You already have a request waiting with ${name}.`);
       }
-      if (!hasOpenSpot(mentor)) return conflict("This mentor is full this month.");
+      if (!hasOpenSpot(mentor)) {
+        const opening = mentor.capacity.nextOpeningAt;
+        return conflict(`${mentor.person.name} has no spots left this month.${opening !== null ? ` The next opening is ${new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", timeZone: "Africa/Nairobi" }).format(opening)}.` : ""}`);
+      }
       const project = body.project && (PROJECTS_BY_OWNER[viewer.id] ?? []).find(item => item.journeyId === body.project!.journeyId && item.version === body.project!.version);
       if (body.project && !project) return failure(400, "validation_error", "Attach one of your own published projects.");
       const now = tick();

@@ -5,14 +5,14 @@ import { runAxe } from "./platform-axe";
  * Mentor connections (U-4.1 / S-4.1) on the DEV-only harness `/dev/platform-mentors`: the real
  * directory, request drawer, mentor queue and availability editor inside SpacesLayout, over the
  * stateful mentoring mock (S-4.1). Screens 05 and 06 at 390 and 1440, axe, the keyboard path,
- * optimistic moves that roll back, the drawer without JavaScript, an account that cannot ask, and
- * the flag off. `platform-mentor-requests.spec.ts` runs the same journeys against B-4.1.
+ * optimistic moves that roll back, the drawer without JavaScript, an organisation account asking as
+ * itself, and the flag off. `platform-mentor-requests.spec.ts` runs the same journeys against B-4.1.
  */
 const HARNESS = "/dev/platform-mentors";
 const EVIDENCE_DIR = "test-results/evidence/platform-mentors";
 const PHONE = { width: 390, height: 844 };
 const DESKTOP = { width: 1440, height: 900 };
-const DAVID = "s00000000000000000000003";
+const JOSEPH = "s00000000000000000000005";
 const SAMUEL = "s00000000000000000000011";
 
 function harness(params: Record<string, string> = {}) {
@@ -50,10 +50,13 @@ for (const viewport of [DESKTOP, PHONE]) {
     await page.screenshot({ path: `${EVIDENCE_DIR}/05-directory-${viewport.width}.png`, fullPage: true });
     await runAxe(page, testInfo, `directory-${viewport.width}`);
 
-    await card(page, "David Kamau").getByRole("link", { name: "Ask for time" }).click();
-    const drawer = drawerFor(page, "David");
+    // Wanjiku's request to David is still waiting, so his card says so instead of offering another (QA4-12).
+    await expect(card(page, "David Kamau")).toContainText("Waiting for David");
+    await expect(card(page, "David Kamau").getByRole("link", { name: /Ask for time/ })).toHaveCount(0);
+    await card(page, "Joseph Mutua").getByRole("link", { name: "Ask for time with Joseph Mutua" }).click();
+    const drawer = drawerFor(page, "Joseph");
     await expect(drawer.getByRole("textbox", NOTE)).toBeFocused();
-    await expect(page).toHaveURL(new RegExp(`ask=${DAVID}`));
+    await expect(page).toHaveURL(new RegExp(`ask=${JOSEPH}`));
     expect(await horizontalOverflow(page)).toBe(0);
     await page.screenshot({ path: `${EVIDENCE_DIR}/05-drawer-${viewport.width}.png` });
     await runAxe(page, testInfo, `drawer-${viewport.width}`);
@@ -101,18 +104,23 @@ test("withdrawing shows at once and puts the request back when the server refuse
   await expect(page.locator("[data-own-request][data-status=WITHDRAWN]")).toHaveCount(1);
 });
 
-test("asking without having agreed to the habits keeps the note and comes back to the drawer", async ({ page }) => {
+// QA4-05: the habits come before Send, and one press agrees and sends.
+test("someone who hasn't agreed to the habits reads them before Send, and sending agrees and sends", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
   await open(page, harness({ view: "directory", conduct: "required" }));
   await card(page, "Samuel Otieno").getByRole("link", { name: "Ask for time" }).click();
   const drawer = drawerFor(page, "Samuel");
+  await expect(drawer.getByRole("heading", { name: "Before you send: how we talk to each other" })).toBeVisible();
   await drawer.getByRole("textbox", NOTE).fill("A review of my ledger's data model?");
   await drawer.getByRole("radio", { name: /Written review/ }).check();
-  await drawer.getByRole("button", { name: "Send request" }).click();
-  await expect(drawer.getByRole("heading", { name: "First, how we talk to each other" })).toBeVisible();
-  await drawer.getByRole("button", { name: "I agree" }).click();
-  await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
-  await expect(drawerFor(page, "Samuel").getByRole("textbox", NOTE)).toHaveValue("A review of my ledger's data model?");
+  await drawer.getByRole("button", { name: "Agree and send request" }).click();
+  await expect(drawer.getByRole("heading", { name: "Request sent" })).toBeFocused();
+  await drawer.getByRole("button", { name: "Done" }).click();
+  await expect(page.locator("[data-own-request]").filter({ hasText: "Samuel Otieno" }).first()).toContainText("Waiting for Samuel");
+  // Agreed once: the next drawer goes straight to Send.
+  await card(page, "Joseph Mutua").getByRole("link", { name: "Ask for time" }).click();
+  await expect(drawerFor(page, "Joseph").getByRole("button", { name: "Send request" })).toBeVisible();
+  await expect(drawerFor(page, "Joseph").locator("[data-request-conduct-inline]")).toHaveCount(0);
 });
 
 for (const viewport of [DESKTOP, PHONE]) {
@@ -129,7 +137,12 @@ for (const viewport of [DESKTOP, PHONE]) {
 
     await page.evaluate(() => window.__mentorsHarness!.refuseWrites(1, 503, "unavailable"));
     await waiting.first().getByRole("button", { name: "Not this month" }).click();
+    // A kind word is optional (QA4-03); one more press sends it as it is.
+    await expect(waiting.first().getByRole("textbox", { name: /A note for/ })).toBeFocused();
+    await waiting.first().getByRole("button", { name: "Send: not this month" }).click();
+    await expect(waiting.first()).toContainText("That didn't go through, so nothing changed.");
     await expect(waiting).toHaveCount(count);
+    await waiting.first().getByRole("button", { name: "Cancel" }).click();
 
     await waiting.first().getByRole("button", { name: "Accept" }).click();
     await expect(page.locator("[data-mentor-request][data-status=ACCEPTED]").first().getByRole("link", { name: /Open conversation/ })).toBeVisible();
@@ -187,16 +200,32 @@ test.describe("without JavaScript", () => {
     await expect(page).toHaveURL(/[?&]sent=/);
     await expect(page.locator("[data-mentor-drawer-static]")).toHaveCount(0);
   });
+
+  // QA4-05: the habits come before Send, and the one post agrees and sends.
+  test("someone who hasn't agreed reads the habits above Send, and one post agrees and sends", async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await page.goto(harness({ view: "directory", conduct: "required" }));
+    await card(page, "Samuel Otieno").getByRole("link", { name: "Ask for time" }).click();
+    const panel = page.locator("[data-mentor-drawer-static]");
+    await expect(panel.getByRole("heading", { name: "Before you send: how we talk to each other" })).toBeVisible();
+    await panel.getByRole("textbox", NOTE).fill("Could you look at how my app syncs offline?");
+    await panel.getByRole("radio", { name: /Written review/ }).check();
+    await panel.getByRole("button", { name: "Agree and send request" }).click();
+    // Sent, not sent back to the habits: the mock is fresh on each harness request, so only the URL tells.
+    await expect(page).toHaveURL(/[?&]sent=/);
+  });
 });
 
-test("an account without a profile or cohort place reads the directory, with no way to ask", async ({ page }, testInfo) => {
+// Owner decision 2026-11-02: anyone signed in asks as themselves (QA4-09).
+test("someone in an organisation is told they can ask as themselves, and can", async ({ page }, testInfo) => {
   await page.setViewportSize(PHONE);
-  await open(page, harness({ view: "directory", member: "no" }));
-  await expect(page.locator("[data-mentor-card]").first()).toBeVisible();
-  await expect(page.getByRole("link", { name: "Ask for time" })).toHaveCount(0);
-  await expect(page.locator("[data-mentors-need-member]")).toContainText("Asking a mentor for time needs a member profile or a cohort place.");
-  await page.screenshot({ path: `${EVIDENCE_DIR}/05-not-a-member-${PHONE.width}.png`, fullPage: true });
-  await runAxe(page, testInfo, "directory-not-a-member");
+  await open(page, harness({ persona: "joseph", view: "directory" }));
+  await expect(page.locator("[data-mentors-as-yourself]")).toHaveText(
+    "You can ask a mentor for time as yourself. Requests come from you, not from your organisation.",
+  );
+  await expect(page.getByRole("link", { name: /Ask for time/ }).first()).toBeVisible();
+  await page.screenshot({ path: `${EVIDENCE_DIR}/05-organisation-${PHONE.width}.png`, fullPage: true });
+  await runAxe(page, testInfo, "directory-organisation");
 });
 
 test("with mentor_requests off, none of these pages exist", async ({ page }) => {

@@ -269,8 +269,11 @@ describe("attention", () => {
     await step(s.call("declineMentorRequest", { id: await step(s.ask(PEOPLE.mercy)), user: PEOPLE.mercy, body: {} }));
     await step(s.call("withdrawMentorRequest", { id: await step(s.ask(PEOPLE.joseph, { format: "CALL_30_MIN" })), body: {} }));
     expect((await listed(VIEWER)).toSorted()).toEqual([["mentor_accepted", "community", PEOPLE.david], ["mentor_declined", "community", PEOPLE.mercy]]);
+    // A new request's notice leaves the mentor's panel once it no longer waits for their answer (QA4-07).
+    expect(await listed(PEOPLE.david)).toEqual([]);
+    expect(await listed(PEOPLE.joseph)).toEqual([["mentor_withdrawn", "mentoring", VIEWER]]);
+    await step(s.ask(PEOPLE.david, { format: "CALL_30_MIN" }));
     expect(await listed(PEOPLE.david)).toEqual([["mentor_request", "mentoring", VIEWER]]);
-    expect((await listed(PEOPLE.joseph)).toSorted()).toEqual([["mentor_request", "mentoring", VIEWER], ["mentor_withdrawn", "mentoring", VIEWER]]);
     for (const user of [PEOPLE.amina, PEOPLE.amani, "synthetic-otieno"]) expect(await listed(user)).toEqual([]);
     // A mentor whose role is revoked loses the Mentoring space, and its notices with it.
     s.database.exec(`DELETE FROM UserRoles WHERE userId = '${PEOPLE.joseph}' AND roleId = (SELECT id FROM Roles WHERE name = 'MENTOR')`);

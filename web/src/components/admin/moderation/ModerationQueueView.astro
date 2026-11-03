@@ -15,9 +15,11 @@ import type { QueueViewProps } from "./page-flow";
 type Props = QueueViewProps & {
   /** The "Request notes" tab, while mentor requests are on for this admin. */
   requestNotesHref?: string;
+  /** Open checks on request notes this admin may decide, shown on that tab. */
+  requestNotesCount?: number;
 };
 
-const { state, items, pendingCount, formAction, tabHrefs, nextHref, paged, notice, noticeSubject, failure, rowError, requestNotesHref } = Astro.props;
+const { state, items, pendingCount, formAction, tabHrefs, nextHref, paged, notice, noticeSubject, failure, rowError, requestNotesHref, requestNotesCount } = Astro.props;
 const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 ---
@@ -49,7 +51,7 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
       label: tab.label, href: tabHrefs[tab.state], current: tab.state === state,
       ...(tab.state === "PENDING" ? { count: pendingCount } : {}),
     })),
-    ...(requestNotesHref ? [{ label: REQUEST_NOTES_LABEL, href: requestNotesHref, current: false }] : []),
+    ...(requestNotesHref ? [{ label: REQUEST_NOTES_LABEL, href: requestNotesHref, current: false, count: requestNotesCount }] : []),
   ]} />
 
   {items.length === 0 ? (

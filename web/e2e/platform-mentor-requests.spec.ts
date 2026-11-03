@@ -8,7 +8,7 @@ import { localPersonaSession, personaSession, signIn, type PersonaKey } from "./
  * and their private conversation opens with the note as its first message.
  * Then the other ways a request ends: withdrawn, not this month, a suggestion
  * of Samuel (who has one spot a month), and Samuel full once someone waits.
- * Last, an institution-only account reads the directory but cannot ask (#304).
+ * Last, an organisation account asks as itself (owner decision 2026-11-02).
  *
  * Local seed only (`platform-personas.local.sql`, which also clears every
  * earlier request): agent previews have no browser mentor yet. The desktop
@@ -40,7 +40,10 @@ const card = (page: Page, name: string) => page.locator("[data-mentor-card]").fi
 const ownRow = (page: Page, name: string) => page.locator("[data-own-request]").filter({ hasText: name }).first();
 const queueCard = (page: Page, name: string) => page.locator("[data-mentor-request]").filter({ has: page.getByRole("heading", { name }) }).first();
 
-/** Asks a mentor for time from the directory, agreeing to the habits first if the server asks. */
+/**
+ * Asks a mentor for time from the directory. Someone who has not agreed to the habits reads them before Send,
+ * and the one press agrees and sends (QA4-05); if the server still asks, agreeing there sends too.
+ */
 async function ask(page: Page, mentor: string, note: string) {
   await visit(page, DIRECTORY);
   await card(page, mentor).getByRole("link", { name: "Ask for time" }).click();
@@ -48,22 +51,14 @@ async function ask(page: Page, mentor: string, note: string) {
   await expect(drawer).toBeVisible();
   await expect(drawer.getByRole("textbox", { name: "What would you like help with?" })).toBeFocused();
   await drawer.getByRole("textbox", { name: "What would you like help with?" }).fill(note);
-  await drawer.getByRole("button", { name: "Send request" }).click();
+  // "Send request", or "Agree and send request" before the person has agreed to the habits.
+  await drawer.getByRole("button", { name: /send request$/i }).click();
   const conduct = drawer.getByRole("heading", { name: "First, how we talk to each other" });
   const sent = drawer.getByRole("heading", { name: "Request sent" });
   await expect(conduct.or(sent)).toBeVisible();
-  if (await conduct.isVisible()) {
-    // The note waits in the tab while the habits are agreed, and the drawer opens again on it.
-    await drawer.getByRole("button", { name: "I agree" }).click();
-    await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
-    const again = page.getByRole("dialog", { name: `Ask ${mentor.split(" ")[0]} for time` });
-    await expect(again.getByRole("textbox", { name: "What would you like help with?" })).toHaveValue(note);
-    await again.getByRole("button", { name: "Send request" }).click();
-    await expect(again.getByRole("heading", { name: "Request sent" })).toBeVisible();
-    await again.getByRole("button", { name: "Done" }).click();
-  } else {
-    await drawer.getByRole("button", { name: "Done" }).click();
-  }
+  if (await conduct.isVisible()) await drawer.getByRole("button", { name: "I agree, send my request" }).click();
+  await expect(sent).toBeVisible();
+  await drawer.getByRole("button", { name: "Done" }).click();
   await expect(ownRow(page, mentor)).toContainText(`Waiting for ${mentor.split(" ")[0]}`);
 }
 
@@ -124,18 +119,21 @@ test("the member withdraws a waiting request, and the mentor sees it withdrawn",
   await expect(mentor.locator("[data-mentor-request][data-status='WITHDRAWN']").first()).toContainText("Withdrawn");
 });
 
-test("not this month is one tap, and reads as the mentor's time, not a verdict", async ({ browser, baseURL }) => {
+test("not this month carries an optional kind word, and reads as the mentor's time, not a verdict", async ({ browser, baseURL }) => {
   const member = await as(browser, baseURL!, "student");
   const mentor = await as(browser, baseURL!, "mentor");
   await ask(member, "David Kamau", "Could we talk about database indexes?");
   await visit(mentor, REQUESTS);
   const request = queueCard(mentor, "Wanjiku Mwangi");
   await request.getByRole("button", { name: "Not this month" }).click();
+  await request.getByRole("textbox", { name: /A note for Wanjiku/ }).fill("I'm travelling this month. Try me in December?");
+  await request.getByRole("button", { name: "Send: not this month" }).click();
   await expect(request).toHaveAttribute("data-status", "DECLINED");
   await visit(member, DIRECTORY);
   const row = ownRow(member, "David Kamau");
   await expect(row).toContainText("Not this month");
   await expect(row).toContainText("you're welcome to ask again or ask someone else");
+  await expect(row).toContainText("I'm travelling this month. Try me in December?");
   await expect(row).not.toContainText(/reject|declined/i);
 });
 
@@ -179,22 +177,18 @@ test("a full mentor stays listed with no request button, and the directory can s
   await expect(samuel.locator("[data-spots-used]")).toHaveText("1 of 1");
 });
 
-test("an account without a profile or cohort place reads the directory, and asking is refused in neutral words", async ({ browser, baseURL }, testInfo) => {
+// Owner decision 2026-11-02 ("Mentor requests are personal"): an organisation account asks as itself (QA4-09).
+test("an organisation account is told it can ask as itself, and its request comes from the person", async ({ browser, baseURL }, testInfo) => {
   const institution = await as(browser, baseURL!, "institution");
   await visit(institution, DIRECTORY);
   await expect(institution.getByRole("heading", { level: 1, name: "Mentors" })).toBeVisible();
-  await expect(card(institution, "David Kamau")).toBeVisible();
-  await expect(institution.getByRole("link", { name: "Ask for time" })).toHaveCount(0);
-  await expect(institution.locator("[data-mentors-need-member]")).toHaveText(
-    "Asking a mentor for time needs a member profile or a cohort place. You can still read who mentors here and what they help with.",
+  await expect(institution.locator("[data-mentors-as-yourself]")).toHaveText(
+    "You can ask a mentor for time as yourself. Requests come from you, not from your organisation.",
   );
   await runAxe(institution, testInfo, "directory-institution");
-
-  // The API is the authority: a hand-made request gets the same words, and nothing reaches David.
-  const response = await institution.request.post("/api/mentor-requests", {
-    headers: { Origin: new URL(baseURL!).origin },
-    data: { mentorId: "ttv-local-persona-mentor", note: "Could we talk about hiring?", project: null, format: "CALL_30_MIN" },
-  });
-  expect(response.status()).toBe(403);
-  expect((await response.json()).error.message).toBe("Asking a mentor for time needs a member profile or a cohort place.");
+  await ask(institution, "David Kamau", "Could we talk about hiring junior developers?");
+  // Leave the shared seed as it was.
+  await ownRow(institution, "David Kamau").getByRole("button", { name: "Withdraw" }).click();
+  await expect(ownRow(institution, "David Kamau")).toContainText("Withdrawn");
 });
+

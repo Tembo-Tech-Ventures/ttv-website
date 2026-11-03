@@ -29,6 +29,7 @@ const KIND_ICON: Record<AttentionKind, IconType> = {
   mentor_redirected: PiHandshake,
   mentor_declined: PiHandshake,
   mentor_withdrawn: PiHandshake,
+  mentor_checked: PiHandshake,
   recording_ready: PiVideoCamera,
   application_status: PiPaperPlaneTilt,
   work_confirmed: PiSealCheck,

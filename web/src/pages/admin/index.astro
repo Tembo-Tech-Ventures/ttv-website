@@ -6,6 +6,10 @@ import * as schema from "@/lib/db/schema";
 import { count, eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { getAdminAttention } from "@/lib/admin/attention";
+import { countOpenChecks } from "@/lib/mentoring/checks";
+import { isFlagEnabled } from "@/lib/platform/server/flags";
+import { MODERATION_PATH } from "@/components/admin/moderation/case-model";
+import { requestNotesAttention, requestNotesPaths } from "@/components/admin/moderation/request-notes";
 
 const db = drizzle(env.DB, { schema });
 
@@ -34,6 +38,17 @@ const attentionGroups = (await getAdminAttention(env.DB)).filter(
   (group) => group.items.length > 0
 );
 
+// Request notes waiting for a check (QA4-04): they live under /admin/moderation, which needs
+// `channels`, and the tab needs `mentor_requests`. Counted once here, for the sidebar badge too
+// (0 while either is off, which is what the layout would count).
+const { user, isAdmin } = Astro.locals;
+const flagContext = { db: env.DB, env, user: user ?? null, isAdmin, locals: Astro.locals };
+const requestNotesOn = Boolean(user) &&
+  (await isFlagEnabled(flagContext, "channels")) &&
+  (await isFlagEnabled(flagContext, "mentor_requests"));
+const openChecks = requestNotesOn && user ? await countOpenChecks(env.DB, user.id) : 0;
+const requestNotes = requestNotesAttention(openChecks, requestNotesOn, requestNotesPaths(MODERATION_PATH));
+
 const formatAttentionDate = (value: string) =>
   new Intl.DateTimeFormat("en", {
     dateStyle: "medium",
@@ -42,7 +57,7 @@ const formatAttentionDate = (value: string) =>
   }).format(new Date(value));
 ---
 
-<AdminLayout title="Dashboard">
+<AdminLayout title="Dashboard" pendingRequestNotes={openChecks}>
   <div class="space-y-6">
     <h2 class="text-2xl font-bold text-white">Dashboard</h2>
 
@@ -56,11 +71,30 @@ const formatAttentionDate = (value: string) =>
         </p>
       </div>
 
+      {requestNotes && (
+        <Card>
+          <div id="attention-request-notes" data-attention-request-notes>
+            <h4 class="font-semibold text-white">Request notes</h4>
+            <a
+              href={requestNotes.href}
+              class="group mt-3 block rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
+            >
+              <span class="font-medium text-white group-hover:text-primary">{requestNotes.text}</span>
+              <span class="mt-1 block text-sm text-ink-secondary">
+                Requests for a mentor's time whose note Tembo's check held, or that a mentor reported.
+              </span>
+            </a>
+          </div>
+        </Card>
+      )}
+
       {
         attentionGroups.length === 0 ? (
-          <Card>
-            <p class="text-sm text-ink-secondary">Nothing needs attention.</p>
-          </Card>
+          !requestNotes && (
+            <Card>
+              <p class="text-sm text-ink-secondary">Nothing needs attention.</p>
+            </Card>
+          )
         ) : (
           <div class="space-y-4">
             {attentionGroups.map((group) => (

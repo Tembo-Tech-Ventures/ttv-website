@@ -2,13 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import type { MentorRequestCase } from "@/lib/platform/contracts";
 import { FIXTURE_NOW, people, pendingMentorRequest } from "@/lib/platform/fixtures";
 import {
-  caseCause, DECIDED_NOTE_NOTICE, moderationView, requestNotesLink, requestNotesPaths, requestNotesRequest, type RequestNotesSource,
+  caseCause, DECIDED_NOTE_NOTICE, decidedStatus, moderationView, requestNoteChoices, requestNotesAttention, requestNotesLink,
+  requestNotesPaths, requestNotesRequest, requestNotesWaitingText, type RequestNotesSource,
 } from "./request-notes";
 
 const paths = requestNotesPaths("/admin/moderation");
 const held: MentorRequestCase = {
   id: pendingMentorRequest.id, request: { ...pendingMentorRequest, check: null }, state: "OPEN",
   clefReasons: ["Harassment"], report: null, openedAt: FIXTURE_NOW - 60_000, decision: null,
+  mentorCapacity: { used: 1, limit: 3, nextOpeningAt: null },
 };
 const reported: MentorRequestCase = {
   ...held, id: "reported-request", request: { ...pendingMentorRequest, id: "reported-request" }, clefReasons: [],
@@ -121,5 +123,75 @@ describe("caseCause", () => {
   it("says what raised the check: Tembo's reasons, or the mentor's report", () => {
     expect(caseCause(held)).toBe("Tembo's check held it before David saw it: Harassment.");
     expect(caseCause(reported)).toBe("David reported it after reading it.");
+  });
+});
+
+describe("requestNoteChoices (QA4-10)", () => {
+  it("says a keep takes one of the mentor's spots, and what it sends", () => {
+    expect(requestNoteChoices(held)).toEqual({
+      keepLabel: "Keep: send it to David",
+      removeLabel: "Remove: close it",
+      keep: "David has used 1 of 3 spots this month. Keeping sends it to David as it was written and takes a spot.",
+      remove: "Removing closes it, and David never sees it. Wanjiku sees “This request wasn't sent” and can ask again with a new note.",
+    });
+  });
+
+  it("says when the mentor is full that a keep still takes a spot", () => {
+    const full = requestNoteChoices({ ...held, mentorCapacity: { used: 3, limit: 3, nextOpeningAt: null } });
+    expect(full.keep).toBe("David is full this month: 3 of 3 spots used. Keeping still sends it to David as it was written and takes a spot.");
+    const one = requestNoteChoices({ ...held, mentorCapacity: { used: 0, limit: 1, nextOpeningAt: null } });
+    expect(one.keep).toMatch(/^David has used 0 of 1 spot this month\./);
+  });
+
+  it("sends a request the mentor reported back to them, and never says who raised it to the person asking", () => {
+    const choices = requestNoteChoices(reported);
+    expect(choices.keepLabel).toBe("Keep: back to David");
+    expect(choices.keep).toBe("David has used 1 of 3 spots this month. Keeping sends it back to David to answer and takes a spot.");
+    expect(choices.remove).toBe("Removing closes it. Wanjiku sees “This request was closed” and can ask again with a new note.");
+  });
+
+  it("says nothing about spots once the mentor has no availability saved", () => {
+    expect(requestNoteChoices({ ...held, mentorCapacity: null }).keep).toBe("Keeping sends it to David as it was written.");
+  });
+
+  it("says a reported request its asker withdrew stays closed whichever is chosen", () => {
+    const withdrawn = requestNoteChoices({ ...reported, request: { ...reported.request, status: "WITHDRAWN" } });
+    expect(withdrawn).toMatchObject({ keepLabel: "Keep", removeLabel: "Remove", remove: null });
+    expect(withdrawn.keep).toMatch(/^Wanjiku withdrew this request, so it stays closed/);
+  });
+});
+
+describe("decidedStatus (QA4-21)", () => {
+  const decision = (action: "keep" | "remove") => ({ action, reason: "Fine", by: people.amina, decidedAt: FIXTURE_NOW });
+  const decided = (item: MentorRequestCase, action: "keep" | "remove", status = item.request.status): MentorRequestCase => ({
+    ...item, state: "DECIDED", decision: decision(action), request: { ...item.request, status } as MentorRequestCase["request"],
+  });
+
+  it("says where a kept request stands now", () => {
+    expect(decidedStatus(decided(held, "keep"))).toBe("Kept: sent to David");
+    expect(decidedStatus(decided(reported, "keep"))).toBe("Kept: back with David");
+    expect(decidedStatus(decided(held, "keep", "DECLINED"))).toBe("Kept: David said not this month");
+    expect(decidedStatus(decided(held, "keep", "WITHDRAWN"))).toBe("Kept: Wanjiku withdrew it");
+  });
+
+  it("says a removed request wasn't sent, or was closed after the mentor read it", () => {
+    expect(decidedStatus(decided(held, "remove", "WITHDRAWN"))).toBe("Removed: not sent");
+    expect(decidedStatus(decided(reported, "remove", "WITHDRAWN"))).toBe("Removed: closed");
+  });
+
+  it("has nothing to say before a decision", () => {
+    expect(decidedStatus(held)).toBeNull();
+  });
+});
+
+describe("requestNotesAttention (QA4-04)", () => {
+  it("links Admin Home to the waiting checks, counted", () => {
+    expect(requestNotesAttention(3, true, paths)).toEqual({ text: "3 request notes waiting for a check", href: "/admin/moderation?tab=request-notes" });
+    expect(requestNotesWaitingText(1)).toBe("1 request note waiting for a check");
+  });
+
+  it("says nothing while mentor requests are off, or nothing waits", () => {
+    expect(requestNotesAttention(3, false, paths)).toBeNull();
+    expect(requestNotesAttention(0, true, paths)).toBeNull();
   });
 });

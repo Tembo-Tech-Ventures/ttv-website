@@ -1,7 +1,7 @@
 import type {
   Channel, Message, MessageVersionCause, ModerationActionKind, ModerationQueueItem, ModerationQueueState,
 } from "@/lib/platform/contracts";
-import { channelTitle, excerpt, ZONE_LABEL } from "@/components/channels/channel-format";
+import { excerpt, ZONE_LABEL } from "@/components/channels/channel-format";
 import { channelPath } from "@/components/channels/paths";
 
 /*
@@ -61,12 +61,31 @@ export function visibilityLabel(message: Pick<Message, "deleted" | "moderation">
 export const CHANNEL_KIND_LABEL: Record<Channel["kind"], string> = {
   COMMUNITY: "Community",
   COHORT: "Cohort",
-  DIRECT: "Direct message",
+  DIRECT: "Direct conversation",
 };
 
 /**
- * The message in its channel: replies open their thread. Null for a kind with no page yet
- * (direct conversations arrive in Phase 4).
+ * Where the message was, as a sentence names it: "#opportunities", or "a direct conversation". A
+ * direct conversation's case carries a stand-in channel with no real slug or name (QA4-01), so the
+ * queue never shows one.
+ */
+export function channelReference(channel: Pick<Channel, "kind" | "slug">): string {
+  return channel.kind === "DIRECT" ? "a direct conversation" : `#${channel.slug}`;
+}
+
+/** The line above the message: "Community · #opportunities · still visible", or "Direct conversation · hidden from members". */
+export function caseContext(channel: Pick<Channel, "kind" | "slug">, message: Pick<Message, "deleted" | "moderation">): string {
+  const where = channel.kind === "DIRECT" ? [] : [`#${channel.slug}`];
+  return [CHANNEL_KIND_LABEL[channel.kind], ...where, visibilityLabel(message)].join(" · ");
+}
+
+/** Said under a direct conversation's case in place of a link: admins can't open the conversation. */
+export const DIRECT_CASE_NOTE =
+  "Only this message is shared with admins; the rest of the conversation stays private to its two members.";
+
+/**
+ * The message in its channel: replies open their thread. Null for a direct conversation: only its
+ * two members can open it, so the case shows the message alone (DIRECT_CASE_NOTE).
  */
 export function messageHref(channel: Pick<Channel, "kind" | "slug">, message: Pick<Message, "id" | "parentId">): string | null {
   const path = channelPath(channel);
@@ -98,7 +117,8 @@ export type DecidedOutcome = ModerationActionKind | "closed";
 export const DECIDED_NOTICE: Record<DecidedOutcome, string> = {
   // An admin's hide, or one an admin kept, is final: the author's review request is refused (`reviewable` false, QA2-14).
   hide: "Hidden. Members no longer see the message. Its author still sees it, with your reason, and that an admin's decision is final.",
-  restore: "Restored. Everyone in the channel sees the message again.",
+  // Said of a channel and a direct conversation alike: whoever can read it, the two members of a conversation.
+  restore: "Restored. Everyone who can read it sees the message again.",
   keep: "Kept as is. Nothing is hidden, and the same text won't be flagged again.",
   closed: "Case closed. Its author had deleted the message, so nothing else changes.",
 };
@@ -133,5 +153,5 @@ export function formatModerationTime(at: number): string {
  */
 export function decidedSubject(item: Pick<ModerationCase, "message" | "channel">): string {
   const words = item.message.deleted ? "" : excerpt(item.message);
-  return `${item.message.author.name}'s message in ${channelTitle(item.channel)}${words ? `: “${words}”` : ""}`;
+  return `${item.message.author.name}'s message in ${channelReference(item.channel)}${words ? `: “${words}”` : ""}`;
 }

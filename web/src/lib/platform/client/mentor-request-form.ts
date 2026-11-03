@@ -17,9 +17,12 @@ import { createStore, type Store } from "./store";
  *   how we talk to each other loses nothing. It is cleared once the request is
  *   sent, and on sign-out (`clearMentorRequestDrafts`).
  * - Nothing is optimistic: a request exists only once the server says so.
- * - `conduct`: the server answered conduct_required. The note becomes the
- *   first message of a private conversation, so the person agrees to the
- *   habits first and then sends the same draft.
+ * - The note becomes the first message of a private conversation, so the
+ *   person agrees to how we talk to each other before it is sent. A person who
+ *   has not agreed yet does so as they send (`submit({ agree })`): the
+ *   agreement is recorded first, then the same draft goes, in one press
+ *   (QA4-05). `conduct`: the server still answered conduct_required (the words
+ *   changed since the page was read); agreeing from there sends too.
  * - A send is never retried automatically: creating a request is not idempotent.
  */
 export const MENTOR_REQUEST_DRAFT_PREFIX = "ttv-mentor-request-draft:";
@@ -28,8 +31,11 @@ const MAX_STORED = 16_384;
 
 export type RequestFormStatus = "editing" | "sending" | "sent" | "conduct" | "error";
 export type RequestFormField = "note" | "format";
-/** Why the last send failed, in words the drawer can choose from. `limit`: too many requests waiting or made today. */
-export type RequestFailure = "conflict" | "notFound" | "limit" | "signedOut" | "notMember" | "other";
+/**
+ * Why the last send failed, in words the drawer can choose from. `limit`: too many requests waiting or made today.
+ * `agree`: the agreement to how we talk to each other was not recorded, so nothing was sent.
+ */
+export type RequestFailure = "conflict" | "notFound" | "limit" | "signedOut" | "agree" | "other";
 
 export interface RequestDraft {
   note: string;
@@ -40,6 +46,8 @@ export interface RequestFormState extends RequestDraft {
   status: RequestFormStatus;
   errors: Partial<Record<RequestFormField, string>>;
   failure: RequestFailure | null;
+  /** The server's own words for a conflict or limit, which know which request or limit is in the way (QA4-11). */
+  failureMessage: string | null;
   error: ApiError | null;
   /** The request the server created, once sent. */
   sent: MentorRequest | null;
@@ -69,6 +77,7 @@ export interface ServerRequestForm extends RequestDraft {
   status: Extract<RequestFormStatus, "editing" | "conduct" | "error">;
   errors: Partial<Record<RequestFormField, string>>;
   failure: RequestFailure | null;
+  failureMessage?: string | null;
 }
 
 const StoredDraft = z.object({
@@ -142,20 +151,22 @@ export function validateRequestDraft(
 }
 
 /** Why a send was refused, from its status and error code; shared with the no-JavaScript post. */
-/**
- * B-4.1's refusal for an account with neither a community profile nor a cohort place (#304), word for word. Other
- * 403 `forbidden` answers (a cross-origin post, a token) say something else, so only this one reads as "notMember".
- */
-export const NEEDS_MEMBER_MESSAGE = "Asking a mentor for time needs a member profile or a cohort place.";
-
-export function requestFailure(error: { status: number; code: string; message?: string }): RequestFailure {
+export function requestFailure(error: { status: number; code: string }): RequestFailure {
   if (error.status === 409 || error.code === "conflict") return "conflict";
   if (error.status === 429 || error.code === "rate_limited") return "limit";
   if (error.status === 404) return "notFound";
   if (error.status === 401) return "signedOut";
-  // B-4.1 (#304): asking needs a member account. conduct_required is a 403 too, and has its own step.
-  if (error.status === 403 && error.code === "forbidden" && error.message === NEEDS_MEMBER_MESSAGE) return "notMember";
   return "other";
+}
+
+/**
+ * The server's own sentence for a refusal the person can act on: which of their requests is in the way, or
+ * that the mentor's spots just filled and when the next one opens (B-4.1's 409s), or which limit they reached
+ * (429). Other refusals keep the drawer's fixed words. Shared with the no-JavaScript post.
+ */
+export function failureMessage(failure: RequestFailure | null, message: string | undefined): string | null {
+  const text = message?.trim();
+  return (failure === "conflict" || failure === "limit") && text ? text.slice(0, 500) : null;
 }
 
 const asApiError = (error: unknown) => error instanceof ApiError ? error
@@ -168,8 +179,11 @@ export function createRequestFormStore(options: RequestFormOptions) {
   const key = mentorRequestDraftKey(options.userId, mentorId);
   const seeded = options.initial ?? null;
   const store: Store<RequestFormState> = createStore<RequestFormState>(seeded
-    ? { ...settle(seeded, options), status: seeded.status, errors: seeded.errors, failure: seeded.failure, error: null, sent: null, announcement: "" }
-    : { ...settle(null, options), status: "editing", errors: {}, failure: null, error: null, sent: null, announcement: "" });
+    ? {
+      ...settle(seeded, options), status: seeded.status, errors: seeded.errors, failure: seeded.failure,
+      failureMessage: seeded.failureMessage ?? null, error: null, sent: null, announcement: "",
+    }
+    : { ...settle(null, options), status: "editing", errors: {}, failure: null, failureMessage: null, error: null, sent: null, announcement: "" });
 
   function edit(change: Partial<RequestDraft>) {
     const state = store.getState();
@@ -211,8 +225,11 @@ export function createRequestFormStore(options: RequestFormOptions) {
      * A send is never stopped once started, not even by closing the drawer: creating is not idempotent and the
      * server may already have the request (counted against the mentor's spots), so it always settles and lands
      * under Your requests.
+     *
+     * With `agree`, the person is agreeing to how we talk to each other as they send: once the draft checks
+     * out, the agreement is recorded first, then the same draft is sent. If the agreement fails, nothing is sent.
      */
-    async submit(): Promise<MentorRequest | null> {
+    async submit(submitOptions: { agree?: () => Promise<void> } = {}): Promise<MentorRequest | null> {
       const state = store.getState();
       if (state.status === "sending" || state.status === "sent") return state.sent;
       const checked = validateRequestDraft(state, options.mentor);
@@ -220,7 +237,19 @@ export function createRequestFormStore(options: RequestFormOptions) {
         store.setState({ ...state, errors: checked.errors, announcement: "Check the highlighted fields." });
         return null;
       }
-      store.setState({ ...state, status: "sending", errors: {}, failure: null, error: null, announcement: "" });
+      store.setState({ ...state, status: "sending", errors: {}, failure: null, failureMessage: null, error: null, announcement: "" });
+      if (submitOptions.agree) {
+        try {
+          await submitOptions.agree();
+        } catch (caught) {
+          store.setState(current => ({
+            ...current, status: "error", error: asApiError(caught), failure: "agree", failureMessage: null,
+            announcement: "Your agreement wasn't saved, so your request wasn't sent. Your note is kept.",
+          }));
+          return null;
+        }
+        store.setState(current => ({ ...current, announcement: `Thanks for agreeing. Sending your request to ${options.mentor.person.name}.` }));
+      }
       try {
         const sent = await api.call(ROUTES.createMentorRequest, {
           body: { mentorId, note: checked.note, project: state.project, format: checked.format },
@@ -235,14 +264,14 @@ export function createRequestFormStore(options: RequestFormOptions) {
         const error = asApiError(caught);
         if (error.code === "conduct_required") {
           store.setState(current => ({
-            ...current, status: "conduct", error, failure: null,
-            announcement: "Agree to how we talk to each other, then send your request.",
+            ...current, status: "conduct", error, failure: null, failureMessage: null,
+            announcement: "Your request wasn't sent yet. Agree to how we talk to each other, and it sends.",
           }));
           return null;
         }
         const failure = requestFailure(error);
         store.setState(current => ({
-          ...current, status: "error", error, failure,
+          ...current, status: "error", error, failure, failureMessage: failureMessage(failure, error.message),
           announcement: "Your request wasn't sent. Your note is kept.",
         }));
         return null;

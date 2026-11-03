@@ -12,8 +12,13 @@ import {
 type ModerationContextValue = {
   /** Null while reporting is not available here (no server, or a read-only harness). */
   actions: ModerationActions | null;
-  /** Reports exist in cohort and community channels, not direct conversations yet (B-2.5). */
+  /** Whether this reader may report here: every channel, and either member of a direct conversation (QA4-01). */
   canReport: boolean;
+  /**
+   * A direct conversation: it has no moderators, so a report or a check goes to TTV admins, who see that
+   * message alone (QA4-01), and the copy says so.
+   */
+  direct: boolean;
   /** The channel's capability (B-2.2): global mentors in community channels, a cohort's teachers and mentors, admins. */
   canModerate: boolean;
   /** Admins have the final say: only they restore a hidden message (B-2.5). */
@@ -25,7 +30,7 @@ type ModerationContextValue = {
 
 const EMPTY: ReadonlySet<string> = new Set();
 const ModerationContext = createContext<ModerationContextValue>({
-  actions: null, canReport: false, canModerate: false, canRestore: false, reported: EMPTY, markReported: () => {},
+  actions: null, canReport: false, direct: false, canModerate: false, canRestore: false, reported: EMPTY, markReported: () => {},
 });
 
 /**
@@ -34,18 +39,19 @@ const ModerationContext = createContext<ModerationContextValue>({
  * above the list and the thread, so a message keeps its "Reported" when it
  * scrolls away and back, or shows in both.
  */
-export function ModerationProvider({ actions, canReport, canModerate, canRestore, children }: {
-  actions: ModerationActions | null; canReport: boolean; canModerate: boolean; canRestore: boolean; children: ReactNode;
+export function ModerationProvider({ actions, canReport, direct = false, canModerate, canRestore, children }: {
+  actions: ModerationActions | null; canReport: boolean; direct?: boolean; canModerate: boolean; canRestore: boolean; children: ReactNode;
 }) {
   const [reported, setReported] = useState<ReadonlySet<string>>(EMPTY);
   const value = useMemo<ModerationContextValue>(() => ({
     actions,
     canReport: canReport && actions !== null,
+    direct,
     canModerate: canModerate && actions !== null,
     canRestore: canModerate && canRestore && actions !== null,
     reported,
     markReported: (id) => setReported((set) => new Set(set).add(id)),
-  }), [actions, canReport, canModerate, canRestore, reported]);
+  }), [actions, canReport, direct, canModerate, canRestore, reported]);
   return <ModerationContext.Provider value={value}>{children}</ModerationContext.Provider>;
 }
 
@@ -85,8 +91,8 @@ export function moderationRights(message: Message, viewerId: string | null, cont
 export function ModerationNote({ message, viewerId, onAskReview, onUndo, undoing = false }: {
   message: Message; viewerId: string | null; onAskReview?: () => void; onUndo?: () => void; undoing?: boolean;
 }) {
-  const { canRestore } = useModeration();
-  const notice = moderationNotice(message, viewerId, { admin: canRestore });
+  const { canRestore, direct } = useModeration();
+  const notice = moderationNotice(message, viewerId, { admin: canRestore, direct });
   if (!notice) return null;
   const Icon = notice.state === "HIDDEN" ? PiEyeSlash : PiFlag;
   // The server says so on every read, and a confirmed request updates the cached message at once.
@@ -153,14 +159,17 @@ export function useUndoHide(
   return { run: allowed ? () => void undo() : undefined, pending };
 }
 
+/** Who looks at a report: a direct conversation has no moderators, so TTV admins do. */
+const reportReader = (direct: boolean) => (direct ? "A TTV admin" : "A moderator");
+
 /** Under a message this reader reported. The live region said it once, when they did. */
 export function ReportedNote({ message }: { message: Message }) {
-  const { reported } = useModeration();
+  const { reported, direct } = useModeration();
   if (!hasReported(message, reported)) return null;
   return (
     <p className="channel-reported" data-reported>
       <PiFlag aria-hidden="true" className="size-3.5 shrink-0" />
-      You reported this. A moderator will look at it.
+      You reported this. {reportReader(direct)} will look at it.
     </p>
   );
 }
@@ -341,7 +350,7 @@ function useMissing() {
 
 /** Report a message to the moderators: why, in a few choices, and anything they should know. */
 export function ReportForm({ message, onDone, onCancel, announce }: PanelProps) {
-  const { actions, markReported } = useModeration();
+  const { actions, markReported, direct } = useModeration();
   const [choice, setChoice] = useState<ReportReasonKey | null>(null);
   const [details, setDetails] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -366,7 +375,7 @@ export function ReportForm({ message, onDone, onCancel, announce }: PanelProps) 
     try {
       await actions.report(message.id, reason);
       markReported(message.id);
-      announce("Reported. A moderator will look at it.");
+      announce(`Reported. ${reportReader(direct)} will look at it.`);
       onDone();
     } catch (failure) {
       setError(moderationFailure(failure, "report"));
@@ -412,18 +421,26 @@ export function ReportForm({ message, onDone, onCancel, announce }: PanelProps) 
         )}
       </fieldset>
       <ReasonBox
-        label={choice === "other" ? "Tell the moderators what's wrong" : "Add details"}
+        label={choice === "other" ? `Tell ${direct ? "TTV admins" : "the moderators"} what's wrong` : "Add details"}
         value={details}
         onChange={setDetails}
         required={choice === "other"}
         missing={words.tried && choice === "other" && !details.trim() ? "Write what's wrong first." : null}
         boxRef={words.box}
       />
-      <p className="text-[0.8125rem] text-ink-secondary">
-        The message stays up while a moderator looks at it.
-        {/* True of the server: a report changes nothing the author can see (reportMessage, B-2.5). */}
-        {!tembo && ` ${firstName(message.author.name)} won't see who reported it.`}
-      </p>
+      {direct ? (
+        // True of the server: an admin outside the conversation reads the reported message alone (QA4-01).
+        // Who reported it goes unsaid: with two people in it, that would be no promise.
+        <p className="text-[0.8125rem] text-ink-secondary" data-report-direct>
+          TTV admins will see this message, and only this message. It stays up while they look at it.
+        </p>
+      ) : (
+        <p className="text-[0.8125rem] text-ink-secondary">
+          The message stays up while a moderator looks at it.
+          {/* True of the server: a report changes nothing the author can see (reportMessage, B-2.5). */}
+          {!tembo && ` ${firstName(message.author.name)} won't see who reported it.`}
+        </p>
+      )}
     </Panel>
   );
 }

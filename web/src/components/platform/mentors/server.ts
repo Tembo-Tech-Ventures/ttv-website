@@ -7,7 +7,7 @@ import { ROUTES } from "@/lib/platform/contracts";
 import { listOwnProjects } from "@/lib/channels/embeds";
 import { worthAnotherLook } from "@/lib/mentoring/another-look";
 import { getAvailability, listMentors } from "@/lib/mentoring/profiles";
-import { getConversation, IS_MEMBER, listRequests } from "@/lib/mentoring/requests";
+import { getConversation, listRequests } from "@/lib/mentoring/requests";
 import { mentoringRequest } from "@/lib/mentoring/http";
 
 /**
@@ -23,11 +23,6 @@ export interface MentorsServer {
   availability(): Promise<MentorAvailability>;
   /** The caller's own published projects, which the drawer can attach. */
   projects(): Promise<ProjectEmbed[]>;
-  /**
-   * Whether this person may ask a mentor for time: a member account, meaning a community profile or a
-   * cohort place (B-4.1's IS_MEMBER, the same condition the API's INSERT checks).
-   */
-  canAsk(): Promise<boolean>;
   /** A private conversation's header: the other member and the accepted request that opened it. Members only. */
   conversation(channelId: string): Promise<Conversation | null>;
   /** Work this mentor confirmed at an earlier revision that has a newer one (B-4.2). */
@@ -46,10 +41,6 @@ export function mentorsServer(
     requests: (query) => listRequests(ctx, query),
     availability: () => getAvailability(db, me.user.id, now),
     projects: () => listOwnProjects(db, me.user.id),
-    async canAsk() {
-      const row = await db.prepare(`SELECT ${IS_MEMBER("?1")} AS member`).bind(me.user.id).first<{ member: number }>();
-      return Boolean(row?.member);
-    },
     conversation: (channelId) => getConversation(ctx, channelId),
     anotherLook: () => worthAnotherLook({ db, env, locals: context.locals }),
     create(body) {

@@ -253,12 +253,21 @@ export function MentionList({ listId, candidates, active, scope, usage, onChoose
   );
 }
 
-/** Under the channel's box: what Tembo reads here, and the reader's questions in channels today (02, QA3-04). */
-export function TemboScopeNote({ scope, usage }: { scope: string; usage: TemboUsage }) {
+/**
+ * Under the channel's box: what Tembo reads here, and the reader's questions in channels today (02, QA3-04). A narrow
+ * composer shows the short form (`reach`, channels.css), so a phone still says what Tembo sees.
+ */
+export function TemboScopeNote({ scope, reach, usage }: { scope: string; reach: string; usage: TemboUsage }) {
+  const spent = usage.used >= usage.limit;
   return (
-    <p className="channel-composer__scope">
-      <span className="font-semibold text-ink-secondary">Tembo</span> · Sees: {scope} · You: {usage.used} of {usage.limit} in channels today
-      {usage.used >= usage.limit && <> · No questions left in channels today; more after midnight East Africa Time</>}
+    <p className="channel-composer__scope" data-tembo-scope>
+      <span className="channel-composer__scope-wide">
+        <span className="font-semibold text-ink-secondary">Tembo</span> · Sees: {scope} · You: {usage.used} of {usage.limit} in channels today
+        {spent && <> · No questions left in channels today; more after midnight East Africa Time</>}
+      </span>
+      <span className="channel-composer__scope-narrow">
+        <span className="font-semibold text-ink-secondary">Tembo</span> sees {reach} · {spent ? "No questions left in channels today" : `${usage.used} of ${usage.limit} in channels today`}
+      </span>
     </p>
   );
 }

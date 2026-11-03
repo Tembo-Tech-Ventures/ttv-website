@@ -90,6 +90,7 @@ export default function AdminShell({
   stagingDemoEnabled = false,
   pendingAccessRequests = 0,
   pendingModeration = null,
+  pendingRequestNotes = 0,
 }: {
   children: ReactNode;
   currentPath?: string;
@@ -100,6 +101,11 @@ export default function AdminShell({
   pendingAccessRequests?: number;
   /** Moderation cases waiting for a decision, or null while `channels` is off. */
   pendingModeration?: number | null;
+  /**
+   * Open checks on request notes this admin may decide (0 while `mentor_requests` is off), counted on
+   * the Moderation badge too: they wait under its "Request notes" tab (QA4-04).
+   */
+  pendingRequestNotes?: number;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const hydrated = useSyncExternalStore(
@@ -118,7 +124,11 @@ export default function AdminShell({
     document.addEventListener(MODERATION_PENDING_EVENT, onPending);
     return () => document.removeEventListener(MODERATION_PENDING_EVENT, onPending);
   }, [pendingModeration]);
-  const links = getAdminLinks(agentAuthEnabled, dataMigrationEnabled, stagingDemoEnabled, pendingAccessRequests, waiting);
+  // The queue's in-place count is the message cases' alone, so the request notes are added here.
+  const links = getAdminLinks(
+    agentAuthEnabled, dataMigrationEnabled, stagingDemoEnabled, pendingAccessRequests,
+    waiting === null ? null : waiting + pendingRequestNotes
+  );
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-surface to-dark">

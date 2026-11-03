@@ -182,6 +182,8 @@ describe("asking Tembo from the channel (S-3.1 + U-3.1)", () => {
     expect(line.textContent).toBe("Tembo is answering in the thread.");
     expect($("[data-channel-announcer]")?.textContent).toBe("Tembo is looking into it");
     expect($(".channel-composer__scope")?.textContent).toContain("You: 7 of 10 in channels today");
+    // A narrow composer says it shorter, but still says what Tembo sees (QA4-08).
+    expect($(".channel-composer__scope-narrow")?.textContent).toBe("Tembo sees this channel, projects shared in it and public builder profiles · 7 of 10 in channels today");
 
     expect(client.answerTembo()).toBe(1);
     await poll();
@@ -215,6 +217,7 @@ describe("asking Tembo from the channel (S-3.1 + U-3.1)", () => {
   it("says when today's questions are used up, and when they come back", async () => {
     const { client } = await mount({ ...wanjiku, temboUsage: { ...wanjiku.temboUsage, used: 10 } });
     expect($(".channel-composer__scope")?.textContent).toContain("You: 10 of 10 in channels today · No questions left in channels today; more after midnight East Africa Time");
+    expect($(".channel-composer__scope-narrow")?.textContent).toBe("Tembo sees this channel, projects shared in it and public builder profiles · No questions left in channels today");
     await send("@tembo one more?");
     expect(client.tembo().asked).toEqual([]);
     const line = $("[data-tembo-question=exhausted]")!;

@@ -32,6 +32,13 @@ describe("how we talk to each other", () => {
     expect(CONDUCT_HABITS.find((habit) => habit.key === "audience")!.body).toMatch(/that cohort, its instructors, TAs and mentors, and TTV staff/);
   });
 
+  it("says who reads a private conversation: its two people, and admins only a reported or flagged message (QA4-08)", () => {
+    const audience = CONDUCT_HABITS.find((habit) => habit.key === "audience")!.body;
+    expect(audience).toMatch(/private conversation is for its two people alone/);
+    expect(audience).toMatch(/only if one of you reports it or our checks flag it, and then only that message/);
+    expect(everything).not.toMatch(/can't (?:be )?report|reports aren't available/i);
+  });
+
   it("keeps each habit addressable once, with a full stop closing each title", () => {
     expect(new Set(CONDUCT_HABITS.map((habit) => habit.key)).size).toBe(CONDUCT_HABITS.length);
     for (const habit of CONDUCT_HABITS) expect(habit.title, `${habit.key}`).toMatch(/\.$/);

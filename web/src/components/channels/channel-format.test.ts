@@ -231,6 +231,11 @@ describe("moderation notices", () => {
     expect(moderationNotice(messages.hidden, people.dennis.id)?.detail).toBe("Only you can see this message now.");
   });
 
+  it("in a direct conversation, names the conversation and TTV admins, since it has no moderators (QA4-01)", () => {
+    expect(moderationNotice(messages.hidden, people.dennis.id, { direct: true })?.title).toBe("Hidden from the conversation: Harsh, not about the work");
+    expect(moderationNotice(messages.flagged, people.peter.id, { direct: true })?.title).toBe("Flagged for TTV admins: Contact details");
+  });
+
   it("tells a moderator who is not an admin what happens after a hide, and an admin only that it is hidden (QA2-11)", () => {
     expect(moderationNotice(messages.hidden, people.david.id)?.detail).toBe(
       "Moderators can still see it. An admin looks at every hide, and Dennis can ask for a review unless an admin made or upheld the hide. If an admin restores it, members see it here again.",

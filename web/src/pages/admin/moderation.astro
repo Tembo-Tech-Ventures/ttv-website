@@ -12,6 +12,7 @@
  * While mentor requests are on for this admin, a third tab, "Request notes" (`?tab=request-notes`),
  * lists the mentor requests whose note Tembo's check held or a mentor reported (B-4.1 checks). Its reads
  * and decisions go through the API's own handler, so a keep also tells the mentor, as the API does.
+ * The tab and the sidebar badge count the open checks this admin may decide (QA4-04).
  */
 import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
@@ -33,6 +34,7 @@ import { hasMatchingRequestOrigin } from "@/lib/admin/mutation-security";
 import { ChannelError } from "@/lib/channels/errors";
 import { decideModeration } from "@/lib/channels/moderation/actions";
 import { countPendingModeration, listModerationQueue } from "@/lib/channels/moderation/queue";
+import { countOpenChecks } from "@/lib/mentoring/checks";
 import { isFlagEnabled } from "@/lib/platform/server/flags";
 import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
 
@@ -55,8 +57,9 @@ const paths = queuePaths(MODERATION_PATH);
 const notesPaths = requestNotesPaths(MODERATION_PATH);
 
 let notesView: (RequestNotesViewProps & { queueTabs: ModerationTab[]; viewerId: string }) | null = null;
-let queueView: (QueueViewProps & { requestNotesHref?: string }) | null = null;
+let queueView: (QueueViewProps & { requestNotesHref?: string; requestNotesCount?: number }) | null = null;
 let pendingCount = 0;
+let openChecks = 0;
 
 if (moderationView(Astro.url.searchParams, requestNotesOn) === "request-notes") {
   const api = (operation: "listMentorRequestCases" | "decideMentorRequestCase", request: Request, params: Record<string, string> = {}) =>
@@ -77,20 +80,20 @@ if (moderationView(Astro.url.searchParams, requestNotesOn) === "request-notes") 
   }, notesPaths);
   if (notes.kind === "redirect") return Astro.redirect(notes.location, 303);
   Astro.response.status = notes.status;
-  pendingCount = await countPendingModeration(env.DB);
+  [pendingCount, openChecks] = await Promise.all([countPendingModeration(env.DB, user.id), countOpenChecks(env.DB, user.id)]);
   notesView = {
     ...notes.props,
     viewerId: user.id,
     queueTabs: [
       ...QUEUE_TABS.map((tab) => ({ label: tab.label, href: paths.tab(tab.state), current: false, ...(tab.state === "PENDING" ? { count: pendingCount } : {}) })),
-      { label: REQUEST_NOTES_LABEL, href: notesPaths.tab("OPEN"), current: true },
+      { label: REQUEST_NOTES_LABEL, href: notesPaths.tab("OPEN"), current: true, count: openChecks },
     ],
   };
 } else {
   const viewer = { user, capabilities: await requestCapabilities(drizzle(env.DB, { schema }), Astro.locals) };
   const outcome = await moderationQueueRequest(Astro.request, Astro.url, {
     list: (query) => listModerationQueue(env.DB, viewer, query),
-    countPending: () => countPendingModeration(env.DB),
+    countPending: () => countPendingModeration(env.DB, user.id),
     decide: (input) => decideModeration({ db: env.DB, env }, viewer, input),
     isBadCursor: (error) => error instanceof ChannelError && error.status === 400,
   }, paths);
@@ -98,11 +101,12 @@ if (moderationView(Astro.url.searchParams, requestNotesOn) === "request-notes") 
   Astro.response.status = outcome.status;
   pendingCount = outcome.props.pendingCount;
   const requestNotesHref = requestNotesLink(requestNotesOn, notesPaths);
-  queueView = { ...outcome.props, ...(requestNotesHref ? { requestNotesHref } : {}) };
+  if (requestNotesHref) openChecks = await countOpenChecks(env.DB, user.id);
+  queueView = { ...outcome.props, ...(requestNotesHref ? { requestNotesHref, requestNotesCount: openChecks } : {}) };
 }
 ---
 
-<AdminLayout title="Moderation" pendingModeration={pendingCount}>
+<AdminLayout title="Moderation" pendingModeration={pendingCount} pendingRequestNotes={openChecks}>
   {notesView && <RequestNotesView {...notesView} />}
   {queueView && <ModerationQueueView {...queueView} />}
 </AdminLayout>

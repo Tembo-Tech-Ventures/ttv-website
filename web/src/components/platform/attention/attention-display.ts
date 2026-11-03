@@ -7,28 +7,34 @@ export const ATTENTION_PAGE_HREF = "/dashboard/attention";
 export const ATTENTION_FILTERS: readonly { filter: AttentionFilter; label: string; empty: string }[] = [
   { filter: "all", label: "All", empty: "Nothing needs you right now." },
   { filter: "mentions", label: "Mentions", empty: "No mentions, replies or Tembo answers yet." },
-  { filter: "requests", label: "Requests", empty: "No mentoring requests yet." },
+  { filter: "requests", label: "Requests", empty: "Answers to requests you send to mentors show here." },
   { filter: "updates", label: "Updates", empty: "No updates yet." },
 ];
 
 /**
- * Requests holds requests for a mentor's time and their answers, and, for
- * administrators, requests for access. A person's own access request is not
- * one of them: it lives in Account, and its empty tab says so, rather than
- * reading as if the request were lost (QAO-01). Without onboarding there are
- * no access requests, and the line stays as it was.
+ * Requests holds notices about requests: answers to the ones a person sent a
+ * mentor (and what a check did to them), requests sent to a mentor, and, for
+ * administrators, requests for access. The empty tab says what it holds for
+ * this reader, rather than "no requests", which read as if a request someone
+ * had just sent were lost (QA4-06). The request itself is under Your requests
+ * on the Mentors page. A person's own access request lives in Account, and the
+ * tab says so too (QAO-01). Without onboarding there are no access requests.
  */
 function requestsEmpty(viewer: AttentionViewer): string {
-  if (!viewer.onboarding) return "No mentoring requests yet.";
-  return viewer.admin
-    ? "No requests for mentoring time or access yet."
-    : "No requests for mentoring time yet. Your own requests for mentor or organisation access are in Account.";
+  const holds = ["answers to requests you send to mentors"];
+  if (viewer.mentor) holds.push("requests sent to you as a mentor");
+  if (viewer.admin && viewer.onboarding) holds.push("requests for access");
+  const list = holds.length === 1 ? holds[0]! : `${holds.slice(0, -1).join(", ")} and ${holds.at(-1)!}`;
+  const line = `${list.charAt(0).toUpperCase()}${list.slice(1)} show here.`;
+  return viewer.onboarding && !viewer.admin ? `${line} Your own requests for mentor or organisation access are in Account.` : line;
 }
 
 /** Who is reading the list, as far as its empty lines depend on it. */
 export interface AttentionViewer {
   admin: boolean;
   onboarding: boolean;
+  /** Holds the MENTOR role, so requests for their time arrive here too. */
+  mentor: boolean;
 }
 
 /**
@@ -43,8 +49,8 @@ export function attentionEmpty(filter: AttentionFilter, awaiting: number | null,
 }
 
 /** The viewer from Me: an administrator has the Admin space. */
-export function attentionViewer(me: Pick<Me, "spaces" | "flags">): AttentionViewer {
-  return { admin: me.spaces.includes("admin"), onboarding: me.flags.onboarding };
+export function attentionViewer(me: Pick<Me, "spaces" | "flags" | "capabilities">): AttentionViewer {
+  return { admin: me.spaces.includes("admin"), onboarding: me.flags.onboarding, mentor: me.capabilities.isMentor };
 }
 
 /** The attention page's summary line, which says "all caught up" only when nothing is known to wait. */

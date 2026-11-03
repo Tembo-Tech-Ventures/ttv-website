@@ -114,7 +114,7 @@ describe("space sidebars", () => {
 
     // With a cohort, applying and Ask Tembo live in the Cohort space instead.
     const wanjiku = spaceSidebar("community", facts(dark(meByPersona.wanjiku), "journey"));
-    expect(labels(wanjiku)).toEqual(["Your journey", "Members", "Mentors"]);
+    expect(labels(wanjiku)).toEqual(["Your journey", "Members", "For mentors"]);
   });
 
   it("say the directories are the public website's pages, before anyone follows them", () => {
@@ -122,7 +122,7 @@ describe("space sidebars", () => {
       const directory = spaceSidebar("community", facts(me, "journey")).groups.find((group) => group.label === "Public directory")!;
       expect(directory.items.map(({ label, href, publicPage }) => ({ label, href, publicPage }))).toEqual([
         { label: "Members", href: "/community/members", publicPage: true },
-        { label: "Mentors", href: "/community/mentors", publicPage: true },
+        { label: "For mentors", href: "/community/mentors", publicPage: true },
       ]);
     }
     // Every other entry stays in the app.
@@ -367,7 +367,7 @@ describe("space sidebars", () => {
       ]);
       expect(model.groups.find((entry) => entry.label === "Public directory")!.items.map(({ label, href }) => ({ label, href }))).toEqual([
         { label: "Members", href: "/community/members" },
-        { label: "Mentors", href: "/community/mentors" },
+        { label: "For mentors", href: "/community/mentors" },
       ]);
     });
 

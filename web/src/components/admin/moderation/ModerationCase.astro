@@ -4,8 +4,8 @@ import Avatar from "@/components/platform/ui/Avatar";
 import Chip from "@/components/platform/ui/Chip";
 import DecisionForm from "./DecisionForm.astro";
 import {
-  CHANNEL_KIND_LABEL, EVIDENCE_CAUSE_LABEL, decisionLabel, decisionOptions, firstName,
-  formatModerationTime, messageHref, sourceLabel, visibilityLabel, type ModerationCase,
+  DIRECT_CASE_NOTE, EVIDENCE_CAUSE_LABEL, caseContext, channelReference, decisionLabel, decisionOptions, firstName,
+  formatModerationTime, messageHref, sourceLabel, type ModerationCase,
 } from "./case-model";
 
 /**
@@ -35,7 +35,8 @@ const pending = item.state === "PENDING";
 const flaggedTone = message.moderation?.state === "HIDDEN" || item.source === "REPORT" ? "peach" : "ring";
 const headingId = `moderation-${item.id}-author`;
 // Every case has the same buttons, so each name says whose message it decides.
-const names = options.map((option) => `${option.label}: ${authorName}'s message in #${channel.slug}`);
+const where = channelReference(channel);
+const names = options.map((option) => `${option.label}: ${authorName}'s message in ${where}`);
 const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 ---
 
@@ -50,7 +51,7 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-ink-secondary">
       <Chip tone={flaggedTone}>{sourceLabel(item)}</Chip>
       <span class="min-w-0 break-words" data-moderation-context>
-        {CHANNEL_KIND_LABEL[channel.kind]} · #{channel.slug} · {visibilityLabel(message)}
+        {caseContext(channel, message)}
       </span>
     </div>
 
@@ -132,10 +133,10 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
         {message.parentId
           ? <PiChatCircleTextDuotone className="size-4 shrink-0" aria-hidden="true" />
           : <PiArrowSquareOutDuotone className="size-4 shrink-0" aria-hidden="true" />}
-        {message.parentId ? `Open the thread in #${channel.slug}` : `Open in #${channel.slug}`}
+        {message.parentId ? `Open the thread in ${where}` : `Open in ${where}`}
       </a>
     ) : (
-      <p class="text-sm text-ink-muted">Direct conversations have no page yet.</p>
+      <p class="text-sm text-ink-secondary" data-moderation-direct>{DIRECT_CASE_NOTE}</p>
     )}
   </div>
 

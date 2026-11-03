@@ -236,17 +236,22 @@ export type ModerationNotice = { state: Exclude<ModerationState, "VISIBLE">; tit
  * decides; only people hide messages. A channel moderator who is not an admin
  * also reads what happens after a hide, and where they will see the outcome
  * (QA2-11): an admin's restore brings the message back for members here.
+ * In a direct conversation only the author is ever told (`direct`).
  */
-export function moderationNotice(message: Message, viewerId: string | null, { admin = false }: { admin?: boolean } = {}): ModerationNotice | null {
+export function moderationNotice(
+  message: Message, viewerId: string | null, { admin = false, direct = false }: { admin?: boolean; direct?: boolean } = {},
+): ModerationNotice | null {
   const moderation = message.moderation;
   if (!moderation || moderation.state === "VISIBLE" || message.deleted) return null;
   const own = viewerId !== null && message.author.id === viewerId;
   const reasons = moderation.reasons.join(", ");
+  // A direct conversation has no moderators: its checks go to TTV admins, and it is a conversation, not a channel.
+  const checker = direct ? "TTV admins" : "a moderator";
   if (moderation.state === "FLAGGED") {
     return own
       ? {
           state: "FLAGGED",
-          title: reasons ? `Flagged for a moderator: ${reasons}` : "Flagged for a moderator",
+          title: reasons ? `Flagged for ${checker}: ${reasons}` : `Flagged for ${checker}`,
           detail: "Your message stays up until a person looks at it. Only you can see this note.",
         }
       : {
@@ -258,7 +263,7 @@ export function moderationNotice(message: Message, viewerId: string | null, { ad
   return own
     ? {
         state: "HIDDEN",
-        title: reasons ? `Hidden from the channel: ${reasons}` : "Hidden from the channel",
+        title: `Hidden from the ${direct ? "conversation" : "channel"}${reasons ? `: ${reasons}` : ""}`,
         detail: "Only you can see this message now.",
       }
     : {

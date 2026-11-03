@@ -178,4 +178,22 @@ describe("moderation in the admin navigation", () => {
   it("stays in the navigation when nothing is waiting", () => {
     expect(getAdminLinks(false, false, false, 0, 0).map(({ label }) => label)).toContain("Moderation");
   });
+
+  it("counts request notes waiting for a check on the Moderation badge (QA4-04)", () => {
+    const html = renderToStaticMarkup(
+      <AdminShell pendingModeration={2} pendingRequestNotes={3}>
+        <div>Admin content</div>
+      </AdminShell>
+    );
+    expect(html).toContain("5 waiting");
+  });
+
+  it("shows no Moderation entry for request notes alone while channels are off", () => {
+    const html = renderToStaticMarkup(
+      <AdminShell pendingModeration={null} pendingRequestNotes={3}>
+        <div>Admin content</div>
+      </AdminShell>
+    );
+    expect(html).not.toContain("/admin/moderation");
+  });
 });

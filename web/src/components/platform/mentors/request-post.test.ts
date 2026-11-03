@@ -1,9 +1,8 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { CreateMentorRequest } from "@/lib/platform/contracts";
 import { mentors, pendingMentorRequest, projects } from "@/lib/platform/fixtures";
-import { NEEDS_MEMBER_MESSAGE, requestFailure } from "@/lib/platform/client/mentor-request-form";
-import { handleRequestPost, isRequestPost, projectValue, REQUEST_INTENT, type RequestPostOptions } from "./request-post";
+import { failureMessage, requestFailure } from "@/lib/platform/client/mentor-request-form";
+import { AGREE_FIELD, handleRequestPost, isRequestPost, projectValue, REQUEST_INTENT, type RequestPostOptions } from "./request-post";
 
 const ORIGIN = "https://ttv.test";
 const PAGE = `${ORIGIN}/dashboard/community/mentors`;
@@ -71,20 +70,49 @@ describe("asking for time without JavaScript", () => {
     expect(opts.send).not.toHaveBeenCalled();
   });
 
-  it("says a full mentor has just filled without asking the API", async () => {
+  it("says a full mentor has just filled without asking the API, with the next opening", async () => {
     const opts = options(json(201, pendingMentorRequest));
     const result = await handleRequestPost(post({ intent: REQUEST_INTENT, mentorId: mercy.person.id, note: "A portfolio review?", format: "WRITTEN_REVIEW" }), opts);
-    expect(result).toMatchObject({ kind: "render", status: 409, form: { status: "error", failure: "conflict" } });
+    expect(result).toMatchObject({
+      kind: "render", status: 409,
+      form: { status: "error", failure: "conflict", failureMessage: "Mercy Wambui has no spots left this month. The next opening is 1 December." },
+    });
     expect(opts.send).not.toHaveBeenCalled();
+  });
+
+  // QA4-05: someone who has not agreed yet agrees as they send, in the same post, and the request goes.
+  it("records the agreement to how we talk to each other first, then sends, when the form carries it", async () => {
+    const calls: string[] = [];
+    const opts = options(() => { calls.push("send"); return json(201, pendingMentorRequest); });
+    const agree = vi.fn(async (version: number) => { calls.push(`agree ${version}`); });
+    const result = await handleRequestPost(askDavid({ [AGREE_FIELD]: "3" }), { ...opts, agree });
+    expect(result.kind).toBe("redirect");
+    expect(calls).toEqual(["agree 3", "send"]);
+  });
+
+  it("agrees to nothing for a draft that needs fixing, a session that may not agree, or no agreement asked", async () => {
+    const agree = vi.fn(async () => {});
+    await handleRequestPost(askDavid({ note: "", [AGREE_FIELD]: "3" }), { ...options(json(201, pendingMentorRequest)), agree });
+    await handleRequestPost(askDavid(), { ...options(json(201, pendingMentorRequest)), agree });
+    await handleRequestPost(askDavid({ [AGREE_FIELD]: "nope" }), { ...options(json(201, pendingMentorRequest)), agree });
+    expect(agree).not.toHaveBeenCalled();
+    // An agent's session has no `agree`: the API asks for the habits again, and the drawer shows them.
+    const result = await handleRequestPost(askDavid({ [AGREE_FIELD]: "3" }), options(refusal(403, "conduct_required")));
+    expect(result).toMatchObject({ kind: "render", status: 403, form: { status: "conduct" } });
   });
 
   it("turns the API's refusals into the drawer's states, the note kept", async () => {
     const cases: [Response, object][] = [
       [refusal(403, "conduct_required"), { status: 403, form: { status: "conduct", failure: null } }],
-      [refusal(403, "forbidden", NEEDS_MEMBER_MESSAGE), { status: 403, form: { status: "error", failure: "notMember" } }],
-      [refusal(403, "forbidden", "Same-origin request required."), { status: 403, form: { status: "error", failure: "other" } }],
-      [refusal(409, "conflict"), { status: 409, form: { status: "error", failure: "conflict" } }],
-      [refusal(429, "rate_limited"), { status: 429, form: { status: "error", failure: "limit" } }],
+      [refusal(403, "forbidden", "Same-origin request required."), { status: 403, form: { status: "error", failure: "other", failureMessage: null } }],
+      // QA4-11: the server knows which request is in the way, and the drawer says so in its words.
+      [refusal(409, "conflict", "Your earlier request to Ruth Atieno is waiting for a check before it's sent. Your requests will show when the check is done."), {
+        status: 409,
+        form: { status: "error", failure: "conflict", failureMessage: "Your earlier request to Ruth Atieno is waiting for a check before it's sent. Your requests will show when the check is done." },
+      }],
+      [refusal(429, "rate_limited", "You have 5 requests waiting. Withdraw one or wait for an answer first."), {
+        status: 429, form: { status: "error", failure: "limit", failureMessage: "You have 5 requests waiting. Withdraw one or wait for an answer first." },
+      }],
       [new Response("not json", { status: 502 }), { status: 502, form: { status: "error", failure: "other" } }],
       [json(201, { not: "a request" }), { status: 500, form: { status: "error", failure: "other" } }],
     ];
@@ -96,17 +124,22 @@ describe("asking for time without JavaScript", () => {
 });
 
 describe("requestFailure", () => {
-  it("knows B-4.1's member refusal word for word, so a reworded backend copy fails here and not quietly in the drawer", () => {
-    // The backend lane owns the message (lib/mentoring/requests.ts); this lane may not import it into client code.
-    expect(readFileSync("src/lib/mentoring/requests.ts", "utf8")).toContain(JSON.stringify(NEEDS_MEMBER_MESSAGE));
-  });
-
-  it("reads only B-4.1's member refusal as needing a member account", () => {
-    expect(requestFailure({ status: 403, code: "forbidden", message: NEEDS_MEMBER_MESSAGE })).toBe("notMember");
-    expect(requestFailure({ status: 403, code: "forbidden", message: "Same-origin request required." })).toBe("other");
+  // Owner decision 2026-11-02: any signed-in person may ask as themselves, so no 403 reads as "not a member".
+  it("reads a 403 other than the habits step as a plain failure", () => {
     expect(requestFailure({ status: 403, code: "forbidden" })).toBe("other");
     expect(requestFailure({ status: 403, code: "conduct_required" })).toBe("other");
     expect(requestFailure({ status: 404, code: "not_found" })).toBe("notFound");
     expect(requestFailure({ status: 401, code: "unauthorized" })).toBe("signedOut");
+  });
+});
+
+describe("failureMessage", () => {
+  it("keeps the server's sentence only for a conflict or a limit, which the person can act on", () => {
+    expect(failureMessage("conflict", "You already have a request waiting with Ruth Atieno.")).toBe("You already have a request waiting with Ruth Atieno.");
+    expect(failureMessage("limit", "You've asked for a lot of time today. Try again later.")).toBe("You've asked for a lot of time today. Try again later.");
+    expect(failureMessage("conflict", "  ")).toBeNull();
+    expect(failureMessage("conflict", undefined)).toBeNull();
+    expect(failureMessage("other", "Internal detail.")).toBeNull();
+    expect(failureMessage("notFound", "Not found.")).toBeNull();
   });
 });
