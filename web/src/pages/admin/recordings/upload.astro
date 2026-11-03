@@ -53,21 +53,23 @@ const programs = await db.query.program.findMany({
 const spaces = await resolveSpacePage(Astro.locals, "adminRecordings");
 ---
 
-<AdminLayout title="Upload Recording" spaces={spaces}>
+<AdminLayout title="Upload recording" spaces={spaces}>
   <div class="mx-auto max-w-3xl space-y-6">
     <a href="/admin/recordings" class="text-sm text-primary hover:underline">
       &larr; Back to Recordings
     </a>
 
-    <Card>
-      <PageTitle spaces={Boolean(spaces)} legacyClass="text-xl font-semibold text-white" size="card">Upload Recording</PageTitle>
+    <div>
+      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Upload recording</PageTitle>
       <p class="mt-1 text-sm text-ink-muted">
         The video is stored in R2 and queued for audio extraction, transcription, and indexing.
       </p>
+    </div>
 
-      {error && <p class="mt-4 rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-100">{error}</p>}
+    <Card>
+      {error && <p class="mb-6 rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-100">{error}</p>}
 
-      <form method="POST" enctype="multipart/form-data" class="mt-6 space-y-4">
+      <form method="POST" enctype="multipart/form-data" class="space-y-4">
         <div class="flex flex-col gap-1.5">
           <label for="title" class="text-sm font-medium text-white/90">Title *</label>
           <input id="title" name="title" required class="form-control" />

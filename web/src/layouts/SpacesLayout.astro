@@ -84,7 +84,7 @@ const shell = {
     <link rel="icon" type="image/png" href="/favicon.png" />
     <title>{pageTitle(titlePrefix + (title === SPACE_LABEL[space] ? title : `${title} · ${SPACE_LABEL[space]}`))}</title>
     {signedIn && <ClientErrorBuffer />}
-    <SheetTransition />
+    <SheetTransition sheet={`space:${space}`} />
   </head>
   <body class="h-full overflow-hidden overscroll-none bg-ground">
     {
