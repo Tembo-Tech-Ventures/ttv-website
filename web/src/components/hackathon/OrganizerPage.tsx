@@ -261,7 +261,7 @@ export default function OrganizerPage() {
                 set. It is not semantic search or a ranking of all members.
               </p>
               <p>
-                Mastra chat uses GLM 5.3 Flash; evidence assessment uses Gemma
+                Chat uses GLM 5.3 Flash; evidence assessment uses Gemma
                 4. Both use Cloudflare AI Gateway. Ratings describe evidence
                 support. Missing evidence stays unknown.
               </p>
