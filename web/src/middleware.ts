@@ -251,5 +251,5 @@ const handle = defineMiddleware(async (context, next) => {
 /** PERF-1 (investigation branch): trace D1 round trips and phases outside production. */
 export const onRequest = defineMiddleware((context, next) =>
   perfTraceEnabled(env.DEPLOYMENT_ENVIRONMENT)
-    ? withPerfTrace(env.DB, async () => (await handle(context, next)) as Response)
+    ? withPerfTrace(env.DB, context.request, async () => (await handle(context, next)) as Response)
     : handle(context, next));
