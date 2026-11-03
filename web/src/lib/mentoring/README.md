@@ -207,7 +207,7 @@ otherwise: it waits on the mentor answering.
   (`src/lib/channels/README.md`): the channel APIs, the code of conduct,
   detectors, masking, Tembo's DIRECT scope ("this conversation only"),
   mentions, and search for its members. Its page is routed at
-  `/dashboard/community/dm/<id>`; the page itself is U-4.1's to build.
+  `/dashboard/community/dm/<id>`.
 - Two people asking each other at the same moment, each accepted at once, can
   end up with two conversations; later acceptances reuse the oldest. Rare
   (it needs two mentors asking each other), and both stay readable to the two
@@ -297,7 +297,7 @@ follow the gates below: flag, browser sessions only, same origin for the
 decision. Each check that opens tells every admin except the request's two
 parties, once per opening (`moderation_pending`, admin space, at
 `/admin/moderation?tab=request-notes`). The notice shows while the check is
-open. U-4.1 builds that "Request notes" tab.
+open, on the "Request notes" tab of `/admin/moderation`.
 
 - **Finding them** (QA4-04): `countOpenChecks(db, viewerId)` counts the open
   checks this admin may decide, as the OPEN queue lists them, for the tab,
@@ -338,9 +338,8 @@ was for (`src/lib/attention/access.ts`).
 `/dashboard/mentoring/availability` are routed only while `mentor_requests` is
 on for the caller (`space-routes.ts`, `space-routing.ts`); Mentoring pages need
 the Mentoring space as usual. Restricted staging identities do not get them.
-The page files, and the conversation page, come with U-4.1: until then these
-routes reach Astro's 404, so `mentor_requests` stays OFF on shared environments
-until they ship.
+The pages and the conversation page shipped with U-4.1
+(`src/components/platform/mentors/README.md`).
 
 ## Worth another look (B-4.2)
 

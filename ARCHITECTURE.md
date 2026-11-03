@@ -12,6 +12,7 @@ TTV Website is a full-stack web application for **Tembo Tech Ventures**, a tech 
 - **Admin dashboards** for managing users, applications, and programs
 - **Certificate generation** for completed programs
 - **Blog** (placeholder — CMS not yet re-implemented)
+- **Platform spaces** behind feature flags: a spaces shell with attention and search, cohort and community channels with moderation, Tembo in channels, mentor connections and guided onboarding (see `web/docs/platform-spaces-and-channels.md`)
 
 The entire application lives inside the `web/` directory as a single Astro project deployed to Cloudflare Workers.
 
@@ -19,7 +20,7 @@ The entire application lives inside the `web/` directory as a single Astro proje
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | Astro 6 (SSR, Cloudflare adapter) |
+| Framework | Astro 7 (SSR, Cloudflare adapter) |
 | Language | TypeScript 5 |
 | UI Islands | React 18 (for interactive components) |
 | CSS | Tailwind CSS 4 (Vite plugin) |
@@ -54,15 +55,25 @@ ttv-website/
 │   │   │   ├── PublicLayout.astro # Marketing pages (nav + footer)
 │   │   │   ├── AdminLayout.astro  # Admin pages (sidebar shell)
 │   │   │   ├── DashboardLayout.astro # User dashboard (sidebar shell)
+│   │   │   ├── SpacesLayout.astro # Spaces shell (flag `spaces`)
 │   │   │   └── CertificateLayout.astro # Minimal layout
 │   │   ├── components/           # Reusable components
 │   │   │   ├── auth/             # Auth components (GitHubSignInButton)
 │   │   │   ├── common/           # Shared UI (Card, Badge, Sidebar, Grain)
 │   │   │   ├── homepage/         # Homepage sheets, skills map and motion (see web/docs/homepage.md)
+│   │   │   ├── platform/         # Spaces shell, overlays, mentors, onboarding (READMEs inside)
+│   │   │   ├── channels/         # Channel view, composer, embeds, Tembo cards
 │   │   │   └── shells/           # Layout shells (AdminShell, DashboardShell)
 │   │   ├── lib/                  # Core libraries
 │   │   │   ├── auth.ts           # better-auth server config
 │   │   │   ├── auth-client.ts    # better-auth client helpers
+│   │   │   ├── platform/         # contracts.ts (Zod), server/ (capabilitiesFor, flags, space routing), client/ (stores, polling)
+│   │   │   ├── attention/        # Attention items and producers
+│   │   │   ├── channels/         # Channels, messages, moderation
+│   │   │   ├── tembo/            # Tembo in channels
+│   │   │   ├── mentoring/        # Mentor connections, checks, confirmations
+│   │   │   ├── search/           # /api/search
+│   │   │   ├── onboarding/       # Intents and access requests
 │   │   │   └── db/
 │   │   │       ├── schema.ts     # Drizzle schema (all models)
 │   │   │       └── migrations/   # D1 migration SQL files
@@ -96,6 +107,8 @@ BaseLayout (HTML shell, global CSS, meta tags)
 │   └── admin/*  (users, applications, programs, data-migration)
 ├── DashboardLayout → DashboardShell (React island with sidebar)
 │   └── dashboard/*  (apply, applications, profile)
+├── SpacesLayout → space tabs, per-space sidebar, attention, search (flag `spaces`)
+│   └── dashboard/*  (the same pages through SpacePage, plus channels, mentoring, attention)
 ├── CertificateLayout → Minimal (no nav, no footer)
 │   └── certificate/[id].astro
 ├── (no layout) → auth/*, blog/*, api/*
@@ -109,7 +122,10 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/blog` | Blog placeholder | None |
 | `/auth/login` | GitHub OAuth sign-in | None |
 | `/auth/logout` | Sign out | Session |
-| `/dashboard` | User dashboard home | Session |
+| `/dashboard` | User dashboard home; with flag `spaces`, a 302 to the last-used space (`ttv-last-space` cookie) or the first one the caller has | Session |
+| `/dashboard/cohort`, `/dashboard/community`, `/dashboard/mentoring`, `/dashboard/discover`, `/dashboard/me`, `/dashboard/account` | Space homes (flag `spaces`). The old pages live under them (`/dashboard/apply` → `/dashboard/cohort/apply`, `/dashboard/ask` → `/dashboard/cohort/ask`, `/dashboard/mentorship` → `/dashboard/mentoring/confirm`, `/dashboard/portfolio` → `/dashboard/me/portfolio`, `/dashboard/profile` → `/dashboard/account`, …), and the old URLs 301 there (`SPACE_REDIRECTS` in `src/lib/platform/server/space-routes.ts`) | Session; each space needs its capability |
+| `/dashboard/attention` | Everything that needs the caller (the bell's page on mobile); flag `spaces` | Session |
+| `/dashboard/ask` | Ask Tembo privately: the sessions of the caller's cohorts | Session |
 | `/dashboard/apply` | Program application form | Session |
 | `/dashboard/application/[id]` | View/edit own application | Session |
 | `/dashboard/profile` | User profile | Session |
@@ -123,6 +139,7 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/admin/programs/[id]` | Program detail, role assignments | ADMIN |
 | `/admin/programs/new` | Create program | ADMIN |
 | `/admin/data-migration` | Import data from old stack | ADMIN |
+| `/admin/access-requests` | Mentor and institution access requests to approve or decline; not flag-gated | ADMIN |
 | `/admin/platform-flags` | Who sees each platform feature flag (Off, Staff, Everyone); Everyone asks to confirm, and dependency warnings never block. No JavaScript needed | ADMIN |
 | `/dashboard/feedback` | The student's own feedback, status and replies | Session |
 | `/dashboard/cohort/c/[slug]`, `/dashboard/community/c/[slug]` | A channel; 404 unless the caller can read it (flag `channels`) | Session |
@@ -136,6 +153,10 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/api/auth/[...all]` | better-auth API handler | N/A |
 | `/api/chat` | Ask Tembo question (JSON, same-origin); Tembo reads the sessions of the caller's cohorts (`capabilitiesFor`), every cohort's for staff. A new conversation is saved only together with its first answer, in one D1 batch, so a failed request leaves nothing in Recent. Only a signed-out request gets `401` (body `{ "error": "Unauthorized" }`), so clients can offer "sign in again" on the status alone | Session |
 | `/api/admin/import` | Data import API | ADMIN |
+| `/api/admin/platform-flags` | Flag audiences (GET; PUT `[key]` with `OFF`, `STAFF` or `ALL`) | ADMIN; tokens need `admin:read` (GET) or `admin:write` (PUT) |
+| `/api/platform/me` | The caller's spaces, capabilities, effective flags, unread counts per space and Tembo allowance; flag `spaces` | Session, browser only |
+| `/api/attention` | The caller's attention items, newest first (GET `?filter&cursor`); `/count` per space (GET); `/read` marks items, or everything up to a snapshot, read (POST); flag `spaces` | Session, browser only |
+| `/api/search` | Search people, projects, session moments and (flag `channels`) messages the caller can read (GET `?q&scope&programId`); flag `spaces` (see `web/src/lib/search/README.md`) | Session, browser only |
 | `/api/feedback` | Feedback widget submission (multipart, same-origin) | Session |
 | `/api/feedback/attachments/[id]` | Feedback screenshot (author or admin only) | Session |
 | `/api/admin/feedback` | Feedback queue JSON for admins and PAT-holding agents (GET, PATCH `[id]`) | ADMIN |
@@ -192,22 +213,28 @@ SQLite via Cloudflare D1, managed with Drizzle ORM. Schema at `web/src/lib/db/sc
 **Files**
 - `file` — uploaded file metadata (name, type, size, path, ownerId)
 
+**Platform** (see `web/docs/platform-spaces-and-channels.md`)
+- `feature_flag` — one row per rollout flag (`spaces`, `onboarding`, `channels`, `tembo_channels`, `mentor_requests`), audience OFF/STAFF/ALL with who changed it; seeded OFF by migration
+- `attention_item` — one thing that needs one person: kind, space, category (mentions/requests/updates), subject link, optional actor, read time; `eventKey` unique per person so each event writes once. Kinds: `application_status`, `recording_ready`, `work_confirmed`, `visitor_message`, `mention`, `tembo_answer`, `message_hidden`, `moderation_pending`, `moderation_decided`, `mentor_request`, `mentor_withdrawn`, `mentor_accepted`, `mentor_redirected`, `mentor_declined`, `mentor_checked`, `access_request`, `access_decided` (`reply` and `opportunity_match` are in the contract with no producer yet). An item shows only while its subject still applies (see `web/src/lib/attention/README.md`)
+- `member_intent`, `member_onboarding`, `access_request` (flag `onboarding`; see `web/src/lib/onboarding/README.md`) — how a person said they'll take part (routing and copy only, never authority), their onboarding stage, and requests for mentor or institution access that an admin decides
+
 **Feedback** (see `web/docs/student-feedback.md`)
 - `feedback` — a signed-in user's note: kind, message, page URL, browser context JSON, status (NEW → IN_PROGRESS → RESOLVED/DECLINED), reply shown to the student, staff-only note, link to the fix
 - `feedback_attachment` — screenshots in R2 under `feedback/<feedbackId>/`, type sniffed from the bytes
 - `feedback_theme` — one problem or wish several notes share (publishable title/summary, status COLLECTING → PROPOSED → PLANNED → IN_PROGRESS → SHIPPED/DECLINED, or DORMANT; issue and PR links); `feedback.themeId` and `feedback.sensitive` link and fence notes
 
-**Channels** (flag `channels`, OFF; see `web/src/lib/channels/README.md`)
+**Channels** (flag `channels`; see `web/src/lib/channels/README.md`)
 - `channel` — COHORT (one program), COMMUNITY or DIRECT; slug, topic, postingPolicy ALL/STAFF, archivedAt. Default community channels and each program's `cohort-NN`, `cNN-help` and `cNN-announcements` are seeded by migration, and a trigger creates a new program's channels
 - `channel_message` — one-level threads, authorKind USER/TEMBO, per-channel `seq`/`changeSeq` for paging and polling, clientNonce unique per author, moderation VISIBLE/FLAGGED/HIDDEN with reasons
 - `channel_member`, `channel_read`, `message_reaction`, `message_report`, `moderation_event` — explicit members, read markers, reactions, member reports and the moderation audit trail
 - `channel_conduct` — each person's latest agreement to the channel code of conduct (version, acknowledgedAt); a new version asks again
-- `channel_message_version`, `moderation_case`, `moderation_allowlist` — moderation (B-2.5): earlier texts kept as evidence for moderators, the admin queue (one case per message, kept by triggers on `moderation_event`), and what an admin's "fine as is" allowlisted. Detectors flag contact details and spam before the write; Clef flash checks after the response and hides only near-certain abuse
+- `channel_action` — a short-lived log of edits and reaction changes for their rate limits, pruned by a trigger after an hour
+- `channel_message_version`, `moderation_case`, `moderation_allowlist` — moderation (B-2.5): earlier texts kept as evidence for moderators, the admin queue (one case per message, kept by triggers on `moderation_event`), and what an admin's "fine as is" allowlisted. Detectors flag contact details and spam before the write; Clef flash checks after the response, hides only near-certain abuse and fails open; flagged contact details are masked for everyone but the author, the channel's moderators and admins until a person decides
 - `channel_message_search` + `channel_message_fts` — the FTS5 index over the bodies of messages nobody deleted or hid, kept by triggers (never embeds); `/api/search` reads it for the channels the caller can read (see `web/src/lib/search/README.md`)
 - `tembo_ask`, `tembo_usage`, `tembo_feedback` (flag `tembo_channels`, B-3.1; see `web/src/lib/tembo/README.md`) — one question per asking message (PENDING/ANSWERED/FAILED under a run's claim), accepted questions per person per Africa/Nairobi day, and "helpful"/"not quite" per person and answer. Tembo reads only what the channel allows (a cohort's transcripts, public profiles and projects shared there, or the conversation), never masked contact details, and every sentence it posts cites a source it was given
-- Access: `channelAccessFor` beside `capabilitiesFor` — cohort channels for that program's members (alumni included), instructors, TAs, invited mentors and admins; community channels for every signed-in person; DIRECT conversations for their two members only (an admin outside one gets nothing); STAFF posting for admins and the cohort's instructors/TAs
+- Access: `channelAccessFor` beside `capabilitiesFor` — cohort channels for that program's members (alumni included), instructors, TAs, invited mentors and admins; community channels for every signed-in person; DIRECT conversations for their two members only (an admin outside one can't open it, and sees only a single reported or flagged message in the moderation queue); STAFF posting for admins and the cohort's instructors/TAs
 
-**Mentor connections** (flag `mentor_requests`, OFF; see `web/src/lib/mentoring/README.md`)
+**Mentor connections** (flag `mentor_requests`; see `web/src/lib/mentoring/README.md`)
 - `mentor_profile` — a mentor's own headline, bio, areas, formats offered, monthly capacity and pause; listed only while they hold the MENTOR role
 - `mentor_request` — PENDING → ACCEPTED/REDIRECTED/DECLINED/WITHDRAWN, one PENDING per pair; the note (screened like a post), the attached project at its revision, and the DIRECT conversation an acceptance opened. Spots are counted per Africa/Nairobi month
 - `mentor_request_case`, `mentor_request_report` — a check on a request's note, opened by Clef's near-certain abuse or the mentor's report (one per request); while open the request holds no spot and its mentor cannot act on it; an admin keeps it (back to the mentor) or removes it (WITHDRAWN, never sent)
@@ -218,6 +245,10 @@ SQLite via Cloudflare D1, managed with Drizzle ORM. Schema at `web/src/lib/db/sc
 - Timestamps use `integer({ mode: "timestamp" })` with `unixepoch()` default
 - Relations defined with `relations()` from drizzle-orm
 - Cascade deletes on auth-related tables (account, session, userRole)
+
+## Feature Flags
+
+New platform features ship dark behind flags in the `feature_flag` table, each with an audience of `OFF`, `STAFF` (admins) or `ALL`, set at `/admin/platform-flags`. A flag that is off for the caller makes its pages and APIs return 404. `onboarding` is effective only while `spaces` is, and `mentor_requests` only while `channels` is; the Tembo routes check both `channels` and `tembo_channels`. Preview and staging deploys turn every flag on with `PLATFORM_FLAGS_OVERRIDE=all`, which production ignores. Moving a flag to `ALL` needs the owner's approval. Each flag, and the access rules, moderation runbook and Tembo rules behind it, are in `web/docs/platform-spaces-and-channels.md`.
 
 ## Authentication
 
