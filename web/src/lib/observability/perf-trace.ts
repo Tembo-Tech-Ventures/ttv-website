@@ -23,7 +23,9 @@ export interface PerfQuery {
   ms: number;
   /** 1 + the deepest query that had finished when this one started: its place in a chain of round trips. */
   depth: number;
+  /** The statement's text, shortened; `statement` tells two statements apart when they begin alike. */
   sql: string;
+  statement: string;
 }
 
 interface PhaseStats { ms: number; d1: number; d1ms: number }
@@ -73,6 +75,13 @@ function noteRegion(result: unknown) {
   servedBy = `${meta.served_by_region ?? "?"}${meta.served_by_primary === false ? " (replica)" : ""} ${meta.served_by ?? ""}`.trim();
 }
 
+/** FNV-1a over the whole statement: the same SQL text twice in one request is a repeated read. */
+function fingerprint(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index++) hash = Math.imul(hash ^ text.charCodeAt(index), 0x01000193);
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
 /** Times one D1 call into the current trace, if any. */
 async function timed<T>(kind: string, sql: string, call: () => Promise<T>): Promise<T> {
   const trace = traces.getStore();
@@ -90,7 +99,8 @@ async function timed<T>(kind: string, sql: string, call: () => Promise<T>): Prom
     const entry = stats(trace, phase);
     entry.d1 += 1;
     entry.d1ms += ms;
-    trace.queries.push({ phase, kind, at: round(startedAt - trace.start), ms: round(ms), depth, sql: sql.replace(/\s+/g, " ").slice(0, 160) });
+    const text = sql.replace(/\s+/g, " ");
+    trace.queries.push({ phase, kind, at: round(startedAt - trace.start), ms: round(ms), depth, sql: text.slice(0, 160), statement: fingerprint(text) });
   }
 }
 

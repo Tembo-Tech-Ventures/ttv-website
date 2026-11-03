@@ -45,6 +45,9 @@ describe("tracePerf", () => {
     expect(result).toEqual(["a", "b", 2]);
     expect(summary.d1).toBe(4);
     expect(summary.depth).toBe(3);
+    const [first, second, third] = summary.queries!;
+    expect(first!.statement).toMatch(/^[0-9a-f]{8}$/);
+    expect([second!.statement === first!.statement, third!.statement === first!.statement]).toEqual([true, false]);
     expect(summary.queries?.map(({ kind, depth, sql }) => [kind, depth, sql])).toEqual([
       ["first", 1, "SELECT name FROM item WHERE id = ?"],
       ["first", 1, "SELECT name FROM item WHERE id = ?"],
