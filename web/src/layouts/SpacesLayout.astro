@@ -94,6 +94,31 @@ const router = !Astro.url.searchParams.has("mpa") && !(Astro.request.headers.get
     {signedIn && <ClientErrorBuffer />}
     <SheetTransition sheet={`space:${space}`} />
     {router && <ClientRouter fallback="none" />}
+    <style is:inline>
+      /* ARCH-1 motion spike: tokens for the card-file gesture, and its click-time first beat. */
+      :root {
+        --motion-file-press: 180ms;
+        --motion-file-rise: 250ms;
+        --ease-file-rise: cubic-bezier(0.16, 0.9, 0.3, 1);
+        --ease-file-settle: cubic-bezier(0.3, 0, 0.2, 1);
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .spaces-shell .space-file > .platform-sheet {
+          transition:
+            filter var(--motion-file-press) var(--ease-file-settle),
+            translate var(--motion-file-press) var(--ease-file-settle);
+        }
+        .spaces-shell[data-nav-pending]:not([data-nav-pending="page"]) .space-file > .platform-sheet {
+          filter: brightness(0.9);
+          translate: 0 0.375rem;
+        }
+        /* Within a space nothing moves; a slow answer only quiets the page after 150ms. */
+        .spaces-shell[data-nav-pending="page"] #spaces-main {
+          opacity: 0.72;
+          transition: opacity 120ms linear 150ms;
+        }
+      }
+    </style>
     <script>
       // ARCH-1 spike: T15's same-sheet skip, for soft navigations (pagereveal does not fire for them).
       document.addEventListener("astro:before-swap", (event) => {
@@ -117,7 +142,7 @@ const router = !Astro.url.searchParams.has("mpa") && !(Astro.request.headers.get
   <body class="h-full overflow-hidden overscroll-none bg-ground">
     {/* ARCH-1 spike: the chrome is two persisted islands; the sheet, sidebar and page are server HTML the router swaps. */}
     <div class="spaces-shell" data-space={space} data-sidebar={hasSidebar ? "" : undefined} data-drawer="closed">
-      <span id="spaces-route-start" tabindex="-1"></span>
+      <span id="spaces-route-start" tabindex="-1" class="sr-only"></span>
       <a href="#spaces-main" class="spaces-shell__skip">Skip to content</a>
       <div class="space-file spaces-shell__file" data-space-file={space} data-tabs={me.spaces.length}>
         <SpacesChrome client:load transition:persist="spaces-chrome-row" {...shell} part="row" />

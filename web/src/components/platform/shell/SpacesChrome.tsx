@@ -119,6 +119,35 @@ export default function SpacesChrome({
     count: counts[id] ?? 0,
   }));
   const tabs: SpaceTabItem[] = links;
+
+  /*
+   * ARCH-1 motion spike: the card-file gesture starts at the click, not when the server answers. The
+   * chosen tab comes forward at once and the sheet you are leaving settles back; the router's view
+   * transition then raises the new sheet when it arrives. Server truth (the next page's props) wins.
+   */
+  const [pending, setPending] = useState<SpaceId | null>(null);
+  useEffect(() => {
+    if (part !== "row") return;
+    const onPrepare = (event: Event) => {
+      const to = (event as Event & { to?: URL }).to;
+      if (!to) return;
+      const target = links.find((link) => new URL(link.href, location.href).href === to.href)?.space ?? null;
+      const root = document.querySelector<HTMLElement>(".spaces-shell");
+      if (target && target !== space) {
+        setPending(target);
+        if (root) root.dataset.navPending = target;
+      } else if (root) {
+        root.dataset.navPending = "page";
+      }
+    };
+    const onSwap = () => setPending(null);
+    document.addEventListener("astro:before-preparation", onPrepare);
+    document.addEventListener("astro:after-swap", onSwap);
+    return () => {
+      document.removeEventListener("astro:before-preparation", onPrepare);
+      document.removeEventListener("astro:after-swap", onSwap);
+    };
+  }, [part, links, space]);
   const attention = links.reduce((sum, link) => sum + link.count, 0);
   const person = { id: me.user.id, name: me.user.name, src: me.user.avatarUrl ?? undefined };
   const sidebarLabel = `${SPACE_LABEL[space]} menu`;
@@ -361,7 +390,7 @@ export default function SpacesChrome({
 
   return (
     <div className="contents" onClickCapture={rememberSpace}>
-      <SpaceFileRow tabs={tabs} active={space} person={person} start={start} end={tools} />
+      <SpaceFileRow tabs={tabs} active={pending ?? space} person={person} start={start} end={tools} />
     </div>
   );
 }
