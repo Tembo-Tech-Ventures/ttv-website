@@ -27,6 +27,11 @@ vi.mock("cloudflare:workers", () => ({
   },
 }));
 vi.mock("@/lib/auth", () => ({ createAuth: mocks.createAuth }));
+// A GET's admin guard reads the request's shared capabilities (PERF-2); here they hold the same mocked ADMIN row.
+vi.mock("@/lib/platform/server/capabilities", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/platform/server/capabilities")>()),
+  capabilitiesFor: async () => ({ isAdmin: Boolean(await mocks.roleFirst()) }),
+}));
 // These legacy middleware cases run with spaces OFF. The real flag/capability
 // integration is exercised in platform/server/space-routing.middleware.test.ts.
 vi.mock("@/lib/platform/server/space-context", () => ({

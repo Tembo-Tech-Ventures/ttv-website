@@ -7,6 +7,7 @@ import {
 import { OnboardingError } from "@/lib/onboarding/service";
 import type { grantCommunityRole, revokeCommunityRole } from "@/lib/onboarding/decisions";
 import type { AttentionProducerContext } from "@/lib/attention/producers";
+import { requestScoped } from "@/lib/platform/server/request-scope";
 
 /**
  * The admin side of access requests (onboarding SPEC S6): the queue at /admin/access-requests, the
@@ -30,8 +31,13 @@ export function isDelegatedCredential(locals: Pick<App.Locals, "personalAccessTo
 /**
  * The open-request count for the Admin sidebar. A badge must never take an admin page down with it,
  * so a failed read shows no badge instead.
+ * Read once per GET for the page and its admin navigation (request-scope.ts).
  */
-export async function countPendingAccessRequests(db: D1Database): Promise<number> {
+export function countPendingAccessRequests(db: D1Database): Promise<number> {
+  return requestScoped("access-requests-pending", () => readCountPendingAccessRequests(db));
+}
+
+async function readCountPendingAccessRequests(db: D1Database): Promise<number> {
   try {
     const row = await db.prepare("SELECT count(*) AS count FROM access_request WHERE status = 'PENDING'")
       .first<{ count: number }>();

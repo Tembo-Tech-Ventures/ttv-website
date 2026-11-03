@@ -4,7 +4,7 @@ import type { Channel, ChannelShareables, ConductAcknowledgement } from "@/lib/p
 import { isAgentSession } from "@/lib/agent-auth";
 import { getRouteChannel, getRouteChannelShareables } from "@/lib/platform/server/channel-context";
 import type { ChannelSpace } from "@/lib/platform/server/space-routes";
-import { resolveSpacePage, type SpacePageContext } from "@/components/platform/spaces/space-page";
+import { resolveSpacePageWith, type SpacePageContext } from "@/components/platform/spaces/space-page";
 import type { SpacePageKey } from "@/components/platform/spaces/sidebar";
 import { conductAgreed, handleConductPost } from "./conduct-flow";
 import { CHANNEL_MESSAGES_ID, channelSpace } from "./paths";
@@ -55,12 +55,19 @@ async function resolve<T extends object>(
   page: SpacePageKey,
   find: () => Promise<T | null>,
 ): Promise<(ChannelsPage & T) | Response> {
-  const context = await resolveSpacePage(astro.locals, page);
-  if (!context?.me.flags.channels) return respond(404);
   const { method } = astro.request;
-  if (method !== "GET" && method !== "HEAD" && method !== "POST") return respond(405, { Allow: "GET, HEAD, POST" });
+  const allowed = method === "GET" || method === "HEAD" || method === "POST";
+  // Started beside onboarding once `channels` is known to be on (PERF-2). A GET also reads the
+  // person's own agreement, which says nothing about this channel; a POST reads it after its write.
+  const resolved = await resolveSpacePageWith(astro.locals, page, (me) => me.flags.channels && allowed
+    ? Promise.all([channelsServer(env.DB, me).list(), find(), method === "POST" ? null : channelsServer(env.DB, me).conduct.load()])
+    : Promise.resolve(null));
+  if (!resolved?.[0].me.flags.channels) return respond(404);
+  const [context, loaded] = resolved;
+  // Null only for a method other than GET, HEAD or POST.
+  if (!loaded) return respond(405, { Allow: "GET, HEAD, POST" });
   const server = channelsServer(env.DB, context.me);
-  const [readable, found] = await Promise.all([server.list(), find()]);
+  const [readable, found, earlyRecord] = loaded;
   if (!found) return respond(404);
 
   const self = astro.url.pathname + astro.url.search;
@@ -69,7 +76,7 @@ async function resolve<T extends object>(
   // From a channel's own gate, back to its messages; from the habits' page, back to the habits.
   const posted = await handleConductPost(astro.request, server.conduct, "channel" in found ? `${self}#${CHANNEL_MESSAGES_ID}` : self);
   if (posted) return posted.kind === "redirect" ? respond(303, { Location: posted.location }) : respond(posted.status);
-  const record = await server.conduct.load();
+  const record = method === "POST" ? await server.conduct.load() : earlyRecord;
   return { context, readable, record, agreed: conductAgreed(record), canAgree, self, ...found };
 }
 

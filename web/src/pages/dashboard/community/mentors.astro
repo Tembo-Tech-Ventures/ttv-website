@@ -17,7 +17,7 @@ import { areaOptions, directoryHref, directoryQuery, parseDirectoryUrl } from "@
 import { conductAgreed, handleConductPost } from "@/components/channels/conduct-flow";
 import { channelsServer } from "@/components/channels/server";
 import SpacePage from "@/components/platform/spaces/SpacePage.astro";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { resolveSpacePageWith } from "@/components/platform/spaces/space-page";
 import MentorPageIntro from "@/components/platform/mentors/MentorPageIntro.astro";
 import MentorsDirectory from "@/components/platform/mentors/MentorsDirectory";
 import { MENTORS_PATH, mentorRequestsOpen } from "@/components/platform/mentors/mentor-display";
@@ -25,23 +25,32 @@ import { mentorPageResponse } from "@/components/platform/mentors/page-responses
 import { handleRequestPost, isRequestPost, type RequestPostResult } from "@/components/platform/mentors/request-post";
 import { mentorsServer } from "@/components/platform/mentors/server";
 
-const context = await resolveSpacePage(Astro.locals, "mentors");
-if (!context || !mentorRequestsOpen(context.me)) return mentorPageResponse(404);
 const { method } = Astro.request;
-if (method !== "GET" && method !== "HEAD" && method !== "POST") return mentorPageResponse(405);
-
+const allowed = method === "GET" || method === "HEAD" || method === "POST";
 const now = Date.now();
-const server = mentorsServer(Astro, env, context.me, now);
 const filters = parseDirectoryUrl(Astro.url.searchParams);
 const base = { area: filters.area, format: filters.format, available: filters.available };
 const filtered = Boolean(filters.area || filters.format || filters.available);
+// The page's reads start beside onboarding, once `mentor_requests` is known to be on (PERF-2). A GET
+// also reads the person's agreement now; a POST reads it after the post below.
+const resolved = await resolveSpacePageWith(Astro.locals, "mentors", (me) => {
+  if (!mentorRequestsOpen(me) || !allowed) return Promise.resolve(null);
+  const server = mentorsServer(Astro, env, me, now);
+  return Promise.all([
+    server.directory({}),
+    filtered ? server.directory(directoryQuery(filters)) : null,
+    server.requests({ as: "requester" }),
+    server.projects(),
+    method === "POST" ? null : channelsServer(env.DB, me).conduct.load(),
+  ]);
+});
+if (!resolved || !mentorRequestsOpen(resolved[0].me)) return mentorPageResponse(404);
+const [context, reads] = resolved;
+// Null only for a method other than GET, HEAD or POST.
+if (!reads) return mentorPageResponse(405);
+const [all, matching, ownRequests, projects, earlyAgreement] = reads;
+const server = mentorsServer(Astro, env, context.me, now);
 const conduct = channelsServer(env.DB, context.me).conduct;
-const [all, matching, ownRequests, projects] = await Promise.all([
-  server.directory({}),
-  filtered ? server.directory(directoryQuery(filters)) : null,
-  server.requests({ as: "requester" }),
-  server.projects(),
-]);
 const canAgree = !isAgentSession(Astro.locals.session?.userAgent);
 
 let posted: Extract<RequestPostResult, { kind: "render" }> | null = null;
@@ -68,7 +77,7 @@ if (method === "POST") {
 }
 
 // Read after any post above, so a send that agreed shows the drawer without the habits again.
-const agreedNow = conductAgreed(await conduct.load());
+const agreedNow = conductAgreed(method === "POST" ? await conduct.load() : earlyAgreement);
 const sentId = Astro.url.searchParams.get("sent");
 const sent = sentId ? ownRequests.items.find((request) => request.id === sentId) ?? null : null;
 Astro.response.headers.set("Cache-Control", "no-store");

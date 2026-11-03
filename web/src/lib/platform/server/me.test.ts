@@ -52,6 +52,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** A refused caller costs the flag, the role and the capability reads, and never a feature read. */
+function expectOnlyGateReads(queries: { mock: { calls: unknown[][] } }) {
+  const tables = queries.mock.calls.map(([sql]) => /from "?(\w+)"?/i.exec(String(sql))?.[1]);
+  expect(tables.length).toBeGreaterThan(0);
+  for (const table of tables) expect(["feature_flag", "Roles", "UserRoles", "programApplication", "programRole"]).toContain(table);
+}
+
 function seedAttention(database: ReturnType<typeof createCapabilityDatabase>["database"]) {
   database.exec(`INSERT INTO studentProfile(id,userId,handle) VALUES
     ('own-profile','synthetic-wanjiku','synthetic-wanjiku'),('other-profile','synthetic-otieno','synthetic-otieno');
@@ -159,7 +166,8 @@ describe("real /me and Astro context adapters", () => {
     expect(response.status).toBe(404);
     expect(ErrorEnvelope.parse(body)).toEqual({ error: { code: "flag_off", message: "Not found." } });
     await expect(getSpaceContext(context)).rejects.toMatchObject({ status: 404 });
-    expect(queries).toHaveBeenCalledTimes(audience === "STAFF" ? 2 : 1);
+    // Capabilities are read beside the flag (PERF-2) and dropped; nothing else is read.
+    expectOnlyGateReads(queries);
   });
 
   it("keeps production OFF for admins even with a preview override", async () => {
@@ -168,7 +176,7 @@ describe("real /me and Astro context adapters", () => {
     mocks.env.PLATFORM_FLAGS_OVERRIDE = "all";
     context.locals.isAdmin = true;
     expect((await request(context)).response.status).toBe(404);
-    expect(queries).toHaveBeenCalledOnce();
+    expectOnlyGateReads(queries);
   });
 
   it("keeps unauthenticated previews dark without querying the database", async () => {

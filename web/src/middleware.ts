@@ -12,8 +12,13 @@ import { isHealthCheckPath } from "@/lib/health";
 import { firstRequestOfIsolate, perfPhase, perfTraceRequested, withPerfTrace } from "@/lib/observability/perf-trace";
 import { enforceAdminMutationOrigin } from "@/lib/admin/mutation-security";
 import { userHasAdminRole } from "@/lib/admin/roles";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { capabilitiesFor } from "@/lib/platform/server/capabilities";
+import { requestScopeActive, withRequestScope } from "@/lib/platform/server/request-scope";
 import { platformAdminApiDenial } from "@/lib/platform/server/http";
 import { routeSpaceRequest } from "@/lib/platform/server/space-routing";
+import { startAdminSpacePage } from "@/components/platform/spaces/space-page";
 import {
   collapseRoutePattern,
   recordErrorInBackground,
@@ -70,7 +75,12 @@ async function enforceAdminGuards(
     return redirect("/auth/login");
   }
 
-  if (!(await userHasAdminRole(env.DB, locals.user.id))) {
+  // A read-only request reuses the capabilities its space context reads next (request-scope.ts): the
+  // same ADMIN role check, read fresh for this request.
+  const isAdmin = requestScopeActive()
+    ? (await capabilitiesFor(drizzle(env.DB, { schema }), locals.user)).isAdmin
+    : await userHasAdminRole(env.DB, locals.user.id);
+  if (!isAdmin) {
     return redirect("/dashboard");
   }
 
@@ -111,6 +121,11 @@ async function enforceAdminGuards(
   if (originFailure) return originFailure;
 
   return null;
+}
+
+/** An admin page's GET, past the ADMIN guard, starts its Admin space beside the page's own reads. */
+function startAdminPageReads(request: Request, url: URL, locals: App.Locals) {
+  if (request.method === "GET" && !url.pathname.startsWith("/api/")) startAdminSpacePage(locals);
 }
 
 /** The channel APIs a channels token may call (src/lib/channels/http.ts checks each scope). */
@@ -225,6 +240,7 @@ const handleRequest = defineMiddleware(async (context, next) => {
     ) {
       const guardResponse = await perfPhase("admin", () => enforceAdminGuards(context, locals));
       if (guardResponse) return platformAdminApiDenial(guardResponse, url.pathname);
+      startAdminPageReads(request, url, locals);
     }
 
     const response = await routeSpaceRequest(context, next);
@@ -248,11 +264,15 @@ const handleRequest = defineMiddleware(async (context, next) => {
   }
 });
 
-/** Outside production, a request with the `ttv-perf` cookie is traced (src/lib/observability/perf-trace.ts). */
+/**
+ * A GET or HEAD request runs in a request scope, which shares each user's capabilities across its
+ * helpers (src/lib/platform/server/request-scope.ts). Outside production, a request with the
+ * `ttv-perf` cookie is traced (src/lib/observability/perf-trace.ts).
+ */
 export const onRequest = defineMiddleware(async (context, next) => {
   const cold = firstRequestOfIsolate();
   // handleRequest answers every request with a Response; its type is the general middleware one.
-  const handle = async () => (await handleRequest(context, next)) as Response;
+  const handle = () => withRequestScope(context.request.method, async () => (await handleRequest(context, next)) as Response);
   return perfTraceRequested(env.DEPLOYMENT_ENVIRONMENT, context.request)
     ? withPerfTrace(env.DB, context.request, { cold }, handle)
     : handle();

@@ -80,6 +80,18 @@ describe("tracePerf", () => {
     expect((await tracePerf(db, () => read(db, 1))).summary.d1Region).toBeNull();
   });
 
+  it("tells apart two statements that only differ after the text it shows", async () => {
+    const { db } = database();
+    const long = (column: string) => `SELECT name FROM item WHERE ${"name IS NOT NULL AND ".repeat(10)}${column} IS NOT NULL`;
+    const { summary } = await tracePerf(db, async () => {
+      await db.prepare(long("id")).all();
+      await db.prepare(long("name")).all();
+    });
+    const [first, second] = summary.queries!;
+    expect(first!.sql).toBe(second!.sql);
+    expect(first!.statement).not.toBe(second!.statement);
+  });
+
   it("records nothing outside a trace and keeps each trace to its own calls", async () => {
     const { db } = database();
     await read(db, 1);

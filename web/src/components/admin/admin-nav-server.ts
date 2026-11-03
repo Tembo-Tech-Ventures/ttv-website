@@ -7,6 +7,7 @@ import { countPendingModeration } from "@/lib/channels/moderation/queue";
 import { countOpenChecks } from "@/lib/mentoring/checks";
 import { isFlagEnabled } from "@/lib/platform/server/flags";
 import { recordError } from "@/lib/observability/errors";
+import type { SpaceFrameFacts } from "@/components/platform/spaces/space-page";
 import { NO_ADMIN_FACTS, type AdminNavFacts } from "./admin-nav";
 
 /** Counts a page has already read, so the navigation does not read them again. */
@@ -33,6 +34,18 @@ export async function loadAdminNavFacts(locals: App.Locals, url: URL, counts: Ad
     await recordError(env.DB, { source: "request", route: url.pathname, error, level: "warning" });
     return { ...NO_ADMIN_FACTS, ...tools(url.origin), pendingCases: null, pendingRequestNotes: 0 };
   }
+}
+
+/**
+ * Starts the navigation's counts with the Admin space's other reads, under the flags its `me` holds
+ * (the same audience as readAdminNavFacts' checks). Each count is shared for the request
+ * (request-scope.ts), so AdminLayout and a page that counts the same thing get these reads.
+ */
+export function startAdminNavCounts(me: SpaceFrameFacts): void {
+  const reads: Promise<unknown>[] = [countPendingAccessRequests(env.DB)];
+  if (me.flags.channels) reads.push(countPendingModeration(env.DB, me.user.id));
+  if (me.flags.channels && me.flags.mentor_requests) reads.push(countOpenChecks(env.DB, me.user.id));
+  for (const read of reads) read.catch(() => {});
 }
 
 export type LoadedAdminNav = AdminNavFacts & { pendingCases: number | null; pendingRequestNotes: number };

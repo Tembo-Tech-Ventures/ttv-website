@@ -33,6 +33,24 @@ The trace reports two round-trip counts:
 Unit tests use `tracePerf(db, run)` with `withRoundTrips` (`src/test/d1-round-trips.ts`) to assert a
 handler's query count and depth.
 
+## Fewer round trips: what a GET shares
+
+Each sequential D1 round trip costs a visitor far from the database 200–300 ms. A GET or HEAD request therefore runs in a request scope (`src/lib/platform/server/request-scope.ts`, opened by the middleware). Inside it, these reads run once per user and every helper shares them:
+- `capabilitiesFor`, which also serves the middleware's ADMIN guard, the STAFF flag audience and the community roles check;
+- `getStudentJourney`;
+- the channel list (`channelsServer().list()`);
+- the cohort heading and certificates;
+- the admin navigation's counts.
+
+The scope ends with the request, so a revoked role or assignment applies on the next one. POST, PUT, PATCH and DELETE requests get no scope: a handler may change something and then read it back.
+
+Reads also start as soon as what they depend on is known:
+- `getMe` reads flags and capabilities together, then attention, the mentoring count and Tembo usage together. The `spaces` flag still decides first.
+- `resolveSpacePage` starts SpacePage's frame reads as soon as the space is known. `resolveSpacePageWith` also starts the page's own reads beside onboarding.
+- An admin page's GET starts its Admin space right after the ADMIN guard, beside the page's own reads.
+
+`src/test/perf/round-trips.render.test.ts` renders representative pages through the real middleware and sets a budget of queries and depth for each. Before PERF-2 they took 8–10 sequential round trips (auth excluded). After it they take 3–4.
+
 ## The navigation harness
 
 `e2e/perf/navigation.perf.ts` signs in the preview personas and runs two journeys:

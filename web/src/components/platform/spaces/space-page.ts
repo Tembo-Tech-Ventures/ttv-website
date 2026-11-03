@@ -12,7 +12,13 @@ import { qaPathAllowed } from "@/lib/staging-qa-policy";
 import { stagingFixturePathAllowed } from "@/lib/staging-fixture-policy";
 import { isValidCompletion } from "@/lib/talent/eligibility";
 import { restrictedQaNextStep } from "@/lib/dashboard-presentation";
-import type { StudentNextStep } from "@/lib/student/journey";
+import { getStudentJourney, type StudentNextStep } from "@/lib/student/journey";
+import { requestScopeActive, requestScoped } from "@/lib/platform/server/request-scope";
+import { channelsServer } from "@/components/channels/server";
+import { drizzle } from "drizzle-orm/d1";
+import { startAdminNavCounts } from "@/components/admin/admin-nav-server";
+import { getFlags } from "@/lib/platform/server/flags";
+import { requestCapabilities } from "@/lib/platform/server/request-capabilities";
 import { canRenderSpace } from "@/components/platform/shell/access";
 import { onboardingView, type OnboardingView } from "@/components/platform/onboarding/framing";
 import { onboardingOpen } from "@/components/platform/onboarding/welcome-flow";
@@ -49,6 +55,20 @@ export function pickSpace(me: Me | null, page: SpacePageKey): SpaceId | null {
  * without a context: the middleware fails them closed.
  */
 export async function resolveSpacePage(locals: App.Locals, page: SpacePageKey): Promise<SpacePageContext | null> {
+  return (await resolveSpacePageWith(locals, page, async () => null))?.[0] ?? null;
+}
+
+/**
+ * resolveSpacePage, with the page's own reads started as soon as its `me` is known, beside onboarding,
+ * instead of after it (PERF-2). `load` runs only when the page has a spaces context, so it may rely
+ * on `me` for its flag and access checks; it must not depend on onboarding. Its errors propagate to
+ * the page, as they would have read after the context.
+ */
+export async function resolveSpacePageWith<T>(
+  locals: App.Locals,
+  page: SpacePageKey,
+  load: (me: Me) => Promise<T>,
+): Promise<[SpacePageContext, T] | null> {
   let me: Me;
   try {
     me = await getSpaceContext({ locals });
@@ -56,7 +76,61 @@ export async function resolveSpacePage(locals: App.Locals, page: SpacePageKey): 
     return null;
   }
   const space = pickSpace(me, page);
-  return space ? { me, space, page, onboarding: await loadOnboarding(locals, me, space, page) } : null;
+  if (!space) return null;
+  startSpaceFrame(me, space);
+  const [onboarding, loaded] = await Promise.all([loadOnboarding(locals, me, space, page), load(me)]);
+  return [{ me, space, page, onboarding }, loaded];
+}
+
+/** What the frame's reads depend on: the parts of `Me` known once its flags and capabilities are read. */
+export interface SpaceFrameFacts {
+  user: Pick<Me["user"], "id">;
+  flags: Pick<Me["flags"], "channels" | "mentor_requests">;
+  spaces: readonly SpaceId[];
+  capabilities: Pick<Me["capabilities"], "cohortIds">;
+}
+
+/**
+ * Starts the reads SpacePage's frame makes (the journey, the sidebar's channels, the cohort heading,
+ * certificates) as soon as the space is known, beside onboarding and the page's own reads, instead of
+ * after the page's frontmatter. Only in a read-only request: there each read is shared for the
+ * request (request-scope.ts), so SpacePage and the page get these same reads, and a POST still reads
+ * them after its own writes. Each is subject to the same checks as in SpacePage, and errors are left
+ * to SpacePage, which reports them.
+ */
+function startSpaceFrame(me: SpaceFrameFacts, space: SpaceId): void {
+  if (!requestScopeActive()) return;
+  const db = drizzle(env.DB, { schema });
+  const reads: Promise<unknown>[] = [getStudentJourney(db, me.user.id)];
+  if (me.flags.channels && (space === "community" || space === "cohort")) reads.push(channelsServer(env.DB, me).list());
+  if (me.spaces.includes("cohort")) reads.push(loadCohortHeading(db, me));
+  if (space === "profile") reads.push(loadCertificates(db, me.user.id));
+  for (const read of reads) read.catch(() => {});
+  if (space === "admin") startAdminNavCounts(me);
+}
+
+/**
+ * For an admin page's GET, once the middleware's ADMIN guard has passed: starts the Admin space's
+ * context and frame beside the page's own reads, which come first in its frontmatter. Every admin
+ * page resolves this context (T14), and it is shared for the request (getSpaceContext,
+ * request-scope.ts), so the page gets these same reads. Failures are left to the page, which treats
+ * a missing context as the existing admin shell.
+ */
+export function startAdminSpacePage(locals: App.Locals): void {
+  const user = locals.user;
+  if (!requestScopeActive() || locals.personalAccessToken || !user) return;
+  getSpaceContext({ locals }).catch(() => {});
+  void (async () => {
+    // The frame needs only the flags and capabilities getMe reads first, not the counts it reads next.
+    // These are the same shared reads, so the Admin space opens exactly when canRenderSpace says so.
+    const [flags, capabilities] = await Promise.all([
+      getFlags({ db: env.DB, env, user, isAdmin: locals.isAdmin, locals }),
+      requestCapabilities(drizzle(env.DB, { schema }), locals),
+    ]);
+    if (flags.spaces && capabilities.spaces.includes("admin")) {
+      startSpaceFrame({ user: { id: user.id }, flags, spaces: capabilities.spaces, capabilities }, "admin");
+    }
+  })().catch(() => {});
 }
 
 /**
@@ -155,7 +229,11 @@ const MEMBER_STATUSES = Object.keys(COHORT_APPLICATION_NOTE) as CohortApplicatio
  * cohortIds), those they were accepted onto or hold a role in. Null when they are in none of them.
  * An application of theirs still waiting, to any cohort, keeps Apply where it is (S2).
  */
-export async function loadCohortHeading(db: Database, me: Pick<Me, "user" | "capabilities">, now = Date.now()): Promise<CohortHeading | null> {
+export function loadCohortHeading(db: Database, me: Pick<SpaceFrameFacts, "user" | "capabilities">, now = Date.now()): Promise<CohortHeading | null> {
+  return requestScoped(`cohort-heading:${me.user.id}`, () => readCohortHeading(db, me, now));
+}
+
+async function readCohortHeading(db: Database, me: Pick<SpaceFrameFacts, "user" | "capabilities">, now: number): Promise<CohortHeading | null> {
   const ids = me.capabilities.cohortIds;
   if (ids.length === 0) return null;
   const program = { columns: { name: true, startDate: true, endDate: true }, with: { curriculum: { columns: { title: true } } } } as const;
@@ -192,7 +270,11 @@ export async function loadCohortHeading(db: Database, me: Pick<Me, "user" | "cap
 }
 
 /** The person's own completed cohorts that have a certificate, newest first. */
-export async function loadCertificates(db: Database, userId: string): Promise<{ id: string; programName: string }[]> {
+export function loadCertificates(db: Database, userId: string): Promise<{ id: string; programName: string }[]> {
+  return requestScoped(`certificates:${userId}`, () => readCertificates(db, userId));
+}
+
+async function readCertificates(db: Database, userId: string): Promise<{ id: string; programName: string }[]> {
   const applications = await db.query.programApplication.findMany({
     where: and(
       eq(schema.programApplication.userId, userId),

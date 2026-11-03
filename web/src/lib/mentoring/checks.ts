@@ -10,6 +10,7 @@ import {
   type MentoringContext, type RequestRow,
 } from "./requests";
 import { MENTOR_SEES } from "./visibility";
+import { requestScoped } from "@/lib/platform/server/request-scope";
 
 /**
  * Checks on mentor request notes (README.md beside this file, "Checks"). The detectors screen and
@@ -149,8 +150,13 @@ export async function listCases(ctx: MentoringContext, isAdmin: boolean, query: 
  * Open checks this admin may decide (not their own requests'), for the Request notes tab, the Admin
  * sidebar badge and Admin Home (QA4-04): the OPEN queue's rows, along mentor_request_case_queue_idx.
  * A badge must never take an admin page down with it, so a failed read counts none.
+ * Read once per GET for the page and its admin navigation (request-scope.ts).
  */
-export async function countOpenChecks(db: D1Database, viewerId: string): Promise<number> {
+export function countOpenChecks(db: D1Database, viewerId: string): Promise<number> {
+  return requestScoped(`request-note-checks:${viewerId}`, () => readCountOpenChecks(db, viewerId));
+}
+
+async function readCountOpenChecks(db: D1Database, viewerId: string): Promise<number> {
   try {
     const row = await db.prepare(`SELECT count(*) AS count FROM mentor_request_case c JOIN mentor_request r ON r.id = c.requestId
       WHERE c.state = 'OPEN' AND ?1 NOT IN (r.requesterId, r.mentorId)
