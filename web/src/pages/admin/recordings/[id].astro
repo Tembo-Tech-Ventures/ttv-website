@@ -142,8 +142,14 @@ const spaces = await resolveSpacePage(Astro.locals, "adminRecordings");
       <h3 class="text-lg font-semibold text-white">Transcript</h3>
       <form method="POST" class="mt-4 space-y-4">
         <input type="hidden" name="action" value="save-transcript" />
-        <textarea name="transcriptText" rows="10" class="form-control text-sm">{recording.transcriptText ?? ""}</textarea>
-        <textarea name="transcriptVtt" rows="6" class="form-control font-mono text-xs">{recording.transcriptVtt ?? ""}</textarea>
+        <div class="flex flex-col gap-1.5">
+          <label for="transcriptText" class="text-sm font-medium text-white/90">Transcript text</label>
+          <textarea id="transcriptText" name="transcriptText" rows="10" class="form-control text-sm">{recording.transcriptText ?? ""}</textarea>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label for="transcriptVtt" class="text-sm font-medium text-white/90">Captions (WebVTT)</label>
+          <textarea id="transcriptVtt" name="transcriptVtt" rows="6" class="form-control font-mono text-xs">{recording.transcriptVtt ?? ""}</textarea>
+        </div>
         <Button type="submit">
           Save Transcript
         </Button>

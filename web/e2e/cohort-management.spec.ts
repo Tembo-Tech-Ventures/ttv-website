@@ -81,12 +81,6 @@ test.describe("admin cohort management", () => {
       );
       await expect(button).toBeInViewport();
       await expect(button).toBeEnabled();
-      // Admin pages are spaces pages (T14): after a form posts back, the sheet's
-      // cross-document view transition runs for 250ms, and while it does
-      // elementFromPoint finds only <html>. Hit-test once it has settled.
-      await page.waitForFunction(
-        () => !(document as Document & { activeViewTransition?: unknown }).activeViewTransition
-      );
 
       const { x, y } = await button.evaluate((el) =>
         new Promise<{ x: number; y: number }>((resolve, reject) => {
