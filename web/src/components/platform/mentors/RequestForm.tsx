@@ -85,6 +85,29 @@ export function failureText(failure: RequestFailure, message: string | null, nam
  * first (the words changed since the page was read), the drawer shows them
  * with the draft kept, and agreeing there sends too.
  */
+/**
+ * Keeps the drawer's scroller clear of its pinned header and footer: their heights, measured as they
+ * change (the footer grows with the habits and a failure), become the sheet's scroll padding, so a
+ * control that takes focus scrolls into the space between them, never under either (WCAG 2.4.11).
+ */
+function useStickyClearance(form: RefObject<HTMLFormElement>, view: string) {
+  useEffect(() => {
+    const sheet = form.current?.closest<HTMLElement>(".mentor-drawer__sheet");
+    const header = sheet?.querySelector<HTMLElement>(".mentor-drawer__header");
+    const footer = form.current?.querySelector<HTMLElement>(".mentor-drawer__actions--sticky");
+    if (!sheet || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      sheet.style.setProperty("--drawer-head", `${header?.offsetHeight ?? 0}px`);
+      sheet.style.setProperty("--drawer-foot", `${footer?.offsetHeight ?? 0}px`);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    for (const edge of [header, footer]) if (edge) observer.observe(edge);
+    return () => observer.disconnect();
+    // Measured again whenever the drawer changes what it shows: the form is replaced by a step and comes back.
+  }, [form, view]);
+}
+
 export default function RequestForm({
   store, mentor, projects, conduct, headingId, action, closeHref = null, onClose, onSent, onAgreed,
 }: Props) {
@@ -93,6 +116,8 @@ export default function RequestForm({
   const formatRef = useRef<HTMLInputElement>(null);
   const sentRef = useRef<HTMLHeadingElement>(null);
   const conductRef = useRef<HTMLHeadingElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  useStickyClearance(formRef, state.status);
   const ids = useId();
   const name = firstName(mentor.person.name);
   const sending = state.status === "sending";
@@ -161,7 +186,7 @@ export default function RequestForm({
     <>
       {live}
       {header}
-      <form method="post" action={action} className="mentor-drawer__body" onSubmit={submit} noValidate aria-busy={sending || undefined}>
+      <form ref={formRef} method="post" action={action} className="mentor-drawer__body" onSubmit={submit} noValidate aria-busy={sending || undefined}>
         <input type="hidden" name="intent" value={REQUEST_INTENT} />
         <input type="hidden" name="mentorId" value={mentor.person.id} />
         <div>

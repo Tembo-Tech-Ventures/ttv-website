@@ -242,6 +242,8 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* Room for the pinned header and footer (RequestForm measures them), so focus never lands under either. */
+  scroll-padding-block: calc(var(--drawer-head, 0px) + 0.5rem) calc(var(--drawer-foot, 0px) + 0.5rem);
 }
 
 .mentor-drawer__header {
@@ -301,6 +303,10 @@
   .mentor-drawer__header,
   .mentor-drawer__actions--sticky {
     position: static;
+  }
+
+  .mentor-drawer__sheet {
+    scroll-padding-block: 0.5rem;
   }
 }
 

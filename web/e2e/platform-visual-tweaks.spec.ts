@@ -90,6 +90,37 @@ for (const viewport of [{ width: 844, height: 390 }, { width: 640, height: 360 }
   });
 }
 
+// B1 (second re-review): every control in the drawer, reached from the keyboard, scrolls clear of the
+// pinned header and footer: the point at its centre is the control itself (WCAG 2.4.11).
+for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) {
+  for (const conduct of ["required", "agreed"]) {
+    test(`T05: no control is under the drawer's pinned edges when focused (${viewport.width}x${viewport.height}, conduct ${conduct})`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await open(page, `/dev/platform-mentors?persona=wanjiku&view=directory${conduct === "required" ? "&conduct=required" : ""}`);
+      await page.locator("[data-mentor-card]", { hasText: "Joseph Mutua" }).getByRole("link", { name: "Ask for time" }).click();
+      await expect(page.locator("dialog[data-mentor-drawer] textarea")).toBeFocused();
+      const covered: string[] = [];
+      const seen = new Set<string>();
+      for (let step = 0; step < 30; step++) {
+        const result = await page.evaluate(() => {
+          const el = document.activeElement as HTMLElement | null;
+          if (!el || !el.closest("dialog[data-mentor-drawer]")) return null;
+          const box = el.getBoundingClientRect();
+          const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+          const name = `${el.tagName.toLowerCase()}:${(el.textContent || el.getAttribute("aria-label") || (el as HTMLInputElement).value || "").trim().slice(0, 40)}`;
+          return { name, clear: hit !== null && (hit === el || el.contains(hit) || hit.contains(el) && hit.tagName === "LABEL") };
+        });
+        if (!result || seen.has(result.name)) break;
+        seen.add(result.name);
+        if (!result.clear) covered.push(result.name);
+        await page.keyboard.press("Tab");
+      }
+      expect(seen.size, "the drawer has controls to walk").toBeGreaterThan(4);
+      expect(covered).toEqual([]);
+    });
+  }
+}
+
 test("T04: an accepted request leads with the mentor and shows Open conversation, on the panel and the page", async ({ page }, testInfo) => {
   const accepted = (scope: ReturnType<Page["locator"]>) => scope.locator("[data-attention-item]").filter({ has: page.locator("[data-attention-action]") });
   await open(page, "/dev/platform-overlays?persona=wanjiku&page=attention");
