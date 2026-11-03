@@ -110,6 +110,8 @@ export function fullMessage(mentor: Pick<MentorDirectoryItem, "person" | "capaci
  * Said to someone who belongs to an organisation (the INSTITUTION role), so they know what they can do
  * rather than guess (QA4-09): asking is personal, and an affiliation neither grants nor blocks it.
  */
+export const AS_YOURSELF = "You can ask a mentor for time as yourself. Requests come from you, not from your organisation.";
+
 /** Where a filter link lands, so the next Tab goes into the results rather than back through the filters (QA4-18). */
 export const MENTOR_RESULTS_ID = "mentor-results";
 
@@ -127,8 +129,6 @@ export function resultsHeading(
   const chosen = [area, filters.format ? FORMAT_LABELS[filters.format] : null, filters.available ? "Has open spots" : null];
   return [plural(count, "mentor"), ...chosen.filter((label): label is string => label !== null)].join(" · ");
 }
-
-export const AS_YOURSELF = "You can ask a mentor for time as yourself. Requests come from you, not from your organisation.";
 
 /** "Spots used 1 of 3", as a share for the meter. */
 export function usedShare(capacity: MentorCapacity): number {

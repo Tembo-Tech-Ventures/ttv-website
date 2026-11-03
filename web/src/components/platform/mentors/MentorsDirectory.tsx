@@ -199,6 +199,8 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
 
   const ask = useCallback((item: MentorDirectoryItem, from: HTMLElement | null) => {
     if (!hasOpenSpot(item) && serverForm?.mentorId !== item.person.id) return;
+    // A send that finished after its drawer closed left no close to move focus for: a new drawer starts clean.
+    justSent.current = null;
     setActive(item);
     window.history.replaceState(window.history.state, "", askHref(path, base, item.person.id));
     show(from);
