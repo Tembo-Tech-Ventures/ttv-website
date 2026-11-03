@@ -345,7 +345,6 @@ function DrawerHeader({ mentor, name, headingId, closeHref, onClose }: {
   );
 }
 
-/** Before the page is interactive (or without JavaScript), Cancel is a link back to the directory. */
 /**
  * Send and Cancel, pinned to the drawer's bottom edge (T05). While sending also agrees to the habits,
  * they come first in the footer (`agreement`), so what Send agrees to is always in view beside it.
@@ -364,6 +363,7 @@ function SendActions({ agreement, sending, closeHref, onClose }: {
   );
 }
 
+/** Before the page is interactive (or without JavaScript), Cancel is a link back to the directory. */
 function CancelControl({ closeHref, onClose }: { closeHref: string | null; onClose: () => void }) {
   return closeHref ? (
     <a href={closeHref} className={cx("inline-flex h-10 items-center rounded-xl px-4 text-sm font-semibold pointer-coarse:min-h-11", BUTTON_VARIANTS.quiet, FOCUS_RING)}>Cancel</a>

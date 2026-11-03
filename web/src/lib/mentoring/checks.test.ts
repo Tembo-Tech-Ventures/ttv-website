@@ -405,6 +405,14 @@ describe("what the person asking hears of a check (QA4-02)", () => {
     expect(await notices(s)).toEqual([[yours, "Your request to David Kamau was checked and sent. It's with David now.", directory, null]]);
   });
 
+  it("never makes a first name out of a fallback when the mentor's name is blank", async () => {
+    const s = setup();
+    const id = await ask(s, ABUSE);
+    s.database.prepare('UPDATE "user" SET name = ? WHERE id = ?').run("  ", PEOPLE.david);
+    await decide(s, id, "keep");
+    expect((await notices(s)).map((notice) => notice[1])).toEqual(["Your request to a member was checked and sent. It's with them now."]);
+  });
+
   it("tells them a removed request wasn't sent, or was closed once the mentor had read it, and that they may ask again", async () => {
     const held = setup();
     await decide(held, await ask(held, ABUSE), "remove");

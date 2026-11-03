@@ -63,10 +63,10 @@ function checkNotice(request: RequestState): CheckNotice | null {
  * It leads with the request it is about ("Your request to David Kamau", its subject's label), never
  * with the mentor as if they had acted: a check is TTV's, and the mentor may never have seen it (T04).
  */
-const CHECK_SUMMARY: Record<CheckNotice, (yours: string, mentor: string) => string> = {
+const CHECK_SUMMARY: Record<CheckNotice, (yours: string, mentor: string | null) => string> = {
   waiting: (yours) => `${yours} is waiting for a check before it's sent. Nothing for you to do: you'll hear here when it's done.`,
   checking: (yours) => `${yours} is being checked by TTV. Nothing for you to do: you'll hear here when it's done.`,
-  sent: (yours, mentor) => `${yours} was checked and sent. It's with ${mentor.split(/\s+/u)[0]} now.`,
+  sent: (yours, mentor) => `${yours} was checked and sent. It's with ${firstNameOf(mentor)} now.`,
   not_sent: (yours) => `${yours} wasn't sent, after a check. You can ask again with a new note.`,
   closed: (yours) => `${yours} was closed, after a check. You can ask again with a new note.`,
 };
@@ -80,11 +80,13 @@ function checkItem(request: RequestState): EventItem | null {
     userId: request.requesterId, actorId: null, space: "community", kind: "mentor_checked",
     subject: { kind: "mentorRequest", id: request.id, href: MENTOR_PAGE_PATHS.directory, label: yours },
     // access.ts reads the notice at $[2] and its time at $[3] of this key, to show each only while it describes the check: keep them in place.
-    summary: CHECK_SUMMARY[notice](yours, nameOf(request.mentorName)), eventKey: JSON.stringify(["mentor_checked", request.id, notice, at]),
+    summary: CHECK_SUMMARY[notice](yours, request.mentorName), eventKey: JSON.stringify(["mentor_checked", request.id, notice, at]),
   };
 }
 
 const nameOf = (name: string | null) => name?.trim() || "a member";
+/** A first name, from the stored name before any fallback: "them" when there is none. */
+const firstNameOf = (name: string | null) => name?.trim().split(/\s+/u)[0] || "them";
 /** A person's name to start a sentence with, as the attention row sets it in bold (T04): "David Kamau accepted…". */
 const leadOf = (name: string | null) => {
   const named = nameOf(name);

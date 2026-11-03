@@ -66,6 +66,30 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
   });
 }
 
+// B1 (re-review): on a short screen the pinned edges let go, so the note being written stays in view,
+// and the habits still come straight before Send.
+for (const viewport of [{ width: 844, height: 390 }, { width: 640, height: 360 }]) {
+  test(`T05: the note being written stays in view on a short screen (${viewport.width}x${viewport.height}), habits just before Send`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await open(page, "/dev/platform-mentors?persona=wanjiku&view=directory&conduct=required");
+    await page.locator("[data-mentor-card]", { hasText: "Joseph Mutua" }).getByRole("link", { name: "Ask for time" }).click();
+    const drawer = page.locator("dialog[data-mentor-drawer]");
+    const note = drawer.getByRole("textbox", { name: "What would you like help with?" });
+    await note.focus();
+    await page.keyboard.type("Could you look at how my route planner saves trips when the phone is offline?");
+    await expect(note).toBeInViewport();
+    // Nothing covers it: the point at its centre is the field itself.
+    expect(await note.evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      return document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) === el;
+    })).toBe(true);
+    const send = drawer.getByRole("button", { name: "Agree and send request" });
+    await send.scrollIntoViewIfNeeded();
+    await expect(send).toBeInViewport();
+    await expect(drawer.getByRole("heading", { name: "Before you send: how we talk to each other" })).toBeInViewport();
+  });
+}
+
 test("T04: an accepted request leads with the mentor and shows Open conversation, on the panel and the page", async ({ page }, testInfo) => {
   const accepted = (scope: ReturnType<Page["locator"]>) => scope.locator("[data-attention-item]").filter({ has: page.locator("[data-attention-action]") });
   await open(page, "/dev/platform-overlays?persona=wanjiku&page=attention");
