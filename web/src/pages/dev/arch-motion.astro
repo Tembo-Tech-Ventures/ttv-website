@@ -1,0 +1,203 @@
+---
+/**
+ * ARCH-1 motion spike (throwaway, DEV only): the signature interaction in the leading option. The
+ * spaces chrome persists across ClientRouter swaps; the space-tab sheet change starts at the click;
+ * a card opens its thread as a rail beside the list. `?delay=ms` holds the server's answer, to see the
+ * click-time beat under a slow server. `?persona=` as in /dev/platform-shell.
+ */
+import type { SpaceId } from "@/lib/platform/contracts";
+import { SpaceId as SpaceIdSchema } from "@/lib/platform/contracts";
+import SpacesLayout from "@/layouts/SpacesLayout.astro";
+import HarnessSidebar from "@/components/platform/shell/harness/HarnessSidebar.astro";
+import CardThreadSpike, { type SpikeCard } from "@/components/platform/shell/harness/CardThreadSpike";
+import { HARNESS_PERSONAS, isHarnessPersona } from "@/components/platform/shell/harness/personas";
+import { SPACE_LABEL } from "@/components/platform/shell/space-routes";
+
+if (!import.meta.env.DEV) {
+  return new Response("Not found", { status: 404 });
+}
+
+const params = Astro.url.searchParams;
+const personaParam = params.get("persona");
+const persona = isHarnessPersona(personaParam) ? personaParam : "wanjiku";
+const me = HARNESS_PERSONAS[persona];
+const requested = SpaceIdSchema.safeParse(params.get("space"));
+const space: SpaceId = requested.success && me.spaces.includes(requested.data) ? requested.data : me.spaces[0];
+const delay = Math.min(Number(params.get("delay") ?? 600) || 0, 5000);
+await new Promise((resolve) => setTimeout(resolve, delay));
+const keep = `&delay=${delay}`;
+const spaceHrefs = Object.fromEntries(me.spaces.map((id) => [id, `/dev/arch-motion?persona=${persona}&space=${id}${keep}`])) as Record<SpaceId, string>;
+
+const people = [
+  ["Brian Otieno", "brian"],
+  ["Akinyi Odhiambo", "akinyi"],
+  ["Kipchoge Mutai", "kipchoge"],
+  ["Njeri Wambui", "njeri"],
+] as const;
+const topics: Record<string, string[]> = {
+  cohort: ["Week 6 project check-in", "Deploying to Workers: D1 migrations", "Pairing on the auth bug"],
+  community: ["Shipped my first open-source PR", "Design crit: a mentor dashboard", "Looking for a study partner"],
+  profile: ["Your portfolio was viewed", "A mentor confirmed your project", "Draft: about me"],
+};
+const cards: SpikeCard[] = (topics[space] ?? topics.community).map((title, index) => {
+  const [author, authorId] = people[index % people.length];
+  return {
+    id: `${space}-${index + 1}`,
+    author,
+    authorId,
+    title,
+    body: "Synthetic fixture text for the motion spike. Nothing here is a real person or post.",
+    replies: [{ id: `${space}-${index + 1}-r1`, author: people[(index + 1) % people.length][0], authorId: people[(index + 1) % people.length][1], body: "Nice — what did you try first?" }],
+  };
+});
+---
+
+<SpacesLayout
+  me={me}
+  space={space}
+  title={SPACE_LABEL[space]}
+  overlays={[]}
+  harness={{ account: { signOut: { kind: "link", href: "#signed-out", label: "Sign out" }, feedback: false }, spaceHrefs }}
+>
+  <HarnessSidebar slot="sidebar" space={space} />
+  <article data-harness-page={space}>
+    <h1 class="text-4xl tracking-heading text-ink-primary sm:text-5xl">{SPACE_LABEL[space]}</h1>
+    <p class="mt-3 max-w-2xl text-base text-ink-secondary">Open a card to read its thread beside the list.</p>
+    <div class="mt-8">
+      <CardThreadSpike client:load cards={cards} />
+    </div>
+  </article>
+</SpacesLayout>
+
+<style is:global>
+  astro-dev-toolbar {
+    display: none !important;
+  }
+  .spike-threads {
+    display: grid;
+    gap: 1.25rem;
+    align-items: start;
+  }
+  @media (min-width: 64rem) {
+    .spike-threads[data-open] {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 26rem);
+    }
+  }
+  @media (max-width: 63.99rem) {
+    .spike-threads[data-open] .spike-threads__list {
+      display: none;
+    }
+  }
+  .spike-threads__list {
+    display: grid;
+    gap: 0.75rem;
+  }
+  .spike-card {
+    border-radius: 1.125rem;
+    border: 1px solid var(--color-hairline);
+    background: var(--color-bg-raised, #fff);
+  }
+  .spike-card__button {
+    display: flex;
+    gap: 0.875rem;
+    width: 100%;
+    padding: 1rem 1.125rem;
+    text-align: left;
+    border-radius: inherit;
+  }
+  .spike-rail {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem;
+    border-radius: 1.375rem;
+    border: 1px solid var(--color-hairline);
+    background: color-mix(in oklab, var(--color-ground) 82%, white);
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.6) inset, 0 18px 40px -24px rgb(1 61 57 / 0.45);
+  }
+  .spike-rail__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .spike-rail__close {
+    inline-size: 2.75rem;
+    block-size: 2.75rem;
+    border-radius: 0.75rem;
+    font-size: 1.5rem;
+  }
+  .spike-rail__replies {
+    display: grid;
+    gap: 0.625rem;
+  }
+  .spike-reply {
+    display: flex;
+    gap: 0.625rem;
+    transition: opacity 200ms linear;
+  }
+  .spike-reply[data-pending] {
+    opacity: 0.6;
+  }
+  .spike-rail__composer {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .spike-rail__composer input {
+    flex: 1;
+    min-height: 2.75rem;
+    padding: 0 0.75rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-hairline);
+  }
+  .spike-rail__composer button {
+    min-height: 2.75rem;
+    padding: 0 1rem;
+    border-radius: 0.75rem;
+    background: var(--color-dark);
+    color: white;
+    font-weight: 600;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .spike-reply:last-child {
+      animation: spike-reply-in 220ms cubic-bezier(0.16, 0.9, 0.3, 1) both;
+    }
+    /* The card lifts into the head of the rail: position and size morph, no fade, paper not light. */
+    ::view-transition-group(thread-origin) {
+      animation-duration: 280ms;
+      animation-timing-function: cubic-bezier(0.16, 0.9, 0.3, 1);
+    }
+    ::view-transition-old(thread-origin),
+    ::view-transition-new(thread-origin) {
+      animation: none;
+      mix-blend-mode: normal;
+      height: 100%;
+    }
+    ::view-transition-old(thread-origin) {
+      display: none;
+    }
+    /* The rail is a second sheet: it slides in from the side it lives on, after the card has moved. */
+    ::view-transition-new(thread-rail) {
+      animation: 300ms cubic-bezier(0.16, 0.9, 0.3, 1) 40ms both spike-rail-in;
+    }
+    ::view-transition-old(thread-rail) {
+      animation: 200ms cubic-bezier(0.3, 0, 0.2, 1) both spike-rail-out;
+    }
+  }
+  @keyframes spike-rail-in {
+    from {
+      translate: 2.5rem 0;
+      opacity: 0;
+    }
+  }
+  @keyframes spike-rail-out {
+    to {
+      translate: 2.5rem 0;
+      opacity: 0;
+    }
+  }
+  @keyframes spike-reply-in {
+    from {
+      translate: 0 0.5rem;
+      opacity: 0;
+    }
+  }
+</style>

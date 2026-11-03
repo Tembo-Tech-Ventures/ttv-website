@@ -79,10 +79,20 @@ export default function SpaceFile({
   sheetAs,
   className,
 }: SpaceFileProps) {
-  const ordered = tabs.toSorted((a, b) => (ORDER.get(a.space) ?? 0) - (ORDER.get(b.space) ?? 0));
-
   return (
-    <div className={cx("space-file", className)} data-space-file={active} data-tabs={ordered.length}>
+    <div className={cx("space-file", className)} data-space-file={active} data-tabs={tabs.length}>
+      <SpaceFileRow tabs={tabs} active={active} person={person} start={start} end={end} label={label} />
+      <Sheet space={active} as={sheetAs}>
+        {children}
+      </Sheet>
+    </div>
+  );
+}
+
+/** ARCH-1 spike: the tab row alone, so a persistent chrome island can own it while the sheet stays server HTML. */
+export function SpaceFileRow({ tabs, active, person, start, end, label = "Spaces" }: Omit<SpaceFileProps, "children" | "sheetAs" | "className">) {
+  const ordered = tabs.toSorted((a, b) => (ORDER.get(a.space) ?? 0) - (ORDER.get(b.space) ?? 0));
+  return (
       <div className="space-file__row">
         {start && <div className="space-file__start">{start}</div>}
         <nav aria-label={label} className="space-file__nav">
@@ -94,9 +104,5 @@ export default function SpaceFile({
         </nav>
         {end && <div className="space-file__end">{end}</div>}
       </div>
-      <Sheet space={active} as={sheetAs}>
-        {children}
-      </Sheet>
-    </div>
   );
 }

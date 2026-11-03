@@ -9,6 +9,8 @@ export default defineConfig({
   // Canonical origin. Certificates print their own verification URL, which must
   // name the public domain rather than whichever host served the request.
   site: "https://tembotechventures.com",
+  // ARCH-1 spike: no router prefetch (spaces pages are no-store, so it only doubles requests; PERF-1 §3.6).
+  prefetch: false,
   // Keep runtime image processing on Cloudflare Images. In particular, do not
   // expose Astro's Sharp service while Astro 6 remains below the AVIF fixes in
   // Astro 7.2.8 / Sharp 0.35.4.

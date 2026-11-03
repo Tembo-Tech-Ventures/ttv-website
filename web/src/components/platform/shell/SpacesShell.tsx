@@ -74,7 +74,7 @@ function tabbable(element: HTMLElement): boolean {
     : getComputedStyle(element).visibility !== "hidden";
 }
 
-function PersonFooter({ person }: { person: PersonSummary }) {
+export function PersonFooter({ person }: { person: PersonSummary }) {
   return (
     <div className="spaces-shell__person">
       <Avatar id={person.id} name={person.name} src={person.avatarUrl ?? undefined} size="md" decorative />
