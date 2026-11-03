@@ -27,6 +27,7 @@ export type SpacePageKey =
   | "mentoring"
   | "confirm"
   | "discover"
+  | "profile"
   | "portfolio"
   | "writing"
   | "opportunities"
@@ -139,6 +140,7 @@ export const PAGE_SPACES: Readonly<Record<SpacePageKey, readonly SpaceId[]>> = {
   mentoring: ["mentoring"],
   confirm: ["mentoring", "admin"],
   discover: ["discover"],
+  profile: ["profile"],
   portfolio: ["profile"],
   writing: ["profile"],
   opportunities: ["profile"],
@@ -163,7 +165,9 @@ export const SPACE_PAGE_PATHS = {
   mentoring: SPACE_PATHS.mentoring,
   confirm: "/dashboard/mentoring/confirm",
   discover: SPACE_PATHS.discover,
-  portfolio: SPACE_PATHS.profile,
+  profile: SPACE_PATHS.profile,
+  // The editor; the space opens on the Overview (T01).
+  portfolio: "/dashboard/me/portfolio",
   writing: "/dashboard/me/writing",
   opportunities: "/dashboard/me/opportunities",
   leads: "/dashboard/me/leads",
@@ -382,6 +386,7 @@ function profile(facts: SidebarFacts): SidebarModel {
     description: "Your public story and what it brings in.",
     groups: [
       ...group(facts, undefined, [
+        { key: "overview", page: "profile", label: "Overview", icon: "overview" },
         { key: "portfolio", page: "portfolio", label: "Public profile", icon: "profile" },
         visible.has("writing") && { key: "writing", page: "writing", label: "Writing", icon: "writing" },
         visible.has("opportunities") && { key: "opportunities", page: "opportunities", label: "Opportunities", icon: "opportunities" },

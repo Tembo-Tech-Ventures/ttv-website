@@ -71,9 +71,9 @@ export function onboardingFor(locals: App.Locals, me: Me): boolean {
 
 /**
  * The landing pages a person can arrive on, which carry the status cards and the one-time card, Account,
- * and the Profile tab's public profile, which frames itself for mentors and organisations (QAO-07).
+ * and the Profile tab's Overview and public profile, which frame themselves for mentors and organisations (QAO-07).
  */
-const ONBOARDING_PAGES: ReadonlySet<SpacePageKey> = new Set(["cohort", "journey", "mentoring", "discover", "account", "portfolio"]);
+const ONBOARDING_PAGES: ReadonlySet<SpacePageKey> = new Set(["cohort", "journey", "mentoring", "discover", "account", "profile", "portfolio"]);
 
 /**
  * The person's onboarding, read for the pages that show it: the landing pages,

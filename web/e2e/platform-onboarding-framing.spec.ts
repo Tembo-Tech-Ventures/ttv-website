@@ -587,22 +587,31 @@ test.describe("F-6: what the onboarding QA found (QAO-01 to QAO-10)", () => {
         await routeFonts(page);
         await signIn(page.context(), baseURL!, session);
       }
-      await open(page, "/dashboard/me");
-      await expect(page.getByText("Your portfolio unlocks when you complete a cohort"), persona).toHaveCount(0);
-      await expect(page.getByRole("link", { name: "Browse Programs" }), persona).toHaveCount(0);
-      const note = page.getByRole("region", { name: "Public profiles come with a cohort" });
-      await expect(note, persona).toContainText("A public builder profile opens when a member completes a cohort. To build and learn as well, choose it in Account.");
-      await expect(note.getByRole("link", { name: "Account" })).toHaveAttribute("href", "/dashboard/account#taking-part");
-      await noSideways(page);
-      await page.screenshot({ path: evidence(`f6-profile-${persona}`) });
-      await runAxe(page, test.info(), `public profile, ${persona}`);
+      // The Overview (T01) and the editor both frame the profile for them.
+      for (const [path, name] of [["/dashboard/me", "overview"], ["/dashboard/me/portfolio", "public profile"]] as const) {
+        await open(page, path);
+        await expect(page.getByText("Your portfolio unlocks when you complete a cohort"), persona).toHaveCount(0);
+        await expect(page.getByText("Your public builder page opens when you complete a cohort"), persona).toHaveCount(0);
+        await expect(page.getByRole("link", { name: /^Browse programs$/i }), persona).toHaveCount(0);
+        await expect(page.getByRole("link", { name: /^Apply to a cohort/ }), persona).toHaveCount(0);
+        const note = page.getByRole("region", { name: "Public profiles come with a cohort" });
+        await expect(note, persona).toContainText("A public builder profile opens when a member completes a cohort. To build and learn as well, choose it in Account.");
+        await expect(note.getByRole("link", { name: "Account" })).toHaveAttribute("href", "/dashboard/account#taking-part");
+        await noSideways(page);
+        await page.screenshot({ path: evidence(`f6-profile-${persona}-${name.replace(" ", "-")}`) });
+        await runAxe(page, test.info(), `${name}, ${persona}`);
+      }
     }
   });
 
   test("QAO-07: a member keeps the profile lock, which is theirs to open", async ({ page, baseURL }) => {
     await as(page, baseURL, "onb-mercy");
-    await open(page, "/dashboard/me");
+    await open(page, "/dashboard/me/portfolio");
     await expect(page.getByText("Your portfolio unlocks when you complete a cohort")).toBeVisible();
+    await expect(page.locator("[data-partner-profile]")).toHaveCount(0);
+    // The Overview says the same, in its own words, and never frames them as a partner.
+    await open(page, "/dashboard/me");
+    await expect(page.getByRole("heading", { level: 2, name: "Your public builder page opens when you complete a cohort" })).toBeVisible();
     await expect(page.locator("[data-partner-profile]")).toHaveCount(0);
   });
 });
