@@ -6,7 +6,8 @@ import { countPendingAccessRequests } from "@/lib/admin/access-requests";
 import { countPendingModeration } from "@/lib/channels/moderation/queue";
 import { countOpenChecks } from "@/lib/mentoring/checks";
 import { isFlagEnabled } from "@/lib/platform/server/flags";
-import type { AdminNavFacts } from "./admin-nav";
+import { recordError } from "@/lib/observability/errors";
+import { NO_ADMIN_FACTS, type AdminNavFacts } from "./admin-nav";
 
 /** Counts a page has already read, so the navigation does not read them again. */
 export interface AdminNavCounts {
@@ -23,7 +24,29 @@ export interface AdminNavCounts {
  * off for them: there is no queue to link to. Its badge also counts the open request-note checks
  * this admin may decide while `mentor_requests` is on (QA4-04), which the Request notes tab lists.
  */
-export async function loadAdminNavFacts(locals: App.Locals, origin: string, counts: AdminNavCounts = {}): Promise<AdminNavFacts & { pendingCases: number | null; pendingRequestNotes: number }> {
+export async function loadAdminNavFacts(locals: App.Locals, origin: string, counts: AdminNavCounts = {}): Promise<LoadedAdminNav> {
+  try {
+    return await readAdminNavFacts(locals, origin, counts);
+  } catch (error) {
+    // The navigation must never take its page down: the entries are listed bare, without counts,
+    // and the failure is recorded. recordError never throws; it reports its own ledger failures.
+    await recordError(env.DB, { source: "request", route: "/admin", error, level: "warning" });
+    return { ...NO_ADMIN_FACTS, ...tools(origin), pendingCases: null, pendingRequestNotes: 0 };
+  }
+}
+
+export type LoadedAdminNav = AdminNavFacts & { pendingCases: number | null; pendingRequestNotes: number };
+
+/** Which optional admin tools exist in this deployment: configuration only, no reads. */
+function tools(origin: string): Pick<AdminNavFacts, "agentAuthEnabled" | "stagingDemoEnabled" | "dataMigrationEnabled"> {
+  return {
+    agentAuthEnabled: isAgentAuthEnabled(env.AGENT_AUTH_ENABLED),
+    stagingDemoEnabled: demoEnabled(env.DEPLOYMENT_ENVIRONMENT, env.STAGING_DEMO_ENABLED, origin),
+    dataMigrationEnabled: isLegacyImportEnabled(env.DEPLOYMENT_ENVIRONMENT),
+  };
+}
+
+async function readAdminNavFacts(locals: App.Locals, origin: string, counts: AdminNavCounts): Promise<LoadedAdminNav> {
   const viewerId = locals.user?.id ?? "";
   const flagContext = { db: env.DB, env, user: locals.user ?? null, isAdmin: true, locals };
   const channelsOn = counts.pendingModeration !== undefined || await isFlagEnabled(flagContext, "channels");
@@ -37,9 +60,7 @@ export async function loadAdminNavFacts(locals: App.Locals, origin: string, coun
       : Promise.resolve([null, 0] as const),
   ]);
   return {
-    agentAuthEnabled: isAgentAuthEnabled(env.AGENT_AUTH_ENABLED),
-    stagingDemoEnabled: demoEnabled(env.DEPLOYMENT_ENVIRONMENT, env.STAGING_DEMO_ENABLED, origin),
-    dataMigrationEnabled: isLegacyImportEnabled(env.DEPLOYMENT_ENVIRONMENT),
+    ...tools(origin),
     pendingAccessRequests,
     // The queue's count is the message cases' alone (the in-place swap reports it); request notes are added.
     pendingModeration: pendingModeration === null ? null : pendingModeration + pendingRequestNotes,
