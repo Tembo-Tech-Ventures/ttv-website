@@ -28,7 +28,10 @@ import type { Me, SpaceId } from "@/lib/platform/contracts";
 import { readLastSpaceCookie } from "@/lib/platform/client/spaces-selection";
 import ClientErrorBuffer from "@/components/feedback/ClientErrorBuffer.astro";
 import FeedbackWidget from "@/components/feedback/FeedbackWidget";
-import SpacesShell from "@/components/platform/shell/SpacesShell";
+import { PersonFooter } from "@/components/platform/shell/SpacesShell";
+import SpacesChrome from "@/components/platform/shell/SpacesChrome";
+import { ClientRouter } from "astro:transitions";
+import { PiX } from "react-icons/pi";
 import { canRenderSpace } from "@/components/platform/shell/access";
 import type { ShellAccount } from "@/components/platform/shell/AccountMenu";
 import type { ShellOverlay } from "@/components/platform/shell/overlays";
@@ -72,7 +75,12 @@ const shell = {
   overlays,
   persistPreference: !harness,
   spaceHrefs: harness?.spaceHrefs,
+  hasSidebar: Astro.slots.has("sidebar"),
 };
+const hasSidebar = shell.hasSidebar;
+const sidebarLabel = `${SPACE_LABEL[space]} menu`;
+// ARCH-1 spike: `?mpa` (or the ttv-arch=mpa cookie) turns the router off to compare in one build.
+const router = !Astro.url.searchParams.has("mpa") && !(Astro.request.headers.get("cookie") ?? "").includes("ttv-arch=mpa");
 ---
 
 <!doctype html>
@@ -85,29 +93,62 @@ const shell = {
     <title>{pageTitle(titlePrefix + (title === SPACE_LABEL[space] ? title : `${title} · ${SPACE_LABEL[space]}`))}</title>
     {signedIn && <ClientErrorBuffer />}
     <SheetTransition sheet={`space:${space}`} />
+    {router && <ClientRouter fallback="none" />}
+    <script>
+      // ARCH-1 spike: T15's same-sheet skip, for soft navigations (pagereveal does not fire for them).
+      document.addEventListener("astro:before-swap", (event) => {
+        const from = document.querySelector<HTMLElement>(".spaces-shell")?.dataset.space;
+        const to = event.newDocument.querySelector<HTMLElement>(".spaces-shell")?.dataset.space;
+        if (from && from === to) event.viewTransition.skipTransition();
+      });
+      // Route-change focus, as a full load leaves it: unless the new page placed focus itself, the next
+      // Tab reaches "Skip to content". The router's own announcer reads the new title.
+      document.addEventListener("astro:page-load", () => {
+        const active = document.activeElement;
+        if (active && active !== document.body && !active.closest("[data-astro-transition-persist]")) return;
+        document.getElementById("spaces-route-start")?.focus({ preventScroll: true });
+      });
+      // Timing for the spike's measurements: when the new page's h1 is in the DOM.
+      document.addEventListener("astro:after-swap", () => {
+        (window as unknown as { __archSwaps?: number }).__archSwaps = ((window as unknown as { __archSwaps?: number }).__archSwaps ?? 0) + 1;
+      });
+    </script>
   </head>
   <body class="h-full overflow-hidden overscroll-none bg-ground">
-    {
-      /*
-       * Two branches, not a conditional slot: an island receives a named slot
-       * whenever one is written, even inside a false expression, and an empty
-       * sidebar would still bring its drawer and menu button.
-       */
-      Astro.slots.has("sidebar") ? (
-        <SpacesShell client:load {...shell}>
-          <slot name="sidebar" slot="sidebar" />
-          <slot />
-        </SpacesShell>
-      ) : (
-        <SpacesShell client:load {...shell}>
-          <slot />
-        </SpacesShell>
-      )
-    }
+    {/* ARCH-1 spike: the chrome is two persisted islands; the sheet, sidebar and page are server HTML the router swaps. */}
+    <div class="spaces-shell" data-space={space} data-sidebar={hasSidebar ? "" : undefined} data-drawer="closed">
+      <span id="spaces-route-start" tabindex="-1"></span>
+      <a href="#spaces-main" class="spaces-shell__skip">Skip to content</a>
+      <div class="space-file spaces-shell__file" data-space-file={space} data-tabs={me.spaces.length}>
+        <SpacesChrome client:load transition:persist="spaces-chrome-row" {...shell} part="row" />
+        <div data-sheet={space} data-space-tone={space} class="platform-sheet">
+          <div class="spaces-shell__body">
+            {
+              hasSidebar && (
+                <>
+                  <div aria-hidden="true" class="spaces-shell__scrim" />
+                  <aside id="space-sidebar" aria-label={sidebarLabel} tabindex="-1" class="spaces-shell__sidebar">
+                    <a href="#spaces-main" data-drawer-close aria-label={`Close ${sidebarLabel}`} class="spaces-shell__close inline-grid size-10 place-items-center rounded-xl text-ink-secondary hover:bg-ink-primary/7 hover:text-ink-primary pointer-coarse:size-11">
+                      <PiX aria-hidden="true" className="size-5" />
+                    </a>
+                    <div class="spaces-shell__sidebar-content"><slot name="sidebar" /></div>
+                    <PersonFooter person={me.user} />
+                  </aside>
+                </>
+              )
+            }
+            <main id="spaces-main" tabindex="0" class="spaces-shell__main">
+              <slot />
+            </main>
+          </div>
+        </div>
+      </div>
+      <SpacesChrome client:load transition:persist="spaces-chrome-bottom" {...shell} part="bottom" />
+    </div>
     <slot name="overlays" />
     {
       /* No floating button: it would sit on the bottom bar. The account menu opens the form. */
-      account.feedback && <FeedbackWidget client:idle showLauncher={false} />
+      account.feedback && <FeedbackWidget client:idle transition:persist="feedback-widget" showLauncher={false} />
     }
   </body>
 </html>
