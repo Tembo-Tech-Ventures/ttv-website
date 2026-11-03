@@ -516,7 +516,12 @@ the rest.
   messages (404). An admin who is one of its two members never sees its cases
   in the queue, the count or the notices, and deciding one is 403. The author
   hears of a hide and a decision as anywhere ("in a direct conversation",
-  never naming the other member), and may ask for a review.
+  never naming the other member), and may ask for a review. Members never
+  moderate it (403). Two things to know about "that message alone": a member
+  may report one of Tembo's answers there, whose text can quote or sum up the
+  conversation it answered, and admins see that text; and admin tokens on
+  `/api/mcp` (`list_moderation_queue` with `admin:read`, `moderate_message`
+  with `admin:write`) see and decide these cases as the page does.
 - **Page functions** (`moderation/queue.ts`, `moderation/actions.ts`), so
   `/admin/moderation` (U-2.4) needs no self-fetch and refuses exactly what the
   API refuses: `listModerationQueue(db, viewer, query)` (403 unless admin,

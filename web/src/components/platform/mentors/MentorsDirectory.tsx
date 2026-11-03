@@ -161,6 +161,9 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
   );
   const [ownRequests] = useState(() => createMentorRequestsStore({ as: "requester", initial: props.ownRequests, ...(api ? { api } : {}) }));
   const [active, setActive] = useState<MentorDirectoryItem | null>(null);
+  // Agreeing in one drawer holds for every drawer after it on this page (QA4-05).
+  const [agreed, setAgreed] = useState(conduct.agreed);
+  const agreedOnce = useCallback(() => setAgreed(true), []);
   const closed = useCallback(() => {
     setActive(null);
     window.history.replaceState(window.history.state, "", directoryHref(path, base) + window.location.hash);
@@ -241,7 +244,7 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
           <div className="mentor-drawer__sheet">
             <RequestForm
               store={form} mentor={shownMentor} projects={projects} headingId={headingId}
-              conduct={{ ...conduct, action: askHref(path, base, shownMentor.person.id) }}
+              conduct={{ ...conduct, agreed, action: askHref(path, base, shownMentor.person.id) }}
               action={askHref(path, base, shownMentor.person.id)} closeHref={directoryHref(path, base)}
               onClose={() => {}} onSent={sent}
             />
@@ -256,9 +259,10 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
               store={form}
               mentor={active}
               projects={projects}
-              conduct={{ ...conduct, action: askHref(path, base, active.person.id) }}
+              conduct={{ ...conduct, agreed, action: askHref(path, base, active.person.id) }}
               action={askHref(path, base, active.person.id)}
               headingId={headingId}
+              onAgreed={agreedOnce}
               onClose={dialog.hide}
               onSent={sent}
             />

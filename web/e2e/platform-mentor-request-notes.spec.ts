@@ -154,8 +154,11 @@ test("a mentor reports a note; the person asking sees only that it's being check
   const back = david.locator("[data-mentor-request]").filter({ hasText: note });
   await expect(back.getByRole("button", { name: "Accept" })).toBeVisible();
   // Answered, so nothing waits between Wanjiku and David for the specs that run after this one.
+  // "Not this month" opens an optional note (QA4-03); sending it empty is the one-tap answer.
   await back.getByRole("button", { name: "Not this month" }).click();
+  await back.getByRole("button", { name: "Send: not this month" }).click();
   await expect(back).toContainText("Not this month");
+  await expect(back.getByRole("button", { name: "Accept" })).toHaveCount(0);
 });
 
 test("a reported note an admin removes reads as closed to the person asking, never as declined", async ({ browser, baseURL }) => {

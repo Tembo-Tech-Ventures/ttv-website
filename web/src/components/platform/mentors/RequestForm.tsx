@@ -36,6 +36,8 @@ interface Props {
   headingId: string;
   /** Where the form posts without JavaScript: this page, with this drawer open. */
   action: string;
+  /** Told once a send here recorded the agreement, so the next drawer opened on this page does not ask again. */
+  onAgreed?: () => void;
   /**
    * Before the page is interactive (or without JavaScript), the drawer is a plain panel: closing it
    * is a link back to the directory. Once interactive, it is a dialog and closing is `onClose`.
@@ -83,7 +85,9 @@ export function failureText(failure: RequestFailure, message: string | null, nam
  * first (the words changed since the page was read), the drawer shows them
  * with the draft kept, and agreeing there sends too.
  */
-export default function RequestForm({ store, mentor, projects, conduct, headingId, action, closeHref = null, onClose, onSent }: Props) {
+export default function RequestForm({
+  store, mentor, projects, conduct, headingId, action, closeHref = null, onClose, onSent, onAgreed,
+}: Props) {
   const state = useRequestForm(store);
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const formatRef = useRef<HTMLInputElement>(null);
@@ -92,8 +96,13 @@ export default function RequestForm({ store, mentor, projects, conduct, headingI
   const ids = useId();
   const name = firstName(mentor.person.name);
   const sending = state.status === "sending";
-  // Agreed as the page read it, or here since: a later send (after a refusal) does not agree again.
+  // Agreed as the page knows it (read at load, or in an earlier drawer: each drawer mounts afresh), or here
+  // since: a later send (after a refusal) does not agree again.
   const [agreed, setAgreed] = useState(conduct.agreed);
+  const agreedNow = () => {
+    setAgreed(true);
+    onAgreed?.();
+  };
   const asksAgreement = !agreed && conduct.canAgree;
   // Agreeing from the habits step keeps that step in view while the request goes.
   const [fromStep, setFromStep] = useState(false);
@@ -116,7 +125,7 @@ export default function RequestForm({ store, mentor, projects, conduct, headingI
     setFromStep(step);
     const sent = await store.submit(agreement.options);
     setFromStep(false);
-    if (agreement.recorded()) setAgreed(true);
+    if (agreement.recorded()) agreedNow();
     if (sent) onSent(sent);
     else if (store.getState().errors.note) noteRef.current?.focus();
     else if (store.getState().errors.format) formatRef.current?.focus();

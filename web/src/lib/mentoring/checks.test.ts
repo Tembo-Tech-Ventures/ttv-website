@@ -401,7 +401,8 @@ describe("what the person asking hears of a check (QA4-02)", () => {
     const id = await ask(s, ABUSE);
     expect(await notices(s)).toEqual([[yours, WAITING, directory, null]]);
     await decide(s, id, "keep");
-    expect(await notices(s)).toEqual([[yours, WAITING, directory, null], [yours, "Checked and sent. It's waiting for David Kamau now.", directory, null]]);
+    // "Waiting" no longer holds, so only what the decision did is listed.
+    expect(await notices(s)).toEqual([[yours, "Checked and sent. It's waiting for David Kamau now.", directory, null]]);
   });
 
   it("tells them a removed request wasn't sent, or was closed once the mentor had read it, and that they may ask again", async () => {
@@ -412,17 +413,20 @@ describe("what the person asking hears of a check (QA4-02)", () => {
     const id = await ask(read, {});
     await report(read, id);
     await decide(read, id, "remove");
-    expect((await notices(read)).map((notice) => notice[1])).toEqual([CHECKING, "It was closed, after a check. You can ask again with a new note."]);
+    expect((await notices(read)).map((notice) => notice[1])).toEqual(["It was closed, after a check. You can ask again with a new note."]);
   });
 
   it("never says declined, never names who opened the check, and says nothing of a decision on a request they withdrew", async () => {
     const s = setup();
     const id = await ask(s, {});
     await report(s, id);
-    await step(s, s.call("withdrawMentorRequest", { id, body: {} }));
-    await decide(s, id, "remove");
     const all = await notices(s);
     expect(all.map((notice) => notice[1])).toEqual([CHECKING]);
+    // Withdrawn, the check no longer concerns them: its notice goes, and the decision adds none.
+    await step(s, s.call("withdrawMentorRequest", { id, body: {} }));
+    expect(await notices(s)).toEqual([]);
+    await decide(s, id, "remove");
+    expect(await notices(s)).toEqual([]);
     expect(JSON.stringify(all.map(([label, summary]) => [label, summary]))).not.toMatch(/declin|report|mentor|Clef|Tembo|Amina/i);
     // Nobody else hears these notices.
     for (const user of [PEOPLE.david, PEOPLE.amina]) expect(await notices(s, user)).toEqual([]);

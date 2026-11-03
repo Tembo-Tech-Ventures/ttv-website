@@ -160,6 +160,9 @@ describe("moderation in a conversation (QA4-01)", () => {
     await s.channelCall("reportMessage", { id: root, body: { reason: "Asks for my PIN." } });
     const refused = await s.channelCall("moderateMessage", { id: other, user: PEOPLE.amina, body: { action: "hide", reason: "Not reported" } });
     expect(refused.status).toBe(404);
+    // Its members never moderate it.
+    const member = await s.channelCall("moderateMessage", { id: root, body: { action: "hide", reason: "Rude" } });
+    expect([member.status, (member.body as { error: { message: string } }).error.message]).toEqual([403, "Only this channel's moderators can do that."]);
     const hidden = await s.channelCall("moderateMessage", { id: root, user: PEOPLE.amina, body: { action: "hide", reason: "Asks for a PIN" } });
     expect(hidden.status).toBe(200);
     await s.channelAfterResponse();

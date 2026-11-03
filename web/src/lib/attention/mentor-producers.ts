@@ -74,6 +74,7 @@ function checkItem(request: RequestState): EventItem | null {
   return {
     userId: request.requesterId, actorId: null, space: "community", kind: "mentor_checked",
     subject: { kind: "mentorRequest", id: request.id, href: MENTOR_PAGE_PATHS.directory, label: `Your request to ${nameOf(request.mentorName)}` },
+    // access.ts reads the notice at $[2] of this key, to show "waiting" and "checking" only while the check is open: keep its place.
     summary: CHECK_SUMMARY[notice](nameOf(request.mentorName)), eventKey: JSON.stringify(["mentor_checked", request.id, notice, at]),
   };
 }

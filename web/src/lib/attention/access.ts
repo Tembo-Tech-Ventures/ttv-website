@@ -16,8 +16,8 @@ import type { PlatformCapabilities } from "@/lib/platform/server/capabilities";
  * visible in a channel the person can still read, their own direct conversations included (B-4.1).
  * Mentor requests (B-4.1): each notice to the party it was for, the mentor or the person asking; the
  * mentor's only while they may see the request (a check can hold it back), a new request's only while
- * it waits for their answer, and an open check's notice for admins while it stays open on a request
- * still waiting or reported.
+ * it waits for their answer, the asker's notice that a check is open only while it is, and an open
+ * check's notice for admins while it stays open on a request still waiting or reported.
  */
 export function attentionAccess(db: Database, userId: string, capabilities: PlatformCapabilities) {
   return and(
@@ -57,8 +57,13 @@ export function attentionAccess(db: Database, userId: string, capabilities: Plat
           and(eq(attentionItem.kind, "mentor_request"), eq(mentorRequest.mentorId, userId), eq(mentorRequest.status, "PENDING"),
             sql.raw(`${MENTOR_SEES(`"mentor_request"`)} AND NOT ${HELD(`"mentor_request"`)}`)),
           and(eq(attentionItem.kind, "mentor_withdrawn"), eq(mentorRequest.mentorId, userId), sql.raw(MENTOR_SEES(`"mentor_request"`))),
-          and(inArray(attentionItem.kind, ["mentor_accepted", "mentor_redirected", "mentor_declined", "mentor_checked"]),
-            eq(mentorRequest.requesterId, userId)),
+          and(inArray(attentionItem.kind, ["mentor_accepted", "mentor_redirected", "mentor_declined"]), eq(mentorRequest.requesterId, userId)),
+          // A check's "waiting" or "checking" notice only while that check is still open on a waiting request; what a
+          // decision did stays (mentor-producers.ts keeps the notice at $[2] of the key).
+          and(eq(attentionItem.kind, "mentor_checked"), eq(mentorRequest.requesterId, userId), or(
+            sql`json_extract(${attentionItem.eventKey}, '$[2]') NOT IN ('waiting', 'checking')`,
+            and(eq(mentorRequest.status, "PENDING"), sql.raw(HELD(`"mentor_request"`))),
+          )),
           capabilities.isAdmin ? and(eq(attentionItem.kind, "moderation_pending"), or(eq(mentorRequest.status, "PENDING"), exists(db.select({ id: mentorRequestReport.requestId })
             .from(mentorRequestReport).where(eq(mentorRequestReport.requestId, mentorRequest.id)))), exists(db.select({ id: mentorRequestCase.requestId })
             .from(mentorRequestCase).where(and(eq(mentorRequestCase.requestId, mentorRequest.id), eq(mentorRequestCase.state, "OPEN"))))) : sql`0`,

@@ -266,6 +266,28 @@ describe("the mentor directory", () => {
     expect(mock.requests().filter((r) => r.mentor.id === joseph.person.id && r.note === "Interview practice?")).toHaveLength(1);
   });
 
+  it("holds an agreement made in one drawer for the next drawer on the page (QA4-05)", async () => {
+    // The send after agreeing is refused, so the person closes the drawer and opens it again.
+    const { props } = await directoryProps({ conductAgreed: false, failure: (request) => request.method === "POST" && new URL(request.url).pathname === "/api/mentor-requests"
+      ? { status: 409, data: { error: { code: "conflict", message: "Joseph Mwangi has no spots left this month." } } } : undefined });
+    await act(async () => root.render(<MentorsDirectory {...props} />));
+    const open = () => act(async () => card(joseph).querySelector<HTMLButtonElement>("[data-ask-mentor]")!.click());
+    await open();
+    const textarea = q<HTMLTextAreaElement>("[data-mentor-drawer] textarea")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, "Interview practice?");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => q<HTMLFormElement>("[data-mentor-drawer] form")!.requestSubmit());
+    await settle();
+    expect(props.conduct.agree).toHaveBeenCalledTimes(1);
+    const close = [...q("[data-mentor-drawer]")!.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Cancel")!;
+    await act(async () => close.click());
+    await open();
+    expect(q("[data-mentor-drawer] [data-request-conduct-inline]")).toBeNull();
+    expect(q<HTMLButtonElement>("[data-mentor-drawer] button[type=submit]")!.textContent).toBe("Send request");
+  });
+
   it("still asks for the habits when the server does, keeping the note, and agreeing there sends it", async () => {
     // The page read the person as agreed; the server has newer words to agree to.
     const { props, mock } = await directoryProps({ conductAgreed: false });

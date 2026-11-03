@@ -209,7 +209,9 @@ export async function decideModeration(
 ): Promise<Message> {
   const target = await findMessageTarget(context.db, input.messageId);
   const readable = target && await findChannelById(drizzle(context.db, { schema }), viewer.user, target.channelId, viewer.capabilities);
-  if (readable?.kind === "DIRECT") {
+  // Its members never moderate a direct conversation: an admin among them leaves it to another admin, and
+  // anyone else gets moderateMessage's refusal.
+  if (readable?.kind === "DIRECT" && viewer.capabilities.isAdmin) {
     throw new ChannelError("forbidden", "Another admin needs to decide on a message in a conversation you're in.", 403);
   }
   const channel = readable ?? (target && await caseConversation(context.db, viewer, target));
