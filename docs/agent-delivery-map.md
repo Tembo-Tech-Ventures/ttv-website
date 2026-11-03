@@ -80,7 +80,8 @@ marks pagination metadata optional, and for an empty bucket Cloudflare omits
 `is_truncated` there failed every PR-close teardown from about 2026-10-24 until
 the owner decided, on 2026-11-03, that teardown treats a bucket as empty when:
 
-- the response is HTTP 200 with `success: true` and a `result` array;
+- the response is a successful HTTP 2xx with `success: true` and a `result`
+  array (an empty 204 has no array and blocks);
 - that first page has zero objects;
 - `result_info` is absent, or is an object whose `is_truncated` is `false` or
   absent, with no non-empty `cursor` and no delimited prefixes.

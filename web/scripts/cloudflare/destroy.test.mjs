@@ -238,6 +238,12 @@ describe("real R2 adapter teardown boundary", () => {
   it.each([
     ["objects without metadata", { success: true, result: [{ key: "private-key-not-for-logs" }] }],
     ["objects without is_truncated", { success: true, result: [{ key: "private-key-not-for-logs" }], result_info: {} }],
+  ])("requires explicit completion metadata for %s", async (_shape, payload) => {
+    const dependencies = setup(payload);
+    await expect(destroyEnvironment(context, dependencies)).rejects.toThrow("R2 listing completion metadata could not be verified");
+    for (const fn of Object.values(dependencies)) expect(fn).not.toHaveBeenCalled();
+  });
+  it.each([
     ["no success flag", { result: [] }],
     ["a non-boolean success flag", { success: "true", result: [] }],
     ["a missing result", { success: true }],
