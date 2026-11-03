@@ -67,13 +67,15 @@ describe("CommunityApp", () => {
     const app = <CommunityApp view="journey" embedded framing="member" initial={initial} />;
     const host = document.createElement("div");
     host.innerHTML = renderToString(app);
-    const rendered = host.innerHTML;
+    const actions = () => [...host.querySelectorAll("button")].filter((button) => /Edit your profile|Add a contribution|Edit Chama/.test(button.textContent ?? ""));
+    // Painted by the server, the actions wait for the island rather than take a click that does nothing.
+    expect(actions().map((button) => button.disabled)).toEqual([true, true, true]);
     document.body.appendChild(host);
     const root = await act(async () => hydrateRoot(host, app, { onRecoverableError: recoverable }));
     expect(recoverable).not.toHaveBeenCalled();
     expect(consoleError).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
-    expect(host.innerHTML).toBe(rendered);
+    expect(actions().map((button) => button.disabled)).toEqual([false, false, false]);
     await act(async () => root.unmount());
     host.remove();
     consoleError.mockRestore();

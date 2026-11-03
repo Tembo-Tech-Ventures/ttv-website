@@ -461,7 +461,7 @@ test.describe("QA-1 polish (F-3)", () => {
     page.on("pageerror", (error) => reactErrors.push(error.message));
     page.on("console", (message) => { if (message.type() === "error" && /hydrat|#418|#423|#425/i.test(message.text())) reactErrors.push(message.text()); });
     await open(page, "/dashboard/community");
-    await expect(page.getByRole("button", { name: "Edit your profile" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Edit your profile" })).toBeEnabled();
     expect(reactErrors).toEqual([]);
     expect(communityCalls).toEqual([]);
   });

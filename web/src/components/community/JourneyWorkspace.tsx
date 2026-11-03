@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { ArrowRight, Plus } from "@phosphor-icons/react";
 import DiscoveryShell from "../discovery/DiscoveryShell";
@@ -71,6 +71,10 @@ export default function JourneyWorkspace({
     draft: EditableCommunityProfile,
   ) => Promise<CommunityProfile>;
 }) {
+  // The page may render this on the server (dashboard/community.astro): until the
+  // island has hydrated, its actions would take a click and do nothing, so they wait.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const [profile, setProfile] = useState(initialProfile);
   const [claims, setClaims] = useState(initialProfile.claims);
   const [editingProfile, setEditingProfile] = useState(false);
@@ -186,6 +190,7 @@ export default function JourneyWorkspace({
           <button
             type="button"
             className="discovery-text-button"
+            disabled={!hydrated}
             onClick={() => setEditingProfile(!editingProfile)}
             aria-expanded={editingProfile}
           >
@@ -221,7 +226,7 @@ export default function JourneyWorkspace({
             </div>
             <button
               className="discovery-button"
-              disabled={busy}
+              disabled={busy || !hydrated}
               onClick={() => {
                 setEditingClaim(null);
                 if(editingClaim)setDraft({title:"",description:"",date:"",sourceUrl:""});
@@ -334,7 +339,7 @@ export default function JourneyWorkspace({
               <li key={claim.id}>
                 <time dateTime={claim.date}>{claim.date}</time>
                 <h3>{claim.title}</h3>
-                {(onUpdate || demo) && <button type="button" className="discovery-text-button" disabled={busy} onClick={()=>{
+                {(onUpdate || demo) && <button type="button" className="discovery-text-button" disabled={busy || !hydrated} onClick={()=>{
                   setEditingClaim(claim);setDraft({title:claim.title,description:claim.description,date:claim.date,sourceUrl:claim.evidence[0]?.url??""});setEditing(true);setError("");setNotice("");
                 }}>Edit {claim.title}</button>}
                 {claim.visibility === "private" && (
