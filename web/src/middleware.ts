@@ -275,5 +275,5 @@ export const onRequest = defineMiddleware((context, next) => {
   const { request } = context;
   const scoped = perfVariant(env.DEPLOYMENT_ENVIRONMENT, request).has("srv") && (request.method === "GET" || request.method === "HEAD");
   const run = async () => (await handle(context, next)) as Response;
-  return withPerfTrace(env.DB, scoped ? () => withRequestScope(run) : run);
+  return withPerfTrace(env.DB, request, scoped ? () => withRequestScope(run) : run);
 });
