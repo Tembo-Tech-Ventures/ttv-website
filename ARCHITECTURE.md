@@ -125,7 +125,7 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/dashboard` | User dashboard home; with flag `spaces`, a 302 to the last-used space (`ttv-last-space` cookie) or the first one the caller has | Session |
 | `/dashboard/cohort`, `/dashboard/community`, `/dashboard/mentoring`, `/dashboard/discover`, `/dashboard/me`, `/dashboard/account` | Space homes (flag `spaces`). The old pages live under them (`/dashboard/apply` → `/dashboard/cohort/apply`, `/dashboard/ask` → `/dashboard/cohort/ask`, `/dashboard/mentorship` → `/dashboard/mentoring/confirm`, `/dashboard/portfolio` → `/dashboard/me/portfolio`, `/dashboard/profile` → `/dashboard/account`, …), and the old URLs 301 there (`SPACE_REDIRECTS` in `src/lib/platform/server/space-routes.ts`) | Session; each space needs its capability |
 | `/dashboard/attention` | Everything that needs the caller (the bell's page on mobile); flag `spaces` | Session |
-| `/dashboard/ask` | Ask Tembo privately: the sessions of the caller's cohorts | Session |
+| `/dashboard/ask` | Ask Tembo privately: the sessions of the caller's cohorts (with `spaces`, a 301 to `/dashboard/cohort/ask`) | Session |
 | `/dashboard/apply` | Program application form | Session |
 | `/dashboard/application/[id]` | View/edit own application | Session |
 | `/dashboard/profile` | User profile | Session |

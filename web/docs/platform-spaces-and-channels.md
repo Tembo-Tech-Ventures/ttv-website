@@ -392,7 +392,9 @@ Tembo is the AI assistant, named the same everywhere. In channels
 The private Ask Tembo page (`/dashboard/cohort/ask`, `/api/chat`) is the same
 assistant with a different scope: the sessions of the person's own cohorts
 (every cohort's for staff). It has no daily count, its conversations are kept
-with the account, and its requests go through the AI Gateway with logging on.
+with the account, and its requests go through the AI Gateway without the
+`collectLog: false` that channel calls set, so the gateway's own log setting
+applies.
 The page says all of this to the person.
 
 ## Mentor connections
@@ -448,6 +450,7 @@ These are not decided, and nothing in the code assumes an answer:
 - Whether people can create their own community channels (today only
   migrations and the program trigger create channels).
 - Whether to raise `CONDUCT_VERSION` before `mentor_requests` widens.
-- Whether to turn off AI Gateway logging for the private Ask Tembo page.
+- Whether the private Ask Tembo page should opt out of AI Gateway logs, as
+  channel calls do.
 - Institutions as organisations with members, rather than a per-person
   INSTITUTION role (policy "Institutions are entities with members").
