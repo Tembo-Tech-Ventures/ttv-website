@@ -383,6 +383,44 @@ describe("the mentor directory", () => {
     expect(q<HTMLButtonElement>("[data-mentor-drawer] button[type=submit]")!.textContent).toBe("Send request");
   });
 
+  it("says why a send didn't go as an alert just above Send, keeping the note and Send for a retry (T13)", async () => {
+    let refusals = 0;
+    const { props } = await directoryProps({ failure: (request) => request.method === "POST" && new URL(request.url).pathname === "/api/mentor-requests"
+      ? (refusals++, { status: 503, data: { error: { code: "server", message: "Busy" } } }) : undefined });
+    await act(async () => root.render(<MentorsDirectory {...props} />));
+    await act(async () => card(joseph).querySelector<HTMLButtonElement>("[data-ask-mentor]")!.click());
+    const textarea = q<HTMLTextAreaElement>("[data-mentor-drawer] textarea")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, "Interview practice?");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const form = q<HTMLFormElement>("[data-mentor-drawer] form")!;
+    const send = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
+    send.focus();
+    await act(async () => form.requestSubmit());
+    await settle();
+    const alert = q("[data-mentor-drawer] [data-request-error]")!;
+    expect(alert.getAttribute("role")).toBe("alert");
+    expect(alert.textContent).toBe("Your request wasn't sent. Try again in a moment. Your note is kept.");
+    // In the pinned footer, straight before Send: where the person who pressed it is looking.
+    expect(alert.closest(".mentor-drawer__actions--sticky")).toBe(send.closest(".mentor-drawer__actions--sticky"));
+    expect(alert.nextElementSibling).toBe(send);
+    // Read out once, by the alert: the polite live region stays quiet about it.
+    expect(q("[data-mentor-drawer] output[aria-live]")!.textContent).toBe("");
+    // The note is kept, and Send keeps focus and works for a retry.
+    expect(q<HTMLTextAreaElement>("[data-mentor-drawer] textarea")!.value).toBe("Interview practice?");
+    expect(document.activeElement).toBe(send);
+    expect(send.disabled).toBe(false);
+    expect(send.getAttribute("aria-disabled")).toBeNull();
+    // A retry clears the alert while it goes, so a second failure is a new alert, read out again.
+    await act(async () => form.requestSubmit());
+    await settle();
+    expect(refusals).toBe(2);
+    const again = q("[data-mentor-drawer] [data-request-error]")!;
+    expect(again).not.toBe(alert);
+    expect(again.getAttribute("role")).toBe("alert");
+  });
+
   it("still asks for the habits when the server does, keeping the note, and agreeing there sends it", async () => {
     // The page read the person as agreed; the server has newer words to agree to.
     const { props, mock } = await directoryProps({ conductAgreed: false });

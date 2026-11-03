@@ -2,9 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { runAxe } from "./platform-axe";
 
 /**
- * The prototype-vs-live visual tweaks whose behaviour a browser has to see (T03, T04, T05, T06, T09, T10, T12;
+ * The prototype-vs-live visual tweaks whose behaviour a browser has to see (T03, T04, T05, T06, T09, T10, T12, T13;
  * Library /reports/platform-visual-review-2026-11-03/), on the DEV-only harnesses: a masked contact
- * marker in a mentor's request card, the directory's filter menus, the accepted request's notice, where a thread opens, where
+ * marker in a mentor's request card, the directory's filter menus, a failed send's reason in the drawer, the accepted request's notice, where a thread opens, where
  * "Jump to latest" stands, and the phone's bar on the attention page. Unit tests cover the markup.
  */
 test.skip(Boolean(process.env.PLAYWRIGHT_BASE_URL), "The harnesses are dev-only and unavailable on deployed environments.");
@@ -117,6 +117,53 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
       }
       expect(seen.size, "the drawer has controls to walk").toBeGreaterThan(4);
       expect(covered).toEqual([]);
+    });
+  }
+}
+
+// T13 (#317's late B1): a send that fails says why just above Send, in the pinned footer, so the person who
+// pressed it sees it whether the drawer sits at its start or its end, and nothing covers it.
+for (const viewport of [{ width: 1440, height: 900 }, { width: 1366, height: 768 }, { width: 390, height: 844 }]) {
+  for (const conduct of ["required", "agreed"] as const) {
+    test(`T13: a failed send's reason is in view and uncovered above Send (${viewport.width}x${viewport.height}, conduct ${conduct})`, async ({ page }, testInfo) => {
+      await page.setViewportSize(viewport);
+      const path = `/dev/platform-mentors?persona=wanjiku&view=directory${conduct === "required" ? "&conduct=required" : ""}`;
+      await open(page, path);
+      // Agreeing posts the page's own conduct form; sending once agreed goes to the harness's API. Both fail.
+      await page.route((url) => url.pathname === "/dev/platform-mentors", (route) =>
+        route.request().method() === "POST" ? route.fulfill({ status: 500, body: "" }) : route.continue());
+      await page.waitForFunction(() => typeof window.__mentorsHarness?.refuseWrites === "function");
+      await page.evaluate(() => window.__mentorsHarness!.refuseWrites(1, 503, "server"));
+      await page.locator("[data-mentor-card]", { hasText: "Joseph Mutua" }).getByRole("link", { name: "Ask for time" }).click();
+      const drawer = page.locator("dialog[data-mentor-drawer]");
+      const note = drawer.getByRole("textbox", { name: "What would you like help with?" });
+      await note.fill("Could you look at how my route planner saves trips when the phone is offline?");
+      const send = drawer.getByRole("button", { name: conduct === "required" ? "Agree and send request" : "Send request" });
+      await send.click();
+
+      const error = drawer.locator("[data-request-error]");
+      await expect(error).toHaveText(conduct === "required"
+        ? "Your agreement wasn't saved, so your request wasn't sent. Try again in a moment. Your note is kept."
+        : "Your request wasn't sent. Try again in a moment. Your note is kept.");
+      const uncovered = () => error.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        return hit !== null && el.contains(hit);
+      });
+      for (const at of ["start", "end"] as const) {
+        await drawer.locator(".mentor-drawer__sheet").evaluate((el, end) => el.scrollTo({ top: end ? el.scrollHeight : 0 }), at === "end");
+        await expect(error, at).toBeInViewport({ ratio: 1 });
+        expect(await uncovered(), `the point at the error's centre is the error (${at})`).toBe(true);
+        await expect(send, at).toBeInViewport();
+      }
+      // It is read out as it appears.
+      await expect(error).toHaveRole("alert");
+      // The note is kept, and Send has focus and is ready for a retry.
+      await expect(note).toHaveValue("Could you look at how my route planner saves trips when the phone is offline?");
+      await expect(send).toBeFocused();
+      await expect(send).toBeEnabled();
+      await expect(send).not.toHaveAttribute("aria-disabled", "true");
+      await runAxe(page, testInfo, `drawer-error-${viewport.width}-${conduct}`);
     });
   }
 }

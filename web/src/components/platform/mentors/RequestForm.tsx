@@ -78,14 +78,6 @@ export function failureText(failure: RequestFailure, message: string | null, nam
 }
 
 /**
- * "Ask for time" (screen 05): what the person would like help with, the work
- * they attach, how, and plainly what the mentor will see. Someone who has not
- * agreed to how we talk to each other yet reads that before Send, and sending
- * agrees to it and sends in one press. If the server still asks for the habits
- * first (the words changed since the page was read), the drawer shows them
- * with the draft kept, and agreeing there sends too.
- */
-/**
  * Keeps the drawer's scroller clear of its pinned header and footer: their heights, measured as they
  * change (the footer grows with the habits and a failure), become the sheet's scroll padding, so a
  * control that takes focus scrolls into the space between them, never under either (WCAG 2.4.11).
@@ -103,11 +95,23 @@ function useStickyClearance(form: RefObject<HTMLFormElement>, view: string) {
     measure();
     const observer = new ResizeObserver(measure);
     for (const edge of [header, footer]) if (edge) observer.observe(edge);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      // The habits step and the thank-you have no pinned footer to clear.
+      sheet.style.removeProperty("--drawer-foot");
+    };
     // Measured again whenever the drawer changes what it shows: the form is replaced by a step and comes back.
   }, [form, view]);
 }
 
+/**
+ * "Ask for time" (screen 05): what the person would like help with, the work
+ * they attach, how, and plainly what the mentor will see. Someone who has not
+ * agreed to how we talk to each other yet reads that before Send, and sending
+ * agrees to it and sends in one press. If the server still asks for the habits
+ * first (the words changed since the page was read), the drawer shows them
+ * with the draft kept, and agreeing there sends too.
+ */
 export default function RequestForm({
   store, mentor, projects, conduct, headingId, action, closeHref = null, onClose, onSent, onAgreed,
 }: Props) {
@@ -156,7 +160,8 @@ export default function RequestForm({
     else if (store.getState().errors.format) formatRef.current?.focus();
   }
 
-  const live = <output className="sr-only" aria-live="polite">{state.announcement}</output>;
+  // A failed send is read out by its alert, beside Send, so the live region doesn't say it a second time.
+  const live = <output className="sr-only" aria-live="polite">{state.status === "error" ? "" : state.announcement}</output>;
   const header = <DrawerHeader mentor={mentor} name={name} headingId={headingId} closeHref={closeHref} onClose={onClose} />;
 
   // The live region stays put across the drawer's states, so each change is read.
@@ -243,11 +248,13 @@ export default function RequestForm({
           </details>
         </div>
 
-        <SendFailure failure={state.status === "error" ? state.failure : null} message={state.failureMessage} name={name} />
-
-        {/* The habits sit just above Send, inside the pinned footer, so they are in view whenever it is (QA4-05, T05). */}
+        {/*
+          The habits, and why the last send didn't go, sit just above Send, inside the pinned footer, so they
+          are in view whenever it is (QA4-05, T05, T13).
+        */}
         <SendActions
           agreement={asksAgreement ? <ConductBeforeSend name={name} conduct={conduct} headingId={`${ids}-conduct`} /> : null}
+          failure={<SendFailure failure={state.status === "error" ? state.failure : null} message={state.failureMessage} name={name} />}
           sending={sending} closeHref={closeHref} onClose={onClose}
         />
       </form>
@@ -372,14 +379,16 @@ function DrawerHeader({ mentor, name, headingId, closeHref, onClose }: {
 
 /**
  * Send and Cancel, pinned to the drawer's bottom edge (T05). While sending also agrees to the habits,
- * they come first in the footer (`agreement`), so what Send agrees to is always in view beside it.
+ * they come first in the footer (`agreement`), so what Send agrees to is always in view beside it. Why
+ * the last send didn't go comes straight above Send, where the person pressing it is looking (T13).
  */
-function SendActions({ agreement, sending, closeHref, onClose }: {
-  agreement: ReactNode; sending: boolean; closeHref: string | null; onClose: () => void;
+function SendActions({ agreement, failure, sending, closeHref, onClose }: {
+  agreement: ReactNode; failure: ReactNode; sending: boolean; closeHref: string | null; onClose: () => void;
 }) {
   return (
     <div className="mentor-drawer__actions mentor-drawer__actions--sticky">
       {agreement}
+      {failure}
       <Button type="submit" variant="primary" loading={sending} className="flex-1 sm:flex-none">
         {agreement ? "Agree and send request" : "Send request"}
       </Button>
@@ -429,7 +438,10 @@ function AttachWork({ projects, attached, sending, store }: {
   );
 }
 
-/** Why the last send didn't go, when it didn't. */
+/**
+ * Why the last send didn't go, when it didn't. An alert, so it is read out as it appears, and again after
+ * a retry that fails too: sending clears it first.
+ */
 function SendFailure({ failure, message, name }: { failure: RequestFailure | null; message: string | null; name: string }) {
-  return failure && <p className="text-sm font-semibold text-danger-ink" data-request-error>{failureText(failure, message, name)}</p>;
+  return failure && <p role="alert" className="w-full text-sm font-semibold text-danger-ink" data-request-error>{failureText(failure, message, name)}</p>;
 }
