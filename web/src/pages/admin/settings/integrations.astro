@@ -236,7 +236,7 @@ const spaces = await resolveSpacePage(Astro.locals, "adminIntegrations");
               If Workspace policy blocks sharing with service accounts, a
               Workspace super admin can instead grant the service account
               domain-wide delegation for the scope
-              <code class="rounded bg-black/20 px-1 py-0.5">https://www.googleapis.com/auth/drive.readonly</code>
+              <code class:list={["rounded bg-black/20 px-1 py-0.5", spaces && "break-all"]}>https://www.googleapis.com/auth/drive.readonly</code>
               — then set &ldquo;Impersonated user&rdquo; to a Workspace user
               who can read the folder.
             </p>

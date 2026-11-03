@@ -4,10 +4,10 @@ import { runAxe } from "./platform-axe";
 import { personaSession, signIn, type PersonaKey } from "./platform-personas";
 
 /**
- * T02: admin inside the spaces shell. Admin Home and Moderation render in the Admin space, with
+ * T02 and T14: admin inside the spaces shell. Every admin page renders in the Admin space, with
  * the space tabs, search and the bell, and the admin navigation as the space's sidebar, so moving
- * between a channel and Moderation keeps them. The pages that have not moved yet keep the existing
- * admin shell. The middleware's ADMIN guard is unchanged: nobody else reaches either page.
+ * between a channel and Moderation keeps them. With `spaces` off for the admin, every one keeps the
+ * existing admin shell. The middleware's ADMIN guard is unchanged: nobody else reaches them.
  *
  * Desktop at 1440x900 (chromium), phones at 390x844 (mobile-chromium). Local seed only
  * (`platform-personas.local.sql`, astro dev with PLATFORM_FLAGS_OVERRIDE=all and
@@ -53,13 +53,15 @@ async function open(page: Page, path: string) {
 const tabs = (page: Page) => page.locator(wide(page) ? ".space-file__nav" : ".spaces-bottom");
 
 /** In the Admin space: its tab current, search and the bell in the top bar, its sidebar current entry, one display heading. */
-async function expectAdminSpace(page: Page, heading: string, current: string) {
+async function expectAdminSpace(page: Page, heading: string, current: string | null) {
   await expect(page.locator(".spaces-shell")).toHaveAttribute("data-space", "admin");
   await expect(tabs(page).locator("[aria-current='page']")).toContainText("Admin");
   await expect(page.getByRole("button", { name: /^Search/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Attention/ })).toBeVisible();
   await expect(page.locator("#spaces-main h1")).toHaveText(heading);
-  await expect(page.locator("#space-sidebar a[aria-current='page']")).toHaveText(new RegExp(`^${current}`));
+  const marked = page.locator("#space-sidebar a[aria-current='page']");
+  if (current === null) await expect(marked).toHaveCount(0);
+  else await expect(marked).toHaveText(new RegExp(`^${current}`));
   const overflow = await page.evaluate(() => [document.documentElement, document.querySelector(".spaces-shell__main")]
     .filter((element): element is Element => element !== null)
     .map((element) => element.scrollWidth - element.clientWidth));
@@ -110,12 +112,94 @@ test("the Admin space's sidebar is the admin navigation, and its Moderation coun
   }
 });
 
-test("admin pages that have not moved yet keep the existing admin shell", async ({ page, baseURL }) => {
-  test.skip(!wide(page), "One width is enough for the unchanged shell.");
-  await as(page, baseURL!, "staff");
-  await open(page, "/admin/users");
-  await expect(page.locator(".spaces-shell")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Back to dashboard" })).toBeVisible();
+interface AdminPage {
+  path: string;
+  /** The h1 in the spaces shell. */
+  heading: string;
+  /** The sidebar entry marked current. Agent access is listed only where agent auth is enabled. */
+  current: string;
+  /** The title the existing admin shell shows, as an h2, or null where it drew none. */
+  legacy?: string | null;
+}
+
+/** Every admin page T14 moved, with a seeded record behind each detail page (platform-personas.local.sql). */
+const MOVED: readonly AdminPage[] = [
+  { path: "/admin/access-requests", heading: "Access requests", current: "Access requests" },
+  { path: "/admin/users", heading: "Users", current: "Users" },
+  { path: "/admin/users/ttv-local-persona-student", heading: "Wanjiku Mwangi", current: "Users" },
+  { path: "/admin/applications", heading: "Applications", current: "Applications" },
+  { path: "/admin/applications/ttv-local-persona-app-student", heading: "Application", current: "Applications" },
+  { path: "/admin/profiles", heading: "Profiles", current: "Profiles" },
+  { path: "/admin/profiles/ttv-local-persona-profile-alumna", heading: "Profile", current: "Profiles" },
+  { path: "/admin/feedback", heading: "Feedback", current: "Feedback" },
+  { path: "/admin/feedback/ttv-local-persona-feedback", heading: "Confusing", current: "Feedback" },
+  { path: "/admin/feedback/themes", heading: "Themes", current: "Feedback" },
+  { path: "/admin/feedback/themes/ttv-local-persona-theme", heading: "Session links are hard to find", current: "Feedback" },
+  { path: "/admin/projects", heading: "Client projects", current: "Client projects", legacy: "Client Projects" },
+  { path: "/admin/projects/ttv-local-persona-project", heading: "Member savings tracker", current: "Client projects" },
+  { path: "/admin/curricula", heading: "Curricula", current: "Curricula" },
+  { path: "/admin/curricula/new", heading: "Create Curriculum", current: "Curricula" },
+  { path: "/admin/curricula/ttv-local-persona-curriculum", heading: "Edit Curriculum", current: "Curricula" },
+  { path: "/admin/programs", heading: "Cohorts", current: "Cohorts" },
+  { path: "/admin/programs/new", heading: "Create Cohort", current: "Cohorts" },
+  { path: "/admin/programs/ttv-local-persona-cohort-05", heading: "Cohort 05", current: "Cohorts", legacy: null },
+  { path: "/admin/recordings", heading: "Recordings", current: "Recordings" },
+  { path: "/admin/recordings/ttv-local-persona-recording-05", heading: "Week 4: SQL joins and indexes", current: "Recordings", legacy: null },
+  { path: "/admin/recordings/upload", heading: "Upload Recording", current: "Recordings" },
+  { path: "/admin/recordings/import", heading: "Import Session Recordings", current: "Recordings" },
+  { path: "/admin/settings/integrations", heading: "Integrations", current: "Integrations" },
+  { path: "/admin/platform-flags", heading: "Feature flags", current: "Feature flags" },
+  { path: "/admin/personal-access-tokens", heading: "Personal access tokens", current: "Personal access tokens", legacy: "Personal Access Tokens" },
+  { path: "/admin/data-migration", heading: "Data migration", current: "Data migration", legacy: "Data Migration" },
+  { path: "/admin/agent-access", heading: "Agent access", current: "Agent access", legacy: "Agent Access" },
+];
+
+/** Whether `spaces` is on for the signed-in person: /api/platform/me exists only while it is. */
+async function spacesOn(page: Page): Promise<boolean> {
+  return (await page.request.get("/api/platform/me")).ok();
+}
+
+test.describe("every admin page", () => {
+  test("renders in the Admin space with its h1 and its sidebar entry current, and fits the screen", async ({ page, baseURL }) => {
+    test.setTimeout(240_000);
+    await as(page, baseURL!, "staff");
+    test.skip(!(await spacesOn(page)), "Spaces is off for the admin here; the next test covers that.");
+    for (const moved of MOVED) {
+      await test.step(moved.path, async () => {
+        await open(page, moved.path);
+        // The optional tools are listed only where they are enabled (admin-nav-server.ts).
+        const listed = await page.locator("#space-sidebar a").filter({ hasText: new RegExp(`^${moved.current}`) }).count();
+        await expectAdminSpace(page, moved.heading, listed > 0 ? moved.current : null);
+      });
+    }
+  });
+
+  test("keeps the existing admin shell, with the title it always had, while spaces is off for the admin", async ({ page, baseURL }) => {
+    test.skip(!wide(page), "One width is enough for the unchanged shell.");
+    test.setTimeout(240_000);
+    await as(page, baseURL!, "staff");
+    test.skip(await spacesOn(page), "Spaces is on for the admin here; run against a server without PLATFORM_FLAGS_OVERRIDE.");
+    for (const moved of MOVED) {
+      await test.step(moved.path, async () => {
+        await open(page, moved.path);
+        await expect(page.locator(".spaces-shell")).toHaveCount(0);
+        await expect(page.getByRole("link", { name: "Back to dashboard" })).toBeVisible();
+        await expect(page.locator("main h1")).toHaveCount(0);
+        const legacy = moved.legacy === undefined ? moved.heading : moved.legacy;
+        if (legacy !== null) await expect(page.getByRole("heading", { level: 2, name: legacy, exact: true })).toBeVisible();
+      });
+    }
+  });
+
+  test("a table page and a form page are clean under axe in the Admin space", async ({ page, baseURL }) => {
+    await as(page, baseURL!, "staff");
+    test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
+    for (const [path, name] of [["/admin/users", "users"], ["/admin/applications", "applications"], ["/admin/programs/new", "programs-new"]]) {
+      await open(page, path);
+      await page.screenshot({ path: evidence(name), fullPage: true });
+      await runAxe(page, test.info(), `${path} in the Admin space`);
+    }
+  });
 });
 
 test.describe("staff only", () => {

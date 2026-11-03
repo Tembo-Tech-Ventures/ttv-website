@@ -99,7 +99,9 @@ test("lists every flag with what it controls, who sees it and who changed it, cl
   await as(context, baseURL, staff);
   await open(page);
 
-  await expect(page.getByRole("heading", { level: 2, name: "Feature flags" })).toBeVisible();
+  // The page title is the h1 in the Admin space (T14), the h2 it always had in the existing admin shell.
+  const level = (await page.locator(".spaces-shell").count()) > 0 ? 1 : 2;
+  await expect(page.getByRole("heading", { level, name: "Feature flags" })).toBeVisible();
   const flags = page.getByRole("list", { name: "Platform feature flags" }).locator("[data-flag]");
   expect(await flags.evaluateAll((items) => items.map((item) => item.getAttribute("data-flag"))))
     .toEqual(["spaces", "onboarding", "channels", "tembo_channels", "mentor_requests"]);
@@ -171,7 +173,7 @@ test("an administrator switches Spaces from Off to Staff, and it stays", async (
     await row(page, "spaces").getByRole("button", { name: "Set Spaces to Staff" }).click();
     await hideDevToolbar(page);
     await expect(page).toHaveURL(new RegExp(`${PAGE}\\?changed=spaces$`));
-    await expect(page.getByRole("status")).toHaveText("Spaces is now Staff: administrators only.");
+    await expect(page.locator("[data-flag-notice]")).toHaveText("Spaces is now Staff: administrators only.");
     await expect(page.locator("[data-flag-notice]")).toBeFocused();
     await expect(onboarding.locator("[data-flag-warning]")).toHaveCount(0);
     await page.screenshot({ path: evidence("switched"), fullPage: true });
@@ -212,7 +214,7 @@ test("works without JavaScript, through the Everyone confirmation and back", asy
     expect((await stored(page.request)).mentor_requests.audience).toBe("OFF");
 
     await press(confirm.getByRole("button", { name: "Show Mentor requests to everyone" }));
-    await expect(page.getByRole("status")).toHaveText(
+    await expect(page.locator("[data-flag-notice]")).toHaveText(
       "Mentor requests is now Everyone: every signed-in user. Mentor requests needs Channels, which is Off. Set Channels to Everyone too, or Mentor requests won't work for everyone it is set for."
     );
     await expect(row(page, "mentor_requests")).toHaveAttribute("data-audience", "ALL");
@@ -222,7 +224,7 @@ test("works without JavaScript, through the Everyone confirmation and back", asy
 
     // Off applies at once, with no confirmation.
     await press(row(page, "mentor_requests").getByRole("button", { name: "Set Mentor requests to Off" }));
-    await expect(page.getByRole("status")).toHaveText("Mentor requests is now Off: no one.");
+    await expect(page.locator("[data-flag-notice]")).toHaveText("Mentor requests is now Off: no one.");
     expect((await stored(page.request)).mentor_requests.audience).toBe("OFF");
   } finally {
     await restore(page, baseURL, { channels: before.channels.audience, mentor_requests: before.mentor_requests.audience });
@@ -239,7 +241,7 @@ test("says nothing when the change in the address did not just happen", async ({
   await open(page, `${PAGE}?changed=tembo_channels`);
   await expect(row(page, "tembo_channels")).toBeVisible();
   await expect(page.locator("[data-flag-notice]")).toHaveCount(0);
-  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(page.locator("[data-flag-notice]")).toHaveCount(0);
 });
 
 test("refuses a form posted from another site", async ({ context, page, baseURL }) => {

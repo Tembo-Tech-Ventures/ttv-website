@@ -100,7 +100,9 @@ test("lays the pending queue out as screens/06 does, clean under axe", async ({ 
   await as(context, baseURL, staff);
   await open(page, QUEUE);
 
-  await expect(page.getByRole("heading", { level: 2, name: "Access requests" })).toBeVisible();
+  // The page title is the h1 in the Admin space (T14), the h2 it always had in the existing admin shell.
+  const level = (await page.locator(".spaces-shell").count()) > 0 ? 1 : 2;
+  await expect(page.getByRole("heading", { level, name: "Access requests" })).toBeVisible();
   await expect(page.getByRole("link", { name: /^Pending\s+\d+ waiting$/ })).toHaveAttribute("aria-current", "page");
   // The sidebar entry counts what is waiting, and says what it counts. Phones open it as a drawer.
   if (test.info().project.name === "chromium") {
@@ -184,7 +186,7 @@ test("declines with a message the person reads without the administrator's name,
   const id = await request.getAttribute("data-access-request");
   await request.getByRole("textbox", { name: "Message to Wairimu (optional)" }).fill(DECLINE_MESSAGE);
   await request.getByRole("button", { name: "Decline mentor access for Wairimu Kamau", exact: true }).click();
-  await expect(page.getByRole("status")).toHaveText("Declined. Wairimu will see your message, not your name.");
+  await expect(page.locator("[data-access-request-notice]")).toHaveText("Declined. Wairimu will see your message, not your name.");
   // QAO-06: the card left the list, so focus is on what happened, not lost on the page.
   await expect(page.locator("[data-access-request-notice]")).toBeFocused();
   await expect(row(page, id!)).toHaveCount(0);
@@ -200,7 +202,7 @@ test("declines with a message the person reads without the administrator's name,
   const conflict = stale.waitForResponse((response) => response.request().method() === "POST");
   await row(stale, id!).getByRole("button", { name: "Approve mentor access for Wairimu Kamau", exact: true }).click();
   expect((await conflict).status()).toBe(409);
-  await expect(stale.getByRole("alert")).toHaveText(/^Someone already decided this request, or the person withdrew it, so nothing changed\./);
+  await expect(stale.locator("[data-access-request-failure]")).toHaveText(/^Someone already decided this request, or the person withdrew it, so nothing changed\./);
   await expect(stale.locator("[data-access-request-failure]")).toBeFocused();
   if (!process.env.PLAYWRIGHT_BASE_URL) await stale.addStyleTag({ content: "astro-dev-toolbar { display: none !important; }" });
   await runAxe(stale, testInfo, "access-requests-conflict");
@@ -230,6 +232,11 @@ test("declines with a message the person reads without the administrator's name,
   await requester.close();
 });
 
+/** The user page's notice: the one status that says something (the spaces shell keeps empty live regions too). */
+function userNotice(page: Page) {
+  return page.getByRole("status").filter({ hasText: /\S/ });
+}
+
 test("approving gives the person their new space, and the user page can take it away and give it back", async ({ browser, context, page, baseURL }) => {
   writesOnce();
   const requester = await browser.newContext();
@@ -241,7 +248,7 @@ test("approving gives the person their new space, and the user page can take it 
   await as(context, baseURL, staff);
   await open(page, QUEUE);
   await row(page, OTIENO_REQUEST).getByRole("button", { name: "Approve mentor access for Otieno Ouma", exact: true }).click();
-  await expect(page.getByRole("status")).toHaveText("Approved. Otieno Ouma was given mentor access.");
+  await expect(page.locator("[data-access-request-notice]")).toHaveText("Approved. Otieno Ouma was given mentor access.");
   await expect(page.locator("[data-access-request-notice]")).toBeFocused();
   await expect(row(page, OTIENO_REQUEST)).toHaveCount(0);
   expect(await tabLabels(his)).toContain("Mentoring");
@@ -252,12 +259,12 @@ test("approving gives the person their new space, and the user page can take it 
   await expect(mentor).toContainText("Has mentor access.");
   page.once("dialog", (dialog) => dialog.accept());
   await mentor.getByRole("button", { name: "Remove mentor access" }).click();
-  await expect(page.getByRole("status")).toHaveText("Mentor access was removed.");
+  await expect(userNotice(page)).toHaveText("Mentor access was removed.");
   await expect(mentor).toContainText("No mentor access.");
   expect(await tabLabels(his)).not.toContain("Mentoring");
 
   await mentor.getByRole("button", { name: "Give mentor access" }).click();
-  await expect(page.getByRole("status")).toHaveText("Mentor access was given.");
+  await expect(userNotice(page)).toHaveText("Mentor access was given.");
   expect(await tabLabels(his)).toContain("Mentoring");
   await page.screenshot({ path: evidence("user-access"), fullPage: true });
   await requester.close();
