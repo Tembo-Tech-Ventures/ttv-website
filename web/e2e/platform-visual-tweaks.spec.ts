@@ -92,7 +92,7 @@ for (const viewport of [{ width: 844, height: 390 }, { width: 640, height: 360 }
 
 // B1 (second re-review): every control in the drawer, reached from the keyboard, scrolls clear of the
 // pinned header and footer: the point at its centre is the control itself (WCAG 2.4.11).
-for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) {
+for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 640, height: 360 }]) {
   for (const conduct of ["required", "agreed"]) {
     test(`T05: no control is under the drawer's pinned edges when focused (${viewport.width}x${viewport.height}, conduct ${conduct})`, async ({ page }) => {
       await page.setViewportSize(viewport);
