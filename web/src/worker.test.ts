@@ -19,8 +19,7 @@ vi.mock("@/lib/recordings/pipeline", () => ({
   processRecordingMessage: mocks.processRecordingMessage,
 }));
 vi.mock("@/lib/recordings/importer", () => ({
-  syncEnabledRecordingImportSources:
-    mocks.syncEnabledRecordingImportSources,
+  syncEnabledRecordingImportSources: mocks.syncEnabledRecordingImportSources,
 }));
 vi.mock("@/lib/observability/alerts", () => ({
   pushAlerts: mocks.pushAlerts,
@@ -186,9 +185,9 @@ describe("Worker scheduled imports", () => {
       { waitUntil } as unknown as ExecutionContext
     );
 
-    expect(mocks.syncEnabledRecordingImportSources).toHaveBeenCalledWith(env);
     expect(waitUntil).toHaveBeenCalledOnce();
     await expect(waitUntil.mock.calls[0][0]).resolves.toEqual([summary]);
+    expect(mocks.syncEnabledRecordingImportSources).toHaveBeenCalledWith(env);
     expect(mocks.pushAlerts).toHaveBeenCalledWith(env);
   });
 
