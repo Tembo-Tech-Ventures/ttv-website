@@ -63,7 +63,7 @@ for (const viewport of [DESKTOP, PHONE]) {
   });
 }
 
-test("the keyboard reaches a mentor, opens the drawer, sends, and comes back to the button", async ({ page }) => {
+test("the keyboard reaches a mentor, opens the drawer, sends, and lands on the request's status", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
   await open(page, harness({ view: "directory" }));
   // Wanjiku is already waiting on David in the fixtures, so she asks Samuel.
@@ -88,7 +88,28 @@ test("the keyboard reaches a mentor, opens the drawer, sends, and comes back to 
   await expect(drawer.getByRole("heading", { name: "Request sent" })).toBeFocused();
   await drawer.getByRole("button", { name: "Done" }).click();
   await expect(page.locator("[data-own-request]").filter({ hasText: "Samuel Otieno" }).first()).toContainText("Waiting for Samuel");
+  // "Ask for time" gave way to the status, so focus goes there rather than to the top of the page (QA4-18).
+  await expect(card(page, "Samuel Otieno").locator("[data-mentor-standing='waiting']")).toBeFocused();
 });
+
+for (const viewport of [DESKTOP, PHONE]) {
+  test(`a filter link says what it chose and carries the keyboard on into the results at ${viewport.width}px (QA4-18)`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await open(page, harness({ view: "directory" }));
+    await page.locator("[data-mentor-filters]").getByRole("link", { name: "Career" }).click();
+    await page.waitForURL(/area=Career#mentor-results$/);
+    await page.waitForFunction(() => typeof window.__mentorsHarness?.refuseWrites === "function");
+    const results = page.getByRole("heading", { level: 2, name: /^\d+ mentors? · Career$/ });
+    await expect(results).toBeFocused();
+    await expect(page.locator("[data-mentor-filters]").getByRole("link", { name: "Career" })).toHaveAttribute("aria-current", "true");
+    // The jump scrolls the sheet only: the shell, its tabs and the phone's bottom bar stay put.
+    expect(await page.locator(".spaces-shell").evaluate((el) => el.scrollTop)).toBe(0);
+    await expect(results).toBeInViewport();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("[data-mentor-grid] [data-mentor-card]").first().locator(":focus")).toHaveCount(1);
+    await page.screenshot({ path: `${EVIDENCE_DIR}/05-filtered-${viewport.width}.png` });
+  });
+}
 
 test("withdrawing shows at once and puts the request back when the server refuses", async ({ page }) => {
   await page.setViewportSize(DESKTOP);

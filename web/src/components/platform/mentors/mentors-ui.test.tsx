@@ -81,7 +81,12 @@ describe("the mentor directory", () => {
     // Filters are links held in the URL; the active ones say so.
     const active = all("[data-mentor-filters] a[aria-current='true']").map((link) => link.textContent);
     expect(active).toEqual(["Career", "Any", "Has open spots"]);
-    expect(q<HTMLAnchorElement>("[data-filter-available]")!.getAttribute("href")).toBe(`${PATH}?area=Career`);
+    // Each lands on the results heading, which says what the filters chose (QA4-18).
+    expect(q<HTMLAnchorElement>("[data-filter-available]")!.getAttribute("href")).toBe(`${PATH}?area=Career#mentor-results`);
+    expect(all("[data-mentor-filters] a").every((link) => link.getAttribute("href")!.endsWith("#mentor-results"))).toBe(true);
+    const results = q("h2[data-mentor-results]")!;
+    expect(results.id).toBe("mentor-results");
+    expect(results.textContent).toBe(`${props.shown.length} mentors · Career · Has open spots`);
     expect(all("[data-own-request]").map((row) => row.dataset.status)).toEqual(["PENDING", "ACCEPTED"]);
     expect(html).not.toContain("<dialog open");
   });
@@ -154,7 +159,8 @@ describe("the mentor directory", () => {
     const { props } = await directoryProps({ search: "?format=QUICK_QUESTION" });
     await act(async () => root.render(<MentorsDirectory {...props} shown={[]} />));
     expect(text("[data-mentors-empty]")).toContain("No mentors match these filters right now.");
-    expect(q<HTMLAnchorElement>("[data-mentors-empty] a")!.getAttribute("href")).toBe(PATH);
+    expect(q<HTMLAnchorElement>("[data-mentors-empty] a")!.getAttribute("href")).toBe(`${PATH}#mentor-results`);
+    expect(text("[data-mentor-results]")).toBe("0 mentors · Quick question");
   });
 
   it("opens the drawer on the note, keeps it in the URL, and returns focus to the button on close", async () => {
@@ -209,6 +215,19 @@ describe("the mentor directory", () => {
     expect(document.activeElement?.textContent).toBe("Request sent");
     expect(mock.requests().filter((r) => r.mentor.id === joseph.person.id && r.status === "PENDING")).toHaveLength(1);
     expect(all("[data-own-request]")[0]!.textContent).toContain("Joseph Mutua");
+    // Done: "Ask for time" has given way to the request's status, and focus goes there, not to the page's top (QA4-18).
+    const done = Array.from(q("[data-request-sent]")!.querySelectorAll("button")).find((button) => button.textContent === "Done")!;
+    await act(async () => done.click());
+    expect(q<HTMLDialogElement>("[data-mentor-drawer]")!.open).toBe(false);
+    expect(document.activeElement).toBe(card(joseph).querySelector("[data-mentor-standing='waiting']"));
+  });
+
+  it("puts focus on the results after a filter link, so Tab carries on into the mentors (QA4-18)", async () => {
+    const { props } = await directoryProps({ search: "?area=Career" });
+    window.history.replaceState(null, "", `${PATH}?area=Career#mentor-results`);
+    await act(async () => root.render(<MentorsDirectory {...props} />));
+    expect(document.activeElement).toBe(q("h2[data-mentor-results]"));
+    expect(document.activeElement?.textContent).toBe(`${props.shown.length} mentors · Career`);
   });
 
   it("keeps a send going when the drawer closes mid-send, and lists the request once the server has it", async () => {

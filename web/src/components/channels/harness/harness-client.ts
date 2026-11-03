@@ -53,7 +53,7 @@ type HarnessOptions = {
 const TEMBO_ANSWER: Record<Channel["kind"], string> = {
   // Markers as the server writes them (grounding.ts): right after the sentence, before its stop.
   COHORT: "Session 9 covers this from 34:12: the 200 tells the provider the callback arrived, so it stops retrying [1].",
-  COMMUNITY: "Revision 3 logs each callback before parsing it, so a failure can still be replayed [1].",
+  COMMUNITY: "Revision 3 logs each callback before parsing it, so a failure can still be replayed [1][2].",
   DIRECT: "Earlier in this conversation you agreed to replay the failing callback first.",
 };
 const TEMBO_CITATIONS: Record<Channel["kind"], Message["citations"]> = {

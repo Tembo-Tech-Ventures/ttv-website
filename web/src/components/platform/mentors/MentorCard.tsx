@@ -79,7 +79,7 @@ export default function MentorCard({ item, now, open, askHref, onAsk, standing =
         </p>
         {standing?.kind === "waiting" ? (
           // A second request would be refused while one waits; Your requests above holds it, with Withdraw.
-          <p className="text-sm font-semibold text-ink-primary" data-mentor-standing="waiting">{standing.label}</p>
+          <p tabIndex={-1} className="text-sm font-semibold text-ink-primary focus:outline-none" data-mentor-standing="waiting">{standing.label}</p>
         ) : !capacity.open ? (
           <p className="text-sm font-semibold text-ink-primary" data-mentor-full>{FULL_THIS_MONTH}</p>
         ) : (

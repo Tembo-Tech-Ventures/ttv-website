@@ -73,6 +73,12 @@ for (const viewport of [DESKTOP, PHONE]) {
     const marker = answer.locator(".channel-tembo .channel-body a.channel-cite-ref[data-cite='1']");
     await expect(marker).toHaveAccessibleName(/^Source 1: /);
     await expect(answer.locator("[aria-label=Sources] a[data-cite='1'] .channel-cite__n")).toHaveText("1");
+    // Two sources in a row: marker 1's focus ring (2px out, 2px wide) stops before marker 2's digit (#312 review).
+    const first = await marker.boundingBox();
+    const secondDigit = await answer.locator(".channel-tembo .channel-body a.channel-cite-ref[data-cite='2'] sup").boundingBox();
+    expect(secondDigit!.x - (first!.x + first!.width)).toBeGreaterThanOrEqual(4);
+    await marker.focus();
+    await expect(marker).toHaveCSS("outline-offset", "2px");
     const helpful = answer.locator("[data-tembo-feedback=helpful]");
     await helpful.focus();
     await page.keyboard.press("Enter");

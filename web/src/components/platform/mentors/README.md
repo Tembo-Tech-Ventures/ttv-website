@@ -39,7 +39,8 @@ exist only while `mentor_requests` is on for the person (effective only with
 
 ## Without JavaScript
 
-Filters are links, and so is "Ask for time" (`?ask=`). The drawer named by `?ask=` renders as a plain panel with a
+Filters are links, and so is "Ask for time" (`?ask=`). Each filter link lands on the results heading
+(`#mentor-results`, "2 mentors · Career"), so the next Tab reaches the first mentor (QA4-18). The drawer named by `?ask=` renders as a plain panel with a
 real form that posts to the directory page; `request-post.ts` hands the same
 body to the API's own handler, so every gate is the API's. A send lands on
 `?sent=<id>`; a refusal renders the drawer again on what was written, with the

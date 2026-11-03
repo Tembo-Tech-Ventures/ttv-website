@@ -3,7 +3,7 @@ import { MentorRequestStatus, type MentorRequest } from "@/lib/platform/contract
 import { availability, FIXTURE_NOW, meByPersona, pendingMentorRequest, people } from "@/lib/platform/fixtures";
 import {
   capacityView, conversationContext, conversationHref, dayPhrase, listingNote, mentorRequestsOpen, mentorStatus,
-  monthName, openingDate, personContext, requesterStatus, requestMeta, usedShare, waitingText,
+  monthName, openingDate, personContext, requesterStatus, requestMeta, resultsHeading, usedShare, waitingText,
 } from "./mentor-display";
 
 const DEC_1_NAIROBI = Date.parse("2026-11-30T21:00:00Z");
@@ -144,5 +144,14 @@ describe("checks on a note (B-4.1)", () => {
     const closed = mentorStatus({ ...request, check: "reported" }, "WITHDRAWN");
     expect(closed).toEqual({ label: "Reported", tone: "neutral", detail: "You reported this request. It's closed." });
     expect(`${closed.label} ${closed.detail}`).not.toMatch(/withdr|Wanjiku/i);
+  });
+});
+
+describe("the directory's results heading (QA4-18)", () => {
+  it("counts the mentors shown and names each chosen filter, in the area's listed spelling", () => {
+    expect(resultsHeading(6, { area: null, format: null, available: false })).toBe("6 mentors");
+    expect(resultsHeading(1, { area: "react", format: "CALL_30_MIN", available: true }, ["React", "Career"]))
+      .toBe("1 mentor · React · 30-minute call · Has open spots");
+    expect(resultsHeading(0, { area: "Rust", format: null, available: false }, ["React"])).toBe("0 mentors · Rust");
   });
 });
