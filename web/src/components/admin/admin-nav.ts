@@ -9,6 +9,29 @@ export const ADMIN_HOME_HREF = "/admin";
 export const ACCESS_REQUESTS_HREF = "/admin/access-requests";
 export const MODERATION_HREF = "/admin/moderation";
 
+/** Where each admin page lives. Its sub-pages (a user, a new cohort, feedback themes) sit under it. */
+export const ADMIN_PAGE_HREFS = {
+  home: ADMIN_HOME_HREF,
+  accessRequests: ACCESS_REQUESTS_HREF,
+  moderation: MODERATION_HREF,
+  users: "/admin/users",
+  applications: "/admin/applications",
+  profiles: "/admin/profiles",
+  feedback: "/admin/feedback",
+  projects: "/admin/projects",
+  curricula: "/admin/curricula",
+  cohorts: "/admin/programs",
+  recordings: "/admin/recordings",
+  integrations: "/admin/settings/integrations",
+  flags: "/admin/platform-flags",
+  tokens: "/admin/personal-access-tokens",
+  migration: "/admin/data-migration",
+  agentAccess: "/admin/agent-access",
+} as const satisfies Partial<Record<AdminNavKey, string>>;
+
+/** The admin navigation's entries that are admin pages, which the spaces shell can draw (T02, T14). */
+export type AdminPageNavKey = keyof typeof ADMIN_PAGE_HREFS;
+
 export type AdminNavKey =
   | "back" | "home" | "accessRequests" | "moderation" | "users" | "applications" | "profiles" | "feedback" | "projects"
   | "curricula" | "cohorts" | "recordings" | "integrations" | "flags" | "tokens" | "demo" | "migration" | "agentAccess" | "logout";
@@ -47,26 +70,26 @@ export function adminNavEntries(facts: AdminNavFacts): AdminNavEntry[] {
   return [
     // Admin is one of the person's spaces: the way back to the rest of the app comes first.
     { key: "back", href: "/dashboard", label: "Back to dashboard" },
-    { key: "home", href: ADMIN_HOME_HREF, label: "Admin Home" },
+    { key: "home", href: ADMIN_PAGE_HREFS.home, label: "Admin Home" },
     // People waiting on a decision come straight after home, with how many are waiting.
-    { key: "accessRequests", href: ACCESS_REQUESTS_HREF, label: "Access requests", badge: facts.pendingAccessRequests, badgeLabel: "pending" },
+    { key: "accessRequests", href: ADMIN_PAGE_HREFS.accessRequests, label: "Access requests", badge: facts.pendingAccessRequests, badgeLabel: "pending" },
     ...(facts.pendingModeration === null
       ? []
-      : [{ key: "moderation" as const, href: MODERATION_HREF, label: "Moderation", badge: facts.pendingModeration, badgeLabel: "waiting" }]),
-    { key: "users", href: "/admin/users", label: "Users" },
-    { key: "applications", href: "/admin/applications", label: "Applications" },
-    { key: "profiles", href: "/admin/profiles", label: "Profiles" },
-    { key: "feedback", href: "/admin/feedback", label: "Feedback" },
-    { key: "projects", href: "/admin/projects", label: "Client Projects" },
-    { key: "curricula", href: "/admin/curricula", label: "Curricula" },
-    { key: "cohorts", href: "/admin/programs", label: "Cohorts" },
-    { key: "recordings", href: "/admin/recordings", label: "Recordings" },
-    { key: "integrations", href: "/admin/settings/integrations", label: "Integrations" },
-    { key: "flags", href: "/admin/platform-flags", label: "Feature flags" },
-    { key: "tokens", href: "/admin/personal-access-tokens", label: "Personal Access Tokens" },
+      : [{ key: "moderation" as const, href: ADMIN_PAGE_HREFS.moderation, label: "Moderation", badge: facts.pendingModeration, badgeLabel: "waiting" }]),
+    { key: "users", href: ADMIN_PAGE_HREFS.users, label: "Users" },
+    { key: "applications", href: ADMIN_PAGE_HREFS.applications, label: "Applications" },
+    { key: "profiles", href: ADMIN_PAGE_HREFS.profiles, label: "Profiles" },
+    { key: "feedback", href: ADMIN_PAGE_HREFS.feedback, label: "Feedback" },
+    { key: "projects", href: ADMIN_PAGE_HREFS.projects, label: "Client Projects" },
+    { key: "curricula", href: ADMIN_PAGE_HREFS.curricula, label: "Curricula" },
+    { key: "cohorts", href: ADMIN_PAGE_HREFS.cohorts, label: "Cohorts" },
+    { key: "recordings", href: ADMIN_PAGE_HREFS.recordings, label: "Recordings" },
+    { key: "integrations", href: ADMIN_PAGE_HREFS.integrations, label: "Integrations" },
+    { key: "flags", href: ADMIN_PAGE_HREFS.flags, label: "Feature flags" },
+    { key: "tokens", href: ADMIN_PAGE_HREFS.tokens, label: "Personal Access Tokens" },
     ...(facts.stagingDemoEnabled ? [{ key: "demo" as const, href: "/demo", label: "Staging demo personas" }] : []),
-    ...(facts.dataMigrationEnabled ? [{ key: "migration" as const, href: "/admin/data-migration", label: "Data Migration" }] : []),
-    ...(facts.agentAuthEnabled ? [{ key: "agentAccess" as const, href: "/admin/agent-access", label: "Agent Access" }] : []),
+    ...(facts.dataMigrationEnabled ? [{ key: "migration" as const, href: ADMIN_PAGE_HREFS.migration, label: "Data Migration" }] : []),
+    ...(facts.agentAuthEnabled ? [{ key: "agentAccess" as const, href: ADMIN_PAGE_HREFS.agentAccess, label: "Agent Access" }] : []),
     { key: "logout", href: "/auth/logout", label: "Logout" },
   ];
 }

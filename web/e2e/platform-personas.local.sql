@@ -219,3 +219,10 @@ INSERT OR REPLACE INTO mentor_request (id,requesterId,mentorId,status,format,not
   'Fictional note held for a check: could we talk about my ledger''s reconciliation job?',1793600000000,1793600000000);
 INSERT OR REPLACE INTO mentor_request_case (requestId,state,clefReasons,openedAt,createdAt,updatedAt) VALUES
  ('ttv-local-mentor-held','OPEN','["Harassment"]',1793600000000,1793600000000,1793600000000);
+-- e2e/platform-admin-space.spec.ts (T14): one feedback note in one theme, and one client project, so their admin detail pages open.
+INSERT OR REPLACE INTO feedback_theme (id,title,summary,kind,status,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-theme','Session links are hard to find','Fictional theme.','CONFUSING','COLLECTING',1793400000,1793400000);
+INSERT OR REPLACE INTO feedback (id,userId,kind,message,pageUrl,themeId,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-feedback','ttv-local-persona-student','CONFUSING','Fictional note: I could not find last week''s session.','/dashboard/cohort/sessions','ttv-local-persona-theme',1793400000,1793400000);
+INSERT OR REPLACE INTO clientProject (id,organization,contactName,contactEmail,title,description,createdAt,updatedAt) VALUES
+ ('ttv-local-persona-project','Fictional Co-op','Halima Said','halima@invalid.ttv','Member savings tracker','Fictional project brief.',1793400000,1793400000);

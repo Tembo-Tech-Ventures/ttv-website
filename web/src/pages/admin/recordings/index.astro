@@ -1,5 +1,7 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import Button from "@/components/common/Button.astro";
 import ProcessingStatus from "@/components/recordings/ProcessingStatus.astro";
 import { formatDuration } from "@/lib/recordings/time-utils";
@@ -12,13 +14,15 @@ const recordings = await db.query.recording.findMany({
   with: { program: true },
   orderBy: (recording, { desc }) => [desc(recording.createdAt)],
 });
+// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
+const spaces = await resolveSpacePage(Astro.locals, "adminRecordings");
 ---
 
-<AdminLayout title="Recordings">
+<AdminLayout title="Recordings" spaces={spaces}>
   <div class="space-y-6">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h2 class="text-2xl font-bold text-white">Recordings</h2>
+        <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Recordings</PageTitle>
         <p class="mt-1 text-sm text-ink-muted">
           Upload sessions, monitor processing, and manage transcripts.
         </p>

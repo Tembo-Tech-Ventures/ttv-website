@@ -1,5 +1,7 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import Button from "@/components/common/Button.astro";
 import Card from "@/components/common/Card.astro";
 import ProcessingStatus from "@/components/recordings/ProcessingStatus.astro";
@@ -54,13 +56,16 @@ const programs = await db.query.program.findMany({
 
 const formatDate = (date: Date | null) =>
   date ? date.toISOString().split("T")[0] : "";
+// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
+const spaces = await resolveSpacePage(Astro.locals, "adminRecordings");
 ---
 
-<AdminLayout title={recording.title}>
+<AdminLayout title={recording.title} spaces={spaces}>
   <div class="space-y-6">
     <a href="/admin/recordings" class="text-sm text-primary hover:underline">
       &larr; Back to Recordings
     </a>
+    <PageTitle spaces={Boolean(spaces)} legacyTag={null}>{recording.title}</PageTitle>
 
     <div class="grid gap-6 lg:grid-cols-[minmax(0,2fr)_320px]">
       <Card>

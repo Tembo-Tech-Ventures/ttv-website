@@ -85,6 +85,13 @@ them and their certificates. The editor is `/dashboard/me/portfolio`
 ("Public profile"). The Overview only reads; every row links to the page that
 does the work.
 
+Every admin page (`/admin/*`) renders in the Admin space while `spaces` is on
+for the admin, with the admin navigation as the space's sidebar and the page
+title as its h1. Without a spaces context (the flag off for them, a personal
+access token, or a context that failed to load) `AdminLayout` draws the
+existing admin shell instead. The middleware's ADMIN guard runs first either
+way.
+
 ### Attention
 
 An `attention_item` is one thing that needs one person, in one space. Its

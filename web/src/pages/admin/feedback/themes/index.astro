@@ -1,5 +1,7 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import Card from "@/components/common/Card.astro";
 import FeedbackStatusPill from "@/components/feedback/FeedbackStatusPill.astro";
 import { env } from "cloudflare:workers";
@@ -33,15 +35,17 @@ const tabs = [
   })),
   { value: "all", label: "All" },
 ];
+// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
+const spaces = await resolveSpacePage(Astro.locals, "adminFeedback");
 ---
 
-<AdminLayout title="Feedback themes">
+<AdminLayout title="Feedback themes" spaces={spaces}>
   <div class="space-y-6">
     <a href="/admin/feedback" class="text-sm text-primary hover:underline">
       &larr; Back to Feedback
     </a>
     <header>
-      <h2 class="text-2xl font-bold text-white">Themes</h2>
+      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Themes</PageTitle>
       <p class="mt-1 max-w-2xl text-sm text-ink-secondary">
         One problem or wish that several students raised. Ideas and confusing
         spots are put forward once {THEME_AGREEMENT_STUDENTS} students raise them

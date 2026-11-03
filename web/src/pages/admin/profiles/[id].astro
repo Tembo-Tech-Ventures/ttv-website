@@ -1,5 +1,7 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import Card from "@/components/common/Card.astro";
 import Badge from "@/components/common/Badge.astro";
 import { drizzle } from "drizzle-orm/d1";
@@ -123,9 +125,11 @@ const moderationOutcomeLabel = profile.moderationOutcome
       error: "Check unavailable",
     }[profile.moderationOutcome]
   : null;
+// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
+const spaces = await resolveSpacePage(Astro.locals, "adminProfiles");
 ---
 
-<AdminLayout title="Profile Detail">
+<AdminLayout title="Profile Detail" spaces={spaces}>
   <div class="space-y-6">
     <a href="/admin/profiles" class="text-sm text-primary hover:underline">
       &larr; Back to Profiles
@@ -141,7 +145,7 @@ const moderationOutcomeLabel = profile.moderationOutcome
     )}
 
     <div class="flex items-center gap-3">
-      <h2 class="text-2xl font-bold text-white">Profile</h2>
+      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Profile</PageTitle>
       <Badge
         variant={
           profile.status.toLowerCase() as

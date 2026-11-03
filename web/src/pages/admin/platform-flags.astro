@@ -2,6 +2,7 @@
 import { env } from "cloudflare:workers";
 import { PiInfoDuotone, PiWarningDuotone } from "react-icons/pi";
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import Button from "@/components/platform/ui/Button";
 import {
   AUDIENCE_LABELS, AUDIENCE_MEANINGS, CONFIRM_ALL, FLAG_DETAILS, FLAG_ORDER, PLATFORM_FLAGS_PATH,
@@ -76,14 +77,18 @@ const overridden = flagsOverridden(env);
 
 const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
+// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
+const spaces = await resolveSpacePage(Astro.locals, "adminFlags");
+// The page title is the screen's one display heading in the spaces shell.
+const Title = spaces ? "h1" : "h2";
 ---
 
-<AdminLayout title="Feature flags">
+<AdminLayout title="Feature flags" spaces={spaces}>
   <div class="mx-auto max-w-6xl space-y-8 lg:px-6 lg:pt-6">
     <header class="space-y-4">
-      <h2 class="text-[2.5rem] leading-[0.95] tracking-display text-ink-primary sm:text-5xl lg:text-6xl">
+      <Title class="text-[2.5rem] leading-[0.95] tracking-display text-ink-primary sm:text-5xl lg:text-6xl">
         Feature flags
-      </h2>
+      </Title>
       <p class="max-w-3xl text-base leading-relaxed text-ink-secondary sm:text-lg">
         Who sees each part of the new platform. Try a feature as Staff before you give it to Everyone.
         Changes apply from the next page anyone opens.

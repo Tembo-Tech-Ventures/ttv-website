@@ -1,5 +1,7 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import Button from "@/components/common/Button.astro";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
@@ -144,12 +146,14 @@ const formatDate = (date: Date) =>
     timeStyle: "short",
     timeZone: "UTC",
   }).format(date);
+// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
+const spaces = await resolveSpacePage(Astro.locals, "adminIntegrations");
 ---
 
-<AdminLayout title="Integrations">
+<AdminLayout title="Integrations" spaces={spaces}>
   <div class="max-w-4xl space-y-6">
     <div>
-      <h2 class="text-2xl font-bold text-white">Integrations</h2>
+      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Integrations</PageTitle>
       <p class="mt-2 text-sm text-ink-secondary">
         Manage third-party service credentials. Secrets are encrypted at rest
         and are never displayed after saving.
@@ -232,7 +236,7 @@ const formatDate = (date: Date) =>
               If Workspace policy blocks sharing with service accounts, a
               Workspace super admin can instead grant the service account
               domain-wide delegation for the scope
-              <code class="rounded bg-black/20 px-1 py-0.5">https://www.googleapis.com/auth/drive.readonly</code>
+              <code class:list={["rounded bg-black/20 px-1 py-0.5", spaces && "break-all"]}>https://www.googleapis.com/auth/drive.readonly</code>
               — then set &ldquo;Impersonated user&rdquo; to a Workspace user
               who can read the folder.
             </p>

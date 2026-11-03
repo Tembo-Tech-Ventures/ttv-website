@@ -1,5 +1,7 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
+import PageTitle from "@/components/platform/spaces/PageTitle.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import Button from "@/components/common/Button.astro";
 import Card from "@/components/common/Card.astro";
 import { drizzle } from "drizzle-orm/d1";
@@ -78,16 +80,18 @@ const noticeByOutcome: Record<string, string> = {
 const outcome = Astro.url.searchParams.get("notice");
 const notice = outcome ? noticeByOutcome[outcome] : undefined;
 const isInUse = curriculum.programs.length > 0;
+// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
+const spaces = await resolveSpacePage(Astro.locals, "adminCurricula");
 ---
 
-<AdminLayout title={`Edit ${curriculum.title}`}>
+<AdminLayout title={`Edit ${curriculum.title}`} spaces={spaces}>
   <div class="mx-auto max-w-3xl space-y-6">
     <a href="/admin/curricula" class="text-sm text-primary hover:underline">
       &larr; Back to Curricula
     </a>
 
     <div>
-      <h2 class="text-2xl font-bold text-white">Edit Curriculum</h2>
+      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Edit Curriculum</PageTitle>
       <p class="mt-1 text-sm text-ink-secondary">
         Changes apply to every program or cohort using this curriculum.
       </p>

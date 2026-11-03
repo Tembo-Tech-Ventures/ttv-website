@@ -8,6 +8,9 @@ mkdirSync(EVIDENCE_DIR, { recursive: true });
 const evidence = (name: string) =>
   `${EVIDENCE_DIR}/${test.info().project.name}-${name}.png`;
 
+/** The page's own notice: the spaces shell (T14) keeps empty live regions of its own. */
+const notice = (page: Page) => page.getByRole("status").filter({ hasText: /\S/ });
+
 /**
  * Opens the admin navigation on a phone: the Admin space's drawer where the spaces flag is on for
  * this session (T02), the existing admin shell's menu otherwise.
@@ -76,7 +79,7 @@ test.describe("admin curriculum management", () => {
       await expect(
         page.getByRole("heading", { name: "Edit Curriculum" })
       ).toBeVisible();
-      await expect(page.getByRole("status")).toContainText(
+      await expect(notice(page)).toContainText(
         "Curriculum created."
       );
       editPath = new URL(page.url()).pathname;
@@ -89,7 +92,7 @@ test.describe("admin curriculum management", () => {
       await descriptionInput.fill("  Updated curriculum description.  ");
       await page.getByRole("button", { name: "Save Changes" }).click();
 
-      await expect(page.getByRole("status")).toContainText(
+      await expect(notice(page)).toContainText(
         "Curriculum changes saved."
       );
       await expect(titleInput).toHaveValue(updatedTitle);
@@ -115,7 +118,7 @@ test.describe("admin curriculum management", () => {
         .getByRole("button", { name: "Delete Curriculum" })
         .click();
 
-      await expect(page.getByRole("status")).toContainText(
+      await expect(notice(page)).toContainText(
         "Curriculum deleted."
       );
       editPath = undefined;

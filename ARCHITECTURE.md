@@ -103,8 +103,8 @@ Astro uses file-based routing in `src/pages/`. Layouts provide shared UI shells.
 BaseLayout (HTML shell, global CSS, meta tags)
 ├── PublicLayout  → Nav bar, footer, grain overlay, gradient background
 │   └── index.astro  →  /  (cohorts and skills map, builders, community, hire, principles)
-├── AdminLayout   → AdminShell (React island with sidebar)
-│   └── admin/*  (users, applications, programs, data-migration)
+├── AdminLayout   → the Admin space in SpacesLayout (flag `spaces`), else AdminShell (React island with sidebar)
+│   └── admin/*  (users, applications, programs, moderation, feedback, recordings, …)
 ├── DashboardLayout → DashboardShell (React island with sidebar)
 │   └── dashboard/*  (apply, applications, profile)
 ├── SpacesLayout → space tabs, per-space sidebar, attention, search (flag `spaces`)
