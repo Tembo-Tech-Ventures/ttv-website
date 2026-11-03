@@ -3,17 +3,18 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ROUTES, WORTH_ANOTHER_LOOK_LIMIT, type MentorDirectoryItem } from "@/lib/platform/contracts";
+import { MASKED_CONTACT, ROUTES, WORTH_ANOTHER_LOOK_LIMIT, type MentorDirectoryItem } from "@/lib/platform/contracts";
 import { acceptedMentorRequest } from "@/lib/platform/fixtures";
 import { ATTENTION_REFRESH_EVENT } from "@/components/platform/shell/overlays";
 import { availability, FIXTURE_NOW, meByPersona, mentors, people, pendingMentorRequest, worthAnotherLook } from "@/lib/platform/fixtures";
 import { NO_FILTERS, parseDirectoryUrl } from "@/lib/platform/client/mentor-directory";
 import { createMentoringMock } from "@/lib/platform/client/mentoring.mock";
 import type { MockReply } from "@/lib/platform/client/mockTransport";
+import { MASKED_NOTE } from "@/components/channels/MaskedText";
 import AvailabilityEditor from "./AvailabilityEditor";
 import MentorRequestsQueue from "./MentorRequestsQueue";
 import { isRecent, RECENT_DAYS } from "./OwnRequests";
-import MentorsDirectory, { standings, type MentorsDirectoryProps } from "./MentorsDirectory";
+import MentorsDirectory, { splitAreas, standings, TOP_AREAS, type MentorsDirectoryProps } from "./MentorsDirectory";
 
 const PATH = "/dashboard/community/mentors";
 const conduct = { version: 1, habitsHref: "/dashboard/community/conduct", canAgree: true };
@@ -80,7 +81,7 @@ describe("the mentor directory", () => {
     expect(card(mercy).querySelector("button")).toBeNull();
     // Filters are links held in the URL; the active ones say so.
     const active = all("[data-mentor-filters] a[aria-current='true']").map((link) => link.textContent);
-    expect(active).toEqual(["Career", "Any", "Has open spots"]);
+    expect(active).toEqual(["Career", "Any format", "Has open spots"]);
     // Each lands on the results heading, which says what the filters chose (QA4-18).
     expect(q<HTMLAnchorElement>("[data-filter-available]")!.getAttribute("href")).toBe(`${PATH}?area=Career#mentor-results`);
     expect(all("[data-mentor-filters] a").every((link) => link.getAttribute("href")!.endsWith("#mentor-results"))).toBe(true);
@@ -139,6 +140,47 @@ describe("the mentor directory", () => {
     expect(q(`[data-own-request="${pendingMentorRequest.id}"] button`)!.getAttribute("aria-label")).toBe("Withdraw request to David Kamau");
   });
 
+  it("puts every filter on one row: the top areas, the rest under More areas, and how as one menu (T06)", async () => {
+    const areas = ["API design", "Python", "Accessibility", "Career advice", "Code review", "CSS", "Data modelling", "Kotlin"];
+    const { props } = await directoryProps({ search: "?area=Kotlin" });
+    container.innerHTML = renderToString(<MentorsDirectory {...props} areas={areas} />);
+    const nav = q("[data-mentor-filters]")!;
+    const row = Array.from(nav.querySelectorAll<HTMLElement>("fieldset > a")).map((link) => link.textContent);
+    // The chosen area shows on the row even though few mentors offer it.
+    expect(row).toEqual(["All", ...areas.slice(0, TOP_AREAS), "Kotlin"]);
+    const menus = Array.from(nav.querySelectorAll<HTMLDetailsElement>("details[data-filter-menu]"));
+    expect(menus.map((menu) => menu.querySelector("summary")!.textContent)).toEqual(["More areas", "Any format"]);
+    expect(Array.from(menus[0]!.querySelectorAll("a")).map((link) => link.textContent)).toEqual(["CSS", "Data modelling"]);
+    // Closed until asked, and still plain links that land on the results.
+    expect(menus.every((menu) => !menu.open)).toBe(true);
+    expect(Array.from(menus[1]!.querySelectorAll("a")).map((link) => link.getAttribute("href"))).toEqual([
+      `${PATH}?area=Kotlin#mentor-results`, `${PATH}?area=Kotlin&format=WRITTEN_REVIEW#mentor-results`,
+      `${PATH}?area=Kotlin&format=CALL_30_MIN#mentor-results`, `${PATH}?area=Kotlin&format=QUICK_QUESTION#mentor-results`,
+    ]);
+    expect(splitAreas(areas.slice(0, 3), null)).toEqual({ shown: areas.slice(0, 3), more: [] });
+  });
+
+  it("folds Your requests to one line that says where they stand, and opens on request (T06)", async () => {
+    const { props } = await directoryProps();
+    await act(async () => root.render(<MentorsDirectory {...props} />));
+    const fold = q<HTMLDetailsElement>("[data-own-requests-fold]")!;
+    expect(fold.open).toBe(false);
+    expect(fold.querySelector("summary h2")!.textContent).toBe("Your requests");
+    expect(text("[data-own-requests-summary]")).toBe("1 waiting · 1 accepted");
+    await act(async () => { fold.querySelector("summary")!.click(); });
+    expect(fold.open).toBe(true);
+    expect(all("[data-own-request]")).toHaveLength(2);
+  });
+
+  it("shows the mentor's reply with contact details masked as the channels' note (T03)", async () => {
+    const { props } = await directoryProps();
+    const declined = { ...pendingMentorRequest, id: "declined-masked", status: "DECLINED" as const, responseNote: `Not this month. Text me on ${MASKED_CONTACT}` };
+    container.innerHTML = renderToString(<MentorsDirectory {...props} ownRequests={{ items: [declined], nextCursor: null }} />);
+    const reply = q("[data-own-request='declined-masked'] blockquote")!;
+    expect(reply.textContent).not.toContain(MASKED_CONTACT);
+    expect(reply.querySelector(".channel-masked[role=note]")!.textContent).toBe(MASKED_NOTE);
+  });
+
   it("keeps waiting and recent requests in view, and folds older answers under Earlier", async () => {
     const { props } = await directoryProps();
     const old = { ...pendingMentorRequest, id: "old-declined", status: "DECLINED" as const, createdAt: FIXTURE_NOW - 40 * 86_400_000, updatedAt: FIXTURE_NOW - 30 * 86_400_000 };
@@ -149,7 +191,7 @@ describe("the mentor directory", () => {
     expect(earlier.querySelectorAll("[data-own-request]")).toHaveLength(1);
     expect(earlier.querySelector("[data-own-request='old-declined']")).not.toBeNull();
     // Still waiting, however long ago it was asked, stays in view with its Withdraw.
-    expect(q("[data-own-requests] > div [data-own-request='old-pending']")).not.toBeNull();
+    expect(q("[data-own-requests-fold] > div [data-own-request='old-pending']")).not.toBeNull();
     expect(isRecent(oldPending, FIXTURE_NOW)).toBe(true);
     expect(isRecent(old, FIXTURE_NOW)).toBe(false);
     expect(isRecent({ ...old, updatedAt: FIXTURE_NOW - (RECENT_DAYS - 1) * 86_400_000 }, FIXTURE_NOW)).toBe(true);
@@ -456,6 +498,15 @@ describe("a mentor's requests", () => {
     expect(failed.textContent).toContain("That didn't go through");
     expect(failed.querySelector<HTMLTextAreaElement>("[data-report-request] textarea")!.value).toBe("Asked for my phone number.");
     expect(failed.querySelector("[data-report-request]")!.closest("[hidden]")).toBeNull();
+  });
+
+  it("shows contact details masked in a note as the channels' note, never the bracketed marker (T03)", async () => {
+    const masked = { ...pendingMentorRequest, note: `Career advice, please. WhatsApp me on ${MASKED_CONTACT}.` };
+    await act(async () => root.render(<MentorRequestsQueue initial={{ items: [masked], nextCursor: null }} mentors={mentors.items} availability={availability} anotherLook={null} now={FIXTURE_NOW} />));
+    const quote = request(pendingMentorRequest.id).querySelector("blockquote")!;
+    expect(quote.textContent).not.toContain(MASKED_CONTACT);
+    expect(quote.querySelector(".channel-masked[role=note]")!.textContent).toBe(MASKED_NOTE);
+    expect(quote.textContent).toContain("WhatsApp me on ");
   });
 
   it("shows a request reported earlier as closed, with nothing to press", async () => {

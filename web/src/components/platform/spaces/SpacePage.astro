@@ -32,7 +32,8 @@ import { channelsServer } from "@/components/channels/server";
 import { loadSidebarChannels } from "@/components/channels/sidebar-channels";
 import SpaceSidebar from "./SpaceSidebar.astro";
 import { SPACE_PAGE_PATHS, spaceSidebar } from "./sidebar";
-import { linkAllowed, loadCertificates, restrictionsFor, type SpacePageContext } from "./space-page";
+import { linkAllowed, loadCertificates, loadCohortHeading, restrictionsFor, type SpacePageContext } from "./space-page";
+import { cohortSearchLabel, type CohortHeading } from "./cohort-heading";
 
 interface Props {
   context: SpacePageContext | null;
@@ -58,16 +59,26 @@ const {
 const overlays: readonly ShellOverlay[] = ["search", "attention"];
 
 let sidebar = null;
+let cohortLabel: string | null = null;
 if (context) {
   const db = drizzle(env.DB, { schema });
   const userId = context.me.user.id;
   const listChannels = suppliedChannels ? async () => suppliedChannels : () => channelsServer(env.DB, context.me).list();
   const reportChannels = (error: unknown) => recordError(env.DB, { source: "request", route: SPACE_PAGE_PATHS[context.page], error, level: "warning" });
-  const [journey, certificates, channels] = await Promise.all([
+  // The cohort's name, for its space and for search's cohort scope (T07). Without it both keep their general names.
+  const loadCohort = (): Promise<CohortHeading | null> => context.me.spaces.includes("cohort")
+    ? loadCohortHeading(db, context.me).catch((error: unknown) => {
+      void recordError(env.DB, { source: "request", route: SPACE_PAGE_PATHS[context.page], error, level: "warning" });
+      return null;
+    })
+    : Promise.resolve(null);
+  const [journey, certificates, channels, cohort] = await Promise.all([
     suppliedJourney ?? getStudentJourney(db, userId),
     context.space === "profile" ? loadCertificates(db, userId) : [],
     loadSidebarChannels(context.me, context.space, listChannels, reportChannels, channelId ?? null),
+    loadCohort(),
   ]);
+  cohortLabel = cohortSearchLabel(context.me, cohort);
   const restrictions = restrictionsFor(Astro.locals);
   sidebar = spaceSidebar(context.space, {
     me: context.me,
@@ -78,6 +89,7 @@ if (context) {
     allowed: (href) => linkAllowed(restrictions, href),
     onboarding: context.onboarding,
     channels,
+    cohort,
   });
 }
 ---
@@ -93,7 +105,7 @@ if (context) {
       ) : (
         <slot />
       )}
-      <PlatformOverlays slot="overlays" client:load me={context.me} />
+      <PlatformOverlays slot="overlays" client:load me={context.me} cohortLabel={cohortLabel} />
     </SpacesLayout>
   ) : (
     <DashboardLayout title={titlePrefix + legacyTitle} journey={suppliedJourney} canDiscover={canDiscover}>

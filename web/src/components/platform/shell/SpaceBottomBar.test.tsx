@@ -23,6 +23,12 @@ describe("SpaceBottomBar", () => {
     expect(html).toMatch(/href="\/dashboard\/cohort" aria-current="page"/);
   });
 
+  it("marks no space current on a page that belongs to none, such as Attention (T12)", () => {
+    const outside = renderToStaticMarkup(<SpaceBottomBar links={LINKS} active="cohort" outside person={PERSON} />);
+    expect(outside).not.toContain("aria-current");
+    expect([...outside.matchAll(/data-space="([a-z]+)"/g)]).toHaveLength(3);
+  });
+
   it("says each count once, after the space's name", () => {
     expect(html).toContain('<span class="sr-only">, 2 new</span>');
     expect(html).toContain('<span class="sr-only">, 12 new</span>');

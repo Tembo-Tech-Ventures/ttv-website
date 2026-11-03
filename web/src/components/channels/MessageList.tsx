@@ -262,8 +262,8 @@ export default function MessageList({
 
       {showJump && (
         <button type="button" onClick={() => void jumpToLatest()} className={cx("channel-jump", FOCUS_RING)} data-jump-latest>
-          <PiArrowDown aria-hidden="true" className="size-4" />
-          Jump to latest
+          <PiArrowDown aria-hidden="true" className="size-4 shrink-0" />
+          <span className="channel-jump__label">Jump to latest</span>
         </button>
       )}
     </div>

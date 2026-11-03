@@ -230,20 +230,20 @@ describe("attention", () => {
     await s.afterResponse();
     await s.afterResponse();
     expect(items(s, PEOPLE.david)).toEqual([{ kind: "mentor_request", space: "mentoring", subjectKind: "mentorRequest",
-      subjectHref: "/dashboard/mentoring/requests", subjectLabel: "Request from Wanjiku Njeri", actorId: VIEWER, summary: "Asked you for a written review." }]);
+      subjectHref: "/dashboard/mentoring/requests", subjectLabel: "Request from Wanjiku Njeri", actorId: VIEWER, summary: "Wanjiku Njeri asked you for a written review." }]);
     const { channelId } = MentorRequest.parse((await s.call("acceptMentorRequest", { id, user: PEOPLE.david, body: {} })).body);
     await s.afterResponse();
     expect(items(s, VIEWER)).toEqual([{ kind: "mentor_accepted", space: "community", subjectKind: "mentorRequest",
       subjectHref: `/dashboard/community/dm/${channelId}`, subjectLabel: "Conversation with David Kamau", actorId: PEOPLE.david,
-      summary: "Accepted your request. Your conversation is open." }]);
+      summary: "David Kamau accepted your request. Your conversation is open." }]);
     expect(JSON.stringify(s.database.prepare("SELECT * FROM attention_item").all())).not.toMatch(/callback idea/);
     for (const row of s.database.prepare("SELECT id FROM attention_item").all() as { id: string }[]) expect(row.id).toEqual(expect.any(String));
   });
 
   it.each([
-    ["redirectMentorRequest", { mentorId: PEOPLE.joseph }, VIEWER, "mentor_redirected", "Suggested you ask Joseph Mutua instead."],
-    ["declineMentorRequest", {}, VIEWER, "mentor_declined", "Can't take your request this month."],
-    ["withdrawMentorRequest", {}, PEOPLE.david, "mentor_withdrawn", "Withdrew their request."],
+    ["redirectMentorRequest", { mentorId: PEOPLE.joseph }, VIEWER, "mentor_redirected", "David Kamau suggested you ask Joseph Mutua instead."],
+    ["declineMentorRequest", {}, VIEWER, "mentor_declined", "David Kamau can't take your request this month."],
+    ["withdrawMentorRequest", {}, PEOPLE.david, "mentor_withdrawn", "Wanjiku Njeri withdrew their request."],
   ] as const)("%s tells %s", async (operation, body, recipient, kind, summary) => {
     const s = setup();
     const id = await s.ask();

@@ -32,13 +32,14 @@ export function searchCoverage(me: Me): string {
 
 /**
  * Where a person can search. "Your cohort" only for someone who belongs to
- * one (it searches their own cohort's sessions), and "Messages" only while
- * channels are on, so no scope promises results it cannot have.
+ * one (it searches their own cohort's sessions), named for it when there is
+ * just the one ("Cohort 05", T07), and "Messages" only while channels are on,
+ * so no scope promises results it cannot have.
  */
-export function scopesFor(me: Me): ScopeOption[] {
+export function scopesFor(me: Me, cohortLabel: string | null = null): ScopeOption[] {
   const options: ScopeOption[] = [{ scope: "all", label: "Everywhere" }];
   if (searchesSessions(me)) {
-    options.push({ scope: "cohort", label: "Your cohort", glyph: "cohort" });
+    options.push({ scope: "cohort", label: cohortLabel ?? "Your cohort", glyph: "cohort" });
   }
   if (me.spaces.includes("community")) options.push({ scope: "community", label: "Community", glyph: "community" });
   if (searchesMessages(me)) options.push({ scope: "messages", label: "Messages" });

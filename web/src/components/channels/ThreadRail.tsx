@@ -30,11 +30,16 @@ type ThreadRailProps = {
   people: ReadonlyMap<string, AuthorSummary>;
   mentionPeople: readonly AuthorSummary[];
   headingRef: RefObject<HTMLHeadingElement>;
+  /** A reply a link named (`?message=`: a notification, a search result): the rail opens at it. */
+  targetId?: string | null;
   onClose: () => void;
   onLoadOlder: () => void;
   onRetry: () => void;
   announce: (text: string) => void;
 };
+
+/** Whether the thread's replies are there to place the rail by: loaded, or rendered by the server. */
+const hasReplies = (thread: ThreadView) => thread.status !== "loading" || thread.messages.length > 0;
 
 /**
  * One thread beside the channel: its first message, the replies, and a reply
@@ -42,7 +47,7 @@ type ThreadRailProps = {
  * one it takes the sheet's place, with "Back to channel". Escape closes it.
  */
 export default function ThreadRail({
-  thread, channel, me, now, composer, shareables, names, people, mentionPeople, headingRef, onClose, onLoadOlder,
+  thread, channel, me, now, composer, shareables, names, people, mentionPeople, headingRef, targetId, onClose, onLoadOlder,
   onRetry, announce,
 }: ThreadRailProps) {
   const scroller = useRef<HTMLElement>(null);
@@ -70,10 +75,26 @@ export default function ThreadRail({
     }
   }, [newest, replies, me.user.id]);
 
-  useEffect(() => {
-    scroller.current?.scrollTo({ top: 0 });
-    nearEnd.current = false;
-  }, [thread.parentId]);
+  // Where a thread opens (T09), once per thread as soon as its replies are there: at the reply a link
+  // named, in the middle of the rail, and otherwise at the end, where the latest reply (often Tembo's
+  // answer) is, and where it then stays while embeds and late replies load.
+  const placed = useRef<string | null>(null);
+  const ready = hasReplies(thread);
+  useLayoutEffect(() => {
+    const element = scroller.current;
+    if (!element || !ready || placed.current === thread.parentId) return;
+    placed.current = thread.parentId;
+    const target = targetId ? element.querySelector<HTMLElement>(`[data-message="${CSS.escape(targetId)}"]`) : null;
+    if (target) {
+      const box = element.getBoundingClientRect();
+      const rect = target.getBoundingClientRect();
+      nearEnd.current = false;
+      element.scrollTop = Math.max(0, rect.top - box.top + element.scrollTop - Math.max(16, (box.height - rect.height) / 2));
+    } else {
+      nearEnd.current = true;
+      element.scrollTop = element.scrollHeight;
+    }
+  }, [ready, thread.parentId, targetId]);
 
   // A reply the reader just sent waits at the end of the thread: show it, and keep following it
   // there as it changes (sending, then sent or failed with its buttons).

@@ -102,6 +102,22 @@ describe("space sidebars", () => {
     expect(current(applicant)).toEqual(["Apply"]);
   });
 
+  it("name the Cohort space for the person's cohort, and keep an accepted member's application under Earlier (T07)", () => {
+    const cohort = { id: "cohort-04", name: "Cohort 04", detail: "TypeScript backends · week 9 of 12", application: "APPROVED" as const };
+    const named = spaceSidebar("cohort", facts(meByPersona.wanjiku, "apply", { cohort, channels: { items: [channels.cohort04] } }));
+    expect([named.title, named.description]).toEqual(["Cohort 04", "TypeScript backends · week 9 of 12"]);
+    expect(groupLabelsOf(named)).toEqual([undefined, "Channels", "Earlier"]);
+    expect(named.groups.at(-1)!.items).toEqual([expect.objectContaining({
+      label: "Application", note: "Accepted", href: "/dashboard/cohort/apply", current: true,
+    })]);
+    expect(labels(named)).not.toContain("Apply");
+    // Someone named for a cohort by a role alone (no application) still applies where they did.
+    const staff = spaceSidebar("cohort", facts(meByPersona.wanjiku, "cohort", { cohort: { ...cohort, application: null } }));
+    expect(labels(staff)).toEqual(["Overview", "Sessions", "Ask Tembo", "Apply"]);
+    // Without a cohort the space keeps its general name.
+    expect(spaceSidebar("cohort", facts(meByPersona.wanjiku, "cohort")).title).toBe("Cohort");
+  });
+
   it("put the way into a cohort in Community for a member without one", () => {
     const lucy = spaceSidebar("community", facts(dark(meByPersona.lucy), "journey", { visibleLinkIds: NEW_SIGN_IN }));
     expect(lucy.groups.map((group) => group.label)).toEqual([undefined, "Public directory", "Cohorts"]);

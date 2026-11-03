@@ -882,7 +882,7 @@ describe("attention", () => {
     await s.call("moderateMessage", { id, body: hide() });
     await s.afterResponse();
     expect(await attentionOf(s, OTIENO)).toEqual([{ kind: "message_hidden", space: "community", actor: null,
-      href: `/dashboard/community/c/help?thread=${root}`, summary: "A moderator hid your message in #help. You can ask for a review." }]);
+      href: `/dashboard/community/c/help?thread=${root}&message=${id}`, summary: "A moderator hid your message in #help. You can ask for a review." }]);
     expect(await attentionOf(s, ACHIENG)).toEqual([{ kind: "moderation_pending", space: "admin", actor: null,
       href: MODERATION_QUEUE_HREF, summary: "A moderator hid a message in #help." }]);
     expect(await attentionOf(s, VIEWER)).toEqual([]);
@@ -894,7 +894,7 @@ describe("attention", () => {
     await s.afterResponse();
     // The hidden notice goes; the author hears the outcome instead, without who decided.
     expect([await attentionOf(s, OTIENO), await attentionOf(s, ACHIENG)]).toEqual([[{ kind: "moderation_decided", space: "community", actor: null,
-      href: `/dashboard/community/c/help?thread=${root}`, summary: "An admin reviewed your message in #help and restored it." }], []]);
+      href: `/dashboard/community/c/help?thread=${root}&message=${id}`, summary: "An admin reviewed your message in #help and restored it." }], []]);
   });
 
   it("tells the author what an admin decided about a case they knew of, once, and nothing about a report", async () => {
@@ -987,7 +987,7 @@ describe("attention", () => {
     const cohort = s.channel("cohort-04");
     const sent = Message.parse((await s.call("postMessage", { id: cohort, body: post("@Otieno Ouma and @Brian Kiprop, @Faith Njeri: review?") })).body);
     await s.afterResponse();
-    const mention = { kind: "mention", space: "cohort", actor: VIEWER, href: "/dashboard/cohort/c/cohort-04", summary: "Mentioned you in #cohort-04." };
+    const mention = { kind: "mention", space: "cohort", actor: VIEWER, href: `/dashboard/cohort/c/cohort-04?message=${sent.id}`, summary: "Mentioned you in #cohort-04." };
     expect(await attentionOf(s, OTIENO)).toEqual([mention]);
     expect(await attentionOf(s, FAITH)).toEqual([mention]);
     // Brian cannot read cohort 04; the author is never told of their own mention.

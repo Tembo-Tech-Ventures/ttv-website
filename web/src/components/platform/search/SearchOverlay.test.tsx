@@ -2,11 +2,12 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ROUTES, SearchQuery, SearchResults, type Me } from "@/lib/platform/contracts";
+import { MASKED_CONTACT, ROUTES, SearchQuery, SearchResults, type Me } from "@/lib/platform/contracts";
 import { meByPersona, searchResults } from "@/lib/platform/fixtures";
 import { createApiClient, type ApiClient } from "@/lib/platform/client/apiClient";
 import { createMockTransport, type MockReply } from "@/lib/platform/client/mockTransport";
 import { requestShellOverlay } from "@/components/platform/shell/overlays";
+import { MASKED_NOTE } from "@/components/channels/MaskedText";
 import { askTemboHref } from "./ask-handoff";
 import { recentSearchKey } from "./recent-searches";
 import SearchOverlay from "./SearchOverlay";
@@ -33,7 +34,9 @@ function backend(): { client: ApiClient; state: Backend } {
             data: SearchResults.parse({
               ...searchResults,
               query,
-              messages: none ? [] : searchResults.messages,
+              messages: none ? [] : /phone/.test(query.q)
+                ? searchResults.messages.map((message) => ({ ...message, excerpt: `My phone is ${MASKED_CONTACT}, text me` }))
+                : searchResults.messages,
               people: none ? [] : searchResults.people,
               projects: none ? [] : searchResults.projects,
               sessionMoments: none ? [] : searchResults.sessionMoments,
@@ -90,8 +93,8 @@ const input = () => container.querySelector<HTMLInputElement>('input[role="combo
 const options = () => Array.from(container.querySelectorAll<HTMLElement>('[role="option"]'));
 const polite = () => container.querySelector('[data-live-regions="search"] output')?.textContent ?? "";
 
-async function mount(me: Me = wanjiku, client = backend().client) {
-  await act(async () => root.render(<SearchOverlay me={me} client={client} />));
+async function mount(me: Me = wanjiku, client = backend().client, cohortLabel: string | null = null) {
+  await act(async () => root.render(<SearchOverlay me={me} client={client} cohortLabel={cohortLabel} />));
   await act(async () => requestShellOverlay({ overlay: "search", trigger, via: "shortcut" }));
   await settle(20);
 }
@@ -132,6 +135,25 @@ describe("SearchOverlay", () => {
     expect(close.querySelector(".search-overlay__esc")?.textContent?.trim()).toBe("Esc");
     expect(close.getAttribute("aria-label")).toBe("Close search, Esc");
     expect(close.getAttribute("aria-keyshortcuts")).toBe("Escape");
+  });
+
+  it("shows a masked contact marker in an excerpt as the channels' note, never the marker (T03)", async () => {
+    await mount();
+    await type("phone");
+    await settle(300);
+    const excerpt = container.querySelector<HTMLElement>("[role=option] .channel-masked")!;
+    expect(excerpt.textContent).toBe(MASKED_NOTE);
+    // Inside an option, whose children are presentational, it is a styled span and not a note.
+    expect(excerpt.getAttribute("role")).toBeNull();
+    expect(container.textContent).not.toContain(MASKED_CONTACT);
+    expect(excerpt.parentElement!.querySelector("mark")!.textContent).toBe("phone");
+  });
+
+  it("names the cohort scope for the person's one cohort (T07)", async () => {
+    await mount(wanjiku, backend().client, "Cohort 04");
+    const scopes = Array.from(dialog().querySelectorAll("[data-search-scope], [role=radio], button")).map((element) => element.textContent?.trim());
+    expect(scopes).toContain("Cohort 04");
+    expect(scopes).not.toContain("Your cohort");
   });
 
   it("says why a result matched when its words do not show it", async () => {

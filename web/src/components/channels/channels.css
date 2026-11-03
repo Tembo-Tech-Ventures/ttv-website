@@ -70,6 +70,21 @@
 }
 
 /*
+ * Below 64rem the shell's top bar already says the channel's name (m1), so the sheet says it once:
+ * its header keeps the topic and who reads it, and the name stays its heading for screen readers (T11).
+ */
+@media (max-width: 63.999rem) {
+  .spaces-shell .channel-view__header [data-channel-header] h1 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/*
  * A phone's top bar already names the channel (m1): the header stays, quieter and shorter, so the
  * messages keep most of a 390px screen (QA2-17). The name and the chips share a line where they fit,
  * and the topic keeps to one.
@@ -250,6 +265,8 @@
 }
 
 .channel-row[data-highlight] {
+  --channel-row-surface: color-mix(in srgb, var(--color-primary) 7%, var(--channel-surface));
+
   background-color: rgb(242 141 104 / 0.07);
   box-shadow: inset 3px 0 0 var(--color-primary);
 }
@@ -371,19 +388,6 @@
   font-weight: 600;
 }
 
-/* Contact details masked until a moderator checks the message (QA2-08): a note, not the member's words. */
-.channel-masked {
-  padding: 0 0.3125rem;
-  border: 1px dashed rgb(255 255 255 / 0.35);
-  border-radius: 0.3125rem;
-  color: var(--color-ink-secondary);
-  font-size: 0.875em;
-  font-style: italic;
-  /* A note that wraps keeps its border on every line. */
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
-}
-
 .channel-code {
   padding: 0.0625rem 0.3125rem;
   border-radius: 0.375rem;
@@ -441,12 +445,16 @@
   display: flex;
 }
 
+/*
+ * Faces overlap by a quarter, each ringed in the colour of the row behind it, so every set of
+ * initials stays whole and readable (T08). The open thread's row is tinted, and so is its ring.
+ */
 .channel-faces > * + * {
-  margin-left: -0.5rem;
+  margin-left: -0.375rem;
 }
 
 .channel-faces [data-avatar] {
-  box-shadow: 0 0 0 2px var(--channel-surface);
+  box-shadow: 0 0 0 2px var(--channel-row-surface, var(--channel-surface));
 }
 
 /* ---- Shared work ---------------------------------------------------------- */
@@ -1003,23 +1011,27 @@
   }
 }
 
+/*
+ * "Jump to latest" stands on the list's bottom edge, at its end, just above the composer (T10): out of
+ * the middle of the messages, where it covered words and the titles of shared work.
+ */
 .channel-jump {
   position: absolute;
-  bottom: 0.75rem;
-  left: 50%;
+  right: var(--channel-gutter);
+  bottom: 0.5rem;
   z-index: 3;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.375rem;
-  height: 2.25rem;
-  padding: 0 0.875rem;
+  height: 2rem;
+  padding: 0 0.75rem;
   border-radius: 999px;
   background: var(--color-ink-primary);
-  box-shadow: 0 12px 28px -10px rgb(0 0 0 / 0.6);
+  box-shadow: 0 10px 24px -10px rgb(0 0 0 / 0.6);
   color: var(--color-dark);
   font-size: 0.8125rem;
   font-weight: 700;
-  translate: -50% 0;
 }
 
 @media (pointer: coarse) {
@@ -1046,12 +1058,21 @@
   display: none;
 }
 
-/* On a phone it sits at the end of the line, away from the reactions and thread links under each message. */
+/* On a phone it is only its arrow, in a round button the size of a fingertip; its words stay its name. */
 @container channel-view (max-width: 40rem) {
   .channel-jump {
-    right: var(--channel-gutter);
-    left: auto;
-    translate: none;
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
+  }
+
+  .channel-jump__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 

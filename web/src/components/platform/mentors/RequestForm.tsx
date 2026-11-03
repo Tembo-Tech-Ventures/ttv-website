@@ -205,19 +205,25 @@ export default function RequestForm({
           {formatError && <p id={`${ids}-format-error`} className="mt-1 text-sm font-semibold text-danger-ink">{formatError}</p>}
         </fieldset>
 
-        <p className="mentor-drawer__note" data-request-privacy>
-          {name} sees your name, this note and the project you attach. Some requests get a check from TTV before they
-          reach a mentor. If {name} accepts, you both get a private conversation, and it shows up under Needs your
-          attention. If the timing doesn't work, {name} can suggest another mentor or say not this month, and neither
-          shows anywhere else.
-        </p>
+        {/* Who sees what, in a line; the rest behind "How this works", so Send stays in view at 1440×900 (T05). */}
+        <div className="mentor-drawer__note" data-request-privacy>
+          <p>{name} sees your name, this note and the project you attach.</p>
+          <details className="mentor-drawer__more">
+            <summary className={cx("mentor-drawer__more-toggle", FOCUS_RING)}>How this works</summary>
+            <p className="mt-2">
+              Some requests get a check from TTV before they reach a mentor. If {name} accepts, you both get a private
+              conversation, and it shows up under Needs your attention. If the timing doesn't work, {name} can suggest
+              another mentor or say not this month, and neither shows anywhere else.
+            </p>
+          </details>
+        </div>
 
         {/* Before Send, not after it (QA4-05): the note follows the channels' habits, and sending agrees to them. */}
         {asksAgreement && <ConductBeforeSend name={name} conduct={conduct} headingId={`${ids}-conduct`} />}
 
         <SendFailure failure={state.status === "error" ? state.failure : null} message={state.failureMessage} name={name} />
 
-        <div className="mentor-drawer__actions">
+        <div className="mentor-drawer__actions mentor-drawer__actions--sticky">
           <Button type="submit" variant="primary" loading={sending} className="flex-1 sm:flex-none">
             {asksAgreement ? "Agree and send request" : "Send request"}
           </Button>

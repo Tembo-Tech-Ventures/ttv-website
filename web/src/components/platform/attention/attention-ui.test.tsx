@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AttentionList, MarkAttentionRead, ROUTES, SPACE_ORDER, type AttentionCount, type AttentionItem, type Me } from "@/lib/platform/contracts";
+import { AttentionList, MarkAttentionRead, MASKED_CONTACT, ROUTES, SPACE_ORDER, type AttentionCount, type AttentionItem, type Me } from "@/lib/platform/contracts";
 import { attention, meByPersona } from "@/lib/platform/fixtures";
 import { createApiClient, type ApiClient } from "@/lib/platform/client/apiClient";
 import { createMockTransport, type MockReply } from "@/lib/platform/client/mockTransport";
@@ -13,6 +13,7 @@ import AttentionPage, { AttentionPageView } from "./AttentionPage";
 import AttentionPanel from "./AttentionPanel";
 import { useAttentionOwner } from "./attention-client";
 import LiveRegions from "@/components/platform/overlays/LiveRegions";
+import { MASKED_NOTE } from "@/components/channels/MaskedText";
 
 const wanjiku = meByPersona.wanjiku;
 const SNAPSHOT = attention.snapshotAt;
@@ -128,6 +129,24 @@ describe("the attention page on the server", () => {
     expect(html).not.toContain("Loading what needs you");
     // Each unread item says so to a screen reader, not only with a dot.
     expect(html.match(/Unread: /g)).toHaveLength(4);
+  });
+
+  it("leads an accepted request with the mentor, and shows its next step on the row, which stays one link (T04)", () => {
+    container.innerHTML = renderToString(<AttentionPage me={wanjiku} initialList={attention} />);
+    const accepted = container.querySelector<HTMLElement>(`[data-attention-item="${attention.items[0]!.id}"]`)!;
+    expect(accepted.querySelector("strong")!.textContent).toBe("David Kamau");
+    expect(accepted.querySelector("[data-attention-action]")!.textContent).toBe("Open conversation");
+    const links = accepted.querySelectorAll("a");
+    expect([links.length, links[0]!.getAttribute("href")]).toEqual([1, attention.items[0]!.subject.href]);
+    // Only an accepted request has one.
+    expect(container.querySelectorAll("[data-attention-action]")).toHaveLength(1);
+  });
+
+  it("shows a masked contact marker in a notice as the same note as in a message, never the marker (T03)", () => {
+    const item = { ...attention.items[1]!, summary: `Faith Njeri mentioned you: call me on ${MASKED_CONTACT}` };
+    container.innerHTML = renderToString(<AttentionPage me={wanjiku} initialList={{ ...attention, items: [item] }} />);
+    expect(container.textContent).not.toContain(MASKED_CONTACT);
+    expect(container.querySelector(".channel-masked[role=note]")!.textContent).toBe(MASKED_NOTE);
   });
 
   it("is honest about an empty inbox", () => {

@@ -209,6 +209,23 @@ export function requesterStatus(
   }
 }
 
+/**
+ * "2 waiting · 1 accepted": where the person's requests stand, in one line, for "Your requests" folded
+ * above the directory (T06). Each status once, in the order the newest request with it comes; a check
+ * is said as the check ("being checked"), never as the mentor's answer.
+ */
+export function requestsSummary(
+  requests: readonly (Pick<MentorRequest, "mentor" | "redirectedTo"> & Partial<Pick<MentorRequest, "check">> & { status: MentorRequestStatus })[],
+): string {
+  const counts = new Map<string, number>();
+  for (const request of requests) {
+    const view = requesterStatus(request, request.status);
+    const said = request.status === "PENDING" && view.tone === "ring" ? "waiting" : view.label.toLowerCase();
+    counts.set(said, (counts.get(said) ?? 0) + 1);
+  }
+  return [...counts].map(([said, count]) => `${count} ${said}`).join(" · ");
+}
+
 /** A request a mentor received, once it has moved on. */
 export function mentorStatus(
   request: Pick<MentorRequest, "requester" | "redirectedTo"> & Partial<Pick<MentorRequest, "check">>, status: MentorRequestStatus,

@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { PiArrowRight } from "react-icons/pi";
+import { PiArrowRight, PiCaretDown } from "react-icons/pi";
 import type { MentorDirectoryItem, MentorRequest } from "@/lib/platform/contracts";
 import { useMentorRequests } from "@/lib/platform/client/hooks/mentoring";
 import { hasOpenSpot } from "@/lib/platform/client/mentor-directory";
@@ -7,7 +7,8 @@ import { shownStatus, type MentorRequestsStore } from "@/lib/platform/client/men
 import { Avatar, Button, Card, Chip } from "@/components/platform/ui";
 import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
-import { capacityView, conversationHref, requesterStatus, requestMeta, type StatusView } from "./mentor-display";
+import MaskedText from "@/components/channels/MaskedText";
+import { capacityView, conversationHref, requesterStatus, requestMeta, requestsSummary, type StatusView } from "./mentor-display";
 
 interface Props {
   store: MentorRequestsStore;
@@ -31,7 +32,9 @@ const LINK = cx("inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[0.81
  * The requests this person sent, newest first, with where each stands. A
  * waiting request can be withdrawn; an accepted one opens its conversation; a
  * suggestion can be asked at once. "Not this month" reads as what it is: the
- * mentor's time, not a verdict.
+ * mentor's time, not a verdict. Folded to one line ("Your requests · 1 waiting
+ * · 1 accepted") above the directory, so the mentors come first (T06); each
+ * mentor's card also says where a request to them stands.
  */
 export default function OwnRequests({ store, now, mentors, onAsk }: Props) {
   const state = useMentorRequests(store);
@@ -96,7 +99,7 @@ export default function OwnRequests({ store, now, mentors, onAsk }: Props) {
             )}
             {request.responseNote && (
               <blockquote className="border-l-2 border-ring/60 pl-3 text-sm leading-relaxed break-words text-ink-secondary">
-                <span className="sr-only">{request.mentor.name} wrote: </span>{request.responseNote}
+                <span className="sr-only">{request.mentor.name} wrote: </span><MaskedText text={request.responseNote} />
               </blockquote>
             )}
             {failed && !failed.stale && <p className="text-sm font-semibold text-danger-ink">Couldn't withdraw. Nothing changed; try again.</p>}
@@ -106,9 +109,21 @@ export default function OwnRequests({ store, now, mentors, onAsk }: Props) {
     );
   }
 
+  const summary = [requestsSummary(recent.map(request => ({ ...request, status: shownStatus(state, request) }))),
+    earlier.length > 0 && `${earlier.length}${state.nextCursor !== null ? "+" : ""} earlier`].filter(Boolean).join(" · ");
+
   return (
-    <section aria-labelledby="own-requests-title" className="mb-10" data-own-requests>
-      <h2 id="own-requests-title" className="font-body text-lg font-bold text-ink-primary">Your requests</h2>
+    <section aria-labelledby="own-requests-title" className="mb-5" data-own-requests>
+      <details className="own-requests group" data-own-requests-fold>
+        <summary className={cx("own-requests__summary", FOCUS_RING)}>
+          <h2 id="own-requests-title" className="font-body text-[0.9375rem] font-bold text-ink-primary">Your requests</h2>
+          {summary && <span className="min-w-0 text-sm text-ink-secondary" data-own-requests-summary>{summary}</span>}
+          <span className="own-requests__toggle" aria-hidden="true">
+            <span className="group-open:hidden">Show</span>
+            <span className="hidden group-open:inline">Hide</span>
+            <PiCaretDown className="size-4 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+          </span>
+        </summary>
       {recent.length > 0 && (
         <Card as="div" padding="sm" className="mt-3 p-0 sm:p-0">
           <ul className="divide-y divide-hairline">{recent.map(row)}</ul>
@@ -125,6 +140,7 @@ export default function OwnRequests({ store, now, mentors, onAsk }: Props) {
           {more}
         </details>
       ) : more}
+      </details>
     </section>
   );
 }
