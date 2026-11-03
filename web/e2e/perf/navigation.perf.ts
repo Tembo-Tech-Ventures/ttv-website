@@ -50,6 +50,9 @@ interface Step {
   doc?: Record<string, number | string | null>; js?: { count: number; transfer: number; decoded: number };
   scriptMs?: number; taskMs?: number; server?: unknown; serverTiming?: unknown;
 }
+/** This environment does not offer the step (no link, no form): the only failure an optional step may skip. */
+class StepUnavailable extends Error {}
+
 /** A step that could not run in this environment, kept so the summary says so instead of dropping it. */
 interface Skipped { journey: string; step: string; profile: ProfileName; rep: number; skipped: string }
 const results: (Step | Skipped)[] = [];
@@ -142,11 +145,15 @@ class Journey {
     });
   }
 
-  /** A step this environment may not offer: when it cannot run, the summary lists it as skipped, with why. */
+  /**
+   * A step this environment may not offer: when it cannot start, the summary lists it as skipped, with
+   * why. Any other failure (a timeout after the action, an error page) still fails the run.
+   */
   async optional(name: string, run: () => Promise<void>) {
     try {
       await run();
     } catch (error) {
+      if (!(error instanceof StepUnavailable)) throw error;
       const reason = String(error).split("\n")[0]!.slice(0, 200);
       results.push({ journey: this.journey, step: name, profile: this.profile, rep: this.rep, skipped: reason });
     }
@@ -162,7 +169,7 @@ class Journey {
       await link.click({ noWaitAfter: true });
       return "click";
     }
-    if (!fallback) throw new Error(`No link for ${selector} on ${this.page.url()}`);
+    if (!fallback) throw new StepUnavailable(`No link for ${selector} on ${this.page.url()}`);
     await this.page.goto(fallback, { waitUntil: "commit" });
     return "goto";
   }
@@ -242,13 +249,16 @@ for (const profile of SELECTED) {
         await j.step("users", () => j.click('a[href="/admin/users"]', "/admin/users"));
         await j.step("user detail", () => j.click('main a[href^="/admin/users/"]'));
         await j.step("applications", () => j.click('a[href="/admin/applications"]', "/admin/applications"));
-        // A pending application, so it has a status form to post (any application otherwise).
-        await j.step("application detail", () => j.click('main tr:has-text("PENDING") a[href^="/admin/applications/"], main a[href^="/admin/applications/"]:not([href$="/applications/"])'));
+        // A pending application, so it has a status form to post; any application when none is pending.
+        await j.step("application detail", async () => {
+          const pending = 'main tr:has-text("PENDING") a[href^="/admin/applications/"]';
+          return j.click(await page.locator(pending).count() ? pending : 'main a[href^="/admin/applications/"]:not([href$="/applications/"])');
+        });
         await j.optional("status post", () => j.step("status post", async () => {
           // A stale expectedStatus: the full POST pipeline (guards, form, reads, render) runs and the
           // page answers "changed, refresh", so the preview's applications stay as the e2e suite left them.
           const form = page.locator("form:has(input[name='expectedStatus'])").first();
-          if (!await form.count()) throw new Error("No status form on this application");
+          if (!await form.count()) throw new StepUnavailable("No status form on this application");
           await form.locator("input[name='expectedStatus']").evaluate((input: HTMLInputElement) => {
             input.value = input.value === "PENDING" ? "REJECTED" : "PENDING";
           });
