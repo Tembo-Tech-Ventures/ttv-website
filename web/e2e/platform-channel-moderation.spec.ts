@@ -22,20 +22,7 @@ function harness(params: Record<string, string>) {
   return `${HARNESS}?${new URLSearchParams({ channel: "show-your-work", ...params })}`;
 }
 
-/** Chromium in the dev container cannot reach Google Fonts itself; Node can. */
-async function routeFonts(page: Page) {
-  await page.route(/fonts\.(googleapis|gstatic)\.com/, async (route) => {
-    try {
-      const response = await fetch(route.request().url());
-      await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
-    } catch {
-      await route.abort();
-    }
-  });
-}
-
 async function open(page: Page, path: string) {
-  await routeFonts(page);
   await page.goto(path);
   await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
   await page.waitForFunction(() => typeof window.__channelHarness?.moderation === "function");
