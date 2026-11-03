@@ -42,6 +42,14 @@ function record(kind: string, sql: string, startedAt: number, ms: number) {
   trace.queries.push({ phase, kind, at: Math.round(startedAt - trace.start), ms: Math.round(ms * 10) / 10, sql: sql.replace(/\s+/g, " ").slice(0, 90) });
 }
 
+/** Where D1 answered from (its result meta), once seen: the D1 region round trips travel to. */
+let servedBy: string | null = null;
+function noteRegion(result: unknown) {
+  if (servedBy) return;
+  const meta = (result as { meta?: { served_by_region?: string; served_by_primary?: boolean; served_by?: string } } | null)?.meta;
+  if (meta?.served_by_region || meta?.served_by) servedBy = `${meta.served_by_region ?? "?"}${meta.served_by_primary === false ? " (replica)" : ""} ${meta.served_by ?? ""}`.trim();
+}
+
 let installed = false;
 let served = 0;
 /** Wraps the D1 binding's prototypes once, so every caller (Drizzle, better-auth, raw) is counted. */
@@ -66,8 +74,11 @@ function installD1Probe(db: D1Database) {
     const original = statement[kind] as (...args: unknown[]) => Promise<unknown>;
     statement[kind] = async function (this: object, ...args: unknown[]) {
       const at = performance.now();
-      try { return await original.apply(this, args); }
-      finally { record(kind, statementSql.get(this) ?? "?", at, performance.now() - at); }
+      try {
+        const result = await original.apply(this, args);
+        noteRegion(result);
+        return result;
+      } finally { record(kind, statementSql.get(this) ?? "?", at, performance.now() - at); }
     };
   }
   const batch = Object.getPrototypeOf(db).batch as (this: D1Database, statements: D1PreparedStatement[]) => Promise<unknown>;
@@ -124,6 +135,7 @@ function summary(trace: Trace, end: number) {
   const d1 = trace.queries.length;
   return {
     cold: trace.cold,
+    d1Region: servedBy,
     waves: sequentialWaves(trace.queries),
     totalMs: round(end - trace.start),
     headersMs: round((trace.headersAt ?? end) - trace.start),
@@ -140,6 +152,7 @@ function finish(trace: Trace, response: Response): Response {
     `total;dur=${headerSummary.headersMs}`,
     `d1;desc="${headerSummary.d1} queries, ${headerSummary.waves} waves";dur=${headerSummary.d1Ms}`,
     `cold;desc="${headerSummary.cold}"`,
+    `region;desc="${headerSummary.d1Region ?? "unknown"}"`,
     ...Object.entries(headerSummary.phases).map(([name, value]) => `${name};desc="${value.d1} d1";dur=${value.ms}`),
   ].join(", ");
   let headers: Headers;
