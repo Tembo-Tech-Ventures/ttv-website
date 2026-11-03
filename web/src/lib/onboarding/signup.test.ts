@@ -98,7 +98,10 @@ describe("Better Auth user.create hook in createAuth", () => {
       DEPLOYMENT_ENVIRONMENT: "production", ...overrides,
     } as Parameters<typeof createAuth>[0]);
     const { internalAdapter } = await auth.$context;
-    return internalAdapter.createUser({ name: "Njambi Wanjiru", email: "njambi@example.test", emailVerified: true });
+    return internalAdapter.createUser(
+      { name: "Njambi Wanjiru", email: "njambi@example.test", emailVerified: true },
+      { method: "oauth", oauth: { providerId: "github" } },
+    );
   }
   const newcomer = (fixture: ReturnType<typeof setup>) =>
     fixture.rows("SELECT o.stage FROM member_onboarding o JOIN user u ON u.id = o.userId WHERE u.email = 'njambi@example.test'");
