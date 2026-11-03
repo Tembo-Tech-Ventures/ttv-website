@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import { PiCheckCircle, PiFolderSimple, PiShieldCheck, PiX } from "react-icons/pi";
 import type { MentorDirectoryItem, MentorRequest, ProjectEmbed } from "@/lib/platform/contracts";
 import { useRequestForm } from "@/lib/platform/client/hooks/mentoring";
@@ -218,12 +218,13 @@ export default function RequestForm({
           </details>
         </div>
 
-        {/* Before Send, not after it (QA4-05): the note follows the channels' habits, and sending agrees to them. */}
-        {asksAgreement && <ConductBeforeSend name={name} conduct={conduct} headingId={`${ids}-conduct`} />}
-
         <SendFailure failure={state.status === "error" ? state.failure : null} message={state.failureMessage} name={name} />
 
-        <SendActions conductId={asksAgreement ? `${ids}-conduct` : null} sending={sending} closeHref={closeHref} onClose={onClose} />
+        {/* The habits sit just above Send, inside the pinned footer, so they are in view whenever it is (QA4-05, T05). */}
+        <SendActions
+          agreement={asksAgreement ? <ConductBeforeSend name={name} conduct={conduct} headingId={`${ids}-conduct`} /> : null}
+          sending={sending} closeHref={closeHref} onClose={onClose}
+        />
       </form>
     </>
   );
@@ -260,11 +261,11 @@ function SentPanel({ name, headingRef, onClose }: { name: string; headingRef: Re
   );
 }
 
-/** The habits, above Send, for someone who has not agreed to them yet: the form then carries the agreement. */
+/** The habits, just above Send, for someone who has not agreed to them yet: the form then carries the agreement. */
 function ConductBeforeSend({ name, conduct, headingId }: { name: string; conduct: ConductPrompt; headingId: string }) {
   return (
-    <section aria-labelledby={headingId} className="mentor-drawer__note flex flex-col gap-2" data-request-conduct-inline>
-      <h3 id={headingId} className="flex items-center gap-2 text-[0.9375rem] font-semibold text-ink-primary">
+    <section aria-labelledby={headingId} className="flex w-full flex-col gap-1.5 text-[0.8125rem] leading-snug text-ink-secondary" data-request-conduct-inline>
+      <h3 id={headingId} className="flex items-center gap-2 text-sm font-semibold text-ink-primary">
         <PiShieldCheck aria-hidden className="size-5 shrink-0 text-ring" />
         Before you send: {CONDUCT_TITLE.toLowerCase()}
       </h3>
@@ -346,23 +347,17 @@ function DrawerHeader({ mentor, name, headingId, closeHref, onClose }: {
 
 /** Before the page is interactive (or without JavaScript), Cancel is a link back to the directory. */
 /**
- * Send and Cancel, pinned to the drawer's bottom edge (T05). While sending also agrees to the habits
- * (`conductId`, their section above), the footer says so and links to them, as it stays in view
- * while they may be scrolled away.
+ * Send and Cancel, pinned to the drawer's bottom edge (T05). While sending also agrees to the habits,
+ * they come first in the footer (`agreement`), so what Send agrees to is always in view beside it.
  */
-function SendActions({ conductId, sending, closeHref, onClose }: {
-  conductId: string | null; sending: boolean; closeHref: string | null; onClose: () => void;
+function SendActions({ agreement, sending, closeHref, onClose }: {
+  agreement: ReactNode; sending: boolean; closeHref: string | null; onClose: () => void;
 }) {
   return (
     <div className="mentor-drawer__actions mentor-drawer__actions--sticky">
-      {conductId && (
-        <p className="w-full text-[0.8125rem] leading-snug text-ink-secondary" data-request-agrees>
-          Sending agrees to {CONDUCT_TITLE.toLowerCase()}, once.{" "}
-          <a href={`#${conductId}`} className={cx("font-semibold text-peach-ink underline underline-offset-4", FOCUS_RING)}>Read them first</a>
-        </p>
-      )}
+      {agreement}
       <Button type="submit" variant="primary" loading={sending} className="flex-1 sm:flex-none">
-        {conductId ? "Agree and send request" : "Send request"}
+        {agreement ? "Agree and send request" : "Send request"}
       </Button>
       <CancelControl closeHref={closeHref} onClose={onClose} />
     </div>

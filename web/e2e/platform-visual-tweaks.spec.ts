@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { runAxe } from "./platform-axe";
 
 /**
- * The prototype-vs-live visual tweaks whose behaviour a browser has to see (T03, T04, T06, T09, T10, T12;
+ * The prototype-vs-live visual tweaks whose behaviour a browser has to see (T03, T04, T05, T06, T09, T10, T12;
  * Library /reports/platform-visual-review-2026-11-03/), on the DEV-only harnesses: a masked contact
  * marker in a mentor's request card, the directory's filter menus, the accepted request's notice, where a thread opens, where
  * "Jump to latest" stands, and the phone's bar on the attention page. Unit tests cover the markup.
@@ -46,6 +46,25 @@ test("T06: both filter menus open inside the screen and the filter row, from 320
     }
   }
 });
+
+for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+  test(`T05: Send, and the habits it agrees to, are in view together in the drawer at ${viewport.width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await open(page, "/dev/platform-mentors?persona=wanjiku&view=directory&conduct=required");
+    await page.locator("[data-mentor-card]", { hasText: "Joseph Mutua" }).getByRole("link", { name: "Ask for time" }).click();
+    const drawer = page.locator("dialog[data-mentor-drawer]");
+    const send = drawer.getByRole("button", { name: "Agree and send request" });
+    await expect(send).toBeInViewport();
+    await expect(drawer.getByRole("heading", { name: "Before you send: how we talk to each other" })).toBeInViewport();
+    await expect(drawer.getByRole("link", { name: "Read how we talk to each other" })).toBeInViewport();
+    await expect(drawer.getByRole("button", { name: "Cancel" }).or(drawer.getByRole("link", { name: "Cancel" }))).toBeInViewport();
+    // With the note scrolled to its end, the habits and Send stay together at the drawer's bottom edge.
+    await drawer.locator(".mentor-drawer__sheet").evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+    await expect(send).toBeInViewport();
+    await expect(drawer.getByRole("heading", { name: "Before you send: how we talk to each other" })).toBeInViewport();
+    await runAxe(page, testInfo, `drawer-conduct-${viewport.width}`);
+  });
+}
 
 test("T04: an accepted request leads with the mentor and shows Open conversation, on the panel and the page", async ({ page }, testInfo) => {
   const accepted = (scope: ReturnType<Page["locator"]>) => scope.locator("[data-attention-item]").filter({ has: page.locator("[data-attention-action]") });

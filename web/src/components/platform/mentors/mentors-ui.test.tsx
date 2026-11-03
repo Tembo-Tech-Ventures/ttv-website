@@ -347,10 +347,8 @@ describe("the mentor directory", () => {
     expect(send.textContent).toBe("Agree and send request");
     // The person's own Send comes after the habits in the drawer.
     expect(inline.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // Pinned in view while the habits may be scrolled away, the footer says what sending agrees to, and links to it.
-    const agrees = form.querySelector(".mentor-drawer__actions--sticky [data-request-agrees]")!;
-    expect(agrees.textContent).toBe("Sending agrees to how we talk to each other, once. Read them first");
-    expect(agrees.querySelector("a")!.getAttribute("href")).toBe(`#${inline.querySelector("h3")!.id}`);
+    // The habits sit in the pinned footer with Send, so what it agrees to is in view whenever it is (T05).
+    expect(inline.closest(".mentor-drawer__actions--sticky")).toBe(send.closest(".mentor-drawer__actions--sticky"));
     const textarea = q<HTMLTextAreaElement>("[data-mentor-drawer] textarea")!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, "Interview practice?");
@@ -382,7 +380,6 @@ describe("the mentor directory", () => {
     await act(async () => close.click());
     await open();
     expect(q("[data-mentor-drawer] [data-request-conduct-inline]")).toBeNull();
-    expect(q("[data-mentor-drawer] [data-request-agrees]")).toBeNull();
     expect(q<HTMLButtonElement>("[data-mentor-drawer] button[type=submit]")!.textContent).toBe("Send request");
   });
 
