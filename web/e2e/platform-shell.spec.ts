@@ -669,6 +669,54 @@ test.describe("the spaces shell harness", () => {
     expect(cut.transition).toBe(false);
   });
 
+  test("keeps the sheet still after a post-back or a link within the same space", async ({ page }) => {
+    await page.addInitScript(() => {
+      type Reveal = { transition: boolean; skipped: boolean | null };
+      addEventListener("pagereveal", (event) => {
+        const transition = (event as Event & { viewTransition: ViewTransition | null }).viewTransition;
+        const state: Reveal = { transition: Boolean(transition), skipped: null };
+        (window as unknown as { __reveal: Reveal }).__reveal = state;
+        // A skipped transition rejects `ready`; one that animates resolves it.
+        transition?.ready.then(
+          () => (state.skipped = false),
+          () => (state.skipped = true),
+        );
+      });
+    });
+    const settled = async () => {
+      await page.waitForFunction(() => (window as unknown as { __reveal?: { skipped: boolean | null } }).__reveal?.skipped !== null);
+      const reveal = await page.evaluate(() => (window as unknown as { __reveal: { transition: boolean; skipped: boolean } }).__reveal);
+      // The browser offered the transition (both pages opt in); the page declined it, and none is running.
+      expect(reveal).toEqual({ transition: true, skipped: true });
+      expect(await page.evaluate(() => (document as Document & { activeViewTransition?: unknown }).activeViewTransition ?? null)).toBeNull();
+    };
+    const path = harness("wanjiku", "cohort");
+    await open(page, path);
+
+    // A form that posts back to the page it is on, as every admin form does.
+    await Promise.all([
+      page.waitForEvent("load"),
+      page.evaluate(() => {
+        const form = document.createElement("form");
+        form.method = "post";
+        form.action = location.href;
+        document.body.appendChild(form);
+        form.submit();
+      }),
+    ]);
+    await settled();
+
+    // Another page of the same space.
+    await Promise.all([page.waitForURL(/&hidden$/), page.evaluate((href) => location.assign(href), harness("wanjiku", "cohort", "&hidden"))]);
+    await settled();
+
+    // Moving to another space still plays it.
+    await spacesNav(page).getByRole("link", { name: /Community/ }).click();
+    await page.waitForURL(/space=community/);
+    await page.waitForFunction(() => (window as unknown as { __reveal?: { skipped: boolean | null } }).__reveal?.skipped !== null);
+    expect(await page.evaluate(() => (window as unknown as { __reveal: { skipped: boolean } }).__reveal.skipped)).toBe(false);
+  });
+
   test("gives every control a 44px target on a touch screen", async ({ page }, testInfo) => {
     test.skip(!testInfo.project.name.includes("mobile"), "Touch sizing applies to coarse pointers.");
     await open(page, harness("every", "discover"));
