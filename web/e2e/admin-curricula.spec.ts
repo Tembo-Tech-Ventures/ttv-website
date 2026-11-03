@@ -8,11 +8,25 @@ mkdirSync(EVIDENCE_DIR, { recursive: true });
 const evidence = (name: string) =>
   `${EVIDENCE_DIR}/${test.info().project.name}-${name}.png`;
 
+/**
+ * Opens the admin navigation on a phone: the Admin space's drawer where the spaces flag is on for
+ * this session (T02), the existing admin shell's menu otherwise.
+ */
+async function openAdminNavigation(page: Page) {
+  if ((await page.locator(".spaces-shell").count()) > 0) {
+    await page.getByRole("link", { name: /^Open .+ menu$/ }).click();
+    await expect(page.locator("#space-sidebar")).toHaveAttribute("role", "dialog");
+    return;
+  }
+  const opener = page.getByRole("button", { name: /open navigation/i });
+  await expect(opener).toBeEnabled();
+  await opener.click();
+  await expect(opener).toHaveAttribute("aria-expanded", "true");
+}
+
 async function navigateToCurricula(page: Page, viewportWidth: number) {
   await page.goto("/admin");
-  if (viewportWidth < 1024) {
-    await page.getByRole("button", { name: "Open navigation" }).click();
-  }
+  if (viewportWidth < 1024) await openAdminNavigation(page);
   await page
     .getByRole("link", { name: "Curricula", exact: true })
     .click();

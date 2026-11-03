@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync } from "fs";
 
 const EVIDENCE_DIR = "test-results/evidence";
@@ -8,6 +8,23 @@ mkdirSync(EVIDENCE_DIR, { recursive: true });
 // the filename keeps their evidence screenshots from clobbering each other.
 const evidence = (name: string) =>
   `${EVIDENCE_DIR}/${test.info().project.name}-${name}.png`;
+
+
+/**
+ * Opens the admin navigation on a phone: the Admin space's drawer where the spaces flag is on for
+ * this session (T02), the existing admin shell's menu otherwise.
+ */
+async function openAdminNavigation(page: Page) {
+  if ((await page.locator(".spaces-shell").count()) > 0) {
+    await page.getByRole("link", { name: /^Open .+ menu$/ }).click();
+    await expect(page.locator("#space-sidebar")).toHaveAttribute("role", "dialog");
+    return;
+  }
+  const opener = page.getByRole("button", { name: /open navigation/i });
+  await expect(opener).toBeEnabled();
+  await opener.click();
+  await expect(opener).toHaveAttribute("aria-expanded", "true");
+}
 
 test.describe("public talent stubs", () => {
   test("/talent returns 200 with heading", async ({ page }) => {
@@ -139,13 +156,7 @@ test.describe("authenticated talent foundation", () => {
     viewport,
   }) => {
     await page.goto("/admin");
-    const isMobile = (viewport?.width ?? 1280) < 1024;
-    if (isMobile) {
-      const opener = page.getByRole("button", { name: /open navigation/i });
-      await expect(opener).toBeEnabled();
-      await opener.click();
-      await expect(opener).toHaveAttribute("aria-expanded", "true");
-    }
+    if ((viewport?.width ?? 1280) < 1024) await openAdminNavigation(page);
     await expect(
       page.getByRole("link", { name: "Profiles", exact: true }),
     ).toBeVisible();
