@@ -150,7 +150,10 @@ export default function RequestForm({
     // it past the sheet's edge: bring it back, with the reason. Pinned, both are in view already (T13). Only
     // after a send from this drawer: one the page arrived with keeps the note it focuses in view.
     if (state.status === "error" && lastStatus.current === "sending") {
-      formRef.current?.querySelector("[data-request-send]")?.scrollIntoView({ block: "nearest" });
+      const send = formRef.current?.querySelector<HTMLElement>("[data-request-send]");
+      // Agreeing from the habits step unmounts the button that had focus: Send takes it back, for the retry.
+      if (!formRef.current?.contains(document.activeElement)) send?.focus({ preventScroll: true });
+      send?.scrollIntoView({ block: "nearest" });
     }
     lastStatus.current = state.status;
   }, [state.status]);

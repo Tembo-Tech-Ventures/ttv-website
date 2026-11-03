@@ -192,6 +192,30 @@ for (const viewport of [{ width: 844, height: 390 }, { width: 640, height: 360 }
   }
 }
 
+// The server asks for the habits after all (their words changed), and agreeing from that step fails: the step,
+// and the button that had focus, give way to the form, and Send takes focus back with the reason in view.
+for (const viewport of [{ width: 1440, height: 900 }, { width: 640, height: 360 }]) {
+  test(`T13: agreeing from the habits step fails, and Send has focus again beside the reason (${viewport.width}x${viewport.height})`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await open(page, "/dev/platform-mentors?persona=wanjiku&view=directory");
+    await page.route((url) => url.pathname === "/dev/platform-mentors", (route) =>
+      route.request().method() === "POST" ? route.fulfill({ status: 500, body: "" }) : route.continue());
+    await page.waitForFunction(() => typeof window.__mentorsHarness?.refuseWrites === "function");
+    await page.evaluate(() => window.__mentorsHarness!.refuseWrites(1, 403, "conduct_required"));
+    await page.locator("[data-mentor-card]", { hasText: "Joseph Mutua" }).getByRole("link", { name: "Ask for time" }).click();
+    const drawer = page.locator("dialog[data-mentor-drawer]");
+    await drawer.getByRole("textbox", { name: "What would you like help with?" }).fill("Could you look at how my route planner saves trips when the phone is offline?");
+    await drawer.getByRole("button", { name: "Send request" }).click();
+    await drawer.getByRole("button", { name: "I agree, send my request" }).click();
+    const error = drawer.locator("[data-request-error]");
+    await expect(error).toHaveText("Your agreement wasn't saved, so your request wasn't sent. Try again in a moment. Your note is kept.");
+    await expect(error).toBeInViewport({ ratio: 1 });
+    const send = drawer.locator("[data-request-send]");
+    await expect(send).toBeFocused();
+    await expect(send).toBeInViewport({ ratio: 1 });
+  });
+}
+
 // A refusal the page arrived with (posted before the island hydrated, or without JavaScript) opens on the note,
 // focused and in view: the drawer only scrolls to Send after a send it made itself.
 test("T13: on a short screen, a refusal the page arrived with keeps the focused note in view", async ({ page }) => {
