@@ -402,7 +402,7 @@ describe("what the person asking hears of a check (QA4-02)", () => {
     expect(await notices(s)).toEqual([[yours, WAITING, directory, null]]);
     await decide(s, id, "keep");
     // "Waiting" no longer holds, so only what the decision did is listed.
-    expect(await notices(s)).toEqual([[yours, "Your request to David Kamau was checked and sent. It's waiting for David Kamau now.", directory, null]]);
+    expect(await notices(s)).toEqual([[yours, "Your request to David Kamau was checked and sent. It's with David now.", directory, null]]);
   });
 
   it("tells them a removed request wasn't sent, or was closed once the mentor had read it, and that they may ask again", async () => {
@@ -438,7 +438,7 @@ describe("what the person asking hears of a check (QA4-02)", () => {
     const s = setup();
     const id = await ask(s, ABUSE);
     await decide(s, id, "keep");
-    expect((await notices(s)).map((notice) => notice[1])).toEqual(["Your request to David Kamau was checked and sent. It's waiting for David Kamau now."]);
+    expect((await notices(s)).map((notice) => notice[1])).toEqual(["Your request to David Kamau was checked and sent. It's with David now."]);
     expect((await step(s, s.call(operation, { id, user: PEOPLE.david, body }))).status).toBe(200);
     expect(await notices(s)).toEqual([]);
   });

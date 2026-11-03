@@ -1063,6 +1063,11 @@
  * It sits lower, mostly over the composer's empty corner, so less of the last line is under it (S4).
  */
 @container channel-view (max-width: 40rem) {
+  /* While it shows, the list stops a little short, so the part of it over the list covers no words. */
+  .channel-list[data-jump] {
+    padding-bottom: 1rem;
+  }
+
   .channel-jump {
     bottom: -1.75rem;
     width: 2.75rem;

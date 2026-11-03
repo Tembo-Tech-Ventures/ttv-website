@@ -223,12 +223,7 @@ export default function RequestForm({
 
         <SendFailure failure={state.status === "error" ? state.failure : null} message={state.failureMessage} name={name} />
 
-        <div className="mentor-drawer__actions mentor-drawer__actions--sticky">
-          <Button type="submit" variant="primary" loading={sending} className="flex-1 sm:flex-none">
-            {asksAgreement ? "Agree and send request" : "Send request"}
-          </Button>
-          <CancelControl closeHref={closeHref} onClose={onClose} />
-        </div>
+        <SendActions conductId={asksAgreement ? `${ids}-conduct` : null} sending={sending} closeHref={closeHref} onClose={onClose} />
       </form>
     </>
   );
@@ -350,6 +345,30 @@ function DrawerHeader({ mentor, name, headingId, closeHref, onClose }: {
 }
 
 /** Before the page is interactive (or without JavaScript), Cancel is a link back to the directory. */
+/**
+ * Send and Cancel, pinned to the drawer's bottom edge (T05). While sending also agrees to the habits
+ * (`conductId`, their section above), the footer says so and links to them, as it stays in view
+ * while they may be scrolled away.
+ */
+function SendActions({ conductId, sending, closeHref, onClose }: {
+  conductId: string | null; sending: boolean; closeHref: string | null; onClose: () => void;
+}) {
+  return (
+    <div className="mentor-drawer__actions mentor-drawer__actions--sticky">
+      {conductId && (
+        <p className="w-full text-[0.8125rem] leading-snug text-ink-secondary" data-request-agrees>
+          Sending agrees to {CONDUCT_TITLE.toLowerCase()}, once.{" "}
+          <a href={`#${conductId}`} className={cx("font-semibold text-peach-ink underline underline-offset-4", FOCUS_RING)}>Read them first</a>
+        </p>
+      )}
+      <Button type="submit" variant="primary" loading={sending} className="flex-1 sm:flex-none">
+        {conductId ? "Agree and send request" : "Send request"}
+      </Button>
+      <CancelControl closeHref={closeHref} onClose={onClose} />
+    </div>
+  );
+}
+
 function CancelControl({ closeHref, onClose }: { closeHref: string | null; onClose: () => void }) {
   return closeHref ? (
     <a href={closeHref} className={cx("inline-flex h-10 items-center rounded-xl px-4 text-sm font-semibold pointer-coarse:min-h-11", BUTTON_VARIANTS.quiet, FOCUS_RING)}>Cancel</a>

@@ -88,14 +88,20 @@ test.describe("T09: where a thread opens", () => {
 test("T10: Jump to latest stands on the list's bottom edge, at its end, compact on phones", async ({ page }) => {
   await open(page, "/dev/platform-channel?persona=wanjiku&channel=cohort-04");
   const scroller = page.locator("[data-channel-scroller]");
-  await scroller.evaluate((el) => el.scrollTo({ top: 0 }));
   const jump = page.locator("[data-jump-latest]");
-  await expect(jump).toBeVisible();
+  // Read from the top: the list measures where the reader is once it has settled, then offers the jump.
+  await expect(async () => {
+    await scroller.evaluate((el) => el.scrollTo({ top: 0 }));
+    await expect(jump).toBeVisible({ timeout: 1_000 });
+  }).toPass();
   const [button, list] = [await jump.boundingBox(), await scroller.boundingBox()];
-  // Across the list's bottom edge, at its right end, not over the middle of the messages.
-  expect(button!.y).toBeLessThan(list!.y + list!.height);
-  expect(button!.y + button!.height).toBeGreaterThan(list!.y + list!.height);
+  const end = list!.y + list!.height;
+  // At the list's right end, below the middle of the messages: across its bottom edge on a wide sheet,
+  // and on a phone just under it, where the list stops short while it shows, so it covers no words.
   expect(button!.x + button!.width).toBeGreaterThan(list!.x + list!.width * 0.75);
+  expect(button!.y + button!.height).toBeGreaterThan(end);
+  if (wide(page)) expect(button!.y).toBeLessThan(end);
+  else expect(button!.y).toBeGreaterThanOrEqual(end - 1);
   await expect(jump).toHaveAccessibleName("Jump to latest");
   if (!wide(page)) expect(Math.round(button!.width)).toBe(44);
 });

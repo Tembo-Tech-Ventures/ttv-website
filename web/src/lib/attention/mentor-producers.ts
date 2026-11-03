@@ -66,7 +66,7 @@ function checkNotice(request: RequestState): CheckNotice | null {
 const CHECK_SUMMARY: Record<CheckNotice, (yours: string, mentor: string) => string> = {
   waiting: (yours) => `${yours} is waiting for a check before it's sent. Nothing for you to do: you'll hear here when it's done.`,
   checking: (yours) => `${yours} is being checked by TTV. Nothing for you to do: you'll hear here when it's done.`,
-  sent: (yours, mentor) => `${yours} was checked and sent. It's waiting for ${mentor} now.`,
+  sent: (yours, mentor) => `${yours} was checked and sent. It's with ${mentor.split(/\s+/u)[0]} now.`,
   not_sent: (yours) => `${yours} wasn't sent, after a check. You can ask again with a new note.`,
   closed: (yours) => `${yours} was closed, after a check. You can ask again with a new note.`,
 };

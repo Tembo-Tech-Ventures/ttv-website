@@ -118,10 +118,12 @@ function FilterMenu({ label, active, end = false, children }: { label: ReactNode
     document.addEventListener("pointerdown", away);
     details.addEventListener("keydown", escape);
     details.addEventListener("toggle", align);
+    window.addEventListener("resize", align);
     return () => {
       document.removeEventListener("pointerdown", away);
       details.removeEventListener("keydown", escape);
       details.removeEventListener("toggle", align);
+      window.removeEventListener("resize", align);
     };
   }, []);
   return (
