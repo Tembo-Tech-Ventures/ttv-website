@@ -120,9 +120,10 @@ export async function processRecordingQueue(
   batch: MessageBatch<unknown>,
   env: Env
 ) {
-  const { processRecordingMessage } = await loadPipeline();
   for (const message of batch.messages) {
     try {
+      // Inside the try, so a pipeline that fails to load is recorded like one that fails to run.
+      const { processRecordingMessage } = await loadPipeline();
       await processRecordingMessage(message.body, env);
       message.ack();
     } catch (error) {

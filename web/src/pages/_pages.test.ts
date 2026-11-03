@@ -8,7 +8,7 @@ import { expect, it } from "vitest";
 it("keeps test files out of the routes", () => {
   const pages = fileURLToPath(new URL(".", import.meta.url));
   const routedTests = readdirSync(pages, { recursive: true, encoding: "utf8" })
-    .filter((path) => /\.test\.[jt]sx?$/.test(path))
+    .filter((path) => /\.(test|spec)\.[cm]?[jt]sx?$/.test(path))
     .filter((path) => !path.split("/").some((segment) => segment.startsWith("_")));
   expect(routedTests).toEqual([]);
 });
