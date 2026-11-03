@@ -10,6 +10,7 @@
  */
 // oxlint-disable-next-line import/no-unassigned-import -- a document's global stylesheet, as in SpacesLayout
 import "@/styles/global.css";
+import FontPreload from "@/components/common/FontPreload.astro";
 // oxlint-disable-next-line import/no-unassigned-import -- the account menu's disclosure styles
 import "@/components/platform/shell/spaces-shell.css";
 // oxlint-disable-next-line import/no-unassigned-import -- the onboarding frame and steps
@@ -46,6 +47,7 @@ const signedIn = Boolean(Astro.locals.user);
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <FontPreload />
     <meta name="robots" content="noindex, nofollow" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <title>{pageTitle(titlePrefix + title)}</title>

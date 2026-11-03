@@ -30,24 +30,7 @@ function harness(persona: string, space?: string, extra = "") {
   return `${HARNESS}?persona=${persona}${space ? `&space=${space}` : ""}${extra}`;
 }
 
-/** Chromium in the dev container cannot reach Google Fonts itself; Node can. */
-async function routeFonts(page: Page) {
-  await page.route(/fonts\.(googleapis|gstatic)\.com/, async (route) => {
-    try {
-      const response = await fetch(route.request().url());
-      await route.fulfill({
-        status: response.status,
-        headers: Object.fromEntries(response.headers),
-        body: Buffer.from(await response.arrayBuffer()),
-      });
-    } catch {
-      await route.abort();
-    }
-  });
-}
-
 async function open(page: Page, path: string) {
-  await routeFonts(page);
   await page.goto(path);
   await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
   await page.evaluate(() => document.fonts.ready);
@@ -375,7 +358,6 @@ test.describe("the spaces shell harness", () => {
       await held;
       await route.continue();
     });
-    await routeFonts(page);
     await page.goto(harness("wanjiku", "cohort"), { waitUntil: "domcontentloaded" });
     await expect(page.locator(".spaces-shell[data-hydrated]")).toHaveCount(0);
 
@@ -436,7 +418,6 @@ test.describe("the spaces shell harness", () => {
         await held;
         await route.continue();
       });
-      await routeFonts(page);
       await page.goto(harness("wanjiku", "cohort"), { waitUntil: "domcontentloaded" });
       await page.getByRole("link", { name: "Open Cohort menu" }).click();
       await expect(page).toHaveURL(/#space-sidebar$/);
@@ -446,7 +427,6 @@ test.describe("the spaces shell harness", () => {
       return;
     }
 
-    await routeFonts(page);
     await page.goto(`${harness("wanjiku", "cohort")}#space-sidebar`);
     await expectPlainSidebar();
     await page.evaluate(() => {
@@ -467,7 +447,6 @@ test.describe("the spaces shell harness", () => {
       await held;
       await route.continue();
     });
-    await routeFonts(page);
     await page.goto(harness("wanjiku", "community"), { waitUntil: "domcontentloaded" });
     await expect(page.locator(".spaces-shell[data-hydrated]")).toHaveCount(1);
     const { summary, panel } = accountMenu(page);
@@ -571,7 +550,6 @@ test.describe("the spaces shell harness", () => {
           await route.continue();
         });
       }
-      await routeFonts(page);
       await page.goto(harness("wanjiku", "community"), { waitUntil: delayed ? "domcontentloaded" : "load" });
       await expect(page.locator(".spaces-shell[data-hydrated]")).toHaveCount(1);
       const { summary, panel } = accountMenu(page);

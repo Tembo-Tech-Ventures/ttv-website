@@ -1,5 +1,6 @@
 ---
 import "@/styles/global.css";
+import FontPreload from "@/components/common/FontPreload.astro";
 import ClientErrorBuffer from "@/components/feedback/ClientErrorBuffer.astro";
 import DemoSessionControls from "@/components/community/DemoSessionControls";
 import { demoPersona } from "@/lib/staging-demo-policy";
@@ -44,6 +45,7 @@ const activeDemoPersona = demoPersona(demo?.persona);
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <FontPreload />
     <meta name="description" content={resolvedDescription} />
     {canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
     {noIndex && <meta name="robots" content="noindex, nofollow" />}

@@ -50,18 +50,6 @@ function evidence(name: string) {
   return `${EVIDENCE_DIR}/${test.info().project.name}-${name}.png`;
 }
 
-/** Routes Google Fonts through Node, which can reach them when the browser in a dev container cannot. */
-async function routeFonts(page: Page) {
-  await page.route(/fonts\.(googleapis|gstatic)\.com/, async (route) => {
-    try {
-      const response = await fetch(route.request().url());
-      await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
-    } catch {
-      await route.abort();
-    }
-  });
-}
-
 async function open(page: Page, path: string) {
   const response = await page.goto(path);
   expect(response?.status(), path).toBe(200);
@@ -140,7 +128,6 @@ for (const key of PERSONAS) {
 
     test.beforeEach(async ({ context, page, baseURL }) => {
       if (typeof session === "string") return;
-      await routeFonts(page);
       await signIn(context, baseURL!, session);
       const me = await page.request.get("/api/platform/me");
       test.skip(me.status() === 404, "The spaces flag is off here; the existing dashboard is covered by its own specs.");
@@ -209,7 +196,6 @@ test.describe("a member without a cohort", () => {
 
   test("sees a way to apply on the community page itself and can open the form", async ({ context, page, baseURL }) => {
     if (typeof session === "string") return;
-    await routeFonts(page);
     await signIn(context, baseURL!, session);
     test.skip((await page.request.get("/api/platform/me")).status() === 404, "The spaces flag is off here.");
 
@@ -243,7 +229,6 @@ test.describe("a member without a cohort", () => {
 
   test("has Ask Tembo in Community, filling the sheet", async ({ context, page, baseURL }) => {
     if (typeof session === "string") return;
-    await routeFonts(page);
     await signIn(context, baseURL!, session);
     test.skip((await page.request.get("/api/platform/me")).status() === 404, "The spaces flag is off here.");
 
@@ -270,7 +255,6 @@ test.describe("a cohort member", () => {
 
   test("keeps sessions and Ask Tembo in the Cohort space, and forms post inside the shell", async ({ context, page, baseURL }) => {
     if (typeof session === "string") return;
-    await routeFonts(page);
     await signIn(context, baseURL!, session);
     test.skip((await page.request.get("/api/platform/me")).status() === 404, "The spaces flag is off here.");
 
@@ -308,7 +292,6 @@ test.describe("a mentor", () => {
 
   test("sees confirmations, and requests and availability as mentor_requests has them: open, or not open yet", async ({ context, page, baseURL }) => {
     if (typeof session === "string") return;
-    await routeFonts(page);
     await signIn(context, baseURL!, session);
     // PLATFORM_FLAGS_OVERRIDE decides this, not stored settings, so the test follows the mentor's effective flag.
     const me = await page.request.get("/api/platform/me");
@@ -341,7 +324,6 @@ test.describe("an institution", () => {
 
   test("opens the Discover workspace inside its space", async ({ context, page, baseURL }) => {
     if (typeof session === "string") return;
-    await routeFonts(page);
     await signIn(context, baseURL!, session);
 
     await open(page, "/dashboard/discover");
@@ -368,7 +350,6 @@ test.describe("staff", () => {
 
   test("keep the mentor review in the Admin space without becoming mentors", async ({ context, page, baseURL }) => {
     if (typeof session === "string") return;
-    await routeFonts(page);
     await signIn(context, baseURL!, session);
     const me = await page.request.get("/api/platform/me");
     test.skip(me.status() === 404, "The spaces flag is off here.");
@@ -389,7 +370,6 @@ test.describe("QA-1 polish (F-3)", () => {
     const session = personaSession(key);
     test.skip(typeof session === "string", typeof session === "string" ? session : "");
     if (typeof session === "string") return;
-    await routeFonts(page);
     await signIn(context, baseURL!, session);
     test.skip((await page.request.get("/api/platform/me")).status() === 404, "The spaces flag is off here.");
   }

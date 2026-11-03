@@ -1,0 +1,9 @@
+---
+/**
+ * Preloads Maven Pro's latin file, the body text of every page, so it starts
+ * downloading with the HTML instead of after the stylesheet. global.css
+ * declares the face; Vite gives both references the same hashed URL.
+ */
+import mavenProLatin from "@/assets/fonts/MavenPro-latin.woff2?url";
+---
+<link rel="preload" href={mavenProLatin} as="font" type="font/woff2" crossorigin />
