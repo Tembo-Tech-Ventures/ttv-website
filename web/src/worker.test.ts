@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   processRecordingMessage: vi.fn(),
   pushAlerts: vi.fn().mockResolvedValue({ created: 0, attempted: 0, sent: 0 }),
   recordError: vi.fn().mockResolvedValue(null),
+  loaded: new Set<string>(),
 }));
 
 vi.mock("@cloudflare/containers", () => ({
@@ -15,16 +16,20 @@ vi.mock("@cloudflare/containers", () => ({
 vi.mock("@astrojs/cloudflare/handler", () => ({
   handle: mocks.handle,
 }));
-vi.mock("@/lib/recordings/pipeline", () => ({
-  processRecordingMessage: mocks.processRecordingMessage,
-}));
-vi.mock("@/lib/recordings/importer", () => ({
-  syncEnabledRecordingImportSources:
-    mocks.syncEnabledRecordingImportSources,
-}));
-vi.mock("@/lib/observability/alerts", () => ({
-  pushAlerts: mocks.pushAlerts,
-}));
+vi.mock("@/lib/recordings/pipeline", () => {
+  mocks.loaded.add("pipeline");
+  return { processRecordingMessage: mocks.processRecordingMessage };
+});
+vi.mock("@/lib/recordings/importer", () => {
+  mocks.loaded.add("importer");
+  return {
+    syncEnabledRecordingImportSources: mocks.syncEnabledRecordingImportSources,
+  };
+});
+vi.mock("@/lib/observability/alerts", () => {
+  mocks.loaded.add("alerts");
+  return { pushAlerts: mocks.pushAlerts };
+});
 vi.mock("@/lib/observability/errors", () => ({
   recordError: mocks.recordError,
 }));
@@ -32,6 +37,18 @@ vi.mock("@/lib/observability/errors", () => ({
 import worker, { ContainerProxy, FfmpegContainer } from "./worker";
 
 beforeEach(() => vi.clearAllMocks());
+
+describe("Worker start", () => {
+  it("loads the recording pipeline, Drive import and alert push only for the events that need them", async () => {
+    expect([...mocks.loaded]).toEqual([]);
+    const waitUntil = vi.fn();
+    worker.scheduled?.({ cron: "*/15 * * * *" } as ScheduledController, {} as Env, { waitUntil } as unknown as ExecutionContext);
+    await waitUntil.mock.calls[0][0];
+    expect([...mocks.loaded].toSorted()).toEqual(["alerts", "importer"]);
+    await worker.queue?.({ messages: [] } as unknown as MessageBatch<unknown>, {} as Env);
+    expect([...mocks.loaded].toSorted()).toEqual(["alerts", "importer", "pipeline"]);
+  });
+});
 
 describe("Worker container exports", () => {
   it("exports the proxy entrypoint required by outbound R2 interception", () => {
@@ -186,9 +203,9 @@ describe("Worker scheduled imports", () => {
       { waitUntil } as unknown as ExecutionContext
     );
 
-    expect(mocks.syncEnabledRecordingImportSources).toHaveBeenCalledWith(env);
     expect(waitUntil).toHaveBeenCalledOnce();
     await expect(waitUntil.mock.calls[0][0]).resolves.toEqual([summary]);
+    expect(mocks.syncEnabledRecordingImportSources).toHaveBeenCalledWith(env);
     expect(mocks.pushAlerts).toHaveBeenCalledWith(env);
   });
 
