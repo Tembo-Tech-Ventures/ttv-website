@@ -155,7 +155,7 @@ export default function AccountMenu({ person, account }: { person: PersonSummary
                 {signOutContent}
               </a>
             ) : (
-              <form method="post" action={signOut.action} data-shell-sign-out onSubmit={forgetDrafts}>
+              <form method="post" action={signOut.action} data-shell-sign-out data-astro-reload onSubmit={forgetDrafts}>
                 <button type="submit" className={ITEM}>
                   {signOutContent}
                 </button>

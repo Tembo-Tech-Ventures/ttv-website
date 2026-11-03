@@ -9,6 +9,7 @@ import { resolveStagingFixtureIdentity, StagingFixtureAccessError } from "@/lib/
 import { stagingFixturePathAllowed } from "@/lib/staging-fixture-policy";
 import { isAgentSession } from "@/lib/agent-auth";
 import { isHealthCheckPath } from "@/lib/health";
+import { perfPhase, perfTraceEnabled, withPerfTrace } from "@/lib/observability/perf-trace";
 import { enforceAdminMutationOrigin } from "@/lib/admin/mutation-security";
 import { userHasAdminRole } from "@/lib/admin/roles";
 import { platformAdminApiDenial } from "@/lib/platform/server/http";
@@ -161,7 +162,7 @@ async function enforceDemoBoundary(locals: App.Locals, request: Request, pathnam
   }
 }
 
-export const onRequest = defineMiddleware(async (context, next) => {
+const handle = defineMiddleware(async (context, next) => {
   const { locals, request, url, redirect } = context;
   const primaryDomain = env.PRIMARY_DOMAIN;
   const redirectDomain = env.REDIRECT_DOMAIN;
@@ -193,15 +194,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
         );
       }
     }
-    const authResult = await resolveAuthentication(env, request);
+    const authResult = await perfPhase("auth", () => resolveAuthentication(env, request));
     locals.session = authResult.session;
     locals.user = authResult.user;
     locals.personalAccessToken = authResult.personalAccessToken;
 
-    const demoFailure = await enforceDemoBoundary(locals,request,url.pathname);
+    const demoFailure = await perfPhase("staging", () => enforceDemoBoundary(locals,request,url.pathname));
     if (demoFailure) return platformAdminApiDenial(demoFailure, url.pathname);
 
-    const fixtureFailure = await enforceStagingFixtureBoundary(locals,url.pathname,request.method);
+    const fixtureFailure = await perfPhase("staging", () => enforceStagingFixtureBoundary(locals,url.pathname,request.method));
     if (fixtureFailure) return platformAdminApiDenial(fixtureFailure, url.pathname);
 
     // Community and channels delegation never inherits the owner's unrelated application access.
@@ -222,7 +223,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
       url.pathname.startsWith("/admin") ||
       url.pathname.startsWith("/api/admin")
     ) {
-      const guardResponse = await enforceAdminGuards(context, locals);
+      const guardResponse = await perfPhase("admin", () => enforceAdminGuards(context, locals));
       if (guardResponse) return platformAdminApiDenial(guardResponse, url.pathname);
     }
 
@@ -246,3 +247,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
     throw error;
   }
 });
+
+/** PERF-1 (investigation branch): trace D1 round trips and phases outside production. */
+export const onRequest = defineMiddleware((context, next) =>
+  perfTraceEnabled(env.DEPLOYMENT_ENVIRONMENT)
+    ? withPerfTrace(env.DB, context.request, async () => (await handle(context, next)) as Response)
+    : handle(context, next));

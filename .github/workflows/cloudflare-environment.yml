@@ -70,7 +70,7 @@ jobs:
   cloudflare-with-environment:
     if: ${{ inputs.github_environment != '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 75
     environment: ${{ inputs.github_environment }}
     permissions:
       contents: read
@@ -167,6 +167,25 @@ jobs:
           trap cleanup EXIT
           sleep 3
           npm run test:e2e
+
+      # PERF-1 (investigation branch only, never merged): navigation measurements on
+      # this agent preview, alone after the e2e suite, into test-results/perf.
+      - if: ${{ always() && inputs.action == 'deploy' && startsWith(inputs.environment_name, 'agent-pr-') && steps.browser_install.outcome == 'success' }}
+        name: Measure navigation performance (PERF-1)
+        continue-on-error: true
+        timeout-minutes: 40
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.deploy.outputs.better_auth_url }}
+          EXPECTED_DEPLOYMENT_ENVIRONMENT: ${{ inputs.environment_name }}
+          EXPECTED_DEPLOYMENT_VERSION: ${{ github.sha }}
+          PERF_REPS: "3"
+        shell: bash
+        run: |
+          set -euo pipefail
+          # ClientRouter (this branch's default) against the same build without it (ttv-perf=mpa).
+          PERF_VARIANTS=base,mpa node scripts/cloudflare/run-live-e2e.mjs -c e2e/perf/perf.config.ts navigation || true
+          for variant in base mpa; do PERF_VARIANTS=$variant node scripts/cloudflare/run-live-e2e.mjs -c e2e/perf/perf.config.ts behaviour || true; done
+          node scripts/perf/summarize.mjs test-results/perf | tee test-results/perf/summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - if: ${{ always() && inputs.action == 'deploy' && inputs.environment_name == 'production' && (steps.smoke.outcome == 'failure' || steps.browser_install.outcome == 'failure' || steps.browser.outcome == 'failure') }}
         id: rollback
