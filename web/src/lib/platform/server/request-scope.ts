@@ -9,8 +9,13 @@
  * The middleware opens a scope for GET and HEAD only: a POST, PUT, PATCH or DELETE handler may
  * change roles, applications, assignments or channels and then read them back. A scope is one Map
  * per request, held by AsyncLocalStorage and never stored anywhere else, so nothing outlives the
- * request: a revoked role or assignment applies on the very next one. Keys always include the user
- * ID, so a request that changes who is signed in reads the new person's values.
+ * request: a revoked role or assignment applies on the very next one. Per-user values are keyed by
+ * user ID, so a request that changes who is signed in reads the new person's values.
+ *
+ * The rule for GET handlers: never write something a scoped read covers and then read it back in the
+ * same request; it would get the value from before the write. Today's GET writes (the last-space
+ * cookie, onboarding's seen markers and first row) read nothing back. A GET that must, should
+ * read outside requestScoped or become a POST.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 
