@@ -16,9 +16,10 @@ import {
 } from "react-icons/pi";
 import type { AttentionItem, AttentionKind } from "@/lib/platform/contracts";
 import { Avatar, SpaceGlyph, TemboMark } from "@/components/platform/ui";
-import { FOCUS_RING } from "@/components/platform/ui/Button";
+import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
-import { attentionActor, attentionPlace, attentionTime, summaryLead } from "./attention-display";
+import MaskedText from "@/components/channels/MaskedText";
+import { attentionAction, attentionActor, attentionPlace, attentionTime, summaryLead } from "./attention-display";
 
 const KIND_ICON: Record<AttentionKind, IconType> = {
   mention: PiAt,
@@ -70,13 +71,15 @@ function Leading({ item }: { item: AttentionItem }) {
 
 /**
  * One thing that needs the person: who or what, where it happened, how long
- * ago, and an unread dot. The whole row is the link to it.
+ * ago, and an unread dot. The whole row is the link to it, and an item with a
+ * next step (an accepted request's conversation) shows that step on the row.
  */
 export default function AttentionItemRow({ item, now, viewer, onOpen }: AttentionItemRowProps) {
   const actor = attentionActor(item);
   const split = summaryLead(item, item.kind === "tembo_answer" ? "Tembo" : (actor?.name ?? null));
   const time = attentionTime(item.createdAt, now);
   const unread = item.readAt === null;
+  const action = attentionAction(item);
 
   return (
     <li className="attention-item" data-attention-item={item.id} data-unread={unread || undefined}>
@@ -88,10 +91,10 @@ export default function AttentionItemRow({ item, now, viewer, onOpen }: Attentio
             {split ? (
               <>
                 <strong className="font-bold text-ink-primary">{split.lead}</strong>
-                {split.rest}
+                <MaskedText text={split.rest} />
               </>
             ) : (
-              item.summary
+              <MaskedText text={item.summary} />
             )}
           </span>
           <span className="attention-item__place">
@@ -100,6 +103,8 @@ export default function AttentionItemRow({ item, now, viewer, onOpen }: Attentio
             </span>
             <span className="min-w-0 break-words">{attentionPlace(item)}</span>
           </span>
+          {/* The row is the link: the action shows where it leads, as the prototype's button does (T04). */}
+          {action && <span className={cx("attention-item__action", BUTTON_VARIANTS.primary)} data-attention-action>{action}</span>}
         </span>
         <span className="attention-item__aside">
           <time dateTime={new Date(item.createdAt).toISOString()} title={time.title} className="attention-item__time">

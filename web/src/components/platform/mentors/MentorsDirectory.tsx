@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { PiCheck } from "react-icons/pi";
+import { PiCaretDown, PiCheck } from "react-icons/pi";
 import {
   MentorRequestFormat,
   type Me, type MentorDirectoryItem, type MentorRequest, type MentorRequestList, type ProjectEmbed,
@@ -68,26 +68,104 @@ function FilterLink({ href, active, small = false, children }: { href: string; a
   );
 }
 
-/** The directory's filters: plain links that keep the URL, so they work without JavaScript. */
-function FilterBar({ path, base, filters, areas }: { path: string; base: DirectoryFilters; filters: DirectoryUrlState; areas: readonly string[] }) {
-  const howId = useId();
+/** How many areas the filter row shows before "More areas": the ones most mentors offer. */
+export const TOP_AREAS = 4;
+
+/**
+ * The areas shown on the filter row, and the rest under "More areas": the TOP_AREAS most mentors
+ * offer (areaOptions orders them so), and the chosen one wherever it falls, so it always shows.
+ */
+export function splitAreas(areas: readonly string[], chosen: string | null): { shown: string[]; more: string[] } {
+  const shown = areas.slice(0, TOP_AREAS);
+  const pick = chosen ? areas.find(area => sameArea(area, chosen)) : undefined;
+  if (pick && !shown.includes(pick)) shown.push(pick);
+  return { shown, more: areas.filter(area => !shown.includes(area)) };
+}
+
+/**
+ * Which edge of its button a menu's list hangs from, so it stays inside the filter row (B1): its
+ * start edge, unless that would run past the row's end, then its end edge if that fits.
+ */
+export function menuAlignment(button: { left: number; right: number }, width: number, row: { left: number; right: number }): "start" | "end" {
+  if (button.left + width <= row.right) return "start";
+  return button.right - width >= row.left ? "end" : "start";
+}
+
+/**
+ * A filter's further choices, dropping under it (details/summary, so it opens without JavaScript).
+ * With JavaScript, the list hangs from whichever edge keeps it inside the row; Escape or a click
+ * elsewhere closes it, and Escape returns to its button.
+ */
+function FilterMenu({ label, active, end = false, children }: { label: ReactNode; active: boolean; end?: boolean; children: ReactNode }) {
+  const menu = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const details = menu.current;
+    if (!details) return;
+    const align = () => {
+      const list = details.querySelector<HTMLElement>(".mentor-filter-menu__list");
+      const row = details.closest<HTMLElement>("[data-mentor-filters]");
+      if (!details.open || !list || !row) return;
+      details.dataset.align = menuAlignment(details.getBoundingClientRect(), list.offsetWidth, row.getBoundingClientRect());
+    };
+    const away = (event: PointerEvent) => {
+      if (details.open && !details.contains(event.target as Node)) details.open = false;
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !details.open) return;
+      details.open = false;
+      details.querySelector("summary")?.focus();
+    };
+    document.addEventListener("pointerdown", away);
+    details.addEventListener("keydown", escape);
+    details.addEventListener("toggle", align);
+    window.addEventListener("resize", align);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      details.removeEventListener("keydown", escape);
+      details.removeEventListener("toggle", align);
+      window.removeEventListener("resize", align);
+    };
+  }, []);
   return (
-    <nav aria-label="Filter mentors" className="flex flex-col gap-3" data-mentor-filters>
+    <details ref={menu} className={cx("mentor-filter-menu", end && "mentor-filter-menu--end")} data-filter-menu>
+      <summary className={cx(PILL, active ? PILL_ON : PILL_OFF, !active && "border border-hairline")}>
+        {label}
+        <PiCaretDown aria-hidden className="size-4" />
+      </summary>
+      <ul className="mentor-filter-menu__list">{children}</ul>
+    </details>
+  );
+}
+
+/**
+ * The directory's filters, on one row (T06): the areas most mentors offer, the rest under "More
+ * areas", how (a format) and "Has open spots". Plain links that keep the URL, so they work without JavaScript.
+ */
+function FilterBar({ path, base, filters, areas }: { path: string; base: DirectoryFilters; filters: DirectoryUrlState; areas: readonly string[] }) {
+  const { shown, more } = splitAreas(areas, filters.area);
+  return (
+    <nav aria-label="Filter mentors" className="flex flex-wrap items-center justify-between gap-3" data-mentor-filters>
       <fieldset className="flex flex-wrap items-center gap-x-1 gap-y-2">
         <legend className="sr-only">Area</legend>
         <FilterLink href={directoryHref(path, base, { area: null })} active={!filters.area}>All</FilterLink>
-        {areas.map(area => (
+        {shown.map(area => (
           <FilterLink key={area} href={directoryHref(path, base, { area })} active={Boolean(filters.area && sameArea(filters.area, area))}>{area}</FilterLink>
         ))}
+        {more.length > 0 && (
+          <FilterMenu label="More areas" active={false}>
+            {more.map(area => (
+              <li key={area}><FilterLink small href={directoryHref(path, base, { area })} active={false}>{area}</FilterLink></li>
+            ))}
+          </FilterMenu>
+        )}
       </fieldset>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <fieldset className="flex flex-wrap items-center gap-x-1 gap-y-2" aria-labelledby={howId}>
-          <span id={howId} className="mr-2 text-sm text-ink-secondary">How</span>
-          <FilterLink small href={directoryHref(path, base, { format: null })} active={!filters.format}>Any</FilterLink>
+      <div className="flex flex-wrap items-center gap-2">
+        <FilterMenu end active={filters.format !== null} label={filters.format ? FORMAT_LABELS[filters.format] : "Any format"}>
+          <li><FilterLink small href={directoryHref(path, base, { format: null })} active={!filters.format}>Any format</FilterLink></li>
           {MentorRequestFormat.options.map(format => (
-            <FilterLink small key={format} href={directoryHref(path, base, { format })} active={filters.format === format}>{FORMAT_LABELS[format]}</FilterLink>
+            <li key={format}><FilterLink small href={directoryHref(path, base, { format })} active={filters.format === format}>{FORMAT_LABELS[format]}</FilterLink></li>
           ))}
-        </fieldset>
+        </FilterMenu>
         <a
           href={toResults(directoryHref(path, base, { available: !filters.available }))}
           aria-current={filters.available ? "true" : undefined}
@@ -180,9 +258,11 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
     drawerFor.current = null;
     // "Ask for time" gave way to the request's status on the card: focus that, or the request under Your requests.
     if (request) {
-      const where = root.current?.querySelector<HTMLElement>(`[data-mentor-card="${CSS.escape(request.mentor.id)}"] [data-mentor-standing='waiting']`)
-        ?? root.current?.querySelector<HTMLElement>(`[data-own-request="${CSS.escape(request.id)}"] [data-request-status]`);
-      where?.focus();
+      const onCard = root.current?.querySelector<HTMLElement>(`[data-mentor-card="${CSS.escape(request.mentor.id)}"] [data-mentor-standing='waiting']`);
+      const inList = root.current?.querySelector<HTMLElement>(`[data-own-request="${CSS.escape(request.id)}"] [data-request-status]`);
+      // A mentor filtered out of the grid: their request is under Your requests, which opens to show it.
+      if (!onCard) for (let fold = inList?.closest("details"); fold; fold = fold.parentElement?.closest("details")) fold.open = true;
+      (onCard ?? inList)?.focus();
     }
   }, [path, base]);
   const dialog = useModalDialog(closed);
@@ -251,7 +331,7 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
       {/* Filter links land here (`#mentor-results`), so the next Tab reaches the first mentor (QA4-18). */}
       <h2
         id={MENTOR_RESULTS_ID} tabIndex={-1}
-        className={cx("mt-6 mb-3 w-fit scroll-mt-40 rounded-sm font-body text-[0.9375rem] font-semibold text-ink-secondary", FOCUS_RING)}
+        className={cx("mt-5 mb-0 w-fit scroll-mt-40 rounded-sm font-body text-[0.9375rem] font-semibold text-ink-secondary", FOCUS_RING)}
         data-mentor-results
       >
         {resultsHeading(shown.length, filters, areas)}

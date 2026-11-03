@@ -8,6 +8,7 @@ import { Avatar, Button, SpaceGlyph } from "@/components/platform/ui";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
 import { onShellOverlay } from "@/components/platform/shell/overlays";
+import MaskedText from "@/components/channels/MaskedText";
 import LiveRegions from "@/components/platform/overlays/LiveRegions";
 import { signInHref } from "@/components/platform/overlays/sign-in";
 import { useModalDialog } from "@/components/platform/overlays/useModalDialog";
@@ -138,7 +139,7 @@ function Option({ entry, query }: { entry: SearchItem; query: string }) {
           <span className="search-option__body">
             <span className="search-option__title">{author.name}</span>
             <span className="search-option__text">
-              “<Marked text={excerpt} query={query} />”
+              “<MaskedText text={excerpt} asNote={false} render={(words) => <Marked text={words} query={query} />} />”
             </span>
             <span className="search-option__meta">{visibility.label}</span>
           </span>
@@ -284,6 +285,8 @@ function Body({ store, state, coverage, listboxId, optionId, onOpen, onPick }: R
 
 type SearchOverlayProps = {
   me: Me;
+  /** The person's one cohort's name, for the cohort scope (search-display.ts scopesFor). */
+  cohortLabel?: string | null;
   /** DEV harness only: a fixture client. Pages leave it out and search the real API. */
   client?: ApiClient;
 };
@@ -297,7 +300,7 @@ type SearchOverlayProps = {
  * one of its results. "Ask Tembo" hands the words to the cohort assistant's
  * composer, unsent.
  */
-export default function SearchOverlay({ me, client }: SearchOverlayProps) {
+export default function SearchOverlay({ me, cohortLabel = null, client }: SearchOverlayProps) {
   const recentKey = recentSearchKey(me.user.id);
   const [store] = useState(() =>
     createSearchStore({
@@ -442,7 +445,7 @@ export default function SearchOverlay({ me, client }: SearchOverlayProps) {
 
             <fieldset className="search-scopes">
               <legend className="sr-only">Search in</legend>
-              {scopesFor(me).map(({ scope, label, glyph }) => (
+              {scopesFor(me, cohortLabel).map(({ scope, label, glyph }) => (
                 <button
                   key={scope}
                   type="button"

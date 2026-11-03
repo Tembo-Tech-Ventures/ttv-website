@@ -209,6 +209,37 @@ export function requesterStatus(
   }
 }
 
+type ShownRequest = Pick<MentorRequest, "mentor" | "redirectedTo"> & Partial<Pick<MentorRequest, "check">> & { status: MentorRequestStatus };
+
+/** How "Your requests" counts each standing, in words that read after a number. */
+function summaryWord(request: ShownRequest): string {
+  if (request.check && REQUESTER_CHECKS[request.check]?.status === request.status) return requesterStatus(request, request.status).label.toLowerCase();
+  return { PENDING: "waiting", ACCEPTED: "accepted", REDIRECTED: "with a suggestion", DECLINED: "not this month", WITHDRAWN: "withdrawn" }[request.status];
+}
+
+/**
+ * "2 waiting · 1 accepted": where the person's requests stand, in one line, for "Your requests" folded
+ * above the directory (T06). Each standing once, in the order the newest request with it comes; a check
+ * is said as the check ("being checked"), never as the mentor's answer.
+ */
+export function requestsSummary(requests: readonly ShownRequest[]): string {
+  const counts = new Map<string, number>();
+  for (const request of requests) {
+    const said = summaryWord(request);
+    counts.set(said, (counts.get(said) ?? 0) + 1);
+  }
+  return [...counts].map(([said, count]) => `${count} ${said}`).join(" · ");
+}
+
+/**
+ * Whether a request has news the person should read where they land (S3): an answer that isn't an
+ * acceptance (a suggestion, not this month) or a check. Its notice leads to the directory, so "Your
+ * requests" opens there; waiting and accepted requests show on the mentors' cards anyway.
+ */
+export function requestHasNews(request: ShownRequest): boolean {
+  return Boolean(request.check) || request.status === "REDIRECTED" || request.status === "DECLINED";
+}
+
 /** A request a mentor received, once it has moved on. */
 export function mentorStatus(
   request: Pick<MentorRequest, "requester" | "redirectedTo"> & Partial<Pick<MentorRequest, "check">>, status: MentorRequestStatus,

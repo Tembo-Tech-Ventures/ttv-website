@@ -9,6 +9,7 @@ import { useMentorRequests } from "@/lib/platform/client/hooks/mentoring";
 import { createMentorRequestsStore, shownStatus, type MentorRequestsStore } from "@/lib/platform/client/mentor-requests";
 import { firstName } from "@/components/channels/channel-format";
 import EmbedCard from "@/components/channels/EmbedCard";
+import MaskedText from "@/components/channels/MaskedText";
 import { requestAttentionRefresh } from "@/components/platform/shell/overlays";
 import { Avatar, Button, Card, Chip } from "@/components/platform/ui";
 import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
@@ -137,7 +138,7 @@ function RequestCard({ store, request, mentors, now, compact = false }: {
       </div>
 
       <blockquote className="text-[0.9375rem] leading-relaxed break-words text-ink-primary sm:text-base">
-        <span className="sr-only">{name} wrote: </span>“{request.note}”
+        <span className="sr-only">{name} wrote: </span>“<MaskedText text={request.note} />”
       </blockquote>
       {request.project && !compact && <div className="max-w-xl"><EmbedCard embed={request.project} /></div>}
       {view.detail && <p className="text-sm text-ink-secondary">{view.detail}</p>}

@@ -133,8 +133,15 @@ talk to each other, U-2.3's `ChannelFrame` asks; after, the conversation:
   new channel opens fresh. The "New" divider skips deleted and hidden
   messages, as the unread count does.
 - **"Jump to latest" never covers the end.** While it shows, the list makes
-  room for it below the last message; on a narrow sheet it sits at the end
-  of the line, clear of reactions and thread links.
+  room for it below the last message. It stands on the list's bottom edge at
+  its end, half over the composer's empty top corner, never over the middle
+  of the messages (T10); on a narrow sheet it is a round arrow button.
+- **A thread opens where the reader is going** (T09): at the reply a link
+  names (`?thread=…&message=…`, from a notification or a search result), and
+  otherwise at its latest reply, where it stays while embeds load.
+- **Masked contact details are a note wherever stored text shows**
+  (`MaskedText.tsx`, T03): messages, mentor request notes and replies,
+  attention notices and search excerpts, never the bracketed marker.
 - **Role badges come from the server**, worded by the server. Nothing in the
   view infers a role, a trust signal or a confirmation.
 - **Moderation is shown to the people the server tells.** `moderation` reaches

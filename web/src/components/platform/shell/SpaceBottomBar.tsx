@@ -14,17 +14,20 @@ type Person = { id: string; name: string; src?: string };
 export default function SpaceBottomBar({
   links,
   active,
+  outside = false,
   person,
 }: {
   links: readonly SpaceLink[];
   active: SpaceId;
+  /** The page sits in `active` without belonging to it (Attention), so no space claims it (T12). */
+  outside?: boolean;
   person: Person;
 }) {
   return (
     <nav aria-label="Spaces" className="spaces-bottom" data-count={links.length}>
       <ul className="spaces-bottom__list">
         {links.map((link) => {
-          const current = link.space === active;
+          const current = !outside && link.space === active;
           return (
             <li key={link.space} className="spaces-bottom__item" data-space={link.space}>
               <a

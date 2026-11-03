@@ -16,6 +16,11 @@ afterEach(() => {
 const channelsOff = (me: Me): Me => ({ ...me, flags: { ...me.flags, channels: false } });
 
 describe("scopesFor", () => {
+  it("names the cohort scope for the person's one cohort when given it (T07)", () => {
+    expect(scopesFor(meByPersona.wanjiku, "Cohort 04").find((option) => option.scope === "cohort")?.label).toBe("Cohort 04");
+    expect(scopesFor(meByPersona.wanjiku).find((option) => option.scope === "cohort")?.label).toBe("Your cohort");
+  });
+
   it("offers a cohort search only to someone in a cohort", () => {
     expect(scopesFor(meByPersona.wanjiku).map((option) => option.scope)).toEqual(["all", "cohort", "community", "messages", "people", "projects"]);
     expect(scopesFor(meByPersona.lucy).map((option) => option.scope)).toEqual(["all", "community", "messages", "people", "projects"]);

@@ -39,11 +39,15 @@ async function messageState(context: AttentionProducerContext, messageId: string
 /** How a summary names a channel: `#slug`, or a direct conversation (B-4.1), which has no slug of its own. */
 const placeName = (message: Pick<MessageState, "kind" | "slug">) => message.kind === "DIRECT" ? "your conversation" : `#${message.slug}`;
 
-/** The message's space, and its channel page, opened on its thread when it is a reply. Conversations are under Community. */
+/**
+ * The message's space (conversations are under Community), and where an item about it leads: the
+ * message itself (`?message=`), in its thread when it is a reply (`?thread=…&message=…`), as a search
+ * result does, so the page opens on it rather than at the top (T09).
+ */
 function messagePlace(message: Pick<MessageState, "id" | "parentId" | "channelId" | "kind" | "slug">): Pick<EventItem, "space" | "subject"> {
   const space = message.kind === "COHORT" ? "cohort" : "community";
-  const thread = message.parentId === null ? "" : `?thread=${encodeURIComponent(message.parentId)}`;
-  const href = `${channelPagePath({ id: message.channelId, kind: message.kind, slug: message.slug })}${thread}`;
+  const params = new URLSearchParams(message.parentId === null ? { message: message.id } : { thread: message.parentId, message: message.id });
+  const href = `${channelPagePath({ id: message.channelId, kind: message.kind, slug: message.slug })}?${params}`;
   return { space, subject: { kind: "message", id: message.id, href, label: message.kind === "DIRECT" ? "Conversation" : `#${message.slug}` } };
 }
 

@@ -393,8 +393,8 @@ describe("what the person asking hears of a check (QA4-02)", () => {
   }
   const yours = "Your request to David Kamau";
   const directory = "/dashboard/community/mentors";
-  const WAITING = "Waiting for a check before it's sent. Nothing for you to do: you'll hear here when it's done.";
-  const CHECKING = "TTV is checking your request. Nothing for you to do: you'll hear here when it's done.";
+  const WAITING = "Your request to David Kamau is waiting for a check before it's sent. Nothing for you to do: you'll hear here when it's done.";
+  const CHECKING = "Your request to David Kamau is being checked by TTV. Nothing for you to do: you'll hear here when it's done.";
 
   it("tells them a held request waits, then that it was sent once an admin keeps it", async () => {
     const s = setup();
@@ -402,18 +402,26 @@ describe("what the person asking hears of a check (QA4-02)", () => {
     expect(await notices(s)).toEqual([[yours, WAITING, directory, null]]);
     await decide(s, id, "keep");
     // "Waiting" no longer holds, so only what the decision did is listed.
-    expect(await notices(s)).toEqual([[yours, "Checked and sent. It's waiting for David Kamau now.", directory, null]]);
+    expect(await notices(s)).toEqual([[yours, "Your request to David Kamau was checked and sent. It's with David now.", directory, null]]);
+  });
+
+  it("never makes a first name out of a fallback when the mentor's name is blank", async () => {
+    const s = setup();
+    const id = await ask(s, ABUSE);
+    s.database.prepare('UPDATE "user" SET name = ? WHERE id = ?').run("  ", PEOPLE.david);
+    await decide(s, id, "keep");
+    expect((await notices(s)).map((notice) => notice[1])).toEqual(["Your request to a member was checked and sent. It's with them now."]);
   });
 
   it("tells them a removed request wasn't sent, or was closed once the mentor had read it, and that they may ask again", async () => {
     const held = setup();
     await decide(held, await ask(held, ABUSE), "remove");
-    expect((await notices(held)).at(-1)?.[1]).toBe("It wasn't sent, after a check. You can ask again with a new note.");
+    expect((await notices(held)).at(-1)?.[1]).toBe("Your request to David Kamau wasn't sent, after a check. You can ask again with a new note.");
     const read = setup();
     const id = await ask(read, {});
     await report(read, id);
     await decide(read, id, "remove");
-    expect((await notices(read)).map((notice) => notice[1])).toEqual(["It was closed, after a check. You can ask again with a new note."]);
+    expect((await notices(read)).map((notice) => notice[1])).toEqual(["Your request to David Kamau was closed, after a check. You can ask again with a new note."]);
   });
 
   it("never says declined, never names who opened the check, and says nothing of a decision on a request they withdrew", async () => {
@@ -438,7 +446,7 @@ describe("what the person asking hears of a check (QA4-02)", () => {
     const s = setup();
     const id = await ask(s, ABUSE);
     await decide(s, id, "keep");
-    expect((await notices(s)).map((notice) => notice[1])).toEqual(["Checked and sent. It's waiting for David Kamau now."]);
+    expect((await notices(s)).map((notice) => notice[1])).toEqual(["Your request to David Kamau was checked and sent. It's with David now."]);
     expect((await step(s, s.call(operation, { id, user: PEOPLE.david, body }))).status).toBe(200);
     expect(await notices(s)).toEqual([]);
   });
@@ -454,7 +462,7 @@ describe("what the person asking hears of a check (QA4-02)", () => {
     await step(s, s.call("reportMentorRequest", { id, user: PEOPLE.david, body: { reason: "Insults me." }, ...at(2) }));
     expect((await notices(s)).map((notice) => notice[1])).toEqual([CHECKING]);
     await admin("remove", 3);
-    expect((await notices(s)).map((notice) => notice[1])).toEqual(["It was closed, after a check. You can ask again with a new note."]);
+    expect((await notices(s)).map((notice) => notice[1])).toEqual(["Your request to David Kamau was closed, after a check. You can ask again with a new note."]);
   });
 });
 

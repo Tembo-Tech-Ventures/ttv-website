@@ -8,6 +8,7 @@
  *
  *   ?persona=wanjiku&view=directory&area=Career&format=CALL_30_MIN&available=true&ask=<mentorId>
  *   &view=requests | availability   the mentor's pages (a persona with Mentoring: david, mercy, samuel)
+ *   &note=masked                    (requests) the first note carries a masked contact marker (T03)
  *   &conduct=required               the person has not agreed to how we talk to each other yet;
  *                                   agreeing posts here and comes back with the drawer open
  *   &check=waiting|checking|not_sent|closed|reported
@@ -22,7 +23,7 @@
  *
  * Nothing is reachable outside `astro dev`; `e2e/platform-mentors.spec.ts` holds the contract.
  */
-import { MentorRequestCheck, type Me, type SpaceId } from "@/lib/platform/contracts";
+import { MASKED_CONTACT, MentorRequestCheck, type Me, type SpaceId } from "@/lib/platform/contracts";
 import { ROUTES } from "@/lib/platform/contracts";
 import { channelList, FIXTURE_NOW, pendingMentorRequest, people, worthAnotherLook } from "@/lib/platform/fixtures";
 import SpacesLayout from "@/layouts/SpacesLayout.astro";
@@ -135,11 +136,15 @@ const harness = view === "directory"
   : view === "requests"
     ? {
       view, props: await (async () => {
-        const [initial, mentors, availability] = await Promise.all([
+        const [listed, mentors, availability] = await Promise.all([
           mock.api.call(ROUTES.listMentorRequests, { query: { as: "mentor" } }),
           mock.api.call(ROUTES.listMentors, { query: {} }),
           mock.api.call(ROUTES.getMentorAvailability),
         ]);
+        // `&note=masked`: the first note as the server gives it to a mentor when it held contact details (T03).
+        const initial = params.get("note") === "masked"
+          ? { ...listed, items: listed.items.map((item, index) => index === 0 ? { ...item, note: `${item.note} WhatsApp me on ${MASKED_CONTACT}.` } : item) }
+          : listed;
         // David has confirmed work with a newer revision since (B-4.2's fixture); other mentors have none.
         const anotherLook = me.user.id === people.david.id ? worthAnotherLook : { items: [] };
         return { initial, mentors: mentors.items, availability, anotherLook, now };

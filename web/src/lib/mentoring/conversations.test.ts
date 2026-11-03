@@ -94,12 +94,13 @@ describe("a conversation opened by a mentor request", () => {
     expect(response.status).toBe(201);
     // The channel route leaves mentions for after its response; run that step here.
     await mentionAttention({ db: s.d1, env: { PLATFORM_FLAGS_OVERRIDE: "all" } }, (response.body as { id: string }).id);
+    const at = `/dashboard/community/dm/${channelId}?message=${(response.body as { id: string }).id}`;
     expect(s.database.prepare("SELECT kind, space, subjectHref, summary FROM attention_item WHERE userId = ? AND kind = 'mention'").all(VIEWER)).toEqual([
-      { kind: "mention", space: "community", subjectHref: `/dashboard/community/dm/${channelId}`, summary: "Mentioned you in your conversation." },
+      { kind: "mention", space: "community", subjectHref: at, summary: "Mentioned you in your conversation." },
     ]);
     // Listed while the person is still in the conversation, and gone once they are not.
     const mentions = async () => (await mentionsOf(s)).map((item) => item.subject.href);
-    expect(await mentions()).toEqual([`/dashboard/community/dm/${channelId}`]);
+    expect(await mentions()).toEqual([at]);
     s.database.prepare("DELETE FROM channel_member WHERE channelId = ? AND userId = ?").run(channelId, VIEWER);
     expect(await mentions()).toEqual([]);
   });

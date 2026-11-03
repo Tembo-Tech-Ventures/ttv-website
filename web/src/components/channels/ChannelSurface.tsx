@@ -167,6 +167,8 @@ export default function ChannelSurface({
   // keyboard carries on from it rather than from the top of the page (QA2-04): a reply in the thread the
   // link opened, otherwise the message in the list, which the list has already brought into view.
   const linked = useRef(messageId);
+  // The reply a link named, for the thread it opened with: the rail opens at it (T09).
+  const linkedReply = initialThreadId !== null && messageId !== null && messageId !== initialThreadId ? messageId : null;
   useEffect(() => {
     const id = linked.current;
     if (!id) return;
@@ -267,6 +269,7 @@ export default function ChannelSurface({
             people={people}
             mentionPeople={mentionPeople}
             headingRef={heading}
+            targetId={thread.parentId === initialThreadId ? linkedReply : null}
             onClose={closeThread}
             onLoadOlder={() => void store.loadOlderReplies()}
             onRetry={() => threadId && void store.openThread(threadId)}

@@ -44,13 +44,15 @@ interface Props {
   title: string;
   /** Prepended to the tab title only, never the visible bar: "Error: " after a rejected form. */
   titlePrefix?: string;
+  /** A page of its own, shown in `space` without belonging to it (Attention): the phone's bar marks no space current (T12). */
+  outsideSpaces?: boolean;
   /** Overlay islands the page mounts in the `overlays` slot; their triggers appear in the top bar. */
   overlays?: readonly ShellOverlay[];
   /** Fixture harnesses only: they live outside the preference cookie's path and have no session. */
   harness?: { account: ShellAccount; spaceHrefs: Readonly<Record<SpaceId, string>> };
 }
 
-const { me, space, title, titlePrefix = "", overlays = [], harness } = Astro.props;
+const { me, space, outsideSpaces = false, title, titlePrefix = "", overlays = [], harness } = Astro.props;
 
 if (!canRenderSpace(me, space)) {
   throw new Error(`SpacesLayout: the ${space} space is not open to this person. Check canRenderSpace before rendering.`);
@@ -63,6 +65,7 @@ const lastSpace = readLastSpaceCookie(Astro.request.headers.get("cookie"));
 const shell = {
   me,
   space,
+  outsideSpaces,
   lastSpace,
   heading: title,
   account,

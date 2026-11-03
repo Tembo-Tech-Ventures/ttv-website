@@ -16,6 +16,8 @@ type PlatformOverlaysProps = {
    * attention page owns its own inbox, so it mounts these overlays without it.
    */
   attention?: boolean;
+  /** The person's one cohort's name ("Cohort 05"), for search's cohort scope; null keeps "Your cohort" (T07). */
+  cohortLabel?: string | null;
   /** DEV harness only: answer from fixtures, in this scenario, instead of the API. */
   harness?: HarnessScenario;
 };
@@ -37,11 +39,11 @@ function AttentionOverlay({ me, api }: { me: Me; api?: ApiClient }) {
  * the attention panel. Mount it in SpacesLayout's `overlays` slot and pass
  * `overlays={["search", "attention"]}`, so the shell shows their triggers.
  */
-export default function PlatformOverlays({ me, attention = true, harness }: PlatformOverlaysProps) {
+export default function PlatformOverlays({ me, attention = true, cohortLabel = null, harness }: PlatformOverlaysProps) {
   const clients = useHarnessClients(harness);
   return (
     <>
-      <SearchOverlay me={me} client={clients?.search} />
+      <SearchOverlay me={me} cohortLabel={cohortLabel} client={clients?.search} />
       {attention && <AttentionOverlay me={me} api={clients?.attention} />}
     </>
   );

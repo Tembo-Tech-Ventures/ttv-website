@@ -22,6 +22,11 @@ export type SpacesShellProps = {
   me: Me;
   /** The space this page belongs to. */
   space: SpaceId;
+  /**
+   * A page of its own that sits in `space` without belonging to it (Attention): the sheet still hangs
+   * from that tab, but the phone's bar marks no space as the page you are on (T12).
+   */
+  outsideSpaces?: boolean;
   /** The ttv-last-space preference, already parsed on the server. Never the Cookie header. */
   lastSpace: SpaceId | null;
   /** Names the page in the phone's top bar, where there are no tabs to say where you are. */
@@ -98,6 +103,7 @@ function PersonFooter({ person }: { person: PersonSummary }) {
 export default function SpacesShell({
   me,
   space,
+  outsideSpaces,
   lastSpace,
   heading,
   account,
@@ -385,7 +391,7 @@ export default function SpacesShell({
           </main>
         </div>
       </SpaceFile>
-      <SpaceBottomBar links={links} active={space} person={person} />
+      <SpaceBottomBar links={links} active={space} outside={outsideSpaces} person={person} />
     </div>
   );
 }

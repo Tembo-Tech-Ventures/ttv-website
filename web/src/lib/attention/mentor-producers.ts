@@ -32,9 +32,9 @@ const STATUS_AFTER: Record<Exclude<MentorRequestEvent, "checking" | "decided">, 
 };
 
 const ASKED_FOR: Record<MentorRequestFormat, string> = {
-  WRITTEN_REVIEW: "Asked you for a written review.",
-  CALL_30_MIN: "Asked you for a 30-minute call.",
-  QUICK_QUESTION: "Asked you a quick question.",
+  WRITTEN_REVIEW: "asked you for a written review.",
+  CALL_30_MIN: "asked you for a 30-minute call.",
+  QUICK_QUESTION: "asked you a quick question.",
 };
 
 interface RequestState {
@@ -58,28 +58,40 @@ function checkNotice(request: RequestState): CheckNotice | null {
   return request.closedRequest ? request.reported ? "closed" : "not_sent" : null;
 }
 
-/** What each notice tells the person asking: a fixed, kind explanation and what happens next (QA4-02). */
-const CHECK_SUMMARY: Record<CheckNotice, (mentor: string) => string> = {
-  waiting: () => "Waiting for a check before it's sent. Nothing for you to do: you'll hear here when it's done.",
-  checking: () => "TTV is checking your request. Nothing for you to do: you'll hear here when it's done.",
-  sent: (mentor) => `Checked and sent. It's waiting for ${mentor} now.`,
-  not_sent: () => "It wasn't sent, after a check. You can ask again with a new note.",
-  closed: () => "It was closed, after a check. You can ask again with a new note.",
+/**
+ * What each notice tells the person asking: a fixed, kind explanation and what happens next (QA4-02).
+ * It leads with the request it is about ("Your request to David Kamau", its subject's label), never
+ * with the mentor as if they had acted: a check is TTV's, and the mentor may never have seen it (T04).
+ */
+const CHECK_SUMMARY: Record<CheckNotice, (yours: string, mentor: string | null) => string> = {
+  waiting: (yours) => `${yours} is waiting for a check before it's sent. Nothing for you to do: you'll hear here when it's done.`,
+  checking: (yours) => `${yours} is being checked by TTV. Nothing for you to do: you'll hear here when it's done.`,
+  sent: (yours, mentor) => `${yours} was checked and sent. It's with ${firstNameOf(mentor)} now.`,
+  not_sent: (yours) => `${yours} wasn't sent, after a check. You can ask again with a new note.`,
+  closed: (yours) => `${yours} was closed, after a check. You can ask again with a new note.`,
 };
 
 function checkItem(request: RequestState): EventItem | null {
   const notice = checkNotice(request);
   if (notice === null) return null;
   const at = notice === "waiting" || notice === "checking" ? request.openedAt : request.decidedAt;
+  const yours = `Your request to ${nameOf(request.mentorName)}`;
   return {
     userId: request.requesterId, actorId: null, space: "community", kind: "mentor_checked",
-    subject: { kind: "mentorRequest", id: request.id, href: MENTOR_PAGE_PATHS.directory, label: `Your request to ${nameOf(request.mentorName)}` },
+    subject: { kind: "mentorRequest", id: request.id, href: MENTOR_PAGE_PATHS.directory, label: yours },
     // access.ts reads the notice at $[2] and its time at $[3] of this key, to show each only while it describes the check: keep them in place.
-    summary: CHECK_SUMMARY[notice](nameOf(request.mentorName)), eventKey: JSON.stringify(["mentor_checked", request.id, notice, at]),
+    summary: CHECK_SUMMARY[notice](yours, request.mentorName), eventKey: JSON.stringify(["mentor_checked", request.id, notice, at]),
   };
 }
 
 const nameOf = (name: string | null) => name?.trim() || "a member";
+/** A first name, from the stored name before any fallback: "them" when there is none. */
+const firstNameOf = (name: string | null) => name?.trim().split(/\s+/u)[0] || "them";
+/** A person's name to start a sentence with, as the attention row sets it in bold (T04): "David Kamau accepted…". */
+const leadOf = (name: string | null) => {
+  const named = nameOf(name);
+  return named.charAt(0).toUpperCase() + named.slice(1);
+};
 
 function itemFor(event: Exclude<MentorRequestEvent, "checking" | "decided">, request: RequestState): EventItem {
   const subject = (href: string, label: string) => ({ kind: "mentorRequest" as const, id: request.id, href, label });
@@ -88,20 +100,23 @@ function itemFor(event: Exclude<MentorRequestEvent, "checking" | "decided">, req
   const toRequester = { userId: request.requesterId, actorId: request.mentorId, space: "community" as const, eventKey };
   const fromRequester = subject(MENTOR_PAGE_PATHS.requests, `Request from ${nameOf(request.requesterName)}`);
   const yourRequest = subject(MENTOR_PAGE_PATHS.directory, `Your request to ${nameOf(request.mentorName)}`);
+  // Each notice leads with who acted, as Tembo's do, so the row can set the name in bold (T04).
+  const requester = leadOf(request.requesterName);
+  const mentor = leadOf(request.mentorName);
   switch (event) {
     case "created":
-      return { ...toMentor, kind: "mentor_request", subject: fromRequester, summary: ASKED_FOR[request.format] };
+      return { ...toMentor, kind: "mentor_request", subject: fromRequester, summary: `${requester} ${ASKED_FOR[request.format]}` };
     case "withdrawn":
-      return { ...toMentor, kind: "mentor_withdrawn", subject: fromRequester, summary: "Withdrew their request." };
+      return { ...toMentor, kind: "mentor_withdrawn", subject: fromRequester, summary: `${requester} withdrew their request.` };
     case "accepted":
       return { ...toRequester, kind: "mentor_accepted",
         subject: subject(`${CONVERSATION_PATH}/${encodeURIComponent(request.channelId ?? "")}`, `Conversation with ${nameOf(request.mentorName)}`),
-        summary: "Accepted your request. Your conversation is open." };
+        summary: `${mentor} accepted your request. Your conversation is open.` };
     case "redirected":
       return { ...toRequester, kind: "mentor_redirected", subject: yourRequest,
-        summary: request.targetName?.trim() ? `Suggested you ask ${request.targetName.trim()} instead.` : "Suggested you ask another mentor." };
+        summary: request.targetName?.trim() ? `${mentor} suggested you ask ${request.targetName.trim()} instead.` : `${mentor} suggested you ask another mentor.` };
     case "declined":
-      return { ...toRequester, kind: "mentor_declined", subject: yourRequest, summary: "Can't take your request this month." };
+      return { ...toRequester, kind: "mentor_declined", subject: yourRequest, summary: `${mentor} can't take your request this month.` };
   }
 }
 

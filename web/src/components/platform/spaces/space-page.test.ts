@@ -13,6 +13,7 @@ import type { StudentNextStep } from "@/lib/student/journey";
 import {
   linkAllowed,
   loadCertificates,
+  loadCohortHeading,
   loadOnboarding,
   onboardingFor,
   pickSpace,
@@ -227,6 +228,73 @@ describe("loadCertificates", () => {
       await expect(loadCertificates(db, "nobody")).resolves.toEqual([]);
     } finally {
       database.close();
+    }
+  });
+});
+
+describe("loadCohortHeading (T07)", () => {
+  const NOW = Date.UTC(2026, 10, 3);
+  const at = (iso: string) => Math.floor(Date.parse(iso) / 1000);
+  const me = (cohortIds: string[]) => ({ user: { ...meByPersona.wanjiku.user, id: "synthetic-wanjiku" }, capabilities: { ...meByPersona.wanjiku.capabilities, cohortIds } });
+  function database() {
+    const setup = createCapabilityDatabase();
+    setup.database.exec(`
+      UPDATE curriculum SET title = 'Full-stack foundations';
+      UPDATE program SET startDate = ${at("2026-09-01")}, endDate = ${at("2026-12-01")} WHERE id = 'cohort-a';
+      UPDATE program SET startDate = ${at("2027-01-10")}, endDate = ${at("2027-04-01")} WHERE id = 'cohort-b';
+      INSERT INTO program (id,name,description,curriculumId) VALUES ('cohort-c','Synthetic cohort C','Test','curriculum');`);
+    const apply = (id: string, programId: string, status: string, userId = "synthetic-wanjiku") => setup.database
+      .prepare("INSERT INTO programApplication (id,userId,programId,status,application) VALUES (?,?,?,?,'{}')").run(id, userId, programId, status);
+    const role = (programId: string, name: string) => setup.database
+      .prepare("INSERT INTO programRole (id,userId,programId,name) VALUES (?,?,?,?)").run(`role-${programId}-${name}`, "synthetic-wanjiku", programId, name);
+    return { ...setup, apply, role };
+  }
+
+  it("names the cohort the person was accepted onto, with its week, and only among the cohorts they read", async () => {
+    const s = database();
+    try {
+      s.apply("a", "cohort-a", "APPROVED");
+      s.apply("c", "cohort-c", "APPROVED");
+      await expect(loadCohortHeading(s.db, me(["cohort-a"]), NOW)).resolves.toEqual({
+        id: "cohort-a", name: "Synthetic cohort A", detail: "Full-stack foundations · week 10 of 13", application: "APPROVED",
+      });
+      // Not in cohortIds, so never named, even with an application.
+      await expect(loadCohortHeading(s.db, me(["cohort-b"]), NOW)).resolves.toBeNull();
+    } finally {
+      s.database.close();
+    }
+  });
+
+  it("ignores waiting and refused applications, and another person's, and keeps Apply while one waits (S2)", async () => {
+    const s = database();
+    try {
+      s.apply("b", "cohort-b", "PENDING");
+      s.apply("r", "cohort-c", "REJECTED");
+      s.apply("other", "cohort-a", "APPROVED", "synthetic-otieno");
+      await expect(loadCohortHeading(s.db, me(["cohort-a", "cohort-b", "cohort-c"]), NOW)).resolves.toBeNull();
+      s.apply("done", "cohort-a", "COMPLETED");
+      // Completed cohort A is named, but the waiting application to B means applying isn't behind them.
+      await expect(loadCohortHeading(s.db, me(["cohort-a", "cohort-b"]), NOW)).resolves.toMatchObject({ id: "cohort-a", application: null });
+    } finally {
+      s.database.close();
+    }
+  });
+
+  it("names a cohort by a role alone, and merges an application and a role for the same cohort", async () => {
+    const s = database();
+    try {
+      s.role("cohort-c", "TA");
+      await expect(loadCohortHeading(s.db, me(["cohort-c"]), NOW)).resolves.toEqual({
+        id: "cohort-c", name: "Synthetic cohort C", detail: "Full-stack foundations", application: null,
+      });
+      s.role("cohort-a", "MENTOR");
+      s.apply("a", "cohort-a", "AUDIT");
+      await expect(loadCohortHeading(s.db, me(["cohort-a"]), NOW)).resolves.toEqual({
+        id: "cohort-a", name: "Synthetic cohort A", detail: "Full-stack foundations · week 10 of 13", application: "AUDIT",
+      });
+      await expect(loadCohortHeading(s.db, me([]), NOW)).resolves.toBeNull();
+    } finally {
+      s.database.close();
     }
   });
 });

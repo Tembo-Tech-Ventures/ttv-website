@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import { PiCheckCircle, PiFolderSimple, PiShieldCheck, PiX } from "react-icons/pi";
 import type { MentorDirectoryItem, MentorRequest, ProjectEmbed } from "@/lib/platform/contracts";
 import { useRequestForm } from "@/lib/platform/client/hooks/mentoring";
@@ -85,6 +85,29 @@ export function failureText(failure: RequestFailure, message: string | null, nam
  * first (the words changed since the page was read), the drawer shows them
  * with the draft kept, and agreeing there sends too.
  */
+/**
+ * Keeps the drawer's scroller clear of its pinned header and footer: their heights, measured as they
+ * change (the footer grows with the habits and a failure), become the sheet's scroll padding, so a
+ * control that takes focus scrolls into the space between them, never under either (WCAG 2.4.11).
+ */
+function useStickyClearance(form: RefObject<HTMLFormElement>, view: string) {
+  useEffect(() => {
+    const sheet = form.current?.closest<HTMLElement>(".mentor-drawer__sheet");
+    const header = sheet?.querySelector<HTMLElement>(".mentor-drawer__header");
+    const footer = form.current?.querySelector<HTMLElement>(".mentor-drawer__actions--sticky");
+    if (!sheet || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      sheet.style.setProperty("--drawer-head", `${header?.offsetHeight ?? 0}px`);
+      sheet.style.setProperty("--drawer-foot", `${footer?.offsetHeight ?? 0}px`);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    for (const edge of [header, footer]) if (edge) observer.observe(edge);
+    return () => observer.disconnect();
+    // Measured again whenever the drawer changes what it shows: the form is replaced by a step and comes back.
+  }, [form, view]);
+}
+
 export default function RequestForm({
   store, mentor, projects, conduct, headingId, action, closeHref = null, onClose, onSent, onAgreed,
 }: Props) {
@@ -93,6 +116,8 @@ export default function RequestForm({
   const formatRef = useRef<HTMLInputElement>(null);
   const sentRef = useRef<HTMLHeadingElement>(null);
   const conductRef = useRef<HTMLHeadingElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  useStickyClearance(formRef, state.status);
   const ids = useId();
   const name = firstName(mentor.person.name);
   const sending = state.status === "sending";
@@ -161,7 +186,7 @@ export default function RequestForm({
     <>
       {live}
       {header}
-      <form method="post" action={action} className="mentor-drawer__body" onSubmit={submit} noValidate aria-busy={sending || undefined}>
+      <form ref={formRef} method="post" action={action} className="mentor-drawer__body" onSubmit={submit} noValidate aria-busy={sending || undefined}>
         <input type="hidden" name="intent" value={REQUEST_INTENT} />
         <input type="hidden" name="mentorId" value={mentor.person.id} />
         <div>
@@ -205,24 +230,26 @@ export default function RequestForm({
           {formatError && <p id={`${ids}-format-error`} className="mt-1 text-sm font-semibold text-danger-ink">{formatError}</p>}
         </fieldset>
 
-        <p className="mentor-drawer__note" data-request-privacy>
-          {name} sees your name, this note and the project you attach. Some requests get a check from TTV before they
-          reach a mentor. If {name} accepts, you both get a private conversation, and it shows up under Needs your
-          attention. If the timing doesn't work, {name} can suggest another mentor or say not this month, and neither
-          shows anywhere else.
-        </p>
-
-        {/* Before Send, not after it (QA4-05): the note follows the channels' habits, and sending agrees to them. */}
-        {asksAgreement && <ConductBeforeSend name={name} conduct={conduct} headingId={`${ids}-conduct`} />}
+        {/* Who sees what, in a line; the rest behind "How this works", so Send stays in view at 1440×900 (T05). */}
+        <div className="mentor-drawer__note" data-request-privacy>
+          <p>{name} sees your name, this note and the project you attach.</p>
+          <details className="mentor-drawer__more">
+            <summary className={cx("mentor-drawer__more-toggle", FOCUS_RING)}>How this works</summary>
+            <p className="mt-2">
+              Some requests get a check from TTV before they reach a mentor. If {name} accepts, you both get a private
+              conversation, and it shows up under Needs your attention. If the timing doesn't work, {name} can suggest
+              another mentor or say not this month, and neither shows anywhere else.
+            </p>
+          </details>
+        </div>
 
         <SendFailure failure={state.status === "error" ? state.failure : null} message={state.failureMessage} name={name} />
 
-        <div className="mentor-drawer__actions">
-          <Button type="submit" variant="primary" loading={sending} className="flex-1 sm:flex-none">
-            {asksAgreement ? "Agree and send request" : "Send request"}
-          </Button>
-          <CancelControl closeHref={closeHref} onClose={onClose} />
-        </div>
+        {/* The habits sit just above Send, inside the pinned footer, so they are in view whenever it is (QA4-05, T05). */}
+        <SendActions
+          agreement={asksAgreement ? <ConductBeforeSend name={name} conduct={conduct} headingId={`${ids}-conduct`} /> : null}
+          sending={sending} closeHref={closeHref} onClose={onClose}
+        />
       </form>
     </>
   );
@@ -259,11 +286,11 @@ function SentPanel({ name, headingRef, onClose }: { name: string; headingRef: Re
   );
 }
 
-/** The habits, above Send, for someone who has not agreed to them yet: the form then carries the agreement. */
+/** The habits, just above Send, for someone who has not agreed to them yet: the form then carries the agreement. */
 function ConductBeforeSend({ name, conduct, headingId }: { name: string; conduct: ConductPrompt; headingId: string }) {
   return (
-    <section aria-labelledby={headingId} className="mentor-drawer__note flex flex-col gap-2" data-request-conduct-inline>
-      <h3 id={headingId} className="flex items-center gap-2 text-[0.9375rem] font-semibold text-ink-primary">
+    <section aria-labelledby={headingId} className="flex w-full flex-col gap-1.5 text-[0.8125rem] leading-snug text-ink-secondary" data-request-conduct-inline>
+      <h3 id={headingId} className="flex items-center gap-2 text-sm font-semibold text-ink-primary">
         <PiShieldCheck aria-hidden className="size-5 shrink-0 text-ring" />
         Before you send: {CONDUCT_TITLE.toLowerCase()}
       </h3>
@@ -340,6 +367,24 @@ function DrawerHeader({ mentor, name, headingId, closeHref, onClose }: {
         <IconButton label="Close" icon={<PiX size={18} />} variant="ghost" size="sm" onClick={onClose} />
       )}
     </header>
+  );
+}
+
+/**
+ * Send and Cancel, pinned to the drawer's bottom edge (T05). While sending also agrees to the habits,
+ * they come first in the footer (`agreement`), so what Send agrees to is always in view beside it.
+ */
+function SendActions({ agreement, sending, closeHref, onClose }: {
+  agreement: ReactNode; sending: boolean; closeHref: string | null; onClose: () => void;
+}) {
+  return (
+    <div className="mentor-drawer__actions mentor-drawer__actions--sticky">
+      {agreement}
+      <Button type="submit" variant="primary" loading={sending} className="flex-1 sm:flex-none">
+        {agreement ? "Agree and send request" : "Send request"}
+      </Button>
+      <CancelControl closeHref={closeHref} onClose={onClose} />
+    </div>
   );
 }
 

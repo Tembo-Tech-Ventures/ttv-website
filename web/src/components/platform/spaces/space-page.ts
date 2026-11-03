@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import type { Me, SpaceId } from "@/lib/platform/contracts";
 import { getSpaceContext } from "@/lib/platform/server/space-context";
@@ -17,6 +17,7 @@ import { canRenderSpace } from "@/components/platform/shell/access";
 import { onboardingView, type OnboardingView } from "@/components/platform/onboarding/framing";
 import { onboardingOpen } from "@/components/platform/onboarding/welcome-flow";
 import { PAGE_SPACES, SPACE_PAGE_PATHS, type SpacePageKey } from "./sidebar";
+import { chooseCohort, COHORT_APPLICATION_NOTE, type CohortApplicationStatus, type CohortHeading, type CohortMembership } from "./cohort-heading";
 
 /**
  * How an existing dashboard page decides whether it renders inside the spaces
@@ -145,6 +146,49 @@ export function restrictedNextStep({ qaPersona, fixture }: Restrictions, step: S
     detail: null,
     action: { href: "/dashboard/community", label: "Open my journey" },
   };
+}
+
+const MEMBER_STATUSES = Object.keys(COHORT_APPLICATION_NOTE) as CohortApplicationStatus[];
+
+/**
+ * The cohort the Cohort space is named for (T07): among the cohorts this person reads (capabilitiesFor's
+ * cohortIds), those they were accepted onto or hold a role in. Null when they are in none of them.
+ * An application of theirs still waiting, to any cohort, keeps Apply where it is (S2).
+ */
+export async function loadCohortHeading(db: Database, me: Pick<Me, "user" | "capabilities">, now = Date.now()): Promise<CohortHeading | null> {
+  const ids = me.capabilities.cohortIds;
+  if (ids.length === 0) return null;
+  const program = { columns: { name: true, startDate: true, endDate: true }, with: { curriculum: { columns: { title: true } } } } as const;
+  const [applications, roles, waiting] = await Promise.all([
+    db.query.programApplication.findMany({
+      where: and(eq(schema.programApplication.userId, me.user.id), inArray(schema.programApplication.programId, ids),
+        inArray(schema.programApplication.status, MEMBER_STATUSES)),
+      columns: { programId: true, status: true }, with: { program },
+    }),
+    db.query.programRole.findMany({
+      where: and(eq(schema.programRole.userId, me.user.id), inArray(schema.programRole.programId, ids)),
+      columns: { programId: true }, with: { program },
+    }),
+    db.query.programApplication.findFirst({
+      where: and(eq(schema.programApplication.userId, me.user.id), eq(schema.programApplication.status, "PENDING")),
+      columns: { id: true },
+    }),
+  ]);
+  const memberships = new Map<string, CohortMembership>();
+  for (const row of [...applications, ...roles]) {
+    if (!row.programId || !row.program) continue;
+    const application = "status" in row ? row.status as CohortApplicationStatus : null;
+    const known = memberships.get(row.programId);
+    if (known) {
+      known.application ??= application;
+      continue;
+    }
+    memberships.set(row.programId, {
+      programId: row.programId, name: row.program.name, curriculum: row.program.curriculum?.title ?? null,
+      startDate: row.program.startDate, endDate: row.program.endDate, application,
+    });
+  }
+  return chooseCohort([...memberships.values()], now, { applying: waiting !== undefined });
 }
 
 /** The person's own completed cohorts that have a certificate, newest first. */

@@ -1,5 +1,6 @@
 import type { AttentionFilter, AttentionItem, AuthorSummary, Me, SpaceId } from "@/lib/platform/contracts";
 import { SPACE_LABEL } from "@/components/platform/shell/space-routes";
+import { CONVERSATION_PATH } from "@/lib/platform/server/space-routes";
 
 /** Where the phone's attention page lives. The bell leads here below the wide layout. */
 export const ATTENTION_PAGE_HREF = "/dashboard/attention";
@@ -69,6 +70,14 @@ export function attentionActor(item: AttentionItem): (AuthorSummary & { id: stri
   if (item.kind === "application_status" || item.kind === "tembo_answer") return null;
   const actor = item.actor;
   return actor?.id ? { ...actor, id: actor.id } : null;
+}
+
+/**
+ * The step an item leads to, shown on its row as a button would be: an accepted request opens its
+ * conversation (prototype 03). The row stays one link, so the step is its words, not a second control.
+ */
+export function attentionAction(item: AttentionItem): string | null {
+  return item.kind === "mentor_accepted" && item.subject.href.startsWith(`${CONVERSATION_PATH}/`) ? "Open conversation" : null;
 }
 
 /** Items for spaces this person cannot open are never shown, even if a response carried one. */

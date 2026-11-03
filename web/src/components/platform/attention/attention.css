@@ -343,6 +343,30 @@
   color: var(--color-ink-muted);
 }
 
+/* An item's next step, drawn as the prototype's button. The row is the link, so it is not a control of its own. */
+.attention-item__action {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  height: 2rem;
+  margin-top: 0.25rem;
+  padding-inline: 0.875rem;
+  border-radius: 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  transition: background-color 150ms ease;
+}
+
+.attention-item__link:hover .attention-item__action {
+  background-color: var(--color-peach-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attention-item__action {
+    transition: none;
+  }
+}
+
 /* The marker sits on the first line of the place, however many lines it wraps to. */
 .attention-item__place > [aria-hidden] {
   height: 1.25rem;

@@ -1,8 +1,9 @@
-import { Fragment, useMemo, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { cx } from "@/components/platform/ui/cx";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
-import { MASKED_CONTACT, type Citation } from "@/lib/platform/contracts";
+import type { Citation } from "@/lib/platform/contracts";
 import { parseBody, type BodySegment } from "./channel-format";
+import MaskedText from "./MaskedText";
 
 type MessageBodyProps = {
   body: string;
@@ -92,23 +93,7 @@ function Cited({ text, citations }: { text: string; citations: readonly Citation
  * details a moderator has not checked yet (QA2-08).
  */
 function Masked({ text, citations }: { text: string; citations: readonly Citation[] }) {
-  if (!text.includes(MASKED_CONTACT)) return <Cited text={text} citations={citations} />;
-  // Each piece is keyed by where it starts in the text.
-  let offset = 0;
-  return text.split(MASKED_CONTACT).map((part, i) => {
-    const start = offset;
-    offset += part.length + MASKED_CONTACT.length;
-    return (
-      <Fragment key={start}>
-        {i > 0 && (
-          <span className="channel-masked" role="note">
-            Contact details hidden until a moderator checks this message
-          </span>
-        )}
-        <Cited text={part} citations={citations} />
-      </Fragment>
-    );
-  });
+  return <MaskedText text={text} render={(words) => <Cited text={words} citations={citations} />} />;
 }
 
 /**

@@ -254,8 +254,9 @@ describe("Tembo's answers are moderated like a person's post", () => {
     const question = s.question("help");
     await s.ask("help", question, { temboModel: scriptedModel([{ answer: NO_TAGS }]).model });
     await s.afterResponse();
+    const [{ answerId }] = s.rows("SELECT answerId FROM tembo_ask") as [{ answerId: string }];
     expect(s.rows("SELECT userId, kind, subjectHref, summary FROM attention_item WHERE kind = 'tembo_answer'")).toEqual([{
-      userId: VIEWER, kind: "tembo_answer", subjectHref: `/dashboard/community/c/help?thread=${question}`, summary: "Tembo answered your question in #help.",
+      userId: VIEWER, kind: "tembo_answer", subjectHref: `/dashboard/community/c/help?thread=${question}&message=${answerId}`, summary: "Tembo answered your question in #help.",
     }]);
     // In the asker's Updates while the answer is visible, and gone once it is hidden.
     expect(await attentionOf(s, VIEWER)).toEqual([{ kind: "tembo_answer", summary: "Tembo answered your question in #help." }]);

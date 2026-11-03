@@ -6,6 +6,7 @@ import { PARTNER, REQUEST, TAKING_PART } from "@/components/platform/onboarding/
 import { offersCohort, type OnboardingView } from "@/components/platform/onboarding/framing";
 import { CONDUCT_TITLE } from "@/components/channels/conduct";
 import { channelPath, channelPathPrefix, conversationPath } from "@/components/channels/paths";
+import { COHORT_APPLICATION_NOTE, type CohortHeading } from "./cohort-heading";
 import {
   CONVERSATIONS_PREFIX, MENTOR_AVAILABILITY_PATH, MENTOR_REQUESTS_PATH, MENTORS_PATH, mentorRequestsOpen,
 } from "@/components/platform/mentors/mentor-display";
@@ -115,6 +116,8 @@ export interface SidebarFacts {
   onboarding?: Pick<OnboardingView, "framing" | "pending"> | null;
   /** The channels this person can read, while `channels` is on for them. Without it the sidebars are as they were. */
   channels?: SidebarChannels | null;
+  /** The person's cohort, which the Cohort space is named for (T07). Without it the space keeps its general name. */
+  cohort?: CohortHeading | null;
 }
 
 export interface SidebarChannels {
@@ -260,19 +263,29 @@ function conversations(facts: SidebarFacts): SidebarGroupModel[] {
   }));
 }
 
+/**
+ * The Cohort space, named for the person's cohort when they are in one ("Cohort 05 · Full-stack
+ * foundations · week 10 of 17", T07). Once they are in, applying is behind them: their application
+ * moves under "Earlier", with where it stands, after the channels.
+ */
 function cohort(facts: SidebarFacts): SidebarModel {
   const visible = new Set(facts.visibleLinkIds);
+  const named = facts.cohort ?? null;
+  const application = named?.application ?? null;
   return {
-    title: "Cohort",
-    description: "Your application, the sessions and Ask Tembo.",
+    title: named?.name ?? "Cohort",
+    description: named?.detail ?? "Your application, the sessions and Ask Tembo.",
     groups: [
       ...group(facts, undefined, [
         { key: "cohort", page: "cohort", label: "Overview", icon: "overview" },
         visible.has("sessions") && { key: "sessions", page: "sessions", label: "Sessions", icon: "sessions" },
         { key: "ask", page: "ask", label: "Ask Tembo", icon: "tembo" },
-        { key: "apply", page: "apply", label: "Apply", icon: "apply" },
+        !application && { key: "apply", page: "apply", label: "Apply", icon: "apply" },
       ]),
       ...channels(facts, "cohort"),
+      ...(application ? group(facts, "Earlier", [
+        { key: "apply", page: "apply", label: "Application", icon: "apply", note: COHORT_APPLICATION_NOTE[application] },
+      ]) : []),
     ],
   };
 }
