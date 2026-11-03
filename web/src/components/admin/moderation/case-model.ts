@@ -1,7 +1,7 @@
 import type {
   Channel, Message, MessageVersionCause, ModerationActionKind, ModerationQueueItem, ModerationQueueState,
 } from "@/lib/platform/contracts";
-import { excerpt, ZONE_LABEL } from "@/components/channels/channel-format";
+import { excerpt, masksContactDetails, ZONE_LABEL } from "@/components/channels/channel-format";
 import { channelPath } from "@/components/channels/paths";
 
 /*
@@ -52,10 +52,14 @@ export function sourceLabel(item: Pick<ModerationCase, "source" | "reportCount" 
   }
 }
 
-/** Where the message stands for the people in its channel right now. */
+/**
+ * Where the message stands for the people in its channel right now. Flagged contact details are
+ * masked for members until someone decides (QA2-08), so such a message is not "still visible".
+ */
 export function visibilityLabel(message: Pick<Message, "deleted" | "moderation">): string {
   if (message.deleted) return "deleted by its author";
-  return message.moderation?.state === "HIDDEN" ? "hidden from members" : "still visible";
+  if (message.moderation?.state === "HIDDEN") return "hidden from members";
+  return masksContactDetails(message.moderation) ? "contact details hidden from members" : "still visible";
 }
 
 export const CHANNEL_KIND_LABEL: Record<Channel["kind"], string> = {

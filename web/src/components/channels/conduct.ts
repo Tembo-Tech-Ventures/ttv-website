@@ -3,7 +3,8 @@
  * they open a channel, and can read again at any time (CONDUCT_PATH).
  *
  * Every line describes something channels actually do (owner decisions
- * 2026-10-31: contact details are flagged for a person, never hidden; no
+ * 2026-10-31: contact details are flagged for a person, never hidden, and
+ * policy 05e89fac masks them for other members until a person decides; no
  * WhatsApp bridge; institutions may read community channels). Change the
  * words only with the coordinator, and when a change means people should read
  * it again, bump CONDUCT_VERSION in lib/channels/conduct.ts: everyone who
@@ -36,7 +37,7 @@ export const CONDUCT_HABITS: readonly ConductHabit[] = [
   {
     key: "contact",
     title: "Keep contact details out of messages.",
-    body: "Phone numbers, email addresses and WhatsApp or Telegram links are flagged for a moderator to look at. The message stays up until a person decides.",
+    body: "Phone numbers, email addresses and WhatsApp or Telegram links are flagged for a moderator to look at. The message stays up, with those details hidden from other members until a person decides.",
   },
   {
     key: "here",

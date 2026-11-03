@@ -139,7 +139,8 @@ talk to each other, U-2.3's `ChannelFrame` asks; after, the conversation:
   view infers a role, a trust signal or a confirmation.
 - **Moderation is shown to the people the server tells.** `moderation` reaches
   only the author and moderators. A flag says the message stays up until a
-  person decides; a hidden message tells its author only they can see it.
+  person decides (with flagged contact details masked for other readers
+  meanwhile, which the notice says); a hidden message tells its author only they can see it.
   Clef can hide too, so the author's note says "Hidden from the channel",
   not who hid it.
 - **Moderating in place** (U-2.2, B-2.5). Everyone but the author can report
