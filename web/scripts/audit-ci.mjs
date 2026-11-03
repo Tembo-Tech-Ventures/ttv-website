@@ -5,11 +5,11 @@ import { execFileSync } from "node:child_process";
  *
  * Fails on any high/critical advisory that is not allowlisted below. The
  * allowlist exists for advisories whose only fix is a breaking upgrade tracked
- * separately, each with the reason its attack
- * surface is not exercised here. For Astro those are View
- * Transition directives, spread attribute names, Sharp asset pipeline) are
- * not exercised by this codebase. The Cloudflare adapter is explicitly pinned
- * to its Cloudflare Images binding, and the app does not use `astro:assets`.
+ * separately, each with the reason its attack surface is not exercised here.
+ * For Astro those surfaces (View Transition directives, spread attribute
+ * names, the Sharp asset pipeline) are not exercised by this codebase. The
+ * Cloudflare adapter is explicitly pinned to its Cloudflare Images binding,
+ * and the app does not use `astro:assets`.
  * Remove the entries when Astro 7 lands — a stale entry costs nothing, a
  * missing one fails the build loudly.
  */

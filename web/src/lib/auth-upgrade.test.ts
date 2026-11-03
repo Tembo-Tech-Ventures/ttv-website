@@ -10,7 +10,7 @@ afterEach(() => {
   for (const { database } of databases.splice(0)) database.close();
 });
 
-function fixture(agentAuth = true) {
+function fixture(agentAuth = true, flagsOverride?: string) {
   const sqlite = createSqliteD1();
   databases.push(sqlite);
   // Seed the existing identity at the original 1.6 schema, then apply every
@@ -34,6 +34,7 @@ function fixture(agentAuth = true) {
     AGENT_AUTH_ENABLED: String(agentAuth),
     STAGING_DEMO_ENABLED: "false",
     DEPLOYMENT_ENVIRONMENT: agentAuth ? "staging" : "production",
+    PLATFORM_FLAGS_OVERRIDE: flagsOverride,
   });
   return { ...sqlite, auth };
 }
@@ -109,6 +110,17 @@ describe("Better Auth 1.7 on the migrated D1 schema", () => {
     expect((await auth.api.signOut({ headers, asResponse: true })).ok).toBe(true);
     expect(database.prepare("SELECT id FROM session WHERE id=?").get(session!.session.id)).toBeUndefined();
     expect(await auth.api.getSession({ headers, query: { disableCookieCache: true } })).toBeNull();
+  });
+
+  it("runs the onboarding sign-up hook for a new GitHub account only", async () => {
+    const { auth, database } = fixture(true, "all");
+    const onboarding = () => database.prepare("SELECT userId, stage FROM member_onboarding ORDER BY userId").all();
+    githubProfile(12345, "amina@example.test");
+    await login(auth);
+    expect(onboarding()).toEqual([]);
+    githubProfile(67890, "new@example.test");
+    const session = await auth.api.getSession({ headers: new Headers({ cookie: cookies(await login(auth)) }) });
+    expect(onboarding()).toEqual([{ userId: session?.user.id, stage: "NEW" }]);
   });
 
   it("rejects invalid OAuth state before exchanging tokens or creating users", async () => {
