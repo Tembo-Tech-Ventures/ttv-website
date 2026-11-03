@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { requireCommunityGateway } from "./native-gateway";
-import { runCommunityAgent } from "./mastra-chat";
+import { runCommunityAgent } from "./chat-agent";
 import { type GatewayMessage, type ToolDefinition } from "../ai/gateway";
 import { CommunityError, parseInput, searchInput, type CommunityProfile, type CommunityJourney } from "./model";
 import type { CommunityService } from "./service";

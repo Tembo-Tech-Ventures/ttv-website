@@ -194,3 +194,20 @@ The chat response adds only server-generated `execution.model`, `modelSteps`
 and `executedToolCalls` metadata. The execution count increments when a validated
 tool actually starts after cancellation checking, so prefetched selected-person
 evidence alone cannot be mistaken for proof of model-driven tool use.
+
+### AI SDK tool loop instead of Mastra (3 November 2026)
+
+The loop now runs on the AI SDK's own `generateText` (`ai` 7.0.153, already a
+dependency) in `web/src/lib/community/chat-agent.ts`, and `@mastra/core` is gone.
+Mastra was about 10 MB of the 17.9 MB Worker upload (measured with
+`wrangler deploy --dry-run`: 17,934 KiB / 4,062 KiB gzip with it, 8,553 KiB /
+2,014 KiB without), and every cold isolate paid for it while one route used it.
+
+Nothing else changed: the same GLM model, Gateway options, 64KB stream cap,
+three model steps, six serialized tools, 1,200 output tokens, 20s step and 60s
+total timeouts, zero retries, and no memory, telemetry or fallback. Cancellation
+behaves as before. A run aborted before or between steps, or while a tool runs,
+returns no answer and is marked limited. Any other provider error still fails
+the request with the generic message. `chat.test.ts` drives the real loop
+through a mocked native binding. Its cases passed against both loops, and the
+three cancellation and step-2 error cases were checked against Mastra first.

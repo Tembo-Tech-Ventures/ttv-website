@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { runCommunityChat } from "./chat";
 import type { CommunityService } from "./service";
-import { COMMUNITY_CHAT_MODEL } from "./mastra-chat";
+import { COMMUNITY_CHAT_MODEL } from "./chat-agent";
 const complete = vi.fn();
 const nativeRun = vi.fn(async (model, body, options) => {
  const value = await complete(model, body.messages, { tools: body.tools, maxTokens: body.max_tokens, temperature: body.temperature, options });
@@ -12,7 +12,7 @@ function service(institution = false) { return { access: vi.fn().mockResolvedVal
 function call(name: string, args: unknown) { return { id: "c", type: "function" as const, function: { name, arguments: JSON.stringify(args) } }; }
 const done = { content: "Summary", toolCalls: [], finishReason: "stop" };
 beforeEach(() => { complete.mockReset(); nativeRun.mockClear(); });
-it("pins Mastra chat to GLM with explicit Gateway, low reasoning and no provider key", async () => {
+it("pins chat to GLM with explicit Gateway, low reasoning and no provider key", async () => {
  complete.mockResolvedValueOnce(done);
  await runCommunityChat(env,service(),{message:"Explain my evidence"});
  expect(complete.mock.calls[0][0]).toBe(COMMUNITY_CHAT_MODEL);
@@ -180,7 +180,7 @@ it("bounds raw provider output before SDK parsing and never retries it", async (
  await expect(runCommunityChat({...env,AI:{run}} as unknown as Env,service(),{message:"hello"})).rejects.toThrow("Community chat unavailable.");
  expect(run).toHaveBeenCalledOnce(); expect(cancelled).toBe(true);
 });
-it("honors an already aborted Mastra run before inference", async () => {
+it("honors an already aborted run before inference", async () => {
  const timeout=vi.spyOn(AbortSignal,"timeout").mockImplementation(()=>AbortSignal.abort());
  try {
   const result=await runCommunityChat(env,service(),{message:"hello"});
@@ -188,6 +188,33 @@ it("honors an already aborted Mastra run before inference", async () => {
   expect(result.execution.executedToolCalls).toBe(0);
   expect(complete).not.toHaveBeenCalled();
  } finally { timeout.mockRestore(); }
+});
+// Aborts end the run as limited, as before the AI SDK loop; other provider errors still fail.
+it("ends a run cancelled after a tool step as limited without an answer", async () => {
+ const cancel=new AbortController();
+ const timeout=vi.spyOn(AbortSignal,"timeout").mockImplementation(()=>cancel.signal);
+ complete.mockResolvedValueOnce({content:null,toolCalls:[call("get_own_profile",{})]}).mockImplementationOnce(async()=>{cancel.abort();throw new DOMException("aborted","AbortError");});
+ try {
+  const result=await runCommunityChat(env,service(),{message:"hello"});
+  expect(result.grounded).toBe(false); expect(result.limited).toBe(true);
+  expect(result.execution).toMatchObject({modelSteps:2,executedToolCalls:1});
+ } finally { timeout.mockRestore(); }
+});
+it("ends a run cancelled while a tool executes as limited without asking the model again", async () => {
+ const cancel=new AbortController();
+ const timeout=vi.spyOn(AbortSignal,"timeout").mockImplementation(()=>cancel.signal);
+ const s=service(); vi.mocked(s.getOwnProfile).mockImplementation(async()=>{cancel.abort();return {userId:"self",version:2} as never;});
+ complete.mockResolvedValueOnce({content:null,toolCalls:[call("get_own_profile",{})]}).mockResolvedValue(done);
+ try {
+  const result=await runCommunityChat(env,s,{message:"hello"});
+  expect(result.limited).toBe(true); expect(complete).toHaveBeenCalledOnce();
+  expect(result.execution).toMatchObject({modelSteps:1,executedToolCalls:1});
+ } finally { timeout.mockRestore(); }
+});
+it("still fails a run whose provider errors after a tool step", async () => {
+ complete.mockResolvedValueOnce({content:null,toolCalls:[call("get_own_profile",{})]}).mockRejectedValueOnce(new Error("PRIVATE provider body"));
+ await expect(runCommunityChat(env,service(),{message:"hello"})).rejects.toThrow("Community chat unavailable.");
+ expect(complete).toHaveBeenCalledTimes(2);
 });
 
 it("orders only searched candidates with published journey citations and exposes actual tool names",async()=>{
