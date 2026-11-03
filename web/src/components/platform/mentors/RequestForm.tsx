@@ -145,6 +145,9 @@ export default function RequestForm({
   useEffect(() => {
     if (state.status === "sent") sentRef.current?.focus();
     if (state.status === "conduct") conductRef.current?.focus();
+    // On a short screen the footer scrolls with the form, so the reason that just appeared above Send can push
+    // it past the sheet's edge: bring it back, with the reason. Pinned, both are in view already (T13).
+    if (state.status === "error") formRef.current?.querySelector("button[type=submit]")?.scrollIntoView({ block: "nearest" });
   }, [state.status]);
 
   async function submit(event: FormEvent) {

@@ -168,6 +168,26 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 1366, height: 768
   }
 }
 
+// On a short screen the footer scrolls with the form, so the drawer brings the reason and Send back into view.
+for (const viewport of [{ width: 844, height: 390 }, { width: 640, height: 360 }]) {
+  test(`T13: on a short screen (${viewport.width}x${viewport.height}) a failed send's reason and Send are both in view`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await open(page, "/dev/platform-mentors?persona=wanjiku&view=directory&conduct=required");
+    await page.route((url) => url.pathname === "/dev/platform-mentors", (route) =>
+      route.request().method() === "POST" ? route.fulfill({ status: 500, body: "" }) : route.continue());
+    await page.locator("[data-mentor-card]", { hasText: "Joseph Mutua" }).getByRole("link", { name: "Ask for time" }).click();
+    const drawer = page.locator("dialog[data-mentor-drawer]");
+    await drawer.getByRole("textbox", { name: "What would you like help with?" }).fill("Could you look at how my route planner saves trips when the phone is offline?");
+    const send = drawer.getByRole("button", { name: "Agree and send request" });
+    await send.click();
+    const error = drawer.locator("[data-request-error]");
+    await expect(error).toBeVisible();
+    await expect(error).toBeInViewport({ ratio: 1 });
+    await expect(send).toBeInViewport({ ratio: 1 });
+    await expect(send).toBeFocused();
+  });
+}
+
 test("T04: an accepted request leads with the mentor and shows Open conversation, on the panel and the page", async ({ page }, testInfo) => {
   const accepted = (scope: ReturnType<Page["locator"]>) => scope.locator("[data-attention-item]").filter({ has: page.locator("[data-attention-action]") });
   await open(page, "/dev/platform-overlays?persona=wanjiku&page=attention");
