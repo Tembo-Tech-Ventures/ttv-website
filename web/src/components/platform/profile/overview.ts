@@ -24,7 +24,7 @@ export function opportunityAnchor(projectId: string): string {
 }
 
 /** How many rows each list shows before "See all". */
-export const OVERVIEW_LIMITS = { projects: 5, leads: 3, drafts: 3, opportunities: 3 } as const;
+export const OVERVIEW_LIMITS = { projects: 5, leads: 3, drafts: 3, journeyNeeds: 3, opportunities: 3 } as const;
 
 export type PublicProfileStatus = "DRAFT" | "PUBLISHED" | "SUSPENDED";
 
@@ -216,6 +216,16 @@ function noProfile(facts: OverviewFacts): OverviewNoProfile | null {
   };
 }
 
+/** One row for the journey rows past the cap, so a long journey never pushes the rest of the page away. */
+function moreOnJourney(key: string, total: number, one: string, many: string): OverviewNeed[] {
+  const more = total - OVERVIEW_LIMITS.journeyNeeds;
+  if (more <= 0) return [];
+  return [{
+    key: `journey-more-${key}`, icon: key === "drafts" ? "draft" : "revision", text: `${more} more ${more === 1 ? one : many} on Your journey`,
+    action: { href: JOURNEY_PATH, label: "See all", name: `See all ${many} on Your journey` },
+  }];
+}
+
 function needs(facts: OverviewFacts, projects: readonly OverviewProject[]): OverviewNeed[] {
   const visible = new Set(facts.visibleLinkIds);
   const list: OverviewNeed[] = [];
@@ -235,8 +245,8 @@ function needs(facts: OverviewFacts, projects: readonly OverviewProject[]): Over
       });
     }
   }
-  for (const project of projects) {
-    if (project.state.kind !== "newer") continue;
+  const newer = projects.filter((project) => project.state.kind === "newer");
+  for (const project of newer.slice(0, OVERVIEW_LIMITS.journeyNeeds)) {
     list.push({
       key: `revision-${project.id}`, icon: "revision", text: `${project.title}: revision ${project.revision} isn't confirmed yet`,
       action: facts.mentorRequests
@@ -244,19 +254,21 @@ function needs(facts: OverviewFacts, projects: readonly OverviewProject[]): Over
         : { href: JOURNEY_PATH, label: "Open", name: `Open ${project.title} on Your journey` },
     });
   }
+  list.push(...moreOnJourney("revisions", newer.length, "newer revision", "newer revisions"));
   if (facts.profile?.status === "DRAFT") {
     list.push({
       key: "profile-draft", icon: "profile", text: "Your public profile is a draft",
       action: { href: PROFILE_EDITOR_PATH, label: "Publish", name: "Publish your public profile" },
     });
   }
-  for (const project of projects) {
-    if (project.state.kind !== "draft") continue;
+  const drafts = projects.filter((project) => project.state.kind === "draft");
+  for (const project of drafts.slice(0, OVERVIEW_LIMITS.journeyNeeds)) {
     list.push({
       key: `journey-draft-${project.id}`, icon: "draft", text: `Draft: “${project.title}”`,
       action: { href: JOURNEY_PATH, label: "Finish", name: `Finish ${project.title} on Your journey` },
     });
   }
+  list.push(...moreOnJourney("drafts", drafts.length, "draft", "drafts"));
   if (visible.has("writing")) {
     for (const draft of facts.drafts.slice(0, OVERVIEW_LIMITS.drafts)) {
       list.push({

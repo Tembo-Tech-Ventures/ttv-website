@@ -138,6 +138,21 @@ describe("profileOverview for an alumna", () => {
     for (const need of model.needs) expect(need.action.name.startsWith(need.action.label)).toBe(true);
   });
 
+  it("caps journey rows in Needs you, and counts the rest on Your journey", () => {
+    const extra = 2;
+    const newer = Array.from({ length: OVERVIEW_LIMITS.journeyNeeds + extra }, (_, index) => work(`n${index}`, { version: 2, confirmations: [confirmation(1, "David")] }));
+    const drafts = Array.from({ length: OVERVIEW_LIMITS.journeyNeeds + 1 }, (_, index) => work(`d${index}`, { visibility: "private" }));
+    const model = profileOverview({ ...ALUMNA, journey: [...newer, ...drafts] });
+    const icons = model.needs.map((need) => need.icon);
+    expect(icons.filter((icon) => icon === "revision")).toHaveLength(OVERVIEW_LIMITS.journeyNeeds + 1);
+    expect(icons.filter((icon) => icon === "draft")).toHaveLength(OVERVIEW_LIMITS.journeyNeeds + 1);
+    expect(model.needs.find((need) => need.key === "journey-more-revisions")).toMatchObject({
+      text: "2 more newer revisions on Your journey", action: { label: "See all", href: "/dashboard/community" },
+    });
+    expect(model.needs.find((need) => need.key === "journey-more-drafts")?.text).toBe("1 more draft on Your journey");
+    expect(profileOverview({ ...ALUMNA, journey: newer.slice(0, OVERVIEW_LIMITS.journeyNeeds) }).needs.some((need) => need.key.startsWith("journey-more"))).toBe(false);
+  });
+
   it("sends a newer revision to the mentor directory while mentor requests are open", () => {
     const model = profileOverview({ ...ALUMNA, mentorRequests: true, journey: [work("a", { version: 2, confirmations: [confirmation(1, "David")] })] });
     expect(model.needs[0]!.action).toMatchObject({ label: "Ask a mentor", href: "/dashboard/community/mentors" });

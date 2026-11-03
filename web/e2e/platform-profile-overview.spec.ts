@@ -103,6 +103,18 @@ test("an alumna sees her published profile as visitors do, with the editor one c
   expect((await sidebarEntries(page)).find((entry) => entry.current)?.name).toBe("Public profile");
 });
 
+test("a form posted to the Overview from a tab opened before it existed goes on to the editor, body and all", async ({ page, baseURL }) => {
+  test.skip(test.info().project.name !== "chromium", "The redirect is the same at every width.");
+  await as(page.context(), baseURL!, "alumna");
+  const response = await page.request.post(`${OVERVIEW}?from=old-tab`, {
+    form: { _action: "save" }, headers: { Origin: new URL(baseURL!).origin }, maxRedirects: 0,
+  });
+  expect(response.status()).toBe(307);
+  expect(response.headers().location).toBe(`${EDITOR}?from=old-tab`);
+  // Reading the Overview stays a plain page.
+  expect((await page.request.get(OVERVIEW, { maxRedirects: 0 })).status()).toBe(200);
+});
+
 test("a member without a public profile is told what opens it, and offered a cohort", async ({ page, baseURL }) => {
   await as(page.context(), baseURL!, "community");
   await open(page, OVERVIEW);
