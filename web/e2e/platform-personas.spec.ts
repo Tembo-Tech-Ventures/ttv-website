@@ -159,7 +159,7 @@ for (const key of PERSONAS) {
         const home = SPACE_HOME[label]!;
         const space = label.toLowerCase();
         if (label === "Admin") {
-          // The admin entry: the tab leads to the existing admin pages, which keep their own shell.
+          // The admin entry: the tab leads to Admin Home, which renders in the Admin space (T02, platform-admin-space.spec.ts).
           await expect(page.locator(`.space-file__nav a[href="${home}"], .spaces-bottom a[href="${home}"]`).first()).toBeAttached();
           const admin = await page.request.get(home, { maxRedirects: 0 });
           expect(admin.status(), "admin entry").toBe(200);
@@ -397,7 +397,7 @@ test.describe("QA-1 polish (F-3)", () => {
   test.describe("with motion", () => {
     test.use({ reducedMotion: "no-preference" });
 
-    test("staff reach Admin from the tabs without a transition error, and Admin leads back", async ({ context, page, baseURL }) => {
+    test("staff reach Admin from the tabs without a transition error, and the tabs lead back", async ({ context, page, baseURL }) => {
       await as("staff", { context, page, baseURL });
       const errors: string[] = [];
       page.on("pageerror", (error) => errors.push(error.message));
@@ -407,18 +407,17 @@ test.describe("QA-1 polish (F-3)", () => {
       await open(page, "/dashboard/community");
       await page.locator(`.space-file__nav a[href="/admin"], .spaces-bottom a[href="/admin"]`).locator("visible=true").first().click();
       await expect(page).toHaveURL(/\/admin$/);
-      await expect(page.locator("main#admin-main")).toBeVisible();
+      // Admin Home is in the Admin space (T02): the tabs, search and the bell stay.
+      await expect(page.locator(".spaces-shell")).toHaveAttribute("data-space", "admin");
       expect(errors.filter((message) => /transition/i.test(message))).toEqual([]);
 
-      // The first stop is a skip link to the page; a way back to the dashboard comes first in the menu.
+      // The first stop is a skip link to the page; the space tabs lead back.
       await page.keyboard.press("Tab");
       await expect(page.locator(":focus")).toHaveText("Skip to content");
       await page.keyboard.press("Enter");
-      await expect(page.locator("#admin-main")).toBeFocused();
-      if (!wide(page)) await page.getByRole("button", { name: "Open navigation" }).click();
-      await page.getByRole("link", { name: "Back to dashboard" }).locator("visible=true").first().click();
-      // Back in a space, not bounced back to Admin.
-      await expect(page.locator(".spaces-shell")).toBeVisible();
+      await expect(page.locator("#spaces-main")).toBeFocused();
+      await page.locator(".space-file__nav, .spaces-bottom").getByRole("link", { name: /Community/ }).locator("visible=true").first().click();
+      await expect(page.locator(".spaces-shell")).toHaveAttribute("data-space", "community");
       expect(new URL(page.url()).pathname).not.toBe("/admin");
       await runAxe(page, test.info(), "staff-back-from-admin");
     });

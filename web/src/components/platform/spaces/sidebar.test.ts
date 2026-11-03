@@ -174,11 +174,36 @@ describe("space sidebars", () => {
     }
   });
 
-  it("keep the admin mentor review in the Admin space", () => {
+  it("give the Admin space the admin navigation, with the mentor review beside the queues (T02)", () => {
+    const admin = { agentAuthEnabled: false, dataMigrationEnabled: false, stagingDemoEnabled: false, pendingAccessRequests: 7, pendingModeration: 10 };
+    const amina = spaceSidebar("admin", facts(meByPersona.amina, "moderation", { admin }));
+    expect(labels(amina)).toEqual([
+      "Admin home", "Access requests", "Moderation", "Mentor review", "Users", "Applications", "Profiles", "Feedback",
+      "Client projects", "Curricula", "Cohorts", "Recordings", "Integrations", "Feature flags", "Personal access tokens",
+    ]);
+    expect(current(amina)).toEqual(["Moderation"]);
+    const entries = amina.groups.flatMap((group) => group.items);
+    expect(entries.find((entry) => entry.label === "Access requests")).toMatchObject({ href: "/admin/access-requests", count: 7, countLabel: "pending" });
+    expect(entries.find((entry) => entry.label === "Moderation")).toMatchObject({ href: "/admin/moderation", count: 10, countLabel: "waiting" });
+    // The space tabs and the account menu already lead back and sign out.
+    expect(hrefs(amina)).not.toContain("/dashboard");
+    expect(hrefs(amina)).not.toContain("/auth/logout");
+
+    // Optional tools appear where they exist; nothing waiting shows no badge.
+    const tools = spaceSidebar("admin", facts(meByPersona.amina, "adminHome", {
+      admin: { agentAuthEnabled: true, dataMigrationEnabled: true, stagingDemoEnabled: true, pendingAccessRequests: 0, pendingModeration: 0 },
+    }));
+    expect(labels(tools).slice(-3)).toEqual(["Staging demo personas", "Data migration", "Agent access"]);
+    expect(current(tools)).toEqual(["Admin home"]);
+    expect(tools.groups.flatMap((group) => group.items).filter((entry) => entry.count)).toEqual([]);
+  });
+
+  it("keep the admin mentor review in the Admin space, after Access requests while channels are off", () => {
     const amina = spaceSidebar("admin", facts(meByPersona.amina, "confirm"));
-    expect(labels(amina)).toEqual(["Admin home", "Mentor review"]);
+    expect(labels(amina).slice(0, 3)).toEqual(["Admin home", "Access requests", "Mentor review"]);
+    expect(labels(amina)).not.toContain("Moderation");
     expect(current(amina)).toEqual(["Mentor review"]);
-    expect(hrefs(amina)).toEqual(["/admin", SPACE_PAGE_PATHS.confirm]);
+    expect(hrefs(amina).slice(0, 3)).toEqual(["/admin", "/admin/access-requests", SPACE_PAGE_PATHS.confirm]);
   });
 
   it("show the profile's pages as the journey unlocks them, with visitor messages counted", () => {

@@ -93,6 +93,28 @@ describe("resolveSpacePage", () => {
   });
 });
 
+describe("resolveSpacePage for the admin pages in the spaces shell (T02)", () => {
+  it("opens Admin home and Moderation in the Admin space for an admin with spaces on", async () => {
+    mocks.getSpaceContext.mockResolvedValue(meByPersona.amina);
+    for (const page of ["adminHome", "moderation"] as const) {
+      await expect(resolveSpacePage(locals, page)).resolves.toMatchObject({ space: "admin", page });
+    }
+  });
+
+  it("keeps the existing admin shell (null) with spaces off, on a denial, for a non-admin, or when the context fails", async () => {
+    for (const page of ["adminHome", "moderation"] as const) {
+      mocks.getSpaceContext.mockResolvedValueOnce(off);
+      await expect(resolveSpacePage(locals, page)).resolves.toBeNull();
+      mocks.getSpaceContext.mockRejectedValueOnce(new Response(null, { status: 403 }));
+      await expect(resolveSpacePage(locals, page)).resolves.toBeNull();
+      mocks.getSpaceContext.mockResolvedValueOnce(meByPersona.lucy);
+      await expect(resolveSpacePage(locals, page)).resolves.toBeNull();
+      mocks.getSpaceContext.mockRejectedValueOnce(new Error("D1 unavailable"));
+      await expect(resolveSpacePage(locals, page)).resolves.toBeNull();
+    }
+  });
+});
+
 describe("loadOnboarding", () => {
   const lucy = meByPersona.lucy;
   const flagOff = { ...lucy, flags: { ...lucy.flags, onboarding: false } };

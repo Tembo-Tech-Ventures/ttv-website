@@ -34,6 +34,8 @@ import SpaceSidebar from "./SpaceSidebar.astro";
 import { SPACE_PAGE_PATHS, spaceSidebar } from "./sidebar";
 import { linkAllowed, loadCertificates, loadCohortHeading, restrictionsFor, type SpacePageContext } from "./space-page";
 import { cohortSearchLabel, type CohortHeading } from "./cohort-heading";
+import { loadAdminNavFacts } from "@/components/admin/admin-nav-server";
+import type { AdminNavFacts } from "@/components/admin/admin-nav";
 
 interface Props {
   context: SpacePageContext | null;
@@ -51,10 +53,13 @@ interface Props {
   channels?: readonly Channel[];
   /** The channel this page shows, marked current in the sidebar. */
   channelId?: string;
+  /** The Admin space's navigation, when the page has already read it (AdminLayout). */
+  admin?: AdminNavFacts;
 }
 
 const {
   context, title, legacyTitle = title, titlePrefix = "", journey: suppliedJourney, canDiscover, fill = false, channels: suppliedChannels, channelId,
+  admin: suppliedAdmin,
 } = Astro.props;
 const overlays: readonly ShellOverlay[] = ["search", "attention"];
 
@@ -72,11 +77,13 @@ if (context) {
       return null;
     })
     : Promise.resolve(null);
-  const [journey, certificates, channels, cohort] = await Promise.all([
+  const [journey, certificates, channels, cohort, admin] = await Promise.all([
     suppliedJourney ?? getStudentJourney(db, userId),
     context.space === "profile" ? loadCertificates(db, userId) : [],
     loadSidebarChannels(context.me, context.space, listChannels, reportChannels, channelId ?? null),
     loadCohort(),
+    // The Admin space's sidebar is the admin navigation, with its counts (the mentor review page reads them here).
+    context.space === "admin" ? suppliedAdmin ?? loadAdminNavFacts(Astro.locals, Astro.url) : null,
   ]);
   cohortLabel = cohortSearchLabel(context.me, cohort);
   const restrictions = restrictionsFor(Astro.locals);
@@ -90,6 +97,7 @@ if (context) {
     onboarding: context.onboarding,
     channels,
     cohort,
+    admin,
   });
 }
 ---

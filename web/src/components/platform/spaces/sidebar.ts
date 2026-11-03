@@ -5,6 +5,7 @@ import { ACCOUNT_PATH, requestRowId } from "@/components/platform/onboarding/acc
 import { PARTNER, REQUEST, TAKING_PART } from "@/components/platform/onboarding/copy";
 import { offersCohort, type OnboardingView } from "@/components/platform/onboarding/framing";
 import { CONDUCT_TITLE } from "@/components/channels/conduct";
+import { ADMIN_HOME_HREF, adminSpaceEntries, MODERATION_HREF, NO_ADMIN_FACTS, type AdminNavFacts, type AdminNavKey } from "@/components/admin/admin-nav";
 import { channelPath, channelPathPrefix, conversationPath } from "@/components/channels/paths";
 import { COHORT_APPLICATION_NOTE, type CohortHeading } from "./cohort-heading";
 import {
@@ -41,7 +42,9 @@ export type SpacePageKey =
   | "mentors"
   | "mentorRequests"
   | "mentorAvailability"
-  | "conversation";
+  | "conversation"
+  | "adminHome"
+  | "moderation";
 
 export type SidebarIcon =
   | "overview"
@@ -63,6 +66,16 @@ export type SidebarIcon =
   | "account"
   | "feedback"
   | "admin"
+  | "gauge"
+  | "accessRequests"
+  | "moderation"
+  | "applications"
+  | "curricula"
+  | "cohorts"
+  | "integrations"
+  | "flags"
+  | "tokens"
+  | "migration"
   | "mentorRequest"
   | "institutionRequest"
   | "channel"
@@ -118,6 +131,8 @@ export interface SidebarFacts {
   channels?: SidebarChannels | null;
   /** The person's cohort, which the Cohort space is named for (T07). Without it the space keeps its general name. */
   cohort?: CohortHeading | null;
+  /** The admin navigation's optional tools and counts, for the Admin space (admin-nav-server.ts). */
+  admin?: AdminNavFacts | null;
 }
 
 export interface SidebarChannels {
@@ -157,6 +172,8 @@ export const PAGE_SPACES: Readonly<Record<SpacePageKey, readonly SpaceId[]>> = {
   mentorRequests: ["mentoring"],
   mentorAvailability: ["mentoring"],
   conversation: ["community"],
+  adminHome: ["admin"],
+  moderation: ["admin"],
 };
 
 export const SPACE_PAGE_PATHS = {
@@ -185,6 +202,8 @@ export const SPACE_PAGE_PATHS = {
   mentorAvailability: MENTOR_AVAILABILITY_PATH,
   // A conversation page is one of many under this prefix; its own path is conversationPath(channel.id).
   conversation: CONVERSATIONS_PREFIX,
+  adminHome: ADMIN_HOME_HREF,
+  moderation: MODERATION_HREF,
 } as const satisfies Record<SpacePageKey, string>;
 
 /** What an entry whose page has not opened says, here and on the page it leads to. */
@@ -372,14 +391,55 @@ function discover(facts: SidebarFacts): SidebarModel {
   };
 }
 
+const ADMIN_ICONS: Record<AdminNavKey, SidebarIcon> = {
+  back: "overview",
+  home: "gauge",
+  accessRequests: "accessRequests",
+  moderation: "moderation",
+  users: "people",
+  applications: "applications",
+  profiles: "profile",
+  feedback: "feedback",
+  projects: "opportunities",
+  curricula: "curricula",
+  cohorts: "cohorts",
+  recordings: "sessions",
+  integrations: "integrations",
+  flags: "flags",
+  tokens: "tokens",
+  demo: "people",
+  migration: "migration",
+  agentAccess: "tokens",
+  logout: "account",
+};
+
+/** The admin pages already drawn in the spaces shell, so their entries are marked current there. */
+const ADMIN_PAGES: Partial<Record<AdminNavKey, SpacePageKey>> = { home: "adminHome", moderation: "moderation" };
+
+/**
+ * The existing admin navigation (admin-nav.ts) as the Admin space's sidebar, with the mentor review
+ * page admins keep beside Moderation. Its counts come from the page (facts.admin); without them the
+ * entries are listed bare, as for an admin with nothing waiting and channels off.
+ */
 function admin(facts: SidebarFacts): SidebarModel {
+  const known = facts.admin ?? NO_ADMIN_FACTS;
+  // The queue only renders while `channels` is on, so on it the Moderation entry is always listed.
+  const nav = adminSpaceEntries(facts.page === "moderation" && known.pendingModeration === null ? { ...known, pendingModeration: 0 } : known);
+  // Mentor review sits with the other queues: after Moderation, or Access requests while channels are off.
+  const reviewAfter: AdminNavKey = nav.some((entry) => entry.key === "moderation") ? "moderation" : "accessRequests";
+  const entries = nav.flatMap((entry): Entry[] => {
+    const page = ADMIN_PAGES[entry.key];
+    const base = {
+      key: `admin-${entry.key}`, label: entry.label, icon: ADMIN_ICONS[entry.key],
+      ...(entry.badge ? { count: entry.badge, countLabel: entry.badgeLabel } : {}),
+    };
+    const link: Entry = page ? { ...base, page } : { ...base, href: entry.href };
+    return entry.key === reviewAfter ? [link, { key: "confirm", page: "confirm", label: "Mentor review", icon: "confirm" }] : [link];
+  });
   return {
     title: "Admin",
     description: "Programmes, people and reviews.",
-    groups: group(facts, undefined, [
-      { key: "admin", href: SPACE_PATHS.admin, label: "Admin home", icon: "admin" },
-      { key: "confirm", page: "confirm", label: "Mentor review", icon: "confirm" },
-    ]),
+    groups: group(facts, undefined, entries),
   };
 }
 

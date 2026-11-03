@@ -29,6 +29,16 @@ import {
   PiVideoCamera,
   PiCalendarCheck,
   PiWrench,
+  PiGauge,
+  PiUserPlus,
+  PiFlag,
+  PiFileText,
+  PiBooks,
+  PiBookOpen,
+  PiPlugs,
+  PiToggleRight,
+  PiKey,
+  PiDatabase,
 } from "react-icons/pi";
 import SidebarGroup from "@/components/platform/shell/SidebarGroup.astro";
 import SidebarHeader from "@/components/platform/shell/SidebarHeader.astro";
@@ -61,6 +71,17 @@ const ICONS: Record<SidebarIcon, Icon> = {
   account: PiUserCircle,
   feedback: PiChatCircleText,
   admin: PiWrench,
+  gauge: PiGauge,
+  accessRequests: PiUserPlus,
+  // A flag, not a second shield beside Mentor review's.
+  moderation: PiFlag,
+  applications: PiFileText,
+  curricula: PiBooks,
+  cohorts: PiBookOpen,
+  integrations: PiPlugs,
+  flags: PiToggleRight,
+  tokens: PiKey,
+  migration: PiDatabase,
   // A request carries its person marker's shape: mentors are rings, institutions diamonds.
   mentorRequest: PiCircle,
   institutionRequest: PiDiamond,
