@@ -49,6 +49,8 @@ interface Step {
   url: string; clickToVisibleMs: number; clickToReadyMs: number; hard: boolean;
   doc?: Record<string, number | string | null>; js?: { count: number; transfer: number; decoded: number };
   scriptMs?: number; taskMs?: number; server?: unknown; serverTiming?: unknown;
+  /** Documents the browser fetched speculatively during this step (Sec-Purpose: prefetch). */
+  speculative?: number;
 }
 const results: Step[] = [];
 
@@ -91,7 +93,7 @@ async function collect(page: Page, keepQueries: boolean) {
     const since = (value: number | null | undefined) => typeof value === "number" ? Math.round(Math.max(0, value - activation)) : null;
     return {
       doc: nav ? {
-        type: nav.type, status: (nav as unknown as { responseStatus?: number }).responseStatus ?? null,
+        type: nav.type, deliveryType: (nav as unknown as { deliveryType?: string }).deliveryType ?? null, status: (nav as unknown as { responseStatus?: number }).responseStatus ?? null,
         activationStart: Math.round(activation),
         ttfb: since(nav.responseStart), redirect: Math.round(nav.redirectEnd - nav.redirectStart),
         fcp: since(fcp), lcp: since(w.__perfLcp), dcl: since(nav.domContentLoadedEventEnd), load: since(nav.loadEventEnd),
@@ -109,12 +111,19 @@ class Journey {
   /** When the person actually clicked: the dwell before it belongs to them, not to the navigation. */
   clickedAt: number | null = null;
 
-  constructor(readonly page: Page, readonly cdp: CDPSession, readonly journey: string, readonly profile: ProfileName, readonly variant: string, readonly rep: number) {}
+  speculative = 0;
+
+  constructor(readonly page: Page, readonly cdp: CDPSession, readonly journey: string, readonly profile: ProfileName, readonly variant: string, readonly rep: number) {
+    page.context().on("request", request => {
+      if (/prefetch|prerender/.test(request.headers()["sec-purpose"] ?? "")) this.speculative += 1;
+    });
+  }
 
   /** Runs one navigation: `act` starts it, then waits for new content and the shell. */
   async step(name: string, act: () => Promise<string>, ready: (page: Page) => Promise<void> = newContent) {
     const { page } = this;
     await markOld(page);
+    const speculativeBefore = this.speculative;
     const before = await metrics(this.cdp);
     const originBefore = await page.evaluate(() => performance.timeOrigin).catch(() => 0);
     this.clickedAt = null;
@@ -135,6 +144,7 @@ class Journey {
       url: new URL(page.url()).pathname + new URL(page.url()).search,
       clickToVisibleMs: visibleAt - startedAt, clickToReadyMs: readyAt - startedAt, hard,
       ...(hard ? data : { js: data.js }),
+      speculative: this.speculative - speculativeBefore,
       scriptMs: delta(before, after, "ScriptDuration"),
       taskMs: delta(before, after, "TaskDuration"),
     });

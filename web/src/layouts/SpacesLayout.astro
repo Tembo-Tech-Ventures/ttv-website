@@ -36,6 +36,8 @@ import { SPACE_LABEL } from "@/components/platform/shell/space-routes";
 import { shellAccount } from "@/components/platform/shell/account";
 import SheetTransition from "@/components/platform/shell/SheetTransition.astro";
 import { pageTitle } from "@/lib/seo";
+import { env } from "cloudflare:workers";
+import { perfVariant } from "@/lib/observability/perf-trace";
 
 interface Props {
   me: Me;
@@ -62,6 +64,22 @@ const signedIn = Boolean(Astro.locals.user);
 const account: ShellAccount = harness?.account ?? shellAccount(Astro.locals);
 // Parsed here, on the server: the island gets a SpaceId or null, never the header.
 const lastSpace = readLastSpaceCookie(Astro.request.headers.get("cookie"));
+// PERF-1 (a): Speculation Rules prefetch of other spaces pages, switched per request for the comparison.
+// `hover` prefetches a link after ~200ms of pointing at it (or on pointerdown on touch); `all` prefetches
+// every matching link on the page at once (the over-fetch bound of a viewport strategy). Same-page
+// `?thread=` links and anything marked data-no-prefetch are never prefetched.
+const variant = perfVariant(env.DEPLOYMENT_ENVIRONMENT, Astro.request);
+const eagerness = variant.has("all") ? "immediate" : variant.has("hover") ? "moderate" : null;
+const speculationRules = eagerness && JSON.stringify({
+  prefetch: [{
+    source: "document",
+    where: { and: [
+      { or: [{ href_matches: "/dashboard/*" }, { href_matches: "/admin/*" }] },
+      { not: { selector_matches: "a[href^='?'], [data-no-prefetch]" } },
+    ] },
+    eagerness,
+  }],
+});
 const shell = {
   me,
   space,
@@ -85,6 +103,7 @@ const shell = {
     <title>{pageTitle(titlePrefix + (title === SPACE_LABEL[space] ? title : `${title} · ${SPACE_LABEL[space]}`))}</title>
     {signedIn && <ClientErrorBuffer />}
     <SheetTransition />
+    {speculationRules && <script type="speculationrules" is:inline set:html={speculationRules} />}
   </head>
   <body class="h-full overflow-hidden overscroll-none bg-ground">
     {

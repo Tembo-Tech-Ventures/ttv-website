@@ -9,7 +9,11 @@ import { resolveStagingFixtureIdentity, StagingFixtureAccessError } from "@/lib/
 import { stagingFixturePathAllowed } from "@/lib/staging-fixture-policy";
 import { isAgentSession } from "@/lib/agent-auth";
 import { isHealthCheckPath } from "@/lib/health";
-import { perfPhase, perfTraceEnabled, withPerfTrace } from "@/lib/observability/perf-trace";
+import { perfPhase, perfTraceEnabled, perfVariant, withPerfTrace } from "@/lib/observability/perf-trace";
+import { requestScopeActive, withRequestScope } from "@/lib/platform/server/request-scope";
+import { capabilitiesFor } from "@/lib/platform/server/capabilities";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
 import { enforceAdminMutationOrigin } from "@/lib/admin/mutation-security";
 import { userHasAdminRole } from "@/lib/admin/roles";
 import { platformAdminApiDenial } from "@/lib/platform/server/http";
@@ -27,7 +31,7 @@ import {
 
 type AuthEnv = typeof env;
 
-async function resolveAuthentication(authEnv: AuthEnv, request: Request) {
+async function resolveAuthentication(authEnv: AuthEnv, request: Request, refreshCookieCache = false) {
   const personalAccessTokenAttempted = hasPersonalAccessTokenAuthorization(request);
   const personalAccessTokenAuth = personalAccessTokenAttempted
     ? await authenticatePersonalAccessToken(authEnv.DB, request)
@@ -39,24 +43,31 @@ async function resolveAuthentication(authEnv: AuthEnv, request: Request) {
       session: personalAccessTokenAuth.session,
       user: personalAccessTokenAuth.user,
       personalAccessToken,
+      setCookies: [] as string[],
     };
   }
 
   if (personalAccessTokenAttempted) {
     // An explicit but invalid PAT must not silently fall back to a browser
     // cookie that happened to accompany the request.
-    return { session: null, user: null, personalAccessToken };
+    return { session: null, user: null, personalAccessToken, setCookies: [] as string[] };
   }
 
   const auth = createAuth(authEnv);
-  const sessionData = await auth.api.getSession({
-    headers: request.headers,
-    query: { disableCookieCache: request.headers.get("cookie")?.includes(DEMO_OPERATOR_COOKIE + "=") ?? false },
-  });
+  const query = { disableCookieCache: request.headers.get("cookie")?.includes(DEMO_OPERATOR_COOKIE + "=") ?? false };
+  if (refreshCookieCache) {
+    // PERF-1 `auth`: keep better-auth's 5-minute session cookie cache (auth.ts) alive. Today the
+    // middleware drops the Set-Cookie getSession returns, so the cache is never set and every
+    // request reads the session and the user from D1.
+    const { headers, response } = await auth.api.getSession({ headers: request.headers, query, returnHeaders: true });
+    return { session: response?.session ?? null, user: response?.user ?? null, personalAccessToken, setCookies: headers.getSetCookie() };
+  }
+  const sessionData = await auth.api.getSession({ headers: request.headers, query });
   return {
     session: sessionData?.session ?? null,
     user: sessionData?.user ?? null,
     personalAccessToken,
+    setCookies: [] as string[],
   };
 }
 
@@ -70,7 +81,11 @@ async function enforceAdminGuards(
     return redirect("/auth/login");
   }
 
-  if (!(await userHasAdminRole(env.DB, locals.user.id))) {
+  // PERF-1 `srv`: the same per-request capabilities the space context reads next, so one lookup serves both.
+  const isAdmin = requestScopeActive()
+    ? (await capabilitiesFor(drizzle(env.DB, { schema }), locals.user)).isAdmin
+    : await userHasAdminRole(env.DB, locals.user.id);
+  if (!isAdmin) {
     return redirect("/dashboard");
   }
 
@@ -111,6 +126,10 @@ async function enforceAdminGuards(
   if (originFailure) return originFailure;
 
   return null;
+}
+
+function appendSetCookies(response: Response, cookies: readonly string[]) {
+  for (const cookie of cookies) response.headers.append("Set-Cookie", cookie);
 }
 
 /** The channel APIs a channels token may call (src/lib/channels/http.ts checks each scope). */
@@ -194,7 +213,8 @@ const handle = defineMiddleware(async (context, next) => {
         );
       }
     }
-    const authResult = await perfPhase("auth", () => resolveAuthentication(env, request));
+    const variant = perfVariant(env.DEPLOYMENT_ENVIRONMENT, request);
+    const authResult = await perfPhase("auth", () => resolveAuthentication(env, request, variant.has("auth")));
     locals.session = authResult.session;
     locals.user = authResult.user;
     locals.personalAccessToken = authResult.personalAccessToken;
@@ -228,6 +248,7 @@ const handle = defineMiddleware(async (context, next) => {
     }
 
     const response = await routeSpaceRequest(context, next);
+    appendSetCookies(response, authResult.setCookies);
     if (response.status === 500) {
       recordErrorInBackground(locals.cfContext, env.DB, {
         source: "request",
@@ -249,7 +270,10 @@ const handle = defineMiddleware(async (context, next) => {
 });
 
 /** PERF-1 (investigation branch): trace D1 round trips and phases outside production. */
-export const onRequest = defineMiddleware((context, next) =>
-  perfTraceEnabled(env.DEPLOYMENT_ENVIRONMENT)
-    ? withPerfTrace(env.DB, async () => (await handle(context, next)) as Response)
-    : handle(context, next));
+export const onRequest = defineMiddleware((context, next) => {
+  if (!perfTraceEnabled(env.DEPLOYMENT_ENVIRONMENT)) return handle(context, next);
+  const { request } = context;
+  const scoped = perfVariant(env.DEPLOYMENT_ENVIRONMENT, request).has("srv") && (request.method === "GET" || request.method === "HEAD");
+  const run = async () => (await handle(context, next)) as Response;
+  return withPerfTrace(env.DB, scoped ? () => withRequestScope(run) : run);
+});

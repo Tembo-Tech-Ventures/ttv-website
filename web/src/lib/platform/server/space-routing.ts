@@ -117,6 +117,14 @@ async function pageMissing(context: APIContext, me: Me, target: string): Promise
   return (channelRoute(target) !== null || conversationRoute(target) !== null) && !await getRouteChannel(context);
 }
 
+/**
+ * A page actually shown. PERF-1: a speculative prefetch is not a visit; it must not move the last-space
+ * preference (the shell writes it client-side when the page is shown) or acknowledge an approval.
+ */
+function isVisit(request: Request, response: Response): boolean {
+  return response.status >= 200 && response.status < 300 && !/prefetch|prerender/.test(request.headers.get("Sec-Purpose") ?? "");
+}
+
 async function serveSpacePage(context: APIContext, next: MiddlewareNext, me: Me, canonical: string | null): Promise<Response> {
   const { request, url } = context;
   const path = normalizeSpacePath(url.pathname);
@@ -140,7 +148,7 @@ async function serveSpacePage(context: APIContext, next: MiddlewareNext, me: Me,
     ? await next(new Request(rewritten, request))
     : await next();
   privateResponse(response);
-  if (read && response.status >= 200 && response.status < 300 && me.spaces.includes(space)) {
+  if (read && isVisit(request, response) && me.spaces.includes(space)) {
     response.headers.append("Set-Cookie", serializeLastSpaceCookie(space, url.protocol === "https:"));
     if (request.method === "GET" && me.flags.onboarding) await acknowledgeApproval(context, me, space);
   }

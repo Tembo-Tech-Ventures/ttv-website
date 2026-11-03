@@ -1,6 +1,10 @@
 import { userHasAdminRole } from "@/lib/admin/roles";
 import { FlagKey, type FlagAudience } from "@/lib/platform/contracts";
 import { platformError } from "./http";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "@/lib/db/schema";
+import { capabilitiesFor } from "./capabilities";
+import { requestScopeActive } from "./request-scope";
 
 export type { FlagKey, FlagAudience } from "@/lib/platform/contracts";
 export type Flags = Record<FlagKey, boolean>;
@@ -49,7 +53,10 @@ async function resolveFlags(ctx: FlagContext): Promise<Flags> {
     `SELECT key, audience FROM feature_flag WHERE key IN (${FLAG_KEY_PLACEHOLDERS})`
   ).bind(...FlagKey.options).all<{ key: FlagKey; audience: FlagAudience }>();
   const isAdmin = results.some((flag) => flag.audience === "STAFF")
-    ? ctx.isAdmin ?? await userHasAdminRole(ctx.db, ctx.user.id)
+    ? ctx.isAdmin ?? (requestScopeActive()
+      // PERF-1 `srv`: the request's capabilities already hold the role.
+      ? (await capabilitiesFor(drizzle(ctx.db, { schema }), ctx.user)).isAdmin
+      : await userHasAdminRole(ctx.db, ctx.user.id))
     : false;
   const flags = uniformFlags(false);
   for (const flag of results) {

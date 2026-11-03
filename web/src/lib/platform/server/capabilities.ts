@@ -5,6 +5,7 @@ import {
   SPACE_ORDER, type Capabilities, type ChannelCapabilities, type ChannelKind, type PostingPolicy, type SpaceId,
 } from "../contracts";
 import { DEMO_PREFIX, isDemoUser } from "@/lib/staging-demo-policy";
+import { requestScoped } from "./request-scope";
 
 export const COHORT_ACCESS_STATUSES = ["APPROVED", "AUDIT", "COMPLETED"] as const;
 const cohortStatuses: ReadonlySet<string> = new Set(COHORT_ACCESS_STATUSES);
@@ -26,7 +27,15 @@ export type PlatformCapabilities = Capabilities & { spaces: SpaceId[]; teachingC
  * Channel-specific membership/posting rules belong to the channel adapter.
  * No cross-request cache: revoked assignments must take effect immediately.
  */
-export async function capabilitiesFor(
+export function capabilitiesFor(
+  db: Database,
+  user: CapabilityUser,
+): Promise<PlatformCapabilities> {
+  // PERF-1: one lookup per user per GET request (see request-scope.ts); revocations still apply next request.
+  return user?.id ? requestScoped(`capabilities:${user.id}`, () => lookupCapabilities(db, user)) : lookupCapabilities(db, user);
+}
+
+async function lookupCapabilities(
   db: Database,
   user: CapabilityUser,
 ): Promise<PlatformCapabilities> {

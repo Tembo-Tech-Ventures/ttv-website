@@ -6,6 +6,7 @@ import { Me, WebLink, type RoleBadge } from "../contracts";
 import { getFlags, requireFlag, type FlagContext } from "./flags";
 import { platformError } from "./http";
 import { requestCapabilities } from "./request-capabilities";
+import { requestScopeActive } from "./request-scope";
 import { readTemboUsage, usageOf } from "@/lib/tembo/quota";
 
 export interface MeContext {
@@ -15,23 +16,43 @@ export interface MeContext {
     & Partial<Pick<App.Locals, "cfContext">>;
 }
 
+/** PERF-1: today's Tembo usage, read alongside attention instead of after it. */
+function earlyTemboUsage(db: D1Database, flagContext: FlagContext, userId: string) {
+  const now = Date.now();
+  return quiet(getFlags(flagContext).then(flags =>
+    flags.tembo_channels && flags.channels ? readTemboUsage(db, userId, now) : usageOf(0, now)));
+}
+
+/** Started early and awaited later: a rejection before then is not unhandled. */
+function quiet<T>(promise: Promise<T>): Promise<T> {
+  promise.catch(() => {});
+  return promise;
+}
+
 /** Shared API/page loader. Denials throw a no-store Response; DB errors propagate. */
 export async function getMe({ db, env, locals }: MeContext): Promise<Me> {
   const user = locals.user;
   // Signed-out callers have no effective flags, including on preview overrides.
   if (!user) throw platformError("flag_off", "Not found.", 404);
   const flagContext = { db, env, user, isAdmin: locals.isAdmin, locals };
+  const database = drizzle(db, { schema });
+  // PERF-1: inside a request scope (GET), flags and capabilities are read together, then the
+  // per-space facts together: two round trips instead of five. The flag still decides first.
+  const parallel = requestScopeActive();
+  const early = parallel ? quiet(requestCapabilities(database, locals)) : null;
   const denial = await requireFlag(flagContext, "spaces");
   if (denial) throw denial;
 
   if (locals.personalAccessToken) throw platformError("forbidden", "Not permitted.", 403);
 
-  const database = drizzle(db, { schema });
-  const canonical = await requestCapabilities(database, locals);
+  const canonical = await (early ?? requestCapabilities(database, locals));
   const { spaces, ...capabilities } = canonical;
-  const attention = await getAttentionCount(database, user.id, canonical);
+  const usage = parallel ? earlyTemboUsage(db, flagContext, user.id) : null;
+  const attentionRead = getAttentionCount(database, user.id, canonical);
+  if (!parallel) await attentionRead;
   // Derived, not attention: see src/lib/mentoring/README.md.
-  const awaiting = spaces.includes("mentoring") ? await awaitingConfirmation({ db, env, locals }) : null;
+  const awaitingRead = spaces.includes("mentoring") ? awaitingConfirmation({ db, env, locals }) : Promise.resolve(null);
+  const [attention, awaiting] = await Promise.all([attentionRead, awaitingRead]);
   // Only display roles established by the canonical capability lookup. Cohort
   // status/labels need richer display metadata; never infer them from cohortIds.
   const roleBadges: RoleBadge[] = [];
@@ -59,7 +80,7 @@ export async function getMe({ db, env, locals }: MeContext): Promise<Me> {
     flags,
     unreadCounts: attention.unreadCounts,
     // Questions to Tembo in channels today (src/lib/tembo), not private-chat usage; read only while Tembo is on.
-    temboUsage: flags.tembo_channels ? await readTemboUsage(db, user.id, now) : usageOf(0, now),
+    temboUsage: usage ? await usage : flags.tembo_channels ? await readTemboUsage(db, user.id, now) : usageOf(0, now),
     ...(awaiting === null ? {} : { mentoring: { awaitingConfirmation: awaiting } }),
   });
 }

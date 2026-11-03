@@ -20,10 +20,10 @@ for (const row of rows) {
 const kb = n => n === null || n === undefined ? "" : Math.round(n / 1024);
 for (const [key, steps] of groups) {
   console.log(`\n### ${key}\n`);
-  console.log("| step | n | via | click→visible | click→shell ready | TTFB | FCP | LCP | shell hydrated | JS files | JS KB (transfer/decoded) | main-thread script ms | D1 queries | D1 waves | server headers ms |");
-  console.log("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+  console.log("| step | n | via | click→visible | click→shell ready | TTFB | FCP | LCP | shell hydrated | JS files | JS KB (transfer/decoded) | main-thread script ms | D1 queries | D1 waves | server headers ms | prefetches | delivery |");
+  console.log("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
   for (const [step, list] of steps) {
     const m = f => median(list.map(f));
-    console.log(`| ${step} | ${list.length} | ${list[0].via}${list[0].hard ? "" : " (soft)"} | ${m(r => r.clickToVisibleMs)} | ${m(r => r.clickToReadyMs)} | ${m(r => r.doc?.ttfb) ?? ""} | ${m(r => r.doc?.fcp) ?? ""} | ${m(r => r.doc?.lcp) ?? ""} | ${m(r => r.doc?.shellHydrated) ?? ""} | ${m(r => r.js?.count)} | ${kb(m(r => r.js?.transfer))}/${kb(m(r => r.js?.decoded))} | ${m(r => r.scriptMs)} | ${m(r => r.server?.d1) ?? ""} | ${m(r => r.server?.waves) ?? ""} | ${m(r => r.server?.headersMs) ?? ""} |`);
+    console.log(`| ${step} | ${list.length} | ${list[0].via}${list[0].hard ? "" : " (soft)"} | ${m(r => r.clickToVisibleMs)} | ${m(r => r.clickToReadyMs)} | ${m(r => r.doc?.ttfb) ?? ""} | ${m(r => r.doc?.fcp) ?? ""} | ${m(r => r.doc?.lcp) ?? ""} | ${m(r => r.doc?.shellHydrated) ?? ""} | ${m(r => r.js?.count)} | ${kb(m(r => r.js?.transfer))}/${kb(m(r => r.js?.decoded))} | ${m(r => r.scriptMs)} | ${m(r => r.server?.d1) ?? ""} | ${m(r => r.server?.waves) ?? ""} | ${m(r => r.server?.headersMs) ?? ""} | ${m(r => r.speculative) ?? ""} | ${[...new Set(list.map(r => r.doc?.deliveryType ?? ""))].join(",")} |`);
   }
 }
