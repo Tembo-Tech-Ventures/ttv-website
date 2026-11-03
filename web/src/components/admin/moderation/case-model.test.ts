@@ -84,8 +84,10 @@ describe("sourceLabel", () => {
 });
 
 describe("visibilityLabel", () => {
-  it("says contact details flagged by Tembo are still visible", () => {
-    expect(visibilityLabel(flagged.message)).toBe("still visible");
+  it("says flagged contact details are hidden from members, never still visible (QA2-08)", () => {
+    expect(visibilityLabel(flagged.message)).toBe("contact details hidden from members");
+    expect(visibilityLabel(reported.message)).toBe("still visible");
+    expect(visibilityLabel({ ...flagged.message, moderation: { state: "FLAGGED", reasons: ["Uses a shortened link"] } })).toBe("still visible");
     expect(visibilityLabel(mentorHidden.message)).toBe("hidden from members");
     expect(visibilityLabel(messages.deleted)).toBe("deleted by its author");
   });
@@ -125,7 +127,8 @@ describe("a direct conversation's case (QA4-01)", () => {
 
   it("names channels as before", () => {
     expect(channelReference(channels.opportunities)).toBe("#opportunities");
-    expect(caseContext(channels.opportunities, flagged.message)).toBe("Community · #opportunities · still visible");
+    expect(caseContext(channels.opportunities, flagged.message)).toBe("Community · #opportunities · contact details hidden from members");
+    expect(caseContext(channels.opportunities, reported.message)).toBe("Community · #opportunities · still visible");
     expect(CHANNEL_KIND_LABEL.COHORT).toBe("Cohort");
   });
 });

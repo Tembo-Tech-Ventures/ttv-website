@@ -13,6 +13,9 @@ const minute = 60_000;
 const hour = 60 * minute;
 const [flagged, reported, mentorHidden] = moderationQueue.items;
 
+const EMAIL = "Shares an email address";
+const PHONE = "Shares a phone number";
+
 function moderated(message: Message, state: "VISIBLE" | "FLAGGED" | "HIDDEN", reasons: string[]): Message {
   return { ...message, moderation: { state, reasons } };
 }
@@ -21,7 +24,9 @@ function moderated(message: Message, state: "VISIBLE" | "FLAGGED" | "HIDDEN", re
 export function harnessCases(): ModerationCase[] {
   return [
     {
-      ...flagged, id: flagged.message.id, evidence: [], review: null, decision: null,
+      // The reasons the detectors store, so each card says what members see (QA2-08).
+      ...flagged, id: flagged.message.id, reasons: [EMAIL], evidence: [], review: null, decision: null,
+      message: moderated(flagged.message, "FLAGGED", [EMAIL]),
     },
     {
       ...reported, id: reported.message.id, review: null, decision: null,
@@ -38,12 +43,12 @@ export function harnessCases(): ModerationCase[] {
     {
       // A reply in a cohort thread, flagged for contact details and reported as well.
       id: "harness-moderation-reply", source: "AI_FLAG", state: "PENDING", reportCount: 1, actor: null,
-      reasons: ["Contact details"], createdAt: FIXTURE_NOW - 50 * minute, evidence: [], review: null, decision: null,
+      reasons: [PHONE], createdAt: FIXTURE_NOW - 50 * minute, evidence: [], review: null, decision: null,
       channel: channels.cohort04,
       message: moderated({
         ...messages.kevinThanks, id: "harness-moderation-reply",
         body: "Thanks! If anyone wants to pair on it later, call me on 0712 345 678.",
-      }, "FLAGGED", ["Contact details"]),
+      }, "FLAGGED", [PHONE]),
     },
     {
       id: "harness-moderation-decided", source: "REPORT", state: "DECIDED", reportCount: 1, actor: null,

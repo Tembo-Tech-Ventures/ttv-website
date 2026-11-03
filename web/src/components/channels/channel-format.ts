@@ -228,11 +228,31 @@ export function threadSummary(message: Message, now: number): { replies: string;
 export type ModerationNotice = { state: Exclude<ModerationState, "VISIBLE">; title: string; detail: string };
 
 /**
+ * The reasons the detectors store for contact details (CONTACT_REASONS in
+ * lib/channels/moderation/detectors.ts; a test keeps the two equal). In a
+ * FLAGGED message with one of them, everyone but the author, the channel's
+ * moderators and admins sees those details masked until a person decides
+ * (QA2-08, policy 05e89fac). Spelled out here so the browser never loads the
+ * detectors.
+ */
+export const MASKING_REASONS: ReadonlySet<string> = new Set([
+  "Shares a phone number",
+  "Shares an email address",
+  "Links to a WhatsApp or Telegram chat",
+]);
+
+/** Whether other readers see this message with its contact details masked. */
+export function masksContactDetails(moderation: Message["moderation"]): boolean {
+  return moderation?.state === "FLAGGED" && moderation.reasons.some((reason) => MASKING_REASONS.has(reason));
+}
+
+/**
  * What a flagged or hidden message says about itself. The server sends
  * `moderation` only to the message's author and to moderators; ordinary
  * readers never receive a flagged state, and never receive a hidden message.
- * Wording follows the owner's rule: a flag keeps the message up until a person
- * decides; only people hide messages. A channel moderator who is not an admin
+ * Wording follows the owner's rules: a flag keeps the message up until a person
+ * decides, with flagged contact details masked for other readers meanwhile;
+ * only people hide messages. A channel moderator who is not an admin
  * also reads what happens after a hide, and where they will see the outcome
  * (QA2-11): an admin's restore brings the message back for members here.
  * In a direct conversation only the author is ever told (`direct`).
@@ -246,19 +266,7 @@ export function moderationNotice(
   const reasons = moderation.reasons.join(", ");
   // A direct conversation has no moderators: its checks go to TTV admins, and it is a conversation, not a channel.
   const checker = direct ? "TTV admins" : "a moderator";
-  if (moderation.state === "FLAGGED") {
-    return own
-      ? {
-          state: "FLAGGED",
-          title: reasons ? `Flagged for ${checker}: ${reasons}` : `Flagged for ${checker}`,
-          detail: "Your message stays up until a person looks at it. Only you can see this note.",
-        }
-      : {
-          state: "FLAGGED",
-          title: reasons ? `Flagged: ${reasons}` : "Flagged",
-          detail: "Still visible to everyone until a moderator decides.",
-        };
-  }
+  if (moderation.state === "FLAGGED") return flaggedNotice(reasons, own, checker, direct, masksContactDetails(moderation));
   return own
     ? {
         state: "HIDDEN",
@@ -270,6 +278,25 @@ export function moderationNotice(
         title: reasons ? `Hidden from members: ${reasons}` : "Hidden from members",
         detail: admin ? "Moderators can still see it." : `Moderators can still see it. ${afterHide(message)}`,
       };
+}
+
+/** A flag keeps the message up; flagged contact details are masked for other readers meanwhile (QA2-08). */
+function flaggedNotice(reasons: string, own: boolean, checker: string, direct: boolean, masked: boolean): ModerationNotice {
+  if (own) {
+    const others = direct ? "the other person" : "other members";
+    return {
+      state: "FLAGGED",
+      title: reasons ? `Flagged for ${checker}: ${reasons}` : `Flagged for ${checker}`,
+      detail: masked
+        ? `Your message stays up until a person looks at it, with your contact details hidden from ${others}. Only you can see this note.`
+        : "Your message stays up until a person looks at it. Only you can see this note.",
+    };
+  }
+  return {
+    state: "FLAGGED",
+    title: reasons ? `Flagged: ${reasons}` : "Flagged",
+    detail: masked ? "Members see it with the contact details hidden until a moderator decides." : "Still visible to everyone until a moderator decides.",
+  };
 }
 
 /**

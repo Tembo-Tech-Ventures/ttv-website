@@ -17,7 +17,7 @@ describe("how we talk to each other", () => {
   it("tells the truth about contact details: flagged for a person, never silently hidden", () => {
     const contact = CONDUCT_HABITS.find((habit) => habit.key === "contact")!;
     expect(contact.body).toMatch(/flagged for a moderator/);
-    expect(contact.body).toMatch(/stays up until a person decides/);
+    expect(contact.body).toMatch(/stays up, with those details hidden from other members until a person decides/);
     expect(everything).not.toMatch(/\b(?:removed|deleted) automatically\b/i);
   });
 

@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { channels, FIXTURE_NOW, messages, meByPersona, people } from "@/lib/platform/fixtures";
 import { MASKED_CONTACT, type Channel, type Message } from "@/lib/platform/contracts";
+import { CONTACT_REASONS } from "@/lib/channels/moderation/detectors";
 import {
   messageActionsLabel,
-  ago, channelTitle, clipTime, clock, composerTools, dayKey, dayLabel, fullTime, groupByDay, mentionsTembo, moderationNotice,
+  ago, channelTitle, clipTime, clock, composerTools, dayKey, dayLabel, fullTime, groupByDay, mentionsTembo, MASKING_REASONS, masksContactDetails, moderationNotice,
   openingDivider, parseBody, postingFor, reviewState, temboReach, temboResetsIn, temboScope, temboSees, threadSummary,
 } from "./channel-format";
 
@@ -251,6 +252,43 @@ describe("moderation notices", () => {
   it("does without reasons the server left out", () => {
     const flagged: Message = { ...messages.flagged, moderation: { state: "FLAGGED", reasons: [] } };
     expect(moderationNotice(flagged, people.peter.id)?.title).toBe("Flagged for a moderator");
+  });
+
+  describe("flagged contact details, masked for other readers (QA2-08)", () => {
+    const phone: Message = { ...messages.flagged, moderation: { state: "FLAGGED", reasons: ["Shares a phone number"] } };
+
+    it("tells the author the message is up with their details hidden, never that everyone sees them", () => {
+      expect(moderationNotice(phone, people.peter.id)?.detail).toBe(
+        "Your message stays up until a person looks at it, with your contact details hidden from other members. Only you can see this note.",
+      );
+      expect(moderationNotice(phone, people.peter.id, { direct: true })?.detail).toBe(
+        "Your message stays up until a person looks at it, with your contact details hidden from the other person. Only you can see this note.",
+      );
+    });
+
+    it("tells a moderator that members see the message with the details hidden", () => {
+      expect(moderationNotice(phone, people.david.id)?.detail).toBe("Members see it with the contact details hidden until a moderator decides.");
+      expect(moderationNotice(phone, people.david.id)?.detail).not.toMatch(/visible to everyone/i);
+    });
+
+    it("keeps saying a flag for anything else is visible to everyone", () => {
+      const spam: Message = { ...messages.flagged, moderation: { state: "FLAGGED", reasons: ["Uses a shortened link"] } };
+      expect(moderationNotice(spam, people.david.id)?.detail).toBe("Still visible to everyone until a moderator decides.");
+    });
+  });
+});
+
+describe("masksContactDetails", () => {
+  it("names the detectors' contact reasons exactly, without loading the detectors in the browser", () => {
+    expect([...MASKING_REASONS].toSorted()).toEqual([...CONTACT_REASONS].toSorted());
+  });
+
+  it("is true only for a FLAGGED message with a contact reason", () => {
+    for (const reason of CONTACT_REASONS) expect(masksContactDetails({ state: "FLAGGED", reasons: ["Uses a shortened link", reason] })).toBe(true);
+    expect(masksContactDetails({ state: "FLAGGED", reasons: ["May share contact details"] })).toBe(false);
+    expect(masksContactDetails({ state: "HIDDEN", reasons: ["Shares a phone number"] })).toBe(false);
+    expect(masksContactDetails({ state: "VISIBLE", reasons: [] })).toBe(false);
+    expect(masksContactDetails(null)).toBe(false);
   });
 });
 

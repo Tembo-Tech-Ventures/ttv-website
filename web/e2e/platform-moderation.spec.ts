@@ -71,7 +71,7 @@ test.describe("admin moderation queue", () => {
   test("lays the queue out as screens/08 does, clean under axe", async ({ page }, testInfo) => {
     await open(page, runFor("&reset"));
     await expect(page.getByRole("heading", { level: 2, name: "Moderation" })).toBeVisible();
-    await expect(page.getByText("Everything else, contact details included, stays visible until a person decides.")).toBeVisible();
+    await expect(page.getByText("Tembo hides only what is clearly abusive. Contact details are hidden from other members until you decide; everything else stays visible.")).toBeVisible();
     // Only a hide's reason reaches the author, and the form says so.
     await expect(card(page, PETER).getByRole("textbox", { name: "Reason" }))
       .toHaveAccessibleDescription("Kept with your decision. If you hide the message, its author sees this reason.");
@@ -80,9 +80,9 @@ test.describe("admin moderation queue", () => {
 
     const peter = card(page, PETER);
     await expect(peter.locator("[data-chip]")).toHaveText("Flagged by Tembo");
-    await expect(peter.locator("[data-moderation-context]")).toHaveText("Community · #opportunities · still visible");
+    await expect(peter.locator("[data-moderation-context]")).toHaveText("Community · #opportunities · contact details hidden from members");
     await expect(peter.getByRole("heading", { level: 3, name: "Peter Njoroge" })).toBeVisible();
-    await expect(peter.locator("[data-moderation-reasons]")).toHaveText("Contact details");
+    await expect(peter.locator("[data-moderation-reasons]")).toHaveText("Shares an email address");
     await expect(peter.getByRole("link", { name: "Open in #opportunities" })).toHaveAttribute("href", `/dashboard/community/c/opportunities?message=${PETER}`);
     await expect(peter.getByRole("button", { name: "Fine as is: Peter Njoroge's message in #opportunities" })).toBeVisible();
 
