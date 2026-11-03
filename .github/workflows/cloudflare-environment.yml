@@ -70,7 +70,7 @@ jobs:
   cloudflare-with-environment:
     if: ${{ inputs.github_environment != '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 75
     environment: ${{ inputs.github_environment }}
     permissions:
       contents: read
@@ -173,7 +173,7 @@ jobs:
       - if: ${{ always() && inputs.action == 'deploy' && startsWith(inputs.environment_name, 'agent-pr-') && steps.browser_install.outcome == 'success' }}
         name: Measure navigation performance (PERF-1)
         continue-on-error: true
-        timeout-minutes: 25
+        timeout-minutes: 40
         env:
           PLAYWRIGHT_BASE_URL: ${{ steps.deploy.outputs.better_auth_url }}
           EXPECTED_DEPLOYMENT_ENVIRONMENT: ${{ inputs.environment_name }}
@@ -182,7 +182,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/cloudflare/run-live-e2e.mjs -c e2e/perf/perf.config.ts || true
+          # ClientRouter (this branch's default) against the same build without it (ttv-perf=mpa).
+          PERF_VARIANTS=base,mpa node scripts/cloudflare/run-live-e2e.mjs -c e2e/perf/perf.config.ts navigation || true
+          for variant in base mpa; do PERF_VARIANTS=$variant node scripts/cloudflare/run-live-e2e.mjs -c e2e/perf/perf.config.ts behaviour || true; done
           node scripts/perf/summarize.mjs test-results/perf | tee test-results/perf/summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - if: ${{ always() && inputs.action == 'deploy' && inputs.environment_name == 'production' && (steps.smoke.outcome == 'failure' || steps.browser_install.outcome == 'failure' || steps.browser.outcome == 'failure') }}

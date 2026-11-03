@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const dir = process.argv[2] ?? "test-results/perf";
-const rows = readdirSync(dir).filter(f => f.endsWith(".json")).flatMap(f => JSON.parse(readFileSync(path.join(dir, f), "utf8")));
+const rows = readdirSync(dir).filter(f => f.endsWith(".json") && !f.startsWith("behaviour-")).flatMap(f => JSON.parse(readFileSync(path.join(dir, f), "utf8")));
 const median = values => {
   const v = values.filter(x => typeof x === "number").toSorted((a, b) => a - b);
   return v.length > 0 ? v[Math.floor((v.length - 1) / 2)] : null;
