@@ -3,6 +3,7 @@ import type {
 } from "@/lib/platform/contracts";
 import { CONDUCT_PATH, CONVERSATION_PATH, MENTOR_PAGE_PATHS } from "@/lib/platform/server/space-routes";
 import { ago, dayLabel, firstName, plural } from "@/components/channels/channel-format";
+import { sameArea, type DirectoryFilters } from "@/lib/platform/client/mentor-directory";
 import { conversationPath } from "@/components/channels/paths";
 
 /*
@@ -110,6 +111,24 @@ export function fullMessage(mentor: Pick<MentorDirectoryItem, "person" | "capaci
  * rather than guess (QA4-09): asking is personal, and an affiliation neither grants nor blocks it.
  */
 export const AS_YOURSELF = "You can ask a mentor for time as yourself. Requests come from you, not from your organisation.";
+
+/** Where a filter link lands, so the next Tab goes into the results rather than back through the filters (QA4-18). */
+export const MENTOR_RESULTS_ID = "mentor-results";
+
+/**
+ * The directory's results heading: how many mentors are shown, and which filters chose them, so the
+ * selected filters are said in words after every filter link (QA4-18). "2 mentors · Career · Has open spots".
+ */
+export function resultsHeading(
+  count: number,
+  filters: DirectoryFilters,
+  areas: readonly string[] = [],
+): string {
+  const wanted = filters.area;
+  const area = wanted ? areas.find((option) => sameArea(option, wanted)) ?? wanted : null;
+  const chosen = [area, filters.format ? FORMAT_LABELS[filters.format] : null, filters.available ? "Has open spots" : null];
+  return [plural(count, "mentor"), ...chosen.filter((label): label is string => label !== null)].join(" · ");
+}
 
 /** "Spots used 1 of 3", as a share for the meter. */
 export function usedShare(capacity: MentorCapacity): number {

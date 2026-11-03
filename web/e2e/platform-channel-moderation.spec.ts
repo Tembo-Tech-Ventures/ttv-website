@@ -333,14 +333,16 @@ test.describe("moderation in a channel", () => {
     await expectButtonsUncovered(form, ["Cancel", "Send report"]);
   });
 
-  test("the day's heading sits under the New divider (QA2-18)", async ({ page }) => {
+  test("the day sits under the New divider, and each day has one heading (QA2-18, QA4-18)", async ({ page }) => {
     await page.setViewportSize(DESKTOP);
     await open(page, harness({ persona: "wanjiku", marker: "s00000000000000000000401" }));
     const divider = page.locator("[data-new-divider]");
     await expect(divider).toHaveCount(1);
-    const next = await divider.evaluate((el) => ({ tag: el.nextElementSibling?.tagName, text: el.nextElementSibling?.textContent }));
-    expect(next.tag).toBe("H3");
+    const next = await divider.evaluate((el) => ({ day: el.nextElementSibling?.matches(".channel-day"), text: el.nextElementSibling?.textContent }));
+    expect(next.day).toBe(true);
     expect(next.text).toMatch(/\S/);
+    const headings = await page.locator("[data-channel-scroller] h3.channel-day").allTextContents();
+    expect(new Set(headings).size).toBe(headings.length);
   });
 
   test("a wheel over the channel's header scrolls the messages, not the page (QA2-17)", async ({ page }) => {

@@ -54,21 +54,14 @@ describe("days and times", () => {
     expect(groupByDay([], now)).toEqual([]);
   });
 
-  it("starts a group at the New divider, so its day's heading sits right under it (QA2-18)", () => {
+  it("keeps one group per day wherever the New divider falls, so each day has one heading (QA4-18)", () => {
     const list = [messages.projectPost, messages.firstPr, messages.mentorOffer];
-    // Mid-day: today is said again under the divider.
-    expect(groupByDay(list, now, messages.mentorOffer.id).map((group) => [group.label, group.messages.map((m) => m.id)])).toEqual([
-      ["Yesterday", [messages.projectPost.id]],
-      ["Today", [messages.firstPr.id]],
-      ["Today", [messages.mentorOffer.id]],
-    ]);
-    // The first of its day: still one heading for the day, and the keys stay unique.
-    const opening = groupByDay(list, now, messages.firstPr.id);
-    expect(opening.map((group) => [group.label, group.messages.map((m) => m.id)])).toEqual([
+    const groups = groupByDay(list, now);
+    expect(groups.map((group) => [group.label, group.messages.map((m) => m.id)])).toEqual([
       ["Yesterday", [messages.projectPost.id]],
       ["Today", [messages.firstPr.id, messages.mentorOffer.id]],
     ]);
-    expect(new Set(groupByDay(list, now, messages.mentorOffer.id).map((group) => group.key)).size).toBe(3);
+    expect(new Set(groups.map((group) => group.key)).size).toBe(groups.length);
   });
 
   it("writes positions in a recording", () => {

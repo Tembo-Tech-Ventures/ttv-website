@@ -10,6 +10,7 @@ import type { MockOptions } from "@/lib/platform/client/mockTransport";
 import { channels, FIXTURE_NOW, fixtureIds, meByPersona, messages, people } from "@/lib/platform/fixtures";
 import ChannelSurface from "./ChannelSurface";
 import ChannelView from "./ChannelView";
+import { dayKey } from "./channel-format";
 import { channelFor, channelPage, momentsFor, shareablesFor, threadPage } from "./harness/fixture-pages";
 import { createHarnessClient } from "./harness/harness-client";
 import { MOMENT_SEARCH_DEBOUNCE_MS, shareablesFinder } from "./moment-search";
@@ -156,6 +157,27 @@ describe("reading without JavaScript", () => {
     for (const section of $$("section[aria-labelledby^='day-']")) {
       expect(section.querySelector(`#${CSS.escape(section.getAttribute("aria-labelledby")!)}`)).not.toBeNull();
     }
+  });
+
+  it("says the day under a mid-day New divider as a label, not a second heading (QA4-18)", () => {
+    const initial = channelPage(community, wanjiku);
+    // Read up to today's first message: the next one by someone else is new, later the same day.
+    const firstToday = initial.items.find((m) => dayKey(m.createdAt) === dayKey(FIXTURE_NOW))!;
+    const unread = initial.items.find((m) => m.createdAt > firstToday.createdAt && m.author.id !== wanjiku.user.id)!;
+    expect(dayKey(unread.createdAt)).toBe(dayKey(FIXTURE_NOW));
+    const store = createChannelStore({
+      channelId: community.id, enabled: true, viewerId: wanjiku.user.id, initial,
+      initialRead: { lastReadMessageId: firstToday.id, unreadCount: 1 },
+    });
+    const composer = createComposer({ store, me: wanjiku });
+    container.innerHTML = renderToString(
+      <ChannelSurface me={wanjiku} channel={community} store={store} composer={composer} now={FIXTURE_NOW} shareables={null} />,
+    );
+    const divider = $("[data-new-divider]")!;
+    expect(divider.closest("[data-message-row]")?.getAttribute("data-message-row")).toBe(unread.id);
+    expect(divider.nextElementSibling?.matches("p.channel-day[data-day-label]")).toBe(true);
+    expect(divider.nextElementSibling?.textContent).toBe("Today");
+    expect($$("h3.channel-day").map((h) => h.textContent)).toEqual(["Yesterday", "Today"]);
   });
 
   it("shows only the role badges the server sent, worded by the server", () => {

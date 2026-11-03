@@ -62,17 +62,16 @@ export function ago(timestamp: number, now: number): string {
 export type DayGroup = { key: string; label: string; messages: Message[] };
 
 /**
- * Messages, oldest first, under one heading per calendar day. The "New" divider's message (`breakAt`)
- * starts a group of its own, so its day's heading sits right under the divider: a channel opens there,
- * and older messages must not read as today's (QA2-18). That group's key ends in "-new".
+ * Messages, oldest first, under one heading per calendar day, so a screen reader hears each day once
+ * (QA4-18). Where the "New" divider falls mid-day, the list repeats the day under it as a plain label
+ * (QA2-18), not as a second heading.
  */
-export function groupByDay(messages: readonly Message[], now: number, breakAt: string | null = null): DayGroup[] {
+export function groupByDay(messages: readonly Message[], now: number): DayGroup[] {
   const groups: DayGroup[] = [];
   for (const message of messages) {
     const key = dayKey(message.createdAt);
     const last = groups.at(-1);
-    if (message.id === breakAt) groups.push({ key: `${key}-new`, label: dayLabel(message.createdAt, now), messages: [message] });
-    else if (last?.key.startsWith(key)) last.messages.push(message);
+    if (last?.key === key) last.messages.push(message);
     else groups.push({ key, label: dayLabel(message.createdAt, now), messages: [message] });
   }
   return groups;

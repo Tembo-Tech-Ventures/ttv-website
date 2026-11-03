@@ -194,7 +194,7 @@ export default function MessageList({
   }
 
   const showJump = measured && messages.length > 0 && (!atBottom || !state.live);
-  const groups = groupByDay(messages, now, firstUnreadId);
+  const groups = groupByDay(messages, now);
 
   return (
     <div className="channel-list" data-jump={showJump || undefined}>
@@ -206,8 +206,9 @@ export default function MessageList({
         <ListState state={state} channel={channel} retry={retry} />
         {groups.length > 0 && <h2 className="sr-only">Messages</h2>}
         {groups.map((group) => {
-          // The channel opens with the "New" divider at the top: its day's heading goes under it, inside
-          // the row the list opens at, so the first thing read says which day it is (QA2-18).
+          // The channel opens with the "New" divider at the top, so the day is said right under it, inside
+          // the row the list opens at (QA2-18): as the day's heading when the divider starts the day, and
+          // otherwise as a plain label, so the day still has one heading (QA4-18).
           const opensHere = group.messages[0]?.id === firstUnreadId;
           const heading = (
             <h3 id={`day-${group.key}`} className="channel-day">
@@ -225,7 +226,11 @@ export default function MessageList({
                       <span>New</span>
                     </p>
                   )}
-                  {opensHere && message.id === firstUnreadId && heading}
+                  {message.id === firstUnreadId && (opensHere ? heading : (
+                    <p className="channel-day" data-day-label>
+                      {group.label}
+                    </p>
+                  ))}
                   <div
                     className="channel-row"
                     data-arrived={(arrivedAfter.current !== null && message.createdAt > arrivedAfter.current) || undefined}

@@ -221,7 +221,7 @@
   flex: 0 0 0;
 }
 
-/* The day's heading under the "New" divider, where a channel opens (QA2-18). */
+/* The day under the "New" divider, where a channel opens (QA2-18): its heading, or a plain label mid-day. */
 .channel-new + .channel-day {
   margin-top: 0.25rem;
 }
@@ -644,6 +644,11 @@
   color: var(--color-peach-ink);
   font-weight: 700;
   text-decoration: none;
+}
+
+/* Two sources in a row ([2][3]): the focus ring (2px out, 2px wide) clears the next digit at any text size. */
+.channel-cite-ref + .channel-cite-ref {
+  margin-left: calc(4px + 0.125rem);
 }
 
 .channel-cite-ref:hover {

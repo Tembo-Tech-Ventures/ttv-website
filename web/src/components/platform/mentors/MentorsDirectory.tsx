@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { PiCheck } from "react-icons/pi";
 import {
   MentorRequestFormat,
@@ -15,7 +15,7 @@ import { useModalDialog } from "@/components/platform/overlays/useModalDialog";
 import { FOCUS_RING } from "@/components/platform/ui/Button";
 import { cx } from "@/components/platform/ui/cx";
 import MentorCard, { type MentorCardStanding } from "./MentorCard";
-import { AS_YOURSELF, conversationHref, FORMAT_LABELS, requesterStatus } from "./mentor-display";
+import { AS_YOURSELF, conversationHref, FORMAT_LABELS, MENTOR_RESULTS_ID, requesterStatus, resultsHeading } from "./mentor-display";
 import OwnRequests from "./OwnRequests";
 import RequestForm, { type ConductPrompt } from "./RequestForm";
 // oxlint-disable-next-line import/no-unassigned-import -- Mentor connections stylesheet.
@@ -54,10 +54,13 @@ const PILL = cx(
 const PILL_ON = "bg-ink-primary text-dark";
 const PILL_OFF = "text-ink-secondary hover:bg-ink-primary/7 hover:text-ink-primary";
 
+/** A filter's link lands on the results heading, so a keyboard carries on from the results (QA4-18). */
+const toResults = (href: string) => `${href}#${MENTOR_RESULTS_ID}`;
+
 function FilterLink({ href, active, small = false, children }: { href: string; active: boolean; small?: boolean; children: ReactNode }) {
   return (
     <a
-      href={href} aria-current={active ? "true" : undefined} data-filter-active={active || undefined}
+      href={toResults(href)} aria-current={active ? "true" : undefined} data-filter-active={active || undefined}
       className={cx(PILL, small && "min-h-9 px-3.5 text-sm", active ? PILL_ON : PILL_OFF)}
     >
       {children}
@@ -86,7 +89,7 @@ function FilterBar({ path, base, filters, areas }: { path: string; base: Directo
           ))}
         </fieldset>
         <a
-          href={directoryHref(path, base, { available: !filters.available })}
+          href={toResults(directoryHref(path, base, { available: !filters.available }))}
           aria-current={filters.available ? "true" : undefined}
           className={cx(PILL, "border", filters.available ? "border-transparent bg-ink-primary text-dark" : "border-hairline text-ink-primary hover:bg-ink-primary/7")}
           data-filter-available
@@ -106,7 +109,7 @@ function NoMentors({ path, filtered }: { path: string; filtered: boolean }) {
       {filtered ? (
         <p>
           No mentors match these filters right now.{" "}
-          <a href={path} className={cx("font-semibold text-peach-ink underline underline-offset-4", FOCUS_RING)}>Show every mentor</a>
+          <a href={toResults(path)} className={cx("font-semibold text-peach-ink underline underline-offset-4", FOCUS_RING)}>Show every mentor</a>
         </p>
       ) : (
         <p>No mentors are listed yet. Mentors appear here once they've set out their availability.</p>
@@ -152,6 +155,11 @@ function sameStandings(a: ReadonlyMap<string, MentorCardStanding>, b: ReadonlyMa
 export default function MentorsDirectory(props: MentorsDirectoryProps) {
   const { me, path, filters, mentors, shown, areas, projects, conduct, now, api, serverForm = null, sent: sentNow = null } = props;
   const headingId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  // The request the open drawer just sent: once it closes, focus goes to where the request now shows (QA4-18).
+  // Only the open drawer's own send counts, so a send that settles after its drawer closed moves nothing.
+  const justSent = useRef<MentorRequest | null>(null);
+  const drawerFor = useRef<string | null>(null);
   // Until the island is interactive (and always without JavaScript) a drawer named by `?ask=` is a plain panel with a real form.
   const [hydrated, setHydrated] = useState(false);
   // The filters alone: following a filter, or closing the drawer, drops `?ask=`.
@@ -167,6 +175,15 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
   const closed = useCallback(() => {
     setActive(null);
     window.history.replaceState(window.history.state, "", directoryHref(path, base) + window.location.hash);
+    const request = justSent.current;
+    justSent.current = null;
+    drawerFor.current = null;
+    // "Ask for time" gave way to the request's status on the card: focus that, or the request under Your requests.
+    if (request) {
+      const where = root.current?.querySelector<HTMLElement>(`[data-mentor-card="${CSS.escape(request.mentor.id)}"] [data-mentor-standing='waiting']`)
+        ?? root.current?.querySelector<HTMLElement>(`[data-own-request="${CSS.escape(request.id)}"] [data-request-status]`);
+      where?.focus();
+    }
   }, [path, base]);
   const dialog = useModalDialog(closed);
   const { show } = dialog;
@@ -185,6 +202,7 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
 
   const ask = useCallback((item: MentorDirectoryItem, from: HTMLElement | null) => {
     if (!hasOpenSpot(item) && serverForm?.mentorId !== item.person.id) return;
+    drawerFor.current = item.person.id;
     setActive(item);
     window.history.replaceState(window.history.state, "", askHref(path, base, item.person.id));
     show(from);
@@ -194,6 +212,10 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
   // or from a send that did not go through. A `?sent=` notice has been read by then, so a reload does not repeat it.
   useEffect(() => {
     setHydrated(true);
+    // Arriving from a filter link: say the results and their filters, and carry on from there (QA4-18).
+    if (!asked && window.location.hash === `#${MENTOR_RESULTS_ID}`) {
+      root.current?.querySelector<HTMLElement>(`#${MENTOR_RESULTS_ID}`)?.focus({ preventScroll: true });
+    }
     if (asked) ask(asked, null);
     else if (new URLSearchParams(window.location.search).has("sent")) {
       window.history.replaceState(window.history.state, "", directoryHref(path, base) + window.location.hash);
@@ -202,13 +224,14 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
   }, []); // oxlint-disable-line react-hooks/exhaustive-deps
 
   function sent(request: MentorRequest) {
+    if (drawerFor.current === request.mentor.id) justSent.current = request;
     ownRequests.prepend(request);
   }
 
   const filtered = Boolean(filters.area || filters.format || filters.available);
 
   return (
-    <div className="mentors-directory" data-mentors-directory>
+    <div ref={root} className="mentors-directory" data-mentors-directory>
       <output className="sr-only" aria-live="polite">{announcement}</output>
       {sentNow && (
         <output className="mb-6 block rounded-2xl border border-ring/40 bg-ring/8 px-4 py-3 text-[0.9375rem] text-ink-primary" data-request-sent-notice>
@@ -225,7 +248,14 @@ export default function MentorsDirectory(props: MentorsDirectoryProps) {
 
       <FilterBar path={path} base={base} filters={filters} areas={areas} />
 
-      <h2 className="sr-only">{filtered ? "Mentors matching your filters" : "All mentors"}</h2>
+      {/* Filter links land here (`#mentor-results`), so the next Tab reaches the first mentor (QA4-18). */}
+      <h2
+        id={MENTOR_RESULTS_ID} tabIndex={-1}
+        className={cx("mt-6 mb-3 w-fit scroll-mt-40 rounded-sm font-body text-[0.9375rem] font-semibold text-ink-secondary", FOCUS_RING)}
+        data-mentor-results
+      >
+        {resultsHeading(shown.length, filters, areas)}
+      </h2>
       {shown.length > 0 ? (
         <ul className="mentor-grid" data-mentor-grid>
           {shown.map(item => (
