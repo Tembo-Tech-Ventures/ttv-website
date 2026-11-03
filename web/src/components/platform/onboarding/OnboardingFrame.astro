@@ -33,9 +33,11 @@ interface Props {
    * the DEV harness, whose landing is another harness. Real steps land in a space.
    */
   sheetPaths?: readonly string[];
+  /** The step on the sheet: moving to another step plays the transition, a rejected post-back does not. */
+  step: string;
 }
 
-const { title, titlePrefix = "", person, account, sheetPaths = [] } = Astro.props;
+const { title, titlePrefix = "", person, account, sheetPaths = [], step } = Astro.props;
 const signedIn = Boolean(Astro.locals.user);
 ---
 
@@ -48,7 +50,7 @@ const signedIn = Boolean(Astro.locals.user);
     <link rel="icon" type="image/png" href="/favicon.png" />
     <title>{pageTitle(titlePrefix + title)}</title>
     {signedIn && <ClientErrorBuffer />}
-    <SheetTransition />
+    <SheetTransition sheet={`onboarding:${step}`} />
   </head>
   <body class="bg-ground" data-sheet-paths={JSON.stringify(sheetPaths)}>
     <div class="onboarding">

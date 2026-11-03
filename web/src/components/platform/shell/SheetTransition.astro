@@ -3,9 +3,21 @@
  * The card-file transition between pages that show a sheet: the spaces shell
  * (SpacesLayout) and the onboarding steps (OnboardingFrame). Both name their
  * sheet `spaces-sheet`, so a step into a space reads as the same gesture as
- * switching spaces. Each page must render this to opt in.
+ * switching spaces. Each page must render this to opt in, naming its sheet:
+ * the transition plays only when the sheet changes (sheet-transition.ts).
  */
+import { sheetTransitionScript, type SheetKey } from "./sheet-transition";
+
+interface Props {
+  sheet: SheetKey;
+}
+
+const { sheet } = Astro.props;
 ---
+
+{/* Classic and in the head, so its pagereveal listener is in place before the first render. */}
+<script is:inline set:html={sheetTransitionScript(sheet)} />
+
 
 {
   /*

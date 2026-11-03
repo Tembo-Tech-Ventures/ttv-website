@@ -32,7 +32,7 @@ const rejected = view.step === "choose" ? view.error !== null : view.failure !==
 const title = view.step === "choose" ? WELCOME.title : REQUEST.title;
 ---
 
-<OnboardingFrame title={title} titlePrefix={rejected ? "Error: " : ""} person={person} account={account} sheetPaths={sheetPaths}>
+<OnboardingFrame title={title} titlePrefix={rejected ? "Error: " : ""} person={person} account={account} sheetPaths={sheetPaths} step={view.step}>
   {
     view.step === "choose" ? (
       <div class="welcome" data-step="choose">
