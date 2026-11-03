@@ -527,6 +527,39 @@ describe("what an answer can cite (QA-3)", () => {
     expect(thread.items.find((item) => item.authorKind === "TEMBO")!.citations).toMatchObject([{ messageId: cited, title: CITED_MESSAGE_CHANGED }]);
   });
 
+  it("keeps a cited message's words when its last edit came before Tembo began answering (#312 review, S1)", async () => {
+    const s = setup();
+    const cited = s.message("help", { body: "The Mongolia trip leaves on 3 March.", author: "synthetic-otieno" });
+    s.database.prepare("UPDATE channel_message SET editedAt = ? WHERE id = ?").run(NOW - 1, cited);
+    const question = s.question("help", "@tembo when does the Mongolia trip leave?");
+    const { model } = scriptedModel([{ answer: "On 3 March [S1]." }]);
+    await s.ask("help", question, { temboModel: model, now: () => NOW });
+    await s.afterResponse();
+    const thread = MessageList.parse((await s.call("listMessages", { id: s.channel("help"), query: `?thread=${question}`, user: "synthetic-achieng" })).body);
+    expect(thread.items.find((item) => item.authorKind === "TEMBO")!.citations)
+      .toMatchObject([{ messageId: cited, title: "Otieno Ouma: “The Mongolia trip leaves on 3 March.”" }]);
+  });
+
+  it("without a question on record, measures a cited message's edit against the answer itself (#312 review, S1)", async () => {
+    const s = setup();
+    const root = s.message("help", { body: "When does the Mongolia trip leave?", author: "synthetic-achieng" });
+    const before = s.message("help", { body: "It leaves on 3 March.", author: "synthetic-otieno" });
+    const after = s.message("help", { body: "Bring boots.", author: "synthetic-otieno" });
+    const answer = s.message("help", { tembo: true, parentId: root, body: "On 3 March [1], with boots [2]." });
+    const citation = (id: string, words: string) => ({
+      type: "message", messageId: id, channelId: s.channel("help"), title: `Otieno Ouma: “${words}”`, href: `/dashboard/community/c/help?message=${id}`,
+    });
+    const answeredAt = (s.rows<{ createdAt: number }>("SELECT createdAt FROM channel_message WHERE id = ?", answer)[0])!.createdAt;
+    s.database.prepare("UPDATE channel_message SET citations = ? WHERE id = ?")
+      .run(JSON.stringify([citation(before, "It leaves on 3 March."), citation(after, "Bring boots.")]), answer);
+    s.database.prepare("UPDATE channel_message SET editedAt = ? WHERE id = ?").run(answeredAt - 1, before);
+    s.database.prepare("UPDATE channel_message SET editedAt = ? WHERE id = ?").run(answeredAt + 1, after);
+    expect(s.rows("SELECT 1 FROM tembo_ask WHERE answerId = ?", answer)).toHaveLength(0);
+    const thread = MessageList.parse((await s.call("listMessages", { id: s.channel("help"), query: `?thread=${root}`, user: "synthetic-faith" })).body);
+    expect(thread.items.find((item) => item.id === answer)!.citations.map((c) => c.title))
+      .toEqual(["Otieno Ouma: “It leaves on 3 March.”", CITED_MESSAGE_CHANGED]);
+  });
+
   it("finds a message with TTV's own address, though not a refused @tembo question (#310 review 3, N1)", async () => {
     const s = setup();
     s.message("help", { body: "Mongolia trip forms go to admissions@tembotechventures.com by Friday." });
