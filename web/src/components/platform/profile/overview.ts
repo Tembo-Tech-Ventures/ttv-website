@@ -18,6 +18,11 @@ const JOURNEY_PATH = SPACE_PAGE_PATHS.journey;
 const LEADS_PATH = SPACE_PAGE_PATHS.leads;
 const WRITING_PATH = SPACE_PAGE_PATHS.writing;
 
+/** A client project's card on the Opportunities page, as an id an URL fragment can carry. */
+export function opportunityAnchor(projectId: string): string {
+  return `project-${encodeURIComponent(projectId)}`;
+}
+
 /** How many rows each list shows before "See all". */
 export const OVERVIEW_LIMITS = { projects: 5, leads: 3, drafts: 3, opportunities: 3 } as const;
 
@@ -101,6 +106,15 @@ export interface OverviewNeed {
   action: { href: string; label: string; name: string };
 }
 
+export interface OverviewOpportunity {
+  id: string;
+  title: string;
+  organization: string;
+  interested: boolean;
+  /** The project's own card on the Opportunities page, where the hand is raised. */
+  href: string;
+}
+
 export interface ProfileOverviewModel {
   title: string;
   lead: string;
@@ -110,7 +124,7 @@ export interface ProfileOverviewModel {
   projects: { items: readonly OverviewProject[]; total: number; available: boolean };
   needs: readonly OverviewNeed[];
   /** Null when the opportunities page is not open to this person, so nothing about it is shown. */
-  opportunities: { items: readonly { id: string; title: string; organization: string; interested: boolean }[]; more: boolean } | null;
+  opportunities: { items: readonly OverviewOpportunity[]; more: boolean } | null;
   certificates: readonly { id: string; programName: string; href: string }[];
 }
 
@@ -164,7 +178,8 @@ export function projectState(entry: CommunityJourney): ProjectState {
 
 function card(facts: OverviewFacts): OverviewCard | null {
   const { profile, person } = facts;
-  if (!facts.eligible || !profile) return null;
+  // A profile that exists is shown as it is, even if the completion behind it has since changed.
+  if (!profile) return null;
   const cohort = facts.certificates[0]?.programName ?? null;
   const place = profile.location?.trim() || profile.country?.trim() || null;
   return {
@@ -179,7 +194,7 @@ function card(facts: OverviewFacts): OverviewCard | null {
 }
 
 function noProfile(facts: OverviewFacts): OverviewNoProfile | null {
-  if (facts.eligible && facts.profile) return null;
+  if (facts.profile) return null;
   if (facts.eligible) {
     return {
       kind: "create",
@@ -229,7 +244,7 @@ function needs(facts: OverviewFacts, projects: readonly OverviewProject[]): Over
         : { href: JOURNEY_PATH, label: "Open", name: `Open ${project.title} on Your journey` },
     });
   }
-  if (facts.eligible && facts.profile?.status === "DRAFT") {
+  if (facts.profile?.status === "DRAFT") {
     list.push({
       key: "profile-draft", icon: "profile", text: "Your public profile is a draft",
       action: { href: PROFILE_EDITOR_PATH, label: "Publish", name: "Publish your public profile" },
@@ -267,14 +282,19 @@ export function profileOverview(facts: OverviewFacts): ProfileOverviewModel {
       : "Your work, what's waiting for you, and what opens next.",
     actions: {
       view: shown?.publicHref ?? null,
-      edit: facts.eligible && facts.profile ? { href: PROFILE_EDITOR_PATH, label: "Edit" } : null,
+      edit: facts.profile ? { href: PROFILE_EDITOR_PATH, label: "Edit" } : null,
     },
     card: shown,
     noProfile: noProfile(facts),
     projects: { items: all.slice(0, OVERVIEW_LIMITS.projects), total: all.length, available: facts.journey !== null },
     needs: needs(facts, all),
     opportunities: opportunitiesOpen
-      ? { items: facts.opportunities.items.slice(0, OVERVIEW_LIMITS.opportunities), more: facts.opportunities.items.length > OVERVIEW_LIMITS.opportunities }
+      ? {
+        items: facts.opportunities.items.slice(0, OVERVIEW_LIMITS.opportunities).map((item) => ({
+          ...item, href: `${SPACE_PAGE_PATHS.opportunities}#${opportunityAnchor(item.id)}`,
+        })),
+        more: facts.opportunities.items.length > OVERVIEW_LIMITS.opportunities,
+      }
       : null,
     certificates: facts.certificates.map((certificate) => ({ ...certificate, href: `/certificate/${encodeURIComponent(certificate.id)}` })),
   };

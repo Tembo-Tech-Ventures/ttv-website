@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CommunityConfirmation, CommunityJourney } from "@/lib/community/model";
 import { STUDENT_DASHBOARD_LINK_IDS } from "@/lib/student/journey";
-import { joinNames, OVERVIEW_LIMITS, profileOverview, projectState, summarise, type OverviewFacts } from "./overview";
+import { joinNames, opportunityAnchor, OVERVIEW_LIMITS, profileOverview, projectState, summarise, type OverviewFacts } from "./overview";
 
 function confirmation(journeyVersion: number, mentorName: string, id = `${mentorName}-${journeyVersion}`): CommunityConfirmation {
   return { id, journeyId: "j", mentorId: `mentor-${mentorName}`, mentorName, statement: "Checked.", method: "Review", journeyVersion, mentorRole: "MENTOR", createdAt: 1 };
@@ -171,6 +171,9 @@ describe("profileOverview for an alumna", () => {
     const model = profileOverview({ ...ALUMNA, opportunities: { gate: "published", items } });
     expect(model.opportunities?.items).toHaveLength(OVERVIEW_LIMITS.opportunities);
     expect(model.opportunities?.items[0]!.interested).toBe(true);
+    // "Raise hand" opens the project's own card on the Opportunities page, where the hand is raised.
+    expect(model.opportunities?.items[1]!.href).toBe("/dashboard/me/opportunities#project-p1");
+    expect(opportunityAnchor("a b/c")).toBe("project-a%20b%2Fc");
     expect(model.opportunities?.more).toBe(true);
     expect(profileOverview({ ...ALUMNA, opportunities: { gate: "not_published", items: [] } }).opportunities).toBeNull();
   });
@@ -193,6 +196,13 @@ describe("profileOverview without a public profile", () => {
     for (const journeyState of ["pending", "accepted", "audit"] as const) {
       expect(profileOverview({ ...MEMBER, journeyState }).noProfile?.action).toBeNull();
     }
+  });
+
+  it("shows a profile that exists as it is, even after the completion behind it changed", () => {
+    const model = profileOverview({ ...ALUMNA, eligible: false });
+    expect(model.card?.status.label).toBe("Published");
+    expect(model.noProfile).toBeNull();
+    expect(model.actions).toEqual({ view: "/talent/achieng-otieno", edit: { href: "/dashboard/me/portfolio", label: "Edit" } });
   });
 
   it("invites a graduate without a profile to create one", () => {

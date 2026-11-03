@@ -65,10 +65,15 @@ async function profileFacts(db: Database, userId: string) {
   };
 }
 
-/** The approved client projects the Opportunities page lists, with the person's raised hands, while its gate is open. */
-async function opportunityFacts(db: Database, profile: { id: string; status: "DRAFT" | "PUBLISHED" | "SUSPENDED" } | null) {
+/**
+ * The approved client projects the Opportunities page lists, with the person's raised hands, read
+ * only while that page is open to them: their journey has unlocked it (`open`) and its own gate,
+ * a published profile, lets them in. Otherwise nothing is read, so no title or organisation can
+ * reach someone the Opportunities page would refuse.
+ */
+export async function opportunityFacts(db: Database, profile: { id: string; status: "DRAFT" | "PUBLISHED" | "SUSPENDED" } | null, open: boolean) {
   const gate = resolveGateState(profile).state;
-  if (gate !== "published" || !profile) return { gate, items: [] };
+  if (!open || gate !== "published" || !profile) return { gate, items: [] };
   const [projects, interests] = await Promise.all([
     db.query.clientProject.findMany({
       where: eq(schema.clientProject.status, "APPROVED"),
@@ -96,7 +101,7 @@ export async function loadProfileOverview(
     ownJourney(locals, userId),
     loadCertificates(db, userId),
   ]);
-  const opportunities = await opportunityFacts(db, own.profile);
+  const opportunities = await opportunityFacts(db, own.profile, journey.visibleLinkIds.includes("opportunities"));
   const profile = own.profile;
   return {
     person: { id: userId, name: me.user.name, image: me.user.avatarUrl },

@@ -157,7 +157,7 @@ const NEED_ICONS: Record<NeedIcon, typeof PiEnvelopeSimple> = {
                   </span>
                   {item.interested
                     ? <Chip tone="ring">Hand raised</Chip>
-                    : <a href={SPACE_PAGE_PATHS.opportunities} aria-label={`Raise hand for ${item.title}`} class:list={[ROW_ACTION, "-mr-3"]}>Raise hand</a>}
+                    : <a href={item.href} aria-label={`Raise hand on Opportunities: ${item.title}`} class:list={[ROW_ACTION, "-mr-3"]}>Raise hand</a>}
                 </li>
               ))}
             </ul>
