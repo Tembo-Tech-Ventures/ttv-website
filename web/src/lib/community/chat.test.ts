@@ -211,6 +211,16 @@ it("ends a run cancelled while a tool executes as limited without asking the mod
   expect(result.execution).toMatchObject({modelSteps:1,executedToolCalls:1});
  } finally { timeout.mockRestore(); }
 });
+it("fails a run whose single step times out before the total deadline, as the Mastra loop did", async () => {
+ vi.useFakeTimers();
+ try {
+  const run = vi.fn((_model: string, _body: unknown, options: { signal: AbortSignal }) => new Promise((_resolve, reject) => { options.signal.addEventListener("abort", () => reject(options.signal.reason)); }));
+  const settled = runCommunityChat({...env,AI:{run}} as unknown as Env,service(),{message:"hello"}).catch((error: unknown) => error);
+  await vi.advanceTimersByTimeAsync(20_001);
+  expect(await settled).toEqual(new Error("Community chat unavailable."));
+  expect(run).toHaveBeenCalledOnce();
+ } finally { vi.useRealTimers(); }
+});
 it("still fails a run whose provider errors after a tool step", async () => {
  complete.mockResolvedValueOnce({content:null,toolCalls:[call("get_own_profile",{})]}).mockRejectedValueOnce(new Error("PRIVATE provider body"));
  await expect(runCommunityChat(env,service(),{message:"hello"})).rejects.toThrow("Community chat unavailable.");

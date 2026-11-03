@@ -74,7 +74,8 @@ export async function runCommunityAgent(env: Env, messages: GatewayMessage[], de
     return { content: result.finishReason === "stop" ? result.text : null, limited: limited || result.finishReason !== "stop",
       execution: { model: COMMUNITY_CHAT_MODEL, modelSteps: steps, executedToolCalls: executed } };
   } catch {
-    // A cancelled or timed-out run is limited, not failed: it yields no answer.
+    // A run cancelled by its 60s total deadline is limited, not failed: it yields no answer.
+    // A single step that times out (20s) aborts only that call, and fails like any provider error.
     if (abortSignal.aborted) return { content: null, limited: true, execution: { model: COMMUNITY_CHAT_MODEL, modelSteps: steps, executedToolCalls: executed } };
     // SDK errors can retain prompts, tool results, response bodies and credentials.
     throw new Error("Community chat unavailable.");
