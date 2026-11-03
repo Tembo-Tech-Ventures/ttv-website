@@ -49,7 +49,7 @@ const harness = { account: { signOut: { kind: "link", href: "#signed-out", label
 
 {
   attentionPage ? (
-    <SpacesLayout me={me} space={space} title="Attention" overlays={["search", "attention"]} harness={harness}>
+    <SpacesLayout me={me} space={space} outsideSpaces title="Attention" overlays={["search", "attention"]} harness={harness}>
       <AttentionPage client:load me={me} initialList={harnessAttentionPage(scenario)} harness={scenario} />
       <PlatformOverlays slot="overlays" client:load me={me} attention={false} harness={scenario} />
     </SpacesLayout>

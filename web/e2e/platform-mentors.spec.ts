@@ -114,6 +114,9 @@ for (const viewport of [DESKTOP, PHONE]) {
 test("withdrawing shows at once and puts the request back when the server refuses", async ({ page }) => {
   await page.setViewportSize(DESKTOP);
   await open(page, harness({ view: "directory" }));
+  // Your requests is folded to one line above the directory (T06); it opens to show each request.
+  await expect(page.locator("[data-own-requests-summary]")).toContainText("waiting");
+  await page.locator("[data-own-requests-fold] > summary").click();
   const row = page.locator("[data-own-request][data-status=PENDING]").first();
   await expect(row).toBeVisible();
   await page.evaluate(() => window.__mentorsHarness!.refuseWrites(1, 503, "unavailable"));
