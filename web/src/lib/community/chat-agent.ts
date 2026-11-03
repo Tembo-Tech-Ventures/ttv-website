@@ -1,6 +1,4 @@
-import { Agent } from "@mastra/core/agent";
-import { noopLogger } from "@mastra/core/logger";
-import { createTool } from "@mastra/core/tools";
+import { generateText, stepCountIs, tool, type ToolSet } from "ai";
 import { createAI } from "agents/models/ai-sdk";
 import { z } from "zod";
 import type { GatewayMessage, ToolDefinition } from "../ai/gateway";
@@ -8,7 +6,10 @@ import { requireCommunityGateway } from "./native-gateway";
 
 export const COMMUNITY_CHAT_MODEL = "@cf/zai-org/glm-5.3-flash";
 
-/** Request-local agent: no persistence, exporters, provider keys or model fallbacks. */
+/**
+ * Request-local tool loop on the AI SDK: no persistence, exporters, provider
+ * keys or model fallbacks (docs/community-evidence-assessments.md).
+ */
 export async function runCommunityAgent(env: Env, messages: GatewayMessage[], definitions: ToolDefinition[], execute: (name: string, args: string) => Promise<string>) {
   requireCommunityGateway(env);
   let steps = 0, calls = 0, executed = 0, limited = false;
@@ -35,19 +36,21 @@ export async function runCommunityAgent(env: Env, messages: GatewayMessage[], de
   const boundedModel = {
     specificationVersion: model.specificationVersion, provider: model.provider, modelId: model.modelId, supportedUrls: model.supportedUrls,
     doGenerate: (options: Parameters<typeof model.doGenerate>[0]) => {
+      abortSignal.throwIfAborted();
       if (++steps > 3) throw new Error("Chat step limit.");
       return model.doGenerate(options);
     },
     doStream: (options: Parameters<typeof model.doStream>[0]) => {
+      abortSignal.throwIfAborted();
       if (++steps > 3) throw new Error("Chat step limit.");
       return model.doStream(options);
     },
   };
-  const tools = Object.fromEntries(definitions.map(({ function: definition }) => [definition.name, createTool({
-    id: definition.name, description: definition.description,
+  const tools: ToolSet = Object.fromEntries(definitions.map(({ function: definition }) => [definition.name, tool({
+    description: definition.description,
     inputSchema: z.fromJSONSchema(definition.parameters as z.core.JSONSchema.JSONSchema),
     execute: async args => {
-      // Mastra may execute calls concurrently. Reserve synchronously before awaiting.
+      // The SDK may execute calls concurrently. Reserve synchronously before awaiting.
       if (steps >= 3 || calls >= 6) { limited = true; return { error: "Tool limit reached. Do not infer missing evidence." }; }
       const serialized = JSON.stringify(args);
       if (serialized.length > 4000) return { error: "Tool input exceeds limit." };
@@ -61,16 +64,19 @@ export async function runCommunityAgent(env: Env, messages: GatewayMessage[], de
       return result;
     },
   })]));
-  const agent = new Agent({ id: "community-chat", name: "Community evidence chat", instructions: messages[0].content ?? "", model: boundedModel, tools });
-  agent.__setLogger(noopLogger);
   try {
-    const result = await agent.generate(messages.slice(1).map(message => ({ role: "user" as const, content: message.content ?? "" })), {
-      maxSteps: 3, maxProcessorRetries: 0, abortSignal,
-      modelSettings: { maxOutputTokens: 1200, temperature: 0, maxRetries: 0, timeout: { stepMs: 20_000, totalMs: 60_000 } },
+    const result = await generateText({
+      model: boundedModel, system: messages[0].content ?? "", tools,
+      messages: messages.slice(1).map(message => ({ role: "user" as const, content: message.content ?? "" })),
+      stopWhen: stepCountIs(3), abortSignal, maxOutputTokens: 1200, temperature: 0, maxRetries: 0,
+      timeout: { stepMs: 20_000, totalMs: 60_000 },
     });
     return { content: result.finishReason === "stop" ? result.text : null, limited: limited || result.finishReason !== "stop",
       execution: { model: COMMUNITY_CHAT_MODEL, modelSteps: steps, executedToolCalls: executed } };
   } catch {
+    // A run cancelled by its 60s total deadline is limited, not failed: it yields no answer.
+    // A single step that times out (20s) aborts only that call, and fails like any provider error.
+    if (abortSignal.aborted) return { content: null, limited: true, execution: { model: COMMUNITY_CHAT_MODEL, modelSteps: steps, executedToolCalls: executed } };
     // SDK errors can retain prompts, tool results, response bodies and credentials.
     throw new Error("Community chat unavailable.");
   }
