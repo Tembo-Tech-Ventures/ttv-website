@@ -207,18 +207,20 @@ test.describe("admin review surfaces", () => {
 
     if (isMobile) return;
 
-    const badge = page.locator(".flex.items-center.gap-3 span").first();
+    // The page's own content: the Admin space's sidebar (T14) has matching spans of its own.
+    const main = page.locator("main");
+    const badge = main.locator(".flex.items-center.gap-3 span").first();
     const statusText = (await badge.textContent())?.trim().toUpperCase() ?? "";
 
     if (statusText === "PENDING") {
-      await page.getByRole("button", { name: /approve/i }).click();
+      await main.getByRole("button", { name: /approve/i }).click();
       await expect(
-        page.locator("span", { hasText: /approved/i }).first(),
+        main.locator("span", { hasText: /approved/i }).first(),
       ).toBeVisible();
     }
 
     await expect(
-      page.locator("span", { hasText: /approved/i }).first(),
+      main.locator("span", { hasText: /approved/i }).first(),
     ).toBeVisible();
 
     await page.screenshot({

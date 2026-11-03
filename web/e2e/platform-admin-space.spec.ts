@@ -204,10 +204,10 @@ test.describe("every admin page", () => {
 
 test.describe("staff only", () => {
   for (const who of ["student", "alumna", "mentor", "community", "institution"] as const) {
-    test(`${who}: neither admin page opens, and there is no Admin tab`, async ({ page, baseURL }) => {
+    test(`${who}: no admin page opens, and there is no Admin tab`, async ({ page, baseURL }) => {
       test.skip(!wide(page), "Access is the same at every width.");
       await as(page, baseURL!, who);
-      for (const path of ["/admin", "/admin/moderation"]) {
+      for (const path of ["/admin", "/admin/moderation", "/admin/users", "/admin/platform-flags"]) {
         const response = await page.request.get(path, { maxRedirects: 0 });
         expect([302, 303], `${who} ${path}`).toContain(response.status());
         expect(new URL(response.headers().location!, baseURL).pathname, `${who} ${path}`).toBe("/dashboard");
@@ -217,9 +217,9 @@ test.describe("staff only", () => {
     });
   }
 
-  test("signed out: both pages send you to sign in", async ({ page }) => {
+  test("signed out: every admin page sends you to sign in", async ({ page }) => {
     test.skip(!wide(page), "Access is the same at every width.");
-    for (const path of ["/admin", "/admin/moderation"]) {
+    for (const path of ["/admin", "/admin/moderation", "/admin/users", "/admin/platform-flags"]) {
       const response = await page.request.get(path, { maxRedirects: 0 });
       expect([302, 303], path).toContain(response.status());
       expect(response.headers().location, path).toMatch(/\/auth\/login/);
