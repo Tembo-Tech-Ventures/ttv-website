@@ -22,6 +22,9 @@ A traced response gets:
   the page read while it streamed. `ttv-perf=detail` adds each query's SQL text (never its
   parameters).
 
+Staging is traced too when asked. Only query text is ever shown, never bound values; keep it so by
+never putting data into `sql.raw`.
+
 The trace reports two round-trip counts:
 - **waves** (PERF-1's definition): queries that started after every earlier query had finished;
 - **depth**: the longest chain of queries where each started after another had finished. It is the
@@ -45,7 +48,9 @@ It runs each journey `PERF_REPS` times (3 in CI) at the runner's own speed (`fas
 - JS files and bytes, and main-thread script time;
 - the server trace.
 
-The results go to `test-results/perf/*.json`.
+The results go to `test-results/perf/*.json`. A step the environment can't offer is listed as skipped,
+with the reason, rather than dropped. On previews the personas are agent sessions, which can't agree
+to the habits, so no thread may exist to open.
 
 To run it on a pull request's `agent-pr-<n>` preview, label the PR `perf` and push. The preview job
 then runs the harness after the e2e suite, which adds about 4 minutes. It writes the summary to the

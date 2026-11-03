@@ -56,6 +56,30 @@ describe("tracePerf", () => {
     ]);
   });
 
+  it("counts a method that calls another once, and reads the region of this request's results", async () => {
+    const { db } = database();
+    // As on D1, all() carries meta with the region; raw() here answers through all(), as some drivers do.
+    const region = (name: string) => ({
+      prepare: (sql: string) => {
+        const statement = db.prepare(sql);
+        return Object.assign(statement, {
+          async all() { return { results: [], success: true, meta: { served_by_region: name, served_by_primary: true } }; },
+          async raw(this: D1PreparedStatement) { return (await this.all()).results; },
+        });
+      },
+      batch: db.batch,
+    } as unknown as D1Database);
+    const weur = region("WEUR");
+    const { summary } = await tracePerf(weur, async () => { await weur.prepare("SELECT 1").raw(); });
+    expect(summary.queries?.map(({ kind }) => kind)).toEqual(["raw"]);
+    // raw() rows carry no meta, so they name no region.
+    expect(summary.d1Region).toBeNull();
+    expect((await tracePerf(weur, () => weur.prepare("SELECT 1").all())).summary.d1Region).toBe("WEUR");
+    const wnam = region("WNAM");
+    expect((await tracePerf(wnam, () => wnam.prepare("SELECT 1").all())).summary.d1Region).toBe("WNAM");
+    expect((await tracePerf(db, () => read(db, 1))).summary.d1Region).toBeNull();
+  });
+
   it("records nothing outside a trace and keeps each trace to its own calls", async () => {
     const { db } = database();
     await read(db, 1);

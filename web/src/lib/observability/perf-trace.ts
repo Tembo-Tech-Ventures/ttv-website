@@ -36,6 +36,8 @@ interface Trace {
   phases: Partial<Record<PerfPhase, PhaseStats>>;
   queries: PerfQuery[];
   finishedDepth: number;
+  /** Where D1 answered this request from, from the first result that says (all, run and batch do). */
+  region: string | null;
   cold: boolean;
   detail: boolean;
 }
@@ -43,7 +45,7 @@ interface Trace {
 export interface PerfSummary {
   /** The first request this isolate served: module load and cold-start work included. */
   cold: boolean;
-  /** Where D1 answered from, once seen (its result meta). */
+  /** Where D1 answered this request from: null when no result carried D1's meta (first and raw do not). */
   d1Region: string | null;
   d1: number;
   /** Queries that started after every earlier one had finished (PERF-1's definition). */
@@ -67,12 +69,11 @@ function stats(trace: Trace, phase: PerfPhase): PhaseStats {
   return (trace.phases[phase] ??= { ms: 0, d1: 0, d1ms: 0 });
 }
 
-let servedBy: string | null = null;
-function noteRegion(result: unknown) {
-  if (servedBy) return;
+/** D1's own meta, on all(), run() and batch() results: which region and replica answered. */
+function regionOf(result: unknown): string | null {
   const meta = (result as { meta?: { served_by_region?: string; served_by_primary?: boolean; served_by?: string } } | null)?.meta;
-  if (!meta?.served_by_region && !meta?.served_by) return;
-  servedBy = `${meta.served_by_region ?? "?"}${meta.served_by_primary === false ? " (replica)" : ""} ${meta.served_by ?? ""}`.trim();
+  if (!meta?.served_by_region && !meta?.served_by) return null;
+  return `${meta.served_by_region ?? "?"}${meta.served_by_primary === false ? " (replica)" : ""} ${meta.served_by ?? ""}`.trim();
 }
 
 /** FNV-1a over the whole statement: the same SQL text twice in one request is a repeated read. */
@@ -90,7 +91,7 @@ async function timed<T>(kind: string, sql: string, call: () => Promise<T>): Prom
   const depth = trace.finishedDepth + 1;
   try {
     const result = await inCall.run(true, call);
-    noteRegion(Array.isArray(result) ? result[0] : result);
+    trace.region ??= regionOf(Array.isArray(result) ? result[0] : result);
     return result;
   } finally {
     const ms = performance.now() - startedAt;
@@ -178,7 +179,7 @@ export function firstRequestOfIsolate(): boolean {
 }
 
 function newTrace(detail: boolean, cold: boolean): Trace {
-  return { start: performance.now(), headersAt: null, phases: {}, queries: [], finishedDepth: 0, cold, detail };
+  return { start: performance.now(), headersAt: null, phases: {}, queries: [], finishedDepth: 0, region: null, cold, detail };
 }
 
 /** Round trips by start time: a query that starts after every earlier one has finished begins a new wave. */
@@ -196,7 +197,7 @@ function summarize(trace: Trace, end: number): PerfSummary {
   const queries = trace.queries.filter((query) => query.at <= end - trace.start);
   return {
     cold: trace.cold,
-    d1Region: servedBy,
+    d1Region: trace.region,
     d1: queries.length,
     waves: sequentialWaves(queries),
     depth: queries.reduce((deepest, query) => Math.max(deepest, query.depth), 0),

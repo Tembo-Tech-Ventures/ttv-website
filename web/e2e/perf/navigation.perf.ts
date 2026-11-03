@@ -8,7 +8,8 @@
  * trace (D1 queries, sequential waves and depth, phases) from
  * src/lib/observability/perf-trace.ts, which the `ttv-perf` cookie asks for.
  *
- * PERF_REPS repeats each journey; PERF_PROFILES picks `fast` and/or `throttled`.
+ * PERF_REPS repeats each journey; PERF_PROFILES picks `fast` and/or `throttled`. A step the
+ * environment cannot offer (no thread to open, no status form) is recorded as skipped, with why.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -49,7 +50,9 @@ interface Step {
   doc?: Record<string, number | string | null>; js?: { count: number; transfer: number; decoded: number };
   scriptMs?: number; taskMs?: number; server?: unknown; serverTiming?: unknown;
 }
-const results: Step[] = [];
+/** A step that could not run in this environment, kept so the summary says so instead of dropping it. */
+interface Skipped { journey: string; step: string; profile: ProfileName; rep: number; skipped: string }
+const results: (Step | Skipped)[] = [];
 
 async function metrics(cdp: CDPSession): Promise<Record<string, number>> {
   const { metrics: list } = await cdp.send("Performance.getMetrics");
@@ -139,6 +142,16 @@ class Journey {
     });
   }
 
+  /** A step this environment may not offer: when it cannot run, the summary lists it as skipped, with why. */
+  async optional(name: string, run: () => Promise<void>) {
+    try {
+      await run();
+    } catch (error) {
+      const reason = String(error).split("\n")[0]!.slice(0, 200);
+      results.push({ journey: this.journey, step: name, profile: this.profile, rep: this.rep, skipped: reason });
+    }
+  }
+
   /** Clicks the first link matching `selector` like a person: point, dwell, click. Falls back to goto. */
   async click(selector: string, fallback?: string): Promise<string> {
     const link = this.page.locator(selector).filter({ visible: true }).first();
@@ -188,47 +201,22 @@ async function throttle(page: Page, profile: ProfileName): Promise<CDPSession> {
   return cdp;
 }
 
-/** Untimed: the student has agreed to the code of conduct and their cohort channel has a thread to open. */
-async function seedThread(page: Page, baseURL: string): Promise<string | null> {
-  const list = await page.request.get("/api/channels");
-  if (!list.ok()) return null;
-  const { items } = await list.json() as { items: { id: string; slug: string; kind: string }[] };
-  const channel = items.find(c => c.kind === "COHORT" && !c.slug.endsWith("announcements")) ?? items.find(c => c.kind === "COMMUNITY");
-  if (!channel) return null;
-  const href = `/dashboard/${channel.kind === "COHORT" ? "cohort" : "community"}/c/${channel.slug}`;
-  // Agree to the code of conduct through its own form, wherever the page offers it.
-  for (const target of [href, "/dashboard/community/conduct"]) {
-    await page.goto(target);
-    const agree = page.locator("form[data-conduct-agree] button[type='submit'], form[data-conduct-agree] button").first();
-    if (await agree.isVisible().catch(() => false)) { await agree.click(); await page.waitForLoadState("load"); break; }
-  }
-  const post = (body: string, parentId: string | null) => page.request.post(`/api/channels/${channel.id}/messages`, {
-    headers: { origin: new URL(baseURL).origin }, data: { body, clientNonce: `perf-${Date.now()}-${Math.random().toString(36).slice(2)}`, parentId, embeds: [] },
-  });
-  const root = await post("Perf check: a thread to open (synthetic, preview only).", null);
-  console.log(`perf seed: ${href} root ${root.status()} ${root.ok() ? "" : (await root.text()).slice(0, 160)}`);
-  if (!root.ok()) return href;
-  const { id } = await root.json() as { id: string };
-  await post("A reply in the thread.", id);
-  return href;
-}
-
 for (const profile of SELECTED) {
   test.describe(profile, () => {
     test(`student: overview → channel → thread → community → mentors → ask → account post`, async ({ browser, baseURL }) => {
-      let channel: string | null = null;
       for (let rep = 1; rep <= REPS; rep++) {
         const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
         if (!await begin(context, baseURL!, "student")) { await context.close(); return; }
         const page = await context.newPage();
-        if (rep === 1) { const seed = await context.newPage(); channel = await seedThread(seed, baseURL!); await seed.close(); }
         const cdp = await throttle(page, profile);
         const j = new Journey(page, cdp, "student", profile, rep);
         await j.step("overview (cold load)", async () => { await page.goto("/dashboard/cohort", { waitUntil: "commit" }); return "goto"; });
-        await j.step("cohort channel", () => j.click(channel ? `a[href="${channel}"]` : 'a[href^="/dashboard/cohort/c/"]', channel ?? "/dashboard/community/c/design-crit"));
-        await j.step("thread", () => j.click('a[href^="?thread="]'), async p => {
+        await j.step("cohort channel", () => j.click('a[href^="/dashboard/cohort/c/"]', "/dashboard/community/c/design-crit"));
+        // Opening a thread is client-side (?thread= pushState). It needs a thread already in the channel:
+        // preview personas are agent sessions, which may not agree to the habits, so they cannot post one.
+        await j.optional("thread", () => j.step("thread", () => j.click('a[href^="?thread="]'), async p => {
           await p.locator('[data-thread="open"]').first().waitFor({ timeout: 60_000 });
-        }).catch(error => test.info().annotations.push({ type: "thread", description: String(error).slice(0, 200) }));
+        }));
         await j.step("community", () => j.click('a[href="/dashboard/community"]', "/dashboard/community"));
         await j.step("mentors", () => j.click('a[href="/dashboard/community/mentors"]', "/dashboard/community/mentors"));
         await j.step("cohort tab", () => j.click('a[href="/dashboard/cohort"]', "/dashboard/cohort"));
@@ -256,7 +244,7 @@ for (const profile of SELECTED) {
         await j.step("applications", () => j.click('a[href="/admin/applications"]', "/admin/applications"));
         // A pending application, so it has a status form to post (any application otherwise).
         await j.step("application detail", () => j.click('main tr:has-text("PENDING") a[href^="/admin/applications/"], main a[href^="/admin/applications/"]:not([href$="/applications/"])'));
-        await j.step("status post", async () => {
+        await j.optional("status post", () => j.step("status post", async () => {
           // A stale expectedStatus: the full POST pipeline (guards, form, reads, render) runs and the
           // page answers "changed, refresh", so the preview's applications stay as the e2e suite left them.
           const form = page.locator("form:has(input[name='expectedStatus'])").first();
@@ -267,7 +255,7 @@ for (const profile of SELECTED) {
           page.once("dialog", dialog => dialog.accept());
           await form.locator("button[type='submit']").click({ noWaitAfter: true });
           return "post";
-        }).catch(error => test.info().annotations.push({ type: "status", description: String(error).slice(0, 200) }));
+        }));
         await context.close();
       }
     });

@@ -20,4 +20,11 @@ describe("summarize", () => {
     expect(summarize(after, before)).toContain("| cohort tab | 3 | 1000 (1100) → 650 (700) |");
     expect(summarize(after, [])).toContain("| cohort tab | 3 | – → 650 (700) |");
   });
+
+  it("lists a step that could not run as skipped, with why, instead of dropping it", () => {
+    const skipped = { profile: "fast", journey: "student", step: "thread", skipped: "Error: No link for a[href^=\"?thread=\"]" };
+    const ran = row("thread", 70, 0, 0, 0, 0);
+    expect(summarize([skipped, skipped])).toContain('| thread | 0 (2 skipped) | skipped: Error: No link for a[href^="?thread="] |');
+    expect(summarize([ran, skipped])).toContain("| thread | 1 (1 skipped) | 70 (70) |");
+  });
 });

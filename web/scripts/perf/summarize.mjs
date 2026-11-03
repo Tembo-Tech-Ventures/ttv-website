@@ -37,8 +37,11 @@ function groups(rows) {
   return byJourney;
 }
 
+/** Rows that ran; a skipped step has no timings. */
+const measured = (rows) => rows?.filter((row) => !row.skipped);
+
 const cell = (list, read) => {
-  if (!list) return "";
+  if (!list || list.length === 0) return "";
   const median = quantile(list.map(read), 0.5);
   return median === null ? "" : `${median} (${quantile(list.map(read), 0.75)})`;
 };
@@ -49,10 +52,14 @@ export function summarize(rows, baselineRows = null) {
   for (const [key, steps] of groups(rows)) {
     lines.push("", `### ${key}`, "", "Median (p75)." + (baseline ? " Baseline → this run." : ""), "");
     lines.push(`| step | n | ${COLUMNS.map(([name]) => name).join(" | ")} |`, `|---|---|${COLUMNS.map(() => "---|").join("")}`);
-    for (const [step, list] of steps) {
-      const before = baseline?.get(key)?.get(step);
-      const cells = COLUMNS.map(([, read]) => baseline ? `${cell(before, read) || "–"} → ${cell(list, read)}` : cell(list, read));
-      lines.push(`| ${step} | ${list.length} | ${cells.join(" | ")} |`);
+    for (const [step, stepRows] of steps) {
+      const list = measured(stepRows);
+      const skipped = stepRows.filter((row) => row.skipped);
+      const before = measured(baseline?.get(key)?.get(step));
+      const cells = list.length === 0
+        ? [`skipped: ${skipped[0].skipped}`, ...COLUMNS.slice(1).map(() => "")]
+        : COLUMNS.map(([, read]) => baseline ? `${cell(before, read) || "–"} → ${cell(list, read)}` : cell(list, read));
+      lines.push(`| ${step} | ${list.length}${skipped.length > 0 ? ` (${skipped.length} skipped)` : ""} | ${cells.join(" | ")} |`);
     }
   }
   return lines.join("\n");
