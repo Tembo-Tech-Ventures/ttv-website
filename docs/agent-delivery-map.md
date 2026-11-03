@@ -75,11 +75,25 @@ An object arriving after the check must make bucket deletion fail, leaving the
 remaining resources intact.
 
 The [R2 list API](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/subresources/objects/methods/list/)
-marks pagination metadata optional. Teardown deliberately requires a successful
-response with an explicit boolean `is_truncated`, no continuation cursor and no
-delimited prefixes before treating an empty listing as complete. Missing metadata
-therefore blocks cleanup even if the bucket may be empty. Only the R2 bucket-not-found
+marks pagination metadata optional, and for an empty bucket Cloudflare omits
+`result_info` entirely (HTTP 200, `success: true`, `result: []`). Requiring
+`is_truncated` there failed every PR-close teardown from about 2026-10-24 until
+the owner decided, on 2026-11-03, that teardown treats a bucket as empty when:
+
+- the response is HTTP 200 with `success: true` and a `result` array;
+- that first page has zero objects;
+- `result_info` is absent, or is an object whose `is_truncated` is `false` or
+  absent, with no non-empty `cursor` and no delimited prefixes.
+
+Everything else still blocks before any deletion: any object, any cursor,
+`is_truncated: true` or a non-boolean value, delimited prefixes, malformed
+`result_info` (including `null`), a missing or non-`true` `success`, a
+non-array `result`, an unreadable body, or a failed request. A page that returns
+objects must carry `is_truncated: false` to count as complete, and teardown
+then still refuses because the bucket isn't empty. Only the R2 bucket-not-found
 404 code `10006` is accepted as already absent; other failures preserve the stack.
+Cloudflare also refuses to delete a non-empty bucket, so an object written
+after the check still stops teardown at the bucket, before the other resources.
 
 ## The production merge path
 

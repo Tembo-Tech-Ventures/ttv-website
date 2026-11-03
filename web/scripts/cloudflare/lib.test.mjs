@@ -566,6 +566,34 @@ describe("environment cleanup", () => {
     );
   });
 
+  it("reads Cloudflare's empty listing without result_info as a complete empty page", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({ success: true, errors: [], messages: [], result: [] })
+      )
+    );
+    await expect(
+      listR2BucketObjectsPage("ttv-files-agent-one", undefined, {
+        requireCompleteMetadata: true,
+      })
+    ).resolves.toEqual({ objects: [], cursor: undefined, isTruncated: false });
+  });
+
+  it("requires explicit completion metadata once a listing returns objects", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({ success: true, result: [{ key: "a" }] })
+      )
+    );
+    await expect(
+      listR2BucketObjectsPage("ttv-files-agent-one", undefined, {
+        requireCompleteMetadata: true,
+      })
+    ).rejects.toThrow("R2 listing completion metadata could not be verified.");
+  });
+
   it("treats a missing R2 bucket as an absent object page", async () => {
     vi.stubGlobal(
       "fetch",
