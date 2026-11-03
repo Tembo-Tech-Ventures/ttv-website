@@ -1,10 +1,14 @@
 import { Container } from "@cloudflare/containers";
 export { ContainerProxy } from "@cloudflare/containers";
 import { handle } from "@astrojs/cloudflare/handler";
-import { processRecordingMessage } from "@/lib/recordings/pipeline";
-import { syncEnabledRecordingImportSources } from "@/lib/recordings/importer";
-import { pushAlerts } from "@/lib/observability/alerts";
 import { recordError } from "@/lib/observability/errors";
+import type { syncEnabledRecordingImportSources } from "@/lib/recordings/importer";
+
+// The recording pipeline, Drive import and alert push run only on queue and
+// cron events, so they load on first use and stay out of every isolate's start.
+const loadPipeline = () => import("@/lib/recordings/pipeline");
+const loadImporter = () => import("@/lib/recordings/importer");
+const loadAlerts = () => import("@/lib/observability/alerts");
 
 export class FfmpegContainer extends Container<Env> {
   defaultPort = 8080;
@@ -118,6 +122,8 @@ export async function processRecordingQueue(
 ) {
   for (const message of batch.messages) {
     try {
+      // Inside the try, so a pipeline that fails to load is recorded like one that fails to run.
+      const { processRecordingMessage } = await loadPipeline();
       await processRecordingMessage(message.body, env);
       message.ack();
     } catch (error) {
@@ -136,7 +142,8 @@ export async function runScheduledTasks(env: Env) {
   let importFailure: unknown;
   let summaries: Awaited<ReturnType<typeof syncEnabledRecordingImportSources>> = [];
   try {
-    summaries = await syncEnabledRecordingImportSources(env);
+    const importer = await loadImporter();
+    summaries = await importer.syncEnabledRecordingImportSources(env);
   } catch (error) {
     importFailure = error;
     await recordError(env.DB, {
@@ -148,6 +155,7 @@ export async function runScheduledTasks(env: Env) {
   }
 
   try {
+    const { pushAlerts } = await loadAlerts();
     await pushAlerts(env);
   } catch (error) {
     await recordError(env.DB, {
