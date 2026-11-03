@@ -21,6 +21,8 @@ interface Trace {
   queries: { phase: PerfPhase; kind: string; at: number; ms: number; sql: string }[];
   /** The first request this isolate served: module load and cold-start work included. */
   cold: boolean;
+  /** Query text only when the harness asks (`ttv-perf=…detail`): pages must never show SQL otherwise. */
+  detail: boolean;
 }
 
 const traces = new AsyncLocalStorage<Trace>();
@@ -83,9 +85,10 @@ export function perfTraceEnabled(environment: string | undefined): boolean {
 }
 
 /** Runs the whole request inside a trace. */
-export function withPerfTrace(db: D1Database, run: () => Promise<Response>): Promise<Response> {
+export function withPerfTrace(db: D1Database, request: Request, run: () => Promise<Response>): Promise<Response> {
   installD1Probe(db);
-  const trace: Trace = { start: performance.now(), headersAt: null, phases: {}, queries: [], cold: served++ === 0 };
+  const detail = /(?:^|;\s*)ttv-perf=[^;]*\bdetail\b/.test(request.headers.get("cookie") ?? "");
+  const trace: Trace = { start: performance.now(), headersAt: null, phases: {}, queries: [], cold: served++ === 0, detail };
   return traces.run(trace, async () => {
     const response = await run();
     trace.headersAt = performance.now();
@@ -127,7 +130,7 @@ function summary(trace: Trace, end: number) {
     d1,
     d1Ms: round(trace.queries.reduce((sum, query) => sum + query.ms, 0)),
     phases: Object.fromEntries(Object.entries(trace.phases).map(([name, value]) => [name, { ms: round(value.ms), d1: value.d1, d1ms: round(value.d1ms) }])),
-    queries: trace.queries,
+    queries: trace.detail ? trace.queries : undefined,
   };
 }
 

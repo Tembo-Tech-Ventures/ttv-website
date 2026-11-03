@@ -171,7 +171,8 @@ async function begin(context: BrowserContext, baseURL: string, key: PersonaKey, 
   const session = personaSession(key);
   if (typeof session === "string") { test.info().annotations.push({ type: "skip", description: `${key}: ${session}` }); return false; }
   await signIn(context, baseURL, session);
-  await context.addCookies([{ name: "ttv-perf", value: variant, url: baseURL }]);
+  // `detail` asks the server trace for its query list; without it pages never carry SQL.
+  await context.addCookies([{ name: "ttv-perf", value: `${variant}.detail`, url: baseURL }]);
   await context.addInitScript(INIT);
   return true;
 }
@@ -203,6 +204,7 @@ async function seedThread(page: Page, baseURL: string): Promise<string | null> {
     headers: { origin: new URL(baseURL).origin }, data: { body, clientNonce: `perf-${Date.now()}-${Math.random().toString(36).slice(2)}`, parentId, embeds: [] },
   });
   const root = await post("Perf check: a thread to open (synthetic, preview only).", null);
+  console.log(`perf seed: ${href} root ${root.status()} ${root.ok() ? "" : (await root.text()).slice(0, 160)}`);
   if (!root.ok()) return href;
   const { id } = await root.json() as { id: string };
   await post("A reply in the thread.", id);
