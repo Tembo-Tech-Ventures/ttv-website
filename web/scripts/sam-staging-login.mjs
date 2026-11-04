@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
  * which puts a five-minute SAM_OIDC_TOKEN in this process only:
  *
  *   node scripts/sam-staging-login.mjs <persona> [--ttl=60] [--out=/tmp/ttv-sam-login]
- *   node scripts/sam-staging-login.mjs --revoke         # end every live login you made
+ *   node scripts/sam-staging-login.mjs --revoke         # end your live logins, remove your newcomers
  *
  * Personas: newcomer, applicant, student, alumna, community, mentor, institution, admin.
  * The session cookie goes only into a Playwright storage-state file (<out>/<persona>.json,
@@ -57,7 +57,7 @@ export async function run(options, { environment = process.env, fetchImpl = fetc
     const hint = response.status === 404 ? " (SAM login is not enabled on this site, or the origin is wrong)" : "";
     throw new Error(`SAM login failed with ${response.status}${hint}: ${body.error ?? "no details"}`);
   }
-  if (options.revoke) return { revoked: body.revoked };
+  if (options.revoke) return { revoked: body.revoked, newcomersRemoved: body.newcomersRemoved, newcomersKept: body.newcomersKept };
 
   await mkdir(options.outDir, { recursive: true, mode: 0o700 });
   const file = path.join(options.outDir, `${options.persona}.json`);

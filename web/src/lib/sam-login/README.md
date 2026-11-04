@@ -29,7 +29,8 @@ const context = await browser.newContext({ storageState: "/tmp/ttv-sam-login/men
 ```
 
 Options: `--ttl=<minutes>` (5 to 240, default 60) and `--out=<dir>`. `--revoke` ends every live
-login you made. Treat the storage-state file as a credential: don't upload it, and scrub Playwright
+login you made and deletes the newcomer accounts your logins created (one that something still
+points at, such as a cohort role, is kept and counted as `newcomersKept`). Treat the storage-state file as a credential: don't upload it, and scrub Playwright
 traces, which also contain the cookie.
 
 | Persona | Who | Lands on |
@@ -47,6 +48,13 @@ The cohorts are three fictional programs ("Cohort 90/91/92 (fictional)") whose d
 each login so that past, current and next stay true. Every login puts the persona's roles and
 cohort status back to what the table says. Everything else it did in the app (posts, profile edits,
 onboarding, mentor requests) carries over to the next login, so start a `newcomer` for a clean slate.
+Nothing resets a fixed persona's content: to undo what one posted or changed, sign in as `admin`
+and use the app's own moderation and admin pages, as you would for anyone.
+
+Everyone on staging sees the personas, as they would see real members: the open "Cohort 92
+(fictional)" on the homepage and the apply form, David Kamau in the mentor directory, and the
+personas' posts in community channels. The fictional cohort numbers also move channel
+auto-numbering on, so a later staging program with no number in its name gets `cohort-93` or above.
 
 ## Turning it on (owner)
 

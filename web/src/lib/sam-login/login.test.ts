@@ -196,9 +196,28 @@ describe("handleSamLogin: revoking", () => {
     await login("student");
     await login("admin");
     const response = await request(undefined, { method: "DELETE" });
-    expect(await response.json()).toEqual({ revoked: 2 });
+    expect(await response.json()).toEqual({ revoked: 2, newcomersRemoved: 0, newcomersKept: 0 });
     expect(rows(`SELECT count(*) AS n FROM staging_sam_login WHERE revokedAt = ?`, NOW)[0]?.n).toBe(2);
     expect(rows(`SELECT count(*) AS n FROM session`)[0]?.n).toBe(0);
+  });
+
+  it("removes the newcomer accounts it made, keeps the fixed personas, and keeps one something still points at", async () => {
+    const first = await login("newcomer");
+    const second = await login("newcomer");
+    await login("student");
+    // A cohort role is kept when its person is deleted, so it holds the account in place.
+    database.prepare(`INSERT INTO programRole (id, programId, userId, name) VALUES ('role', 'ttv-sam-persona-cohort-current', ?, 'TA')`).run(second.userId);
+    const response = await request(undefined, { method: "DELETE" });
+    expect(await response.json()).toEqual({ revoked: 3, newcomersRemoved: 1, newcomersKept: 1 });
+    expect(rows(`SELECT id FROM "user" ORDER BY id`).map((row) => row.id)).toEqual([second.userId, "ttv-sam-persona-student"].toSorted());
+    expect(rows(`SELECT count(*) AS n FROM member_onboarding WHERE userId = ?`, first.userId)[0]?.n).toBe(0);
+  });
+
+  it("never removes another SAM user's newcomers", async () => {
+    const { userId } = await login("newcomer");
+    database.prepare(`UPDATE staging_sam_login SET samUserId = 'someone-else'`).run();
+    await request(undefined, { method: "DELETE" });
+    expect(rows(`SELECT id FROM "user"`)).toEqual([{ id: userId }]);
   });
 });
 

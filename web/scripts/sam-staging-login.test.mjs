@@ -58,9 +58,9 @@ describe("run", () => {
   });
 
   it("revokes with DELETE and the origin SAM_LOGIN_ORIGIN names", async () => {
-    const fetchImpl = vi.fn(async () => Response.json({ revoked: 2 }));
+    const fetchImpl = vi.fn(async () => Response.json({ revoked: 2, newcomersRemoved: 1, newcomersKept: 0 }));
     const result = await run({ persona: null, revoke: true, outDir }, { environment: { SAM_OIDC_TOKEN: TOKEN, SAM_LOGIN_ORIGIN: "http://127.0.0.1:4321" }, fetchImpl });
-    expect(result).toEqual({ revoked: 2 });
+    expect(result).toEqual({ revoked: 2, newcomersRemoved: 1, newcomersKept: 0 });
     expect(String(fetchImpl.mock.calls[0][0])).toBe("http://127.0.0.1:4321/api/staging/sam-login");
     expect(fetchImpl.mock.calls[0][1]).toMatchObject({ method: "DELETE" });
   });

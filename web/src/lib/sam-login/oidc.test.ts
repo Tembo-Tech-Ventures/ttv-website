@@ -125,4 +125,13 @@ describe("samKeySource", () => {
     const source = samKeySource((async () => new Response("down", { status: 503 })) as unknown as typeof fetch, () => 0);
     await expect(source.keys(false)).rejects.toThrow(SamTokenError);
   });
+
+  it("fails closed when the key set request times out or the network fails", async () => {
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      throw new DOMException("The operation timed out.", "TimeoutError");
+    });
+    const source = samKeySource(fetchImpl as unknown as typeof fetch, () => 0);
+    await expect(source.keys(false)).rejects.toThrow(SamTokenError);
+  });
 });

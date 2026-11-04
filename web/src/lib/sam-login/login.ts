@@ -154,14 +154,36 @@ async function revokeLogin(db: D1Database, loginId: string, sessionId: string, n
   ]);
 }
 
-/** Ends every live login the token's SAM user made, wherever it was used. */
+/**
+ * Deletes the newcomer accounts this SAM user's logins created (each login makes a fresh one).
+ * One at a time: an account something still points at (a cohort role) stays, and is counted.
+ */
+async function removeNewcomers(db: D1Database, samUserId: string) {
+  const { results } = await db.prepare(`SELECT DISTINCT userId FROM staging_sam_login WHERE samUserId=? AND persona='newcomer'`)
+    .bind(samUserId).all<{ userId: string }>();
+  let removed = 0;
+  let kept = 0;
+  for (const { userId } of results) {
+    if (!userId.startsWith(samPersonaUserId("newcomer", ""))) continue;
+    try {
+      const result = await db.prepare(`DELETE FROM "user" WHERE id=? AND email=?`).bind(userId, samPersonaEmail(userId)).run();
+      if ((result.meta.changes ?? 0) > 0) removed++;
+    } catch {
+      kept++;
+    }
+  }
+  return { removed, kept };
+}
+
+/** Ends every live login the token's SAM user made, wherever it was used, and removes their newcomer accounts. */
 async function revokeAll(env: SamLoginWorkerEnv, config: SamLoginConfig, request: Request, options: SamLoginOptions) {
   const now = options.now ?? Math.floor(Date.now() / 1000);
   const claims = await verifiedOwner(config, request, options);
   const { results } = await env.DB.prepare(`SELECT id, sessionId FROM staging_sam_login WHERE samUserId=? AND revokedAt IS NULL AND expiresAt>?`)
     .bind(claims.userId, now).all<{ id: string; sessionId: string }>();
   for (const row of results) await revokeLogin(env.DB, row.id, row.sessionId, now);
-  return json(200, { revoked: results.length });
+  const newcomers = await removeNewcomers(env.DB, claims.userId);
+  return json(200, { revoked: results.length, newcomersRemoved: newcomers.removed, newcomersKept: newcomers.kept });
 }
 
 /**

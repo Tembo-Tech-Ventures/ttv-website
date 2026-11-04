@@ -14,6 +14,8 @@ const MIN_MODULUS_BITS = 2048;
 const JWKS_TTL_MS = 10 * 60_000;
 /** An unknown key id refreshes the key set at most this often, so junk tokens can't hammer SAM. */
 const JWKS_REFRESH_INTERVAL_MS = 60_000;
+/** A hung key-set request fails closed instead of holding the login open. */
+const JWKS_TIMEOUT_MS = 5_000;
 
 export class SamTokenError extends Error {
   constructor(reason: string) {
@@ -50,7 +52,8 @@ export function samKeySource(fetchImpl: typeof fetch = fetch, clock: () => numbe
       const stale = !cached || now - cached.fetchedAt > JWKS_TTL_MS;
       const mayRefresh = refresh && (!cached || now - cached.fetchedAt > JWKS_REFRESH_INTERVAL_MS);
       if (stale || mayRefresh) {
-        const response = await fetchImpl(SAM_OIDC_JWKS_URL, { headers: { Accept: "application/json" } });
+        const response = await fetchImpl(SAM_OIDC_JWKS_URL, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(JWKS_TIMEOUT_MS) })
+          .catch(() => { throw new SamTokenError("key set unavailable"); });
         if (!response.ok) throw new SamTokenError("key set unavailable");
         const body = (await response.json()) as { keys?: unknown };
         if (!Array.isArray(body.keys)) throw new SamTokenError("key set unavailable");
