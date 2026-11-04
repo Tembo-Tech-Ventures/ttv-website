@@ -584,6 +584,12 @@ export function createGeneratedWranglerConfig({
   if (demoEnabled && (deployment.environment !== "staging" || primaryDomain !== "staging.tembotechventures.com" || betterAuthUrl !== "https://staging.tembotechventures.com")) {
     throw new Error("Retained demo access is allowed only on the canonical staging deployment.");
   }
+  const samLoginProjectId = getOptionalEnv("CLOUDFLARE_SAM_LOGIN_PROJECT_ID");
+  const samLoginUserIds = getOptionalEnv("CLOUDFLARE_SAM_LOGIN_USER_IDS");
+  const samLoginEnabled = Boolean(samLoginProjectId && samLoginUserIds);
+  if ((samLoginProjectId || samLoginUserIds) && (deployment.environment !== "staging" || primaryDomain !== "staging.tembotechventures.com" || betterAuthUrl !== "https://staging.tembotechventures.com")) {
+    throw new Error("SAM login is allowed only on the canonical staging deployment.");
+  }
   const workersDevEnabled = !primaryDomain && !redirectDomain;
   if (
     agentAuthEnabled &&
@@ -635,6 +641,7 @@ export function createGeneratedWranglerConfig({
         : {}),
       ...(retainedProbeEnabled ? { STAGING_RETAINED_READ_PROBE_ENABLED: "true" } : {}),
       ...(demoEnabled ? { STAGING_DEMO_ENABLED: "true" } : {}),
+      ...(samLoginEnabled ? { SAM_LOGIN_PROJECT_ID: samLoginProjectId, SAM_LOGIN_USER_IDS: samLoginUserIds } : {}),
       AI_GATEWAY_ACCOUNT_ID: getRequiredEnv("CLOUDFLARE_ACCOUNT_ID"),
       AI_GATEWAY_NAME: aiGatewayName,
       AI_GATEWAY_MODEL:

@@ -11,6 +11,9 @@ declare namespace Cloudflare {
     AGENT_AUTH_ENABLED?: string;
     STAGING_DEMO_ENABLED?: string;
     STAGING_RETAINED_READ_PROBE_ENABLED?: string;
+    /** SAM login (src/lib/sam-login/README.md): staging only, and only with both set. */
+    SAM_LOGIN_PROJECT_ID?: string;
+    SAM_LOGIN_USER_IDS?: string;
     SAM_ALERT_WEBHOOK_URL?: string;
     SAM_ALERT_WEBHOOK_TOKEN?: string;
   }
@@ -58,5 +61,6 @@ declare namespace App {
     stagingDemo?: {persona:string;expiresAt:number} | null;
     stagingQa?: import("@/lib/staging-qa-policy").QaIdentity | null;
     stagingFixture?: import("@/lib/staging-fixtures").StagingFixtureIdentity | null;
+    samLogin?: import("@/lib/sam-login/login").SamLoginIdentity | null;
   }
 }

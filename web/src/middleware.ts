@@ -8,6 +8,7 @@ import { createAuth } from "@/lib/auth";
 import { resolveStagingFixtureIdentity, StagingFixtureAccessError } from "@/lib/staging-fixtures";
 import { stagingFixturePathAllowed } from "@/lib/staging-fixture-policy";
 import { isAgentSession } from "@/lib/agent-auth";
+import { resolveSamLogin, SamLoginAccessError } from "@/lib/sam-login/login";
 import { isHealthCheckPath } from "@/lib/health";
 import { firstRequestOfIsolate, perfPhase, perfTraceRequested, withPerfTrace } from "@/lib/observability/perf-trace";
 import { enforceAdminMutationOrigin } from "@/lib/admin/mutation-security";
@@ -163,6 +164,21 @@ async function enforceStagingFixtureBoundary(locals: App.Locals, pathname: strin
   }
 }
 
+/** A SAM persona's session is valid only while its login is (src/lib/sam-login/README.md); other accounts pass untouched. */
+async function enforceSamLogin(locals: App.Locals): Promise<Response | null> {
+  locals.samLogin = null;
+  if (!locals.user) return null;
+  try {
+    locals.samLogin = await resolveSamLogin({
+      env, user: locals.user, session: locals.session ?? { id: "" }, viaPersonalAccessToken: Boolean(locals.personalAccessToken),
+    });
+    return null;
+  } catch (error) {
+    if (!(error instanceof SamLoginAccessError)) throw error;
+    return new Response(error.message, { status: error.status, headers: { "Cache-Control": "no-store" } });
+  }
+}
+
 async function enforceDemoBoundary(locals: App.Locals, request: Request, pathname: string) {
   // These endpoints independently validate the operator, allowing recovery after a persona expires.
   if (["/demo", "/api/demo/switch", "/api/demo/logout", "/api/demo/return"].includes(pathname.replace(/\/$/, ""))) return null;
@@ -175,6 +191,13 @@ async function enforceDemoBoundary(locals: App.Locals, request: Request, pathnam
     if (!(error instanceof DemoAccessError)) throw error;
     return new Response(error.message, {status:error.status,headers:{"Cache-Control":"no-store"}});
   }
+}
+
+/** SAM persona logins, the retained demo and synthetic fixtures, in that order; the first refusal wins. */
+async function enforceStagingBoundaries(locals: App.Locals, request: Request, pathname: string): Promise<Response | null> {
+  return (await enforceSamLogin(locals))
+    ?? (await enforceDemoBoundary(locals, request, pathname))
+    ?? (await enforceStagingFixtureBoundary(locals, pathname, request.method));
 }
 
 const handleRequest = defineMiddleware(async (context, next) => {
@@ -214,11 +237,8 @@ const handleRequest = defineMiddleware(async (context, next) => {
     locals.user = authResult.user;
     locals.personalAccessToken = authResult.personalAccessToken;
 
-    const demoFailure = await perfPhase("staging", () => enforceDemoBoundary(locals,request,url.pathname));
-    if (demoFailure) return platformAdminApiDenial(demoFailure, url.pathname);
-
-    const fixtureFailure = await perfPhase("staging", () => enforceStagingFixtureBoundary(locals,url.pathname,request.method));
-    if (fixtureFailure) return platformAdminApiDenial(fixtureFailure, url.pathname);
+    const stagingFailure = await perfPhase("staging", () => enforceStagingBoundaries(locals, request, url.pathname));
+    if (stagingFailure) return platformAdminApiDenial(stagingFailure, url.pathname);
 
     // Community and channels delegation never inherits the owner's unrelated application access.
     // Use Astro's normalized route pathname, as with the admin origin guards.

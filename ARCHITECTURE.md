@@ -154,6 +154,7 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/api/auth/[...all]` | better-auth API handler | N/A |
 | `/api/chat` | Ask Tembo question (JSON, same-origin); Tembo reads the sessions of the caller's cohorts (`capabilitiesFor`), every cohort's for staff. A new conversation is saved only together with its first answer, in one D1 batch, so a failed request leaves nothing in Recent. Only a signed-out request gets `401` (body `{ "error": "Unauthorized" }`), so clients can offer "sign in again" on the status alone | Session |
 | `/api/admin/import` | Data import API | ADMIN |
+| `/api/staging/sam-login` | A SAM agent signs in as a fictional persona with its SAM OIDC token (POST), or ends its logins (DELETE); staging only, 404 unless `SAM_LOGIN_PROJECT_ID` and `SAM_LOGIN_USER_IDS` are set (see `web/src/lib/sam-login/README.md`) | SAM OIDC token of an allowed SAM user |
 | `/api/admin/platform-flags` | Flag audiences (GET; PUT `[key]` with `OFF`, `STAFF` or `ALL`) | ADMIN; tokens need `admin:read` (GET) or `admin:write` (PUT) |
 | `/api/platform/me` | The caller's spaces, capabilities, effective flags, unread counts per space and Tembo allowance; flag `spaces` | Session, browser only |
 | `/api/attention` | The caller's attention items, newest first (GET `?filter&cursor`); `/count` per space (GET); `/read` marks items, or everything up to a snapshot, read (POST); flag `spaces` | Session, browser only |
@@ -218,6 +219,9 @@ SQLite via Cloudflare D1, managed with Drizzle ORM. Schema at `web/src/lib/db/sc
 - `feature_flag` — one row per rollout flag (`spaces`, `onboarding`, `channels`, `tembo_channels`, `mentor_requests`), audience OFF/STAFF/ALL with who changed it; seeded OFF by migration
 - `attention_item` — one thing that needs one person: kind, space, category (mentions/requests/updates), subject link, optional actor, read time; `eventKey` unique per person so each event writes once. Kinds: `application_status`, `recording_ready`, `work_confirmed`, `visitor_message`, `mention`, `tembo_answer`, `message_hidden`, `moderation_pending`, `moderation_decided`, `mentor_request`, `mentor_withdrawn`, `mentor_accepted`, `mentor_redirected`, `mentor_declined`, `mentor_checked`, `access_request`, `access_decided` (`reply` and `opportunity_match` are in the contract with no producer yet). An item shows only while its subject still applies (see `web/src/lib/attention/README.md`)
 - `member_intent`, `member_onboarding`, `access_request` (flag `onboarding`; see `web/src/lib/onboarding/README.md`) — how a person said they'll take part (routing and copy only, never authority), their onboarding stage, and requests for mentor or institution access that an admin decides
+
+**Staging agent logins** (see `web/src/lib/sam-login/README.md`)
+- `staging_sam_login` — one login a SAM agent made with its OIDC token: the spent token id, the SAM project, user, task and workspace, the persona and its session, expiry and revocation. Middleware accepts a `ttv-sam-persona-*` session only while its row is live
 
 **Feedback** (see `web/docs/student-feedback.md`)
 - `feedback` — a signed-in user's note: kind, message, page URL, browser context JSON, status (NEW → IN_PROGRESS → RESOLVED/DECLINED), reply shown to the student, staff-only note, link to the fix

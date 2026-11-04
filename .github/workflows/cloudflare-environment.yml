@@ -102,6 +102,9 @@ jobs:
       CLOUDFLARE_AGENT_AUTH_ENABLED: ${{ inputs.agent_auth_enabled }}
       CLOUDFLARE_STAGING_RETAINED_READ_PROBE_ENABLED: ${{ inputs.staging_retained_read_probe_enabled }}
       CLOUDFLARE_STAGING_DEMO_ENABLED: ${{ inputs.staging_demo_enabled }}
+      # SAM login (web/src/lib/sam-login/README.md): the staging environment's own variables, never any other environment's.
+      CLOUDFLARE_SAM_LOGIN_PROJECT_ID: ${{ inputs.environment_name == 'staging' && vars.SAM_LOGIN_PROJECT_ID || '' }}
+      CLOUDFLARE_SAM_LOGIN_USER_IDS: ${{ inputs.environment_name == 'staging' && vars.SAM_LOGIN_USER_IDS || '' }}
       CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ inputs.workers_subdomain }}
       CLOUDFLARE_D1_JURISDICTION: ${{ inputs.d1_jurisdiction }}
       CLOUDFLARE_R2_JURISDICTION: ${{ inputs.r2_jurisdiction }}
@@ -283,6 +286,9 @@ jobs:
       CLOUDFLARE_AGENT_AUTH_ENABLED: ${{ inputs.agent_auth_enabled }}
       CLOUDFLARE_STAGING_RETAINED_READ_PROBE_ENABLED: ${{ inputs.staging_retained_read_probe_enabled }}
       CLOUDFLARE_STAGING_DEMO_ENABLED: ${{ inputs.staging_demo_enabled }}
+      # SAM login (web/src/lib/sam-login/README.md): the staging environment's own variables, never any other environment's.
+      CLOUDFLARE_SAM_LOGIN_PROJECT_ID: ${{ inputs.environment_name == 'staging' && vars.SAM_LOGIN_PROJECT_ID || '' }}
+      CLOUDFLARE_SAM_LOGIN_USER_IDS: ${{ inputs.environment_name == 'staging' && vars.SAM_LOGIN_USER_IDS || '' }}
       CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ inputs.workers_subdomain }}
       CLOUDFLARE_D1_JURISDICTION: ${{ inputs.d1_jurisdiction }}
       CLOUDFLARE_R2_JURISDICTION: ${{ inputs.r2_jurisdiction }}

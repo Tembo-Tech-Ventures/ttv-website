@@ -463,3 +463,24 @@ describe('dedicated QA middleware does not inherit normal authentication',()=>{
   expect(requireResponse(await onRequest(context as never,next)).status).toBe(403);expect(next).not.toHaveBeenCalled();expect(mocks.getSession).not.toHaveBeenCalled();
  });
 });
+
+describe("SAM persona sessions", () => {
+  const persona = { ...tokenAuth.user, id: "ttv-sam-persona-admin", email: "ttv-sam-persona-admin@invalid.ttv" };
+  const session = { ...tokenAuth.session, id: "persona-session", userId: persona.id, userAgent: "ttv-sam-login:login-1" };
+
+  it("refuses a persona session wherever SAM login is not on, before any handler", async () => {
+    mocks.getSession.mockResolvedValue({ user: persona, session });
+    const { context, next } = createContext(new Request("https://staging.tembotechventures.com/dashboard"));
+    const response = requireResponse(await onRequest(context as never, next));
+    expect(response.status).toBe(403);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("leaves ordinary accounts untouched", async () => {
+    mocks.getSession.mockResolvedValue({ user: tokenAuth.user, session: { ...tokenAuth.session, userAgent: "Mozilla/5.0" } });
+    const { context, next } = createContext(new Request("https://staging.tembotechventures.com/dashboard"));
+    await onRequest(context as never, next);
+    expect(next).toHaveBeenCalledOnce();
+    expect(context.locals).toMatchObject({ samLogin: null });
+  });
+});
