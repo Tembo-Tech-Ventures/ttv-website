@@ -156,6 +156,23 @@ describe("createGeneratedWranglerConfig", () => {
     expect(()=>createGeneratedWranglerConfig({...settings,betterAuthUrl:"https://example.com"})).toThrow("canonical staging");
   });
 
+  it("passes SAM login settings only to the canonical staging deployment", () => {
+    const settings = {workerName:"ttv-staging",containerAppName:"container",d1Name:"db",d1Id:"id",bucketName:"bucket",queueName:"queue",vectorizeIndexName:"index",aiGatewayName:"gateway",primaryDomain:"staging.tembotechventures.com",betterAuthUrl:"https://staging.tembotechventures.com"};
+    vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME","staging");
+    expect(createGeneratedWranglerConfig(settings).vars).not.toHaveProperty("SAM_LOGIN_PROJECT_ID");
+    vi.stubEnv("CLOUDFLARE_SAM_LOGIN_PROJECT_ID","project-1");
+    // Both are needed: a project with nobody allowed stays off.
+    expect(createGeneratedWranglerConfig(settings).vars).not.toHaveProperty("SAM_LOGIN_PROJECT_ID");
+    vi.stubEnv("CLOUDFLARE_SAM_LOGIN_USER_IDS","user-1,user-2");
+    expect(createGeneratedWranglerConfig(settings).vars).toMatchObject({SAM_LOGIN_PROJECT_ID:"project-1",SAM_LOGIN_USER_IDS:"user-1,user-2"});
+    for (const environment of ["production","prod","agent-preview"]) {
+      vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME",environment);
+      expect(()=>createGeneratedWranglerConfig(settings)).toThrow("SAM login is allowed only on the canonical staging deployment.");
+    }
+    vi.stubEnv("CLOUDFLARE_ENVIRONMENT_NAME","staging");
+    expect(()=>createGeneratedWranglerConfig({...settings,betterAuthUrl:"https://example.com"})).toThrow("canonical staging");
+  });
+
   it("includes deployment identity and every runtime binding", () => {
     vi.stubEnv("CLOUDFLARE_DEPLOYMENT_VERSION", "deadbeef");
     vi.stubEnv("CLOUDFLARE_AGENT_AUTH_ENABLED", "true");

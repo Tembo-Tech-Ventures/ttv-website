@@ -1297,6 +1297,30 @@ export const stagingQaResource = sqliteTable("stagingQaResource", {
   userId: text("userId").notNull().references(() => user.id),
 }, table => [index("stagingQaResource_run_idx").on(table.runId)]);
 
+// One staging login a SAM agent made with its OIDC token (src/lib/sam-login/README.md). The row is
+// the session's authority: middleware accepts a persona session only while its login is live. No
+// foreign keys, so the audit trail and the spent token id outlive the session and the persona.
+export const stagingSamLogin = sqliteTable("staging_sam_login", {
+  id: text("id").primaryKey(),
+  /** The SAM token's id: each token signs in once. */
+  jti: text("jti").notNull().unique(),
+  samProjectId: text("samProjectId").notNull(),
+  samUserId: text("samUserId").notNull(),
+  samSubject: text("samSubject").notNull(),
+  samTaskId: text("samTaskId"),
+  samWorkspaceId: text("samWorkspaceId"),
+  samAgentSessionId: text("samAgentSessionId"),
+  persona: text("persona").notNull(),
+  userId: text("userId").notNull(),
+  sessionId: text("sessionId").notNull().unique(),
+  createdAt: integer("createdAt").notNull(),
+  expiresAt: integer("expiresAt").notNull(),
+  revokedAt: integer("revokedAt"),
+}, table => [
+  index("staging_sam_login_sam_user_idx").on(table.samUserId, table.createdAt),
+  check("staging_sam_login_time_check", sql`${table.expiresAt} > ${table.createdAt}`),
+]);
+
 // ─── Channels (src/lib/channels/README.md) ─────────────────
 // Timestamps are epoch milliseconds, like attention. Cohort and community
 // membership is derived at read time; channel_member holds DIRECT members and

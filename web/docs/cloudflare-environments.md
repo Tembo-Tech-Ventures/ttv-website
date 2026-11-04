@@ -52,6 +52,8 @@ Set these in the GitHub `staging` environment if you want to use them:
 
 If `STAGING_BETTER_AUTH_URL` is unset, the staging workflow derives `BETTER_AUTH_URL` from `staging.tembotechventures.com`.
 
+`SAM_LOGIN_PROJECT_ID` and `SAM_LOGIN_USER_IDS` switch on SAM agent logins as fictional personas (`web/src/lib/sam-login/README.md`). They are read only for the `staging` environment, and the deploy script refuses them for any other deployment.
+
 ## Cloudflare token scope
 
 The API token needs enough scope to manage the resources this workflow touches:
