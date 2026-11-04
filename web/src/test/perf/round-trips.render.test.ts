@@ -92,7 +92,9 @@ async function visit(name: PageName) {
 const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   "cohort overview": { d1: 16, depth: 3 },
   "cohort channel": { d1: 16, depth: 4 },
-  community: { d1: 16, depth: 3 },
+  // Two more than PERF-2 measured: the journey's profile and entries, read with the page since PERF-3
+  // (#330) in place of three API calls after hydration, each with its own middleware and auth reads.
+  community: { d1: 18, depth: 3 },
   mentors: { d1: 20, depth: 3 },
   ask: { d1: 14, depth: 3 },
   "admin home": { d1: 19, depth: 3 },
