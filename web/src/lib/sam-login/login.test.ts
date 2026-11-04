@@ -254,6 +254,22 @@ describe("handleSamLogin: revoking", () => {
     expect((await revoke()).body).toEqual({ revoked: 0, newcomersRemoved: 1, newcomersKept: 0 });
   });
 
+  it("gets past kept newcomers to the ones it can remove", async () => {
+    const insertUser = database.prepare(`INSERT INTO "user" (id, name, email) VALUES (?, 'n', ?)`);
+    const insertLogin = database.prepare(`INSERT INTO staging_sam_login (id, jti, samProjectId, samUserId, samSubject, samTaskId, persona, userId, sessionId, createdAt, expiresAt)
+      VALUES (?, ?, ?, ?, 's', 'task-1', 'newcomer', ?, ?, ?, ?)`);
+    const insertRole = database.prepare(`INSERT INTO programRole (id, programId, userId, name) VALUES (?, 'ttv-sam-persona-cohort-current', ?, 'TA')`);
+    await login("student");
+    for (let index = 0; index < 53; index++) {
+      const userId = `ttv-sam-persona-newcomer-${String(index).padStart(3, "0")}`;
+      insertUser.run(userId, `${userId}@invalid.ttv`);
+      insertLogin.run(`k${index}`, `jk${index}`, PROJECT_ID, SAM_USER_ID, userId, `sk${index}`, NOW - 7200, NOW - 3600);
+      // The first 50 are held by a cohort role; the last three can go.
+      if (index < 50) insertRole.run(`role-${index}`, userId);
+    }
+    expect((await revoke()).body).toEqual({ revoked: 1, newcomersRemoved: 3, newcomersKept: 50 });
+  });
+
   it("reports a database failure instead of counting the account as kept", async () => {
     await login("newcomer");
     const real = env.DB;

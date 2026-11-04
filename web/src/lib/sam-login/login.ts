@@ -154,7 +154,9 @@ async function revokeLogin(db: D1Database, loginId: string, sessionId: string, n
   ]);
 }
 
+/** A revoke deletes at most this many newcomers, and tries at most ATTEMPTS (kept ones cost a try too). */
 const NEWCOMERS_PER_REVOKE = 50;
+const NEWCOMER_ATTEMPTS_PER_REVOKE = 200;
 
 /** The logins a revoke covers: one SAM task's (or agent session's), or every login of the SAM user. */
 interface RevokeScope {
@@ -169,6 +171,7 @@ function scopeWhere(scope: RevokeScope, alias: string) {
 }
 
 async function revokeScope(request: Request, claims: SamClaims): Promise<RevokeScope> {
+  if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) throw new LoginRequestError(413, "Request body is too large.");
   const text = await request.text();
   if (new TextEncoder().encode(text).length > MAX_BODY_BYTES) throw new LoginRequestError(413, "Request body is too large.");
   let body: unknown = {};
@@ -192,25 +195,32 @@ async function revokeScope(request: Request, claims: SamClaims): Promise<RevokeS
 const isForeignKeyRefusal = (error: unknown) => String(error).includes("FOREIGN KEY");
 
 /**
- * Deletes newcomer accounts these logins created (each newcomer login makes a fresh one), up to 50
- * a call, trying only accounts that still exist. An account something still points at (a cohort
- * role) stays and is counted; any other failure is an error.
+ * Deletes newcomer accounts these logins created (each newcomer login makes a fresh one), trying
+ * only accounts that still exist, in id order so kept ones never hide the rest. An account
+ * something still points at (a cohort role) stays and is counted; any other failure is an error.
  */
 async function removeNewcomers(db: D1Database, scope: RevokeScope) {
   const where = scopeWhere(scope, "l.");
-  const { results } = await db.prepare(`SELECT DISTINCT l.userId FROM staging_sam_login l JOIN "user" u ON u.id = l.userId
-    WHERE ${where.sql} AND l.persona='newcomer' AND u.email = l.userId || '@invalid.ttv' LIMIT ?`)
-    .bind(...where.params, NEWCOMERS_PER_REVOKE).all<{ userId: string }>();
   let removed = 0;
   let kept = 0;
-  for (const { userId } of results) {
-    if (!userId.startsWith(samPersonaUserId("newcomer", ""))) continue;
-    try {
-      const result = await db.prepare(`DELETE FROM "user" WHERE id=? AND email=?`).bind(userId, samPersonaEmail(userId)).run();
-      if ((result.meta.changes ?? 0) > 0) removed++;
-    } catch (error) {
-      if (!isForeignKeyRefusal(error)) throw error;
-      kept++;
+  let after = "";
+  while (removed < NEWCOMERS_PER_REVOKE && removed + kept < NEWCOMER_ATTEMPTS_PER_REVOKE) {
+    const { results } = await db.prepare(`SELECT DISTINCT l.userId FROM staging_sam_login l JOIN "user" u ON u.id = l.userId
+      WHERE ${where.sql} AND l.persona='newcomer' AND u.email = l.userId || '@invalid.ttv' AND l.userId > ?
+      ORDER BY l.userId LIMIT ?`)
+      .bind(...where.params, after, NEWCOMERS_PER_REVOKE).all<{ userId: string }>();
+    if (results.length === 0) break;
+    for (const { userId } of results) {
+      after = userId;
+      if (removed >= NEWCOMERS_PER_REVOKE || removed + kept >= NEWCOMER_ATTEMPTS_PER_REVOKE) break;
+      if (!userId.startsWith(samPersonaUserId("newcomer", ""))) continue;
+      try {
+        const result = await db.prepare(`DELETE FROM "user" WHERE id=? AND email=?`).bind(userId, samPersonaEmail(userId)).run();
+        if ((result.meta.changes ?? 0) > 0) removed++;
+      } catch (error) {
+        if (!isForeignKeyRefusal(error)) throw error;
+        kept++;
+      }
     }
   }
   return { removed, kept };
