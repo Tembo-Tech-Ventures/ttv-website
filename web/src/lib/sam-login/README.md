@@ -28,9 +28,12 @@ Open the site with it:
 const context = await browser.newContext({ storageState: "/tmp/ttv-sam-login/mentor.json" });
 ```
 
-Options: `--ttl=<minutes>` (5 to 240, default 60) and `--out=<dir>`. `--revoke` ends every live
-login you made and deletes the newcomer accounts your logins created (one that something still
-points at, such as a cohort role, is kept and counted as `newcomersKept`). Treat the storage-state file as a credential: don't upload it, and scrub Playwright
+Options: `--ttl=<minutes>` (5 to 240, default 60) and `--out=<dir>`. `--revoke` ends the live
+logins your SAM task made and deletes the newcomer accounts they created, up to 50 a call (one that
+something still points at, such as a cohort role, is kept and counted as `newcomersKept`). Every
+agent of one SAM user shares that user, so `--revoke` never touches another task's logins;
+`--revoke --all` covers every task of your SAM user. The script sends the token only to staging or
+a local `http://127.0.0.1` / `localhost` build. Treat the storage-state file as a credential: don't upload it, and scrub Playwright
 traces, which also contain the cookie.
 
 | Persona | Who | Lands on |

@@ -154,13 +154,53 @@ async function revokeLogin(db: D1Database, loginId: string, sessionId: string, n
   ]);
 }
 
+const NEWCOMERS_PER_REVOKE = 50;
+
+/** The logins a revoke covers: one SAM task's (or agent session's), or every login of the SAM user. */
+interface RevokeScope {
+  samUserId: string;
+  only: { column: "samTaskId" | "samAgentSessionId"; value: string } | null;
+}
+
+function scopeWhere(scope: RevokeScope, alias: string) {
+  return scope.only
+    ? { sql: `${alias}samUserId=? AND ${alias}${scope.only.column}=?`, params: [scope.samUserId, scope.only.value] }
+    : { sql: `${alias}samUserId=?`, params: [scope.samUserId] };
+}
+
+async function revokeScope(request: Request, claims: SamClaims): Promise<RevokeScope> {
+  const text = await request.text();
+  if (new TextEncoder().encode(text).length > MAX_BODY_BYTES) throw new LoginRequestError(413, "Request body is too large.");
+  let body: unknown = {};
+  if (text.trim()) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      throw new LoginRequestError(400, "Request body must be JSON.");
+    }
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new LoginRequestError(400, "Request body must be a JSON object.");
+  const { all, ...rest } = body as Record<string, unknown>;
+  if (Object.keys(rest).length > 0 || (all !== undefined && typeof all !== "boolean")) throw new LoginRequestError(400, "The only field is all (true or false).");
+  if (all) return { samUserId: claims.userId, only: null };
+  // Every agent of one SAM user shares it: scope to the caller, so one agent's cleanup never ends another's run.
+  if (claims.taskId) return { samUserId: claims.userId, only: { column: "samTaskId", value: claims.taskId } };
+  if (claims.agentSessionId) return { samUserId: claims.userId, only: { column: "samAgentSessionId", value: claims.agentSessionId } };
+  throw new LoginRequestError(400, 'This SAM token names no task or agent session; send {"all":true} to revoke every login of the SAM user.');
+}
+
+const isForeignKeyRefusal = (error: unknown) => String(error).includes("FOREIGN KEY");
+
 /**
- * Deletes the newcomer accounts this SAM user's logins created (each login makes a fresh one).
- * One at a time: an account something still points at (a cohort role) stays, and is counted.
+ * Deletes newcomer accounts these logins created (each newcomer login makes a fresh one), up to 50
+ * a call, trying only accounts that still exist. An account something still points at (a cohort
+ * role) stays and is counted; any other failure is an error.
  */
-async function removeNewcomers(db: D1Database, samUserId: string) {
-  const { results } = await db.prepare(`SELECT DISTINCT userId FROM staging_sam_login WHERE samUserId=? AND persona='newcomer'`)
-    .bind(samUserId).all<{ userId: string }>();
+async function removeNewcomers(db: D1Database, scope: RevokeScope) {
+  const where = scopeWhere(scope, "l.");
+  const { results } = await db.prepare(`SELECT DISTINCT l.userId FROM staging_sam_login l JOIN "user" u ON u.id = l.userId
+    WHERE ${where.sql} AND l.persona='newcomer' AND u.email = l.userId || '@invalid.ttv' LIMIT ?`)
+    .bind(...where.params, NEWCOMERS_PER_REVOKE).all<{ userId: string }>();
   let removed = 0;
   let kept = 0;
   for (const { userId } of results) {
@@ -168,26 +208,28 @@ async function removeNewcomers(db: D1Database, samUserId: string) {
     try {
       const result = await db.prepare(`DELETE FROM "user" WHERE id=? AND email=?`).bind(userId, samPersonaEmail(userId)).run();
       if ((result.meta.changes ?? 0) > 0) removed++;
-    } catch {
+    } catch (error) {
+      if (!isForeignKeyRefusal(error)) throw error;
       kept++;
     }
   }
   return { removed, kept };
 }
 
-/** Ends every live login the token's SAM user made, wherever it was used, and removes their newcomer accounts. */
-async function revokeAll(env: SamLoginWorkerEnv, config: SamLoginConfig, request: Request, options: SamLoginOptions) {
+/** Ends the caller's live logins (see revokeScope) and removes the newcomer accounts they made. */
+async function revoke(env: SamLoginWorkerEnv, config: SamLoginConfig, request: Request, options: SamLoginOptions) {
   const now = options.now ?? Math.floor(Date.now() / 1000);
-  const claims = await verifiedOwner(config, request, options);
-  const { results } = await env.DB.prepare(`SELECT id, sessionId FROM staging_sam_login WHERE samUserId=? AND revokedAt IS NULL AND expiresAt>?`)
-    .bind(claims.userId, now).all<{ id: string; sessionId: string }>();
+  const scope = await revokeScope(request, await verifiedOwner(config, request, options));
+  const where = scopeWhere(scope, "");
+  const { results } = await env.DB.prepare(`SELECT id, sessionId FROM staging_sam_login WHERE ${where.sql} AND revokedAt IS NULL AND expiresAt>?`)
+    .bind(...where.params, now).all<{ id: string; sessionId: string }>();
   for (const row of results) await revokeLogin(env.DB, row.id, row.sessionId, now);
-  const newcomers = await removeNewcomers(env.DB, claims.userId);
+  const newcomers = await removeNewcomers(env.DB, scope);
   return json(200, { revoked: results.length, newcomersRemoved: newcomers.removed, newcomersKept: newcomers.kept });
 }
 
 /**
- * POST signs in as a persona; DELETE revokes the caller's live logins. Both take a SAM OIDC token
+ * POST signs in as a persona; DELETE revokes the calling task's logins (all of the SAM user's with `{"all":true}`). Both take a SAM OIDC token
  * whose audience is this site's origin. Off (404) unless samLoginConfig says it is on.
  */
 export async function handleSamLogin(env: SamLoginWorkerEnv, request: Request, options: SamLoginOptions = {}): Promise<Response> {
@@ -195,7 +237,7 @@ export async function handleSamLogin(env: SamLoginWorkerEnv, request: Request, o
   if (!config || new URL(request.url).origin !== config.origin) return notFound();
   try {
     if (request.method === "POST") return await login(env, config, request, options);
-    if (request.method === "DELETE") return await revokeAll(env, config, request, options);
+    if (request.method === "DELETE") return await revoke(env, config, request, options);
     return notFound();
   } catch (error) {
     if (error instanceof LoginRequestError) return json(error.status, { error: error.message });

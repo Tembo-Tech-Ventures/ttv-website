@@ -17,7 +17,7 @@ afterEach(async () => {
 
 describe("parseArguments", () => {
   it("reads a persona, a session length and an output directory", () => {
-    expect(parseArguments(["mentor", "--ttl=30", "--out=/tmp/x"])).toEqual({ persona: "mentor", revoke: false, ttlMinutes: 30, outDir: "/tmp/x" });
+    expect(parseArguments(["mentor", "--ttl=30", "--out=/tmp/x"])).toEqual({ persona: "mentor", revoke: false, all: false, ttlMinutes: 30, outDir: "/tmp/x" });
   });
 
   it.each([
@@ -27,6 +27,7 @@ describe("parseArguments", () => {
     [["../etc"], /Not a persona/],
     [["mentor", "--ttl=soon"], /whole number/],
     [["--force"], /Unknown argument/],
+    [["mentor", "--all"], /goes with --revoke/],
   ])("refuses %j", (argv, message) => {
     expect(() => parseArguments(argv)).toThrow(message);
   });
@@ -59,10 +60,24 @@ describe("run", () => {
 
   it("revokes with DELETE and the origin SAM_LOGIN_ORIGIN names", async () => {
     const fetchImpl = vi.fn(async () => Response.json({ revoked: 2, newcomersRemoved: 1, newcomersKept: 0 }));
-    const result = await run({ persona: null, revoke: true, outDir }, { environment: { SAM_OIDC_TOKEN: TOKEN, SAM_LOGIN_ORIGIN: "http://127.0.0.1:4321" }, fetchImpl });
+    const result = await run({ persona: null, revoke: true, all: false, outDir }, { environment: { SAM_OIDC_TOKEN: TOKEN, SAM_LOGIN_ORIGIN: "http://127.0.0.1:4321" }, fetchImpl });
     expect(result).toEqual({ revoked: 2, newcomersRemoved: 1, newcomersKept: 0 });
     expect(String(fetchImpl.mock.calls[0][0])).toBe("http://127.0.0.1:4321/api/staging/sam-login");
-    expect(fetchImpl.mock.calls[0][1]).toMatchObject({ method: "DELETE" });
+    expect(fetchImpl.mock.calls[0][1]).toMatchObject({ method: "DELETE", body: "{}" });
+  });
+
+  it("asks for every task's logins with --all", async () => {
+    const fetchImpl = vi.fn(async () => Response.json({ revoked: 0, newcomersRemoved: 0, newcomersKept: 0 }));
+    await run({ persona: null, revoke: true, all: true, outDir }, { environment: { SAM_OIDC_TOKEN: TOKEN }, fetchImpl });
+    expect(fetchImpl.mock.calls[0][1]).toMatchObject({ body: JSON.stringify({ all: true }) });
+  });
+
+  it("never sends the token anywhere but staging or a local build", async () => {
+    const fetchImpl = vi.fn();
+    for (const origin of ["https://tembotechventures.com", "https://evil.example", "http://staging.tembotechventures.com"]) {
+      await expect(run({ persona: "admin", revoke: false, outDir }, { environment: { SAM_OIDC_TOKEN: TOKEN, SAM_LOGIN_ORIGIN: origin }, fetchImpl })).rejects.toThrow(/SAM_LOGIN_ORIGIN must be/);
+    }
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("says when SAM login is not enabled", async () => {

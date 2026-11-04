@@ -55,7 +55,7 @@ export function samKeySource(fetchImpl: typeof fetch = fetch, clock: () => numbe
         const response = await fetchImpl(SAM_OIDC_JWKS_URL, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(JWKS_TIMEOUT_MS) })
           .catch(() => { throw new SamTokenError("key set unavailable"); });
         if (!response.ok) throw new SamTokenError("key set unavailable");
-        const body = (await response.json()) as { keys?: unknown };
+        const body = (await response.json().catch(() => ({}))) as { keys?: unknown };
         if (!Array.isArray(body.keys)) throw new SamTokenError("key set unavailable");
         cached = { keys: body.keys as Jwk[], fetchedAt: now };
       }

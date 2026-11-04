@@ -192,31 +192,83 @@ describe("handleSamLogin: refusals", () => {
 });
 
 describe("handleSamLogin: revoking", () => {
-  it("ends every live login of the SAM user and deletes their sessions", async () => {
+  const revoke = async (body?: unknown, claims: Record<string, unknown> = {}) => {
+    const response = await handleSamLogin(env, new Request(`${ORIGIN}/api/staging/sam-login`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${await signer.sign(samClaims(claims))}` },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }), { keys: signer.keys, now: NOW });
+    return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+  };
+  const asTask = async (taskId: string, persona: SamPersona) => {
+    const response = await request({ persona }, { token: await signer.sign(samClaims({ task_id: taskId })) });
+    return (await response.json()) as LoginBody;
+  };
+
+  it("ends the calling task's live logins and deletes their sessions", async () => {
     await login("student");
     await login("admin");
-    const response = await request(undefined, { method: "DELETE" });
-    expect(await response.json()).toEqual({ revoked: 2, newcomersRemoved: 0, newcomersKept: 0 });
+    expect(await revoke()).toEqual({ status: 200, body: { revoked: 2, newcomersRemoved: 0, newcomersKept: 0 } });
     expect(rows(`SELECT count(*) AS n FROM staging_sam_login WHERE revokedAt = ?`, NOW)[0]?.n).toBe(2);
     expect(rows(`SELECT count(*) AS n FROM session`)[0]?.n).toBe(0);
   });
 
-  it("removes the newcomer accounts it made, keeps the fixed personas, and keeps one something still points at", async () => {
+  it("leaves another task of the same SAM user alone, unless asked for all", async () => {
+    const mine = await asTask("task-a", "newcomer");
+    const theirs = await asTask("task-b", "newcomer");
+    await asTask("task-b", "student");
+    expect((await revoke(undefined, { task_id: "task-a" })).body).toEqual({ revoked: 1, newcomersRemoved: 1, newcomersKept: 0 });
+    expect(rows(`SELECT id FROM "user" WHERE id IN (?, ?)`, mine.userId, theirs.userId)).toEqual([{ id: theirs.userId }]);
+    expect(rows(`SELECT count(*) AS n FROM staging_sam_login WHERE samTaskId = 'task-b' AND revokedAt IS NULL`)[0]?.n).toBe(2);
+    expect((await revoke({ all: true }, { task_id: "task-a" })).body).toEqual({ revoked: 2, newcomersRemoved: 1, newcomersKept: 0 });
+  });
+
+  it("falls back to the agent session, and needs all when the token names neither", async () => {
+    await login("student");
+    expect((await revoke(undefined, { task_id: undefined, agent_session_id: "agent-session-1" })).body.revoked).toBe(1);
+    expect((await revoke(undefined, { task_id: undefined, agent_session_id: undefined })).status).toBe(400);
+    expect((await revoke({ all: "yes" })).status).toBe(400);
+  });
+
+  it("removes newcomers it made, keeps fixed personas, and keeps one something still points at", async () => {
     const first = await login("newcomer");
     const second = await login("newcomer");
     await login("student");
     // A cohort role is kept when its person is deleted, so it holds the account in place.
     database.prepare(`INSERT INTO programRole (id, programId, userId, name) VALUES ('role', 'ttv-sam-persona-cohort-current', ?, 'TA')`).run(second.userId);
-    const response = await request(undefined, { method: "DELETE" });
-    expect(await response.json()).toEqual({ revoked: 3, newcomersRemoved: 1, newcomersKept: 1 });
+    expect((await revoke()).body).toEqual({ revoked: 3, newcomersRemoved: 1, newcomersKept: 1 });
     expect(rows(`SELECT id FROM "user" ORDER BY id`).map((row) => row.id)).toEqual([second.userId, "ttv-sam-persona-student"].toSorted());
     expect(rows(`SELECT count(*) AS n FROM member_onboarding WHERE userId = ?`, first.userId)[0]?.n).toBe(0);
+  });
+
+  it("tries only newcomers that still exist, at most 50 a call", async () => {
+    const insertUser = database.prepare(`INSERT INTO "user" (id, name, email) VALUES (?, 'n', ?)`);
+    const insertLogin = database.prepare(`INSERT INTO staging_sam_login (id, jti, samProjectId, samUserId, samSubject, samTaskId, persona, userId, sessionId, createdAt, expiresAt)
+      VALUES (?, ?, ?, ?, 's', 'task-1', 'newcomer', ?, ?, ?, ?)`);
+    for (let index = 0; index < 52; index++) {
+      const userId = `ttv-sam-persona-newcomer-old${index}`;
+      if (index < 51) insertUser.run(userId, `${userId}@invalid.ttv`);
+      insertLogin.run(`l${index}`, `j${index}`, PROJECT_ID, SAM_USER_ID, userId, `s${index}`, NOW - 7200, NOW - 3600);
+    }
+    expect((await revoke()).body).toEqual({ revoked: 0, newcomersRemoved: 50, newcomersKept: 0 });
+    expect((await revoke()).body).toEqual({ revoked: 0, newcomersRemoved: 1, newcomersKept: 0 });
+  });
+
+  it("reports a database failure instead of counting the account as kept", async () => {
+    await login("newcomer");
+    const real = env.DB;
+    const failing = { ...real, prepare: (sql: string) => {
+      if (sql.startsWith('DELETE FROM "user"')) throw new Error("D1_ERROR: Too many API requests by single worker invocation.");
+      return real.prepare(sql);
+    } } as D1Database;
+    env = { ...env, DB: failing };
+    await expect(revoke()).rejects.toThrow(/Too many API requests/);
   });
 
   it("never removes another SAM user's newcomers", async () => {
     const { userId } = await login("newcomer");
     database.prepare(`UPDATE staging_sam_login SET samUserId = 'someone-else'`).run();
-    await request(undefined, { method: "DELETE" });
+    await revoke({ all: true });
     expect(rows(`SELECT id FROM "user"`)).toEqual([{ id: userId }]);
   });
 });

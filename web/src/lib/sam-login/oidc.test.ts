@@ -126,6 +126,11 @@ describe("samKeySource", () => {
     await expect(source.keys(false)).rejects.toThrow(SamTokenError);
   });
 
+  it("fails closed when the key set isn't JSON", async () => {
+    const source = samKeySource((async () => new Response("<html>oops</html>")) as unknown as typeof fetch, () => 0);
+    await expect(source.keys(false)).rejects.toThrow(SamTokenError);
+  });
+
   it("fails closed when the key set request times out or the network fails", async () => {
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
       expect(init?.signal).toBeInstanceOf(AbortSignal);
