@@ -22,14 +22,17 @@ const { caption, ground = false, code, label, class: className } = Astro.props;
 ---
 
 <figure class:list={["m-0 min-w-0", className]} aria-label={caption ? undefined : label} data-specimen>
-  <div
-    class:list={[
-      "min-w-0 rounded-[1.25rem] border border-hairline",
-      ground ? "bg-ground px-1 pt-5 sm:px-4" : "p-4 sm:p-7",
-    ]}
-  >
-    <slot />
+  <div class="min-w-0 overflow-hidden rounded-[1.25rem] border border-hairline">
+    <div
+      class:list={[
+        "min-w-0",
+        // On the ground, an example's own sheets stand clear of the frame on every side, their feet rounded.
+        ground ? "bg-ground px-2 pt-5 pb-2 [--sheet-foot:1.25rem] sm:px-4 sm:pb-4" : "p-4 sm:p-7",
+      ]}
+    >
+      <slot />
+    </div>
+    {code && <CodeBlock code={code} attached />}
   </div>
   {caption && <figcaption class="mt-3 text-sm leading-relaxed text-ink-muted">{caption}</figcaption>}
-  {code && <CodeBlock code={code} />}
 </figure>

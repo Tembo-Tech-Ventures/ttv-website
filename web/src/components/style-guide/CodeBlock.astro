@@ -1,15 +1,22 @@
 ---
 /**
- * A short piece of code to copy. It wraps rather than scrolling sideways: a
- * page that already scrolls should not hide a second scroller inside it.
+ * A short piece of code to copy, kept as written: long lines scroll inside the
+ * block rather than breaking mid-attribute. The block takes focus so the
+ * keyboard can scroll it too. `attached` makes it the foot of a specimen.
  */
 interface Props {
   code: string;
+  attached?: boolean;
 }
 
-const { code } = Astro.props;
+const { code, attached = false } = Astro.props;
 ---
 
 <pre
-  class="mt-3 mb-0 rounded-xl border border-hairline bg-ground/60 px-4 py-3.5 font-mono text-[0.8125rem] leading-relaxed break-words whitespace-pre-wrap text-ink-secondary"
+  tabindex="0"
+  class:list={[
+    "mb-0 overflow-x-auto bg-ground/60 px-4 py-3.5 font-mono text-[0.8125rem] leading-relaxed whitespace-pre text-ink-secondary",
+    "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-peach-ink",
+    attached ? "mt-0 border-t border-hairline" : "mt-3 rounded-xl border border-hairline",
+  ]}
   data-code><code>{code}</code></pre>

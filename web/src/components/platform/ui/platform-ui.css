@@ -308,13 +308,50 @@
 }
 
 /*
- * A strip that keeps its words scrolls on narrow screens; its ends fade, so a
- * tab cut by the edge reads as "more this way" rather than as a broken word.
+ * A strip that keeps its words scrolls on narrow screens. Each end fades only
+ * while there is more to scroll that way, so a tab cut by the edge reads as
+ * "more this way" rather than as a broken word, and a tab at rest against the
+ * edge is never faded. The fades follow the strip's own scroll position; with
+ * nothing to scroll (or no scroll timelines) both stay at zero.
  */
-@container (max-width: 40rem) {
-  .space-file[data-fold="off"] .space-file__nav {
-    mask-image: linear-gradient(to right, transparent, #000 1.25rem, #000 calc(100% - 1.25rem), transparent);
+@property --strip-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --strip-fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes space-file-strip-fade {
+  from {
+    --strip-fade-start: 0px;
+    --strip-fade-end: 1.5rem;
   }
+  8%,
+  92% {
+    --strip-fade-start: 1.5rem;
+    --strip-fade-end: 1.5rem;
+  }
+  to {
+    --strip-fade-start: 1.5rem;
+    --strip-fade-end: 0px;
+  }
+}
+
+.space-file[data-fold="off"] .space-file__nav {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--strip-fade-start),
+    #000 calc(100% - var(--strip-fade-end)),
+    transparent
+  );
+  animation: space-file-strip-fade linear both;
+  animation-timeline: scroll(self inline);
 }
 
 @container (max-width: 34rem) {

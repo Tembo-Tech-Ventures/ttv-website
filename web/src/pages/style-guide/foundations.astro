@@ -69,7 +69,7 @@ const MOTION = [
           <div data-colour-group={group.id}>
             <h3 class="m-0 text-lg font-bold text-ink-primary">{group.title}</h3>
             <p class="mt-1.5 mb-0 max-w-3xl text-sm leading-relaxed text-ink-secondary">{group.summary}</p>
-            <ul class="mt-5 mb-0 grid list-none gap-4 p-0 sm:grid-cols-2 xl:grid-cols-3">
+            <ul class="mt-5 mb-0 grid list-none grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4 p-0">
               {group.colours.map(({ token, name, use }) => {
                 const measured = measure(group.id, token);
                 return (
@@ -92,7 +92,7 @@ const MOTION = [
                     )}
                     <div class="p-4">
                       <p class="m-0 font-semibold text-ink-primary">{name}</p>
-                      <p class="mt-1 mb-0 font-mono text-xs break-all text-ink-muted">
+                      <p class="mt-1 mb-0 font-mono text-xs break-words text-ink-muted">
                         --color-{token} · {colourToken(token)}
                       </p>
                       <p class="mt-2 mb-0 text-sm leading-relaxed text-ink-secondary">{use}</p>
@@ -139,11 +139,11 @@ const MOTION = [
     </ul>
 
     <p class="mt-6 mb-0 max-w-3xl text-sm leading-relaxed text-ink-secondary">
-      Display tracking comes from three tokens rather than per-heading values, so the face can change without retuning every title:
-      <code class="font-mono text-ink-primary">tracking-display</code> ({trackingToken("display")}),
-      <code class="font-mono text-ink-primary">tracking-heading</code> ({trackingToken("heading")}) and
-      <code class="font-mono text-ink-primary">tracking-subhead</code> ({trackingToken("subhead")}). Sentence case everywhere; no capitals
-      for emphasis, and no small labels above headings.
+      Display tracking comes from three tokens rather than per-heading values, so the face can change without retuning every title:{" "}
+      <code class="font-mono text-[0.875em] text-ink-primary">tracking-display</code> ({trackingToken("display")}),{" "}
+      <code class="font-mono text-[0.875em] text-ink-primary">tracking-heading</code> ({trackingToken("heading")}) and{" "}
+      <code class="font-mono text-[0.875em] text-ink-primary">tracking-subhead</code> ({trackingToken("subhead")}). Sentence case everywhere; no capitals for emphasis, and no small
+      labels above headings.
     </p>
   </GuideSection>
 
@@ -152,7 +152,7 @@ const MOTION = [
     title="Shape and space"
     intro="Corners soften as surfaces get smaller, so a page reads as sheets holding cards holding controls. Space follows a 4px grid: tight inside a group, open between groups, generous between sections."
   >
-    <ul class="m-0 grid list-none gap-4 p-0 sm:grid-cols-2 xl:grid-cols-5">
+    <ul class="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-x-4 gap-y-6 p-0">
       {
         RADII.map((radius) => (
           <li class="flex min-w-0 flex-col gap-3">

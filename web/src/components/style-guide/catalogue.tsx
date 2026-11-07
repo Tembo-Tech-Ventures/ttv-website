@@ -161,7 +161,7 @@ export const CATALOGUE: readonly CatalogueEntry[] = [
     use: ["Toolbars and dense rows where the icon is widely understood.", "Toggles, with pressed on or off."],
     avoid: ["The main action on a page. Words are clearer: use Button with an icon."],
     access: [
-      "label is required, and the component refuses to render without one.",
+      "The label is required, and the component refuses to render without one.",
       "A badge joins the name, “Attention, 4 waiting”, because a badge inside a labelled button is never read.",
     ],
     code: `<IconButton label="Attention" icon={<PiBellSimple />} badge={count} badgeLabel="waiting" />`,
@@ -292,7 +292,7 @@ export const CATALOGUE: readonly CatalogueEntry[] = [
     ),
     use: ["Wherever a person acts or is listed. Mentors wear the ring, as they do on the homepage's map."],
     avoid: ["Colour by position in a list. The colour belongs to the person, from their id."],
-    access: ["decorative when the name is written beside it, so it is not read twice."],
+    access: ["Set decorative when the name is written beside it, so it is not read twice."],
     code: `<Avatar id={person.id} name={person.name} src={person.avatarUrl ?? undefined} mentor={isMentor} decorative />`,
   },
   {
@@ -474,7 +474,7 @@ export const CATALOGUE: readonly CatalogueEntry[] = [
     use: [
       "Every form, in React islands and in server-rendered Astro forms alike.",
       "Radios for one of a few answers worth reading side by side; a select past six or seven.",
-      "optional on the fields people may skip, rather than an asterisk on the rest.",
+      "Mark the fields people may skip as optional, rather than starring the rest.",
     ],
     avoid: ["Placeholders as labels: they vanish as soon as someone types.", "Validating while someone is still typing."],
     access: [
@@ -496,7 +496,7 @@ export const CATALOGUE: readonly CatalogueEntry[] = [
       "The platform's frame. Each space is a sheet in its own tone; its tabs stand on the sheet like the index tabs of a card file, the active one raised and joined to the page.",
     specimen: () => (
       <div className="flex min-w-0 flex-col gap-8">
-        <div className="-mx-3 min-w-0 rounded-[1.25rem] bg-ground px-1 pt-5 sm:mx-0 sm:px-4">
+        <div className="-mx-2 min-w-0 rounded-[1.25rem] bg-ground px-1.5 pt-5 pb-1.5 [--sheet-foot:1rem] sm:mx-0 sm:px-4 sm:pb-4">
           <SpaceFile
             label="Wanjiku's spaces"
             active="community"
@@ -513,7 +513,7 @@ export const CATALOGUE: readonly CatalogueEntry[] = [
             </div>
           </SpaceFile>
         </div>
-        <div className="-mx-3 min-w-0 rounded-[1.25rem] bg-ground px-1 pt-5 sm:mx-0 sm:px-4">
+        <div className="-mx-2 min-w-0 rounded-[1.25rem] bg-ground px-1.5 pt-5 pb-1.5 [--sheet-foot:1rem] sm:mx-0 sm:px-4 sm:pb-4">
           <TabFile
             label="Request views"
             active="waiting"

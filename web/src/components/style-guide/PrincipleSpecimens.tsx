@@ -35,11 +35,13 @@ export function PeopleFirst() {
         {[wanjiku, david, joseph].map((person) => (
           <li key={person.id} className="flex min-w-0 items-center gap-3">
             <Avatar id={person.id} name={person.name} decorative mentor={person.roleBadges.some((badge) => badge.kind === "MENTOR")} />
-            <span className="min-w-0 font-semibold text-ink-primary">{person.name}</span>
-            <span className="flex flex-wrap gap-1.5">
-              {person.roleBadges.map((badge) => (
-                <RoleBadge key={badge.kind} badge={badge} />
-              ))}
+            <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="font-semibold whitespace-nowrap text-ink-primary">{person.name}</span>
+              <span className="flex flex-wrap gap-1.5">
+                {person.roleBadges.map((badge) => (
+                  <RoleBadge key={badge.kind} badge={badge} />
+                ))}
+              </span>
             </span>
           </li>
         ))}

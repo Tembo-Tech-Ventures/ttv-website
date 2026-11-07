@@ -23,7 +23,7 @@ const contents = [
 ];
 
 const { lucy } = GUIDE_PEOPLE;
-const rules = "m-0 flex list-none flex-col gap-3 p-0";
+const rules = "m-0 flex max-w-3xl list-none flex-col gap-3 p-0";
 const rule = "border-l-2 border-hairline pl-4 text-[0.9375rem] leading-relaxed text-ink-secondary";
 
 const FEEDBACK = [
@@ -55,7 +55,7 @@ const FEEDBACK = [
           { space: "profile", label: "Profile", href: "#frame" },
         ]}
       >
-        <span slot="start" class="px-2 font-heading text-base tracking-subhead text-ink-primary" aria-hidden="true">TEMBO</span>
+        <span slot="start" class="hidden px-2 font-heading sm:inline text-base tracking-subhead text-ink-primary" aria-hidden="true">TEMBO</span>
         <FrameTools slot="end" />
         <div class="grid gap-6 px-4 pt-6 pb-7 sm:px-6 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8">
           <div class="flex flex-col gap-4 border-hairline md:border-r md:pr-6">

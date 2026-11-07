@@ -9,6 +9,7 @@
  * static HTML; only the demonstrations you can press hydrate.
  */
 import PublicLayout from "@/layouts/PublicLayout.astro";
+import { PiCaretDown } from "react-icons/pi";
 import { TabFile } from "@/components/platform/ui";
 import { GUIDE_SECTIONS, guideSection, type GuideSectionId } from "./sections";
 
@@ -50,9 +51,10 @@ const link = "block rounded-lg px-2.5 py-1.5 text-sm leading-snug text-ink-secon
               <h1 class="text-4xl tracking-display break-words text-ink-primary sm:text-5xl lg:text-6xl">{current.title}</h1>
               <p class="mt-5 mb-0 text-lg leading-relaxed text-ink-secondary sm:text-xl">{lead}</p>
             </header>
-            <details class="mt-8 rounded-xl border border-hairline lg:hidden">
-              <summary class="flex min-h-11 cursor-pointer items-center rounded-xl px-4 text-sm font-semibold text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink">
+            <details class="group mt-8 rounded-xl border border-hairline lg:hidden">
+              <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-4 text-sm font-semibold text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink [&::-webkit-details-marker]:hidden">
                 On this page
+                <PiCaretDown aria-hidden className="size-4 shrink-0 text-ink-secondary transition-transform duration-150 group-open:rotate-180 motion-reduce:transition-none" />
               </summary>
               <ul class="m-0 flex list-none flex-col gap-0.5 px-1.5 pb-3">
                 {contents.map((entry) => <li><a href={`#${entry.id}`} class:list={[link, "min-h-11 py-2.5"]}>{entry.label}</a></li>)}

@@ -53,7 +53,7 @@ export function RequestRejected() {
 /** The frame's tools, beside the tabs: search, and attention with what is waiting. */
 export function FrameTools() {
   return (
-    <span className="flex gap-2">
+    <span className="flex gap-2 pr-1 pt-1">
       <IconButton label="Search" icon={<PiMagnifyingGlass className="size-5" />} size="sm" />
       <IconButton label="Attention" icon={<PiBellSimple className="size-5" />} size="sm" badge={2} badgeLabel="waiting" />
     </span>
