@@ -50,6 +50,7 @@ test.describe("layout integrity", () => {
       ...expectedPublicLinks,
       { label: "Sign in", href: "/auth/login" },
       { label: "Apply", href: "/dashboard/apply" },
+      { label: "Style guide", href: "/style-guide" },
     ]) {
       await expect(
         footer.getByRole("link", { name: link.label, exact: true })

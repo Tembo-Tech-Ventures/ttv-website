@@ -1,0 +1,67 @@
+---
+/**
+ * The public style guide's frame: the site's public layout, and inside it the
+ * guide's own sections as a tab file, the same card file the platform's spaces
+ * stand in. Each section is a sheet in a borrowed space tone, with its
+ * contents beside the page on wide screens and folded above it on narrow ones.
+ *
+ * Pages render the kit's real components with no `client:` directive, as
+ * static HTML; only the demonstrations you can press hydrate.
+ */
+import PublicLayout from "@/layouts/PublicLayout.astro";
+import { TabFile } from "@/components/platform/ui";
+import { GUIDE_SECTIONS, guideSection, type GuideSectionId } from "./sections";
+
+export interface GuideContentsEntry {
+  id: string;
+  label: string;
+}
+
+interface Props {
+  section: GuideSectionId;
+  /** The page's opening paragraph, under its title. */
+  lead: string;
+  /** The page's sections, for "On this page". */
+  contents: readonly GuideContentsEntry[];
+}
+
+const { section, lead, contents } = Astro.props;
+const current = guideSection(section);
+const title = section === "principles" ? "Style guide" : `${current.title} · Style guide`;
+const link = "block rounded-lg px-2.5 py-1.5 text-sm leading-snug text-ink-secondary transition-colors duration-150 hover:bg-ink-primary/5 hover:text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink motion-reduce:transition-none";
+---
+
+<PublicLayout title={title} description={current.description}>
+  <div class="mx-auto max-w-7xl px-3 pt-10 sm:px-6 sm:pt-14 lg:px-8" data-style-guide={section}>
+    {/* The guide's sheet ends on the page, so its foot is rounded like its head. */}
+    <div class="[--sheet-foot:1.25rem] sm:[--sheet-foot:1.75rem]">
+      <TabFile label="Style guide" active={section} tabs={GUIDE_SECTIONS}>
+        <div class="grid gap-8 px-5 pt-9 pb-14 sm:px-8 sm:pt-12 lg:grid-cols-[12.5rem_minmax(0,1fr)] lg:gap-14 lg:px-12 lg:pt-14 lg:pb-20">
+          <aside class="hidden lg:block">
+            <nav aria-label="On this page" class="sticky top-28">
+              <p class="mb-2 px-2.5 text-[0.8125rem] font-semibold text-ink-muted">On this page</p>
+              <ul class="m-0 flex list-none flex-col gap-0.5 p-0">
+                {contents.map((entry) => <li><a href={`#${entry.id}`} class={link}>{entry.label}</a></li>)}
+              </ul>
+            </nav>
+          </aside>
+          <article class="min-w-0">
+            <header class="max-w-3xl">
+              <h1 class="text-4xl tracking-display break-words text-ink-primary sm:text-5xl lg:text-6xl">{current.title}</h1>
+              <p class="mt-5 mb-0 text-lg leading-relaxed text-ink-secondary sm:text-xl">{lead}</p>
+            </header>
+            <details class="mt-8 rounded-xl border border-hairline lg:hidden">
+              <summary class="flex min-h-11 cursor-pointer items-center rounded-xl px-4 text-sm font-semibold text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink">
+                On this page
+              </summary>
+              <ul class="m-0 flex list-none flex-col gap-0.5 px-1.5 pb-3">
+                {contents.map((entry) => <li><a href={`#${entry.id}`} class:list={[link, "min-h-11 py-2.5"]}>{entry.label}</a></li>)}
+              </ul>
+            </details>
+            <slot />
+          </article>
+        </div>
+      </TabFile>
+    </div>
+  </div>
+</PublicLayout>

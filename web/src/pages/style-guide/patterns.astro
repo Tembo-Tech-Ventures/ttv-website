@@ -1,0 +1,192 @@
+---
+import { PiChatsCircle, PiHouse, PiUsersThree } from "react-icons/pi";
+import { Notice, PillNav, SpaceFile } from "@/components/platform/ui";
+import SidebarGroup from "@/components/platform/shell/SidebarGroup.astro";
+import SidebarHeader from "@/components/platform/shell/SidebarHeader.astro";
+import SidebarLink from "@/components/platform/shell/SidebarLink.astro";
+import GuideSection from "@/components/style-guide/GuideSection.astro";
+import LiveSpecimen from "@/components/style-guide/LiveSpecimen";
+import { EmptyExamples, FrameTools, RequestAtRest, RequestRejected } from "@/components/style-guide/PatternSpecimens";
+import Specimen from "@/components/style-guide/Specimen.astro";
+import StyleGuideLayout from "@/components/style-guide/StyleGuideLayout.astro";
+import { GUIDE_PEOPLE } from "@/components/style-guide/people";
+
+const contents = [
+  { id: "frame", label: "The spaces frame" },
+  { id: "page", label: "A page" },
+  { id: "forms", label: "Forms" },
+  { id: "feedback", label: "Feedback" },
+  { id: "empty", label: "Empty and waiting" },
+  { id: "filters", label: "Lists and filters" },
+  { id: "overlays", label: "Overlays" },
+  { id: "without-javascript", label: "Without JavaScript" },
+];
+
+const { lucy } = GUIDE_PEOPLE;
+const rules = "m-0 flex list-none flex-col gap-3 p-0";
+const rule = "border-l-2 border-hairline pl-4 text-[0.9375rem] leading-relaxed text-ink-secondary";
+
+const FEEDBACK = [
+  { when: "A form was rejected", use: "A danger notice at the top of the form, an error under each field, and focus moved to the notice. Keep everything the person typed." },
+  { when: "A change was saved", use: "Show the new state. Add a success notice only when the change is not visible where the person is looking." },
+  { when: "Something cannot be undone", use: "A warning notice before the action, in words, and a second step to confirm it." },
+  { when: "The page is limited", use: "An info notice where the limit applies: “This channel is read-only after the cohort ends.”" },
+  { when: "An action failed in the background", use: "Say what failed and keep the person's input; offer the same action again, never a blank page." },
+];
+---
+
+<StyleGuideLayout
+  section="patterns"
+  lead="How the parts combine on the platform. A pattern is a decision made once, so a mentor's queue, an admin's review and a student's application all behave the same way."
+  contents={contents}
+>
+  <GuideSection
+    id="frame"
+    title="The spaces frame"
+    intro="Every signed-in page sits in the same frame: the tab file of spaces with search and attention beside it, and on the active sheet the space's sidebar and the page. Below 64rem the tabs become a bar at the foot of the screen and the sidebar a drawer."
+  >
+    <Specimen ground caption="Lucy in Community. The sidebar names the space and lists its places; the page holds one task.">
+      <SpaceFile
+        label="Lucy's spaces"
+        active="community"
+        person={{ id: lucy.id, name: lucy.name }}
+        tabs={[
+          { space: "community", label: "Community", href: "#frame" },
+          { space: "profile", label: "Profile", href: "#frame" },
+        ]}
+      >
+        <span slot="start" class="px-2 font-heading text-base tracking-subhead text-ink-primary" aria-hidden="true">TEMBO</span>
+        <FrameTools slot="end" />
+        <div class="grid gap-6 px-4 pt-6 pb-7 sm:px-6 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8">
+          <div class="flex flex-col gap-4 border-hairline md:border-r md:pr-6">
+            <SidebarHeader title="Community" description="Builders, alumni and mentors across every cohort." />
+            <SidebarGroup>
+              <SidebarLink href="#frame" label="What's new" icon={PiHouse} current />
+              <SidebarLink href="#frame" label="Mentors" icon={PiUsersThree} />
+            </SidebarGroup>
+            <SidebarGroup label="Channels">
+              <SidebarLink href="#frame" label="general" icon={PiChatsCircle} emphasis="unread" count={3} countLabel="unread messages" />
+              <SidebarLink href="#frame" label="show-and-tell" icon={PiChatsCircle} emphasis="read" />
+            </SidebarGroup>
+          </div>
+          <div class="min-w-0">
+            <p class="m-0 font-heading text-3xl tracking-heading text-ink-primary" aria-hidden="true">What's new</p>
+            <p class="mt-2 mb-0 max-w-prose text-sm leading-relaxed text-ink-secondary">
+              The page's one display title, then its content. Lists, cards and forms sit straight on the sheet.
+            </p>
+          </div>
+        </div>
+      </SpaceFile>
+    </Specimen>
+  </GuideSection>
+
+  <GuideSection id="page" title="A page">
+    <ul class="m-0 grid list-none gap-4 p-0 md:grid-cols-2">
+      {
+        [
+          ["One display title", "Each screen has exactly one Mattone heading, its h1. Sections below it are Maven Pro h2s."],
+          ["Say what it is for", "A sentence under the title says what the page is for, when that is not obvious from the title."],
+          ["The task near the top", "The primary action comes before the long content it relates to, not after it."],
+          ["Readable lines", "Prose stops at about 70 characters a line; lists and tables can use the width."],
+          ["Space before rules", "Sections are separated by space first, a hairline second, a card third."],
+          ["Nothing behind a hover", "Every action and every piece of information is reachable by keyboard and by touch."],
+        ].map(([title, body]) => (
+          <li class="rounded-[1.125rem] border border-hairline bg-ink-primary/4 p-5">
+            <p class="m-0 font-bold text-ink-primary">{title}</p>
+            <p class="mt-1.5 mb-0 text-sm leading-relaxed text-ink-secondary">{body}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </GuideSection>
+
+  <GuideSection
+    id="forms"
+    title="Forms"
+    intro="Server-rendered forms that post, using the kit's fields. Ask only for what you need, mark what can be skipped, and when a submit is rejected say exactly what to fix without losing a word."
+  >
+    <div class="grid gap-6 xl:grid-cols-2">
+      <Specimen caption="At rest: labels above, hints under them, one primary action last.">
+        <RequestAtRest />
+      </Specimen>
+      <Specimen caption="Rejected: a notice at the top says how many things to fix; each field says what.">
+        <RequestRejected />
+      </Specimen>
+    </div>
+    <ul class:list={[rules, "mt-8"]}>
+      <li class={rule}>Validate when the form is sent, not while someone types. The browser's own checks (required, type="email") run first.</li>
+      <li class={rule}>Errors say how to fix the value: “Enter an email address, like wanjiku@example.com”, not “Invalid input”.</li>
+      <li class={rule}>A rejected submit re-renders the form with every value kept and moves focus to the notice at the top.</li>
+      <li class={rule}>Destructive actions get their own small form and a danger button, away from the main submit.</li>
+    </ul>
+  </GuideSection>
+
+  <GuideSection id="feedback" title="Feedback" intro="Which notice, when. Say it once, where it applies, and say what to do next.">
+    <dl class="m-0" data-feedback>
+      {
+        FEEDBACK.map((row) => (
+          <div class="grid gap-1 border-t border-hairline py-4 md:grid-cols-[15rem_minmax(0,1fr)] md:gap-8">
+            <dt class="text-sm font-semibold text-ink-primary">{row.when}</dt>
+            <dd class="m-0 text-sm leading-relaxed text-ink-secondary">{row.use}</dd>
+          </div>
+        ))
+      }
+    </dl>
+    <div class="mt-6 grid gap-3">
+      <Notice tone="warning" title="Removing this request is permanent">David won't see it, and it can't be brought back.</Notice>
+    </div>
+  </GuideSection>
+
+  <GuideSection
+    id="empty"
+    title="Empty and waiting"
+    intro="An empty list says what belongs there and how it fills; it never just says “Nothing here”. Work in progress keeps its place: a button that is working says so, and the page around it does not jump."
+  >
+    <EmptyExamples />
+  </GuideSection>
+
+  <GuideSection
+    id="filters"
+    title="Lists and filters"
+    intro="When views of a list are worth linking to, they are addresses: a PillNav of links that work without JavaScript. When a filter only narrows what is already on screen, it is a row of Pill toggles."
+  >
+    <div class="grid gap-6 lg:grid-cols-2">
+      <Specimen caption="Views with their own address.">
+        <PillNav
+          label="Moderation lists"
+          items={[
+            { label: "Needs a decision", href: "#filters", current: true, count: 3 },
+            { label: "Decided", href: "#filters" },
+            { label: "Request notes", href: "#filters", count: 1 },
+          ]}
+        />
+      </Specimen>
+      <Specimen caption="Filters on this page. Try them.">
+        <LiveSpecimen demo="pill" client:visible />
+      </Specimen>
+    </div>
+  </GuideSection>
+
+  <GuideSection id="overlays" title="Overlays">
+    <ul class={rules}>
+      <li class={rule}>Overlays are for quick tasks that keep their context: search, attention, a short drawer. A task that matters gets its own page.</li>
+      <li class={rule}>A modal takes focus on open, keeps it inside, closes on Escape and returns focus to the control that opened it.</li>
+      <li class={rule}>Behind a modal, the page is inert and dimmed, so nothing can be reached by mistake.</li>
+      <li class={rule}>Drawers slide from the edge they live on and are still under reduced motion.</li>
+      <li class={rule}>No tooltips carrying information. If a word needs explaining, explain it on the page.</li>
+    </ul>
+  </GuideSection>
+
+  <GuideSection
+    id="without-javascript"
+    title="Without JavaScript"
+    intro="Every page renders on the server and every essential task works before, or without, any script. Islands of React add speed and comfort, not capability."
+  >
+    <ul class={rules}>
+      <li class={rule}>Forms are <code class="font-mono text-ink-primary">&lt;form method="POST"&gt;</code>, handled in the page's frontmatter.</li>
+      <li class={rule}>Menus are native disclosures (<code class="font-mono text-ink-primary">&lt;details&gt;</code>); the sidebar drawer opens through its own link.</li>
+      <li class={rule}>Views live in the address, so back, forward, refresh and sharing a link all work.</li>
+      <li class={rule}>A kit component in an .astro file with no client directive is HTML only: hydrate it only when it must respond to a press.</li>
+    </ul>
+  </GuideSection>
+</StyleGuideLayout>

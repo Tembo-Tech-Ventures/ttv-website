@@ -59,15 +59,17 @@ ttv-website/
 │   │   │   └── CertificateLayout.astro # Minimal layout
 │   │   ├── components/           # Reusable components
 │   │   │   ├── auth/             # Auth components (GitHubSignInButton)
+│   │   │   ├── style-guide/      # The public /style-guide's frame, catalogue and specimens
 │   │   │   ├── common/           # Shared UI (Card, Badge, Sidebar, Grain)
 │   │   │   ├── homepage/         # Homepage sheets, skills map and motion (see web/docs/homepage.md)
-│   │   │   ├── platform/         # Spaces shell, overlays, mentors, onboarding (READMEs inside)
+│   │   │   ├── platform/         # ui/ (the TTV UI kit), spaces shell, overlays, mentors, onboarding (READMEs inside)
 │   │   │   ├── channels/         # Channel view, composer, embeds, Tembo cards
 │   │   │   └── shells/           # Layout shells (AdminShell, DashboardShell)
 │   │   ├── lib/                  # Core libraries
 │   │   │   ├── auth.ts           # better-auth server config
 │   │   │   ├── auth-client.ts    # better-auth client helpers
 │   │   │   ├── platform/         # contracts.ts (Zod), server/ (capabilitiesFor, flags, space routing), client/ (stores, polling)
+│   │   │   ├── design/           # Design tokens read from global.css, and WCAG contrast arithmetic
 │   │   │   ├── attention/        # Attention items and producers
 │   │   │   ├── channels/         # Channels, messages, moderation
 │   │   │   ├── tembo/            # Tembo in channels
@@ -120,6 +122,7 @@ BaseLayout (HTML shell, global CSS, meta tags)
 |------|---------|------|
 | `/` | Public homepage: cohorts, skills map, builders, community, hire, principles | None |
 | `/blog` | Blog placeholder | None |
+| `/style-guide` | The public style guide, five pages in a tab file: Principles, `/foundations`, `/components`, `/patterns`, `/voice`. Renders the UI kit's real components (see `web/docs/design-system/`) | None |
 | `/auth/login` | GitHub OAuth sign-in | None |
 | `/auth/logout` | Sign out | Session |
 | `/dashboard` | User dashboard home; with flag `spaces`, a 302 to the last-used space (`ttv-last-space` cookie) or the first one the caller has | Session |
@@ -272,7 +275,7 @@ GitHub OAuth via **better-auth**:
 ## Styling
 
 - **Tailwind CSS 4**: Custom theme defined in `src/styles/global.css` using `@theme` directive
-- **Color tokens**: `--color-primary` (#F28D68), `--color-dark` (#013D39), `--color-teal` (#2C6964), `--color-bg-raised`, `--color-ink-primary`, `--color-ink-secondary`, `--color-ink-muted`, `--color-rule`
+- **Color tokens**: `--color-primary` (#F28D68), `--color-dark` (#013D39), `--color-teal` (#2C6964), `--color-bg-raised`, `--color-ink-primary`, `--color-ink-secondary`, `--color-ink-muted`, `--color-rule`; for the platform, the ground and sheet tones, `peach-ink`, `ring`, and the status inks `danger-ink`, `success-ink`, `warning-ink` (every one in `web/docs/design-system/foundations.md`)
 - **Typography**: Mattone Black (Collletttivo, OFL 1.1, self-hosted) for h1/h2, Maven Pro (OFL 1.1, self-hosted, latin file preloaded by `FontPreload`) for body and h3-h6
 - **Display tracking**: three named theme tokens (`--tracking-display`, `--tracking-heading`, `--tracking-subhead`) instead of per-element `letter-spacing`, so the display face can be swapped without retuning every heading
 - **Animations**: GSAP ScrollTrigger on the homepage's stacked sheets and skills map (see `web/docs/homepage.md`), reveal utility class
@@ -331,9 +334,10 @@ No Docker needed. Wrangler handles local D1 database emulation.
 - **Astro first**: Use `.astro` for pages and static components. React `.tsx` only for interactivity.
 - **`client:visible`** for below-fold interactive content, **`client:load`** for above-fold
 - **Path alias**: `@/` for `src/` in imports
-- **Common components**: Use `Card`, `Badge`, `Sidebar` from `src/components/common/`.
-  `Button`, `Input` and `Table` used to be listed here but were never imported by
-  anything — three dead files that this instruction kept pointing at, which is a
-  large part of why there are 74 hand-rolled buttons in 41 spellings. They have
-  been deleted; real primitives are a separate piece of work.
+- **UI kit**: Build UI from the TTV UI kit, `@/components/platform/ui` (buttons, links, fields, notices,
+  empty states, chips, avatars, cards, sheets and the tab file). In `.astro` files a kit component with no
+  `client:` directive renders as static HTML. Where a component cannot go, use its recipe (`buttonClass`,
+  `FOCUS_RING`) rather than copying classes. The older `common/Button.astro`, `Card.astro`, `Badge.astro` and the
+  `form-control` utility are frozen to the files that already use them (`legacy-ui.test.ts`). The guide is
+  `web/docs/design-system/`; the public version, with every component live, is `/style-guide`.
 - **Theme colors**: Use Tailwind classes (`text-primary`, `bg-dark`, `text-ink-primary`, etc.)

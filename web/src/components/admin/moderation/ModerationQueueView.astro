@@ -5,6 +5,7 @@ import ModerationTabs from "./ModerationTabs.astro";
 import { REQUEST_NOTES_LABEL } from "./request-notes";
 import { QUEUE_TABS } from "./case-model";
 import type { QueueViewProps } from "./page-flow";
+import { FOCUS_RING } from "@/components/platform/ui/recipes";
 
 /**
  * The admin moderation queue (U-2.4, screens/08), as /admin/moderation and its DEV harness render
@@ -23,7 +24,6 @@ type Props = QueueViewProps & {
 
 const { titleTag: Title = "h2", state, items, pendingCount, formAction, tabHrefs, nextHref, paged, notice, noticeSubject, failure, rowError, requestNotesHref, requestNotesCount } = Astro.props;
 const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
-const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 ---
 
 <div class="mx-auto max-w-6xl space-y-8 pt-4 lg:px-6 lg:pt-6" data-moderation-root data-state={state} data-pending-count={pendingCount}>
@@ -39,7 +39,7 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
     <p role="status" tabindex="-1" autofocus class={`${BANNER} border-ring/30 bg-ring/8`} data-moderation-notice>
       {noticeSubject && <span class="block font-semibold" data-moderation-notice-subject>{noticeSubject}</span>}
       {notice}
-      {" "}<a href={tabHrefs.DECIDED} class={`font-semibold text-peach-ink underline ${FOCUS}`}>See decided cases</a>
+      {" "}<a href={tabHrefs.DECIDED} class={`font-semibold text-peach-ink underline ${FOCUS_RING}`}>See decided cases</a>
     </p>
   )}
   {failure && (
@@ -77,8 +77,8 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
 
   {(nextHref || paged) && (
     <nav aria-label="More cases" class="flex flex-wrap gap-4 text-sm">
-      {paged && <a href={tabHrefs[state]} class={`inline-flex min-h-11 items-center text-peach-ink hover:underline ${FOCUS}`}>Back to the start</a>}
-      {nextHref && <a href={nextHref} class={`inline-flex min-h-11 items-center text-peach-ink hover:underline ${FOCUS}`}>Older cases</a>}
+      {paged && <a href={tabHrefs[state]} class={`inline-flex min-h-11 items-center text-peach-ink hover:underline ${FOCUS_RING}`}>Back to the start</a>}
+      {nextHref && <a href={nextHref} class={`inline-flex min-h-11 items-center text-peach-ink hover:underline ${FOCUS_RING}`}>Older cases</a>}
     </nav>
   )}
 

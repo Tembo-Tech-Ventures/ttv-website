@@ -10,6 +10,7 @@ import {
 } from "@/lib/admin/platform-flags";
 import { listFlags, updateFlag } from "@/lib/platform/server/flag-admin";
 import { FlagAudience, FlagKey } from "@/lib/platform/contracts";
+import { FOCUS_RING } from "@/components/platform/ui/recipes";
 
 /*
  * Who sees each platform feature flag (U-F.1). Middleware has required ADMIN, admin:write for a
@@ -76,7 +77,6 @@ const confirmWarnings = confirming
 const overridden = flagsOverridden(env);
 
 const BANNER = "rounded-xl border px-4 py-3 text-sm text-ink-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
-const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 // In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
 const spaces = await resolveSpacePage(Astro.locals, "adminFlags");
 // The page title is the screen's one display heading in the spaces shell.
@@ -118,7 +118,7 @@ const Title = spaces ? "h1" : "h2";
         aria-labelledby="flag-confirm-heading"
         tabindex="-1"
         autofocus
-        class={`space-y-4 rounded-2xl border border-primary/50 bg-primary/8 p-5 sm:p-6 ${FOCUS}`}
+        class={`space-y-4 rounded-2xl border border-primary/50 bg-primary/8 p-5 sm:p-6 ${FOCUS_RING}`}
         data-flag-confirm={confirming}
       >
         <h3 id="flag-confirm-heading" class="text-xl font-bold text-ink-primary">Show {confirmName} to everyone?</h3>
@@ -138,7 +138,7 @@ const Title = spaces ? "h1" : "h2";
           <Button type="submit" variant="primary" className="h-11">Show {confirmName} to everyone</Button>
           <a
             href={PLATFORM_FLAGS_PATH}
-            class={`inline-flex h-11 items-center rounded-xl border border-hairline bg-ink-primary/6 px-4 text-sm font-semibold text-ink-primary hover:bg-ink-primary/10 ${FOCUS}`}
+            class={`inline-flex h-11 items-center rounded-xl border border-hairline bg-ink-primary/6 px-4 text-sm font-semibold text-ink-primary hover:bg-ink-primary/10 ${FOCUS_RING}`}
           >
             Cancel
           </a>
@@ -197,7 +197,7 @@ const Title = spaces ? "h1" : "h2";
                       name="audience"
                       value={audience}
                       aria-label={`Set ${name} to ${AUDIENCE_LABELS[audience]}`}
-                      class={`inline-flex min-h-11 items-center justify-center rounded-lg px-3 text-sm font-semibold text-ink-secondary transition-colors hover:bg-ink-primary/8 hover:text-ink-primary motion-reduce:transition-none ${FOCUS}`}
+                      class={`inline-flex min-h-11 items-center justify-center rounded-lg px-3 text-sm font-semibold text-ink-secondary transition-colors hover:bg-ink-primary/8 hover:text-ink-primary motion-reduce:transition-none ${FOCUS_RING}`}
                     >
                       {AUDIENCE_LABELS[audience]}
                     </button>

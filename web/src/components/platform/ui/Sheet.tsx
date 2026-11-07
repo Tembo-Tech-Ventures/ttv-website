@@ -3,9 +3,16 @@ import { cx } from "./cx";
 import type { Space } from "./spaces";
 import "./platform-ui.css";
 
+/**
+ * The sheet tones, named for the spaces that wear them. Anything else drawn as
+ * a sheet (the style guide's sections, say) borrows one of these rather than
+ * mixing a new colour: contrast.test.ts proves every ink on exactly these.
+ */
+export type SheetTone = Space;
+
 type SheetProps = {
   /** Whose sheet this is. The tone follows the space. */
-  space: Space;
+  space: SheetTone;
   children: ReactNode;
   as?: "div" | "section" | "main" | "article";
   className?: string;

@@ -3,7 +3,7 @@ export interface SitemapEntry {
   lastmod?: Date;
 }
 
-export const STATIC_PUBLIC_ROUTES = ["/", "/community", "/community/members", "/community/mentors", "/community/institutions", "/talent", "/hire", "/blog"] as const;
+export const STATIC_PUBLIC_ROUTES = ["/", "/community", "/community/members", "/community/mentors", "/community/institutions", "/talent", "/hire", "/blog", "/style-guide", "/style-guide/foundations", "/style-guide/components", "/style-guide/patterns", "/style-guide/voice"] as const;
 
 export function escapeXml(value: string): string {
   return value

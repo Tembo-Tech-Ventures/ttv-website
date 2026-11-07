@@ -156,8 +156,11 @@ export default function SpacesShell({
 
   /* Choosing a space, from the tabs or the bottom bar, is remembered for next time. */
   function rememberSpace(event: MouseEvent) {
-    const link = (event.target as Element).closest<HTMLAnchorElement>("[data-space] a[href]");
-    const chosen = link?.closest<HTMLElement>("[data-space]")?.dataset.space;
+    const target = event.target as Element;
+    if (!target.closest("a[href]")) return;
+    // A tab in the file names its space as `data-tab`; an item in the bottom bar as `data-space`.
+    const item = target.closest<HTMLElement>(".space-file__tabs [data-tab], .spaces-bottom [data-space]");
+    const chosen = item?.dataset.tab ?? item?.dataset.space;
     if (chosen && chosen !== space && remembered(chosen)) shell.switchSpace(chosen);
   }
 

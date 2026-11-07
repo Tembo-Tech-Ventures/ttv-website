@@ -46,7 +46,7 @@ describe("SpaceFile", () => {
   });
 
   it("always orders spaces the same way, with Profile last", () => {
-    const order = [...render().matchAll(/data-space="([a-z]+)"/g)].map((m) => m[1]);
+    const order = [...render().matchAll(/data-tab="([a-z]+)"/g)].map((m) => m[1]);
     expect(order).toEqual(["cohort", "community", "mentoring", "admin", "profile"]);
     expect(SPACES.at(-1)).toBe("profile");
   });
@@ -58,12 +58,12 @@ describe("SpaceFile", () => {
   it("marks exactly one tab as the current page, and the sheet takes its tone", () => {
     const html = render("admin");
     expect(html.match(/aria-current="page"/g)).toHaveLength(1);
-    expect(html).toMatch(/data-space="admin" data-space-tone="admin" data-active="true"><a class="space-tab__link" href="\/a" aria-current="page"/);
+    expect(html).toMatch(/data-tab="admin" data-space-tone="admin" data-active="true"><a class="space-tab__link" href="\/a" aria-current="page"/);
     expect(html).toContain('data-sheet="admin"');
   });
 
   it("tints every tab with its own space's tone", () => {
-    for (const { space } of STAFF) expect(render()).toContain(`data-space="${space}" data-space-tone="${space}"`);
+    for (const { space } of STAFF) expect(render()).toContain(`data-tab="${space}" data-space-tone="${space}"`);
   });
 
   it("reads counts with their meaning and names an unread dot", () => {
@@ -89,7 +89,7 @@ describe("SpaceFile", () => {
 
   it("wears the person's avatar on the Profile tab, silently", () => {
     const html = render();
-    expect(html).toMatch(/data-space="profile"[^]*data-avatar="fixture-amina-hassan"[^]*aria-hidden="true"/);
+    expect(html).toMatch(/data-tab="profile"[^]*data-avatar="fixture-amina-hassan"[^]*aria-hidden="true"/);
   });
 
   it("puts end content in the row only when given", () => {

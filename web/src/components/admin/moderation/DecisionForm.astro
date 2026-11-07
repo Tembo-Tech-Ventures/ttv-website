@@ -2,6 +2,7 @@
 import Button from "@/components/platform/ui/Button";
 import { REASON_MAX } from "./decision-form";
 import type { DecisionOption } from "./case-model";
+import { FOCUS_RING } from "@/components/platform/ui/recipes";
 
 /**
  * The decision form for one case: a required reason, then one button per decision. A plain form
@@ -25,7 +26,6 @@ const hint = options.some((option) => option.action === "hide")
   ? "Kept with your decision. If you hide the message, its author sees this reason."
   : "Kept with your decision. Only admins see it.";
 const ids = { reason: `moderation-${caseId}-reason`, hint: `moderation-${caseId}-hint`, error: `moderation-${caseId}-error` };
-const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-peach-ink";
 ---
 
 <form method="POST" action={action} class:list={["space-y-3", className]} data-moderation-form>
@@ -40,7 +40,7 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
       maxlength={REASON_MAX}
       aria-describedby={error ? `${ids.error} ${ids.hint}` : ids.hint}
       aria-invalid={error ? "true" : undefined}
-      class={`block min-h-11 w-full resize-y rounded-xl border border-hairline bg-ground/60 px-3.5 py-2.5 text-[0.9375rem] text-ink-primary placeholder:text-ink-muted focus-visible:border-peach-ink ${FOCUS}`}
+      class={`block min-h-11 w-full resize-y rounded-xl border border-hairline bg-ground/60 px-3.5 py-2.5 text-[0.9375rem] text-ink-primary placeholder:text-ink-muted focus-visible:border-peach-ink ${FOCUS_RING}`}
     >{draftReason}</textarea>
     <p id={ids.hint} class="text-xs text-ink-muted">{hint}</p>
     <p
@@ -48,7 +48,7 @@ const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visi
       role="alert"
       tabindex="-1"
       autofocus={Boolean(error)}
-      class:list={["text-sm text-danger-ink", FOCUS, !error && "hidden"]}
+      class:list={["text-sm text-danger-ink", FOCUS_RING, !error && "hidden"]}
       data-moderation-error
     >{error}</p>
   </div>

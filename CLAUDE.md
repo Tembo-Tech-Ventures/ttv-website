@@ -24,6 +24,7 @@ npm test                      # Run Vitest tests
 
 - **Path alias**: Use `@/` for `src/`. Example: `import * as schema from "@/lib/db/schema"`
 - **Astro components by default**: Only use React (`.tsx`) with `client:visible` or `client:load` when the component needs browser APIs, hooks, or event handlers
+- **UI kit and style guide**: Build UI from `@/components/platform/ui` (Button, ButtonLink, fields, Notice, EmptyState, Chip, Card, TabFile…), static in `.astro` files without a `client:` directive. Never hand-roll a button, field or alert. Principles, tokens, components, patterns and voice are in `web/docs/design-system/`; the public guide is `/style-guide`.
 - **Middleware for auth**: Auth guards are in `src/middleware.ts`, not per-page. Dashboard requires login, admin requires ADMIN role.
 - **Feature flags**: Platform features (spaces, onboarding, channels, Tembo in channels, mentor requests) ship dark behind DB-backed flags; a page or API whose flag is off for the caller returns 404. Access comes from `capabilitiesFor` / `channelAccessFor`. See `web/docs/platform-spaces-and-channels.md`.
 - **Astro pages**: All pages are `.astro` files in `src/pages/`. Forms use standard HTML `<form method="POST">` with server-side handling in frontmatter.

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { contrast, over, parseColour as parse, type Rgb } from "@/lib/design/contrast";
+import { colourToken as token } from "@/lib/design/tokens";
 import { AVATAR_PALETTE } from "./avatar-colour";
+import { NOTICE_TONES } from "./Notice";
+import { CONTROL } from "./recipes";
 import { SPACES } from "./spaces";
 import { CHIP_TONES, RAISED, type ChipTone } from "./tones";
 
@@ -16,46 +20,10 @@ import { CHIP_TONES, RAISED, type ChipTone } from "./tones";
  * Change a token or a tint and this recomputes; it cannot drift out of date.
  */
 const HERE = resolve(__dirname);
-const GLOBAL_CSS = readFileSync(resolve(HERE, "../../../styles/global.css"), "utf8");
 const PLATFORM_CSS = readFileSync(join(HERE, "platform-ui.css"), "utf8");
 const AA = 4.5;
-
-type Rgb = [number, number, number];
-
-function token(name: string): string {
-  const match = new RegExp(`--color-${name}:\\s*([^;]+);`).exec(GLOBAL_CSS);
-  if (!match) throw new Error(`--color-${name} is not defined in global.css`);
-  return match[1].trim();
-}
-
-function parse(value: string): { rgb: Rgb; alpha: number } {
-  const hex = /^#([0-9a-f]{6})$/i.exec(value);
-  if (hex) {
-    const n = Number.parseInt(hex[1], 16);
-    return { rgb: [(n >> 16) & 255, (n >> 8) & 255, n & 255], alpha: 1 };
-  }
-  const parts = value.match(/[\d.]+/g);
-  if (!parts || parts.length < 3) throw new Error(`Cannot parse colour: ${value}`);
-  return { rgb: [Number(parts[0]), Number(parts[1]), Number(parts[2])], alpha: Number(parts[3] ?? 1) };
-}
-
-/** `top` at `alpha` laid over the opaque `base`. */
-function over(top: Rgb, alpha: number, base: Rgb): Rgb {
-  return top.map((c, i) => alpha * c + (1 - alpha) * base[i]) as Rgb;
-}
-
-function luminance([r, g, b]: Rgb) {
-  const channel = (c: number) => {
-    const v = c / 255;
-    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-}
-
-function contrast(a: Rgb, b: Rgb) {
-  const [hi, lo] = [luminance(a), luminance(b)].toSorted((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
-}
+/** WCAG 1.4.11: the edge that shows where a control is. */
+const NON_TEXT = 3;
 
 /** Ink colour, composited onto the surface when the token is translucent. */
 function ink(name: string, surface: Rgb): Rgb {
@@ -71,7 +39,7 @@ function tint(classes: string) {
 }
 
 function textToken(classes: string) {
-  const match = /\btext-((?:ink|peach|ring|danger)[a-z-]*)\b/.exec(classes);
+  const match = /\btext-((?:ink|peach|ring|danger|success|warning)[a-z-]*)\b/.exec(classes);
   if (!match) throw new Error(`No text colour in "${classes}"`);
   return match[1];
 }
@@ -84,7 +52,7 @@ function lay(classes: string, base: Rgb): Rgb {
 /** The strongest `hover:bg-<colour>/<n>` tint any primitive lays under its text. */
 function strongestHover(colour: string) {
   const sources = readdirSync(HERE)
-    .filter((file) => file.endsWith(".tsx"))
+    .filter((file) => /\.tsx?$/.test(file) && !file.includes(".test."))
     .map((file) => readFileSync(join(HERE, file), "utf8"))
     .join("\n");
   const pattern = new RegExp(`hover:bg-${colour}/(\\d+)`, "g");
@@ -101,7 +69,7 @@ describe.each(SPACES)("the %s sheet", (space) => {
   const bases = { sheet, card: raised } as const;
 
   describe.each(Object.entries(bases))("on the %s", (_, base) => {
-    it.each(["ink-primary", "ink-secondary", "ink-muted", "peach-ink", "ring", "danger-ink"])(
+    it.each(["ink-primary", "ink-secondary", "ink-muted", "peach-ink", "ring", "danger-ink", "success-ink", "warning-ink"])(
       "%s clears 4.5:1",
       (name) => {
         expect(contrast(ink(name, base), base)).toBeGreaterThanOrEqual(AA);
@@ -128,6 +96,37 @@ describe.each(SPACES)("the %s sheet", (space) => {
     it("danger-ink stays readable under its hover", () => {
       const surface = over(parse(token("danger-ink")).rgb, strongestHover("danger-ink"), base);
       expect(contrast(ink("danger-ink", surface), surface)).toBeGreaterThanOrEqual(AA);
+    });
+  });
+
+  describe.each(Object.entries(bases))("a notice on the %s", (_, base) => {
+    it.each(Object.entries(NOTICE_TONES))("%s: its title and its words clear 4.5:1 on its tint", (_tone, { frame, ink: title }) => {
+      const surface = lay(frame, base);
+      expect(contrast(ink(textToken(title), surface), surface)).toBeGreaterThanOrEqual(AA);
+      // Body words are ink-secondary under a title and ink-primary without one.
+      expect(contrast(ink("ink-secondary", surface), surface)).toBeGreaterThanOrEqual(AA);
+    });
+  });
+
+  describe.each(Object.entries(bases))("a text field on the %s", (_, base) => {
+    const well = lay(CONTROL, base);
+
+    it("shows its edge at 3:1, so the field can be found", () => {
+      const edge = /\bborder-ink-primary\/(\d+)\b/.exec(CONTROL);
+      expect(edge, "the control's border is a tint of ink-primary").not.toBeNull();
+      const border = over(parse(token("ink-primary")).rgb, Number(edge![1]) / 100, base);
+      expect(contrast(border, base)).toBeGreaterThanOrEqual(NON_TEXT);
+    });
+
+    it("keeps typed words and the placeholder at 4.5:1 in its well", () => {
+      expect(contrast(ink("ink-primary", well), well)).toBeGreaterThanOrEqual(AA);
+      expect(contrast(ink("ink-muted", well), well)).toBeGreaterThanOrEqual(AA);
+    });
+
+    it("shows an invalid edge and a focused edge at 3:1", () => {
+      for (const name of ["danger-ink", "peach-ink"]) {
+        expect(contrast(ink(name, base), base)).toBeGreaterThanOrEqual(NON_TEXT);
+      }
     });
   });
 

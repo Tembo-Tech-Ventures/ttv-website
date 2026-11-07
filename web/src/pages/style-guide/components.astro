@@ -1,0 +1,66 @@
+---
+import CatalogueSpecimen from "@/components/style-guide/CatalogueSpecimen";
+import CodeBlock from "@/components/style-guide/CodeBlock.astro";
+import Guidance from "@/components/style-guide/Guidance.astro";
+import GuideSection from "@/components/style-guide/GuideSection.astro";
+import LiveSpecimen from "@/components/style-guide/LiveSpecimen";
+import Specimen from "@/components/style-guide/Specimen.astro";
+import StyleGuideLayout from "@/components/style-guide/StyleGuideLayout.astro";
+import { CATALOGUE } from "@/components/style-guide/catalogue";
+
+const contents = [{ id: "using-the-kit", label: "Using the kit" }, ...CATALOGUE.map((entry) => ({ id: entry.id, label: entry.name }))];
+---
+
+<StyleGuideLayout
+  section="components"
+  lead="The TTV UI kit, part by part. Each example is the real component, rendered by the server exactly as the platform renders it; the ones marked “Try it” respond when you press them."
+  contents={contents}
+>
+  <GuideSection
+    id="using-the-kit"
+    title="Using the kit"
+    intro="One import, for React islands and Astro pages alike. In an .astro file, a component without a client directive renders as plain HTML and sends no JavaScript."
+  >
+    <CodeBlock
+      code={`---
+import { Button, Notice, TextField } from "@/components/platform/ui";
+---
+<form method="POST">
+  {error && <Notice tone="danger" title={error} />}
+  <TextField name="name" label="Your name" required />
+  <Button variant="primary" type="submit">Save</Button>
+</form>`}
+    />
+    <p class="mt-4 mb-0 max-w-3xl text-sm leading-relaxed text-ink-secondary">
+      Where a component cannot go, such as a link inside server-rendered copy that must look like a button, take its recipe instead:
+      <code class="rounded bg-ground/60 px-1.5 py-0.5 font-mono text-[0.8125rem] text-ink-primary">buttonClass({"{"} variant: "primary" {"}"})</code>.
+      Never copy a component's classes by hand.
+    </p>
+  </GuideSection>
+
+  {
+    CATALOGUE.map((entry) => (
+      <GuideSection id={entry.id} title={entry.name} intro={entry.summary}>
+        <Specimen label={`${entry.name} examples`} code={entry.code}>
+          <CatalogueSpecimen id={entry.id} />
+          {entry.live && (
+            <div class="mt-6 border-t border-hairline pt-5" data-live={entry.live}>
+              <p class="mt-0 mb-3 text-xs font-semibold text-peach-ink">Try it</p>
+              <LiveSpecimen demo={entry.live} client:visible />
+            </div>
+          )}
+        </Specimen>
+        <Guidance use={entry.use} avoid={entry.avoid} access={entry.access} />
+        <p class="mt-6 mb-0 text-xs leading-relaxed text-ink-muted">
+          Exports:{" "}
+          {entry.exports.map((name, index) => (
+            <>
+              {index > 0 && ", "}
+              <code class="font-mono text-ink-secondary">{name}</code>
+            </>
+          ))}
+        </p>
+      </GuideSection>
+    ))
+  }
+</StyleGuideLayout>

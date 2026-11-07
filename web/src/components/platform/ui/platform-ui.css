@@ -20,7 +20,8 @@
 .platform-sheet {
   --sheet: var(--space-tone);
   position: relative;
-  border-radius: var(--sheet-radius, 1.75rem) var(--sheet-radius, 1.75rem) 0 0;
+  /* Square at the foot by default: a space's sheet runs off the bottom of the screen. A sheet that ends on the page sets --sheet-foot. */
+  border-radius: var(--sheet-radius, 1.75rem) var(--sheet-radius, 1.75rem) var(--sheet-foot, 0) var(--sheet-foot, 0);
   background-color: var(--space-tone);
   box-shadow:
     0 -1px 0 rgb(255 248 242 / 0.1),
@@ -216,15 +217,19 @@
  * longest labels with counts (130 to 168px a tab), plus gaps and insets, with a
  * little room to spare; e2e/platform-ui.spec.ts sweeps them. The label stays in the accessibility tree; only the
  * active tab, which names where you are, keeps its word on screen.
+ *
+ * A file whose tabs have no markers (`data-fold="off"`, set by TabFile) keeps
+ * every word instead, since a folded tab would be an empty square: its strip
+ * scrolls within its bounds, opening on the active tab.
  */
 @container (max-width: 27rem) {
-  .space-file[data-tabs="2"] .space-tab:not([data-active]) .space-tab__link {
+  .space-file[data-tabs="2"]:not([data-fold="off"]) .space-tab:not([data-active]) .space-tab__link {
     justify-content: center;
     min-width: 2.75rem;
     padding-inline: 0.625rem;
   }
 
-  .space-file[data-tabs="2"] .space-tab:not([data-active]) .space-tab__label {
+  .space-file[data-tabs="2"]:not([data-fold="off"]) .space-tab:not([data-active]) .space-tab__label {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -235,13 +240,13 @@
 }
 
 @container (max-width: 36rem) {
-  .space-file[data-tabs="3"] .space-tab:not([data-active]) .space-tab__link {
+  .space-file[data-tabs="3"]:not([data-fold="off"]) .space-tab:not([data-active]) .space-tab__link {
     justify-content: center;
     min-width: 2.75rem;
     padding-inline: 0.625rem;
   }
 
-  .space-file[data-tabs="3"] .space-tab:not([data-active]) .space-tab__label {
+  .space-file[data-tabs="3"]:not([data-fold="off"]) .space-tab:not([data-active]) .space-tab__label {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -252,13 +257,13 @@
 }
 
 @container (max-width: 45rem) {
-  .space-file[data-tabs="4"] .space-tab:not([data-active]) .space-tab__link {
+  .space-file[data-tabs="4"]:not([data-fold="off"]) .space-tab:not([data-active]) .space-tab__link {
     justify-content: center;
     min-width: 2.75rem;
     padding-inline: 0.625rem;
   }
 
-  .space-file[data-tabs="4"] .space-tab:not([data-active]) .space-tab__label {
+  .space-file[data-tabs="4"]:not([data-fold="off"]) .space-tab:not([data-active]) .space-tab__label {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -269,13 +274,13 @@
 }
 
 @container (max-width: 54rem) {
-  .space-file[data-tabs="5"] .space-tab:not([data-active]) .space-tab__link {
+  .space-file[data-tabs="5"]:not([data-fold="off"]) .space-tab:not([data-active]) .space-tab__link {
     justify-content: center;
     min-width: 2.75rem;
     padding-inline: 0.625rem;
   }
 
-  .space-file[data-tabs="5"] .space-tab:not([data-active]) .space-tab__label {
+  .space-file[data-tabs="5"]:not([data-fold="off"]) .space-tab:not([data-active]) .space-tab__label {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -286,19 +291,29 @@
 }
 
 @container (max-width: 62rem) {
-  .space-file[data-tabs="6"] .space-tab:not([data-active]) .space-tab__link {
+  .space-file[data-tabs="6"]:not([data-fold="off"]) .space-tab:not([data-active]) .space-tab__link {
     justify-content: center;
     min-width: 2.75rem;
     padding-inline: 0.625rem;
   }
 
-  .space-file[data-tabs="6"] .space-tab:not([data-active]) .space-tab__label {
+  .space-file[data-tabs="6"]:not([data-fold="off"]) .space-tab:not([data-active]) .space-tab__label {
     position: absolute;
     width: 1px;
     height: 1px;
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
+  }
+}
+
+/*
+ * A strip that keeps its words scrolls on narrow screens; its ends fade, so a
+ * tab cut by the edge reads as "more this way" rather than as a broken word.
+ */
+@container (max-width: 40rem) {
+  .space-file[data-fold="off"] .space-file__nav {
+    mask-image: linear-gradient(to right, transparent, #000 1.25rem, #000 calc(100% - 1.25rem), transparent);
   }
 }
 
