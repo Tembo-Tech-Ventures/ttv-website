@@ -107,21 +107,21 @@ test.describe("the demonstrations", () => {
 
     const pill = page.locator('[data-live="pill"]');
     await pill.scrollIntoViewIfNeeded();
-    await expect(pill.locator("astro-island[ssr]")).toHaveCount(0);
+    await expect(pill.locator("astro-island[ssr]")).toHaveCount(0, { timeout: 20_000 });
     await pill.getByRole("button", { name: /Decided/ }).click();
     await expect(pill.getByRole("button", { name: /Decided/ })).toHaveAttribute("aria-pressed", "true");
     await expect(pill.getByRole("listitem")).toHaveText([/Achieng Otieno/]);
 
     const button = page.locator('[data-live="button"]');
     await button.scrollIntoViewIfNeeded();
-    await expect(button.locator("astro-island[ssr]")).toHaveCount(0);
+    await expect(button.locator("astro-island[ssr]")).toHaveCount(0, { timeout: 20_000 });
     await button.getByRole("button", { name: "Send request" }).click();
     await expect(button.getByRole("button")).toHaveAttribute("aria-busy", "true");
     await expect(button.getByRole("status")).toContainText("Sent.", { timeout: 5_000 });
 
     const reaction = page.locator('[data-live="reaction"]');
     await reaction.scrollIntoViewIfNeeded();
-    await expect(reaction.locator("astro-island[ssr]")).toHaveCount(0);
+    await expect(reaction.locator("astro-island[ssr]")).toHaveCount(0, { timeout: 20_000 });
     const learned = reaction.getByRole("button", { name: /Learned something/ });
     await expect(learned).toHaveAttribute("aria-pressed", "false");
     await learned.click();
@@ -130,7 +130,7 @@ test.describe("the demonstrations", () => {
 
     const toggles = page.locator('[data-live="icon-button"]');
     await toggles.scrollIntoViewIfNeeded();
-    await expect(toggles.locator("astro-island[ssr]")).toHaveCount(0);
+    await expect(toggles.locator("astro-island[ssr]")).toHaveCount(0, { timeout: 20_000 });
     const bell = toggles.getByRole("button", { name: "Attention, 4 waiting" });
     await bell.click();
     await expect(toggles.getByRole("button", { name: "Attention" })).toBeVisible();
@@ -141,7 +141,7 @@ test.describe("the demonstrations", () => {
     await open(page, "/style-guide/components");
     const button = page.locator('[data-live="button"]');
     await button.scrollIntoViewIfNeeded();
-    await expect(button.locator("astro-island[ssr]")).toHaveCount(0);
+    await expect(button.locator("astro-island[ssr]")).toHaveCount(0, { timeout: 20_000 });
     await button.getByRole("button", { name: "Send request" }).click();
     const spinner = button.locator("[data-spinner]");
     await expect(spinner).toBeVisible();

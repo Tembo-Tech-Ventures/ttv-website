@@ -311,8 +311,11 @@
  * A strip that keeps its words scrolls on narrow screens. Each end fades only
  * while there is more to scroll that way, so a tab cut by the edge reads as
  * "more this way" rather than as a broken word, and a tab at rest against the
- * edge is never faded. The fades follow the strip's own scroll position; with
- * nothing to scroll (or no scroll timelines) both stay at zero.
+ * edge is never faded. The fades follow the strip's own scroll position, so
+ * they exist only where scroll timelines do: without them a fill-both
+ * animation would hold its last frame, fading the wrong end for good. With
+ * nothing to scroll, both stay at zero. Scoped to the file's own strip, never
+ * a file nested inside its sheet.
  */
 @property --strip-fade-start {
   syntax: "<length>";
@@ -342,16 +345,18 @@
   }
 }
 
-.space-file[data-fold="off"] .space-file__nav {
-  mask-image: linear-gradient(
-    to right,
-    transparent,
-    #000 var(--strip-fade-start),
-    #000 calc(100% - var(--strip-fade-end)),
-    transparent
-  );
-  animation: space-file-strip-fade linear both;
-  animation-timeline: scroll(self inline);
+@supports (animation-timeline: scroll()) {
+  .space-file[data-fold="off"] > .space-file__row > .space-file__nav {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 var(--strip-fade-start),
+      #000 calc(100% - var(--strip-fade-end)),
+      transparent
+    );
+    animation: space-file-strip-fade linear both;
+    animation-timeline: scroll(self inline);
+  }
 }
 
 @container (max-width: 34rem) {

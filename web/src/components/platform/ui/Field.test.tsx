@@ -160,6 +160,25 @@ describe("choices", () => {
   });
 });
 
+describe("choice ids", () => {
+  it("make a value with spaces safe for an id, so a hint's reference stays one token", () => {
+    const input = dom(renderToStaticMarkup(<Checkbox label="Data science" name="areas" value="data science" hint="Python and SQL." />)).querySelector("input")!;
+    expect(input.id).toBe("areas-data-science");
+    expect(input.getAttribute("aria-describedby")).toBe("areas-data-science-hint");
+  });
+});
+
+describe("a caller's own description", () => {
+  it("is kept, before the field's hint and error", () => {
+    const input = dom(
+      renderToStaticMarkup(<TextField label="Bio" name="bio" hint="Two lines." error="Too long." aria-describedby="bio-count" />),
+    ).querySelector("input")!;
+    expect(input.getAttribute("aria-describedby")).toBe("bio-count bio-hint bio-error");
+    const plain = dom(renderToStaticMarkup(<TextAreaField label="Bio" name="b2" aria-describedby="b2-count" />)).querySelector("textarea")!;
+    expect(plain.getAttribute("aria-describedby")).toBe("b2-count");
+  });
+});
+
 describe("fieldAria", () => {
   it("is empty for a field with nothing to add", () => {
     expect(fieldAria("x", {})).toEqual({ "aria-describedby": undefined, "aria-invalid": undefined });

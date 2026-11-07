@@ -26,6 +26,11 @@ type FieldText = {
   optional?: boolean;
 };
 
+/** A value as part of an id: no spaces, which would split an `aria-describedby` list. */
+function idPart(value: string): string {
+  return value.trim().replace(/[^A-Za-z0-9_-]+/g, "-") || "blank";
+}
+
 /** The id every part of one field hangs off. */
 export function fieldId(id: string | undefined, name: string | undefined): string {
   const resolved = id ?? name;
@@ -33,9 +38,12 @@ export function fieldId(id: string | undefined, name: string | undefined): strin
   return resolved;
 }
 
-/** The control's links to its hint and error, so both are read with it. */
-export function fieldAria(id: string, { hint, error }: Pick<FieldText, "hint" | "error">) {
-  const describedBy = [hint ? `${id}-hint` : null, error ? `${id}-error` : null].filter(Boolean).join(" ");
+/**
+ * The control's links to its hint and error, so both are read with it, after
+ * any descriptions of the caller's own (a character count, say).
+ */
+export function fieldAria(id: string, { hint, error }: Pick<FieldText, "hint" | "error">, own?: string) {
+  const describedBy = [own, hint ? `${id}-hint` : null, error ? `${id}-error` : null].filter(Boolean).join(" ");
   return {
     "aria-describedby": describedBy || undefined,
     "aria-invalid": error ? (true as const) : undefined,
@@ -97,7 +105,7 @@ export function TextField({ label, hint, error, optional, id, name, type = "text
   const fid = fieldId(id, name);
   return (
     <Frame id={fid} label={label} hint={hint} error={error} optional={optional} className={className}>
-      <input {...rest} {...fieldAria(fid, { hint, error })} id={fid} name={name} type={type} className={cx(CONTROL, CONTROL_HEIGHT)} />
+      <input {...rest} {...fieldAria(fid, { hint, error }, rest["aria-describedby"])} id={fid} name={name} type={type} className={cx(CONTROL, CONTROL_HEIGHT)} />
     </Frame>
   );
 }
@@ -111,7 +119,7 @@ export function TextAreaField({ label, hint, error, optional, id, name, rows = 4
     <Frame id={fid} label={label} hint={hint} error={error} optional={optional} className={className}>
       <textarea
         {...rest}
-        {...fieldAria(fid, { hint, error })}
+        {...fieldAria(fid, { hint, error }, rest["aria-describedby"])}
         id={fid}
         name={name}
         rows={rows}
@@ -143,7 +151,7 @@ export function SelectField({ label, hint, error, optional, id, name, options, p
       <span className="relative flex">
         <select
           {...rest}
-          {...fieldAria(fid, { hint, error })}
+          {...fieldAria(fid, { hint, error }, rest["aria-describedby"])}
           id={fid}
           name={name}
           className={cx(CONTROL, CONTROL_HEIGHT, "cursor-pointer appearance-none pr-10")}
@@ -170,13 +178,14 @@ type ChoiceProps = Omit<InputHTMLAttributes<HTMLInputElement>, "className" | "ty
 };
 
 function Choice({ type, label, hint, error, id, name, value, className, ...rest }: ChoiceProps & { type: "checkbox" | "radio" }) {
-  // One of several boxes sharing a name is told apart by its value.
-  const fid = fieldId(id, name && value !== undefined ? `${name}-${String(value)}` : name);
+  // One of several boxes sharing a name is told apart by its value, made safe for an id.
+  const fid = fieldId(id, name && value !== undefined ? `${name}-${idPart(String(value))}` : name);
   return (
     <div data-choice={type} data-invalid={error ? true : undefined} className={cx("flex min-w-0 items-start gap-3", className)}>
       <input
-        {...fieldAria(fid, { hint, error })}
         {...rest}
+        {...fieldAria(fid, { hint, error }, rest["aria-describedby"])}
+        aria-invalid={error || rest["aria-invalid"] ? true : undefined}
         id={fid}
         name={name}
         value={value}

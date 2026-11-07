@@ -67,3 +67,10 @@ const link = "block rounded-lg px-2.5 py-1.5 text-sm leading-snug text-ink-secon
     </div>
   </div>
 </PublicLayout>
+
+<script>
+  import { needsTabReveal, revealCurrentTabs } from "@/components/platform/ui/tab-file-reveal";
+
+  // The guide's tabs keep their words, so on a phone the strip scrolls: open it on this page's tab everywhere.
+  if (needsTabReveal()) revealCurrentTabs();
+</script>

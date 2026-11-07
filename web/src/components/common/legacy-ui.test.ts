@@ -15,7 +15,7 @@ const SRC = resolve(__dirname, "../..");
 
 const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
   "common/Button.astro": {
-    pattern: /components\/common\/Button(\.astro)?"/,
+    pattern: /common\/Button(\.astro)?["']/,
     files: [
     "components/admin/CohortMentors.astro",
     "components/platform/application/ApplicationAnswers.astro",
@@ -42,7 +42,7 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     ],
   },
   "common/Card.astro": {
-    pattern: /components\/common\/Card(\.astro)?"/,
+    pattern: /common\/Card(\.astro)?["']/,
     files: [
     "components/admin/CohortMentors.astro",
     "pages/admin/applications/[id].astro",
@@ -75,7 +75,7 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     ],
   },
   "common/Badge.astro": {
-    pattern: /components\/common\/Badge(\.astro)?"/,
+    pattern: /common\/Badge(\.astro)?["']/,
     files: [
     "pages/admin/applications/[id].astro",
     "pages/admin/applications/index.astro",
