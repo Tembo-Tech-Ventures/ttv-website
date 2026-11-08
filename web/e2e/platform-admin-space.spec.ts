@@ -139,7 +139,7 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/feedback/themes/ttv-local-persona-theme", heading: "Session links are hard to find", current: "Feedback" },
   { path: "/admin/projects", heading: "Client projects", current: "Client projects", legacy: "Client Projects" },
   { path: "/admin/projects/ttv-local-persona-project", heading: "Member savings tracker", current: "Client projects" },
-  { path: "/admin/curricula", heading: "Curricula", current: "Curricula" },
+  { path: "/admin/curricula", heading: "Curricula", current: "Curricula", retired: true },
   { path: "/admin/curricula/new", heading: "Create Curriculum", current: "Curricula" },
   { path: "/admin/curricula/ttv-local-persona-curriculum", heading: "Edit Curriculum", current: "Curricula" },
   { path: "/admin/programs", heading: "Cohorts", current: "Cohorts" },
