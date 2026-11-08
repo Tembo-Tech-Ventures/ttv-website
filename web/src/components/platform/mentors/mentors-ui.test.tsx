@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MASKED_CONTACT, ROUTES, WORTH_ANOTHER_LOOK_LIMIT, type MentorDirectoryItem } from "@/lib/platform/contracts";
+import { MASKED_CONTACT, ROUTES, WORTH_ANOTHER_LOOK_LIMIT, type MentorDirectoryItem, type MentorRequestList } from "@/lib/platform/contracts";
 import { acceptedMentorRequest } from "@/lib/platform/fixtures";
 import { ATTENTION_REFRESH_EVENT } from "@/components/platform/shell/overlays";
 import { availability, FIXTURE_NOW, meByPersona, mentors, people, pendingMentorRequest, worthAnotherLook } from "@/lib/platform/fixtures";
@@ -11,7 +11,8 @@ import { filterDirectory, NO_FILTERS, parseDirectoryUrl } from "@/lib/platform/c
 import { createMentoringMock } from "@/lib/platform/client/mentoring.mock";
 import type { MockReply } from "@/lib/platform/client/mockTransport";
 import { MASKED_NOTE } from "@/components/channels/MaskedText";
-import MentorRequestsQueue from "./MentorRequestsQueue";
+import MentorMonthRail from "./MentorMonthRail";
+import MentorRequestsQueue, { type MentorRequestsQueueProps } from "./MentorRequestsQueue";
 import DirectoryRequests, { type DirectoryRequestsProps } from "./DirectoryRequests";
 import { menuAlignment, wireFilterMenus } from "./filter-menus";
 import { standings } from "./MentorCard";
@@ -619,44 +620,148 @@ describe("the mentor directory", () => {
 });
 
 describe("a mentor's requests", () => {
-  async function queue(failure?: (request: Request) => MockReply | undefined, anotherLook: typeof worthAnotherLook | null = null) {
-    const mock = createMentoringMock({ viewer: people.david, ...(failure ? { failure } : {}) });
+  type QueueOptions = {
+    failure?: (request: Request) => MockReply | undefined;
+    anotherLook?: typeof worthAnotherLook | null;
+    initial?: MentorRequestList;
+    availability?: typeof availability;
+    props?: Partial<MentorRequestsQueueProps>;
+  };
+  async function queueProps(options: QueueOptions = {}) {
+    const mock = createMentoringMock({ viewer: people.david, ...(options.failure ? { failure: options.failure } : {}) });
     const [initial, list] = await Promise.all([
       mock.api.call(ROUTES.listMentorRequests, { query: { as: "mentor" } }),
       mock.api.call(ROUTES.listMentors, { query: {} }),
     ]);
-    await act(async () => root.render(<MentorRequestsQueue initial={initial} mentors={list.items} availability={availability} anotherLook={anotherLook} now={FIXTURE_NOW} api={mock.api} />));
+    const props: MentorRequestsQueueProps = {
+      initial: options.initial ?? initial, mentors: list.items, availability: options.availability ?? availability, now: FIXTURE_NOW,
+      ...(options.initial ? {} : { api: mock.api }), ...options.props,
+    };
+    return { mock, props };
+  }
+  /** The page as MentorRequests.astro renders it on the server: the island, then the rail. */
+  function QueuePage({ props, anotherLook }: { props: MentorRequestsQueueProps; anotherLook: typeof worthAnotherLook | null }) {
+    return (
+      <div data-mentor-requests>
+        <div data-island><MentorRequestsQueue {...props} /></div>
+        <MentorMonthRail availability={props.availability} now={props.now} anotherLook={anotherLook?.items ?? []} />
+      </div>
+    );
+  }
+  /** The page without JavaScript: its server render only. */
+  async function serverQueue(options: QueueOptions = {}) {
+    const { props } = await queueProps(options);
+    container.innerHTML = renderToString(<QueuePage props={props} anotherLook={options.anotherLook ?? null} />);
+  }
+  /** The page once interactive: the server's rail, with the island hydrated into its place. */
+  async function queue(options: QueueOptions = {}) {
+    const { mock, props } = await queueProps(options);
+    container.innerHTML = renderToString(<QueuePage props={props} anotherLook={options.anotherLook ?? null} />);
+    const mount = q("[data-island]")!;
+    mount.replaceChildren();
+    island = createRoot(mount);
+    await act(async () => island!.render(<MentorRequestsQueue {...props} />));
     return mock;
   }
   const request = (id: string) => q(`[data-mentor-request="${id}"]`)!;
   const button = (id: string, name: string) => Array.from(request(id).querySelectorAll("button")).find((b) => b.textContent === name)!;
+  const waitingHeading = () => q("h2[data-waiting-count], [data-waiting-count] h2")!;
+  const waitingCount = () => q("[data-waiting-count]")!.getAttribute("data-waiting-count");
+  const type = async (field: HTMLTextAreaElement, value: string) => act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field, value);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
 
   it("shows who is waiting, with the work attached, and the month's spots", async () => {
     await queue();
-    expect(text("[data-waiting-count]")).toBe("2 requests waiting for you");
+    expect(waitingHeading().textContent).toBe("2 requests waiting for you");
+    // An h2 in the kit's own type: no weight or face of its own.
+    expect(waitingHeading().className).not.toMatch(/font-(semibold|body|bold)/);
     expect(request(pendingMentorRequest.id).textContent).toContain("Bus fare splitter");
     expect(text("[data-spots-used]")).toBe("1 of 3");
     expect(q<HTMLMeterElement>("[data-mentoring-rail] meter")!.value).toBe(1);
     expect(button(pendingMentorRequest.id, "Accept").getAttribute("aria-describedby")).toBe(request(pendingMentorRequest.id).getAttribute("aria-labelledby"));
+    // The heading an answer moves focus to shows it, with the kit's ring.
+    const heading = request(pendingMentorRequest.id).querySelector("[data-request-heading]")!;
+    expect(heading.className).toContain("focus-visible:outline-2");
+    expect(heading.className).not.toContain("focus:outline-none");
+  });
+
+  it("keeps every card's answers quiet, so the view has no peach action until a panel opens", async () => {
+    await queue();
+    expect(all("[data-variant='primary']")).toHaveLength(0);
+    expect(button(pendingMentorRequest.id, "Accept").dataset.variant).toBe("quiet");
+    await act(async () => button(pendingMentorRequest.id, "Not this month").click());
+    expect(all("[data-variant='primary']").map((b) => b.textContent)).toEqual(["Send: not this month"]);
+    // One panel at a time: opening another request's closes the first, so one Send is ever primary.
+    const other = all("[data-mentor-request][data-status=PENDING]").find((row) => row.dataset.mentorRequest !== pendingMentorRequest.id)!;
+    await act(async () => Array.from(other.querySelectorAll("button")).find((b) => b.textContent === "Report this request")!.click());
+    expect(all("[data-variant='primary']").map((b) => b.textContent)).toEqual(["Send report"]);
+    expect(request(pendingMentorRequest.id).querySelector("[data-decline-request]")).toBeNull();
+  });
+
+  it("answers without JavaScript: Accept posts, and each panel opens through the page's URL", async () => {
+    await serverQueue();
+    const asked = request(pendingMentorRequest.id);
+    const accept = Array.from(asked.querySelectorAll("button")).find((b) => b.textContent === "Accept")!;
+    const acceptForm = accept.closest("form")!;
+    expect(acceptForm.getAttribute("method")).toBe("post");
+    expect(acceptForm.getAttribute("action")).toBe("/dashboard/mentoring/requests");
+    expect(Object.fromEntries(new FormData(acceptForm))).toEqual({ intent: "accept", requestId: pendingMentorRequest.id });
+    const decline = Array.from(asked.querySelectorAll("button")).find((b) => b.textContent === "Not this month")!;
+    expect(decline.getAttribute("type")).toBe("submit");
+    expect(decline.closest("form")!.getAttribute("method")).toBe("get");
+    expect(decline.closest("form")!.getAttribute("action")).toBe(`/dashboard/mentoring/requests#request-${pendingMentorRequest.id}`);
+    expect([decline.getAttribute("name"), decline.getAttribute("value")]).toEqual(["answer", "decline"]);
+    expect(asked.querySelector<HTMLInputElement>("input[name=request]")!.value).toBe(pendingMentorRequest.id);
+  });
+
+  it("renders a panel the URL opened as a form, its Cancel a link back", async () => {
+    await serverQueue({ props: { opened: { requestId: pendingMentorRequest.id, panel: "suggest" } } });
+    const form = request(pendingMentorRequest.id).querySelector<HTMLFormElement>("[data-suggest-mentor]")!;
+    expect(form.getAttribute("method")).toBe("post");
+    expect(form.querySelector<HTMLInputElement>("input[name=intent]")!.value).toBe("redirect");
+    expect(form.querySelectorAll(`input[type=radio][name="suggest-${pendingMentorRequest.id}"]`).length).toBeGreaterThan(0);
+    // No card inside the card: the panel sits under a hairline.
+    expect(form.className).toContain("border-t");
+    expect(form.className).not.toMatch(/rounded/);
+    const cancel = Array.from(form.querySelectorAll("a")).find((link) => link.textContent === "Cancel")!;
+    expect(cancel.getAttribute("href")).toBe(`/dashboard/mentoring/requests#request-${pendingMentorRequest.id}`);
+  });
+
+  it("brings a refused answer back with its panel, what was written, and a danger notice that takes focus", async () => {
+    await serverQueue({
+      props: {
+        serverAnswer: {
+          requestId: pendingMentorRequest.id, panel: "report", note: "", mentorId: null,
+          error: "Say what's wrong with this request, so TTV knows what to check.", failure: "Your answer wasn't sent. Fix what's marked, then send it again.",
+        },
+      },
+    });
+    const asked = request(pendingMentorRequest.id);
+    const notice = asked.querySelector("[data-request-answer-error] [data-notice='danger']")!;
+    expect(notice.hasAttribute("autofocus")).toBe(true);
+    expect(notice.textContent).toContain("Your answer wasn't sent.");
+    expect(asked.querySelector("[data-report-request] textarea")!.getAttribute("aria-invalid")).toBe("true");
+    expect(asked.querySelector("[data-report-request]")!.textContent).toContain("Say what's wrong with this request");
   });
 
   it("points at confirmed work with a newer revision, and leaves the card out when there is none", async () => {
-    await queue(undefined, worthAnotherLook);
+    await serverQueue({ anotherLook: worthAnotherLook });
     const item = worthAnotherLook.items[0]!;
     expect(q("[data-another-look]")!.textContent).toContain("Achieng shared revision 3 of Chama ledger: M-Pesa receipt parser. Your confirmation covers revision 2.");
     const link = q<HTMLAnchorElement>(`[data-another-look-item="${item.journeyId}"] a`)!;
     expect(link.getAttribute("href")).toBe("/dashboard/mentoring/confirm");
     expect(link.textContent).toBe("Review revision 3");
-    await act(async () => root.unmount());
-    root = createRoot(container);
-    await queue(undefined, { items: [] });
+    expect(link.dataset.variant).toBe("quiet");
+    await serverQueue({ anotherLook: { items: [] } });
     expect(q("[data-another-look]")).toBeNull();
   });
 
   it("names three pieces of work at most, then points at Confirm work for the rest", async () => {
     const base = worthAnotherLook.items[0]!;
     const items = [1, 2, 3, 4, 5].map((n) => ({ ...base, journeyId: `journey-${n}`, title: `Project ${n}` }));
-    await queue(undefined, { items });
+    await serverQueue({ anotherLook: { items } });
     expect(all("[data-another-look-item]")).toHaveLength(3);
     expect(text("[data-another-look] > a")).toBe("2 more on Confirm work ");
   });
@@ -664,64 +769,58 @@ describe("a mentor's requests", () => {
   it("says the rest is a floor when the server's list is at its cap", async () => {
     const base = worthAnotherLook.items[0]!;
     const items = Array.from({ length: WORTH_ANOTHER_LOOK_LIMIT }, (_, n) => ({ ...base, journeyId: `journey-${n}`, title: `Project ${n}` }));
-    await queue(undefined, { items });
+    await serverQueue({ anotherLook: { items } });
     expect(text("[data-another-look] > a")).toBe(`${WORTH_ANOTHER_LOOK_LIMIT - 3}+ more on Confirm work `);
   });
 
   it("reports a note with a reason, after which the request is closed for the mentor and leaves the count", async () => {
     await queue();
-    expect(q("[data-waiting-count]")!.getAttribute("data-waiting-count")).toBe("2");
+    expect(waitingCount()).toBe("2");
     await act(async () => button(pendingMentorRequest.id, "Report this request").click());
     const form = request(pendingMentorRequest.id).querySelector<HTMLFormElement>("[data-report-request]")!;
     expect(document.activeElement?.tagName).toBe("TEXTAREA");
     // A reason first: TTV needs to know what to check.
     await act(async () => form.requestSubmit());
     expect(form.textContent).toContain("Say what's wrong with this request");
-    const reason = form.querySelector("textarea")!;
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(reason, "Asked for my phone number.");
-      reason.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    await type(form.querySelector("textarea")!, "Asked for my phone number.");
     await act(async () => form.requestSubmit());
     await settle();
     const reported = request(pendingMentorRequest.id);
     expect(reported.textContent).toContain("Reported");
     expect(reported.textContent).toContain("stays closed for you unless they send it back");
     expect(Array.from(reported.querySelectorAll("button")).map((b) => b.textContent)).not.toContain("Accept");
-    expect(q("[data-waiting-count]")!.getAttribute("data-waiting-count")).toBe("1");
+    expect(waitingCount()).toBe("1");
   });
 
   it("keeps the reason when a report doesn't go through, so it can be sent again", async () => {
-    await queue((http) => http.method === "POST" && http.url.endsWith("/report")
-      ? { status: 503, data: { error: { code: "unavailable", message: "Try again." } } } : undefined);
-    await act(async () => button(pendingMentorRequest.id, "Report this request").click());
-    const reason = request(pendingMentorRequest.id).querySelector<HTMLTextAreaElement>("[data-report-request] textarea")!;
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(reason, "Asked for my phone number.");
-      reason.dispatchEvent(new Event("input", { bubbles: true }));
+    await queue({
+      failure: (http) => http.method === "POST" && http.url.endsWith("/report")
+        ? { status: 503, data: { error: { code: "unavailable", message: "Try again." } } } : undefined,
     });
+    await act(async () => button(pendingMentorRequest.id, "Report this request").click());
+    await type(request(pendingMentorRequest.id).querySelector<HTMLTextAreaElement>("[data-report-request] textarea")!, "Asked for my phone number.");
     await act(async () => request(pendingMentorRequest.id).querySelector<HTMLFormElement>("[data-report-request]")!.requestSubmit());
     await settle();
     const failed = request(pendingMentorRequest.id);
-    expect(failed.textContent).toContain("That didn't go through");
+    expect(failed.querySelector("[data-notice='danger']")!.textContent).toContain("That didn't go through");
     expect(failed.querySelector<HTMLTextAreaElement>("[data-report-request] textarea")!.value).toBe("Asked for my phone number.");
     expect(failed.querySelector("[data-report-request]")!.closest("[hidden]")).toBeNull();
   });
 
   it("shows contact details masked in a note as the channels' note, never the bracketed marker (T03)", async () => {
     const masked = { ...pendingMentorRequest, note: `Career advice, please. WhatsApp me on ${MASKED_CONTACT}.` };
-    await act(async () => root.render(<MentorRequestsQueue initial={{ items: [masked], nextCursor: null }} mentors={mentors.items} availability={availability} anotherLook={null} now={FIXTURE_NOW} />));
+    await queue({ initial: { items: [masked], nextCursor: null } });
     const quote = request(pendingMentorRequest.id).querySelector("blockquote")!;
     expect(quote.textContent).not.toContain(MASKED_CONTACT);
     expect(quote.querySelector(".channel-masked[role=note]")!.textContent).toBe(MASKED_NOTE);
     expect(quote.textContent).toContain("WhatsApp me on ");
   });
 
-  it("shows a request reported earlier as closed, with nothing to press", async () => {
+  it("shows a request reported earlier as closed, with nothing to press, under an empty state", async () => {
     const reported = { ...pendingMentorRequest, check: "reported" as const };
-    await act(async () => root.render(<MentorRequestsQueue initial={{ items: [reported], nextCursor: null }} mentors={mentors.items} availability={availability} anotherLook={null} now={FIXTURE_NOW} />));
+    await queue({ initial: { items: [reported], nextCursor: null } });
     expect(request(pendingMentorRequest.id).querySelectorAll("button")).toHaveLength(0);
-    expect(text("[data-waiting-count]")).toBe("Nothing waiting for you");
+    expect(q("[data-waiting-count] [data-empty-state] h2")!.textContent).toBe("Nothing waiting for you");
   });
 
   it("accepts at once and then links the conversation", async () => {
@@ -732,8 +831,10 @@ describe("a mentor's requests", () => {
     expect(request(pendingMentorRequest.id).dataset.status).toBe("ACCEPTED");
     expect(document.activeElement?.hasAttribute("data-request-heading")).toBe(true);
     await settle();
-    expect(request(pendingMentorRequest.id).querySelector("a[href^='/dashboard/community/dm/']")!.textContent).toBe("Open conversation with Wanjiku ");
-    expect(text("[data-waiting-count]")).toBe("1 request waiting for you");
+    const open = request(pendingMentorRequest.id).querySelector<HTMLAnchorElement>("a[href^='/dashboard/community/dm/']")!;
+    expect(open.textContent).toBe("Open conversation with Wanjiku");
+    expect(open.dataset.variant).toBe("quiet");
+    expect(waitingHeading().textContent).toBe("1 request waiting for you");
     // QA4-07: once the server has the answer, the bell and the Mentoring tab count again.
     expect(refreshes).toHaveBeenCalledTimes(1);
     window.removeEventListener(ATTENTION_REFRESH_EVENT, refreshes);
@@ -746,21 +847,23 @@ describe("a mentor's requests", () => {
     let refuse = true;
     const refreshes = vi.fn();
     window.addEventListener(ATTENTION_REFRESH_EVENT, refreshes);
-    await queue((r) => r.method === "POST" && refuse ? { status: 503, data: { error: { code: "server", message: "Busy" } } } : undefined);
+    await queue({ failure: (r) => r.method === "POST" && refuse ? { status: 503, data: { error: { code: "server", message: "Busy" } } } : undefined });
     const id = pendingMentorRequest.id;
     await act(async () => button(id, "Not this month").click());
     expect(document.activeElement?.tagName).toBe("TEXTAREA");
     await act(async () => sendDecline(id).click());
     await settle();
     expect(request(id).dataset.status).toBe("PENDING");
-    expect(request(id).textContent).toContain("That didn't go through, so nothing changed.");
+    expect(request(id).querySelector("[data-notice='danger']")!.textContent).toContain("That didn't go through, so nothing changed.");
     // A refused answer changed nothing, so nothing is counted again.
     expect(refreshes).not.toHaveBeenCalled();
     refuse = false;
     await act(async () => sendDecline(id).click());
     await settle();
     expect(request(id).dataset.status).toBe("DECLINED");
+    // The rail is the server's, but its spots follow the answers given here.
     expect(text("[data-spots-used]")).toBe("0 of 3");
+    expect(all("[data-spots-used]")).toHaveLength(1);
     expect(refreshes).toHaveBeenCalledTimes(1);
     window.removeEventListener(ATTENTION_REFRESH_EVENT, refreshes);
   });
@@ -773,21 +876,18 @@ describe("a mentor's requests", () => {
     await act(async () => Array.from(declineNote(id)!.querySelectorAll("button")).find((b) => b.textContent === "Cancel")!.click());
     expect(declineNote(id)).toBeNull();
     await act(async () => button(id, "Not this month").click());
-    const note = declineNote(id)!.querySelector("textarea")!;
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(note, "  I'm travelling this month. Try me in December?  ");
-      note.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    await type(declineNote(id)!.querySelector("textarea")!, "  I'm travelling this month. Try me in December?  ");
     await act(async () => sendDecline(id).click());
     await settle();
     expect(mock.requests().find((r) => r.id === id)).toMatchObject({ status: "DECLINED", responseNote: "I'm travelling this month. Try me in December?" });
   });
 
-  it("tells a paused mentor they're out of the directory, not what members see when full (QA4-15)", async () => {
-    await act(async () => root.render(
-      <MentorRequestsQueue initial={{ items: [], nextCursor: null }} mentors={mentors.items} availability={{ ...availability, paused: true, listed: false }} anotherLook={null} now={FIXTURE_NOW} />,
-    ));
+  it("tells a paused mentor they're out of the directory, with a Paused chip (QA4-15)", async () => {
+    await serverQueue({ initial: { items: [], nextCursor: null }, availability: { ...availability, paused: true, listed: false } });
     expect(text("[data-spots-note]")).toBe("You've paused new requests, so you're not in the mentor directory. Requests already waiting stay with you.");
+    expect(q("[data-requests-paused] [data-chip]")!.textContent).toBe("Paused");
+    expect(q("[data-waiting-count] [data-empty-state]")!.textContent).toContain("When someone asks for your time");
+    expect(q<HTMLAnchorElement>("[data-mentoring-rail] a[href='/dashboard/mentoring/availability']")!.dataset.variant).toBe("quiet");
   });
 
   it("suggests another mentor with an optional note, and needs a choice first", async () => {
@@ -817,6 +917,14 @@ describe("a mentor's requests", () => {
     await settle();
     expect(request(pendingMentorRequest.id).dataset.status).toBe("WITHDRAWN");
     expect(request(pendingMentorRequest.id).textContent).toContain("Wanjiku withdrew this request.");
+  });
+
+  it("drops a panel and an answer named in the URL once interactive, so a reload repeats neither", async () => {
+    window.history.replaceState(null, "", `/dashboard/mentoring/requests?request=${pendingMentorRequest.id}&answer=decline#request-${pendingMentorRequest.id}`);
+    await queue({ props: { opened: { requestId: pendingMentorRequest.id, panel: "decline" } } });
+    expect(window.location.search).toBe("");
+    expect(window.location.hash).toBe(`#request-${pendingMentorRequest.id}`);
+    expect(declineNote(pendingMentorRequest.id)).not.toBeNull();
   });
 });
 

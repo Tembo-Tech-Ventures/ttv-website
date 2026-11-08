@@ -7,7 +7,8 @@
  * SpacesLayout, with the real sidebar model, over the stateful mentoring mock, for any synthetic person:
  *
  *   ?persona=wanjiku&view=directory&area=Career&format=CALL_30_MIN&available=true&ask=<mentorId>
- *   &view=requests | availability   the mentor's pages (a persona with Mentoring: david, mercy, samuel)
+ *   &view=requests | availability   the mentor's pages (a persona with Mentoring: david, mercy, samuel); the
+ *                                   requests' answers need JavaScript here (the real page takes their posts)
  *   &note=masked                    (requests) the first note carries a masked contact marker (T03)
  *   &conduct=required               the person has not agreed to how we talk to each other yet;
  *                                   agreeing posts here and comes back with the drawer open
@@ -35,6 +36,7 @@ import SpaceSidebar from "@/components/platform/spaces/SpaceSidebar.astro";
 import { spaceSidebar, type SpacePageKey } from "@/components/platform/spaces/sidebar";
 import HarnessMentors from "@/components/platform/mentors/harness/HarnessMentors";
 import MentorsDirectory from "@/components/platform/mentors/MentorsDirectory.astro";
+import MentorRequests from "@/components/platform/mentors/MentorRequests.astro";
 import MentorPageIntro from "@/components/platform/mentors/MentorPageIntro.astro";
 import AvailabilityForm from "@/components/platform/mentors/AvailabilityForm.astro";
 import { handleAvailabilityPost, valuesOf, type AvailabilityPostResult } from "@/components/platform/mentors/availability-post";
@@ -159,13 +161,14 @@ const harness = view === "directory"
         const initial = params.get("note") === "masked"
           ? { ...listed, items: listed.items.map((item, index) => index === 0 ? { ...item, note: `${item.note} WhatsApp me on ${MASKED_CONTACT}.` } : item) }
           : listed;
-        // David has confirmed work with a newer revision since (B-4.2's fixture); other mentors have none.
-        const anotherLook = me.user.id === people.david.id ? worthAnotherLook : { items: [] };
-        return { initial, mentors: mentors.items, availability, anotherLook, now };
+        return { initial, mentors: mentors.items, availability, now };
       })(),
     } as const
     : null;
 const availability = view === "availability" ? await mock.api.call(ROUTES.getMentorAvailability) : null;
+
+// David has confirmed work with a newer revision since (B-4.2's fixture); other mentors have none.
+const anotherLook = me.user.id === people.david.id ? worthAnotherLook : { items: [] };
 
 const spaceHrefs = Object.fromEntries(me.spaces.map((id) => [id, `/dev/platform-shell?persona=${persona}&space=${id}`])) as Record<SpaceId, string>;
 ---
@@ -187,6 +190,10 @@ const spaceHrefs = Object.fromEntries(me.spaces.map((id) => [id, `/dev/platform-
     >
       <HarnessMentors client:load viewer={me.user} conductAgreed={agreedNow} check={check} latencyMs={latency} harness={harness} />
     </MentorsDirectory>
+  ) : harness?.view === "requests" ? (
+    <MentorRequests availability={harness.props.availability} anotherLook={anotherLook} now={now}>
+      <HarnessMentors client:load viewer={me.user} conductAgreed={agreedNow} check={check} latencyMs={latency} harness={harness} />
+    </MentorRequests>
   ) : harness && (
     <HarnessMentors client:load viewer={me.user} conductAgreed={agreedNow} check={check} latencyMs={latency} harness={harness} />
   )}

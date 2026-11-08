@@ -47,8 +47,14 @@ exist only while `mentor_requests` is on for the person (effective only with
 - A card shows where the person already stands with that mentor
   (`MentorCard`'s `standings`): a request still waiting replaces "Ask for
   time" with its status, and an accepted one offers its conversation beside it.
-- One peach action per view: every card's "Ask for time" and a suggestion's
-  "Ask {name}" are quiet; the drawer's Send is the primary.
+- The Requests page renders its rail on the server (`MentorRequests.astro`,
+  `MentorMonthRail.tsx`): the month's spots, what the mentor is open to, and
+  "Worth another look". Only the list of requests hydrates
+  (`MentorRequestsQueue.tsx`), and draws the spots (`MentorSpots`) in the rail
+  once interactive, so they follow the answers given on the page.
+- One peach action per view: every card's "Ask for time", a suggestion's
+  "Ask {name}" and every request's Accept are quiet; the drawer's Send, or the
+  one open answer panel's Send, is the primary.
 - Once the server has a mentor's answer, the queue asks the page's attention
   owner to count again (`requestAttentionRefresh`), so the bell and the
   Mentoring tab drop the answered request's notice at once.
@@ -65,6 +71,16 @@ body to the API's own handler, so every gate is the API's. A send lands on
 `?sent=<id>`, whose success notice takes focus; a refusal renders the drawer
 again on what was written, with the reason in a danger notice that takes focus
 and each field's error under it.
+
+A mentor answers without JavaScript too. Accept is a form that posts to the
+Requests page; "Suggest another mentor", "Not this month" and "Report this
+request" open their panel through the URL (`?request=<id>&answer=decline`),
+and each panel is a form that posts there. `answer-post.ts` hands the same body
+to the API's own handler, and the mentor lands on `?answered=<id>`, whose
+success notice says what they did (with the conversation an acceptance opened)
+and takes focus. A refusal renders the queue again with the API's status, the
+panel open on what was written, and why in a danger notice on that request
+that takes focus; a request that moved on meanwhile says what happened instead.
 
 ## How we talk to each other, before Send
 
@@ -106,16 +122,19 @@ name who raised it and never say "declined":
 ## Tests
 
 - Unit: `mentor-display.test.ts`, `mentors-ui.test.tsx`, `request-post.test.ts`,
-  and the client stores' tests beside them.
+  `answer-post.test.ts`, and the client stores' tests beside them.
 - Render: `src/pages/dashboard/community/_tests/mentors.render.test.ts`, the page
   through the middleware on SQLite: the server-rendered directory with one
-  island, filters, the drawer's no-JS post both ways, and the notices.
+  island, filters, the drawer's no-JS post both ways, and the notices; and
+  `src/pages/dashboard/mentoring/_tests/requests.render.test.ts`, the Requests
+  page: the server-rendered rail with one island, quiet Accepts, and each
+  answer's no-JS post, refused and not.
 - `e2e/platform-mentors.spec.ts`: the DEV harness `/dev/platform-mentors`
   (stateful mock) at 390 and 1440, axe, keyboard, rollback, no-JS drawer, the
   habits before Send, an organisation account asking as itself, flag off.
 - `e2e/platform-mentor-requests.spec.ts`: the same journeys against the real
   backend with the local persona seed: request → accept → conversation,
-  withdraw, not this month with a note, a suggestion, a full mentor, and an
-  organisation account asking as itself.
+  withdraw, not this month with a note (also without JavaScript), a suggestion,
+  a full mentor, and an organisation account asking as itself.
 - `e2e/platform-mentor-request-notes.spec.ts`: checks against the real backend, both ways: a Tembo-held note
   (seeded) that an admin removes, and a reported one an admin keeps.

@@ -1,9 +1,7 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
-import { PiArrowRight, PiCheck, PiPauseCircle } from "react-icons/pi";
-import {
-  WORTH_ANOTHER_LOOK_LIMIT,
-  type MentorAvailability, type MentorDirectoryItem, type MentorRequest, type MentorRequestList, type WorthAnotherLook,
-} from "@/lib/platform/contracts";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
+import { PiArrowRight, PiCheck } from "react-icons/pi";
+import type { MentorAvailability, MentorDirectoryItem, MentorRequest, MentorRequestList } from "@/lib/platform/contracts";
 import type { ApiClient } from "@/lib/platform/client/apiClient";
 import { useMentorRequests } from "@/lib/platform/client/hooks/mentoring";
 import { createMentorRequestsStore, shownStatus, type MentorRequestsStore } from "@/lib/platform/client/mentor-requests";
@@ -11,13 +9,13 @@ import { firstName } from "@/components/channels/channel-format";
 import EmbedCard from "@/components/channels/EmbedCard";
 import MaskedText from "@/components/channels/MaskedText";
 import { requestAttentionRefresh } from "@/components/platform/shell/overlays";
-import { Avatar, Button, Card, Chip } from "@/components/platform/ui";
-import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
-import { cx } from "@/components/platform/ui/cx";
+import { Avatar, Button, ButtonLink, Card, ChoiceGroup, Chip, EmptyState, FOCUS_RING, Notice, TextAreaField, cx } from "@/components/platform/ui";
 import {
-  capacityView, conversationHref, MENTOR_AVAILABILITY_PATH, mentorStatus, monthName, openingDate, personContext,
-  requestMeta, usedShare, waitingText,
-} from "./mentor-display";
+  ANSWERED_PARAM, CHOOSE_MENTOR, DIDNT_GO_THROUGH, NOTE_MAX, PANEL_PARAM, REPORT_REQUIRED, REQUEST_PARAM, requestAnchor, suggestField,
+  type AnswerIntent, type AnswerPanel, type ServerAnswer,
+} from "./answer-fields";
+import { capacityView, conversationHref, MENTOR_REQUESTS_PATH, mentorStatus, personContext, requestMeta, waitingText } from "./mentor-display";
+import MentorSpots from "./MentorSpots";
 // oxlint-disable-next-line import/no-unassigned-import -- The embed card's stylesheet (channels.css).
 import "@/components/channels/channels.css";
 // oxlint-disable-next-line import/no-unassigned-import -- Mentor connections stylesheet.
@@ -28,16 +26,25 @@ export interface MentorRequestsQueueProps {
   initial: MentorRequestList;
   /** Listed mentors this one can suggest instead (the directory never lists the caller). */
   mentors: readonly MentorDirectoryItem[];
+  /** For the month's spots, which the island draws in the rail once interactive (`data-mentor-spots`). */
   availability: MentorAvailability;
-  /** Work this mentor confirmed at an earlier revision that has a newer one (B-4.2); null when it could not be read. */
-  anotherLook: WorthAnotherLook | null;
   now: number;
+  /** Where the answers' forms post and open their panels without JavaScript: this page. */
+  path?: string;
+  /** A panel opened through the page's URL without JavaScript (`?request=<id>&answer=decline`). */
+  opened?: { requestId: string; panel: AnswerPanel } | null;
+  /** An answer posted without JavaScript that did not go through: its card says why, with the panel open again. */
+  serverAnswer?: ServerAnswer | null;
   /** A fixture client for the DEV harness. Live pages call the API. */
   api?: ApiClient;
 }
 
-const LINK = cx("inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold pointer-coarse:min-h-11", BUTTON_VARIANTS.quiet, FOCUS_RING);
+/** The one open panel in the list, and whether a press opened it here (focus then moves into it). */
+type OpenPanel = { requestId: string; panel: AnswerPanel; pressed: boolean };
+
 const FREED = new Set(["REDIRECTED", "DECLINED", "WITHDRAWN"]);
+// The rail's spots are taken over before the first paint, so nothing flickers; on the server, nothing runs.
+const useBeforePaint = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 /**
  * Mentoring → Requests (screen 06): who is asking for this mentor's time,
@@ -47,8 +54,16 @@ const FREED = new Set(["REDIRECTED", "DECLINED", "WITHDRAWN"]);
  * wants to add one. Every answer shows at once and is put back if the server
  * refuses it, and once the server has it the bell and the Mentoring tab count
  * again, so the answered request's notice leaves them (QA4-07).
+ *
+ * Each answer is a real form, so without JavaScript it posts to the page
+ * (answer-post.ts) and a panel opens through the page's URL. The rail around
+ * the list renders on the server (MentorMonthRail); once interactive, the
+ * island draws its spots, which follow the answers given here.
  */
-export default function MentorRequestsQueue({ initial, mentors, availability, anotherLook, now, api }: MentorRequestsQueueProps) {
+export default function MentorRequestsQueue({
+  initial, mentors, availability, now, path = MENTOR_REQUESTS_PATH, opened = null, serverAnswer = null, api,
+}: MentorRequestsQueueProps) {
+  const root = useRef<HTMLDivElement>(null);
   const [store] = useState(() => createMentorRequestsStore({ as: "mentor", initial, ...(api ? { api } : {}) }));
   const state = useMentorRequests(store);
   // Grouped as the page arrived, so a request answered here stays where the mentor's eyes are.
@@ -57,6 +72,15 @@ export default function MentorRequestsQueue({ initial, mentors, availability, an
   const waiting = state.items.filter(item => waitingIds.has(item.id));
   const earlier = state.items.filter(item => !waitingIds.has(item.id));
   const stillWaiting = waiting.filter(item => shownStatus(state, item) === "PENDING" && item.check !== "reported").length;
+  // One panel open at a time, so its Send is the view's one primary action: every card's answers are quiet.
+  const [open, setOpen] = useState<OpenPanel | null>(() => {
+    const first = serverAnswer?.panel ? { requestId: serverAnswer.requestId, panel: serverAnswer.panel } : opened;
+    return first ? { ...first, pressed: false } : null;
+  });
+  // The server's refusal stays on its card until the mentor answers that request again.
+  const [refused, setRefused] = useState(serverAnswer);
+  const [hydrated, setHydrated] = useState(false);
+  const [spots, setSpots] = useState<HTMLElement | null>(null);
 
   // A spot is held by each waiting request and each one accepted this month: an answer other than
   // accepting frees one, and so does a report (an open check holds no spot), so the rail follows the
@@ -64,59 +88,92 @@ export default function MentorRequestsQueue({ initial, mentors, availability, an
   const freed = waiting.filter(item => (item.status !== "PENDING" && FREED.has(item.status)) || item.check === "reported").length;
   const used = Math.max(0, availability.capacity.used - freed);
 
+  useBeforePaint(() => {
+    setHydrated(true);
+    // The rail's spots, from here on: the island draws them where the server's stood.
+    const element = root.current?.closest("[data-mentor-requests]")?.querySelector<HTMLElement>("[data-mentor-spots]") ?? null;
+    element?.replaceChildren();
+    setSpots(element);
+    // A panel named in the URL is open now, and an answer's notice has been read: a reload repeats neither.
+    const url = new URL(window.location.href);
+    if ([REQUEST_PARAM, PANEL_PARAM, ANSWERED_PARAM].some(key => url.searchParams.has(key))) {
+      for (const key of [REQUEST_PARAM, PANEL_PARAM, ANSWERED_PARAM]) url.searchParams.delete(key);
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    }
+    // Only on arrival: from then on the island owns the spots.
+  }, []);
+
+  const card = (request: MentorRequest, compact = false) => (
+    <RequestCard
+      key={request.id} store={store} request={request} mentors={mentors} now={now} path={path} compact={compact} hydrated={hydrated}
+      open={open?.requestId === request.id ? open : null}
+      refused={refused?.requestId === request.id ? refused : null}
+      onPanel={(panel) => setOpen(panel ? { requestId: request.id, panel, pressed: true } : null)}
+      onAnswering={() => {
+        if (refused?.requestId === request.id) setRefused(null);
+      }}
+    />
+  );
+
   return (
-    <div className="mentoring-requests" data-mentor-requests>
+    <div ref={root} className="min-w-0" data-mentor-requests-list>
       <output className="sr-only" aria-live="polite">{state.announcement}</output>
-      <div className="min-w-0">
-        <h2 className="font-body text-xl font-bold text-ink-primary" data-waiting-count={stillWaiting}>
-          {stillWaiting > 0 ? waitingText(stillWaiting, state.nextCursor !== null) : "Nothing waiting for you"}
-        </h2>
-        {waiting.length === 0 ? (
-          <p className="mt-3 max-w-2xl text-[0.9375rem] leading-relaxed text-ink-secondary">
+      {waiting.length === 0 ? (
+        <div data-waiting-count={0}>
+          <EmptyState title="Nothing waiting for you" headingLevel={2}>
             When someone asks for your time, their request appears here with the work they attached.
-          </p>
-        ) : (
-          <ul className="mt-4 flex flex-col gap-4">
-            {waiting.map(request => <RequestCard key={request.id} store={store} request={request} mentors={mentors} now={now} />)}
-          </ul>
-        )}
+          </EmptyState>
+        </div>
+      ) : (
+        <>
+          <h2 className="text-xl text-ink-primary" data-waiting-count={stillWaiting}>
+            {stillWaiting > 0 ? waitingText(stillWaiting, state.nextCursor !== null) : "Nothing waiting for you"}
+          </h2>
+          <ul className="mt-4 flex flex-col gap-4">{waiting.map(request => card(request))}</ul>
+        </>
+      )}
 
-        {earlier.length > 0 && (
-          <section aria-labelledby="earlier-requests" className="mt-10">
-            <h2 id="earlier-requests" className="font-body text-lg font-bold text-ink-primary">Earlier</h2>
-            <ul className="mt-3 flex flex-col gap-3">
-              {earlier.map(request => <RequestCard key={request.id} store={store} request={request} mentors={mentors} now={now} compact />)}
-            </ul>
-          </section>
-        )}
-        {state.nextCursor !== null && (
-          <Button className="mt-4" loading={state.loadingMore} onClick={() => void store.loadMore()}>Show earlier requests</Button>
-        )}
-      </div>
-
-      <MonthRail availability={availability} used={used} now={now} anotherLook={anotherLook?.items ?? []} />
+      {earlier.length > 0 && (
+        <section aria-labelledby="earlier-requests" className="mt-10">
+          <h2 id="earlier-requests" className="text-lg text-ink-primary">Earlier</h2>
+          <ul className="mt-3 flex flex-col gap-3">{earlier.map(request => card(request, true))}</ul>
+        </section>
+      )}
+      {state.nextCursor !== null && (
+        <Button className="mt-4" loading={state.loadingMore} onClick={() => void store.loadMore()}>Show earlier requests</Button>
+      )}
+      {spots && createPortal(<MentorSpots availability={availability} used={used} />, spots)}
     </div>
   );
 }
 
-function RequestCard({ store, request, mentors, now, compact = false }: {
-  store: MentorRequestsStore; request: MentorRequest; mentors: readonly MentorDirectoryItem[]; now: number; compact?: boolean;
+function RequestCard({ store, request, mentors, now, path, compact, hydrated, open, refused, onPanel, onAnswering }: {
+  store: MentorRequestsStore; request: MentorRequest; mentors: readonly MentorDirectoryItem[]; now: number; path: string; compact: boolean;
+  hydrated: boolean;
+  /** This card's open panel, if the list's one open panel is here. */
+  open: OpenPanel | null;
+  /** Why an answer posted to the page without JavaScript did not go through. */
+  refused: ServerAnswer | null;
+  onPanel: (panel: AnswerPanel | null) => void;
+  /** An answer is on its way from this card. */
+  onAnswering: () => void;
 }) {
   const state = useMentorRequests(store, current => ({
     status: shownStatus(current, request), pending: current.pending[request.id], failed: current.failed[request.id],
   }), (a, b) => a.status === b.status && a.pending === b.pending && a.failed === b.failed);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const ids = useId();
   const requester = request.requester;
   const name = firstName(requester.name);
+  const whoId = requestAnchor(request.id);
   const context = personContext(requester);
   const view = mentorStatus(request, state.status);
-  const open = state.status === "PENDING" && !state.pending && request.check !== "reported";
+  const answerable = state.status === "PENDING" && !state.pending && request.check !== "reported";
 
   function answered<T>(run: () => Promise<T>): Promise<T> {
+    onAnswering();
     const result = run();
     // The buttons give way to the answer: focus stays on this request (its heading), and the live
-    // region says how it went. Nothing visible moves when focus leaves it again.
+    // region says how it went.
     headingRef.current?.focus();
     // Answered (or reported), the request's notice no longer counts: the bell and the tab read again.
     void result.then(done => {
@@ -127,14 +184,20 @@ function RequestCard({ store, request, mentors, now, compact = false }: {
   }
 
   return (
-    <Card as="li" aria-labelledby={`${ids}-who`} className="flex flex-col gap-4" data-mentor-request={request.id} data-status={state.status}>
+    <Card as="li" aria-labelledby={whoId} className="flex flex-col gap-4" data-mentor-request={request.id} data-status={state.status}>
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <Avatar id={requester.id} name={requester.name} src={requester.avatarUrl ?? undefined} size={compact ? "md" : "lg"} decorative />
         <div className="min-w-0 flex-1">
-          <h3 ref={headingRef} tabIndex={-1} id={`${ids}-who`} className="text-lg leading-snug font-bold break-words text-ink-primary focus:outline-none" data-request-heading>{requester.name}</h3>
+          <h3
+            ref={headingRef} tabIndex={-1} id={whoId}
+            className={cx("w-fit max-w-full rounded-sm text-lg leading-snug font-bold break-words text-ink-primary", FOCUS_RING)}
+            data-request-heading
+          >
+            {requester.name}
+          </h3>
           <p className="text-sm text-ink-secondary">{[context, requestMeta(request, now)].filter(Boolean).join(" · ")}</p>
         </div>
-        {!open && <Chip tone={view.tone}>{state.pending ? `${view.label}…` : view.label}</Chip>}
+        {!answerable && <Chip tone={view.tone}>{state.pending ? `${view.label}…` : view.label}</Chip>}
       </div>
 
       <blockquote className="text-[0.9375rem] leading-relaxed break-words text-ink-primary sm:text-base">
@@ -143,76 +206,123 @@ function RequestCard({ store, request, mentors, now, compact = false }: {
       {request.project && !compact && <div className="max-w-xl"><EmbedCard embed={request.project} /></div>}
       {view.detail && <p className="text-sm text-ink-secondary">{view.detail}</p>}
 
-      {state.failed && !state.failed.stale && (
-        <output className="text-sm font-semibold text-danger-ink">That didn't go through, so nothing changed. Try again.</output>
+      {/* The live region has said it already; this keeps it in view beside the request. */}
+      {state.failed && !state.failed.stale ? (
+        <Notice tone="danger" announce="none">{DIDNT_GO_THROUGH}</Notice>
+      ) : refused && (
+        <div data-request-answer-error={request.id}>
+          <Notice tone="danger" focusOnLoad>{refused.failure}</Notice>
+        </div>
       )}
 
       {/* Mounted while the server's request waits, and only hidden while an answer is on its way, so a
           suggestion or report that fails comes back with what the mentor wrote. */}
       {request.status === "PENDING" && request.check !== "reported" && (
-        <RequestAnswers store={store} request={request} mentors={mentors} now={now} whoId={`${ids}-who`} busy={!open} onAnswer={answered} />
+        <RequestAnswers
+          store={store} request={request} mentors={mentors} now={now} path={path} whoId={whoId} busy={!answerable} hydrated={hydrated}
+          open={open} draft={refused?.panel ? refused : null} onPanel={onPanel} onAnswer={answered}
+        />
       )}
       {state.status === "ACCEPTED" && request.channelId && (
-        <a href={conversationHref(request.channelId)} className={cx(LINK, "w-fit")}>
-          Open conversation with {name} <PiArrowRight aria-hidden className="size-4" />
-        </a>
+        <ButtonLink href={conversationHref(request.channelId)} trailingIcon={<PiArrowRight className="size-4" />} className="w-fit">
+          Open conversation with {name}
+        </ButtonLink>
       )}
     </Card>
   );
 }
 
-const FIELD = cx("w-full rounded-xl border border-hairline bg-ink-primary/4 px-3.5 py-2.5 text-[0.9375rem] text-ink-primary aria-invalid:border-danger-ink", FOCUS_RING);
+/** What every answer's form carries: what it does, and to which request. */
+function AnswerFields({ intent, requestId }: { intent: AnswerIntent; requestId: string }) {
+  return (
+    <>
+      <input type="hidden" name="intent" value={intent} />
+      <input type="hidden" name="requestId" value={requestId} />
+    </>
+  );
+}
 
-/** The three answers, and the panels that replace them: suggesting another mentor, or reporting the note. */
-function RequestAnswers({ store, request, mentors, now, whoId, busy, onAnswer }: {
-  store: MentorRequestsStore; request: MentorRequest; mentors: readonly MentorDirectoryItem[]; now: number;
+/** A panel sits in its card as a part of it, under a hairline, never as a card of its own. */
+const PANEL = "flex flex-col gap-4 border-t border-hairline pt-4";
+
+interface PanelProps {
+  request: MentorRequest;
+  path: string;
+  name: string;
+  /** A press opened the panel here: focus moves into it. */
+  pressed: boolean;
+  hydrated: boolean;
+  /** What was written before a post without JavaScript did not go through. */
+  draft: ServerAnswer | null;
+  onCancel: () => void;
+}
+
+/** The three answers and a report, and the panels that replace them: a suggestion, "Not this month", or a report. */
+function RequestAnswers({ store, request, mentors, now, path, whoId, busy, hydrated, open, draft, onPanel, onAnswer }: {
+  store: MentorRequestsStore; request: MentorRequest; mentors: readonly MentorDirectoryItem[]; now: number; path: string;
   /** The request's heading, which every answer names. */
   whoId: string;
   /** An answer is on its way: nothing here can be pressed, and the panels keep their drafts. */
   busy: boolean;
+  hydrated: boolean;
+  open: OpenPanel | null;
+  draft: ServerAnswer | null;
+  onPanel: (panel: AnswerPanel | null) => void;
   onAnswer: <T>(run: () => Promise<T>) => Promise<T>;
 }) {
-  const [panel, setPanel] = useState<"answers" | "suggest" | "decline" | "report">("answers");
   const actionsRef = useRef<HTMLDivElement>(null);
   const name = firstName(request.requester.name);
-  const backToAnswers = (trigger: string) => {
-    setPanel("answers");
-    requestAnimationFrame(() => actionsRef.current?.querySelector<HTMLElement>(`[${trigger}]`)?.focus());
+  const backToAnswers = (trigger: AnswerPanel) => {
+    onPanel(null);
+    requestAnimationFrame(() => actionsRef.current?.querySelector<HTMLElement>(`[data-answer-trigger="${trigger}"]`)?.focus());
   };
+  // Without JavaScript each opens its panel through the page's URL; with it, in place.
+  const opens = (panel: AnswerPanel) => ({
+    type: "submit" as const, name: PANEL_PARAM, value: panel, "aria-describedby": whoId, "data-answer-trigger": panel,
+    onClick: (event: MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      onPanel(panel);
+    },
+  });
+  const panel = { request, path, name, pressed: open?.pressed ?? false, hydrated, draft: draft?.panel === open?.panel ? draft : null };
 
   return (
     <div hidden={busy}>
-      {panel === "answers" && (
+      {open === null && (
         <div ref={actionsRef} className="flex flex-wrap items-center gap-2">
-          {/* Each answer names whose request it answers, as the list holds several. */}
-          <Button variant="primary" icon={<PiCheck />} aria-describedby={whoId} onClick={() => onAnswer(() => store.accept(request.id))}>Accept</Button>
-          <Button aria-describedby={whoId} onClick={() => setPanel("suggest")} data-suggest-trigger>Suggest another mentor</Button>
-          <Button variant="ghost" aria-describedby={whoId} onClick={() => setPanel("decline")} data-decline-trigger>Not this month</Button>
-          <Button variant="ghost" size="sm" className="sm:ml-auto" aria-describedby={whoId} onClick={() => setPanel("report")} data-report-trigger>
-            Report this request
-          </Button>
+          <form method="post" action={path} className="contents" onSubmit={(event) => { event.preventDefault(); void onAnswer(() => store.accept(request.id)); }}>
+            <AnswerFields intent="accept" requestId={request.id} />
+            {/* Each answer names whose request it answers, as the list holds several. Quiet on every card. */}
+            <Button type="submit" icon={<PiCheck />} aria-describedby={whoId}>Accept</Button>
+          </form>
+          <form method="get" action={`${path}#${whoId}`} className="contents">
+            <input type="hidden" name={REQUEST_PARAM} value={request.id} />
+            <Button {...opens("suggest")}>Suggest another mentor</Button>
+            <Button variant="ghost" {...opens("decline")}>Not this month</Button>
+            <Button variant="ghost" size="sm" className="sm:ml-auto" {...opens("report")}>Report this request</Button>
+          </form>
         </div>
       )}
-      {panel === "suggest" && (
+      {open?.panel === "suggest" && (
         <SuggestMentor
-          request={request}
+          {...panel}
           mentors={mentors}
           now={now}
-          onCancel={() => backToAnswers("data-suggest-trigger")}
+          onCancel={() => backToAnswers("suggest")}
           onSuggest={(choice) => { void onAnswer(() => store.redirect(request.id, choice)); }}
         />
       )}
-      {panel === "decline" && (
+      {open?.panel === "decline" && (
         <DeclineRequest
-          name={name}
-          onCancel={() => backToAnswers("data-decline-trigger")}
+          {...panel}
+          onCancel={() => backToAnswers("decline")}
           onDecline={(note) => { void onAnswer(() => store.decline(request.id, note || undefined)); }}
         />
       )}
-      {panel === "report" && (
+      {open?.panel === "report" && (
         <ReportRequest
-          name={name}
-          onCancel={() => backToAnswers("data-report-trigger")}
+          {...panel}
+          onCancel={() => backToAnswers("report")}
           onReport={(reason) => { void onAnswer(() => store.report(request.id, reason)); }}
         />
       )}
@@ -220,244 +330,124 @@ function RequestAnswers({ store, request, mentors, now, whoId, busy, onAnswer }:
   );
 }
 
-/** How much a note may say: the API's limit. */
-const NOTE_MAX = 2000;
+/** Moves focus to the panel's first field when a press opened it. */
+function useFocusOnOpen(pressed: boolean) {
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (pressed) formRef.current?.querySelector<HTMLElement>("input:not([type=hidden]), textarea")?.focus();
+  }, [pressed]);
+  return formRef;
+}
+
+/** A panel's Cancel: back to the answers in place, or without JavaScript, the page without the panel. */
+function Cancel({ path, request, hydrated, onCancel }: Pick<PanelProps, "path" | "request" | "hydrated" | "onCancel">) {
+  return hydrated
+    ? <Button onClick={onCancel}>Cancel</Button>
+    : <ButtonLink href={`${path}#${requestAnchor(request.id)}`}>Cancel</ButtonLink>;
+}
+
+const text = (form: HTMLFormElement, field: string) => String(new FormData(form).get(field) ?? "").trim();
 
 /**
  * "Not this month" (QA4-03): one more press sends it as it is; a kind word is optional, and the person
  * asking reads it with the answer ("try again in December", or who else might help).
  */
-function DeclineRequest({ name, onCancel, onDecline }: { name: string; onCancel: () => void; onDecline: (note: string) => void }) {
-  const ids = useId();
-  const [note, setNote] = useState("");
-  const fieldRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { fieldRef.current?.focus(); }, []);
+function DeclineRequest({ request, path, name, pressed, hydrated, draft, onCancel, onDecline }: PanelProps & { onDecline: (note: string) => void }) {
+  const formRef = useFocusOnOpen(pressed);
 
-  function submit(event: FormEvent) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onDecline(note.trim());
+    onDecline(text(event.currentTarget, "note"));
   }
 
   return (
-    <form onSubmit={submit} noValidate className="flex flex-col gap-3 rounded-xl border border-hairline p-4" data-decline-request>
-      <label htmlFor={`${ids}-note`} className="text-[0.9375rem] font-semibold text-ink-primary">
-        A note for {name} <span className="font-normal text-ink-secondary">(optional)</span>
-      </label>
-      <p id={`${ids}-hint`} className="text-sm text-ink-secondary">
-        {`${name} sees it with your answer. For example, when you might have time, or who else could help. It's fine to send it without one.`}
-      </p>
-      <textarea
-        ref={fieldRef} id={`${ids}-note`} rows={2} maxLength={NOTE_MAX} value={note}
-        onChange={event => setNote(event.target.value)} aria-describedby={`${ids}-hint`} className={FIELD}
+    <form ref={formRef} method="post" action={path} onSubmit={submit} noValidate className={PANEL} data-decline-request>
+      <AnswerFields intent="decline" requestId={request.id} />
+      <TextAreaField
+        id={`${request.id}-decline-note`} name="note" label={`A note for ${name}`} optional rows={2} maxLength={NOTE_MAX} defaultValue={draft?.note}
+        hint={`${name} sees it with your answer. For example, when you might have time, or who else could help. It's fine to send it without one.`}
       />
       <div className="flex flex-wrap gap-2">
         <Button type="submit" variant="primary">Send: not this month</Button>
-        <Button onClick={onCancel}>Cancel</Button>
+        <Cancel path={path} request={request} hydrated={hydrated} onCancel={onCancel} />
       </div>
     </form>
   );
 }
-
-/** How much a report may say: the API's limit. */
-const REPORT_MAX = 2000;
 
 /**
  * "Report this request" (B-4.1 checks): for a note that shouldn't be here, not for a request the mentor
  * would rather not take ("Not this month" is that). TTV checks it, and it closes for the mentor meanwhile;
  * the person asking sees only that it is being checked, never who opened the check.
  */
-function ReportRequest({ name, onCancel, onReport }: { name: string; onCancel: () => void; onReport: (reason: string) => void }) {
-  const ids = useId();
-  const [reason, setReason] = useState("");
-  const [error, setError] = useState("");
-  const fieldRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { fieldRef.current?.focus(); }, []);
+function ReportRequest({ request, path, name, pressed, hydrated, draft, onCancel, onReport }: PanelProps & { onReport: (reason: string) => void }) {
+  const formRef = useFocusOnOpen(pressed);
+  const [error, setError] = useState(draft?.error ?? "");
+  const id = `${request.id}-report-reason`;
 
-  function submit(event: FormEvent) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!reason.trim()) {
-      setError("Say what's wrong with this request, so TTV knows what to check.");
-      fieldRef.current?.focus();
+    const reason = text(event.currentTarget, "reason");
+    if (!reason) {
+      setError(REPORT_REQUIRED);
+      event.currentTarget.querySelector<HTMLTextAreaElement>(`#${CSS.escape(id)}`)?.focus();
       return;
     }
     onReport(reason);
   }
 
   return (
-    <form onSubmit={submit} noValidate className="flex flex-col gap-3 rounded-xl border border-hairline p-4" data-report-request>
-      <label htmlFor={`${ids}-reason`} className="text-[0.9375rem] font-semibold text-ink-primary">What's wrong with this request?</label>
-      <p id={`${ids}-hint`} className="text-sm text-ink-secondary">
-        For a note that breaks how we talk to each other. TTV checks it, and it closes for you meanwhile.
-        {` ${name} sees only that it's being checked, not that you reported it. If you'd just rather not take it, "Not this month" is enough.`}
-      </p>
-      <textarea
-        ref={fieldRef} id={`${ids}-reason`} rows={3} maxLength={REPORT_MAX} value={reason}
-        onChange={event => { setReason(event.target.value); if (error) setError(""); }}
-        aria-describedby={error ? `${ids}-hint ${ids}-error` : `${ids}-hint`} aria-invalid={error ? true : undefined}
-        className={FIELD}
+    <form ref={formRef} method="post" action={path} onSubmit={submit} onChange={() => setError("")} noValidate className={PANEL} data-report-request>
+      <AnswerFields intent="report" requestId={request.id} />
+      <TextAreaField
+        id={id} name="reason" label="What's wrong with this request?" rows={3} maxLength={NOTE_MAX} required defaultValue={draft?.note}
+        error={error || undefined}
+        hint={`For a note that breaks how we talk to each other. TTV checks it, and it closes for you meanwhile. ${name} sees only that it's being checked, not that you reported it. If you'd just rather not take it, "Not this month" is enough.`}
       />
-      {error && <p id={`${ids}-error`} className="text-sm font-semibold text-danger-ink">{error}</p>}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" variant="primary">Send report</Button>
-        <Button onClick={onCancel}>Cancel</Button>
+        <Cancel path={path} request={request} hydrated={hydrated} onCancel={onCancel} />
       </div>
     </form>
   );
 }
 
-function SuggestMentor({ request, mentors, now, onCancel, onSuggest }: {
-  request: MentorRequest; mentors: readonly MentorDirectoryItem[]; now: number;
-  onCancel: () => void; onSuggest: (choice: { mentorId: string; mentorName: string; note?: string }) => void;
+function SuggestMentor({ request, path, name, pressed, hydrated, draft, mentors, now, onCancel, onSuggest }: PanelProps & {
+  mentors: readonly MentorDirectoryItem[]; now: number;
+  onSuggest: (choice: { mentorId: string; mentorName: string; note?: string }) => void;
 }) {
-  const ids = useId();
-  const choices = useMemo(() => mentors.filter(item => item.person.id !== request.requester.id && item.person.id !== request.mentor.id), [mentors, request]);
-  const [chosen, setChosen] = useState<string>("");
-  const [note, setNote] = useState("");
-  const [error, setError] = useState("");
-  const name = firstName(request.requester.name);
-  const listRef = useRef<HTMLFieldSetElement>(null);
-
   // The panel replaces the button that opened it: focus moves to its first choice, or its note when there is none.
-  useEffect(() => {
-    listRef.current?.querySelector<HTMLElement>("input, textarea")?.focus();
-  }, []);
+  const formRef = useFocusOnOpen(pressed);
+  const choices = useMemo(() => mentors.filter(item => item.person.id !== request.requester.id && item.person.id !== request.mentor.id), [mentors, request]);
+  const [error, setError] = useState(draft?.error ?? "");
+  const field = suggestField(request.id);
 
-  function submit(event: FormEvent) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const chosen = text(event.currentTarget, field);
     const choice = choices.find(item => item.person.id === chosen);
     if (!choice) {
-      setError("Choose a mentor to suggest.");
+      setError(CHOOSE_MENTOR);
       return;
     }
-    onSuggest({ mentorId: choice.person.id, mentorName: choice.person.name, ...(note.trim() ? { note: note.trim() } : {}) });
+    const note = text(event.currentTarget, "note");
+    onSuggest({ mentorId: choice.person.id, mentorName: choice.person.name, ...(note ? { note } : {}) });
   }
 
   return (
-    <form onSubmit={submit} noValidate className="flex flex-col gap-4 rounded-2xl border border-hairline p-4" data-suggest-mentor>
-      <fieldset ref={listRef} aria-describedby={error ? `${ids}-error` : undefined}>
-        <legend className="text-[0.9375rem] font-semibold text-ink-primary">Who might be better placed for {name}?</legend>
-        {choices.length === 0 ? (
-          <p className="mt-2 text-sm text-ink-secondary">No other mentors are listed right now.</p>
-        ) : (
-          <div className="mt-3 flex flex-col gap-2">
-            {choices.map(item => (
-              <label key={item.person.id} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-hairline px-3 py-2 has-checked:border-peach-ink has-checked:bg-primary/10 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-peach-ink">
-                <input
-                  type="radio" name={`${ids}-mentor`} value={item.person.id} checked={chosen === item.person.id}
-                  onChange={() => { setChosen(item.person.id); setError(""); }} className="size-4 accent-peach-ink"
-                  aria-labelledby={`${ids}-${item.person.id}-name`} aria-describedby={`${ids}-${item.person.id}-about`}
-                />
-                <span className="min-w-0 flex-1">
-                  <span id={`${ids}-${item.person.id}-name`} className="block text-sm font-semibold break-words text-ink-primary">{item.person.name}</span>
-                  <span id={`${ids}-${item.person.id}-about`} className="block text-[0.8125rem] break-words text-ink-secondary">{item.headline} · {capacityView(item.capacity, now).text}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-        )}
-        {error && <p id={`${ids}-error`} className="mt-2 text-sm font-semibold text-danger-ink">{error}</p>}
-      </fieldset>
-      <div>
-        <label htmlFor={`${ids}-note`} className="text-[0.9375rem] font-semibold text-ink-primary">
-          A note for {name} <span className="font-normal text-ink-secondary">(optional)</span>
-        </label>
-        <textarea
-          id={`${ids}-note`} rows={2} value={note} maxLength={2000} onChange={event => setNote(event.target.value)}
-          className={cx("mt-2", FIELD)}
-        />
-      </div>
+    <form ref={formRef} method="post" action={path} onSubmit={submit} onChange={() => setError("")} noValidate className={PANEL} data-suggest-mentor>
+      <AnswerFields intent="redirect" requestId={request.id} />
+      <ChoiceGroup
+        name={field} label={`Who might be better placed for ${name}?`} required error={error || undefined}
+        defaultValue={draft?.mentorId ?? undefined}
+        hint={choices.length === 0 ? "No other mentors are listed right now." : undefined}
+        options={choices.map(item => ({ value: item.person.id, label: item.person.name, hint: `${item.headline} · ${capacityView(item.capacity, now).text}` }))}
+      />
+      <TextAreaField id={`${request.id}-suggest-note`} name="note" label={`A note for ${name}`} optional rows={2} maxLength={NOTE_MAX} defaultValue={draft?.note} />
       <div className="flex flex-wrap gap-2">
         <Button type="submit" variant="primary" disabled={choices.length === 0}>Send suggestion</Button>
-        <Button onClick={onCancel}>Cancel</Button>
+        <Cancel path={path} request={request} hydrated={hydrated} onCancel={onCancel} />
       </div>
     </form>
-  );
-}
-
-function MonthRail({ availability, used, now, anotherLook }: {
-  availability: MentorAvailability; used: number; now: number; anotherLook: WorthAnotherLook["items"];
-}) {
-  const { limit } = availability.capacity;
-  const full = used >= limit && limit > 0;
-  const capacity = { ...availability.capacity, used };
-  const opening = availability.capacity.nextOpeningAt;
-  return (
-    <aside aria-labelledby="mentoring-month" className="flex flex-col gap-4" data-mentoring-rail>
-      <h2 id="mentoring-month" className="font-body text-lg font-bold text-ink-primary">Your {monthName(now)}</h2>
-      <Card>
-        <p className="text-sm text-ink-secondary">Spots used</p>
-        <p className="mt-1 text-3xl font-bold text-ink-primary" data-spots-used>{used} of {limit}</p>
-        <meter className="sr-only" min={0} max={Math.max(limit, 1)} value={used} aria-label="Spots used this month">{used} of {limit}</meter>
-        <div className="mentor-meter mt-3" aria-hidden="true">
-          <div className="mentor-meter__fill" style={{ width: `${Math.round(usedShare(capacity) * 100)}%` }} />
-        </div>
-        <p className="mt-3 text-sm leading-relaxed text-ink-secondary" data-spots-note>
-          {availability.paused
-            // Paused, the mentor isn't in the directory at all, so nobody sees an opening date (QA4-15).
-            ? "You've paused new requests, so you're not in the mentor directory. Requests already waiting stay with you."
-            : full
-              ? opening !== null
-                ? `You're full. Members see "Next opening ${openingDate(opening)}" instead of a request button.`
-                : "You're full while these requests wait for your answer."
-              : `When you're full, members see when your next opening is instead of a request button.`}
-        </p>
-        {/* Spots are counted as members see them, so a waiting request already holds one (QA4-13). */}
-        <p className="mt-2 text-sm leading-relaxed text-ink-secondary">
-          Each request waiting for your answer holds a spot, and so does each one you accept this month.
-        </p>
-      </Card>
-      <Card>
-        <h3 className="text-[0.9375rem] font-bold text-ink-primary">Open to</h3>
-        {availability.areas.length > 0 ? (
-          <ul className="mt-3 flex flex-wrap gap-2" aria-label="Areas you help with">
-            {availability.areas.map(area => <li key={area} className="flex"><Chip tone="ring">{area}</Chip></li>)}
-          </ul>
-        ) : (
-          <p className="mt-2 text-sm text-ink-secondary">No areas listed yet.</p>
-        )}
-        <p className="mt-4 flex items-center justify-between gap-3 text-sm text-ink-secondary">
-          <span className="inline-flex items-center gap-2"><PiPauseCircle aria-hidden className="size-[1.125rem]" />Pause new requests</span>
-          <span className="font-semibold text-ink-primary">{availability.paused ? "On" : "Off"}</span>
-        </p>
-        <a href={MENTOR_AVAILABILITY_PATH} className={cx(LINK, "mt-4 w-fit")}>Edit availability</a>
-      </Card>
-      {anotherLook.length > 0 && <AnotherLook items={anotherLook} />}
-    </aside>
-  );
-}
-
-/** How many "Worth another look" items the rail names before pointing at the Confirm page for the rest. */
-const ANOTHER_LOOK_SHOWN = 3;
-
-/**
- * "Worth another look" (screen 06, B-4.2): work this mentor confirmed whose owner has shared a newer
- * revision since, so the confirmation no longer covers what is shared now. Each links to the Confirm
- * page, where the newer revision waits. Shown only when there is something to look at.
- */
-function AnotherLook({ items }: { items: WorthAnotherLook["items"] }) {
-  const shown = items.slice(0, ANOTHER_LOOK_SHOWN);
-  const more = items.length - shown.length;
-  return (
-    <Card as="section" aria-labelledby="another-look-title" data-another-look={items.length}>
-      <h3 id="another-look-title" className="text-[0.9375rem] font-bold text-ink-primary">Worth another look</h3>
-      <ul className="mt-3 flex flex-col gap-4">
-        {shown.map(item => (
-          <li key={item.journeyId} className="flex flex-col gap-2.5" data-another-look-item={item.journeyId}>
-            <p className="text-sm leading-relaxed break-words text-ink-secondary">
-              {firstName(item.owner.name)} shared revision {item.currentVersion} of {item.title}.
-              Your confirmation covers revision {item.confirmedVersion}.
-            </p>
-            <a href={item.href} className={cx(LINK, "w-fit")} aria-label={`Review revision ${item.currentVersion} of ${item.title}`}>
-              Review revision {item.currentVersion}
-            </a>
-          </li>
-        ))}
-      </ul>
-      {more > 0 && (
-        <a href={shown[0]!.href} className={cx("mt-4 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-peach-ink underline-offset-4 hover:underline", FOCUS_RING)}>
-          {more}{items.length >= WORTH_ANOTHER_LOOK_LIMIT ? "+" : ""} more on Confirm work <PiArrowRight aria-hidden className="size-4" />
-        </a>
-      )}
-    </Card>
   );
 }

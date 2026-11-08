@@ -9,7 +9,9 @@ import { listOwnProjects } from "@/lib/channels/embeds";
 import { worthAnotherLook } from "@/lib/mentoring/another-look";
 import { DIRECTORY_LIMIT, getAvailability, listMentors } from "@/lib/mentoring/profiles";
 import { getConversation, listRequests } from "@/lib/mentoring/requests";
-import { mentoringRequest } from "@/lib/mentoring/http";
+import { mentoringRequest, type MentoringOperation } from "@/lib/mentoring/http";
+import type { AnswerIntent } from "./answer-fields";
+import type { AnswerBody } from "./answer-post";
 
 /**
  * The mentor pages' one seam to the backend lane (lib/mentoring, B-4.1). Page
@@ -38,12 +40,28 @@ export interface MentorsServer {
   create(body: CreateMentorRequest): Promise<Response>;
   /** Saves this mentor's availability without JavaScript, through the API's own handler (availability-post.ts). */
   saveAvailability(body: UpdateMentorAvailability): Promise<Response>;
+  /** Answers a waiting request without JavaScript, through the API's own handler (answer-post.ts). */
+  answer(intent: AnswerIntent, requestId: string, body: AnswerBody): Promise<Response>;
 }
+
+const ANSWER_OPERATIONS: Record<AnswerIntent, MentoringOperation> = {
+  accept: "acceptMentorRequest", redirect: "redirectMentorRequest", decline: "declineMentorRequest", report: "reportMentorRequest",
+};
 
 export function mentorsServer(
   context: Pick<APIContext, "locals" | "url">, env: Env, me: Me, now: number = Date.now(),
 ): MentorsServer {
   const db = env.DB;
+  // The API's own handler, given this page's same-origin post (checked by request-post.ts and answer-post.ts)
+  // as an inner request that carries that origin.
+  const viaApi = (operation: MentoringOperation, path: string, body: unknown, params: Record<string, string> = {}) => {
+    const request = new Request(new URL(path, context.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: context.url.origin },
+      body: JSON.stringify(body),
+    });
+    return mentoringRequest(operation, { request, locals: context.locals, params }, env);
+  };
   const ctx = { db, viewerId: me.user.id, now };
   return {
     directory: (query) => listMentors(db, me.user.id, query, now),
@@ -59,15 +77,12 @@ export function mentorsServer(
     projects: () => listOwnProjects(db, me.user.id),
     conversation: (channelId) => getConversation(ctx, channelId),
     anotherLook: () => worthAnotherLook({ db, env, locals: context.locals }),
-    create(body) {
-      // The same handler as POST /api/mentor-requests. The page has already checked its own post is
-      // same-origin (request-post.ts), so this inner request carries that origin.
-      const request = new Request(new URL(ROUTES.createMentorRequest.path, context.url), {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Origin: context.url.origin },
-        body: JSON.stringify(body),
-      });
-      return mentoringRequest("createMentorRequest", { request, locals: context.locals, params: {} }, env);
+    // The same handler as POST /api/mentor-requests.
+    create: (body) => viaApi("createMentorRequest", ROUTES.createMentorRequest.path, body),
+    // The same handlers as POST /api/mentor-requests/:id/accept, /redirect, /decline and /report.
+    answer(intent, requestId, body) {
+      const operation = ANSWER_OPERATIONS[intent];
+      return viaApi(operation, ROUTES[operation].path.replace(":id", encodeURIComponent(requestId)), body, { id: requestId });
     },
     saveAvailability(body) {
       // The same handler as PUT /api/mentoring/availability, from the page's own same-origin post.

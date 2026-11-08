@@ -118,6 +118,11 @@ const STATUS_WORDS: Record<MentorRequestStatus, string> = {
   DECLINED: "already answered", WITHDRAWN: "withdrawn",
 };
 
+/** Said when a change is refused because the request had already moved on: what happened instead. */
+export function movedText(name: string, status: MentorRequestStatus): string {
+  return `This request from ${name} was ${STATUS_WORDS[status]}, so nothing changed.`;
+}
+
 export function createMentorRequestsStore(options: MentorRequestsOptions) {
   const api = options.api ?? options.mock ?? createApiClient();
   const side = options.as;
@@ -201,7 +206,7 @@ export function createMentorRequestsStore(options: MentorRequestsOptions) {
         items: truth ? current.items.map(item => item.id === id ? truth : item) : current.items,
         failed: { ...current.failed, [id]: { action, error, stale: truth !== null && truth.status !== "PENDING" } },
         announcement: truth && truth.status !== "PENDING"
-          ? `This request from ${name} was ${STATUS_WORDS[truth.status]}, so nothing changed.`
+          ? movedText(name, truth.status)
           : `Couldn't ${VERB[action]}. Nothing changed.`,
       }));
       return null;

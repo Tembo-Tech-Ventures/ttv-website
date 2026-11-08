@@ -10,6 +10,9 @@ import type { MentorArea, MentorRequestFormat } from "../contracts";
 /** Every way a mentor can help, in the contract's order (`MentorRequestFormat.options`). */
 export const MENTOR_REQUEST_FORMATS = ["WRITTEN_REVIEW", "CALL_30_MIN", "QUICK_QUESTION"] as const satisfies readonly MentorRequestFormat[];
 
+/** The most items "Worth another look" lists (`WORTH_ANOTHER_LOOK_LIMIT`): at this many, there may be more. */
+export const WORTH_ANOTHER_LOOK_LIMIT = 20;
+
 /** The longest area a mentor can list (`MentorArea`). */
 const MAX_AREA = 40;
 

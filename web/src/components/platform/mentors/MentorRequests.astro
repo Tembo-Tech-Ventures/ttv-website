@@ -1,0 +1,39 @@
+---
+/**
+ * Mentoring → Requests (screen 06), as the server renders it: what an answer
+ * posted without JavaScript did, the island (`MentorRequestsQueue`: the list
+ * of requests and their answers) in the default slot, then the month's rail
+ * with no island (`MentorMonthRail`). The page passes the live island; the DEV
+ * harness passes its own over the mentoring mock.
+ */
+import type { MentorAvailability, MentorRequest, WorthAnotherLook } from "@/lib/platform/contracts";
+import { Notice } from "@/components/platform/ui";
+import AnsweredNotice from "./AnsweredNotice";
+import MentorMonthRail from "./MentorMonthRail";
+// oxlint-disable-next-line import/no-unassigned-import -- Mentor connections stylesheet, for the page's grid and the meter.
+import "./mentors.css";
+
+interface Props {
+  availability: MentorAvailability;
+  /** Null when it could not be read: the rail leaves it out. */
+  anotherLook: WorthAnotherLook | null;
+  now: number;
+  /** After an answer posted without JavaScript that went through: the request it answered, named by `?answered=`. */
+  answered?: MentorRequest | null;
+  /** Why an answer posted without JavaScript did not go through, when its request is not in the list to say it. */
+  failure?: string | null;
+}
+
+const { availability, anotherLook, now, answered = null, failure = null } = Astro.props;
+---
+
+{answered && <AnsweredNotice request={answered} />}
+{failure && (
+  <div class="mb-6" data-request-answer-error>
+    <Notice tone="danger" focusOnLoad>{failure}</Notice>
+  </div>
+)}
+<div class="mentoring-requests" data-mentor-requests>
+  <slot />
+  <MentorMonthRail availability={availability} now={now} anotherLook={anotherLook?.items ?? []} />
+</div>
