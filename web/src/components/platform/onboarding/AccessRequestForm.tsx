@@ -2,13 +2,14 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { PiLockSimpleBold, PiWarningCircleBold } from "react-icons/pi";
 import type { AccessRole } from "@/lib/platform/contracts";
 import { readDrafts, sessionDraftStorage, writeDrafts } from "@/lib/platform/client/onboarding-drafts";
-import { PersonMarker } from "@/components/platform/ui";
-import { BUTTON_VARIANTS } from "@/components/platform/ui/Button";
-import { cx } from "@/components/platform/ui/cx";
+import { Button, CHOICE_BOX, CONTROL, CONTROL_HEIGHT, cx, FIELD_ERROR, HINT, LABEL, linkClass, Notice, PersonMarker } from "@/components/platform/ui";
 import { REQUEST } from "./copy";
 import { fillForm, fromStoredDrafts, isPristine, mergeDrafts, readForm } from "./request-drafts";
-import { ACTION_BUTTON } from "./WelcomeChoices";
 import { REQUEST_FIELDS, type RequestDraft, type RequestErrors, type RequestField } from "./welcome-flow";
+
+/** The kit's controls: one-line fields at 44px, notes that grow (patterns.md). */
+const INPUT = cx(CONTROL, CONTROL_HEIGHT);
+const TEXTAREA = cx(CONTROL, "min-h-24 resize-y py-2.5 leading-relaxed");
 
 type Props = {
   action: string;
@@ -46,22 +47,23 @@ function Field({ field, label, optional, hint, error, counter, children }: Field
   const errorId = error && `${id}-error`;
   return (
     <div className="request-field" data-invalid={error ? "" : undefined}>
-      <label htmlFor={id} className="request-field__label">
+      <label htmlFor={id} className={LABEL}>
         {label}
-        {optional && <span className="request-field__optional"> {REQUEST.optional}</span>}
+        {optional && <span className="font-normal text-ink-muted"> {REQUEST.optional}</span>}
       </label>
       {hintId && (
-        <p id={hintId} className="request-field__hint">
+        <p id={hintId} className={HINT}>
           {hint}
         </p>
       )}
+      {children({ id, "aria-invalid": error ? true : undefined, "aria-describedby": describedBy(hintId || false, errorId || false) })}
+      {/* Under the field, as every kit field says what went wrong (patterns.md). */}
       {error && (
-        <p id={errorId || undefined} className="request-field__error">
+        <p id={errorId || undefined} className={cx(FIELD_ERROR, "flex items-start gap-1.5")}>
           <PiWarningCircleBold aria-hidden="true" className="size-4 shrink-0" />
           {error}
         </p>
       )}
-      {children({ id, "aria-invalid": error ? true : undefined, "aria-describedby": describedBy(hintId || false, errorId || false) })}
       {counter}
     </div>
   );
@@ -147,30 +149,19 @@ export default function AccessRequestForm({ action, roles, draft, errors, failur
       className="request-form"
     >
       {(problems.length > 0 || failure) && (
-        <div
-          id={SUMMARY_ID}
-          className="request-summary"
-          role="alert"
-          tabIndex={-1}
-          // oxlint-disable-next-line jsx-a11y/no-autofocus -- the rejected form's problems, the page's focus target
-          autoFocus
-          aria-labelledby={problems.length > 0 ? `${SUMMARY_ID}-title` : undefined}
-        >
+        <Notice tone="danger" id={SUMMARY_ID} focusOnLoad title={problems.length > 0 ? REQUEST.errorTitle : undefined} className="request-summary">
           {problems.length > 0 ? (
-            <>
-              <h2 id={`${SUMMARY_ID}-title`} className="request-summary__title">{REQUEST.errorTitle}</h2>
-              <ul className="request-summary__list">
-                {problems.map((field) => (
-                  <li key={field}>
-                    <a href={`#${fieldId(field)}`}>{errors[field]}</a>
-                  </li>
-                ))}
-              </ul>
-            </>
+            <ul className="request-summary__list">
+              {problems.map((field) => (
+                <li key={field}>
+                  <a href={`#${fieldId(field)}`} className={linkClass()}>{errors[field]}</a>
+                </li>
+              ))}
+            </ul>
           ) : (
-            <p className="request-summary__failure">{failure}</p>
+            failure
           )}
-        </div>
+        </Notice>
       )}
 
       {mentor && (
@@ -182,13 +173,13 @@ export default function AccessRequestForm({ action, roles, draft, errors, failur
           <Field field="mentorNote" label={REQUEST.mentorNote} hint={REQUEST.noteLength} error={errors.mentorNote} counter={counter("mentorNote")}>
             {(control) => (
               <textarea {...control} name="mentorNote" required rows={4} maxLength={NOTE_MAX} defaultValue={draft.mentorNote}
-                onInput={count("mentorNote")} className="request-input request-input--area" />
+                onInput={count("mentorNote")} className={TEXTAREA} />
             )}
           </Field>
           <Field field="mentorLink" label={REQUEST.mentorLink} optional error={errors.mentorLink}>
             {(control) => (
               <input {...control} name="mentorLink" type="url" inputMode="url" autoComplete="url" placeholder="https://"
-                defaultValue={draft.mentorLink} className="request-input" />
+                defaultValue={draft.mentorLink} className={INPUT} />
             )}
           </Field>
         </section>
@@ -203,31 +194,31 @@ export default function AccessRequestForm({ action, roles, draft, errors, failur
           <Field field="organisation" label={REQUEST.organisation} error={errors.organisation}>
             {(control) => (
               <input {...control} name="organisation" type="text" required maxLength={TEXT_MAX} autoComplete="organization"
-                defaultValue={draft.organisation} className="request-input" />
+                defaultValue={draft.organisation} className={INPUT} />
             )}
           </Field>
           <Field field="organisationRole" label={REQUEST.organisationRole} optional error={errors.organisationRole}>
             {(control) => (
               <input {...control} name="organisationRole" type="text" maxLength={TEXT_MAX} autoComplete="organization-title"
-                defaultValue={draft.organisationRole} className="request-input" />
+                defaultValue={draft.organisationRole} className={INPUT} />
             )}
           </Field>
           <Field field="institutionNote" label={REQUEST.institutionNote} hint={`${REQUEST.institutionNoteHint} ${REQUEST.noteLength}`}
             error={errors.institutionNote} counter={counter("institutionNote")}>
             {(control) => (
               <textarea {...control} name="institutionNote" required rows={4} maxLength={NOTE_MAX} defaultValue={draft.institutionNote}
-                onInput={count("institutionNote")} className="request-input request-input--area" />
+                onInput={count("institutionNote")} className={TEXTAREA} />
             )}
           </Field>
           <Field field="institutionLink" label={REQUEST.institutionLink} optional error={errors.institutionLink}>
             {(control) => (
               <input {...control} name="institutionLink" type="url" inputMode="url" autoComplete="url" placeholder="https://"
-                defaultValue={draft.institutionLink} className="request-input" />
+                defaultValue={draft.institutionLink} className={INPUT} />
             )}
           </Field>
           <div className="request-ack" data-invalid={errors.scope ? "" : undefined}>
             {errors.scope && (
-              <p id={`${fieldId("scope")}-error`} className="request-field__error">
+              <p id={`${fieldId("scope")}-error`} className={cx(FIELD_ERROR, "flex items-start gap-1.5")}>
                 <PiWarningCircleBold aria-hidden="true" className="size-4 shrink-0" />
                 {errors.scope}
               </p>
@@ -242,7 +233,7 @@ export default function AccessRequestForm({ action, roles, draft, errors, failur
                 defaultChecked={draft.scope}
                 aria-invalid={errors.scope ? true : undefined}
                 aria-describedby={errors.scope ? `${fieldId("scope")}-error` : undefined}
-                className="request-ack__input"
+                className={CHOICE_BOX}
               />
               <span>{REQUEST.scope}</span>
             </label>
@@ -251,9 +242,9 @@ export default function AccessRequestForm({ action, roles, draft, errors, failur
       )}
 
       <div className="request-send">
-        <button type="submit" aria-disabled={sending || undefined} className={cx(ACTION_BUTTON, BUTTON_VARIANTS.primary)}>
+        <Button type="submit" variant="primary" size="lg" loading={sending}>
           {roles.length > 1 ? REQUEST.sendBoth : REQUEST.send}
-        </button>
+        </Button>
         <p className="request-send__privacy">
           <PiLockSimpleBold aria-hidden="true" className="size-4 shrink-0" />
           {REQUEST.privacy}

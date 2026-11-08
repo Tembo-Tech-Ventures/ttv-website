@@ -1,9 +1,7 @@
-import { useEffect, useId, useReducer, useState, type FormEvent } from "react";
-import { PiArrowRightBold, PiCheckBold, PiCheckCircleBold, PiHourglassMediumBold, PiInfoBold } from "react-icons/pi";
+import { useEffect, useReducer, useState, type FormEvent } from "react";
+import { PiArrowRightBold, PiCheckCircleBold, PiHourglassMediumBold, PiInfoBold } from "react-icons/pi";
 import { intentSelectionReducer } from "@/lib/platform/client/onboarding-intents";
-import { Chip, PersonMarker } from "@/components/platform/ui";
-import { BUTTON_VARIANTS, FOCUS_RING } from "@/components/platform/ui/Button";
-import { cx } from "@/components/platform/ui/cx";
+import { Button, ChoiceCard, Chip, Notice, PersonMarker } from "@/components/platform/ui";
 import { CHOICES, WELCOME, type Choice, type ChoiceIntent } from "./copy";
 import type { ChoiceStatus } from "./welcome-flow";
 
@@ -21,12 +19,6 @@ type Props = {
   error: string | null;
 };
 
-export const ACTION_BUTTON = cx(
-  "inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl px-5 text-[0.9375rem] font-bold whitespace-nowrap",
-  "transition-colors duration-150 motion-reduce:transition-none",
-  FOCUS_RING,
-);
-
 function StatusChip({ choice, status }: { choice: Choice; status: ChoiceStatus | undefined }) {
   if (status === "active") return <Chip tone="peach" icon={<PiCheckCircleBold className="size-3.5" />}>{WELCOME.active}</Chip>;
   if (status === "pending") return <Chip tone="ring" icon={<PiHourglassMediumBold className="size-3.5" />}>{WELCOME.pending}</Chip>;
@@ -39,9 +31,9 @@ function StatusChip({ choice, status }: { choice: Choice; status: ChoiceStatus |
  * S1, "How will you take part?": three cards a person may combine, and a
  * separate "just looking around" that stands alone.
  *
- * A plain form: each card is a label around a real checkbox, so it works
- * before and without JavaScript, and the selected look comes from CSS
- * (`:has(:checked)`), not from state. Hydration adds the count in the phone's
+ * A plain form: each card is the kit's ChoiceCard, a label around a real
+ * checkbox, so it works before and without JavaScript, and the selected look
+ * comes from CSS (`:has(:checked)`), not from state. Hydration adds the count in the phone's
  * action bar, the "choose at least one" check before posting, and holding
  * the buttons once the form is on its way. The selection follows S-O.2's
  * `intentSelectionReducer`, the one every onboarding surface shares.
@@ -52,7 +44,6 @@ export default function WelcomeChoices({ action, selected, statuses, error }: Pr
   const [refusal, setRefusal] = useState<string | null>(error);
   const [hydrated, setHydrated] = useState(false);
   const [sending, setSending] = useState(false);
-  const idBase = useId();
 
   useEffect(() => setHydrated(true), []);
   // Coming back through the browser's history restores the page as it was left: let it be pressed again.
@@ -88,61 +79,37 @@ export default function WelcomeChoices({ action, selected, statuses, error }: Pr
 
   return (
     <form method="post" action={action} noValidate onSubmit={onSubmit} className="welcome-form">
+      {/*
+        The one problem with this choice: found before posting (announced as it appears), or sent back
+        by the server, when it takes focus as the page opens (`autofocus`, so without JavaScript too).
+      */}
+      {problem && (
+        <Notice tone="danger" id={CHOICES_ERROR_ID} focusOnLoad={error !== null} className="welcome-error">
+          {problem}
+        </Notice>
+      )}
       <fieldset
         className="welcome-choices"
         aria-labelledby={WELCOME_TITLE_ID}
         aria-describedby={problem ? CHOICES_ERROR_ID : undefined}
       >
-        {/*
-          Always present, so a problem found before posting is announced as it appears. One the
-          server sent back takes focus as the page opens (rendered `autofocus`, so without JavaScript too).
-        */}
-        <p
-          id={CHOICES_ERROR_ID}
-          role="alert"
-          tabIndex={-1}
-          // oxlint-disable-next-line jsx-a11y/no-autofocus -- the rejected form's one problem, the page's focus target
-          autoFocus={error !== null}
-          className={problem ? "welcome-error" : "sr-only"}
-        >
-          {problem}
-        </p>
         {CHOICES.map((choice) => {
           const key = choice.intent.toLowerCase();
-          const titleId = `${idBase}-${key}-title`;
-          const bodyId = `${idBase}-${key}-body`;
-          const chipId = `${idBase}-${key}-chip`;
           return (
-            <label key={choice.intent} className="welcome-choice" data-intent={key}>
-              <input
-                id={`welcome-choice-${key}`}
-                type="checkbox"
-                name="intent"
-                value={choice.intent}
-                className="welcome-choice__input"
-                aria-labelledby={titleId}
-                aria-describedby={`${bodyId} ${chipId}`}
-                checked={selection.intents.includes(choice.intent)}
-                onChange={() => toggle(choice.intent)}
-              />
-              <span className="welcome-choice__top">
-                <span className="welcome-choice__seal" aria-hidden="true">
-                  <PersonMarker kind={choice.marker} className="welcome-choice__marker" />
-                </span>
-                <span id={titleId} className="welcome-choice__title">
-                  {choice.title}
-                </span>
-                <span className="welcome-choice__check" aria-hidden="true">
-                  <PiCheckBold />
-                </span>
-              </span>
-              <span id={bodyId} className="welcome-choice__body">
-                {choice.body}
-              </span>
-              <span id={chipId} className="welcome-choice__foot">
-                <StatusChip choice={choice} status={statuses[choice.intent]} />
-              </span>
-            </label>
+            <ChoiceCard
+              key={choice.intent}
+              type="checkbox"
+              id={`welcome-choice-${key}`}
+              name="intent"
+              value={choice.intent}
+              label={choice.title}
+              hint={choice.body}
+              mark={<PersonMarker kind={choice.marker} />}
+              detail={<StatusChip choice={choice} status={statuses[choice.intent]} />}
+              checked={selection.intents.includes(choice.intent)}
+              onChange={() => toggle(choice.intent)}
+              className="welcome-choice"
+            />
           );
         })}
       </fieldset>
@@ -153,31 +120,35 @@ export default function WelcomeChoices({ action, selected, statuses, error }: Pr
       </p>
 
       <div className="welcome-actions">
-        <button
+        <Button
           type="submit"
           name="action"
           value="continue"
-          aria-disabled={sending || undefined}
-          className={cx(ACTION_BUTTON, BUTTON_VARIANTS.primary, "welcome-actions__continue")}
+          variant="primary"
+          size="lg"
+          loading={sending}
+          className="welcome-actions__continue"
         >
           {WELCOME.continue}
           <PiArrowRightBold aria-hidden="true" className="size-4" />
-        </button>
+        </Button>
         <div className="welcome-actions__more">
           {hydrated && (
             <span className="welcome-actions__count" aria-hidden="true">
               {count} selected
             </span>
           )}
-          <button
+          <Button
             type="submit"
             name="action"
             value="explore"
-            aria-disabled={sending || undefined}
-            className={cx(ACTION_BUTTON, "welcome-actions__explore")}
+            variant="ghost"
+            size="lg"
+            loading={sending}
+            className="welcome-actions__explore"
           >
             {WELCOME.explore}
-          </button>
+          </Button>
           <span className="welcome-actions__later">{WELCOME.later}</span>
         </div>
       </div>

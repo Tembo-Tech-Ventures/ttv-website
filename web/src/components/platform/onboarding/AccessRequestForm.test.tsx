@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { HINT } from "@/components/platform/ui";
 import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
@@ -80,7 +81,9 @@ describe("AccessRequestForm, as the server sends it", () => {
 
   it("says why nothing was sent when the answers were fine", () => {
     const summary = html({ failure: FAILURES.rateLimited }).querySelector(`#${SUMMARY_ID}`)!;
-    expect(summary.textContent).toBe(FAILURES.rateLimited);
+    // The kit's danger Notice: its words, after the "Problem:" its icon stands for.
+    expect(summary.getAttribute("data-notice")).toBe("danger");
+    expect(summary.textContent).toContain(FAILURES.rateLimited);
     expect(summary.querySelector("a")).toBeNull();
   });
 
@@ -95,7 +98,7 @@ describe("AccessRequestForm, as the server sends it", () => {
     const hint = page.querySelector(`#${note.getAttribute("aria-describedby")}`)!;
     // QAO-04: on screen, not only for screen readers, so nobody learns the minimum from an error.
     expect(hint.textContent).toBe(REQUEST.noteLength);
-    expect(hint.className).toBe("request-field__hint");
+    expect(hint.className).toBe(HINT);
     expect(page.querySelector(".sr-only")).toBeNull();
     expect(page.textContent).not.toContain("/ 600");
   });

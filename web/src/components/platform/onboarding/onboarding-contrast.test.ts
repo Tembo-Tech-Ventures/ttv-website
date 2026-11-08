@@ -5,11 +5,11 @@ import { CHIP_TONES } from "@/components/platform/ui/tones";
 
 /**
  * The welcome cards' words over the welcome sheet, chosen or not, recomputed
- * from the stylesheets so a token or tint change cannot drift past AA. The
- * chosen card is the brightest surface the chips land on.
+ * from the kit's ChoiceCard tints and the theme, so a token or tint change
+ * cannot drift past AA. The chosen card is the brightest surface the chips land on.
  */
 const GLOBAL_CSS = readFileSync(resolve(__dirname, "../../../styles/global.css"), "utf8");
-const ONBOARDING_CSS = readFileSync(resolve(__dirname, "onboarding.css"), "utf8");
+const FIELD_TSX = readFileSync(resolve(__dirname, "../ui/Field.tsx"), "utf8");
 type Rgb = [number, number, number];
 
 const token = (name: string) => /#([0-9a-f]{6})/i.exec(new RegExp(`--color-${name}:\\s*([^;]+);`).exec(GLOBAL_CSS)![1])![0];
@@ -26,10 +26,11 @@ const contrast = (a: Rgb, b: Rgb) => {
   const [hi, lo] = [luminance(a), luminance(b)].toSorted((x, y) => y - x);
   return (hi! + 0.05) / (lo! + 0.05);
 };
-/** The ink alpha a rule block paints a card with: `background-color: rgb(255 248 242 / a)`. */
-function cardAlpha(selector: string): number {
-  const block = ONBOARDING_CSS.slice(ONBOARDING_CSS.indexOf(`${selector} {`));
-  return Number(/background-color: rgb\(255 248 242 \/ ([\d.]+)\)/.exec(block.slice(0, block.indexOf("}")))![1]);
+/** A ChoiceCard tint, read from the class names the kit gives it: `bg-<token>/<percent>`, plain or `has-checked:`. */
+function cardTint(prefix: "" | "has-checked:"): { tint: Rgb; alpha: number } {
+  const card = FIELD_TSX.slice(FIELD_TSX.indexOf("export function ChoiceCard"));
+  const [, name, percent] = new RegExp(`(?:^|\\s|")${prefix.replace(":", "\\:")}bg-([a-z-]+)/(\\d+)`).exec(card)!;
+  return { tint: hex(token(name!)), alpha: Number(percent) / 100 };
 }
 /** A chip tone's tint strength and ink, read from the class names Chip uses. */
 function chip(tone: "peach" | "ring"): { tint: Rgb; alpha: number; ink: Rgb } {
@@ -41,9 +42,10 @@ function chip(tone: "peach" | "ring"): { tint: Rgb; alpha: number; ink: Rgb } {
 
 const SHEET = hex(token("sheet-welcome"));
 const INK = hex(token("ink-primary"));
+const onSheet = ({ tint, alpha }: { tint: Rgb; alpha: number }) => over(tint, alpha, SHEET);
 const SURFACES = {
-  card: over(INK, cardAlpha(".welcome-choice"), SHEET),
-  chosen: over(INK, cardAlpha(".welcome-choice:has(:checked)"), SHEET),
+  card: onSheet(cardTint("")),
+  chosen: onSheet(cardTint("has-checked:")),
 };
 
 describe("the welcome cards' contrast", () => {
@@ -53,7 +55,9 @@ describe("the welcome cards' contrast", () => {
     expect(contrast(ink, over(tint, alpha, surface))).toBeGreaterThanOrEqual(4.5);
   });
 
+  // The card's words are the kit's hint on a tint: ink-secondary.
   it.each(Object.entries(SURFACES))("keeps a card's body text at AA on a %s", (_, surface) => {
-    expect(contrast(over(INK, 0.72, surface), surface)).toBeGreaterThanOrEqual(4.5);
+    const secondary = Number(/--color-ink-secondary:\s*rgba\(255, 248, 242, ([\d.]+)\)/.exec(GLOBAL_CSS)![1]);
+    expect(contrast(over(INK, secondary, surface), surface)).toBeGreaterThanOrEqual(4.5);
   });
 });

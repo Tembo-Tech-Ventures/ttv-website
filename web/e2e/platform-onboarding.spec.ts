@@ -59,7 +59,8 @@ async function open(page: Page, path: string, scripted = true) {
 
 const main = (page: Page) => page.locator("main");
 const heading = (page: Page) => main(page).getByRole("heading", { level: 1 });
-const card = (page: Page, intent: "member" | "mentor" | "institution") => page.locator(`.welcome-choice[data-intent=${intent}]`);
+// The kit's ChoiceCard: the label around each intent's checkbox.
+const card = (page: Page, intent: "member" | "mentor" | "institution") => page.locator(`label.welcome-choice[for="welcome-choice-${intent}"]`);
 const checkbox = (page: Page, name: string) => main(page).getByRole("checkbox", { name, exact: true });
 const continueButton = (page: Page) => main(page).getByRole("button", { name: "Continue" });
 const exploreButton = (page: Page) => main(page).getByRole("button", { name: "I’m just looking around" });
@@ -232,9 +233,10 @@ test.describe("the welcome and request steps (DEV harness)", () => {
       const style = getComputedStyle(el);
       return { border: style.borderTopColor, outline: style.outlineStyle };
     }));
-    expect(looks[0]!.border).toBe("rgb(242, 141, 104)");
-    expect(looks[1]).toEqual({ border: "rgb(242, 141, 104)", outline: "solid" });
-    expect(looks[2]!.border).not.toBe("rgb(242, 141, 104)");
+    // Chosen cards take the kit's peach-ink edge (#FFB496); the focused one also its outline.
+    expect(looks[0]!.border).toBe("rgb(255, 180, 150)");
+    expect(looks[1]).toEqual({ border: "rgb(255, 180, 150)", outline: "solid" });
+    expect(looks[2]!.border).not.toBe("rgb(255, 180, 150)");
     if (test.info().project.name === "mobile-chromium") await expect(page.locator(".welcome-actions__count")).toHaveText("2 selected");
     await page.screenshot({ path: evidence("01-welcome") });
     await page.screenshot({ path: evidence("01-welcome-full"), fullPage: true });
@@ -247,11 +249,12 @@ test.describe("the welcome and request steps (DEV harness)", () => {
     await reset(page, "wairimu");
     await open(page, harness("wairimu"));
     await continueButton(page).click();
-    await expect(main(page).getByRole("alert")).toHaveText("Choose at least one, or pick ‘I’m just looking around’.");
+    // The kit's danger Notice: its words follow the "Problem:" its icon stands for.
+    await expect(main(page).getByRole("alert")).toContainText("Choose at least one, or pick ‘I’m just looking around’.");
     expect(page.url()).toContain(HARNESS);
     expect((await state(page, "wairimu")).stage).toBe("NEW");
     await card(page, "member").click();
-    await expect(main(page).getByRole("alert")).toHaveText("");
+    await expect(main(page).getByRole("alert")).toHaveCount(0);
   });
 
   test("preselects the hinted card without sending anything", async ({ page }) => {
@@ -386,7 +389,7 @@ test.describe("the welcome and request steps (DEV harness)", () => {
     await main(page).getByRole("button", { name: "Send request" }).click();
     await settled(page);
     await expect(main(page).getByRole("alert")).toBeFocused();
-    await expect(main(page).getByRole("alert")).toHaveText("You’ve sent several requests in the last day. Your answers are still here: try again later.");
+    await expect(main(page).getByRole("alert")).toContainText("You’ve sent several requests in the last day. Your answers are still here: try again later.");
     await expect(main(page).getByLabel("What kind of work could you review?")).toHaveValue("Data pipelines and the tests around them.");
     expect((await state(page, "peter")).requests[0]?.status).toBe("DECLINED");
   });
@@ -443,7 +446,7 @@ test.describe("without JavaScript (DEV harness)", () => {
     await expect(page.locator(".welcome-actions__count")).toHaveCount(0);
     await continueButton(page).click();
     await settled(page, false);
-    await expect(main(page).getByRole("alert")).toHaveText("Choose at least one, or pick ‘I’m just looking around’.");
+    await expect(main(page).getByRole("alert")).toContainText("Choose at least one, or pick ‘I’m just looking around’.");
     await expect(main(page).getByRole("alert")).toBeFocused();
     await card(page, "member").click();
     await card(page, "mentor").click();
@@ -471,41 +474,35 @@ test.describe("motion (DEV harness)", () => {
     await open(page, harness("wairimu"));
     const result = await page.evaluate(() => {
       const el = document.querySelector<HTMLElement>(".welcome-choice")!;
-      const check = el.querySelector<HTMLElement>(".welcome-choice__check")!;
-      // Each moving part's last moment: its longest duration plus delay.
-      const ends = (style: CSSStyleDeclaration) => {
-        const seconds = (list: string) => list.split(",").map((value) => Number.parseFloat(value) * 1000);
-        const durations = seconds(style.transitionDuration);
-        const delays = seconds(style.transitionDelay);
-        return Math.max(...durations.map((duration, i) => (duration > 0 ? duration + (delays[i % delays.length] ?? 0) : 0)));
-      };
+      // The card's last moment: its longest transition duration plus delay.
+      const style = getComputedStyle(el);
+      const seconds = (list: string) => list.split(",").map((value) => Number.parseFloat(value) * 1000);
+      const durations = seconds(style.transitionDuration);
+      const delays = seconds(style.transitionDelay);
+      // `transition-property: none` (the kit's motion-reduce:transition-none) moves nothing, whatever the duration says.
+      const moves = style.transitionProperty === "none"
+        ? 0
+        : Math.max(...durations.map((duration, i) => (duration > 0 ? duration + (delays[i % delays.length] ?? 0) : 0)));
       // Whether the page opts into the sheet transition under these preferences: an @view-transition rule that applies.
       const applies = (rules: CSSRuleList, media: string | null): boolean => Array.from(rules).some((rule) => {
         if (rule instanceof CSSMediaRule) return applies(rule.cssRules, rule.media.mediaText);
         return rule.cssText.startsWith("@view-transition") && (media === null || matchMedia(media).matches);
       });
-      return {
-        card: ends(getComputedStyle(el)),
-        fill: ends(getComputedStyle(check, "::before")),
-        tick: ends(getComputedStyle(check.querySelector("svg")!)),
-        transition: Array.from(document.styleSheets).some((sheet) => applies(sheet.cssRules, null)),
-      };
+      return { card: moves, transition: Array.from(document.styleSheets).some((sheet) => applies(sheet.cssRules, null)) };
     });
     await context.close();
     return result;
   }
 
-  test("is a lift under 180 ms with motion, and a cut without it", async ({ browser }) => {
+  test("is a colour change under 180 ms with motion, and a cut without it", async ({ browser }) => {
     test.skip(test.info().project.name === "mobile-chromium", "The same stylesheet; one project checks it.");
+    // The kit's ChoiceCard: its edge and tint change in 150 ms, and not at all under reduced motion.
     const moving = await cardMotion(browser, "no-preference");
-    // The edge and lift lead, the fill follows, the tick lands last, and all of it inside 180 ms.
     expect(moving.card).toBeGreaterThan(0);
-    expect(moving.fill).toBeGreaterThan(0);
-    expect(moving.tick).toBeGreaterThan(moving.fill);
-    expect(Math.max(moving.card, moving.fill, moving.tick)).toBeLessThanOrEqual(180);
+    expect(moving.card).toBeLessThanOrEqual(180);
     expect(moving.transition).toBe(true);
     const still = await cardMotion(browser, "reduce");
-    expect(still).toEqual({ card: 0, fill: 0, tick: 0, transition: false });
+    expect(still).toEqual({ card: 0, transition: false });
   });
 
   test("never moves the cards on arrival", async ({ page }) => {

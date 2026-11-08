@@ -139,6 +139,22 @@ describe("ChoiceCard", () => {
     expect(html).not.toContain("text-ink-muted");
   });
 
+  it("is named by its title alone, and described by its hint and detail", () => {
+    const html = renderToStaticMarkup(
+      <ChoiceCard type="checkbox" name="intent" value="mentor" label="Mentor" hint="Review shared work." detail={<span>Needs team approval</span>} />,
+    );
+    expect(html).toContain('aria-labelledby="intent-mentor-label"');
+    expect(html).toMatch(/<span id="intent-mentor-label"[^>]*>Mentor<\/span>/);
+    expect(html).toContain('aria-describedby="intent-mentor-detail intent-mentor-hint"');
+    expect(html).toMatch(/<span id="intent-mentor-detail"[^>]*><span>Needs team approval<\/span><\/span>/);
+  });
+
+  it("sets a mark beside its words, hidden from assistive tech", () => {
+    const html = renderToStaticMarkup(<ChoiceCard name="intent" value="mentor" label="Mentor" mark={<i data-mark />} />);
+    expect(html).toMatch(/<span aria-hidden="true" class="inline-flex shrink-0"><i data-mark="true"><\/i><\/span>/);
+    expect(renderToStaticMarkup(<ChoiceCard name="intent" value="mentor" label="Mentor" />)).not.toContain('<span aria-hidden="true" class="inline-flex shrink-0">');
+  });
+
   it("lays a ChoiceGroup out as cards, two to a row from 40rem", () => {
     const html = renderToStaticMarkup(
       <ChoiceGroup name="intent" label="How will you take part?" appearance="cards" options={[{ value: "cohort", label: "In a cohort" }, { value: "mentor", label: "Mentoring" }]} />,
