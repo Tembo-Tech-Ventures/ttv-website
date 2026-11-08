@@ -200,9 +200,10 @@ test.describe("admin curriculum management", () => {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ action: "delete" }),
       });
-      return { ok: response.ok, body: await response.text() };
+      return { status: response.status, body: await response.text() };
     });
-    expect(deleteResponse.ok).toBe(true);
+    // A refused delete renders the page again with its reason, as a rejected form.
+    expect(deleteResponse.status).toBe(400);
     expect(deleteResponse.body).toContain(
       "This curriculum is used by one or more programs and cannot be deleted."
     );

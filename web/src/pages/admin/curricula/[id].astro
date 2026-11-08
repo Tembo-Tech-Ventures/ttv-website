@@ -71,8 +71,10 @@ if (Astro.request.method === "POST") {
       }
       errors = result.errors;
       values = result.values;
+      Astro.response.status = 400;
     } catch {
       formError = curriculumSaveErrorMessage();
+      Astro.response.status = 503;
     }
   } else if (action === "delete") {
     try {
@@ -85,11 +87,14 @@ if (Astro.request.method === "POST") {
       }
       refusedInUse = result.reason === "in-use";
       deleteError = result.message;
+      Astro.response.status = 400;
     } catch {
       deleteError = "The database didn't answer. Try again in a moment.";
+      Astro.response.status = 503;
     }
   } else {
     formError = "Choose a valid curriculum action.";
+    Astro.response.status = 400;
   }
 }
 

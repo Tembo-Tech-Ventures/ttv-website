@@ -121,7 +121,7 @@ describe("a curriculum on the style guide", () => {
       ok: false, reason: "validation", errors: { title: "Enter a curriculum title." }, values: { title: "   ", description: "Kept." },
     });
     const { status, body } = await visit({ query: "?notice=saved", form: { action: "save", title: "   ", description: "Kept." }, cookie: FLASH });
-    expect(status).toBe(200);
+    expect(status).toBe(400);
     expect(body).toMatch(/data-title-prefix="Error: "/);
     expect(body).toMatch(/<div (?=[^>]*autofocus="")(?=[^>]*role="alert")[^>]*data-notice="danger"[\s\S]*?The curriculum wasn&#x27;t saved/);
     expect(body).not.toMatch(/data-notice="success"|Curriculum saved/);
@@ -133,6 +133,7 @@ describe("a curriculum on the style guide", () => {
   it("says a failed delete in the delete card, and a deletion back on the list with a 303", async () => {
     store.remove.mockResolvedValue({ ok: false, reason: "in-use", message: "This curriculum is used by one or more programs and cannot be deleted." });
     const refused = await visit({ form: { action: "delete" } });
+    expect(refused.status).toBe(400);
     expect(refused.body).toMatch(/<div (?=[^>]*autofocus="")(?=[^>]*role="alert")[^>]*data-notice="danger"[\s\S]*?The curriculum wasn&#x27;t deleted[\s\S]*?cannot be deleted\./);
     expect(refused.body).toContain("This curriculum cannot be deleted while a program or cohort references it.");
     expect(refused.body).not.toMatch(/confirm=delete/);
@@ -140,7 +141,9 @@ describe("a curriculum on the style guide", () => {
     expect(refused.body).toContain("A program or cohort started using it just now.");
     expect(refused.body).not.toMatch(/<ul>\s*<\/ul>/);
     store.remove.mockRejectedValue(new Error("D1 down"));
-    expect((await visit({ form: { action: "delete" } })).body).toContain("The database didn&#39;t answer. Try again in a moment.");
+    const failed = await visit({ form: { action: "delete" } });
+    expect(failed.status).toBe(503);
+    expect(failed.body).toContain("The database didn&#39;t answer. Try again in a moment.");
     store.remove.mockResolvedValue({ ok: true });
     const deleted = await visit({ form: { action: "delete" } });
     expect(deleted.status).toBe(303);
