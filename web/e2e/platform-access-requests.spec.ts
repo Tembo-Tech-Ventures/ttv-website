@@ -256,14 +256,19 @@ test("approving gives the person their new space, and the user page can take it 
   await open(page, `/admin/users/${OTIENO}`);
   const mentor = page.locator("[data-community-role='MENTOR']");
   await expect(mentor).toContainText("Has mentor access.");
-  page.once("dialog", (dialog) => dialog.accept());
+  // Removing asks first, on the page itself (?confirm=), with no browser dialog.
+  await mentor.getByRole("link", { name: "Remove mentor access" }).click();
+  await expect(page.getByRole("region", { name: "Remove mentor access from Otieno Ouma?" })).toBeFocused();
   await mentor.getByRole("button", { name: "Remove mentor access" }).click();
-  await expect(userNotice(page)).toHaveText("Mentor access was removed.");
+  await expect(userNotice(page)).toHaveText("Done: Mentor access was removed.");
   await expect(mentor).toContainText("No mentor access.");
   expect(await tabLabels(his)).not.toContain("Mentoring");
 
   await mentor.getByRole("button", { name: "Give mentor access" }).click();
-  await expect(userNotice(page)).toHaveText("Mentor access was given.");
+  await expect(userNotice(page)).toHaveText("Done: Mentor access was given.");
+  // The notice is said once: a reload does not say it again.
+  await page.reload();
+  await expect(userNotice(page)).toHaveCount(0);
   expect(await tabLabels(his)).toContain("Mentoring");
   await page.screenshot({ path: evidence("user-access"), fullPage: true });
   await requester.close();
