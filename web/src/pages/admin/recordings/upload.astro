@@ -1,106 +1,125 @@
 ---
 import AdminLayout from "@/layouts/AdminLayout.astro";
-import PageTitle from "@/components/platform/spaces/PageTitle.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
-import Button from "@/components/common/Button.astro";
-import Card from "@/components/common/Card.astro";
+import {
+  BackLink,
+  Button,
+  Card,
+  FileField,
+  Notice,
+  PageHeader,
+  SelectField,
+  TextAreaField,
+  TextField,
+} from "@/components/platform/ui";
 import { drizzle } from "drizzle-orm/d1";
+import { eq } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import * as schema from "@/lib/db/schema";
 import { env } from "cloudflare:workers";
+import { redirectWithFlash } from "@/lib/platform/server/flash";
+import { RECORDINGS_PATH } from "@/lib/admin/recordings";
+import { TITLE_MAX, detailsFromForm, detailsUpdate, type DetailsErrors, type DetailsValues } from "@/lib/admin/recording-detail";
+import { videoContentType, videoFromForm, videoKey } from "@/lib/admin/recording-upload";
 
 const db = drizzle(env.DB, { schema });
-let error = "";
+// The cohorts and the Admin space are independent reads: one round trip.
+const [programs, spaces] = await Promise.all([
+  db.query.program.findMany({ columns: { id: true, name: true }, orderBy: (program, { desc }) => [desc(program.createdAt)] }),
+  resolveSpacePage(Astro.locals, "adminRecordings"),
+]);
+
+let values: DetailsValues = { title: "", programId: "", recordedAt: "", description: "" };
+let errors: DetailsErrors & { video?: string } = {};
+let failure: { title: string; message: string } | undefined;
 
 if (Astro.request.method === "POST") {
-  const formData = await Astro.request.formData();
-  const title = String(formData.get("title") ?? "").trim();
-  const description = String(formData.get("description") ?? "").trim();
-  const programId = String(formData.get("programId") ?? "") || null;
-  const recordedAtValue = String(formData.get("recordedAt") ?? "");
-  const file = formData.get("video");
-
-  if (!title || !(file instanceof File) || file.size === 0) {
-    error = "Title and video file are required.";
-  } else {
-    const id = createId();
-    const extension = file.name.split(".").pop() || "mp4";
-    const r2VideoKey = `recordings/${id}/source.${extension}`;
-    await env.BUCKET.put(r2VideoKey, file.stream(), {
-      httpMetadata: { contentType: file.type || "video/mp4" },
-    });
-
-    await db.insert(schema.recording).values({
-      id,
-      title,
-      description: description || null,
-      programId,
-      recordedAt: recordedAtValue ? new Date(recordedAtValue) : null,
-      r2VideoKey,
-      fileSizeBytes: file.size,
-      processingStatus: "queued",
-    });
-
-    await env.RECORDING_QUEUE.send({ type: "process_recording", recordingId: id });
-    return Astro.redirect(`/admin/recordings/${id}`);
+  let formData: FormData | undefined;
+  try {
+    formData = await Astro.request.formData();
+  } catch {
+    failure = { title: "The upload didn't arrive", message: "The file didn't reach us whole. Choose it again and upload it once more." };
+    Astro.response.status = 400;
+  }
+  if (formData) {
+    const details = detailsFromForm(formData, programs.map((program) => program.id));
+    const video = videoFromForm(formData);
+    values = details.values;
+    errors = { ...details.errors, ...(video.ok ? {} : { video: video.error }) };
+    if (!video.ok || Object.keys(errors).length > 0) {
+      failure = { title: "The recording wasn't uploaded", message: "Fix the fields marked below. Everything you wrote is kept; choose the video again." };
+      Astro.response.status = 400;
+    } else {
+      const id = createId();
+      const r2VideoKey = videoKey(id, video.file);
+      let stored = false;
+      try {
+        await env.BUCKET.put(r2VideoKey, video.file.stream(), { httpMetadata: { contentType: videoContentType(video.file) } });
+        stored = true;
+        await db.insert(schema.recording).values({
+          id,
+          ...detailsUpdate(values, { recordedAt: null }),
+          r2VideoKey,
+          fileSizeBytes: video.file.size,
+          processingStatus: "queued",
+        });
+      } catch {
+        // A stored video with no recording row is a file nobody can reach: take it back.
+        if (stored) await env.BUCKET.delete(r2VideoKey).catch(() => undefined);
+        failure = {
+          title: "The recording wasn't uploaded",
+          message: stored
+            ? "The database didn't answer, so no recording was made. Try again in a moment."
+            : "The video store didn't answer, so nothing was uploaded. Try again in a moment.",
+        };
+        Astro.response.status = 503;
+      }
+      if (!failure) {
+        const detail = `${RECORDINGS_PATH}/${id}`;
+        try {
+          await env.RECORDING_QUEUE.send({ type: "process_recording", recordingId: id });
+        } catch {
+          // The recording exists; only its transcription is waiting. Its page can start it again.
+          await db.update(schema.recording).set({ processingStatus: "pending" }).where(eq(schema.recording.id, id)).catch(() => undefined);
+          return redirectWithFlash(Astro, detail, {
+            tone: "warning",
+            title: "Uploaded, but not queued",
+            message: "The video is stored, but the processing queue didn't answer. Use “Transcribe again” to start it.",
+          });
+        }
+        return redirectWithFlash(Astro, detail, { tone: "success", title: "Recording uploaded", message: "It's queued to transcribe, which takes a few minutes." });
+      }
+    }
   }
 }
 
-const programs = await db.query.program.findMany({
-  orderBy: (program, { desc }) => [desc(program.createdAt)],
-});
-// In the Admin space while `spaces` is on for this admin (T14); the existing admin shell otherwise.
-const spaces = await resolveSpacePage(Astro.locals, "adminRecordings");
+const cohortOptions = [{ value: "", label: "No cohort" }, ...programs.map((program) => ({ value: program.id, label: program.name }))];
 ---
 
-<AdminLayout title="Upload recording" spaces={spaces}>
+<AdminLayout title="Upload recording" titlePrefix={failure ? "Error: " : ""} spaces={spaces}>
   <div class="mx-auto max-w-3xl space-y-6">
-    <a href="/admin/recordings" class="text-sm text-primary hover:underline">
-      &larr; Back to Recordings
-    </a>
+    <BackLink href={RECORDINGS_PATH}>Recordings</BackLink>
 
-    <div>
-      <PageTitle spaces={Boolean(spaces)} legacyClass="text-2xl font-bold text-white">Upload recording</PageTitle>
-      <p class="mt-1 text-sm text-ink-muted">
-        The video is stored in R2 and queued for audio extraction, transcription, and indexing.
-      </p>
-    </div>
+    <PageHeader title="Upload recording">
+      The video is stored, then transcribed and indexed so its cohort can search it and ask Tembo about it.
+    </PageHeader>
+
+    {failure && (
+      <Notice tone="danger" focusOnLoad id="upload-failure" title={failure.title}>{failure.message}</Notice>
+    )}
 
     <Card>
-      {error && <p class="mb-6 rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-100">{error}</p>}
-
-      <form method="POST" enctype="multipart/form-data" class="space-y-4">
-        <div class="flex flex-col gap-1.5">
-          <label for="title" class="text-sm font-medium text-white/90">Title *</label>
-          <input id="title" name="title" required class="form-control" />
+      <form method="POST" action={Astro.url.pathname} enctype="multipart/form-data" class="grid gap-5" data-upload>
+        <TextField label="Title" name="title" required maxLength={TITLE_MAX} defaultValue={values.title} error={errors.title} />
+        <div class="grid gap-5 sm:grid-cols-2">
+          <SelectField label="Cohort" name="programId" optional options={cohortOptions} defaultValue={values.programId} error={errors.programId} />
+          <TextField label="Recorded on" name="recordedAt" type="date" optional defaultValue={values.recordedAt} error={errors.recordedAt} />
         </div>
-
-        <div class="flex flex-col gap-1.5">
-          <label for="programId" class="text-sm font-medium text-white/90">Program</label>
-          <select id="programId" name="programId" class="form-control">
-            <option value="">Unassigned</option>
-            {programs.map((program) => <option value={program.id}>{program.name}</option>)}
-          </select>
+        <TextAreaField label="Description" name="description" optional rows={4} defaultValue={values.description} error={errors.description} />
+        <FileField label="Video" name="video" required accept="video/*" hint="A video file, such as an MP4 or a WebM." error={errors.video} />
+        <div>
+          <Button type="submit" variant="primary">Upload and process</Button>
         </div>
-
-        <div class="flex flex-col gap-1.5">
-          <label for="recordedAt" class="text-sm font-medium text-white/90">Recorded Date</label>
-          <input type="date" id="recordedAt" name="recordedAt" class="form-control" />
-        </div>
-
-        <div class="flex flex-col gap-1.5">
-          <label for="description" class="text-sm font-medium text-white/90">Description</label>
-          <textarea id="description" name="description" rows="4" class="form-control"></textarea>
-        </div>
-
-        <div class="flex flex-col gap-1.5">
-          <label for="video" class="text-sm font-medium text-white/90">Video File *</label>
-          <input type="file" id="video" name="video" required accept="video/*" class="form-control file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1 file:text-sm file:font-semibold file:text-dark" />
-        </div>
-
-        <Button type="submit">
-          Upload and Process
-        </Button>
       </form>
     </Card>
   </div>

@@ -147,7 +147,7 @@ const MOVED: readonly AdminPage[] = [
   { path: "/admin/programs/ttv-local-persona-cohort-05", heading: "Cohort 05", current: "Cohorts", legacy: null },
   { path: "/admin/recordings", heading: "Recordings", current: "Recordings", retired: true },
   { path: "/admin/recordings/ttv-local-persona-recording-05", heading: "Week 4: SQL joins and indexes", current: "Recordings", retired: true },
-  { path: "/admin/recordings/upload", heading: "Upload recording", current: "Recordings" },
+  { path: "/admin/recordings/upload", heading: "Upload recording", current: "Recordings", retired: true },
   { path: "/admin/recordings/import", heading: "Import Session Recordings", current: "Recordings" },
   { path: "/admin/settings/integrations", heading: "Integrations", current: "Integrations", retired: true },
   { path: "/admin/platform-flags", heading: "Feature flags", current: "Feature flags", retired: true },
@@ -398,6 +398,27 @@ test.describe("every admin page", () => {
     await context.close();
   });
 
+  test("uploading a recording: one primary, and a file that isn't a video refused in words, with what was written kept", async ({ browser, baseURL }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium", "One project is enough for the form.");
+    const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    await as(page, baseURL!, "staff");
+    await page.goto("/admin/recordings/upload");
+    const main = page.locator("main");
+    await expect(main.locator('[data-variant="primary"]')).toHaveText(["Upload and process"]);
+    await main.getByRole("textbox", { name: "Title" }).fill("Week 5: e2e upload");
+    await main.getByRole("combobox", { name: /^Cohort/ }).selectOption({ label: "Cohort 05" });
+    await main.getByLabel(/^Video/).setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("not a video") });
+    const upload = main.getByRole("button", { name: "Upload and process" });
+    await upload.focus();
+    await upload.press("Enter");
+    await expect(main.getByRole("alert").filter({ hasText: "The recording wasn't uploaded" })).toBeVisible();
+    await expect(main.getByText("notes.txt isn't a video. Choose a video file, such as an MP4.")).toBeVisible();
+    await expect(main.getByRole("textbox", { name: "Title" })).toHaveValue("Week 5: e2e upload");
+    await expect(main.getByRole("combobox", { name: /^Cohort/ })).toHaveValue("ttv-local-persona-cohort-05");
+    await context.close();
+  });
+
   test("personal access tokens: a new token shown once without JavaScript, and revoked after a confirm step", async ({ browser, baseURL }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium", "Making a token writes to the seed; one project is enough.");
     const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
@@ -512,7 +533,8 @@ test.describe("every admin page", () => {
     await as(page, baseURL!, "staff");
     test.skip(!(await spacesOn(page)), "Spaces is off for the admin here.");
     for (const [path, name] of [["/admin/users", "users"], ["/admin/applications", "applications"], ["/admin/programs/new", "programs-new"],
-      ["/admin/recordings/ttv-local-persona-recording-05", "recording-detail"], ["/admin/recordings/ttv-local-persona-recording-05?confirm=reprocess", "recording-detail-confirm"], ["/admin/data-migration", "data-migration"]]) {
+      ["/admin/recordings/ttv-local-persona-recording-05", "recording-detail"], ["/admin/recordings/ttv-local-persona-recording-05?confirm=reprocess", "recording-detail-confirm"], ["/admin/data-migration", "data-migration"],
+      ["/admin/recordings/upload", "recordings-upload"]]) {
       await open(page, path);
       await page.screenshot({ path: evidence(name), fullPage: true });
       await runAxe(page, test.info(), `${path} in the Admin space`);

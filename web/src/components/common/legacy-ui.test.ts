@@ -19,7 +19,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     files: [
     "pages/admin/programs/new.astro",
     "pages/admin/recordings/import.astro",
-    "pages/admin/recordings/upload.astro",
     "pages/dashboard/apply.astro",
     "pages/dashboard/portfolio.astro",
     "pages/dashboard/profile.astro",
@@ -30,7 +29,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     files: [
     "pages/admin/programs/new.astro",
     "pages/admin/recordings/import.astro",
-    "pages/admin/recordings/upload.astro",
     "pages/dashboard/apply.astro",
     "pages/dashboard/portfolio.astro",
     "pages/dashboard/profile.astro",
@@ -49,7 +47,6 @@ const LEGACY: Record<string, { pattern: RegExp; files: readonly string[] }> = {
     "components/blog/editor/PlainPostForm.astro",
     "pages/admin/programs/new.astro",
     "pages/admin/recordings/import.astro",
-    "pages/admin/recordings/upload.astro",
     "pages/dashboard/portfolio.astro",
     "pages/dashboard/profile.astro",
     ],
