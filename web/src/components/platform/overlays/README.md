@@ -9,12 +9,31 @@ who follows the link). Dark until the `spaces` flag is on for the person.
 ```astro
 <SpacesLayout me={me} space="community" title="What's new" overlays={["search", "attention"]}>
   …the page…
-  <PlatformOverlays slot="overlays" client:load me={me} />
+  <PlatformOverlays slot="overlays" client:idle me={me} />
 </SpacesLayout>
 ```
 
 Only `Me` reaches the island. The attention page owns its own inbox, so it
 mounts `<PlatformOverlays attention={false} />` and handles the bell itself.
+
+## Loaded on demand (S7)
+
+The island is `client:idle`, and neither panel is in a page's first download:
+with the attention store, its API client and the contract schemas they validate
+with, they were about 60 KB gzipped on every page.
+- Search (`SearchOverlay`) loads on its first request.
+- Attention (`AttentionOverlay`: the store and the panel) loads on the first of:
+  the bell; the person coming back to the tab (focus, or the page shown); its
+  first count falling due, 30 s after the page rendered (it starts from the
+  counts `Me` carries); or another island asking for a count. Except on the bell,
+  it counts at once, so the bell is as fresh as when the store loaded with the page.
+- A request made before the island hydrated is held for a few seconds
+  (`onShellOverlay` in `shell/overlays.ts`), and a request made before its panel
+  loaded is asked again once the panel listens, with its trigger.
+- What must happen without the panels stays in the island: attention's live
+  region, and clearing other people's recent searches (and all of them on sign-out).
+- `[data-platform-overlays][data-listening]` says the island is listening: e2e
+  waits for it rather than for a panel.
 
 ## What lives where
 

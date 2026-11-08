@@ -27,7 +27,8 @@ async function open(page: Page, path: string) {
   await expect(page.locator("astro-island[ssr]")).toHaveCount(0);
   // Hydrated is not listening: wait until the shortcut, the bell and the overlays' listeners are attached.
   await expect(page.locator(".spaces-shell[data-hydrated]")).toHaveCount(1);
-  await expect(page.locator("[data-search-overlay][data-ready]")).toHaveCount(1);
+  // The overlays island listens before either panel loads; each panel loads on its first request (S7).
+  await expect(page.locator("[data-platform-overlays][data-listening]")).toHaveCount(1);
   await page.evaluate(() => document.fonts.ready);
 }
 

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
-import { isSearchShortcut, onShellOverlay, requestShellOverlay, SHELL_OVERLAY_EVENT } from "./overlays";
+import { isSearchShortcut, onShellOverlay, requestShellOverlay, SHELL_OVERLAY_EVENT, UNCLAIMED_REQUEST_MS } from "./overlays";
 
 const key = (overrides: Partial<KeyboardEventInit> = {}) =>
   new KeyboardEvent("keydown", { key: "k", ctrlKey: true, ...overrides });
@@ -66,5 +66,63 @@ describe("live attention counts", () => {
     publishAttentionCounts(counts(0));
     expect(listener).toHaveBeenCalledTimes(2);
     expect(latestAttentionCounts()?.cohort).toBe(0);
+  });
+});
+
+describe("a request made before its overlay listens (client:idle)", () => {
+  /** Drops anything an earlier test left unclaimed, by letting it expire. */
+  function freshStart() {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + UNCLAIMED_REQUEST_MS + 1);
+    onShellOverlay("search", () => {})();
+    onShellOverlay("attention", () => {})();
+  }
+  const flush = () => new Promise<void>((resolve) => { queueMicrotask(resolve); });
+
+  it("reaches the first listener that subscribes within a few seconds, once, with its trigger", async () => {
+    freshStart();
+    const trigger = document.createElement("button");
+    requestShellOverlay({ overlay: "search", trigger, via: "shortcut" });
+    vi.setSystemTime(Date.now() + UNCLAIMED_REQUEST_MS - 1);
+    const first = vi.fn();
+    const second = vi.fn();
+    const stopFirst = onShellOverlay("search", first);
+    const stopSecond = onShellOverlay("search", second);
+    await flush();
+    expect(first).toHaveBeenCalledExactlyOnceWith({ overlay: "search", trigger, via: "shortcut" });
+    expect(second).not.toHaveBeenCalled();
+    stopFirst(); stopSecond();
+    vi.useRealTimers();
+  });
+
+  it("is dropped once it is older than a person would expect it to open", async () => {
+    freshStart();
+    requestShellOverlay({ overlay: "attention", trigger: null, via: "click" });
+    vi.setSystemTime(Date.now() + UNCLAIMED_REQUEST_MS + 1);
+    const late = vi.fn();
+    const stop = onShellOverlay("attention", late);
+    await flush();
+    expect(late).not.toHaveBeenCalled();
+    stop();
+    vi.useRealTimers();
+  });
+
+  it("is not held when its overlay is listening, nor handed to another overlay", async () => {
+    freshStart();
+    const listening = vi.fn();
+    const stop = onShellOverlay("search", listening);
+    requestShellOverlay({ overlay: "search", trigger: null, via: "click" });
+    expect(listening).toHaveBeenCalledTimes(1);
+    stop();
+    const later = vi.fn();
+    const stopLater = onShellOverlay("search", later);
+    requestShellOverlay({ overlay: "attention", trigger: null, via: "click" });
+    const other = vi.fn();
+    const stopOther = onShellOverlay("search", other);
+    await flush();
+    expect(later).not.toHaveBeenCalled();
+    expect(other).not.toHaveBeenCalled();
+    stopLater(); stopOther();
+    vi.useRealTimers();
   });
 });

@@ -26,18 +26,41 @@ export interface ShellOverlayRequest {
   via: "click" | "shortcut";
 }
 
+/**
+ * How long a request nobody heard waits for its overlay. The overlays island hydrates when the
+ * browser is idle (`client:idle`), so a press or Ctrl K just before that still opens what was asked
+ * for; a request older than this is a press the person has forgotten, and is dropped.
+ */
+export const UNCLAIMED_REQUEST_MS = 5_000;
+
+const listening: Record<ShellOverlay, number> = { search: 0, attention: 0 };
+let unclaimed: { request: ShellOverlayRequest; at: number } | null = null;
+
 export function requestShellOverlay(request: ShellOverlayRequest): void {
+  unclaimed = listening[request.overlay] > 0 ? null : { request, at: Date.now() };
   window.dispatchEvent(new CustomEvent<ShellOverlayRequest>(SHELL_OVERLAY_EVENT, { detail: request }));
 }
 
-/** Subscribes an overlay to its requests. Returns the unsubscribe function. */
+/**
+ * Subscribes an overlay to its requests. Returns the unsubscribe function. The first listener for an
+ * overlay also receives a request made for it in the last few seconds that nobody heard.
+ */
 export function onShellOverlay(overlay: ShellOverlay, handler: (request: ShellOverlayRequest) => void): () => void {
   const listener = (event: Event) => {
     const { detail } = event as CustomEvent<ShellOverlayRequest>;
     if (detail?.overlay === overlay) handler(detail);
   };
   window.addEventListener(SHELL_OVERLAY_EVENT, listener);
-  return () => window.removeEventListener(SHELL_OVERLAY_EVENT, listener);
+  listening[overlay] += 1;
+  const waiting = unclaimed;
+  if (waiting?.request.overlay === overlay) {
+    unclaimed = null;
+    if (Date.now() - waiting.at <= UNCLAIMED_REQUEST_MS) queueMicrotask(() => handler(waiting.request));
+  }
+  return () => {
+    window.removeEventListener(SHELL_OVERLAY_EVENT, listener);
+    listening[overlay] -= 1;
+  };
 }
 
 /**
