@@ -218,7 +218,8 @@ test.describe("/dashboard/opportunities (authed)", () => {
 
     if (!isMobile) {
       await expect(
-        page.getByRole("heading", { name: /opportunities/i })
+        // The page's own title: a section heading also names opportunities.
+        page.getByRole("heading", { level: 1, name: "Opportunities" })
       ).toBeVisible();
     }
 
