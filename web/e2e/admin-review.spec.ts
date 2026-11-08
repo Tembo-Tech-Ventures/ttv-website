@@ -185,7 +185,7 @@ test.describe("admin review surfaces", () => {
       await page.goto("/admin/projects");
       const row = page.locator("tr", { hasText: "Clinic booking website" });
       await expect(row).toBeVisible();
-      await row.getByRole("link", { name: "View" }).click();
+      await row.getByRole("link", { name: "Clinic booking website" }).click();
     }
 
     await expect(
@@ -235,7 +235,7 @@ test.describe("admin review surfaces", () => {
         hasText: "Delivery tracking dashboard",
       });
       await expect(row).toBeVisible();
-      await row.getByRole("link", { name: "View" }).click();
+      await row.getByRole("link", { name: "Delivery tracking dashboard" }).click();
     }
 
     await expect(

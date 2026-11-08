@@ -1,4 +1,4 @@
-import { asc, count, desc, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, sql } from "drizzle-orm";
 import * as schema from "@/lib/db/schema";
 import type { Database } from "@/lib/db/schema";
 import { ADMIN_PAGE_SIZE } from "@/lib/admin/paging";
@@ -21,6 +21,12 @@ export function parseProjectStatus(value: string | null): ProjectStatus | null {
 
 const QUEUE_ORDER = sql`case ${schema.clientProject.status} when 'PENDING' then 0 when 'APPROVED' then 1 when 'MATCHED' then 2 when 'REJECTED' then 3 else 4 end`;
 
+/** How many builders are interested, in words: "None yet", "1 builder", "3 builders". */
+export function interestLabel(count: number): string {
+  if (count === 0) return "None yet";
+  return count === 1 ? "1 builder" : `${count} builders`;
+}
+
 /** One page of projects with their interest counts, and how many there are in each status: read together. */
 export async function readProjectsPage(db: Database, { status, page }: { status: ProjectStatus | null; page: number }) {
   const project = schema.clientProject;
@@ -37,7 +43,11 @@ export async function readProjectsPage(db: Database, { status, page }: { status:
         interest: count(schema.projectInterest.id),
       })
       .from(project)
-      .leftJoin(schema.projectInterest, eq(schema.projectInterest.projectId, project.id))
+      // Only interest still standing: a builder who withdrew no longer counts.
+      .leftJoin(
+        schema.projectInterest,
+        and(eq(schema.projectInterest.projectId, project.id), eq(schema.projectInterest.status, "INTERESTED")),
+      )
       .where(status ? eq(project.status, status) : undefined)
       .groupBy(project.id)
       .orderBy(QUEUE_ORDER, desc(project.createdAt), asc(project.id))

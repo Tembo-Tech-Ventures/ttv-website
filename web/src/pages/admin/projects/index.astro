@@ -5,7 +5,7 @@ import AdminLayout from "@/layouts/AdminLayout.astro";
 import { resolveSpacePage } from "@/components/platform/spaces/space-page";
 import { ButtonLink, DataCell, DataRow, DataTable, EmptyState, PageHeader, Pager, PillNav, StatusChip, linkClass, statusTone } from "@/components/platform/ui";
 import { lastPage as lastPageOf, pageHref, pageSummary, parsePage } from "@/lib/admin/paging";
-import { PROJECTS_PATH, PROJECT_QUEUE, parseProjectStatus, readProjectsPage } from "@/lib/admin/projects";
+import { PROJECTS_PATH, PROJECT_QUEUE, interestLabel, parseProjectStatus, readProjectsPage } from "@/lib/admin/projects";
 import * as schema from "@/lib/db/schema";
 import { formatMomentDate } from "@/lib/display-date";
 import { budgetLabel } from "@/lib/talent/budget";
@@ -39,7 +39,6 @@ const filters = [
 const filterName = statusFilter ? label(statusFilter).toLowerCase() : null;
 const caption = filterName ? `Client projects, ${filterName}` : "Client projects";
 const title = page === 1 ? caption : `${caption}, page ${page}`;
-const interest = (count: number) => (count === 0 ? "None yet" : count === 1 ? "1 builder" : `${count} builders`);
 ---
 
 <AdminLayout title={title} spaces={spaces}>
@@ -76,7 +75,7 @@ const interest = (count: number) => (count === 0 ? "None yet" : count === 1 ? "1
             <DataCell label="Status">
               <StatusChip domain="project" status={project.status} />
             </DataCell>
-            <DataCell label="Interested">{interest(project.interest)}</DataCell>
+            <DataCell label="Interested">{interestLabel(project.interest)}</DataCell>
             <DataCell label="Submitted" align="end">
               {project.createdAt ? formatMomentDate(project.createdAt) : "Not recorded"}
             </DataCell>
