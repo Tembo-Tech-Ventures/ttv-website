@@ -124,7 +124,7 @@ BaseLayout (HTML shell, global CSS, meta tags)
 | `/blog` | Blog placeholder | None |
 | `/style-guide` | The public style guide, five pages in a tab file: Principles, `/foundations`, `/components`, `/patterns`, `/voice`. Renders the UI kit's real components (see `web/docs/design-system/`) | None |
 | `/auth/login` | GitHub OAuth sign-in | None |
-| `/auth/logout` | Sign out | Session |
+| `/auth/logout` | Sign out: a GET only asks "Sign out?" (prefetchers and link previews fetch with GET); its POST form, and the account menu's, sign out with a 303 home | Session |
 | `/dashboard` | User dashboard home; with flag `spaces`, a 302 to the last-used space (`ttv-last-space` cookie) or the first one the caller has | Session |
 | `/dashboard/cohort`, `/dashboard/community`, `/dashboard/mentoring`, `/dashboard/discover`, `/dashboard/me`, `/dashboard/account` | Space homes (flag `spaces`). The old pages live under them (`/dashboard/apply` → `/dashboard/cohort/apply`, `/dashboard/ask` → `/dashboard/cohort/ask`, `/dashboard/mentorship` → `/dashboard/mentoring/confirm`, `/dashboard/portfolio` → `/dashboard/me/portfolio`, `/dashboard/profile` → `/dashboard/account`, …), and the old URLs 301 there (`SPACE_REDIRECTS` in `src/lib/platform/server/space-routes.ts`) | Session; each space needs its capability |
 | `/dashboard/me` | The Profile space's Overview (flag `spaces`): the public profile card with "View public page" and "Edit", shared work with its mentor confirmation and revision state, "Needs you" (unopened visitor messages, unconfirmed newer revisions, drafts), opportunities and certificates. Read-only; the editor is `/dashboard/me/portfolio` | Session |

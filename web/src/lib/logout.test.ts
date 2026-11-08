@@ -34,7 +34,9 @@ describe("logout response", () => {
     const originalHeaders = requestHeaders(jar);
     expect(await auth.api.getSession({ headers: originalHeaders })).not.toBeNull();
     const response = await logoutResponse(originalHeaders, (options) => auth.api.signOut(options));
-    expect(response.status).toBe(302);
+    if (!response) throw new Error("sign out failed");
+    // 303, so the browser follows with a GET and never replays the POST that signed out.
+    expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe("/");
     expect(response.headers.getSetCookie().length).toBeGreaterThanOrEqual(2);
     // Regression: unchanged browser cookies still authenticate from the cache after DB deletion.
@@ -49,18 +51,16 @@ describe("logout response", () => {
     const headers = new Headers();
     for (const cookie of cookies) headers.append("Set-Cookie", cookie);
     const response = await logoutResponse(new Headers(), async () => new Response("{}", { headers }));
+    if (!response) throw new Error("sign out failed");
     expect(response.headers.getSetCookie()).toEqual(cookies);
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
-  it.each(["throws", "non-success"])("does not claim success or leak details when sign out %s", async (failure) => {
+  it.each(["throws", "non-success"])("does not claim success when sign out %s, so the page can say so", async (failure) => {
     const response = await logoutResponse(new Headers(), async () => {
       if (failure === "throws") throw new Error("sensitive upstream detail");
-      return new Response("sensitive upstream detail", { status: 500 });
+      return new Response("sensitive upstream detail", { status: 500, headers: { "Set-Cookie": "a=; Max-Age=0" } });
     });
-    expect(response.status).toBe(503);
-    expect(response.headers.get("location")).toBeNull();
-    expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.text()).not.toContain("sensitive");
+    expect(response).toBeNull();
   });
 });

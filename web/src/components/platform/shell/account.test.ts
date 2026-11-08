@@ -5,8 +5,8 @@ const user = { id: "u1" } as App.Locals["user"];
 const qa = { runId: "r", persona: "mentor", userId: "u1", sessionId: "s", issuedAt: 0, expiresAt: 1 } as App.Locals["stagingQa"];
 
 describe("shellAccount", () => {
-  it("signs a person out through the link, with feedback on", () => {
-    expect(shellAccount({ user })).toEqual({ signOut: { kind: "link", href: "/auth/logout", label: "Sign out" }, feedback: true });
+  it("signs a person out by posting to /auth/logout, with feedback on", () => {
+    expect(shellAccount({ user })).toEqual({ signOut: { kind: "form", action: "/auth/logout", label: "Sign out" }, feedback: true });
   });
 
   it("signs a staging QA persona out by posting to its own endpoint, without feedback", () => {
