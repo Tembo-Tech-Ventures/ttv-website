@@ -5,6 +5,7 @@ import { demoPathAllowed } from "@/lib/staging-demo-policy";
 import { defineMiddleware } from "astro:middleware";
 import { env } from "cloudflare:workers";
 import { createAuth } from "@/lib/auth";
+import { readBrowserSession, withSessionCookies } from "@/lib/auth-session";
 import { resolveStagingFixtureIdentity, StagingFixtureAccessError } from "@/lib/staging-fixtures";
 import { stagingFixturePathAllowed } from "@/lib/staging-fixture-policy";
 import { isAgentSession } from "@/lib/agent-auth";
@@ -45,25 +46,22 @@ async function resolveAuthentication(authEnv: AuthEnv, request: Request) {
       session: personalAccessTokenAuth.session,
       user: personalAccessTokenAuth.user,
       personalAccessToken,
+      sessionCookies: [],
     };
   }
 
   if (personalAccessTokenAttempted) {
     // An explicit but invalid PAT must not silently fall back to a browser
     // cookie that happened to accompany the request.
-    return { session: null, user: null, personalAccessToken };
+    return { session: null, user: null, personalAccessToken, sessionCookies: [] };
   }
 
-  const auth = createAuth(authEnv);
-  const sessionData = await auth.api.getSession({
-    headers: request.headers,
-    query: { disableCookieCache: request.headers.get("cookie")?.includes(DEMO_OPERATOR_COOKIE + "=") ?? false },
-  });
-  return {
-    session: sessionData?.session ?? null,
-    user: sessionData?.user ?? null,
-    personalAccessToken,
-  };
+  const { session, user, cookies } = await readBrowserSession(
+    createAuth(authEnv),
+    request.headers,
+    request.headers.get("cookie")?.includes(DEMO_OPERATOR_COOKIE + "=") ?? false,
+  );
+  return { session, user, personalAccessToken, sessionCookies: cookies };
 }
 
 async function enforceAdminGuards(
@@ -124,7 +122,7 @@ async function enforceAdminGuards(
   return null;
 }
 
-/** An admin page's GET, past the ADMIN guard, starts its Admin space beside the page's own reads. */
+/** An admin page's GET starts its Admin space beside the ADMIN guard and the page's own reads. */
 function startAdminPageReads(request: Request, url: URL, locals: App.Locals) {
   if (request.method === "GET" && !url.pathname.startsWith("/api/")) startAdminSpacePage(locals);
 }
@@ -236,20 +234,23 @@ const handleRequest = defineMiddleware(async (context, next) => {
     locals.session = authResult.session;
     locals.user = authResult.user;
     locals.personalAccessToken = authResult.personalAccessToken;
+    // Every answer from here carries the session cookies better-auth refreshed while reading, so the
+    // next navigation is served from its cookie cache instead of D1 (auth-session.ts).
+    const respond = (response: Response) => withSessionCookies(response, authResult.sessionCookies);
 
     const stagingFailure = await perfPhase("staging", () => enforceStagingBoundaries(locals, request, url.pathname));
-    if (stagingFailure) return platformAdminApiDenial(stagingFailure, url.pathname);
+    if (stagingFailure) return respond(platformAdminApiDenial(stagingFailure, url.pathname));
 
     // Community and channels delegation never inherits the owner's unrelated application access.
     // Use Astro's normalized route pathname, as with the admin origin guards.
     const delegationFailure = enforceTokenDelegation(locals,request,url.pathname);
-    if(delegationFailure) return platformAdminApiDenial(delegationFailure, url.pathname);
+    if(delegationFailure) return respond(platformAdminApiDenial(delegationFailure, url.pathname));
 
     // Protect /dashboard/* routes — require authentication
     if (url.pathname.startsWith("/dashboard")) {
       if (!locals.user) {
         const returnPath = `${url.pathname}${url.search}`;
-        return redirect(`/auth/login?next=${encodeURIComponent(returnPath)}`);
+        return respond(redirect(`/auth/login?next=${encodeURIComponent(returnPath)}`));
       }
     }
 
@@ -258,9 +259,11 @@ const handleRequest = defineMiddleware(async (context, next) => {
       url.pathname.startsWith("/admin") ||
       url.pathname.startsWith("/api/admin")
     ) {
-      const guardResponse = await perfPhase("admin", () => enforceAdminGuards(context, locals));
-      if (guardResponse) return platformAdminApiDenial(guardResponse, url.pathname);
+      // The Admin space's reads start beside the ADMIN guard, not after it: they read the same shared
+      // flags and capabilities, and nothing they read is shown unless the guard passes.
       startAdminPageReads(request, url, locals);
+      const guardResponse = await perfPhase("admin", () => enforceAdminGuards(context, locals));
+      if (guardResponse) return respond(platformAdminApiDenial(guardResponse, url.pathname));
     }
 
     const response = await routeSpaceRequest(context, next);
@@ -272,7 +275,7 @@ const handleRequest = defineMiddleware(async (context, next) => {
         version: env.DEPLOYMENT_VERSION,
       });
     }
-    return response;
+    return respond(response);
   } catch (error) {
     recordErrorInBackground(locals.cfContext, env.DB, {
       source: "request",

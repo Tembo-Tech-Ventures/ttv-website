@@ -14,7 +14,10 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("cloudflare:workers", () => ({ env: mocks.env }));
 vi.mock("astro:middleware", () => ({ defineMiddleware: (handler: unknown) => handler }));
-vi.mock("@/lib/auth", () => ({ createAuth: () => ({ api: { getSession: mocks.getSession } }) }));
+vi.mock("@/lib/auth", async () => {
+  const { sessionApi } = await import("@/test/auth-mock");
+  return { createAuth: () => ({ api: sessionApi(mocks.getSession) }) };
+});
 vi.mock("@/lib/personal-access-tokens", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/personal-access-tokens")>(),
   authenticatePersonalAccessToken: mocks.authenticatePersonalAccessToken,

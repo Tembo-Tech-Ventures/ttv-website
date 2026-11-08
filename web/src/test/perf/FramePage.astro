@@ -1,0 +1,30 @@
+---
+/**
+ * A space page with no reads of its own, for round-trips.render.test.ts: what it costs is what the
+ * frame costs (the space context, onboarding, the sidebar and, in Admin, the navigation counts).
+ */
+import AdminLayout from "@/layouts/AdminLayout.astro";
+import SpacePage from "@/components/platform/spaces/SpacePage.astro";
+import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import type { SpacePageKey } from "@/components/platform/spaces/sidebar";
+
+interface Props {
+  page: SpacePageKey;
+  admin?: boolean;
+}
+
+const { page, admin = false } = Astro.props;
+const context = await resolveSpacePage(Astro.locals, page);
+---
+
+{
+  admin ? (
+    <AdminLayout title="Frame only" spaces={context}>
+      <p>Nothing of its own.</p>
+    </AdminLayout>
+  ) : (
+    <SpacePage context={context} title="Frame only">
+      <p>Nothing of its own.</p>
+    </SpacePage>
+  )
+}

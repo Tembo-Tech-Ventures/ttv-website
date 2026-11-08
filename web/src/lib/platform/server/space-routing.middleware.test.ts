@@ -12,7 +12,10 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("cloudflare:workers", () => ({ env: mocks.env }));
 vi.mock("astro:middleware", () => ({ defineMiddleware: (handler: unknown) => handler }));
-vi.mock("@/lib/auth", () => ({ createAuth: () => ({ api: { getSession: mocks.getSession } }) }));
+vi.mock("@/lib/auth", async () => {
+  const { sessionApi } = await import("@/test/auth-mock");
+  return { createAuth: () => ({ api: sessionApi(mocks.getSession) }) };
+});
 vi.mock("@/lib/staging-qa-access", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/staging-qa-access")>(), hasQaCookie: mocks.hasQaCookie, authenticateQaCookie: mocks.authenticateQaCookie }));
 vi.mock("@/lib/staging-demo-access", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/staging-demo-access")>(), validateDemoSession: mocks.validateDemoSession }));
 vi.mock("@/lib/staging-fixtures", async importOriginal => ({ ...await importOriginal<typeof import("@/lib/staging-fixtures")>(), resolveStagingFixtureIdentity: mocks.resolveStagingFixtureIdentity }));

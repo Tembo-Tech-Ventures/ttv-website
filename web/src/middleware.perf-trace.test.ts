@@ -6,7 +6,10 @@ import { Me, ROUTES } from "@/lib/platform/contracts";
 const mocks = vi.hoisted(() => ({ env: {} as Record<string, unknown>, getSession: vi.fn() }));
 vi.mock("cloudflare:workers", () => ({ env: mocks.env }));
 vi.mock("astro:middleware", () => ({ defineMiddleware: (handler: unknown) => handler }));
-vi.mock("@/lib/auth", () => ({ createAuth: () => ({ api: { getSession: mocks.getSession } }) }));
+vi.mock("@/lib/auth", async () => {
+  const { sessionApi } = await import("@/test/auth-mock");
+  return { createAuth: () => ({ api: sessionApi(mocks.getSession) }) };
+});
 import { onRequest } from "@/middleware";
 import { GET } from "@/pages/api/platform/me";
 

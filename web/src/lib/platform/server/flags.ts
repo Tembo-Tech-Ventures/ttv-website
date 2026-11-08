@@ -76,12 +76,18 @@ async function staffAudience(db: D1Database, userId: string): Promise<boolean> {
     : userHasAdminRole(db, userId);
 }
 
-/** Reuse ctx/locals after authentication. Auth changes invalidate an early read. */
+/**
+ * Reuse ctx/locals after authentication. Auth changes invalidate an early read. A read made without
+ * a trusted ADMIN result serves callers that have one, and the other way round: it read the same
+ * request's ADMIN role (staffAudience), so it can only disagree with a caller that says otherwise.
+ * That lets an admin page start its flags beside the ADMIN guard instead of after it.
+ */
 export function getFlags(ctx: FlagContext): Promise<Flags> {
   const cacheKey = ctx.locals ?? ctx;
   const userId = ctx.user?.id ?? null;
   let cached = requestFlags.get(cacheKey);
-  if (!cached || cached.userId !== userId || cached.isAdmin !== ctx.isAdmin) {
+  const adminDisagrees = cached?.isAdmin !== undefined && ctx.isAdmin !== undefined && cached.isAdmin !== ctx.isAdmin;
+  if (!cached || cached.userId !== userId || adminDisagrees) {
     cached = { userId, isAdmin: ctx.isAdmin, flags: resolveFlags(ctx) };
     requestFlags.set(cacheKey, cached);
   }
