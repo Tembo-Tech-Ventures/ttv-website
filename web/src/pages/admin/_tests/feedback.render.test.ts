@@ -76,6 +76,7 @@ describe("the feedback queue on the style guide", () => {
     expect(body).toContain("Screenshot only");
     expect(body).toContain("/dashboard/cohort/sessions · 1 image");
     expect(body).toContain("3 Nov, 09:13 UTC");
+    expect(body).toMatch(/queue\s+through <code[^>]*>\/api\/admin\/feedback<\/code> with/);
   });
 
   it("says what fills an empty view", async () => {
