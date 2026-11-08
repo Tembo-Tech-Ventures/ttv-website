@@ -22,9 +22,9 @@ export function parseProjectStatus(value: string | null): ProjectStatus | null {
 const QUEUE_ORDER = sql`case ${schema.clientProject.status} when 'PENDING' then 0 when 'APPROVED' then 1 when 'MATCHED' then 2 when 'REJECTED' then 3 else 4 end`;
 
 /** How many builders are interested, in words: "None yet", "1 builder", "3 builders". */
-export function interestLabel(count: number): string {
-  if (count === 0) return "None yet";
-  return count === 1 ? "1 builder" : `${count} builders`;
+export function interestLabel(builders: number): string {
+  if (builders === 0) return "None yet";
+  return builders === 1 ? "1 builder" : `${builders} builders`;
 }
 
 /** One page of projects with their interest counts, and how many there are in each status: read together. */
