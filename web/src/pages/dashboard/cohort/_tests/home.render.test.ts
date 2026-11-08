@@ -18,7 +18,10 @@ import { withRaw } from "@/lib/attention/test-support";
  */
 const mocks = vi.hoisted(() => ({ env: {} as Record<string, unknown>, getSession: vi.fn() }));
 vi.mock("cloudflare:workers", () => ({ env: mocks.env }));
-vi.mock("@/lib/auth", () => ({ createAuth: () => ({ api: { getSession: mocks.getSession } }) }));
+vi.mock("@/lib/auth", async () => {
+  const { sessionApi } = await import("@/test/auth-mock");
+  return { createAuth: () => ({ api: sessionApi(mocks.getSession) }) };
+});
 
 const { onRequest } = await import("@/middleware");
 const { default: Page } = await import("../../index.astro");
