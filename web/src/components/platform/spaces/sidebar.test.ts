@@ -7,7 +7,7 @@ import { canonicalSpacePath, isAvailableSpacePath, isNewSpacePath, legacySpacePa
 import { STUDENT_DASHBOARD_LINK_IDS, type StudentDashboardLinkId } from "@/lib/student/journey";
 import { adminSpaceEntries, type AdminNavFacts } from "@/components/admin/admin-nav";
 import {
-  ADMIN_SPACE_PAGES, NOT_OPEN_YET, PAGE_SPACES, SPACE_PAGE_PATHS, spaceSidebar, type SidebarFacts, type SidebarModel, type SpacePageKey,
+  ADMIN_SPACE_PAGES, PAGE_SPACES, SPACE_PAGE_PATHS, spaceSidebar, type SidebarFacts, type SidebarModel, type SpacePageKey,
 } from "./sidebar";
 
 const EVERY_LINK: StudentDashboardLinkId[] = [...STUDENT_DASHBOARD_LINK_IDS];
@@ -166,9 +166,9 @@ describe("space sidebars", () => {
       { label: "Availability", note: "Not open yet", current: false },
     ]);
     expect(hrefs(david).slice(2)).toEqual(["/dashboard/mentoring#requests", "/dashboard/mentoring#availability"]);
-    // The page those entries open says the same thing, so the sidebar and the page never disagree.
+    // The page those entries open says the same thing, in the same constant, so the sidebar and the page never disagree.
     const overview = readFileSync(resolve(import.meta.dirname, "MentoringOverview.astro"), "utf8");
-    expect(overview).toContain(NOT_OPEN_YET);
+    expect(overview).toContain("<Chip className=\"ml-auto\">{NOT_OPEN_YET}</Chip>");
     expect(overview).not.toMatch(/\bSoon\b/);
   });
 

@@ -6,7 +6,7 @@ import MentoringOverview from "@/components/platform/spaces/MentoringOverview.as
 import OnboardingNotices from "@/components/platform/onboarding/OnboardingNotices.astro";
 import OnboardingPrompt from "@/components/platform/onboarding/OnboardingPrompt.astro";
 import { awaitingConfirmation } from "@/components/platform/spaces/awaiting-confirmation";
-import { resolveSpacePage } from "@/components/platform/spaces/space-page";
+import { pickSpace, resolveSpacePage, resolveSpacePageWith } from "@/components/platform/spaces/space-page";
 import { loadChannelShortcuts } from "@/components/platform/spaces/channel-shortcuts-server";
 import { normalizeSpacePath, SPACE_PATHS } from "@/lib/platform/server/space-routes";
 import { env } from "cloudflare:workers";
@@ -19,19 +19,25 @@ import "@/styles/discovery.css";
 // /dashboard/mentoring/confirm (the review). Admins who are not mentors keep
 // the review, in their Admin space, without becoming mentors.
 const atLanding = normalizeSpacePath(Astro.originPathname) === SPACE_PATHS.mentoring;
-const spaces =
-  (atLanding ? await resolveSpacePage(Astro.locals, "mentoring") : null) ??
-  (await resolveSpacePage(Astro.locals, "confirm"));
-// The landing's way into the channels while `channels` is on (QA2-16).
-const shortcuts = spaces?.page === "mentoring" ? (await loadChannelShortcuts(spaces)).shortcuts : null;
-// Requests waiting and this month's availability while mentor requests are open (U-4.1).
-const requests = spaces?.page === "mentoring" && mentorRequestsOpen(spaces.me) ? await loadMentoringOverview(Astro, env, spaces.me) : null;
+// The landing's own reads start beside onboarding (PERF-2): the channel list for its "Channels" card
+// (QA2-16), handed on to SpacePage, and requests and availability while mentor requests are open (U-4.1).
+const landing = atLanding
+  ? await resolveSpacePageWith(Astro.locals, "mentoring", (me) => Promise.all([
+    loadChannelShortcuts({ me, space: pickSpace(me, "mentoring")!, page: "mentoring" }),
+    mentorRequestsOpen(me) ? loadMentoringOverview(Astro, env, me) : null,
+  ]))
+  : null;
+const spaces = landing?.[0] ?? (await resolveSpacePage(Astro.locals, "confirm"));
+const [shortcuts, requests] = landing?.[1] ?? [null, null];
 ---
 {
   spaces?.page === "mentoring" ? (
-    <SpacePage context={spaces} title="Mentoring">
-      {spaces.onboarding && <OnboardingNotices view={spaces.onboarding} space={spaces.space} />}
-      <MentoringOverview awaiting={awaitingConfirmation(spaces.me)} shortcuts={shortcuts} requests={requests}>
+    <SpacePage context={spaces} title="Mentoring" channels={shortcuts?.channels}>
+      <MentoringOverview awaiting={awaitingConfirmation(spaces.me)} shortcuts={shortcuts?.shortcuts ?? null} requests={requests}>
+        {/* The status cards follow the page's title, so its h1 comes first. */}
+        <Fragment slot="after-title">
+          {spaces.onboarding && <OnboardingNotices view={spaces.onboarding} space={spaces.space} class="mt-8" />}
+        </Fragment>
         <OnboardingPrompt slot="after-primary" view={spaces.onboarding} space={spaces.space} class="mt-6" />
       </MentoringOverview>
     </SpacePage>

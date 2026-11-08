@@ -73,6 +73,8 @@ const PAGES = {
   conversation: { path: () => `/dashboard/community/dm/${DIRECT}`, page: () => import("@/pages/dashboard/community/dm/[id].astro"), user: STUDENT },
   community: { path: () => "/dashboard/community", page: () => import("@/pages/dashboard/community.astro"), user: STUDENT },
   mentors: { path: () => "/dashboard/community/mentors", page: () => import("@/pages/dashboard/community/mentors.astro"), user: STUDENT },
+  "mentoring home": { path: () => "/dashboard/mentoring", page: () => import("@/pages/dashboard/mentorship.astro"), user: MENTOR },
+  "mentoring confirm": { path: () => "/dashboard/mentoring/confirm", page: () => import("@/pages/dashboard/mentorship.astro"), user: MENTOR },
   "mentoring availability": { path: () => "/dashboard/mentoring/availability", page: () => import("@/pages/dashboard/mentoring/availability.astro"), user: MENTOR },
   "mentors, filtered": { path: () => "/dashboard/community/mentors?area=Code%20review&available=true", page: () => import("@/pages/dashboard/community/mentors.astro"), user: STUDENT },
   "mentoring requests": { path: () => "/dashboard/mentoring/requests", page: () => import("@/pages/dashboard/mentoring/requests.astro"), user: MENTOR },
@@ -140,6 +142,9 @@ const BUDGETS: Record<PageName, { d1: number; depth: number }> = {
   community: { d1: 18, depth: 3 },
   mentors: { d1: 20, depth: 3 },
   // The router marks an approved mentor request seen after the response (waitUntil), so it is not counted.
+  // Its channel list, requests and availability start beside onboarding (depth 5 before).
+  "mentoring home": { d1: 16, depth: 3 },
+  "mentoring confirm": { d1: 11, depth: 3 },
   "mentoring availability": { d1: 12, depth: 3 },
   // One directory read, filtered in memory: two (the same statement twice) before the style-guide rollout.
   "mentors, filtered": { d1: 20, depth: 3 },

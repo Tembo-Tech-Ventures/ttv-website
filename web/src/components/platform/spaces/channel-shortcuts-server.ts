@@ -8,9 +8,10 @@ import type { SpacePageContext } from "./space-page";
 
 /**
  * An overview page's "Channels" card, and the list it read, which the page hands to SpacePage so the
- * sidebar does not read it again. Nothing is read while `channels` is off for the person.
+ * sidebar does not read it again. Nothing is read while `channels` is off for the person. Only `me`, the
+ * space and the page are needed, so a page can start this before its onboarding is read.
  */
-export async function loadChannelShortcuts(context: SpacePageContext): Promise<{ channels?: readonly Channel[]; shortcuts: ChannelShortcutsModel | null }> {
+export async function loadChannelShortcuts(context: Pick<SpacePageContext, "me" | "space" | "page">): Promise<{ channels?: readonly Channel[]; shortcuts: ChannelShortcutsModel | null }> {
   const list = await loadShortcutChannels(
     context.me,
     () => channelsServer(env.DB, context.me).list(),

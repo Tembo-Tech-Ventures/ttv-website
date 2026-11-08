@@ -13,15 +13,15 @@
  * the card is gone. Each is said once: a script drops its parameter from the
  * address after rendering, so a reload or a bookmark does not repeat it.
  *
- * These sit above the page's h1, so their titles are not headings: each card
- * is a region named by its title, and the page's own h1 comes first in the
- * heading outline.
+ * Their titles are not headings: each card is a region named by its title,
+ * so the page's own h1 leads the heading outline wherever they sit (on
+ * Mentoring they follow the title, MentoringOverview's `after-title`).
  *
  * Nothing renders while onboarding is off for the person: the page passes
  * `view` only from its spaces context, which is null then.
  */
 import type { AccessRole, SpaceId } from "@/lib/platform/contracts";
-import PersonMarker from "@/components/platform/ui/PersonMarker";
+import { Notice, PersonMarker } from "@/components/platform/ui";
 import { SPACE_PATHS } from "@/lib/platform/server/space-routes";
 import { PiCheckCircleBold } from "react-icons/pi";
 import {
@@ -63,7 +63,7 @@ const LINK = "font-semibold text-ink-primary underline underline-offset-3 hover:
 {shown && (
   <div data-onboarding-notices class:list={["flex flex-col gap-4", spacing]}>
     {unsaved && (
-      <p role="alert" class="rounded-xl border border-danger-ink/40 bg-danger-ink/8 px-4 py-3 text-sm font-semibold text-ink-primary">{STATUS.unsaved}</p>
+      <Notice tone="danger">{STATUS.unsaved}</Notice>
     )}
     {sent.length > 0 && (
       <p role="status" tabindex="-1" autofocus data-onboarding-sent data-once-param={SENT_PARAM} class={CONFIRMATION}>
